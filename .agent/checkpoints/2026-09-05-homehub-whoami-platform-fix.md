@@ -5,8 +5,8 @@
 ## Observed issue
 
 用户真实消息显示：Telegram `/whoami` 返回 `platform: kook`，而
-`platformUserId: 5501555095` 正确。LangBot 日志确认请求走了 command path：
-`Processing request from person_5501555095 ... /whoami`，随后旧 `PersonCommandSent` event
+`platformUserId: <telegram-user-id>` 正确。LangBot 日志确认请求走了 command path：
+`Processing request from person_<telegram-user-id> ... /whoami`，随后旧 `PersonCommandSent` event
 没有平台字段，归一化层按历史兼容默认值当作 KOOK。
 
 ## Fix
