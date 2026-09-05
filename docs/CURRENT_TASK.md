@@ -11,6 +11,18 @@
 - [x] 在仓库根目录 `AGENTS.md` 记录：使用 `/goal` 时不手动设置固定 `token_budget`，使用 Codex 默认预算机制。
 - [x] 完成只读 `/whoami` 命令：Telegram/KOOK 私聊和群聊/频道均通过统一平台契约处理。
 
+## `/whoami` 平台来源修复（2026-09-05）
+
+用户实测发现 Telegram `/whoami` 曾错误显示 `platform: kook`。根因是 LangBot 的
+`PersonCommandSent`/`GroupCommandSent` 命令事件原本没有携带平台字段，旧兼容默认值把
+Telegram session 当成了 KOOK。
+
+- [x] build-time patch 为 LangBot command event 增加平台字段，并按实际 source adapter 判定 `telegram`/`kook`。
+- [x] EventListener 接管 command event 后再执行 `/whoami`，继续使用真实 `sender_id`，不使用昵称判断。
+- [x] patched LangBot image `local/langbot-agent:9c34a89-whoami-fix-20260905` 已激活，plugin 3.2.4 已重新安装并 ready。
+- [x] runtime 与 LangBot 容器健康检查通过。
+- [ ] 等待真实 Telegram 用户再次发送 `/whoami` 完成最终入站回归确认。
+
 ## HomeHub `/whoami` 完成清单
 
 - [x] 通过 `NormalizedBotMessage.user.platformUserId` 使用平台真实唯一用户 ID。

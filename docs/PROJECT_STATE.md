@@ -35,6 +35,13 @@ runtime 镜像已在 OrbStack ubuntu/CasaOS 健康运行，LangBot V3 plugin 3.2
 `sha256:4e902c2b578777be6c42733d180da5dc8e72e883139611833856504d336b8383`），CasaOS compose
 回滚副本位于 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260905-214712`。
 
+## `/whoami` 平台来源修复状态：DEPLOYED / RECHECK PENDING
+
+已修复 LangBot command event 缺少 `platform` 导致 Telegram 被当成 KOOK 的问题。当前
+LangBot 与 plugin runtime 使用 `local/langbot-agent:9c34a89-whoami-fix-20260905`，其中
+`PersonCommandSent`/`GroupCommandSent` 会从 `query.adapter` 传递真实平台；plugin gateway
+监听 command event 后才调用 `/v3/whoami`。等待真实 Telegram 用户再次发送命令确认最终入站输出。
+
 ## 当前运行时观察
 
 以下信息来自本机 Ubuntu/CasaOS 的只读检查，用于迁移基线，不是新机器的硬编码地址：
@@ -42,7 +49,7 @@ runtime 镜像已在 OrbStack ubuntu/CasaOS 健康运行，LangBot V3 plugin 3.2
 | 组件 | 当前观察 |
 | --- | --- |
 | OrbStack machine | ubuntu running |
-| LangBot | langbot + langbot_plugin_runtime，兼容 LangBot 4.10.8 定制镜像 |
+| LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:9c34a89-whoami-fix-20260905，兼容 LangBot 4.10.8 定制镜像 |
 | Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.3-whoami-ddfee46，healthy，端口 5310 |
 | Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
 | Review | feature version review-features-4 |
