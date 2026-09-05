@@ -350,6 +350,7 @@ RUN python /tmp/agent-monorepo-langbot-patches/patch_kook_adapter.py \
       /app/src/langbot/pkg/platform/sources/whatsapp.py \
       /app/src/langbot/pkg/provider/modelmgr/requesters/litellmchat.py \
       /app/src/langbot/pkg/pipeline/process/handlers/chat.py \
+      /app/src/langbot/pkg/pipeline/process/handlers/command.py \
       /app/.venv/lib/python3.12/site-packages/langbot_plugin/api/entities/events.py
 EOF
 }
