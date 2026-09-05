@@ -7,7 +7,7 @@
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
 系统的可迁移 monorepo。迁移阶段、HomeHub V1、只读 `/whoami`、目标 runtime/plugin 部署、平台
 来源修复、Admin Identity、Developer Workflow Optimization V1 和 **HomeHub V1.1 Security & Runtime
-Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，未执行 Docker build、CasaOS 部署或生产服务重启。
+Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使用 immutable image `local/pubg-query-engine-v3:git-46efb62eba0c` 部署到 OrbStack `ubuntu` / CasaOS；生产容器已验证 healthy。
 用户指定的 PUBG Intent Router 时间词误判 small-scope task 已完成 targeted verification，代码与文档已以独立 commit `d12b733` 提交。
 2026-09-05 的 Telegram/KOOK `Request Failed` 事故已由用户修正 9Router key，并完成 provider key、
 9router API 和 Telegram 流式回复验证；用户确认 KOOK/Telegram 均恢复。
@@ -63,7 +63,9 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，未执行 D
 - Admin env 仍只从外部 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID` 读取，真实值不入 Git。
 - `runtime-executor` 已移除 HomeHub source 中的 `orb -m` 命令；Docker/Ubuntu 使用 direct command，macOS Host 无 executor 返回 UNKNOWN。
 - `HealthStatus` 已覆盖 healthy/unhealthy/down/unknown；metrics failure 返回 null；unknown 不计入 abnormal。
-- `pnpm workflow:verify`、plugin dry-run、Python compile、diff check 已通过；未部署。
+- `pnpm workflow:verify`、plugin dry-run、Python compile、diff check 已通过；production image 已 build/load/deploy，`/healthz` 与 `/homehub/health` healthy。
+- 部署脚本的 `set -u` 空数组 bug 已修复并提交为 `46efb62`；host proxy refused 首次失败后用 `--no-proxy` 成功。
+
 
 ## 状态更新协议
 

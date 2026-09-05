@@ -5,10 +5,10 @@
 ## 状态
 
 Monorepo 迁移、Codex 工程规范、HomeHub V1 和 HomeHub V1.1 Security & Runtime Reliability
-实现阶段已完成；HomeHub V1.1 已通过测试并提交为 `e0a3ed5`，用户指定的 PUBG Intent Router
-时间词误判 small-scope task 也已通过 targeted verification，并以独立 commit `d12b733` 提交。仓库继续作为代码、配置
-模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的 `origin/main`；
-没有把运行时数据或真实 credentials 放入仓库。两个阶段均不执行 Docker build、CasaOS 部署或生产服务重启。
+实现阶段已完成；HomeHub V1.1 已通过测试并提交为 `e0a3ed5`，PUBG Intent Router 时间词误判 task
+已通过 targeted verification 并以独立 commit `d12b733` 提交。生产 runtime 已在 OrbStack `ubuntu` / CasaOS
+使用 immutable image `local/pubg-query-engine-v3:git-46efb62eba0c` 部署并验证 healthy。仓库继续作为代码、
+配置模板、workflow、文档和 Codex 状态的 Git source of truth；没有把运行时数据或真实 credentials 放入仓库。
 
 ## Telegram / KOOK `Request Failed` 事故：RESOLVED / VERIFIED（2026-09-05）
 
@@ -130,7 +130,7 @@ secret file 路径和空的环境变量，不保存 key。
 - LangBot deploy dry-run/apply 脚本、项目地图和四个可迁移 Codex skills；
 - workflow / plugin / service 兼容说明以及 Codex checkpoint。
 
-## HomeHub V1.1 Security & Runtime Reliability 状态：IMPLEMENTED / TARGETED VERIFIED / COMMITTED / NOT DEPLOYED（2026-09-05）
+## HomeHub V1.1 Security & Runtime Reliability 状态：IMPLEMENTED / TARGETED VERIFIED / COMMITTED / DEPLOYED（2026-09-05）
 
 V1.1 已在 Git source 中完成统一授权、管理员身份、运行时执行边界和健康状态语义修复：
 
@@ -142,7 +142,18 @@ V1.1 已在 Git source 中完成统一授权、管理员身份、运行时执行
 - host metrics 失败保留 null，不回填 0%；`/homehub/authorize` 仅返回共享授权决策，不执行操作。
 
 V1.1 的验证证据包括 affected typecheck、HomeHub security/runtime 定向测试、local endpoint smoke、Python plugin
-compile、LangBot plugin dry-run/package validation、secret scan 和 diff check。代码已提交为 `e0a3ed5`，尚未部署到 CasaOS。
+compile、LangBot plugin dry-run/package validation、secret scan 和 diff check。代码已提交为 `e0a3ed5`，并已部署到 CasaOS；当前 image 为 `local/pubg-query-engine-v3:git-46efb62eba0c`。
+
+## Production Deployment 状态：HEALTHY（2026-09-05）
+
+- image：`local/pubg-query-engine-v3:git-46efb62eba0c`
+- machine：OrbStack `ubuntu` / CasaOS
+- compose：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml`
+- rollback backup：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-012427`
+- `pubg-query-engine-v3`：`Up (healthy)`
+- `/healthz` 与 `/homehub/health`：HTTP 200 / healthy
+- 首次 build 因 host proxy `127.0.0.1:7897` refused 失败，未触碰 compose；使用 `--no-proxy` 重试成功。
+- 部署未修改 AppData、媒体库和 secrets。
 
 ## 后续 task 状态：PUBG Intent Router 时间词误判 / IMPLEMENTED / COMMITTED
 
@@ -152,7 +163,7 @@ TimeRange 已从正向 PUBG intent 中移除；router 先判断 Domain/Intent，
 “昨天 Emby 挂了吗”进入 HomeHub。代码与状态文档已单独提交；只运行 affected typecheck、targeted tests、
 secret scan 和 diff check，未构建 Docker image 或执行 Release。
 
-## HomeHub V1 状态：IMPLEMENTED / NOT YET DEPLOYED
+## HomeHub V1 状态：IMPLEMENTED / V1.1 PRODUCTION DEPLOYED
 
 HomeHub V1 已进入 Git source of truth，包含：
 
@@ -164,7 +175,7 @@ HomeHub V1 已进入 Git source of truth，包含：
 
 安全约束：服务操作按风险等级要求确认；媒体整理必须指定下载项目，先预览，再确认、备份并逐项移动，
 只允许 `/Volumes/Avalon/downloads` 到 `/Volumes/Avalon/media/{movies,tv}`，拒绝覆盖已有目标。
-尚未在 OrbStack ubuntu/CasaOS 中执行 `--apply` 部署和真实 Telegram/KOOK 入站烟测。
+V1.1 已在 OrbStack `ubuntu` / CasaOS 执行 `--apply --build --no-proxy` 并验证 healthy；真实 Telegram/KOOK 入站授权烟测仍需单独执行。生产部署 checkpoint：`.agent/checkpoints/2026-09-05-homehub-v1.1-production-deployment.md`。
 
 ## 已验证的边界
 

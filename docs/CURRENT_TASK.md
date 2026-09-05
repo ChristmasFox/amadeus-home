@@ -6,9 +6,25 @@
 
 **PUBG Intent Router 时间词误判 — 已完成并提交。**
 
-本阶段只修改 Authorization / Admin Identity / Runtime Executor / Health State Semantics；没有执行 Docker
-build、CasaOS 部署或生产服务重启。HomeHub V1.1 已以 `e0a3ed5` 提交；PUBG Intent Router 时间词修复已以独立 commit `d12b733` 提交。两个阶段均未执行 Docker build 或 Release。
+本阶段已完成生产发布。HomeHub V1.1 已以 `e0a3ed5` 提交；PUBG Intent Router 时间词修复已以独立 commit `d12b733` 提交；部署脚本修复已以 `46efb62` 提交。生产 runtime 已在 OrbStack `ubuntu` / CasaOS 激活 immutable image，未执行无关服务重启。
 
+
+## HomeHub V1.1 Production Deployment（2026-09-05）
+
+状态：**PUSHED / BUILT / DEPLOYED / HEALTHY**。
+
+- [x] `main` 已 push 到 `origin/main`，包含 V1.1、安全修复、PUBG Router 修复和部署脚本修复。
+- [x] 首次 RELEASE 构建在 final dependency deploy 阶段因 host 的 `127.0.0.1:7897` proxy refused 失败；未更新 CasaOS compose，旧生产容器仍保持 healthy。
+- [x] 修复 `scripts/deploy-agent-runtime.sh` 的 `set -u` 空数组展开问题，提交 `46efb62` 并再次 push。
+- [x] 使用 `./scripts/deploy-agent-runtime.sh --apply --build --no-proxy` 完成 host BuildKit 构建、image transfer 和 CasaOS `docker compose up -d --no-build`。
+- [x] immutable image：`local/pubg-query-engine-v3:git-46efb62eba0c`。
+- [x] canonical compose：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml`；当前 compose image 与运行容器均为 `local/pubg-query-engine-v3:git-46efb62eba0c`。
+- [x] rollback compose backup：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-012427`。
+- [x] 生产容器 `pubg-query-engine-v3` 状态为 `Up (healthy)`，`/healthz` 返回 200，`/homehub/health` 返回 `status=healthy`。
+- [x] 未修改 `/DATA/AppData`、媒体库或 secrets；部署仅替换 runtime image 并保留 compose 回滚副本。
+
+回滚：在 Ubuntu root shell 中将 compose image 恢复为 backup 中的旧 image，然后执行
+`cd /var/lib/casaos/apps/pubg-query-engine-v3 && docker compose up -d --no-build`，再验证两个 health endpoint。
 
 ## Telegram / KOOK `Request Failed` 诊断（2026-09-05）
 
@@ -87,7 +103,7 @@ Telegram session 当成了 KOOK。
 
 ## HomeHub V1.1 Security & Runtime Reliability（2026-09-05）
 
-状态：**IMPLEMENTED / TARGETED VERIFIED / NOT DEPLOYED**。
+状态：**IMPLEMENTED / TARGETED VERIFIED / DEPLOYED**。
 
 - [x] 新增平台无关 `AuthorizationCore`：`PlatformIdentity → InternalIdentity → Role → Authorization`；未配置映射默认 `PUBLIC`，副作用 Action 默认 DENY。
 - [x] Telegram / KOOK 统一使用 `NormalizedBotMessage.user.platformUserId`，不读取 nickname、displayName、username 或 chat name；管理员映射只来自 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，内部用户为 `arthur`。
