@@ -34,6 +34,7 @@ infra/
 scripts/               bootstrap、doctor、backup、restore、检查工具
 docs/                  架构、状态、决策、迁移清单和历史归档
 .agent/                Codex 持久化状态与 checkpoint
+skills/                可迁移的 Codex skill source
 ```
 
 ## 新机器恢复
@@ -94,6 +95,20 @@ pnpm check:secrets
 生成的 `.lbpkg` 只用于本地安装，已被 `.gitignore` 排除；插件源文件仍在
 `integrations/langbot/plugins/` 中版本化。
 
+LangBot 部署预览与显式应用：
+
+```sh
+./scripts/deploy-langbot.sh --dry-run
+export LANGBOT_API_KEY='<restore-from-password-manager>'
+./scripts/deploy-langbot.sh --apply --plugin pubg-stats-v3
+```
+
+`deploy-langbot.sh` 默认只构建和检查，不写入 LangBot。插件应用通过 LangBot
+`/api/v1/plugins/install/local` API 完成，API key 只从外部环境读取。patch 是
+第三方镜像的 build-time 变更；需要先预览 `--patches`，再显式使用
+`--apply --patches --activate-image` 构建并切换 CasaOS LangBot 镜像。旧镜像、compose
+备份和 `.lbpkg` 回滚包都保留在 Git 外。
+
 ## Codex 持久化协议
 
 每次新会话先读取：
@@ -107,6 +122,7 @@ docs/CURRENT_TASK.md
 ```
 
 再执行 `git status --short --branch` 和 `git log -5 --oneline --decorate`。
+需要理解目录责任时继续读取 `docs/PROJECT_MAP.md`；按需读取 `skills/*/SKILL.md`。
 阶段完成后更新 `docs/CURRENT_TASK.md`、`docs/PROJECT_STATE.md`，并在
 `.agent/checkpoints/` 写入 checkpoint。详细规则见 `AGENTS.md`。
 
@@ -119,8 +135,8 @@ docs/CURRENT_TASK.md
   仍必须离线加密保存。
 - `.env.example` 和各组件配置模板只包含空值或明确 placeholder。
 
-提交前必须运行 `pnpm check:secrets`。仓库初始化后默认只保留本地 Git 历史，
-不会配置或使用公网 push。
+提交前必须运行 `pnpm check:secrets`。当前 `main` 已配置用户指定的 `origin` 和
+GitHub 远端；恢复流程本身仍不会自动 push，发布必须由用户明确执行。
 
 ## 当前状态
 

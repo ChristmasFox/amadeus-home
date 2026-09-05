@@ -4,9 +4,10 @@
 
 ## 状态
 
-Monorepo 迁移阶段已完成，当前仓库可以作为代码、配置模板、workflow、文档和
-Codex 状态的 Git source of truth。初始本地 commit 为 767dd36；尚未执行公网 push，
-也没有把运行时数据或真实 credentials 放入仓库。
+Monorepo 迁移和 Codex 工程规范阶段已完成，当前仓库可以作为代码、配置模板、
+workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
+`origin/main`，最近远端同步提交为 `22c1c25`；没有把运行时数据或真实 credentials
+放入仓库。
 
 ## 当前运行时观察
 
@@ -36,6 +37,7 @@ secret file 路径和空的环境变量，不保存 key。
 - n8n V3/V2、PUBG daily stats、organize-emby workflow；
 - CasaOS 架构与平台适配历史文档的脱敏归档；
 - bootstrap、doctor、backup、restore、secret scan 和插件构建脚本；
+- LangBot deploy dry-run/apply 脚本、项目地图和四个可迁移 Codex skills；
 - workflow / plugin / service 兼容说明以及 Codex checkpoint。
 
 ## 已验证的边界
@@ -45,6 +47,8 @@ secret file 路径和空的环境变量，不保存 key。
 - 原始 9router / aria2 compose 中的真实密钥没有迁移，只生成脱敏模板。
 - 共享 media、下载目录、Postgres、n8n data、LangBot data 与 Redis 都与 Git 分离。
 - 新机器恢复路径是 clone -> 恢复 secrets -> bootstrap -> 恢复数据 -> 启动 -> doctor。
+- LangBot plugin 从 Git 构建 `.lbpkg` 后通过 API 安装；LangBot patch 只在 overlay image
+  构建阶段应用，不直接改运行容器。
 
 ## 待人工完成的运行时动作
 
@@ -55,6 +59,13 @@ secret file 路径和空的环境变量，不保存 key。
 3. 如启用 Cloudflare，创建 tunnel、放置 credentials file，并按模板配置 ingress。
 4. 构建与发布目标架构可用的 runtime / LangBot 定制镜像。
 5. 启动后运行 scripts/doctor.sh 和真实平台入站烟测；不要用 bot 自发消息替代真实入站验证。
+
+## 工程规范基线
+
+- Git 仓库是唯一 source of truth，禁止 runtime-only 修改；Domain 不依赖平台，LLM
+  保持在边界，核心逻辑 deterministic。
+- n8n 修改必须导出 JSON；第三方 LangBot patch 必须可追踪、可重建、可回滚。
+- 每个阶段必须更新状态文档、运行匹配测试、执行 secret scan，并写入 checkpoint。
 
 ## 下一步建议
 
