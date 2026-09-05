@@ -42,7 +42,8 @@
 - 完成 HomeHub V1 domain/runtime/API 接线、安全媒体整理流程和回归测试；
 - 已验证：pnpm install、类型检查、构建、92 项 runtime tests（91 pass、1 skip）、secret scan、脚本 smoke test 和 Compose 模板；
 - 初始本地 commit：767dd36（chore: initialize agent monorepo）；
-- HomeHub V1 完成 commit 待本阶段提交；不执行公网 push。
+- HomeHub V1 完成 commit：`ba1d556`（feat: add HomeHub v1 runtime）；不执行公网 push。
+- 当前工作树应保持干净；后续仅按 `.agent/tasks/homehub-runtime-smoke.md` 执行目标环境烟测。
 
 ## 状态更新协议
 
