@@ -40,7 +40,8 @@
 - 补齐 bootstrap、doctor、backup、restore 和 secret scan；
 - 修复 restore.sh 语法错误并为脚本补充执行权限；
 - 已验证：pnpm install、类型检查、构建、测试、secret scan、脚本 smoke test 和 Compose 模板；
-  当前剩余 staged 审计和本地 commit。
+- 初始本地 commit：767dd36（chore: initialize agent monorepo）；
+- 当前工作树干净，无 remote，无公网 push。
 
 ## 状态更新协议
 

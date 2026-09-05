@@ -5,8 +5,8 @@
 ## 状态
 
 Monorepo 迁移阶段已完成，当前仓库可以作为代码、配置模板、workflow、文档和
-Codex 状态的 Git source of truth。尚未执行公网 push，也没有把运行时数据或真实
-credentials 放入仓库。
+Codex 状态的 Git source of truth。初始本地 commit 为 767dd36；尚未执行公网 push，
+也没有把运行时数据或真实 credentials 放入仓库。
 
 ## 当前运行时观察
 
@@ -61,3 +61,13 @@ secret file 路径和空的环境变量，不保存 key。
 后续开发应先读取 README.md、本文、docs/CURRENT_TASK.md、.agent/state.md，
 再查看 Git 状态和最近五次提交。若修改部署，优先修改 infra/docker/ 模板或
 实际 CasaOS compose，并同步更新本文件和 checkpoint。
+
+## 最终验证
+
+- 根 pnpm workspace install 使用唯一 pnpm-lock.yaml 成功；
+- TypeScript typecheck/build 成功；runtime 83 项测试通过（1 项需要外部 fixture 的测试跳过）；
+- legacy-v2 Python 测试 30 项通过；
+- shell/Python 语法、bootstrap/backup/restore smoke test 和 Compose config 通过；
+- check-secrets 通过，且 staged 文件没有真实 credential 或运行时数据；
+- Docker build 命令已写入 apps/agent-runtime/README.md；基础镜像元数据检查因 Docker Hub 网络超时未完成，
+  需在网络可用时手动执行。

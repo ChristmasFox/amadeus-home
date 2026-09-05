@@ -7,8 +7,7 @@
 **COMPLETE — Monorepo migration**
 
 已完成用户要求的仓库整理、代码归档、配置脱敏、Codex 持久化文档、基础脚本和
-本地 Git 初始化准备。完整验证已通过，当前正在进行最终 staged 审计并创建本地
-初始化 commit；不执行公网 push。
+本地 Git 初始化。完整验证已通过，初始化 commit 为 767dd36；不执行公网 push。
 
 ## 完成清单
 

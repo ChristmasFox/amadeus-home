@@ -25,4 +25,4 @@
 3. 所有 shell/Python 语法、脚本 smoke test、脱敏 Compose config 已通过；
 4. secrets scan 已通过，且用假 key fixture 验证了扫描器会拒绝敏感赋值；
 5. Docker Hub 基础镜像元数据请求超时，实际镜像构建留作网络可用时的人工验证；
-6. 下一步是检查 staged 文件、确认 remote 为空并创建本地初始化 commit。
+6. staged 文件已检查，remote 为空，已创建本地初始化 commit 767dd36。
