@@ -46,6 +46,8 @@ def patch_events() -> None:
     platform_field_block = (
         "    platform: str = 'kook'\n"
         '    """Source platform identifier used by cross-process adapters."""\n'
+        "    display_name: typing.Optional[str] = None\n"
+        '    """Display-only name; never used as an identity key."""\n'
         "\n"
     )
 
@@ -150,6 +152,22 @@ def patch_command_handler() -> None:
         else:
             _pubg_command_platform = 'kook'
 
+        # Preserve a display-only name when the raw platform event exposes it.
+        # The stable sender_id above remains the only identity key.
+        _pubg_display_name = None
+        source_platform_object = getattr(query.message_event, 'source_platform_object', None)
+        effective_message = getattr(source_platform_object, 'effective_message', None)
+        source_user = getattr(effective_message, 'from_user', None)
+        if source_user is not None:
+            _pubg_display_name = getattr(source_user, 'full_name', None) or getattr(source_user, 'username', None)
+        elif isinstance(source_platform_object, dict):
+            extra = source_platform_object.get('extra') or {}
+            author = extra.get('author') if isinstance(extra, dict) else None
+            if isinstance(author, dict):
+                _pubg_display_name = author.get('nickname') or author.get('username')
+        if _pubg_display_name is not None:
+            _pubg_display_name = str(_pubg_display_name).strip() or None
+
         event = event_class(
             launcher_type=query.launcher_type.value,
             launcher_id=query.launcher_id,
@@ -158,6 +176,7 @@ def patch_command_handler() -> None:
             params=spt[1:] if len(spt) > 1 else [],
             text_message=full_command_text,
             platform=_pubg_command_platform,
+            display_name=_pubg_display_name,
             is_admin=(privilege == 2),
             query=query,
         )

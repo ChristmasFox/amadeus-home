@@ -146,6 +146,7 @@ class PlatformAdapterTest(unittest.TestCase):
             'sender_id': '5501555095',
             'text_message': '/whoami',
             'message_id': 'telegram-command-1',
+            'display_name': 'Arthur',
         })
         kook_message = normalize_event_message({
             'platform': 'kook',
@@ -158,6 +159,7 @@ class PlatformAdapterTest(unittest.TestCase):
 
         self.assertEqual(telegram_message['platform'], 'telegram')
         self.assertEqual(telegram_message['user']['platformUserId'], '5501555095')
+        self.assertEqual(telegram_message['user']['displayName'], 'Arthur')
         self.assertEqual(kook_message['platform'], 'kook')
         self.assertEqual(kook_message['user']['platformUserId'], '1413857482')
 
