@@ -21,35 +21,57 @@ events_path = Path(
 )
 
 
+command_path = Path(
+    sys.argv[4]
+    if len(sys.argv) > 4
+    else "/app/src/langbot/pkg/pipeline/process/handlers/command.py"
+)
+
 PUBG_MARKER = "_PUBG_INLINE_KEYBOARD_MARKER"
 
 
 def patch_events() -> None:
     source = events_path.read_text()
-    if "    platform: str = 'kook'" not in source:
-        field_block = """    platform: str = 'kook'
-    \"\"\"Source platform identifier used by cross-process adapters.\"\"\"
+    normal_field_block = (
+        "    platform: str = 'kook'\n"
+        '    """Source platform identifier used by cross-process adapters."""\n'
+        "\n"
+        "    callback_data: typing.Optional[str] = None\n"
+        '    """Opaque platform callback data, if this event came from a button."""\n'
+        "\n"
+        "    callback_id: typing.Optional[str] = None\n"
+        '    """Platform callback acknowledgement identifier."""\n'
+        "\n"
+    )
+    platform_field_block = (
+        "    platform: str = 'kook'\n"
+        '    """Source platform identifier used by cross-process adapters."""\n'
+        "\n"
+    )
 
-    callback_data: typing.Optional[str] = None
-    \"\"\"Opaque platform callback data, if this event came from a button.\"\"\"
+    def add_field_block(class_name: str, field_block: str) -> None:
+        nonlocal source
+        class_marker = f"class {class_name}(_WithReplyMessageChain):"
+        class_start = source.find(class_marker)
+        if class_start < 0:
+            raise SystemExit(f"{class_marker} not found")
+        next_class = source.find("\nclass ", class_start + len(class_marker))
+        class_end = next_class if next_class >= 0 else len(source)
+        class_source = source[class_start:class_end]
+        if "    platform: str = 'kook'" in class_source:
+            return
+        text_marker = "    text_message: str\n"
+        text_start = source.find(text_marker, class_start, class_end)
+        if text_start < 0:
+            raise SystemExit(f"{text_marker.strip()} not found in {class_name}")
+        insert_at = text_start + len(text_marker)
+        source = source[:insert_at] + field_block + source[insert_at:]
 
-    callback_id: typing.Optional[str] = None
-    \"\"\"Platform callback acknowledgement identifier.\"\"\"
-
-"""
-        for class_name in ("PersonNormalMessageReceived", "GroupNormalMessageReceived"):
-            class_marker = f"class {class_name}(_WithReplyMessageChain):"
-            class_start = source.find(class_marker)
-            if class_start < 0:
-                raise SystemExit(f"{class_marker} not found")
-            text_marker = "    text_message: str\n"
-            text_start = source.find(text_marker, class_start)
-            if text_start < 0:
-                raise SystemExit(f"{text_marker.strip()} not found in {class_name}")
-            insert_at = text_start + len(text_marker)
-            source = source[:insert_at] + field_block + source[insert_at:]
+    for class_name in ("PersonNormalMessageReceived", "GroupNormalMessageReceived"):
+        add_field_block(class_name, normal_field_block)
+    for class_name in ("PersonCommandSent", "GroupCommandSent"):
+        add_field_block(class_name, platform_field_block)
     events_path.write_text(source)
-
 
 def patch_chat_handler() -> None:
     source = chat_path.read_text()
@@ -100,6 +122,50 @@ def patch_chat_handler() -> None:
         source = source.replace(old, new, 1)
     chat_path.write_text(source)
 
+
+def patch_command_handler() -> None:
+    source = command_path.read_text()
+    if "_pubg_command_platform" in source:
+        return
+    old = """        event = event_class(
+            launcher_type=query.launcher_type.value,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
+            command=spt[0],
+            params=spt[1:] if len(spt) > 1 else [],
+            text_message=full_command_text,
+            is_admin=(privilege == 2),
+            query=query,
+        )
+"""
+    new = """        # Preserve the actual source adapter on command events so platform
+        # identity resolution never falls back to the historical KOOK default.
+        adapter_type = type(query.adapter)
+        adapter_name = adapter_type.__name__.lower()
+        adapter_module = adapter_type.__module__.lower()
+        if 'whatsapp' in adapter_name or 'whatsapp' in adapter_module:
+            _pubg_command_platform = 'whatsapp'
+        elif 'telegram' in adapter_name or 'telegram' in adapter_module:
+            _pubg_command_platform = 'telegram'
+        else:
+            _pubg_command_platform = 'kook'
+
+        event = event_class(
+            launcher_type=query.launcher_type.value,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
+            command=spt[0],
+            params=spt[1:] if len(spt) > 1 else [],
+            text_message=full_command_text,
+            platform=_pubg_command_platform,
+            is_admin=(privilege == 2),
+            query=query,
+        )
+"""
+    if old not in source:
+        raise SystemExit("Command event construction marker not found")
+    source = source.replace(old, new, 1)
+    command_path.write_text(source)
 
 def patch_telegram_adapter() -> None:
     source = telegram_path.read_text()
@@ -356,4 +422,5 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
 
 patch_events()
 patch_chat_handler()
+patch_command_handler()
 patch_telegram_adapter()

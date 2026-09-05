@@ -32,6 +32,13 @@ class PubgQueryGatewayV3Listener(EventListener):
                 async def handle_callback(event_context: event_context_module.EventContext) -> None:
                     await self._handle(event_context)
 
+        for event_name in ('PersonCommandSent', 'GroupCommandSent'):
+            command_event = getattr(events, event_name, None)
+            if command_event is not None:
+                @self.handler(command_event)
+                async def handle_command(event_context: event_context_module.EventContext) -> None:
+                    await self._handle(event_context)
+
     async def _handle(self, event_context: event_context_module.EventContext) -> None:
         event = event_context.event
         message = normalize_event_message(event, query_id=event_context.query_id)

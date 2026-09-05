@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from components.platform.kook import KookAdapter
 from components.platform.contracts import build_normalized_message
-from components.platform.registry import normalize_session_message
+from components.platform.registry import normalize_event_message, normalize_session_message
 from components.platform.telegram import TelegramAdapter
 from components.platform.whatsapp import WhatsAppAdapter
 from components.pubg_v3_client import classify_pubg_message, is_whoami_command, run_whoami
@@ -137,6 +137,29 @@ class PlatformAdapterTest(unittest.TestCase):
         }, text='昨日战绩', query_id=4)
         self.assertEqual(telegram_message['platform'], 'telegram')
         self.assertEqual(telegram_message['chat']['type'], 'private')
+
+    def test_command_event_platform_field_prevents_telegram_kook_fallback(self) -> None:
+        telegram_message = normalize_event_message({
+            'platform': 'telegram',
+            'launcher_type': 'person',
+            'launcher_id': '5501555095',
+            'sender_id': '5501555095',
+            'text_message': '/whoami',
+            'message_id': 'telegram-command-1',
+        })
+        kook_message = normalize_event_message({
+            'platform': 'kook',
+            'launcher_type': 'person',
+            'launcher_id': '1413857482',
+            'sender_id': '1413857482',
+            'text_message': '/whoami',
+            'message_id': 'kook-command-1',
+        })
+
+        self.assertEqual(telegram_message['platform'], 'telegram')
+        self.assertEqual(telegram_message['user']['platformUserId'], '5501555095')
+        self.assertEqual(kook_message['platform'], 'kook')
+        self.assertEqual(kook_message['user']['platformUserId'], '1413857482')
 
     def test_session_entrypoint_supports_future_platforms_with_generic_adapter(self) -> None:
         message = normalize_session_message({
