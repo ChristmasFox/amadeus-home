@@ -101,8 +101,16 @@ CasaOS app 定义的实际落点是：
 infra/docker/ 中的文件是脱敏模板，不会自动覆盖现有 CasaOS compose。修改现有
 服务前应先读取实际文件，完成后使用：
 
-    orb -m ubuntu -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d'
+    orb -m ubuntu -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d --no-build'
     orb -m ubuntu -u root docker ps
+
+## 开发与镜像构建边界
+
+FAST/RUNTIME/RELEASE 的 source-scope 选择与验证命令定义在
+`docs/DEVELOPER_WORKFLOW.md`。Docker build 不属于 HomeHub/runtime source 的默认验证：
+RUNTIME 只执行 TypeScript build/typecheck、定向 tests 和本地 endpoint smoke。实际 RELEASE 使用
+host Docker Buildx 生成 commit-tagged image，再 transfer 到 OrbStack `ubuntu`；CasaOS 仅执行
+`docker compose up -d --no-build`。这避免 Ubuntu 的运行时 compose 隐式触发新的 production build。
 
 ## 迁移不变量
 

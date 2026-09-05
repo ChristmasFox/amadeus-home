@@ -74,7 +74,25 @@ n8n data、LangBot data、runtime state 和其他明确列入备份清单的 vol
 
 ## 开发与验证
 
-要求 Node.js `>=22`、pnpm `9.9.x`、Git 和 Python 3。常用命令：
+要求 Node.js `>=22`、pnpm `9.9.x`、Git 和 Python 3。先按 Git diff 选择最低足够的验证等级：
+
+```sh
+pnpm workflow:plan                 # FAST / RUNTIME / RELEASE scope 预览
+pnpm workflow:verify               # 只运行 FAST/RUNTIME 本地验证；绝不 build/deploy
+pnpm test:workflow                 # 分类规则回归测试
+pnpm smoke:runtime                 # 非 Docker 的 /healthz + /homehub/health smoke
+```
+
+- **FAST** 是 docs、`.agent`、tests、skills、纯逻辑和小功能的默认流程：定向测试、受影响
+  package typecheck、`git diff --check`，必要时 secrets scan；不 build、不 restart、不 deploy。
+- **RUNTIME** 用于 `apps/agent-runtime/src/**`、`packages/homehub-domain/src/**` 及 runtime assets：
+  运行受影响 package 的 typecheck/build、映射后的定向 tests 与本地 endpoint smoke；仍不 build
+  production Docker image。HomeHub 源码变更不会自动升级为 RELEASE。
+- **RELEASE** 只在明确要求实际 CasaOS 部署时执行。Dockerfile、`.dockerignore`、`package.json`
+  或 `pnpm-lock.yaml` 变更会标记为 `RELEASE_BUILD_REQUIRED`，但只会给出计划，绝不会自动 build。
+
+完整 scope 矩阵、LangBot/env 特例、BuildKit cache 和 benchmark 见
+`docs/DEVELOPER_WORKFLOW.md`。传统本地命令仍可按需使用：
 
 ```sh
 pnpm install

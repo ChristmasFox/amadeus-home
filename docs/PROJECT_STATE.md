@@ -8,6 +8,26 @@ Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当�
 配置模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
 `origin/main`；没有把运行时数据或真实 credentials 放入仓库。
 
+## Developer Workflow Optimization V1：COMPLETE（未部署）
+
+开发/验证/部署已采用 FAST / RUNTIME / RELEASE 分层。`scripts/developer-workflow.sh` 依据 Git diff
+识别 docs/tests/.agent、HomeHub/runtime source、Docker/package/lockfile、LangBot plugin/patch 和 env-only
+scope，并默认选择最低足够流程。普通 HomeHub/runtime TS 修改进入 RUNTIME：typecheck/build、映射后的
+定向 tests、非 Docker `/healthz` + `/homehub/health` smoke；不会自动 Docker build、Compose restart 或
+CasaOS deploy。
+
+`apps/agent-runtime/Dockerfile` 已改为 manifest/lockfile -> BuildKit cached `pnpm install` -> source ->
+build/deploy，且 production stage 使用 `COPY --chown` + 单独 `/data` 创建。2026-09-05 host BuildKit
+实测：原 Dockerfile 单一 HomeHub source 改动 build 为 132.25s（`pnpm install` 114.0s），新 Dockerfile
+为 22.37s（install `CACHED`），减少 83.1%；最终 image 从 474,477,455 B 至 360,758,644 B（-24.0%）。
+优化 image 的容器 `/healthz` 和 `/homehub/health` smoke 已通过。
+
+新增 `scripts/deploy-agent-runtime.sh` 默认 dry-run；显式 apply 一律使用
+`docker compose up -d --no-build`。只有干净已提交 source 下的 `--apply --build` 执行 tests、secret scan、
+host Buildx immutable commit-tag image build、transfer 到 Ubuntu、compose update、health/smoke 与 rollback
+compose backup。此阶段未传入或部署新 image，当前 CasaOS runtime 仍保持既有 `3.3.4-admin-03b0e41`。
+详见 `docs/DEVELOPER_WORKFLOW.md`。
+
 ## Codex Goal 预算策略
 
 仓库根目录 `AGENTS.md` 与用户级 `/Users/blacksidev/AGENTS.md` 均规定：禁止为 goal

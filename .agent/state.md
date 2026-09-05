@@ -6,8 +6,9 @@
 
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
 系统的可迁移 monorepo。迁移阶段、HomeHub V1 代码阶段、只读 `/whoami` 代码阶段、目标
-runtime/plugin 部署、平台来源修复和 Admin Identity 配置已完成，当前等待真实 Telegram
-入站复测。
+runtime/plugin 部署、平台来源修复、Admin Identity 配置和 Developer Workflow Optimization V1
+已完成；当前运行时功能侧仅等待真实 Telegram 入站复测。Developer Workflow Optimization V1 未执行
+CasaOS 部署，production runtime 保持原镜像。
 
 ## 新会话入口
 
@@ -50,6 +51,7 @@ runtime/plugin 部署、平台来源修复和 Admin Identity 配置已完成，�
 - 已新增 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID` 启动配置，本机 `.env` 已填入真实值并保持 ignored；CasaOS runtime 已加载外部 env 并重启验证。
 - HomeHub `/whoami` 实现提交为 `b3f2406`，Docker/package 修复提交为 `1fcefd7`、`7626cde`、`ddfee46`；已推送并部署 runtime 镜像 `local/pubg-query-engine-v3:3.3.4-admin-03b0e41`。
 - 已修复 LangBot command event 的 Telegram/KOOK 平台来源和 displayName 传递，提交 `dd5785e`、`9c34a89`、`1adbc1d`；patched image 已激活，等待 Telegram `/whoami` 复测。
+- 已完成 Developer Workflow Optimization V1：新增 change-scope classifier、FAST/RUNTIME/RELEASE 文档与 skill、无 Docker 本地 runtime smoke、默认 `--no-build` deploy script；Dockerfile pnpm install cache 与 final image layer 已优化。单一 HomeHub source build 从 132.25s（install 114.0s）降至 22.37s（install cache hit），optimized image smoke 通过；本阶段未部署。
 
 ## 状态更新协议
 

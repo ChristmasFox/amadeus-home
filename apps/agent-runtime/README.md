@@ -29,9 +29,23 @@ pnpm --filter @agent/agent-runtime typecheck
 pnpm --filter @agent/agent-runtime test
 ```
 
-从 monorepo 根目录构建容器：
+从 monorepo 根目录的常规源码改动先走 RUNTIME 本地验证，而不是构建容器：
 
-    docker build -f apps/agent-runtime/Dockerfile -t local/pubg-query-engine-v3:dev .
+```sh
+./scripts/developer-workflow.sh --run --files apps/agent-runtime/src/server.ts
+./scripts/smoke-agent-runtime.sh
+```
 
-容器部署使用 /DATA/AppData/pubg-query-engine-v3 的 data 和外部 secret file；
-不要把 API key 写入 compose 或镜像。
+只有明确 RELEASE 才使用 host BuildKit 构建 runtime image；Dockerfile 会先复制 workspace
+manifest/lockfile、执行缓存化的 `pnpm install`，再复制 TypeScript source。因此普通 HomeHub /
+Runtime TS 改动会复用 install layer。实际 CasaOS 部署使用：
+
+```sh
+./scripts/deploy-agent-runtime.sh --dry-run
+./scripts/deploy-agent-runtime.sh --apply --build
+```
+
+脚本以 commit-derived immutable image tag 在 host Buildx 构建并传入 Ubuntu；CasaOS 最终只运行
+`docker compose up -d --no-build`。容器仍使用 `/DATA/AppData/pubg-query-engine-v3` 的 data 和
+外部 secret file；不要把 API key 写入 compose 或镜像。详细规则见
+`docs/DEVELOPER_WORKFLOW.md`。

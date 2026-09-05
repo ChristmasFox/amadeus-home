@@ -35,6 +35,24 @@ git log -5 --oneline --decorate
 - 第三方 LangBot 的修改必须使用可追踪的仓库 patch，并通过镜像构建应用；禁止直接在运行容器内手工改文件作为长期方案。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
 
+## 开发验证与部署等级（FAST / RUNTIME / RELEASE）
+
+- 默认先运行 `pnpm workflow:plan`（或 `./scripts/developer-workflow.sh --plan`）按 Git diff 选择
+  **最低足够**的验证等级；不得把完整 release discovery 或 Docker build 当成每个 Goal 的默认动作。
+- **FAST**：docs、`.agent`、tests、skills、纯逻辑和小功能。运行定向 tests、受影响 package
+  typecheck、`git diff --check`，按需 secrets scan；默认禁止 Docker build、Compose restart 和 deploy。
+- **RUNTIME**：`apps/agent-runtime/src/**`、`packages/homehub-domain/src/**` 与 runtime assets。运行受影响
+  typecheck/build、定向 tests、`scripts/smoke-agent-runtime.sh`；RUNTIME 不意味着 Docker build，HomeHub
+  source 变更不得自动升级 RELEASE。
+- **RELEASE**：只有用户明确要求实际 CasaOS 部署时才执行。Dockerfile、`.dockerignore`、`package.json`
+  或 `pnpm-lock.yaml` 只标记 `RELEASE_BUILD_REQUIRED`，不会自行构建。顺序为 test -> secrets -> host
+  BuildKit build -> immutable commit tag -> compose update -> `docker compose up -d --no-build` -> health/smoke
+  -> rollback checkpoint。
+- `integrations/langbot/plugins/**` 走 plugin workflow；`integrations/langbot/patches/**` 走 LangBot image
+  workflow；仅 env 改动只允许显式 `--apply` 的 no-build recreate。
+- `scripts/deploy-agent-runtime.sh` 默认 dry-run；普通 `--apply` 永远使用 `--no-build`。只有明确
+  `--apply --build` 才能创建并传入新的 runtime image。详细矩阵见 `docs/DEVELOPER_WORKFLOW.md`。
+
 ## Codex Goal 预算（强制）
 
 - 仓库规则与 Codex 全局规则均禁止为 goal 手动设置、指定、增加或限制预算。
@@ -65,7 +83,7 @@ git log -5 --oneline --decorate
 ```sh
 orb -m ubuntu ...
 orb -m ubuntu -u root ...
-orb -m ubuntu -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d'
+orb -m ubuntu -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d --no-build'
 ```
 
 ## 安全边界

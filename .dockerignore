@@ -18,3 +18,5 @@ coverage
 *.tar.gz
 apps/agent-runtime/inspect_*.ts
 docs/archive
+.local/
+**/.DS_Store

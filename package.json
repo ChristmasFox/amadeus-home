@@ -9,6 +9,10 @@
     "test": "pnpm --filter @agent/agent-runtime test",
     "test:legacy-v2": "PYTHONPATH=packages/pubg-domain/legacy-v2:integrations/langbot/plugins/pubg-stats-v2 python3 -m unittest discover -s packages/pubg-domain/legacy-v2/tests",
     "check:secrets": "./scripts/check-secrets.sh",
-    "doctor": "./scripts/doctor.sh"
+    "doctor": "./scripts/doctor.sh",
+    "workflow:plan": "./scripts/developer-workflow.sh --plan",
+    "workflow:verify": "./scripts/developer-workflow.sh --run",
+    "test:workflow": "./scripts/test-developer-workflow.sh",
+    "smoke:runtime": "./scripts/smoke-agent-runtime.sh"
   }
 }

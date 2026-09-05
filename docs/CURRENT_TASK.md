@@ -4,7 +4,29 @@
 
 ## 当前阶段
 
-**HomeHub V1 + `/whoami` — 代码实现、推送和目标环境部署完成；真实入站烟测待执行**
+**Developer Workflow Optimization V1 — 已完成；未执行 CasaOS 部署。**
+
+HomeHub V1 + `/whoami` 的真实 Telegram/KOOK 入站烟测仍是独立的后续人工任务；本阶段没有重启、
+替换或部署该 runtime。
+
+## Developer Workflow Optimization V1（2026-09-05）
+
+- [x] 落地 `FAST` / `RUNTIME` / 显式 `RELEASE` 规则与 `scripts/developer-workflow.sh` 自动 scope 分类。
+- [x] docs、tests、`.agent` 默认 FAST；`apps/agent-runtime/src/**` 与
+  `packages/homehub-domain/src/**` 默认 RUNTIME，且不触发 Docker build。
+- [x] Dockerfile、`.dockerignore`、package manifest、`pnpm-lock.yaml` 标记
+  `RELEASE_BUILD_REQUIRED`；LangBot plugin/patch 与 env-only 分别路由到专用 no-build workflow。
+- [x] `apps/agent-runtime/Dockerfile` 已把 manifests/lockfile 与 `pnpm install` 放到 source copy 前，
+  并用 BuildKit `/pnpm/store` cache mount；final stage 改用 `COPY --chown`，避免 `chown -R` 大层重写。
+- [x] 新增非 Docker `scripts/smoke-agent-runtime.sh`，验证 `/healthz` 与 `/homehub/health`。
+- [x] 新增 `scripts/deploy-agent-runtime.sh`：默认 dry-run，任何 apply 都使用
+  `docker compose up -d --no-build`；仅 `--apply --build` 允许 host BuildKit 构建、commit-tag image
+  transfer、健康检查与 compose rollback backup。
+- [x] 已完成 workflow 分类测试、RUNTIME 定向 typecheck/tests/local smoke、optimized image container smoke；
+  BuildKit benchmark 证明单一 HomeHub TS 改动仍命中 `pnpm install` cache。
+- [x] 关键时间记录：原 Dockerfile 的 source-change build 132.25s（install 114.0s）→ 新 Dockerfile
+  22.37s（install `CACHED`），降低 83.1%；image size 降低 24.0%。
+- [x] 详细规则、环境边界和 benchmark 写入 `docs/DEVELOPER_WORKFLOW.md`。
 
 ## Codex 配置变更（2026-09-05）
 
