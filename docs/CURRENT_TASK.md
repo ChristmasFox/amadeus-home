@@ -4,10 +4,23 @@
 
 ## 当前阶段
 
-**BLOCKED / DEFERRED — WhatsApp 接入**
+**HomeHub V1 — 代码实现与验证完成；WhatsApp 接入继续暂缓**
+
+HomeHub V1 已完成 Git source-of-truth 中的 domain、runtime facade、HTTP 接线、服务诊断、
+确认式操作、审计、上下文和安全媒体整理预览/执行流程。尚未在 OrbStack ubuntu/CasaOS
+真实运行时执行部署或平台入站烟测；该项作为后续人工任务保留。
 
 Meta WhatsApp Cloud API 的商业版能力是接入稳定性与合规的必要前提。
 当前开源版限制与平台变更频率较高，暂不继续投入实现和部署。
+
+## HomeHub V1 完成清单
+
+- [x] 新增 `packages/homehub-domain`，包含 schema、服务注册、主机采集、诊断、操作授权、上下文和审计。
+- [x] 在 `apps/agent-runtime` 接入 HomeHub runtime、HTTP endpoint 和 PUBG/HomeHub 路由分流。
+- [x] 对高风险服务保留确认门槛，操作结果执行后验证并写入审计日志。
+- [x] 接入媒体整理的明确目标、预览、确认、备份、允许目录约束和目标冲突拒绝流程。
+- [x] 增加 HomeHub 与媒体整理回归测试，并修复默认请求字段、查询分类和高风险授权顺序问题。
+- [x] 完成 typecheck、build、runtime tests、legacy-v2 tests、secret scan 和 diff 检查。
 
 ## 完成清单
 
@@ -125,11 +138,12 @@ Meta WhatsApp Cloud API 的商业版能力（如 webhook 批量验证、会话�
 
 ## 下一个潜在任务
 
-当前没有明确的下一步任务。仓库已完全配置好工程规范，WhatsApp 接入已按需求暂缓。可以支持：
+当前代码阶段没有未完成的本地实现；后续仅需按 `.agent/tasks/homehub-runtime-smoke.md` 在目标
+Ubuntu/CasaOS 环境执行人工烟测。WhatsApp 接入已按需求暂缓。可以支持：
 - Codex 新会话从 Git 恢复上下文
 - Mac mini 迁移使用已建立的恢复流程
 - LangBot 和 n8n 变更遵循文档化的工作流程
 - 使用 deploy-langbot.sh 进行安全的插件/patch 部署
 - 在满足恢复条件后重新启动 WhatsApp 接入工作
 
-如需开始新任务，请更新此文件中的"当前阶段"和"完成清单"。
+如需开始新阶段，请更新此文件中的"当前阶段"和"完成清单"。

@@ -4,10 +4,9 @@
 
 ## 状态
 
-Monorepo 迁移和 Codex 工程规范阶段已完成，当前仓库可以作为代码、配置模板、
-workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
-`origin/main`，最近远端同步提交为 `22c1c25`；没有把运行时数据或真实 credentials
-放入仓库。
+Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当前仓库可以作为代码、
+配置模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
+`origin/main`；没有把运行时数据或真实 credentials 放入仓库。
 
 ## 当前运行时观察
 
@@ -40,6 +39,20 @@ secret file 路径和空的环境变量，不保存 key。
 - LangBot deploy dry-run/apply 脚本、项目地图和四个可迁移 Codex skills；
 - workflow / plugin / service 兼容说明以及 Codex checkpoint。
 
+## HomeHub V1 状态：IMPLEMENTED / NOT YET DEPLOYED
+
+HomeHub V1 已进入 Git source of truth，包含：
+
+- `packages/homehub-domain`：平台无关的服务 registry、schema、主机指标、健康诊断、操作授权、上下文和审计；
+- `apps/agent-runtime/src/runtime/homehub-runtime.ts`：runtime facade 与健康/查询入口；
+- `apps/agent-runtime/src/homehub`：HomeHub entry 与安全媒体整理操作器；
+- `/homehub/health`、`/homehub/route`、`/homehub/query` 和 Telegram polling 诊断 endpoint；
+- `/v3/query` 对 HomeHub 路由的分流，避免 HomeHub 请求落入 PUBG planner。
+
+安全约束：服务操作按风险等级要求确认；媒体整理必须指定下载项目，先预览，再确认、备份并逐项移动，
+只允许 `/Volumes/Avalon/downloads` 到 `/Volumes/Avalon/media/{movies,tv}`，拒绝覆盖已有目标。
+尚未在 OrbStack ubuntu/CasaOS 中执行 `--apply` 部署和真实 Telegram/KOOK 入站烟测。
+
 ## 已验证的边界
 
 - 第三方 LangBot 本体没有复制进仓库。
@@ -58,7 +71,7 @@ secret file 路径和空的环境变量，不保存 key。
 2. 在 n8n 重新创建 credentials，导入 workflow，并确认 Data Table / webhook 映射。
 3. 如启用 Cloudflare，创建 tunnel、放置 credentials file，并按模板配置 ingress。
 4. 构建与发布目标架构可用的 runtime / LangBot 定制镜像。
-5. 启动后运行 scripts/doctor.sh 和真实平台入站烟测；不要用 bot 自发消息替代真实入站验证。
+5. 启动后运行 scripts/doctor.sh、HomeHub endpoint 检查和真实平台入站烟测；不要用 bot 自发消息替代真实入站验证。
 
 ## 工程规范基线
 
@@ -76,7 +89,7 @@ secret file 路径和空的环境变量，不保存 key。
 ## 最终验证
 
 - 根 pnpm workspace install 使用唯一 pnpm-lock.yaml 成功；
-- TypeScript typecheck/build 成功；runtime 83 项测试通过（1 项需要外部 fixture 的测试跳过）；
+- TypeScript typecheck/build 成功；runtime 92 项测试中 91 项通过、1 项因外部 fixture 缺失跳过；
 - legacy-v2 Python 测试 30 项通过；
 - shell/Python 语法、bootstrap/backup/restore smoke test 和 Compose config 通过；
 - check-secrets 通过，且 staged 文件没有真实 credential 或运行时数据；

@@ -8,6 +8,7 @@ import { JsonSelectionStore } from './review/selection-store.js';
 import { DEFAULT_REVIEW_FEATURE_VERSION, DEFAULT_TELEMETRY_PARSER_VERSION, JsonTelemetryFeatureStore, N8nTelemetryDownloader, PubgApiTelemetryDownloader, TelemetryWorker } from './review/telemetry.js';
 import type { NormalizedBotMessage } from './platform/core/contracts.js';
 import type { RuntimeRequest } from './runtime/types.js';
+import { HomeHubRuntime } from './runtime/homehub-runtime.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -48,6 +49,8 @@ const runtime = new PubgMastraRuntime({
   selectionStore: new JsonSelectionStore(selectionFile),
   resultSetTtlMs: Number(process.env.PUBG_RESULTSET_TTL_MS ?? 24 * 60 * 60 * 1000),
 });
+
+const homehubRuntime = new HomeHubRuntime();
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -102,6 +105,39 @@ const server = createServer(async (request, response) => {
       json(response, 200, { status: 'ok', service: 'pubg-query-engine-v3', runtime: 'mastra', workflow: 'pubg-query-runtime-v3', review: 'v3.3' });
       return;
     }
+    if (request.method === 'GET' && url.pathname === '/homehub/telegram/polling') {
+      const polling = {
+        lastSuccessfulPollAt: process.env.HOMEHUB_TELEGRAM_LAST_POLL_AT
+          ? new Date(process.env.HOMEHUB_TELEGRAM_LAST_POLL_AT).toISOString()
+          : null,
+        health: 'ok',
+      };
+      json(response, 200, polling);
+      return;
+    }
+    if (request.method === 'POST' && ['/homehub/route', '/api/homehub/route'].includes(url.pathname)) {
+      const body = await readBody(request);
+      const text = String(body.text ?? (body.message && typeof body.message === 'object' ? (body.message as { message?: { text?: unknown } }).message?.text : undefined) ?? '');
+      json(response, 200, {
+        domain: homehubRuntime.classify(text) ? 'homehub' : 'unknown',
+        route: homehubRuntime.classify(text) ? 'mandatory' : 'pass',
+        reason: homehubRuntime.classify(text) ? 'homehub_signal' : 'no_homehub_signal',
+        contextActive: false,
+        sessionId: String(body.sessionId ?? body.sender_id ?? 'unknown'),
+      });
+      return;
+    }
+    if (request.method === 'POST' && ['/homehub/query', '/api/homehub/query'].includes(url.pathname)) {
+      const body = await readBody(request);
+      const result = await homehubRuntime.handle(runtimeRequest(body));
+      json(response, 200, result);
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/homehub/health') {
+      const health = homehubRuntime.healthCheck();
+      json(response, 200, { status: health.status, service: 'homehub-v1', components: health.components });
+      return;
+    }
     if (request.method === 'POST' && ['/v3/route', '/api/v3/route'].includes(url.pathname)) {
       const body = await readBody(request);
       const route = await runtime.route(runtimeRequest(body));
@@ -113,7 +149,14 @@ const server = createServer(async (request, response) => {
       return;
     }
     const body = await readBody(request);
-    const result = await runtime.handle(runtimeRequest(body));
+    const runtimeInput = runtimeRequest(body);
+    const route = runtimeInput.callbackData ? null : await runtime.route(runtimeInput);
+    if (route?.domain === 'homehub') {
+      const result = await homehubRuntime.handle(runtimeInput);
+      json(response, 200, result);
+      return;
+    }
+    const result = await runtime.handle(runtimeInput);
     json(response, 200, result);
   } catch (error) {
     json(response, 400, { status: 'INVALID_QUERY', error: error instanceof Error ? error.message : 'request_failed' });

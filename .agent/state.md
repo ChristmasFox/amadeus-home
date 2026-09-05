@@ -5,7 +5,7 @@
 ## 当前上下文
 
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
-系统的可迁移 monorepo。迁移阶段已完成，当前工作是验证并建立本地初始化 commit。
+系统的可迁移 monorepo。迁移阶段已完成，HomeHub V1 代码阶段已完成，当前保留目标环境烟测任务。
 
 ## 新会话入口
 
@@ -39,9 +39,10 @@
 - 补齐脱敏 Docker/CasaOS、Cloudflare、macOS 模板；
 - 补齐 bootstrap、doctor、backup、restore 和 secret scan；
 - 修复 restore.sh 语法错误并为脚本补充执行权限；
-- 已验证：pnpm install、类型检查、构建、测试、secret scan、脚本 smoke test 和 Compose 模板；
+- 完成 HomeHub V1 domain/runtime/API 接线、安全媒体整理流程和回归测试；
+- 已验证：pnpm install、类型检查、构建、92 项 runtime tests（91 pass、1 skip）、secret scan、脚本 smoke test 和 Compose 模板；
 - 初始本地 commit：767dd36（chore: initialize agent monorepo）；
-- 当前工作树干净，无 remote，无公网 push。
+- HomeHub V1 完成 commit 待本阶段提交；不执行公网 push。
 
 ## 状态更新协议
 

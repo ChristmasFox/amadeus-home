@@ -14,6 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@agent/homehub-domain": "workspace:*",
     "@mastra/core": "1.63.2",
     "zod": "4.5.4"
   },
