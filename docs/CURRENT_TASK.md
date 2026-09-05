@@ -7,7 +7,7 @@
 **PUBG Intent Router 时间词误判 — 已完成并提交。**
 
 本阶段只修改 Authorization / Admin Identity / Runtime Executor / Health State Semantics；没有执行 Docker
-build、CasaOS 部署或生产服务重启。HomeHub V1.1 已以 `e0a3ed5` 提交；PUBG Intent Router 时间词修复已以独立 commit（见最近 Git 提交记录） 提交。两个阶段均未执行 Docker build 或 Release。
+build、CasaOS 部署或生产服务重启。HomeHub V1.1 已以 `e0a3ed5` 提交；PUBG Intent Router 时间词修复已以独立 commit `d12b733` 提交。两个阶段均未执行 Docker build 或 Release。
 
 
 ## Telegram / KOOK `Request Failed` 诊断（2026-09-05）
@@ -117,7 +117,7 @@ Meta WhatsApp Cloud API 的商业版能力是接入稳定性与合规的必要�
 - [x] 明确 PUBG 语义或 activeDomain=pubg 的有效追问才进入 PUBG；长技术句不会因日期前缀继承 PUBG context。
 - [x] 回归：`昨天战绩` → PUBG；PUBG 上下文后的 `前天呢？` → PUBG；`昨天超的是CL30, tRCD 36, tRP 36, tRAS 80` → NOT PUBG；`昨天 Emby 挂了吗` → HomeHub / NOT PUBG。
 - [x] 仅运行 affected typecheck + targeted router/query tests、`git diff --check` 和 secret scan；未执行 Docker build / Release。
-- [x] 独立代码/文档 commit（见最近 Git 提交记录）。
+- [x] 独立代码/文档 commit：`d12b733`。
 
 ## HomeHub V1 完成清单
 

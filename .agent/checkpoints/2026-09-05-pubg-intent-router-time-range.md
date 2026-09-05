@@ -2,7 +2,7 @@
 
 Date: 2026-09-05 (Asia/Shanghai)
 Base commit: e0a3ed5 (`feat: harden homehub authorization and runtime health`)
-Status: implementation and targeted verification complete; independent commit pending.
+Status: implementation, targeted verification, and independent commit complete (`d12b733`).
 
 ## Change
 
@@ -31,4 +31,4 @@ Status: implementation and targeted verification complete; independent commit pe
 
 ## Next step
 
-Commit this source, tests, documentation, task state, and checkpoint independently from HomeHub V1.1.
+The source, tests, documentation, task state, and checkpoint were committed independently from HomeHub V1.1 as `d12b733`.

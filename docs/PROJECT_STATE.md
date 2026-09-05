@@ -6,7 +6,7 @@
 
 Monorepo 迁移、Codex 工程规范、HomeHub V1 和 HomeHub V1.1 Security & Runtime Reliability
 实现阶段已完成；HomeHub V1.1 已通过测试并提交为 `e0a3ed5`，用户指定的 PUBG Intent Router
-时间词误判 small-scope task 也已通过 targeted verification 并单独提交。仓库继续作为代码、配置
+时间词误判 small-scope task 也已通过 targeted verification，并以独立 commit `d12b733` 提交。仓库继续作为代码、配置
 模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的 `origin/main`；
 没有把运行时数据或真实 credentials 放入仓库。两个阶段均不执行 Docker build、CasaOS 部署或生产服务重启。
 

@@ -8,7 +8,7 @@
 系统的可迁移 monorepo。迁移阶段、HomeHub V1、只读 `/whoami`、目标 runtime/plugin 部署、平台
 来源修复、Admin Identity、Developer Workflow Optimization V1 和 **HomeHub V1.1 Security & Runtime
 Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，未执行 Docker build、CasaOS 部署或生产服务重启。
-用户指定的 PUBG Intent Router 时间词误判 small-scope task 已完成 targeted verification；代码与文档即将以独立 commit 提交。
+用户指定的 PUBG Intent Router 时间词误判 small-scope task 已完成 targeted verification，代码与文档已以独立 commit `d12b733` 提交。
 2026-09-05 的 Telegram/KOOK `Request Failed` 事故已由用户修正 9Router key，并完成 provider key、
 9router API 和 Telegram 流式回复验证；用户确认 KOOK/Telegram 均恢复。
 

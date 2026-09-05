@@ -23,4 +23,4 @@
 ## 验证边界
 
 只运行 targeted tests 和 affected typecheck；不执行 Docker build、Release、Compose 或部署。
-已更新 `docs/CURRENT_TASK.md`、`docs/PROJECT_STATE.md`、`.agent/state.md`，并写入日期 checkpoint；代码与文档以独立 Git commit 结束。
+已更新 `docs/CURRENT_TASK.md`、`docs/PROJECT_STATE.md`、`.agent/state.md`，并写入日期 checkpoint；代码与文档已以独立 Git commit `d12b733` 结束。
