@@ -8,6 +8,8 @@ RUN corepack enable && corepack prepare pnpm@9.9.0 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/agent-runtime/package.json apps/agent-runtime/package.json
 COPY apps/agent-runtime/tsconfig.json apps/agent-runtime/tsconfig.json
+COPY packages/homehub-domain/package.json packages/homehub-domain/package.json
+COPY packages/homehub-domain/src packages/homehub-domain/src
 COPY apps/agent-runtime/src apps/agent-runtime/src
 COPY apps/agent-runtime/teams apps/agent-runtime/teams
 COPY apps/agent-runtime/pubg-query.schema.json apps/agent-runtime/pubg-query.schema.json
