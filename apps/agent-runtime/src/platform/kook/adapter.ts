@@ -4,6 +4,9 @@ export interface KookEvent {
   channel_type?: string;
   target_id?: string;
   author_id?: string;
+  author_name?: string;
+  sender_name?: string;
+  display_name?: string;
   msg_id?: string;
   message_id?: string;
   content?: string;
@@ -33,7 +36,7 @@ export class KookAdapter implements PlatformAdapter<KookEvent> {
         platform: 'kook',
         platformUserId: String(event.author_id ?? 'unknown'),
         internalUserId: null,
-        displayName: null,
+        displayName: event.sender_name ?? event.author_name ?? event.display_name ?? null,
       },
       chat: {
         type: normalizeChatType(event.channel_type),

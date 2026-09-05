@@ -3,6 +3,7 @@ import type { DataLayerResult, ResultSetRecord, SessionContextRecord, Structured
 import type { BotResponse, NormalizedBotMessage, PlatformIdentity, PresentationModel } from '../platform/core/contracts.js';
 import type { ResolvedIdentity } from '../platform/core/identity.js';
 import type { ReviewExecution } from '../review/types.js';
+import type { WhoAmIInfo } from '../platform/core/whoami.js';
 
 export interface RuntimeRequest {
   text: string;
@@ -60,5 +61,18 @@ export interface RuntimeResponse {
   data: StructuredResult['data'] | null;
   evidence: StructuredResult['evidence'] | null;
   callbackAnswer?: { text: string; showAlert?: boolean } | null;
+  trace: RuntimeTraceEvent[];
+}
+
+export interface WhoAmIRuntimeResponse {
+  queryId: string;
+  domain: 'homehub';
+  status: 'success';
+  response: string;
+  messages: BotResponse['messages'];
+  normalizedMessage: NormalizedBotMessage;
+  identity: PlatformIdentity;
+  presentation: PresentationModel;
+  data: WhoAmIInfo;
   trace: RuntimeTraceEvent[];
 }

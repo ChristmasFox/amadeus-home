@@ -4,13 +4,13 @@ metadata:
   author: local
   name: pubg-stats
   repository: ''
-  version: 3.2.3
+  version: 3.2.4
   description:
-    en_US: Platform-independent PUBG Query Engine v3.2 bridge with Telegram and WhatsApp text messaging.
-    zh_Hans: 支持 Telegram 与 WhatsApp 文本消息及对局复盘的平台无关 PUBG Query Engine v3.2 桥接插件。
+    en_US: Platform-independent PUBG Query Engine v3.2 bridge with Telegram, KOOK, WhatsApp, and read-only identity inspection.
+    zh_Hans: 支持 Telegram、KOOK、WhatsApp 文本消息、对局复盘和只读身份查询的平台无关 PUBG Query Engine v3.2 桥接插件。
   label:
-    en_US: PUBG Stats v3.2.3
-    zh_Hans: PUBG 战绩 v3.2.3
+    en_US: PUBG Stats v3.2.4
+    zh_Hans: PUBG 战绩 v3.2.4
 spec:
   config: []
   components:

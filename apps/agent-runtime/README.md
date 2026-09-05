@@ -13,6 +13,7 @@ HomeHub 与 PUBG runtime 共用此进程，但 domain 实现位于 `packages/hom
 - `GET /homehub/health`：检查 HomeHub 组件状态；
 - `POST /homehub/route`：判断请求是否属于 HomeHub；
 - `POST /homehub/query`：执行状态查询、诊断、确认式服务操作和媒体整理预览；
+- `POST /whoami`（以及 `/v3/whoami`）：只读返回当前消息发送者的平台身份、聊天信息、内部用户映射和角色；
 - `GET /homehub/telegram/polling`：提供 Telegram polling 诊断指标。
 
 媒体整理只允许处理 `/Volumes/Avalon/downloads` 下明确指定的项目；默认只生成预览，

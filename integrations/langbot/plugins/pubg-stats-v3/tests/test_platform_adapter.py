@@ -9,7 +9,7 @@ from components.platform.contracts import build_normalized_message
 from components.platform.registry import normalize_session_message
 from components.platform.telegram import TelegramAdapter
 from components.platform.whatsapp import WhatsAppAdapter
-from components.pubg_v3_client import classify_pubg_message
+from components.pubg_v3_client import classify_pubg_message, is_whoami_command, run_whoami
 
 
 class PlatformAdapterTest(unittest.TestCase):
@@ -51,6 +51,74 @@ class PlatformAdapterTest(unittest.TestCase):
         self.assertEqual(message['chat']['type'], 'group')
         self.assertEqual(message['chat']['id'], '-200')
         self.assertNotEqual(message['user']['platformUserId'], message['chat']['id'])
+
+    def test_whoami_command_and_same_name_ids(self) -> None:
+        self.assertTrue(is_whoami_command('/whoami'))
+        self.assertTrue(is_whoami_command('/whoami@homehub_bot'))
+        self.assertFalse(is_whoami_command('/whoami Arthur'))
+
+        adapter = TelegramAdapter('test-telegram')
+        first = adapter.normalize_event({
+            'message': {
+                'message_id': 1,
+                'text': '/whoami',
+                'from': {'id': 1001, 'first_name': 'Arthur'},
+                'chat': {'id': -500, 'type': 'group'},
+            },
+        })
+        second = adapter.normalize_event({
+            'message': {
+                'message_id': 2,
+                'text': '/whoami',
+                'from': {'id': 1002, 'first_name': 'Arthur'},
+                'chat': {'id': -500, 'type': 'group'},
+            },
+        })
+        self.assertEqual(first['user']['displayName'], second['user']['displayName'])
+        self.assertNotEqual(first['user']['platformUserId'], second['user']['platformUserId'])
+
+    def test_whoami_client_is_read_only_and_forwards_normalized_identity(self) -> None:
+        message = build_normalized_message(
+            platform='kook',
+            bot_id='kook-bot',
+            platform_user_id='kook-user-1',
+            chat_type='group',
+            chat_id='kook-channel-1',
+            message_id='whoami-1',
+            text='/whoami',
+        )
+        with patch('components.pubg_v3_client._post_json', return_value={
+            'status': 'success',
+            'response': 'platform: kook\nplatformUserId: kook-user-1',
+            'data': {'platformUserId': 'kook-user-1'},
+        }) as post:
+            result = asyncio.run(run_whoami(None, message=message, query_id=7))
+
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['data']['platformUserId'], 'kook-user-1')
+        post.assert_called_once()
+        url, payload = post.call_args.args
+        self.assertTrue(url.endswith('/v3/whoami'))
+        self.assertEqual(payload['message']['user']['platformUserId'], 'kook-user-1')
+        plugin_state: dict[str, object] = {}
+        self.assertNotIn('last_pubg_query_result', plugin_state)
+
+    def test_whoami_rejects_missing_platform_identity_without_calling_runtime(self) -> None:
+        message = build_normalized_message(
+            platform='telegram',
+            bot_id='telegram-bot',
+            platform_user_id='unknown',
+            chat_type='private',
+            chat_id='unknown',
+            message_id='whoami-invalid',
+            text='/whoami',
+        )
+        with patch('components.pubg_v3_client._post_json') as post:
+            result = asyncio.run(run_whoami(None, message=message, query_id=8))
+
+        self.assertEqual(result['status'], 'INVALID_IDENTITY')
+        self.assertIn('真实的平台用户 ID', result['response'])
+        post.assert_not_called()
 
     def test_session_entrypoint_uses_registered_platform_adapter(self) -> None:
         kook_message = normalize_session_message({

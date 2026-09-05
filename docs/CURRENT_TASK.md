@@ -6,6 +6,19 @@
 
 **HomeHub V1 — 代码实现与验证完成；WhatsApp 接入继续暂缓**
 
+## Codex 配置变更（2026-09-05）
+
+- [x] 在仓库根目录 `AGENTS.md` 记录：使用 `/goal` 时不手动设置固定 `token_budget`，使用 Codex 默认预算机制。
+- [x] 完成只读 `/whoami` 命令：Telegram/KOOK 私聊和群聊/频道均通过统一平台契约处理。
+
+## HomeHub `/whoami` 完成清单
+
+- [x] 通过 `NormalizedBotMessage.user.platformUserId` 使用平台真实唯一用户 ID。
+- [x] 通过 `IdentityRegistry` 只按平台和稳定用户 ID解析 `internalUser`/`role`；未绑定返回 `unbound`。
+- [x] 通过独立的只读 runtime path 和 `PresentationModel` 返回结构化身份信息，不读取或写入 Context，不调用数据层、Action 或危险工具。
+- [x] LangBot V3 增加 `/whoami` Command，复用 Telegram/KOOK session Adapter 和 `/v3/whoami` endpoint。
+- [x] 增加 Telegram 私聊/群聊、KOOK 私聊/频道、同昵称不同 userId 和无状态修改测试。
+
 HomeHub V1 已完成 Git source-of-truth 中的 domain、runtime facade、HTTP 接线、服务诊断、
 确认式操作、审计、上下文和安全媒体整理预览/执行流程。尚未在 OrbStack ubuntu/CasaOS
 真实运行时执行部署或平台入站烟测；该项作为后续人工任务保留。

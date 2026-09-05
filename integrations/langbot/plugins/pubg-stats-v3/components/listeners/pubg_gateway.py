@@ -10,7 +10,7 @@ from components.platform.kook import KookAdapter
 from components.platform.registry import normalize_event_message
 from components.platform.telegram import TelegramAdapter
 from components.platform.whatsapp import WhatsAppAdapter
-from components.pubg_v3_client import classify_pubg_message, run_pubg_callback, run_pubg_query
+from components.pubg_v3_client import classify_pubg_message, is_whoami_command, run_pubg_callback, run_pubg_query, run_whoami
 
 
 class PubgQueryGatewayV3Listener(EventListener):
@@ -41,6 +41,16 @@ class PubgQueryGatewayV3Listener(EventListener):
             adapter = WhatsAppAdapter()
         else:
             adapter = KookAdapter()
+        if is_whoami_command(message.get('message', {}).get('text', '')):
+            result = await run_whoami(
+                self.plugin,
+                message=message,
+                query_id=event_context.query_id,
+            )
+            adapter.reply_response(event_context, result)
+            event_context.prevent_default()
+            event_context.prevent_postorder()
+            return
         if message.get('callback', {}).get('data'):
             if isinstance(adapter, TelegramAdapter):
                 await adapter.acknowledge_callback(event_context, '正在读取这场比赛的战斗记录…')

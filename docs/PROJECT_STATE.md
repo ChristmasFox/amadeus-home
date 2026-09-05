@@ -8,6 +8,27 @@ Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当�
 配置模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
 `origin/main`；没有把运行时数据或真实 credentials 放入仓库。
 
+## Codex Goal 预算策略
+
+仓库根目录 `AGENTS.md` 约定：使用 `/goal` 创建任务时不手动设置固定 `token_budget`，使用
+Codex 默认预算机制。该约定避免仓库工作流人为施加固定预算，但不覆盖 Codex 平台自身的
+系统上限；达到系统上限时应在新的任务或会话继续。
+
+## HomeHub `/whoami` 状态：IMPLEMENTED / NOT YET DEPLOYED
+
+只读 `/whoami` 已进入 Git source of truth。runtime 提供 `/whoami`、`/homehub/whoami` 和
+`/v3/whoami` POST aliases，LangBot V3 plugin 注册 `/whoami` Command。输出同时包含文本和
+结构化 `data`/`PresentationModel`，字段为 `platform`、`platformUserId`、`chatId`、
+`chatType`、`displayName`、`internalUser`、`role`。
+
+身份解析只使用平台事件归一化后的 `NormalizedBotMessage.user.platformUserId`：Telegram
+来源是事件 `from.id`，KOOK 来源是事件 `author_id`（或 Adapter 暴露的同一稳定 sender ID）。
+未建立映射时输出 `internalUser: unbound`、`role: unbound`；昵称、用户名和 display name
+不参与身份判定。
+
+`/whoami` 不读取或写入 Context，不调用 DataProvider、ActionEngine、审计或危险工具；当前
+只完成代码和本地测试，尚未在 OrbStack ubuntu/CasaOS 做真实平台入站烟测或部署。
+
 ## 当前运行时观察
 
 以下信息来自本机 Ubuntu/CasaOS 的只读检查，用于迁移基线，不是新机器的硬编码地址：

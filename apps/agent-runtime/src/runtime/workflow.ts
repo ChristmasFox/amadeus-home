@@ -18,8 +18,9 @@ import { IdentityRegistry } from '../platform/core/identity.js';
 import { normalizeRuntimeMessage } from '../platform/core/legacy.js';
 import { renderForPlatform } from '../platform/core/renderer.js';
 import { NormalizedBotMessageSchema } from '../platform/core/contracts.js';
+import { buildWhoAmIPresentation, resolveWhoAmI } from '../platform/core/whoami.js';
 import { classifyPubgRequest, type DomainRouteResult } from './router.js';
-import type { RuntimeEnvelope, RuntimeRequest, RuntimeResponse, RuntimeTraceEvent } from './types.js';
+import type { RuntimeEnvelope, RuntimeRequest, RuntimeResponse, RuntimeTraceEvent, WhoAmIRuntimeResponse } from './types.js';
 import { ReviewSubgraph } from '../review/subgraph.js';
 import { callbackDataForToken, createSelectionToken, InMemorySelectionStore, tokenFromCallbackData, type SelectionStore } from '../review/selection-store.js';
 import { resultSetForMatchCandidates } from '../review/match-selector.js';
@@ -517,6 +518,47 @@ export class PubgMastraRuntime {
       data: result.result?.data ?? null,
       evidence: result.result?.evidence ?? null,
       trace: result.trace,
+    };
+  }
+
+  /**
+   * Resolve and render the current platform identity without entering the
+   * query workflow. This method intentionally does not read or write context,
+   * call the data provider, execute actions, or invoke tools.
+   */
+  async whoami(request: RuntimeRequest): Promise<WhoAmIRuntimeResponse> {
+    const normalizedMessage = normalizeRuntimeMessage(request);
+    const info = resolveWhoAmI(normalizedMessage, this.identityRegistry);
+    const presentation = buildWhoAmIPresentation(normalizedMessage, this.identityRegistry);
+    const botResponse = renderForPlatform(presentation, normalizedMessage);
+    const response = botResponse.messages
+      .filter((message) => message.type === 'text' && typeof message.text === 'string')
+      .map((message) => message.text as string)
+      .join('\n\n');
+    return {
+      queryId: request.queryId ?? `whoami_${randomUUID()}`,
+      domain: 'homehub',
+      status: 'success',
+      response,
+      messages: botResponse.messages,
+      normalizedMessage,
+      identity: this.identityRegistry.resolve(normalizedMessage).platformIdentity,
+      presentation,
+      data: info,
+      trace: [{
+        stage: 'whoami',
+        at: new Date().toISOString(),
+        details: {
+          readOnly: true,
+          mutatesState: false,
+          executesAction: false,
+          callsDangerousTool: false,
+          platform: info.platform,
+          platformUserId: info.platformUserId,
+          chatId: info.chatId,
+          chatType: info.chatType,
+        },
+      }],
     };
   }
 

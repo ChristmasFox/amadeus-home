@@ -127,6 +127,16 @@ const server = createServer(async (request, response) => {
       });
       return;
     }
+    if (request.method === 'POST' && [
+      '/whoami', '/api/whoami',
+      '/homehub/whoami', '/api/homehub/whoami',
+      '/v3/whoami', '/api/v3/whoami',
+    ].includes(url.pathname)) {
+      const body = await readBody(request);
+      const result = await runtime.whoami(runtimeRequest(body));
+      json(response, 200, result);
+      return;
+    }
     if (request.method === 'POST' && ['/homehub/query', '/api/homehub/query'].includes(url.pathname)) {
       const body = await readBody(request);
       const result = await homehubRuntime.handle(runtimeRequest(body));

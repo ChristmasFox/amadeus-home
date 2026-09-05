@@ -4,7 +4,7 @@
 
 ## 内容
 
-- plugins/pubg-stats-v3：当前 V3 PUBG tool、command、listener、platform adapter；
+- plugins/pubg-stats-v3：当前 V3 PUBG tool、command、listener、platform adapter，以及只读 `/whoami` command；
 - plugins/pubg-stats-v2：V2 兼容插件，配合 packages/pubg-domain/legacy-v2；
 - plugins/organize-emby：媒体整理插件；
 - plugins/macos-nas-control：Mac/NAS 管理插件；

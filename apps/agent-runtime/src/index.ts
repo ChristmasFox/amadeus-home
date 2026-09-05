@@ -20,6 +20,7 @@ export * from './platform/core/chunking.js';
 export * from './platform/core/identity.js';
 export * from './platform/core/legacy.js';
 export * from './platform/core/renderer.js';
+export * from './platform/core/whoami.js';
 export * from './platform/kook/adapter.js';
 export * from './platform/kook/renderer.js';
 export * from './platform/telegram/adapter.js';
