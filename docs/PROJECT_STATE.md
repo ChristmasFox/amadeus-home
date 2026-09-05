@@ -14,7 +14,7 @@ Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当�
 Codex 默认预算机制。该约定避免仓库工作流人为施加固定预算，但不覆盖 Codex 平台自身的
 系统上限；达到系统上限时应在新的任务或会话继续。
 
-## HomeHub `/whoami` 状态：IMPLEMENTED / NOT YET DEPLOYED
+## HomeHub `/whoami` 状态：IMPLEMENTED / DEPLOYED / INBOUND SMOKE PENDING
 
 只读 `/whoami` 已进入 Git source of truth。runtime 提供 `/whoami`、`/homehub/whoami` 和
 `/v3/whoami` POST aliases，LangBot V3 plugin 注册 `/whoami` Command。输出同时包含文本和
@@ -26,8 +26,14 @@ Codex 默认预算机制。该约定避免仓库工作流人为施加固定预�
 未建立映射时输出 `internalUser: unbound`、`role: unbound`；昵称、用户名和 display name
 不参与身份判定。
 
-`/whoami` 不读取或写入 Context，不调用 DataProvider、ActionEngine、审计或危险工具；当前
-只完成代码和本地测试，尚未在 OrbStack ubuntu/CasaOS 做真实平台入站烟测或部署。
+`/whoami` 不读取或写入 Context，不调用 DataProvider、ActionEngine、审计或危险工具。当前
+runtime 镜像已在 OrbStack ubuntu/CasaOS 健康运行，LangBot V3 plugin 3.2.4 已通过本地 API
+安装并 ready；真实 Telegram/KOOK 入站事件烟测仍待执行。
+
+部署记录：Git `main` 已推送至 `origin`，runtime 镜像为
+`local/pubg-query-engine-v3:3.3.3-whoami-ddfee46`（image id
+`sha256:4e902c2b578777be6c42733d180da5dc8e72e883139611833856504d336b8383`），CasaOS compose
+回滚副本位于 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260905-214712`。
 
 ## 当前运行时观察
 
@@ -37,7 +43,7 @@ Codex 默认预算机制。该约定避免仓库工作流人为施加固定预�
 | --- | --- |
 | OrbStack machine | ubuntu running |
 | LangBot | langbot + langbot_plugin_runtime，兼容 LangBot 4.10.8 定制镜像 |
-| Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.2-whatsapp-20260905-3，healthy，端口 5310 |
+| Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.3-whoami-ddfee46，healthy，端口 5310 |
 | Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
 | Review | feature version review-features-4 |
 | n8n | n8n running，主机端口 5679 |

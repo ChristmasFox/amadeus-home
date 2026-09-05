@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**HomeHub V1 — 代码实现与验证完成；WhatsApp 接入继续暂缓**
+**HomeHub V1 + `/whoami` — 代码实现、推送和目标环境部署完成；真实入站烟测待执行**
 
 ## Codex 配置变更（2026-09-05）
 
@@ -18,10 +18,13 @@
 - [x] 通过独立的只读 runtime path 和 `PresentationModel` 返回结构化身份信息，不读取或写入 Context，不调用数据层、Action 或危险工具。
 - [x] LangBot V3 增加 `/whoami` Command，复用 Telegram/KOOK session Adapter 和 `/v3/whoami` endpoint。
 - [x] 增加 Telegram 私聊/群聊、KOOK 私聊/频道、同昵称不同 userId 和无状态修改测试。
+- [x] 推送 `main` 到 `origin`，在 Ubuntu/CasaOS 激活 runtime 镜像并安装 LangBot V3 plugin 3.2.4。
+- [x] 通过 runtime `/healthz`、`/v3/whoami`、`scripts/doctor.sh` 完成部署后验证；保留 compose 回滚副本。
+- [ ] 使用真实 Telegram/KOOK 用户事件执行最终入站烟测。
 
 HomeHub V1 已完成 Git source-of-truth 中的 domain、runtime facade、HTTP 接线、服务诊断、
-确认式操作、审计、上下文和安全媒体整理预览/执行流程。尚未在 OrbStack ubuntu/CasaOS
-真实运行时执行部署或平台入站烟测；该项作为后续人工任务保留。
+确认式操作、审计、上下文和安全媒体整理预览/执行流程。`/whoami` runtime 已部署到
+OrbStack ubuntu/CasaOS，真实 Telegram/KOOK 入站烟测仍作为后续人工任务保留。
 
 Meta WhatsApp Cloud API 的商业版能力是接入稳定性与合规的必要前提。
 当前开源版限制与平台变更频率较高，暂不继续投入实现和部署。

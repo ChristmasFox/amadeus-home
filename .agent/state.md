@@ -5,8 +5,8 @@
 ## 当前上下文
 
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
-系统的可迁移 monorepo。迁移阶段、HomeHub V1 代码阶段和只读 `/whoami` 代码阶段已完成，
-当前保留目标环境烟测任务。
+系统的可迁移 monorepo。迁移阶段、HomeHub V1 代码阶段、只读 `/whoami` 代码阶段和目标
+runtime/plugin 部署已完成，当前保留真实 Telegram/KOOK 入站烟测任务。
 
 ## 新会话入口
 
@@ -45,8 +45,8 @@
 - 初始本地 commit：767dd36（chore: initialize agent monorepo）；
 - HomeHub V1 完成 commit：`ba1d556`（feat: add HomeHub v1 runtime）；不执行公网 push。
 - 已在 `AGENTS.md` 记录 `/goal` 不手动设置固定 `token_budget` 的仓库协作规则。
-- 已完成 HomeHub `/whoami` 的平台无关 identity resolver、runtime endpoint、LangBot Command、测试和文档同步；未执行部署。
-- HomeHub `/whoami` 实现已提交到 `b3f2406`；后续仅按 `.agent/tasks/homehub-runtime-smoke.md` 执行目标环境烟测。
+- 已完成 HomeHub `/whoami` 的平台无关 identity resolver、runtime endpoint、LangBot Command、测试和文档同步；已部署并验证。
+- HomeHub `/whoami` 实现提交为 `b3f2406`，Docker/package 修复提交为 `1fcefd7`、`7626cde`、`ddfee46`；已推送并部署 runtime 镜像 `local/pubg-query-engine-v3:3.3.3-whoami-ddfee46`。
 
 ## 状态更新协议
 
