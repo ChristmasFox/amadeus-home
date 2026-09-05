@@ -39,7 +39,7 @@ Telegram session 当成了 KOOK。
 - [x] 新增 `TELEGRAM_ADMIN_USER_ID`、`KOOK_ADMIN_USER_ID` 环境配置项，未将真实 ID 写入源码。
 - [x] 系统启动时将已配置的平台 ID 映射为 `internalUser: arthur`、`role: ADMIN`。
 - [x] 已将真实值写入本机忽略文件 `.env`，该文件未进入 Git。
-- [ ] 尚未将这两个环境变量应用到已运行的 CasaOS container；需要显式部署/重启后生效。
+- [x] 已将这两个环境变量通过外部 env 文件应用到 CasaOS container，并完成 runtime 重启。
 
 HomeHub V1 已完成 Git source-of-truth 中的 domain、runtime facade、HTTP 接线、服务诊断、
 确认式操作、审计、上下文和安全媒体整理预览/执行流程。`/whoami` runtime 已部署到

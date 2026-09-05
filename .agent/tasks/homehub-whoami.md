@@ -1,6 +1,6 @@
 # HomeHub `/whoami` 待办
 
-状态：已完成（代码、平台来源/displayName 修复、Admin Identity 配置、推送、目标环境部署与本地验证）；真实 Telegram `/whoami` 入站复测和 CasaOS admin env 应用仍待执行。
+状态：已完成（代码、平台来源/displayName 修复、Admin Identity 配置、推送、目标环境部署与本地验证）；真实 Telegram `/whoami` 入站复测仍待执行。
 
 ## 目标
 

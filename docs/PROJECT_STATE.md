@@ -42,12 +42,16 @@ LangBot 与 plugin runtime 使用 `local/langbot-agent:1adbc1d-whoami-display-20
 `PersonCommandSent`/`GroupCommandSent` 会从 `query.adapter` 传递真实平台；plugin gateway
 监听 command event 后才调用 `/v3/whoami`。等待真实 Telegram 用户再次发送命令确认最终入站输出。
 
-## Admin Identity 配置状态：SOURCE READY / CASAOS ENV PENDING
+## Admin Identity 配置状态：DEPLOYED / INBOUND RECHECK PENDING
 
 runtime 启动配置读取 `TELEGRAM_ADMIN_USER_ID` 和 `KOOK_ADMIN_USER_ID`，配置值存在时只按
 平台稳定 ID建立同一个 `arthur` / `ADMIN` mapping；缺少或占位值时不建立绑定。真实值已
-写入本机被 Git 忽略的 `.env`，没有写入源码或 `.env.example`。当前已运行的 CasaOS runtime
-尚未重启以加载这两个变量，需经过显式部署流程后生效。
+写入本机被 Git 忽略的 `.env`，没有写入源码或 `.env.example`。CasaOS runtime 已通过外部
+env 文件加载这两个变量并重启生效；真实 Telegram/KOOK 入站复测仍待执行。
+
+active runtime image：`local/pubg-query-engine-v3:3.3.4-admin-03b0e41`；外部 identity env
+file：`/DATA/AppData/pubg-query-engine-v3/admin-identity.env`。回滚 compose 副本和部署过程
+记录在 `.agent/checkpoints/2026-09-05-homehub-admin-identity-deployment.md`。
 
 ## 当前运行时观察
 
@@ -57,7 +61,7 @@ runtime 启动配置读取 `TELEGRAM_ADMIN_USER_ID` 和 `KOOK_ADMIN_USER_ID`，�
 | --- | --- |
 | OrbStack machine | ubuntu running |
 | LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:1adbc1d-whoami-display-20260905，兼容 LangBot 4.10.8 定制镜像 |
-| Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.3-whoami-ddfee46，healthy，端口 5310 |
+| Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.4-admin-03b0e41，healthy，端口 5310 |
 | Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
 | Review | feature version review-features-4 |
 | n8n | n8n running，主机端口 5679 |

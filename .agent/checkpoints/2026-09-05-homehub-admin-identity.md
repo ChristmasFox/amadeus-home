@@ -30,7 +30,8 @@
 
 ## Deployment
 
-- 当前已运行的 CasaOS runtime 尚未重启加载两个 admin env；本次没有执行外部部署。
-- 如需应用到 canonical Ubuntu/CasaOS，应将真实值从外部 secret/config 注入
-  `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml` 的 environment，随后按显式
-  deploy/apply 流程重建 runtime。
+- 已部署到 canonical OrbStack `ubuntu` / CasaOS；active image 为
+  `local/pubg-query-engine-v3:3.3.4-admin-03b0e41`。
+- 外部 identity env file：`/DATA/AppData/pubg-query-engine-v3/admin-identity.env`，权限为 `0600`；真实值未写入 Git。
+- CasaOS runtime compose 已通过该 env file 重建并健康运行。
+- 部署回滚和验证细节记录在 `.agent/checkpoints/2026-09-05-homehub-admin-identity-deployment.md`。
