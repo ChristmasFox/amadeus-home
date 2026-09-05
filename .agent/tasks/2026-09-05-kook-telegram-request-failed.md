@@ -1,6 +1,6 @@
 # Telegram / KOOK `Request Failed` 修复任务
 
-状态：**待显式 `--apply`**
+状态：**已完成（用户修正 key，运行时验证通过）**
 
 ## 已确认事实
 
@@ -16,7 +16,16 @@
   9router active key 为 200。
 - `scripts/doctor.sh` 当前通过；这不是需要盲目重启的容器健康问题。
 
-## 显式 apply 后的建议顺序
+## 已完成结果
+
+- 用户已在 LangBot 管理界面更新 `9Router` provider credential。
+- 复核确认 LangBot provider key 与 9router 数据库 active key 完全一致，调用 `/v1/models`
+  返回 HTTP 200。
+- LangBot 随后成功处理 Telegram 私聊和群聊测试并完成流式回复；用户确认 KOOK/Telegram
+  均已恢复。没有重建镜像，也没有必要重启容器。
+- 独立的 Kiro `invalid_grant` / Codex Luna account lock 告警仍保留，后续另行处理。
+
+## （历史）显式 apply 前的建议顺序
 
 1. 在 Ubuntu 上备份 `/DATA/AppData/langbot/data/langbot.db`，备份文件留在仓库外。
 2. 从 9router 管理界面/API 或其本地数据库获取当前 active API key；**绝不把 key 写入 Git、

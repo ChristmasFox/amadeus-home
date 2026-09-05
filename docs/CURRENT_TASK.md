@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-**Telegram / KOOK `Request Failed` 事故诊断 — 已完成诊断；运行时修复待显式 `--apply`。**
+**Telegram / KOOK `Request Failed` 事故 — 已完成修复和验证。**
 
 Developer Workflow Optimization V1 已完成，且未执行 CasaOS 部署。
 
@@ -24,10 +24,13 @@ HomeHub V1 + `/whoami` 的真实 Telegram/KOOK 入站烟测仍是独立的后续
   `scripts/doctor.sh` 通过（0 failure、0 warning）。
 - [x] 记录次要运行时告警：9router 的 Kiro OAuth refresh token 返回 `invalid_grant`，
   Codex Luna 曾出现短时 account lock；它们不是本次 401 的直接根因。
-- [ ] 将 9router active API key 重新绑定到 LangBot `9Router` provider；该动作会修改运行时
-  credential，尚未执行，必须由用户显式要求 `--apply` 后进行并先保留备份。
-- [ ] 重启 LangBot（使用 `--no-build`，不重新构建镜像）并完成真实 KOOK/Telegram
-  入站回归；后续步骤见 `.agent/tasks/2026-09-05-kook-telegram-request-failed.md`。
+- [x] 用户已将 9router active API key 重新绑定到 LangBot `9Router` provider；只读复核确认
+  provider key 与 9router active key 完全一致，使用该 key 请求 `/v1/models` 返回 HTTP 200。
+- [x] 修复后 Telegram 私聊和群聊测试均成功完成模型流式响应（各 2 chunks），最近日志没有
+  新增该 HTTP 401；用户确认 KOOK 与 Telegram 均已恢复。
+- [x] 不需要重建镜像或重启容器；LangBot 通过管理 API 保存 provider 更新后立即恢复。
+- [ ] 9router 的 Kiro `invalid_grant` 和 Codex Luna account lock 仍是独立的上游告警，后续
+  如需稳定 fallback 再单独处理；不影响本次 key 修复结论。
 
 ## Developer Workflow Optimization V1（2026-09-05）
 
