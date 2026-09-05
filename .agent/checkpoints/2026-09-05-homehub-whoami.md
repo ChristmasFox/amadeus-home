@@ -36,8 +36,8 @@
 
 ## 当前分支与部署
 
-- 分支：`main`，未执行公网 push。
-- 代码和插件 source 已修改在工作树；未部署到 OrbStack ubuntu/CasaOS。
+- 实现提交：`b3f2406`（feat: add read-only whoami command）；分支：`main`，未执行公网 push。
+- 代码和插件 source 已进入 Git；未部署到 OrbStack ubuntu/CasaOS。
 - 目标环境真实入站烟测仍由 `.agent/tasks/homehub-runtime-smoke.md` 负责。
 
 ## 下一步

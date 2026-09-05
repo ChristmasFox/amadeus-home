@@ -46,7 +46,7 @@
 - HomeHub V1 完成 commit：`ba1d556`（feat: add HomeHub v1 runtime）；不执行公网 push。
 - 已在 `AGENTS.md` 记录 `/goal` 不手动设置固定 `token_budget` 的仓库协作规则。
 - 已完成 HomeHub `/whoami` 的平台无关 identity resolver、runtime endpoint、LangBot Command、测试和文档同步；未执行部署。
-- 当前阶段代码存在未提交变更；提交后仅按 `.agent/tasks/homehub-runtime-smoke.md` 执行目标环境烟测。
+- HomeHub `/whoami` 实现已提交到 `b3f2406`；后续仅按 `.agent/tasks/homehub-runtime-smoke.md` 执行目标环境烟测。
 
 ## 状态更新协议
 
