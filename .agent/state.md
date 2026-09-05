@@ -45,7 +45,7 @@ runtime/plugin 部署、平台来源修复和 Admin Identity 配置已完成，�
 - 已验证：pnpm install、类型检查、构建、92 项 runtime tests（91 pass、1 skip）、secret scan、脚本 smoke test 和 Compose 模板；
 - 初始本地 commit：767dd36（chore: initialize agent monorepo）；
 - HomeHub V1 完成 commit：`ba1d556`（feat: add HomeHub v1 runtime）；不执行公网 push。
-- 已在 `AGENTS.md` 记录 `/goal` 不手动设置固定 `token_budget` 的仓库协作规则。
+- 已在仓库根目录 `AGENTS.md` 与用户级 `/Users/blacksidev/AGENTS.md` 记录：禁止为 goal 手动设置、指定、增加或限制预算；调用 `/goal`/`create_goal` 时省略 `token_budget`，使用 Codex 默认预算机制。
 - 已完成 HomeHub `/whoami` 的平台无关 identity resolver、runtime endpoint、LangBot Command、测试和文档同步；已部署并验证。
 - 已新增 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID` 启动配置，本机 `.env` 已填入真实值并保持 ignored；CasaOS runtime 已加载外部 env 并重启验证。
 - HomeHub `/whoami` 实现提交为 `b3f2406`，Docker/package 修复提交为 `1fcefd7`、`7626cde`、`ddfee46`；已推送并部署 runtime 镜像 `local/pubg-query-engine-v3:3.3.4-admin-03b0e41`。

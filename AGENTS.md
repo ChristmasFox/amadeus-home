@@ -35,10 +35,11 @@ git log -5 --oneline --decorate
 - 第三方 LangBot 的修改必须使用可追踪的仓库 patch，并通过镜像构建应用；禁止直接在运行容器内手工改文件作为长期方案。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
 
-## Codex Goal 预算
+## Codex Goal 预算（强制）
 
-- 使用 `/goal` 创建任务时，不要手动设置固定 `token_budget`，使用 Codex 默认预算机制。
-- 不要因为仓库任务而人为增加或限制 goal 预算；如果系统达到平台上限，应开启新的任务或会话继续。
+- 仓库规则与 Codex 全局规则均禁止为 goal 手动设置、指定、增加或限制预算。
+- 调用 `/goal` 或 `create_goal` 时不得传入 `token_budget`，只能使用 Codex 默认预算机制。
+- 如果系统达到平台上限，应开启新的任务或会话继续；不得通过仓库规则伪造或解除平台限制。
 
 ## 阶段完成协议
 

@@ -8,7 +8,7 @@
 
 ## Codex 配置变更（2026-09-05）
 
-- [x] 在仓库根目录 `AGENTS.md` 记录：使用 `/goal` 时不手动设置固定 `token_budget`，使用 Codex 默认预算机制。
+- [x] 已在仓库根目录 `AGENTS.md` 与用户级 `/Users/blacksidev/AGENTS.md` 写入强制规则：禁止为 goal 手动设置、指定、增加或限制预算；调用 `/goal`/`create_goal` 时省略 `token_budget`，使用 Codex 默认预算机制。
 - [x] 完成只读 `/whoami` 命令：Telegram/KOOK 私聊和群聊/频道均通过统一平台契约处理。
 
 ## `/whoami` 平台来源修复（2026-09-05）

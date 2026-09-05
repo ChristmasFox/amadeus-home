@@ -10,9 +10,10 @@ Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当�
 
 ## Codex Goal 预算策略
 
-仓库根目录 `AGENTS.md` 约定：使用 `/goal` 创建任务时不手动设置固定 `token_budget`，使用
-Codex 默认预算机制。该约定避免仓库工作流人为施加固定预算，但不覆盖 Codex 平台自身的
-系统上限；达到系统上限时应在新的任务或会话继续。
+仓库根目录 `AGENTS.md` 与用户级 `/Users/blacksidev/AGENTS.md` 均规定：禁止为 goal
+手动设置、指定、增加或限制预算；调用 `/goal` 或 `create_goal` 时不得传入 `token_budget`，
+只能使用 Codex 默认预算机制。该约定不覆盖 Codex 平台自身的系统上限；达到系统上限时应在
+新的任务或会话继续。
 
 ## HomeHub `/whoami` 状态：IMPLEMENTED / DEPLOYED / INBOUND SMOKE PENDING
 
