@@ -25,7 +25,7 @@
 
 - [x] pnpm install 生成根 pnpm-lock.yaml；
 - [x] pnpm typecheck、pnpm build；
-- [x] pnpm test：83 个 runtime tests 通过；
+- [x] pnpm test：83 个 runtime tests（82 pass，1 个外部 fixture 缺失而 skip）；
 - [x] pnpm test:legacy-v2：30 个 Python tests 通过；
 - [x] pnpm check:secrets；
 - [x] Shell/Python 语法、脚本 dry-run/help smoke test；
