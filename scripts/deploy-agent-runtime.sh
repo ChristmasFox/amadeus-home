@@ -103,16 +103,29 @@ if ((BUILD)); then
     pnpm check:secrets
   )
 
-  build_args=()
-  if ((CLEAR_PROXY)); then
-    build_args+=(--build-arg HTTP_PROXY= --build-arg HTTPS_PROXY= --build-arg ALL_PROXY= --build-arg NO_PROXY=)
-  fi
-
-  docker buildx build --load --progress=plain \
-    "${build_args[@]}" \
-    --file "$ROOT_DIR/apps/agent-runtime/Dockerfile" \
-    --tag "$IMAGE" \
+  build_command=(
+    docker buildx build
+    --load
+    --progress=plain
+    --file "$ROOT_DIR/apps/agent-runtime/Dockerfile"
+    --tag "$IMAGE"
     "$ROOT_DIR"
+  )
+  if ((CLEAR_PROXY)); then
+    build_command=(
+      docker buildx build
+      --load
+      --progress=plain
+      --build-arg HTTP_PROXY=
+      --build-arg HTTPS_PROXY=
+      --build-arg ALL_PROXY=
+      --build-arg NO_PROXY=
+      --file "$ROOT_DIR/apps/agent-runtime/Dockerfile"
+      --tag "$IMAGE"
+      "$ROOT_DIR"
+    )
+  fi
+  "${build_command[@]}"
 
   docker save "$IMAGE" | orb -m "$MACHINE" -u root docker load
 fi
