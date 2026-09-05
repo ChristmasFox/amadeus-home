@@ -19,7 +19,7 @@ Telegram session 当成了 KOOK。
 
 - [x] build-time patch 为 LangBot command event 增加平台字段，并按实际 source adapter 判定 `telegram`/`kook`。
 - [x] EventListener 接管 command event 后再执行 `/whoami`，继续使用真实 `sender_id`，不使用昵称判断。
-- [x] patched LangBot image `local/langbot-agent:9c34a89-whoami-fix-20260905` 已激活，plugin 3.2.4 已重新安装并 ready。
+- [x] patched LangBot image `local/langbot-agent:1adbc1d-whoami-display-20260905` 已激活，plugin 3.2.4 已重新安装并 ready。
 - [x] runtime 与 LangBot 容器健康检查通过。
 - [ ] 等待真实 Telegram 用户再次发送 `/whoami` 完成最终入站回归确认。
 
