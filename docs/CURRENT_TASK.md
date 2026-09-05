@@ -4,10 +4,30 @@
 
 ## 当前阶段
 
-**Developer Workflow Optimization V1 — 已完成；未执行 CasaOS 部署。**
+**Telegram / KOOK `Request Failed` 事故诊断 — 已完成诊断；运行时修复待显式 `--apply`。**
+
+Developer Workflow Optimization V1 已完成，且未执行 CasaOS 部署。
 
 HomeHub V1 + `/whoami` 的真实 Telegram/KOOK 入站烟测仍是独立的后续人工任务；本阶段没有重启、
 替换或部署该 runtime。
+
+## Telegram / KOOK `Request Failed` 诊断（2026-09-05）
+
+- [x] 只读检查 OrbStack `ubuntu` / CasaOS 中的 `langbot`、`langbot_plugin_runtime`、
+  `9router` 和 `pubg-query-engine-v3`；LangBot 与插件 runtime 正常运行，runtime 为 healthy。
+- [x] 确认 2026-09-05 23:13:57、23:14:31、23:14:47 的 KOOK 失败，以及
+  23:14:55、23:41:47、23:41:50 的 Telegram 失败，均落在同一条 `arthur-combo` 模型请求链路。
+- [x] 根因已交叉验证：LangBot `9Router` provider 保存的 API key 长度为 3，
+  `9router` 数据库当前 active API key 长度为 35；使用 LangBot 当前 key 请求 `/v1/models`
+  返回 HTTP 401 `API key required for remote API access`，使用 9router active key 返回 HTTP 200。
+- [x] 排除 Telegram/KOOK 传输层为主因：两平台的 `/whoami` 和部分后续消息仍成功出站，
+  `scripts/doctor.sh` 通过（0 failure、0 warning）。
+- [x] 记录次要运行时告警：9router 的 Kiro OAuth refresh token 返回 `invalid_grant`，
+  Codex Luna 曾出现短时 account lock；它们不是本次 401 的直接根因。
+- [ ] 将 9router active API key 重新绑定到 LangBot `9Router` provider；该动作会修改运行时
+  credential，尚未执行，必须由用户显式要求 `--apply` 后进行并先保留备份。
+- [ ] 重启 LangBot（使用 `--no-build`，不重新构建镜像）并完成真实 KOOK/Telegram
+  入站回归；后续步骤见 `.agent/tasks/2026-09-05-kook-telegram-request-failed.md`。
 
 ## Developer Workflow Optimization V1（2026-09-05）
 

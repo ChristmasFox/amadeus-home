@@ -8,6 +8,24 @@ Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当�
 配置模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
 `origin/main`；没有把运行时数据或真实 credentials 放入仓库。
 
+## Telegram / KOOK `Request Failed` 事故：DIAGNOSED / FIX PENDING（2026-09-05）
+
+2026-09-05 晚间 KOOK 和 Telegram 均出现多条 `Request Failed`。只读检查确认这不是两个平台
+适配器同时掉线，而是它们共用的 LangBot `arthur-combo` 模型请求链路认证失败：LangBot 的
+`9Router` provider 仍保存一个 3 字符的旧/占位 API key，而 9router 本地数据库当前 active key
+为另一把 35 字符 key。使用前者访问 `http://9router:20128/v1/models` 返回 HTTP 401
+`API key required for remote API access`；使用后者返回 HTTP 200。
+
+最近一批错误为：KOOK 23:13:57、23:14:31、23:14:47；Telegram 23:14:55、23:41:47、
+23:41:50（Asia/Shanghai）。平台传输仍有成功记录，Telegram/KOOK `/whoami` 和部分普通消息
+可出站；LangBot、插件 runtime、9router 和 Mastra runtime 容器仍在运行，`scripts/doctor.sh`
+报告 0 failure / 0 warning。
+
+尚未执行 credential 重绑、容器重启或部署。运行时 credential 变更需要显式 `--apply`，并应先
+备份 LangBot 数据库；修复和回归步骤记录在 `.agent/tasks/2026-09-05-kook-telegram-request-failed.md`。
+9router 同时存在 Kiro OAuth `invalid_grant` 和 Codex Luna 短时 account lock 告警，属于独立的
+上游可用性问题，修复 key 后仍需观察 fallback。
+
 ## Developer Workflow Optimization V1：COMPLETE（未部署）
 
 开发/验证/部署已采用 FAST / RUNTIME / RELEASE 分层。`scripts/developer-workflow.sh` 依据 Git diff
@@ -82,6 +100,7 @@ file：`/DATA/AppData/pubg-query-engine-v3/admin-identity.env`。回滚 compose 
 | --- | --- |
 | OrbStack machine | ubuntu running |
 | LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:1adbc1d-whoami-display-20260905，兼容 LangBot 4.10.8 定制镜像 |
+| 9router | 9router running；`/api/health` 可用；本地 `/v1/models` 仅接受其当前 active API key，LangBot provider key 尚未同步 |
 | Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.4-admin-03b0e41，healthy，端口 5310 |
 | Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
 | Review | feature version review-features-4 |

@@ -7,8 +7,9 @@
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
 系统的可迁移 monorepo。迁移阶段、HomeHub V1 代码阶段、只读 `/whoami` 代码阶段、目标
 runtime/plugin 部署、平台来源修复、Admin Identity 配置和 Developer Workflow Optimization V1
-已完成；当前运行时功能侧仅等待真实 Telegram 入站复测。Developer Workflow Optimization V1 未执行
-CasaOS 部署，production runtime 保持原镜像。
+已完成；2026-09-05 新增的 Telegram/KOOK `Request Failed` 事故已完成只读诊断，运行时 credential
+修复仍等待显式 `--apply`。Developer Workflow Optimization V1 未执行 CasaOS 部署，production
+runtime 保持原镜像。
 
 ## 新会话入口
 
@@ -33,6 +34,8 @@ CasaOS 部署，production runtime 保持原镜像。
 - shared storage：/Volumes/Avalon/...；
 - Git source of truth：本仓库；
 - n8n credentials、LangBot env、PUBG API key、Cloudflare token：仓库外；
+- 2026-09-05 事故诊断：KOOK/Telegram 共用的 LangBot `9Router` provider 使用了旧/占位 key，
+  与 9router 数据库 active key 不一致；当前尚未执行 credential 重绑或重启；
 - Redis：可重建缓存，不是核心恢复依赖；
 - 不执行公网 push，除非用户另外明确授权。
 
