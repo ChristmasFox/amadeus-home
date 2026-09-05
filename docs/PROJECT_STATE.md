@@ -38,7 +38,7 @@ runtime 镜像已在 OrbStack ubuntu/CasaOS 健康运行，LangBot V3 plugin 3.2
 ## `/whoami` 平台来源修复状态：DEPLOYED / RECHECK PENDING
 
 已修复 LangBot command event 缺少 `platform` 导致 Telegram 被当成 KOOK 的问题。当前
-LangBot 与 plugin runtime 使用 `local/langbot-agent:9c34a89-whoami-fix-20260905`，其中
+LangBot 与 plugin runtime 使用 `local/langbot-agent:1adbc1d-whoami-display-20260905`，其中
 `PersonCommandSent`/`GroupCommandSent` 会从 `query.adapter` 传递真实平台；plugin gateway
 监听 command event 后才调用 `/v3/whoami`。等待真实 Telegram 用户再次发送命令确认最终入站输出。
 
@@ -49,7 +49,7 @@ LangBot 与 plugin runtime 使用 `local/langbot-agent:9c34a89-whoami-fix-202609
 | 组件 | 当前观察 |
 | --- | --- |
 | OrbStack machine | ubuntu running |
-| LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:9c34a89-whoami-fix-20260905，兼容 LangBot 4.10.8 定制镜像 |
+| LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:1adbc1d-whoami-display-20260905，兼容 LangBot 4.10.8 定制镜像 |
 | Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.3-whoami-ddfee46，healthy，端口 5310 |
 | Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
 | Review | feature version review-features-4 |

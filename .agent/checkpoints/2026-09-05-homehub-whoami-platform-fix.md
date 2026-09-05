@@ -20,18 +20,18 @@
 
 ## Git
 
-- 修复提交：`dd5785e`、`9c34a89`。
-- 部署状态文档提交：`9b604f3`。
-- `main` 已推送到 `origin/main`，当前 HEAD/远端均为 `9b604f3`。
+- 修复提交：`dd5785e`、`9c34a89`、`1adbc1d`。
+- 部署状态文档提交：`9b604f3`、`cbd79e3`。
+- `main` 已推送到 `origin/main`，source fix commit 为 `1adbc1d`。
 - `pnpm check:secrets`、Python tests、patch py_compile 和 `git diff --check`：通过。
 
 ## Deployment
 
 - canonical target：OrbStack `ubuntu` / CasaOS。
-- LangBot image：`local/langbot-agent:9c34a89-whoami-fix-20260905`。
-- image id：`sha256:8a5fece4dbec`（build result；以 Docker inspect 为准）。
+- LangBot image：`local/langbot-agent:1adbc1d-whoami-display-20260905`。
+- image id：`sha256:70dce1500ae2`（build result；以 Docker inspect 为准）。
 - active compose：`/var/lib/casaos/apps/langbot/docker-compose.yml`。
-- compose backup：`/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260905-222023`。
+- compose backup：`/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260905-222807`。
 - runtime image remains `local/pubg-query-engine-v3:3.3.3-whoami-ddfee46` and healthy.
 - plugin `local/pubg-stats` version `3.2.4` reinstalled via `deploy-langbot.sh --apply`, task `12`, `INSTALL_READY`。
 - `scripts/doctor.sh`：0 failure、0 warning。
@@ -48,7 +48,7 @@
 ## Rollback
 
 ```sh
-orb -m ubuntu -u root bash -lc 'cp -p /var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260905-222023 /var/lib/casaos/apps/langbot/docker-compose.yml && cd /var/lib/casaos/apps/langbot && docker compose up -d'
+orb -m ubuntu -u root bash -lc 'cp -p /var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260905-222807 /var/lib/casaos/apps/langbot/docker-compose.yml && cd /var/lib/casaos/apps/langbot && docker compose up -d'
 ```
 
 ## Next step
