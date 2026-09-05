@@ -21,7 +21,8 @@
 ## Git
 
 - 修复提交：`dd5785e`、`9c34a89`。
-- `main` 已推送到 `origin/main`，当前 HEAD/远端均为 `9c34a89`。
+- 部署状态文档提交：`9b604f3`。
+- `main` 已推送到 `origin/main`，当前 HEAD/远端均为 `9b604f3`。
 - `pnpm check:secrets`、Python tests、patch py_compile 和 `git diff --check`：通过。
 
 ## Deployment
