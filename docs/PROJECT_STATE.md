@@ -4,9 +4,11 @@
 
 ## 状态
 
-Monorepo 迁移、Codex 工程规范和 HomeHub V1 代码阶段已完成，当前仓库可以作为代码、
-配置模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的
-`origin/main`；没有把运行时数据或真实 credentials 放入仓库。
+Monorepo 迁移、Codex 工程规范、HomeHub V1 和 HomeHub V1.1 Security & Runtime Reliability
+实现阶段已完成；HomeHub V1.1 已通过测试并提交为 `e0a3ed5`，用户指定的 PUBG Intent Router
+时间词误判 small-scope task 也已通过 targeted verification 并单独提交。仓库继续作为代码、配置
+模板、workflow、文档和 Codex 状态的 Git source of truth。`main` 已跟踪用户指定的 `origin/main`；
+没有把运行时数据或真实 credentials 放入仓库。两个阶段均不执行 Docker build、CasaOS 部署或生产服务重启。
 
 ## Telegram / KOOK `Request Failed` 事故：RESOLVED / VERIFIED（2026-09-05）
 
@@ -127,6 +129,28 @@ secret file 路径和空的环境变量，不保存 key。
 - bootstrap、doctor、backup、restore、secret scan 和插件构建脚本；
 - LangBot deploy dry-run/apply 脚本、项目地图和四个可迁移 Codex skills；
 - workflow / plugin / service 兼容说明以及 Codex checkpoint。
+
+## HomeHub V1.1 Security & Runtime Reliability 状态：IMPLEMENTED / TARGETED VERIFIED / COMMITTED / NOT DEPLOYED（2026-09-05）
+
+V1.1 已在 Git source 中完成统一授权、管理员身份、运行时执行边界和健康状态语义修复：
+
+- `packages/homehub-domain/src/authorization/authorization-core.ts` 提供平台无关的身份映射和 Action policy；
+- `packages/homehub-domain/src/execution/runtime-executor.ts` 提供 Docker、Ubuntu、macOS Host 和 LangBot Component executor；
+- `ServiceRegistry` 为 LangBot、Telegram/KOOK、PUBG Runtime、n8n、Postgres、Redis、Emby、Jellyfin、qBittorrent、aria2、Glances、cloudflared 声明执行位置；
+- HomeHub Entry / ActionEngine / organize-emby confirmation 使用精确 platform + chat + platform user + action 绑定；
+- `HealthResult.summary` 增加 `down`，executor/observation failure 只产生 `unknown`，不会加入 `abnormal`；
+- host metrics 失败保留 null，不回填 0%；`/homehub/authorize` 仅返回共享授权决策，不执行操作。
+
+V1.1 的验证证据包括 affected typecheck、HomeHub security/runtime 定向测试、local endpoint smoke、Python plugin
+compile、LangBot plugin dry-run/package validation、secret scan 和 diff check。代码已提交为 `e0a3ed5`，尚未部署到 CasaOS。
+
+## 后续 task 状态：PUBG Intent Router 时间词误判 / IMPLEMENTED / COMMITTED
+
+TimeRange 已从正向 PUBG intent 中移除；router 先判断 Domain/Intent，再允许时间范围作为参数进入 planner。
+结构化 active PUBG follow-up 只接受紧凑时间追问或 PUBG 对局引用，长技术句不会仅凭日期前缀继承 PUBG。
+目标回归全部通过：“昨天战绩”进入 PUBG、“前天呢？”在 PUBG 上下文中进入 PUBG、硬件时序句不进入 PUBG、
+“昨天 Emby 挂了吗”进入 HomeHub。代码与状态文档已单独提交；只运行 affected typecheck、targeted tests、
+secret scan 和 diff check，未构建 Docker image 或执行 Release。
 
 ## HomeHub V1 状态：IMPLEMENTED / NOT YET DEPLOYED
 

@@ -4,12 +4,11 @@
 
 ## 当前阶段
 
-**Telegram / KOOK `Request Failed` 事故 — 已完成修复和验证。**
+**PUBG Intent Router 时间词误判 — 已完成并提交。**
 
-Developer Workflow Optimization V1 已完成，且未执行 CasaOS 部署。
+本阶段只修改 Authorization / Admin Identity / Runtime Executor / Health State Semantics；没有执行 Docker
+build、CasaOS 部署或生产服务重启。HomeHub V1.1 已以 `e0a3ed5` 提交；PUBG Intent Router 时间词修复已以独立 commit（见最近 Git 提交记录） 提交。两个阶段均未执行 Docker build 或 Release。
 
-HomeHub V1 + `/whoami` 的真实 Telegram/KOOK 入站烟测仍是独立的后续人工任务；本阶段没有重启、
-替换或部署该 runtime。
 
 ## Telegram / KOOK `Request Failed` 诊断（2026-09-05）
 
@@ -86,12 +85,39 @@ Telegram session 当成了 KOOK。
 - [x] 已将真实值写入本机忽略文件 `.env`，该文件未进入 Git。
 - [x] 已将这两个环境变量通过外部 env 文件应用到 CasaOS container，并完成 runtime 重启。
 
+## HomeHub V1.1 Security & Runtime Reliability（2026-09-05）
+
+状态：**IMPLEMENTED / TARGETED VERIFIED / NOT DEPLOYED**。
+
+- [x] 新增平台无关 `AuthorizationCore`：`PlatformIdentity → InternalIdentity → Role → Authorization`；未配置映射默认 `PUBLIC`，副作用 Action 默认 DENY。
+- [x] Telegram / KOOK 统一使用 `NormalizedBotMessage.user.platformUserId`，不读取 nickname、displayName、username 或 chat name；管理员映射只来自 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，内部用户为 `arthur`。
+- [x] 所有 HomeHub restart/start/stop/organize media 经过授权、风险判断、确认、执行和验证；`pendingAction` 精确绑定 platform、chatId、platformUserId、actionId；外国用户确认会被拒绝并审计。
+- [x] Service Registry 为 13 个服务声明 `runtime` / `executor`，区分 Docker、LangBot Component、Ubuntu Process 和 macOS Host Service；`cloudflared` 没有 macOS Host Executor 时返回 UNKNOWN。
+- [x] Host / Docker 检查改为当前运行边界的 direct executor，不再调用 `orb -m ubuntu`；executor 或 observation failure 不再转换为 DOWN。
+- [x] Health 状态区分 HEALTHY、UNHEALTHY、DOWN、UNKNOWN；未知状态不进入 abnormal service 数量；CPU/Memory/Disk 不可读时返回 null，渲染为“未知”。
+- [x] organize-emby plugin 在 Preview / Execute 前调用共享 `/homehub/authorize`，Authorization transport failure fail closed；插件 Preview key 同时保存 platform、chat、platform user 和 action ID。
+- [x] 运行 `pnpm workflow:verify`：affected typecheck、HomeHub security/V1 定向测试、`/healthz` + `/homehub/health` local smoke 全部通过。
+- [x] 运行 `scripts/deploy-langbot.sh --plugin organize-emby --dry-run --skip-runtime-check`：plugin package / secret scan 通过；未安装 plugin、未 build image、未修改 CasaOS。
+- [x] 运行 Python `py_compile/compileall`、`git diff --check`。
+- [x] V1.1 implementation commit：`e0a3ed5`（feat: harden homehub authorization and runtime health）。
+
 HomeHub V1 已完成 Git source-of-truth 中的 domain、runtime facade、HTTP 接线、服务诊断、
 确认式操作、审计、上下文和安全媒体整理预览/执行流程。`/whoami` runtime 已部署到
 OrbStack ubuntu/CasaOS，真实 Telegram/KOOK 入站烟测仍作为后续人工任务保留。
 
 Meta WhatsApp Cloud API 的商业版能力是接入稳定性与合规的必要前提。
 当前开源版限制与平台变更频率较高，暂不继续投入实现和部署。
+
+## 后续 small-scope task：PUBG Intent Router 时间词误判（2026-09-05）
+
+状态：**IMPLEMENTED / TARGETED VERIFIED / COMMITTED**。
+
+- [x] TimeRange 只能作为参数，不能单独触发 PUBG。
+- [x] 先判断 Domain/Intent，再解析 TimeRange；使用正向 PUBG intent 与结构化 follow-up，不堆 negative keywords。
+- [x] 明确 PUBG 语义或 activeDomain=pubg 的有效追问才进入 PUBG；长技术句不会因日期前缀继承 PUBG context。
+- [x] 回归：`昨天战绩` → PUBG；PUBG 上下文后的 `前天呢？` → PUBG；`昨天超的是CL30, tRCD 36, tRP 36, tRAS 80` → NOT PUBG；`昨天 Emby 挂了吗` → HomeHub / NOT PUBG。
+- [x] 仅运行 affected typecheck + targeted router/query tests、`git diff --check` 和 secret scan；未执行 Docker build / Release。
+- [x] 独立代码/文档 commit（见最近 Git 提交记录）。
 
 ## HomeHub V1 完成清单
 

@@ -386,6 +386,8 @@ export function buildDeterministicQuery(input: PlannerInput, team: TeamConfig = 
 }
 
 export function isPubgText(text: string, context?: PlannerContextHint): boolean {
+  // Keep planner-side legacy classification aligned with the domain router:
+  // TimeRange tokens are parameters, not standalone PUBG intent.
   if (context?.activeDomain === 'pubg') return true;
-  return /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析这把|这把|上一把|下一把|火箭筒|开车|吃鸡|哪一把|哪一局|最强|最菜|拉完|上周六|昨天|前天|最近\s*\d+\s*(?:场|把)/iu.test(text);
+  return /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|最强|最菜|拉完|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目/iu.test(text);
 }
