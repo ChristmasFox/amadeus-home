@@ -142,8 +142,8 @@ class PlatformAdapterTest(unittest.TestCase):
         telegram_message = normalize_event_message({
             'platform': 'telegram',
             'launcher_type': 'person',
-            'launcher_id': '5501555095',
-            'sender_id': '5501555095',
+            'launcher_id': 'telegram-user-fixture',
+            'sender_id': 'telegram-user-fixture',
             'text_message': '/whoami',
             'message_id': 'telegram-command-1',
             'display_name': 'Arthur',
@@ -151,17 +151,17 @@ class PlatformAdapterTest(unittest.TestCase):
         kook_message = normalize_event_message({
             'platform': 'kook',
             'launcher_type': 'person',
-            'launcher_id': '1413857482',
-            'sender_id': '1413857482',
+            'launcher_id': 'kook-user-fixture',
+            'sender_id': 'kook-user-fixture',
             'text_message': '/whoami',
             'message_id': 'kook-command-1',
         })
 
         self.assertEqual(telegram_message['platform'], 'telegram')
-        self.assertEqual(telegram_message['user']['platformUserId'], '5501555095')
+        self.assertEqual(telegram_message['user']['platformUserId'], 'telegram-user-fixture')
         self.assertEqual(telegram_message['user']['displayName'], 'Arthur')
         self.assertEqual(kook_message['platform'], 'kook')
-        self.assertEqual(kook_message['user']['platformUserId'], '1413857482')
+        self.assertEqual(kook_message['user']['platformUserId'], 'kook-user-fixture')
 
     def test_session_entrypoint_supports_future_platforms_with_generic_adapter(self) -> None:
         message = normalize_session_message({

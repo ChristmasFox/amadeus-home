@@ -1,6 +1,7 @@
 export * from './config/capabilities.js';
 export * from './config/chicken-index.js';
 export * from './config/team.js';
+export * from './config/identity.js';
 export * from './context/context-store.js';
 export * from './data/model.js';
 export * from './data/provider.js';

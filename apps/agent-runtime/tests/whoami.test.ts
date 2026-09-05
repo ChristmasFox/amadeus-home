@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { InMemoryContextStore } from '../src/context/context-store.js';
+import { identityMappingsFromEnvironment } from '../src/config/identity.js';
 import type { DataProvider } from '../src/data/provider.js';
 import { IdentityRegistry } from '../src/platform/core/identity.js';
 import { KookAdapter } from '../src/platform/kook/adapter.js';
@@ -156,6 +157,41 @@ test('same display name with different platform IDs never shares an identity map
     internalUser: 'unbound',
     role: 'unbound',
   });
+});
+
+test('startup environment maps both configured administrator platform IDs to arthur/ADMIN', () => {
+  const mappings = identityMappingsFromEnvironment({
+    TELEGRAM_ADMIN_USER_ID: 'telegram-admin-fixture',
+    KOOK_ADMIN_USER_ID: 'kook-admin-fixture',
+  });
+  const registry = new IdentityRegistry(mappings);
+
+  assert.deepEqual(mappings, [{
+    internalUserId: 'arthur',
+    roles: ['ADMIN'],
+    identities: {
+      telegram: ['telegram-admin-fixture'],
+      kook: ['kook-admin-fixture'],
+    },
+  }]);
+  assert.equal(resolveWhoAmI(telegramMessage(1, 1, 'private', 'Arthur'), registry).internalUser, 'unbound');
+  assert.equal(resolveWhoAmI(telegramMessage(1, 1, 'private', 'Arthur'), new IdentityRegistry([
+    ...mappings,
+  ])).role, 'unbound');
+  const mappedTelegram = telegramMessage(1, 1, 'private', 'Arthur');
+  const mappedKook = kookMessage('kook-admin-fixture', 'kook-user', 'PERSON', 'Arthur');
+  mappedTelegram.user.platformUserId = 'telegram-admin-fixture';
+  assert.equal(resolveWhoAmI(mappedTelegram, registry).internalUser, 'arthur');
+  assert.equal(resolveWhoAmI(mappedTelegram, registry).role, 'ADMIN');
+  assert.equal(resolveWhoAmI(mappedKook, registry).internalUser, 'arthur');
+  assert.equal(resolveWhoAmI(mappedKook, registry).role, 'ADMIN');
+});
+
+test('missing or placeholder admin IDs do not create an identity binding', () => {
+  assert.deepEqual(identityMappingsFromEnvironment({
+    TELEGRAM_ADMIN_USER_ID: '',
+    KOOK_ADMIN_USER_ID: 'unknown',
+  }), []);
 });
 
 test('/whoami does not read or write context or call the data provider', async () => {

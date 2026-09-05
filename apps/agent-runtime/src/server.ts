@@ -9,6 +9,8 @@ import { DEFAULT_REVIEW_FEATURE_VERSION, DEFAULT_TELEMETRY_PARSER_VERSION, JsonT
 import type { NormalizedBotMessage } from './platform/core/contracts.js';
 import type { RuntimeRequest } from './runtime/types.js';
 import { HomeHubRuntime } from './runtime/homehub-runtime.js';
+import { identityMappingsFromEnvironment } from './config/identity.js';
+import { IdentityRegistry } from './platform/core/identity.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -45,6 +47,7 @@ const telemetryWorker = new TelemetryWorker({
 const runtime = new PubgMastraRuntime({
   provider: new N8nDataProvider({ url: n8nUrl, timeoutMs: Number(process.env.PUBG_N8N_TIMEOUT_MS ?? 120000) }),
   contextStore: new JsonContextStore(stateFile),
+  identityRegistry: new IdentityRegistry(identityMappingsFromEnvironment()),
   telemetryWorker,
   selectionStore: new JsonSelectionStore(selectionFile),
   resultSetTtlMs: Number(process.env.PUBG_RESULTSET_TTL_MS ?? 24 * 60 * 60 * 1000),

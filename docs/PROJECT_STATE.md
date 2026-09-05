@@ -42,6 +42,13 @@ LangBot 与 plugin runtime 使用 `local/langbot-agent:1adbc1d-whoami-display-20
 `PersonCommandSent`/`GroupCommandSent` 会从 `query.adapter` 传递真实平台；plugin gateway
 监听 command event 后才调用 `/v3/whoami`。等待真实 Telegram 用户再次发送命令确认最终入站输出。
 
+## Admin Identity 配置状态：SOURCE READY / CASAOS ENV PENDING
+
+runtime 启动配置读取 `TELEGRAM_ADMIN_USER_ID` 和 `KOOK_ADMIN_USER_ID`，配置值存在时只按
+平台稳定 ID建立同一个 `arthur` / `ADMIN` mapping；缺少或占位值时不建立绑定。真实值已
+写入本机被 Git 忽略的 `.env`，没有写入源码或 `.env.example`。当前已运行的 CasaOS runtime
+尚未重启以加载这两个变量，需经过显式部署流程后生效。
+
 ## 当前运行时观察
 
 以下信息来自本机 Ubuntu/CasaOS 的只读检查，用于迁移基线，不是新机器的硬编码地址：

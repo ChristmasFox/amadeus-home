@@ -20,6 +20,10 @@ HomeHub 与 PUBG runtime 共用此进程，但 domain 实现位于 `packages/hom
 必须收到明确确认后才会备份并移动文件，禁止覆盖已有 `/Volumes/Avalon/media` 内容。
 HomeHub 服务操作同样需要按服务风险等级确认，真实 credentials 和运行时数据不入库。
 
+本地 `pnpm --filter @agent/agent-runtime dev` 会通过 Node `--env-file` 读取仓库根目录的
+`.env`；production/CasaOS 运行时必须从外部环境注入 `TELEGRAM_ADMIN_USER_ID` 和
+`KOOK_ADMIN_USER_ID`，不要把真实身份值写入源码、镜像或 `.env.example`。
+
 ```sh
 pnpm --filter @agent/agent-runtime typecheck
 pnpm --filter @agent/agent-runtime test

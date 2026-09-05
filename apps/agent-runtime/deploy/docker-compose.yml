@@ -21,6 +21,8 @@ services:
       PUBG_TELEMETRY_PARSER_VERSION: ${PUBG_TELEMETRY_PARSER_VERSION:-telemetry-parser-4}
       PUBG_REVIEW_FEATURE_VERSION: ${PUBG_REVIEW_FEATURE_VERSION:-review-features-4}
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
+      KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
     volumes:
       - /DATA/AppData/pubg-query-engine-v3/data:/data
       - /DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key:/run/secrets/pubg_api_key:ro
