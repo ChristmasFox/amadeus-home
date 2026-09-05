@@ -14,7 +14,7 @@ COPY apps/agent-runtime/src apps/agent-runtime/src
 COPY apps/agent-runtime/teams apps/agent-runtime/teams
 COPY apps/agent-runtime/pubg-query.schema.json apps/agent-runtime/pubg-query.schema.json
 
-RUN pnpm install --filter @agent/agent-runtime --frozen-lockfile
+RUN pnpm install --filter @agent/agent-runtime... --frozen-lockfile
 RUN pnpm --filter @agent/agent-runtime build
 RUN pnpm --filter @agent/agent-runtime deploy --prod /prod
 RUN cp -R apps/agent-runtime/dist /prod/dist
