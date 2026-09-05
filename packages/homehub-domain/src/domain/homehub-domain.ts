@@ -9,6 +9,11 @@ import type {
   HomeHubQuery
 } from '../schema/types.js';
 import { ActionRequestSchema } from '../schema/types.js';
+import {
+  AuthorizationCore,
+  identityFromParts,
+  type AuthorizationIdentityLike,
+} from '../authorization/authorization-core.js';
 
 export interface HomeHubDomainOptions {
   userId: string;
@@ -20,11 +25,13 @@ export class HomeHubDomain {
   private readonly userId: string;
   private readonly platform: string;
   private sessionId: string;
+  private readonly authorizationCore: AuthorizationCore;
 
   constructor(options: HomeHubDomainOptions) {
     this.userId = options.userId;
     this.platform = options.platform;
     this.sessionId = options.sessionId ?? this.generateSessionId();
+    this.authorizationCore = new AuthorizationCore();
   }
 
   private generateSessionId(): string {
@@ -126,13 +133,25 @@ export class HomeHubDomain {
   createAuditEntry(
     request: ActionRequest,
     result: ActionResult,
-    verificationPassed: boolean
+    verificationPassed: boolean,
+    identity?: AuthorizationIdentityLike,
   ): AuditEntry {
     const normalizedRequest = ActionRequestSchema.parse(request);
+    const platformUserId = normalizedRequest.platformUserId ?? normalizedRequest.userId;
+    const internalUser = identity ? identity.internalUserId ?? identity.internalIdentity?.internalUserId ?? null : null;
+    const roles = identity?.roles ?? ['PUBLIC'];
+    const role = roles.includes('ADMIN') ? 'ADMIN' : roles.includes('TRUSTED') ? 'TRUSTED' : 'PUBLIC';
     return {
       id: this.generateId(),
-      userId: normalizedRequest.userId,
+      userId: platformUserId,
       platform: normalizedRequest.platform,
+      platformUserId,
+      internalUser,
+      role,
+      chatId: normalizedRequest.chatId ?? 'unknown-chat',
+      target: normalizedRequest.target ?? null,
+      authorized: result.status !== 'cancelled',
+      denied: result.status === 'cancelled',
       serviceId: normalizedRequest.serviceId,
       action: normalizedRequest.action,
       request: normalizedRequest,
@@ -144,47 +163,25 @@ export class HomeHubDomain {
     };
   }
 
-  /**
-   * Validate action authorization based on risk level
-   */
-  validateActionAuthorization(request: ActionRequest, serviceDefinition: ServiceDefinition): {
-    authorized: boolean;
-    requiresConfirmation: boolean;
-    reason?: string;
-  } {
-    const riskLevel = serviceDefinition.riskLevel;
-
-    // Critical actions always require explicit confirmation
-    if (riskLevel === 'critical') {
-      return {
-        authorized: false,
-        requiresConfirmation: true,
-        reason: 'Critical service actions require explicit confirmation',
-      };
-    }
-
-    // High risk actions require confirmation unless explicitly authorized
-    if (riskLevel === 'high' && !request.skipConfirmation) {
-      return {
-        authorized: false,
-        requiresConfirmation: true,
-        reason: 'High risk actions require confirmation',
-      };
-    }
-
-    // Check if action is allowed for this service
-    if (!serviceDefinition.allowedActions.includes(request.action)) {
-      return {
-        authorized: false,
-        requiresConfirmation: false,
-        reason: `Action ${request.action} not allowed for service ${serviceDefinition.serviceId}`,
-      };
-    }
-
-    return {
-      authorized: true,
-      requiresConfirmation: false,
-    };
+  /** Validate action authorization through the shared policy core. */
+  validateActionAuthorization(
+    request: ActionRequest,
+    serviceDefinition: ServiceDefinition,
+    identity?: AuthorizationIdentityLike,
+  ) {
+    const normalized = ActionRequestSchema.parse(request);
+    const subject = identity ?? identityFromParts(
+      normalized.platform,
+      normalized.platformUserId ?? normalized.userId,
+      null,
+      ['PUBLIC'],
+    );
+    return this.authorizationCore.authorize({
+      identity: subject,
+      action: normalized.action,
+      service: serviceDefinition,
+      confirmed: normalized.confirmed,
+    });
   }
 
   /**
@@ -195,24 +192,26 @@ export class HomeHubDomain {
 
     lines.push(`📊 **系统状态摘要**`);
     lines.push(`主机: ${result.host.hostname} | 运行时间: ${this.formatUptime(result.host.uptime)}`);
-    lines.push(`服务: ${result.summary.healthy}/${result.summary.totalServices} 正常`);
+    lines.push(`服务: ${result.summary.healthy}/${result.summary.totalServices} 正常（${result.summary.unknown} 个未知）`);
 
     if (result.abnormal.length > 0) {
       lines.push(`\n⚠️ **异常服务**: ${result.abnormal.map(s => s).join(', ')}`);
+    } else if (result.summary.unknown > 0) {
+      lines.push(`\n❓ **未知服务**: ${result.summary.unknown}`);
     }
 
     lines.push(`\n🔍 **诊断**: ${result.diagnosis}`);
 
-    if (result.host.cpu.usage > 80) {
+    if (typeof result.host.cpu.usage === 'number' && result.host.cpu.usage > 80) {
       lines.push(`\n⚠️ CPU 使用率较高: ${result.host.cpu.usage.toFixed(1)}%`);
     }
 
-    if (result.host.memory.percentage > 80) {
+    if (typeof result.host.memory.percentage === 'number' && result.host.memory.percentage > 80) {
       lines.push(`⚠️ 内存使用率较高: ${result.host.memory.percentage.toFixed(1)}%`);
     }
 
     for (const disk of result.host.disk) {
-      if (disk.percentage > 90) {
+      if (typeof disk.percentage === 'number' && disk.percentage > 90) {
         lines.push(`⚠️ 磁盘空间不足 (${disk.mount}): ${disk.percentage.toFixed(1)}%`);
       }
     }
@@ -305,7 +304,8 @@ export class HomeHubDomain {
     return lines.join('\n');
   }
 
-  private formatUptime(seconds: number): string {
+  private formatUptime(seconds: number | null): string {
+    if (seconds === null) return '未知';
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -321,7 +321,13 @@ export class HomeHubDomain {
    */
   formatHealthForService(result: DiagnosisResult, displayName: string): string {
     const lines: string[] = [];
-    const icons: Record<string, string> = { healthy: '✅', degraded: '⚠️', unhealthy: '❌', unknown: '❓' };
+    if (result.status === 'failed' && result.issues.length === 0) {
+      lines.push(`❓ **${displayName}** 状态未知`);
+      for (const check of result.checks.filter((item) => item.status === 'skipped').slice(0, 3)) {
+        lines.push(`❓ ${check.message}`);
+      }
+      return lines.join('\n');
+    }
     if (result.issues.length === 0 && result.status === 'resolved') {
       lines.push(`✅ **${displayName}** 正常`);
       return lines.join('\n');

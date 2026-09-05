@@ -21,7 +21,7 @@ export function identityMappingsFromEnvironment(
 ): IdentityMapping[] {
   const telegramUserId = configuredPlatformUserId(environment[TELEGRAM_ADMIN_USER_ID_ENV]);
   const kookUserId = configuredPlatformUserId(environment[KOOK_ADMIN_USER_ID_ENV]);
-  const identities: IdentityMapping['identities'] = {};
+  const identities: Record<string, string[]> = {};
   if (telegramUserId) identities.telegram = [telegramUserId];
   if (kookUserId) identities.kook = [kookUserId];
   if (Object.keys(identities).length === 0) return [];

@@ -463,6 +463,38 @@ export class MediaOperations {
     }
   }
 
+  /** Verify the post-execution state without modifying any files. */
+  async verifyPlan(plan: MediaOperationPlan): Promise<{
+    passed: boolean;
+    message: string;
+    missing: string[];
+  }> {
+    const missing: string[] = [];
+    try {
+      this.validatePlanPaths(plan);
+      if (!(await this.pathExists(plan.targetPath))) missing.push(plan.targetPath);
+      for (const operation of plan.operations) {
+        if (operation.operation === 'move') {
+          if (!(await this.pathExists(operation.dst))) missing.push(operation.dst);
+          if (await this.pathExists(operation.src)) missing.push(`source still exists: ${operation.src}`);
+        } else if (operation.operation === 'create_dir' && !(await this.pathExists(operation.dst))) {
+          missing.push(operation.dst);
+        }
+      }
+    } catch (error) {
+      return {
+        passed: false,
+        message: `验证失败: ${error instanceof Error ? error.message : '未知错误'}`,
+        missing,
+      };
+    }
+    return {
+      passed: missing.length === 0,
+      message: missing.length === 0 ? '目标路径和文件均已验证' : `缺少 ${missing.length} 个预期路径或文件`,
+      missing,
+    };
+  }
+
   /**
    * Refresh Emby library
    */

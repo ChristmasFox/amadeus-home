@@ -1,9 +1,28 @@
-import type { HomeHubContext, ServiceId, DiagnosisResult, ActionRequest, ActionResult } from '../schema/types.js';
+import { randomUUID } from 'node:crypto';
+import type {
+  ActionRequest,
+  ActionResult,
+  DiagnosisResult,
+  HomeHubContext,
+  Role,
+  ServiceId,
+} from '../schema/types.js';
 import { ActionRequestSchema } from '../schema/types.js';
 
 export interface ContextManagerOptions {
   persistPath?: string;
-  sessionTtl?: number; // milliseconds
+  sessionTtl?: number;
+}
+
+export interface PendingActionBinding {
+  actionId: string;
+  platform: string;
+  chatId: string;
+  userId: string;
+  platformUserId: string;
+  internalUserId: string | null;
+  role: Role;
+  target?: string | null;
 }
 
 export interface SessionReference {
@@ -14,21 +33,23 @@ export interface SessionReference {
   pendingRequest: ActionRequest | null;
 }
 
+/** In-memory session state with exact actor binding for pending confirmations. */
 export class ContextManager {
-  private contexts: Map<string, HomeHubContext>;
-  private options: Required<ContextManagerOptions>;
+  private readonly contexts: Map<string, HomeHubContext>;
+  private readonly options: Required<ContextManagerOptions>;
 
   constructor(options: ContextManagerOptions = {}) {
     this.contexts = new Map();
     this.options = {
       persistPath: options.persistPath ?? '/DATA/AppData/homehub/contexts',
-      sessionTtl: options.sessionTtl ?? 30 * 60 * 1000, // 30 minutes
+      sessionTtl: options.sessionTtl ?? 30 * 60 * 1000,
     };
   }
 
   getContext(sessionId: string, userId: string, platform: string): HomeHubContext {
     let context = this.contexts.get(sessionId);
     if (!context) {
+      const now = new Date().toISOString();
       context = {
         sessionId,
         userId,
@@ -37,8 +58,8 @@ export class ContextManager {
         lastDiagnosis: null,
         pendingAction: null,
         lastActionResult: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
       };
       this.contexts.set(sessionId, context);
     } else {
@@ -69,11 +90,35 @@ export class ContextManager {
     this.contexts.set(sessionId, context);
   }
 
-  setPendingAction(sessionId: string, request: ActionRequest): void {
+  setPendingAction(sessionId: string, request: ActionRequest, binding?: Partial<PendingActionBinding>): string | null {
     const context = this.contexts.get(sessionId);
-    if (!context) return;
-    const normalizedRequest = ActionRequestSchema.parse(request);
+    if (!context) return null;
+    const parsed = ActionRequestSchema.parse(request);
+    const actionId = binding?.actionId ?? parsed.actionId ?? `action-${randomUUID()}`;
+    const platformUserId = binding?.platformUserId ?? parsed.platformUserId ?? parsed.userId;
+    const userId = binding?.userId ?? platformUserId;
+    const platform = binding?.platform ?? parsed.platform;
+    const chatId = binding?.chatId ?? parsed.chatId ?? sessionId;
+    const internalUserId = binding?.internalUserId ?? parsed.internalUserId ?? null;
+    const role = binding?.role ?? parsed.role ?? 'PUBLIC';
+    const target = binding?.target ?? parsed.target ?? null;
+    const normalizedRequest = {
+      ...parsed,
+      actionId,
+      platformUserId,
+      internalUserId,
+      role,
+      chatId,
+    };
     context.pendingAction = {
+      actionId,
+      platform,
+      chatId,
+      userId,
+      platformUserId,
+      internalUserId,
+      role,
+      target,
       request: normalizedRequest,
       status: 'pending',
       timestamp: new Date().toISOString(),
@@ -81,6 +126,18 @@ export class ContextManager {
     context.activeService = normalizedRequest.serviceId;
     context.updatedAt = new Date().toISOString();
     this.contexts.set(sessionId, context);
+    return actionId;
+  }
+
+  /** Return a pending action only when every confirmation binding matches. */
+  getPendingForActor(sessionId: string, binding: Pick<PendingActionBinding, 'platform' | 'chatId' | 'platformUserId' | 'actionId'>): HomeHubContext['pendingAction'] {
+    const pending = this.contexts.get(sessionId)?.pendingAction;
+    if (!pending) return null;
+    if (pending.platform !== binding.platform) return null;
+    if (pending.chatId !== binding.chatId) return null;
+    if (pending.platformUserId !== binding.platformUserId) return null;
+    if (pending.actionId !== binding.actionId) return null;
+    return pending;
   }
 
   setLastActionResult(sessionId: string, result: ActionResult): void {
@@ -88,6 +145,14 @@ export class ContextManager {
     if (!context) return;
     context.lastActionResult = { result, timestamp: new Date().toISOString() };
     context.activeService = result.serviceId;
+    context.pendingAction = null;
+    context.updatedAt = new Date().toISOString();
+    this.contexts.set(sessionId, context);
+  }
+
+  clearPendingAction(sessionId: string): void {
+    const context = this.contexts.get(sessionId);
+    if (!context) return;
     context.pendingAction = null;
     context.updatedAt = new Date().toISOString();
     this.contexts.set(sessionId, context);
@@ -113,9 +178,7 @@ export class ContextManager {
 
   getContextForReference(sessionId: string): SessionReference {
     const context = this.contexts.get(sessionId);
-    if (!context) {
-      return { activeService: null, lastService: null, lastActionSuccess: null, hasPendingAction: false, pendingRequest: null };
-    }
+    if (!context) return { activeService: null, lastService: null, lastActionSuccess: null, hasPendingAction: false, pendingRequest: null };
     return {
       activeService: context.activeService ?? null,
       lastService: context.lastActionResult?.result.serviceId ?? context.lastDiagnosis?.serviceId ?? null,
@@ -131,15 +194,13 @@ export class ContextManager {
     status: string | null;
     timestamp: string | null;
   } {
-    const context = this.contexts.get(sessionId);
-    if (!context?.pendingAction) {
-      return { request: null, action: null, status: null, timestamp: null };
-    }
+    const pending = this.contexts.get(sessionId)?.pendingAction;
+    if (!pending) return { request: null, action: null, status: null, timestamp: null };
     return {
-      request: context.pendingAction.request,
-      action: context.pendingAction.request.action,
-      status: context.pendingAction.status,
-      timestamp: context.pendingAction.timestamp,
+      request: pending.request,
+      action: pending.request.action,
+      status: pending.status,
+      timestamp: pending.timestamp,
     };
   }
 
@@ -147,8 +208,7 @@ export class ContextManager {
     const now = Date.now();
     let cleaned = 0;
     for (const [sessionId, context] of this.contexts.entries()) {
-      const age = now - new Date(context.updatedAt).getTime();
-      if (age > this.options.sessionTtl) {
+      if (now - new Date(context.updatedAt).getTime() > this.options.sessionTtl) {
         this.contexts.delete(sessionId);
         cleaned++;
       }
@@ -158,12 +218,7 @@ export class ContextManager {
 
   getActiveSessions(): HomeHubContext[] {
     const now = Date.now();
-    const active: HomeHubContext[] = [];
-    for (const context of this.contexts.values()) {
-      const age = now - new Date(context.updatedAt).getTime();
-      if (age <= this.options.sessionTtl) active.push(context);
-    }
-    return active;
+    return Array.from(this.contexts.values()).filter((context) => now - new Date(context.updatedAt).getTime() <= this.options.sessionTtl);
   }
 
   deleteSession(sessionId: string): boolean {
@@ -177,7 +232,6 @@ export class ContextManager {
   resolveServiceReference(sessionId: string, text: string): ServiceId | null {
     const context = this.getContextForReference(sessionId);
     const lowerText = text.toLowerCase();
-
     if (/telegram|电报|轮询|polling/.test(lowerText)) return 'telegram-adapter';
     if (/kook/.test(lowerText)) return 'kook-adapter';
     if (/langbot|机器人主/.test(lowerText)) return 'langbot';
@@ -191,10 +245,7 @@ export class ContextManager {
     if (/aria2/.test(lowerText)) return 'aria2';
     if (/glances/.test(lowerText)) return 'glances';
     if (/cloudflare|cloudflared|tunnel/.test(lowerText)) return 'cloudflared';
-
-    if (/它|it|that|刚才那个|刚才的服务/.test(lowerText)) {
-      return context.activeService ?? context.lastService;
-    }
+    if (/它|it|that|刚才那个|刚才的服务/.test(lowerText)) return context.activeService ?? context.lastService;
     return null;
   }
 }

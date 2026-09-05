@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import test from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ServiceRegistry, HomeHubDomain, DiagnosticEngine, ActionEngine, ContextManager, AuditLogger } from '@agent/homehub-domain';
+import { ServiceRegistry, HomeHubDomain, DiagnosticEngine, ActionEngine, ContextManager, AuditLogger, AuthorizationCore, identityFromParts } from '@agent/homehub-domain';
 import type { ActionRequest } from '@agent/homehub-domain';
 import { classifyPubgRequest } from '../src/runtime/router.js';
 import { MediaOperations } from '../src/homehub/operations/media-operations.js';
@@ -83,10 +83,22 @@ test('HomeHub action engine requires authorization and confirmation for high-ris
   assert.equal(dry.result.success, true);
   assert.match(dry.result.message ?? '', /DRY RUN/);
 
-  // Real restart without confirmation is refused for high-risk postgres
+  // Real side effects are denied by default for an unmapped PUBLIC user.
   const real = await engine.executeAction({ ...request, dryRun: false });
   assert.equal(real.status, 'cancelled');
-  assert.match(real.result.message, /确认|confirmation/i);
+  assert.match(real.result.message, /PUBLIC|allowlist|允许/i);
+
+  // Even an ADMIN still needs an explicit confirmation for a high-risk action.
+  const admin = identityFromParts('kook', 'u1', 'arthur', ['ADMIN']);
+  const confirmedRequired = await engine.executeAction({
+    serviceId: 'n8n',
+    action: 'restart',
+    userId: 'u1',
+    platform: 'kook',
+    dryRun: false,
+  }, admin);
+  assert.equal(confirmedRequired.status, 'cancelled');
+  assert.match(confirmedRequired.result.message, /确认|confirmation/i);
 });
 
 test('HomeHub router routes service health questions to homehub and keeps PUBG weather pass', () => {
@@ -142,7 +154,8 @@ test('ContextManager supports active service, diagnosis, pending action follow-u
 });
 
 test('AuditLogger records action entries with verification', async () => {
-  const logger = new AuditLogger({ logPath: '/tmp/homehub-test-audit' });
+  const auditRoot = await mkdtemp(join(tmpdir(), 'homehub-test-audit-'));
+  const logger = new AuditLogger({ logPath: auditRoot });
   const result = {
     requestId: 'r1',
     serviceId: 'emby' as const,
@@ -161,7 +174,10 @@ test('AuditLogger records action entries with verification', async () => {
   assert.equal(logs.length, 1);
   assert.equal(logs[0]?.verificationPassed, true);
   assert.equal(logs[0]?.serviceId, 'emby');
+  assert.equal(logs[0]?.authorized, true);
+  assert.equal(logs[0]?.denied, false);
   logger.stop();
+  await rm(auditRoot, { recursive: true, force: true });
 });
 
 test('MediaOperations scopes preview and execution to download and library roots', async () => {
@@ -230,6 +246,11 @@ test('HomeHub media entry requires an explicit target and confirmation', async (
         libraryPaths: { movies, tv },
         backupPath: backups,
       }),
+      authorizationCore: new AuthorizationCore([{
+        internalUserId: 'trusted-user',
+        roles: ['TRUSTED'],
+        identities: { kook: ['u1'] },
+      }]),
     });
 
     const missingTarget = await entry.handleRequest('请整理下载好了的媒体', 'kook', 'u1', 'sender-1');

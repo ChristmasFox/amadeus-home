@@ -19,6 +19,15 @@ export const ServiceIdSchema = z.enum([
 
 export type ServiceId = z.infer<typeof ServiceIdSchema>;
 
+export const ExecutionRuntimeSchema = z.enum(['docker', 'ubuntu', 'macos', 'langbot-component']);
+export type ExecutionRuntime = z.infer<typeof ExecutionRuntimeSchema>;
+
+export const ExecutorKindSchema = z.enum(['docker', 'ubuntu', 'macos-host', 'langbot-component']);
+export type ExecutorKind = z.infer<typeof ExecutorKindSchema>;
+
+export const RoleSchema = z.enum(['PUBLIC', 'TRUSTED', 'ADMIN']);
+export type Role = z.infer<typeof RoleSchema>;
+
 export const RiskLevelSchema = z.enum(['low', 'medium', 'high', 'critical']);
 export type RiskLevel = z.infer<typeof RiskLevelSchema>;
 
@@ -29,12 +38,17 @@ export const ActionSchema = z.enum([
   'check',
   'cleanup',
   'rotate_logs',
+  'organize_media',
+  'organize',
 ]);
 
 export type Action = z.infer<typeof ActionSchema>;
 
 export const ServiceDefinitionSchema = z.object({
   serviceId: ServiceIdSchema,
+  runtime: ExecutionRuntimeSchema,
+  executor: ExecutorKindSchema,
+
   displayName: z.string(),
   description: z.string().optional(),
   healthCheck: z.object({
@@ -51,6 +65,10 @@ export const ServiceDefinitionSchema = z.object({
     name: z.string(),
     pidFile: z.string().optional(),
   }).optional(),
+  component: z.object({
+    name: z.string(),
+    containerName: z.string(),
+  }).optional(),
   dependencies: z.array(ServiceIdSchema).default([]),
   allowedActions: z.array(ActionSchema).default(['check']),
   riskLevel: RiskLevelSchema.default('medium'),
@@ -64,7 +82,7 @@ export const ServiceDefinitionSchema = z.object({
 export type ServiceDefinition = z.infer<typeof ServiceDefinitionSchema>;
 
 // Health Results
-export const HealthStatusSchema = z.enum(['healthy', 'degraded', 'unhealthy', 'unknown']);
+export const HealthStatusSchema = z.enum(['healthy', 'degraded', 'unhealthy', 'down', 'unknown']);
 export type HealthStatus = z.infer<typeof HealthStatusSchema>;
 
 export const ServiceHealthSchema = z.object({
@@ -77,6 +95,9 @@ export const ServiceHealthSchema = z.object({
     memory: z.number().optional(),
     disk: z.number().optional(),
   }).optional(),
+  runtime: ExecutionRuntimeSchema.optional(),
+  executor: ExecutorKindSchema.optional(),
+  unknownReason: z.string().optional(),
   checks: z.array(z.object({
     name: z.string(),
     status: HealthStatusSchema,
@@ -89,24 +110,24 @@ export type ServiceHealth = z.infer<typeof ServiceHealthSchema>;
 
 export const HostHealthSchema = z.object({
   hostname: z.string(),
-  uptime: z.number(),
-  loadAverage: z.array(z.number()).length(3),
+  uptime: z.number().nullable(),
+  loadAverage: z.array(z.number().nullable()).length(3),
   cpu: z.object({
-    usage: z.number(),
-    cores: z.number(),
+    usage: z.number().nullable(),
+    cores: z.number().nullable(),
   }),
   memory: z.object({
-    total: z.number(),
-    used: z.number(),
-    available: z.number(),
-    percentage: z.number(),
+    total: z.number().nullable(),
+    used: z.number().nullable(),
+    available: z.number().nullable(),
+    percentage: z.number().nullable(),
   }),
   disk: z.array(z.object({
     mount: z.string(),
-    total: z.number(),
-    used: z.number(),
-    available: z.number(),
-    percentage: z.number(),
+    total: z.number().nullable(),
+    used: z.number().nullable(),
+    available: z.number().nullable(),
+    percentage: z.number().nullable(),
   })),
   network: z.array(z.object({
     interface: z.string(),
@@ -125,6 +146,7 @@ export const HealthResultSchema = z.object({
     healthy: z.number(),
     degraded: z.number(),
     unhealthy: z.number(),
+    down: z.number(),
     unknown: z.number(),
   }),
   abnormal: z.array(ServiceIdSchema),
@@ -178,10 +200,20 @@ export type ActionStatus = z.infer<typeof ActionStatusSchema>;
 export const ActionRequestSchema = z.object({
   serviceId: ServiceIdSchema,
   action: ActionSchema,
-  userId: z.string(),
-  platform: z.string(),
+  /** Backwards-compatible alias; for platform actions this is the platform user ID. */
+  userId: z.string().min(1),
+  platform: z.string().min(1),
+  platformUserId: z.string().min(1).optional(),
+  internalUserId: z.string().min(1).nullable().optional(),
+  role: RoleSchema.optional(),
+  chatId: z.string().min(1).optional(),
+  actionId: z.string().min(1).optional(),
+  target: z.string().min(1).optional(),
   reason: z.string().optional(),
+  /** Deprecated compatibility field. Authorization never treats it as confirmation. */
   skipConfirmation: z.boolean().default(false),
+  /** Set only by the verified confirmation path, never from an inbound body. */
+  confirmed: z.boolean().default(false),
   dryRun: z.boolean().default(false),
 });
 
@@ -227,6 +259,14 @@ export const HomeHubContextSchema = z.object({
     timestamp: z.string(),
   }).nullable().optional(),
   pendingAction: z.object({
+    actionId: z.string().min(1),
+    platform: z.string().min(1),
+    chatId: z.string().min(1),
+    userId: z.string().min(1),
+    platformUserId: z.string().min(1),
+    internalUserId: z.string().min(1).nullable(),
+    role: RoleSchema,
+    target: z.string().min(1).nullable(),
     request: ActionRequestSchema,
     status: ActionStatusSchema,
     timestamp: z.string(),
@@ -246,6 +286,13 @@ export const AuditEntrySchema = z.object({
   id: z.string(),
   userId: z.string(),
   platform: z.string(),
+  platformUserId: z.string().min(1),
+  internalUser: z.string().min(1).nullable(),
+  role: RoleSchema,
+  chatId: z.string().min(1),
+  target: z.string().min(1).nullable(),
+  authorized: z.boolean(),
+  denied: z.boolean(),
   serviceId: ServiceIdSchema,
   action: ActionSchema,
   request: ActionRequestSchema,

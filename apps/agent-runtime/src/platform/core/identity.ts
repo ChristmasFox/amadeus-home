@@ -1,52 +1,75 @@
-import type { NormalizedBotMessage, PlatformId, PlatformIdentity } from './contracts.js';
+import {
+  AuthorizationCore,
+  type AuthorizationIdentityMapping,
+  type InternalIdentity,
+  type Role,
+} from '@agent/homehub-domain';
+import type { NormalizedBotMessage, PlatformIdentity } from './contracts.js';
 
-export type PermissionRole = 'PUBLIC' | 'TRUSTED' | 'ADMIN';
-
-export interface IdentityMapping {
-  internalUserId: string;
-  roles: PermissionRole[];
-  identities: Partial<Record<PlatformId, string[]>>;
-}
+export type PermissionRole = Role;
+export type IdentityMapping = AuthorizationIdentityMapping;
 
 export interface ResolvedIdentity {
   platformIdentity: PlatformIdentity;
+  internalIdentity: InternalIdentity | null;
   internalUserId: string | null;
   roles: PermissionRole[];
+  role: PermissionRole;
 }
 
+/**
+ * Adapter-facing facade over the shared platform-neutral AuthorizationCore.
+ * It accepts the normalized message, but only forwards platform + stable user
+ * ID; display names and any inbound internalUserId are never authorization
+ * inputs.
+ */
 export class IdentityRegistry {
-  private readonly mappings: IdentityMapping[];
+  private readonly core: AuthorizationCore;
 
   constructor(mappings: IdentityMapping[] = []) {
-    this.mappings = mappings.map((mapping) => ({ ...mapping, roles: [...mapping.roles], identities: { ...mapping.identities } }));
+    this.core = new AuthorizationCore(mappings);
   }
 
-  private findMapping(message: NormalizedBotMessage): IdentityMapping | undefined {
-    return this.mappings.find((candidate) => candidate.identities[message.platform]?.includes(message.user.platformUserId));
+  get authorizationCore(): AuthorizationCore {
+    return this.core;
   }
 
   resolve(message: NormalizedBotMessage): ResolvedIdentity {
-    const mapping = this.findMapping(message);
-    const internalUserId = mapping?.internalUserId ?? message.user.internalUserId;
+    const resolved = this.core.resolve({
+      platform: message.platform,
+      platformUserId: message.user.platformUserId,
+    });
     return {
-      platformIdentity: { ...message.user, internalUserId },
-      internalUserId,
-      roles: mapping?.roles ?? ['PUBLIC'],
+      platformIdentity: {
+        ...message.user,
+        // Never carry an inbound internal identity across the trust boundary.
+        internalUserId: resolved.internalUserId,
+      },
+      internalIdentity: resolved.internalIdentity,
+      internalUserId: resolved.internalUserId,
+      roles: [...resolved.roles],
+      role: resolved.role,
     };
   }
 
   /**
-   * Read-only mapping existence check for identity display and future binding flows.
-   * It deliberately uses only the stable platform identity, never display names.
+   * Read-only mapping existence check. It deliberately uses only the stable
+   * platform identity, never display names or a supplied internal user ID.
    */
   isBound(message: NormalizedBotMessage): boolean {
-    return this.findMapping(message) !== undefined || Boolean(message.user.internalUserId?.trim());
+    return this.core.isMapped({
+      platform: message.platform,
+      platformUserId: message.user.platformUserId,
+    });
   }
 
   hasRole(message: NormalizedBotMessage, role: PermissionRole): boolean {
-    const roles = this.resolve(message).roles;
-    if (role === 'PUBLIC') return true;
-    if (role === 'TRUSTED') return roles.includes('TRUSTED') || roles.includes('ADMIN');
-    return roles.includes('ADMIN');
+    return this.core.hasRole({
+      platformIdentity: {
+        platform: message.platform,
+        platformUserId: message.user.platformUserId,
+      },
+      roles: this.resolve(message).roles,
+    }, role);
   }
 }

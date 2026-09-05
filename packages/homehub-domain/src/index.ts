@@ -9,6 +9,8 @@ export { ServiceRegistry } from './registry/service-registry.js';
 
 // Diagnostic Engine
 export { DiagnosticEngine } from './diagnostic/diagnostic-engine.js';
+export { HostCollector } from './registry/host-collector.js';
+export type { HostCollectorOptions } from './registry/host-collector.js';
 export type { DiagnosticEngineOptions } from './diagnostic/diagnostic-engine.js';
 
 // Action Engine
@@ -22,3 +24,33 @@ export type { ContextManagerOptions } from './context/context-manager.js';
 // Audit Logger
 export { AuditLogger } from './audit/audit-logger.js';
 export type { AuditLoggerOptions } from './audit/audit-logger.js';
+
+// Authorization and identity core
+export {
+  AuthorizationCore,
+  identityFromParts,
+  primaryRoleForIdentity,
+} from './authorization/authorization-core.js';
+export type {
+  PlatformIdentity as AuthorizationPlatformIdentity,
+  InternalIdentity,
+  ResolvedIdentity as AuthorizationResolvedIdentity,
+  IdentityMapping as AuthorizationIdentityMapping,
+  AuthorizationIdentityLike,
+  AuthorizationService,
+  AuthorizationRequest,
+  AuthorizationDecision,
+} from './authorization/authorization-core.js';
+
+// Runtime execution boundaries
+export {
+  RuntimeExecutorManager,
+  isExecutorUnavailable,
+} from './execution/runtime-executor.js';
+export type {
+  CommandSpec,
+  CommandExecution,
+  CommandExecutor,
+  ExecutorKind,
+  RuntimeExecutorManagerOptions,
+} from './execution/runtime-executor.js';

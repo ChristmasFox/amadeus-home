@@ -39,7 +39,14 @@ export function normalizeRuntimeMessage(request: RuntimeRequest): NormalizedBotM
   if (request.message) {
     const parsed = NormalizedBotMessageSchema.parse(request.message);
     const { raw: _raw, ...safeMessage } = parsed;
-    return safeMessage;
+    return {
+      ...safeMessage,
+      user: {
+        ...safeMessage.user,
+        // Internal identity is resolved from the server-side mapping only.
+        internalUserId: null,
+      },
+    };
   }
   return legacyRequestToMessage(request);
 }

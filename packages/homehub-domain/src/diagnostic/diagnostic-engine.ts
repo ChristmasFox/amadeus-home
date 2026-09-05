@@ -1,133 +1,182 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import type {
-  ServiceDefinition,
-  ServiceId,
-  ServiceHealth,
-  HealthResult,
-  DiagnosisResult,
-  DiagnosisIssue,
-  DiagnosisStatus,
   Action,
+  DiagnosisIssue,
+  DiagnosisResult,
+  DiagnosisStatus,
+  HealthResult,
+  HealthStatus,
+  ServiceDefinition,
+  ServiceHealth,
+  ServiceId,
 } from '../schema/types.js';
 import { ServiceRegistry } from '../registry/service-registry.js';
 import { HostCollector } from '../registry/host-collector.js';
+import {
+  RuntimeExecutorManager,
+  type CommandExecution,
+  type RuntimeExecutorManagerOptions,
+} from '../execution/runtime-executor.js';
 
-const execAsync = promisify(exec);
-
-export interface DiagnosticEngineOptions {
+export interface DiagnosticEngineOptions extends RuntimeExecutorManagerOptions {
+  /** Deprecated compatibility fields; all commands now use explicit executors. */
   orbHost?: string;
   orbUser?: string;
   casaosAppsPath?: string;
   embyApiKey?: string;
   runtimeBaseUrl?: string;
+  execution?: RuntimeExecutorManager;
+  executorManager?: RuntimeExecutorManager;
+  serviceRegistry?: ServiceRegistry;
+  hostCollector?: HostCollector;
 }
 
+type Check = DiagnosisResult['checks'][number];
+type CheckDetails = Record<string, unknown>;
+type FailureCause = 'service_down' | 'health_check_failed' | 'resource_exceeded' | 'log_error' | 'executor_unavailable' | 'observation_failure';
+
+/**
+ * Deterministic HomeHub diagnostics. A command/executor failure is represented
+ * as an unknown observation and is never converted into a service-down issue.
+ */
 export class DiagnosticEngine {
-  private serviceRegistry: ServiceRegistry;
-  private options: Required<DiagnosticEngineOptions>;
-  private collector: HostCollector;
+  private readonly serviceRegistry: ServiceRegistry;
+  private readonly options: {
+    runtimeBaseUrl: string;
+  };
+  private readonly execution: RuntimeExecutorManager;
+  private readonly collector: HostCollector;
 
   constructor(options: DiagnosticEngineOptions = {}) {
-    this.serviceRegistry = new ServiceRegistry();
+    this.serviceRegistry = options.serviceRegistry ?? new ServiceRegistry();
     this.options = {
-      orbHost: options.orbHost ?? 'ubuntu',
-      orbUser: options.orbUser ?? 'root',
-      casaosAppsPath: options.casaosAppsPath ?? '/var/lib/casaos/apps',
-      embyApiKey: options.embyApiKey ?? '',
       runtimeBaseUrl: options.runtimeBaseUrl ?? 'http://localhost:5310',
     };
-    this.collector = new HostCollector({ orbHost: this.options.orbHost, orbUser: this.options.orbUser });
+    this.execution = options.executorManager
+      ?? options.execution
+      ?? new RuntimeExecutorManager(options);
+    this.collector = options.hostCollector ?? new HostCollector({ execution: this.execution });
   }
 
   get registry(): ServiceRegistry {
     return this.serviceRegistry;
   }
 
-  /**
-   * Aggregate system health across all registered services.
-   */
-  async systemHealth(platform = 'kook'): Promise<HealthResult> {
-    const host = await this.collector.collect();
-    const serviceDefs = this.serviceRegistry.getAllServices();
-    const services: ServiceHealth[] = [];
+  get executor(): RuntimeExecutorManager {
+    return this.execution;
+  }
 
-    for (const def of serviceDefs) {
-      services.push(await this.checkServiceHealth(def));
+  /** Aggregate system health across all registered services. */
+  async systemHealth(_platform = 'kook'): Promise<HealthResult> {
+    const host = await this.collector.collect();
+    const services: ServiceHealth[] = [];
+    for (const definition of this.serviceRegistry.getAllServices()) {
+      services.push(await this.checkServiceHealth(definition));
     }
 
     const summary = {
       totalServices: services.length,
-      healthy: services.filter((s) => s.status === 'healthy').length,
-      degraded: services.filter((s) => s.status === 'degraded').length,
-      unhealthy: services.filter((s) => s.status === 'unhealthy').length,
-      unknown: services.filter((s) => s.status === 'unknown').length,
+      healthy: services.filter((service) => service.status === 'healthy').length,
+      degraded: services.filter((service) => service.status === 'degraded').length,
+      unhealthy: services.filter((service) => service.status === 'unhealthy').length,
+      down: services.filter((service) => service.status === 'down').length,
+      unknown: services.filter((service) => service.status === 'unknown').length,
     };
-
     const abnormal = services
-      .filter((s) => s.status === 'degraded' || s.status === 'unhealthy')
-      .map((s) => s.serviceId);
-
-    const diagnosis = this.diagnoseSystem(summary.healthy, summary.totalServices, abnormal.length);
+      .filter((service) => ['degraded', 'unhealthy', 'down'].includes(service.status))
+      .map((service) => service.serviceId);
+    const executorUnavailable = services.some((service) => service.unknownReason === 'executor_unavailable');
 
     return {
       host,
       services,
       summary,
       abnormal,
-      diagnosis,
+      diagnosis: this.diagnoseSystem(summary.healthy, summary.totalServices, abnormal.length, summary.unknown, executorUnavailable),
       timestamp: new Date().toISOString(),
     };
   }
 
-  private diagnoseSystem(healthy: number, total: number, abnormal: number): string {
-    if (abnormal === 0 && total > 0 && healthy === total) return '系统运行正常';
-    if (abnormal > 0) {
-      return `有 ${abnormal} 个服务异常，其余 ${healthy}/${total} 个服务正常`;
+  private diagnoseSystem(
+    healthy: number,
+    total: number,
+    abnormal: number,
+    unknown: number,
+    executorUnavailable: boolean,
+  ): string {
+    if (executorUnavailable && unknown > 0) {
+      return `HomeHub Executor unavailable; services status unknown (${unknown}/${total})`;
     }
+    if (abnormal === 0 && total > 0 && healthy === total) return '系统运行正常';
+    if (abnormal > 0) return `有 ${abnormal} 个服务异常，其余 ${healthy}/${total} 个服务正常`;
+    if (unknown > 0) return `部分服务状态未知（${healthy}/${total} 正常，${unknown} 个未知）`;
     return `服务状态未知（${healthy}/${total} 正常）`;
   }
 
-  /**
-   * Check a single service health and return a ServiceHealth.
-   */
-  async checkServiceHealth(def: ServiceDefinition): Promise<ServiceHealth> {
-    const result = await this.diagnose(def.serviceId);
-    const status = result.status === 'resolved'
-      ? 'healthy'
-      : result.issues.some((i) => i.severity === 'critical' || i.severity === 'error')
-        ? 'unhealthy'
-        : result.status === 'failed' ? 'unknown' : 'degraded';
+  /** Check one registered service and preserve the distinction between DOWN and UNKNOWN. */
+  async checkServiceHealth(definition: ServiceDefinition): Promise<ServiceHealth> {
+    const result = await this.diagnose(definition.serviceId);
+    const unknownCheck = result.checks.find((check) => this.isPrimaryUnknownCheck(check));
+    const downCheck = result.checks.find((check) => this.hasCause(check, 'service_down'));
+    const explicitFailure = result.checks.some((check) => this.hasCause(check, 'health_check_failed')
+      || this.hasCause(check, 'resource_exceeded')
+      || this.hasCause(check, 'log_error'));
+
+    let status: HealthStatus;
+    let unknownReason: string | undefined;
+    if (unknownCheck) {
+      status = 'unknown';
+      unknownReason = String(unknownCheck.details?.cause ?? 'observation_failure');
+    } else if (downCheck) {
+      status = 'down';
+    } else if (explicitFailure || result.issues.length > 0) {
+      status = 'unhealthy';
+    } else {
+      // Optional resource/log observations may be unavailable while the
+      // primary service health check is known to be healthy.
+      status = 'healthy';
+    }
+
+    const message = status === 'unknown'
+      ? `无法确认 ${definition.displayName} 状态（${unknownCheck?.message ?? '检查不可用'}）`
+      : status === 'down'
+        ? downCheck?.message ?? `${definition.displayName} 未运行`
+        : result.checks.find((check) => check.status === 'failed')?.message
+          ?? result.issues[0]?.message
+          ?? '运行正常';
 
     return {
-      serviceId: def.serviceId,
+      serviceId: definition.serviceId,
       status,
       lastCheck: new Date().toISOString(),
-      message: result.checks.find((c) => c.status === 'failed')?.message
-        ?? result.issues[0]?.message
-        ?? '运行正常',
-      checks: result.checks.map((c) => ({
-        name: c.name,
-        status: c.status === 'passed' ? 'healthy' : c.status === 'failed' ? 'unhealthy' : 'unknown',
-        message: c.message,
-        timestamp: c.timestamp,
+      message,
+      runtime: definition.runtime,
+      executor: definition.executor,
+      ...(unknownReason ? { unknownReason } : {}),
+      checks: result.checks.map((check) => ({
+        name: check.name,
+        status: check.status === 'passed'
+          ? 'healthy'
+          : this.hasCause(check, 'service_down')
+            ? 'down'
+            : check.status === 'failed'
+              ? 'unhealthy'
+              : 'unknown',
+        message: check.message,
+        timestamp: check.timestamp,
       })),
     };
   }
 
   async diagnose(serviceId: ServiceId): Promise<DiagnosisResult> {
     const service = this.serviceRegistry.getService(serviceId);
-    if (!service) {
-      return this.createErrorDiagnosis(serviceId, 'Service not found in registry');
-    }
+    if (!service) return this.createErrorDiagnosis(serviceId, 'Service not found in registry');
 
     const checks: DiagnosisResult['checks'] = [];
     const issues: DiagnosisIssue[] = [];
 
-    // 1. Container/process alive
     const aliveCheck = await this.checkAlive(service);
     checks.push(aliveCheck);
-    if (aliveCheck.status === 'failed') {
+    if (this.hasCause(aliveCheck, 'service_down')) {
       issues.push({
         severity: 'critical',
         category: 'process',
@@ -138,11 +187,12 @@ export class DiagnosticEngine {
       });
     }
 
-    // 2. HTTP/TCP endpoint reachable (when applicable)
+    // Do not run dependent checks after an unknown alive observation: doing so
+    // would turn a missing executor into a chain of false service failures.
     if (aliveCheck.status === 'passed' && (service.healthCheck.type === 'http' || service.healthCheck.type === 'tcp')) {
       const reachable = await this.checkReachable(service);
       checks.push(reachable);
-      if (reachable.status === 'failed') {
+      if (this.hasCause(reachable, 'health_check_failed')) {
         issues.push({
           severity: 'error',
           category: 'connectivity',
@@ -154,11 +204,10 @@ export class DiagnosticEngine {
       }
     }
 
-    // 3. Dependencies
-    if (service.dependencies.length > 0) {
+    if (aliveCheck.status === 'passed' && service.dependencies.length > 0) {
       const dependencyCheck = await this.checkDependencies(service);
       checks.push(dependencyCheck);
-      if (dependencyCheck.status === 'failed') {
+      if (this.hasCause(dependencyCheck, 'service_down')) {
         const failed = (dependencyCheck.details?.failed as string[] | undefined) ?? [];
         issues.push({
           severity: 'warning',
@@ -171,27 +220,25 @@ export class DiagnosticEngine {
       }
     }
 
-    // 4. Resource usage (CPU/mem by container)
-    if (service.container) {
+    if (aliveCheck.status === 'passed' && service.container) {
       const resourceCheck = await this.checkResourceUsage(service);
       checks.push(resourceCheck);
-      if (resourceCheck.status === 'failed') {
+      if (this.hasCause(resourceCheck, 'resource_exceeded')) {
         issues.push({
           severity: 'warning',
           category: 'resource',
           component: service.serviceId,
-          message: String(resourceCheck.details?.problem ?? '资源占用异常'),
+          message: String(resourceCheck.details?.problem ?? resourceCheck.message),
           suggestion: '重启服务释放资源',
           actionable: true,
         });
       }
     }
 
-    // 5. Recent logs scan
-    if (aliveCheck.status === 'passed') {
+    if (aliveCheck.status === 'passed' && service.container) {
       const logCheck = await this.checkRecentLogs(service);
       checks.push(logCheck);
-      if (logCheck.status === 'failed') {
+      if (this.hasCause(logCheck, 'log_error')) {
         issues.push({
           severity: 'warning',
           category: 'data',
@@ -203,9 +250,12 @@ export class DiagnosticEngine {
       }
     }
 
-    const status: DiagnosisStatus = issues.length === 0
-      ? 'resolved'
-      : issues.some((i) => i.severity === 'critical') ? 'diagnosed' : 'uncertain';
+    const hasUnknownObservation = checks.some((check) => this.isUnknownCheck(check));
+    const status: DiagnosisStatus = hasUnknownObservation && issues.length === 0
+      ? 'failed'
+      : issues.length === 0
+        ? 'resolved'
+        : issues.some((issue) => issue.severity === 'critical') ? 'diagnosed' : 'uncertain';
 
     return {
       serviceId,
@@ -217,22 +267,16 @@ export class DiagnosticEngine {
     };
   }
 
-  /**
-   * Specialized Telegram polling diagnosis used by the V1 self-healing flow.
-   */
+  /** Specialized Telegram polling diagnosis used by the self-healing flow. */
   async diagnoseTelegramPolling(): Promise<DiagnosisResult> {
     const service = this.serviceRegistry.getService('telegram-adapter');
-    if (!service) {
-      return this.createErrorDiagnosis('telegram-adapter', 'Telegram adapter not in registry');
-    }
+    if (!service) return this.createErrorDiagnosis('telegram-adapter', 'Telegram adapter not in registry');
 
     const checks: DiagnosisResult['checks'] = [];
     const issues: DiagnosisIssue[] = [];
-
-    // 1. Adapter container/process alive
     const aliveCheck = await this.checkAlive(service);
     checks.push(aliveCheck);
-    if (aliveCheck.status === 'failed') {
+    if (this.hasCause(aliveCheck, 'service_down')) {
       issues.push({
         severity: 'critical',
         category: 'process',
@@ -243,12 +287,11 @@ export class DiagnosticEngine {
       });
     }
 
-    // 2. LangBot host up (adapter runs inside LangBot)
     const langbot = this.serviceRegistry.getService('langbot');
-    if (langbot) {
+    if (langbot && aliveCheck.status === 'passed') {
       const langbotCheck = await this.checkAlive(langbot);
       checks.push({ ...langbotCheck, name: 'langbot_host' });
-      if (langbotCheck.status === 'failed') {
+      if (this.hasCause(langbotCheck, 'service_down')) {
         issues.push({
           severity: 'error',
           category: 'dependency',
@@ -260,11 +303,10 @@ export class DiagnosticEngine {
       }
     }
 
-    // 3. Polling staleness via runtime health endpoint
     const pollCheck = await this.checkPollingStaleness();
     checks.push(pollCheck);
     const staleSeconds = pollCheck.details?.staleSeconds;
-    if (typeof staleSeconds === 'number' && staleSeconds > 0) {
+    if (pollCheck.status === 'failed' && typeof staleSeconds === 'number' && staleSeconds > 0) {
       const minutes = Math.round(staleSeconds / 60);
       issues.push({
         severity: staleSeconds > 300 ? 'critical' : 'warning',
@@ -276,11 +318,10 @@ export class DiagnosticEngine {
       });
     }
 
-    // 4. Bot API reachability
     if (aliveCheck.status === 'passed') {
       const apiCheck = await this.checkTelegramBotApi();
       checks.push(apiCheck);
-      if (apiCheck.status === 'failed') {
+      if (this.hasCause(apiCheck, 'health_check_failed')) {
         issues.push({
           severity: 'error',
           category: 'external',
@@ -292,17 +333,14 @@ export class DiagnosticEngine {
       }
     }
 
-    const status: DiagnosisStatus = issues.length === 0
-      ? 'resolved'
-      : issues.some((i) => i.severity === 'critical') ? 'diagnosed' : 'uncertain';
-
-    const recommendedActions = issues.some((i) => i.category === 'connectivity' && i.severity === 'critical')
-      ? [{
-          action: 'restart' as Action,
-          reason: 'Telegram polling stale，重启 adapter 可恢复轮询',
-          confidence: 0.85,
-          requiresConfirmation: false,
-        }]
+    const hasUnknownObservation = checks.some((check) => this.isUnknownCheck(check));
+    const status: DiagnosisStatus = hasUnknownObservation && issues.length === 0
+      ? 'failed'
+      : issues.length === 0
+        ? 'resolved'
+        : issues.some((issue) => issue.severity === 'critical') ? 'diagnosed' : 'uncertain';
+    const recommendedActions = issues.some((issue) => issue.category === 'connectivity' && issue.severity === 'critical')
+      ? [{ action: 'restart' as Action, reason: 'Telegram polling stale，重启 adapter 可恢复轮询', confidence: 0.85, requiresConfirmation: true }]
       : [];
 
     return {
@@ -315,149 +353,153 @@ export class DiagnosticEngine {
     };
   }
 
-  private async checkAlive(service: ServiceDefinition): Promise<DiagnosisResult['checks'][0]> {
-    const target = service.container?.name
-      ?? service.process?.name
-      ?? service.serviceId;
-
-    try {
-      if (service.container) {
-        const { stdout } = await execAsync(
-          `orb -m ${this.options.orbHost} -u ${this.options.orbUser} bash -lc "docker ps --filter name=${target} --format '{{.Names}}|{{.Status}}' | head -n1"`,
-          { timeout: 15_000, shell: '/bin/bash' },
-        );
-        const line = stdout.trim();
-        if (!line) {
-          return { name: 'container_alive', status: 'failed', message: `容器 ${target} 未运行`, timestamp: new Date().toISOString() };
-        }
-        const [name, state] = line.split('|');
-        if (/^Up/.test(state ?? '')) {
-          return { name: 'container_alive', status: 'passed', message: `容器 ${name} 运行中`, timestamp: new Date().toISOString(), details: { state } };
-        }
-        return { name: 'container_alive', status: 'failed', message: `容器 ${name} 状态异常: ${state}`, timestamp: new Date().toISOString(), details: { state } };
-      }
-
-      const { stdout } = await execAsync(
-        `orb -m ${this.options.orbHost} -u ${this.options.orbUser} bash -lc "pgrep -f ${target} >/dev/null && echo alive || echo dead"`,
-        { timeout: 10_000, shell: '/bin/bash' },
-      );
-      const alive = stdout.trim() === 'alive';
-      return {
-        name: 'process_alive',
-        status: alive ? 'passed' : 'failed',
-        message: alive ? `进程 ${target} 运行中` : `进程 ${target} 未运行`,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      return {
-        name: 'container_alive',
-        status: 'failed',
-        message: `无法检查容器状态: ${error instanceof Error ? error.message : 'unknown'}`,
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-
-  private async checkReachable(service: ServiceDefinition): Promise<DiagnosisResult['checks'][0]> {
-    if (service.healthCheck.type === 'http') {
-      try {
-        const response = await fetch(service.healthCheck.target, {
-          signal: AbortSignal.timeout(service.healthCheck.timeout ?? 8000),
-        });
-        if (response.ok) {
-          return { name: 'http_reachable', status: 'passed', message: `HTTP ${response.status}`, timestamp: new Date().toISOString() };
-        }
-        return { name: 'http_reachable', status: 'failed', message: `HTTP ${response.status} ${response.statusText}`, timestamp: new Date().toISOString() };
-      } catch (error) {
-        return { name: 'http_reachable', status: 'failed', message: `HTTP 不可达: ${error instanceof Error ? error.message : 'timeout'}`, timestamp: new Date().toISOString() };
-      }
-    }
-
-    // TCP reachability via host bash
-    const [host, port] = service.healthCheck.target.split(':');
-    try {
-      const { stdout } = await execAsync(
-        `orb -m ${this.options.orbHost} -u ${this.options.orbUser} bash -lc "timeout 5 bash -c 'echo > /dev/tcp/${host}/${port}' >/dev/null 2>&1 && echo open || echo closed"`,
-        { timeout: 10_000, shell: '/bin/bash' },
-      );
-      const open = stdout.trim() === 'open';
-      return { name: 'tcp_reachable', status: open ? 'passed' : 'failed', message: open ? `TCP ${host}:${port} 可达` : `TCP ${host}:${port} 不可达`, timestamp: new Date().toISOString() };
-    } catch (error) {
-      return { name: 'tcp_reachable', status: 'failed', message: `TCP 检查失败: ${error instanceof Error ? error.message : 'unknown'}`, timestamp: new Date().toISOString() };
-    }
-  }
-
-  private async checkDependencies(service: ServiceDefinition): Promise<DiagnosisResult['checks'][0]> {
-    const failed: string[] = [];
-    for (const depId of service.dependencies) {
-      const dep = this.serviceRegistry.getService(depId);
-      if (!dep) { failed.push(depId); continue; }
-      const check = await this.checkAlive(dep);
-      if (check.status === 'failed') failed.push(depId);
-    }
-    return failed.length
-      ? { name: 'dependencies', status: 'failed', message: `依赖异常: ${failed.join('、')}`, timestamp: new Date().toISOString(), details: { failed } }
-      : { name: 'dependencies', status: 'passed', message: '依赖正常', timestamp: new Date().toISOString() };
-  }
-
-  private async checkResourceUsage(service: ServiceDefinition): Promise<DiagnosisResult['checks'][0]> {
-    const container = service.container?.name;
-    if (!container) return { name: 'resource_usage', status: 'skipped', message: '无容器信息', timestamp: new Date().toISOString() };
-
-    try {
-      const { stdout } = await execAsync(
-        `orb -m ${this.options.orbHost} -u ${this.options.orbUser} docker stats --no-stream --format '{{.CPUPerc}}|{{.MemPerc}}' ${container}`,
-        { timeout: 15_000, shell: '/bin/bash' },
-      );
-      const line = stdout.trim();
-      const match = line.match(/([\d.]+)%\|([\d.]+)%/);
-      if (!match) return { name: 'resource_usage', status: 'skipped', message: '无法读取资源', timestamp: new Date().toISOString() };
-      const cpu = Number(match[1]);
-      const mem = Number(match[2]);
-      const problem = cpu > 90 ? `CPU 使用率 ${cpu}%` : mem > 90 ? `内存使用率 ${mem}%` : undefined;
-      return problem
-        ? { name: 'resource_usage', status: 'failed', message: problem, timestamp: new Date().toISOString(), details: { problem, cpu, mem } }
-        : { name: 'resource_usage', status: 'passed', message: `CPU ${cpu}% 内存 ${mem}%`, timestamp: new Date().toISOString(), details: { cpu, mem } };
-    } catch {
-      return { name: 'resource_usage', status: 'skipped', message: '资源检查不可用', timestamp: new Date().toISOString() };
-    }
-  }
-
-  private async checkRecentLogs(service: ServiceDefinition): Promise<DiagnosisResult['checks'][0]> {
-    const container = service.container?.name;
-    if (!container) return { name: 'recent_logs', status: 'skipped', message: '无容器可查日志', timestamp: new Date().toISOString() };
-
-    try {
-      const { stdout } = await execAsync(
-        `orb -m ${this.options.orbHost} -u ${this.options.orbUser} docker logs --tail 200 ${container} 2>&1 | grep -iE 'error|exception|traceback|fatal|panic' | tail -n 5`,
-        { timeout: 15_000, shell: '/bin/bash' },
-      );
-      if (!stdout.trim()) {
-        return { name: 'recent_logs', status: 'passed', message: '最近日志无错误', timestamp: new Date().toISOString() };
-      }
-      const firstLine = stdout.trim().split('\n')[0] ?? '未知错误';
-      return { name: 'recent_logs', status: 'failed', message: `最近日志发现错误: ${firstLine.slice(0, 300)}`, timestamp: new Date().toISOString(), details: { sample: firstLine.slice(0, 300) } };
-    } catch {
-      return { name: 'recent_logs', status: 'skipped', message: '日志检查不可用', timestamp: new Date().toISOString() };
-    }
-  }
-
-  private async checkPollingStaleness(): Promise<DiagnosisResult['checks'][0]> {
-    // Ask the agent runtime for Telegram polling health. The runtime exposes
-    // /homehub/telegram/polling with lastSuccessfulPollAt when available.
-    try {
-      const response = await fetch(`${this.options.runtimeBaseUrl}/homehub/telegram/polling`, {
-        signal: AbortSignal.timeout(5000),
+  private async checkAlive(service: ServiceDefinition): Promise<Check> {
+    if (service.runtime === 'langbot-component') {
+      const containerName = service.component?.containerName;
+      if (!containerName) return this.skipped('component_alive', 'LangBot component container 未配置', 'observation_failure');
+      const result = await this.execution.execute('docker', {
+        command: 'docker',
+        args: ['ps', '-a', '--filter', `name=^${containerName}$`, '--format', '{{.Names}}|{{.State}}|{{.Status}}'],
+        timeoutMs: service.healthCheck.timeout,
       });
-      if (!response.ok) {
-        return { name: 'polling_staleness', status: 'skipped', message: 'runtime 未暴露 polling 指标', timestamp: new Date().toISOString() };
+      return this.containerCheck(result, containerName, 'component_alive');
+    }
+
+    if (service.container) {
+      const result = await this.execution.executeForService(service, {
+        command: 'docker',
+        args: ['ps', '-a', '--filter', `name=^${service.container.name}$`, '--format', '{{.Names}}|{{.State}}|{{.Status}}'],
+        timeoutMs: service.healthCheck.timeout,
+      });
+      return this.containerCheck(result, service.container.name, 'container_alive');
+    }
+
+    const target = service.process?.name ?? service.healthCheck.target;
+    const result = await this.execution.executeForService(service, {
+      command: 'pgrep',
+      args: ['-f', target],
+      timeoutMs: service.healthCheck.timeout,
+    });
+    if (result.executorAvailable && (result.ok || result.exitCode === 1)) {
+      const alive = result.ok && result.stdout.trim().length > 0;
+      return alive
+        ? this.passed('process_alive', `进程 ${target} 运行中`, { target })
+        : this.failed('process_alive', `进程 ${target} 未运行`, 'service_down', { target });
+    }
+    return this.skipped('process_alive', `无法检查进程 ${target}`, result.executorAvailable ? 'observation_failure' : 'executor_unavailable');
+  }
+
+  private containerCheck(result: CommandExecution, target: string, name: string): Check {
+    if (!result.ok) {
+      return this.skipped(
+        name,
+        result.executorAvailable ? `无法检查容器 ${target}` : `Docker executor 不可用，无法检查容器 ${target}`,
+        result.executorAvailable ? 'observation_failure' : 'executor_unavailable',
+      );
+    }
+    const line = result.stdout.trim().split('\n').map((value) => value.trim()).find(Boolean);
+    if (!line) return this.failed(name, `容器 ${target} 未找到或已停止`, 'service_down', { target, state: 'missing' });
+    const [nameValue, state, status] = line.split('|');
+    if (state === 'running' || /^Up\b/u.test(status ?? '')) {
+      return this.passed(name, `容器 ${nameValue ?? target} 运行中`, { state: state ?? 'running', status: status ?? '' });
+    }
+    return this.failed(name, `容器 ${nameValue ?? target} 状态异常: ${status ?? state ?? 'unknown'}`, 'service_down', { state, status });
+  }
+
+  private async checkReachable(service: ServiceDefinition): Promise<Check> {
+    const timeoutSeconds = Math.max(1, Math.ceil((service.healthCheck.timeout ?? 8000) / 1000));
+    if (service.healthCheck.type === 'http') {
+      const result = await this.execution.executeForService(service, {
+        command: 'curl',
+        args: ['-sS', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', String(timeoutSeconds), service.healthCheck.target],
+        timeoutMs: service.healthCheck.timeout,
+      });
+      if (!result.executorAvailable) return this.skipped('http_reachable', 'HTTP executor 不可用', 'executor_unavailable');
+      if (!result.ok) return this.skipped('http_reachable', 'HTTP 检查执行失败', 'observation_failure');
+      const code = Number(result.stdout.trim());
+      if (Number.isInteger(code) && code >= 200 && code < 400) {
+        return this.passed('http_reachable', `HTTP ${code}`, { statusCode: code });
       }
+      return this.failed('http_reachable', `HTTP ${Number.isFinite(code) ? code : '无响应'}`, 'health_check_failed', { statusCode: code });
+    }
+
+    const [host, port] = service.healthCheck.target.split(':');
+    if (!host || !port) return this.skipped('tcp_reachable', 'TCP 目标格式无效', 'observation_failure');
+    const result = await this.execution.executeForService(service, {
+      command: 'nc',
+      args: ['-z', '-w', String(timeoutSeconds), host, port],
+      timeoutMs: service.healthCheck.timeout,
+    });
+    if (!result.executorAvailable) return this.skipped('tcp_reachable', 'TCP executor 不可用', 'executor_unavailable');
+    if (result.ok) return this.passed('tcp_reachable', `TCP ${host}:${port} 可达`, { host, port });
+    if (result.exitCode === 1) return this.failed('tcp_reachable', `TCP ${host}:${port} 不可达`, 'health_check_failed', { host, port });
+    return this.skipped('tcp_reachable', 'TCP 检查执行失败', 'observation_failure', { host, port });
+  }
+
+  private async checkDependencies(service: ServiceDefinition): Promise<Check> {
+    const failed: string[] = [];
+    const unknown: string[] = [];
+    for (const dependencyId of service.dependencies) {
+      const dependency = this.serviceRegistry.getService(dependencyId);
+      if (!dependency) {
+        unknown.push(dependencyId);
+        continue;
+      }
+      const check = await this.checkAlive(dependency);
+      if (this.hasCause(check, 'service_down')) failed.push(dependencyId);
+      else if (check.status !== 'passed') unknown.push(dependencyId);
+    }
+    if (failed.length) {
+      return this.failed('dependencies', `依赖异常: ${failed.join('、')}`, 'service_down', { failed, ...(unknown.length ? { unknown } : {}) });
+    }
+    if (unknown.length) return this.skipped('dependencies', `依赖状态未知: ${unknown.join('、')}`, 'observation_failure', { unknown });
+    return this.passed('dependencies', '依赖正常');
+  }
+
+  private async checkResourceUsage(service: ServiceDefinition): Promise<Check> {
+    const container = service.container?.name;
+    if (!container) return this.skipped('resource_usage', '无容器信息', 'observation_failure');
+    const result = await this.execution.executeForService(service, {
+      command: 'docker',
+      args: ['stats', '--no-stream', '--format', '{{.CPUPerc}}|{{.MemPerc}}', container],
+      timeoutMs: service.healthCheck.timeout,
+    });
+    if (!result.executorAvailable) return this.skipped('resource_usage', 'Docker executor 不可用', 'executor_unavailable');
+    if (!result.ok) return this.skipped('resource_usage', '资源检查执行失败', 'observation_failure');
+    const match = result.stdout.trim().match(/([\d.]+)%\|([\d.]+)%/u);
+    if (!match) return this.skipped('resource_usage', '无法读取资源', 'observation_failure');
+    const cpu = Number(match[1]);
+    const memory = Number(match[2]);
+    const problem = cpu > 90 ? `CPU 使用率 ${cpu}%` : memory > 90 ? `内存使用率 ${memory}%` : undefined;
+    return problem
+      ? this.failed('resource_usage', problem, 'resource_exceeded', { problem, cpu, memory })
+      : this.passed('resource_usage', `CPU ${cpu}% 内存 ${memory}%`, { cpu, memory });
+  }
+
+  private async checkRecentLogs(service: ServiceDefinition): Promise<Check> {
+    const container = service.container?.name;
+    if (!container) return this.skipped('recent_logs', '无容器可查日志', 'observation_failure');
+    const result = await this.execution.executeForService(service, {
+      command: 'docker',
+      args: ['logs', '--tail', '200', container],
+      timeoutMs: service.healthCheck.timeout,
+    });
+    if (!result.executorAvailable) return this.skipped('recent_logs', 'Docker executor 不可用', 'executor_unavailable');
+    if (!result.ok) return this.skipped('recent_logs', '日志检查执行失败', 'observation_failure');
+    const errors = `${result.stdout}\n${result.stderr}`.split('\n')
+      .filter((line) => /error|exception|traceback|fatal|panic/iu.test(line));
+    if (!errors.length) return this.passed('recent_logs', '最近日志无错误');
+    const sample = errors[0]!.slice(0, 300);
+    return this.failed('recent_logs', `最近日志发现错误: ${sample}`, 'log_error', { sample });
+  }
+
+  private async checkPollingStaleness(): Promise<Check> {
+    try {
+      const response = await fetch(`${this.options.runtimeBaseUrl}/homehub/telegram/polling`, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) return this.skipped('polling_staleness', 'runtime 未暴露 polling 指标', 'observation_failure');
       const body = await response.json() as Record<string, unknown>;
       const lastPoll = body.lastSuccessfulPollAt ? Date.parse(String(body.lastSuccessfulPollAt)) : NaN;
-      const staleSeconds = Number.isFinite(lastPoll)
-        ? Math.max(0, (Date.now() - lastPoll) / 1000)
-        : -1;
-
+      const staleSeconds = Number.isFinite(lastPoll) ? Math.max(0, (Date.now() - lastPoll) / 1000) : -1;
       return {
         name: 'polling_staleness',
         status: staleSeconds > 300 ? 'failed' : 'passed',
@@ -468,56 +510,37 @@ export class DiagnosticEngine {
         details: { staleSeconds },
       };
     } catch {
-      return { name: 'polling_staleness', status: 'skipped', message: '无法读取 polling 指标', timestamp: new Date().toISOString(), details: { staleSeconds: -1 } };
+      return this.skipped('polling_staleness', '无法读取 polling 指标', 'observation_failure', { staleSeconds: -1 });
     }
   }
 
-  private async checkTelegramBotApi(): Promise<DiagnosisResult['checks'][0]> {
+  private async checkTelegramBotApi(): Promise<Check> {
     try {
       const response = await fetch('https://api.telegram.org', { signal: AbortSignal.timeout(8000) });
       return response.ok || response.status < 500
-        ? { name: 'bot_api_reachable', status: 'passed', message: 'Bot API 可达', timestamp: new Date().toISOString() }
-        : { name: 'bot_api_reachable', status: 'failed', message: `Bot API HTTP ${response.status}`, timestamp: new Date().toISOString() };
+        ? this.passed('bot_api_reachable', 'Bot API 可达', { statusCode: response.status })
+        : this.failed('bot_api_reachable', `Bot API HTTP ${response.status}`, 'health_check_failed', { statusCode: response.status });
     } catch {
-      return { name: 'bot_api_reachable', status: 'failed', message: 'Bot API 不可达', timestamp: new Date().toISOString() };
+      return this.skipped('bot_api_reachable', 'Bot API 检查执行失败', 'observation_failure');
     }
   }
 
-  private generateRecommendedActions(
-    service: ServiceDefinition,
-    issues: DiagnosisIssue[],
-  ): DiagnosisResult['recommendedActions'] {
+  private generateRecommendedActions(service: ServiceDefinition, issues: DiagnosisIssue[]): DiagnosisResult['recommendedActions'] {
     const actions: DiagnosisResult['recommendedActions'] = [];
-    const critical = issues.some((i) => i.severity === 'critical' && i.category === 'process');
-    const dependency = issues.some((i) => i.category === 'dependency');
-    const resource = issues.some((i) => i.category === 'resource');
-
+    const critical = issues.some((issue) => issue.severity === 'critical' && issue.category === 'process');
+    const dependency = issues.some((issue) => issue.category === 'dependency');
+    const resource = issues.some((issue) => issue.category === 'resource');
     if (critical && service.allowedActions.includes('restart')) {
-      actions.push({
-        action: 'restart',
-        reason: `${service.displayName} 进程异常，重启恢复`,
-        confidence: 0.8,
-        requiresConfirmation: service.riskLevel === 'high' || service.riskLevel === 'critical',
-      });
+      actions.push({ action: 'restart', reason: `${service.displayName} 进程异常，重启恢复`, confidence: 0.8, requiresConfirmation: true });
     }
     if (dependency && service.allowedActions.includes('restart')) {
-      actions.push({
-        action: 'restart',
-        reason: '依赖服务恢复后重启主服务',
-        confidence: 0.6,
-        requiresConfirmation: true,
-      });
+      actions.push({ action: 'restart', reason: '依赖服务恢复后重启主服务', confidence: 0.6, requiresConfirmation: true });
     }
     if (resource && service.allowedActions.includes('restart')) {
-      actions.push({
-        action: 'restart',
-        reason: '资源占用异常，重启释放',
-        confidence: 0.7,
-        requiresConfirmation: service.riskLevel === 'high' || service.riskLevel === 'critical',
-      });
+      actions.push({ action: 'restart', reason: '资源占用异常，重启释放', confidence: 0.7, requiresConfirmation: true });
     }
     if (resource && service.allowedActions.includes('rotate_logs')) {
-      actions.push({ action: 'rotate_logs', reason: '清理日志释放空间', confidence: 0.6, requiresConfirmation: false });
+      actions.push({ action: 'rotate_logs', reason: '清理日志释放空间', confidence: 0.6, requiresConfirmation: true });
     }
     if (issues.length && !actions.length && service.allowedActions.includes('check')) {
       actions.push({ action: 'check', reason: '进一步人工检查', confidence: 0.4, requiresConfirmation: false });
@@ -525,18 +548,38 @@ export class DiagnosticEngine {
     return actions;
   }
 
-  private createErrorDiagnosis(serviceId: string, message: string): DiagnosisResult {
+  private passed(name: string, message: string, details?: CheckDetails): Check {
+    return { name, status: 'passed', message, timestamp: new Date().toISOString(), ...(details ? { details } : {}) };
+  }
+
+  private failed(name: string, message: string, cause: FailureCause, details: CheckDetails = {}): Check {
+    return { name, status: 'failed', message, timestamp: new Date().toISOString(), details: { cause, ...details } };
+  }
+
+  private skipped(name: string, message: string, cause: FailureCause, details: CheckDetails = {}): Check {
+    return { name, status: 'skipped', message, timestamp: new Date().toISOString(), details: { cause, ...details } };
+  }
+
+  private hasCause(check: Check, cause: FailureCause): boolean {
+    return check.details?.cause === cause;
+  }
+
+  private isUnknownCheck(check: Check): boolean {
+    return check.status === 'skipped'
+      || this.hasCause(check, 'executor_unavailable')
+      || this.hasCause(check, 'observation_failure');
+  }
+
+  private isPrimaryUnknownCheck(check: Check): boolean {
+    if (!this.isUnknownCheck(check)) return false;
+    return ['container_alive', 'component_alive', 'process_alive', 'http_reachable', 'tcp_reachable', 'dependencies'].includes(check.name);
+  }
+
+  private createErrorDiagnosis(serviceId: ServiceId, message: string): DiagnosisResult {
     return {
-      serviceId: serviceId as ServiceId,
+      serviceId,
       status: 'failed',
-      issues: [{
-        severity: 'critical',
-        category: 'external',
-        component: serviceId,
-        message,
-        suggestion: '检查服务注册表与运行环境',
-        actionable: false,
-      }],
+      issues: [{ severity: 'critical', category: 'external', component: serviceId, message, suggestion: '检查服务注册表与运行环境', actionable: false }],
       checks: [],
       recommendedActions: [],
       timestamp: new Date().toISOString(),

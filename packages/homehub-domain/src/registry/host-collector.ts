@@ -1,123 +1,165 @@
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
 import type { HostHealth } from '../schema/types.js';
+import {
+  RuntimeExecutorManager,
+  type CommandExecutor,
+  type RuntimeExecutorManagerOptions,
+} from '../execution/runtime-executor.js';
 
-const execAsync = promisify(exec);
-
-export interface HostCollectorOptions {
+export interface HostCollectorOptions extends RuntimeExecutorManagerOptions {
+  /** Deprecated compatibility fields; host collection no longer uses them. */
   orbHost?: string;
   orbUser?: string;
+  executor?: CommandExecutor;
+  execution?: RuntimeExecutorManager;
 }
 
+/** Collects metrics from the current Ubuntu runtime, never through a remote shell hop. */
 export class HostCollector {
-  private options: Required<HostCollectorOptions>;
+  private readonly execution: RuntimeExecutorManager;
 
   constructor(options: HostCollectorOptions = {}) {
-    this.options = {
-      orbHost: options.orbHost ?? 'ubuntu',
-      orbUser: options.orbUser ?? 'root',
-    };
+    this.execution = options.execution ?? new RuntimeExecutorManager({
+      ...options,
+      ...(options.executor ? { executors: { ...(options.executors ?? {}), ubuntu: options.executor } } : {}),
+    });
   }
 
   /**
-   * Collect host health metrics.
-   *
-   * When running inside the ubuntu container directly this reads /proc.
-   * Otherwise it shells out through orb to the ubuntu machine. Both paths
-   * fail safe to an "unknown" structure rather than throwing.
+   * A failed observation returns null-valued metrics. Zero is reserved for a
+   * measured zero, not for an unavailable executor or unreadable /proc file.
    */
   async collect(): Promise<HostHealth> {
+    const result = await this.execution.execute('ubuntu', {
+      command: 'bash',
+      args: ['-lc', this.collectScript()],
+      timeoutMs: 10_000,
+    });
+    if (!result.ok) return this.unknownHost();
+
     try {
-      const cmd = this.buildCollectCommand();
-      const { stdout } = await execAsync(cmd, { timeout: 10_000, shell: '/bin/bash' });
-      const parsed = JSON.parse(stdout) as Record<string, unknown>;
-      return this.normalize(parsed);
+      return this.normalize(JSON.parse(result.stdout) as Record<string, unknown>);
     } catch {
       return this.unknownHost();
     }
   }
 
-  private buildCollectCommand(): string {
-    const script = `
-set -e
-CORES=$(nproc 2>/dev/null || echo 1)
-LOAD=$(cat /proc/loadavg 2>/dev/null || echo '0 0 0')
-read -r L1 L2 L3 _rest <<< "$LOAD"
-MEM_TOTAL=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo 0)
-MEM_AVAIL=$(awk '/MemAvailable/{print $2}' /proc/meminfo 2>/dev/null || echo 0)
-MEM_TOTAL_KB=$((MEM_TOTAL))
-MEM_AVAIL_KB=$((MEM_AVAIL))
-DISKS=$(python3 - <<'PY'
-import json, os
-out=[]
-for m in ('/', '/DATA', '/Volumes/Avalon'):
+  private collectScript(): string {
+    return `python3 - <<'PY'
+import json
+import os
+import time
+
+result = {
+    'hostname': None,
+    'uptime': None,
+    'loadAverage': [None, None, None],
+    'cpu': {'usage': None, 'cores': None},
+    'memory': {'total': None, 'used': None, 'available': None, 'percentage': None},
+    'disk': [],
+}
+
+try:
+    result['hostname'] = os.uname().nodename
+except OSError:
+    pass
+
+try:
+    with open('/proc/uptime') as handle:
+        result['uptime'] = int(float(handle.read().split()[0]))
+except (OSError, IndexError, ValueError):
+    pass
+
+try:
+    result['loadAverage'] = [float(value) for value in os.getloadavg()[:3]]
+except (OSError, ValueError):
+    pass
+
+try:
+    with open('/proc/stat') as handle:
+        first = handle.readline().split()[1:]
+    total0 = sum(int(value) for value in first[:8])
+    busy0 = sum(int(value) for value in first[:4])
+    time.sleep(0.2)
+    with open('/proc/stat') as handle:
+        second = handle.readline().split()[1:]
+    total1 = sum(int(value) for value in second[:8])
+    busy1 = sum(int(value) for value in second[:4])
+    total_delta = total1 - total0
+    busy_delta = busy1 - busy0
+    if total_delta > 0:
+        result['cpu']['usage'] = round(100.0 * busy_delta / total_delta, 1)
+except (OSError, IndexError, ValueError):
+    pass
+
+try:
+    result['cpu']['cores'] = os.cpu_count()
+except (OSError, ValueError):
+    pass
+
+try:
+    memory = {}
+    with open('/proc/meminfo') as handle:
+        for line in handle:
+            key, value, *_ = line.split()
+            memory[key.rstrip(':')] = int(value) * 1024
+    total = memory.get('MemTotal')
+    available = memory.get('MemAvailable')
+    if total is not None and available is not None:
+        result['memory'] = {
+            'total': total,
+            'used': total - available,
+            'available': available,
+            'percentage': round(100.0 * (total - available) / total, 1) if total else None,
+        }
+except (OSError, IndexError, ValueError):
+    pass
+
+for mount in ('/', '/DATA', '/Volumes/Avalon'):
     try:
-        s=os.statvfs(m)
-        total=s.f_blocks*s.f_frsize
-        free=s.f_bavail*s.f_frsize
-        used=total-free
-        out.append({'mount': m, 'total': total, 'used': used, 'available': free, 'percentage': round(used/total*100,1) if total else 0})
+        stat = os.statvfs(mount)
+        total = stat.f_blocks * stat.f_frsize
+        available = stat.f_bavail * stat.f_frsize
+        used = total - available
+        result['disk'].append({
+            'mount': mount,
+            'total': total,
+            'used': used,
+            'available': available,
+            'percentage': round(100.0 * used / total, 1) if total else None,
+        })
     except OSError:
         pass
-print(json.dumps(out))
-PY
-)
-CPU_USAGE=$(python3 - <<'PY'
-import time, os
-def read():
-    with open('/proc/stat') as f:
-        parts=f.readline().split()[1:]
-    return sum(map(int, parts[:8])), sum(map(int, parts[:4]))
-t0,c0=read(); time.sleep(0.2); t1,c1=read()
-dt=t1-t0; dc=c1-c0
-print(round(100.0*dc/dt,1) if dt else 0)
-PY
-)
-HOSTNAME=$(hostname 2>/dev/null || echo ubuntu)
-UPTIME=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
-python3 -c "
-import json
-mem_total_kb=$MEM_TOTAL_KB; mem_avail_kb=$MEM_AVAIL_KB
-mem_total=mem_total_kb*1024; mem_avail=mem_avail_kb*1024
-print(json.dumps({
-  'hostname': '$HOSTNAME',
-  'uptime': $UPTIME,
-  'loadAverage': [$L1,$L2,$L3],
-  'cpu': {'usage': $CPU_USAGE, 'cores': $CORES},
-  'memory': {'total': mem_total, 'used': mem_total-mem_avail, 'available': mem_avail, 'percentage': round(100.0*(mem_total-mem_avail)/mem_total,1) if mem_total else 0},
-  'disk': $DISKS
-}))
-"
-`;
-    return `orb -m ${this.options.orbHost} -u ${this.options.orbUser} bash -lc ${JSON.stringify(script)}`;
+
+print(json.dumps(result))
+PY`;
   }
 
   private normalize(parsed: Record<string, unknown>): HostHealth {
-    const cpu = parsed.cpu as Record<string, unknown> | undefined;
-    const memory = parsed.memory as Record<string, unknown> | undefined;
-    const disk = Array.isArray(parsed.disk) ? parsed.disk as Array<Record<string, unknown>> : [];
-    const load = Array.isArray(parsed.loadAverage) ? parsed.loadAverage as unknown[] : [];
+    const cpu = this.record(parsed.cpu);
+    const memory = this.record(parsed.memory);
+    const disk = Array.isArray(parsed.disk) ? parsed.disk.map((value) => this.record(value)) : [];
+    const load = Array.isArray(parsed.loadAverage) ? parsed.loadAverage : [];
 
     return {
-      hostname: String(parsed.hostname ?? 'ubuntu'),
-      uptime: this.num(parsed.uptime, 0),
-      loadAverage: [this.num(load[0], 0), this.num(load[1], 0), this.num(load[2], 0)],
+      hostname: this.text(parsed.hostname) ?? 'unknown',
+      uptime: this.numberOrNull(parsed.uptime),
+      loadAverage: [this.numberOrNull(load[0]), this.numberOrNull(load[1]), this.numberOrNull(load[2])],
       cpu: {
-        usage: this.num(cpu?.usage, 0),
-        cores: this.num(cpu?.cores, 1),
+        usage: this.numberOrNull(cpu.usage),
+        cores: this.numberOrNull(cpu.cores),
       },
       memory: {
-        total: this.num(memory?.total, 0),
-        used: this.num(memory?.used, 0),
-        available: this.num(memory?.available, 0),
-        percentage: this.num(memory?.percentage, 0),
+        total: this.numberOrNull(memory.total),
+        used: this.numberOrNull(memory.used),
+        available: this.numberOrNull(memory.available),
+        percentage: this.numberOrNull(memory.percentage),
       },
-      disk: disk.map((d) => ({
-        mount: String(d.mount ?? '/'),
-        total: this.num(d.total, 0),
-        used: this.num(d.used, 0),
-        available: this.num(d.available, 0),
-        percentage: this.num(d.percentage, 0),
+      disk: disk.map((entry) => ({
+        mount: this.text(entry.mount) ?? 'unknown',
+        total: this.numberOrNull(entry.total),
+        used: this.numberOrNull(entry.used),
+        available: this.numberOrNull(entry.available),
+        percentage: this.numberOrNull(entry.percentage),
       })),
     };
   }
@@ -125,16 +167,25 @@ print(json.dumps({
   private unknownHost(): HostHealth {
     return {
       hostname: 'unknown',
-      uptime: 0,
-      loadAverage: [0, 0, 0],
-      cpu: { usage: 0, cores: 0 },
-      memory: { total: 0, used: 0, available: 0, percentage: 0 },
+      uptime: null,
+      loadAverage: [null, null, null],
+      cpu: { usage: null, cores: null },
+      memory: { total: null, used: null, available: null, percentage: null },
       disk: [],
     };
   }
 
-  private num(value: unknown, fallback: number): number {
-    const n = typeof value === 'number' ? value : Number(value);
-    return Number.isFinite(n) ? n : fallback;
+  private record(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  }
+
+  private text(value: unknown): string | null {
+    const text = String(value ?? '').trim();
+    return text || null;
+  }
+
+  private numberOrNull(value: unknown): number | null {
+    const number = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(number) ? number : null;
   }
 }

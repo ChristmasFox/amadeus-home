@@ -1,5 +1,6 @@
-import type { AuditEntry, ActionRequest, ActionResult } from '../schema/types.js';
+import type { AuditEntry, ActionRequest, ActionResult, Role } from '../schema/types.js';
 import { ActionRequestSchema } from '../schema/types.js';
+import type { AuthorizationIdentityLike } from '../authorization/authorization-core.js';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 
@@ -7,6 +8,12 @@ export interface AuditLoggerOptions {
   logPath?: string;
   maxFileSize?: number; // bytes
   maxFiles?: number;
+}
+
+function primaryRole(roles: readonly Role[]): Role {
+  if (roles.includes('ADMIN')) return 'ADMIN';
+  if (roles.includes('TRUSTED')) return 'TRUSTED';
+  return 'PUBLIC';
 }
 
 export class AuditLogger {
@@ -28,12 +35,30 @@ export class AuditLogger {
   /**
    * Log an action execution
    */
-  async logAction(request: ActionRequest, result: ActionResult, verificationPassed: boolean): Promise<AuditEntry> {
+  async logAction(
+    request: ActionRequest,
+    result: ActionResult,
+    verificationPassed: boolean,
+    identity?: AuthorizationIdentityLike,
+  ): Promise<AuditEntry> {
     const normalizedRequest = ActionRequestSchema.parse(request);
+    const platformUserId = normalizedRequest.platformUserId ?? normalizedRequest.userId;
+    const internalUser = identity?.internalUserId
+      ?? identity?.internalIdentity?.internalUserId
+      ?? null;
+    const role = identity ? (identity.role ?? primaryRole(identity.roles)) : 'PUBLIC';
     const entry: AuditEntry = {
       id: this.generateId(),
-      userId: normalizedRequest.userId,
+      // userId is retained as a compatibility alias for the stable platform ID.
+      userId: platformUserId,
       platform: normalizedRequest.platform,
+      platformUserId,
+      internalUser,
+      role,
+      chatId: normalizedRequest.chatId ?? 'unknown-chat',
+      target: normalizedRequest.target ?? null,
+      authorized: result.status !== 'cancelled',
+      denied: result.status === 'cancelled',
       serviceId: normalizedRequest.serviceId,
       action: normalizedRequest.action,
       request: normalizedRequest,
@@ -46,11 +71,9 @@ export class AuditLogger {
 
     this.logQueue.push(entry);
 
-    // Flush immediately for critical actions
-    if (result.status === 'failed' || !verificationPassed) {
-      await this.flush();
-    }
-
+    // Authorization and execution audit entries must survive a short-lived
+    // runtime; flush every event before acknowledging the action.
+    await this.flush();
     return entry;
   }
 

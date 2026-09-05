@@ -5,11 +5,12 @@
 ## 当前上下文
 
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
-系统的可迁移 monorepo。迁移阶段、HomeHub V1 代码阶段、只读 `/whoami` 代码阶段、目标
-runtime/plugin 部署、平台来源修复、Admin Identity 配置和 Developer Workflow Optimization V1
-已完成；2026-09-05 新增的 Telegram/KOOK `Request Failed` 事故已由用户修正 9Router key，并
-完成 provider key、9router API 和 Telegram 流式回复验证；用户确认 KOOK/Telegram 均恢复。
-Developer Workflow Optimization V1 未执行 CasaOS 部署，production runtime 保持原镜像。
+系统的可迁移 monorepo。迁移阶段、HomeHub V1、只读 `/whoami`、目标 runtime/plugin 部署、平台
+来源修复、Admin Identity、Developer Workflow Optimization V1 和 **HomeHub V1.1 Security & Runtime
+Reliability 实现与定向验证**已完成；V1.1 当前等待 Git commit，未执行 Docker build、CasaOS 部署或生产
+服务重启。V1.1 commit 后继续用户指定的 PUBG Intent Router 时间词误判 small-scope task。
+2026-09-05 的 Telegram/KOOK `Request Failed` 事故已由用户修正 9Router key，并完成 provider key、
+9router API 和 Telegram 流式回复验证；用户确认 KOOK/Telegram 均恢复。
 
 ## 新会话入口
 
@@ -55,6 +56,14 @@ Developer Workflow Optimization V1 未执行 CasaOS 部署，production runtime 
 - HomeHub `/whoami` 实现提交为 `b3f2406`，Docker/package 修复提交为 `1fcefd7`、`7626cde`、`ddfee46`；已推送并部署 runtime 镜像 `local/pubg-query-engine-v3:3.3.4-admin-03b0e41`。
 - 已修复 LangBot command event 的 Telegram/KOOK 平台来源和 displayName 传递，提交 `dd5785e`、`9c34a89`、`1adbc1d`；patched image 已激活，等待 Telegram `/whoami` 复测。
 - 已完成 Developer Workflow Optimization V1：新增 change-scope classifier、FAST/RUNTIME/RELEASE 文档与 skill、无 Docker 本地 runtime smoke、默认 `--no-build` deploy script；Dockerfile pnpm install cache 与 final image layer 已优化。单一 HomeHub source build 从 132.25s（install 114.0s）降至 22.37s（install cache hit），optimized image smoke 通过；本阶段未部署。
+
+## HomeHub V1.1 当前完成证据（2026-09-05）
+
+- 共享 `AuthorizationCore` 已接入 IdentityRegistry、HomeHub Action 和 organize-emby plugin。
+- Admin env 仍只从外部 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID` 读取，真实值不入 Git。
+- `runtime-executor` 已移除 HomeHub source 中的 `orb -m` 命令；Docker/Ubuntu 使用 direct command，macOS Host 无 executor 返回 UNKNOWN。
+- `HealthStatus` 已覆盖 healthy/unhealthy/down/unknown；metrics failure 返回 null；unknown 不计入 abnormal。
+- `pnpm workflow:verify`、plugin dry-run、Python compile、diff check 已通过；未部署。
 
 ## 状态更新协议
 

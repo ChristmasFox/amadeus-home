@@ -44,16 +44,17 @@ const telemetryWorker = new TelemetryWorker({
   ...(telemetryDownloader ? { downloader: telemetryDownloader } : {}),
 });
 
+const identityRegistry = new IdentityRegistry(identityMappingsFromEnvironment());
 const runtime = new PubgMastraRuntime({
   provider: new N8nDataProvider({ url: n8nUrl, timeoutMs: Number(process.env.PUBG_N8N_TIMEOUT_MS ?? 120000) }),
   contextStore: new JsonContextStore(stateFile),
-  identityRegistry: new IdentityRegistry(identityMappingsFromEnvironment()),
+  identityRegistry,
   telemetryWorker,
   selectionStore: new JsonSelectionStore(selectionFile),
   resultSetTtlMs: Number(process.env.PUBG_RESULTSET_TTL_MS ?? 24 * 60 * 60 * 1000),
 });
 
-const homehubRuntime = new HomeHubRuntime();
+const homehubRuntime = new HomeHubRuntime({ identityRegistry });
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -137,6 +138,17 @@ const server = createServer(async (request, response) => {
     ].includes(url.pathname)) {
       const body = await readBody(request);
       const result = await runtime.whoami(runtimeRequest(body));
+      json(response, 200, result);
+      return;
+    }
+    if (request.method === 'POST' && ['/homehub/authorize', '/api/homehub/authorize'].includes(url.pathname)) {
+      const body = await readBody(request);
+      const result = homehubRuntime.authorize(
+        runtimeRequest(body),
+        String(body.serviceId ?? body.service_id ?? ''),
+        String(body.action ?? ''),
+        body.confirmed === true,
+      );
       json(response, 200, result);
       return;
     }
