@@ -4,10 +4,10 @@
 
 ## 当前阶段
 
-**COMPLETE — Codex Engineering Specifications**
+**BLOCKED / DEFERRED — WhatsApp 接入**
 
-已完成 Monorepo 初始化和 Codex 工程规范建立。GitHub 远程已配置并验证：
-git@github.com:ChristmasFox/amadeus-home.git（main 分支，最新 commit daa40a1）。
+Meta WhatsApp Cloud API 的商业版能力是接入稳定性与合规的必要前提。
+当前开源版限制与平台变更频率较高，暂不继续投入实现和部署。
 
 ## 完成清单
 
@@ -30,6 +30,33 @@ git@github.com:ChristmasFox/amadeus-home.git（main 分支，最新 commit daa40
   - [x] 更新 README.md 反映 GitHub 配置和部署说明
   - [x] 创建工程规范完成 checkpoint（.agent/checkpoints/2026-09-05-codex-engineering-specs.md）
 
+- [x] **WhatsApp 接入暂停 Phase**
+  - [x] 在 docs/DECISIONS.md 记录暂缓原因和恢复条件
+  - [x] 在 docs/PROJECT_STATE.md 更新 WhatsApp 接入状态
+  - [x] 确认 WhatsApp 代码不影响 KOOK / Telegram runtime
+  - [x] 确认无默认启用配置，代码仅作为静态导出
+  - [x] 保留 Cloudflare Tunnel 配置用于未来 Webhook / HomeLab API
+  - [x] 保留已完成的 Adapter/实验代码作为 future integration reference
+
+## 暂缓原因
+
+Meta WhatsApp Cloud API 的商业版能力（如 webhook 批量验证、会话模板、高并发消息队列）是接入稳定性与合规的必要前提。当前开源版限制与平台变更频率较高，暂不继续投入实现和部署。
+
+详见 docs/DECISIONS.md 的"2026-09-05：WhatsApp 接入暂缓"章节。
+
+## 保留的代码和配置
+
+- apps/whatsapp-adapter：Meta Cloud API 的 webhook 验签、入站消息归一化、文本拆分和发送器边界 facade
+- apps/agent-runtime/src/platform/whatsapp：完整实现的 WhatsApp platform adapter、renderer、webhook、sender 和 graph-api
+- integrations/langbot/patches/whatsapp.yaml：LangBot 侧的自定义平台资源
+- infra/cloudflare：Cloudflare Tunnel 配置模板（保留用于未来 Webhook / HomeLab API）
+
+## 确保不影响其他平台
+
+- WhatsApp 相关代码仅作为静态导出，不影响 KOOK / Telegram runtime 路由
+- Platform capabilities 定义保持静态配置，不引入运行时依赖
+- Runtime 镜像中的 whatsapp 标签仅表示构建时包含相关代码，不会自动启用
+
 ## 验证结果
 
 - [x] **Monorepo 基础验证**
@@ -48,9 +75,11 @@ git@github.com:ChristmasFox/amadeus-home.git（main 分支，最新 commit daa40
   - [x] deploy-langbot.sh 语法验证（bash -n）
   - [x] Git 仓库干净并成功推送到 origin/main
 
-- [ ] **可选后续验证**
-  - [ ] Docker 镜像实际构建：Docker Hub 基础镜像元数据请求超时，需在网络可用时按 README 命令验证
-  - [ ] LangBot 插件实际部署测试（需要外部 LANGBOT_API_KEY 和运行时环境）
+- [x] **WhatsApp 暂缓验证**
+  - [x] 确认 WhatsApp 代码仅作为静态导出
+  - [x] 确认无默认启用配置
+  - [x] 确认不影响 KOOK / Telegram runtime
+  - [x] Cloudflare Tunnel 配置保留
 
 ## 会话启动协议
 
@@ -81,12 +110,26 @@ git@github.com:ChristmasFox/amadeus-home.git（main 分支，最新 commit daa40
 5. 更新本文件、docs/PROJECT_STATE.md 和一个新的 checkpoint；
 6. 跑与改动匹配的测试以及 pnpm check:secrets。
 
+## 恢复条件
+
+1. 获得 WhatsApp Business API 商业版授权
+2. 明确所需的消息模板、会话状态和 webhook 验签能力
+3. 完成与现有 runtime 的集成测试和性能基准
+
+## 恢复操作
+
+1. 重新评估 Meta Cloud API 最新能力与合规要求
+2. 更新 docs/CURRENT_TASK.md 状态
+3. 启用 apps/agent-runtime/src/platform/whatsapp 相关代码
+4. 配置 Cloudflare Tunnel 和 LangBot webhook 集成
+
 ## 下一个潜在任务
 
-当前没有明确的下一步任务。仓库已完全配置好工程规范，可以支持：
+当前没有明确的下一步任务。仓库已完全配置好工程规范，WhatsApp 接入已按需求暂缓。可以支持：
 - Codex 新会话从 Git 恢复上下文
 - Mac mini 迁移使用已建立的恢复流程
 - LangBot 和 n8n 变更遵循文档化的工作流程
 - 使用 deploy-langbot.sh 进行安全的插件/patch 部署
+- 在满足恢复条件后重新启动 WhatsApp 接入工作
 
 如需开始新任务，请更新此文件中的"当前阶段"和"完成清单"。

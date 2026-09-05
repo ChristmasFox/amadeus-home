@@ -82,3 +82,22 @@ secret file 路径和空的环境变量，不保存 key。
 - check-secrets 通过，且 staged 文件没有真实 credential 或运行时数据；
 - Docker build 命令已写入 apps/agent-runtime/README.md；基础镜像元数据检查因 Docker Hub 网络超时未完成，
   需在网络可用时手动执行。
+
+## WhatsApp 接入状态：BLOCKED / DEFERRED
+
+状态更新：2026-09-05
+
+Meta WhatsApp Cloud API 接入工作已暂停，原因和计划详见 docs/DECISIONS.md。
+
+当前保留：
+- apps/whatsapp-adapter：Meta Cloud API 的 webhook 验签、入站消息归一化、文本拆分和发送器边界 facade
+- apps/agent-runtime/src/platform/whatsapp：完整实现的 WhatsApp platform adapter、renderer、webhook、sender 和 graph-api
+- integrations/langbot/patches/whatsapp.yaml：LangBot 侧的自定义平台资源
+- infra/cloudflare：Cloudflare Tunnel 配置模板（保留用于未来 Webhook / HomeLab API）
+
+确保不影响其他平台：
+- WhatsApp 相关代码仅作为静态导出，不影响 KOOK / Telegram runtime 路由
+- Platform capabilities 定义保持静态配置，不引入运行时依赖
+- Runtime 镜像中的 whatsapp 标签仅表示构建时包含相关代码，不会自动启用
+
+恢复条件和操作步骤见 docs/DECISIONS.md。

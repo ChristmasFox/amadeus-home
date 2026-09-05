@@ -38,3 +38,25 @@ n8n workflow JSON 进入 Git；credential 由 n8n 目标实例重新建立。这
 
 初始化只在本地执行 git init / git commit。除非用户单独授权，否则不添加
 公网 remote、不 push，也不把备份归档放入仓库。
+
+## 2026-09-05：WhatsApp 接入暂缓
+
+Meta WhatsApp Cloud API 的商业版能力（如 webhook 批量验证、会话模板、
+高并发消息队列）是接入稳定性与合规的必要前提。当前开源版限制与平台变更
+频率较高，暂不继续投入实现和部署。
+
+保留原因：
+- 已完成的 Adapter、实验代码和 LangBot patch 作为 future integration reference
+- Cloudflare Tunnel 配置保留，后续仍可用于 Webhook / HomeLab API
+- 代码不影响 KOOK / Telegram runtime，相关导出和能力定义保持静态配置
+
+恢复条件：
+- 获得 WhatsApp Business API 商业版授权
+- 明确所需的消息模板、会话状态和 webhook 验签能力
+- 完成与现有 runtime 的集成测试和性能基准
+
+恢复操作：
+1. 重新评估 Meta Cloud API 最新能力与合规要求
+2. 更新 docs/CURRENT_TASK.md 状态
+3. 启用 apps/agent-runtime/src/platform/whatsapp 相关代码
+4. 配置 Cloudflare Tunnel 和 LangBot webhook 集成
