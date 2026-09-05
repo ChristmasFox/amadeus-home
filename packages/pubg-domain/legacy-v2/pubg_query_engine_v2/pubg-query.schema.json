@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pubg-query-engine-v2/pubg-query.schema.json",
+  "title": "PUBG Canonical Query",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["version", "domain", "queryId", "sessionId", "subject", "operation", "selector", "segments", "groupBy", "metrics", "filters", "orderBy", "limit", "reference", "presentation"],
+  "properties": {
+    "version": {"const": 1},
+    "domain": {"const": "pubg"},
+    "queryId": {"type": "string", "minLength": 1},
+    "sessionId": {"type": "string", "minLength": 1},
+    "subject": {
+      "type": "object",
+      "required": ["type", "ids"],
+      "properties": {
+        "type": {"enum": ["team", "player", "players"]},
+        "ids": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "operation": {"enum": ["report", "rank", "compare", "trend", "list"]},
+    "selector": {"$ref": "#/$defs/selector"},
+    "segments": {"type": "array", "items": {"$ref": "#/$defs/segment"}},
+    "groupBy": {"enum": ["player", "match", "day", "team"]},
+    "metrics": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "filters": {"type": "object"},
+    "orderBy": {"type": "object"},
+    "limit": {"type": ["integer", "null"], "minimum": 1},
+    "reference": {"type": "object"},
+    "presentation": {"type": "object"}
+  },
+  "$defs": {
+    "selector": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["time_range", "last_n_matches", "recent_days", "relative_period", "result_set"]},
+        "start": {"type": "string"},
+        "end": {"type": "string"},
+        "count": {"type": "integer", "minimum": 1},
+        "value": {"type": "string"},
+        "resultSetId": {"type": "string"}
+      }
+    },
+    "segment": {
+      "type": "object",
+      "required": ["label", "selector"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1},
+        "selector": {"$ref": "#/$defs/selector"}
+      }
+    }
+  }
+}

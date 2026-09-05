@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: nas_status
+  label:
+    en_US: macOS NAS Status
+    zh_Hans: macOS NAS 状态
+  description:
+    en_US: Read the macOS NAS hostname, uptime, and root filesystem usage.
+    zh_Hans: 查询 macOS NAS 主机名、运行时间和根文件系统使用情况。
+spec:
+  parameters:
+    type: object
+    properties: {}
+  llm_prompt: Use this tool when the user asks for the macOS NAS status, uptime, or disk usage summary.
+execution:
+  python:
+    path: nas_status.py
+    attr: NasStatusTool

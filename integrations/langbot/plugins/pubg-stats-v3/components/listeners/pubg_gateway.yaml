@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: EventListener
+metadata:
+  name: pubg_query_gateway_v3_2
+  label:
+    en_US: PUBG Query Gateway v3
+    zh_Hans: PUBG 查询网关 v3
+  description:
+    en_US: Mandatory routing for PUBG queries and Telegram match-review callbacks to Mastra Query Engine v3.2.
+    zh_Hans: 将 PUBG 查询和 Telegram 对局复盘回调强制路由到 Mastra Query Engine v3.2。
+spec: {}
+execution:
+  python:
+    path: pubg_gateway.py
+    attr: PubgQueryGatewayV3Listener

@@ -1,0 +1,12 @@
+# Copy to an external, permission-restricted config file and replace placeholders.
+tunnel: REPLACE_WITH_TUNNEL_ID
+credentials-file: /DATA/AppData/cloudflared/credentials.json
+
+ingress:
+  - hostname: n8n.example.invalid
+    service: http://n8n:5678
+  - hostname: langbot.example.invalid
+    service: http://langbot:5300
+  - hostname: pubg.example.invalid
+    service: http://pubg-query-engine-v3:5310
+  - service: http_status:404

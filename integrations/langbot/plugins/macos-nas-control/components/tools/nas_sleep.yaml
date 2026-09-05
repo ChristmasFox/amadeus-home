@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: nas_sleep
+  label:
+    en_US: Put macOS NAS to Sleep
+    zh_Hans: 让 macOS NAS 睡眠
+  description:
+    en_US: Put the macOS NAS to sleep. This is a potentially disruptive action and requires explicit user intent.
+    zh_Hans: 让 macOS NAS 进入睡眠；这是可能中断服务的操作，只能在用户明确要求时调用。
+spec:
+  parameters:
+    type: object
+    properties: {}
+  llm_prompt: Only use this tool when the user explicitly asks to put the macOS NAS to sleep. Never infer this from an indirect request.
+execution:
+  python:
+    path: nas_sleep.py
+    attr: NasSleepTool

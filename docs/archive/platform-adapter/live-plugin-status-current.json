@@ -1,0 +1,16 @@
+{
+  "source": "LangBot official Local Plugin API",
+  "checkedAt": "2026-09-02T20:43:03+08:00",
+  "plugin": {
+    "name": "local/pubg-stats",
+    "version": "3.1.1",
+    "status": "initialized",
+    "enabled": true,
+    "components": [
+      {"kind": "EventListener", "name": "pubg_query_gateway_v3"},
+      {"kind": "Command", "name": "pubg"},
+      {"kind": "Tool", "name": "get_pubg_stats_v3"}
+    ]
+  },
+  "secrets": "not included"
+}

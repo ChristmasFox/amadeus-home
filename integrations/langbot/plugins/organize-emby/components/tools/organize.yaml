@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: organize_media
+  label:
+    en_US: Organize Emby Media
+    zh_Hans: 整理 Emby 媒体
+  description:
+    en_US: Scan or preview one explicitly selected TV download folder and execute only after explicit confirmation.
+    zh_Hans: 扫描或预览一个明确选择的电视剧下载文件夹，只有用户明确确认后才执行整理。
+spec:
+  parameters:
+    type: object
+    properties:
+      action:
+        type: string
+        enum:
+          - scan
+          - preview
+          - execute
+          - cancel
+        description: Use scan to list folders, preview to analyze one folder, execute only after explicit confirmation, or cancel a pending preview.
+      source_name:
+        type: string
+        description: Exact source folder name under the configured download inbox.
+      candidate_index:
+        type: integer
+        description: Number from the scan result.
+      confirm:
+        type: boolean
+        description: Must be true only when the user explicitly confirms execution after seeing the preview.
+    required:
+      - action
+  llm_prompt: |
+    Use this tool for requests to scan, preview, or organize downloaded TV and anime folders for Emby. The basic unit is one explicitly selected source folder, never the whole inbox and never a folder chosen by modification time. For a request such as “整理一下 Severance 第二季”, first use action=preview with the exact folder name if known, or action=scan when the folder is ambiguous. Never use action=execute for an implicit request to organize. Use action=execute with confirm=true only after a preview has been shown in this same conversation and the user explicitly confirms with wording such as “确认执行”, “执行整理”, or equivalent. Do not silently resolve conflicts, delete source files, overwrite existing media, or guess an uncertain match. Use action=cancel when the user cancels.
+execution:
+  python:
+    path: organize.py
+    attr: OrganizeMediaTool

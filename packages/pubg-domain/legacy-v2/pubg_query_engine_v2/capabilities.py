@@ -1,0 +1,166 @@
+from __future__ import annotations
+
+from typing import Any
+
+CAPABILITY_REGISTRY: dict[str, Any] = {
+    "version": 1,
+    "domain": "pubg",
+    "supported_operations": ["report", "rank", "compare", "trend", "list"],
+    "supported_selectors": [
+        "time_range",
+        "last_n_matches",
+        "recent_days",
+        "relative_period",
+        "result_set",
+    ],
+    "supported_groups": ["player", "match", "day", "team"],
+    "supported_metrics": [
+        "matches",
+        "kills",
+        "assists",
+        "damage",
+        "avg_damage",
+        "kd",
+        "deaths",
+        "wins",
+        "top10",
+        "rank",
+        "dbnos",
+        "revives",
+        "headshot_kills",
+        "survival_time",
+        "longest_kill",
+    ],
+    "unsupported_capabilities": ["weapon", "telemetry", "season_stats", "lifetime_stats"],
+}
+
+METRIC_DICTIONARY: dict[str, dict[str, Any]] = {
+    "matches": {
+        "source_fields": ["matchId"],
+        "aggregation": "count_distinct_match",
+        "group_behavior": "count rows or matches",
+        "null_handling": "missing match id excludes row",
+    },
+    "kills": {
+        "source_fields": ["kills"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "assists": {
+        "source_fields": ["assists"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "damage": {
+        "source_fields": ["damage", "damageDealt"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "avg_damage": {
+        "source_fields": ["damage", "damageDealt"],
+        "aggregation": "damage divided by distinct matches",
+        "group_behavior": "derived after aggregation",
+        "null_handling": "zero when no matches",
+    },
+    "deaths": {
+        "source_fields": ["deaths", "died", "rank"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "rank > 1 is a documented placement proxy when explicit deaths is absent",
+    },
+    "kd": {
+        "source_fields": ["kills", "deaths", "died", "rank"],
+        "aggregation": "total kills divided by total deaths",
+        "group_behavior": "derived after aggregation",
+        "null_handling": "kills when deaths is zero; zero when both are zero",
+    },
+    "wins": {
+        "source_fields": ["wins", "rank"],
+        "aggregation": "count rank == 1 or explicit wins",
+        "group_behavior": "count matches won",
+        "null_handling": "rank is used when explicit wins is absent",
+    },
+    "top10": {
+        "source_fields": ["top10", "rank"],
+        "aggregation": "count rank <= 10 or explicit top10",
+        "group_behavior": "count matches in top ten",
+        "null_handling": "rank is used when explicit top10 is absent",
+    },
+    "rank": {
+        "source_fields": ["rank"],
+        "aggregation": "average rank for player/team; raw rank for match",
+        "group_behavior": "lower is better",
+        "null_handling": "excluded from average when absent",
+    },
+    "dbnos": {
+        "source_fields": ["dbnos"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "revives": {
+        "source_fields": ["revives"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "headshot_kills": {
+        "source_fields": ["headshotKills", "headshot_kills"],
+        "aggregation": "sum",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "survival_time": {
+        "source_fields": ["survivalTime", "timeSurvived", "time_survived"],
+        "aggregation": "sum seconds",
+        "group_behavior": "sum player values per group",
+        "null_handling": "null becomes zero",
+    },
+    "longest_kill": {
+        "source_fields": ["longestKill", "longest_kill"],
+        "aggregation": "maximum",
+        "group_behavior": "maximum player value per group",
+        "null_handling": "null becomes zero",
+    },
+}
+
+METRIC_ALIASES: dict[str, str] = {
+    "击杀": "kills",
+    "杀人": "kills",
+    "击杀数": "kills",
+    "助攻": "assists",
+    "伤害": "damage",
+    "总伤害": "damage",
+    "场均伤害": "avg_damage",
+    "kd": "kd",
+    "kda": "kd",
+    "死亡": "deaths",
+    "吃鸡": "wins",
+    "胜利": "wins",
+    "前十": "top10",
+    "倒地": "dbnos",
+    "击倒": "dbnos",
+    "救援": "revives",
+    "救人": "revives",
+    "复活": "revives",
+    "爆头": "headshot_kills",
+    "生存": "survival_time",
+    "存活": "survival_time",
+    "最长击杀": "longest_kill",
+    "最远击杀": "longest_kill",
+    "排名": "rank",
+}
+
+UNSUPPORTED_ALIASES: dict[str, str] = {
+    "枪": "weapon",
+    "武器": "weapon",
+    "用什么枪": "weapon",
+    "枪械": "weapon",
+    "telemetry": "telemetry",
+    "战斗轨迹": "telemetry",
+    "赛季": "season_stats",
+    "生涯": "lifetime_stats",
+}

@@ -1,0 +1,49 @@
+# Codex State
+
+更新时间：2026-09-05（Asia/Shanghai）
+
+## 当前上下文
+
+本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab
+系统的可迁移 monorepo。迁移阶段已完成，当前工作是验证并建立本地初始化 commit。
+
+## 新会话入口
+
+必须先读取：
+
+    README.md
+    docs/ARCHITECTURE.md
+    docs/PROJECT_STATE.md
+    docs/CURRENT_TASK.md
+    .agent/state.md
+
+随后执行：
+
+    git status --short --branch
+    git log -5 --oneline --decorate
+
+## 当前事实
+
+- canonical HomeLab runtime：OrbStack machine ubuntu 内的 CasaOS；
+- canonical app definition：/var/lib/casaos/apps/<app>/docker-compose.yml；
+- canonical app data：/DATA/AppData/<app>；
+- shared storage：/Volumes/Avalon/...；
+- Git source of truth：本仓库；
+- n8n credentials、LangBot env、PUBG API key、Cloudflare token：仓库外；
+- Redis：可重建缓存，不是核心恢复依赖；
+- 不执行公网 push，除非用户另外明确授权。
+
+## 最近完成
+
+- 完成代码、插件、patch、workflow、文档和历史 baseline 的归档；
+- 补齐脱敏 Docker/CasaOS、Cloudflare、macOS 模板；
+- 补齐 bootstrap、doctor、backup、restore 和 secret scan；
+- 修复 restore.sh 语法错误并为脚本补充执行权限；
+- 已验证：pnpm install、类型检查、构建、测试、secret scan、脚本 smoke test 和 Compose 模板；
+  当前剩余 staged 审计和本地 commit。
+
+## 状态更新协议
+
+每个阶段结束时更新 docs/CURRENT_TASK.md、docs/PROJECT_STATE.md，并在
+.agent/checkpoints/ 写入带日期的记录。如果后续工作未完成，使用 .agent/tasks/
+保存明确的下一步，不把聊天内容当作唯一上下文。

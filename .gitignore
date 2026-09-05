@@ -1,0 +1,60 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+!**/.env.example
+**/secrets/
+**/*secret*
+**/*token*
+!scripts/check-secrets.sh
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Runtime data and private backups
+.backups/
+backups/
+**/data/
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+**/*.db-journal
+*.tar
+*.tar.gz
+*.tgz
+.local/
+**/.local/
+.venv/
+**/.venv/
+*.bak
+*.orig
+
+# Generated deployment/build output
+integrations/langbot/build/
+infra/**/rendered/
+
+# Generated and local tool state
+node_modules/
+**/node_modules/
+**/pnpm-lock.yaml
+!pnpm-lock.yaml
+dist/
+**/dist/
+.pnpm-store/
+coverage/
+.cache/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.lbpkg
+*.log
+.DS_Store
+
+# Editor and OS state
+.idea/
+.vscode/
+*.swp
+*.swo

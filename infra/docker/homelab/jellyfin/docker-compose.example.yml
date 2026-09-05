@@ -1,0 +1,30 @@
+name: jellyfin
+
+services:
+  jellyfin:
+    image: ${JELLYFIN_IMAGE:-lscr.io/linuxserver/jellyfin:latest}
+    container_name: jellyfin
+    hostname: jellyfin
+    restart: unless-stopped
+    environment:
+      PUID: ${JELLYFIN_PUID:-1000}
+      PGID: ${JELLYFIN_PGID:-1000}
+      TZ: Asia/Shanghai
+    ports:
+      - "${JELLYFIN_PORT:-8097}:8096/tcp"
+      - "7359:7359/udp"
+      - "1900:1900/udp"
+    volumes:
+      - ${JELLYFIN_CONFIG_DIR:-/DATA/AppData/jellyfin/config}:/config
+      - ${JELLYFIN_CACHE_DIR:-/DATA/AppData/jellyfin/cache}:/cache
+      - ${MEDIA_MOVIES_DIR:-/Volumes/Avalon/media/movies}:/data/movies:ro
+      - ${MEDIA_TV_DIR:-/Volumes/Avalon/media/tv}:/data/tvshows:ro
+      - ${MEDIA_MUSIC_DIR:-/Volumes/Avalon/media/music}:/data/music:ro
+      - ${MEDIA_PHOTOS_DIR:-/Volumes/Avalon/media/photos}:/data/photos:ro
+    x-casaos:
+      author: self
+      category: Media
+      port_map: "8097"
+      scheme: http
+      title:
+        custom: jellyfin

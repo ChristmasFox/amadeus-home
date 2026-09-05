@@ -1,0 +1,215 @@
+{
+  "bot": {
+    "uuid": "2f25e57b-6157-458d-99e4-db411ddc85d4",
+    "workspace_uuid": "065fd6ae-b9f0-4a08-9ab7-0164cfa7619e",
+    "name": "KOOK",
+    "adapter": "kook",
+    "enable": 1,
+    "use_pipeline_name": "KOOK Pipeline",
+    "use_pipeline_uuid": "2cc265c7-0dd1-4221-b594-0a6b38d7c1d5",
+    "pipeline_routing_rules": [],
+    "created_at": "2026-08-29 09:39:27",
+    "updated_at": "2026-08-30 16:30:47"
+  },
+  "pipeline": {
+    "uuid": "2cc265c7-0dd1-4221-b594-0a6b38d7c1d5",
+    "workspace_uuid": "065fd6ae-b9f0-4a08-9ab7-0164cfa7619e",
+    "name": "KOOK Pipeline",
+    "for_version": "v4.10.8",
+    "is_default": 0,
+    "stages": [
+      "GroupRespondRuleCheckStage",
+      "BanSessionCheckStage",
+      "PreContentFilterStage",
+      "PreProcessor",
+      "ConversationMessageTruncator",
+      "RequireRateLimitOccupancy",
+      "MessageProcessor",
+      "ReleaseRateLimitOccupancy",
+      "PostContentFilterStage",
+      "ResponseWrapper",
+      "LongTextProcessStage",
+      "SendResponseBackStage"
+    ],
+    "config": {
+      "ai": {
+        "dashscope-app-api": {
+          "api-key": "<redacted>",
+          "app-id": "your-app-id",
+          "app-type": "agent",
+          "references-quote": "参考资料来自:"
+        },
+        "dify-service-api": {
+          "api-key": "<redacted>",
+          "app-type": "chat",
+          "base-url": "https://api.dify.ai/v1",
+          "timeout": 30
+        },
+        "langflow-api": {
+          "api-key": "<redacted>",
+          "base-url": "http://localhost:7860",
+          "flow-id": "your-flow-id",
+          "input-type": "chat",
+          "output-type": "chat",
+          "tweaks": "{}"
+        },
+        "local-agent": {
+          "box-session-id-template": "{launcher_type}_{launcher_id}",
+          "enable-all-tools": true,
+          "knowledge-bases": [],
+          "max-round": 10000,
+          "mcp-resource-agent-read-enabled": true,
+          "mcp-resources": [],
+          "model": {
+            "primary": "4d608fdb-126b-42cd-a8a5-be1349629713",
+            "fallbacks": [],
+            "reasoning": {}
+          },
+          "prompt": [
+            {
+              "content": "You are a helpful assistant.\n使用可用工具获取实时信息，并以工具返回为准，不要臆测；如果问题与某个工具相关，直接调用该工具。\n\n【PUBG 输出规则】\n当调用 get_pubg_daily_stats 后，工具返回内容就是已经排版好的最终 KOOK 回复。\n必须只输出工具返回内容本身，不得总结、改写、翻译、补充标题、重新计算、调整顺序或添加用户 @。\n必须保留工具返回的换行、emoji、Unicode 框线字符和三反引号代码块；严禁把框线内容转换成 Markdown 管道表格（不要生成 | 队员 | 这一类格式），也不要把代码块移出代码块。\n用户可能说 KDA，但 PUBG 结果统一使用 KD；助攻只按工具返回展示。",
+              "role": "system"
+            }
+          ],
+          "rerank-model": "",
+          "rerank-top-k": 5,
+          "tools": []
+        },
+        "n8n-service-api": {
+          "auth-type": "none",
+          "basic-password": "<redacted>",
+          "basic-username": "",
+          "header-name": "",
+          "header-value": "",
+          "jwt-algorithm": "HS256",
+          "jwt-secret": "<redacted>",
+          "output-key": "response",
+          "timeout": 120,
+          "webhook-url": "http://your-n8n-webhook-url"
+        },
+        "runner": {
+          "runner": "local-agent",
+          "expire-time": 0
+        }
+      },
+      "trigger": {
+        "access-control": {
+          "blacklist": [],
+          "mode": "blacklist",
+          "whitelist": []
+        },
+        "group-respond-rules": {
+          "at": true,
+          "prefix": [
+            "arthur",
+            "Arthur"
+          ],
+          "random": 1,
+          "regexp": []
+        },
+        "ignore-rules": {
+          "prefix": [],
+          "regexp": []
+        },
+        "message-aggregation": {
+          "delay": 1.5,
+          "enabled": false
+        },
+        "misc": {
+          "combine-quote-message": true
+        }
+      },
+      "safety": {
+        "content-filter": {
+          "check-sensitive-words": true,
+          "scope": "all"
+        },
+        "rate-limit": {
+          "limitation": 60,
+          "strategy": "drop",
+          "window-length": 60
+        }
+      },
+      "output": {
+        "force-delay": {
+          "max": 0,
+          "min": 0
+        },
+        "long-text-processing": {
+          "font-path": "",
+          "strategy": "none",
+          "threshold": 1000
+        },
+        "misc": {
+          "at-sender": true,
+          "exception-handling": "show-hint",
+          "failure-hint": "Request failed.",
+          "quote-origin": true,
+          "remove-think": false,
+          "track-function-calls": false
+        }
+      }
+    },
+    "extensions_preferences": {
+      "enable_all_plugins": true,
+      "enable_all_mcp_servers": true,
+      "plugins": [
+        {
+          "author": "local",
+          "name": "homelab-status"
+        },
+        {
+          "author": "langbot-team",
+          "name": "ScheNotify"
+        },
+        {
+          "author": "local",
+          "name": "macos-nas-control"
+        }
+      ],
+      "mcp_servers": [],
+      "mcp_resources": [],
+      "mcp_resource_agent_read_enabled": true,
+      "enable_all_skills": true,
+      "skills": []
+    },
+    "created_at": "2026-08-29 09:59:17",
+    "updated_at": "2026-08-31 16:03:11"
+  },
+  "model": {
+    "uuid": "4d608fdb-126b-42cd-a8a5-be1349629713",
+    "workspace_uuid": "065fd6ae-b9f0-4a08-9ab7-0164cfa7619e",
+    "name": "arthur-combo",
+    "provider_uuid": "5f9b87df-cb2a-4c3f-89af-4e9d6b588297",
+    "abilities": [
+      "vision",
+      "func_call",
+      "reasoning"
+    ],
+    "context_length": 1000000,
+    "reasoning_config": {
+      "level": "provider_default"
+    },
+    "extra_args": {},
+    "prefered_ranking": 0,
+    "created_at": "2026-08-29 10:36:54",
+    "updated_at": "2026-08-30 16:10:11"
+  },
+  "plugin": {
+    "workspace_uuid": "065fd6ae-b9f0-4a08-9ab7-0164cfa7619e",
+    "plugin_author": "local",
+    "plugin_name": "pubg-stats",
+    "installation_uuid": "36f920e4-ce6a-423d-9b26-b89c90ae4ab4",
+    "artifact_digest": "433662a73d8166f025eb9e421e27545614abe9530f7e0d8f968eed5fdac88654",
+    "runtime_revision": 6,
+    "enabled": 1,
+    "priority": 0,
+    "config": {},
+    "install_source": "local",
+    "install_info": {
+      "_artifact_storage": "tenant_binary_storage_v1"
+    },
+    "created_at": "2026-08-30 15:51:17",
+    "updated_at": "2026-08-31 14:59:48"
+  }
+}

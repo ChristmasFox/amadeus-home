@@ -1,0 +1,36 @@
+name: 9router
+
+services:
+  9router:
+    image: ${NINE_ROUTER_IMAGE:-decolua/9router:latest}
+    container_name: 9router
+    restart: unless-stopped
+    environment:
+      HOSTNAME: 0.0.0.0
+      PORT: "20128"
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+      DATA_DIR: /app/data
+      BASE_URL: ${NINE_ROUTER_BASE_URL:-http://127.0.0.1:20128}
+      NEXT_PUBLIC_BASE_URL: ${NINE_ROUTER_BASE_URL:-http://127.0.0.1:20128}
+      CLOUD_URL: https://9router.com
+      NEXT_PUBLIC_CLOUD_URL: https://9router.com
+      API_KEY_SECRET: ${NINE_ROUTER_API_KEY_SECRET:?Set NINE_ROUTER_API_KEY_SECRET outside Git}
+      JWT_SECRET: ${NINE_ROUTER_JWT_SECRET:?Set NINE_ROUTER_JWT_SECRET outside Git}
+      INITIAL_PASSWORD: ${NINE_ROUTER_INITIAL_PASSWORD:?Set NINE_ROUTER_INITIAL_PASSWORD outside Git}
+      MACHINE_ID_SALT: ${NINE_ROUTER_MACHINE_ID_SALT:?Set NINE_ROUTER_MACHINE_ID_SALT outside Git}
+      REQUIRE_API_KEY: ${NINE_ROUTER_REQUIRE_API_KEY:-true}
+      AUTH_COOKIE_SECURE: "false"
+      OBSERVABILITY_ENABLED: "true"
+      ENABLE_REQUEST_LOGS: "false"
+    ports:
+      - "${NINE_ROUTER_PORT:-20128}:20128"
+    volumes:
+      - ${NINE_ROUTER_DATA_DIR:-/DATA/AppData/9router/data}:/app/data
+    x-casaos:
+      author: self
+      category: Developer
+      port_map: "20128"
+      scheme: http
+      title:
+        custom: 9router

@@ -1,0 +1,31 @@
+name: aria2
+
+services:
+  aria2:
+    image: ${ARIA2_IMAGE:-p3terx/aria2-pro:latest}
+    container_name: aria2
+    hostname: aria2
+    restart: unless-stopped
+    environment:
+      DISK_CACHE: 64M
+      IPV6_MODE: "false"
+      LISTEN_PORT: "6888"
+      RPC_PORT: "6800"
+      RPC_SECRET: ${ARIA2_RPC_SECRET:?Set ARIA2_RPC_SECRET outside Git}
+      TZ: Asia/Shanghai
+      UMASK_SET: "022"
+    ports:
+      - "6800:6800/tcp"
+      - "6888:6888/tcp"
+      - "6888:6888/udp"
+    volumes:
+      - ${ARIA2_CONFIG_DIR:-/DATA/AppData/aria2/config}:/config
+      - ${ARIA2_DOWNLOAD_DIR:-/Volumes/Avalon/downloads/complete}:/downloads
+      - ${ARIA2_INCOMPLETE_DIR:-/Volumes/Avalon/downloads/incomplete}:/downloads/incomplete
+    x-casaos:
+      author: self
+      category: self
+      port_map: "6800"
+      scheme: http
+      title:
+        custom: aria2

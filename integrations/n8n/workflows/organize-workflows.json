@@ -1,0 +1,266 @@
+[
+  {
+    "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf1522f1",
+    "name": "Organize Media - Scan",
+    "active": true,
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "path": "organize-scan",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -480,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152201",
+        "name": "Organize Scan Webhook",
+        "webhookId": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152201"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://media-organizer-adapter:8765/scan",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.body }}",
+          "options": {
+            "timeout": 45000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -240,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152202",
+        "name": "Scan Download Folders"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          0,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152203",
+        "name": "Return Scan Result"
+      }
+    ],
+    "connections": {
+      "Organize Scan Webhook": {
+        "main": [
+          [
+            {
+              "node": "Scan Download Folders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Scan Download Folders": {
+        "main": [
+          [
+            {
+              "node": "Return Scan Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {}
+  },
+  {
+    "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf1522f2",
+    "name": "Organize Media - Preview",
+    "active": true,
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "path": "organize-preview",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -480,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152211",
+        "name": "Organize Preview Webhook",
+        "webhookId": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152211"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://media-organizer-adapter:8765/preview",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.body }}",
+          "options": {
+            "timeout": 45000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -240,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152212",
+        "name": "Build Media Preview"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          0,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152213",
+        "name": "Return Preview Result"
+      }
+    ],
+    "connections": {
+      "Organize Preview Webhook": {
+        "main": [
+          [
+            {
+              "node": "Build Media Preview",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Media Preview": {
+        "main": [
+          [
+            {
+              "node": "Return Preview Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {}
+  },
+  {
+    "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf1522f3",
+    "name": "Organize Media - Execute",
+    "active": true,
+    "settings": {
+      "executionOrder": "v1",
+      "binaryMode": "separate"
+    },
+    "nodes": [
+      {
+        "parameters": {
+          "path": "organize-execute",
+          "httpMethod": "POST",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          -480,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152221",
+        "name": "Organize Execute Webhook",
+        "webhookId": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152221"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "http://media-organizer-adapter:8765/execute",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.body }}",
+          "options": {
+            "timeout": 45000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          -240,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152222",
+        "name": "Execute Media Plan"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          0,
+          0
+        ],
+        "id": "d1db9f0a-8b4f-4c7f-a8b5-b37dcf152223",
+        "name": "Return Execute Result"
+      }
+    ],
+    "connections": {
+      "Organize Execute Webhook": {
+        "main": [
+          [
+            {
+              "node": "Execute Media Plan",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Execute Media Plan": {
+        "main": [
+          [
+            {
+              "node": "Return Execute Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "pinData": {}
+  }
+]

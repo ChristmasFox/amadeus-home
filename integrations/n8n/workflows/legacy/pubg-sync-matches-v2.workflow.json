@@ -1,0 +1,771 @@
+{
+  "name": "PUBG Sync Matches v2",
+  "id": "pubg-sync-matches-v2-20260901",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai",
+    "saveManualExecutions": true
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pubg-sync-matches-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pubg-sync-v2-node-001",
+      "name": "PUBG Sync Webhook v2",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1200,
+        0
+      ],
+      "webhookId": "pubg-sync-matches-v2-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst query = body.query && typeof body.query === 'object' ? body.query : {};\nconst subject = query.subject && typeof query.subject === 'object' ? query.subject : { type: 'team', ids: [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"] };\nconst playerIds = Array.isArray(subject.ids) && subject.ids.length ? subject.ids.map(String) : [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"];\nconst players = [{\"accountId\":\"account.29044012052444c0848d617ba100fe1e\",\"playerName\":\"SG_LabmemNo007\",\"displayName\":\"SG_LabmemNo007\"},{\"accountId\":\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"playerName\":\"SG_LabmemNo008\",\"displayName\":\"SG_LabmemNo008\"},{\"accountId\":\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"playerName\":\"SG_LabmemNo004\",\"displayName\":\"SG_LabmemNo004\"},{\"accountId\":\"account.84c0d223534f42b1922c070a52c3c6ce\",\"playerName\":\"kim_kkl\",\"displayName\":\"kim_kkl\"}].filter((player) => playerIds.includes(player.accountId));\nreturn [{ json: {\n  query,\n  queryId: String(body.queryId || query.queryId || 'sync-query'),\n  sessionId: String(body.sessionId || query.sessionId || 'sync-session'),\n  shard: 'steam',\n  playerIds,\n  players,\n  syncKey: 'v2:sync-state:steam:default-team',\n  forceDiscovery: body.forceDiscovery !== false,\n  nowMs: Date.now(),\n  allowedCompetitiveModes: ['solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp'],\n} }];\n"
+      },
+      "id": "pubg-sync-v2-node-002",
+      "name": "Normalize Sync Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.syncKey }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-sync-v2-node-003",
+      "name": "Read V2 Sync State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -800,
+        -160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "v2-match"
+            },
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "match"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-sync-v2-node-004",
+      "name": "Read V2 Match Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -800,
+        160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) { if (typeof value === 'string') { try { return JSON.parse(value); } catch { return null; } } return value && typeof value === 'object' ? value : null; }\nfunction numericTime(value) { if (typeof value === 'number') return value > 10000000000 ? value : value * 1000; const text = String(value || '').trim(); const numeric = Number(text); if (/^\\d+(?:\\.\\d+)?$/.test(text) && Number.isFinite(numeric)) return numeric > 10000000000 ? numeric : numeric * 1000; const parsed = Date.parse(text); return Number.isFinite(parsed) ? parsed : 0; }\nconst request = $('Normalize Sync Request').first().json;\nconst stateRow = $input.all().find((item) => String(item.json?.cacheKey || '') === request.syncKey);\nconst state = parsePayload(stateRow?.json?.payload);\nconst storeRows = $('Read V2 Match Store').all().map((item) => parsePayload(item.json?.payload ?? item.json)).filter((record) => record && record.matchId);\nconst existingMatchIds = [...new Set(storeRows.map((record) => String(record.matchId)))];\nconst stateExpires = numericTime(state?.expiresAt);\nconst stateFresh = Boolean(state && (!stateExpires || stateExpires > Date.now()));\nconst needsDiscovery = Boolean(request.forceDiscovery || !stateFresh);\nconst matchIds = Array.isArray(state?.matchIds) ? state.matchIds.map(String) : [];\nconst playerMap = state?.playerMap && typeof state.playerMap === 'object' ? state.playerMap : Object.fromEntries(request.players.map((player) => [player.accountId, player]));\nreturn [{ json: { ...request, state, storeRows, existingMatchIds, matchIds, playerMap, needsDiscovery, discoveryOk: !needsDiscovery, discoveryError: state?.lastError || '', rateLimit: state?.rateLimit || null } }];\n"
+      },
+      "id": "pubg-sync-v2-node-005",
+      "name": "Prepare Sync State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.needsDiscovery }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "pubg-sync-v2-node-006",
+      "name": "Needs Player Discovery",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.pubg.com/shards/' + $json.shard + '/players?filter%5BplayerIds%5D=' + $json.playerIds.join(',') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "pubg-sync-v2-node-007",
+      "name": "Lookup PUBG Players v2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -80,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pubg-api-header-20260830",
+          "name": "PUBG API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) { if (typeof value === 'string') { try { return JSON.parse(value); } catch { return {}; } } return value && typeof value === 'object' ? value : {}; }\nfunction headerValue(headers, name) { const wanted = String(name).toLowerCase(); const entry = Object.entries(headers || {}).find(([key]) => String(key).toLowerCase() === wanted); return entry ? String(entry[1]) : null; }\nconst request = $('Prepare Sync State').first().json;\nconst body = parsePayload($json.body ?? $json);\nconst statusCode = Number($json.statusCode || 0);\nconst data = Array.isArray(body.data) ? body.data : [];\nconst failed = Boolean($json.error) || statusCode >= 400 || data.length === 0;\nconst detail = $json.error?.message || body.errors?.[0]?.title || body.errors?.[0]?.detail || 'Players API returned no data';\nif (failed) {\n  return [{ json: { ...request, matchIds: request.matchIds || [], playerMap: request.playerMap || {}, playerSnapshots: request.state?.playerSnapshots || [], discoveryOk: false, discoveryError: detail, sourceUnavailable: true, rateLimit: { remaining: Number(headerValue($json.headers, 'x-ratelimit-remaining') || 0) || null, reset: Number(headerValue($json.headers, 'x-ratelimit-reset') || 0) || null } } }];\n}\nconst snapshots = request.players.map((requested) => {\n  const player = data.find((entry) => String(entry.id || '') === String(requested.accountId));\n  const matches = player?.relationships?.matches?.data || [];\n  return { ...requested, found: Boolean(player), apiName: player?.attributes?.name || requested.playerName, matchIds: [...new Set(matches.filter((match) => match?.id).map((match) => String(match.id)))] };\n});\nconst matchIds = [...new Set(snapshots.flatMap((player) => player.matchIds))];\nconst playerMap = Object.fromEntries(snapshots.map((player) => [player.accountId, player]));\nreturn [{ json: { ...request, matchIds, playerMap, playerSnapshots: snapshots, discoveryOk: true, discoveryError: '', sourceUnavailable: false, rateLimit: { remaining: Number(headerValue($json.headers, 'x-ratelimit-remaining') || 0) || null, reset: Number(headerValue($json.headers, 'x-ratelimit-reset') || 0) || null } } }];\n"
+      },
+      "id": "pubg-sync-v2-node-008",
+      "name": "Parse Player Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ...($input.first()?.json || {}), discoveryOk: Boolean($input.first()?.json?.discoveryOk), sourceUnavailable: false } }];"
+      },
+      "id": "pubg-sync-v2-node-009",
+      "name": "Use Existing Discovery State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst input = $input.first()?.json || {};\nconst existing = new Set((input.existingMatchIds || []).map(String));\nconst existingById = new Map((input.storeRows || []).filter((record) => record?.matchId).map((record) => [String(record.matchId), record]));\nconst requestedPlayerIds = new Set((input.playerIds || []).map(String));\nconst previousPlayerIds = new Set(Object.keys(input.state?.playerMap || {}).map(String));\nconst refreshPlayerIds = previousPlayerIds.size ? [...requestedPlayerIds].filter((playerId) => !previousPlayerIds.has(playerId)) : [];\nconst discovered = [...new Set((input.matchIds || []).map(String))];\nconst needsPlayerRefresh = (record) => {\n  if (!refreshPlayerIds.length || !record) return false;\n  if (!record) return false;\n  const checkedPlayerIds = Array.isArray(record.checkedPlayerIds) ? new Set(record.checkedPlayerIds.map(String)) : null;\n  if (checkedPlayerIds && refreshPlayerIds.every((playerId) => checkedPlayerIds.has(playerId))) return false;\n  const presentPlayerIds = new Set((record.players || []).map((player) => String(player.accountId)));\n  return refreshPlayerIds.some((playerId) => !presentPlayerIds.has(playerId));\n};\nconst missing = input.discoveryError && !input.discoveryOk ? [] : discovered.filter((matchId) => !existing.has(matchId) || needsPlayerRefresh(existingById.get(matchId)));\nconst common = { ...input, matchIds: discovered, missingMatchIds: missing, hasMissingMatches: missing.length > 0, refreshedMatchIds: missing.filter((matchId) => existing.has(matchId)) };\nif (!missing.length) return [{ json: { ...common, matchId: null } }];\nreturn missing.map((matchId) => ({ json: { ...common, matchId } }));\n"
+      },
+      "id": "pubg-sync-v2-node-010",
+      "name": "Build Match Fetch Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.matchId }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "pubg-sync-v2-node-011",
+      "name": "Has Missing Match IDs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.pubg.com/shards/' + $json.shard + '/matches/' + $json.matchId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "pubg-sync-v2-node-012",
+      "name": "Get PUBG Match v2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pubg-api-header-20260830",
+          "name": "PUBG API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "jsCode": "const value = $input.first()?.json || {}; return [{ json: { ...value, record: null, fetchError: '', failedMatchId: null } }];"
+      },
+      "id": "pubg-sync-v2-node-013",
+      "name": "Emit Noop Sync Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) { if (typeof value === 'string') { try { return JSON.parse(value); } catch { return {}; } } return value && typeof value === 'object' ? value : {}; }\nconst plans = $('Build Match Fetch Plan').all();\nconst inputs = $input.all();\nfunction number(value, fallback = 0) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }\nreturn inputs.map((item, index) => {\n  const plan = plans[index]?.json || {};\n  if (!plan.matchId) return { json: { ...plan, record: null, fetchError: '', failedMatchId: null } };\n  const response = item.json || {};\n  const body = parsePayload(response.body ?? response);\n  const match = body.data;\n  const statusCode = Number(response.statusCode || 0);\n  if (response.error || statusCode >= 400 || !match) {\n    const detail = response.error?.message || body.errors?.[0]?.title || body.errors?.[0]?.detail || 'Match API failed';\n    return { json: { ...plan, record: null, fetchError: detail, failedMatchId: String(plan.matchId) } };\n  }\n  const attributes = match.attributes || {};\n  const createdAt = String(attributes.createdAt || '');\n  const timestamp = Date.parse(createdAt);\n  const matchType = String(attributes.matchType || '').toLowerCase();\n  const gameMode = String(attributes.gameMode || '').toLowerCase();\n  const allowed = new Set(plan.allowedCompetitiveModes || ['solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp']);\n  const isCompetitive = matchType === 'competitive' && allowed.has(gameMode);\n  const included = Array.isArray(body.included) ? body.included : [];\n  const participants = included.filter((entry) => entry.type === 'participant');\n  const rosters = new Map(included.filter((entry) => entry.type === 'roster').map((entry) => [String(entry.id), entry]));\n  const players = [];\n  for (const participant of participants) {\n    const stats = participant.attributes?.stats || {};\n    const accountId = String(stats.playerId || participant.relationships?.player?.data?.id || '');\n    const known = plan.playerMap?.[accountId];\n    if (!known) continue;\n    const rosterId = participant.relationships?.roster?.data?.id;\n    const rosterStats = rosters.get(String(rosterId))?.attributes?.stats || {};\n    const rank = number(stats.winPlace || rosterStats.rank || 0, 0);\n    players.push({ accountId, playerName: known.playerName, displayName: known.displayName, rank: rank > 0 ? rank : null, kills: number(stats.kills), assists: number(stats.assists), damage: number(stats.damageDealt), dbnos: number(stats.DBNOs), revives: number(stats.revives), headshotKills: number(stats.headshotKills), survivalTime: number(stats.timeSurvived), longestKill: number(stats.longestKill) });\n  }\n  const record = { schemaVersion: 2, matchId: String(match.id || plan.matchId), shard: plan.shard || 'steam', createdAt, timestamp, matchType, gameMode, isCompetitive, mapName: String(attributes.mapName || '未知地图'), duration: number(attributes.duration), patchVersion: String(attributes.patchVersion || ''), checkedPlayerIds: [...new Set((plan.playerIds || []).map(String))], players };\n  return { json: { ...plan, record, fetchError: '', failedMatchId: null } };\n});\n"
+      },
+      "id": "pubg-sync-v2-node-014",
+      "name": "Normalize Match Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) { if (typeof value === 'string') { try { return JSON.parse(value); } catch { return {}; } } return value && typeof value === 'object' ? value : {}; }\nfunction iso(value) { return value ? new Date(value).toISOString() : null; }\nconst inputs = $input.all().map((item) => item.json || {});\nconst first = inputs[0] || $('Build Match Fetch Plan').first()?.json || $('Prepare Sync State').first()?.json || {};\nconst oldRecords = ($('Prepare Sync State').first()?.json?.storeRows || []).filter((record) => record && record.matchId);\nconst records = inputs.map((item) => item.record).filter((record) => record && record.matchId);\nconst failedMatchIds = [...new Set(inputs.map((item) => item.failedMatchId).filter(Boolean).map(String))];\nconst allRecords = [...oldRecords, ...records];\nconst timestamps = allRecords.map((record) => Number(record.timestamp || 0)).filter((value) => Number.isFinite(value) && value > 0);\nconst discoveryOk = Boolean(first.discoveryOk);\nconst status = !discoveryOk ? 'SOURCE_UNAVAILABLE' : failedMatchIds.length ? 'PARTIAL' : 'OK';\nconst now = Date.now();\nconst coverageStart = timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : null;\nconst coverageEnd = new Date(now).toISOString();\nreturn [{ json: {\n  queryId: first.queryId,\n  sessionId: first.sessionId,\n  records,\n  coverage: { status, complete: discoveryOk && failedMatchIds.length === 0, coverageStart, coverageEnd, knownPlayerIds: first.playerIds || [], failedMatchIds },\n  source: { store: 'n8n-data-table', syncTriggered: true, playersApi: discoveryOk, matchApiCount: inputs.filter((item) => item.matchId).length },\n  status,\n  discoveredMatchIds: first.matchIds || [],\n  playerSnapshots: first.playerSnapshots || [],\n  playerMap: first.playerMap || {},\n  rateLimit: first.rateLimit || null,\n  syncKey: first.syncKey,\n  stateExpiresAt: now + 5 * 60 * 1000,\n  coverageStart,\n  coverageEnd,\n  coverageComplete: discoveryOk && failedMatchIds.length === 0,\n  failedMatchIds,\n  updatedAt: new Date(now).toISOString(),\n} }];\n"
+      },
+      "id": "pubg-sync-v2-node-015",
+      "name": "Build Sync Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nreturn $input.all().filter((item) => item.json?.record?.matchId).map((item) => {\n  const record = item.json.record;\n  return { json: { cacheKey: 'v2:match:' + String(record.shard || 'steam') + ':' + String(record.matchId), cacheType: 'v2-match', payload: JSON.stringify(record), refreshedAt: new Date().toISOString(), expiresAt: 0 } };\n});\n"
+      },
+      "id": "pubg-sync-v2-node-016",
+      "name": "Prepare V2 Match Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cacheKey": "={{ $json.cacheKey }}",
+            "cacheType": "={{ $json.cacheType }}",
+            "payload": "={{ $json.payload }}",
+            "refreshedAt": "={{ $json.refreshedAt }}",
+            "expiresAt": "={{ $json.expiresAt }}"
+          },
+          "schema": [
+            {
+              "id": "cacheKey",
+              "displayName": "cacheKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cacheType",
+              "displayName": "cacheType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "refreshedAt",
+              "displayName": "refreshedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "pubg-sync-v2-node-017",
+      "name": "Upsert V2 Match Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1600,
+        -300
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst result = $input.first()?.json || {};\nconst payload = { schemaVersion: 2, shard: 'steam', matchIds: result.discoveredMatchIds || [], playerSnapshots: result.playerSnapshots || [], playerMap: result.playerMap || {}, coverageStart: result.coverageStart || null, coverageEnd: result.coverageEnd || null, coverageComplete: Boolean(result.coverageComplete), failedMatchIds: result.failedMatchIds || [], status: result.status || 'SOURCE_UNAVAILABLE', lastError: result.status === 'SOURCE_UNAVAILABLE' ? 'Players API discovery failed' : '', lastDiscoveryAt: result.updatedAt || new Date().toISOString(), rateLimit: result.rateLimit || null, expiresAt: result.stateExpiresAt || Date.now() + 5 * 60 * 1000 };\nreturn [{ json: { cacheKey: result.syncKey || 'v2:sync-state:steam:default-team', cacheType: 'v2-sync-state', payload: JSON.stringify(payload), refreshedAt: result.updatedAt || new Date().toISOString(), expiresAt: payload.expiresAt } }];\n"
+      },
+      "id": "pubg-sync-v2-node-018",
+      "name": "Prepare V2 Sync State Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cacheKey": "={{ $json.cacheKey }}",
+            "cacheType": "={{ $json.cacheType }}",
+            "payload": "={{ $json.payload }}",
+            "refreshedAt": "={{ $json.refreshedAt }}",
+            "expiresAt": "={{ $json.expiresAt }}"
+          },
+          "schema": [
+            {
+              "id": "cacheKey",
+              "displayName": "cacheKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cacheType",
+              "displayName": "cacheType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "refreshedAt",
+              "displayName": "refreshedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "pubg-sync-v2-node-019",
+      "name": "Upsert V2 Sync State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        200
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "pubg-sync-v2-node-020",
+      "name": "Respond Sync Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1840,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "PUBG Sync Webhook v2": {
+      "main": [
+        [
+          {
+            "node": "Normalize Sync Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Sync Request": {
+      "main": [
+        [
+          {
+            "node": "Read V2 Sync State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read V2 Match Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Sync State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sync State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Match Store": {
+      "main": [
+        [
+          {
+            "node": "Prepare Sync State",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Sync State": {
+      "main": [
+        [
+          {
+            "node": "Needs Player Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Player Discovery": {
+      "main": [
+        [
+          {
+            "node": "Lookup PUBG Players v2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Existing Discovery State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup PUBG Players v2": {
+      "main": [
+        [
+          {
+            "node": "Parse Player Discovery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Player Discovery": {
+      "main": [
+        [
+          {
+            "node": "Build Match Fetch Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Existing Discovery State": {
+      "main": [
+        [
+          {
+            "node": "Build Match Fetch Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Match Fetch Plan": {
+      "main": [
+        [
+          {
+            "node": "Has Missing Match IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Missing Match IDs": {
+      "main": [
+        [
+          {
+            "node": "Get PUBG Match v2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Emit Noop Sync Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PUBG Match v2": {
+      "main": [
+        [
+          {
+            "node": "Normalize Match Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Emit Noop Sync Result": {
+      "main": [
+        [
+          {
+            "node": "Normalize Match Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Match Record": {
+      "main": [
+        [
+          {
+            "node": "Build Sync Response",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare V2 Match Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Sync Response": {
+      "main": [
+        [
+          {
+            "node": "Respond Sync Result",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare V2 Sync State Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare V2 Match Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert V2 Match Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare V2 Sync State Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert V2 Sync State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "tags": []
+}

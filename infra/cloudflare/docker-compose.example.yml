@@ -1,0 +1,10 @@
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN outside Git}
+    environment:
+      TUNNEL_ORIGIN_REQUEST_NO_TLS_VERIFY: ${CLOUDFLARE_TUNNEL_NO_TLS_VERIFY:-false}
+    volumes:
+      - ${CLOUDFLARE_CONFIG_DIR:-/DATA/AppData/cloudflared}:/etc/cloudflared:ro

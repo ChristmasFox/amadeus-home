@@ -1,0 +1,14 @@
+{
+  "name": "agent-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.9.0",
+  "scripts": {
+    "build": "pnpm --filter @agent/agent-runtime build",
+    "typecheck": "pnpm --filter @agent/agent-runtime typecheck",
+    "test": "pnpm --filter @agent/agent-runtime test",
+    "test:legacy-v2": "PYTHONPATH=packages/pubg-domain/legacy-v2:integrations/langbot/plugins/pubg-stats-v2 python3 -m unittest discover -s packages/pubg-domain/legacy-v2/tests",
+    "check:secrets": "./scripts/check-secrets.sh",
+    "doctor": "./scripts/doctor.sh"
+  }
+}

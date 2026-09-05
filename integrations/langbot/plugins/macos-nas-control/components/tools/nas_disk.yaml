@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: nas_disk
+  label:
+    en_US: macOS NAS Disk
+    zh_Hans: macOS NAS 磁盘
+  description:
+    en_US: Read filesystem usage on the macOS NAS.
+    zh_Hans: 查询 macOS NAS 文件系统使用情况。
+spec:
+  parameters:
+    type: object
+    properties: {}
+  llm_prompt: Use this tool when the user asks how much disk space is available on the macOS NAS.
+execution:
+  python:
+    path: nas_disk.py
+    attr: NasDiskTool

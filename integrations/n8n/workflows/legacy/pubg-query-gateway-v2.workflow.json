@@ -1,0 +1,307 @@
+{
+  "name": "PUBG Query Gateway v2",
+  "id": "pubg-query-gateway-v2-20260901",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai",
+    "saveManualExecutions": true
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pubg-query-gateway-v2",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pubg-query-v2-node-001",
+      "name": "PUBG Query Webhook v2",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1000,
+        0
+      ],
+      "webhookId": "pubg-query-gateway-v2-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst query = body.query && typeof body.query === 'object' ? body.query : body.queryPlan && typeof body.queryPlan === 'object' ? body.queryPlan : {};\nconst subject = query.subject && typeof query.subject === 'object' ? query.subject : { type: 'team', ids: [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"] };\nconst playerIds = Array.isArray(subject.ids) ? subject.ids.map(String) : [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"];\nconst players = [{\"accountId\":\"account.29044012052444c0848d617ba100fe1e\",\"playerName\":\"SG_LabmemNo007\",\"displayName\":\"SG_LabmemNo007\"},{\"accountId\":\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"playerName\":\"SG_LabmemNo008\",\"displayName\":\"SG_LabmemNo008\"},{\"accountId\":\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"playerName\":\"SG_LabmemNo004\",\"displayName\":\"SG_LabmemNo004\"},{\"accountId\":\"account.84c0d223534f42b1922c070a52c3c6ce\",\"playerName\":\"kim_kkl\",\"displayName\":\"kim_kkl\"}].filter((player) => playerIds.includes(player.accountId));\nconst sessionId = String(query.sessionId || body.sessionId || 'unknown-session');\nconst queryId = String(query.queryId || body.queryId || 'unknown-query');\nreturn [{ json: {\n  query,\n  queryId,\n  sessionId,\n  subject: { type: subject.type || 'team', ids: playerIds },\n  playerIds,\n  players,\n  shard: 'steam',\n  syncKey: 'v2:sync-state:steam:default-team',\n  nowMs: Date.now(),\n  allowedCompetitiveModes: ['solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp'],\n} }];\n"
+      },
+      "id": "pubg-query-v2-node-002",
+      "name": "Normalize Query Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.syncKey }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-query-v2-node-003",
+      "name": "Read V2 Sync State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        -160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "v2-match"
+            },
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "match"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-query-v2-node-004",
+      "name": "Read V2 Match Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) {\n  if (typeof value === 'string') { try { return JSON.parse(value); } catch { return null; } }\n  return value && typeof value === 'object' ? value : null;\n}\nfunction timestamp(value) {\n  if (typeof value === 'number') return value > 10000000000 ? value : value * 1000;\n  const text = String(value || '').trim();\n  const numeric = Number(text);\n  if (/^\\d+(?:\\.\\d+)?$/.test(text) && Number.isFinite(numeric)) {\n    return numeric > 10000000000 ? numeric : numeric * 1000;\n  }\n  const parsed = Date.parse(text);\n  return Number.isFinite(parsed) ? parsed : 0;\n}\nfunction normalizeRecord(row) {\n  const payload = parsePayload(row?.payload ?? row);\n  if (!payload || !payload.matchId) return null;\n  return payload;\n}\nfunction stateFromRows(rows) {\n  const row = rows.find((item) => String(item.json?.cacheKey || '') === String($('Normalize Query Input').first().json.syncKey));\n  return parsePayload(row?.json?.payload);\n}\nconst request = $('Normalize Query Input').first().json;\nconst state = stateFromRows($input.all());\nconst storeRows = $('Read V2 Match Store').all().map((item) => normalizeRecord(item.json)).filter(Boolean);\nconst uniqueRecords = [...new Map(storeRows.map((record) => [String(record.matchId), record])).values()];\nconst query = request.query || {};\nconst selector = query.selector || {};\nconst nowMs = Date.now();\nconst expiresAt = timestamp(state?.expiresAt);\nconst stateFresh = Boolean(state && (!expiresAt || expiresAt > nowMs));\nconst knownIds = new Set((state?.matchIds || []).map(String));\nconst recordIds = new Set(uniqueRecords.map((record) => String(record.matchId)));\nconst relevant = (record) => {\n  if (record.isCompetitive === false) return false;\n  const ids = new Set((request.playerIds || []).map(String));\n  return Array.isArray(record.players) && record.players.some((player) => ids.has(String(player.accountId)));\n};\nconst relevantRecords = uniqueRecords.filter(relevant);\nconst selectedIdCount = relevantRecords.length;\nfunction selectorCovered(candidate) {\n  if (!state?.coverageComplete) return false;\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    const coverageStart = timestamp(state?.coverageStart);\n    const coverageEnd = timestamp(state?.coverageEnd);\n    const openEnded = end > nowMs;\n    const effectiveEnd = openEnded ? coverageEnd : end;\n    return Boolean(\n      coverageStart &&\n      coverageEnd &&\n      start <= nowMs &&\n      start >= coverageStart &&\n      (!openEnded ? effectiveEnd <= coverageEnd : start <= coverageEnd),\n    );\n  }\n  if (candidate?.type === 'last_n_matches') {\n    const required = Number(candidate.count || 0) + Number(candidate.offset || 0);\n    return selectedIdCount >= required;\n  }\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((query.reference?.matchIds || []).map(String));\n    return resultIds.size > 0 && [...resultIds].every((id) => recordIds.has(id));\n  }\n  return true;\n}\nconst selectors = Array.isArray(query.segments) && query.segments.length\n  ? query.segments.map((segment) => segment.selector || {})\n  : [selector];\nconst withinCoverage = selectors.every(selectorCovered);\nconst syncNeeded = !stateFresh || !withinCoverage;\nlet coverageStatus = 'COVERAGE_GAP';\nif (stateFresh && state?.coverageComplete && withinCoverage) coverageStatus = 'OK';\nif (state?.status === 'SOURCE_UNAVAILABLE' && !withinCoverage) coverageStatus = 'SOURCE_UNAVAILABLE';\nreturn [{ json: {\n  ...request,\n  records: uniqueRecords,\n  state,\n  coverage: {\n    status: coverageStatus,\n    complete: Boolean(state?.coverageComplete && withinCoverage),\n    coverageStart: state?.coverageStart || null,\n    coverageEnd: state?.coverageEnd || null,\n    knownPlayerIds: request.playerIds,\n    failedMatchIds: state?.failedMatchIds || [],\n  },\n  source: { store: 'n8n-data-table', cacheType: 'v2-match-or-legacy-match', syncTriggered: false },\n  syncNeeded,\n  syncRequest: { query, queryId: request.queryId, sessionId: request.sessionId, forceDiscovery: true },\n  diagnostics: { localRecordCount: uniqueRecords.length, relevantRecordCount: selectedIdCount, stateFresh, withinCoverage, stateExpiresAt: state?.expiresAt || null, nowMs },\n} }];\n"
+      },
+      "id": "pubg-query-v2-node-005",
+      "name": "Prepare Query Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.syncNeeded }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "pubg-query-v2-node-006",
+      "name": "Needs Read Through Sync",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/pubg-sync-matches-v2",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.syncRequest }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "pubg-query-v2-node-007",
+      "name": "Ensure Data via Sync v2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        180,
+        -160
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) {\n  if (typeof value === 'string') { try { return JSON.parse(value); } catch { return {}; } }\n  return value && typeof value === 'object' ? value : {};\n}\nconst decision = $('Prepare Query Data').first().json;\nconst syncInvoked = Boolean(decision.syncNeeded);\nconst response = syncInvoked ? parsePayload($json.body ?? $json) : {};\nconst syncFailed = syncInvoked && (Boolean($json.error) || response.status === 'SOURCE_UNAVAILABLE' && !Array.isArray(response.records));\nconst incoming = syncInvoked && Array.isArray(response.records) ? response.records : [];\nconst merged = [...(decision.records || []), ...incoming].filter((record) => record && record.matchId);\nconst records = [...new Map(merged.map((record) => [String(record.matchId), record])).values()];\nlet coverage = response.coverage && typeof response.coverage === 'object' ? response.coverage : decision.coverage;\nlet source = { ...(decision.source || {}), syncTriggered: Boolean(decision.syncNeeded), syncStatus: response.status || (syncFailed ? 'SOURCE_UNAVAILABLE' : 'NOT_NEEDED') };\nif (syncFailed) {\n  coverage = { ...(decision.coverage || {}), status: records.length ? 'PARTIAL' : 'SOURCE_UNAVAILABLE', complete: false, sourceUnavailable: true };\n  source.syncError = response.error || $json.error?.message || 'sync workflow unavailable';\n}\nfunction timestamp(value) {\n  if (typeof value === 'number') return value > 10000000000 ? value : value * 1000;\n  const text = String(value || '').trim();\n  const numeric = Number(text);\n  if (/^\\d+(?:\\.\\d+)?$/.test(text) && Number.isFinite(numeric)) return numeric > 10000000000 ? numeric : numeric * 1000;\n  const parsed = Date.parse(text);\n  return Number.isFinite(parsed) ? parsed : 0;\n}\nconst nowMs = Date.now();\nfunction selectorCovered(candidate) {\n  if (!coverage?.complete) return false;\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    const coverageStart = timestamp(coverage.coverageStart);\n    const coverageEnd = timestamp(coverage.coverageEnd);\n    const openEnded = end > nowMs;\n    const effectiveEnd = openEnded ? coverageEnd : end;\n    return Boolean(\n      coverageStart &&\n      coverageEnd &&\n      start <= nowMs &&\n      start >= coverageStart &&\n      (!openEnded ? effectiveEnd <= coverageEnd : start <= coverageEnd),\n    );\n  }\n  if (candidate?.type === 'last_n_matches') {\n    const ids = new Set((decision.playerIds || []).map(String));\n    const count = records.filter((record) => record.isCompetitive !== false && Array.isArray(record.players) && record.players.some((player) => ids.has(String(player.accountId)))).length;\n    return count >= Number(candidate.count || 0) + Number(candidate.offset || 0);\n  }\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((decision.query?.reference?.matchIds || []).map(String));\n    const recordIds = new Set(records.map((record) => String(record.matchId)));\n    return resultIds.size > 0 && [...resultIds].every((id) => recordIds.has(id));\n  }\n  return true;\n}\nconst selectors = Array.isArray(decision.query?.segments) && decision.query.segments.length\n  ? decision.query.segments.map((segment) => segment.selector || {})\n  : [decision.query?.selector || {}];\nif (!syncFailed && syncInvoked && coverage?.complete && !selectors.every(selectorCovered)) {\n  coverage = { ...coverage, status: 'COVERAGE_GAP', complete: false };\n}\nreturn [{ json: { query: decision.query, queryId: decision.queryId, sessionId: decision.sessionId, records, coverage, source, diagnostics: { ...(decision.diagnostics || {}), syncFailed, syncRecordCount: incoming.length } } }];\n"
+      },
+      "id": "pubg-query-v2-node-008",
+      "name": "Collect Query Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "pubg-query-v2-node-009",
+      "name": "Respond Query Data v2",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "PUBG Query Webhook v2": {
+      "main": [
+        [
+          {
+            "node": "Normalize Query Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Query Input": {
+      "main": [
+        [
+          {
+            "node": "Read V2 Sync State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read V2 Match Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Sync State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Match Store": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Query Data": {
+      "main": [
+        [
+          {
+            "node": "Needs Read Through Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Read Through Sync": {
+      "main": [
+        [
+          {
+            "node": "Ensure Data via Sync v2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Data via Sync v2": {
+      "main": [
+        [
+          {
+            "node": "Collect Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Query Data": {
+      "main": [
+        [
+          {
+            "node": "Respond Query Data v2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "tags": []
+}

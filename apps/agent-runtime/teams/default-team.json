@@ -1,0 +1,27 @@
+{
+  "id": "default_team",
+  "label": "四人组",
+  "platform": "steam",
+  "players": [
+    {
+      "id": "account.29044012052444c0848d617ba100fe1e",
+      "name": "SG_LabmemNo007",
+      "aliases": ["007", "SG_LabmemNo007"]
+    },
+    {
+      "id": "account.a22ea4bce333448e9cce807cebd7f4bf",
+      "name": "SG_LabmemNo008",
+      "aliases": ["008", "SG_LabmemNo008"]
+    },
+    {
+      "id": "account.45ad53f453db4c4bbff2b4cf00b131d6",
+      "name": "SG_LabmemNo004",
+      "aliases": ["004", "SG_LabmemNo004"]
+    },
+    {
+      "id": "account.84c0d223534f42b1922c070a52c3c6ce",
+      "name": "kim_kkl",
+      "aliases": ["kim", "kim_kkl"]
+    }
+  ]
+}

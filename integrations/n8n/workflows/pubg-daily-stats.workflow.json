@@ -1,0 +1,817 @@
+{
+  "id": "pubg-daily-stats-20260830",
+  "name": "PUBG 今日战绩",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pubg-daily-stats",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de001",
+      "name": "PUBG Stats Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -960,
+        0
+      ],
+      "webhookId": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de002"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst timezone = 'Asia/Shanghai';\nconst now = new Date();\nconst nowMs = now.getTime();\n\nfunction pad(value) {\n  return String(value).padStart(2, '0');\n}\n\nfunction dateTimeParts(value) {\n  const date = value instanceof Date ? value : new Date(value);\n  return Object.fromEntries(new Intl.DateTimeFormat('en-CA', {\n    timeZone: timezone,\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    hour: '2-digit',\n    minute: '2-digit',\n    hourCycle: 'h23',\n  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));\n}\n\nfunction dateLabelFromParts(parts) {\n  return `${parts.year}-${parts.month}-${parts.day}`;\n}\n\nfunction parseDateLabel(label) {\n  const match = String(label).match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n  return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;\n}\n\nfunction daysInMonth(year, month) {\n  return new Date(Date.UTC(year, month, 0)).getUTCDate();\n}\n\nfunction isValidDateParts(year, month, day) {\n  return Number.isInteger(year) && Number.isInteger(month) && Number.isInteger(day)\n    && month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth(year, month);\n}\n\nfunction makeDateLabel(year, month, day) {\n  if (!isValidDateParts(year, month, day)) return null;\n  return `${year}-${pad(month)}-${pad(day)}`;\n}\n\nfunction addDays(label, amount) {\n  const parts = parseDateLabel(label);\n  if (!parts) return null;\n  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + amount));\n  return makeDateLabel(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());\n}\n\nfunction compareLabels(left, right) {\n  return String(left).localeCompare(String(right));\n}\n\nfunction periodStartMs(label) {\n  return Date.parse(`${label}T06:00:00+08:00`);\n}\n\nfunction formatDateTime(value) {\n  const parts = dateTimeParts(value);\n  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;\n}\n\nfunction formatPeriodRange(startLabel, endLabel) {\n  return `${startLabel} 06:00 至 ${endLabel} 06:00（北京时间）`;\n}\n\nfunction weekday(label) {\n  const parts = parseDateLabel(label);\n  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();\n}\n\nfunction mondayOfWeek(label) {\n  const day = weekday(label);\n  return addDays(label, -((day + 6) % 7));\n}\n\nfunction extractDateTokens(value) {\n  const text = String(value ?? '');\n  const tokens = [];\n  const occupied = [];\n  const fullPattern = /(?:(\\d{4})\\s*年\\s*)?(\\d{1,2})\\s*月\\s*(\\d{1,2})\\s*(?:日|号)?|(?:(\\d{4})\\s*[/-]\\s*)?(\\d{1,2})\\s*[/-]\\s*(\\d{1,2})/g;\n  let match;\n  while ((match = fullPattern.exec(text)) !== null) {\n    const year = match[1] ?? match[4] ?? null;\n    const month = match[2] ?? match[5];\n    const day = match[3] ?? match[6];\n    tokens.push({\n      index: match.index,\n      end: match.index + match[0].length,\n      year: year ? Number(year) : null,\n      month: Number(month),\n      day: Number(day),\n      hasMonth: true,\n    });\n    occupied.push({ start: match.index, end: match.index + match[0].length });\n  }\n\n  const dayOnlyPattern = /(\\d{1,2})\\s*(?:日|号)/g;\n  while ((match = dayOnlyPattern.exec(text)) !== null) {\n    if (occupied.some((range) => match.index >= range.start && match.index < range.end)) continue;\n    tokens.push({\n      index: match.index,\n      end: match.index + match[0].length,\n      year: null,\n      month: null,\n      day: Number(match[1]),\n      hasMonth: false,\n    });\n  }\n\n  return tokens.sort((left, right) => left.index - right.index);\n}\n\nfunction resolveDateToken(token, referenceLabel, inherited = null) {\n  const reference = parseDateLabel(referenceLabel);\n  let year = token.year ?? inherited?.year ?? reference.year;\n  let month = token.month ?? inherited?.month ?? reference.month;\n  const day = token.day;\n  const hasExplicitYear = token.year !== null && token.year !== undefined;\n  const hasInheritedYear = inherited?.year !== null && inherited?.year !== undefined;\n\n  if (!hasExplicitYear && !hasInheritedYear && token.hasMonth) {\n    const candidate = makeDateLabel(year, month, day);\n    if (!candidate) return null;\n    if (compareLabels(candidate.slice(5), referenceLabel.slice(5)) > 0) year -= 1;\n  } else if (!hasExplicitYear && !hasInheritedYear && !token.hasMonth && day > reference.day) {\n    month -= 1;\n    if (month < 1) {\n      month = 12;\n      year -= 1;\n    }\n  }\n\n  return makeDateLabel(year, month, day);\n}\n\nfunction adjustRangeEnd(startLabel, endLabel, endToken, startToken) {\n  if (!startLabel || !endLabel || compareLabels(endLabel, startLabel) >= 0) return endLabel;\n  if (endToken.year !== null || startToken.year !== null) return endLabel;\n  const endParts = parseDateLabel(endLabel);\n  if (endToken.hasMonth && startToken.hasMonth) {\n    return makeDateLabel(endParts.year + 1, endParts.month, endParts.day) ?? endLabel;\n  }\n  const nextMonth = endParts.month === 12 ? 1 : endParts.month + 1;\n  const nextYear = endParts.month === 12 ? endParts.year + 1 : endParts.year;\n  return makeDateLabel(nextYear, nextMonth, endParts.day) ?? endLabel;\n}\n\nconst calendarDateLabel = dateLabelFromParts(dateTimeParts(now));\nconst calendarStartMs = periodStartMs(calendarDateLabel);\nconst currentDateLabel = nowMs >= calendarStartMs ? calendarDateLabel : addDays(calendarDateLabel, -1);\nconst currentStartMs = periodStartMs(currentDateLabel);\nconst currentEndLabel = addDays(currentDateLabel, 1);\nconst currentEndBoundaryMs = periodStartMs(currentEndLabel);\nfunction parseObject(value) {\n  if (value && typeof value === 'object' && !Array.isArray(value)) return value;\n  if (typeof value === 'string') {\n    try {\n      const parsed = JSON.parse(value);\n      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};\n    } catch {\n      return {};\n    }\n  }\n  return {};\n}\n\nfunction normalizeString(value) {\n  return typeof value === 'string' ? value.trim().toLowerCase() : '';\n}\n\nfunction normalizeList(value) {\n  if (Array.isArray(value)) return value;\n  if (typeof value === 'string') return value.split(/[,，、\\s]+/).filter(Boolean);\n  return [];\n}\n\nconst allowedOperations = new Set(['report', 'per_player', 'rank', 'compare', 'trend']);\nconst allowedMetrics = new Set([\n  'kd', 'kda', 'kills', 'assists', 'damage', 'dbnos', 'revives',\n  'rank', 'wins', 'top10', 'survival_time',\n]);\nconst allowedRankings = new Set([\n  'strongest', 'weakest', 'steadiest', 'kills', 'damage',\n  'assists', 'dbnos', 'revives', 'all',\n]);\nconst allowedGroups = new Set(['player', 'ranking', 'match', 'team']);\nconst rawQuery = String(body.chatInput ?? body.message ?? body.user_message_text ?? '').trim();\nconst queryText = rawQuery.replace(/\\s+/g, '').toLowerCase();\nconst bodyPlan = {\n  ...parseObject(body.query_plan),\n  ...parseObject(body.queryPlan),\n};\nfunction canonicalMetric(value) {\n  const metric = normalizeString(value);\n  return metric === 'kda' ? 'kd' : metric;\n}\n\nconst planMetrics = [...new Set(normalizeList(bodyPlan.metrics).map(canonicalMetric).filter((metric) => allowedMetrics.has(metric)))];\nconst hasPlan = Object.keys(bodyPlan).length > 0;\nconst dateTokens = extractDateTokens(rawQuery);\nconst asksPreviousWeek = /上周|上星期|上礼拜/.test(queryText);\nconst asksCurrentWeek = /本周|这周|本星期|这星期|本礼拜|这礼拜|周总结|星期总结/.test(queryText);\nconst asksRecentSevenDays = /最近(?:7|七)天|近(?:7|七)天|过去(?:7|七)天/.test(queryText);\nconst asksRelativeDay = /(\\d{1,3})天前|大前天|前天|昨天|昨日/.test(queryText);\nconst asksCurrentDay = /今天|今日|今晚|当前战绩|现在战绩/.test(queryText);\nconst hasExplicitPeriod = asksPreviousWeek || asksCurrentWeek || asksRecentSevenDays\n  || asksRelativeDay || asksCurrentDay || dateTokens.length > 0;\n\nfunction inferMetrics() {\n  const metrics = [];\n  const add = (metric, pattern) => {\n    if (pattern.test(queryText) && !metrics.includes(metric)) metrics.push(metric);\n  };\n  add('kd', /kda|kd|kd比|击杀助攻|综合表现/);\n  add('kills', /击杀|杀人|人头/);\n  add('assists', /助攻/);\n  add('damage', /伤害|输出/);\n  add('dbnos', /倒地|击倒|放倒/);\n  add('revives', /救援|救人|复活/);\n  add('rank', /排名|名次|分段|段位|稳定|最稳/);\n  add('wins', /吃鸡|胜场|冠军/);\n  add('top10', /前十|top10/);\n  add('survival_time', /存活|生存时间/);\n  return metrics;\n}\n\nconst lexicalMetrics = inferMetrics();\nconst asksIndividual = /分别|各自|每人|每个人|四个人|所有人|大家|他们几个|他们四个|列出来|逐人|各项/.test(queryText);\nconst asksCompare = /对比|比较|相比|差距|谁比谁|和谁/.test(queryText);\nconst asksTrend = /趋势|走势|变化|提升|下降|逐日|每天|这几天/.test(queryText);\nconst asksFunRanking = /趣味排名|娱乐排名|趣味|彩蛋/.test(queryText);\nconst asksRanking = /谁|排名|第一|最强|最厉害|最菜|最差|垫底|最稳|王|最多|最高|最低/.test(queryText);\nconst asksCompleteReport = /完整|全量|总览|明细|详细|报告|小队|战绩|数据/.test(queryText);\nconst hasMetricBreakdown = asksIndividual && lexicalMetrics.length > 0;\n\nfunction inferOperation() {\n  if (asksCompare) return 'compare';\n  if (asksTrend) return 'trend';\n  if (hasMetricBreakdown) return 'per_player';\n  if (asksRanking || asksFunRanking) return 'rank';\n  return 'report';\n}\n\nfunction inferRanking() {\n  if (asksFunRanking) return 'all';\n  if (/最菜|最差|垫底/.test(queryText)) return 'weakest';\n  if (/最稳|稳定性|最稳定/.test(queryText)) return 'steadiest';\n  if (/击杀王|杀人王|人头王|击杀最多|杀得最多|谁杀得最多/.test(queryText)) return 'kills';\n  if (/伤害王|伤害最高|输出王|输出最高|伤害最多|谁打得最多伤害/.test(queryText)) return 'damage';\n  if (/助攻王|助攻最多|谁助攻最多/.test(queryText)) return 'assists';\n  if (/倒地王|击倒王|倒地最多|击倒最多|谁放倒最多/.test(queryText)) return 'dbnos';\n  if (/救援王|救人王|复活王|救援最多|救人最多|谁救人最多|最能救人/.test(queryText)) return 'revives';\n  if (/最强|最厉害|谁第一|谁是第一/.test(queryText)) return 'strongest';\n  return null;\n}\n\nconst inferredOperation = inferOperation();\nconst suppliedOperation = normalizeString(bodyPlan.operation);\nconst operation = allowedOperations.has(suppliedOperation)\n  ? (inferredOperation !== 'report'\n    ? inferredOperation\n    : asksCompleteReport && !asksRanking && !asksFunRanking\n      ? 'report'\n      : suppliedOperation)\n  : inferredOperation;\nconst inferredRanking = inferRanking();\nconst suppliedRanking = normalizeString(bodyPlan.ranking);\nconst suppliedAllRankingIsUsable = suppliedRanking !== 'all'\n  || asksFunRanking\n  || (suppliedOperation === 'rank' && !asksCompleteReport);\nconst ranking = allowedRankings.has(inferredRanking ?? '')\n  ? inferredRanking\n  : allowedRankings.has(suppliedRanking) && suppliedAllRankingIsUsable\n    ? suppliedRanking\n    : operation === 'rank' ? 'strongest' : null;\nlet metrics = lexicalMetrics.length > 0 ? lexicalMetrics : planMetrics;\nif (operation === 'rank' && metrics.length === 0) {\n  metrics = ranking === 'steadiest' ? ['rank'] : ranking === 'all' ? [] : ['kd'];\n}\nif (operation === 'per_player' && metrics.length === 0) metrics = ['kd'];\nif (ranking === 'strongest' && metrics.length === 0) metrics = ['kd'];\nif (ranking === 'steadiest' && !metrics.includes('rank')) metrics.push('rank');\nif (ranking && ranking !== 'strongest' && ranking !== 'weakest' && ranking !== 'steadiest' && ranking !== 'all') {\n  metrics = [ranking, ...metrics.filter((metric) => metric !== ranking)];\n}\nconst groupBy = allowedGroups.has(normalizeString(bodyPlan.group_by))\n  ? normalizeString(bodyPlan.group_by)\n  : operation === 'rank' ? 'ranking' : operation === 'per_player' || operation === 'compare' ? 'player' : 'team';\nconst mode = normalizeString(bodyPlan.mode) === 'competitive' ? 'competitive' : 'competitive';\nconst periodHint = typeof bodyPlan.period_hint === 'string' ? bodyPlan.period_hint.trim() : '';\nconst queryPlan = {\n  operation,\n  metrics,\n  period_hint: periodHint,\n  mode,\n  group_by: groupBy,\n  ranking: ranking ?? undefined,\n  operationSource: suppliedOperation && operation === suppliedOperation ? 'model' : 'text',\n  metricsSource: lexicalMetrics.length > 0 ? 'text' : planMetrics.length > 0 ? 'model' : 'default',\n};\nconst contextualFollowup = /刚才|上一条|上面|前面|这个(?:周期|时间|结果|报告)|那(?:他|她|个人|几个|几个人)?(?:呢|的)?|他们|她们|再列|也列|继续|同样|前述/.test(queryText);\nconst allPlayersRequested = /我们四个|四个人|所有人|大家|他们几个|他们四个|全员|每个人|各自|分别/.test(queryText);\n\nlet startLabel = currentDateLabel;\nlet endLabel = currentEndLabel;\nlet periodType = 'day';\nlet periodLabel = '今日';\nlet selectionSource = 'default';\n\nif (asksPreviousWeek || asksCurrentWeek) {\n  const currentWeekStart = mondayOfWeek(currentDateLabel);\n  if (asksPreviousWeek) {\n    startLabel = addDays(currentWeekStart, -7);\n    endLabel = currentWeekStart;\n    periodLabel = '上周总结';\n    selectionSource = 'previous-week';\n  } else {\n    startLabel = currentWeekStart;\n    endLabel = addDays(currentWeekStart, 7);\n    periodLabel = '本周总结';\n    selectionSource = 'current-week';\n  }\n  periodType = 'week';\n} else if (asksRecentSevenDays) {\n  startLabel = addDays(currentDateLabel, -6);\n  endLabel = currentEndLabel;\n  periodLabel = '近7天';\n  periodType = 'range';\n  selectionSource = 'recent-seven-days';\n} else if (dateTokens.length >= 2) {\n  const first = dateTokens[0];\n  const second = dateTokens[1];\n  startLabel = resolveDateToken(first, currentDateLabel);\n  const firstParts = parseDateLabel(startLabel);\n  endLabel = resolveDateToken(second, currentDateLabel, second.hasMonth ? null : firstParts);\n  endLabel = adjustRangeEnd(startLabel, endLabel, second, first);\n  if (startLabel && endLabel && compareLabels(endLabel, startLabel) < 0) {\n    const endParts = parseDateLabel(endLabel);\n    endLabel = makeDateLabel(endParts.year + 1, endParts.month, endParts.day) ?? endLabel;\n  }\n  endLabel = endLabel ? addDays(endLabel, 1) : endLabel;\n  periodLabel = '日期范围';\n  periodType = 'range';\n  selectionSource = 'explicit-range';\n} else if (dateTokens.length === 1) {\n  startLabel = resolveDateToken(dateTokens[0], currentDateLabel);\n  endLabel = startLabel ? addDays(startLabel, 1) : currentEndLabel;\n  periodLabel = startLabel === currentDateLabel ? '今日' : startLabel;\n  selectionSource = 'explicit-date';\n} else {\n  const daysAgoMatch = queryText.match(/(\\d{1,3})天前/);\n  const relativeOffset = daysAgoMatch\n    ? -Number(daysAgoMatch[1])\n    : /大前天/.test(queryText)\n      ? -3\n      : /前天/.test(queryText)\n        ? -2\n        : /昨天|昨日/.test(queryText)\n          ? -1\n          : 0;\n  startLabel = addDays(currentDateLabel, relativeOffset);\n  endLabel = addDays(startLabel, 1);\n  periodLabel = relativeOffset === 0 ? '今日' : relativeOffset === -1 ? '昨日' : relativeOffset === -2 ? '前天' : relativeOffset === -3 ? '大前天' : `${Math.abs(relativeOffset)}天前`;\n  selectionSource = relativeOffset === 0 ? 'current-day' : 'relative-day';\n}\n\nif (!startLabel || !endLabel || !parseDateLabel(startLabel) || !parseDateLabel(endLabel)) {\n  startLabel = currentDateLabel;\n  endLabel = currentEndLabel;\n  periodType = 'day';\n  periodLabel = '今日';\n  selectionSource = 'fallback';\n}\n\nconst rangeStartMs = periodStartMs(startLabel);\nconst rangeEndBoundaryMs = periodStartMs(endLabel);\nconst endMs = Math.min(rangeEndBoundaryMs, nowMs);\nconst overlapsCurrentTime = rangeStartMs <= nowMs && nowMs < rangeEndBoundaryMs;\nconst isPartial = overlapsCurrentTime && endMs < rangeEndBoundaryMs;\nconst reportTitle = periodType === 'week' ? periodLabel : `${periodLabel}战绩`;\nconst players = [\n  { displayName: 'SG_LabmemNo007', playerName: 'SG_LabmemNo007', accountId: 'account.29044012052444c0848d617ba100fe1e' },\n  { displayName: 'SG_LabmemNo008', playerName: 'SG_LabmemNo008', accountId: 'account.a22ea4bce333448e9cce807cebd7f4bf' },\n  { displayName: 'SG_LabmemNo004', playerName: 'SG_LabmemNo004', accountId: 'account.45ad53f453db4c4bbff2b4cf00b131d6' },\n  { displayName: 'kim_kkl', playerName: 'kim_kkl', accountId: 'account.84c0d223534f42b1922c070a52c3c6ce' },\n];\nconst playerCacheTtlMs = 60 * 1000;\nconst matchCacheTtlMs = 14 * 24 * 60 * 60 * 1000;\nconst contextTtlMs = 12 * 60 * 60 * 1000;\nconst allowedCompetitiveModes = ['solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp'];\nconst context = parseObject(body.context);\nconst contextKey = String(context.key ?? body.contextKey ?? '').trim();\n\nreturn [{\n  json: {\n    chatInput: rawQuery,\n    timezone,\n    shard: 'steam',\n    queryPlan,\n    queryPlanProvided: hasPlan,\n    periodHint,\n    periodExplicit: hasExplicitPeriod,\n    contextualFollowup,\n    allPlayersRequested,\n    context,\n    contextKey,\n    contextTtlMs,\n    queryId: body.queryId ?? body.query_id ?? null,\n    dateLabel: startLabel,\n    periodLabel,\n    periodType,\n    reportTitle,\n    selectionSource,\n    rangeStartLabel: startLabel,\n    rangeEndLabel: endLabel,\n    rangeStartMs,\n    rangeEndBoundaryMs,\n    startMs: rangeStartMs,\n    endMs,\n    isPartial,\n    rangeText: formatPeriodRange(startLabel, endLabel),\n    currentTimeText: formatDateTime(now),\n    players,\n    playerNames: players.map((player) => player.playerName),\n    playerIds: players.map((player) => player.accountId),\n    playerCacheKey: 'player-lookup:' + players.map((player) => player.accountId).sort().join(','),\n    playerCacheTtlMs,\n    matchCacheTtlMs,\n    allowedCompetitiveModes,\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de003",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.pubg.com/shards/' + $json.shard + '/players?filter%5BplayerIds%5D=' + $json.playerIds.join(',') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de004",
+      "name": "Lookup PUBG Players",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -200,
+        -160
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pubg-api-header-20260830",
+          "name": "PUBG API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": false
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function parseBody(value) {\n  if (typeof value === 'string') {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return {};\n    }\n  }\n  return value && typeof value === 'object' ? value : {};\n}\n\nfunction headerValue(headers, name) {\n  const wanted = String(name).toLowerCase();\n  const entry = Object.entries(headers ?? {}).find(([key]) => String(key).toLowerCase() === wanted);\n  return entry ? String(entry[1]) : null;\n}\n\nfunction parseRateLimit(headers) {\n  const remaining = headerValue(headers, 'x-ratelimit-remaining');\n  const reset = headerValue(headers, 'x-ratelimit-reset');\n  return {\n    remaining: remaining === null ? null : Number(remaining),\n    reset: reset === null ? null : Number(reset),\n  };\n}\n\nfunction makePlayerMap(snapshots) {\n  return Object.fromEntries(snapshots.map((player) => [player.accountId, {\n    accountId: player.accountId,\n    playerName: player.playerName,\n    displayName: player.displayName,\n  }]));\n}\n\nfunction makeResultFromPayload(payload, request, extra = {}) {\n  const payloadPlayers = Array.isArray(payload?.players) ? payload.players : [];\n  const payloadById = new Map(payloadPlayers.map((player) => [String(player.accountId), player]));\n  const snapshots = (request.players ?? []).map((requested) => {\n    const cached = payloadById.get(String(requested.accountId));\n    return {\n      accountId: requested.accountId,\n      playerName: requested.playerName,\n      displayName: requested.displayName,\n      found: cached?.found !== false,\n      matchIds: Array.isArray(cached?.matchIds) ? [...new Set(cached.matchIds.map(String))] : [],\n    };\n  });\n  const fetchedAt = payload?.fetchedAt ?? extra.fetchedAt ?? null;\n  return {\n    ...request,\n    playerMap: makePlayerMap(snapshots),\n    playerSnapshots: snapshots,\n    foundPlayers: snapshots.filter((player) => player.found),\n    missingPlayers: snapshots.filter((player) => !player.found),\n    matchIds: [...new Set(snapshots.flatMap((player) => player.matchIds))],\n    playerLookupFetchedAt: fetchedAt,\n    shouldWritePlayerCache: false,\n    usedStaleCache: Boolean(extra.usedStaleCache),\n    lookupError: extra.lookupError ?? '',\n    rateLimit: extra.rateLimit ?? payload?.rateLimit ?? null,\n    cacheAsOfAt: fetchedAt ?? extra.cacheAsOfAt ?? null,\n  };\n}\n\nfunction formatCachedTime(value) {\n  const timestamp = Date.parse(String(value ?? ''));\n  if (!Number.isFinite(timestamp)) return '未知时间';\n  return new Intl.DateTimeFormat('zh-CN', {\n    timeZone: 'Asia/Shanghai',\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    hour: '2-digit',\n    minute: '2-digit',\n  }).format(new Date(timestamp));\n}\n\nconst request = $('Prepare Cache').first()?.json ?? $('Normalize Request').first()?.json ?? {};\nconst cacheState = $('Prepare Cache').first()?.json ?? {};\nconst result = $input.first()?.json ?? {};\nconst body = parseBody(result.body ?? result);\nconst statusCode = Number(result.statusCode ?? 0);\nconst headers = result.headers ?? {};\nconst rateLimit = parseRateLimit(headers);\nconst data = Array.isArray(body.data) ? body.data : [];\nconst detail = result.error?.message\n  ?? body.errors?.[0]?.title\n  ?? body.errors?.[0]?.detail\n  ?? `HTTP ${statusCode || 'unknown'}`;\nconst failed = Boolean(result.error) || statusCode >= 400 || data.length === 0;\n\nif (failed) {\n  const stalePayload = cacheState.stalePlayerPayload;\n  if (Array.isArray(stalePayload?.players) && stalePayload.players.length > 0) {\n    return [{\n      json: makeResultFromPayload(stalePayload, request, {\n        usedStaleCache: true,\n        lookupError: `⚠️ PUBG 玩家列表同步失败（${detail}），已使用 ${formatCachedTime(stalePayload.fetchedAt)} 的缓存`,\n        rateLimit,\n        cacheAsOfAt: stalePayload.fetchedAt ?? cacheState.cacheAsOfAt,\n      }),\n    }];\n  }\n\n  return [{\n    json: {\n      ...request,\n      playerMap: {},\n      playerSnapshots: [],\n      foundPlayers: [],\n      missingPlayers: request.players ?? [],\n      matchIds: [],\n      playerLookupFetchedAt: null,\n      shouldWritePlayerCache: false,\n      usedStaleCache: false,\n      lookupError: `查询 PUBG 玩家失败：${detail}`,\n      rateLimit,\n      cacheAsOfAt: cacheState.cacheAsOfAt ?? null,\n    },\n  }];\n}\n\nconst requestedById = new Map((request.players ?? []).map((player) => [String(player.accountId), player]));\nconst snapshots = (request.players ?? []).map((requested) => {\n  const player = data.find((entry) => String(entry.id ?? '') === String(requested.accountId));\n  const matches = player?.relationships?.matches?.data ?? [];\n  return {\n    accountId: requested.accountId,\n    playerName: requested.playerName,\n    displayName: requested.displayName,\n    found: Boolean(player),\n    apiName: player?.attributes?.name ?? requested.playerName,\n    matchIds: [...new Set(matches.filter((match) => match?.id).map((match) => String(match.id)))],\n  };\n});\nconst fetchedAt = new Date().toISOString();\nconst playerCachePayload = {\n  schemaVersion: 1,\n  fetchedAt,\n  players: snapshots,\n  rateLimit,\n};\n\nreturn [{\n  json: {\n    ...request,\n    playerMap: makePlayerMap(snapshots),\n    playerSnapshots: snapshots,\n    foundPlayers: snapshots.filter((player) => player.found),\n    missingPlayers: snapshots.filter((player) => !player.found),\n    matchIds: [...new Set(snapshots.flatMap((player) => player.matchIds))],\n    playerLookupFetchedAt: fetchedAt,\n    shouldWritePlayerCache: true,\n    playerCachePayload,\n    usedStaleCache: false,\n    lookupError: '',\n    rateLimit,\n    cacheAsOfAt: fetchedAt,\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de005",
+      "name": "Parse Player Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.matchId }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de007",
+      "name": "Has New Match IDs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://api.pubg.com/shards/' + $json.shard + '/matches/' + $json.matchId }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.api+json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 20000
+        }
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de008",
+      "name": "Get PUBG Match",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        640,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pubg-api-header-20260830",
+          "name": "PUBG API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function parseBody(value) {\n  if (typeof value === 'string') {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return {};\n    }\n  }\n  return value && typeof value === 'object' ? value : {};\n}\n\nconst plan = $('Build Match Fetch Plan').first()?.json ?? {};\nconst result = $json ?? {};\nconst body = parseBody(result.body ?? result);\nconst statusCode = Number(result.statusCode ?? 0);\nconst match = body.data;\nconst matchId = String(plan.matchId ?? match?.id ?? '');\n\nif (result.error || statusCode >= 400 || !match) {\n  const detail = result.error?.message ?? body.errors?.[0]?.title ?? body.errors?.[0]?.detail ?? `HTTP ${statusCode || 'unknown'}`;\n  return {\n    json: {\n      matchId,\n      shard: plan.shard ?? 'steam',\n      isMatchRecord: false,\n      cacheable: false,\n      isInRange: false,\n      matchError: detail,\n      players: [],\n    },\n  };\n}\n\nconst attributes = match.attributes ?? {};\nconst createdAt = String(attributes.createdAt ?? '');\nconst timestamp = Date.parse(createdAt);\nconst matchType = String(attributes.matchType ?? '').toLowerCase();\nconst gameMode = String(attributes.gameMode ?? '').toLowerCase();\nconst allowedModes = new Set(plan.allowedCompetitiveModes ?? [\n  'solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp',\n]);\nconst isCompetitive = matchType === 'competitive' && allowedModes.has(gameMode);\nconst included = Array.isArray(body.included) ? body.included : [];\nconst participants = included.filter((item) => item.type === 'participant');\nconst rosters = new Map(included.filter((item) => item.type === 'roster').map((item) => [String(item.id), item]));\nconst players = [];\n\nfor (const participant of participants) {\n  const stats = participant.attributes?.stats ?? {};\n  const accountId = String(stats.playerId ?? participant.relationships?.player?.data?.id ?? '');\n  const knownPlayer = plan.playerMap?.[accountId];\n  if (!knownPlayer) continue;\n  const rosterId = participant.relationships?.roster?.data?.id;\n  const rosterStats = rosters.get(String(rosterId))?.attributes?.stats ?? {};\n  const rank = Number(stats.winPlace ?? rosterStats.rank ?? 0);\n  players.push({\n    accountId,\n    displayName: knownPlayer.displayName,\n    playerName: knownPlayer.playerName,\n    rank: Number.isFinite(rank) && rank > 0 ? rank : null,\n    kills: Number(stats.kills ?? 0),\n    assists: Number(stats.assists ?? 0),\n    damageDealt: Number(stats.damageDealt ?? 0),\n    dbnos: Number(stats.DBNOs ?? 0),\n    revives: Number(stats.revives ?? 0),\n    headshotKills: Number(stats.headshotKills ?? 0),\n    timeSurvived: Number(stats.timeSurvived ?? 0),\n    longestKill: Number(stats.longestKill ?? 0),\n  });\n}\n\nconst inTimeRange = Number.isFinite(timestamp)\n  && timestamp >= Number(plan.startMs)\n  && timestamp < Number(plan.endMs);\n\nreturn {\n  json: {\n    matchId: String(match.id ?? matchId),\n    shard: plan.shard ?? 'steam',\n    createdAt,\n    timestamp,\n    matchType,\n    gameMode,\n    isCompetitive,\n    isMatchRecord: true,\n    cacheable: true,\n    isInRange: isCompetitive && inTimeRange,\n    mapName: String(attributes.mapName ?? '未知地图'),\n    duration: Number(attributes.duration ?? 0),\n    patchVersion: String(attributes.patchVersion ?? ''),\n    players,\n  },\n};"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de009",
+      "name": "Extract Match Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        860,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const teamName = '【范德林德帮】';\nconst request = $('Prepare Cache').first()?.json ?? $('Normalize Request').first()?.json ?? {};\nconst plan = $('Build Match Fetch Plan').first()?.json ?? $input.first()?.json ?? {};\nconst cacheState = $('Prepare Cache').first()?.json ?? {};\nconst cachedRecords = Array.isArray(cacheState.cachedMatchRecords) ? cacheState.cachedMatchRecords : [];\nconst fetchedRecords = $input.all().map((item) => item.json ?? []).filter((row) => row.isMatchRecord && row.cacheable);\nconst recordById = new Map();\n\nfor (const row of cachedRecords) {\n  if (row.matchId) recordById.set(String(row.matchId), row);\n}\nfor (const row of fetchedRecords) {\n  if (row.matchId) recordById.set(String(row.matchId), row);\n}\n\nconst allowedModes = new Set(request.allowedCompetitiveModes ?? [\n  'solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp',\n]);\nconst rows = [...recordById.values()]\n  .filter((row) => row.isCompetitive && allowedModes.has(String(row.gameMode ?? '').toLowerCase()))\n  .filter((row) => Number(row.timestamp) >= Number(request.startMs) && Number(row.timestamp) < Number(request.endMs))\n  .filter((row) => Array.isArray(row.players) && row.players.length > 0)\n  .sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0));\n\nconst requestedPlayers = Array.isArray(request.players) ? request.players : [];\nconst stats = new Map();\nconst playerIcons = ['🔴', '🔵', '🟢', '🟣', '🟠', '🟡'];\n\nfor (const [index, player] of requestedPlayers.entries()) {\n  stats.set(player.playerName, {\n    displayName: player.displayName,\n    playerName: player.playerName,\n    icon: playerIcons[index] ?? '👤',\n    games: 0,\n    wins: 0,\n    top10: 0,\n    kills: 0,\n    assists: 0,\n    deaths: 0,\n    damage: 0,\n    dbnos: 0,\n    revives: 0,\n    headshots: 0,\n    survived: 0,\n    rankTotal: 0,\n    rankedGames: 0,\n  });\n}\n\nfor (const row of rows) {\n  for (const player of row.players) {\n    const summary = stats.get(player.playerName);\n    if (!summary) continue;\n    summary.games += 1;\n    summary.wins += player.rank === 1 ? 1 : 0;\n    summary.top10 += player.rank !== null && player.rank <= 10 ? 1 : 0;\n    summary.deaths += player.rank === 1 ? 0 : 1;\n    if (Number.isFinite(Number(player.rank)) && Number(player.rank) > 0) {\n      summary.rankTotal += Number(player.rank);\n      summary.rankedGames += 1;\n    }\n    summary.kills += Number.isFinite(Number(player.kills)) ? Number(player.kills) : 0;\n    summary.assists += Number.isFinite(Number(player.assists)) ? Number(player.assists) : 0;\n    summary.damage += Number.isFinite(Number(player.damageDealt)) ? Number(player.damageDealt) : 0;\n    summary.dbnos += Number.isFinite(Number(player.dbnos)) ? Number(player.dbnos) : 0;\n    summary.revives += Number.isFinite(Number(player.revives)) ? Number(player.revives) : 0;\n    summary.headshots += Number.isFinite(Number(player.headshotKills)) ? Number(player.headshotKills) : 0;\n    summary.survived += Number.isFinite(Number(player.timeSurvived)) ? Number(player.timeSurvived) : 0;\n  }\n}\n\nfunction formatNumber(value) {\n  return Number(value ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: 0 });\n}\n\nfunction formatDuration(seconds) {\n  const total = Math.max(0, Math.round(Number(seconds) || 0));\n  return `${Math.floor(total / 60)}分${String(total % 60).padStart(2, '0')}秒`;\n}\n\nfunction formatTime(value) {\n  const date = new Date(value);\n  const options = request.periodType === 'day'\n    ? {\n        timeZone: 'Asia/Shanghai',\n        hour: '2-digit',\n        minute: '2-digit',\n      }\n    : {\n        timeZone: 'Asia/Shanghai',\n        month: '2-digit',\n        day: '2-digit',\n        hour: '2-digit',\n        minute: '2-digit',\n      };\n  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', options)\n    .formatToParts(date)\n    .filter((part) => part.type !== 'literal')\n    .map((part) => [part.type, part.value]));\n  return request.periodType === 'day'\n    ? `${parts.hour}:${parts.minute}`\n    : `${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;\n}\n\nfunction formatDateTime(value) {\n  const timestamp = Date.parse(String(value ?? ''));\n  if (!Number.isFinite(timestamp)) return '未知时间';\n  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {\n    timeZone: 'Asia/Shanghai',\n    year: 'numeric',\n    month: '2-digit',\n    day: '2-digit',\n    hour: '2-digit',\n    minute: '2-digit',\n    hourCycle: 'h23',\n  }).formatToParts(new Date(timestamp)).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));\n  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;\n}\n\nfunction kdRatio(summary) {\n  if (summary.deaths === 0) return summary.kills > 0 ? Number.POSITIVE_INFINITY : 0;\n  return summary.kills / summary.deaths;\n}\n\nfunction formatKdRatio(value) {\n  return Number.isFinite(value) ? value.toFixed(2) : '∞';\n}\n\nfunction sameKd(left, right) {\n  return left === right || (Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) < 0.000001);\n}\n\nfunction mapLabel(value) {\n  return {\n    Baltic_Main: '艾伦格',\n    Desert_Main: '米拉玛',\n    Savage_Main: '萨诺',\n    DihorOtok_Main: '维寒迪',\n    Tiger_Main: '泰戈',\n    Kiki_Main: '卡拉金',\n    Summerland_Main: '帕拉莫',\n    Neon_Main: '霓虹城',\n  }[value] ?? value;\n}\n\nfunction modeLabel(value) {\n  return {\n    solo: '单排',\n    'solo-fpp': '单排 FPP',\n    duo: '双排',\n    'duo-fpp': '双排 FPP',\n    squad: '四排',\n    'squad-fpp': '四排 FPP',\n  }[value] ?? value;\n}\n\nfunction ordinal(index) {\n  return ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'][index] ?? `${index + 1}.`;\n}\n\nconst sortedSummaries = [...stats.values()].sort((left, right) => {\n  if (left.games === 0 && right.games !== 0) return 1;\n  if (right.games === 0 && left.games !== 0) return -1;\n  const leftKd = kdRatio(left);\n  const rightKd = kdRatio(right);\n  if (leftKd !== rightKd) return rightKd > leftKd ? 1 : -1;\n  if (left.kills !== right.kills) return right.kills - left.kills;\n  if (left.assists !== right.assists) return right.assists - left.assists;\n  return right.damage - left.damage;\n});\n\nlet previousKd = null;\nlet previousRank = 0;\nconst summaryLines = sortedSummaries.map((summary, index) => {\n  const averageDamage = summary.games ? Math.round(summary.damage / summary.games) : 0;\n  const currentKd = kdRatio(summary);\n  const rank = summary.games === 0\n    ? null\n    : previousKd !== null && sameKd(currentKd, previousKd)\n      ? previousRank\n      : index + 1;\n  if (summary.games > 0) {\n    previousKd = currentKd;\n    previousRank = rank;\n  }\n  const rankIcon = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank ? `${rank}.` : '—';\n  return `${rankIcon} ${summary.icon} ${summary.playerName}\\n   ⚔️ KD ${summary.kills}/${summary.deaths}（${formatKdRatio(currentKd)}）｜🤝 ${summary.assists} 助攻｜🎮 ${summary.games} 局｜💥 ${formatNumber(averageDamage)} 平均伤害`;\n});\n\nconst queryText = String(request.chatInput ?? '').replace(/\\s+/g, '').toLowerCase();\nconst queryPlan = request.queryPlan && typeof request.queryPlan === 'object' ? request.queryPlan : {};\nconst canonicalMetric = (value) => String(value) === 'kda' ? 'kd' : String(value);\nconst planMetrics = Array.isArray(queryPlan.metrics) ? [...new Set(queryPlan.metrics.map(canonicalMetric))] : [];\nconst operation = ['report', 'per_player', 'rank', 'compare', 'trend'].includes(String(queryPlan.operation))\n  ? String(queryPlan.operation)\n  : 'report';\nconst planRanking = ['strongest', 'weakest', 'steadiest', 'kills', 'damage', 'assists', 'dbnos', 'revives', 'all'].includes(String(queryPlan.ranking))\n  ? String(queryPlan.ranking)\n  : null;\nconst asksWhoIsStrongest = /谁(?:是|比较)?(?:最强|最厉害)|谁第一|最强|最厉害/.test(queryText);\nconst asksWhoIsWeakest = /谁(?:是|比较)?(?:最菜|最差|垫底)|最菜|最差|垫底/.test(queryText);\nconst asksWhoIsSteadiest = /谁(?:是|比较)?最稳|最稳|稳定性|最稳定/.test(queryText);\nconst asksKillKing = /击杀王|杀人王|人头王|击杀最多|杀得最多|谁杀得最多/.test(queryText);\nconst asksDamageKing = /伤害王|伤害最高|输出王|输出最高|伤害最多|谁打得最多伤害/.test(queryText);\nconst asksAssistKing = /助攻王|助攻最多|谁助攻最多/.test(queryText);\nconst asksDbnoKing = /倒地王|击倒王|倒地最多|击倒最多|谁放倒最多/.test(queryText);\nconst asksReviveKing = /救援王|救人王|复活王|救援最多|救人最多|谁救人最多|最能救人/.test(queryText);\nconst asksFunRanking = /趣味排名|娱乐排名|趣味|彩蛋/.test(queryText);\nconst asksRanking = asksWhoIsStrongest || asksWhoIsWeakest || asksWhoIsSteadiest\n  || asksKillKing || asksDamageKing || asksAssistKing || asksDbnoKing || asksReviveKing\n  || asksFunRanking || /排名|第一|最强|最厉害|最菜|最差|垫底|王|最多|最高|最低/.test(queryText);\nconst asksIndividual = /分别|各自|每人|每个人|四个人|所有人|大家|他们几个|他们四个|列出来|逐人|各项/.test(queryText);\nconst hasRescueTerm = /救援|救人|复活/.test(queryText) || planMetrics.includes('revives');\nconst hasDbnoTerm = /倒地|击倒/.test(queryText) || planMetrics.includes('dbnos');\nconst asksMetricBreakdown = operation === 'per_player'\n  || ((hasRescueTerm || hasDbnoTerm) && /分别|各自|每人|每个人|四个人|所有人|多少|几次|次数|数量/.test(queryText));\nconst rankableSummaries = sortedSummaries.filter((summary) => summary.games > 0);\n\nfunction compareDescending(left, right) {\n  if (left === right) return 0;\n  return right > left ? 1 : -1;\n}\n\nfunction compareAscending(left, right) {\n  if (left === right) return 0;\n  return left > right ? 1 : -1;\n}\n\nfunction averagePlacement(summary) {\n  return summary.rankedGames > 0 ? summary.rankTotal / summary.rankedGames : Number.POSITIVE_INFINITY;\n}\n\nfunction sameMetric(left, right) {\n  return left === right || (Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) < 0.000001);\n}\n\nfunction formatAverage(value, digits = 2) {\n  return Number.isFinite(value) ? value.toFixed(digits) : '—';\n}\n\nconst funRankingDefinitions = [\n  {\n    key: 'strongest',\n    label: '最强',\n    icon: '🏆',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(kdRatio(left), kdRatio(right)) || compareDescending(left.kills, right.kills) || compareDescending(left.assists, right.assists) || compareDescending(left.damage, right.damage),\n    same: (left, right) => sameMetric(kdRatio(left), kdRatio(right)),\n    format: (summary) => `⚔️ KD ${summary.kills}/${summary.deaths}（${formatKdRatio(kdRatio(summary))}）｜🤝 ${summary.assists} 助攻｜🎮 ${summary.games} 局`,\n  },\n  {\n    key: 'weakest',\n    label: '最菜',\n    icon: '🫠',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareAscending(kdRatio(left), kdRatio(right)) || compareAscending(left.kills, right.kills) || compareAscending(left.assists, right.assists) || compareAscending(left.damage, right.damage),\n    same: (left, right) => sameMetric(kdRatio(left), kdRatio(right)),\n    format: (summary) => `⚔️ KD ${summary.kills}/${summary.deaths}（${formatKdRatio(kdRatio(summary))}）｜🤝 ${summary.assists} 助攻｜🎮 ${summary.games} 局`,\n  },\n  {\n    key: 'steadiest',\n    label: '最稳',\n    icon: '🛡️',\n    include: (summary) => summary.games > 0 && summary.rankedGames > 0,\n    compare: (left, right) => compareAscending(averagePlacement(left), averagePlacement(right)) || compareDescending(left.top10 / left.games, right.top10 / right.games) || compareDescending(kdRatio(left), kdRatio(right)),\n    same: (left, right) => sameMetric(averagePlacement(left), averagePlacement(right)),\n    format: (summary) => `📍 平均排名 #${formatAverage(averagePlacement(summary))}｜🔟 前十 ${summary.top10}/${summary.games}`,\n  },\n  {\n    key: 'kills',\n    label: '击杀王',\n    icon: '🔫',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(left.kills, right.kills) || compareDescending(left.kills / left.games, right.kills / right.games) || compareDescending(left.damage, right.damage),\n    same: (left, right) => left.kills === right.kills,\n    format: (summary) => `🔫 ${formatNumber(summary.kills)} 杀｜场均 ${formatAverage(summary.kills / summary.games)}`,\n  },\n  {\n    key: 'damage',\n    label: '伤害王',\n    icon: '💥',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(left.damage, right.damage) || compareDescending(left.damage / left.games, right.damage / right.games) || compareDescending(left.kills, right.kills),\n    same: (left, right) => left.damage === right.damage,\n    format: (summary) => `💥 ${formatNumber(summary.damage)} 总伤害｜场均 ${formatNumber(summary.damage / summary.games)}`,\n  },\n  {\n    key: 'assists',\n    label: '助攻王',\n    icon: '🤝',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(left.assists, right.assists) || compareDescending(kdRatio(left), kdRatio(right)) || compareDescending(left.damage, right.damage),\n    same: (left, right) => left.assists === right.assists,\n    format: (summary) => `🤝 ${formatNumber(summary.assists)} 助攻｜场均 ${formatAverage(summary.assists / summary.games)}`,\n  },\n  {\n    key: 'dbnos',\n    label: '倒地王',\n    icon: '💀',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(left.dbnos, right.dbnos) || compareDescending(left.kills, right.kills) || compareDescending(left.damage, right.damage),\n    same: (left, right) => left.dbnos === right.dbnos,\n    format: (summary) => `💀 ${formatNumber(summary.dbnos)} 次倒地｜场均 ${formatAverage(summary.dbnos / summary.games)}`,\n  },\n  {\n    key: 'revives',\n    label: '救援王',\n    icon: '🚑',\n    include: (summary) => summary.games > 0,\n    compare: (left, right) => compareDescending(left.revives, right.revives) || compareDescending(left.assists, right.assists) || compareDescending(left.damage, right.damage),\n    same: (left, right) => left.revives === right.revives,\n    format: (summary) => `🚑 ${formatNumber(summary.revives)} 次救援｜场均 ${formatAverage(summary.revives / summary.games)}`,\n  },\n];\n\nfunction findRankingResult(key) {\n  const definition = funRankingDefinitions.find((item) => item.key === key);\n  if (!definition) return null;\n  const eligible = rankableSummaries.filter(definition.include);\n  const sorted = [...eligible].sort(definition.compare);\n  const winners = sorted.length > 0 ? sorted.filter((summary) => definition.same(summary, sorted[0])) : [];\n  return { definition, winners };\n}\n\nconst funRankingResults = funRankingDefinitions.map((definition) => findRankingResult(definition.key));\nconst strongestResult = findRankingResult('strongest');\nconst strongestPlayers = strongestResult?.winners ?? [];\nconst strongestLines = strongestPlayers.map((summary) => {\n  const averageDamage = summary.games ? Math.round(summary.damage / summary.games) : 0;\n  return `${summary.icon} ${summary.playerName}：⚔️ KD ${summary.kills}/${summary.deaths}（${formatKdRatio(kdRatio(summary))}）｜🤝 ${summary.assists} 助攻｜🎮 ${summary.games} 局｜💥 ${formatNumber(averageDamage)} 平均伤害`;\n});\n\nfunction formatFunRankingResult(result) {\n  if (!result || result.winners.length === 0) return `${result?.definition?.icon ?? '🎲'} ${result?.definition?.label ?? '排名'}：暂无可比较数据`;\n  const details = result.winners.map((summary) => `${summary.playerName}｜${result.definition.format(summary)}`).join('；');\n  return `${result.definition.icon} ${result.definition.label}：${details}`;\n}\n\nconst allFunRankingLines = funRankingResults\n  .filter((result) => result.definition.key !== 'strongest')\n  .map(formatFunRankingResult);\nconst lexicalRankingMode = asksWhoIsStrongest\n  ? 'strongest'\n  : asksWhoIsWeakest\n    ? 'weakest'\n    : asksWhoIsSteadiest\n      ? 'steadiest'\n      : asksKillKing\n        ? 'kills'\n        : asksDamageKing\n          ? 'damage'\n          : asksAssistKing\n            ? 'assists'\n            : asksDbnoKing\n              ? 'dbnos'\n              : asksReviveKing\n                ? 'revives'\n                : asksFunRanking\n                  ? 'all'\n                  : null;\nconst rankingMode = lexicalRankingMode ?? planRanking;\nconst selectedRankingResult = rankingMode && rankingMode !== 'all' ? findRankingResult(rankingMode) : null;\nconst teamWins = rows.filter((row) => row.players.some((player) => player.rank === 1)).length;\nconst teamTop10 = rows.filter((row) => row.players.some((player) => player.rank !== null && player.rank <= 10)).length;\nconst totalKills = [...stats.values()].reduce((total, summary) => total + summary.kills, 0);\nconst totalAssists = [...stats.values()].reduce((total, summary) => total + summary.assists, 0);\nconst iconByPlayerName = new Map([...stats.values()].map((summary) => [summary.playerName, summary.icon]));\nconst detailLines = [];\n\nfor (const [index, row] of rows.slice(0, 40).entries()) {\n  const rank = row.players.find((player) => player.rank !== null)?.rank ?? '-';\n  const playerLines = row.players.map((player) => {\n    const deaths = player.rank === 1 ? 0 : 1;\n    return `${iconByPlayerName.get(player.playerName) ?? '👤'} ${player.playerName}｜⚔️ KD ${player.kills}/${deaths}｜🤝 ${player.assists} 助攻｜💥 ${formatNumber(player.damageDealt)}｜⏱️ ${formatDuration(player.timeSurvived)}`;\n  });\n  detailLines.push(`${ordinal(index)} ⏰ ${formatTime(row.createdAt)}｜🗺️ ${mapLabel(row.mapName)}｜🎮 ${modeLabel(row.gameMode)}｜🏅 #${rank}\\n${playerLines.map((line) => `   ${line}`).join('\\n')}`);\n}\n\nconst noGamePlayers = [...stats.values()].filter((summary) => summary.games === 0).map((summary) => summary.playerName);\nconst periodLabel = request.periodLabel ?? '今日';\nconst reportTitle = request.reportTitle ?? `${periodLabel}战绩`;\nconst rangeText = request.rangeText ?? `${request.dateLabel ?? ''} 06:00 至 ${request.rangeEndLabel ?? ''} 06:00（北京时间）`;\nconst partialText = request.isPartial ? `\\n📍 当前统计至 ${request.currentTimeText ?? '现在'}` : '';\nconst syncAt = plan.playerLookupFetchedAt ?? plan.cacheAsOfAt ?? cacheState.cacheAsOfAt;\nconst syncText = syncAt ? `\\n🔄 数据同步至 ${formatDateTime(syncAt)}` : '';\nconst warningLines = [];\nif (plan.lookupError) warningLines.push(plan.lookupError);\nif (plan.usedStaleCache && !plan.lookupError) warningLines.push('⚠️ 玩家列表使用过期缓存，可能漏掉刚结束的比赛');\nconst warningText = warningLines.length > 0 ? `\\n${warningLines.join('\\n')}` : '';\nconst strongestPeriodTitle = request.periodType === 'week' ? periodLabel.replace(/总结$/, '') : periodLabel;\nconst rankingResponse = selectedRankingResult\n  ? [\n      `${selectedRankingResult.definition.icon} **${teamName}｜PUBG ${strongestPeriodTitle}${selectedRankingResult.definition.label}${selectedRankingResult.definition.key === 'strongest' ? '（按 KD）' : ''}**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      selectedRankingResult.winners.length === 0\n        ? `📭 ${periodLabel}暂未找到可比较的战绩。`\n        : formatFunRankingResult(selectedRankingResult),\n    ]\n  : null;\nconst allRankingResponse = asksFunRanking\n  ? [\n      `🎲 **${teamName}｜PUBG ${strongestPeriodTitle}趣味排名**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      '📌 仅统计上述周期内的竞技模式对局',\n      ...allFunRankingLines,\n    ]\n  : null;\nconst metricLabels = {\n  kd: 'KD',\n  kills: '击杀',\n  assists: '助攻',\n  damage: '伤害',\n  dbnos: '倒地',\n  revives: '救援',\n  rank: '排名',\n  wins: '吃鸡',\n  top10: '前十',\n  survival_time: '存活时间',\n};\nconst breakdownMetrics = [...new Set([\n  ...planMetrics,\n  ...(hasRescueTerm ? ['revives'] : []),\n  ...(hasDbnoTerm ? ['dbnos'] : []),\n].filter((metric) => Object.prototype.hasOwnProperty.call(metricLabels, metric)))].sort((left, right) => {\n  const order = ['kd', 'kills', 'assists', 'damage', 'dbnos', 'revives', 'rank', 'wins', 'top10', 'survival_time'];\n  return order.indexOf(left) - order.indexOf(right);\n});\nif (asksMetricBreakdown && breakdownMetrics.length === 0) breakdownMetrics.push('kd');\nif (breakdownMetrics.includes('kd') && !breakdownMetrics.includes('assists')) {\n  breakdownMetrics.splice(breakdownMetrics.indexOf('kd') + 1, 0, 'assists');\n}\nconst metricLabel = breakdownMetrics.map((metric) => metricLabels[metric]).join('与') || '指标';\n\nfunction formatMetricCell(summary, metric) {\n  switch (metric) {\n    case 'kd':\n      return `${summary.kills}/${summary.deaths}（${formatKdRatio(kdRatio(summary))}）`;\n    case 'kills':\n      return formatNumber(summary.kills);\n    case 'assists':\n      return formatNumber(summary.assists);\n    case 'damage':\n      return formatNumber(summary.damage);\n    case 'dbnos':\n      return formatNumber(summary.dbnos);\n    case 'revives':\n      return formatNumber(summary.revives);\n    case 'rank':\n      return Number.isFinite(averagePlacement(summary)) ? `#${formatAverage(averagePlacement(summary))}` : '—';\n    case 'wins':\n      return formatNumber(summary.wins);\n    case 'top10':\n      return formatNumber(summary.top10);\n    case 'survival_time':\n      return formatDuration(summary.games ? summary.survived / summary.games : 0);\n    default:\n      return '—';\n  }\n}\n\nfunction displayWidth(value) {\n  let width = 0;\n  for (const character of String(value ?? '')) {\n    const codePoint = character.codePointAt(0);\n    const isWide = (codePoint >= 0x1100 && codePoint <= 0x115f)\n      || (codePoint >= 0x2e80 && codePoint <= 0x303e)\n      || (codePoint >= 0x3040 && codePoint <= 0x33ff)\n      || (codePoint >= 0xac00 && codePoint <= 0xd7a3)\n      || (codePoint >= 0xf900 && codePoint <= 0xfaff)\n      || (codePoint >= 0xfe10 && codePoint <= 0xfe6f)\n      || (codePoint >= 0xff01 && codePoint <= 0xff60)\n      || (codePoint >= 0x1f300 && codePoint <= 0x1faff);\n    width += isWide ? 2 : 1;\n  }\n  return width;\n}\n\nfunction padTableCell(value, width, alignment = 'left') {\n  const text = String(value ?? '—').replace(/[\\r\\n]+/g, ' ');\n  const gap = Math.max(width - displayWidth(text), 0);\n  if (alignment === 'right') return `${' '.repeat(gap)}${text}`;\n  if (alignment === 'center') {\n    const leftGap = Math.floor(gap / 2);\n    return `${' '.repeat(leftGap)}${text}${' '.repeat(gap - leftGap)}`;\n  }\n  return `${text}${' '.repeat(gap)}`;\n}\n\nfunction formatMetricTable(summaries, metrics) {\n  const headers = ['队员', ...metrics.map((metric) => metricLabels[metric] ?? metric)];\n  const rows = summaries.map((summary) => [\n    summary.playerName,\n    ...metrics.map((metric) => formatMetricCell(summary, metric)),\n  ]);\n  const widths = headers.map((header, index) => Math.max(\n    displayWidth(header),\n    ...rows.map((row) => displayWidth(row[index])),\n  ));\n  const horizontal = (left, joint, right) => `${left}${widths.map((width) => '─'.repeat(width + 2)).join(joint)}${right}`;\n  const formatRow = (cells, isHeader = false) => `│ ${cells.map((cell, index) => padTableCell(cell, widths[index], index === 0 ? 'left' : isHeader ? 'center' : 'right')).join(' │ ')} │`;\n  return [\n    '```',\n    horizontal('┌', '┬', '┐'),\n    formatRow(headers, true),\n    horizontal('├', '┼', '┤'),\n    ...rows.map((row) => formatRow(row)),\n    horizontal('└', '┴', '┘'),\n    '```',\n  ].join('\\n');\n}\n\nfunction formatMetricValue(summary, metric) {\n  switch (metric) {\n    case 'kd':\n      return `⚔️ KD ${summary.kills}/${summary.deaths}（${formatKdRatio(kdRatio(summary))}）`;\n    case 'kills':\n      return `🔫 击杀 ${formatNumber(summary.kills)}`;\n    case 'assists':\n      return `🤝 助攻 ${formatNumber(summary.assists)}`;\n    case 'damage':\n      return `💥 伤害 ${formatNumber(summary.damage)}`;\n    case 'dbnos':\n      return `💀 倒地 ${formatNumber(summary.dbnos)}`;\n    case 'revives':\n      return `🚑 救援 ${formatNumber(summary.revives)}`;\n    case 'rank':\n      return `📍 平均排名 #${formatAverage(averagePlacement(summary))}`;\n    case 'wins':\n      return `🏆 吃鸡 ${formatNumber(summary.wins)}`;\n    case 'top10':\n      return `🔟 前十 ${formatNumber(summary.top10)}`;\n    case 'survival_time':\n      return `⏱️ 平均存活 ${formatDuration(summary.games ? summary.survived / summary.games : 0)}`;\n    default:\n      return null;\n  }\n}\n\nfunction formatPlayerMetricLine(summary, metrics = breakdownMetrics) {\n  const values = [`${summary.icon} ${summary.playerName}`, `🎮 ${summary.games} 局`];\n  for (const metric of metrics) {\n    const value = formatMetricValue(summary, metric);\n    if (value) values.push(value);\n  }\n  return values.join('｜');\n}\n\nconst contextFocusPlayerNames = Array.isArray(request.contextFocusPlayerNames)\n  ? new Set(request.contextFocusPlayerNames.map(String))\n  : new Set();\nconst focusSummaries = [...stats.values()].filter((summary) => contextFocusPlayerNames.has(summary.playerName));\nconst breakdownSummaries = request.contextApplied && contextFocusPlayerNames.size > 0 && !asksRanking\n  ? focusSummaries\n  : [...stats.values()];\nconst metricBreakdownLines = breakdownSummaries.map((summary) => formatPlayerMetricLine(summary));\nconst metricBreakdownOutput = breakdownSummaries.length > 1\n  ? formatMetricTable(breakdownSummaries, breakdownMetrics)\n  : metricBreakdownLines.join('\\n');\nconst metricBreakdownResponse = asksMetricBreakdown\n  ? [\n      `📊 **${teamName}｜PUBG ${strongestPeriodTitle}${metricLabel}**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      '📌 仅统计上述周期内的竞技模式对局',\n      metricBreakdownOutput,\n    ]\n  : null;\nconst compareMetrics = breakdownMetrics.length > 0 ? breakdownMetrics : ['kd', 'assists'];\nconst compareSummaries = request.contextApplied && contextFocusPlayerNames.size > 0 && !asksRanking\n  ? focusSummaries\n  : [...stats.values()];\nconst compareOutput = compareSummaries.length > 1\n  ? formatMetricTable(compareSummaries, compareMetrics)\n  : compareSummaries.map((summary) => formatPlayerMetricLine(summary, compareMetrics)).join('\\n');\nconst compareResponse = operation === 'compare'\n  ? [\n      `⚖️ **${teamName}｜PUBG ${strongestPeriodTitle}对比**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      '📌 仅统计上述周期内的竞技模式对局',\n      compareOutput,\n    ]\n  : null;\nconst trendOutput = compareSummaries.length > 1\n  ? formatMetricTable(compareSummaries, compareMetrics)\n  : compareSummaries.map((summary) => formatPlayerMetricLine(summary, compareMetrics)).join('\\n');\nconst trendResponse = operation === 'trend'\n  ? [\n      `📈 **${teamName}｜PUBG ${strongestPeriodTitle}趋势数据**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      '📌 当前工作流按查询周期汇总；如需逐日变化，请提供至少两个日期或日期范围',\n      trendOutput,\n    ]\n  : null;\nconst storedFocusPlayerNames = contextFocusPlayerNames.size > 0\n  ? [...contextFocusPlayerNames]\n  : selectedRankingResult?.winners.map((summary) => summary.playerName) ?? [];\nconst contextualGenericFollowup = Boolean(\n  request.contextApplied\n    && contextFocusPlayerNames.size > 0\n    && !request.allPlayersRequested\n    && !asksRanking\n    && !asksIndividual,\n);\nconst contextFocusResponse = contextualGenericFollowup\n  ? [\n      `🧭 **${teamName}｜接着上条：${strongestPeriodTitle}重点数据**`,\n      `📅 ${periodLabel}｜${rangeText}${partialText}${syncText}${warningText}`,\n      '📌 根据上一条结果聚焦相关玩家；仅统计上述周期内的竞技模式对局',\n      ...(focusSummaries.length > 0\n        ? [focusSummaries.length > 1\n          ? formatMetricTable(focusSummaries, compareMetrics)\n          : focusSummaries.map((summary) => formatPlayerMetricLine(summary, compareMetrics)).join('\\n')]\n        : ['📭 上一条涉及的玩家在该周期内暂无可用对局']),\n    ]\n  : null;\nconst compactRankingResponse = contextFocusResponse ?? metricBreakdownResponse ?? rankingResponse ?? allRankingResponse ?? compareResponse ?? trendResponse;\nconst responseSections = compactRankingResponse ?? [\n  `📊 **${teamName}｜PUBG ${reportTitle}**`,\n  `📅 ${periodLabel}`,\n  `⏰ 战绩周期：${rangeText}${partialText}${syncText}${warningText}`,\n  '',\n  '🎮 **小队总览**',\n  `🧾 ${rows.length} 局｜🔫 ${totalKills} 杀｜🤝 ${totalAssists} 助攻｜🏆 吃鸡 ${teamWins}｜🔟 前十 ${teamTop10} 局`,\n  '',\n  '🏆 **个人 KD 排名**',\n  summaryLines.join('\\n'),\n  '',\n  '🎲 **趣味排名（本查询周期）**',\n  ...allFunRankingLines,\n];\nif (!compactRankingResponse && noGamePlayers.length > 0) {\n  responseSections.push(`⚠️ ${periodLabel}暂无对局：${noGamePlayers.join('、')}`);\n}\n\nif (!compactRankingResponse && detailLines.length > 0) {\n  responseSections.push('', '🗺️ **对局明细**', detailLines.join('\\n\\n'));\n} else if (!compactRankingResponse) {\n  responseSections.push('', plan.lookupError && !plan.usedStaleCache\n    ? '📭 当前没有可用的玩家数据，请稍后重试。'\n    : `📭 ${periodLabel}暂未找到已收录的竞技比赛。刚结束的比赛可能需要等待 PUBG API 更新。`);\n}\n\nlet response = responseSections.join('\\n');\nif (response.length > 7800) {\n  response = `${response.slice(0, 7750)}\\n……明细过多，已截断`;\n}\n\nreturn [{\n  json: {\n    response,\n    dateLabel: request.dateLabel,\n    periodLabel,\n    periodType: request.periodType,\n    queryPlan,\n    contextApplied: Boolean(request.contextApplied),\n    contextFocusPlayerNames: [...contextFocusPlayerNames],\n    rangeStartLabel: request.rangeStartLabel,\n    rangeEndLabel: request.rangeEndLabel,\n    isPartial: Boolean(request.isPartial),\n    matchCount: rows.length,\n    cacheStatus: plan.cacheStatus ?? cacheState.cacheStatus ?? 'empty',\n    playerLookupFromCache: Boolean(plan.playerLookupFromCache),\n    cachedMatchCount: Number(plan.cachedMatchCount ?? cacheState.cachedMatchCount ?? 0),\n    newMatchesFetched: Number(plan.newMatchCount ?? 0),\n    syncedAt: syncAt ?? null,\n    summaries: sortedSummaries.map((summary) => ({\n      ...summary,\n      kd: `${summary.kills}/${summary.deaths}`,\n      kdRatio: Number.isFinite(kdRatio(summary)) ? Number(kdRatio(summary).toFixed(2)) : null,\n      assists: summary.assists,\n    })),\n    funRankings: funRankingResults.map((result) => ({\n      key: result.definition.key,\n      label: result.definition.label,\n      players: result.winners.map((summary) => summary.playerName),\n      metric: result.winners.length > 0 ? result.definition.format(result.winners[0]) : null,\n    })),\n    metricBreakdown: [...stats.values()].map((summary) => ({\n      playerName: summary.playerName,\n      games: summary.games,\n      kills: summary.kills,\n      assists: summary.assists,\n      deaths: summary.deaths,\n      damage: summary.damage,\n      kd: `${summary.kills}/${summary.deaths}`,\n      kdRatio: Number.isFinite(kdRatio(summary)) ? Number(kdRatio(summary).toFixed(2)) : null,\n      assists: summary.assists,\n      rankAverage: Number.isFinite(averagePlacement(summary)) ? Number(averagePlacement(summary).toFixed(2)) : null,\n      wins: summary.wins,\n      top10: summary.top10,\n      survivalTime: summary.survived,\n      revives: summary.revives,\n      dbnos: summary.dbnos,\n    })),\n    contextPayload: {\n      schemaVersion: 1,\n      updatedAt: new Date().toISOString(),\n      periodLabel,\n      periodType: request.periodType,\n      reportTitle,\n      rangeStartLabel: request.rangeStartLabel,\n      rangeEndLabel: request.rangeEndLabel,\n      queryPlan,\n      focusPlayerNames: storedFocusPlayerNames,\n      summaries: sortedSummaries.map((summary) => ({\n        playerName: summary.playerName,\n        games: summary.games,\n        kills: summary.kills,\n        assists: summary.assists,\n        deaths: summary.deaths,\n        damage: summary.damage,\n        dbnos: summary.dbnos,\n        revives: summary.revives,\n        wins: summary.wins,\n        top10: summary.top10,\n        rankAverage: Number.isFinite(averagePlacement(summary)) ? Number(averagePlacement(summary).toFixed(2)) : null,\n      })),\n      matchCount: rows.length,\n    },\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de010",
+      "name": "Aggregate Today's Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de012",
+      "name": "Respond to LangBot",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": []
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de013",
+      "name": "Read PUBG Cache",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -800,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function parseJson(value) {\n  if (value && typeof value === 'object') return value;\n  if (typeof value === 'string') {\n    try {\n      return JSON.parse(value);\n    } catch {\n      return null;\n    }\n  }\n  return null;\n}\n\nfunction parseTime(value) {\n  const time = Date.parse(String(value ?? ''));\n  return Number.isFinite(time) ? time : 0;\n}\n\nfunction parseDateLabel(label) {\n  const match = String(label ?? '').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);\n  return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;\n}\n\nfunction periodStartMs(label) {\n  return Date.parse(`${label}T06:00:00+08:00`);\n}\n\nfunction addDays(label, amount) {\n  const parts = parseDateLabel(label);\n  if (!parts) return null;\n  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + amount));\n  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;\n}\n\nfunction formatPeriodRange(startLabel, endLabel) {\n  return `${startLabel} 06:00 至 ${endLabel} 06:00（北京时间）`;\n}\n\nfunction isValidPeriod(startLabel, endLabel) {\n  return Boolean(\n    parseDateLabel(startLabel)\n      && parseDateLabel(endLabel)\n      && Number.isFinite(periodStartMs(startLabel))\n      && Number.isFinite(periodStartMs(endLabel)),\n  );\n}\n\nconst request = $('Normalize Request').first()?.json ?? {};\nconst rows = $input.all().map((item) => item.json ?? {});\nconst nowMs = Date.now();\nconst retentionMs = Number(request.matchCacheTtlMs ?? 14 * 24 * 60 * 60 * 1000);\nconst playerCacheKey = request.playerCacheKey ?? '';\nconst cacheByKey = new Map();\nconst cachedMatchRecords = [];\nlet cacheAsOfMs = 0;\n\nfor (const row of rows) {\n  const cacheKey = String(row.cacheKey ?? '');\n  const payload = parseJson(row.payload);\n  if (!cacheKey || !payload) continue;\n\n  const refreshedAtMs = parseTime(row.refreshedAt);\n  cacheByKey.set(cacheKey, { ...row, payload });\n\n  const isMatchRow = row.cacheType === 'match' || cacheKey.startsWith('match:');\n  if (!isMatchRow) continue;\n  cacheAsOfMs = Math.max(cacheAsOfMs, refreshedAtMs);\n  if (!payload.matchId) continue;\n  const matchTimestamp = Number(payload.timestamp ?? parseTime(payload.createdAt));\n  if (Number.isFinite(matchTimestamp) && matchTimestamp >= nowMs - retentionMs) {\n    cachedMatchRecords.push(payload);\n  }\n}\n\nconst contextKey = String(request.contextKey ?? '').trim();\nconst contextEntry = contextKey ? cacheByKey.get(contextKey) : null;\nconst contextPayload = contextEntry?.payload;\nconst contextExpiresAt = Number(contextEntry?.expiresAt ?? contextPayload?.expiresAt ?? 0);\nconst contextFresh = Boolean(\n  contextPayload\n    && contextExpiresAt > nowMs\n    && isValidPeriod(contextPayload.rangeStartLabel, contextPayload.rangeEndLabel),\n);\nconst useContext = Boolean(request.contextualFollowup && !request.periodExplicit && contextFresh);\nlet effectiveRequest = { ...request, contextApplied: false };\n\nif (useContext) {\n  const contextStartLabel = contextPayload.rangeStartLabel;\n  const contextEndLabel = contextPayload.rangeEndLabel;\n  const contextStartMs = periodStartMs(contextStartLabel);\n  const contextEndBoundaryMs = periodStartMs(contextEndLabel);\n  const contextEndMs = Math.min(contextEndBoundaryMs, nowMs);\n  const contextPlan = contextPayload.queryPlan && typeof contextPayload.queryPlan === 'object'\n    ? contextPayload.queryPlan\n    : {};\n  const currentPlan = request.queryPlan && typeof request.queryPlan === 'object'\n    ? request.queryPlan\n    : {};\n  const currentMetrics = Array.isArray(currentPlan.metrics) ? currentPlan.metrics : [];\n  const currentIsGeneric = currentPlan.operation === 'report' && currentMetrics.length === 0;\n  let effectivePlan = { ...currentPlan };\n\n  if (currentIsGeneric && Object.keys(contextPlan).length > 0) {\n    effectivePlan = { ...contextPlan, contextInherited: true };\n  }\n  if (request.allPlayersRequested && currentMetrics.length === 0) {\n    effectivePlan = {\n      ...effectivePlan,\n      operation: 'per_player',\n      metrics: Array.isArray(contextPlan.metrics) && contextPlan.metrics.length > 0 ? contextPlan.metrics : ['kda'],\n      group_by: 'player',\n      contextInherited: true,\n    };\n  } else if (currentPlan.operation === 'report' && currentMetrics.length > 0 && contextPlan.operation === 'per_player') {\n    effectivePlan = {\n      ...effectivePlan,\n      operation: 'per_player',\n      group_by: 'player',\n      contextInherited: true,\n    };\n  } else if (currentPlan.operation === 'report' && currentMetrics.length > 0 && !currentPlan.ranking) {\n    effectivePlan = {\n      ...effectivePlan,\n      operation: 'per_player',\n      group_by: 'player',\n      contextInherited: true,\n    };\n  }\n\n  const contextFocusPlayerNames = request.allPlayersRequested\n    ? [...(request.playerNames ?? [])]\n    : Array.isArray(contextPayload.focusPlayerNames)\n      ? [...new Set(contextPayload.focusPlayerNames.map(String))]\n      : [];\n  effectiveRequest = {\n    ...request,\n    queryPlan: effectivePlan,\n    dateLabel: contextStartLabel,\n    periodLabel: contextPayload.periodLabel ?? request.periodLabel,\n    periodType: contextPayload.periodType ?? request.periodType,\n    reportTitle: contextPayload.reportTitle ?? request.reportTitle,\n    selectionSource: 'context',\n    rangeStartLabel: contextStartLabel,\n    rangeEndLabel: contextEndLabel,\n    rangeStartMs: contextStartMs,\n    rangeEndBoundaryMs: contextEndBoundaryMs,\n    startMs: contextStartMs,\n    endMs: contextEndMs,\n    isPartial: contextStartMs <= nowMs && nowMs < contextEndBoundaryMs && contextEndMs < contextEndBoundaryMs,\n    rangeText: formatPeriodRange(contextStartLabel, contextEndLabel),\n    contextApplied: true,\n    contextFresh: true,\n    contextPayload,\n    contextFocusPlayerNames,\n  };\n}\n\nconst playerEntry = cacheByKey.get(effectiveRequest.playerCacheKey ?? playerCacheKey);\nconst playerPayload = playerEntry?.payload;\nconst hasPlayerPayload = Array.isArray(playerPayload?.players) && playerPayload.players.length > 0;\nconst playerEntryExpiresAt = Number(playerEntry?.expiresAt ?? 0);\nconst playerCacheValid = hasPlayerPayload && playerEntryExpiresAt > nowMs;\nconst cacheStatus = playerCacheValid ? 'fresh' : hasPlayerPayload ? 'stale' : 'empty';\nconst playerCacheRefreshedAt = playerEntry?.refreshedAt ?? null;\n\nreturn [{\n  json: {\n    ...effectiveRequest,\n    originalRequest: {\n      queryPlan: request.queryPlan ?? {},\n      periodLabel: request.periodLabel,\n      rangeStartLabel: request.rangeStartLabel,\n      rangeEndLabel: request.rangeEndLabel,\n    },\n    playerCacheKey: effectiveRequest.playerCacheKey ?? playerCacheKey,\n    playerCacheValid,\n    needsPlayerLookup: !playerCacheValid,\n    cacheStatus,\n    freshPlayerPayload: playerCacheValid ? playerPayload : null,\n    stalePlayerPayload: hasPlayerPayload ? playerPayload : null,\n    playerCacheRefreshedAt,\n    cachedMatchRecords,\n    cachedMatchCount: cachedMatchRecords.length,\n    cacheAsOfAt: cacheAsOfMs ? new Date(cacheAsOfMs).toISOString() : null,\n    cacheReadAt: new Date(nowMs).toISOString(),\n    contextFresh,\n    contextPayload: contextFresh ? contextPayload : null,\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de014",
+      "name": "Prepare Cache",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.needsPlayerLookup }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de015",
+      "name": "Needs Player Lookup",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function makePlayerMap(snapshots) {\n  return Object.fromEntries(snapshots.map((player) => [player.accountId, {\n    accountId: player.accountId,\n    playerName: player.playerName,\n    displayName: player.displayName,\n  }]));\n}\n\nconst request = $('Prepare Cache').first()?.json ?? $('Normalize Request').first()?.json ?? {};\nconst state = $('Prepare Cache').first()?.json ?? {};\nconst payload = state.freshPlayerPayload ?? state.stalePlayerPayload;\nconst payloadPlayers = Array.isArray(payload?.players) ? payload.players : [];\nconst payloadById = new Map(payloadPlayers.map((player) => [String(player.accountId), player]));\nconst snapshots = (request.players ?? []).map((requested) => {\n  const cached = payloadById.get(String(requested.accountId));\n  return {\n    accountId: requested.accountId,\n    playerName: requested.playerName,\n    displayName: requested.displayName,\n    found: cached?.found !== false,\n    matchIds: Array.isArray(cached?.matchIds) ? [...new Set(cached.matchIds.map(String))] : [],\n  };\n});\n\nreturn [{\n  json: {\n    ...request,\n    playerMap: makePlayerMap(snapshots),\n    playerSnapshots: snapshots,\n    foundPlayers: snapshots.filter((player) => player.found),\n    missingPlayers: snapshots.filter((player) => !player.found),\n    matchIds: [...new Set(snapshots.flatMap((player) => player.matchIds))],\n    playerLookupFetchedAt: payload?.fetchedAt ?? state.cacheAsOfAt ?? null,\n    shouldWritePlayerCache: false,\n    usedStaleCache: false,\n    lookupError: payload ? '' : '查询 PUBG 玩家失败：缓存为空，且未能完成同步。',\n    rateLimit: payload?.rateLimit ?? null,\n    cacheAsOfAt: payload?.fetchedAt ?? state.cacheAsOfAt ?? null,\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de016",
+      "name": "Use Cached Players",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const request = $('Prepare Cache').first()?.json ?? $('Normalize Request').first()?.json ?? {};\nconst source = $input.first()?.json ?? {};\nconst cacheState = $('Prepare Cache').first()?.json ?? {};\nconst snapshots = Array.isArray(source.playerSnapshots) ? source.playerSnapshots : [];\nconst cachedRecords = Array.isArray(cacheState.cachedMatchRecords) ? cacheState.cachedMatchRecords : [];\nconst cachedMatchIds = new Set(cachedRecords.map((record) => String(record.matchId)).filter(Boolean));\nconst matchIds = [...new Set(snapshots.flatMap((player) => Array.isArray(player.matchIds) ? player.matchIds.map(String) : []))];\nconst missingMatchIds = source.lookupError && !source.usedStaleCache\n  ? []\n  : matchIds.filter((matchId) => !cachedMatchIds.has(matchId));\nconst common = {\n  ...request,\n  playerMap: source.playerMap ?? {},\n  playerSnapshots: snapshots,\n  foundPlayers: source.foundPlayers ?? [],\n  missingPlayers: source.missingPlayers ?? request.players ?? [],\n  matchIds,\n  lookupError: source.lookupError ?? '',\n  usedStaleCache: Boolean(source.usedStaleCache),\n  playerLookupFetchedAt: source.playerLookupFetchedAt ?? null,\n  cacheAsOfAt: source.cacheAsOfAt ?? cacheState.cacheAsOfAt ?? null,\n  cacheStatus: cacheState.cacheStatus ?? 'empty',\n  playerCacheValid: Boolean(cacheState.playerCacheValid),\n  playerLookupFromCache: !source.shouldWritePlayerCache,\n  cachedMatchCount: cachedRecords.length,\n  cachedMatchIds: [...cachedMatchIds],\n  newMatchCount: missingMatchIds.length,\n  hasMissingMatches: missingMatchIds.length > 0,\n  rateLimit: source.rateLimit ?? null,\n};\n\nif (missingMatchIds.length === 0) {\n  return [{\n    json: {\n      ...common,\n      matchId: null,\n      shard: request.shard,\n    },\n  }];\n}\n\nreturn missingMatchIds.map((matchId) => ({\n  json: {\n    ...common,\n    matchId,\n    shard: request.shard,\n  },\n}));\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de017",
+      "name": "Build Match Fetch Plan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const source = $input.first()?.json ?? {};\nif (!source.shouldWritePlayerCache || !source.playerCachePayload || !source.playerCacheKey) return [];\n\nreturn [{\n  json: {\n    cacheKey: source.playerCacheKey,\n    cacheType: 'playerLookup',\n    payload: JSON.stringify(source.playerCachePayload),\n    refreshedAt: source.playerLookupFetchedAt ?? new Date().toISOString(),\n    expiresAt: Date.now() + Number(source.playerCacheTtlMs ?? 60 * 1000),\n  },\n}];"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de018",
+      "name": "Prepare Player Cache Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cacheKey": "={{ $json.cacheKey }}",
+            "cacheType": "={{ $json.cacheType }}",
+            "payload": "={{ $json.payload }}",
+            "refreshedAt": "={{ $json.refreshedAt }}",
+            "expiresAt": "={{ $json.expiresAt }}"
+          },
+          "schema": [
+            {
+              "id": "cacheKey",
+              "displayName": "cacheKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cacheType",
+              "displayName": "cacheType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "refreshedAt",
+              "displayName": "refreshedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de019",
+      "name": "Upsert PUBG Player Cache",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        420,
+        -320
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return $input.all().map((item) => item.json ?? {}).filter((source) => source.cacheable && source.matchId).map((source) => {\n  const payload = {\n    schemaVersion: 1,\n    matchId: source.matchId,\n    shard: source.shard ?? 'steam',\n    createdAt: source.createdAt ?? null,\n    timestamp: Number(source.timestamp ?? 0),\n    matchType: source.matchType ?? '',\n    gameMode: source.gameMode ?? '',\n    isCompetitive: Boolean(source.isCompetitive),\n    mapName: source.mapName ?? '未知地图',\n    duration: Number(source.duration ?? 0),\n    patchVersion: source.patchVersion ?? '',\n    players: Array.isArray(source.players) ? source.players : [],\n  };\n\n  return {\n    json: {\n      cacheKey: `match:${payload.shard}:${payload.matchId}`,\n      cacheType: 'match',\n      payload: JSON.stringify(payload),\n      refreshedAt: new Date().toISOString(),\n      expiresAt: Date.now() + Number(source.matchCacheTtlMs ?? 14 * 24 * 60 * 60 * 1000),\n    },\n  };\n});"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de020",
+      "name": "Prepare Match Cache Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cacheKey": "={{ $json.cacheKey }}",
+            "cacheType": "={{ $json.cacheType }}",
+            "payload": "={{ $json.payload }}",
+            "refreshedAt": "={{ $json.refreshedAt }}",
+            "expiresAt": "={{ $json.expiresAt }}"
+          },
+          "schema": [
+            {
+              "id": "cacheKey",
+              "displayName": "cacheKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cacheType",
+              "displayName": "cacheType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "refreshedAt",
+              "displayName": "refreshedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de021",
+      "name": "Upsert PUBG Match Cache",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1220,
+        -320
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const request = $('Prepare Cache').first()?.json ?? $('Normalize Request').first()?.json ?? {};\nconst result = $input.first()?.json ?? {};\nconst contextKey = String(request.contextKey ?? '').trim();\nif (!contextKey || !result.contextPayload) return [];\n\nconst updatedAt = new Date().toISOString();\nconst expiresAt = Date.now() + Number(request.contextTtlMs ?? 12 * 60 * 60 * 1000);\nconst payload = {\n  ...result.contextPayload,\n  updatedAt,\n  expiresAt,\n  contextKey,\n};\n\nreturn [{\n  json: {\n    cacheKey: contextKey,\n    cacheType: 'context',\n    payload: JSON.stringify(payload),\n    refreshedAt: updatedAt,\n    expiresAt,\n  },\n}];\n"
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de022",
+      "name": "Prepare PUBG Context Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.cacheKey }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "cacheKey": "={{ $json.cacheKey }}",
+            "cacheType": "={{ $json.cacheType }}",
+            "payload": "={{ $json.payload }}",
+            "refreshedAt": "={{ $json.refreshedAt }}",
+            "expiresAt": "={{ $json.expiresAt }}"
+          },
+          "schema": [
+            {
+              "id": "cacheKey",
+              "displayName": "cacheKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cacheType",
+              "displayName": "cacheType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "refreshedAt",
+              "displayName": "refreshedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "expiresAt",
+              "displayName": "expiresAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de023",
+      "name": "Upsert PUBG Context",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        320
+      ],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "PUBG Stats Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Read PUBG Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read PUBG Cache": {
+      "main": [
+        [
+          {
+            "node": "Prepare Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Cache": {
+      "main": [
+        [
+          {
+            "node": "Needs Player Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Player Lookup": {
+      "main": [
+        [
+          {
+            "node": "Lookup PUBG Players",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Cached Players",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup PUBG Players": {
+      "main": [
+        [
+          {
+            "node": "Parse Player Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Player Lookup": {
+      "main": [
+        [
+          {
+            "node": "Build Match Fetch Plan",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Player Cache Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Cached Players": {
+      "main": [
+        [
+          {
+            "node": "Build Match Fetch Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Player Cache Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert PUBG Player Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Match Fetch Plan": {
+      "main": [
+        [
+          {
+            "node": "Has New Match IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Match IDs": {
+      "main": [
+        [
+          {
+            "node": "Get PUBG Match",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aggregate Today's Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PUBG Match": {
+      "main": [
+        [
+          {
+            "node": "Extract Match Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Match Records": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Today's Stats",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Match Cache Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Match Cache Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert PUBG Match Cache",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Today's Stats": {
+      "main": [
+        [
+          {
+            "node": "Respond to LangBot",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare PUBG Context Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare PUBG Context Row": {
+      "main": [
+        [
+          {
+            "node": "Upsert PUBG Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "Asia/Shanghai"
+  },
+  "versionId": "b8ae4fb1-4d7b-4de0-9d72-5dd0129de013",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": {},
+  "tags": []
+}

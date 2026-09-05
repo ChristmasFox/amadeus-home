@@ -1,0 +1,307 @@
+{
+  "name": "PUBG Data Gateway v3",
+  "id": "pubg-data-gateway-v3-20260902",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai",
+    "saveManualExecutions": true
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pubg-data-gateway-v3",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "pubg-data-v3-node-001",
+      "name": "PUBG Data Webhook v3",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1000,
+        0
+      ],
+      "webhookId": "pubg-data-gateway-v3-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst body = $json.body && typeof $json.body === 'object' ? $json.body : $json;\nconst rawQuery = body.query && typeof body.query === 'object' ? body.query : body.queryPlan && typeof body.queryPlan === 'object' ? body.queryPlan : {};\nconst subject = rawQuery.subject && typeof rawQuery.subject === 'object' ? rawQuery.subject : { type: 'team', ids: ['default_team'], label: \"四人组\" };\nconst requestedIds = Array.isArray(subject.ids) ? subject.ids.map(String) : [];\nconst resolvedSubjectIds = subject.type === 'team' && (!requestedIds.length || requestedIds.includes('default_team')) ? [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"] : requestedIds;\nconst playerIds = resolvedSubjectIds.length ? resolvedSubjectIds : [\"account.29044012052444c0848d617ba100fe1e\",\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"account.84c0d223534f42b1922c070a52c3c6ce\"];\nconst resultSetMatchIds = Array.isArray(body.resultSetMatchIds) ? body.resultSetMatchIds.map(String) : [];\nconst query = resultSetMatchIds.length\n  ? { ...rawQuery, reference: { ...(rawQuery.reference || {}), matchIds: resultSetMatchIds } }\n  : rawQuery;\nconst requestedNow = body.now ? Date.parse(String(body.now)) : NaN;\nconst nowMs = Number.isFinite(requestedNow) ? requestedNow : Date.now();\nconst players = [{\"accountId\":\"account.29044012052444c0848d617ba100fe1e\",\"playerName\":\"SG_LabmemNo007\",\"displayName\":\"SG_LabmemNo007\"},{\"accountId\":\"account.a22ea4bce333448e9cce807cebd7f4bf\",\"playerName\":\"SG_LabmemNo008\",\"displayName\":\"SG_LabmemNo008\"},{\"accountId\":\"account.45ad53f453db4c4bbff2b4cf00b131d6\",\"playerName\":\"SG_LabmemNo004\",\"displayName\":\"SG_LabmemNo004\"},{\"accountId\":\"account.84c0d223534f42b1922c070a52c3c6ce\",\"playerName\":\"kim_kkl\",\"displayName\":\"kim_kkl\"}].filter((player) => playerIds.includes(player.accountId));\nconst sessionId = String(query.sessionId || body.sessionId || 'unknown-session');\nconst queryId = String(query.queryId || body.queryId || 'unknown-query');\nreturn [{ json: {\n  query,\n  queryId,\n  sessionId,\n  subject: { type: subject.type || 'team', ids: playerIds, label: subject.label || \"四人组\" },\n  playerIds,\n  players,\n  shard: 'steam',\n  syncKey: 'v2:sync-state:steam:default-team',\n  nowMs,\n  allowedCompetitiveModes: ['solo', 'solo-fpp', 'duo', 'duo-fpp', 'squad', 'squad-fpp'],\n} }];\n"
+      },
+      "id": "pubg-data-v3-node-002",
+      "name": "Normalize Query Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.syncKey }}"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-data-v3-node-003",
+      "name": "Read V2 Sync State",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        -160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "5ZFCBuokb-pn1ey9"
+        },
+        "matchType": "anyCondition",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "v2-match"
+            },
+            {
+              "keyName": "cacheType",
+              "condition": "eq",
+              "keyValue": "match"
+            }
+          ]
+        },
+        "returnAll": true,
+        "orderBy": false
+      },
+      "id": "pubg-data-v3-node-004",
+      "name": "Read V2 Match Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        160
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) {\n  if (typeof value === 'string') { try { return JSON.parse(value); } catch { return null; } }\n  return value && typeof value === 'object' ? value : null;\n}\nfunction timestamp(value) {\n  if (typeof value === 'number') return value > 10000000000 ? value : value * 1000;\n  const text = String(value || '').trim();\n  const numeric = Number(text);\n  if (/^\\d+(?:\\.\\d+)?$/.test(text) && Number.isFinite(numeric)) return numeric > 10000000000 ? numeric : numeric * 1000;\n  const parsed = Date.parse(text);\n  return Number.isFinite(parsed) ? parsed : 0;\n}\nfunction normalizeRecord(row) {\n  const payload = parsePayload(row?.payload ?? row);\n  return payload && payload.matchId ? payload : null;\n}\nfunction stateFromRows(rows) {\n  const request = $('Normalize Query Input').first().json;\n  const row = rows.find((item) => String(item.json?.cacheKey || '') === String(request.syncKey));\n  return parsePayload(row?.json?.payload);\n}\nconst request = $('Normalize Query Input').first().json;\nconst state = stateFromRows($input.all());\nconst storeRows = $('Read V2 Match Store').all().map((item) => normalizeRecord(item.json)).filter(Boolean);\nconst uniqueRecords = [...new Map(storeRows.map((record) => [String(record.matchId), record])).values()];\nconst query = request.query || {};\nconst queryNowMs = Number(request.nowMs) || Date.now();\nconst expiresAt = timestamp(state?.expiresAt);\nconst stateFresh = Boolean(state && (!expiresAt || expiresAt > queryNowMs));\nconst ids = new Set((request.playerIds || []).map(String));\nconst relevantRecords = uniqueRecords.filter((record) => record.isCompetitive !== false && Array.isArray(record.players) && record.players.some((player) => ids.has(String(player.accountId))));\nconst recordIds = new Set(uniqueRecords.map((record) => String(record.matchId)));\nconst selectors = Array.isArray(query.segments) && query.segments.length\n  ? query.segments.map((segment) => segment.selector || {})\n  : [query.selector || {}];\nfunction selectorRecords(candidate) {\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    return relevantRecords.filter((record) => record.timestamp >= start && record.timestamp < end);\n  }\n  if (candidate?.type === 'last_n_matches') {\n    const ordered = [...relevantRecords].sort((left, right) => right.timestamp - left.timestamp || String(right.matchId).localeCompare(String(left.matchId)));\n    return ordered.slice(Number(candidate.offset || 0), Number(candidate.offset || 0) + Number(candidate.count || 0));\n  }\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((query.reference?.matchIds || []).map(String));\n    return uniqueRecords.filter((record) => resultIds.has(String(record.matchId)));\n  }\n  return [];\n}\nfunction selectorCovered(candidate) {\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    const coverageStart = timestamp(state?.coverageStart);\n    const coverageEnd = timestamp(state?.coverageEnd);\n    return Boolean(state?.coverageComplete && coverageStart && coverageEnd && start >= coverageStart && end <= coverageEnd && end <= queryNowMs);\n  }\n  if (candidate?.type === 'last_n_matches') {\n    const required = Number(candidate.count || 0) + Number(candidate.offset || 0);\n    return relevantRecords.length >= required;\n  }\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((query.reference?.matchIds || []).map(String));\n    return resultIds.size > 0 && [...resultIds].every((id) => recordIds.has(id));\n  }\n  return false;\n}\nfunction requiresFreshness(candidate) {\n  if (candidate?.type === 'result_set') return false;\n  if (candidate?.type === 'last_n_matches') return true;\n  if (candidate?.type === 'time_range') return timestamp(candidate.end) >= queryNowMs;\n  return true;\n}\nconst localComplete = selectors.every(selectorCovered);\n// Current and rolling selectors must re-check the source on every request.\n// A future coverageEnd or a non-expired sync state cannot prove that a new\n// Match did not arrive after the previous query.\nconst needsFreshness = selectors.some(requiresFreshness);\nconst queryCovered = localComplete && !needsFreshness;\nconst localSelectedRecords = [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];\nconst requiredMatchCount = Math.max(...selectors.map((candidate) => candidate?.type === 'last_n_matches' ? Number(candidate.count || 0) + Number(candidate.offset || 0) : 0), 0);\nconst coverageStatus = queryCovered ? 'OK' : state?.status === 'SOURCE_UNAVAILABLE' && !localComplete ? 'SOURCE_UNAVAILABLE' : 'COVERAGE_GAP';\nreturn [{ json: {\n  ...request,\n  records: uniqueRecords,\n  state,\n  coverage: {\n    status: coverageStatus,\n    complete: queryCovered,\n    coverageStart: state?.coverageStart || null,\n    coverageEnd: state?.coverageEnd || null,\n    checkedAt: new Date(queryNowMs).toISOString(),\n    knownPlayerIds: request.playerIds,\n    failedMatchIds: state?.failedMatchIds || [],\n    sourceUnavailable: false,\n    freshness: queryCovered ? 'fresh' : 'unknown',\n    localComplete,\n    queryCovered,\n    requiredMatchCount,\n    availableMatchCount: relevantRecords.length,\n  },\n  source: { store: 'n8n-data-table', cacheType: 'v2-match-or-legacy-match', syncInvoked: false, syncTriggered: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: uniqueRecords.length },\n  syncNeeded: !queryCovered,\n  localComplete,\n  queryCovered,\n  syncRequest: {\n    query: { ...query, subject: { ...(query.subject || {}), type: query.subject?.type || 'team', ids: request.playerIds, label: query.subject?.label || \"四人组\" } },\n    queryId: request.queryId,\n    sessionId: request.sessionId,\n    forceDiscovery: true,\n    now: new Date(queryNowMs).toISOString(),\n  },\n  diagnostics: { localRecordCount: uniqueRecords.length, relevantRecordCount: relevantRecords.length, localSelectedCount: localSelectedRecords.length, stateFresh, localComplete, queryCovered, needsFreshness, requiredMatchCount, queryNowMs, stateExpiresAt: state?.expiresAt || null },\n} }];\n"
+      },
+      "id": "pubg-data-v3-node-005",
+      "name": "Prepare Query Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.syncNeeded }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "pubg-data-v3-node-006",
+      "name": "Needs Read Through Sync",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/pubg-sync-matches-v3",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.syncRequest }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": false,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        }
+      },
+      "id": "pubg-data-v3-node-007",
+      "name": "Ensure Data via Sync v3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        180,
+        -160
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\nfunction parsePayload(value) {\n  if (typeof value === 'string') { try { return JSON.parse(value); } catch { return {}; } }\n  return value && typeof value === 'object' ? value : {};\n}\nfunction timestamp(value) {\n  if (typeof value === 'number') return value > 10000000000 ? value : value * 1000;\n  const text = String(value || '').trim();\n  const numeric = Number(text);\n  if (/^\\d+(?:\\.\\d+)?$/.test(text) && Number.isFinite(numeric)) return numeric > 10000000000 ? numeric : numeric * 1000;\n  const parsed = Date.parse(text);\n  return Number.isFinite(parsed) ? parsed : 0;\n}\nconst decision = $('Prepare Query Data').first().json;\nconst syncInvoked = Boolean(decision.syncNeeded);\nconst response = syncInvoked ? parsePayload($json.body ?? $json) : {};\nconst responseSource = response.source && typeof response.source === 'object' ? response.source : {};\nconst responseStatus = typeof response.status === 'string' ? response.status : '';\nconst syncFailed = syncInvoked && (Boolean($json.error) || responseStatus === 'SOURCE_UNAVAILABLE');\nconst incoming = syncInvoked && Array.isArray(response.records) ? response.records : [];\nconst merged = [...(decision.records || []), ...incoming].filter((record) => record && record.matchId);\nconst records = [...new Map(merged.map((record) => [String(record.matchId), record])).values()];\nconst ids = new Set((decision.playerIds || []).map(String));\nconst relevantRecords = records.filter((record) => record.isCompetitive !== false && Array.isArray(record.players) && record.players.some((player) => ids.has(String(player.accountId))));\nconst query = decision.query || {};\nconst queryNowMs = Number(decision.nowMs || decision.diagnostics?.queryNowMs) || Date.now();\nconst selectors = Array.isArray(query.segments) && query.segments.length\n  ? query.segments.map((segment) => segment.selector || {})\n  : [query.selector || {}];\nfunction selectorRecords(candidate) {\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    return relevantRecords.filter((record) => record.timestamp >= start && record.timestamp < end);\n  }\n  if (candidate?.type === 'last_n_matches') {\n    const ordered = [...relevantRecords].sort((left, right) => right.timestamp - left.timestamp || String(right.matchId).localeCompare(String(left.matchId)));\n    return ordered.slice(Number(candidate.offset || 0), Number(candidate.offset || 0) + Number(candidate.count || 0));\n  }\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((query.reference?.matchIds || []).map(String));\n    return records.filter((record) => resultIds.has(String(record.matchId)));\n  }\n  return [];\n}\nfunction selectorCovered(candidate, coverage) {\n  if (!coverage?.complete) return false;\n  if (candidate?.type === 'time_range') {\n    const start = timestamp(candidate.start);\n    const end = timestamp(candidate.end);\n    const coverageStart = timestamp(coverage.coverageStart);\n    const coverageEnd = timestamp(coverage.coverageEnd);\n    return Boolean(coverageStart && coverageEnd && start >= coverageStart && end <= coverageEnd && end <= queryNowMs);\n  }\n  if (candidate?.type === 'last_n_matches') return relevantRecords.length >= Number(candidate.count || 0) + Number(candidate.offset || 0);\n  if (candidate?.type === 'result_set') {\n    const resultIds = new Set((query.reference?.matchIds || []).map(String));\n    const recordIds = new Set(records.map((record) => String(record.matchId)));\n    return resultIds.size > 0 && [...resultIds].every((id) => recordIds.has(id));\n  }\n  return false;\n}\nconst localSelectedRecords = [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];\nlet coverage = response.coverage && typeof response.coverage === 'object' ? { ...response.coverage } : { ...(decision.coverage || {}) };\nlet source = { ...(decision.source || {}), ...responseSource };\nsource.syncInvoked = syncInvoked || Boolean(responseSource.syncInvoked);\nsource.syncTriggered = syncInvoked || Boolean(responseSource.syncTriggered);\nsource.playerApiCalls = Number(responseSource.playerApiCalls ?? (responseSource.playersApi ? 1 : decision.source?.playerApiCalls || 0));\nsource.matchApiCalls = Number(responseSource.matchApiCalls ?? responseSource.matchApiCount ?? (decision.source?.matchApiCalls || 0));\nsource.localMatchCount = Number(decision.diagnostics?.localRecordCount || decision.source?.localMatchCount || 0);\nsource.returnedMatchCount = records.length;\nsource.syncStatus = syncInvoked ? (syncFailed ? 'SOURCE_UNAVAILABLE' : responseStatus || 'OK') : 'NOT_NEEDED';\nif (syncFailed) {\n  const localQueryCovered = Boolean(decision.queryCovered || decision.coverage?.queryCovered);\n  const localSelectedCount = Number(decision.diagnostics?.localSelectedCount || 0);\n  const fallbackStatus = localQueryCovered ? 'STALE' : localSelectedCount > 0 || incoming.length > 0 ? 'PARTIAL' : 'SOURCE_UNAVAILABLE';\n  coverage = {\n    ...(decision.coverage || {}),\n    status: fallbackStatus,\n    complete: localQueryCovered,\n    queryCovered: localQueryCovered,\n    localComplete: Boolean(decision.localComplete),\n    sourceUnavailable: true,\n    freshness: localQueryCovered ? 'stale' : 'unknown',\n    checkedAt: new Date(queryNowMs).toISOString(),\n  };\n  source.error = response.error || $json.error?.message || 'sync workflow unavailable';\n}\nif (!syncFailed && syncInvoked) {\n  if (responseStatus === 'PARTIAL') {\n    coverage = { ...coverage, status: 'PARTIAL', complete: false, queryCovered: false, sourceUnavailable: false, freshness: 'unknown' };\n  } else if (responseStatus === 'SOURCE_UNAVAILABLE') {\n    coverage = { ...coverage, status: records.length ? 'PARTIAL' : 'SOURCE_UNAVAILABLE', complete: false, queryCovered: false, sourceUnavailable: true, freshness: 'unknown' };\n  } else {\n    const postSyncCovered = Boolean(coverage.complete) && selectors.every((selector) => selectorCovered(selector, coverage));\n    coverage = {\n      ...coverage,\n      status: postSyncCovered ? 'OK' : 'COVERAGE_GAP',\n      complete: postSyncCovered,\n      queryCovered: postSyncCovered,\n      sourceUnavailable: false,\n      freshness: postSyncCovered ? 'fresh' : 'unknown',\n    };\n  }\n}\ncoverage.failedMatchIds = Array.isArray(coverage.failedMatchIds) ? coverage.failedMatchIds.map(String) : [];\ncoverage.checkedAt = coverage.checkedAt || new Date(queryNowMs).toISOString();\ncoverage.localComplete = coverage.localComplete ?? Boolean(decision.localComplete);\ncoverage.queryCovered = coverage.queryCovered ?? Boolean(decision.queryCovered);\ncoverage.sourceUnavailable = Boolean(coverage.sourceUnavailable);\nconst status = coverage.status || (syncFailed ? 'SOURCE_UNAVAILABLE' : 'OK');\nreturn [{ json: { status, query, queryId: decision.queryId, sessionId: decision.sessionId, records, coverage, source, diagnostics: { ...(decision.diagnostics || {}), syncFailed, syncRecordCount: incoming.length, localSelectedCount: localSelectedRecords.length } } }];\n"
+      },
+      "id": "pubg-data-v3-node-008",
+      "name": "Collect Query Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "pubg-data-v3-node-009",
+      "name": "Respond Data Result v3",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        680,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "PUBG Data Webhook v3": {
+      "main": [
+        [
+          {
+            "node": "Normalize Query Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Query Input": {
+      "main": [
+        [
+          {
+            "node": "Read V2 Sync State",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Read V2 Match Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Sync State": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read V2 Match Store": {
+      "main": [
+        [
+          {
+            "node": "Prepare Query Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Prepare Query Data": {
+      "main": [
+        [
+          {
+            "node": "Needs Read Through Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Read Through Sync": {
+      "main": [
+        [
+          {
+            "node": "Ensure Data via Sync v3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Collect Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Data via Sync v3": {
+      "main": [
+        [
+          {
+            "node": "Collect Query Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Query Data": {
+      "main": [
+        [
+          {
+            "node": "Respond Data Result v3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "tags": []
+}

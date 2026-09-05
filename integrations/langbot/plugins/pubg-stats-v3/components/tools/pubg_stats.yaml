@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: get_pubg_stats_v3
+  label:
+    en_US: PUBG Query Engine v3.2
+    zh_Hans: PUBG 查询引擎 v3.2
+  description:
+    en_US: Execute a PUBG query or match review through the mandatory Mastra Query Engine v3.2 runtime.
+    zh_Hans: 通过强制 Mastra Query Engine v3.2 runtime 执行 PUBG 查询或对局复盘。
+spec:
+  parameters:
+    type: object
+    properties:
+      query:
+        type: string
+        description: The complete PUBG-related user question, including dates, references, and follow-up wording.
+      queryPlan:
+        type: object
+        description: Optional version 3 Canonical Query Schema; the runtime validates it before execution.
+        properties:
+          version:
+            type: integer
+          domain:
+            type: string
+          queryId:
+            type: string
+          subject:
+            type: object
+          operation:
+            type: string
+            enum:
+              - report
+              - detail
+              - rank
+              - strongest
+              - weakest
+              - compare
+              - trend
+              - list
+              - review_match
+          selector:
+            type: object
+          matchSelector:
+            type: object
+            description: Optional deterministic selector for one match; use latest, earliest, ordinal, filtered, ranked, active_match, previous, or next.
+          segments:
+            type: array
+          groupBy:
+            type: string
+            enum:
+              - player
+              - match
+              - day
+              - team
+          metrics:
+            type: array
+          filters:
+            type: object
+          orderBy:
+            type: object
+          limit:
+            type: integer
+          reference:
+            type: object
+          presentation:
+            type: object
+    required:
+      - query
+  llm_prompt: |
+    This tool is the mandatory PUBG Query Engine v3.2 entry point. Use it for PUBG, 绝地求生, 吃鸡, 战绩, KD, match, ranking, comparison, trend, and PUBG follow-up requests. Explicit requests such as 复盘, 分析这把, or 为什么输了 use review_match; ordinary reports must remain on the V3 QuerySubgraph. The runtime resolves structured sender-isolated context, validates a version 3 canonical query, checks data freshness, reads or syncs n8n data, deterministically selects a match, parses Telemetry into structured Review Facts, and renders the response. Never answer PUBG facts from conversation memory. Never pass raw Telemetry to an LLM. Never recalculate or rewrite returned numbers. Output only the tool's rendered response.
+execution:
+  python:
+    path: pubg_stats.py
+    attr: GetPubgStatsV3Tool

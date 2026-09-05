@@ -1,0 +1,37 @@
+{
+  "date": "2026-09-02",
+  "timezone": "Asia/Shanghai",
+  "runtime": {
+    "image": "local/pubg-query-engine-v3:3.1.0-adapter",
+    "imageId": "sha256:863a43161a47efa17bc2e6e2437e221e478017f5bdeeb0ffdfbedcef18f85e47",
+    "health": "healthy",
+    "healthEndpoint": "/healthz"
+  },
+  "plugin": {
+    "name": "local/pubg-stats",
+    "version": "3.1.1",
+    "status": "initialized",
+    "enabled": true,
+    "installTask": 14,
+    "package": "docs/platform-adapter/pubg-stats-platform-v1.1.lbpkg",
+    "sha256": "15c0a13b177e6ec45ca6560b6dd6d2d3246bafee34264fe9e113dd739630d6e9"
+  },
+  "checks": [
+    {"name": "kook_normalized_report", "status": "OK", "defaultTeam": true, "templateA": true, "has007": true},
+    {"name": "telegram_mock_report", "status": "OK", "defaultTeam": true, "templateA": true, "has007": true},
+    {"name": "telegram_same_sender_follow_up", "status": "OK", "operation": "weakest", "inherited": true},
+    {"name": "telegram_cross_sender_follow_up", "status": "NO_MATCHES", "inherited": false},
+    {"name": "telegram_real_private_smoke", "status": "PASS", "messages": ["测试", "今天战绩", "昨天战绩"], "oneReplyPerMessage": true},
+    {"name": "telegram_real_group_smoke", "status": "PASS", "messages": ["测试", "今天战绩", "昨天战绩"], "oneReplyPerMessage": true},
+    {"name": "telegram_timeout_recovery", "status": "PASS", "image": "langbot-local:4.10.8-telegram-retry-20260902", "stableWindowSeconds": 120},
+    {"name": "wechat_generic_envelope", "status": "OK", "defaultTeam": true, "templateA": true, "has007": true}
+  ],
+  "restrictedChecks": {
+    "telegramNetwork": "PASS: getMe and getWebhookInfo verified from inside LangBot container through configured proxy",
+    "telegramToken": "configured in LangBot; value omitted",
+    "telegramRealInbound": "PASS: private and group smoke messages received and replied",
+    "wechatNetwork": "not attempted",
+    "realKookHumanInbound": "blocked: requires a non-bot KOOK member message",
+    "kookDesktopMobileVisual": "blocked: depends on real KOOK human inbound"
+  }
+}

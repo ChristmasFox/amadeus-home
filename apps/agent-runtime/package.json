@@ -1,0 +1,25 @@
+{
+  "name": "@agent/agent-runtime",
+  "version": "3.3.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/src/server.js",
+    "test": "tsx --test tests/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@mastra/core": "1.63.2",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "tsx": "4.23.13",
+    "typescript": "5.9.2"
+  }
+}

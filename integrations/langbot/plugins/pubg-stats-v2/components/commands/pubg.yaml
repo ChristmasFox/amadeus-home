@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Command
+metadata:
+  name: pubg
+  label:
+    en_US: PUBG Stats
+    zh_Hans: PUBG 战绩
+  description:
+    en_US: Fetch the current PUBG business-day squad statistics from n8n.
+    zh_Hans: 从 n8n 获取当前 06:00 战绩日的 PUBG 小队战绩。
+spec: {}
+execution:
+  python:
+    path: pubg.py
+    attr: PubgCommand

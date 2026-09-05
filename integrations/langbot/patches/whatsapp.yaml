@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: MessagePlatformAdapter
+metadata:
+  name: whatsapp
+  label:
+    en_US: WhatsApp Cloud API
+    zh_Hans: WhatsApp 云 API
+    zh_Hant: WhatsApp 雲 API
+  description:
+    en_US: Meta WhatsApp Cloud API adapter with signed webhook verification and text messages.
+    zh_Hans: Meta WhatsApp Cloud API 适配器，支持签名 Webhook 校验和文本消息。
+    zh_Hant: Meta WhatsApp Cloud API 適配器，支援簽名 Webhook 驗證與文字訊息。
+  icon: whatsapp.svg
+spec:
+  categories:
+    - popular
+    - global
+  help_links:
+    en: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+    zh: https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+  config:
+    - name: webhook_url
+      label:
+        en_US: Webhook URL
+        zh_Hans: Webhook 地址
+        zh_Hant: Webhook 位址
+      description:
+        en_US: Set this URL in Meta as https://your-host/bots/<bot_uuid>.
+        zh_Hans: 在 Meta 中配置为 https://your-host/bots/<bot_uuid>。
+        zh_Hant: 在 Meta 中設定為 https://your-host/bots/<bot_uuid>。
+      type: webhook-url
+      required: false
+      default: ""
+    - name: VERIFY_TOKEN
+      label:
+        en_US: VERIFY_TOKEN
+        zh_Hans: Webhook 验证令牌
+        zh_Hant: Webhook 驗證令牌
+      type: string
+      required: true
+      default: ""
+    - name: APP_SECRET
+      label:
+        en_US: APP_SECRET
+        zh_Hans: Meta App Secret
+        zh_Hant: Meta App Secret
+      type: string
+      required: true
+      default: ""
+    - name: ACCESS_TOKEN
+      label:
+        en_US: ACCESS_TOKEN
+        zh_Hans: WhatsApp Access Token
+        zh_Hant: WhatsApp Access Token
+      type: string
+      required: true
+      default: ""
+    - name: PHONE_NUMBER_ID
+      label:
+        en_US: PHONE_NUMBER_ID
+        zh_Hans: WhatsApp 电话号码 ID
+        zh_Hant: WhatsApp 電話號碼 ID
+      type: string
+      required: true
+      default: ""
+    - name: WABA_ID
+      label:
+        en_US: WABA_ID
+        zh_Hans: WhatsApp Business Account ID
+        zh_Hant: WhatsApp Business Account ID
+      type: string
+      required: true
+      default: ""
+    - name: GRAPH_API_VERSION
+      label:
+        en_US: Graph API Version
+        zh_Hans: Graph API 版本
+        zh_Hant: Graph API 版本
+      type: string
+      required: false
+      default: v23.0
+    - name: GRAPH_API_BASE_URL
+      label:
+        en_US: Graph API Base URL
+        zh_Hans: Graph API 基础地址
+        zh_Hant: Graph API 基礎位址
+      type: string
+      required: false
+      default: https://graph.facebook.com
+    - name: GRAPH_API_TIMEOUT_SECONDS
+      label:
+        en_US: Graph API Timeout (seconds)
+        zh_Hans: Graph API 超时（秒）
+        zh_Hant: Graph API 逾時（秒）
+      type: integer
+      required: false
+      default: 30
+execution:
+  python:
+    path: ./whatsapp.py
+    attr: WhatsAppAdapter

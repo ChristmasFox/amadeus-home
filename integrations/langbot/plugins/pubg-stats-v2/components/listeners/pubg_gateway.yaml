@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: EventListener
+metadata:
+  name: pubg_query_gateway
+  label:
+    en_US: PUBG Query Gateway
+    zh_Hans: PUBG 查询网关
+  description:
+    en_US: Mandatory routing for PUBG natural-language queries.
+    zh_Hans: 强制将 PUBG 自然语言查询路由到 Query Engine v2。
+spec: {}
+execution:
+  python:
+    path: pubg_gateway.py
+    attr: PubgQueryGatewayListener

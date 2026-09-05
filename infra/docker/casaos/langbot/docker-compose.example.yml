@@ -1,0 +1,51 @@
+services:
+  langbot_plugin_runtime:
+    image: ${LANGBOT_IMAGE:-rockchin/langbot:4.10.8}
+    container_name: langbot_plugin_runtime
+    restart: unless-stopped
+    env_file:
+      - ${LANGBOT_ENV_FILE:-/DATA/AppData/langbot/.env}
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - ${LANGBOT_DATA_DIR:-/DATA/AppData/langbot/data/plugins}:/app/data/plugins
+      - ${LANGBOT_SSH_DIR:-/DATA/AppData/langbot/ssh}:/run/langbot-ssh:ro
+      - ${LANGBOT_KOOK_TOKEN_FILE:-/DATA/AppData/langbot/secrets/kook-bot-token}:/run/secrets/kook-bot-token:ro
+    command: ["uv", "run", "--no-sync", "-m", "langbot_plugin.cli.__init__", "rt"]
+    networks:
+      - langbot_network
+
+  langbot:
+    image: ${LANGBOT_IMAGE:-rockchin/langbot:4.10.8}
+    container_name: langbot
+    restart: unless-stopped
+    env_file:
+      - ${LANGBOT_ENV_FILE:-/DATA/AppData/langbot/.env}
+    environment:
+      TZ: Asia/Shanghai
+      LANGBOT_TELEGRAM_CONNECT_TIMEOUT: "30"
+      LANGBOT_TELEGRAM_READ_TIMEOUT: "30"
+      LANGBOT_TELEGRAM_WRITE_TIMEOUT: "30"
+      LANGBOT_TELEGRAM_GET_UPDATES_READ_TIMEOUT: "45"
+      LANGBOT_TELEGRAM_GET_UPDATES_TIMEOUT: "90"
+      LANGBOT_TELEGRAM_POLLING_STALL_SECONDS: "90"
+      LANGBOT_TELEGRAM_POLLING_RECOVERY_CHECK_SECONDS: "10"
+      LANGBOT_TELEGRAM_POLLING_RECOVERY_COOLDOWN: "600"
+      SYSTEM__BLOCKING_EXECUTOR__MAX_WORKERS: "8"
+      SYSTEM__BLOCKING_EXECUTOR__MAX_PENDING: "128"
+      SYSTEM__BLOCKING_EXECUTOR__MAX_INFLIGHT_PER_SCOPE: "4"
+    volumes:
+      - ${LANGBOT_DATA_DIR:-/DATA/AppData/langbot/data}:/app/data
+      - ${LANGBOT_SSH_DIR:-/DATA/AppData/langbot/ssh}:/run/langbot-ssh:ro
+    ports:
+      - "${LANGBOT_PORT:-5300}:5300"
+    networks:
+      - langbot_network
+      - nine_router_network
+
+networks:
+  langbot_network:
+    driver: bridge
+  nine_router_network:
+    external: true
+    name: 9router_default

@@ -1,0 +1,39 @@
+services:
+  n8n:
+    image: ${N8N_IMAGE:-n8nio/n8n:latest}
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "${N8N_PUBLIC_PORT:-5679}:5678"
+    env_file:
+      - ${N8N_ENV_FILE:-/DATA/AppData/n8n/.env}
+      - ${N8N_SANDBOX_ENV_FILE:-/DATA/AppData/n8n-sandbox/n8n.env}
+    environment:
+      N8N_HOST: ${N8N_HOST:-0.0.0.0}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      N8N_LISTEN_ADDRESS: 0.0.0.0
+      N8N_EDITOR_BASE_URL: ${N8N_PUBLIC_BASE_URL:-http://localhost:5679/}
+      N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5679/}
+      N8N_SECURE_COOKIE: "false"
+      NODE_ENV: production
+      GENERIC_TIMEZONE: Asia/Shanghai
+      TZ: Asia/Shanghai
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_UNVERIFIED_PACKAGES_ENABLED: "false"
+      N8N_RUNNERS_TASK_TIMEOUT: "300"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "true"
+      N8N_GIT_NODE_DISABLE_BARE_REPOS: "true"
+    volumes:
+      - ${N8N_DATA_DIR:-/DATA/AppData/n8n}:/home/node/.n8n
+      - ${N8N_DIGEST_DIR:-/DATA/AppData/n8n/daily-digest}:/home/node/.n8n-files/daily-digest:rw
+    networks:
+      - langbot_network
+
+networks:
+  langbot_network:
+    external: true
+    name: langbot_langbot_network

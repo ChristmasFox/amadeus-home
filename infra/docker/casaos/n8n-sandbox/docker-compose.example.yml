@@ -1,0 +1,106 @@
+services:
+  tls-init:
+    image: ${N8N_SANDBOX_API_IMAGE:-n8nio/n8n-sandbox-service-api:1.1.1}
+    container_name: n8n-sandbox-tls-init
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        bootstrap-mtls.sh --out-dir /tls --runners 1
+        --api-san n8n-sandbox-api-local
+        --control-san-prefix n8n-sandbox-runner-local
+        && chown -R sandbox-api:sandbox-api /tls/api
+    volumes:
+      - ${N8N_SANDBOX_TLS_DIR:-/DATA/AppData/n8n-sandbox/tls}:/tls
+    networks:
+      - sandbox-service
+
+  api:
+    image: ${N8N_SANDBOX_API_IMAGE:-n8nio/n8n-sandbox-service-api:1.1.1}
+    container_name: n8n-sandbox-api
+    restart: unless-stopped
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+    env_file:
+      - ${N8N_SANDBOX_API_ENV_FILE:-/DATA/AppData/n8n-sandbox/api.env}
+    environment:
+      SANDBOX_API_GRPC_TLS_CERT_FILE: /tls/grpc-server.crt
+      SANDBOX_API_GRPC_TLS_KEY_FILE: /tls/grpc-server.key
+      SANDBOX_API_GRPC_TLS_CLIENT_CA_FILE: /tls/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CA_FILE: /tls/ca.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/control-grpc-api-client.crt
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/control-grpc-api-client.key
+      SANDBOX_API_RUNNER_CONTROL_GRPC_TLS_SERVER_NAME: n8n-sandbox-runner-local-1
+      SANDBOX_API_DEFAULT_MAX_SANDBOXES: "10"
+      SANDBOX_API_STORE: sqlite
+    volumes:
+      - ${N8N_SANDBOX_TLS_DIR:-/DATA/AppData/n8n-sandbox/tls}/api:/tls:ro
+      - ${N8N_SANDBOX_API_DATA_DIR:-/DATA/AppData/n8n-sandbox/api-data}:/var/lib/n8n-sandbox-api
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    networks:
+      sandbox-service:
+        aliases:
+          - n8n-sandbox-api-local
+      langbot-network:
+        aliases:
+          - n8n-sandbox-api
+
+  runner:
+    image: ${N8N_SANDBOX_RUNNER_IMAGE:-n8nio/n8n-sandbox-service-runner-dind:1.1.1}
+    container_name: n8n-sandbox-runner-1
+    restart: unless-stopped
+    privileged: true
+    depends_on:
+      tls-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    env_file:
+      - ${N8N_SANDBOX_RUNNER_ENV_FILE:-/DATA/AppData/n8n-sandbox/runner.env}
+    environment:
+      SANDBOX_RUNNER_DOCKER_SANDBOX_IMAGE: n8nio/n8n-sandbox-service-sandbox:1.1.0
+      SANDBOX_RUNNER_API_GRPC_ADDR: n8n-sandbox-api-local:9090
+      SANDBOX_RUNNER_HTTP_BASE_URL: http://n8n-sandbox-runner-local-1:8080
+      SANDBOX_RUNNER_CONTROL_GRPC_LISTEN_ADDR: ":9091"
+      SANDBOX_RUNNER_CONTROL_GRPC_ADVERTISE_ADDR: n8n-sandbox-runner-local-1:9091
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CA_FILE: /tls/ca.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_CERT_FILE: /tls/grpc-client.crt
+      SANDBOX_RUNNER_REGISTRATION_GRPC_KEY_FILE: /tls/grpc-client.key
+      SANDBOX_RUNNER_REGISTRATION_GRPC_SERVER_NAME: n8n-sandbox-api-local
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CERT_FILE: /tls/control-grpc-server.crt
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_KEY_FILE: /tls/control-grpc-server.key
+      SANDBOX_RUNNER_CONTROL_GRPC_TLS_CLIENT_CA_FILE: /tls/ca.crt
+      SANDBOX_RUNNER_CAPACITY_TOTAL: "4"
+      SANDBOX_RUNNER_DEFAULT_MEMORY_MB: "512"
+      SANDBOX_RUNNER_DEFAULT_CPU_PERCENT: "100"
+      SANDBOX_RUNNER_DEFAULT_PIDS_MAX: "256"
+      SANDBOX_RUNNER_IDLE_TTL_SECONDS: "1800"
+      SANDBOX_RUNNER_DATA_DIR: /var/sandboxes
+    volumes:
+      - ${N8N_SANDBOX_TLS_DIR:-/DATA/AppData/n8n-sandbox/tls}/runner:/tls:ro
+      - ${N8N_SANDBOX_RUNNER_DATA_DIR:-/DATA/AppData/n8n-sandbox/runner-data}:/var/sandboxes
+      - ${N8N_SANDBOX_DOCKER_DATA_DIR:-/DATA/AppData/n8n-sandbox/docker-data}:/var/lib/docker
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 20s
+    networks:
+      sandbox-service:
+        aliases:
+          - n8n-sandbox-runner-local-1
+
+networks:
+  sandbox-service:
+    name: n8n-sandbox-service
+    driver: bridge
+  langbot-network:
+    external: true
+    name: langbot_langbot_network

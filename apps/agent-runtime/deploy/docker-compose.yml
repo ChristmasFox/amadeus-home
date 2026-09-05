@@ -1,0 +1,35 @@
+services:
+  pubg-query-engine-v3:
+    image: ${PUBG_RUNTIME_IMAGE:-local/pubg-query-engine-v3:latest}
+    container_name: pubg-query-engine-v3
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      TZ: Asia/Shanghai
+      PUBG_QUERY_ENGINE_HOST: 0.0.0.0
+      PUBG_QUERY_ENGINE_PORT: "5310"
+      PUBG_N8N_DATA_URL: http://n8n:5678/webhook/pubg-data-gateway-v3
+      PUBG_N8N_TIMEOUT_MS: "120000"
+      PUBG_STATE_FILE: /data/state.json
+      PUBG_TIMEZONE: Asia/Shanghai
+      PUBG_BUSINESS_DAY_START: "06:00"
+      PUBG_RESULTSET_TTL_MS: "86400000"
+      PUBG_CONTEXT_TTL_MS: "43200000"
+      PUBG_FEATURE_STATE_FILE: /data/features.json
+      PUBG_SELECTION_STATE_FILE: /data/selections.json
+      PUBG_TELEMETRY_TIMEOUT_MS: "120000"
+      PUBG_TELEMETRY_PARSER_VERSION: ${PUBG_TELEMETRY_PARSER_VERSION:-telemetry-parser-4}
+      PUBG_REVIEW_FEATURE_VERSION: ${PUBG_REVIEW_FEATURE_VERSION:-review-features-4}
+      PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+    volumes:
+      - /DATA/AppData/pubg-query-engine-v3/data:/data
+      - /DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key:/run/secrets/pubg_api_key:ro
+    ports:
+      - "5310:5310"
+    networks:
+      - langbot_network
+
+networks:
+  langbot_network:
+    external: true
+    name: langbot_langbot_network

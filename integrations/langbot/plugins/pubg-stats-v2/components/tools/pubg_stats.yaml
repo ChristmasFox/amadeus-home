@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: get_pubg_daily_stats
+  label:
+    en_US: PUBG Query Engine
+    zh_Hans: PUBG 查询引擎
+  description:
+    en_US: Execute a validated PUBG natural-language query through Query Engine v2.
+    zh_Hans: 通过 Query Engine v2 执行经过验证的 PUBG 自然语言查询。
+spec:
+  parameters:
+    type: object
+    properties:
+      query:
+        type: string
+        description: The complete PUBG-related user question, including dates, references, and follow-up wording.
+      queryPlan:
+        type: object
+        description: Optional complete version 1 Canonical Query Schema. The runtime validates it and replans when invalid.
+        properties:
+          version:
+            type: integer
+          domain:
+            type: string
+          queryId:
+            type: string
+          sessionId:
+            type: string
+          subject:
+            type: object
+          operation:
+            type: string
+            enum:
+              - report
+              - rank
+              - compare
+              - trend
+              - list
+          selector:
+            type: object
+          segments:
+            type: array
+          groupBy:
+            type: string
+            enum:
+              - player
+              - match
+              - day
+              - team
+          metrics:
+            type: array
+          filters:
+            type: object
+          orderBy:
+            type: object
+          limit:
+            type: integer
+          reference:
+            type: object
+          presentation:
+            type: object
+    required:
+      - query
+  llm_prompt: |
+    This tool is a compatibility entry point into the mandatory PUBG Query Engine v2. Use it for any PUBG, 绝地求生, 吃鸡, 战绩, KD, match, ranking, comparison, trend, or PUBG follow-up request. The runtime validates or generates a version 1 Canonical Query Schema before it reads data. Never answer a PUBG fact from conversation memory and never infer numbers from this tool description. Follow-ups such as 昨天呢、哪一把、那场、跟前天比 must be passed with the complete user wording; structured session context is resolved by the runtime. The tool response is already rendered for KOOK: output only its text without recalculating, rewriting, or adding facts.
+execution:
+  python:
+    path: pubg_stats.py
+    attr: GetPubgDailyStatsTool
