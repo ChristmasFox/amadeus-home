@@ -99,8 +99,8 @@ function formatHostMetricReason(reason?: string): string {
 }
 
 function formatHealthDiagnosis(diagnosis: string): string {
-  const match = diagnosis.match(/HomeHub Executor unavailable; services status unknown \((\d+\/\d+)\)/i);
-  if (match) return `HomeHub 执行器不可用，服务状态未知（${match[1]}）。`;
+  const legacy = diagnosis.match(/HomeHub Executor unavailable; services status unknown \((\d+\/\d+)\)/i);
+  if (legacy) return `HomeHub 执行器不可用，服务状态未知（${legacy[1]}）。`;
   return diagnosis;
 }
 

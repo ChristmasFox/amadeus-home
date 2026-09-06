@@ -83,14 +83,21 @@ export class DiagnosticEngine {
     const abnormal = services
       .filter((service) => ['degraded', 'unhealthy', 'down'].includes(service.status))
       .map((service) => service.serviceId);
-    const executorUnavailable = services.some((service) => service.unknownReason === 'executor_unavailable');
+    const unknownExecutors = services.reduce((counts, service) => {
+      if (service.status !== 'unknown' || service.unknownReason !== 'executor_unavailable') return counts;
+      if (service.executor === 'docker') counts.docker += 1;
+      else if (service.executor === 'langbot-component') counts.component += 1;
+      else if (service.executor === 'macos-host') counts.macos += 1;
+      else counts.other += 1;
+      return counts;
+    }, { docker: 0, component: 0, macos: 0, other: 0 });
 
     return {
       host,
       services,
       summary,
       abnormal,
-      diagnosis: this.diagnoseSystem(summary.healthy, summary.totalServices, abnormal.length, summary.unknown, executorUnavailable),
+      diagnosis: this.diagnoseSystem(summary.healthy, summary.totalServices, abnormal.length, summary.unknown, unknownExecutors),
       timestamp: new Date().toISOString(),
     };
   }
@@ -100,10 +107,19 @@ export class DiagnosticEngine {
     total: number,
     abnormal: number,
     unknown: number,
-    executorUnavailable: boolean,
+    unknownExecutors: { docker: number; component: number; macos: number; other: number },
   ): string {
-    if (executorUnavailable && unknown > 0) {
-      return `HomeHub Executor unavailable; services status unknown (${unknown}/${total})`;
+    if (unknownExecutors.docker > 0) {
+      return `HomeHub Docker 执行器不可用，Docker 服务状态未知（${unknownExecutors.docker}/${total}）`;
+    }
+    if (unknownExecutors.component > 0) {
+      return `LangBot 组件执行器不可用，组件服务状态未知（${unknownExecutors.component}/${total}）`;
+    }
+    if (unknownExecutors.macos > 0) {
+      return `macOS 主机执行器不可用，macOS 服务状态未知（${unknownExecutors.macos}/${total}）`;
+    }
+    if (unknownExecutors.other > 0) {
+      return `服务执行器不可用，部分服务状态未知（${unknownExecutors.other}/${total}）`;
     }
     if (abnormal === 0 && total > 0 && healthy === total) return '系统运行正常';
     if (abnormal > 0) return `有 ${abnormal} 个服务异常，其余 ${healthy}/${total} 个服务正常`;

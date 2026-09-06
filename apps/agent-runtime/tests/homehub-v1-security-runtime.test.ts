@@ -317,7 +317,7 @@ test('executor failure yields UNKNOWN and is excluded from abnormal service coun
   assert.equal(health.summary.totalServices, 13);
   assert.equal(health.summary.unknown, 13);
   assert.equal(health.abnormal.length, 0);
-  assert.match(health.diagnosis, /HomeHub Executor unavailable|services status unknown/u);
+  assert.match(health.diagnosis, /执行器不可用|服务状态未知/u);
   assert.doesNotMatch(health.diagnosis, /13.*异常/u);
   assert.equal(health.services.every((service) => service.status === 'unknown'), true);
 });
@@ -329,6 +329,25 @@ test('macOS host executor unavailable yields UNKNOWN rather than DOWN', async ()
   assert.equal(cloudflared.runtime, 'macos');
   assert.equal(cloudflared.executor, 'macos-host');
   assert.equal(cloudflared.status, 'unknown');
+});
+
+test('system diagnosis distinguishes intentional macOS-only UNKNOWN from Docker outage', async () => {
+  const component = new ScriptedExecutor('langbot-component', (spec) => {
+    if (spec.command === 'docker' && spec.args?.[0] === 'ps') return execution({ stdout: 'langbot|running|Up 1 minute\n' });
+    return execution();
+  });
+  const health = await new DiagnosticEngine({
+    execution: new RuntimeExecutorManager({
+      executors: {
+        docker: healthyDockerExecutor(),
+        'langbot-component': component,
+        'macos-host': unavailable('macos-host'),
+      },
+    }),
+  }).systemHealth();
+  assert.equal(health.summary.unknown, 1);
+  assert.match(health.diagnosis, /macOS 主机执行器不可用/u);
+  assert.doesNotMatch(health.diagnosis, /HomeHub Docker 执行器不可用/u);
 });
 
 test('metrics executor failure returns null instead of zero', async () => {
