@@ -39,6 +39,11 @@
   返回 8 healthy、3 down（实际不存在的 postgres/redis/glances）、1 unhealthy（Jellyfin recent log error）
   和 1 unknown（macOS cloudflared），不是全量 UNKNOWN。
 - Host CPU/Memory 保持 UNKNOWN，原因为 `macOS executor unavailable; HomeHub container metrics are not host metrics`。
+- `scripts/deploy-n8n-workflow.sh --apply` 已将 `PUBG Sync Matches v3` 和 `PUBG 今日战绩` 导入并激活；
+  n8n external backups 为 `codex-pubg-sync-matches-v3-20260902-before-20260906-105911.json` 和
+  `codex-pubg-daily-stats-20260830-before-20260906-110037.json`。
+- 真实 `POST /v3/query` `最近20场战绩` smoke：4 个玩家 KD 为 1.47、0.91、0.74、0.38，合计 KD 0.96；
+  返回 response 和结构化 payload 均没有 `∞` / `Infinity`。
 
 ## 未完成
 

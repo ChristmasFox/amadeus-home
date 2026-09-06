@@ -26,6 +26,12 @@ container 以 `node` + supplementary group `104` 运行，`/var/run/docker.sock`
 13 个 registered services，其中 8 healthy、3 down（实际不存在的 postgres/redis/glances）、1 unhealthy（Jellyfin
 最近日志错误）、1 unknown（macOS cloudflared）；没有出现全量 UNKNOWN。Host CPU/内存明确返回
 `UNKNOWN — macOS executor unavailable; HomeHub container metrics are not host metrics`。
+PUBG workflow 生产同步：已用 `scripts/deploy-n8n-workflow.sh --apply` 导入并重新激活
+`PUBG Sync Matches v3` 与 `PUBG 今日战绩`；n8n 外部 rollback backups 分别为
+`/home/node/.n8n/workflow-backups/codex-pubg-sync-matches-v3-20260902-before-20260906-105911.json`
+和 `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-110037.json`。
+真实 runtime `最近20场战绩` smoke 返回 20 场、玩家 KD `1.47 / 0.91 / 0.74 / 0.38`，合计 KD `0.96`，
+response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 
 ## Codex Global Completion Notification Bridge（未开始）
 

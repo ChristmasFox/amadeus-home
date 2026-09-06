@@ -23,6 +23,9 @@ image `local/pubg-query-engine-v3:git-1a8a825812b6`，compose rollback backup
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
 完整 runtime tests 已通过，生产 `/status` smoke 也通过；零死亡 KD 不再向用户渲染 `∞`，而显示 `—`。
+n8n `PUBG Sync Matches v3` 和 legacy `PUBG 今日战绩` 已从 Git workflow source 重新导入、激活并重启
+n8n；外部 backups 位于 `/home/node/.n8n/workflow-backups/`。真实 runtime `最近20场战绩` smoke 返回
+有限 KD（1.47、0.91、0.74、0.38，合计 0.96），response/JSON 不含 `∞` 或 `Infinity`。
 
 ## 状态
 
