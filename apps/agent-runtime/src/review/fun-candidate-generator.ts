@@ -113,7 +113,7 @@ function specialCandidate(facts: MatchReviewFacts, event: SpecialEvent): FunCand
     ROCKET_HIT: {
       type: 'SPECIAL_EVENT',
       title: '🚀 火箭筒开张',
-      text: `${name}\n火箭筒${shots}发 · ${hits}中`,
+      text: `${name}\n火箭筒${shots}发 · ${hits}次命中记录`,
       score: 480 + hits * 30,
     },
     MULTI_KNOCK: {

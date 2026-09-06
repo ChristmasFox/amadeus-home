@@ -8,6 +8,15 @@ import { detectKeyOperations } from './key-operation-detector.js';
 import { detectSpecialEvents } from './special-events.js';
 import { extractVehicleStats } from './vehicle-intelligence.js';
 import { extractFlashStats, extractTeamDamageFacts, extractTeamVehicleEvents } from './team-damage.js';
+import {
+  extractArmorBreakFacts,
+  extractEnvironmentStats,
+  extractLootStats,
+  extractRecoveryStats,
+  extractStunGunStats,
+  extractVehicleImpactFacts,
+  extractVehicleTrunkTransfers,
+} from './supplemental-intelligence.js';
 import type { MatchReviewFacts, ReviewEvidence, ReviewPlayerFacts, ReviewSquadSummary } from './types.js';
 import { normalizeTelemetryEvents, type NormalizedTelemetryEvent } from './telemetry-events.js';
 
@@ -71,6 +80,7 @@ function factsForPlayer(match: NormalizedMatch, team: TeamConfig): ReviewPlayerF
     return {
       playerId: configured.id,
       playerName: configured.name,
+      matchPresence: player ? 'recorded' : 'not_recorded',
       rank: player?.rank ?? null,
       kills: player?.kills ?? 0,
       assists: player?.assists ?? 0,
@@ -90,7 +100,9 @@ function playerSummaryEvidence(match: NormalizedMatch, player: ReviewPlayerFacts
     kind: 'FACT',
     source: 'match_store',
     eventIds: [],
-    description: `${player.playerName} 的 Match Store 基础战绩：${player.kills}杀、${player.assists}助、${Math.round(player.damage)}伤害、${player.dbnos}倒地、${player.revives}救援`,
+    description: player.matchPresence === 'not_recorded'
+      ? `${player.playerName} 未出现在本场 Match Store participant 记录中`
+      : `${player.playerName} 的 Match Store 基础战绩：${player.kills}杀、${player.assists}助、${Math.round(player.damage)}伤害、${player.dbnos}倒地、${player.revives}救援`,
   };
 }
 
@@ -119,6 +131,13 @@ export function extractMatchReviewFacts(
   const teamDamage = extractTeamDamageFacts(events, teamIds);
   const teamVehicleEvents = extractTeamVehicleEvents(events, teamIds);
   const flash = extractFlashStats(events, teamIds);
+  const stunGuns = extractStunGunStats(events, teamIds);
+  const recovery = extractRecoveryStats(events, teamIds);
+  const loot = extractLootStats(events, teamIds);
+  const vehicleTrunk = extractVehicleTrunkTransfers(events, teamIds);
+  const environment = extractEnvironmentStats(events, teamIds);
+  const armorBreaks = extractArmorBreakFacts(events, teamIds);
+  const vehicleImpacts = extractVehicleImpactFacts(events, teamIds);
   const players = factsForPlayer(match, team);
   const squad = squadSummary(match, team);
   const combatEvents = dedupeRelevantCombatEvents(events, teamIds);
@@ -159,6 +178,13 @@ export function extractMatchReviewFacts(
     teamDamage,
     teamVehicleEvents,
     flash,
+    stunGuns,
+    recovery,
+    loot,
+    vehicleTrunk,
+    environment,
+    armorBreaks,
+    vehicleImpacts,
     evidence: [
       {
         id: `match-summary-${match.matchId}`,
@@ -172,6 +198,14 @@ export function extractMatchReviewFacts(
     ],
   };
   const operations = detectKeyOperations(facts);
+  const roleForOperation = (type: string): { role: string; confidence: ReviewPlayerFacts['roleConfidence'] } => {
+    if (type === 'ENTRY') return { role: '开团/信息', confidence: 'high' };
+    if (['MULTI_KNOCK', 'CLUTCH'].includes(type)) return { role: '主攻/终结', confidence: 'high' };
+    if (['REVIVE', 'SUPPORT'].includes(type)) return { role: '支援/救援', confidence: 'medium' };
+    if (type === 'HEAVY_WEAPON') return { role: '重火力', confidence: 'medium' };
+    if (type === 'VEHICLE') return { role: '载具作战', confidence: 'medium' };
+    return { role: '火力输出', confidence: 'medium' };
+  };
   for (const player of facts.players) {
     player.keyOperations = operations.filter((operation) => operation.playerId === player.playerId);
     const playerVehicle = vehicles.find((vehicle) => vehicle.playerId === player.playerId);
@@ -181,16 +215,9 @@ export function extractMatchReviewFacts(
       ?? player.keyOperations.find((operation) => ['DAMAGE', 'TRADE', 'SUPPORT', 'REVIVE'].includes(operation.type))
       ?? player.keyOperations.find((operation) => ['HEAVY_WEAPON', 'VEHICLE'].includes(operation.type));
     if (roleOperation) {
-      player.matchRole = ['ENTRY', 'MULTI_KNOCK', 'CLUTCH'].includes(roleOperation.type)
-        ? '主攻/终结'
-        : ['REVIVE', 'SUPPORT'].includes(roleOperation.type)
-          ? '支援/救援'
-          : roleOperation.type === 'HEAVY_WEAPON'
-            ? '重火力'
-            : roleOperation.type === 'VEHICLE'
-              ? '载具作战'
-              : '火力输出';
-      player.roleConfidence = ['ENTRY', 'MULTI_KNOCK', 'CLUTCH'].includes(roleOperation.type) ? 'high' : 'medium';
+      const role = roleForOperation(roleOperation.type);
+      player.matchRole = role.role;
+      player.roleConfidence = role.confidence;
     }
   }
   facts.specialEvents = detectSpecialEvents(events, fights, heavyWeapons, vehicles, teamIds, facts.fightIntegrity.pass);
@@ -218,6 +245,55 @@ export function extractMatchReviewFacts(
       source: 'telemetry' as const,
       eventIds: fact.evidenceIds,
       description: `${fact.playerId} 使用闪光弹${fact.uses}次`,
+    })),
+    ...stunGuns.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的电击枪统计`,
+    })),
+    ...recovery.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的恢复和能量物品使用统计`,
+    })),
+    ...loot.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的死亡盒搜包统计`,
+    })),
+    ...vehicleTrunk.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的载具仓库${fact.direction === 'PUT' ? '存入' : '取出'}记录`,
+    })),
+    ...environment.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的环境互动统计`,
+    })),
+    ...armorBreaks.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.actorPlayerId} 的护甲破坏记录`,
+    })),
+    ...vehicleImpacts.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的载具攻击组合记录`,
     })),
   );
   return facts;

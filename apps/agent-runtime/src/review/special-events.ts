@@ -115,7 +115,7 @@ export function detectSpecialEvents(
         type: 'ROCKET_HIT',
         playerId: stats.playerId,
         time: hitEvents[0]?.timeSeconds ?? null,
-        impact: `火箭筒命中${stats.hits}次`,
+        impact: `火箭筒产生${stats.hits}次命中记录`,
         impactScore: 180 + stats.playerDamage,
         facts: { shots: stats.shots, hits: stats.hits, playerDamage: stats.playerDamage },
         evidenceIds: [...new Set(hitEvents.flatMap((event) => [

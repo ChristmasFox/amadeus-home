@@ -85,7 +85,7 @@ function specialEvent(facts: MatchReviewFacts, event: SpecialEvent): FunEvent | 
     ROCKET_MULTI_KILL: { type: 'ROCKET_MULTI_KILL', title: '💥 一炮多响', text: `${name}\n一发火箭筒关联${kills}次击杀`, score: Math.min(99, 82 + kills * 4), category: 'heavy_weapon' },
     ROCKET_VEHICLE_MULTI_KILL: { type: 'ROCKET_VEHICLE_MULTI_KILL', title: `☢️ 一炮${kills}响`, text: `${name}\nPanzerfaust摧毁载具 · ${kills}杀`, score: 100, category: 'heavy_weapon' },
     ROCKET_VEHICLE_DESTROY: { type: 'ROCKET_VEHICLE_DESTROY', title: '🚙 火箭筒拆车', text: `${name}\nPanzerfaust摧毁${Number(values.vehiclesDestroyed ?? 0)}辆载具`, score: 78, category: 'heavy_weapon' },
-    ROCKET_HIT: { type: 'ROCKET_HIT', title: '🚀 火箭筒开张', text: `${name}\n火箭筒${shots}发 · ${hits}中`, score: Math.min(90, 65 + hits * 5), category: 'heavy_weapon' },
+    ROCKET_HIT: { type: 'ROCKET_HIT', title: '🚀 火箭筒开张', text: `${name}\n火箭筒${shots}发 · ${hits}次命中记录`, score: Math.min(90, 65 + hits * 5), category: 'heavy_weapon' },
     MULTI_KNOCK: { type: 'MULTI_KNOCK', title: '⚡ 倒地制造机', text: `${name}\n一波团战造成${Number(values.knocks ?? 0)}次倒地`, score: Math.min(92, 70 + Number(values.knocks ?? 0) * 5), category: 'combat' },
     CLUTCH: { type: 'CLUTCH', title: '🏆 收割现场', text: `${name}\n团战内完成${kills}次击杀`, score: Math.min(94, 76 + kills * 5), category: 'combat' },
     REVIVE_CHAIN: { type: 'REVIVE_CHAIN', title: '❤️ 急救站站长', text: `${name}\n连续完成${Number(values.revives ?? 0)}次救援`, score: Math.min(86, 55 + Number(values.revives ?? 0) * 6), category: 'support' },
@@ -266,6 +266,65 @@ function flashEvents(facts: MatchReviewFacts): FunEvent[] {
     facts: { uses: item.uses },
     tags: ['flash', 'utility'],
     dedupGroup: `flash-use:${item.playerId}`,
+  })).filter((item): item is FunEvent => item !== null);
+}
+
+function stunGunEvents(facts: MatchReviewFacts): FunEvent[] {
+  return (facts.stunGuns ?? []).filter((item) => item.pickups > 0 || item.shots > 0).map((item) => makeFunEvent(facts, {
+    id: `fun-event-stun-gun-${item.playerId}`,
+    type: 'STUN_GUN_USED',
+    actorPlayerId: item.playerId,
+    targetPlayerIds: [],
+    factIds: [item.id],
+    evidenceIds: [`evidence-${item.id}`, ...item.evidenceIds],
+    confidence: 'CONFIRMED',
+    funScore: Math.min(80, 40 + item.shots * 12 + item.confirmedHits * 12),
+    category: 'utility',
+    title: '⚡ 电击枪出场',
+    text: `${playerName(facts, item.playerId)}\n拾取${item.pickups}次 · 开火${item.shots}次 · ${item.confirmedHits > 0 ? `确认命中${item.confirmedHits}次` : '未确认命中对象'}`,
+    facts: { pickups: item.pickups, shots: item.shots, confirmedHits: item.confirmedHits, teammateHits: item.teammateHits, enemyHits: item.enemyHits, unknownOutcomes: item.unknownOutcomes },
+    tags: ['stun_gun', 'utility'],
+    dedupGroup: `stun-gun:${item.playerId}`,
+  })).filter((item): item is FunEvent => item !== null);
+}
+
+function vehicleImpactEvents(facts: MatchReviewFacts): FunEvent[] {
+  return (facts.vehicleImpacts ?? [])
+    .filter((item) => item.wheelsDestroyed >= 3 || item.vehicleDestroyed > 0)
+    .map((item) => makeFunEvent(facts, {
+      id: `fun-event-vehicle-impact-${item.id}`,
+      type: item.wheelsDestroyed >= 4 ? 'VEHICLE_FOUR_WHEELS' : 'VEHICLE_IMPACT_CHAIN',
+      actorPlayerId: item.playerId,
+      targetPlayerIds: [],
+      factIds: [item.id],
+      evidenceIds: [`evidence-${item.id}`, ...item.evidenceIds],
+      confidence: 'CONFIRMED',
+      funScore: Math.min(100, 70 + item.wheelsDestroyed * 5 + item.vehicleDestroyed * 8 + item.knocks * 4),
+      category: 'vehicle',
+      title: item.wheelsDestroyed >= 4 ? '☢️ 一炮四轮' : '🚗 拆车连招',
+      text: `${playerName(facts, item.playerId)}\n${item.wheelsDestroyed > 0 ? `摧毁${item.wheelsDestroyed}个轮胎` : ''}${item.vehicleDamage > 0 ? ` · ${Math.round(item.vehicleDamage)}载具伤害` : ''}${item.playerDamage > 0 ? ` · ${Math.round(item.playerDamage)}人体伤害` : ''}${item.knocks > 0 ? ` · ${item.knocks}倒地` : ''}${item.vehicleDestroyed > 0 ? ' · 载具被摧毁' : ''}`,
+      facts: { wheelsDestroyed: item.wheelsDestroyed, vehicleDamage: Math.round(item.vehicleDamage), playerDamage: Math.round(item.playerDamage), knocks: item.knocks, kills: item.kills, vehicleDestroyed: item.vehicleDestroyed },
+      tags: ['vehicle', 'impact_chain', ...(item.wheelsDestroyed >= 4 ? ['four_wheels'] : [])],
+      dedupGroup: 'vehicle-impact-chain',
+    })).filter((item): item is FunEvent => item !== null);
+}
+
+function armorBreakEvents(facts: MatchReviewFacts): FunEvent[] {
+  return (facts.armorBreaks ?? []).filter((item) => item.followUp !== null).map((item) => makeFunEvent(facts, {
+    id: `fun-event-armor-break-${item.id}`,
+    type: 'ARMOR_BREAK_FOLLOW_UP',
+    actorPlayerId: item.actorPlayerId,
+    targetPlayerIds: item.victimPlayerId ? [item.victimPlayerId] : [],
+    factIds: [item.id],
+    evidenceIds: [`evidence-${item.id}`, ...item.evidenceIds],
+    confidence: 'CONFIRMED',
+    funScore: item.followUp === 'KILL' ? 88 : 76,
+    category: 'combat',
+    title: item.followUp === 'KILL' ? '🎯 破盔后击杀' : '🎯 破盔后击倒',
+    text: `${playerName(facts, item.actorPlayerId)}\n${item.weapon ?? '攻击'}破坏${item.armorSlot ?? '护甲'}后${item.followUp === 'KILL' ? '完成击杀' : '造成倒地'}`,
+    facts: { armorItem: item.armorItem, armorSlot: item.armorSlot, weapon: item.weapon, followUp: item.followUp, distanceMeters: item.distanceMeters },
+    tags: ['armor_break', 'follow_up'],
+    dedupGroup: `armor-break-follow-up:${item.actorPlayerId}`,
   })).filter((item): item is FunEvent => item !== null);
 }
 
@@ -502,6 +561,9 @@ export function generateBaseFunEvents(facts: MatchReviewFacts): FunEvent[] {
     ...aggregateTeamDamage(facts, 'EXPLOSIVE'),
     ...teamVehicleEvents(facts),
     ...flashEvents(facts),
+    ...stunGunEvents(facts),
+    ...vehicleImpactEvents(facts),
+    ...armorBreakEvents(facts),
     ...vehicleEvents(facts),
     ...playerEvents(facts),
     ...keyOperationEvents(facts),

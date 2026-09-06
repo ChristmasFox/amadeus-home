@@ -3,11 +3,11 @@ kind: Tool
 metadata:
   name: get_pubg_stats_v3
   label:
-    en_US: PUBG Query Engine v3.2
-    zh_Hans: PUBG 查询引擎 v3.2
+    en_US: PUBG Query Engine v3.3
+    zh_Hans: PUBG 查询引擎 v3.3
   description:
-    en_US: Execute a PUBG query or match review through the mandatory Mastra Query Engine v3.2 runtime.
-    zh_Hans: 通过强制 Mastra Query Engine v3.2 runtime 执行 PUBG 查询或对局复盘。
+    en_US: Execute a PUBG query or match review through the mandatory Mastra Query Engine v3.3 runtime.
+    zh_Hans: 通过强制 Mastra Query Engine v3.3 runtime 执行 PUBG 查询或对局复盘。
 spec:
   parameters:
     type: object
@@ -43,7 +43,7 @@ spec:
             type: object
           matchSelector:
             type: object
-            description: Optional deterministic selector for one match; use latest, earliest, ordinal, filtered, ranked, active_match, previous, or next.
+            description: Optional deterministic selector for one match; use match_id, latest, earliest, ordinal, filtered, ranked, active_match, previous, or next.
           segments:
             type: array
           groupBy:
@@ -68,7 +68,7 @@ spec:
     required:
       - query
   llm_prompt: |
-    This tool is the mandatory PUBG Query Engine v3.2 entry point. Use it for PUBG, 绝地求生, 吃鸡, 战绩, KD, match, ranking, comparison, trend, and PUBG follow-up requests. Explicit requests such as 复盘, 分析这把, or 为什么输了 use review_match; ordinary reports must remain on the V3 QuerySubgraph. The runtime resolves structured sender-isolated context, validates a version 3 canonical query, checks data freshness, reads or syncs n8n data, deterministically selects a match, parses Telemetry into structured Review Facts, and renders the response. Never answer PUBG facts from conversation memory. Never pass raw Telemetry to an LLM. Never recalculate or rewrite returned numbers. Output only the tool's rendered response.
+    This tool is the mandatory PUBG Query Engine v3.3 entry point. Use it for PUBG, 绝地求生, 吃鸡, 战绩, KD, match, ranking, comparison, trend, and PUBG follow-up requests. Explicit requests such as 复盘, 分析这把, 为什么输了, or a concrete PUBG Match ID use review_match; ordinary reports must remain on the V3 QuerySubgraph. The runtime resolves structured sender-isolated context, validates a version 3 canonical query, checks data freshness, reads or syncs n8n data, deterministically selects a match, parses Telemetry into structured Review Facts, and renders the response. Never answer PUBG facts from conversation memory. Never pass raw Telemetry to an LLM. Never recalculate or rewrite returned numbers. Output only the tool's rendered response.
 execution:
   python:
     path: pubg_stats.py

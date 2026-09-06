@@ -1,11 +1,27 @@
 import type { CanonicalQuery } from '../schema/query.js';
 import { PresentationModelSchema, type PresentationModel, type PresentationSection } from '../platform/core/contracts.js';
-import type { FunEvent, MatchPickerModel, MatchReviewResult, ReviewPlayerFacts } from './types.js';
+import { isPunchWeapon } from './telemetry-events.js';
+import type {
+  FunEvent,
+  MatchPickerModel,
+  MatchReviewResult,
+  ReviewPlayerFacts,
+  ReviewTurningPoint,
+  WeaponStats,
+} from './types.js';
 
-const REVIEW_SECTION_KEYS = ['overview', 'players', 'key_operations', 'key_fights', 'turning_points', 'weapons', 'vehicles', 'heavy_weapons', 'fun', 'conclusion'] as const;
+const REVIEW_SECTION_KEYS = [
+  'overview', 'players', 'key_operations', 'key_fights', 'turning_points', 'weapons',
+  'interactions', 'recovery', 'loot', 'environment', 'vehicles', 'heavy_weapons', 'fun', 'conclusion',
+] as const;
 
 function integer(value: number): string {
   return Math.round(value).toLocaleString('zh-CN');
+}
+
+function percentage(value: number, total: number): string | null {
+  if (!Number.isFinite(value) || !Number.isFinite(total) || total <= 0) return null;
+  return `${((value / total) * 100).toFixed(1)}%`;
 }
 
 function clock(seconds: number | null): string {
@@ -21,6 +37,13 @@ function localTime(value: string | null): string {
   return new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
 }
 
+function mapLabel(value: string): string {
+  const labels: Record<string, string> = {
+    Neon_Main: '荣都',
+  };
+  return labels[value] ?? value.replace(/_Main$/u, '').replace(/_Arena$/u, '竞技场');
+}
+
 function rankLabel(rank: number | null): string {
   return rank === 1 ? '🍗 #1' : rank === null ? '#?' : `#${rank}`;
 }
@@ -31,6 +54,51 @@ function ordinalLabel(ordinal: number): string {
 
 function operationIcon(type: string): string {
   return ({ ENTRY: '🔥', MULTI_KNOCK: '⚡', CLUTCH: '🏆', FLANK: '🧭', TRADE: '🔁', SUPPORT: '🛡️', REVIVE: '❤️', DAMAGE: '💥', POSITIONING_RISK: '⚠️', MISTAKE: '❗', VEHICLE: '🚗', HEAVY_WEAPON: '🚀' } as Record<string, string>)[type] ?? '⭐';
+}
+
+function playerName(review: MatchReviewResult, playerId: string): string {
+  return review.facts.players.find((player) => player.playerId === playerId)?.playerName ?? playerId;
+}
+
+function fightOrdinal(review: MatchReviewResult, fightId: string): number {
+  return Math.max(1, review.facts.fights.findIndex((fight) => fight.id === fightId) + 1);
+}
+
+function resultLabel(result: string): string {
+  return ({ WIN: '赢下', LOSS: '未收口', TRADE: '高收益交换', UNKNOWN: '接触' } as Record<string, string>)[result] ?? result;
+}
+
+function itemLabel(value: string): string {
+  const normalized = value.replace(/^Item_/iu, '').replace(/^Weapon_/iu, '').replace(/_C$/u, '');
+  const labels: Record<string, string> = {
+    Ammo_762mm: '7.62mm弹药',
+    Ammo_556mm: '5.56mm弹药',
+    Ammo_9mm: '9mm弹药',
+    PanzerFaust100M: 'Panzerfaust',
+    FlashBang: '闪光弹',
+    Grenade: '手雷',
+    SmokeBomb: '烟雾弹',
+    Molotov: '燃烧瓶',
+    BluezoneGrenade: '蓝区手雷',
+    Heal_Bandage: '绷带',
+    Heal_FirstAid: '急救包',
+    Boost_EnergyDrink: '能量饮料',
+    Boost_PainKiller: '止痛药',
+    Boost_AdrenalineSyringe: '肾上腺素',
+  };
+  return labels[normalized] ?? normalized;
+}
+
+function weaponLabel(value: string): string {
+  const normalized = value.replace(/^Weap/iu, '').replace(/_C$/u, '').replace(/^Item_Weapon_/iu, '');
+  return ({
+    ProjGrenade: '手雷',
+    Grenade: '手雷',
+    SmokeBomb: '烟雾弹',
+    Molotov: '燃烧瓶',
+    StunGun: '电击枪',
+    PanzerFaust: 'Panzerfaust',
+  } as Record<string, string>)[normalized] ?? normalized;
 }
 
 function vehicleLine(player: ReviewPlayerFacts): string | null {
@@ -49,8 +117,10 @@ function heavyWeaponLine(player: ReviewPlayerFacts): string[] {
   return player.heavyWeapons
     .filter((weapon) => weapon.evidenceIds.length > 0)
     .map((weapon) => {
-      const shot = weapon.shots > 0 ? `${weapon.shots}发${weapon.hits > 0 ? `${weapon.hits}中` : ''}` : `拾取${weapon.pickupEvents}次 · 0发`;
+      const shot = weapon.shots > 0 ? `${weapon.shots}发 · ${weapon.hits}次命中记录` : `拾取${weapon.pickupEvents}次 · 未发射`;
       const impact: string[] = [];
+      if (weapon.playerDamage > 0) impact.push(`${integer(weapon.playerDamage)}人体伤害`);
+      if (weapon.vehicleDamage > 0) impact.push(`${integer(weapon.vehicleDamage)}载具伤害`);
       if (weapon.kills > 0) impact.push(`${weapon.kills}杀`);
       if (weapon.knocks > 0) impact.push(`${weapon.knocks}倒地`);
       if (weapon.vehiclesDestroyed > 0) impact.push(`摧毁${weapon.vehiclesDestroyed}辆载具`);
@@ -58,15 +128,28 @@ function heavyWeaponLine(player: ReviewPlayerFacts): string[] {
     });
 }
 
+function playerContributionLine(review: MatchReviewResult, player: ReviewPlayerFacts): string | null {
+  if (player.matchPresence === 'not_recorded') return 'ℹ️ 本场 Match Store 没有该玩家记录，不把缺失当作0贡献';
+  const parts: string[] = [];
+  const share = percentage(player.damage, review.facts.squad.damage);
+  if (share && player.damage > 0) parts.push(`队伍伤害占比${share}`);
+  if (player.dbnos > 0) parts.push(`倒地→击杀 ${player.kills}/${player.dbnos}（${Math.round((player.kills / player.dbnos) * 100)}%）`);
+  if (player.assists > 0) parts.push(`${player.assists}次助攻`);
+  if (player.revives > 0) parts.push(`${player.revives}次救援`);
+  return parts.length ? `📊 ${parts.join(' · ')}` : null;
+}
+
 function playerSection(review: MatchReviewResult, player: ReviewPlayerFacts, profile: string): PresentationSection {
   const commentary = review.analysis.playerCommentary.find((item) => item.playerId === player.playerId);
   const lines = [
-    `━━━━━━━━━━━━━━`,
+    '━━━━━━━━━━━━━━',
     `👑 ${player.playerName}${player.matchRole ? ` · ${player.matchRole}` : ''}`,
-    `━━━━━━━━━━━━━━`,
+    '━━━━━━━━━━━━━━',
     `${player.kills}杀 · ${player.assists}助 · ${integer(player.damage)}伤害`,
     `${player.dbnos}倒地 · ${player.revives}救援 · ${rankLabel(player.rank)}`,
   ];
+  const contribution = playerContributionLine(review, player);
+  if (contribution) lines.push(contribution);
   const vehicle = vehicleLine(player);
   if (vehicle && (profile === 'default' || profile === 'vehicle' || profile === 'detailed' || profile === 'fun')) lines.push(vehicle);
   const heavy = heavyWeaponLine(player);
@@ -74,7 +157,8 @@ function playerSection(review: MatchReviewResult, player: ReviewPlayerFacts, pro
   if (profile !== 'vehicle' && profile !== 'weapon') {
     lines.push('', '⭐ 关键操作');
     if (player.keyOperations.length) {
-      for (const operation of player.keyOperations) lines.push(`${operationIcon(operation.type)}${operation.time === null ? '' : ` ${clock(operation.time)}`}\n${operation.impact}`);
+      for (const operation of player.keyOperations) lines.push(`${operationIcon(operation.type)}${operation.time === null ? '' : ` ${clock(operation.time)}`}
+${operation.impact}`);
     } else {
       lines.push('— 未发现足够影响战局的关键操作');
     }
@@ -91,8 +175,120 @@ function playerSection(review: MatchReviewResult, player: ReviewPlayerFacts, pro
       section: 'key_operations',
       vehicle: player.vehicle ?? null,
       heavyWeapons: player.heavyWeapons,
+      matchPresence: player.matchPresence ?? 'recorded',
     },
   };
+}
+
+function weaponLine(review: MatchReviewResult, weapon: WeaponStats): string {
+  const player = playerName(review, weapon.playerId);
+  const impact: string[] = [];
+  if (weapon.damage > 0) impact.push(`${integer(weapon.damage)}伤害`);
+  if (weapon.hits > 0) impact.push(`${weapon.hits}次命中记录`);
+  if (weapon.knocks > 0) impact.push(`${weapon.knocks}倒地`);
+  if (weapon.kills > 0) impact.push(`${weapon.kills}杀`);
+  if (!impact.length && weapon.shots > 0) impact.push(`${weapon.shots}次攻击记录，未形成伤害命中`);
+  return `• ${player} · ${weaponLabel(weapon.weapon)} · ${impact.join(' · ')}`;
+}
+
+function weaponSection(review: MatchReviewResult): PresentationSection | null {
+  const weapons = review.facts.weapons
+    .filter((weapon) => weapon.evidenceIds.length > 0 && (weapon.damage > 0 || weapon.hits > 0 || weapon.knocks > 0 || weapon.kills > 0))
+    .sort((left, right) => right.damage - left.damage || right.kills - left.kills || right.shots - left.shots)
+    .slice(0, 12);
+  if (!weapons.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🔫 武器信息', '━━━━━━━━━━━━━━', '命中记录来自伤害/倒地事件，不把攻击次数直接当作命中率。', ...weapons.map((weapon) => weaponLine(review, weapon))];
+  return { type: 'weapons', title: 'weapons', text: lines.join('\n'), data: { weapons } };
+}
+
+function interactionsSection(review: MatchReviewResult): PresentationSection | null {
+  const facts = review.facts;
+  const names = new Map(facts.players.map((player) => [player.playerId, player.playerName]));
+  const lines = ['━━━━━━━━━━━━━━', '🥊 队友互动与误伤', '━━━━━━━━━━━━━━'];
+  const punches = (facts.teamDamage ?? []).filter((fact) => fact.source === 'MELEE' && isPunchWeapon(fact.weapon ?? null, fact.damageTypeCategory ?? null));
+  for (const punch of punches) lines.push(`• ${names.get(punch.actorPlayerId) ?? punch.actorPlayerId} → ${names.get(punch.victimPlayerId) ?? punch.victimPlayerId}：${punch.hitCount}拳 · ${integer(punch.damage)}伤害`);
+  const other = (facts.teamDamage ?? []).filter((fact) => !(fact.source === 'MELEE' && isPunchWeapon(fact.weapon ?? null, fact.damageTypeCategory ?? null)));
+  for (const fact of other) {
+    const source = fact.source === 'EXPLOSIVE' ? '手雷/爆炸物' : fact.source === 'GUN' ? '枪械' : fact.source === 'VEHICLE' ? '载具' : '近战';
+    lines.push(`• ${names.get(fact.actorPlayerId) ?? fact.actorPlayerId} → ${names.get(fact.victimPlayerId) ?? fact.victimPlayerId}：${source}${fact.hitCount}次 · ${integer(fact.damage)}伤害`);
+  }
+  const stun = (facts.stunGuns ?? []).filter((item) => item.pickups > 0 || item.shots > 0);
+  for (const item of stun) lines.push(`• ${names.get(item.playerId) ?? item.playerId}：电击枪拾取${item.pickups}次 · 开火${item.shots}次 · ${item.confirmedHits > 0 ? `确认命中${item.confirmedHits}次` : '未确认命中对象'}`);
+  if (!punches.length && !other.length && !stun.length) return null;
+  if (punches.length >= 2 && punches.some((left) => punches.some((right) => left.actorPlayerId === right.victimPlayerId && left.victimPlayerId === right.actorPlayerId))) lines.push('', '🚨 组合：本场出现双向队友拳击。');
+  if (punches.length && other.some((fact) => fact.source === 'EXPLOSIVE')) lines.push('🚨 组合：双向拳击 + 投掷物误伤，形成误伤三件套。');
+  return { type: 'interactions', title: 'interactions', text: lines.join('\n'), data: { teamDamage: facts.teamDamage ?? [], stunGuns: stun } };
+}
+
+function recoveryLine(review: MatchReviewResult, playerId: string): string | null {
+  const stats = review.facts.recovery?.find((item) => item.playerId === playerId);
+  if (!stats) return null;
+  const healing: string[] = [];
+  if (stats.bandages) healing.push(`绷带${stats.bandages}`);
+  if (stats.firstAids) healing.push(`急救包${stats.firstAids}`);
+  if (stats.medKits) healing.push(`医疗箱${stats.medKits}`);
+  const boosts: string[] = [];
+  if (stats.adrenaline) boosts.push(`肾上腺素${stats.adrenaline}`);
+  if (stats.energyDrinks) boosts.push(`能量饮料${stats.energyDrinks}`);
+  if (stats.painkillers) boosts.push(`止痛药${stats.painkillers}`);
+  if (stats.otherUses) boosts.push(`其他增益${stats.otherUses}`);
+  const lines = [`• ${playerName(review, playerId)}`];
+  if (healing.length) lines.push(`  治疗：${healing.join(' · ')}`);
+  if (boosts.length) lines.push(`  能量/增益：${boosts.join(' · ')}`);
+  return lines.join('\n');
+}
+
+function recoverySection(review: MatchReviewResult): PresentationSection | null {
+  const stats = review.facts.recovery ?? [];
+  if (!stats.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '💊 恢复物品与能量', '━━━━━━━━━━━━━━', ...stats.map((item) => recoveryLine(review, item.playerId)).filter((item): item is string => Boolean(item))];
+  return { type: 'recovery', title: 'recovery', text: lines.join('\n'), data: { recovery: stats } };
+}
+
+function lootSection(review: MatchReviewResult): PresentationSection | null {
+  const stats = review.facts.loot ?? [];
+  const transfers = review.facts.vehicleTrunk ?? [];
+  if (!stats.length && !transfers.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '📦 搜包与物资搬运', '━━━━━━━━━━━━━━'];
+  for (const item of stats) {
+    const breakdown = [
+      item.weapons ? `武器${item.weapons}` : '', item.throwables ? `投掷物${item.throwables}` : '',
+      item.ammunition ? `弹药${item.ammunition}` : '', item.healing ? `治疗${item.healing}` : '',
+      item.boosts ? `增益${item.boosts}` : '', item.armor ? `防具${item.armor}` : '', item.attachments ? `配件${item.attachments}` : '',
+    ].filter(Boolean);
+    lines.push(`• ${playerName(review, item.playerId)}：死亡盒拾取${item.lootBoxPickups}次${breakdown.length ? ` · ${breakdown.join(' · ')}` : ''}`);
+    if (item.notableItems.length) lines.push(`  重点物资：${item.notableItems.join('、')}`);
+  }
+  for (const transfer of transfers) lines.push(`• ${clock(transfer.time)} ${playerName(review, transfer.playerId)}${transfer.direction === 'PUT' ? ' → 车厢' : ' ← 车厢'}：${itemLabel(transfer.item)}${transfer.vehicleId ? `（${transfer.vehicleId}）` : ''}`);
+  lines.push('', '注：不同车辆之间只确认存取动作，不把它们强行解释成同一件物资的完整接力。');
+  return { type: 'loot', title: 'loot', text: lines.join('\n'), data: { loot: stats, vehicleTrunk: transfers } };
+}
+
+function environmentSection(review: MatchReviewResult): PresentationSection | null {
+  const stats = review.facts.environment ?? [];
+  if (!stats.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🪟 环境动作', '━━━━━━━━━━━━━━'];
+  for (const item of stats) lines.push(`• ${playerName(review, item.playerId)}：开门${item.doorOpens} · 关门${item.doorCloses} · 破窗${item.windowsDestroyed} · 拆栅栏${item.fencesDestroyed} · 翻越${item.vaults}${item.ledgeGrabs ? `（抓边${item.ledgeGrabs}）` : ''}${item.vaultsOnVehicle ? ` · 车上翻越${item.vaultsOnVehicle}` : ''}`);
+  const environmentTimes = stats.flatMap((item) => item.eventTimes);
+  const fightsWithEnvironment = review.facts.fights.filter((fight) => environmentTimes.some((time) => time >= fight.start && time <= fight.end));
+  lines.push('', fightsWithEnvironment.length
+    ? `战斗关联：${fightsWithEnvironment.map((fight) => `第${fightOrdinal(review, fight.id)}波`).join('、')}战斗窗口内出现环境动作。`
+    : '战斗关联：精确战斗窗口内未记录开门或翻越，不据此推断战果因果。');
+  return { type: 'environment', title: 'environment', text: lines.join('\n'), data: { environment: stats, fightsWithEnvironment: fightsWithEnvironment.map((fight) => fight.id) } };
+}
+
+function turningPointLine(review: MatchReviewResult, point: ReviewTurningPoint): string {
+  const icon = point.impact === 'positive' ? '✅' : point.impact === 'negative' ? '⚠️' : '🔎';
+  return `${icon} ${point.time === null ? '' : `${clock(point.time)} · `}${point.title}\n${point.text}`;
+}
+
+function turningPointSection(review: MatchReviewResult): PresentationSection | null {
+  const points = review.analysis.turningPoints ?? [];
+  if (!points.length && !review.analysis.teamStory) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🧭 战局走势', '━━━━━━━━━━━━━━'];
+  if (points.length) lines.push('', ...points.map((point) => turningPointLine(review, point)));
+  else lines.push(review.analysis.teamStory || '暂无足够事实串起战局');
+  return { type: 'turning_points', title: 'turning_points', text: lines.join('\n'), data: { turningPoints: points, actionPlan: review.analysis.actionPlan ?? [] } };
 }
 
 function funEventMatchesProfile(event: FunEvent, review: MatchReviewResult, query: CanonicalQuery, profile: string): boolean {
@@ -108,13 +304,8 @@ function funEventMatchesProfile(event: FunEvent, review: MatchReviewResult, quer
 function funSection(review: MatchReviewResult, query: CanonicalQuery, profile: string): PresentationSection | null {
   const events = (review.analysis.funEvents ?? []).filter((event) => funEventMatchesProfile(event, review, query, profile));
   if (!events.length) return null;
-  const text = ['🤣 本局整活', ...events.map((event) => `${event.title}\n${event.text}`)].join('\n\n');
-  return {
-    type: 'fun',
-    title: 'fun',
-    text,
-    data: { items: events, eventIds: events.map((event) => event.id) },
-  };
+  const text = ['🤣 趣味事件组合', ...events.map((event) => `${event.title}\n${event.text}`)].join('\n\n');
+  return { type: 'fun', title: 'fun', text, data: { items: events, eventIds: events.map((event) => event.id) } };
 }
 
 function buildPickerText(picker: MatchPickerModel, query: CanonicalQuery): string {
@@ -124,7 +315,7 @@ function buildPickerText(picker: MatchPickerModel, query: CanonicalQuery): strin
     const teamKills = Number(candidate.row.metrics.teamKills ?? candidate.row.metrics.kills ?? 0);
     const teamAssists = Number(candidate.row.metrics.teamAssists ?? candidate.row.metrics.assists ?? 0);
     const teamDamage = Number(candidate.row.metrics.teamDamage ?? candidate.row.metrics.damage ?? 0);
-    lines.push(`${ordinalLabel(candidate.ordinal)} ${localTime(candidate.match.createdAt)} · ${candidate.match.mapName} · ${rankLabel(candidate.row.bestRank ?? null)}`);
+    lines.push(`${ordinalLabel(candidate.ordinal)} ${localTime(candidate.match.createdAt)} · ${mapLabel(candidate.match.mapName)} · ${rankLabel(candidate.row.bestRank ?? null)}`);
     const players = candidate.row.players ?? [];
     lines.push(players.map((player) => `${player.displayName || player.playerName} ${player.kills}杀${player.assists}助`).join(' ｜ ') || '暂无队员明细');
     lines.push(`⚔️ ${teamKills}杀 · ${teamAssists}助 ｜🎯 ${integer(teamDamage)}伤害`, '');
@@ -152,36 +343,57 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
   const analysis = review.analysis;
   const overview = [
     '🎬 PUBG · 对局复盘',
-    `${match.ordinal} ${localTime(match.startedAt)} · ${match.mapName}`,
-    `${rankLabel(match.placement)} · ${clock(match.duration)}`,
+    `${match.ordinal} ${localTime(match.startedAt)} · ${mapLabel(match.mapName)}`,
+    `${rankLabel(match.placement)} · ${clock(match.duration)} · ${match.gameMode}`,
     '',
-    `⚔️ ${facts.squad.kills}杀 · ${facts.squad.assists}助攻`,
-    `🎯${integer(facts.squad.damage)}伤害 · 💥${facts.squad.knocks}倒地`,
+    `⚔️ ${facts.squad.kills}杀 · ${facts.squad.assists}助攻 · ${facts.squad.knocks}倒地`,
+    `🎯 ${integer(facts.squad.damage)}伤害 · ❤️ ${facts.squad.revives}救援`,
     '',
     '🔥 本局一句话',
     analysis.summary,
+    '',
+    '🧭 战局主线',
+    analysis.teamStory || '暂无足够事实串起战局',
   ];
   if (review.telemetry.status === 'UNAVAILABLE') overview.push('', '⚠️ 该场基础战绩已经找到，但详细战斗记录暂时无法获取。');
   if (!facts.fightIntegrity.pass) overview.push('', '⚠️ 详细团战数据未通过一致性校验，暂不展示团战结论。');
-  const sections: PresentationSection[] = [{ type: 'overview', title: 'overview', text: overview.join('\n'), data: { matchId: match.matchId, telemetry: review.telemetry } }];
+  const sections: PresentationSection[] = [{ type: 'overview', title: 'overview', text: overview.join('\n'), data: { matchId: match.matchId, telemetry: review.telemetry, turningPointCount: analysis.turningPoints?.length ?? 0 } }];
+  const teamProfile = profile !== 'personal' && profile !== 'vehicle' && profile !== 'weapon';
+  if (teamProfile) {
+    const turningPoints = turningPointSection(review);
+    if (turningPoints) sections.push(turningPoints);
+  }
   const visiblePlayers = profile === 'personal' && query.subject.type !== 'team'
     ? facts.players.filter((player) => query.subject.ids.includes(player.playerId))
     : facts.players;
   for (const player of visiblePlayers) sections.push(playerSection(review, player, profile));
+  if (profile === 'default' || profile === 'combat' || profile === 'detailed' || profile === 'weapon' || profile === 'fun') {
+    const weapons = weaponSection(review);
+    if (weapons) sections.push(weapons);
+  }
+  const interactions = interactionsSection(review);
+  if (interactions) sections.push(interactions);
+  const recovery = recoverySection(review);
+  if (recovery) sections.push(recovery);
+  const loot = lootSection(review);
+  if (loot) sections.push(loot);
+  const environment = environmentSection(review);
+  if (environment && profile !== 'personal') sections.push(environment);
   const fun = funSection(review, query, profile);
   if (fun) sections.push(fun);
-  if (profile !== 'personal' && profile !== 'vehicle' && profile !== 'weapon') {
+  if (teamProfile) {
     const fightLines = !facts.fightIntegrity.pass
       ? ['⚠️ 详细团战数据未通过一致性校验，暂不展示。']
       : analysis.keyFights.length
-        ? analysis.keyFights.map((fight, index) => `${index + 1} ${clock(fight.start)}–${clock(fight.end)} · ${fight.result}\n我方：${fight.teamKills}杀 · ${integer(fight.teamDamage)}伤害 · ${fight.teamKnocks}倒地\n承受：${integer(fight.receivedDamage)}伤害 · ${fight.receivedKnocks}人倒地\n关键人物：${fight.keyPlayers.length ? fight.keyPlayers.map((playerId) => facts.players.find((player) => player.playerId === playerId)?.playerName ?? playerId).join('、') : '暂无'}${fight.location ? `\n地点：${fight.location}` : ''}`)
+        ? analysis.keyFights.map((fight) => `${fightOrdinal(review, fight.id)} ${clock(fight.start)}–${clock(fight.end)} · ${resultLabel(fight.result)}\n我方：${fight.teamKills}杀 · ${fight.teamKnocks}倒地 · ${integer(fight.teamDamage)}伤害\n我方被击杀：${fight.receivedKills}次 · 被击倒：${fight.receivedKnocks}次 · 承受${integer(fight.receivedDamage)}伤害\n关键人物：${fight.keyPlayers.length ? fight.keyPlayers.map((playerId) => playerName(review, playerId)).join('、') : '暂无'}${fight.location ? `\n地点：${fight.location}` : ''}`)
         : ['暂无足够战斗事件形成团战'];
     sections.push({ type: 'key_fights', title: 'key_fights', text: ['━━━━━━━━━━━━━━', '⚔️ 关键团战', '━━━━━━━━━━━━━━', ...fightLines].join('\n'), data: { fights: analysis.keyFights } });
     const good = analysis.good.length ? analysis.good.map((item) => `• ${item}`).join('\n') : '• 暂无可确认的正向结论';
     const improvements = analysis.improvements.length ? analysis.improvements.map((item) => `• ${item}`).join('\n') : '• 暂无明确改进项';
     const keyPlayers = analysis.keyPlayers.length ? analysis.keyPlayers.map((item) => `• ${item}`).join('\n') : '• 暂无足够证据';
-    const conclusion = ['━━━━━━━━━━━━━━', '🧠 本局复盘', '━━━━━━━━━━━━━━', '✅ 做得好的', good, '', '⚠️ 可以改进', improvements, '', '🏅 本局关键人物', keyPlayers];
-    sections.push({ type: 'conclusion', title: 'conclusion', text: conclusion.join('\n'), data: { good: analysis.good, improvements: analysis.improvements, keyPlayers: analysis.keyPlayers } });
+    const actionPlan = analysis.actionPlan?.length ? analysis.actionPlan.map((item) => `• ${item}`).join('\n') : '• 暂无额外行动建议';
+    const conclusion = ['━━━━━━━━━━━━━━', '🧠 本局复盘', '━━━━━━━━━━━━━━', '✅ 做得好的', good, '', '⚠️ 可以改进', improvements, '', '🎯 下一局行动', actionPlan, '', '🏅 本局关键人物', keyPlayers];
+    sections.push({ type: 'conclusion', title: 'conclusion', text: conclusion.join('\n'), data: { good: analysis.good, improvements: analysis.improvements, actionPlan: analysis.actionPlan ?? [], keyPlayers: analysis.keyPlayers } });
   }
   const fallbackText = sections.map((section) => section.text ?? '').filter(Boolean).join('\n\n');
   return PresentationModelSchema.parse({

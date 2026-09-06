@@ -117,7 +117,7 @@ export function detectKeyOperations(facts: MatchReviewFacts): KeyOperation[] {
     }
     for (const weapon of facts.heavyWeapons.filter((item) => item.playerId === player.playerId)) {
       if (weapon.shots <= 0 && weapon.hits <= 0 && weapon.knocks <= 0 && weapon.kills <= 0 && weapon.vehiclesDestroyed <= 0) continue;
-      const impact = weapon.shots === 0 ? `拾取${weapon.weapon}${weapon.pickupEvents}次但未发射` : `${weapon.weapon}${weapon.shots}发/${weapon.hits}中`;
+      const impact = weapon.shots === 0 ? `拾取${weapon.weapon}${weapon.pickupEvents}次但未发射` : `${weapon.weapon}${weapon.shots}发/${weapon.hits}次命中记录`;
       add(playerOps, player.playerId, evidenceTime(facts, weapon.evidenceIds), 'HEAVY_WEAPON', impact, Math.min(500, 80 + weapon.hits * 180 + weapon.kills * 160 + weapon.vehiclesDestroyed * 150), { weapon: weapon.weapon, shots: weapon.shots, hits: weapon.hits, kills: weapon.kills }, weapon.evidenceIds);
     }
 

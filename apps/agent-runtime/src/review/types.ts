@@ -64,6 +64,111 @@ export interface HeavyWeaponStats {
   evidenceIds: string[];
 }
 
+export interface StunGunStats {
+  id: string;
+  playerId: string;
+  pickups: number;
+  shots: number;
+  confirmedHits: number;
+  teammateHits: number;
+  enemyHits: number;
+  unknownOutcomes: number;
+  evidenceIds: string[];
+}
+
+export interface RecoveryStats {
+  id: string;
+  playerId: string;
+  bandages: number;
+  firstAids: number;
+  medKits: number;
+  adrenaline: number;
+  energyDrinks: number;
+  painkillers: number;
+  otherUses: number;
+  /** Raw heal ticks are retained for diagnostics, not rendered as item uses. */
+  healingAmount: number;
+  evidenceIds: string[];
+}
+
+export interface LootStats {
+  id: string;
+  playerId: string;
+  lootBoxPickups: number;
+  weapons: number;
+  throwables: number;
+  ammunition: number;
+  healing: number;
+  boosts: number;
+  armor: number;
+  attachments: number;
+  notableItems: string[];
+  evidenceIds: string[];
+}
+
+export type VehicleTrunkDirection = 'PUT' | 'PICKUP';
+
+export interface VehicleTrunkTransfer {
+  id: string;
+  direction: VehicleTrunkDirection;
+  playerId: string;
+  item: string;
+  itemCategory?: string;
+  itemSubCategory?: string;
+  vehicleId: string | null;
+  vehicleType: string | null;
+  stackCount: number | null;
+  time: number | null;
+  evidenceIds: string[];
+}
+
+export interface EnvironmentStats {
+  id: string;
+  playerId: string;
+  doorOpens: number;
+  doorCloses: number;
+  windowsDestroyed: number;
+  fencesDestroyed: number;
+  vaults: number;
+  ledgeGrabs: number;
+  vaultsOnVehicle: number;
+  eventTimes: number[];
+  evidenceIds: string[];
+}
+
+export type ArmorBreakFollowUp = 'KNOCK' | 'KILL' | null;
+
+export interface ArmorBreakFact {
+  id: string;
+  actorPlayerId: string;
+  victimPlayerId: string | null;
+  armorItem: string | null;
+  armorSlot: string | null;
+  weapon: string | null;
+  damageReason: string | null;
+  distanceMeters: number | null;
+  attackId: string | null;
+  time: number | null;
+  followUp: ArmorBreakFollowUp;
+  evidenceIds: string[];
+}
+
+export interface VehicleImpactFact {
+  id: string;
+  playerId: string;
+  attackId: string;
+  vehicleId: string | null;
+  vehicleType: string | null;
+  wheelsDestroyed: number;
+  vehicleDamage: number;
+  playerDamage: number;
+  knocks: number;
+  kills: number;
+  vehicleDestroyed: number;
+  time: number | null;
+  evidenceIds: string[];
+}
+
 export type TeamDamageSource = 'MELEE' | 'GUN' | 'VEHICLE' | 'EXPLOSIVE';
 
 export interface TeamDamageFact {
@@ -173,6 +278,8 @@ export interface KeyOperation {
 export interface ReviewPlayerFacts {
   playerId: string;
   playerName: string;
+  /** Match Store may omit a configured player from a match row. Missing is not zero contribution. */
+  matchPresence?: 'recorded' | 'not_recorded';
   rank: number | null;
   kills: number;
   assists: number;
@@ -216,6 +323,14 @@ export interface MatchReviewFacts {
   teamVehicleEvents?: TeamVehicleEvent[];
   /** Flash use is countable; flash victims are intentionally not inferred. */
   flash?: FlashStats[];
+  /** Supplemental telemetry facts used by the v1 report template. */
+  stunGuns?: StunGunStats[];
+  recovery?: RecoveryStats[];
+  loot?: LootStats[];
+  vehicleTrunk?: VehicleTrunkTransfer[];
+  environment?: EnvironmentStats[];
+  armorBreaks?: ArmorBreakFact[];
+  vehicleImpacts?: VehicleImpactFact[];
 }
 
 export type SpecialEventType =
@@ -254,8 +369,24 @@ export interface PlayerCommentary {
   operationIds: string[];
 }
 
+export type ReviewTurningPointType = 'POWER_SPIKE' | 'CLEAN_WIN' | 'FINAL_LOSS' | 'TEAMWORK_RISK';
+
+export interface ReviewTurningPoint {
+  id: string;
+  type: ReviewTurningPointType;
+  time: number | null;
+  title: string;
+  text: string;
+  impact: 'positive' | 'negative' | 'neutral';
+  facts: Record<string, number | string | boolean | null>;
+  evidenceIds: string[];
+}
+
 export interface ReviewAnalysis {
   summary: string;
+  teamStory?: string;
+  turningPoints?: ReviewTurningPoint[];
+  actionPlan?: string[];
   playerCommentary: PlayerCommentary[];
   keyFights: Fight[];
   good: string[];

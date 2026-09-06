@@ -12,6 +12,7 @@ export * from '../../../apps/agent-runtime/src/review/telemetry-events.js';
 export * from '../../../apps/agent-runtime/src/review/telemetry.js';
 export * from '../../../apps/agent-runtime/src/review/review-facts.js';
 export * from '../../../apps/agent-runtime/src/review/review-analyzer.js';
+export * from '../../../apps/agent-runtime/src/review/supplemental-intelligence.js';
 export * from '../../../apps/agent-runtime/src/review/subgraph.js';
 export * from '../../../apps/agent-runtime/src/schema/query.js';
 export * from '../../../apps/agent-runtime/src/schema/status.js';

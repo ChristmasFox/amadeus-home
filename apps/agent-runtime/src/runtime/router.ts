@@ -10,6 +10,7 @@ export interface DomainRouteResult {
 // Positive PUBG intent only. Relative dates and other TimeRange tokens are
 // deliberately absent: they are parameters parsed after this domain decision.
 const PUBG_INTENT_SIGNAL = /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|杀人|人头|伤害|助攻|倒地|击倒|救援|扶人|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|谁最强|谁最菜|谁最拉|拉完了|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目/u;
+const PUBG_MATCH_ID_SIGNAL = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/iu;
 // A valid contextual follow-up is either a compact time selector with a
 // follow-up marker, or a conversational PUBG reference. Arbitrary text that
 // merely starts with a date is not a follow-up.
@@ -95,7 +96,7 @@ export function classifyPubgRequest(text: string, context: SessionContextRecord 
 
   // 3. Decide PUBG intent before any downstream time-range parsing. A date
   // word by itself is only a selector parameter and cannot enter this branch.
-  if (PUBG_INTENT_SIGNAL.test(normalized)) {
+  if (PUBG_INTENT_SIGNAL.test(normalized) || PUBG_MATCH_ID_SIGNAL.test(normalized)) {
     return { domain: 'pubg', route: 'mandatory', reason: 'explicit_pubg_signal', contextActive };
   }
   if (hasValidPendingSelection(context) && MATCH_SELECTION_INPUT.test(normalized)) {

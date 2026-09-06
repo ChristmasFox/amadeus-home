@@ -6,8 +6,8 @@ metadata:
     en_US: PUBG Query Gateway v3
     zh_Hans: PUBG 查询网关 v3
   description:
-    en_US: Mandatory routing for PUBG queries and Telegram match-review callbacks to Mastra Query Engine v3.2.
-    zh_Hans: 将 PUBG 查询和 Telegram 对局复盘回调强制路由到 Mastra Query Engine v3.2。
+    en_US: Mandatory routing for PUBG queries and Telegram match-review callbacks to Mastra Query Engine v3.3.
+    zh_Hans: 将 PUBG 查询和 Telegram 对局复盘回调强制路由到 Mastra Query Engine v3.3。
 spec: {}
 execution:
   python:

@@ -112,6 +112,29 @@ test('generated n8n data gateway skips expired-state sync for complete historica
   assert.equal((prepared.diagnostics as Record<string, unknown>).stateFresh, false);
 });
 
+test('generated n8n data gateway resolves an explicit match ID without applying a hidden date filter', async () => {
+  const workflow = await loadWorkflow();
+  const directQuery = {
+    ...query,
+    selector: { type: 'time_range', start: '2026-09-01T00:00:00.000Z', end: now, label: '今天' },
+    operation: 'review_match',
+    matchSelector: { type: 'match_id', matchId: 'fixture-match', label: '指定对局' },
+  };
+  const normalized = executeNode(nodeCode(workflow, 'Normalize Query Input'), { query: directQuery, now, sessionId: 'n8n-session', queryId: 'n8n-query' }, [], {});
+  const prepared = executeNode(
+    nodeCode(workflow, 'Prepare Query Data'),
+    {},
+    [{ json: stateRow }, { json: matchRow }],
+    {
+      'Normalize Query Input': [{ json: normalized }],
+      'Read V2 Match Store': [{ json: matchRow }],
+    },
+  );
+  assert.equal(prepared.syncNeeded, false);
+  assert.equal((prepared.diagnostics as Record<string, unknown>).localSelectedCount, 1);
+  assert.equal((prepared.diagnostics as Record<string, unknown>).directMatchId, 'fixture-match');
+});
+
 test('generated n8n data gateway treats current selector as freshness-sensitive', async () => {
   const workflow = await loadWorkflow();
   const currentQuery = { ...query, selector: { type: 'time_range', start: '2026-08-31T22:00:00.000Z', end: now, label: '今天' } };

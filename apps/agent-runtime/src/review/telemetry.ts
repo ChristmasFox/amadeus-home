@@ -5,8 +5,8 @@ import type { NormalizedMatch } from '../data/model.js';
 import { extractMatchReviewFacts } from './review-facts.js';
 import type { MatchReviewFacts, ReviewEvidence } from './types.js';
 
-export const DEFAULT_TELEMETRY_PARSER_VERSION = 'telemetry-parser-4';
-export const DEFAULT_REVIEW_FEATURE_VERSION = 'review-features-4';
+export const DEFAULT_TELEMETRY_PARSER_VERSION = 'telemetry-parser-5';
+export const DEFAULT_REVIEW_FEATURE_VERSION = 'review-features-5';
 
 export interface TelemetryFeatureKey {
   matchId: string;
@@ -105,6 +105,55 @@ function compactEvidence(facts: MatchReviewFacts): ReviewEvidence[] {
     'telemetry',
     fact.evidenceIds,
     `${fact.playerId} 的闪光弹使用事实`,
+  ));
+  facts.stunGuns?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的电击枪使用事实`,
+  ));
+  facts.recovery?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的恢复/能量物品使用事实`,
+  ));
+  facts.loot?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的死亡盒搜包事实`,
+  ));
+  facts.vehicleTrunk?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的载具仓库${fact.direction === 'PUT' ? '存入' : '取出'}事实`,
+  ));
+  facts.environment?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的环境互动事实`,
+  ));
+  facts.armorBreaks?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.actorPlayerId} 的护甲破坏事实`,
+  ));
+  facts.vehicleImpacts?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的载具攻击组合事实`,
   ));
   return retained;
 }

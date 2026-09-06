@@ -9,7 +9,19 @@ export type NormalizedTelemetryEventType =
   | 'REVIVE'
   | 'ITEM_ACQUIRE'
   | 'ITEM_DROP'
+  | 'ITEM_USE'
+  | 'ITEM_LOOT'
+  | 'ITEM_TRUNK_PUT'
+  | 'ITEM_TRUNK_PICKUP'
+  | 'ITEM_ATTACH'
+  | 'ITEM_DETACH'
   | 'THROWABLE_USE'
+  | 'HEAL'
+  | 'ARMOR_DESTROY'
+  | 'WHEEL_DESTROY'
+  | 'OBJECT_INTERACTION'
+  | 'OBJECT_DESTROY'
+  | 'VAULT'
   | 'VEHICLE_RIDE'
   | 'VEHICLE_LEAVE'
   | 'VEHICLE_DAMAGE'
@@ -55,6 +67,25 @@ export interface NormalizedTelemetryEvent {
   speed: number | null;
   distanceMeters: number | null;
   location: TelemetryLocation | null;
+  /** Supplemental telemetry fields; omitted by old cached facts. */
+  healAmount?: number;
+  health?: number | null;
+  blueZone?: boolean | null;
+  redZone?: boolean | null;
+  specialZone?: string | null;
+  itemCategory?: string | null;
+  itemSubCategory?: string | null;
+  stackCount?: number | null;
+  ownerTeamId?: string | null;
+  creatorId?: string | null;
+  parentItemId?: string | null;
+  childItemId?: string | null;
+  damageReason?: string | null;
+  wheelIndex?: number | null;
+  objectType?: string | null;
+  objectStatus?: string | null;
+  isLedgeGrab?: boolean | null;
+  isVaultOnVehicle?: boolean | null;
 }
 
 type RawObject = Record<string, unknown>;
@@ -126,6 +157,18 @@ function rawType(event: RawObject): string {
 
 function eventType(type: string): NormalizedTelemetryEventType | null {
   const normalized = type.replace(/^Log/u, '').toLowerCase();
+  if (normalized.includes('itempickupfromlootbox')) return 'ITEM_LOOT';
+  if (normalized.includes('itempickupfromvehicletrunk')) return 'ITEM_TRUNK_PICKUP';
+  if (normalized.includes('itemputtovehicletrunk')) return 'ITEM_TRUNK_PUT';
+  if (normalized.includes('itemuse')) return 'ITEM_USE';
+  if (normalized.includes('itemattach')) return 'ITEM_ATTACH';
+  if (normalized.includes('itemdetach')) return 'ITEM_DETACH';
+  if (normalized === 'heal' || normalized.includes('playerheal')) return 'HEAL';
+  if (normalized.includes('armordestroy')) return 'ARMOR_DESTROY';
+  if (normalized.includes('wheeldestroy')) return 'WHEEL_DESTROY';
+  if (normalized.includes('objectinteraction')) return 'OBJECT_INTERACTION';
+  if (normalized.includes('objectdestroy')) return 'OBJECT_DESTROY';
+  if (normalized.includes('vaultstart')) return 'VAULT';
   if (normalized.includes('playerattack') || normalized === 'weaponfire') return 'ATTACK';
   if (normalized.includes('playerdamage') || normalized.includes('takedamage')) return 'DAMAGE';
   if (normalized.includes('makegroggy') || normalized.includes('knock')) return 'KNOCK';
@@ -420,7 +463,19 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
     REVIVE: ['reviver', 'character', 'player'],
     ITEM_ACQUIRE: ['character', 'player'],
     ITEM_DROP: ['character', 'player'],
+    ITEM_USE: ['character', 'player'],
+    ITEM_LOOT: ['character', 'player'],
+    ITEM_TRUNK_PUT: ['character', 'player'],
+    ITEM_TRUNK_PICKUP: ['character', 'player'],
+    ITEM_ATTACH: ['character', 'player'],
+    ITEM_DETACH: ['character', 'player'],
     THROWABLE_USE: ['attacker', 'character', 'player'],
+    HEAL: ['character', 'player'],
+    ARMOR_DESTROY: ['attacker', 'character', 'player'],
+    WHEEL_DESTROY: ['attacker', 'character', 'player'],
+    OBJECT_INTERACTION: ['character', 'player'],
+    OBJECT_DESTROY: ['character', 'player'],
+    VAULT: ['character', 'player'],
     VEHICLE_RIDE: ['character', 'player'],
     VEHICLE_LEAVE: ['character', 'player'],
     VEHICLE_DAMAGE: ['attacker', 'character', 'player'],
@@ -435,7 +490,7 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
   const victimEntity = firstEntityObject(event, ['victim', 'target', 'damagedPlayer', 'victimCharacter', 'attackedCharacter']);
   const vehicles = [event.vehicle, event.killerVehicle, event.attackerVehicle, event.vehicleInfo].map(objectValue);
   const speed = numberValue(event.speed ?? event.maxSpeed ?? vehicles.map((vehicle) => vehicle.maxSpeed).find((value) => value !== undefined));
-  const distanceCandidate = numberValue(event.distanceMeters ?? event.rideDistance);
+  const distanceCandidate = numberValue(event.distanceMeters ?? event.rideDistance ?? event.distance);
   const distanceMeters = distanceCandidate !== null && distanceCandidate >= 0 ? distanceCandidate : null;
   const category = damageTypeCategory(event);
   const normalizedVehicleId = vehicleId(event);
@@ -445,6 +500,11 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
   const normalizedVehicleDamage = numberValue(event.vehicleDamage ?? event.damageToVehicle)
     ?? (normalizedType === 'VEHICLE_DAMAGE' ? normalizedDamage : 0);
   const character = objectValue(event.character);
+  const item = objectValue(event.item);
+  const parentItem = objectValue(event.parentItem);
+  const childItem = objectValue(event.childItem);
+  const objectType = stringValue(event.objectType);
+  const objectStatus = stringValue(event.objectTypeStatus ?? event.objectStatus);
   return {
     id: `telemetry-${index + 1}`,
     type,
@@ -477,6 +537,24 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
     speed,
     distanceMeters,
     location: locationOf(event),
+    healAmount: numberValue(event.healAmount) ?? 0,
+    health: numberValue(character.health),
+    blueZone: booleanValue(character.isInBlueZone),
+    redZone: booleanValue(character.isInRedZone),
+    specialZone: stringValue(character.inSpecialZone),
+    itemCategory: stringValue(item.category),
+    itemSubCategory: stringValue(item.subCategory),
+    stackCount: numberValue(item.stackCount),
+    ownerTeamId: firstString(event.ownerTeamId, event.owner_team_id),
+    creatorId: firstString(event.creatorAccountId, event.creator_account_id),
+    parentItemId: firstString(parentItem.itemId, parentItem.item_id),
+    childItemId: firstString(childItem.itemId, childItem.item_id),
+    damageReason: firstString(event.damageReason, event.damage_reason),
+    wheelIndex: numberValue(event.wheelIndex),
+    objectType,
+    objectStatus,
+    isLedgeGrab: booleanValue(event.isLedgeGrab),
+    isVaultOnVehicle: booleanValue(event.isVaultOnVehicle),
   };
 }
 

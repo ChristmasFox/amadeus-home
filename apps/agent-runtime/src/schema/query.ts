@@ -63,6 +63,7 @@ export type MatchRankMetric = z.infer<typeof MatchRankMetricSchema>;
 // Match selection is deliberately separate from the time selector. The former
 // chooses one item from a resolved ResultSet; it never changes Query semantics.
 export const MatchSelectorSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('match_id'), matchId: z.string().min(1), label: z.string().optional() }),
   z.object({ type: z.literal('latest'), recent: z.boolean().optional() }),
   z.object({ type: z.literal('earliest') }),
   z.object({ type: z.literal('ordinal'), ordinal: MatchOrdinalSchema }),

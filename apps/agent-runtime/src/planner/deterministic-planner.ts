@@ -41,6 +41,8 @@ const METRIC_ALIASES: Array<[Metric, RegExp]> = [
   ['matches', /场次|几把|多少场|打了几把/u],
 ];
 
+const PUBG_MATCH_ID_PATTERN = /\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/iu;
+
 function has(text: string, pattern: RegExp): boolean {
   return pattern.test(text);
 }
@@ -120,6 +122,8 @@ function pendingSelectionOrdinal(text: string): number | null {
 function reviewMatchSelector(text: string, context: PlannerContextHint | undefined, reviewOperation: boolean): MatchSelector | null {
   const boundedOrdinal = (value: number): number => Math.max(1, Math.min(1000, value));
   if (!reviewOperation) return null;
+  const explicitMatchId = text.match(PUBG_MATCH_ID_PATTERN)?.[0];
+  if (explicitMatchId) return { type: 'match_id', matchId: explicitMatchId, label: '指定对局' };
   const pendingOrdinal = pendingSelectionOrdinal(text);
   if (pendingOrdinal !== null && context?.pendingMatchSelection?.resultSetId) {
     return { type: 'ordinal', ordinal: boundedOrdinal(pendingOrdinal) };
@@ -267,7 +271,7 @@ export function buildDeterministicQuery(input: PlannerInput, team: TeamConfig = 
   const isStrongest = /最强|最猛|发挥最好|状态最好|C了|表现最好/u.test(text);
   const isWeakest = /最菜|最拉|拉胯|拉完了|最坑|发挥最差|状态最差/u.test(text);
   const isList = /列出|有哪些比赛|比赛列表|每一把/u.test(text);
-  const explicitSelectorFlag = Boolean(selectorResult || compare || pendingMatchSelection);
+  const explicitSelectorFlag = Boolean(selectorResult || compare || pendingMatchSelection || selectedMatchSelector?.type === 'match_id');
   const useResultSet = !reviewOperation && !explicitSelectorFlag && Boolean(input.context?.lastResultSetId) && /其中|刚才|上一组|这些比赛|哪一把|哪场|哪局|那场|那些比赛/u.test(text);
   let operation: CanonicalQuery['operation'] = 'report';
   let groupBy: CanonicalQuery['groupBy'] = 'player';
@@ -341,7 +345,9 @@ export function buildDeterministicQuery(input: PlannerInput, team: TeamConfig = 
     limit = previous.limit;
   }
 
-  let selector: Selector = selectorResult?.selector ?? { type: 'relative_period', value: 'today', label: '今天' };
+  let selector: Selector = selectedMatchSelector?.type === 'match_id'
+    ? { type: 'last_n_matches', count: 1, offset: 0, label: '指定对局' }
+    : selectorResult?.selector ?? { type: 'relative_period', value: 'today', label: '今天' };
   if (pendingMatchSelection && input.context?.pendingMatchSelection?.resultSetId) {
     selector = {
       type: 'result_set',
@@ -389,5 +395,5 @@ export function isPubgText(text: string, context?: PlannerContextHint): boolean 
   // Keep planner-side legacy classification aligned with the domain router:
   // TimeRange tokens are parameters, not standalone PUBG intent.
   if (context?.activeDomain === 'pubg') return true;
-  return /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|最强|最菜|拉完|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目/iu.test(text);
+  return /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|最强|最菜|拉完|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/iu.test(text);
 }

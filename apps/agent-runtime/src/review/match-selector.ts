@@ -83,7 +83,12 @@ function inSelector(match: NormalizedMatch, query: CanonicalQuery, ids: Set<stri
 
 function baseCandidates(records: NormalizedMatch[], query: CanonicalQuery, team: TeamConfig, now: Date): MatchPickerCandidate[] {
   const ids = subjectIds(query, team);
-  let matches = records.filter((match) => match.isCompetitive !== false && selectedPlayers(match, ids).length > 0 && inSelector(match, query, ids, now));
+  const directMatchId = query.matchSelector?.type === 'match_id' ? query.matchSelector.matchId : null;
+  let matches = records.filter((match) => match.isCompetitive !== false
+    && selectedPlayers(match, ids).length > 0
+    // An explicit Match ID is authoritative and must not be narrowed away by
+    // the planner's default time selector.
+    && (directMatchId ? match.matchId === directMatchId : inSelector(match, query, ids, now)));
   if (query.selector.type === 'last_n_matches') {
     const orderedNewest = [...matches].sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId));
     matches = orderedNewest.slice(query.selector.offset, query.selector.offset + query.selector.count);
@@ -125,6 +130,11 @@ export function resolveMatchCandidates(
   let candidates = baseCandidates(records, query, team, now);
   const selector = query.matchSelector ?? null;
   if (!selector) return { candidates, selected: candidates, selectionRequired: candidates.length > 1, selector };
+
+  if (selector.type === 'match_id') {
+    const selected = candidates.filter((candidate) => candidate.match.matchId === selector.matchId);
+    return { candidates, selected, selectionRequired: false, selector };
+  }
 
   if (selector.type === 'active_match') {
     const active = candidates.find((candidate) => candidate.match.matchId === context?.activeMatchId);

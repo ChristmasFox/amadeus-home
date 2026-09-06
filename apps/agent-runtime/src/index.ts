@@ -42,6 +42,7 @@ export * from './review/heavy-weapon-intelligence.js';
 export * from './review/special-events.js';
 export * from './review/review-facts.js';
 export * from './review/review-analyzer.js';
+export * from './review/supplemental-intelligence.js';
 export * from './review/fun-candidate-generator.js';
 export * from './review/fun-event-generator.js';
 export * from './review/event-combination-engine.js';

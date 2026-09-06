@@ -20,6 +20,11 @@ function playerSummaryFact(facts: MatchReviewFacts, playerId: string): string {
   return `player-summary-${facts.match.matchId}-${playerId}`;
 }
 
+function fightLabel(facts: MatchReviewFacts, fight: MatchReviewFacts['fights'][number]): string {
+  const ordinal = Math.max(1, facts.fights.findIndex((item) => item.id === fight.id) + 1);
+  return `第${ordinal}波团战`;
+}
+
 function punchFacts(facts: MatchReviewFacts, playerId: string): TeamDamageFact[] {
   return (facts.teamDamage ?? []).filter((fact) => fact.actorPlayerId === playerId
     && fact.source === 'MELEE'
@@ -119,6 +124,141 @@ function firstThenFight(): FunCombinationRule {
         facts: { punchHits: punches, enemyDamage, breakdown },
         tags: ['punching', 'low_enemy_damage'],
         suppresses: ['TEAMMATE_PUNCHING'],
+      });
+    },
+  };
+}
+
+function bidirectionalPunch(): FunCombinationRule {
+  return {
+    id: 'bidirectional_punch',
+    conditions: ['same pair has confirmed punches in both directions'],
+    priority: 112,
+    funScore: 86,
+    confidenceRequirement: 'CONFIRMED',
+    dedupGroup: 'combo-teammate',
+    evaluate(facts) {
+      const pairs = new Map<string, { left: TeamDamageFact; right: TeamDamageFact }>();
+      for (const left of facts.teamDamage ?? []) {
+        if (left.source !== 'MELEE' || !isPunchWeapon(left.weapon ?? null, left.damageTypeCategory ?? null)) continue;
+        const reverse = (facts.teamDamage ?? []).find((right) => right.source === 'MELEE'
+          && isPunchWeapon(right.weapon ?? null, right.damageTypeCategory ?? null)
+          && right.actorPlayerId === left.victimPlayerId
+          && right.victimPlayerId === left.actorPlayerId);
+        if (!reverse) continue;
+        const ids = [left.actorPlayerId, left.victimPlayerId].sort();
+        pairs.set(ids.join(':'), { left, right: reverse });
+      }
+      const selected = [...pairs.values()].sort((left, right) => {
+        const leftHits = left.left.hitCount + left.right.hitCount;
+        const rightHits = right.left.hitCount + right.right.hitCount;
+        return rightHits - leftHits || left.left.id.localeCompare(right.left.id);
+      })[0];
+      if (!selected) return null;
+      const leftHits = selected.left.hitCount;
+      const rightHits = selected.right.hitCount;
+      return makeCombo(facts, this, {
+        id: `fun-event-combo-bidirectional-punch-${selected.left.actorPlayerId}-${selected.left.victimPlayerId}`,
+        actorPlayerId: selected.left.actorPlayerId,
+        targetPlayerIds: [selected.left.victimPlayerId],
+        factIds: [selected.left.id, selected.right.id],
+        evidenceIds: [...selected.left.evidenceIds, ...selected.right.evidenceIds, `evidence-${selected.left.id}`, `evidence-${selected.right.id}`],
+        title: '🥊 双向互殴',
+        text: `${playerName(facts, selected.left.actorPlayerId)}→${playerName(facts, selected.left.victimPlayerId)} ${leftHits}拳；${playerName(facts, selected.right.actorPlayerId)}→${playerName(facts, selected.right.victimPlayerId)} ${rightHits}拳。`,
+        facts: { forwardPunches: leftHits, reversePunches: rightHits, forwardDamage: Math.round(selected.left.damage), reverseDamage: Math.round(selected.right.damage) },
+        tags: ['punching', 'bidirectional'],
+        suppresses: ['TEAMMATE_PUNCHING'],
+      });
+    },
+  };
+}
+
+function friendlyDamageTriad(): FunCombinationRule {
+  return {
+    id: 'friendly_damage_triad',
+    conditions: ['bidirectional punches', 'additional friendly explosive/gun/vehicle damage'],
+    priority: 118,
+    funScore: 94,
+    confidenceRequirement: 'CONFIRMED',
+    dedupGroup: 'combo-teammate',
+    evaluate(facts) {
+      const punches = (facts.teamDamage ?? []).filter((fact) => fact.source === 'MELEE' && isPunchWeapon(fact.weapon ?? null, fact.damageTypeCategory ?? null));
+      const forward = punches.find((fact) => punches.some((reverse) => reverse.actorPlayerId === fact.victimPlayerId && reverse.victimPlayerId === fact.actorPlayerId));
+      if (!forward) return null;
+      const reverse = punches.find((fact) => fact.actorPlayerId === forward.victimPlayerId && fact.victimPlayerId === forward.actorPlayerId);
+      const extra = (facts.teamDamage ?? []).find((fact) => ['EXPLOSIVE', 'GUN', 'VEHICLE'].includes(fact.source));
+      if (!reverse || !extra) return null;
+      return makeCombo(facts, this, {
+        id: `fun-event-combo-friendly-damage-triad-${forward.actorPlayerId}-${forward.victimPlayerId}`,
+        actorPlayerId: extra.actorPlayerId,
+        targetPlayerIds: [forward.victimPlayerId, reverse.victimPlayerId, extra.victimPlayerId],
+        factIds: [forward.id, reverse.id, extra.id],
+        evidenceIds: [...forward.evidenceIds, ...reverse.evidenceIds, ...extra.evidenceIds, `evidence-${forward.id}`, `evidence-${reverse.id}`, `evidence-${extra.id}`],
+        title: '🚨 误伤三件套',
+        text: `${playerName(facts, forward.actorPlayerId)}→${playerName(facts, forward.victimPlayerId)} ${forward.hitCount}拳；${playerName(facts, reverse.actorPlayerId)}→${playerName(facts, reverse.victimPlayerId)} ${reverse.hitCount}拳；${playerName(facts, extra.actorPlayerId)}再用${extra.source === 'EXPLOSIVE' ? '投掷物' : extra.source === 'GUN' ? '枪械' : '载具'}误伤队友${extra.hitCount}次。`,
+        facts: { forwardPunches: forward.hitCount, reversePunches: reverse.hitCount, extraSource: extra.source, extraHits: extra.hitCount },
+        tags: ['team_damage', 'punching', 'triad'],
+        suppresses: ['TEAMMATE_PUNCHING', 'TEAM_EXPLOSIVE_DAMAGE', 'TEAM_GUN_DAMAGE', 'TEAM_VEHICLE_DAMAGE'],
+      });
+    },
+  };
+}
+
+function entryToClutch(): FunCombinationRule {
+  return {
+    id: 'entry_to_clutch',
+    conditions: ['one teammate opens a fight', 'another teammate converts multiple knocks/kills'],
+    priority: 104,
+    funScore: 91,
+    confidenceRequirement: 'DERIVED',
+    dedupGroup: 'combo-combat',
+    evaluate(facts) {
+      for (const fight of facts.fights) {
+        const operations = facts.players.flatMap((player) => player.keyOperations.filter((operation) => operation.facts.fightId === fight.id));
+        const entry = operations.find((operation) => operation.type === 'ENTRY');
+        const finisher = operations.filter((operation) => operation.type === 'CLUTCH' || operation.type === 'MULTI_KNOCK')
+          .sort((left, right) => right.impactScore - left.impactScore)[0];
+        if (!entry || !finisher || entry.playerId === finisher.playerId) continue;
+        return makeCombo(facts, this, {
+          id: `fun-event-combo-entry-to-clutch-${fight.id}`,
+          actorPlayerId: entry.playerId,
+          targetPlayerIds: [finisher.playerId],
+          factIds: [entry.id, finisher.id],
+          evidenceIds: [...entry.evidenceIds, ...finisher.evidenceIds, `evidence-${entry.id}`, `evidence-${finisher.id}`],
+          title: '🔥 开团到收割',
+          text: `${playerName(facts, entry.playerId)}先手开团，${playerName(facts, finisher.playerId)}随后完成${String(finisher.facts.kills ?? finisher.facts.knocks ?? 0)}次${finisher.type === 'CLUTCH' ? '击杀' : '倒地'}。`,
+          facts: { fightId: fight.id, entryPlayerId: entry.playerId, finisherPlayerId: finisher.playerId, finisherType: finisher.type },
+          tags: ['combat', 'teamwork', 'entry', 'finish'],
+          suppresses: ['KEY_OPERATION_ENTRY'],
+        });
+      }
+      return null;
+    },
+  };
+}
+
+function highDamageNoConversion(): FunCombinationRule {
+  return {
+    id: 'high_damage_no_conversion',
+    conditions: ['loss fight has damage and knocks', 'zero kills'],
+    priority: 101,
+    funScore: 89,
+    confidenceRequirement: 'DERIVED',
+    dedupGroup: 'combo-combat',
+    evaluate(facts) {
+      const fight = [...facts.fights].filter((item) => item.result === 'LOSS' && item.teamKills === 0 && item.teamKnocks > 0 && item.teamDamage >= 100)
+        .sort((left, right) => right.teamDamage - left.teamDamage || right.end - left.end)[0];
+      if (!fight) return null;
+      return makeCombo(facts, this, {
+        id: `fun-event-combo-no-conversion-${fight.id}`,
+        targetPlayerIds: fight.keyPlayers,
+        factIds: [fight.id],
+        evidenceIds: fight.evidenceIds,
+        title: '🫠 有伤害没收口',
+        text: `${fightLabel(facts, fight)}造成${Math.round(fight.teamDamage)}伤害、${fight.teamKnocks}次倒地，但0击杀，最终以失败收场。`,
+        facts: { fightId: fight.id, damage: Math.round(fight.teamDamage), knocks: fight.teamKnocks, kills: fight.teamKills },
+        tags: ['combat', 'loss', 'conversion'],
+        suppresses: [],
       });
     },
   };
@@ -293,6 +433,10 @@ function attackDirection(): FunCombinationRule {
 }
 
 export const DEFAULT_FUN_COMBINATION_RULES: FunCombinationRule[] = [
+  friendlyDamageTriad(),
+  bidirectionalPunch(),
+  entryToClutch(),
+  highDamageNoConversion(),
   firstThenFight(),
   friendlyThreat(),
   pubgTour(),

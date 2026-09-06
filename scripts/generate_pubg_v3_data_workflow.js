@@ -79,7 +79,9 @@ const recordIds = new Set(uniqueRecords.map((record) => String(record.matchId)))
 const selectors = Array.isArray(query.segments) && query.segments.length
   ? query.segments.map((segment) => segment.selector || {})
   : [query.selector || {}];
+const directMatchId = query.matchSelector?.type === 'match_id' ? String(query.matchSelector.matchId || '') : '';
 function selectorRecords(candidate) {
+  if (directMatchId) return uniqueRecords.filter((record) => String(record.matchId) === directMatchId);
   if (candidate?.type === 'time_range') {
     const start = timestamp(candidate.start);
     const end = timestamp(candidate.end);
@@ -96,6 +98,7 @@ function selectorRecords(candidate) {
   return [];
 }
 function selectorCovered(candidate) {
+  if (directMatchId) return Boolean(directMatchId && recordIds.has(directMatchId));
   if (candidate?.type === 'time_range') {
     const start = timestamp(candidate.start);
     const end = timestamp(candidate.end);
@@ -119,14 +122,18 @@ function requiresFreshness(candidate) {
   if (candidate?.type === 'time_range') return timestamp(candidate.end) >= queryNowMs;
   return true;
 }
-const localComplete = selectors.every(selectorCovered);
+const localComplete = directMatchId ? recordIds.has(directMatchId) : selectors.every(selectorCovered);
 // Current and rolling selectors must re-check the source on every request.
 // A future coverageEnd or a non-expired sync state cannot prove that a new
 // Match did not arrive after the previous query.
-const needsFreshness = selectors.some(requiresFreshness);
+const needsFreshness = directMatchId ? false : selectors.some(requiresFreshness);
 const queryCovered = localComplete && !needsFreshness;
-const localSelectedRecords = [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];
-const requiredMatchCount = Math.max(...selectors.map((candidate) => candidate?.type === 'last_n_matches' ? Number(candidate.count || 0) + Number(candidate.offset || 0) : 0), 0);
+const localSelectedRecords = directMatchId
+  ? uniqueRecords.filter((record) => String(record.matchId) === directMatchId)
+  : [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];
+const requiredMatchCount = directMatchId
+  ? 1
+  : Math.max(...selectors.map((candidate) => candidate?.type === 'last_n_matches' ? Number(candidate.count || 0) + Number(candidate.offset || 0) : 0), 0);
 const coverageStatus = queryCovered ? 'OK' : state?.status === 'SOURCE_UNAVAILABLE' && !localComplete ? 'SOURCE_UNAVAILABLE' : 'COVERAGE_GAP';
 return [{ json: {
   ...request,
@@ -158,7 +165,7 @@ return [{ json: {
     forceDiscovery: true,
     now: new Date(queryNowMs).toISOString(),
   },
-  diagnostics: { localRecordCount: uniqueRecords.length, relevantRecordCount: relevantRecords.length, localSelectedCount: localSelectedRecords.length, stateFresh, localComplete, queryCovered, needsFreshness, requiredMatchCount, queryNowMs, stateExpiresAt: state?.expiresAt || null },
+  diagnostics: { localRecordCount: uniqueRecords.length, relevantRecordCount: relevantRecords.length, localSelectedCount: localSelectedRecords.length, stateFresh, localComplete, queryCovered, needsFreshness, requiredMatchCount, directMatchId: directMatchId || null, queryNowMs, stateExpiresAt: state?.expiresAt || null },
 } }];
 `;
 }
@@ -193,7 +200,9 @@ const queryNowMs = Number(decision.nowMs || decision.diagnostics?.queryNowMs) ||
 const selectors = Array.isArray(query.segments) && query.segments.length
   ? query.segments.map((segment) => segment.selector || {})
   : [query.selector || {}];
+const directMatchId = query.matchSelector?.type === 'match_id' ? String(query.matchSelector.matchId || '') : '';
 function selectorRecords(candidate) {
+  if (directMatchId) return relevantRecords.filter((record) => String(record.matchId) === directMatchId);
   if (candidate?.type === 'time_range') {
     const start = timestamp(candidate.start);
     const end = timestamp(candidate.end);
@@ -210,6 +219,7 @@ function selectorRecords(candidate) {
   return [];
 }
 function selectorCovered(candidate, coverage) {
+  if (directMatchId) return Boolean(directMatchId && records.some((record) => String(record.matchId) === directMatchId));
   if (!coverage?.complete) return false;
   if (candidate?.type === 'time_range') {
     const start = timestamp(candidate.start);
@@ -226,7 +236,9 @@ function selectorCovered(candidate, coverage) {
   }
   return false;
 }
-const localSelectedRecords = [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];
+const localSelectedRecords = directMatchId
+  ? relevantRecords.filter((record) => String(record.matchId) === directMatchId)
+  : [...new Map(selectors.flatMap(selectorRecords).map((record) => [String(record.matchId), record])).values()];
 let coverage = response.coverage && typeof response.coverage === 'object' ? { ...response.coverage } : { ...(decision.coverage || {}) };
 let source = { ...(decision.source || {}), ...responseSource };
 source.syncInvoked = syncInvoked || Boolean(responseSource.syncInvoked);
@@ -258,7 +270,9 @@ if (!syncFailed && syncInvoked) {
   } else if (responseStatus === 'SOURCE_UNAVAILABLE') {
     coverage = { ...coverage, status: records.length ? 'PARTIAL' : 'SOURCE_UNAVAILABLE', complete: false, queryCovered: false, sourceUnavailable: true, freshness: 'unknown' };
   } else {
-    const postSyncCovered = Boolean(coverage.complete) && selectors.every((selector) => selectorCovered(selector, coverage));
+    const postSyncCovered = directMatchId
+      ? localSelectedRecords.length > 0
+      : Boolean(coverage.complete) && selectors.every((selector) => selectorCovered(selector, coverage));
     coverage = {
       ...coverage,
       status: postSyncCovered ? 'OK' : 'COVERAGE_GAP',
@@ -271,11 +285,11 @@ if (!syncFailed && syncInvoked) {
 }
 coverage.failedMatchIds = Array.isArray(coverage.failedMatchIds) ? coverage.failedMatchIds.map(String) : [];
 coverage.checkedAt = coverage.checkedAt || new Date(queryNowMs).toISOString();
-coverage.localComplete = coverage.localComplete ?? Boolean(decision.localComplete);
+coverage.localComplete = coverage.localComplete ?? Boolean(directMatchId ? localSelectedRecords.length > 0 : decision.localComplete);
 coverage.queryCovered = coverage.queryCovered ?? Boolean(decision.queryCovered);
 coverage.sourceUnavailable = Boolean(coverage.sourceUnavailable);
 const status = coverage.status || (syncFailed ? 'SOURCE_UNAVAILABLE' : 'OK');
-return [{ json: { status, query, queryId: decision.queryId, sessionId: decision.sessionId, records, coverage, source, diagnostics: { ...(decision.diagnostics || {}), syncFailed, syncRecordCount: incoming.length, localSelectedCount: localSelectedRecords.length } } }];
+return [{ json: { status, query, queryId: decision.queryId, sessionId: decision.sessionId, records, coverage, source, diagnostics: { ...(decision.diagnostics || {}), syncFailed, syncRecordCount: incoming.length, localSelectedCount: localSelectedRecords.length, directMatchId: directMatchId || null } } }];
 `;
 }
 
