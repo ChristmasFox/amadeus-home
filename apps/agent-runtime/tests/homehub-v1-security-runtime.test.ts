@@ -263,7 +263,7 @@ test('pending action is bound to platform, chat, user and action ID', async () =
     const confirmed = await entry.handleRequest('确认', 'kook', 'admin-user', 'shared-chat');
     assert.equal(confirmed.success, true);
     assert.equal(confirmed.responseType, 'action');
-    assert.equal(docker.calls.some((call) => call.command === 'docker' && call.args?.[0] === 'restart' && call.args?.[1] === 'redis'), true);
+    assert.equal(docker.calls.some((call) => call.command === 'docker' && call.args?.[0] === 'restart' && call.args?.[1] === 'immich-redis'), true);
   } finally {
     auditLogger.stop();
     await rm(root, { recursive: true, force: true });
@@ -272,6 +272,10 @@ test('pending action is bound to platform, chat, user and action ID', async () =
 
 test('Docker health states distinguish healthy, stopped, unhealthy and executor failure', async () => {
   const registry = new ServiceRegistry();
+  const n8nDefinition = registry.getService('n8n')!;
+  // This focused test exercises Docker container/health semantics without
+  // depending on a local test process resolving the production n8n hostname.
+  registry.registerService({ ...n8nDefinition, healthCheck: { type: 'docker', target: 'n8n', timeout: 1000, expected: 'up' } });
   const n8n = registry.getService('n8n')!;
 
   const healthy = healthyDockerExecutor();
@@ -314,8 +318,8 @@ test('Docker health states distinguish healthy, stopped, unhealthy and executor 
 test('executor failure yields UNKNOWN and is excluded from abnormal service count', async () => {
   const engine = new DiagnosticEngine({ execution: unavailableManager() });
   const health = await engine.systemHealth();
-  assert.equal(health.summary.totalServices, 13);
-  assert.equal(health.summary.unknown, 13);
+  assert.equal(health.summary.totalServices, 14);
+  assert.equal(health.summary.unknown, 14);
   assert.equal(health.abnormal.length, 0);
   assert.match(health.diagnosis, /执行器不可用|服务状态未知/u);
   assert.doesNotMatch(health.diagnosis, /13.*异常/u);
@@ -369,7 +373,7 @@ test('HomeHub status explains unavailable macOS host metrics without leaking exe
     assert.match(response.message, /HomeHub 运行在 Docker 容器内，当前未连接 macOS 主机执行器/u);
     assert.match(response.message, /Cloudflare Tunnel — macOS 主机执行器不可用/u);
     assert.doesNotMatch(response.message, /macOS executor unavailable|Docker executor unavailable/u);
-    assert.match(response.message, /📦 \*\*服务状态\*\*/u);
+    assert.match(response.message, /📦 \*\*核心服务\*\*/u);
   } finally {
     auditLogger.stop();
     await rm(root, { recursive: true, force: true });

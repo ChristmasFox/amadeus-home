@@ -333,10 +333,12 @@ export class HomeHubDomain {
       return lines.join('\n');
     }
     const top = result.issues[0];
-    lines.push(`${top?.severity === 'critical' || top?.severity === 'error' ? '❌' : '⚠️'} **${displayName}** 异常`);
+    const degraded = result.status === 'uncertain' && result.issues.every((issue) => issue.severity === 'warning');
+    lines.push(`${top?.severity === 'critical' || top?.severity === 'error' ? '❌' : '⚠️'} **${displayName}** ${degraded ? '运行中但需要关注' : '异常'}`);
     for (const issue of result.issues.slice(0, 5)) {
       const icon = { info: 'ℹ️', warning: '⚠️', error: '❌', critical: '🚨' }[issue.severity];
-      lines.push(`${icon} ${issue.message}`);
+      const diagnosticOnly = issue.category === 'data' && /日志|error|exception|traceback|媒体库|library/iu.test(issue.message);
+      lines.push(`${icon} ${diagnosticOnly ? '最近存在错误日志；如需详情请说「诊断 ' + displayName + '」' : issue.message}`);
     }
     return lines.join('\n');
   }

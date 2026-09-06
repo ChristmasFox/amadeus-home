@@ -53,6 +53,8 @@ export interface HomeHubResponse {
   };
   requiresConfirmation?: boolean;
   nextActions?: Array<{ label: string; action: string; params: Record<string, unknown> }>;
+  /** Set only when a confirmation can be rendered as an interactive button. */
+  pendingActionId?: string;
 }
 
 const SERVICE_KEYWORDS: Array<{ serviceId: ServiceId; keywords: RegExp }> = [
@@ -105,12 +107,39 @@ function formatHealthDiagnosis(diagnosis: string): string {
 }
 
 function formatServiceHealthMessage(service: HealthResult['services'][number]): string {
+  if (service.status === 'healthy') return '';
   if (service.status === 'unknown' && service.unknownReason === 'executor_unavailable') {
     if (service.executor === 'macos-host') return 'macOS 主机执行器不可用';
     if (service.executor === 'docker') return 'Docker 执行器不可用';
     return '服务执行器不可用';
   }
-  return service.message;
+  if (service.status === 'degraded' && service.checks.some((check) => check.name === 'recent_logs' && check.status === 'unhealthy')) {
+    const source = `${service.message} ${service.checks.find((check) => check.name === 'recent_logs')?.message ?? ''}`;
+    return /media|library|媒体库|资料库/iu.test(source) ? '运行中，最近存在媒体库错误' : '运行中，最近存在错误日志';
+  }
+  return service.message.replace(/^最近日志发现错误:\s*/u, '最近存在错误：').slice(0, 160);
+}
+
+function statusIcon(status: HealthResult['services'][number]['status']): string {
+  return { healthy: '✅', degraded: '⚠️', unhealthy: '❌', down: '❌', unknown: '❓' }[status];
+}
+
+function diskLabel(mount: string): string {
+  if (mount === '/' || mount === '/System/Volumes/Data') return '系统盘';
+  if (/Avalon/iu.test(mount)) return 'Avalon';
+  return mount;
+}
+
+function formatBytes(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '未知';
+  const units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
+  let size = Math.max(0, value);
+  let index = 0;
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+  return `${size.toFixed(size >= 100 || index === 0 ? 0 : 1)} ${units[index]}`;
 }
 
 export class HomeHubEntry {
@@ -167,6 +196,22 @@ export class HomeHubEntry {
       default:
         return this.handleStatusQuery(query, platform, chatId, domain);
     }
+  }
+
+  /** Handle a namespaced platform callback after the adapter has normalized it. */
+  async handleCallback(
+    action: 'confirm' | 'cancel',
+    actionId: string,
+    platform: string,
+    platformUserId: string,
+    chatId: string,
+    identity: AuthorizationIdentityLike,
+  ): Promise<HomeHubResponse> {
+    const sessionId = sessionIdForChat(platform, chatId);
+    const domain = new HomeHubDomain({ userId: platformUserId, platform, sessionId });
+    this.contextManager.getContext(sessionId, platformUserId, platform);
+    if (action === 'confirm') return this.confirmPending(sessionId, platform, chatId, platformUserId, identity, domain, actionId);
+    return this.cancelPending(sessionId, platform, chatId, platformUserId, identity, actionId);
   }
 
   private resolveServiceId(text: string): ServiceId | undefined {
@@ -290,6 +335,7 @@ export class HomeHubEntry {
         responseType: 'action',
         message: `${preview.message}\n\n目标：${plan.targetPath}\n备份：${plan.backupPath}\n\n仅会处理这个明确下载项目，不会修改已有媒体库文件。回复「确认」执行，或「取消」。`,
         requiresConfirmation: true,
+        pendingActionId: actionId,
         data: { media: { items, plan, preview } },
       };
     } catch (error) {
@@ -400,6 +446,7 @@ export class HomeHubEntry {
         responseType: 'action',
         message: `⚠️ 确认执行「${this.actionLabel(action)} ${this.displayName(serviceId)}」？\n\n回复「确认」执行，或「取消」。`,
         requiresConfirmation: true,
+        pendingActionId: actionId,
         data: { action: preview },
       };
     }
@@ -417,17 +464,23 @@ export class HomeHubEntry {
     platformUserId: string,
     identity: AuthorizationIdentityLike,
     domain: HomeHubDomain,
+    requestedActionId?: string,
   ): Promise<HomeHubResponse> {
     const anyPending = this.contextManager.getContextRecord(sessionId)?.pendingAction ?? null;
     if (!anyPending) return { success: false, responseType: 'error', message: '没有待确认的操作。' };
-    const pending = this.contextManager.getPendingForActor(sessionId, {
+    const lookup = this.contextManager.claimPendingForActor(sessionId, {
       platform,
       chatId,
       platformUserId,
-      actionId: anyPending.actionId,
+      actionId: requestedActionId ?? anyPending.actionId,
     });
-    if (!pending) return this.denyForeignConfirmation(anyPending.request, platform, chatId, platformUserId, identity);
-
+    if (!lookup.pending) {
+      if (lookup.reason === 'expired') return { success: false, responseType: 'error', message: '待确认操作已过期，请重新发起操作。' };
+      if (lookup.reason === 'claimed') return { success: false, responseType: 'action', message: '该操作正在执行，请稍候。' };
+      if (lookup.reason === 'already_consumed') return { success: false, responseType: 'action', message: '该确认已处理，不能重复执行。' };
+      return this.denyForeignConfirmation(anyPending.request, platform, chatId, platformUserId, identity);
+    }
+    const pending = lookup.pending;
     const request = { ...pending.request, confirmed: true, dryRun: false };
     if (request.action === 'organize_media' || request.action === 'organize') {
       const media = this.pendingMediaPlans.get(pending.actionId);
@@ -466,16 +519,23 @@ export class HomeHubEntry {
     chatId: string,
     platformUserId: string,
     identity: AuthorizationIdentityLike,
+    requestedActionId?: string,
   ): Promise<HomeHubResponse> {
     const anyPending = this.contextManager.getContextRecord(sessionId)?.pendingAction ?? null;
     if (!anyPending) return { success: false, responseType: 'error', message: '没有待取消的操作。' };
-    const pending = this.contextManager.getPendingForActor(sessionId, {
+    const lookup = this.contextManager.inspectPendingForActor(sessionId, {
       platform,
       chatId,
       platformUserId,
-      actionId: anyPending.actionId,
+      actionId: requestedActionId ?? anyPending.actionId,
     });
-    if (!pending) return this.denyForeignConfirmation(anyPending.request, platform, chatId, platformUserId, identity);
+    const pending = lookup.pending;
+    if (!pending) {
+      if (lookup.reason === 'expired') return { success: false, responseType: 'error', message: '待取消操作已过期。' };
+      if (lookup.reason === 'claimed') return { success: false, responseType: 'action', message: '该操作正在执行，不能取消。' };
+      if (lookup.reason === 'already_consumed') return { success: false, responseType: 'action', message: '该操作已处理，不能重复取消。' };
+      return this.denyForeignConfirmation(anyPending.request, platform, chatId, platformUserId, identity);
+    }
     this.pendingMediaPlans.delete(pending.actionId);
     const request = { ...pending.request, confirmed: false, dryRun: false };
     const cancelled = this.cancelledResult(request, '用户取消操作');
@@ -563,27 +623,75 @@ export class HomeHubEntry {
   }
 
   private renderSystemHealth(health: HealthResult): string {
-    const metric = (value: number | null): string => typeof value === 'number' ? `${value.toFixed(1)}%` : '未知';
+    const metric = (value: number | null | undefined): string => typeof value === 'number' && Number.isFinite(value) ? `${value.toFixed(1)}%` : '未知';
+    const load = health.host.loadAverage.filter((value): value is number => typeof value === 'number').map((value) => value.toFixed(2)).join(' ｜ ');
     const hostMetricsAvailable = health.host.status === 'available';
+    const host = health.host;
+    const os = host.os?.version ? `macOS ${host.os.version}${host.os.build ? ` (${host.os.build})` : ''}` : '未知';
     const lines = [
-      '📊 **主机状态**',
-      `主机：${health.host.hostname === 'unknown' ? '未知' : health.host.hostname}`,
-      `指标：${hostMetricsAvailable ? '✅ 已获取' : '❓ 暂不可用'}`,
-      `CPU：${metric(health.host.cpu.usage)} ｜内存：${metric(health.host.memory.percentage)}`,
+      '📊 **NAS 状态**',
+      `主机：${host.hostname === 'unknown' ? '未知' : host.hostname} ｜系统：${os} ｜型号：${host.model ?? '未知'}`,
+      `CPU：${metric(host.cpu.usage)} ｜内存：${metric(host.memory.percentage)} ｜运行：${this.formatUptime(host.uptime)}`,
     ];
-    if (!hostMetricsAvailable) lines.push(`原因：${formatHostMetricReason(health.host.unknownReason)}`);
-    for (const disk of health.host.disk) lines.push(`磁盘 ${disk.mount}: ${metric(disk.percentage)}`);
-    lines.push('', '📦 **服务状态**');
-    const icons: Record<string, string> = { healthy: '✅', degraded: '⚠️', unhealthy: '❌', down: '⛔', unknown: '❓' };
-    for (const service of health.services) lines.push(`${icons[service.status] ?? '❓'} ${this.displayName(service.serviceId)} — ${formatServiceHealthMessage(service)}`);
-    if (health.abnormal.length) {
-      lines.push('', `⚠️ 异常服务: ${health.abnormal.map((service) => this.displayName(service)).join('、')}`, `诊断: ${formatHealthDiagnosis(health.diagnosis)}`);
-    } else if (health.summary.unknown > 0) {
-      lines.push('', `❓ 有 ${health.summary.unknown} 个服务状态未知。`, `诊断: ${formatHealthDiagnosis(health.diagnosis)}`);
-    } else {
-      lines.push('', '✅ 所有服务运行正常。');
+    if (load) lines.push(`负载：${load}`);
+    if (!hostMetricsAvailable) lines.push(`指标：❓ 暂不可用\n原因：${formatHostMetricReason(host.unknownReason)}`);
+
+    const diskLine = host.disk.map((disk) => `${diskLabel(disk.mount)} ${metric(disk.percentage)}${typeof disk.percentage === 'number' && disk.percentage >= 90 ? ' ⚠️' : ''}`).join(' ｜ ');
+    if (diskLine) lines.push(diskLine);
+    if (host.memory.total !== undefined || host.memory.used !== undefined) {
+      lines.push(`内存：${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}，可用 ${formatBytes(host.memory.available)}`);
     }
+    if (host.network?.length) {
+      const network = host.network.slice(0, 4).map((item) => `${item.interface} ↓${formatBytes(item.bytesIn)} ↑${formatBytes(item.bytesOut)}`).join(' ｜ ');
+      lines.push(`网络：${network}`);
+    }
+    if (host.power) {
+      const powerPercent = metric(host.power.percentage);
+      lines.push(`电源：${host.power.source ?? '未知'}${powerPercent === '未知' ? '' : ` ${powerPercent}`} ｜${host.power.state ?? '状态未知'}`);
+    }
+    if (host.cloudflared) {
+      lines.push(`cloudflared：${host.cloudflared.status === 'running' ? '✅ 运行中' : host.cloudflared.status === 'stopped' ? '❌ 未运行' : '❓ 未知'}`);
+    }
+    if (host.highCpuProcesses?.length) {
+      const processes = host.highCpuProcesses.slice(0, 3).map((item) => `${item.name} ${metric(item.cpu)}`).join('、');
+      lines.push(`高占用进程：${processes}`);
+    }
+
+    const groups: Array<{ title: string; services: HealthResult['services'] }> = [
+      { title: '📦 **核心服务**', services: health.services.filter((service) => ['langbot', 'telegram-adapter', 'kook-adapter', 'mastra-pubg-runtime', 'n8n'].includes(service.serviceId)) },
+      { title: '🎬 **媒体服务**', services: health.services.filter((service) => ['emby', 'jellyfin', 'qbittorrent', 'aria2', 'media-organizer-adapter'].includes(service.serviceId)) },
+      { title: '🧩 **基础设施**', services: health.services.filter((service) => ['postgres', 'redis', 'glances', 'cloudflared'].includes(service.serviceId)) },
+    ];
+    const attention: string[] = [];
+    for (const group of groups) {
+      if (!group.services.length) continue;
+      lines.push('', group.title);
+      for (const service of group.services) {
+        const detail = formatServiceHealthMessage(service);
+        lines.push(`${statusIcon(service.status)} ${this.displayName(service.serviceId)}${detail ? ` — ${detail}` : ''}`);
+        if (service.status === 'degraded' || service.status === 'unhealthy' || service.status === 'down') {
+          attention.push(`${this.displayName(service.serviceId)}：${detail || service.message}`);
+        } else if (service.status === 'unknown') {
+          attention.push(`${this.displayName(service.serviceId)}：状态未知`);
+        }
+      }
+    }
+    for (const disk of host.disk) {
+      if (typeof disk.percentage === 'number' && disk.percentage >= 90) attention.push(`${diskLabel(disk.mount)}：使用率 ${disk.percentage.toFixed(1)}%`);
+    }
+    if (attention.length) lines.push('', '⚠️ **需要关注**', ...attention.slice(0, 8).map((item) => `• ${item}`));
+    if (!hostMetricsAvailable && !attention.length) lines.push('', `❓ ${formatHostMetricReason(host.unknownReason)}`);
     return lines.join('\n');
+  }
+
+  private formatUptime(seconds: number | null): string {
+    if (seconds === null || !Number.isFinite(seconds)) return '未知';
+    const days = Math.floor(seconds / 86_400);
+    const hours = Math.floor((seconds % 86_400) / 3_600);
+    const minutes = Math.floor((seconds % 3_600) / 60);
+    if (days > 0) return `${days}天${hours}小时`;
+    if (hours > 0) return `${hours}小时${minutes}分钟`;
+    return `${minutes}分钟`;
   }
 
   private displayName(serviceId: ServiceId): string {
@@ -601,6 +709,7 @@ export class HomeHubEntry {
       aria2: 'aria2',
       glances: 'Glances',
       cloudflared: 'Cloudflare Tunnel',
+      'media-organizer-adapter': 'Media Organizer',
     };
     return names[serviceId] ?? serviceId;
   }

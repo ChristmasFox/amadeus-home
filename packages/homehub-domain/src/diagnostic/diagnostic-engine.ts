@@ -1,3 +1,4 @@
+import { createConnection } from 'node:net';
 import type {
   Action,
   DiagnosisIssue,
@@ -136,9 +137,9 @@ export class DiagnosticEngine {
       && this.hasCause(check, 'service_down')
     ));
     const dependencyFailure = result.checks.some((check) => check.name === 'dependencies' && this.hasCause(check, 'service_down'));
-    const explicitFailure = result.checks.some((check) => this.hasCause(check, 'health_check_failed')
-      || this.hasCause(check, 'resource_exceeded')
-      || this.hasCause(check, 'log_error'));
+    const endpointFailure = result.checks.some((check) => this.hasCause(check, 'health_check_failed'));
+    const resourceWarning = result.checks.some((check) => this.hasCause(check, 'resource_exceeded'));
+    const logWarning = result.checks.some((check) => this.hasCause(check, 'log_error'));
 
     let status: HealthStatus;
     let unknownReason: string | undefined;
@@ -147,15 +148,15 @@ export class DiagnosticEngine {
       unknownReason = String(unknownCheck.details?.cause ?? 'observation_failure');
     } else if (downCheck) {
       status = 'down';
-    } else if (explicitFailure || result.issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) {
+    } else if (endpointFailure || result.issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) {
+      // A running container with a failed application/Docker health probe is
+      // unhealthy, but it is not the same as a stopped service.
       status = 'unhealthy';
-    } else if (dependencyFailure) {
-      // The primary container is still running; a missing dependency is a
-      // degraded condition, not proof that the service itself is DOWN.
+    } else if (dependencyFailure || resourceWarning || logWarning) {
+      // Recent ERROR logs are diagnostic evidence only. They can make a
+      // running service DEGRADED, never DOWN by themselves.
       status = 'degraded';
     } else {
-      // Optional resource/log observations may be unavailable while the
-      // primary service health check is known to be healthy.
       status = 'healthy';
     }
 
@@ -164,9 +165,11 @@ export class DiagnosticEngine {
       ? `无法确认 ${definition.displayName} 状态（${unknownCheck?.message ?? '检查不可用'}）`
       : status === 'down'
         ? downCheck?.message ?? `${definition.displayName} 未运行`
-        : failedCheck?.message
-          ?? result.issues[0]?.message
-          ?? '运行正常';
+        : status === 'degraded' && logWarning
+          ? '运行中，最近存在错误日志'
+          : failedCheck?.message
+            ?? result.issues[0]?.message
+            ?? '运行正常';
 
     return {
       serviceId: definition.serviceId,
@@ -213,22 +216,46 @@ export class DiagnosticEngine {
 
     // Do not run dependent checks after an unknown alive observation: doing so
     // would turn a missing executor into a chain of false service failures.
-    if (aliveCheck.status === 'passed' && (service.healthCheck.type === 'http' || service.healthCheck.type === 'tcp')) {
-      // Docker services are observed from the runtime container. Their host
-      // published ports (for example localhost:5679) are not reachable via
-      // the runtime container's loopback, so use the Docker health/status
-      // boundary instead of pretending that a local curl is authoritative.
-      const reachable = service.runtime === 'docker' && service.container
-        ? await this.checkContainerHealth(service)
-        : await this.checkReachable(service);
-      checks.push(reachable);
-      if (this.hasCause(reachable, 'health_check_failed')) {
+    if (aliveCheck.status === 'passed' && service.healthCheck.type === 'docker') {
+      const healthCheck = await this.checkContainerHealth(service);
+      checks.push(healthCheck);
+      if (this.hasCause(healthCheck, 'health_check_failed')) {
         issues.push({
           severity: 'error',
           category: 'connectivity',
           component: service.serviceId,
-          message: reachable.message,
-          suggestion: `检查 ${service.displayName} 的网络/端口配置`,
+          message: healthCheck.message,
+          suggestion: `检查 ${service.displayName} 的 Docker HEALTHCHECK`,
+          actionable: true,
+        });
+      }
+    } else if (aliveCheck.status === 'passed' && (service.healthCheck.type === 'http' || service.healthCheck.type === 'tcp')) {
+      // A running container is not enough when an application endpoint is
+      // declared. Check Docker health first, then the endpoint itself.
+      const containerHealth = service.runtime === 'docker' && service.container
+        ? await this.checkContainerHealth(service)
+        : null;
+      if (containerHealth) checks.push(containerHealth);
+      if (!containerHealth || containerHealth.status === 'passed') {
+        const reachable = await this.checkReachable(service);
+        checks.push(reachable);
+        if (this.hasCause(reachable, 'health_check_failed')) {
+          issues.push({
+            severity: 'error',
+            category: 'connectivity',
+            component: service.serviceId,
+            message: reachable.message,
+            suggestion: `检查 ${service.displayName} 的网络/端口配置`,
+            actionable: true,
+          });
+        }
+      } else if (this.hasCause(containerHealth, 'health_check_failed')) {
+        issues.push({
+          severity: 'error',
+          category: 'connectivity',
+          component: service.serviceId,
+          message: containerHealth.message,
+          suggestion: `检查 ${service.displayName} 的 Docker HEALTHCHECK`,
           actionable: true,
         });
       }
@@ -395,6 +422,29 @@ export class DiagnosticEngine {
       return this.containerCheck(result, containerName, 'component_alive');
     }
 
+    if (service.executor === 'macos-host' && service.healthCheck.type === 'process') {
+      const result = await this.execution.executeForService(service, {
+        command: 'macos-agent',
+        args: ['/v1/cloudflared/status'],
+        timeoutMs: service.healthCheck.timeout,
+      });
+      if (!result.executorAvailable) return this.skipped('process_alive', 'macOS 主机执行器不可用', 'executor_unavailable');
+      if (!result.ok) return this.skipped('process_alive', 'macOS 主机状态检查失败', 'observation_failure');
+      try {
+        const payload = JSON.parse(result.stdout) as Record<string, unknown>;
+        const state = String(payload.status ?? '').toLowerCase();
+        if (state === 'running' || payload.running === true) {
+          return this.passed('process_alive', 'cloudflared 进程运行中', { target: 'cloudflared', status: 'running' });
+        }
+        if (state === 'stopped' || payload.running === false) {
+          return this.failed('process_alive', 'cloudflared 进程未运行', 'service_down', { target: 'cloudflared', status: 'stopped' });
+        }
+      } catch {
+        // Fall through to an unknown observation instead of guessing.
+      }
+      return this.skipped('process_alive', '无法解析 macOS cloudflared 状态', 'observation_failure');
+    }
+
     if (service.container) {
       const result = await this.execution.executeForService(service, {
         command: 'docker',
@@ -453,33 +503,49 @@ export class DiagnosticEngine {
   }
 
   private async checkReachable(service: ServiceDefinition): Promise<Check> {
-    const timeoutSeconds = Math.max(1, Math.ceil((service.healthCheck.timeout ?? 8000) / 1000));
+    const timeoutMs = Math.max(100, service.healthCheck.timeout ?? 8000);
     if (service.healthCheck.type === 'http') {
-      const result = await this.execution.executeForService(service, {
-        command: 'curl',
-        args: ['-sS', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', String(timeoutSeconds), service.healthCheck.target],
-        timeoutMs: service.healthCheck.timeout,
-      });
-      if (!result.executorAvailable) return this.skipped('http_reachable', 'HTTP executor 不可用', 'executor_unavailable');
-      if (!result.ok) return this.skipped('http_reachable', 'HTTP 检查执行失败', 'observation_failure');
-      const code = Number(result.stdout.trim());
-      if (Number.isInteger(code) && code >= 200 && code < 400) {
-        return this.passed('http_reachable', `HTTP ${code}`, { statusCode: code });
+      try {
+        const response = await fetch(service.healthCheck.target, { signal: AbortSignal.timeout(timeoutMs) });
+        if (response.status >= 200 && response.status < 400) {
+          return this.passed('http_reachable', `HTTP ${response.status}`, { statusCode: response.status, target: service.healthCheck.target });
+        }
+        return this.failed('http_reachable', `HTTP ${response.status}`, 'health_check_failed', { statusCode: response.status, target: service.healthCheck.target });
+      } catch {
+        return this.failed('http_reachable', 'HTTP 应用端点不可达', 'health_check_failed', { target: service.healthCheck.target });
       }
-      return this.failed('http_reachable', `HTTP ${Number.isFinite(code) ? code : '无响应'}`, 'health_check_failed', { statusCode: code });
     }
 
-    const [host, port] = service.healthCheck.target.split(':');
-    if (!host || !port) return this.skipped('tcp_reachable', 'TCP 目标格式无效', 'observation_failure');
-    const result = await this.execution.executeForService(service, {
-      command: 'nc',
-      args: ['-z', '-w', String(timeoutSeconds), host, port],
-      timeoutMs: service.healthCheck.timeout,
-    });
-    if (!result.executorAvailable) return this.skipped('tcp_reachable', 'TCP executor 不可用', 'executor_unavailable');
-    if (result.ok) return this.passed('tcp_reachable', `TCP ${host}:${port} 可达`, { host, port });
-    if (result.exitCode === 1) return this.failed('tcp_reachable', `TCP ${host}:${port} 不可达`, 'health_check_failed', { host, port });
-    return this.skipped('tcp_reachable', 'TCP 检查执行失败', 'observation_failure', { host, port });
+    const target = service.healthCheck.target.includes('://') ? service.healthCheck.target : `tcp://${service.healthCheck.target}`;
+    try {
+      const parsed = new URL(target);
+      const port = Number(parsed.port);
+      if (!parsed.hostname || !Number.isInteger(port) || port < 1 || port > 65535) {
+        return this.failed('tcp_reachable', 'TCP 目标格式无效', 'health_check_failed', { target: service.healthCheck.target });
+      }
+      await new Promise<void>((resolve, reject) => {
+        const socket = createConnection({ host: parsed.hostname, port });
+        const timer = setTimeout(() => socket.destroy(new Error('timeout')), timeoutMs);
+        socket.once('connect', () => {
+          clearTimeout(timer);
+          socket.end();
+          resolve();
+        });
+        socket.once('error', (error) => {
+          clearTimeout(timer);
+          socket.destroy();
+          reject(error);
+        });
+        socket.once('timeout', () => {
+          clearTimeout(timer);
+          socket.destroy();
+          reject(new Error('timeout'));
+        });
+      });
+      return this.passed('tcp_reachable', `TCP ${parsed.hostname}:${port} 可达`, { host: parsed.hostname, port });
+    } catch {
+      return this.failed('tcp_reachable', 'TCP 应用端点不可达', 'health_check_failed', { target: service.healthCheck.target });
+    }
   }
 
   private async checkDependencies(service: ServiceDefinition): Promise<Check> {

@@ -58,3 +58,24 @@ Runtime TS 改动会复用 install layer。实际 CasaOS 部署使用：
 `docker compose up -d --no-build`。容器仍使用 `/DATA/AppData/pubg-query-engine-v3` 的 data 和
 外部 secret file；不要把 API key 写入 compose 或镜像。详细规则见
 `docs/DEVELOPER_WORKFLOW.md`。
+
+## HomeHub V1.2 identity, confirmation and macOS host boundary
+
+Telegram/KOOK identity is resolved from the normalized platform user ID only:
+Telegram uses `message.from.id` (and `callback_query.from.id` for button clicks), while
+chat scope uses `message.chat.id`. A private chat and a group therefore share the same
+internal user mapping without sharing a `chatId`; group IDs are never administrator IDs.
+
+Side-effect confirmations return a platform-neutral presentation. Telegram's existing
+inline-keyboard renderer receives bounded `hh1:confirm:<actionId>` and
+`hh1:cancel:<actionId>` callback data; the server checks the pending action's exact
+`platform + chatId + platformUserId + actionId` binding before atomically claiming it.
+KOOK keeps the text fallback. A unique pending action can be confirmed with `确认` and
+is protected by the same ownership, replay and expiry checks.
+
+macOS host metrics do not come from `/proc` or the HomeHub container. Configure the
+external `MAC_HOST_AGENT_URL` (normally `http://host.docker.internal:49152`) and mount
+`MAC_HOST_AGENT_TOKEN_FILE` into `/run/secrets/mac_host_agent_token`. The read-only agent
+implementation and launchd template are in `infra/macos/`; it exposes only `/v1/health`,
+`/v1/host/status` and `/v1/cloudflared/status`, requires a bearer token, and has no
+`/exec` or `/shell`. If it is unavailable, host and macOS service values stay `UNKNOWN`.

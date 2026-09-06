@@ -2,6 +2,16 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## HomeHub V1.2 当前阶段
+
+2026-09-06 已完成 V1.2 source implementation：Telegram/KOOK identity correction、HomeHub Telegram
+confirmation buttons/callback ownership/replay/expiry/text fallback、MacHostAgent/Executor、APFS-aware
+host metrics、label-based Service Registry mapping、new grouped `/status` formatter and health semantics。
+本地 runtime 125 pass / 1 skip，MacHostAgent Python tests、plugin tests、secret scan 和 diff check 通过。
+当前唯一未完成项是提交后实际部署：启动外部 token-protected MacHostAgent，build/deploy runtime 与 patched
+LangBot images 到 OrbStack ubuntu/CasaOS，运行真实 `/status`、agent reachability、Telegram callback/text
+smoke，并记录 rollback checkpoint。源码 checkpoint 为 `.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
+
 ## 当前上下文
 
 本仓库是 LangBot / Mastra / PUBG / n8n / Telemetry / Platform Adapter / HomeLab

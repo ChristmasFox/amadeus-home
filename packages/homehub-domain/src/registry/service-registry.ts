@@ -61,7 +61,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'Mastra/PUBG Runtime',
         description: 'PUBG 查询引擎运行时，端口 5310',
-        healthCheck: { type: 'http', target: 'http://localhost:5310/healthz', timeout: 5000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://127.0.0.1:5310/healthz', timeout: 5000, expected: 'response' },
         container: { name: 'pubg-query-engine-v3', composePath: '/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart'],
@@ -74,7 +74,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'n8n',
         description: '工作流自动化平台，端口 5679',
-        healthCheck: { type: 'http', target: 'http://localhost:5679/healthz', timeout: 10000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://n8n:5678/healthz', timeout: 10000, expected: 'response' },
         container: { name: 'n8n', composePath: '/var/lib/casaos/apps/n8n/docker-compose.yml' },
         // n8n production uses its local SQLite database in CasaOS.
         dependencies: [],
@@ -88,8 +88,15 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'PostgreSQL',
         description: '主要数据库服务',
-        healthCheck: { type: 'tcp', target: 'localhost:5432', timeout: 5000, expected: 'response' },
-        container: { name: 'postgres', composePath: '/var/lib/casaos/apps/postgres/docker-compose.yml' },
+        // CasaOS/Immich labels resolve service=database, project=immich to
+        // the actual container immich-postgres; service ID remains postgres.
+        healthCheck: { type: 'docker', target: 'immich-postgres', timeout: 10000, expected: 'up' },
+        container: {
+          name: 'immich-postgres',
+          composePath: '/var/lib/casaos/apps/immich/docker-compose.yml',
+          labels: { 'com.docker.compose.project': 'immich', 'com.docker.compose.service': 'database' },
+          aliases: ['postgres'],
+        },
         dependencies: [],
         allowedActions: ['check'],
         riskLevel: 'high',
@@ -101,8 +108,15 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'Redis',
         description: '缓存和消息队列',
-        healthCheck: { type: 'tcp', target: 'localhost:6379', timeout: 3000, expected: 'response' },
-        container: { name: 'redis', composePath: '/var/lib/casaos/apps/redis/docker-compose.yml' },
+        // CasaOS/Immich labels resolve service=redis, project=immich to
+        // the actual container immich-redis; service ID remains redis.
+        healthCheck: { type: 'docker', target: 'immich-redis', timeout: 5000, expected: 'up' },
+        container: {
+          name: 'immich-redis',
+          composePath: '/var/lib/casaos/apps/immich/docker-compose.yml',
+          labels: { 'com.docker.compose.project': 'immich', 'com.docker.compose.service': 'redis' },
+          aliases: ['redis'],
+        },
         dependencies: [],
         allowedActions: ['check', 'restart'],
         riskLevel: 'low',
@@ -114,7 +128,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'Emby',
         description: '媒体服务器',
-        healthCheck: { type: 'http', target: 'http://localhost:8096/health', timeout: 10000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://host.docker.internal:8096/', timeout: 10000, expected: 'response' },
         container: { name: 'emby', composePath: '/var/lib/casaos/apps/emby/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart', 'organize_media'],
@@ -127,7 +141,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'Jellyfin',
         description: '备用媒体服务器',
-        healthCheck: { type: 'http', target: 'http://localhost:8096/health', timeout: 10000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://host.docker.internal:8097/health', timeout: 10000, expected: 'response' },
         container: { name: 'jellyfin', composePath: '/var/lib/casaos/apps/jellyfin/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart'],
@@ -140,7 +154,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'qBittorrent',
         description: 'BT 下载客户端',
-        healthCheck: { type: 'http', target: 'http://localhost:8080', timeout: 10000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://host.docker.internal:8080/', timeout: 10000, expected: 'response' },
         container: { name: 'qbittorrent', composePath: '/var/lib/casaos/apps/qbittorrent/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart'],
@@ -153,7 +167,7 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'aria2',
         description: '多协议下载工具',
-        healthCheck: { type: 'http', target: 'http://localhost:6800/jsonrpc', timeout: 5000, expected: 'response' },
+        healthCheck: { type: 'tcp', target: 'host.docker.internal:6800', timeout: 5000, expected: 'response' },
         container: { name: 'aria2', composePath: '/var/lib/casaos/apps/aria2/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart'],
@@ -166,11 +180,28 @@ export class ServiceRegistry {
         executor: 'docker',
         displayName: 'Glances',
         description: '系统监控工具',
-        healthCheck: { type: 'http', target: 'http://localhost:61208', timeout: 5000, expected: 'response' },
+        healthCheck: { type: 'http', target: 'http://host.docker.internal:61208/', timeout: 5000, expected: 'response' },
         container: { name: 'glances', composePath: '/var/lib/casaos/apps/glances/docker-compose.yml' },
         dependencies: [],
         allowedActions: ['check', 'restart'],
         riskLevel: 'low',
+        recovery: { restart: true, containerRecreate: false, clusterRestart: false },
+      },
+      {
+        serviceId: 'media-organizer-adapter',
+        runtime: 'docker',
+        executor: 'docker',
+        displayName: 'Media Organizer Adapter',
+        description: '媒体整理的受限预览/执行边界，端口 8765',
+        healthCheck: { type: 'docker', target: 'media-organizer-adapter', timeout: 10000, expected: 'up' },
+        container: {
+          name: 'media-organizer-adapter',
+          composePath: '/var/lib/casaos/apps/media-organizer-adapter/docker-compose.yml',
+          labels: { 'com.docker.compose.project': 'media-organizer-adapter', 'com.docker.compose.service': 'media-organizer-adapter' },
+        },
+        dependencies: ['emby'],
+        allowedActions: ['check', 'restart'],
+        riskLevel: 'medium',
         recovery: { restart: true, containerRecreate: false, clusterRestart: false },
       },
       {
@@ -199,6 +230,17 @@ export class ServiceRegistry {
 
   getAllServices(): ServiceDefinition[] {
     return Array.from(this.services.values());
+  }
+
+  /** Return the label-verified container mapping, not the service ID. */
+  getContainerName(serviceId: ServiceId): string | undefined {
+    return this.getService(serviceId)?.container?.name;
+  }
+
+  /** Resolve a service by its actual container name or a declared alias. */
+  getServiceByContainerName(containerName: string): ServiceDefinition | undefined {
+    const normalized = String(containerName).replace(/^\/+/, '');
+    return this.getAllServices().find((service) => service.container?.name === normalized || service.container?.aliases?.includes(normalized));
   }
 
   getServicesByRiskLevel(riskLevel: RiskLevel): ServiceDefinition[] {

@@ -2,6 +2,22 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## HomeHub V1.2 implementation（SOURCE COMPLETE；实际部署待执行）
+
+截至 2026-09-06，V1.2 源码实现与本地验证已完成，实际 CasaOS/LangBot/macOS agent 部署仍待当前阶段的 RELEASE 操作：
+
+- [x] Telegram/KOOK platform identity 只使用稳定 platform user ID；Telegram 群聊从 `message.from.id` / callback `from.id` 取用户，`chat.id` 只作为会话边界；群 ID 不进入 Admin mapping。
+- [x] HomeHub confirmation 使用平台无关 presentation；Telegram 复用现有 PUBG inline keyboard/callback marker，生成短 `hh1:confirm|cancel:<actionId>` 数据，服务端精确校验 `platform + chatId + platformUserId + actionId`，支持原子 claim、replay/expiry/foreign 拒绝；KOOK 保留文本 fallback。
+- [x] 文本唯一 pending action 的「确认」已从 `/v3/route` 路由到 HomeHub，能执行而不是要求重新说明操作。
+- [x] 新增 `MacHostAgentCommandExecutor` 与 `infra/macos/mac_host_agent.py`，只允许 `/v1/health`、`/v1/host/status`、`/v1/cloudflared/status`，Bearer token 鉴权，禁止 `/exec`/`/shell`；HostAgent 不可用时主机与 macOS 服务为 UNKNOWN。
+- [x] MacHostAgent 采集真实 macOS hostname、OS/build、model、CPU、load、uptime、APFS-aware disks、network、power、cloudflared 和 high CPU processes；本机实际 handler smoke 已返回 MacBookPro18,3、macOS 26.0.1、Avalon 约 92.4% 和 cloudflared running。
+- [x] Service Registry 根据真实 CasaOS labels 映射 `postgres -> immich-postgres`（Immich/database）、`redis -> immich-redis`（Immich/redis），补齐实际运行的 `media-organizer-adapter`，Docker allowlist 同步实际 container names。
+- [x] 健康判断以 executor/container/process/Docker health/application endpoint 为主，ERROR 日志仅产生 DEGRADED；stopped 为 DOWN，executor unavailable 为 UNKNOWN；`/status` formatter 改为 NAS/核心/媒体/基础设施/需要关注分组，不把完整日志塞入列表。
+- [x] 新增 TypeScript/Python 回归：Telegram identity、buttons/callback ownership/replay/expiry/text fallback、MacHostAgent surface/metrics、running+ERROR != DOWN、service registry mapping；runtime 125 pass / 1 skip，secret scan、diff check、MacHostAgent tests 通过。
+- [ ] 用提交后的 immutable runtime/LangBot images 部署到 OrbStack `ubuntu`/CasaOS，并通过真实 `/status`、HostAgent reachability、Telegram callback/text smoke；部署后补充 checkpoint 与 rollback evidence。
+
+本阶段源码 checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
+
 ## HomeHub Docker Executor + PUBG KD 修复（DEPLOYED / VERIFIED）
 
 - [x] 新增 `DockerApiCommandExecutor`：只通过 `/var/run/docker.sock` 使用 Docker Engine API，不依赖 Docker CLI。

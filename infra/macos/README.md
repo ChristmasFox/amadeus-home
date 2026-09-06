@@ -1,15 +1,30 @@
-# macOS / Mac mini
+# macOS Host Agent
 
-Mac mini 只承载 OrbStack、共享卷和可选的本地转发工具。长期服务仍部署在
-OrbStack ubuntu 的 CasaOS 中。
+`mac_host_agent.py` 是 HomeHub V1.2 的只读 macOS 观测边界。它只暴露：
 
-bootstrap.sh 会检查或安装 Homebrew、Git、Node、pnpm、tmux、cloudflared 和
-OrbStack。若使用 Apple Silicon，应确认 runtime 与 LangBot 镜像支持目标架构。
+- `GET /v1/health`
+- `GET /v1/host/status`
+- `GET /v1/cloudflared/status`
 
-host-forwarders/9router_proxy.py 是可选的 9router host 转发器：
+所有请求都必须带 `Authorization: Bearer <token>`（也接受同值的
+`X-MacHostAgent-Token`）。不存在 `/exec`、`/shell` 或任意命令转发接口；源码中的
+`subprocess` 调用只使用固定的本机观测命令，并且 `shell=False`。
 
-    python3 infra/macos/host-forwarders/9router_proxy.py
+## 在 Mac mini 上安装
 
-可以用 ORBSTACK_MACHINE 指定 machine，用 ORB_BIN 指定 orb 路径。启动前确认
-本地 20128 端口没有其他进程，并确认 Ubuntu 内 9router 已运行。若 machine
-网络不是常见的私有 IPv4，可额外设置 ORBSTACK_TARGET_HOST。
+```sh
+sudo mkdir -p /Users/Shared/HomeHub
+sudo sh -c 'umask 077; openssl rand -hex 32 > /Users/Shared/HomeHub/mac-host-agent.token'
+chmod 600 /Users/Shared/HomeHub/mac-host-agent.token
+```
+
+复制并审查 `mac-host-agent-launchd.plist.example`，把仓库路径替换为实际路径后：
+
+```sh
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.local.homehub.mac-host-agent.plist
+launchctl kickstart -k "gui/$(id -u)/com.local.homehub.mac-host-agent"
+```
+
+launchd 模板默认监听 `0.0.0.0:49152`，因此 CasaOS 容器可通过
+`http://host.docker.internal:49152` 访问。应在 macOS 防火墙/网络边界限制端口来源，token
+只放在 Mac mini 和 CasaOS 外部 secret 路径，不要写入 Git。

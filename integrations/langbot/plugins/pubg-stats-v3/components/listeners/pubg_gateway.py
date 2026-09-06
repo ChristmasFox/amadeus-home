@@ -60,7 +60,11 @@ class PubgQueryGatewayV3Listener(EventListener):
             return
         if message.get('callback', {}).get('data'):
             if isinstance(adapter, TelegramAdapter):
-                await adapter.acknowledge_callback(event_context, '正在读取这场比赛的战斗记录…')
+                callback_data = str(message.get('callback', {}).get('data') or '')
+                await adapter.acknowledge_callback(
+                    event_context,
+                    '正在处理 HomeHub 操作…' if callback_data.startswith('hh1:') else '正在读取这场比赛的战斗记录…',
+                )
             # The host callback handler ACKs before enqueueing this query. Keep
             # the resume inside the event so reply_message_chain is serialized
             # back to LangBot after the deterministic review completes.

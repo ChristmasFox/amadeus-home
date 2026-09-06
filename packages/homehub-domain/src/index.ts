@@ -19,7 +19,7 @@ export type { ActionEngineOptions } from './action/action-engine.js';
 
 // Context Manager
 export { ContextManager } from './context/context-manager.js';
-export type { ContextManagerOptions } from './context/context-manager.js';
+export type { ContextManagerOptions, PendingActionBinding, PendingActionClaim, PendingActionLookupReason, SessionReference } from './context/context-manager.js';
 
 // Audit Logger
 export { AuditLogger } from './audit/audit-logger.js';
@@ -46,6 +46,7 @@ export type {
 export {
   RuntimeExecutorManager,
   DockerApiCommandExecutor,
+  MacHostAgentCommandExecutor,
   DEFAULT_DOCKER_ALLOWED_CONTAINERS,
   isExecutorUnavailable,
 } from './execution/runtime-executor.js';
@@ -56,4 +57,5 @@ export type {
   ExecutorKind,
   RuntimeExecutorManagerOptions,
   DockerApiExecutorOptions,
+  MacHostAgentExecutorOptions,
 } from './execution/runtime-executor.js';

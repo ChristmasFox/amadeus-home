@@ -15,6 +15,7 @@ export const ServiceIdSchema = z.enum([
   'aria2',
   'glances',
   'cloudflared',
+  'media-organizer-adapter',
 ]);
 
 export type ServiceId = z.infer<typeof ServiceIdSchema>;
@@ -58,8 +59,12 @@ export const ServiceDefinitionSchema = z.object({
     expected: z.enum(['up', 'down', 'response']).default('up'),
   }),
   container: z.object({
+    /** Actual container name resolved from the CasaOS/Compose registry. */
     name: z.string(),
     composePath: z.string(),
+    /** Label evidence used when a service name differs from its container name. */
+    labels: z.record(z.string(), z.string()).optional(),
+    aliases: z.array(z.string()).optional(),
   }).optional(),
   process: z.object({
     name: z.string(),
@@ -112,6 +117,12 @@ export const HostHealthSchema = z.object({
   status: z.enum(['available', 'unknown']).default('unknown'),
   unknownReason: z.string().optional(),
   hostname: z.string(),
+  os: z.object({
+    name: z.string().nullable(),
+    version: z.string().nullable(),
+    build: z.string().nullable(),
+  }).optional(),
+  model: z.string().nullable().optional(),
   uptime: z.number().nullable(),
   loadAverage: z.array(z.number().nullable()).length(3),
   cpu: z.object({
@@ -133,8 +144,28 @@ export const HostHealthSchema = z.object({
   })),
   network: z.array(z.object({
     interface: z.string(),
-    bytesIn: z.number(),
-    bytesOut: z.number(),
+    bytesIn: z.number().nullable().default(0),
+    bytesOut: z.number().nullable().default(0),
+    ip: z.string().nullable().optional(),
+  })).optional(),
+  power: z.object({
+    source: z.string().nullable(),
+    percentage: z.number().nullable(),
+    charging: z.boolean().nullable(),
+    state: z.string().nullable(),
+  }).optional(),
+  cloudflared: z.object({
+    status: z.enum(['running', 'stopped', 'unknown']),
+    pid: z.number().int().nullable(),
+    version: z.string().nullable().optional(),
+    message: z.string().optional(),
+  }).optional(),
+  highCpuProcesses: z.array(z.object({
+    pid: z.number().int().nullable(),
+    name: z.string(),
+    cpu: z.number().nullable(),
+    memory: z.number().nullable(),
+    command: z.string().optional(),
   })).optional(),
 });
 

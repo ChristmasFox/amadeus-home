@@ -26,10 +26,13 @@ services:
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
       KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
+      MAC_HOST_AGENT_URL: ${MAC_HOST_AGENT_URL:-http://host.docker.internal:49152}
+      MAC_HOST_AGENT_TOKEN_FILE: /run/secrets/mac_host_agent_token
     volumes:
       - /DATA/AppData/pubg-query-engine-v3/data:/data
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - /DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key:/run/secrets/pubg_api_key:ro
+      - ${MAC_HOST_AGENT_TOKEN_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
     ports:
       - "5310:5310"
     networks:

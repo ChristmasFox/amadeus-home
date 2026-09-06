@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.local.homehub.mac-host-agent</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/REPLACE_WITH_REPO/infra/macos/mac_host_agent.py</string>
+    <string>--host</string>
+    <string>0.0.0.0</string>
+    <string>--port</string>
+    <string>49152</string>
+    <string>--token-file</string>
+    <string>/Users/Shared/HomeHub/mac-host-agent.token</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>MAC_HOST_AGENT_TOKEN_FILE</key>
+    <string>/Users/Shared/HomeHub/mac-host-agent.token</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/Shared/HomeHub/mac-host-agent.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/Shared/HomeHub/mac-host-agent.stderr.log</string>
+</dict>
+</plist>

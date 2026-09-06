@@ -1,4 +1,5 @@
 import { request as httpRequest, type RequestOptions } from 'node:http';
+import { readFileSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ServiceDefinition } from '../schema/types.js';
@@ -12,11 +13,14 @@ export const DEFAULT_DOCKER_ALLOWED_CONTAINERS = Object.freeze([
   'n8n',
   'postgres',
   'redis',
+  'immich-postgres',
+  'immich-redis',
   'emby',
   'jellyfin',
   'qbittorrent',
   'aria2',
   'glances',
+  'media-organizer-adapter',
 ] as const);
 
 /** A command that is executed by one of HomeHub's explicit runtime boundaries. */
@@ -572,6 +576,126 @@ export class DockerApiCommandExecutor implements CommandExecutor {
   }
 }
 
+export interface MacHostAgentExecutorOptions {
+  baseUrl?: string;
+  token?: string;
+  tokenFile?: string;
+  requestTimeoutMs?: number;
+  maxResponseBytes?: number;
+}
+
+const MAC_HOST_AGENT_PATHS = new Set(['/v1/health', '/v1/host/status', '/v1/cloudflared/status']);
+
+/**
+ * Read-only HTTP client for the macOS host agent. The command surface is
+ * intentionally a three-path allowlist; there is no exec/shell passthrough.
+ */
+export class MacHostAgentCommandExecutor implements CommandExecutor {
+  readonly kind = 'macos-host' as const;
+
+  private readonly baseUrl: URL | null;
+  private readonly token: string;
+  private readonly requestTimeoutMs: number;
+  private readonly maxResponseBytes: number;
+
+  constructor(options: MacHostAgentExecutorOptions = {}) {
+    const rawBaseUrl = options.baseUrl ?? process.env.MAC_HOST_AGENT_URL ?? '';
+    try {
+      const parsed = new URL(rawBaseUrl);
+      parsed.pathname = parsed.pathname.replace(/\/+$/u, '');
+      parsed.search = '';
+      parsed.hash = '';
+      this.baseUrl = parsed;
+    } catch {
+      this.baseUrl = null;
+    }
+    this.token = (options.token?.trim()
+      || (options.tokenFile ? this.readToken(options.tokenFile) : '')
+      || (process.env.MAC_HOST_AGENT_TOKEN_FILE ? this.readToken(process.env.MAC_HOST_AGENT_TOKEN_FILE) : '')
+      || process.env.MAC_HOST_AGENT_TOKEN
+      || '').trim();
+    this.requestTimeoutMs = Math.max(100, options.requestTimeoutMs ?? Number(process.env.MAC_HOST_AGENT_TIMEOUT_MS ?? 5000));
+    this.maxResponseBytes = Math.max(64 * 1024, options.maxResponseBytes ?? 2 * 1024 * 1024);
+  }
+
+  async execute(spec: CommandSpec): Promise<CommandExecution> {
+    if (spec.command !== 'macos-agent') return policyDenied('macOS host executor only accepts the macos-agent command');
+    const args = [...(spec.args ?? [])];
+    if (args.length !== 1 || !MAC_HOST_AGENT_PATHS.has(String(args[0]))) {
+      return policyDenied('macOS host executor only permits /v1/health, /v1/host/status, and /v1/cloudflared/status');
+    }
+    if (!this.baseUrl || !this.token) return unavailableResult('macOS host agent unavailable or token is not configured');
+
+    const endpoint = new URL(String(args[0]), this.baseUrl);
+    endpoint.search = '';
+    endpoint.hash = '';
+    try {
+      const response = await this.request(endpoint, spec.timeoutMs);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return {
+          ok: false,
+          executorAvailable: true,
+          stdout: '',
+          stderr: '',
+          exitCode: response.statusCode,
+          error: `macOS host agent HTTP ${response.statusCode}`,
+        };
+      }
+      return successResult(`${response.body.toString('utf8')}\n`);
+    } catch (error) {
+      const detail = error as NodeJS.ErrnoException;
+      const message = String(detail?.message ?? 'macOS host agent request failed');
+      const code = typeof detail?.code === 'string' ? detail.code : '';
+      const unavailable = new Set(['ECONNREFUSED', 'ECONNRESET', 'EHOSTUNREACH', 'ENETUNREACH', 'ETIMEDOUT', 'ENOENT']).has(code)
+        || /timed out|socket|connect|host agent/i.test(message);
+      return unavailable
+        ? unavailableResult('macOS host agent unavailable')
+        : { ok: false, executorAvailable: true, stdout: '', stderr: '', exitCode: null, error: 'macOS host agent request failed' };
+    }
+  }
+
+  private readToken(filePath: string): string {
+    try {
+      return readFileSync(filePath, 'utf8').trim();
+    } catch {
+      return '';
+    }
+  }
+
+  private request(endpoint: URL, timeoutMs?: number): Promise<{ statusCode: number; body: Buffer }> {
+    return new Promise((resolve, reject) => {
+      const requestOptions: RequestOptions = {
+        protocol: endpoint.protocol,
+        hostname: endpoint.hostname,
+        port: endpoint.port || undefined,
+        path: `${endpoint.pathname}${endpoint.search}`,
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          authorization: `Bearer ${this.token}`,
+        },
+      };
+      const req = httpRequest(requestOptions, (response) => {
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        response.on('data', (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          bytes += buffer.length;
+          if (bytes > this.maxResponseBytes) {
+            req.destroy(new Error('macOS host agent response exceeded the bounded limit'));
+            return;
+          }
+          chunks.push(buffer);
+        });
+        response.on('end', () => resolve({ statusCode: response.statusCode ?? 0, body: Buffer.concat(chunks) }));
+      });
+      req.setTimeout(Math.max(100, timeoutMs ?? this.requestTimeoutMs), () => req.destroy(new Error('macOS host agent request timed out')));
+      req.on('error', reject);
+      req.end();
+    });
+  }
+}
+
 class UnavailableCommandExecutor implements CommandExecutor {
   constructor(
     readonly kind: ExecutorKind,
@@ -684,6 +808,10 @@ export interface RuntimeExecutorManagerOptions {
   dockerSocketPath?: string;
   dockerApiVersion?: string;
   dockerAllowedContainers?: readonly string[];
+  macHostAgentUrl?: string;
+  macHostAgentToken?: string;
+  macHostAgentTokenFile?: string;
+  macHostAgentTimeoutMs?: number;
 }
 
 /**
@@ -706,10 +834,16 @@ export class RuntimeExecutorManager {
         primaryCommand: 'bash',
         supportedPlatforms: ['linux'],
       }),
-      'macos-host': provided['macos-host'] ?? new ChildProcessCommandExecutor('macos-host', {
-        primaryCommand: 'bash',
-        supportedPlatforms: ['darwin'],
-      }),
+      'macos-host': provided['macos-host'] ?? (
+        options.macHostAgentUrl || process.env.MAC_HOST_AGENT_URL
+          ? new MacHostAgentCommandExecutor({
+              ...(options.macHostAgentUrl ? { baseUrl: options.macHostAgentUrl } : {}),
+              ...(options.macHostAgentToken ? { token: options.macHostAgentToken } : {}),
+              ...(options.macHostAgentTokenFile ? { tokenFile: options.macHostAgentTokenFile } : {}),
+              ...(options.macHostAgentTimeoutMs ? { requestTimeoutMs: options.macHostAgentTimeoutMs } : {}),
+            })
+          : new UnavailableCommandExecutor('macos-host', 'macOS host agent is not configured')
+      ),
       'langbot-component': provided['langbot-component']
         ?? new LangBotComponentCommandExecutor(docker, options.langbotContainerName ?? 'langbot'),
     };

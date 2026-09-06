@@ -138,6 +138,53 @@ class PlatformAdapterTest(unittest.TestCase):
         self.assertEqual(telegram_message['platform'], 'telegram')
         self.assertEqual(telegram_message['chat']['type'], 'private')
 
+    def test_telegram_command_session_prefers_raw_message_from_and_chat_ids(self) -> None:
+        # Reproduce LangBot's command event shape: query.sender_id is the
+        # group ID, while message_event carries the authoritative Telegram
+        # Update. The normalized identity must use message.from.id.
+        event = {
+            'platform': 'telegram',
+            'launcher_type': 'group',
+            'launcher_id': '-5527996775',
+            'sender_id': '-5527996775',
+            'text_message': '/whoami',
+            'message_id': 'telegram-command-group',
+            'message_event': {
+                'source_platform_object': {
+                    'message': {
+                        'message_id': 7,
+                        'date': 1788326400,
+                        'text': '/whoami',
+                        'from': {'id': 424242, 'first_name': 'Arthur'},
+                        'chat': {'id': -5527996775, 'type': 'group', 'title': 'HomeHub'},
+                    },
+                },
+            },
+        }
+        message = normalize_event_message(event)
+        self.assertEqual(message['user']['platformUserId'], '424242')
+        self.assertEqual(message['chat']['id'], '-5527996775')
+        self.assertNotEqual(message['user']['platformUserId'], message['chat']['id'])
+
+        private = normalize_event_message({
+            **event,
+            'launcher_type': 'person',
+            'launcher_id': '424242',
+            'sender_id': '424242',
+            'message_event': {
+                'source_platform_object': {
+                    'message': {
+                        'message_id': 8,
+                        'text': '/whoami',
+                        'from': {'id': 424242, 'first_name': 'Arthur'},
+                        'chat': {'id': 424242, 'type': 'private'},
+                    },
+                },
+            },
+        })
+        self.assertEqual(private['user']['platformUserId'], '424242')
+        self.assertEqual(private['chat']['id'], '424242')
+
     def test_command_event_platform_field_prevents_telegram_kook_fallback(self) -> None:
         telegram_message = normalize_event_message({
             'platform': 'telegram',

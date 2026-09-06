@@ -12,12 +12,12 @@ import { HomeHubEntry } from '../src/homehub/entry/homehub-entry.js';
 test('HomeHub ServiceRegistry contains all V1 services with correct definitions', () => {
   const registry = new ServiceRegistry();
   const services = registry.getAllServices();
-  assert.equal(services.length, 13);
+  assert.equal(services.length, 14);
   const ids = services.map((s) => s.serviceId).sort();
   assert.deepEqual(ids, [
     'aria2', 'cloudflared', 'emby', 'glances', 'jellyfin', 'kook-adapter',
     'langbot', 'mastra-pubg-runtime', 'n8n', 'postgres', 'qbittorrent',
-    'redis', 'telegram-adapter',
+    'redis', 'telegram-adapter', 'media-organizer-adapter',
   ].sort());
 
   // Risk levels & allowed actions

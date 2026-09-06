@@ -12,6 +12,8 @@ import { ActionRequestSchema } from '../schema/types.js';
 export interface ContextManagerOptions {
   persistPath?: string;
   sessionTtl?: number;
+  /** Confirmation tokens expire independently of the chat session. */
+  pendingActionTtl?: number;
 }
 
 export interface PendingActionBinding {
@@ -23,6 +25,13 @@ export interface PendingActionBinding {
   internalUserId: string | null;
   role: Role;
   target?: string | null;
+}
+
+export type PendingActionLookupReason = 'missing' | 'expired' | 'foreign' | 'already_consumed' | 'claimed';
+
+export interface PendingActionClaim {
+  pending: HomeHubContext['pendingAction'];
+  reason?: PendingActionLookupReason;
 }
 
 export interface SessionReference {
@@ -43,6 +52,7 @@ export class ContextManager {
     this.options = {
       persistPath: options.persistPath ?? '/DATA/AppData/homehub/contexts',
       sessionTtl: options.sessionTtl ?? 30 * 60 * 1000,
+      pendingActionTtl: options.pendingActionTtl ?? 10 * 60 * 1000,
     };
   }
 
@@ -131,13 +141,58 @@ export class ContextManager {
 
   /** Return a pending action only when every confirmation binding matches. */
   getPendingForActor(sessionId: string, binding: Pick<PendingActionBinding, 'platform' | 'chatId' | 'platformUserId' | 'actionId'>): HomeHubContext['pendingAction'] {
-    const pending = this.contexts.get(sessionId)?.pendingAction;
-    if (!pending) return null;
-    if (pending.platform !== binding.platform) return null;
-    if (pending.chatId !== binding.chatId) return null;
-    if (pending.platformUserId !== binding.platformUserId) return null;
-    if (pending.actionId !== binding.actionId) return null;
-    return pending;
+    const lookup = this.lookupPendingForActor(sessionId, binding);
+    return lookup.pending;
+  }
+
+  inspectPendingForActor(
+    sessionId: string,
+    binding: Pick<PendingActionBinding, 'platform' | 'chatId' | 'platformUserId' | 'actionId'>,
+  ): PendingActionClaim {
+    return this.lookupPendingForActor(sessionId, binding);
+  }
+
+  /**
+   * Atomically claim a pending action for execution. Exact platform/chat/user
+   * binding is checked before changing the state to `executing`, which closes
+   * the duplicate-confirmation race between two callback deliveries.
+   */
+  claimPendingForActor(
+    sessionId: string,
+    binding: Pick<PendingActionBinding, 'platform' | 'chatId' | 'platformUserId' | 'actionId'>,
+  ): PendingActionClaim {
+    const lookup = this.lookupPendingForActor(sessionId, binding);
+    if (!lookup.pending || lookup.reason) return lookup;
+    const context = this.contexts.get(sessionId);
+    if (!context?.pendingAction) return { pending: null, reason: 'missing' };
+    context.pendingAction.status = 'executing';
+    context.updatedAt = new Date().toISOString();
+    this.contexts.set(sessionId, context);
+    return { pending: context.pendingAction };
+  }
+
+  private lookupPendingForActor(
+    sessionId: string,
+    binding: Pick<PendingActionBinding, 'platform' | 'chatId' | 'platformUserId' | 'actionId'>,
+  ): PendingActionClaim {
+    const context = this.contexts.get(sessionId);
+    const pending = context?.pendingAction;
+    if (!pending) return { pending: null, reason: 'missing' };
+    if (Date.now() - Date.parse(pending.timestamp) > this.options.pendingActionTtl) {
+      context.pendingAction = null;
+      context.updatedAt = new Date().toISOString();
+      this.contexts.set(sessionId, context);
+      return { pending: null, reason: 'expired' };
+    }
+    if (pending.platform !== binding.platform
+      || pending.chatId !== binding.chatId
+      || pending.platformUserId !== binding.platformUserId
+      || pending.actionId !== binding.actionId) {
+      return { pending: null, reason: 'foreign' };
+    }
+    if (pending.status === 'executing') return { pending: null, reason: 'claimed' };
+    if (pending.status !== 'pending') return { pending: null, reason: 'already_consumed' };
+    return { pending };
   }
 
   setLastActionResult(sessionId: string, result: ActionResult): void {
@@ -196,11 +251,18 @@ export class ContextManager {
   } {
     const pending = this.contexts.get(sessionId)?.pendingAction;
     if (!pending) return { request: null, action: null, status: null, timestamp: null };
+    const active = this.lookupPendingForActor(sessionId, {
+      platform: pending.platform,
+      chatId: pending.chatId,
+      platformUserId: pending.platformUserId,
+      actionId: pending.actionId,
+    }).pending;
+    if (!active) return { request: null, action: null, status: null, timestamp: null };
     return {
-      request: pending.request,
-      action: pending.request.action,
-      status: pending.status,
-      timestamp: pending.timestamp,
+      request: active.request,
+      action: active.request.action,
+      status: active.status,
+      timestamp: active.timestamp,
     };
   }
 

@@ -11,6 +11,7 @@ import type { RuntimeRequest } from './runtime/types.js';
 import { HomeHubRuntime } from './runtime/homehub-runtime.js';
 import { identityMappingsFromEnvironment } from './config/identity.js';
 import { IdentityRegistry } from './platform/core/identity.js';
+import { isHomeHubCallback } from './homehub/confirmation.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -122,10 +123,12 @@ const server = createServer(async (request, response) => {
     if (request.method === 'POST' && ['/homehub/route', '/api/homehub/route'].includes(url.pathname)) {
       const body = await readBody(request);
       const text = String(body.text ?? (body.message && typeof body.message === 'object' ? (body.message as { message?: { text?: unknown } }).message?.text : undefined) ?? '');
+      const callbackData = String(body.callbackData ?? body.callback_data ?? (body.message && typeof body.message === 'object' ? (body.message as { callback?: { data?: unknown } }).callback?.data : '') ?? '');
+      const homehub = homehubRuntime.classify(text) || isHomeHubCallback(callbackData);
       json(response, 200, {
-        domain: homehubRuntime.classify(text) ? 'homehub' : 'unknown',
-        route: homehubRuntime.classify(text) ? 'mandatory' : 'pass',
-        reason: homehubRuntime.classify(text) ? 'homehub_signal' : 'no_homehub_signal',
+        domain: homehub ? 'homehub' : 'unknown',
+        route: homehub ? 'mandatory' : 'pass',
+        reason: homehub ? (isHomeHubCallback(callbackData) ? 'homehub_callback' : 'homehub_signal') : 'no_homehub_signal',
         contextActive: false,
         sessionId: String(body.sessionId ?? body.sender_id ?? 'unknown'),
       });
@@ -170,7 +173,19 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'POST' && ['/v3/route', '/api/v3/route'].includes(url.pathname)) {
       const body = await readBody(request);
-      const route = await runtime.route(runtimeRequest(body));
+      const input = runtimeRequest(body);
+      const callbackData = input.callbackData ?? input.message?.callback?.data ?? '';
+      if (isHomeHubCallback(callbackData) || homehubRuntime.classify(input.text)) {
+        json(response, 200, {
+          domain: 'homehub',
+          route: 'mandatory',
+          reason: isHomeHubCallback(callbackData) ? 'homehub_callback' : 'homehub_signal',
+          contextActive: false,
+          sessionId: String(body.sessionId ?? body.sender_id ?? 'unknown'),
+        });
+        return;
+      }
+      const route = await runtime.route(input);
       json(response, 200, route);
       return;
     }
@@ -180,6 +195,12 @@ const server = createServer(async (request, response) => {
     }
     const body = await readBody(request);
     const runtimeInput = runtimeRequest(body);
+    const callbackData = runtimeInput.callbackData ?? runtimeInput.message?.callback?.data ?? '';
+    if (isHomeHubCallback(callbackData) || homehubRuntime.classify(runtimeInput.text)) {
+      const result = await homehubRuntime.handle(runtimeInput);
+      json(response, 200, result);
+      return;
+    }
     const route = runtimeInput.callbackData ? null : await runtime.route(runtimeInput);
     if (route?.domain === 'homehub') {
       const result = await homehubRuntime.handle(runtimeInput);

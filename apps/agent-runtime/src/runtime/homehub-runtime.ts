@@ -13,6 +13,9 @@ import { MediaOperations } from '../homehub/operations/media-operations.js';
 import { identityMappingsFromEnvironment } from '../config/identity.js';
 import { IdentityRegistry } from '../platform/core/identity.js';
 import { normalizeRuntimeMessage } from '../platform/core/legacy.js';
+import { renderForPlatform } from '../platform/core/renderer.js';
+import { PresentationModelSchema, type BotResponse, type NormalizedBotMessage, type PresentationModel } from '../platform/core/contracts.js';
+import { parseHomeHubCallback, homeHubCallbackData } from '../homehub/confirmation.js';
 import type { RuntimeRequest, RuntimeTraceEvent } from './types.js';
 
 export interface HomeHubRuntimeResponse {
@@ -22,6 +25,9 @@ export interface HomeHubRuntimeResponse {
   response: string;
   responseType: 'status' | 'diagnosis' | 'action' | 'error';
   requiresConfirmation?: boolean;
+  pendingActionId?: string;
+  messages: BotResponse['messages'];
+  callbackAnswer?: { text: string; showAlert?: boolean } | null;
   nextActions?: Array<{ label: string; action: string; params: Record<string, unknown> }>;
   data?: Record<string, unknown>;
   trace: RuntimeTraceEvent[];
@@ -99,25 +105,38 @@ export class HomeHubRuntime {
       const message = normalizeRuntimeMessage(request);
       const identity = this.identityRegistry.resolve(message);
       const text = message.message.text || request.text || '';
-      const response = await this.homeHubEntry.handleRequest(
-        text,
-        message.platform,
-        message.user.platformUserId,
-        message.chat.id,
-        {
-          identity,
-          platformUserId: message.user.platformUserId,
-          chatId: message.chat.id,
-          messageId: message.message.id,
-        },
-      );
-      return this.runtimeResponse(queryId, startTime, response, {
+      const callback = parseHomeHubCallback(message.callback?.data ?? request.callbackData);
+      const response = callback
+        ? await this.homeHubEntry.handleCallback(
+            callback.action,
+            callback.actionId,
+            message.platform,
+            message.user.platformUserId,
+            message.chat.id,
+            identity,
+          )
+        : await this.homeHubEntry.handleRequest(
+            text,
+            message.platform,
+            message.user.platformUserId,
+            message.chat.id,
+            {
+              identity,
+              platformUserId: message.user.platformUserId,
+              chatId: message.chat.id,
+              messageId: message.message.id,
+            },
+          );
+      const botResponse = this.renderResponse(response, message);
+      return this.runtimeResponse(queryId, startTime, response, botResponse, {
         text,
         platform: message.platform,
         chatId: message.chat.id,
         platformUserId: message.user.platformUserId,
         internalUserId: identity.internalUserId,
         role: identity.role,
+        callbackAction: callback?.action ?? null,
+        callbackActionId: callback?.actionId ?? null,
         responseType: response.responseType,
         success: response.success,
       });
@@ -128,6 +147,8 @@ export class HomeHubRuntime {
         status: 'error',
         response: `HomeHub 处理失败: ${error instanceof Error ? error.message : '未知错误'}`,
         responseType: 'error',
+        messages: [],
+        callbackAnswer: null,
         data: { error: error instanceof Error ? error.message : String(error) },
         trace: [{
           stage: 'homehub_error',
@@ -144,6 +165,7 @@ export class HomeHubRuntime {
     queryId: string,
     startTime: number,
     response: HomeHubResponse,
+    botResponse: BotResponse,
     traceDetails: Record<string, unknown>,
   ): HomeHubRuntimeResponse {
     return {
@@ -152,13 +174,38 @@ export class HomeHubRuntime {
       status: response.success ? 'success' : 'error',
       response: response.message,
       responseType: response.responseType,
+      messages: botResponse.messages,
+      callbackAnswer: null,
       ...(response.requiresConfirmation !== undefined ? { requiresConfirmation: response.requiresConfirmation } : {}),
+      ...(response.pendingActionId ? { pendingActionId: response.pendingActionId } : {}),
       ...(response.nextActions ? { nextActions: response.nextActions } : {}),
       ...(response.data ? { data: response.data as Record<string, unknown> } : {}),
       trace: [{ stage: 'homehub_processing', at: new Date().toISOString(), details: traceDetails }],
       timestamp: new Date().toISOString(),
       processingTimeMs: Date.now() - startTime,
     };
+  }
+
+  private renderResponse(response: HomeHubResponse, message: NormalizedBotMessage): BotResponse {
+    const inlineKeyboard = response.pendingActionId
+      ? [
+          { text: '✅ 确认', callbackData: homeHubCallbackData('confirm', response.pendingActionId) },
+          { text: '❌ 取消', callbackData: homeHubCallbackData('cancel', response.pendingActionId) },
+        ]
+      : [];
+    const presentation: PresentationModel = PresentationModelSchema.parse({
+      version: 1,
+      type: `homehub_${response.responseType}`,
+      title: 'HomeHub',
+      sections: [{ type: 'text', text: response.message }],
+      fallbackText: response.message,
+      metadata: {
+        ...(inlineKeyboard.length ? { inlineKeyboard } : {}),
+        responseType: response.responseType,
+        requiresConfirmation: response.requiresConfirmation ?? false,
+      },
+    });
+    return renderForPlatform(presentation, message);
   }
 
   /** Return the live HomeHub service inventory for an internal status probe. */
@@ -202,7 +249,8 @@ export class HomeHubRuntime {
   classify(text: string): boolean {
     const normalized = String(text ?? '').trim();
     const signal = /(?:服务器|主机|系统状态|服务状态|哪些服务|挂了|状态|服务|重启|启动|停止|诊断|日志|操作记录|整理|刮削|telegram|tg|kook|langbot|n8n|emby|jellyfin|postgres|redis|qbittorrent|aria2|glances|cloudflared|pubg.*服务|恢复正常)/i;
-    return signal.test(normalized);
+    const confirmation = /^(?:确认|确认执行|执行|是|是的|好|行|重启它|取消|算了|不用|不了|no)$/iu.test(normalized);
+    return signal.test(normalized) || confirmation;
   }
 
   healthCheck(): { status: 'healthy' | 'degraded'; components: Record<string, string> } {

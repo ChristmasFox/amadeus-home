@@ -80,8 +80,8 @@ def patch_chat_handler() -> None:
     if "_pubg_callback_data" not in source:
         old = """        event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=query.launcher_id,
-            sender_id=query.sender_id,
+            launcher_id=_pubg_command_launcher_id,
+            sender_id=_pubg_command_sender_id,
             text_message=str(query.message_chain),
             message_event=query.message_event,
             message_chain=query.message_chain,
@@ -106,10 +106,31 @@ def patch_chat_handler() -> None:
             callback_data = getattr(callback_query, 'data', None)
             callback_id = callback_id or getattr(callback_query, 'id', None)
 
+        # Telegram identity is always taken from Message.from_user.id and the
+        # chat from Message.chat.id. LangBot's legacy query sender_id may be
+        # the group ID, so it is never authoritative when a raw Telegram
+        # message/update is available.
+        _pubg_launcher_id = query.launcher_id
+        _pubg_sender_id = query.sender_id
+        if platform == 'telegram':
+            _source = getattr(query.message_event, 'source_platform_object', None)
+            _source_callback = getattr(_source, 'callback_query', None)
+            _source_message = getattr(_source_callback, 'message', None) or getattr(_source, 'effective_message', None) or getattr(_source, 'message', None) or _source
+            _source_user = getattr(_source_callback, 'from_user', None) or getattr(_source_message, 'from_user', None) or getattr(_source, 'effective_user', None)
+            _source_chat = getattr(_source_message, 'chat', None) or getattr(_source, 'effective_chat', None)
+            if _source_user is not None and getattr(_source_user, 'id', None) is not None:
+                _pubg_sender_id = str(_source_user.id)
+            elif _source is not None:
+                _pubg_sender_id = 'unknown'
+            if _source_chat is not None and getattr(_source_chat, 'id', None) is not None:
+                _pubg_launcher_id = str(_source_chat.id)
+            elif _source is not None:
+                _pubg_launcher_id = 'unknown'
+
         event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=query.launcher_id,
-            sender_id=query.sender_id,
+            launcher_id=_pubg_launcher_id,
+            sender_id=_pubg_sender_id,
             text_message=str(query.message_chain),
             message_event=query.message_event,
             message_chain=query.message_chain,
@@ -131,8 +152,8 @@ def patch_command_handler() -> None:
         return
     old = """        event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=query.launcher_id,
-            sender_id=query.sender_id,
+            launcher_id=_pubg_command_launcher_id,
+            sender_id=_pubg_command_sender_id,
             command=spt[0],
             params=spt[1:] if len(spt) > 1 else [],
             text_message=full_command_text,
@@ -155,9 +176,22 @@ def patch_command_handler() -> None:
         # Preserve a display-only name when the raw platform event exposes it.
         # The stable sender_id above remains the only identity key.
         _pubg_display_name = None
+        _pubg_command_launcher_id = query.launcher_id
+        _pubg_command_sender_id = query.sender_id
         source_platform_object = getattr(query.message_event, 'source_platform_object', None)
-        effective_message = getattr(source_platform_object, 'effective_message', None)
-        source_user = getattr(effective_message, 'from_user', None)
+        callback_query = getattr(source_platform_object, 'callback_query', None)
+        effective_message = getattr(callback_query, 'message', None) or getattr(source_platform_object, 'effective_message', None) or getattr(source_platform_object, 'message', None) or source_platform_object
+        source_user = getattr(callback_query, 'from_user', None) or getattr(effective_message, 'from_user', None) or getattr(source_platform_object, 'effective_user', None)
+        source_chat = getattr(effective_message, 'chat', None) or getattr(source_platform_object, 'effective_chat', None)
+        if _pubg_command_platform == 'telegram':
+            if source_user is not None and getattr(source_user, 'id', None) is not None:
+                _pubg_command_sender_id = str(source_user.id)
+            elif source_platform_object is not None:
+                _pubg_command_sender_id = 'unknown'
+            if source_chat is not None and getattr(source_chat, 'id', None) is not None:
+                _pubg_command_launcher_id = str(source_chat.id)
+            elif source_platform_object is not None:
+                _pubg_command_launcher_id = 'unknown'
         if source_user is not None:
             _pubg_display_name = getattr(source_user, 'full_name', None) or getattr(source_user, 'username', None)
         elif isinstance(source_platform_object, dict):
@@ -170,8 +204,8 @@ def patch_command_handler() -> None:
 
         event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=query.launcher_id,
-            sender_id=query.sender_id,
+            launcher_id=_pubg_command_launcher_id,
+            sender_id=_pubg_command_sender_id,
             command=spt[0],
             params=spt[1:] if len(spt) > 1 else [],
             text_message=full_command_text,
@@ -333,7 +367,7 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
     callback_handler_replacement = """            await query.answer()
             try:
                 callback_data = str(query.data or '')
-                if callback_data.startswith('pubg:m:'):
+                if callback_data.startswith(('pubg:m:', 'hh1:')):
                     await self._enqueue_pubg_callback(update, query)
                     return
                 data = json.loads(query.data)
