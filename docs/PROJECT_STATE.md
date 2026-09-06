@@ -2,6 +2,27 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## Codex Global Completion Notification Bridge：DEPLOYED / VERIFIED（2026-09-06）
+
+全局 Codex notify 已写入 `/Users/blacksidev/.codex/config.toml` 的 root-level `notify`，实际执行
+`/Users/blacksidev/.codex/bin/codex-notify.sh`；source 为 Git 中的 `integrations/codex/codex-notify.sh`，
+所以其他仓库和 `/tmp` 等 cwd 也能使用。脚本接受 Codex legacy argv payload，只处理
+`agent-turn-complete`，归一化 completion 字段，使用 2 秒连接/5 秒总 timeout，网络失败 fail-open，日志
+不记录 payload 或 secret。
+
+n8n `Codex Completion Notification`（ID `codex-completion-notification-20260906`）已激活，Webhook
+`/webhook/codex-complete`。它校验外部 `CODEX_NOTIFY_SECRET`，用唯一 Data Table
+`codex-completion-idempotency-20260906` claim `threadId + turnId`，再通过现有 LangBot Platform
+Adapter sender 同时发送 Telegram/KOOK 固定 `person` DM。目标只读取 global variables
+`TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，不读取 inbound chat、channel、context 或 payload recipient；
+两个平台失败互不阻塞并记录 `sent/failed`。
+
+实际证据：global Codex turn（cwd `/tmp`）成功触发 n8n，双平台均 sent；runtime smoke 验证缺 secret 401、
+安全 projectName、重复事件 duplicate suppressed；受控双向 failure-isolation 验证 Telegram failed/KOOK
+sent 与 Telegram sent/KOOK failed，随后恢复真实外部 variables。最后一次 workflow rollback backup 位于
+`/home/node/.n8n/workflow-backups/codex-codex-completion-notification-20260906-before-20260906-114742.json`。
+真实 shared secret、LangBot API credential、Admin IDs 和 n8n variables 不入 Git。
+
 ## HomeHub Docker Executor + PUBG KD 修复：DEPLOYED / VERIFIED
 
 HomeHub source 已新增受限 `DockerApiCommandExecutor`，通过只读 Docker socket 使用 Docker Engine API，

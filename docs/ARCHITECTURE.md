@@ -103,6 +103,8 @@ hyphenated/camelCase/snake_case 字段，只 POST completion event，并以 `thr
 | LangBot data/plugins/SQLite | /DATA/AppData/langbot | 只提交自定义源 | volume 备份 + 重新安装插件 |
 | n8n workflows | 仓库 JSON | 提交 | 导入 workflow |
 | n8n credentials/executions | /DATA/AppData/n8n 与外部 secret | 不提交 | volume 备份，credentials 重新核验 |
+| Codex notify secret / n8n Admin variables | ~/.codex/secrets、/DATA/AppData/n8n 与 n8n DB | 不提交 | provision/sync 脚本恢复 |
+| Codex completion idempotency table | n8n Data Table `codex-completion-idempotency-20260906` | schema/workflow 提交，rows 不提交 | create table script |
 | n8n sandbox TLS/data | /DATA/AppData/n8n-sandbox | 不提交 | volume 备份或重新生成 |
 | Postgres | 对应 CasaOS AppData / volume | 不提交 | 数据库备份后恢复 |
 | Redis | 对应 volume | 不提交 | 默认可重建缓存 |

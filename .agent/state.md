@@ -1,6 +1,6 @@
 # Codex State
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-06（Asia/Shanghai）
 
 ## 当前上下文
 
@@ -27,6 +27,17 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
     git status --short --branch
     git log -5 --oneline --decorate
 
+## Codex Global Completion Notification Bridge（已完成）
+
+- 全局配置：`/Users/blacksidev/.codex/config.toml` root-level `notify`。
+- 全局脚本：`/Users/blacksidev/.codex/bin/codex-notify.sh`；Git source：`integrations/codex/codex-notify.sh`。
+- n8n workflow：`Codex Completion Notification` / `codex-completion-notification-20260906`，Webhook
+  `/webhook/codex-complete`；最后导入 backup 记录在 `docs/CURRENT_TASK.md`。
+- n8n Data Table 使用 `threadId:turnId` 唯一 eventKey；Admin IDs/shared secret 只存在外部文件和 n8n
+  global variables，真实 credential 不入 Git。
+- 2026-09-06 已验证：global Codex turn（cwd `/tmp`）双平台 sent；缺 secret/非 completion 被拦截；
+  runtime duplicate suppressed；Telegram/KOOK 双向 failure isolation 均通过并恢复真实 identity config。
+
 ## 当前事实
 
 - canonical HomeLab runtime：OrbStack machine ubuntu 内的 CasaOS；
@@ -39,6 +50,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
   `/v1/models` 返回 200，Telegram 私聊/群聊流式测试成功；未重建镜像或重启容器；
 - Redis：可重建缓存，不是核心恢复依赖；
 - 不执行公网 push，除非用户另外明确授权。
+- Codex notify bridge runtime secret files：`~/.codex/secrets/codex-notify-secret` 与
+  `/DATA/AppData/n8n/secrets/codex-notify-secret`；值不入 Git、不在日志输出。
+- 当前 HomeHub runtime image：`local/pubg-query-engine-v3:git-1a8a825812b6`，Docker socket smoke 和 PUBG
+  `最近20场` finite-KD smoke 已通过。
 
 ## 最近完成
 

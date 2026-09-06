@@ -33,12 +33,34 @@ PUBG workflow 生产同步：已用 `scripts/deploy-n8n-workflow.sh --apply` 导
 真实 runtime `最近20场战绩` smoke 返回 20 场、玩家 KD `1.47 / 0.91 / 0.74 / 0.38`，合计 KD `0.96`，
 response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 
-## Codex Global Completion Notification Bridge（未开始）
+## Codex Global Completion Notification Bridge（DEPLOYED / VERIFIED）
 
-目标与验收清单保留在活动 Codex goal；后续必须完成全局 `~/.codex/config.toml` notify hook、portable
-notify script、带 shared secret/idempotency 的 n8n workflow、固定 Telegram/KOOK Admin DM、LangBot
-outbound sender 接线、双平台故障隔离、smoke test、文档和 checkpoint。真实 secrets 只能在仓库外恢复。
+- [x] 全局 hook 已安装到 `/Users/blacksidev/.codex/bin/codex-notify.sh`，配置位置为
+  `/Users/blacksidev/.codex/config.toml` root-level `notify`；不依赖 agent-monorepo 或当前 cwd。
+- [x] Git source 为 `integrations/codex/codex-notify.sh`；安装脚本复制 source，不在全局 config 写入 secret。
+- [x] 当前 Codex legacy notify argv payload（`type=agent-turn-complete`、`thread-id`、`turn-id`、`cwd`、
+  `last-assistant-message`）已归一化为 webhook 所需的 event/threadId/turnId/cwd/projectName/
+  lastAssistantMessage/timestamp。
+- [x] script 使用 curl 2 秒连接/5 秒总 timeout，过滤非 completion event，日志不含 payload/secret，网络失败返回 0。
+- [x] n8n workflow `Codex Completion Notification` 已激活，source 为
+  `integrations/n8n/workflows/codex-completion-notification.workflow.json`，生产 ID
+  `codex-completion-notification-20260906`，Webhook `/webhook/codex-complete`。
+- [x] n8n shared secret 与固定 admin identities 通过外部文件同步到 global variables；真实值未入 Git。
+- [x] idempotency Data Table `codex-completion-idempotency-20260906` 已创建，`eventKey` 唯一索引为
+  `threadId:turnId`；重复事件在发送前返回 `duplicate: true`。
+- [x] Telegram/KOOK 均复用 LangBot `/send_message` outbound sender，固定 `target_type: person`；目标
+  只来自 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`（Arthur Admin identity），不使用 payload/chat/channel。
+- [x] 两个 sender 均 `continueOnFail: true`，结果分别记录 `telegram: sent|failed`、`kook: sent|failed`。
+- [x] global Codex turn smoke（cwd `/tmp`）已进入 n8n，Telegram 与 KOOK 均 `sent`；runtime smoke 已验证
+  缺失 secret 拒绝、项目名从 cwd 安全解析、双平台发送和重复抑制。
+- [x] 受控 failure-isolation smoke 已验证 Telegram failed 时 KOOK sent、KOOK failed 时 Telegram sent；测试后
+  两个平台 admin variables 与 shared secret 均从原外部配置恢复并核对。
+- [x] static workflow smoke、notify script smoke、runtime webhook smoke、secret scan、JSON/shell 校验通过。
 
+n8n workflow 最后一次生产导入的外部 rollback backup 为
+`/home/node/.n8n/workflow-backups/codex-codex-completion-notification-20260906-before-20260906-114742.json`。
+shared secret 外部文件为 `~/.codex/secrets/codex-notify-secret` 与
+`/DATA/AppData/n8n/secrets/codex-notify-secret`，不在仓库内。
 
 ## 当前阶段
 
