@@ -14,9 +14,22 @@
 - [x] Service Registry 根据真实 CasaOS labels 映射 `postgres -> immich-postgres`（Immich/database）、`redis -> immich-redis`（Immich/redis），补齐实际运行的 `media-organizer-adapter`，Docker allowlist 同步实际 container names。
 - [x] 健康判断以 executor/container/process/Docker health/application endpoint 为主，ERROR 日志仅产生 DEGRADED；stopped 为 DOWN，executor unavailable 为 UNKNOWN；`/status` formatter 改为 NAS/核心/媒体/基础设施/需要关注分组，不把完整日志塞入列表。
 - [x] 新增 TypeScript/Python 回归：Telegram identity、buttons/callback ownership/replay/expiry/text fallback、MacHostAgent surface/metrics、running+ERROR != DOWN、service registry mapping；runtime 125 pass / 1 skip，secret scan、diff check、MacHostAgent tests 通过。
-- [ ] 用提交后的 immutable runtime/LangBot images 部署到 OrbStack `ubuntu`/CasaOS，并通过真实 `/status`、HostAgent reachability、Telegram callback/text smoke；部署后补充 checkpoint 与 rollback evidence。
+- [x] 用提交后的 immutable runtime/LangBot images 部署到 OrbStack `ubuntu`/CasaOS，并通过真实 `/status`、HostAgent reachability、Telegram callback/text smoke；部署后补充 checkpoint 与 rollback evidence。
 
-本阶段源码 checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
+源码 checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
+
+## HomeHub V1.2 deployment（DEPLOYED / VERIFIED：2026-09-06）
+
+- [x] macOS `com.local.homehub.mac-host-agent` 已由 launchd 启动并监听 `0.0.0.0:49152`；token 只在 `/Users/Shared/HomeHub/mac-host-agent.token` 与 CasaOS `/DATA/AppData/pubg-query-engine-v3/secrets/mac-host-agent-token`，不入 Git。
+- [x] runtime immutable image `local/pubg-query-engine-v3:git-6a59a544bacf` 已部署；runtime compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-151912`，HostAgent token mount/env compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-152003`。
+- [x] patched LangBot image `local/langbot-agent:99759f5687c6-20260906-152251` 已激活；compose rollback 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-152254`。`pubg-stats 3.2.4`、`organize-emby 0.2.0`、`macos-nas-control 0.1.4` 已通过 API task `12/13/14` 安装就绪。
+- [x] live MacHostAgent through HomeHub returned hostname `Xu 的 MacBook Pro`, macOS `26.0.1 (25A362)`, model `MacBookPro18,3`, root/Avalon disks `92.2%/92.4%`, 30 network entries, AC power and cloudflared running; no container metrics were used.
+- [x] real `/status` returned 14 registered services: 8 HEALTHY, 4 DEGRADED (LangBot/n8n/Jellyfin/media organizer recent errors), 1 UNHEALTHY (Postgres Docker HEALTHCHECK), 1 DOWN (Glances absent), 0 UNKNOWN. The main list contains compact diagnostics only; full log samples remain in diagnosis data.
+- [x] `scripts/smoke-homehub-docker.sh` passed: read-only Docker socket, 10 allowlisted actual containers, and real macOS host metrics.
+- [x] live `/v3/whoami` private/group smoke mapped Telegram user `5501555095` to the same `arthur/ADMIN` with distinct chat IDs (`5501555095` and `-5527996775`); live HomeHub prompt returned bounded confirm/cancel buttons; foreign callback was denied; owner cancel succeeded; `/v3/route` routed text `确认` to HomeHub.
+- [x] live text fallback confirmed `重启 aria2`; action verification passed and canonical `aria2` was observed `Up` after restart.
+
+Deployment checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-deployment.md`。
 
 ## Codex Global Completion Notification Bridge：DEPLOYED / VERIFIED（2026-09-06）
 

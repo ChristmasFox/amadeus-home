@@ -8,9 +8,12 @@
 confirmation buttons/callback ownership/replay/expiry/text fallback、MacHostAgent/Executor、APFS-aware
 host metrics、label-based Service Registry mapping、new grouped `/status` formatter and health semantics。
 本地 runtime 125 pass / 1 skip，MacHostAgent Python tests、plugin tests、secret scan 和 diff check 通过。
-当前唯一未完成项是提交后实际部署：启动外部 token-protected MacHostAgent，build/deploy runtime 与 patched
-LangBot images 到 OrbStack ubuntu/CasaOS，运行真实 `/status`、agent reachability、Telegram callback/text
-smoke，并记录 rollback checkpoint。源码 checkpoint 为 `.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
+2026-09-06 已完成实际部署：Mac launchd agent、runtime image `local/pubg-query-engine-v3:git-6a59a544bacf`、
+patched LangBot image `local/langbot-agent:99759f5687c6-20260906-152251` 与三个 plugin API installs 已就绪。
+真实 `/status` 返回 8 healthy / 4 degraded / 1 unhealthy / 1 down / 0 unknown，并取得真实 macOS 指标；
+private/group identity、button ownership/cancel、text route 和 aria2 text confirmation smoke 已通过。部署 rollback
+与 compose backup 记录在 `.agent/checkpoints/2026-09-06-homehub-v1.2-deployment.md`。
+源码 checkpoint 仍为 `.agent/checkpoints/2026-09-06-homehub-v1.2-implementation.md`。
 
 ## 当前上下文
 
