@@ -17,9 +17,10 @@ Adapter sender 同时发送 Telegram/KOOK 固定 `person` DM。目标只读取 g
 `TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，不读取 inbound chat、channel、context 或 payload recipient；
 两个平台失败互不阻塞并记录 `sent/failed`。
 
-实际证据：global Codex turn（cwd `/tmp`）成功触发 n8n，双平台均 sent；runtime smoke 验证缺 secret 401、
+实际证据：global Codex turn（cwd `/tmp`）成功触发 n8n（production execution `2968`），双平台均 sent；最终
+runtime smoke execution `2992` 的发送目标类型均为 `person` 且与当前 Admin variables 匹配；runtime smoke 验证缺 secret 401、
 安全 projectName、重复事件 duplicate suppressed；受控双向 failure-isolation 验证 Telegram failed/KOOK
-sent 与 Telegram sent/KOOK failed，随后恢复真实外部 variables。最后一次 workflow rollback backup 位于
+sent（execution `2981`）与 Telegram sent/KOOK failed（execution `2989`），随后恢复真实外部 variables。最后一次 workflow rollback backup 位于
 `/home/node/.n8n/workflow-backups/codex-codex-completion-notification-20260906-before-20260906-114742.json`。
 真实 shared secret、LangBot API credential、Admin IDs 和 n8n variables 不入 Git。
 

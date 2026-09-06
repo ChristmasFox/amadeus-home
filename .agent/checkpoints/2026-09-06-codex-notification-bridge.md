@@ -24,8 +24,10 @@
 - `scripts/test-codex-notification-workflow.sh`：通过（workflow topology、fixed person target、idempotency、independent delivery recorder）。
 - `scripts/smoke-codex-notification-runtime.sh`：通过（缺 secret rejected、双平台 sent、cwd-derived project、duplicate suppressed）。
 - 真实 global `codex exec` from `/tmp`：Codex exit 0，n8n execution recorded `telegram=sent`、`kook=sent`。
-- 受控 failure isolation：Telegram failed/KOOK sent；Telegram sent/KOOK failed；随后 Admin IDs/shared secret
-  与原外部配置匹配恢复。
+  production execution evidence：n8n execution `2968` recorded the global turn and both `sent`。
+- 受控 failure isolation：n8n execution `2981` recorded Telegram failed/KOOK sent；execution `2989` recorded
+  Telegram sent/KOOK failed；随后 Admin IDs/shared secret 与原外部配置匹配恢复。最终 runtime smoke execution
+  `2992` 的真实 Admin person targets hash matched both configured variables。
 - `pnpm check:secrets` 与 `git diff --check`：通过。
 
 ## 外部恢复/回滚
