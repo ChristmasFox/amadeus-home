@@ -127,6 +127,33 @@ export LANGBOT_API_KEY='<restore-from-password-manager>'
 `--apply --patches --activate-image` 构建并切换 CasaOS LangBot 镜像。旧镜像、compose
 备份和 `.lbpkg` 回滚包都保留在 Git 外。
 
+## Codex 全局完成通知
+
+Codex completion notification 是用户级能力，不依赖当前仓库目录。Git source 位于
+`integrations/codex/codex-notify.sh`，安装到 `~/.codex/bin/codex-notify.sh`，并由全局
+`~/.codex/config.toml` 的 root-level `notify` 配置调用。它只接受
+`agent-turn-complete`，将 `threadId + turnId`、cwd、从 cwd 安全解析的项目名、最后回复和
+时间发送到本机/HomeLab n8n `/webhook/codex-complete`；网络失败 fail-open，不影响 Codex。
+
+n8n workflow source 是 `integrations/n8n/workflows/codex-completion-notification.workflow.json`。
+它校验外部 shared secret，把 completion key 写入唯一 Data Table，然后通过现有 LangBot
+`send_message` outbound sender 同时发送固定 Telegram/KOOK `person` DM。目标 ID 只来自外部
+`TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，不读取当前 chat、channel 或 payload recipient；
+两个平台的发送结果独立记录。真实 secret、n8n credential、variables 和 Data Table 只在
+运行时恢复，不入 Git。
+
+安装、配置和验证：
+
+```sh
+./scripts/provision-codex-notify-secret.sh --apply
+./scripts/install-codex-notify.sh --apply
+./scripts/create-n8n-codex-idempotency-table.sh --apply
+./scripts/deploy-n8n-workflow.sh --workflow integrations/n8n/workflows/codex-completion-notification.workflow.json --id codex-completion-notification-20260906 --apply
+./scripts/smoke-codex-notify.sh
+./scripts/test-codex-notification-workflow.sh
+./scripts/smoke-codex-notification-runtime.sh
+```
+
 ## Codex 持久化协议
 
 每次新会话先读取：

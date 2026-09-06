@@ -1,0 +1,545 @@
+{
+  "name": "Codex Completion Notification",
+  "id": "codex-completion-notification-20260906",
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Asia/Shanghai",
+    "saveManualExecutions": true
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "codex-complete",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "codex-complete-node-001",
+      "name": "Codex Completion Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1000,
+        0
+      ],
+      "webhookId": "codex-complete-webhook-20260906"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const webhook = $json && typeof $json === 'object' ? $json : {};\nlet body = webhook.body ?? webhook;\nif (typeof body === 'string') {\n  try { body = JSON.parse(body); } catch { body = {}; }\n}\nif (!body || typeof body !== 'object' || Array.isArray(body)) body = {};\nconst headers = webhook.headers && typeof webhook.headers === 'object' ? webhook.headers : {};\nconst normalizedHeaders = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), String(value ?? '')]));\nconst suppliedSecret = normalizedHeaders['x-codex-notify-secret'] || normalizedHeaders['x-codex-notify-secret-token'] || '';\nconst expectedSecret = String($vars.CODEX_NOTIFY_SECRET ?? '').trim();\nconst event = String(body.event ?? body.type ?? body.event_name ?? '').trim();\nconst threadId = String(body.threadId ?? body.thread_id ?? body['thread-id'] ?? '').trim();\nconst turnId = String(body.turnId ?? body.turn_id ?? body['turn-id'] ?? '').trim();\nconst cwd = String(body.cwd ?? '').trim();\n\nfunction rejected(statusCode, error, extra = {}) {\n  return [{ json: { accepted: false, statusCode, error, ...extra } }];\n}\nif (!expectedSecret) return rejected(503, 'notification configuration unavailable');\nif (!suppliedSecret || suppliedSecret !== expectedSecret) return rejected(401, 'unauthorized');\nif (!String($vars.TELEGRAM_ADMIN_USER_ID ?? '').trim() || !String($vars.KOOK_ADMIN_USER_ID ?? '').trim()) return rejected(503, 'admin recipient configuration unavailable');\nif (event !== 'agent-turn-complete') return rejected(400, 'ignored non-completion event', { ignored: true });\nif (!threadId || !turnId || !cwd) return rejected(400, 'completion payload missing required identity fields');\nif (threadId.length > 256 || turnId.length > 256 || cwd.length > 4096) return rejected(400, 'completion payload field too long');\n\nconst projectBase = cwd.replace(/[\\\\/]+$/u, '').split(/[\\\\/]/u).filter(Boolean).pop() || 'unknown-project';\nconst projectName = projectBase.replace(/[^A-Za-z0-9._-]+/gu, '_').replace(/^[-._]+|[-._]+$/gu, '').slice(0, 80) || 'unknown-project';\nconst message = String(body.lastAssistantMessage ?? body.last_assistant_message ?? body['last-assistant-message'] ?? '').trim().slice(0, 8000);\nconst timestampValue = String(body.timestamp ?? body.completedAt ?? body.completed_at ?? '').trim();\nconst parsedTimestamp = Date.parse(timestampValue);\nconst timestamp = Number.isFinite(parsedTimestamp) ? new Date(parsedTimestamp).toISOString() : new Date().toISOString();\nconst idempotencyKey = `${threadId}:${turnId}`;\n\nreturn [{ json: { accepted: true, duplicate: false, statusCode: 200, event, threadId, turnId, cwd, projectName, message, timestamp, idempotencyKey } }];"
+      },
+      "id": "codex-complete-node-002",
+      "name": "Validate Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.accepted }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "codex-complete-node-003",
+      "name": "Valid Completion?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $('Resolve Idempotency').first()?.json ?? $('Validate Completion').first()?.json ?? $json;\nfunction redact(value) {\n  let result = String(value ?? '').replace(/[\\\\\\r\\n]+/gu, ' ').trim();\n  result = result.replace(/Bearer\\s+[A-Za-z0-9._-]{16,}/giu, 'Bearer [REDACTED]');\n  result = result.replace(/\\bsk-[A-Za-z0-9_-]{16,}\\b/gu, '[REDACTED]');\n  result = result.replace(/\\bgh[pousr]_[A-Za-z0-9_]{16,}\\b/gu, '[REDACTED]');\n  result = result.replace(/\\b(api[_-]?key|access[_-]?token|bot[_-]?token|app[_-]?secret|jwt[_-]?secret|password)\\s*[:=]\\s*[^\\s,;]+/giu, '$1=[REDACTED]');\n  return result.slice(0, 8000);\n}\nconst time = new Date(input.timestamp);\nconst timeLabel = Number.isFinite(time.getTime())\n  ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(time)\n  : '未知时间';\nconst displayCwd = String(input.cwd ?? '').replace(/^\\/Users\\/[^/]+/u, '~').replace(/^\\/home\\/[^/]+/u, '~');\nconst message = redact(input.message) || 'Codex agent turn completed.';\nconst text = `✅ Codex 执行完成\\n\\n项目：${input.projectName}\\n目录：${displayCwd}\\n时间：${timeLabel}\\n\\n结果：\\n${message}`;\nconst telegramTarget = String($vars.TELEGRAM_ADMIN_USER_ID ?? '').trim();\nconst kookTarget = String($vars.KOOK_ADMIN_USER_ID ?? '').trim();\nif (!telegramTarget || !kookTarget) throw new Error('admin recipient configuration unavailable');\nconst chain = [{ type: 'Plain', text }];\nreturn [{ json: {\n  accepted: true,\n  event: input.event,\n  threadId: input.threadId,\n  turnId: input.turnId,\n  idempotencyKey: input.idempotencyKey,\n  projectName: input.projectName,\n  cwd: input.cwd,\n  timestamp: input.timestamp,\n  message: input.message,\n  notificationText: text,\n  telegramBody: { target_type: 'person', target_id: telegramTarget, message_chain: chain },\n  kookBody: { target_type: 'person', target_id: kookTarget, message_chain: chain },\n} }];"
+      },
+      "id": "codex-complete-node-004",
+      "name": "Format Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://langbot:5300/api/v1/platform/bots/e2ff1900-fd8a-4ad5-9e99-6cae6afdb831/send_message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.telegramBody }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "codex-complete-node-005",
+      "name": "Send Telegram DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3e1d6a25-5f08-4ab3-a1bf-2c31a6bf1c21",
+          "name": "LangBot API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://langbot:5300/api/v1/platform/bots/2f25e57b-6157-458d-99e4-db411ddc85d4/send_message",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Format Notification').first().json.kookBody }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "codex-complete-node-006",
+      "name": "Send KOOK DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        -120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "3e1d6a25-5f08-4ab3-a1bf-2c31a6bf1c21",
+          "name": "LangBot API"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1500
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const formatted = $('Format Notification').first()?.json ?? {};\nconst telegramRaw = $('Send Telegram DM').first()?.json ?? {};\nconst kookRaw = $('Send KOOK DM').first()?.json ?? {};\nfunction delivery(value) {\n  const statusCode = Number(value?.statusCode ?? 0);\n  const body = value?.body && typeof value.body === 'object' ? value.body : value;\n  const error = value?.error || body?.error;\n  const sent = !error && ((Number.isInteger(statusCode) && statusCode >= 200 && statusCode < 300) || body?.data?.sent === true || body?.sent === true);\n  return { status: sent ? 'sent' : 'failed', ...(Number.isInteger(statusCode) && statusCode > 0 ? { statusCode } : {}), ...(!sent ? { reason: 'platform_request_failed' } : {}) };\n}\nreturn [{ json: {\n  accepted: true,\n  duplicate: false,\n  event: formatted.event,\n  threadId: formatted.threadId,\n  turnId: formatted.turnId,\n  idempotencyKey: formatted.idempotencyKey,\n  projectName: formatted.projectName,\n  timestamp: formatted.timestamp,\n  telegram: delivery(telegramRaw),\n  kook: delivery(kookRaw),\n  completedAt: new Date().toISOString(),\n} }];"
+      },
+      "id": "codex-complete-node-007",
+      "name": "Record Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "codex-complete-node-008",
+      "name": "Respond Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        720,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode || 400 }}"
+        }
+      },
+      "id": "codex-complete-node-009",
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "codex-completion-idempotency-20260906"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "eventKey",
+              "condition": "eq",
+              "keyValue": "={{ $json.idempotencyKey }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1,
+        "orderBy": false
+      },
+      "id": "codex-complete-node-010",
+      "name": "Read Idempotency Key",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -520,
+        -120
+      ],
+      "alwaysOutputData": true,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const incoming = $('Validate Completion').first()?.json ?? {};\nconst row = $input.first()?.json ?? {};\nconst duplicate = String(row.eventKey ?? '') === String(incoming.idempotencyKey ?? '');\nreturn [{ json: { ...incoming, accepted: !duplicate, duplicate, statusCode: 200 } }];"
+      },
+      "id": "codex-complete-node-011",
+      "name": "Resolve Idempotency",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -280,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.duplicate }}",
+              "operation": "equal",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "codex-complete-node-012",
+      "name": "Already Seen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "codex-completion-idempotency-20260906"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "eventKey": "={{ $json.idempotencyKey }}",
+            "receivedAt": "={{ new Date().toISOString() }}",
+            "threadId": "={{ $json.threadId }}",
+            "turnId": "={{ $json.turnId }}",
+            "projectName": "={{ $json.projectName }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "schema": [
+            {
+              "id": "eventKey",
+              "displayName": "eventKey",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "receivedAt",
+              "displayName": "receivedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "threadId",
+              "displayName": "threadId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "turnId",
+              "displayName": "turnId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "projectName",
+              "displayName": "projectName",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "codex-complete-node-013",
+      "name": "Claim Completion",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode || 200 }}"
+        }
+      },
+      "id": "codex-complete-node-014",
+      "name": "Respond Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Codex Completion Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Completion": {
+      "main": [
+        [
+          {
+            "node": "Valid Completion?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Idempotency Key": {
+      "main": [
+        [
+          {
+            "node": "Resolve Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Already Seen?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Already Seen?": {
+      "main": [
+        [
+          {
+            "node": "Respond Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claim Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Completion": {
+      "main": [
+        [
+          {
+            "node": "Format Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Notification": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram DM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram DM": {
+      "main": [
+        [
+          {
+            "node": "Send KOOK DM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send KOOK DM": {
+      "main": [
+        [
+          {
+            "node": "Record Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Delivery": {
+      "main": [
+        [
+          {
+            "node": "Respond Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Accepted": {
+      "main": [
+        []
+      ]
+    },
+    "Respond Duplicate": {
+      "main": [
+        []
+      ]
+    },
+    "Valid Completion?": {
+      "main": [
+        [
+          {
+            "node": "Read Idempotency Key",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "description": "Global Codex agent-turn-complete bridge. Validates a shared secret, claims threadId+turnId once in an external Data Table, and sends fixed person DMs through LangBot; never uses webhook chat context or payload recipients."
+}

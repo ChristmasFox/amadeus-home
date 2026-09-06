@@ -75,6 +75,26 @@ Runtime 与 LangBot 插件共享 Telegram、KOOK、WhatsApp 的平台 contract�
 adapter / renderer 层处理，业务 domain 不直接依赖某一个聊天平台。WhatsApp Cloud
 API 凭据、webhook verify token 和 Telegram/KOOK token 都在运行时 secrets 中。
 
+## Codex Global Completion Notification Bridge
+
+Codex completion notification 是用户级边界，不依赖当前 repository cwd。Git 保存
+`integrations/codex/codex-notify.sh` 和安装/验证脚本；`scripts/install-codex-notify.sh --apply`
+把脚本复制到 `~/.codex/bin` 并更新 `~/.codex/config.toml` 的 root-level `notify`。当前 Codex
+legacy notify payload 作为 argv[1] 传入，事件类型为 `agent-turn-complete`；脚本归一化
+hyphenated/camelCase/snake_case 字段，只 POST completion event，并以 `threadId + turnId`
+交给 n8n 做唯一 claim。tool call、streaming/intermediate event 和无效 payload 不发送。
+
+本机脚本默认 POST `http://127.0.0.1:5679/webhook/codex-complete`，使用外部
+`~/.codex/secrets/codex-notify-secret`。它有 2 秒连接/5 秒总超时、只写无 payload 的状态日志，
+所有网络/配置失败都返回 0，保证不影响 Codex。n8n workflow source
+`integrations/n8n/workflows/codex-completion-notification.workflow.json` 在 HomeLab n8n 中校验
+`CODEX_NOTIFY_SECRET` global variable，并用唯一 external Data Table `eventKey` claim 去重。
+
+发送节点固定调用 LangBot `/api/v1/platform/bots/<bot_uuid>/send_message`，两个节点均使用
+`target_type: person` 和 `continueOnFail`，固定目标来自外部 `TELEGRAM_ADMIN_USER_ID`、
+`KOOK_ADMIN_USER_ID` variables；不使用 inbound chat/context/payload recipient。LangBot credential
+只在 n8n 实例重新绑定，不存在 workflow source。
+
 ## 数据所有权与恢复
 
 | 数据 | canonical 位置 | Git 策略 | 恢复策略 |

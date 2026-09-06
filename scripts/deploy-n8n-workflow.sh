@@ -76,9 +76,14 @@ backup_name_q="$(printf '%q' "$backup_name")"
 workflow_id_q="$(printf '%q' "$WORKFLOW_ID")"
 
 orb -m "$MACHINE" -u root docker exec "$CONTAINER" sh -lc 'mkdir -p /home/node/.n8n/workflow-backups'
-orb -m "$MACHINE" -u root docker exec "$CONTAINER" n8n export:workflow \
+backup_created=0
+if orb -m "$MACHINE" -u root docker exec "$CONTAINER" n8n export:workflow \
   --id="$WORKFLOW_ID" --published --pretty \
-  --output="/home/node/.n8n/workflow-backups/$backup_name"
+  --output="/home/node/.n8n/workflow-backups/$backup_name"; then
+  backup_created=1
+else
+  printf '%s\n' 'No existing workflow with this ID; importing as a new workflow without an overwrite backup.' >&2
+fi
 
 orb -m "$MACHINE" -u root docker exec "$CONTAINER" sh -lc "echo '$encoded' | base64 -d >$remote_file_q"
 orb -m "$MACHINE" -u root docker exec "$CONTAINER" n8n import:workflow --input="$remote_file"
@@ -105,7 +110,18 @@ node_values = json.loads(nodes)
 code = '\\n'.join(str(node.get('parameters', {}).get('jsCode', '')) for node in node_values)
 if workflow_id == 'pubg-sync-matches-v3-20260902' and 'deathSemantics' not in code:
     raise SystemExit('PUBG v3 workflow did not contain the KD normalization marker')
+if workflow_id == 'codex-completion-notification-20260906':
+    node_names = {str(node.get('name')) for node in node_values}
+    required_nodes = {'Codex Completion Webhook', 'Validate Completion', 'Format Notification', 'Send Telegram DM', 'Send KOOK DM', 'Record Delivery'}
+    if not required_nodes.issubset(node_names):
+        raise SystemExit('Codex notification workflow is missing required nodes')
+    if 'target_type' not in code or '\$vars.TELEGRAM_ADMIN_USER_ID' not in code or '\$vars.KOOK_ADMIN_USER_ID' not in code:
+        raise SystemExit('Codex notification workflow does not resolve fixed admin recipients')
 print(f'Verified n8n workflow active: {name}')
 PY
 "
-printf '%s\n' "n8n workflow deployment passed; external backup: /home/node/.n8n/workflow-backups/$backup_name"
+if ((backup_created)); then
+  printf '%s\n' "n8n workflow deployment passed; external backup: /home/node/.n8n/workflow-backups/$backup_name"
+else
+  printf '%s\n' 'n8n workflow deployment passed; workflow was newly created, so no overwrite backup was required.'
+fi
