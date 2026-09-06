@@ -77,18 +77,17 @@ def patch_events() -> None:
 
 def patch_chat_handler() -> None:
     source = chat_path.read_text()
-    if "_pubg_callback_data" not in source:
-        old = """        event = event_class(
+    old = """        event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=_pubg_command_launcher_id,
-            sender_id=_pubg_command_sender_id,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
             text_message=str(query.message_chain),
             message_event=query.message_event,
             message_chain=query.message_chain,
             query=query,
         )
 """
-        new = """        adapter_type = type(query.adapter)
+    new = """        adapter_type = type(query.adapter)
         adapter_name = adapter_type.__name__.lower()
         adapter_module = adapter_type.__module__.lower()
         if 'whatsapp' in adapter_name or 'whatsapp' in adapter_module:
@@ -140,20 +139,46 @@ def patch_chat_handler() -> None:
             query=query,
         )
 """
-        if old not in source:
-            raise SystemExit("Chat event construction marker not found")
+    if old in source:
         source = source.replace(old, new, 1)
+    elif '_pubg_sender_id' not in source:
+        marker = """        event = event_class(
+            launcher_type=query.launcher_type.value,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
+"""
+        identity = """        # Correct Telegram group identity when this file already contains
+        # the older callback/platform patch.
+        _pubg_launcher_id = query.launcher_id
+        _pubg_sender_id = query.sender_id
+        if platform == 'telegram':
+            _source = getattr(query.message_event, 'source_platform_object', None)
+            _source_callback = getattr(_source, 'callback_query', None)
+            _source_message = getattr(_source_callback, 'message', None) or getattr(_source, 'effective_message', None) or getattr(_source, 'message', None) or _source
+            _source_user = getattr(_source_callback, 'from_user', None) or getattr(_source_message, 'from_user', None) or getattr(_source, 'effective_user', None)
+            _source_chat = getattr(_source_message, 'chat', None) or getattr(_source, 'effective_chat', None)
+            if _source_user is not None and getattr(_source_user, 'id', None) is not None:
+                _pubg_sender_id = str(_source_user.id)
+            elif _source is not None:
+                _pubg_sender_id = 'unknown'
+            if _source_chat is not None and getattr(_source_chat, 'id', None) is not None:
+                _pubg_launcher_id = str(_source_chat.id)
+            elif _source is not None:
+                _pubg_launcher_id = 'unknown'
+
+"""
+        if marker not in source:
+            raise SystemExit('Chat identity correction marker not found')
+        source = source.replace(marker, identity + marker.replace('launcher_id=query.launcher_id', 'launcher_id=_pubg_launcher_id').replace('sender_id=query.sender_id', 'sender_id=_pubg_sender_id'), 1)
     chat_path.write_text(source)
 
 
 def patch_command_handler() -> None:
     source = command_path.read_text()
-    if "_pubg_command_platform" in source:
-        return
     old = """        event = event_class(
             launcher_type=query.launcher_type.value,
-            launcher_id=_pubg_command_launcher_id,
-            sender_id=_pubg_command_sender_id,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
             command=spt[0],
             params=spt[1:] if len(spt) > 1 else [],
             text_message=full_command_text,
@@ -174,7 +199,6 @@ def patch_command_handler() -> None:
             _pubg_command_platform = 'kook'
 
         # Preserve a display-only name when the raw platform event exposes it.
-        # The stable sender_id above remains the only identity key.
         _pubg_display_name = None
         _pubg_command_launcher_id = query.launcher_id
         _pubg_command_sender_id = query.sender_id
@@ -215,9 +239,38 @@ def patch_command_handler() -> None:
             query=query,
         )
 """
-    if old not in source:
-        raise SystemExit("Command event construction marker not found")
-    source = source.replace(old, new, 1)
+    if old in source:
+        source = source.replace(old, new, 1)
+    elif '_pubg_command_sender_id' not in source:
+        marker = """        event = event_class(
+            launcher_type=query.launcher_type.value,
+            launcher_id=query.launcher_id,
+            sender_id=query.sender_id,
+            command=spt[0],
+"""
+        identity = """        # Correct Telegram command identity when this file already contains
+        # the older platform/display-name patch.
+        _pubg_command_launcher_id = query.launcher_id
+        _pubg_command_sender_id = query.sender_id
+        source_platform_object = getattr(query.message_event, 'source_platform_object', None)
+        callback_query = getattr(source_platform_object, 'callback_query', None)
+        effective_message = getattr(callback_query, 'message', None) or getattr(source_platform_object, 'effective_message', None) or getattr(source_platform_object, 'message', None) or source_platform_object
+        source_user = getattr(callback_query, 'from_user', None) or getattr(effective_message, 'from_user', None) or getattr(source_platform_object, 'effective_user', None)
+        source_chat = getattr(effective_message, 'chat', None) or getattr(source_platform_object, 'effective_chat', None)
+        if _pubg_command_platform == 'telegram':
+            if source_user is not None and getattr(source_user, 'id', None) is not None:
+                _pubg_command_sender_id = str(source_user.id)
+            elif source_platform_object is not None:
+                _pubg_command_sender_id = 'unknown'
+            if source_chat is not None and getattr(source_chat, 'id', None) is not None:
+                _pubg_command_launcher_id = str(source_chat.id)
+            elif source_platform_object is not None:
+                _pubg_command_launcher_id = 'unknown'
+
+"""
+        if marker not in source:
+            raise SystemExit('Command identity correction marker not found')
+        source = source.replace(marker, identity + marker.replace('launcher_id=query.launcher_id', 'launcher_id=_pubg_command_launcher_id').replace('sender_id=query.sender_id', 'sender_id=_pubg_command_sender_id'), 1)
     command_path.write_text(source)
 
 def patch_telegram_adapter() -> None:
@@ -372,10 +425,13 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
                     return
                 data = json.loads(query.data)
 """
-    if "callback_data.startswith('pubg:m:')" not in source:
-        if callback_handler_marker not in source:
-            raise SystemExit("Telegram callback JSON marker not found")
-        source = source.replace(callback_handler_marker, callback_handler_replacement, 1)
+    if "callback_data.startswith(('pubg:m:', 'hh1:'))" not in source:
+        if "if callback_data.startswith('pubg:m:'):" in source:
+            source = source.replace("if callback_data.startswith('pubg:m:'):", "if callback_data.startswith(('pubg:m:', 'hh1:')):", 1)
+        else:
+            if callback_handler_marker not in source:
+                raise SystemExit("Telegram callback JSON marker not found")
+            source = source.replace(callback_handler_marker, callback_handler_replacement, 1)
 
     if "reply_markup = next(" not in source:
         old = """        components = await TelegramMessageConverter.yiri2target(message, self.bot)
