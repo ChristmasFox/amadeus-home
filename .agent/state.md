@@ -2,11 +2,13 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
-## PUBG 对局复盘 V1（SOURCE COMPLETE：2026-09-06）
+## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
-已基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 Match API/Telemetry 完成复盘报告 V1 source implementation：新增 `telemetry-parser-5`、`review-features-5` supplemental facts（电击枪、恢复/能量、搜包、载具仓库、门窗翻越、护甲破坏、载具攻击链），丰富 deterministic review story/turning points/action plan，接入中文地图名、武器信息、逐人队友误伤和趣味组合；圈阶段/白圈未进入 presentation。显式 UUID Match ID 复盘已接入 planner、match selector、n8n source workflow 和插件 fallback。LangBot `pubg-stats` source manifest 为 `3.3.0`。
+已基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 Match API/Telemetry 完成并部署复盘 V1：runtime image `local/pubg-query-engine-v3:git-2f6a63b013ff` 已运行在 OrbStack `ubuntu` / CasaOS，runtime compose 已切换 `telemetry-parser-5` / `review-features-5`，n8n `PUBG Data Gateway v3` 已导入并 active，LangBot `local/pubg-stats` `3.3.0` 已由 API task `14` 安装 ready。
 
-本阶段验证：runtime 130 tests（129 pass、1 skip）、PUBG plugin 13 Python tests、typecheck、build、local runtime smoke、n8n workflow tests、plugin dry-run、secret scan、diff check 全部通过。当前未 build/deploy CasaOS runtime image，未调用 LangBot API 安装；后续如需上线，执行 `.agent/tasks/pubg-review-v1-deployment.md` 中的显式 RELEASE 流程。checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-implementation.md`。 Source commit：`fb6000a`。
+真实 Match ID runtime query 已返回 OK 并创建 v5 feature cache，presentation 包含战局走势、武器、队友互动/误伤、电击枪、恢复/能量、搜包、载具仓库、环境动作和趣味组合；未输出圈阶段/白圈。runtime `/healthz`、`/homehub/health`、n8n health、`scripts/doctor.sh`、`scripts/smoke-homehub-docker.sh` 均通过。部署 rollback 与证据在 `.agent/checkpoints/2026-09-06-pubg-review-v1-deployment.md`；代码 source commits 为 `fb6000a`、`2f6a63b`、`acdfc65`。
+
+Codex 未代发真实 Telegram 用户消息；如需最后一项平台 inbound 人工确认，由用户发送：`复盘这场比赛 d8c41c10-de9f-40b4-ac88-ede0ab554a31`。
 
 ## HomeHub V1.2 follow-up（2026-09-06）
 

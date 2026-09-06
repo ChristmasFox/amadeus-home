@@ -2,24 +2,22 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
-## PUBG 对局复盘 V1（SOURCE COMPLETE；实际 runtime/plugin 部署待 RELEASE）
+## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
 更新时间：2026-09-06（Asia/Shanghai）
 
-基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 PUBG Match API 与 Telemetry 调试，已完成第一版可迁移复盘报告实现：
+基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 PUBG Match API/Telemetry 完成复盘 V1 source implementation，并已部署到 OrbStack `ubuntu` / CasaOS：
 
-- [x] `match_id` 直接复盘选择器：指定 Match ID 不再被默认“今天”时间选择器隐藏过滤；n8n data gateway source 同步支持该选择器。
-- [x] Telemetry parser 从 `telemetry-parser-4/review-features-4` 升级为 `telemetry-parser-5/review-features-5`，新增结构化电击枪、恢复/能量、搜包、载具仓库、环境互动、护甲破坏和载具攻击链 facts。
-- [x] 复盘报告新增战局主线、转折点、武器信息、队友互动/误伤、恢复物品和能量次数、搜包与物资搬运、开门/破窗/翻越、载具攻击组合等 section；未输出圈阶段/白圈内容。
-- [x] 队友拳击按攻击者/被攻击者分别统计；电击枪区分拾取、开火、确认命中和未知结果，不把开火记录伪装成命中。
-- [x] 趣味组合新增双向互殴、误伤三件套、开团到收割、高伤害未收口、一炮四轮、破甲后倒地/击杀等证据链。
-- [x] Match Store 缺失队员标记为 `not_recorded`，不再渲染为确定的 0 贡献；地图 `Neon_Main` 在展示层显示为“荣都”。
-- [x] LangBot PUBG plugin source 版本升级为 `3.3.0`，tool/command/listener 文案同步；`.lbpkg` 构建和 `deploy-langbot.sh --dry-run` 通过。
-- [x] 130 项 runtime tests 中 129 pass、1 skip；plugin tests 13 pass；typecheck/build、runtime smoke、workflow tests、secret scan、diff check 通过。
-- [ ] 尚未执行 CasaOS runtime image build、n8n 在线 workflow 导入或 LangBot API plugin 安装；需用户显式要求 RELEASE/部署后执行。
+- [x] runtime immutable image `local/pubg-query-engine-v3:git-2f6a63b013ff` 已加载并运行；image deployment rollback compose：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-231814`。
+- [x] CasaOS runtime compose 已切换 `PUBG_TELEMETRY_PARSER_VERSION=telemetry-parser-5`、`PUBG_REVIEW_FEATURE_VERSION=review-features-5`；配置 rollback compose：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-232046`。
+- [x] n8n `PUBG Data Gateway v3`（ID `pubg-data-gateway-v3-20260902`）已从 Git source 导入并保持 active；external backup：`/home/node/.n8n/workflow-backups/codex-pubg-data-gateway-v3-20260902-before-20260906-231837.json`。
+- [x] LangBot API task `14` 已安装 `local/pubg-stats` `3.3.0` 并达到 `INSTALL_READY`；LangBot deploy backup：`.backups/langbot/20260906-231910`。
+- [x] 真实 `/v3/query` Match ID smoke 返回 `OK`，使用 `telemetry-parser-5/review-features-5`，命中荣都、武器信息、队友互动、恢复/能量、搜包、环境动作、一炮四轮和误伤三件套等 section；新 feature cache 创建于 `2026-09-06T15:21:25.459Z`。
+- [x] `GET /healthz`、`/homehub/health`、n8n health、`scripts/doctor.sh`、`scripts/smoke-homehub-docker.sh` 均通过；runtime healthy，Docker smoke 为 8 healthy / 4 degraded / 1 down / 0 unknown。
+- [x] source commits：`fb6000a`（复盘实现）、`2f6a63b`（状态文档）、`acdfc65`（parser/feature compose defaults）。
+- [ ] 本轮未发送新的真实 Telegram 用户消息；如需平台端人工复测，发送“复盘这场比赛`d8c41c10-de9f-40b4-ac88-ede0ab554a31`”即可确认 LangBot 入站链路。
 
-源码阶段 checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-implementation.md`。
-Source commit：`fb6000a`。
+部署 checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-deployment.md`。
 
 ## HomeHub V1.2 implementation（SOURCE COMPLETE；实际部署待执行）
 
