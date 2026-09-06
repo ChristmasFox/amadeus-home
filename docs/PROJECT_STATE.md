@@ -2,7 +2,7 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
-## HomeHub Docker Executor + PUBG KD 修复：SOURCE COMPLETE / DEPLOYMENT PENDING
+## HomeHub Docker Executor + PUBG KD 修复：DEPLOYED / VERIFIED
 
 HomeHub source 已新增受限 `DockerApiCommandExecutor`，通过只读 Docker socket 使用 Docker Engine API，
 严格限制 Service Registry 中的容器名和 `ps` / `inspect` / bounded `logs` / `stats` 观察；变更只允许
@@ -13,11 +13,16 @@ runtime compose 模板已声明 `/var/run/docker.sock:/var/run/docker.sock:ro` �
 HostCollector 默认不读取容器自身 `/proc` 作为 macOS Host 指标；无 macOS Host Executor 时 CPU、内存和
 主机状态为 UNKNOWN，并返回 `macOS executor unavailable` 原因。新增 `GET /status` 可输出真实 Docker
 service inventory。生产 canonical compose 仍需执行 `scripts/deploy-homehub-docker-socket.sh --apply`，
-随后由 `scripts/smoke-homehub-docker.sh` 完成实际容器内验证。
+随后由 `scripts/smoke-homehub-docker.sh` 完成实际容器内验证。2026-09-06 实际运行验证通过：
+image `local/pubg-query-engine-v3:git-1a8a825812b6`，compose rollback backup
+`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-105507`，socket
+为只读 bind mount、UID 1000 node 通过 GID 104 访问；7 个 allowlisted containers 被 client 列出，
+`GET /status` 返回 8 healthy、3 down（postgres/redis/glances 不存在）、1 unhealthy（Jellyfin 日志错误）
+和 1 unknown（macOS cloudflared），没有全量 UNKNOWN。主机指标保持 `UNKNOWN` 并明确说明无 macOS executor。
 
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
-完整 runtime tests 已通过。
+完整 runtime tests 已通过，生产 `/status` smoke 也通过；零死亡 KD 不再向用户渲染 `∞`，而显示 `—`。
 
 ## 状态
 

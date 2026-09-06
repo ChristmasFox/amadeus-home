@@ -2,7 +2,7 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
-## HomeHub Docker Executor + PUBG KD 修复（源码阶段已完成，生产部署待执行）
+## HomeHub Docker Executor + PUBG KD 修复（DEPLOYED / VERIFIED）
 
 - [x] 新增 `DockerApiCommandExecutor`：只通过 `/var/run/docker.sock` 使用 Docker Engine API，不依赖 Docker CLI。
 - [x] Docker 容器名严格限制为 Service Registry 的 allowlist：`langbot`、`pubg-query-engine-v3`、`n8n`、`postgres`、`redis`、`emby`、`jellyfin`、`qbittorrent`、`aria2`、`glances`。
@@ -12,12 +12,20 @@
 - [x] 新增 `GET /status` 与 `/homehub/status` 实时状态端点，新增只读 `scripts/smoke-homehub-docker.sh`。
 - [x] 修复 PUBG KD：n8n 归一化记录补齐 `deaths` / `deathSemantics`，runtime 对旧记录缺失字段使用 placement proxy；零死亡 KD 不再向用户渲染 `∞`，而显示为未定义 `—`。
 - [x] 定向 TypeScript、完整 runtime tests、secret scan 和 diff check 已通过。
-- [ ] 使用 `scripts/deploy-homehub-docker-socket.sh --apply` 修改 canonical CasaOS compose 并重建 runtime。
-- [ ] 使用 `scripts/smoke-homehub-docker.sh` 在实际 `pubg-query-engine-v3` 容器内验证 socket、Docker client 和 `/status`。
+- [x] 使用 `scripts/deploy-homehub-docker-socket.sh --apply` 修改 canonical CasaOS compose 并重建 runtime。
+- [x] 使用 `scripts/smoke-homehub-docker.sh` 在实际 `pubg-query-engine-v3` 容器内验证 socket、Docker client 和 `/status`。
 
 生产部署顺序：先提交干净 source，再执行 `./scripts/deploy-agent-runtime.sh --apply --build --no-proxy`，随后执行
 `./scripts/deploy-homehub-docker-socket.sh --apply`（该脚本只做显式 `--no-build` compose recreate），最后保留
 compose rollback backup、health 和 Docker smoke 证据。
+
+部署证据（2026-09-06）：immutable image `local/pubg-query-engine-v3:git-1a8a825812b6`；
+canonical compose rollback backup `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-105507`；
+container 以 `node` + supplementary group `104` 运行，`/var/run/docker.sock` 为只读 bind mount，
+`test -S /var/run/docker.sock` 通过，受限 client 列出 7 个 allowlisted containers，`GET /status` 返回
+13 个 registered services，其中 8 healthy、3 down（实际不存在的 postgres/redis/glances）、1 unhealthy（Jellyfin
+最近日志错误）、1 unknown（macOS cloudflared）；没有出现全量 UNKNOWN。Host CPU/内存明确返回
+`UNKNOWN — macOS executor unavailable; HomeHub container metrics are not host metrics`。
 
 ## Codex Global Completion Notification Bridge（未开始）
 

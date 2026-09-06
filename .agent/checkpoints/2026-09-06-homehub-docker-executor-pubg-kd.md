@@ -29,6 +29,17 @@
 3. 运行 `./scripts/smoke-homehub-docker.sh`，记录 socket、allowlist client 和 `/status` 输出。
 4. 若失败，恢复脚本打印的 `docker-compose.yml.codex-backup.<timestamp>`，执行 `docker compose up -d --no-build`。
 
+## 生产部署验证（2026-09-06）
+
+- image：`local/pubg-query-engine-v3:git-1a8a825812b6`。
+- canonical compose：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml`。
+- rollback backup：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-105507`。
+- `pubg-query-engine-v3` 以 node + GID 104 访问只读 Docker socket；`test -S` 通过。
+- `scripts/smoke-homehub-docker.sh` 通过：restricted Docker API 列出 7 个 allowlisted containers；`GET /status`
+  返回 8 healthy、3 down（实际不存在的 postgres/redis/glances）、1 unhealthy（Jellyfin recent log error）
+  和 1 unknown（macOS cloudflared），不是全量 UNKNOWN。
+- Host CPU/Memory 保持 UNKNOWN，原因为 `macOS executor unavailable; HomeHub container metrics are not host metrics`。
+
 ## 未完成
 
 - Codex Global Completion Notification Bridge 尚未实现。
