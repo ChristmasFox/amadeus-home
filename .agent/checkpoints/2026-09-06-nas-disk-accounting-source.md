@@ -12,6 +12,6 @@ macOS `df -Ph /` reported `460GiB total`, `16GiB Used`, `36.2GiB Avail`, and `31
 - `pmset` source, battery percentage, charging state, and remaining time are rendered as Chinese power status.
 - Plugin manifest version bumped to `0.1.4` so LangBot accepts the update.
 
-## Pending activation
+## Activation evidence
 
-The external forced command was updated during this source stage. The `0.1.4` formatter must be reinstalled through the authenticated LangBot Plugin API after the clean commit; do not edit the runtime plugin directory manually.
+The external forced command was updated and the clean commit was installed through the authenticated LangBot Plugin API. `macos-nas-control` v0.1.4 reached `INSTALL_READY` as task `19`. The active plugin runtime called the real macOS `nas.status` command and rendered approximately `424GiB / 460GiB`, `92.1%` usage for the system disk, plus Chinese uptime and power status. No runtime plugin directory was manually edited.

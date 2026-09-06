@@ -38,7 +38,7 @@ response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 - [x] PUBG 所有用户可见 KD（TypeScript runtime、legacy V2 Python、legacy n8n）统一按四舍五入保留 1 位小数；内部排序仍使用未格式化数值。
 - [x] 零死亡 KD 继续显示 `—`，不会渲染 `∞` / `Infinity`。
 - [x] macOS NAS `nas.status` 升级为 V2 结构化 payload：主机、macOS 版本/build、型号、CPU 核心、load、uptime、登录用户、内存、系统盘/Avalon、网络、网关、电源、cloudflared 和高占用进程；磁盘单位修复为 macOS human-readable 输出。
-- [x] NAS formatter 增加移动端卡片样式、90% 磁盘告警和旧 payload 兼容；manifest 升级至 `0.1.3`。
+- [x] NAS formatter 增加移动端卡片样式、90% 磁盘告警和旧 payload 兼容；manifest 已升级至 `0.1.4`。
 - [x] 新增 `scripts/deploy-nas-control.sh`，默认 dry-run；`--apply` 会创建 `.codex-backup.<timestamp>`、安装外部 forced-command 并执行真实 `nas.status` smoke。
 - [x] Telegram outbound boundary 和 streaming chunk 增加 `<think>` / `</think>` 过滤；完整、未闭合和 think-only 内容均不会泄漏到 Telegram。
 - [x] HomeHub status 将 host CPU/内存继续明确保持 UNKNOWN（不冒充 Docker 容器指标），但改为中文原因说明；服务级 macOS/Docker executor UNKNOWN 也不再显示原始英文报错。
@@ -48,8 +48,8 @@ response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 - [x] LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` 已激活，compose rollback backup 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`；live Telegram source 已确认 outbound/Markdown/streaming think filter 存在，patch chain 编译通过，active virtualenv helper smoke 通过。
 - [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`；当前 payload 已改为 APFS 实际占用计算（系统盘约 `424GiB / 460GiB`、使用率约 `92.1%`），并输出中文运行时间和电源状态。
 - [x] NAS formatter 修复 `df` 在 macOS APFS 根快照上把快照 Used 当成整盘 Used 的问题；运行时间和 `pmset` 电源文本改为中文卡片。
-- [ ] 上述 NAS formatter 源码已升级至 manifest `0.1.4`，需在提交后通过 LangBot Plugin API 重新安装激活。
-- [x] `macos-nas-control` v0.1.3 已通过 LangBot Plugin API 安装并初始化（task `15`）；使用仓库外 key file，未输出或提交 credential。已在 active `langbot_plugin_runtime` 内调用真实 macOS `nas.status`，V2 移动端 formatter smoke 通过。
+- [x] NAS formatter `0.1.4` 已通过 LangBot Plugin API 重新安装激活（task `19`）；真实 active plugin runtime 输出系统盘约 `424GiB / 460GiB`、使用率 `92.1%`，运行时间和电源均为中文。
+- [x] `macos-nas-control` v0.1.4 已通过 LangBot Plugin API 安装并初始化（task `19`）；使用仓库外 key file，未输出或提交 credential。已在 active `langbot_plugin_runtime` 内调用真实 macOS `nas.status`，APFS 磁盘、中文 uptime、电源和 V2 移动端 formatter smoke 全部通过。
 
 ## Codex Global Completion Notification Bridge（DEPLOYED / VERIFIED）
 

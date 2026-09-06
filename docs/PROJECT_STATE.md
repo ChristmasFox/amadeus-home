@@ -49,7 +49,7 @@ PUBG KD 展示层已统一为 1 位小数：TypeScript runtime、legacy V2 Pytho
 
 macOS NAS status 已升级为 V2 结构化数据与移动端卡片，补充 macOS 版本/build、型号、CPU、load、uptime、
 登录用户、内存、系统盘/Avalon、网络/网关、电源、cloudflared 和高占用进程；`df -Ph` 修复了磁盘单位被
-block 数字覆盖的问题。NAS plugin manifest 为 `0.1.3`，外部 forced-command 安装通过 Git-owned
+block 数字覆盖的问题。NAS plugin manifest 为 `0.1.4`，外部 forced-command 安装通过 Git-owned
 `scripts/deploy-nas-control.sh` 管理，默认 dry-run，apply 时保留 timestamped rollback backup。
 
 Telegram patch 在 outbound API、Markdown conversion 和 streaming path 过滤完整/未闭合 `<think>` block，
@@ -65,8 +65,9 @@ smoke 通过；credential 仍不入 Git。
 
 2026-09-06 追加修复 macOS APFS 根卷磁盘统计：`df` 的根系统 snapshot Used 不代表整个 APFS
 container，NAS command 现在使用 `total - available` 计算实际占用，并输出 `使用率`；同时将 uptime
-和 pmset 电源状态转换为中文。源版本为 `macos-nas-control` `0.1.4`，待 clean commit 后通过 LangBot
-Plugin API 重新安装。
+和 pmset 电源状态转换为中文。`macos-nas-control` `0.1.4` 已通过 LangBot Plugin API 重新安装，task `19`
+和 active plugin runtime 真实 NAS formatter smoke 均通过；当前系统盘显示约 `424GiB / 460GiB`、使用率
+`92.1%`，不再把 `16GiB` snapshot Used 当作整盘占用。
 
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
