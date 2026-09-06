@@ -42,7 +42,7 @@ image `local/pubg-query-engine-v3:git-1a8a825812b6`，compose rollback backup
 `GET /status` 返回 8 healthy、3 down（postgres/redis/glances 不存在）、1 unhealthy（Jellyfin 日志错误）
 和 1 unknown（macOS cloudflared），没有全量 UNKNOWN。主机指标保持 `UNKNOWN` 并明确说明无 macOS executor。
 
-## 2026-09-06 快速 Bug 修复：DEPLOYED / VERIFIED（NAS plugin API activation pending）
+## 2026-09-06 快速 Bug 修复：DEPLOYED / VERIFIED
 
 PUBG KD 展示层已统一为 1 位小数：TypeScript runtime、legacy V2 Python renderer 和 legacy n8n
 `PUBG 今日战绩` workflow 均已更新；内部 KD 仍保留数值精度用于排序，零死亡分母显示 `—` 而不是 `∞`。
@@ -59,8 +59,9 @@ source 后执行对应 release/import/apply，LangBot plugin API key 继续只�
 image `local/pubg-query-engine-v3:git-1b52d2c89f3e`、n8n daily-stats workflow、LangBot patched image
 `local/langbot-agent:5a051b8756c4-20260906-132959` 和 macOS external forced-command 的实际部署与 smoke；
 各 rollback backup 已记录在 docs/CURRENT_TASK.md。真实 `/v3/query`「最近20场战绩」已返回 KD `1.5 / 0.9 /
-0.7 / 0.4`、合计 `1.0`，无 `∞`/`Infinity`；active LangBot virtualenv helper smoke 也已通过。当前唯一未激活项是 `macos-nas-control` 新 formatter 的
-LangBot plugin API 安装，因为当前 shell 没有外部 LangBot API credential；不直接修改运行时 plugin 目录。
+0.7 / 0.4`、合计 `1.0`，无 `∞`/`Infinity`；active LangBot virtualenv helper smoke 也已通过。
+`macos-nas-control` v0.1.3 已通过外部 API key file 安装并初始化，active plugin runtime 真实 NAS formatter
+smoke 通过；credential 仍不入 Git。
 
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与

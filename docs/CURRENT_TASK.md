@@ -33,7 +33,7 @@ PUBG workflow 生产同步：已用 `scripts/deploy-n8n-workflow.sh --apply` 导
 真实 runtime `最近20场战绩` smoke 返回 20 场、玩家 KD `1.47 / 0.91 / 0.74 / 0.38`，合计 KD `0.96`，
 response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 
-## 2026-09-06 快速 Bug 修复（DEPLOYED / VERIFIED；NAS 插件 API 安装待外部 credential）
+## 2026-09-06 快速 Bug 修复（DEPLOYED / VERIFIED）
 
 - [x] PUBG 所有用户可见 KD（TypeScript runtime、legacy V2 Python、legacy n8n）统一按四舍五入保留 1 位小数；内部排序仍使用未格式化数值。
 - [x] 零死亡 KD 继续显示 `—`，不会渲染 `∞` / `Infinity`。
@@ -47,7 +47,7 @@ response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 - [x] n8n `PUBG 今日战绩` 已重新导入/激活，live export 确认 KD formatter 使用 `toFixed(1)`；外部 rollback backup 为 `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-132906.json`。
 - [x] LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` 已激活，compose rollback backup 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`；live Telegram source 已确认 outbound/Markdown/streaming think filter 存在，patch chain 编译通过，active virtualenv helper smoke 通过。
 - [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`；当前 payload 输出 `460Gi`/`7.3Ti` human-readable 磁盘单位。
-- [ ] `macos-nas-control` 新 formatter 尚未通过 LangBot plugin API 安装：当前 shell 没有 `LANGBOT_API_KEY` / `--api-key-file`，禁止直接改运行时 plugin 目录；恢复仓库外 credential 后执行 `./scripts/deploy-langbot.sh --apply --plugin macos-nas-control --api-key-file <external-file>`。
+- [x] `macos-nas-control` v0.1.3 已通过 LangBot Plugin API 安装并初始化（task `15`）；使用仓库外 key file，未输出或提交 credential。已在 active `langbot_plugin_runtime` 内调用真实 macOS `nas.status`，V2 移动端 formatter smoke 通过。
 
 ## Codex Global Completion Notification Bridge（DEPLOYED / VERIFIED）
 

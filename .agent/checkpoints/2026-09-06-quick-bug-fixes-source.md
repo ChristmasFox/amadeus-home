@@ -31,6 +31,6 @@
 - Active LangBot virtualenv helper smoke passed for complete, unclosed, isolated, and caption think markup.
 - `scripts/doctor.sh`: 0 failures / 0 warnings.
 
-## Pending activation
+## Final plugin activation
 
-The new `macos-nas-control` formatter is not installed through LangBot because no external LangBot API credential is available in the current shell. Keep the plugin API key outside Git and run the documented apply command after restoring it; never edit the runtime plugin directory directly.
+The external LangBot API key was placed in the pre-created 0600 file outside Git. `macos-nas-control` v0.1.3 installation completed with task `15` and status `INSTALL_READY`. Inside the active `langbot_plugin_runtime`, the installed formatter called the real macOS `nas.status` command and rendered the V2 mobile card successfully. The key remains outside Git and was never printed or committed.
