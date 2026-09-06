@@ -497,13 +497,26 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
             return
         if self.config['markdown_card'] is True:
             content = telegramify_markdown.markdownify(content=content)
-        args = {
-            'chat_id': update.effective_chat.id,
-            'text': content,
-        }
-        if self.config['markdown_card'] is True:
-            args['parse_mode'] = 'MarkdownV2'
 
+        # Telegram send_message accepts at most 4096 characters. The plugin
+        # event contract carries one MessageChain, so split the final rendered
+        # content here and send the chunks sequentially. Keep reply markup and
+        # quote origin on the first chunk only.
+        def split_content(value: str, max_length: int = 3800) -> list[str]:
+            chunks: list[str] = []
+            remaining = value.strip()
+            while len(remaining) > max_length:
+                candidate = remaining[: max_length + 1]
+                split_at = max(candidate.rfind('\n\n'), candidate.rfind('\n'), candidate.rfind(' '))
+                if split_at <= 0:
+                    split_at = max_length
+                chunks.append(remaining[:split_at].rstrip())
+                remaining = remaining[split_at:].lstrip()
+            if remaining:
+                chunks.append(remaining)
+            return chunks
+
+        content_chunks = split_content(content)
         reply_markup = next(
             (
                 component.get('reply_markup')
@@ -512,18 +525,22 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
             ),
             None,
         )
-        if reply_markup is not None:
-            args['reply_markup'] = reply_markup
-
         effective_message = update.effective_message
         message_thread_id = getattr(effective_message, 'message_thread_id', None) if effective_message else None
-        if message_thread_id:
-            args['message_thread_id'] = message_thread_id
-
-        if quote_origin and effective_message is not None:
-            args['reply_to_message_id'] = effective_message.id
-
-        await self._telegram_call('send_message', **args)
+        for index, chunk in enumerate(content_chunks):
+            args = {
+                'chat_id': update.effective_chat.id,
+                'text': chunk,
+            }
+            if self.config['markdown_card'] is True:
+                args['parse_mode'] = 'MarkdownV2'
+            if index == 0 and reply_markup is not None:
+                args['reply_markup'] = reply_markup
+            if message_thread_id:
+                args['message_thread_id'] = message_thread_id
+            if index == 0 and quote_origin and effective_message is not None:
+                args['reply_to_message_id'] = effective_message.id
+            await self._telegram_call('send_message', **args)
 
 """
     source = source[:reply_start] + reply_method + source[reply_end:]

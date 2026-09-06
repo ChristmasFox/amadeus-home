@@ -42,9 +42,10 @@ class TelegramThinkFilterTests(unittest.TestCase):
         self.assertIn("_strip_telegram_think_markup(components[0]['text'])", source)
         self.assertIn("Telegram outbound entity fallback", source)
         self.assertIn("fallback_kwargs.pop('parse_mode', None)", source)
-        self.assertIn("_strip_telegram_think_markup(text_component.get('text', ''))", Path(
-            Path(__file__).parents[1] / "patch_pubg_telegram_picker.py"
-        ).read_text(encoding="utf-8"))
+        picker_source = Path(Path(__file__).parents[1] / "patch_pubg_telegram_picker.py").read_text(encoding="utf-8")
+        self.assertIn("_strip_telegram_think_markup(text_component.get('text', ''))", picker_source)
+        self.assertIn("Telegram send_message accepts at most 4096 characters", picker_source)
+        self.assertIn("content_chunks = split_content(content)", picker_source)
 
 
 if __name__ == "__main__":
