@@ -19,6 +19,16 @@
 
 部署 checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-deployment.md`。
 
+## PUBG 复盘 Telegram 超长消息修复（DEPLOYED / VERIFIED：2026-09-06）
+
+- [x] 定位 23:26–23:27 Telegram `BadRequest: Message is too long` 根因：runtime 返回的 4,278 字符复盘被插件 adapter 合并为单条 `reply_message_chain`，没有使用 runtime 内部的多 message 分段。
+- [x] Git patch `25d4535` / `cfaaacd` 已让 patched Telegram host adapter 在最终渲染后按 3,800 字符安全阈值顺序发送多个 chunk；reply markup/quote 仅保留第一段。
+- [x] LangBot image `local/langbot-agent:cfaaacd35b87-20260906-233604` 已在 CasaOS `ubuntu` 激活；rollback compose：`/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-233608`。
+- [x] active container source、in-container split smoke（`[3600, 600]`）、LangBot plugin `3.3.0` readiness、runtime health、doctor 均通过。
+- [ ] Codex 未代发新的真实 Telegram 用户消息；请用户重发复盘请求确认最终 Telegram outbound。
+
+Hotfix checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-telegram-long-message-fix.md`。
+
 ## HomeHub V1.2 implementation（SOURCE COMPLETE；实际部署待执行）
 
 截至 2026-09-06，V1.2 源码实现与本地验证已完成，实际 CasaOS/LangBot/macOS agent 部署仍待当前阶段的 RELEASE 操作：

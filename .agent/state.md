@@ -10,6 +10,12 @@
 
 Codex 未代发真实 Telegram 用户消息；如需最后一项平台 inbound 人工确认，由用户发送：`复盘这场比赛 d8c41c10-de9f-40b4-ac88-ede0ab554a31`。
 
+## PUBG Telegram 超长消息 hotfix（DEPLOYED / VERIFIED：2026-09-06）
+
+已定位 2026-09-06 23:26–23:27 的 `BadRequest: Message is too long`：新复盘报告 runtime response 为 4,278 字符，LangBot plugin adapter 把多段 response 合并为一个 `reply_message_chain`。Git patch `25d4535` / `cfaaacd` 已在 patched Telegram host adapter 最终渲染后按 3,800 字符安全阈值顺序发送多个 chunk，inline keyboard/quote 只挂首段。LangBot image `local/langbot-agent:cfaaacd35b87-20260906-233604` 已在 CasaOS `ubuntu` 激活，compose rollback 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-233608`。active source、in-container split smoke `[3600, 600]`、patch tests、runtime tests、doctor、Docker smoke 和 secret scan 通过。checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-telegram-long-message-fix.md`。
+
+Codex 未代发真实 Telegram 用户消息；请用户重发复盘请求完成最终 outbound 确认。
+
 ## HomeHub V1.2 follow-up（2026-09-06）
 
 最新 follow-up 已完成：HomeHub status 磁盘显示已用/总量/可用/百分比；Telegram 历史 `BadRequest: can't find end of precode entity` 已通过 outbound plain-text fallback 修复。新 runtime image 为 `local/pubg-query-engine-v3:git-7df513bdcd27`，LangBot patch image 为 `local/langbot-agent:7df513bdcd27-20260906-183935`，live `/status`、Docker smoke、active patch source 检查通过。checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-disk-telegram-followup.md`。

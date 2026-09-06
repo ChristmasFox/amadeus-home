@@ -4,6 +4,7 @@
 
 ## 已完成
 
+- Telegram 超长复盘 hotfix 已完成：LangBot image `local/langbot-agent:cfaaacd35b87-20260906-233604`，rollback compose：`/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-233608`；按 3,800 字符安全阈值顺序发送多个 Telegram chunk。
 - runtime image `local/pubg-query-engine-v3:git-2f6a63b013ff` 已通过 host BuildKit build/load 并部署到 OrbStack `ubuntu` / CasaOS；image compose rollback：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-231814`。
 - runtime compose 已显式切换 `telemetry-parser-5` / `review-features-5`；env compose rollback：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-232046`。
 - n8n `PUBG Data Gateway v3` ID `pubg-data-gateway-v3-20260902` 已导入、重启并验证 active；backup：`/home/node/.n8n/workflow-backups/codex-pubg-data-gateway-v3-20260902-before-20260906-231837.json`。
