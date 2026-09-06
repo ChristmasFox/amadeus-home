@@ -111,7 +111,10 @@ add_plugin() {
 expand_plugins() {
   local requested
   TARGET_PLUGINS=()
-  for requested in "${REQUESTED_PLUGINS[@]:-}"; do
+  if [ "${#REQUESTED_PLUGINS[@]}" -eq 0 ]; then
+    return 0
+  fi
+  for requested in "${REQUESTED_PLUGINS[@]}"; do
     case "$requested" in
       all)
         add_plugin pubg-stats-v3
