@@ -2,6 +2,10 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## HomeHub V1.2 follow-up（2026-09-06）
+
+最新 follow-up 已完成：HomeHub status 磁盘显示已用/总量/可用/百分比；Telegram 历史 `BadRequest: can't find end of precode entity` 已通过 outbound plain-text fallback 修复。新 runtime image 为 `local/pubg-query-engine-v3:git-7df513bdcd27`，LangBot patch image 为 `local/langbot-agent:7df513bdcd27-20260906-183935`，live `/status`、Docker smoke、active patch source 检查通过。checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-disk-telegram-followup.md`。
+
 ## HomeHub V1.2 当前阶段
 
 2026-09-06 已完成 V1.2 source implementation：Telegram/KOOK identity correction、HomeHub Telegram

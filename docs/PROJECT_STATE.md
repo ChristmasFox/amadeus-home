@@ -31,6 +31,16 @@
 
 Deployment checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-deployment.md`。
 
+## HomeHub V1.2 follow-up（2026-09-06：磁盘容量 + Telegram fallback）
+
+- [x] NAS/HomeHub status 磁盘行现在显示 `已用 / 全部，可用，使用率`，例如系统盘 `425 GiB / 460 GiB，可用 35.5 GiB，92.3% ⚠️`；APFS root accounting 继续复用 `total - available`。
+- [x] 定位 Telegram 不回复根因：历史 outbound `BadRequest: Can't parse entities: can't find end of precode entity`。Telegram patched boundary 现在对 entity/Markdown 解析类 BadRequest 自动去除 `parse_mode/entities` 后以纯文本重试，其他 BadRequest 仍原样失败。
+- [x] 新 runtime image `local/pubg-query-engine-v3:git-7df513bdcd27` 已部署，rollback compose 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-183922`。
+- [x] 新 LangBot patched image `local/langbot-agent:7df513bdcd27-20260906-183935` 已激活，rollback compose 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-183938`；active Telegram source 已确认含 entity fallback、identity correction 和 `hh1` callback 分支。
+- [x] live `/status` 已显示系统盘/Avalon 已用、总量和可用空间；Docker smoke 仍为 8 healthy、4 degraded、1 down、0 unknown，HostAgent real macOS metrics 正常。
+
+Follow-up checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-disk-telegram-followup.md`。
+
 ## Codex Global Completion Notification Bridge：DEPLOYED / VERIFIED（2026-09-06）
 
 全局 Codex notify 已写入 `/Users/blacksidev/.codex/config.toml` 的 root-level `notify`，实际执行
