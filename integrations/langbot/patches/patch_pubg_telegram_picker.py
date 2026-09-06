@@ -507,7 +507,7 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
             remaining = value.strip()
             while len(remaining) > max_length:
                 candidate = remaining[: max_length + 1]
-                split_at = max(candidate.rfind('\n\n'), candidate.rfind('\n'), candidate.rfind(' '))
+                split_at = max(candidate.rfind('\\n\\n'), candidate.rfind('\\n'), candidate.rfind(' '))
                 if split_at <= 0:
                     split_at = max_length
                 chunks.append(remaining[:split_at].rstrip())
