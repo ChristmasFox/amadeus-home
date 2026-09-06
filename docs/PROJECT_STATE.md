@@ -42,6 +42,21 @@ image `local/pubg-query-engine-v3:git-1a8a825812b6`，compose rollback backup
 `GET /status` 返回 8 healthy、3 down（postgres/redis/glances 不存在）、1 unhealthy（Jellyfin 日志错误）
 和 1 unknown（macOS cloudflared），没有全量 UNKNOWN。主机指标保持 `UNKNOWN` 并明确说明无 macOS executor。
 
+## 2026-09-06 快速 Bug 修复：SOURCE IMPLEMENTED
+
+PUBG KD 展示层已统一为 1 位小数：TypeScript runtime、legacy V2 Python renderer 和 legacy n8n
+`PUBG 今日战绩` workflow 均已更新；内部 KD 仍保留数值精度用于排序，零死亡分母显示 `—` 而不是 `∞`。
+
+macOS NAS status 已升级为 V2 结构化数据与移动端卡片，补充 macOS 版本/build、型号、CPU、load、uptime、
+登录用户、内存、系统盘/Avalon、网络/网关、电源、cloudflared 和高占用进程；`df -Ph` 修复了磁盘单位被
+block 数字覆盖的问题。NAS plugin manifest 为 `0.1.3`，外部 forced-command 安装通过 Git-owned
+`scripts/deploy-nas-control.sh` 管理，默认 dry-run，apply 时保留 timestamped rollback backup。
+
+Telegram patch 在 outbound API、Markdown conversion 和 streaming path 过滤完整/未闭合 `<think>` block，
+think-only message 会被抑制；HomeHub status 不会把容器 CPU/内存冒充 macOS 主机指标，UNKNOWN 原因改为
+中文说明，并将 executor unavailable 的服务行本地化。源代码与定向回归测试已完成；生产激活仍需提交干净
+source 后执行对应 release/import/apply，LangBot plugin API key 继续只从仓库外恢复。
+
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
 完整 runtime tests 已通过，生产 `/status` smoke 也通过；零死亡 KD 不再向用户渲染 `∞`，而显示 `—`。

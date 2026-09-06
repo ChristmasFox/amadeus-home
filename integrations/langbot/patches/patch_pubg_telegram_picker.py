@@ -402,7 +402,9 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
         if text_component is None:
             return
 
-        content = text_component.get('text', '')
+        content = _strip_telegram_think_markup(text_component.get('text', ''))
+        if not content.strip():
+            return
         if self.config['markdown_card'] is True:
             content = telegramify_markdown.markdownify(content=content)
         args = {

@@ -338,3 +338,21 @@ test('metrics executor failure returns null instead of zero', async () => {
   assert.deepEqual(host.disk, []);
   assert.equal(host.uptime, null);
 });
+
+test('HomeHub status explains unavailable macOS host metrics without leaking executor error text', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'homehub-status-render-'));
+  const { entry, auditLogger } = buildEntry({ root });
+  try {
+    const response = await entry.handleRequest('查询服务器状态', 'kook', 'u1', 'status-chat');
+    assert.equal(response.success, true);
+    assert.match(response.message, /指标：❓ 暂不可用/u);
+    assert.match(response.message, /CPU：未知 ｜内存：未知/u);
+    assert.match(response.message, /HomeHub 运行在 Docker 容器内，当前未连接 macOS 主机执行器/u);
+    assert.match(response.message, /Cloudflare Tunnel — macOS 主机执行器不可用/u);
+    assert.doesNotMatch(response.message, /macOS executor unavailable|Docker executor unavailable/u);
+    assert.match(response.message, /📦 \*\*服务状态\*\*/u);
+  } finally {
+    auditLogger.stop();
+    await rm(root, { recursive: true, force: true });
+  }
+});

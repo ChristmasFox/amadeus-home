@@ -25,6 +25,10 @@ function fixed(valueToFormat: string | number, digits = 2): string {
   return parsed.toFixed(digits).replace(/\.00$/u, '').replace(/(\.\d)0$/u, '$1');
 }
 
+function kdFixed(valueToFormat: string | number): string {
+  return fixed(valueToFormat, 1);
+}
+
 function integer(valueToFormat: string | number): string {
   if (valueToFormat === '∞' || valueToFormat === Number.POSITIVE_INFINITY) return '—';
   const parsed = Number(valueToFormat);
@@ -37,7 +41,7 @@ function playerCard(row: QueryRow, position?: number): string[] {
   const rank = row.bestRank ?? value(row, 'rank', '—');
   return [
     prefix,
-    `   ⚔️ KD ${fixed(value(row, 'kd'))} ｜击杀 ${integer(value(row, 'kills'))} ｜死亡 ${integer(value(row, 'deaths'))} ｜助攻 ${integer(value(row, 'assists'))}`,
+    `   ⚔️ KD ${kdFixed(value(row, 'kd'))} ｜击杀 ${integer(value(row, 'kills'))} ｜死亡 ${integer(value(row, 'deaths'))} ｜助攻 ${integer(value(row, 'assists'))}`,
     `   🎯 伤害 ${integer(value(row, 'damage'))} ｜场均 ${integer(value(row, 'avg_damage'))} ｜💥 倒地 ${integer(value(row, 'dbnos'))} ｜❤️ 救援 ${integer(value(row, 'revives'))}`,
     `   🍗 吃鸡 ${integer(value(row, 'wins'))} ｜🏅 Top10 ${integer(value(row, 'top10'))} ｜最佳 #${rank} ｜🥔 菜鸡指数 ${fixed(value(row, 'chicken_index', '—'))}`,
   ];
@@ -81,7 +85,7 @@ function renderTeamSummary(data: OperationData): string[] {
     `🎮 比赛 ${integer(String(team.matches ?? data.summary.uniqueMatchCount ?? 0))} ｜💀 击杀 ${integer(String(team.kills ?? 0))} ｜🤝 助攻 ${integer(String(team.assists ?? 0))}`,
     `💥 倒地 ${integer(String(team.dbnos ?? 0))} ｜❤️ 救援 ${integer(String(team.revives ?? 0))} ｜🎯 总伤害 ${integer(String(team.damage ?? 0))}`,
     `📊 场均伤害 ${integer(String(team.avg_damage ?? 0))} ｜🍗 吃鸡 ${integer(String(team.wins ?? 0))} ｜🏅 Top10 ${integer(String(team.top10 ?? 0))}`,
-    `⚔️ 合计 KD ${fixed(String(team.teamCombinedKD ?? team.kd ?? '—'))}`,
+    `⚔️ 合计 KD ${kdFixed(String(team.teamCombinedKD ?? team.kd ?? '—'))}`,
   ];
 }
 
@@ -89,7 +93,11 @@ function highlightLine(label: string, rows: QueryRow[], metric: string): string 
   if (!rows.length) return `${label} 暂无数据`;
   const format = (row: QueryRow): string => {
     const raw = value(row, metric);
-    const formatted = ['damage', 'kills', 'assists', 'dbnos', 'revives', 'wins', 'top10'].includes(metric) ? integer(raw) : fixed(raw);
+    const formatted = metric === 'kd'
+      ? kdFixed(raw)
+      : ['damage', 'kills', 'assists', 'dbnos', 'revives', 'wins', 'top10'].includes(metric)
+        ? integer(raw)
+        : fixed(raw);
     return `${row.label}（${formatted}）`;
   };
   return `${label} ${rows.map(format).join('、')}`;
@@ -107,7 +115,7 @@ function renderHighlights(data: OperationData): string[] {
     highlightLine('🧎 倒地王', first('dbnos'), 'dbnos'),
     highlightLine('❤️ 救援王', first('revives'), 'revives'),
     highlightLine('🎯 最远击杀', first('longest_kill'), 'longest_kill'),
-    chicken.length ? `🥔 拉完了\n${chicken.map((row) => `${row.label} · 菜鸡指数 ${fixed(value(row, 'chicken_index'))}\nKD ${fixed(value(row, 'kd'))} · 场均${integer(value(row, 'avg_damage'))}伤害`).join('\n')}` : '🥔 拉完了 暂无有效玩家',
+    chicken.length ? `🥔 拉完了\n${chicken.map((row) => `${row.label} · 菜鸡指数 ${fixed(value(row, 'chicken_index'))}\nKD ${kdFixed(value(row, 'kd'))} · 场均${integer(value(row, 'avg_damage'))}伤害`).join('\n')}` : '🥔 拉完了 暂无有效玩家',
   ];
 }
 
@@ -173,27 +181,27 @@ function renderCompare(data: OperationData, status: DataStatus): string {
   if (data.rows.length) {
     lines.push('📈 第一周期 − 第二周期', '');
     for (const row of data.rows) {
-      lines.push(`${row.label}`, `KD ${fixed(value(row, 'kd'))} ｜击杀 ${signed(value(row, 'kills'))} ｜伤害 ${signed(value(row, 'damage'))} ｜场均伤害 ${signed(value(row, 'avg_damage'))}`, '');
+      lines.push(`${row.label}`, `KD ${kdFixed(value(row, 'kd'))} ｜击杀 ${signed(value(row, 'kills'))} ｜伤害 ${signed(value(row, 'damage'))} ｜场均伤害 ${signed(value(row, 'avg_damage'))}`, '');
     }
   }
   return [...statusPrefix(status), ...lines].join('\n').trim();
 }
 
-function signed(valueToFormat: string | number): string {
+function signed(valueToFormat: string | number, digits = 2): string {
   const parsed = valueToFormat === '∞' ? Number.POSITIVE_INFINITY : Number(valueToFormat);
   if (!Number.isFinite(parsed)) return '—';
-  return `${parsed > 0 ? '+' : ''}${fixed(parsed)}`;
+  return `${parsed > 0 ? '+' : ''}${fixed(parsed, digits)}`;
 }
 
 function renderTrend(data: OperationData, status: DataStatus): string {
   const lines = ['📈 PUBG · 状态趋势', ''];
   for (const row of data.dailySeries ?? []) {
-    lines.push(`${row.label} ｜KD ${fixed(value(row, 'kd'))} ｜场均伤害 ${integer(value(row, 'avg_damage'))} ｜击杀 ${integer(value(row, 'kills'))}`);
+    lines.push(`${row.label} ｜KD ${kdFixed(value(row, 'kd'))} ｜场均伤害 ${integer(value(row, 'avg_damage'))} ｜击杀 ${integer(value(row, 'kills'))}`);
   }
   const change = data.change as { direction?: string; metrics?: Record<string, { from: number; to: number; delta: number }> } | undefined;
   if (change?.metrics) {
     lines.push('', `结论：${change.direction === 'up' ? '📈 变好了' : change.direction === 'down' ? '📉 变差了' : '➖ 基本稳定'}`);
-    for (const [metric, item] of Object.entries(change.metrics)) lines.push(`${metricLabel(metric)} ${fixed(item.from)} → ${fixed(item.to)}（${signed(item.delta)}）`);
+    for (const [metric, item] of Object.entries(change.metrics)) lines.push(`${metricLabel(metric)} ${metric === 'kd' ? kdFixed(item.from) : fixed(item.from)} → ${metric === 'kd' ? kdFixed(item.to) : fixed(item.to)}（${signed(item.delta, metric === 'kd' ? 1 : 2)}）`);
   }
   return [...statusPrefix(status), ...lines].join('\n');
 }

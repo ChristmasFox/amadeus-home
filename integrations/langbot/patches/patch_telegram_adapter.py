@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import sys
 
 
@@ -117,6 +118,40 @@ _MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024
         raise SystemExit("Telegram outbound marker not found")
     source = source.replace(outbound_marker, outbound_block, 1)
 
+if "import re\n" not in source:
+    import_marker = "import os\n"
+    if import_marker not in source:
+        raise SystemExit("Telegram import marker not found for think filter")
+    source = source.replace(import_marker, "import os\nimport re\n", 1)
+
+if "def _strip_telegram_think_markup" not in source:
+    think_marker = "_MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024\n"
+    think_block = r"""_TELEGRAM_THINK_BLOCK_RE = re.compile(r'<think\b[^>]*>.*?</think\s*>', re.IGNORECASE | re.DOTALL)
+_TELEGRAM_THINK_OPEN_RE = re.compile(r'<think\b[^>]*>.*$', re.IGNORECASE | re.DOTALL)
+_TELEGRAM_THINK_CLOSE_RE = re.compile(r'</think\s*>', re.IGNORECASE)
+
+def _strip_telegram_think_markup(value):
+    if not isinstance(value, str):
+        return value
+    if '<think' not in value.lower() and '</think' not in value.lower():
+        return value
+    cleaned = _TELEGRAM_THINK_BLOCK_RE.sub('', value)
+    cleaned = _TELEGRAM_THINK_OPEN_RE.sub('', cleaned)
+    return _TELEGRAM_THINK_CLOSE_RE.sub('', cleaned)
+
+def _sanitize_telegram_outbound_kwargs(kwargs):
+    sanitized = dict(kwargs)
+    for field in ('text', 'caption'):
+        if field in sanitized:
+            sanitized[field] = _strip_telegram_think_markup(sanitized[field])
+    return sanitized
+
+_MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024
+"""
+    if think_marker not in source:
+        raise SystemExit("Telegram media marker not found for think filter")
+    source = source.replace(think_marker, think_block, 1)
+
 application_marker = "        application = ApplicationBuilder().token(config['token']).build()\n"
 application_replacement = """        # Build both request clients explicitly so the polling bot can be instrumented safely.
         proxy_url = (
@@ -157,6 +192,15 @@ if "async def _telegram_call" not in source:
     call_block = """    async def _telegram_call(self, method_name: str, **kwargs):
         method = getattr(self.bot, method_name)
         is_outbound = method_name in _TELEGRAM_OUTBOUND_METHODS
+        if is_outbound:
+            kwargs = _sanitize_telegram_outbound_kwargs(kwargs)
+            if method_name in {'send_message', 'send_message_draft', 'edit_message_text'} and not str(kwargs.get('text', '')).strip():
+                logging.getLogger(__name__).info(
+                    'Telegram outbound suppressed empty think-only message method=%s chat_id=%s',
+                    method_name,
+                    kwargs.get('chat_id'),
+                )
+                return None
         chat_id = kwargs.get('chat_id')
         text_bytes = len(str(kwargs.get('text', '')).encode('utf-8')) if 'text' in kwargs else 0
         for attempt in range(_TELEGRAM_API_RETRY_ATTEMPTS):
@@ -227,6 +271,26 @@ if "async def _telegram_call" not in source:
     if call_marker not in source:
         raise SystemExit("Telegram stream state marker not found")
     source = source.replace(call_marker, call_block, 1)
+
+if "_sanitize_telegram_outbound_kwargs(kwargs)" not in source:
+    call_sanitize_marker = """        is_outbound = method_name in _TELEGRAM_OUTBOUND_METHODS
+        chat_id = kwargs.get('chat_id')
+"""
+    call_sanitize_replacement = """        is_outbound = method_name in _TELEGRAM_OUTBOUND_METHODS
+        if is_outbound:
+            kwargs = _sanitize_telegram_outbound_kwargs(kwargs)
+            if method_name in {'send_message', 'send_message_draft', 'edit_message_text'} and not str(kwargs.get('text', '')).strip():
+                logging.getLogger(__name__).info(
+                    'Telegram outbound suppressed empty think-only message method=%s chat_id=%s',
+                    method_name,
+                    kwargs.get('chat_id'),
+                )
+                return None
+        chat_id = kwargs.get('chat_id')
+"""
+    if call_sanitize_marker not in source:
+        raise SystemExit("Telegram call sanitizer marker not found")
+    source = source.replace(call_sanitize_marker, call_sanitize_replacement, 1)
 
 for method_name in (
     'send_message',
@@ -647,6 +711,29 @@ if run_marker in source:
     source = source.replace(run_marker, run_replacement, 1)
 elif "async def _reset_after_start_failure" not in source:
     raise SystemExit("Telegram run_async marker not found")
+
+if "_strip_telegram_think_markup(text)" not in source:
+    markdown_marker = """    def _process_markdown(self, text: str) -> str:
+        if self.config.get('markdown_card', False):
+            return telegramify_markdown.markdownify(content=text)
+        return text
+"""
+    markdown_replacement = """    def _process_markdown(self, text: str) -> str:
+        text = _strip_telegram_think_markup(text)
+        if self.config.get('markdown_card', False):
+            return telegramify_markdown.markdownify(content=text)
+        return text
+"""
+    if markdown_marker not in source:
+        raise SystemExit("Telegram markdown marker not found")
+    source = source.replace(markdown_marker, markdown_replacement, 1)
+
+if "_strip_telegram_think_markup(components[0]['text'])" not in source:
+    stream_content_marker = "        content = components[0]['text']\n"
+    stream_content_replacement = "        content = _strip_telegram_think_markup(components[0]['text'])\n"
+    if stream_content_marker not in source:
+        raise SystemExit("Telegram stream content marker not found")
+    source = source.replace(stream_content_marker, stream_content_replacement, 1)
 
 if "Telegram stream state missing at final" not in source:
     stream_state_marker = """        if message_id not in self.msg_stream_id:

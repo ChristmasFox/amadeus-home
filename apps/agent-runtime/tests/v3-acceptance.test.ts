@@ -100,6 +100,27 @@ test('default team report includes all four players, KD order and mobile-first c
   assert.doesNotMatch(rendered, /\| 队员 \|/u);
   const cards = rendered.split(/\n\n/u).filter((section) => /^(?:🥇|🥈|🥉|#4) (?:SG_LabmemNo|kim_kkl)/u.test(section));
   assert.equal(cards.length, 4);
+  assert.match(rendered, /KD 8\.0/u);
+  assert.match(rendered, /KD 1\.5/u);
+  assert.doesNotMatch(rendered, /KD \d+\.\d{2}/u);
+});
+
+test('KD display is always one decimal and undefined KD never becomes infinity', () => {
+  const records = structuredClone(FIXTURE_RECORDS).map((record) => ({
+    ...record,
+    players: record.players.map((player) => player.accountId === DEFAULT_TEAM.players[0]?.id
+      ? { ...player, kills: 5, deaths: 0 }
+      : player),
+  }));
+  const query = buildDeterministicQuery({ text: '最近3场战绩', now: TEST_NOW });
+  const engine = new DeterministicQueryEngine({ team: DEFAULT_TEAM, now: TEST_NOW });
+  const result = engine.execute(query, records, completeCoverage, fixtureSource, {});
+  const rendered = renderResult(result, { ...query, selector: resolveSelector(query.selector, { now: TEST_NOW }) });
+  assert.match(rendered, /KD —/u);
+  assert.doesNotMatch(rendered, /∞|Infinity/u);
+  for (const match of rendered.matchAll(/KD (\d+(?:\.\d+)?)/gu)) {
+    assert.match(match[1]!, /^\d+\.\d$/u);
+  }
 });
 
 test('explicit player report uses a player renderer instead of team totals', () => {

@@ -88,6 +88,31 @@ function internalUserId(identity: AuthorizationIdentityLike): string | null {
   return identity.internalUserId ?? identity.internalIdentity?.internalUserId ?? null;
 }
 
+function formatHostMetricReason(reason?: string): string {
+  const normalized = String(reason ?? '').toLowerCase();
+  if (normalized.includes('macos executor unavailable') || normalized.includes('container metrics are not host metrics')) {
+    return 'HomeHub 运行在 Docker 容器内，当前未连接 macOS 主机执行器；不会用容器指标冒充 Mac 主机指标。';
+  }
+  if (normalized.includes('invalid data')) return 'macOS 主机指标返回的数据无效。';
+  if (normalized.includes('collection failed')) return 'macOS 主机指标采集失败。';
+  return 'macOS 主机指标暂不可用。';
+}
+
+function formatHealthDiagnosis(diagnosis: string): string {
+  const match = diagnosis.match(/HomeHub Executor unavailable; services status unknown \((\d+\/\d+)\)/i);
+  if (match) return `HomeHub 执行器不可用，服务状态未知（${match[1]}）。`;
+  return diagnosis;
+}
+
+function formatServiceHealthMessage(service: HealthResult['services'][number]): string {
+  if (service.status === 'unknown' && service.unknownReason === 'executor_unavailable') {
+    if (service.executor === 'macos-host') return 'macOS 主机执行器不可用';
+    if (service.executor === 'docker') return 'Docker 执行器不可用';
+    return '服务执行器不可用';
+  }
+  return service.message;
+}
+
 export class HomeHubEntry {
   private readonly contextManager: ContextManager;
   private readonly diagnosticEngine: DiagnosticEngine;
@@ -539,22 +564,22 @@ export class HomeHubEntry {
 
   private renderSystemHealth(health: HealthResult): string {
     const metric = (value: number | null): string => typeof value === 'number' ? `${value.toFixed(1)}%` : '未知';
-    const hostMetricStatus = health.host.status === 'unknown'
-      ? `未知（${health.host.unknownReason ?? '主机执行器不可用'}）`
-      : '可用';
+    const hostMetricsAvailable = health.host.status === 'available';
     const lines = [
       '📊 **主机状态**',
-      `指标: ${hostMetricStatus}`,
-      `CPU: ${metric(health.host.cpu.usage)} | 内存: ${metric(health.host.memory.percentage)}`,
+      `主机：${health.host.hostname === 'unknown' ? '未知' : health.host.hostname}`,
+      `指标：${hostMetricsAvailable ? '✅ 已获取' : '❓ 暂不可用'}`,
+      `CPU：${metric(health.host.cpu.usage)} ｜内存：${metric(health.host.memory.percentage)}`,
     ];
+    if (!hostMetricsAvailable) lines.push(`原因：${formatHostMetricReason(health.host.unknownReason)}`);
     for (const disk of health.host.disk) lines.push(`磁盘 ${disk.mount}: ${metric(disk.percentage)}`);
     lines.push('', '📦 **服务状态**');
     const icons: Record<string, string> = { healthy: '✅', degraded: '⚠️', unhealthy: '❌', down: '⛔', unknown: '❓' };
-    for (const service of health.services) lines.push(`${icons[service.status] ?? '❓'} ${this.displayName(service.serviceId)} — ${service.message}`);
+    for (const service of health.services) lines.push(`${icons[service.status] ?? '❓'} ${this.displayName(service.serviceId)} — ${formatServiceHealthMessage(service)}`);
     if (health.abnormal.length) {
-      lines.push('', `⚠️ 异常服务: ${health.abnormal.map((service) => this.displayName(service)).join('、')}`, `诊断: ${health.diagnosis}`);
+      lines.push('', `⚠️ 异常服务: ${health.abnormal.map((service) => this.displayName(service)).join('、')}`, `诊断: ${formatHealthDiagnosis(health.diagnosis)}`);
     } else if (health.summary.unknown > 0) {
-      lines.push('', `❓ 有 ${health.summary.unknown} 个服务状态未知。`, `诊断: ${health.diagnosis}`);
+      lines.push('', `❓ 有 ${health.summary.unknown} 个服务状态未知。`, `诊断: ${formatHealthDiagnosis(health.diagnosis)}`);
     } else {
       lines.push('', '✅ 所有服务运行正常。');
     }

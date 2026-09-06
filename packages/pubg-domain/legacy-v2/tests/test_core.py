@@ -252,6 +252,14 @@ class DeterministicEngineTests(unittest.TestCase):
         self.assertIn("kim_kkl", rendered)
         self.assertLess(rendered.index("SG_LabmemNo007"), rendered.index("SG_LabmemNo008"))
 
+    def test_kd_display_uses_exactly_one_decimal(self):
+        planned = query("查询昨天小队四人战绩")
+        result = self.engine.execute(planned, RECORDS, coverage=self.coverage, source=self.source, now=NOW)
+        rendered = render_result(planned, result)
+        self.assertRegex(rendered, r"KD")
+        self.assertIn("8.0", rendered)
+        self.assertNotRegex(rendered, r"KD[^\n]*\d+\.\d{2}")
+
     def test_compare_and_trend_are_deterministic(self):
         compare = self.engine.execute(query("昨天 vs 前天怎么样？"), RECORDS, coverage=self.coverage, source=self.source, now=NOW)
         self.assertEqual(compare["data"]["operation"], "compare")

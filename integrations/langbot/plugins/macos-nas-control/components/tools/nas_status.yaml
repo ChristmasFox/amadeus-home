@@ -6,13 +6,13 @@ metadata:
     en_US: macOS NAS Status
     zh_Hans: macOS NAS 状态
   description:
-    en_US: Read the macOS NAS hostname, uptime, and root filesystem usage.
-    zh_Hans: 查询 macOS NAS 主机名、运行时间和根文件系统使用情况。
+    en_US: Read the macOS NAS host, OS, CPU, memory, disks, network, power, and cloudflared status.
+    zh_Hans: 查询 macOS NAS 主机、系统版本、CPU、内存、磁盘、网络、电源和 cloudflared 状态。
 spec:
   parameters:
     type: object
     properties: {}
-  llm_prompt: Use this tool when the user asks for the macOS NAS status, uptime, or disk usage summary.
+  llm_prompt: Use this tool when the user asks for the macOS NAS status, system information, uptime, resource usage, network, power, cloudflared, or disk summary.
 execution:
   python:
     path: nas_status.py

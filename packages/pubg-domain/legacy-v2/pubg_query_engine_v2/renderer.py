@@ -44,7 +44,7 @@ def _metric_label(metric: str) -> str:
 
 
 def _format_metric(metric: str, value: Any) -> str:
-    digits = 2 if metric in {"kd", "avg_damage", "rank"} else 0
+    digits = 1 if metric == "kd" else 2 if metric in {"avg_damage", "rank"} else 0
     return f"{_metric_label(metric)} {_format_number(value, digits)}"
 
 
@@ -138,7 +138,7 @@ def _render_player_table(
                 (label, "left"),
                 (_format_number(metrics.get("matches")), "right"),
                 (_format_number(metrics.get("kills")), "right"),
-                (_format_number(metrics.get("kd"), 2), "right"),
+                (_format_number(metrics.get("kd"), 1), "right"),
                 (_format_number(metrics.get("damage")), "right"),
                 (_format_number(metrics.get("avg_damage"), 2), "right"),
                 (_format_number(metrics.get("wins")), "right"),
