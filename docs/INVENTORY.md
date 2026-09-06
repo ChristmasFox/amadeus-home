@@ -37,8 +37,8 @@
 - Mastra：@mastra/core 1.63.2；
 - Node：>=22；
 - pnpm：9.9.x；
-- Telemetry parser：telemetry-parser-4；
-- Review features：review-features-4；
+- Telemetry parser：telemetry-parser-5；
+- Review features：review-features-5；
 - n8n sandbox：当前 compose 使用 1.1.1 API/runner service；
 - HomeLab 服务镜像版本与路径以 infra/docker/ 模板及目标 CasaOS 实例为准。
 
