@@ -42,7 +42,7 @@ image `local/pubg-query-engine-v3:git-1a8a825812b6`，compose rollback backup
 `GET /status` 返回 8 healthy、3 down（postgres/redis/glances 不存在）、1 unhealthy（Jellyfin 日志错误）
 和 1 unknown（macOS cloudflared），没有全量 UNKNOWN。主机指标保持 `UNKNOWN` 并明确说明无 macOS executor。
 
-## 2026-09-06 快速 Bug 修复：SOURCE IMPLEMENTED
+## 2026-09-06 快速 Bug 修复：DEPLOYED / VERIFIED（NAS plugin API activation pending）
 
 PUBG KD 展示层已统一为 1 位小数：TypeScript runtime、legacy V2 Python renderer 和 legacy n8n
 `PUBG 今日战绩` workflow 均已更新；内部 KD 仍保留数值精度用于排序，零死亡分母显示 `—` 而不是 `∞`。
@@ -55,7 +55,11 @@ block 数字覆盖的问题。NAS plugin manifest 为 `0.1.3`，外部 forced-co
 Telegram patch 在 outbound API、Markdown conversion 和 streaming path 过滤完整/未闭合 `<think>` block，
 think-only message 会被抑制；HomeHub status 不会把容器 CPU/内存冒充 macOS 主机指标，UNKNOWN 原因改为
 中文说明，并将 executor unavailable 的服务行本地化。源代码与定向回归测试已完成；生产激活仍需提交干净
-source 后执行对应 release/import/apply，LangBot plugin API key 继续只从仓库外恢复。
+source 后执行对应 release/import/apply，LangBot plugin API key 继续只从仓库外恢复。2026-09-06 已完成 runtime
+image `local/pubg-query-engine-v3:git-1b52d2c89f3e`、n8n daily-stats workflow、LangBot patched image
+`local/langbot-agent:5a051b8756c4-20260906-132959` 和 macOS external forced-command 的实际部署与 smoke；
+各 rollback backup 已记录在 docs/CURRENT_TASK.md。当前唯一未激活项是 `macos-nas-control` 新 formatter 的
+LangBot plugin API 安装，因为当前 shell 没有外部 LangBot API credential；不直接修改运行时 plugin 目录。
 
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与

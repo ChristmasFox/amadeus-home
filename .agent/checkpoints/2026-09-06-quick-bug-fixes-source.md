@@ -20,6 +20,14 @@
 - `pnpm check:secrets`: passed.
 - `git diff --check`: passed.
 
+## Production activation evidence
+
+- Runtime image `local/pubg-query-engine-v3:git-1b52d2c89f3e` deployed; compose backup `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-132837`.
+- HomeHub Docker smoke passed: socket present, 7 allowlisted containers listed, `/status` reports real service states and host metrics explicitly unavailable.
+- n8n `PUBG 今日战绩` imported and active; live export confirms `toFixed(1)`; backup `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-132906.json`.
+- LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` active; compose backup `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`; live source contains the think filter.
+- External NAS forced command deployed; backup `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`; real `nas.status` smoke passed.
+
 ## Pending activation
 
-Source changes still require a clean commit before RELEASE actions. Runtime image, LangBot patched image, n8n workflow import, and external NAS forced-command installation are handled by explicit apply commands. No credentials are stored in Git.
+The new `macos-nas-control` formatter is not installed through LangBot because no external LangBot API credential is available in the current shell. Keep the plugin API key outside Git and run the documented apply command after restoring it; never edit the runtime plugin directory directly.

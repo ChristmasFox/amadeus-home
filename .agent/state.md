@@ -52,8 +52,9 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 不执行公网 push，除非用户另外明确授权。
 - Codex notify bridge runtime secret files：`~/.codex/secrets/codex-notify-secret` 与
   `/DATA/AppData/n8n/secrets/codex-notify-secret`；值不入 Git、不在日志输出。
-- 当前 HomeHub runtime image：`local/pubg-query-engine-v3:git-1a8a825812b6`，Docker socket smoke 和 PUBG
-  `最近20场` finite-KD smoke 已通过。
+- 当前 HomeHub runtime image：`local/pubg-query-engine-v3:git-1b52d2c89f3e`，Docker socket smoke、真实 `/status` 和
+  macOS-only UNKNOWN diagnosis smoke 已通过；LangBot patched image 为 `local/langbot-agent:5a051b8756c4-20260906-132959`。
+- 2026-09-06 快速 bug fixes 已提交（`806ab63`、`1b52d2c`、`5a051b8`）：KD 展示统一 1 位小数且零死亡不显示∞，NAS status V2 已部署到外部 forced command，Telegram `<think>` outbound/streaming filter 已激活，HomeHub host CPU/内存继续 UNKNOWN 但不再显示原始 executor 错误。macos-nas-control 新 formatter 的 LangBot plugin API 安装仍等待仓库外 credential。
 
 ## 最近完成
 
