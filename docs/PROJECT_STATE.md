@@ -63,6 +63,11 @@ image `local/pubg-query-engine-v3:git-1b52d2c89f3e`、n8n daily-stats workflow�
 `macos-nas-control` v0.1.3 已通过外部 API key file 安装并初始化，active plugin runtime 真实 NAS formatter
 smoke 通过；credential 仍不入 Git。
 
+2026-09-06 追加修复 macOS APFS 根卷磁盘统计：`df` 的根系统 snapshot Used 不代表整个 APFS
+container，NAS command 现在使用 `total - available` 计算实际占用，并输出 `使用率`；同时将 uptime
+和 pmset 电源状态转换为中文。源版本为 `macos-nas-control` `0.1.4`，待 clean commit 后通过 LangBot
+Plugin API 重新安装。
+
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
 缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
 完整 runtime tests 已通过，生产 `/status` smoke 也通过；零死亡 KD 不再向用户渲染 `∞`，而显示 `—`。

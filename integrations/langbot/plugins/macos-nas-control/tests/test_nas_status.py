@@ -26,12 +26,17 @@ MEM_FREE_PERCENT=25
 LOAD_AVERAGE=1.20 0.90 0.70
 UPTIME=up 3 days, 4:12
 USER_COUNT=1
-DISK_ROOT=460Gi|16Gi|37Gi|31%
-DISK_AVALON=7.3Ti|6.7Ti|567Gi|93%
+DISK_ROOT=460GiB|424GiB|36.2GiB|92.1%
+DISK_AVALON=7.3TiB|6.7TiB|567GiB|92.4%
 NETWORK_INTERFACE=en0
 IP_ADDRESS=192.168.1.20
 GATEWAY=192.168.1.1
-POWER=AC Power
+POWER=Now drawing from 'AC Power' -InternalBattery-0 100%; charged; 0:00 remaining present: true
+POWER_SOURCE=AC Power
+BATTERY_PERCENT=100%
+BATTERY_STATE=charged
+POWER_REMAINING=0:00
+POWER_CONNECTED=true
 CLOUDFLARED=未运行
 TOP_PROCESS=123|python3|30.1|4.2
 """
@@ -44,8 +49,10 @@ TOP_PROCESS=123|python3|30.1|4.2
         self.assertIn("💻 型号：Macmini9,1", rendered)
         self.assertIn("⚙️ CPU：8 逻辑核", rendered)
         self.assertIn("🧠 内存：16.0 GiB，总计；已用 75% / 可用 25%", rendered)
-        self.assertIn("系统盘：16Gi / 460Gi，可用 37Gi，已用 31%", rendered)
-        self.assertIn("Avalon：6.7Ti / 7.3Ti，可用 567Gi，已用 93% ⚠️", rendered)
+        self.assertIn("⏱️ 运行：3天4小时12分钟", rendered)
+        self.assertIn("🔋 电源：交流电源 · 电量 100% · 已充满", rendered)
+        self.assertIn("系统盘：已用 424GiB / 460GiB，可用 36.2GiB，使用率 92.1% ⚠️", rendered)
+        self.assertIn("Avalon：已用 6.7TiB / 7.3TiB，可用 567GiB，使用率 92.4% ⚠️", rendered)
         self.assertIn("🌐 网络：en0 · 192.168.1.20 · 网关 192.168.1.1", rendered)
         self.assertIn("python3 · CPU 30.1% · 内存 4.2%", rendered)
         self.assertNotIn("DISK_ROOT=", rendered)
@@ -65,6 +72,8 @@ DISK_AVALON=
         self.assertIn("系统盘：不可用", rendered)
         self.assertIn("Avalon：不可用", rendered)
         self.assertIn("🌐 网络：不可用", rendered)
+        self.assertIn("⏱️ 运行：未知", rendered)
+        self.assertIn("🔋 电源：不可用", rendered)
 
     def test_legacy_payload_remains_compatible(self):
         rendered = _module.format_nas_status(
@@ -77,12 +86,12 @@ disk:
 
         self.assertEqual(
             rendered,
-            "🖥️ NAS 状态\n主机：old-mac\n运行时间：up 2 days\n💾 磁盘：/dev/disk3s1 100Gi 60Gi 40Gi 60% /",
+            "🖥️ NAS 状态\n主机：old-mac\n运行时间：2天\n💾 磁盘：/dev/disk3s1 100Gi 60Gi 40Gi 60% /",
         )
 
     def test_disk_warning_is_only_added_at_ninety_percent(self):
-        self.assertNotIn("⚠️", _module._disk_line("100Gi|89Gi|11Gi|89%", "系统盘"))
-        self.assertIn("⚠️", _module._disk_line("100Gi|90Gi|10Gi|90%", "系统盘"))
+        self.assertNotIn("⚠️", _module._disk_line("100GiB|89GiB|11GiB|89.0%", "系统盘"))
+        self.assertIn("⚠️", _module._disk_line("100GiB|90GiB|10GiB|90.0%", "系统盘"))
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
   `/DATA/AppData/n8n/secrets/codex-notify-secret`；值不入 Git、不在日志输出。
 - 当前 HomeHub runtime image：`local/pubg-query-engine-v3:git-1b52d2c89f3e`，Docker socket smoke、真实 `/status` 和
   macOS-only UNKNOWN diagnosis smoke 已通过；LangBot patched image 为 `local/langbot-agent:5a051b8756c4-20260906-132959`。
-- 2026-09-06 快速 bug fixes 已提交（`806ab63`、`1b52d2c`、`5a051b8`）：KD 展示统一 1 位小数且零死亡不显示∞，真实「最近20场」smoke 返回 `1.5 / 0.9 / 0.7 / 0.4` 与合计 `1.0`，NAS status V2 已部署到外部 forced command，Telegram `<think>` outbound/streaming filter 已激活并通过 live helper smoke，HomeHub host CPU/内存继续 UNKNOWN 但不再显示原始 executor 错误。macos-nas-control v0.1.3 已通过 LangBot Plugin API 安装并在 active plugin runtime 中完成真实 NAS formatter smoke；credential 仍在仓库外。
+- 2026-09-06 快速 bug fixes 已提交（`806ab63`、`1b52d2c`、`5a051b8`）：KD 展示统一 1 位小数且零死亡不显示∞，真实「最近20场」smoke 返回 `1.5 / 0.9 / 0.7 / 0.4` 与合计 `1.0`，NAS status V2 已部署到外部 forced command，Telegram `<think>` outbound/streaming filter 已激活并通过 live helper smoke，HomeHub host CPU/内存继续 UNKNOWN 但不再显示原始 executor 错误。macos-nas-control v0.1.3 已通过 LangBot Plugin API 安装并在 active plugin runtime 中完成真实 NAS formatter smoke；credential 仍在仓库外。随后发现 macOS APFS 根卷 `df` snapshot Used 与整盘容量不一致，已在 Git source 升级 formatter/forced-command 至 `0.1.4`，修复实际占用、中文 uptime 和电源显示，等待 clean commit 后重新安装。
 
 ## 最近完成
 

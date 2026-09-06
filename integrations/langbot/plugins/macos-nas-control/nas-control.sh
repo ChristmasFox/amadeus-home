@@ -11,15 +11,49 @@ sysctl_value() {
   /usr/sbin/sysctl -n "$1" 2>/dev/null || true
 }
 
+humanize_blocks() {
+  /usr/bin/awk -v blocks="$1" 'BEGIN {
+    value = blocks * 512;
+    unit = "B";
+    if (value >= 1024) { value /= 1024; unit = "KiB"; }
+    if (value >= 1024) { value /= 1024; unit = "MiB"; }
+    if (value >= 1024) { value /= 1024; unit = "GiB"; }
+    if (value >= 1024) { value /= 1024; unit = "TiB"; }
+    if (value >= 1024) { value /= 1024; unit = "PiB"; }
+    if (unit == "B" || value >= 100) printf "%.0f%s", value, unit;
+    else printf "%.1f%s", value, unit;
+  }'
+}
+
 disk_summary() {
   local mount="$1"
-  local line
-  line=$(/bin/df -Ph "$mount" 2>/dev/null | /usr/bin/tail -n 1 || true)
+  local line total_blocks available_blocks used_blocks size used available capacity
+  line=$(/bin/df -P "$mount" 2>/dev/null | /usr/bin/tail -n 1 || true)
   if [[ -z "$line" ]]; then
     print 'unavailable'
-  else
-    print -r -- "$line" | /usr/bin/awk '{printf "%s|%s|%s|%s", $2, $3, $4, $5}'
+    return
   fi
+
+  total_blocks=$(print -r -- "$line" | /usr/bin/awk '{print $2}')
+  available_blocks=$(print -r -- "$line" | /usr/bin/awk '{print $4}')
+  if [[ "$total_blocks" != <-> || "$available_blocks" != <-> ]] || (( total_blocks <= 0 || available_blocks < 0 || available_blocks > total_blocks )); then
+    print 'unavailable'
+    return
+  fi
+
+  # macOS APFS exposes the read-only system snapshot at `/`. Its df `Used`
+  # column is only the snapshot usage, while `Avail` is container free space.
+  # Derive actual occupied capacity as total blocks minus available blocks.
+  used_blocks=$((total_blocks - available_blocks))
+  size=$(humanize_blocks "$total_blocks")
+  used=$(humanize_blocks "$used_blocks")
+  available=$(humanize_blocks "$available_blocks")
+  capacity=$(/usr/bin/awk -v used="$used_blocks" -v available="$available_blocks" 'BEGIN {
+    total = used + available
+    if (total > 0) printf "%.1f%%", used / total * 100
+    else print "0.0%"
+  }')
+  print -r -- "$size|$used|$available|$capacity"
 }
 
 case "$requested_command" in
@@ -51,7 +85,18 @@ case "$requested_command" in
         break
       fi
     done
-    power=$(compact "$(/usr/bin/pmset -g batt 2>/dev/null | /usr/bin/tail -n 2 || true)")
+    power_raw=$(/usr/bin/pmset -g batt 2>/dev/null | /usr/bin/tail -n 2 || true)
+    power=$(compact "$power_raw")
+    power_source=$(compact "$(print -r -- "$power_raw" | /usr/bin/awk -F"'" '/Now drawing from/ {print $2; exit}')")
+    battery_line=$(print -r -- "$power_raw" | /usr/bin/awk '/[0-9]+%;/ {print; exit}')
+    battery_percent=$(compact "$(print -r -- "$battery_line" | /usr/bin/sed -nE 's/.*[[:space:]]([0-9]+)%;.*/\1%/p')")
+    battery_state=$(compact "$(print -r -- "$battery_line" | /usr/bin/sed -nE 's/.*%;[[:space:]]*([^;]+);.*/\1/p')")
+    power_remaining=$(compact "$(print -r -- "$battery_line" | /usr/bin/sed -nE 's/.*;[[:space:]]*([0-9:]+) remaining.*/\1/p')")
+    if print -r -- "$battery_line" | /usr/bin/grep -q 'present: true'; then
+      power_connected='true'
+    else
+      power_connected='false'
+    fi
     if /usr/bin/pgrep -x cloudflared >/dev/null 2>&1; then
       cloudflared='运行中'
     else
@@ -77,6 +122,11 @@ case "$requested_command" in
     print "IP_ADDRESS=$(compact "$ip_address")"
     print "GATEWAY=$(compact "$gateway")"
     print "POWER=$(compact "$power")"
+    print "POWER_SOURCE=$(compact "$power_source")"
+    print "BATTERY_PERCENT=$(compact "$battery_percent")"
+    print "BATTERY_STATE=$(compact "$battery_state")"
+    print "POWER_REMAINING=$(compact "$power_remaining")"
+    print "POWER_CONNECTED=$(compact "$power_connected")"
     print "CLOUDFLARED=$(compact "$cloudflared")"
     /bin/ps -Ao pid=,comm=,%cpu=,%mem= -r 2>/dev/null | /usr/bin/head -n 4 | while IFS= read -r process_line; do
       print "TOP_PROCESS=$(compact "$process_line" | /usr/bin/sed -E 's/[[:space:]]+/|/g')"

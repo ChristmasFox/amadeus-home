@@ -46,7 +46,9 @@ response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 - [x] runtime image `local/pubg-query-engine-v3:git-1b52d2c89f3e` 已部署；compose rollback backup 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-132837`；真实 HomeHub `/status` smoke 通过（7 healthy、2 unhealthy、3 down、1 unknown），Docker socket 与 allowlist client 正常。实际 `/v3/query`「最近20场战绩」返回 KD `1.5 / 0.9 / 0.7 / 0.4`、合计 `1.0`，无 `∞`/`Infinity`。
 - [x] n8n `PUBG 今日战绩` 已重新导入/激活，live export 确认 KD formatter 使用 `toFixed(1)`；外部 rollback backup 为 `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-132906.json`。
 - [x] LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` 已激活，compose rollback backup 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`；live Telegram source 已确认 outbound/Markdown/streaming think filter 存在，patch chain 编译通过，active virtualenv helper smoke 通过。
-- [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`；当前 payload 输出 `460Gi`/`7.3Ti` human-readable 磁盘单位。
+- [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`；当前 payload 已改为 APFS 实际占用计算（系统盘约 `424GiB / 460GiB`、使用率约 `92.1%`），并输出中文运行时间和电源状态。
+- [x] NAS formatter 修复 `df` 在 macOS APFS 根快照上把快照 Used 当成整盘 Used 的问题；运行时间和 `pmset` 电源文本改为中文卡片。
+- [ ] 上述 NAS formatter 源码已升级至 manifest `0.1.4`，需在提交后通过 LangBot Plugin API 重新安装激活。
 - [x] `macos-nas-control` v0.1.3 已通过 LangBot Plugin API 安装并初始化（task `15`）；使用仓库外 key file，未输出或提交 credential。已在 active `langbot_plugin_runtime` 内调用真实 macOS `nas.status`，V2 移动端 formatter smoke 通过。
 
 ## Codex Global Completion Notification Bridge（DEPLOYED / VERIFIED）

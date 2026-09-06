@@ -40,8 +40,72 @@ def _disk_line(value: str, label: str) -> str:
     if len(parts) < 4 or not any(parts):
         return f'{label}：不可用'
     size, used, available, capacity = parts[:4]
-    warning = ' ⚠️' if capacity.rstrip('%').isdigit() and int(capacity.rstrip('%')) >= 90 else ''
-    return f'{label}：{used} / {size}，可用 {available}，已用 {capacity}{warning}'
+    try:
+        usage_percent = float(capacity.rstrip('%'))
+    except (TypeError, ValueError):
+        usage_percent = None
+    warning = ' ⚠️' if usage_percent is not None and usage_percent >= 90 else ''
+    return f'{label}：已用 {used} / {size}，可用 {available}，使用率 {capacity}{warning}'
+
+
+def _format_uptime(value: Any) -> str:
+    text = _clean(value)
+    if not text or text == '未知':
+        return '未知'
+    match = re.search(r'\bup\s+(.+?)(?:,\s*\d+\s+users?\b|,\s*load averages?:|$)', text, re.IGNORECASE)
+    duration = match.group(1).strip(' ,') if match else text
+    day_match = re.search(r'(\d+)\s+days?', duration, re.IGNORECASE)
+    clock_match = re.search(r'(\d+):(\d+)', duration)
+    parts = []
+    if day_match:
+        parts.append(f'{int(day_match.group(1))}天')
+    if clock_match:
+        parts.extend((f'{int(clock_match.group(1))}小时', f'{int(clock_match.group(2)):02d}分钟'))
+    if parts:
+        return ''.join(parts)
+    return re.sub(r'\bdays?\b', '天', duration, flags=re.IGNORECASE)
+
+
+def _format_power(fields: dict[str, str]) -> str:
+    source = _clean(fields.get('POWER_SOURCE', ''))
+    percent = _clean(fields.get('BATTERY_PERCENT', ''))
+    state = _clean(fields.get('BATTERY_STATE', ''))
+    remaining = _clean(fields.get('POWER_REMAINING', ''))
+    raw = _clean(fields.get('POWER', ''))
+
+    if not source:
+        source_match = re.search(r"from ['\"]([^'\"]+)['\"]", raw, re.IGNORECASE)
+        source = source_match.group(1) if source_match else ''
+    if not percent:
+        percent_match = re.search(r'(\d+)%', raw)
+        percent = f'{percent_match.group(1)}%' if percent_match else ''
+    if not state:
+        state_match = re.search(r';\s*(not charging|charged|charging|discharging)\b', raw, re.IGNORECASE)
+        state = state_match.group(1) if state_match else ''
+    if not remaining:
+        remaining_match = re.search(r';\s*([0-9:]+)\s+remaining', raw, re.IGNORECASE)
+        remaining = remaining_match.group(1) if remaining_match else ''
+
+    source_label = {
+        'AC Power': '交流电源',
+        'Battery Power': '电池',
+    }.get(source, source)
+    state_label = {
+        'charged': '已充满',
+        'charging': '正在充电',
+        'discharging': '放电中',
+        'not charging': '未充电',
+    }.get(state.lower(), state)
+    parts = []
+    if source_label:
+        parts.append(source_label)
+    if percent:
+        parts.append(f'电量 {percent}')
+    if state_label:
+        parts.append(state_label)
+    if remaining and remaining != '0:00':
+        parts.append(f'剩余 {remaining}')
+    return ' · '.join(parts) or '不可用'
 
 
 def format_nas_status(raw: str) -> str:
@@ -58,7 +122,7 @@ def format_nas_status(raw: str) -> str:
         return '\n'.join([
             '🖥️ NAS 状态',
             f'主机：{_clean(host)}',
-            f'运行时间：{_clean(uptime)}',
+            f'运行时间：{_format_uptime(uptime)}',
             f'💾 磁盘：{_clean(disk)}',
         ])
 
@@ -72,7 +136,7 @@ def format_nas_status(raw: str) -> str:
     if fields.get('CPU_PHYSICAL') and fields.get('CPU_LOGICAL') and fields['CPU_PHYSICAL'] != fields['CPU_LOGICAL']:
         cpu = f"{_clean(fields['CPU_PHYSICAL'])} 核 / {_clean(fields['CPU_LOGICAL'])} 逻辑核"
     load = _clean(fields.get('LOAD_AVERAGE', '未知'))
-    uptime = _clean(fields.get('UPTIME', '未知'))
+    uptime = _format_uptime(fields.get('UPTIME', '未知'))
     user_count = _clean(fields.get('USER_COUNT', '0'))
 
     memory = '不可用'
@@ -92,7 +156,7 @@ def format_nas_status(raw: str) -> str:
         _clean(fields.get('GATEWAY', '')) and f"网关 {_clean(fields['GATEWAY'])}",
     ) if part]
     network = ' · '.join(network_parts) or '不可用'
-    power = _clean(fields.get('POWER', '不可用'))
+    power = _format_power(fields)
     cloudflared = _clean(fields.get('CLOUDFLARED', '未知'))
 
     lines = [
