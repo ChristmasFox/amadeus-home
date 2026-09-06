@@ -272,6 +272,56 @@ if "async def _telegram_call" not in source:
         raise SystemExit("Telegram stream state marker not found")
     source = source.replace(call_marker, call_block, 1)
 
+# A malformed Markdown/code fence must not make Telegram silently drop the
+# response. Retry the same outbound call once as plain text while preserving
+# the original error behavior for unrelated BadRequest failures.
+if "Telegram outbound entity fallback" not in source:
+    call_start = source.find("    async def _telegram_call(")
+    call_end = source.find("    def _cap_stream_states", call_start)
+    if call_start < 0 or call_end < 0:
+        raise SystemExit("Telegram call method boundaries not found for entity fallback")
+    call_source = source[call_start:call_end]
+    fallback_marker = "            except Exception as exc:\n"
+    fallback_block = """            except telegram.error.BadRequest as exc:
+                error_text = str(exc)
+                parse_error = any(
+                    marker in error_text.lower()
+                    for marker in ('parse entities', 'precode entity', "can't find end")
+                )
+                if is_outbound and parse_error and method_name in {
+                    'send_message', 'send_message_draft', 'edit_message_text',
+                    'send_photo', 'send_document',
+                }:
+                    fallback_kwargs = dict(kwargs)
+                    fallback_kwargs.pop('parse_mode', None)
+                    fallback_kwargs.pop('entities', None)
+                    fallback_kwargs.pop('caption_entities', None)
+                    try:
+                        result = await method(**fallback_kwargs)
+                        logging.getLogger(__name__).warning(
+                            'Telegram outbound entity parse fallback method=%s chat_id=%s',
+                            method_name,
+                            chat_id,
+                        )
+                        return result
+                    except Exception:
+                        pass
+                if is_outbound:
+                    logging.getLogger(__name__).error(
+                        'Telegram outbound failed method=%s chat_id=%s error=%s',
+                        method_name,
+                        chat_id,
+                        type(exc).__name__,
+                    )
+                raise
+            # Telegram outbound entity fallback
+            except Exception as exc:
+"""
+    if fallback_marker not in call_source:
+        raise SystemExit("Telegram generic exception marker not found")
+    call_source = call_source.replace(fallback_marker, fallback_block, 1)
+    source = source[:call_start] + call_source + source[call_end:]
+
 if "_sanitize_telegram_outbound_kwargs(kwargs)" not in source:
     call_sanitize_marker = """        is_outbound = method_name in _TELEGRAM_OUTBOUND_METHODS
         chat_id = kwargs.get('chat_id')

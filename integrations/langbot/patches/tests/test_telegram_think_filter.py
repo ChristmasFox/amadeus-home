@@ -40,6 +40,8 @@ class TelegramThinkFilterTests(unittest.TestCase):
         source = PATCH_PATH.read_text(encoding="utf-8")
         self.assertIn("_sanitize_telegram_outbound_kwargs(kwargs)", source)
         self.assertIn("_strip_telegram_think_markup(components[0]['text'])", source)
+        self.assertIn("Telegram outbound entity fallback", source)
+        self.assertIn("fallback_kwargs.pop('parse_mode', None)", source)
         self.assertIn("_strip_telegram_think_markup(text_component.get('text', ''))", Path(
             Path(__file__).parents[1] / "patch_pubg_telegram_picker.py"
         ).read_text(encoding="utf-8"))

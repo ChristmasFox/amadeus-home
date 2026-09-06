@@ -636,7 +636,11 @@ export class HomeHubEntry {
     if (load) lines.push(`负载：${load}`);
     if (!hostMetricsAvailable) lines.push(`指标：❓ 暂不可用\n原因：${formatHostMetricReason(host.unknownReason)}`);
 
-    const diskLine = host.disk.map((disk) => `${diskLabel(disk.mount)} ${metric(disk.percentage)}${typeof disk.percentage === 'number' && disk.percentage >= 90 ? ' ⚠️' : ''}`).join(' ｜ ');
+    const diskLine = host.disk.map((disk) => {
+      const percentage = metric(disk.percentage);
+      const warning = typeof disk.percentage === 'number' && disk.percentage >= 90 ? ' ⚠️' : '';
+      return `${diskLabel(disk.mount)} ${formatBytes(disk.used)} / ${formatBytes(disk.total)}，可用 ${formatBytes(disk.available)}，${percentage}${warning}`;
+    }).join(' ｜ ');
     if (diskLine) lines.push(diskLine);
     if (host.memory.total !== undefined || host.memory.used !== undefined) {
       lines.push(`内存：${formatBytes(host.memory.used)} / ${formatBytes(host.memory.total)}，可用 ${formatBytes(host.memory.available)}`);
