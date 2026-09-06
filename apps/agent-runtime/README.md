@@ -14,11 +14,20 @@ HomeHub 与 PUBG runtime 共用此进程，但 domain 实现位于 `packages/hom
 - `POST /homehub/route`：判断请求是否属于 HomeHub；
 - `POST /homehub/query`：执行状态查询、诊断、确认式服务操作和媒体整理预览；
 - `POST /whoami`（以及 `/v3/whoami`）：只读返回当前消息发送者的平台身份、聊天信息、内部用户映射和角色；
-- `GET /homehub/telegram/polling`：提供 Telegram polling 诊断指标。
+- `GET /homehub/telegram/polling`：提供 Telegram polling 诊断指标；
+- `GET /status`（以及 `/homehub/status`）：返回实时服务状态；Docker 服务只经由只读 Docker socket 和内置受限 API client 观察。
 
 媒体整理只允许处理 `/Volumes/Avalon/downloads` 下明确指定的项目；默认只生成预览，
 必须收到明确确认后才会备份并移动文件，禁止覆盖已有 `/Volumes/Avalon/media` 内容。
 HomeHub 服务操作同样需要按服务风险等级确认，真实 credentials 和运行时数据不入库。
+
+当 runtime 部署在 CasaOS Docker 容器内时，`apps/agent-runtime/deploy/docker-compose.yml` 和
+`infra/docker/casaos/pubg-query-engine-v3/docker-compose.example.yml` 会以 `:ro` 挂载
+`/var/run/docker.sock`，并通过 `DOCKER_SOCKET_GID` 加入 socket 所属组。
+`DockerApiCommandExecutor` 只允许 Service Registry 中的精确容器名，观察仅支持受限的
+`ps` / `inspect` / `logs` / `stats`，变更仅支持 `start` / `restart`；不会执行
+`compose`、`exec`、`run`、`rm`、prune 或任意 shell。socket 不可用时服务状态为
+`UNKNOWN`，主机 CPU/内存也不会把 HomeHub 容器指标冒充为 macOS Host 指标。
 
 本地 `pnpm --filter @agent/agent-runtime dev` 会通过 Node `--env-file` 读取仓库根目录的
 `.env`；production/CasaOS 运行时必须从外部环境注入 `TELEGRAM_ADMIN_USER_ID` 和

@@ -163,6 +163,11 @@ const server = createServer(async (request, response) => {
       json(response, 200, { status: health.status, service: 'homehub-v1', components: health.components });
       return;
     }
+    if (request.method === 'GET' && (url.pathname === '/status' || url.pathname === '/homehub/status')) {
+      const health = await homehubRuntime.status();
+      json(response, 200, { status: 'ok', service: 'homehub-v1', health });
+      return;
+    }
     if (request.method === 'POST' && ['/v3/route', '/api/v3/route'].includes(url.pathname)) {
       const body = await readBody(request);
       const route = await runtime.route(runtimeRequest(body));

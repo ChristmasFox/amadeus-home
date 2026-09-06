@@ -109,6 +109,8 @@ export const ServiceHealthSchema = z.object({
 export type ServiceHealth = z.infer<typeof ServiceHealthSchema>;
 
 export const HostHealthSchema = z.object({
+  status: z.enum(['available', 'unknown']).default('unknown'),
+  unknownReason: z.string().optional(),
   hostname: z.string(),
   uptime: z.number().nullable(),
   loadAverage: z.array(z.number().nullable()).length(3),

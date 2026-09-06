@@ -263,7 +263,7 @@ test('pending action is bound to platform, chat, user and action ID', async () =
     const confirmed = await entry.handleRequest('确认', 'kook', 'admin-user', 'shared-chat');
     assert.equal(confirmed.success, true);
     assert.equal(confirmed.responseType, 'action');
-    assert.equal(docker.calls.some((call) => call.command === 'docker' && call.args?.[0] === 'compose'), true);
+    assert.equal(docker.calls.some((call) => call.command === 'docker' && call.args?.[0] === 'restart' && call.args?.[1] === 'redis'), true);
   } finally {
     auditLogger.stop();
     await rm(root, { recursive: true, force: true });
@@ -293,6 +293,7 @@ test('Docker health states distinguish healthy, stopped, unhealthy and executor 
 
   const unhealthy = new ScriptedExecutor('docker', (spec) => {
     if (spec.command === 'docker' && spec.args?.[0] === 'ps') return execution({ stdout: 'n8n|running|Up 1 minute\n' });
+    if (spec.command === 'docker' && spec.args?.[0] === 'inspect') return execution({ stdout: 'unhealthy\n' });
     if (spec.command === 'curl') return execution({ stdout: '500' });
     if (spec.command === 'docker' && spec.args?.[0] === 'stats') return execution({ stdout: '0.10%|1.20%\n' });
     return execution();

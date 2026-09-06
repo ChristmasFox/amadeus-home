@@ -13,14 +13,14 @@ export interface HostCollectorOptions extends RuntimeExecutorManagerOptions {
   execution?: RuntimeExecutorManager;
 }
 
-/** Collects metrics from the current Ubuntu runtime, never through a remote shell hop. */
+/** Collects host metrics only through an explicit macOS host executor. */
 export class HostCollector {
   private readonly execution: RuntimeExecutorManager;
 
   constructor(options: HostCollectorOptions = {}) {
     this.execution = options.execution ?? new RuntimeExecutorManager({
       ...options,
-      ...(options.executor ? { executors: { ...(options.executors ?? {}), ubuntu: options.executor } } : {}),
+      ...(options.executor ? { executors: { ...(options.executors ?? {}), 'macos-host': options.executor } } : {}),
     });
   }
 
@@ -29,17 +29,19 @@ export class HostCollector {
    * measured zero, not for an unavailable executor or unreadable /proc file.
    */
   async collect(): Promise<HostHealth> {
-    const result = await this.execution.execute('ubuntu', {
+    const result = await this.execution.execute('macos-host', {
       command: 'bash',
       args: ['-lc', this.collectScript()],
       timeoutMs: 10_000,
     });
-    if (!result.ok) return this.unknownHost();
+    if (!result.ok) return this.unknownHost(result.executorAvailable
+      ? 'macOS host metric collection failed'
+      : 'macOS executor unavailable; HomeHub container metrics are not host metrics');
 
     try {
       return this.normalize(JSON.parse(result.stdout) as Record<string, unknown>);
     } catch {
-      return this.unknownHost();
+      return this.unknownHost('macOS host metric collection returned invalid data');
     }
   }
 
@@ -50,6 +52,7 @@ import os
 import time
 
 result = {
+    'status': 'available',
     'hostname': None,
     'uptime': None,
     'loadAverage': [None, None, None],
@@ -140,7 +143,14 @@ PY`;
     const disk = Array.isArray(parsed.disk) ? parsed.disk.map((value) => this.record(value)) : [];
     const load = Array.isArray(parsed.loadAverage) ? parsed.loadAverage : [];
 
+    const status = parsed.status === 'available' ? 'available' : 'unknown';
+    const unknownReason = status === 'unknown'
+      ? this.text(parsed.unknownReason) ?? 'macOS host metrics unavailable'
+      : undefined;
+
     return {
+      status,
+      ...(unknownReason ? { unknownReason } : {}),
       hostname: this.text(parsed.hostname) ?? 'unknown',
       uptime: this.numberOrNull(parsed.uptime),
       loadAverage: [this.numberOrNull(load[0]), this.numberOrNull(load[1]), this.numberOrNull(load[2])],
@@ -164,8 +174,10 @@ PY`;
     };
   }
 
-  private unknownHost(): HostHealth {
+  private unknownHost(reason = 'macOS host executor unavailable; HomeHub container metrics are not host metrics'): HostHealth {
     return {
+      status: 'unknown',
+      unknownReason: reason,
       hostname: 'unknown',
       uptime: null,
       loadAverage: [null, null, null],

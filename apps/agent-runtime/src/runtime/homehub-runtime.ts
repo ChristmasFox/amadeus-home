@@ -161,6 +161,11 @@ export class HomeHubRuntime {
     };
   }
 
+  /** Return the live HomeHub service inventory for an internal status probe. */
+  async status() {
+    return this.diagnosticEngine.systemHealth();
+  }
+
   /**
    * Read-only authorization decision endpoint used by platform plugins. It
    * resolves identity from the normalized platform user ID before evaluating

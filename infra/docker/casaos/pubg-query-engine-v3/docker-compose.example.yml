@@ -3,6 +3,9 @@ services:
     image: ${PUBG_RUNTIME_IMAGE:-local/pubg-query-engine-v3:latest}
     container_name: pubg-query-engine-v3
     restart: unless-stopped
+    # Docker API is used through the socket by the restricted HomeHub executor.
+    group_add:
+      - "${DOCKER_SOCKET_GID:-104}"
     environment:
       NODE_ENV: production
       TZ: Asia/Shanghai
@@ -25,6 +28,7 @@ services:
       KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
     volumes:
       - ${PUBG_RUNTIME_DATA_DIR:-/DATA/AppData/pubg-query-engine-v3/data}:/data
+      - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ${PUBG_API_KEY_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
     ports:
       - "${PUBG_QUERY_ENGINE_PORT:-5310}:5310"

@@ -63,7 +63,7 @@ function addPlayer(accumulator: Accumulator, match: NormalizedMatch, player: Nor
   accumulator.headshotKills += numberOr(player.headshotKills);
   accumulator.survivalTime += numberOr(player.survivalTime);
   accumulator.longestKill = Math.max(accumulator.longestKill, numberOr(player.longestKill));
-  if (player.deaths !== null) accumulator.deaths += numberOr(player.deaths);
+  if (typeof player.deaths === 'number' && Number.isFinite(player.deaths)) accumulator.deaths += Math.max(0, player.deaths);
   if (player.deathSemantics) accumulator.deathSemantics.add(player.deathSemantics);
   if (player.rank !== null) {
     accumulator.rankValues.push(player.rank);
@@ -87,7 +87,7 @@ function metricNumber(row: QueryRow, metric: Metric): number {
 function metricValue(accumulator: Accumulator, metric: Metric): number | string | null {
   const matches = accumulator.matchIds.size;
   const avgRank = accumulator.rankValues.length ? accumulator.rankValues.reduce((sum, value) => sum + value, 0) / accumulator.rankValues.length : null;
-  const kd = accumulator.deaths === 0 ? (accumulator.kills > 0 ? '∞' : 0) : accumulator.kills / accumulator.deaths;
+  const kd = accumulator.deaths > 0 ? accumulator.kills / accumulator.deaths : null;
   switch (metric) {
     case 'matches': return matches;
     case 'kills': return accumulator.kills;
@@ -203,7 +203,7 @@ function aggregateTeamRow(records: NormalizedMatch[], ids: Set<string>, team: Te
   row.metrics.top10 = teamTop10;
   row.metrics.rank = teamRanks.length ? round(teamRanks.reduce((sum, value) => sum + value, 0) / teamRanks.length) : null;
   row.metrics.avg_damage = accumulator.matchIds.size ? round(accumulator.damage / accumulator.matchIds.size) : 0;
-  row.metrics.teamCombinedKD = accumulator.deaths === 0 ? (accumulator.kills > 0 ? '∞' : 0) : round(accumulator.kills / accumulator.deaths);
+  row.metrics.teamCombinedKD = accumulator.deaths > 0 ? round(accumulator.kills / accumulator.deaths) : null;
   row.metrics.deathSemantics = [...accumulator.deathSemantics].join(',') || 'unknown';
   return row;
 }

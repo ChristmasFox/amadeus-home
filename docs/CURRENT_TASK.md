@@ -1,6 +1,30 @@
 # Current Task
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-06（Asia/Shanghai）
+
+## HomeHub Docker Executor + PUBG KD 修复（源码阶段已完成，生产部署待执行）
+
+- [x] 新增 `DockerApiCommandExecutor`：只通过 `/var/run/docker.sock` 使用 Docker Engine API，不依赖 Docker CLI。
+- [x] Docker 容器名严格限制为 Service Registry 的 allowlist：`langbot`、`pubg-query-engine-v3`、`n8n`、`postgres`、`redis`、`emby`、`jellyfin`、`qbittorrent`、`aria2`、`glances`。
+- [x] 观察仅支持受限 `ps`、脱敏 `inspect`、最多 200 行 `logs` 和 `stats`；变更仅支持 `start` / `restart`；明确拒绝 `compose`、`exec`、`run`、`rm`、prune 和任意 shell。
+- [x] HomeHub Docker action 已从 Compose 改为安全的容器 `start` / `restart` API；socket/权限/daemon 失败统一保留为 `UNKNOWN`。
+- [x] HostCollector 默认不再读取 HomeHub 容器 `/proc` 冒充 macOS Host；无 macOS Host Executor 时返回 `UNKNOWN` 和明确原因。
+- [x] 新增 `GET /status` 与 `/homehub/status` 实时状态端点，新增只读 `scripts/smoke-homehub-docker.sh`。
+- [x] 修复 PUBG KD：n8n 归一化记录补齐 `deaths` / `deathSemantics`，runtime 对旧记录缺失字段使用 placement proxy；零死亡 KD 不再向用户渲染 `∞`，而显示为未定义 `—`。
+- [x] 定向 TypeScript、完整 runtime tests、secret scan 和 diff check 已通过。
+- [ ] 使用 `scripts/deploy-homehub-docker-socket.sh --apply` 修改 canonical CasaOS compose 并重建 runtime。
+- [ ] 使用 `scripts/smoke-homehub-docker.sh` 在实际 `pubg-query-engine-v3` 容器内验证 socket、Docker client 和 `/status`。
+
+生产部署顺序：先提交干净 source，再执行 `./scripts/deploy-agent-runtime.sh --apply --build --no-proxy`，随后执行
+`./scripts/deploy-homehub-docker-socket.sh --apply`（该脚本只做显式 `--no-build` compose recreate），最后保留
+compose rollback backup、health 和 Docker smoke 证据。
+
+## Codex Global Completion Notification Bridge（未开始）
+
+目标与验收清单保留在活动 Codex goal；后续必须完成全局 `~/.codex/config.toml` notify hook、portable
+notify script、带 shared secret/idempotency 的 n8n workflow、固定 Telegram/KOOK Admin DM、LangBot
+outbound sender 接线、双平台故障隔离、smoke test、文档和 checkpoint。真实 secrets 只能在仓库外恢复。
+
 
 ## 当前阶段
 

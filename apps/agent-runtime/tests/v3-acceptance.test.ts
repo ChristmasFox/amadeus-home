@@ -153,7 +153,7 @@ test('status semantics never convert source failure or coverage gaps into NO_MAT
   assert.equal(noMatches.result.status, 'NO_MATCHES');
 });
 
-test('Chicken Index handles infinite KD and excludes inactive players', () => {
+test('Chicken Index handles undefined zero-death KD without rendering infinity', () => {
   const records = structuredClone(FIXTURE_RECORDS).map((record) => ({
     ...record,
     players: record.players.map((player) => player.accountId === DEFAULT_TEAM.players[0]?.id
@@ -164,10 +164,12 @@ test('Chicken Index handles infinite KD and excludes inactive players', () => {
   const engine = new DeterministicQueryEngine({ team: DEFAULT_TEAM, now: TEST_NOW });
   const result = engine.execute(query, records, completeCoverage, fixtureSource, {});
   const player = result.data.rows.find((row) => row.label === 'SG_LabmemNo007');
-  assert.equal(player?.metrics.kd, '∞');
+  assert.equal(player?.metrics.kd, null);
   assert.equal(typeof player?.metrics.chicken_index, 'number');
+  const rendered = renderResult(result, { ...query, selector: resolveSelector(query.selector, { now: TEST_NOW }) });
+  assert.doesNotMatch(rendered, /∞/u);
   const highestKd = engine.execute(buildDeterministicQuery({ text: '最近3场谁KD最高', now: TEST_NOW }), records, completeCoverage, fixtureSource, {});
-  assert.equal(highestKd.data.rows[0]?.label, 'SG_LabmemNo007');
+  assert.notEqual(highestKd.data.rows[0]?.metrics.kd, '∞');
 });
 
 test('structured context inherits selectors, result sets and isolates senders', async () => {

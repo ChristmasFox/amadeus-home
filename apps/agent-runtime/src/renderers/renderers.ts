@@ -7,7 +7,7 @@ import { buildMatchPickerPresentation, buildReviewPresentation } from '../review
 
 function value(row: QueryRow, metric: string, fallback: string | number = 0): string | number {
   const raw = row.metrics[metric];
-  if (raw === null || raw === undefined || raw === '') return fallback;
+  if (raw === null || raw === undefined || raw === '') return metric === 'kd' ? '—' : fallback;
   return raw;
 }
 
@@ -19,14 +19,14 @@ function numberValue(row: QueryRow, metric: string): number {
 }
 
 function fixed(valueToFormat: string | number, digits = 2): string {
-  if (valueToFormat === '∞' || valueToFormat === Number.POSITIVE_INFINITY) return '∞';
+  if (valueToFormat === '∞' || valueToFormat === Number.POSITIVE_INFINITY) return '—';
   const parsed = Number(valueToFormat);
   if (!Number.isFinite(parsed)) return '—';
   return parsed.toFixed(digits).replace(/\.00$/u, '').replace(/(\.\d)0$/u, '$1');
 }
 
 function integer(valueToFormat: string | number): string {
-  if (valueToFormat === '∞') return '∞';
+  if (valueToFormat === '∞' || valueToFormat === Number.POSITIVE_INFINITY) return '—';
   const parsed = Number(valueToFormat);
   return Number.isFinite(parsed) ? Math.round(parsed).toLocaleString('zh-CN') : '—';
 }
@@ -81,7 +81,7 @@ function renderTeamSummary(data: OperationData): string[] {
     `🎮 比赛 ${integer(String(team.matches ?? data.summary.uniqueMatchCount ?? 0))} ｜💀 击杀 ${integer(String(team.kills ?? 0))} ｜🤝 助攻 ${integer(String(team.assists ?? 0))}`,
     `💥 倒地 ${integer(String(team.dbnos ?? 0))} ｜❤️ 救援 ${integer(String(team.revives ?? 0))} ｜🎯 总伤害 ${integer(String(team.damage ?? 0))}`,
     `📊 场均伤害 ${integer(String(team.avg_damage ?? 0))} ｜🍗 吃鸡 ${integer(String(team.wins ?? 0))} ｜🏅 Top10 ${integer(String(team.top10 ?? 0))}`,
-    `⚔️ 合计 KD ${fixed(String(team.teamCombinedKD ?? team.kd ?? 0))}`,
+    `⚔️ 合计 KD ${fixed(String(team.teamCombinedKD ?? team.kd ?? '—'))}`,
   ];
 }
 
@@ -181,7 +181,7 @@ function renderCompare(data: OperationData, status: DataStatus): string {
 
 function signed(valueToFormat: string | number): string {
   const parsed = valueToFormat === '∞' ? Number.POSITIVE_INFINITY : Number(valueToFormat);
-  if (!Number.isFinite(parsed)) return parsed === Number.POSITIVE_INFINITY ? '+∞' : '—';
+  if (!Number.isFinite(parsed)) return '—';
   return `${parsed > 0 ? '+' : ''}${fixed(parsed)}`;
 }
 

@@ -1,6 +1,23 @@
 # Project State
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-06（Asia/Shanghai）
+
+## HomeHub Docker Executor + PUBG KD 修复：SOURCE COMPLETE / DEPLOYMENT PENDING
+
+HomeHub source 已新增受限 `DockerApiCommandExecutor`，通过只读 Docker socket 使用 Docker Engine API，
+严格限制 Service Registry 中的容器名和 `ps` / `inspect` / bounded `logs` / `stats` 观察；变更只允许
+`start` / `restart`，不再调用 Docker Compose，也不会提供 `exec`、`run`、`rm` 或任意 shell passthrough。
+Docker socket 不可用、权限失败或 daemon 不可达时保持 `UNKNOWN`，不会误判为 `DOWN`。
+
+runtime compose 模板已声明 `/var/run/docker.sock:/var/run/docker.sock:ro` 和 `DOCKER_SOCKET_GID`，
+HostCollector 默认不读取容器自身 `/proc` 作为 macOS Host 指标；无 macOS Host Executor 时 CPU、内存和
+主机状态为 UNKNOWN，并返回 `macOS executor unavailable` 原因。新增 `GET /status` 可输出真实 Docker
+service inventory。生产 canonical compose 仍需执行 `scripts/deploy-homehub-docker-socket.sh --apply`，
+随后由 `scripts/smoke-homehub-docker.sh` 完成实际容器内验证。
+
+PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录
+缺失 `deaths` 时按 placement proxy 补齐；零死亡分母不再显示数学 `∞`，而显示未定义 `—`。源码定向与
+完整 runtime tests 已通过。
 
 ## 状态
 

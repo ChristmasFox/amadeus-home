@@ -190,7 +190,13 @@ export class DiagnosticEngine {
     // Do not run dependent checks after an unknown alive observation: doing so
     // would turn a missing executor into a chain of false service failures.
     if (aliveCheck.status === 'passed' && (service.healthCheck.type === 'http' || service.healthCheck.type === 'tcp')) {
-      const reachable = await this.checkReachable(service);
+      // Docker services are observed from the runtime container. Their host
+      // published ports (for example localhost:5679) are not reachable via
+      // the runtime container's loopback, so use the Docker health/status
+      // boundary instead of pretending that a local curl is authoritative.
+      const reachable = service.runtime === 'docker' && service.container
+        ? await this.checkContainerHealth(service)
+        : await this.checkReachable(service);
       checks.push(reachable);
       if (this.hasCause(reachable, 'health_check_failed')) {
         issues.push({
@@ -404,6 +410,22 @@ export class DiagnosticEngine {
       return this.passed(name, `容器 ${nameValue ?? target} 运行中`, { state: state ?? 'running', status: status ?? '' });
     }
     return this.failed(name, `容器 ${nameValue ?? target} 状态异常: ${status ?? state ?? 'unknown'}`, 'service_down', { state, status });
+  }
+
+  private async checkContainerHealth(service: ServiceDefinition): Promise<Check> {
+    if (!service.container) return this.skipped('container_health', '无容器信息', 'observation_failure');
+    const result = await this.execution.executeForService(service, {
+      command: 'docker',
+      args: ['inspect', '--format', '{{.State.Health.Status}}', service.container.name],
+      timeoutMs: service.healthCheck.timeout,
+    });
+    if (!result.executorAvailable) return this.skipped('container_health', 'Docker executor 不可用', 'executor_unavailable');
+    if (!result.ok) return this.skipped('container_health', '容器健康状态检查失败', 'observation_failure');
+    const health = result.stdout.trim().toLowerCase();
+    if (!health) return this.passed('container_health', '容器运行中（未配置 Docker HEALTHCHECK）', { status: 'none' });
+    if (health === 'healthy') return this.passed('container_health', 'Docker HEALTHCHECK 通过', { status: health });
+    if (health === 'unhealthy') return this.failed('container_health', 'Docker HEALTHCHECK 失败', 'health_check_failed', { status: health });
+    return this.skipped('container_health', `Docker HEALTHCHECK 状态：${health}`, 'observation_failure', { status: health });
   }
 
   private async checkReachable(service: ServiceDefinition): Promise<Check> {

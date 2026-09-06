@@ -539,8 +539,12 @@ export class HomeHubEntry {
 
   private renderSystemHealth(health: HealthResult): string {
     const metric = (value: number | null): string => typeof value === 'number' ? `${value.toFixed(1)}%` : '未知';
+    const hostMetricStatus = health.host.status === 'unknown'
+      ? `未知（${health.host.unknownReason ?? '主机执行器不可用'}）`
+      : '可用';
     const lines = [
       '📊 **主机状态**',
+      `指标: ${hostMetricStatus}`,
       `CPU: ${metric(health.host.cpu.usage)} | 内存: ${metric(health.host.memory.percentage)}`,
     ];
     for (const disk of health.host.disk) lines.push(`磁盘 ${disk.mount}: ${metric(disk.percentage)}`);

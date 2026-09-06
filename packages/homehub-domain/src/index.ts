@@ -45,6 +45,8 @@ export type {
 // Runtime execution boundaries
 export {
   RuntimeExecutorManager,
+  DockerApiCommandExecutor,
+  DEFAULT_DOCKER_ALLOWED_CONTAINERS,
   isExecutorUnavailable,
 } from './execution/runtime-executor.js';
 export type {
@@ -53,4 +55,5 @@ export type {
   CommandExecutor,
   ExecutorKind,
   RuntimeExecutorManagerOptions,
+  DockerApiExecutorOptions,
 } from './execution/runtime-executor.js';

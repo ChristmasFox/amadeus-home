@@ -206,13 +206,13 @@ export class ActionEngine {
   private async performAction(request: ParsedActionRequest, service: ServiceDefinition): Promise<ExecResult> {
     switch (request.action) {
       case 'start':
-        return this.runServiceCommand(service, ['up', '-d'], `启动 ${service.displayName}`);
+        return this.runServiceCommand(service, 'start', `启动 ${service.displayName}`);
       case 'restart':
         return service.runtime === 'langbot-component'
           ? this.restartLangBotComponent(service)
-          : this.runServiceCommand(service, ['restart'], `重启 ${service.displayName}`);
+          : this.runServiceCommand(service, 'restart', `重启 ${service.displayName}`);
       case 'stop':
-        return this.runServiceCommand(service, ['stop'], `停止 ${service.displayName}`);
+        return { success: false, message: 'stop 未配置安全执行器，默认拒绝' };
       case 'rotate_logs':
         return this.rotateLogs(service);
       case 'check':
@@ -227,16 +227,13 @@ export class ActionEngine {
     }
   }
 
-  private async runServiceCommand(service: ServiceDefinition, composeArgs: readonly string[], label: string): Promise<ExecResult> {
-    if (service.runtime === 'langbot-component') {
-      return { success: false, message: `${label}失败: LangBot component 不支持通用 Compose 操作` };
-    }
+  private async runServiceCommand(service: ServiceDefinition, operation: 'start' | 'restart', label: string): Promise<ExecResult> {
     if (service.runtime !== 'docker' || !service.container) {
-      return { success: false, message: `${label}失败: 该服务没有安全的 Docker Compose 执行定义` };
+      return { success: false, message: `${label}失败: 该服务没有安全的 Docker 执行定义` };
     }
     const result = await this.execution.executeForService(service, {
       command: 'docker',
-      args: ['compose', '-f', service.container.composePath, ...composeArgs],
+      args: [operation, service.container.name],
       timeoutMs: 120_000,
     });
     return this.toExecResult(result, `${label}${result.ok ? '成功' : '失败'}`);
@@ -255,30 +252,8 @@ export class ActionEngine {
       : `${service.displayName} 重启失败`);
   }
 
-  private async rotateLogs(service: ServiceDefinition): Promise<ExecResult> {
-    if (!service.container) return { success: false, message: '无容器日志可轮转' };
-    const ids = await this.execution.executeForService(service, {
-      command: 'docker',
-      args: ['ps', '-q', '--filter', `name=^${service.container.name}$`],
-      timeoutMs: 30_000,
-    });
-    if (!ids.ok) return this.toExecResult(ids, '日志轮转失败');
-    const containerId = ids.stdout.trim().split(/\s+/u).find(Boolean);
-    if (!containerId) return { success: true, message: '没有运行中的容器，未轮转日志' };
-    const logPath = await this.execution.executeForService(service, {
-      command: 'docker',
-      args: ['inspect', '--format', '{{.LogPath}}', containerId],
-      timeoutMs: 30_000,
-    });
-    if (!logPath.ok) return this.toExecResult(logPath, '日志路径读取失败');
-    const path = logPath.stdout.trim();
-    if (!path || !path.startsWith('/')) return { success: false, message: '日志路径无效，拒绝轮转' };
-    const truncated = await this.execution.executeForService(service, {
-      command: 'truncate',
-      args: ['-s', '0', path],
-      timeoutMs: 30_000,
-    });
-    return this.toExecResult(truncated, truncated.ok ? '日志轮转完成' : '日志轮转失败');
+  private async rotateLogs(_service: ServiceDefinition): Promise<ExecResult> {
+    return { success: false, message: 'rotate_logs 未配置安全执行器，默认拒绝' };
   }
 
   private async verifyAction(request: ParsedActionRequest, service: ServiceDefinition): Promise<ActionResult['verification']> {
