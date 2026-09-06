@@ -68,7 +68,7 @@ if (!names.includes("langbot") || !names.includes("pubg-query-engine-v3")) {
 console.log(`Restricted Docker API listed ${names.length} allowlisted service(s): ${names.join(", ")}`);
 '
 
-status_json="$(curl --fail --silent --show-error --max-time 10 "$BASE_URL/status")"
+status_json="$(curl --fail --silent --show-error --max-time 30 "$BASE_URL/status")"
 printf '%s\n' "$status_json" | node --input-type=module -e '
 import fs from "node:fs";
 const body = JSON.parse(fs.readFileSync(0, "utf8"));

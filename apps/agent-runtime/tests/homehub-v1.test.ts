@@ -28,7 +28,7 @@ test('HomeHub ServiceRegistry contains all V1 services with correct definitions'
   assert.equal(telegram?.riskLevel, 'low');
   assert.ok(telegram?.allowedActions.includes('restart'));
   const n8n = registry.getService('n8n');
-  assert.deepEqual(n8n?.dependencies, ['postgres']);
+  assert.deepEqual(n8n?.dependencies, []);
 });
 
 test('HomeHub domain parse classifies status/diagnosis/action/history queries', () => {

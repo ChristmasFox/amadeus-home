@@ -36,9 +36,9 @@ if ((APPLY == 0)); then
   exit 0
 fi
 
-patch_source='''from pathlib import Path
+patch_source="$(cat <<'PY'
+from pathlib import Path
 import shutil
-import stat
 import sys
 
 compose = Path(sys.argv[1])
@@ -47,33 +47,35 @@ socket_gid = sys.argv[3]
 text = compose.read_text()
 original = text
 
-if "/var/run/docker.sock:/var/run/docker.sock:ro" not in text:
-    marker = "    volumes:\\n"
+socket_mount = '      - /var/run/docker.sock:/var/run/docker.sock:ro\n'
+if '/var/run/docker.sock:/var/run/docker.sock:ro' not in text:
+    marker = '    volumes:\n'
     if marker not in text:
-        raise SystemExit("compose service volumes block not found")
-    text = text.replace(marker, f"      - /var/run/docker.sock:/var/run/docker.sock:ro\\n{marker}", 1)
+        raise SystemExit('compose service volumes block not found')
+    text = text.replace(marker, marker + socket_mount, 1)
 
-if "    group_add:\\n" not in text:
-    marker = "    restart: unless-stopped\\n"
+if '    group_add:\n' not in text:
+    marker = '    restart: unless-stopped\n'
     if marker not in text:
-        raise SystemExit("compose service restart block not found")
-    text = text.replace(marker, f"{marker}    group_add:\\n      - \\\"{socket_gid}\\\"\\n", 1)
+        raise SystemExit('compose service restart block not found')
+    text = text.replace(marker, marker + '    group_add:\n      - "' + socket_gid + '"\n', 1)
 else:
     lines = text.splitlines()
     for index, line in enumerate(lines):
-        if line == "    group_add:":
+        if line == '    group_add:':
             if index + 1 >= len(lines) or lines[index + 1].strip() != socket_gid:
-                raise SystemExit("compose already has group_add with an unexpected value; refusing to overwrite")
+                raise SystemExit('compose already has group_add with an unexpected value; refusing to overwrite')
             break
 
 if text != original:
-    backup = compose.with_name(compose.name + ".codex-backup." + backup_stamp)
+    backup = compose.with_name(compose.name + '.codex-backup.' + backup_stamp)
     shutil.copy2(compose, backup)
     compose.write_text(text)
-    print("ROLLBACK_COMPOSE=" + str(backup))
+    print('ROLLBACK_COMPOSE=' + str(backup))
 else:
-    print("COMPOSE_ALREADY_CONFIGURED=true")
-'''
+    print('COMPOSE_ALREADY_CONFIGURED=true')
+PY
+)"
 encoded="$(printf '%s' "$patch_source" | base64 | tr -d '\n')"
 remote_compose="$(printf '%q' "$COMPOSE_FILE")"
 remote_container="$(printf '%q' "$CONTAINER")"

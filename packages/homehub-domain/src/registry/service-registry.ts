@@ -23,7 +23,8 @@ export class ServiceRegistry {
         description: '主要机器人服务，处理所有平台消息路由',
         healthCheck: { type: 'docker', target: 'langbot', timeout: 15000, expected: 'up' },
         container: { name: 'langbot', composePath: '/var/lib/casaos/apps/langbot/docker-compose.yml' },
-        dependencies: ['redis'],
+        // LangBot production uses its local SQLite data; Redis is optional.
+        dependencies: [],
         allowedActions: ['check', 'restart'],
         riskLevel: 'medium',
         recovery: { restart: true, containerRecreate: false, clusterRestart: false },
@@ -75,7 +76,8 @@ export class ServiceRegistry {
         description: '工作流自动化平台，端口 5679',
         healthCheck: { type: 'http', target: 'http://localhost:5679/healthz', timeout: 10000, expected: 'response' },
         container: { name: 'n8n', composePath: '/var/lib/casaos/apps/n8n/docker-compose.yml' },
-        dependencies: ['postgres'],
+        // n8n production uses its local SQLite database in CasaOS.
+        dependencies: [],
         allowedActions: ['check', 'restart'],
         riskLevel: 'medium',
         recovery: { restart: true, containerRecreate: false, clusterRestart: false },

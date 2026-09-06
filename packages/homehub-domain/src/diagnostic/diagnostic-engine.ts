@@ -68,10 +68,9 @@ export class DiagnosticEngine {
   /** Aggregate system health across all registered services. */
   async systemHealth(_platform = 'kook'): Promise<HealthResult> {
     const host = await this.collector.collect();
-    const services: ServiceHealth[] = [];
-    for (const definition of this.serviceRegistry.getAllServices()) {
-      services.push(await this.checkServiceHealth(definition));
-    }
+    const services = await Promise.all(
+      this.serviceRegistry.getAllServices().map((definition) => this.checkServiceHealth(definition)),
+    );
 
     const summary = {
       totalServices: services.length,
@@ -116,7 +115,11 @@ export class DiagnosticEngine {
   async checkServiceHealth(definition: ServiceDefinition): Promise<ServiceHealth> {
     const result = await this.diagnose(definition.serviceId);
     const unknownCheck = result.checks.find((check) => this.isPrimaryUnknownCheck(check));
-    const downCheck = result.checks.find((check) => this.hasCause(check, 'service_down'));
+    const downCheck = result.checks.find((check) => (
+      ['container_alive', 'component_alive', 'process_alive'].includes(check.name)
+      && this.hasCause(check, 'service_down')
+    ));
+    const dependencyFailure = result.checks.some((check) => check.name === 'dependencies' && this.hasCause(check, 'service_down'));
     const explicitFailure = result.checks.some((check) => this.hasCause(check, 'health_check_failed')
       || this.hasCause(check, 'resource_exceeded')
       || this.hasCause(check, 'log_error'));
@@ -128,19 +131,24 @@ export class DiagnosticEngine {
       unknownReason = String(unknownCheck.details?.cause ?? 'observation_failure');
     } else if (downCheck) {
       status = 'down';
-    } else if (explicitFailure || result.issues.length > 0) {
+    } else if (explicitFailure || result.issues.some((issue) => issue.severity === 'critical' || issue.severity === 'error')) {
       status = 'unhealthy';
+    } else if (dependencyFailure) {
+      // The primary container is still running; a missing dependency is a
+      // degraded condition, not proof that the service itself is DOWN.
+      status = 'degraded';
     } else {
       // Optional resource/log observations may be unavailable while the
       // primary service health check is known to be healthy.
       status = 'healthy';
     }
 
+    const failedCheck = result.checks.find((check) => check.status === 'failed');
     const message = status === 'unknown'
       ? `无法确认 ${definition.displayName} 状态（${unknownCheck?.message ?? '检查不可用'}）`
       : status === 'down'
         ? downCheck?.message ?? `${definition.displayName} 未运行`
-        : result.checks.find((check) => check.status === 'failed')?.message
+        : failedCheck?.message
           ?? result.issues[0]?.message
           ?? '运行正常';
 
