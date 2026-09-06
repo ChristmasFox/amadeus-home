@@ -87,9 +87,21 @@ if (body.health.summary.unknown === body.health.summary.totalServices) {
   console.error("/status still reports every service as UNKNOWN");
   process.exit(1);
 }
-if (body.health.host.status !== "unknown" || !String(body.health.host.unknownReason || "").includes("macOS")) {
-  console.error("Host metrics were not explicitly marked as unavailable from the container");
+const host = body.health.host;
+if (host.status === "unknown") {
+  if (!String(host.unknownReason || "").includes("macOS")) {
+    console.error("Unknown host metrics did not explain the macOS HostAgent boundary");
+    process.exit(1);
+  }
+  console.log(`HomeHub /status passed: ${body.health.summary.healthy} healthy, ${body.health.summary.down} down, ${body.health.summary.unknown} unknown; macOS host metrics unavailable without container fallback.`);
+} else if (host.status === "available") {
+  if (!host.hostname || host.hostname === "unknown" || !host.cpu || !host.memory || !Array.isArray(host.disk)) {
+    console.error("Available macOS host metrics are incomplete");
+    process.exit(1);
+  }
+  console.log(`HomeHub /status passed: ${body.health.summary.healthy} healthy, ${body.health.summary.degraded} degraded, ${body.health.summary.down} down, ${body.health.summary.unknown} unknown; real macOS host=${host.hostname}, disks=${host.disk.length}, network=${(host.network || []).length}.`);
+} else {
+  console.error(`Unexpected host status: ${host.status}`);
   process.exit(1);
 }
-console.log(`HomeHub /status passed: ${body.health.summary.healthy} healthy, ${body.health.summary.down} down, ${body.health.summary.unknown} unknown; host metrics explicitly unavailable.`);
 '
