@@ -58,7 +58,8 @@ think-only message 会被抑制；HomeHub status 不会把容器 CPU/内存冒�
 source 后执行对应 release/import/apply，LangBot plugin API key 继续只从仓库外恢复。2026-09-06 已完成 runtime
 image `local/pubg-query-engine-v3:git-1b52d2c89f3e`、n8n daily-stats workflow、LangBot patched image
 `local/langbot-agent:5a051b8756c4-20260906-132959` 和 macOS external forced-command 的实际部署与 smoke；
-各 rollback backup 已记录在 docs/CURRENT_TASK.md。当前唯一未激活项是 `macos-nas-control` 新 formatter 的
+各 rollback backup 已记录在 docs/CURRENT_TASK.md。真实 `/v3/query`「最近20场战绩」已返回 KD `1.5 / 0.9 /
+0.7 / 0.4`、合计 `1.0`，无 `∞`/`Infinity`；active LangBot virtualenv helper smoke 也已通过。当前唯一未激活项是 `macos-nas-control` 新 formatter 的
 LangBot plugin API 安装，因为当前 shell 没有外部 LangBot API credential；不直接修改运行时 plugin 目录。
 
 PUBG KD 修复同时覆盖 n8n v3 match normalization、runtime legacy record normalization 和 renderer：旧记录

@@ -26,7 +26,10 @@
 - HomeHub Docker smoke passed: socket present, 7 allowlisted containers listed, `/status` reports real service states and host metrics explicitly unavailable.
 - n8n `PUBG 今日战绩` imported and active; live export confirms `toFixed(1)`; backup `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-132906.json`.
 - LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` active; compose backup `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`; live source contains the think filter.
-- External NAS forced command deployed; backup `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`; real `nas.status` smoke passed.
+- External NAS forced command deployed; backup `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`; real `nas.status` smoke passed and emitted human-readable `460Gi`/`7.3Ti` disk units.
+- Real runtime `/v3/query`「最近20场战绩」smoke returned KD `1.5 / 0.9 / 0.7 / 0.4`, team KD `1.0`, and no `∞`/`Infinity`.
+- Active LangBot virtualenv helper smoke passed for complete, unclosed, isolated, and caption think markup.
+- `scripts/doctor.sh`: 0 failures / 0 warnings.
 
 ## Pending activation
 

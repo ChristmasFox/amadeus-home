@@ -43,10 +43,10 @@ response 与结构化 payload 均不含 `∞` 或 `Infinity`。
 - [x] Telegram outbound boundary 和 streaming chunk 增加 `<think>` / `</think>` 过滤；完整、未闭合和 think-only 内容均不会泄漏到 Telegram。
 - [x] HomeHub status 将 host CPU/内存继续明确保持 UNKNOWN（不冒充 Docker 容器指标），但改为中文原因说明；服务级 macOS/Docker executor UNKNOWN 也不再显示原始英文报错。
 - [x] 定向 TypeScript、完整 runtime（118 pass / 1 skip）、legacy Python（31 pass）、NAS/Telegram patch tests、shell/Python syntax、LangBot patch dry-run、secret scan 已通过。
-- [x] runtime image `local/pubg-query-engine-v3:git-1b52d2c89f3e` 已部署；compose rollback backup 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-132837`；真实 HomeHub `/status` smoke 通过（7 healthy、2 unhealthy、3 down、1 unknown），Docker socket 与 allowlist client 正常。
+- [x] runtime image `local/pubg-query-engine-v3:git-1b52d2c89f3e` 已部署；compose rollback backup 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260906-132837`；真实 HomeHub `/status` smoke 通过（7 healthy、2 unhealthy、3 down、1 unknown），Docker socket 与 allowlist client 正常。实际 `/v3/query`「最近20场战绩」返回 KD `1.5 / 0.9 / 0.7 / 0.4`、合计 `1.0`，无 `∞`/`Infinity`。
 - [x] n8n `PUBG 今日战绩` 已重新导入/激活，live export 确认 KD formatter 使用 `toFixed(1)`；外部 rollback backup 为 `/home/node/.n8n/workflow-backups/codex-pubg-daily-stats-20260830-before-20260906-132906.json`。
-- [x] LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` 已激活，compose rollback backup 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`；live Telegram source 已确认 outbound/Markdown/streaming think filter 存在，patch chain 编译通过。
-- [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`。
+- [x] LangBot patched image `local/langbot-agent:5a051b8756c4-20260906-132959` 已激活，compose rollback backup 为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260906-133002`；live Telegram source 已确认 outbound/Markdown/streaming think filter 存在，patch chain 编译通过，active virtualenv helper smoke 通过。
+- [x] macOS external forced-command 已安装并通过真实 `nas.status` smoke；旧文件 rollback backup 为 `/Users/blacksidev/.local/bin/nas-control.codex-backup.20260906-132920`；当前 payload 输出 `460Gi`/`7.3Ti` human-readable 磁盘单位。
 - [ ] `macos-nas-control` 新 formatter 尚未通过 LangBot plugin API 安装：当前 shell 没有 `LANGBOT_API_KEY` / `--api-key-file`，禁止直接改运行时 plugin 目录；恢复仓库外 credential 后执行 `./scripts/deploy-langbot.sh --apply --plugin macos-nas-control --api-key-file <external-file>`。
 
 ## Codex Global Completion Notification Bridge（DEPLOYED / VERIFIED）
