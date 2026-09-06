@@ -2,6 +2,12 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## PUBG 对局复盘 V1（SOURCE COMPLETE：2026-09-06）
+
+已基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 Match API/Telemetry 完成复盘报告 V1 source implementation：新增 `telemetry-parser-5`、`review-features-5` supplemental facts（电击枪、恢复/能量、搜包、载具仓库、门窗翻越、护甲破坏、载具攻击链），丰富 deterministic review story/turning points/action plan，接入中文地图名、武器信息、逐人队友误伤和趣味组合；圈阶段/白圈未进入 presentation。显式 UUID Match ID 复盘已接入 planner、match selector、n8n source workflow 和插件 fallback。LangBot `pubg-stats` source manifest 为 `3.3.0`。
+
+本阶段验证：runtime 130 tests（129 pass、1 skip）、PUBG plugin 13 Python tests、typecheck、build、local runtime smoke、n8n workflow tests、plugin dry-run、secret scan、diff check 全部通过。当前未 build/deploy CasaOS runtime image，未调用 LangBot API 安装；后续如需上线，执行 `.agent/tasks/pubg-review-v1-deployment.md` 中的显式 RELEASE 流程。checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-implementation.md`。 Source commit：`fb6000a`。
+
 ## HomeHub V1.2 follow-up（2026-09-06）
 
 最新 follow-up 已完成：HomeHub status 磁盘显示已用/总量/可用/百分比；Telegram 历史 `BadRequest: can't find end of precode entity` 已通过 outbound plain-text fallback 修复。新 runtime image 为 `local/pubg-query-engine-v3:git-7df513bdcd27`，LangBot patch image 为 `local/langbot-agent:7df513bdcd27-20260906-183935`，live `/status`、Docker smoke、active patch source 检查通过。checkpoint：`.agent/checkpoints/2026-09-06-homehub-v1.2-disk-telegram-followup.md`。

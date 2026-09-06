@@ -2,6 +2,23 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## PUBG 对局复盘 V1（SOURCE COMPLETE；实际 runtime/plugin 部署待 RELEASE）
+
+更新时间：2026-09-06（Asia/Shanghai）
+
+已将比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 PUBG API/Telemetry 调试结果固化为第一版复盘实现：
+
+- `match_id` 可被确定性 planner 直接识别并选择，不受默认相对日期过滤影响；n8n V3 data gateway 已同步支持显式 Match ID。
+- Telemetry parser/review feature 版本为 `telemetry-parser-5` / `review-features-5`，新增电击枪结果状态、恢复/能量物品次数、死亡盒搜包、载具仓库存取、门窗翻越、护甲破坏和载具攻击链。
+- Presentation 使用中文地图名（`Neon_Main -> 荣都`），不展示圈阶段/白圈；武器信息、队友逐人误伤、战局走势和下一局行动建议已接入。
+- 组合事件包含双向互殴、误伤三件套、开团到收割、高伤害未收口、一炮四轮、破甲后倒地/击杀。
+- 配置队员缺少 Match API participant 记录时标为 `not_recorded`，避免把缺失数据渲染为 0 贡献。
+- LangBot `pubg-stats` source manifest 已升级为 `3.3.0`；本地 `.lbpkg` 构建与 dry-run 通过。
+- 验证：runtime 130 项测试（129 pass、1 skip）、PUBG plugin 13 项 Python tests、typecheck、build、local runtime smoke、workflow tests、secret scan、diff check 全部通过。
+- 尚未执行 CasaOS runtime 镜像构建、n8n 在线 workflow 导入或 LangBot API 安装；保持现有生产 runtime/plugin 不变，待显式 RELEASE。
+
+源码 checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-implementation.md`。
+
 ## HomeHub V1.2 implementation（SOURCE COMPLETE；实际部署待执行）
 
 截至 2026-09-06，V1.2 源码实现与本地验证已完成，实际 CasaOS/LangBot/macOS agent 部署仍待当前阶段的 RELEASE 操作：
@@ -221,8 +238,8 @@ file：`/DATA/AppData/pubg-query-engine-v3/admin-identity.env`。回滚 compose 
 | LangBot | langbot + langbot_plugin_runtime，镜像 local/langbot-agent:1adbc1d-whoami-display-20260905，兼容 LangBot 4.10.8 定制镜像 |
 | 9router | 9router running；`/api/health` 可用；LangBot provider key 已与当前 active API key 同步，`/v1/models` 验证通过 |
 | Mastra/PUBG runtime | pubg-query-engine-v3，镜像 local/pubg-query-engine-v3:3.3.4-admin-03b0e41，healthy，端口 5310 |
-| Telemetry | 嵌入 runtime，parser telemetry-parser-4 |
-| Review | feature version review-features-4 |
+| Telemetry | 嵌入 runtime，parser telemetry-parser-5 |
+| Review | feature version review-features-5 |
 | n8n | n8n running，主机端口 5679 |
 | n8n sandbox | compose 已存在，TLS/data 在 /DATA/AppData/n8n-sandbox |
 | Postgres / Redis | 当前 Ubuntu 可观察到共享服务；n8n 是否使用 Postgres 需以恢复后的 env 和连接测试为准 |

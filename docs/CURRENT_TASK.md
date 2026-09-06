@@ -2,6 +2,25 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## PUBG 对局复盘 V1（SOURCE COMPLETE；实际 runtime/plugin 部署待 RELEASE）
+
+更新时间：2026-09-06（Asia/Shanghai）
+
+基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 PUBG Match API 与 Telemetry 调试，已完成第一版可迁移复盘报告实现：
+
+- [x] `match_id` 直接复盘选择器：指定 Match ID 不再被默认“今天”时间选择器隐藏过滤；n8n data gateway source 同步支持该选择器。
+- [x] Telemetry parser 从 `telemetry-parser-4/review-features-4` 升级为 `telemetry-parser-5/review-features-5`，新增结构化电击枪、恢复/能量、搜包、载具仓库、环境互动、护甲破坏和载具攻击链 facts。
+- [x] 复盘报告新增战局主线、转折点、武器信息、队友互动/误伤、恢复物品和能量次数、搜包与物资搬运、开门/破窗/翻越、载具攻击组合等 section；未输出圈阶段/白圈内容。
+- [x] 队友拳击按攻击者/被攻击者分别统计；电击枪区分拾取、开火、确认命中和未知结果，不把开火记录伪装成命中。
+- [x] 趣味组合新增双向互殴、误伤三件套、开团到收割、高伤害未收口、一炮四轮、破甲后倒地/击杀等证据链。
+- [x] Match Store 缺失队员标记为 `not_recorded`，不再渲染为确定的 0 贡献；地图 `Neon_Main` 在展示层显示为“荣都”。
+- [x] LangBot PUBG plugin source 版本升级为 `3.3.0`，tool/command/listener 文案同步；`.lbpkg` 构建和 `deploy-langbot.sh --dry-run` 通过。
+- [x] 130 项 runtime tests 中 129 pass、1 skip；plugin tests 13 pass；typecheck/build、runtime smoke、workflow tests、secret scan、diff check 通过。
+- [ ] 尚未执行 CasaOS runtime image build、n8n 在线 workflow 导入或 LangBot API plugin 安装；需用户显式要求 RELEASE/部署后执行。
+
+源码阶段 checkpoint：`.agent/checkpoints/2026-09-06-pubg-review-v1-implementation.md`。
+Source commit：`fb6000a`。
+
 ## HomeHub V1.2 implementation（SOURCE COMPLETE；实际部署待执行）
 
 截至 2026-09-06，V1.2 源码实现与本地验证已完成，实际 CasaOS/LangBot/macOS agent 部署仍待当前阶段的 RELEASE 操作：
