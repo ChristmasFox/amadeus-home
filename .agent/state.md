@@ -9,7 +9,7 @@ confirmation buttons/callback ownership/replay/expiry/text fallback、MacHostAge
 host metrics、label-based Service Registry mapping、new grouped `/status` formatter and health semantics。
 本地 runtime 125 pass / 1 skip，MacHostAgent Python tests、plugin tests、secret scan 和 diff check 通过。
 2026-09-06 已完成实际部署：Mac launchd agent、runtime image `local/pubg-query-engine-v3:git-6a59a544bacf`、
-patched LangBot image `local/langbot-agent:99759f5687c6-20260906-152251` 与三个 plugin API installs 已就绪。
+patched LangBot image `local/langbot-agent:415b6ea002d1-20260906-153202` 与三个 plugin API installs 已就绪。
 真实 `/status` 返回 8 healthy / 4 degraded / 1 unhealthy / 1 down / 0 unknown，并取得真实 macOS 指标；
 private/group identity、button ownership/cancel、text route 和 aria2 text confirmation smoke 已通过。部署 rollback
 与 compose backup 记录在 `.agent/checkpoints/2026-09-06-homehub-v1.2-deployment.md`。
@@ -66,7 +66,7 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - Codex notify bridge runtime secret files：`~/.codex/secrets/codex-notify-secret` 与
   `/DATA/AppData/n8n/secrets/codex-notify-secret`；值不入 Git、不在日志输出。
 - 当前 HomeHub runtime image：`local/pubg-query-engine-v3:git-1b52d2c89f3e`，Docker socket smoke、真实 `/status` 和
-  macOS-only UNKNOWN diagnosis smoke 已通过；LangBot patched image 为 `local/langbot-agent:5a051b8756c4-20260906-132959`。
+  macOS-only UNKNOWN diagnosis smoke 已通过；LangBot patched image 为 `local/langbot-agent:415b6ea002d1-20260906-153202`。
 - 2026-09-06 快速 bug fixes 已提交（`806ab63`、`1b52d2c`、`5a051b8`）：KD 展示统一 1 位小数且零死亡不显示∞，真实「最近20场」smoke 返回 `1.5 / 0.9 / 0.7 / 0.4` 与合计 `1.0`，NAS status V2 已部署到外部 forced command，Telegram `<think>` outbound/streaming filter 已激活并通过 live helper smoke，HomeHub host CPU/内存继续 UNKNOWN 但不再显示原始 executor 错误。macos-nas-control v0.1.3 已通过 LangBot Plugin API 安装并在 active plugin runtime 中完成真实 NAS formatter smoke；credential 仍在仓库外。随后发现 macOS APFS 根卷 `df` snapshot Used 与整盘容量不一致，已在 Git source 升级 formatter/forced-command 至 `0.1.4`，并完成 LangBot Plugin API task `19` 重新安装；active plugin runtime 真实 smoke 显示系统盘约 `424GiB / 460GiB`、`92.1%`，uptime 和电源均为中文。
 
 ## 最近完成
