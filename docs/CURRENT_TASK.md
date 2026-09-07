@@ -16,10 +16,10 @@
 - [x] 21 项 Product Radar TypeScript tests、Python plugin tests、typecheck/build、Compose config、LangBot dry-run、secret scan 通过。
 - [x] Bunjang Product smoke（2026-09-07）：公开商品 `418123655` 返回标题、₩1,400,000、ACTIVE、2 张图片和卖家 `4771473/기미히끼잉잉`；SQLite snapshot baseline 建立，baseline notifications 为 0。
 - [x] Bunjang Seller smoke（2026-09-07）：公开卖家 `4771473` 通过 Bunjang shop search endpoint 取得 5 条当前 listings；SQLite seller baseline 建立，baseline notifications 为 0；未登录、未使用代理池或反爬绕过。
-- [x] 已执行显式 RELEASE：Product Radar 与 changedetection 已部署到 OrbStack `ubuntu`/CasaOS；LangBot Product Radar plugin 已通过 API 安装并达到 `INSTALL_READY` task `24`；修正 listener manifest 后重新安装为 task `32`，Command 与 EventListener 均已加载。
+- [x] 已执行显式 RELEASE：Product Radar 与 changedetection 已部署到 OrbStack `ubuntu`/CasaOS；LangBot Product Radar plugin 已通过 API 安装并达到 `INSTALL_READY` task `24`；修正 listener manifest 后重新安装为 task `32`，Command 与 EventListener 均已加载；最新 task `35` 增加了使用现有 PUBG renderer marker 的按钮渲染、无 token 确认和停止监控。
 - [x] Product Radar `/health` HTTP 200、changedetection API HTTP 200、Seller/Product preview HTTP 200；未创建测试 Watch，未向真实 Telegram/KOOK 发送测试垃圾消息。
 
-实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`；部署 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-deployment.md`；实现 commits：`83c3557`、`ed394e9`、`380f132`、`efbf19e`。
+实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`；部署 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-deployment.md`；实现 commits：`83c3557`、`ed394e9`、`380f132`、`efbf19e`、`53d1b84`。
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 

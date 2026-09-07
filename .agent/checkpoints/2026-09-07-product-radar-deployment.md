@@ -62,3 +62,16 @@ reports both `Command` and `EventListener` components for `product-radar`.
 The deployed Product Radar and changedetection containers remained healthy. The
 user should resend the natural-language request; no Watch or test notification was
 created by the diagnostic work.
+
+## Post-deployment interaction fix
+
+The first preview worked but the Telegram inline keyboard did not render because
+the active LangBot image only consumed the existing PUBG marker. Commit `53d1b84`
+updated the Product Radar bridge to use that existing renderer marker and added
+plain `确认监控` / `取消` handling scoped to the pending conversation. It also
+sets natural-language watches to `intervalSeconds=120` and adds `停止监控` /
+`停止这个商品 <URL>` controls that PATCH the Watch to `enabled=false`.
+
+LangBot plugin reinstall task `35` reached `INSTALL_READY`; the API reports both
+`Command` and `EventListener` components. No test Watch or real platform
+notification was created by this fix.
