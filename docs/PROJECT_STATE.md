@@ -381,7 +381,7 @@ Meta WhatsApp Cloud API 接入工作已暂停，原因和计划详见 docs/DECIS
 
 ## Product Radar V0.1（2026-09-07）
 
-Product Radar source implementation is complete in commits `83c3557` and `ed394e9`, separately from the existing
+Product Radar source implementation is complete in commits `83c3557`, `ed394e9`, and `efbf19e`, separately from the existing
 agent-runtime. It is a standalone Node service at `apps/product-radar`, with SQLite persistence,
 generic source/sensor ports, deterministic matching/diffing, and LangBot private notification
 channels. Bunjang is the first adapter; the 2026-09-07 smoke successfully fetched five public
@@ -398,4 +398,4 @@ Evidence:
 - Local runtime `/api/sources` returned Bunjang capabilities; `/health` correctly reported `degraded` with HTTP 503 while changedetection was intentionally absent.
 - Product smoke persisted one baseline snapshot and emitted zero events/notifications. Seller smoke persisted five baseline listings and emitted zero events/notifications.
 
-Product Radar was deployed through the explicit RELEASE path to `/var/lib/casaos/apps/product-radar/docker-compose.yml` on OrbStack `ubuntu`. The immutable Product Radar image is `local/product-radar:git-dd80fb7a606d`; the changedetection service is healthy and has persistent `/DATA/AppData/changedetection/datastore` storage. LangBot Product Radar plugin install task `24` reached `INSTALL_READY`. Product Radar and changedetection preview checks passed; no real Telegram/KOOK test notification was sent.
+Product Radar was deployed through the explicit RELEASE path to `/var/lib/casaos/apps/product-radar/docker-compose.yml` on OrbStack `ubuntu`. The immutable Product Radar image is `local/product-radar:git-dd80fb7a606d`; the changedetection service is healthy and has persistent `/DATA/AppData/changedetection/datastore` storage. LangBot Product Radar plugin install task `24` reached `INSTALL_READY`; after adding the missing EventListener `spec: {}` manifest block, reinstall task `32` reached `INSTALL_READY` and both Command/EventListener components loaded. Product Radar and changedetection preview checks passed; no real Telegram/KOOK test notification was sent.

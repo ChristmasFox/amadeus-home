@@ -51,3 +51,14 @@ orb -m ubuntu -u root bash -lc \
 Do not remove `/DATA/AppData/product-radar` or
 `/DATA/AppData/changedetection/datastore` during a rollback unless data deletion
 is explicitly requested.
+
+## Post-deployment listener fix
+
+The first installed plugin task `24` exposed only the Command component because the
+Product Radar EventListener YAML lacked `spec: {}`. Commit `efbf19e` added the
+manifest field. Reinstall task `32` reached `INSTALL_READY`; the LangBot API now
+reports both `Command` and `EventListener` components for `product-radar`.
+
+The deployed Product Radar and changedetection containers remained healthy. The
+user should resend the natural-language request; no Watch or test notification was
+created by the diagnostic work.
