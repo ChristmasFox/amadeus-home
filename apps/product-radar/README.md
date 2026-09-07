@@ -66,3 +66,20 @@ A changedetection notification is accepted at
 `POST /api/sensors/changedetection/webhook` with `radarWatchId` and
 `sensorWatchId`. The service deliberately ignores the sensor diff content and
 refetches the source before creating an event.
+
+## V0.2 image similarity watch
+
+V0.2 accepts an image attachment through the LangBot plugin and creates a
+`similarity` watch. It queries the Bunjang public keyword feed (default Korean
+clothing query `의류`, up to 60 newest candidates), downloads candidate images,
+and compares them with a persisted deterministic perceptual feature vector.
+The initial threshold is `0.60`; this is a visual similarity score, not a
+claim of exact product identity. Existing candidates are a silent baseline;
+only newly seen candidates at or above the threshold create
+`SimilarListingMatchedEvent`.
+
+The reference image is persisted as a feature under the Product Radar data
+volume, so a temporary Telegram image URL is not required after creation.
+Current V0.2 intentionally uses a lightweight perceptual matcher rather than a
+large semantic CLIP model. The `ImageMatcher` port leaves room for a local
+CLIP/SigLIP provider after threshold calibration.

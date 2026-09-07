@@ -74,6 +74,22 @@ export function formatNotification(event: RadarEvent, sourceDisplayName: string)
       ...(listing?.url ? ['', `查看商品：${listing.url}`] : []),
     ].join('\n');
   }
+  if (event.type === 'SimilarListingMatchedEvent') {
+    const listing = event.after as Listing;
+    const similarity = Number((event.payload as { similarity?: number }).similarity ?? 0);
+    const threshold = Number((event.payload as { threshold?: number }).threshold ?? 0.6);
+    return [
+      `🖼️ ${sourceDisplayName} 相似商品`,
+      '',
+      listing.title,
+      formatPrice(listing.price),
+      '',
+      `相似度：${(similarity * 100).toFixed(1)}%（阈值 ${(threshold * 100).toFixed(0)}%）`,
+      ...(listing.seller ? [`卖家：${listingSeller(listing)}`] : []),
+      '',
+      `查看商品：${listing.url}`,
+    ].join('\n');
+  }
   const listing = event.after as Listing;
   const fields = Array.isArray(event.payload.fields) ? event.payload.fields.join('、') : '商品信息';
   return [

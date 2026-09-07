@@ -1,17 +1,16 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { RadarError, SensorUnavailableError, SourceFetchError } from './errors.js';
-import type { Listing } from './listing/model.js';
+import type { Listing, ProductStatus } from './listing/model.js';
 import type { RadarEvent } from './events/events.js';
 import { detectProductChanges, hasMeaningfulProductDiff, productStateFingerprint } from './detection/comparator.js';
 import { matchListing } from './matching/matcher.js';
+import type { ImageMatcher, ImageSource } from './matching/image.js';
 import { NotificationDispatcher } from './notification/dispatcher.js';
-import type { SensorClient } from '../sensors/sensor.js';
+import type { SensorClient, SensorWatch } from '../sensors/sensor.js';
 import type { SqliteRadarStore } from '../storage/sqlite.js';
 import { SourceAdapterRegistry, type ListingSourceAdapter, type ValidatedTarget } from '../sources/registry.js';
-import { isSellerRules, type ImplementedWatchType, type Watch, type WatchTarget } from './watch/model.js';
+import { isSellerRules, isSimilarityRules, type ImplementedWatchType, type Watch, type WatchTarget } from './watch/model.js';
 import { applyWatchPatch, parseWatchCreateInput, parseWatchPatch } from './watch/validation.js';
-import type { SensorWatch } from '../sensors/sensor.js';
-import type { ProductStatus } from './listing/model.js';
 
 export interface RadarServiceOptions {
   store: SqliteRadarStore;
@@ -19,6 +18,7 @@ export interface RadarServiceOptions {
   sensor: SensorClient;
   notifications: NotificationDispatcher;
   webhookUrl: string;
+  imageMatcher?: ImageMatcher;
   now?: () => string;
 }
 
@@ -93,6 +93,19 @@ function statusOrNull(value: ProductStatus | undefined): ProductStatus | null {
   return value ?? null;
 }
 
+function referenceInput(target: WatchTarget): ImageSource {
+  const base64 = typeof target.referenceImageBase64 === 'string' && target.referenceImageBase64.trim() ? target.referenceImageBase64 : undefined;
+  const url = typeof target.referenceImageUrl === 'string' && target.referenceImageUrl.trim() ? target.referenceImageUrl : undefined;
+  if (base64 !== undefined) return { base64 };
+  if (url !== undefined) return { url };
+  throw new RadarError('similarity watch requires a reference image', 'INVALID_REFERENCE_IMAGE', 400);
+}
+
+function persistedSimilarityTarget(target: ValidatedTarget, referenceId: string): WatchTarget {
+  const { referenceImageBase64: _referenceImageBase64, referenceImageUrl: _referenceImageUrl, ...withoutInput } = target;
+  return { ...withoutInput, referenceImageId: referenceId };
+}
+
 export class ProductRadarService {
   private readonly now: () => string;
   private readonly store: SqliteRadarStore;
@@ -100,6 +113,7 @@ export class ProductRadarService {
   private readonly sensor: SensorClient;
   private readonly notifications: NotificationDispatcher;
   private readonly webhookUrl: string;
+  private readonly imageMatcher: ImageMatcher | undefined;
 
   constructor(options: RadarServiceOptions) {
     this.store = options.store;
@@ -107,6 +121,7 @@ export class ProductRadarService {
     this.sensor = options.sensor;
     this.notifications = options.notifications;
     this.webhookUrl = options.webhookUrl;
+    this.imageMatcher = options.imageMatcher;
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -122,9 +137,31 @@ export class ProductRadarService {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);
     this.sources.requireCapability(adapter, parsed.type);
-    const target = await adapter.validateTarget(parsed.type, parsed.target);
-    const normalized = await this.fetchNormalized(adapter, parsed.type, target);
+    const validatedTarget = await adapter.validateTarget(parsed.type, parsed.target);
+    const fetchTarget = parsed.type === 'similarity'
+      ? { ...validatedTarget, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit }
+      : validatedTarget;
+    const target = parsed.type === 'similarity'
+      ? await this.prepareSimilarityTarget(fetchTarget)
+      : validatedTarget;
+    const normalized = await this.fetchNormalized(adapter, parsed.type, fetchTarget);
     const first = normalized[0];
+    if (parsed.type === 'similarity') {
+      const scores = await this.scoreSimilarity(target.referenceImageId ?? '', normalized, parsed.rules as { similarityThreshold: number; candidateLimit: number });
+      return {
+        source: adapter.id,
+        sourceDisplayName: adapter.displayName,
+        type: parsed.type,
+        target: this.publicTarget(target),
+        rules: parsed.rules,
+        baselineCount: normalized.length,
+        similarity: {
+          threshold: (parsed.rules as { similarityThreshold: number }).similarityThreshold,
+          candidateCount: normalized.length,
+          topMatches: scores.slice(0, 5),
+        },
+      };
+    }
     return {
       source: adapter.id,
       sourceDisplayName: adapter.displayName,
@@ -133,7 +170,7 @@ export class ProductRadarService {
       rules: parsed.rules,
       baselineCount: normalized.length,
       ...(parsed.type === 'seller'
-        ? { seller: first?.seller ?? { externalId: target.externalId, url: target.url }, listings: normalized.slice(0, 10) }
+        ? { seller: first?.seller ?? { externalId: validatedTarget.externalId, url: validatedTarget.url }, listings: normalized.slice(0, 10) }
         : { product: first }),
     };
   }
@@ -142,7 +179,12 @@ export class ProductRadarService {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);
     this.sources.requireCapability(adapter, parsed.type);
-    const target = await adapter.validateTarget(parsed.type, parsed.target);
+    const validatedTarget = await adapter.validateTarget(parsed.type, parsed.target);
+    const fetchTarget = parsed.type === 'similarity'
+      ? { ...validatedTarget, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit }
+      : validatedTarget;
+    let persistedTarget: WatchTarget = validatedTarget;
+    if (parsed.type === 'similarity') persistedTarget = await this.prepareSimilarityTarget(fetchTarget);
     const id = parsed.id ?? randomUUID();
     if (this.store.getWatch(id)) throw new RadarError(`watch already exists: ${id}`, 'CONFLICT', 409);
     const now = this.now();
@@ -150,30 +192,29 @@ export class ProductRadarService {
       id,
       source: adapter.id,
       type: parsed.type,
-      target,
+      target: persistedTarget,
       rules: parsed.rules,
       enabled: parsed.enabled ?? true,
       intervalSeconds: parsed.intervalSeconds,
       createdAt: now,
       updatedAt: now,
     };
-    const baseline = await this.fetchNormalized(adapter, watch.type, target);
+    const baseline = await this.fetchNormalized(adapter, watch.type, fetchTarget);
     let sensorWatch: SensorWatch | undefined;
     try {
       sensorWatch = await this.sensor.createWatch({
         radarWatchId: watch.id,
-        url: target.url,
-        title: `${adapter.displayName} ${watch.type} watch ${target.externalId}`,
+        url: validatedTarget.url,
+        title: `${adapter.displayName} ${watch.type} watch ${validatedTarget.externalId}`,
         intervalSeconds: watch.intervalSeconds,
         webhookUrl: this.webhookUrl,
       });
-      const createdSensorWatch = sensorWatch;
-      if (!watch.enabled) await this.sensor.pauseWatch(createdSensorWatch.id);
-      const persistedWatch: Watch = { ...watch, sensorId: createdSensorWatch.id };
+      if (!watch.enabled) await this.sensor.pauseWatch(sensorWatch.id);
+      const persistedWatch: Watch = { ...watch, sensorId: sensorWatch.id };
       this.store.transaction(() => {
         this.store.createWatch(persistedWatch);
-        this.store.upsertSensorWatch(persistedWatch.id, createdSensorWatch.id, this.sensor.id, target.url, persistedWatch.enabled ? 'active' : 'paused', now);
-        if (watch.type === 'seller') {
+        this.store.upsertSensorWatch(persistedWatch.id, sensorWatch!.id, this.sensor.id, validatedTarget.url, persistedWatch.enabled ? 'active' : 'paused', now);
+        if (watch.type === 'seller' || watch.type === 'similarity') {
           for (const listing of baseline) {
             this.store.upsertListing(listing);
             this.store.recordSeenListing(watch.id, listing, now, true, false);
@@ -245,11 +286,16 @@ export class ProductRadarService {
     if (!pollRun) return { watchId: id, status: 'duplicate', triggerKey, newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
     try {
       const adapter = this.sources.require(watch.source);
-      const target = await adapter.validateTarget(watch.type, watch.target);
+      const validatedTarget = await adapter.validateTarget(watch.type, watch.target);
+      const target = watch.type === 'similarity' && isSimilarityRules(watch.rules)
+        ? { ...validatedTarget, candidateLimit: watch.rules.candidateLimit }
+        : validatedTarget;
       const normalized = await this.fetchNormalized(adapter, watch.type, target);
       const result = watch.type === 'seller'
         ? await this.processSellerWatch(watch, normalized)
-        : await this.processProductWatch(watch, normalized[0]);
+        : watch.type === 'similarity'
+          ? await this.processSimilarityWatch(watch, normalized)
+          : await this.processProductWatch(watch, normalized[0]);
       this.store.finishPollRun(pollRun.id, 'succeeded', this.now(), { listingsCount: normalized.length, changesCount: result.changes });
       await this.notifications.deliverPending();
       return { ...result, watchId: id, status: 'succeeded', triggerKey };
@@ -274,8 +320,6 @@ export class ProductRadarService {
       const result = await this.runWatch(radarWatchId, triggerKey);
       return { accepted: true, ...result };
     } catch (error) {
-      // A source fetch failure is recorded in poll_runs and intentionally does
-      // not turn a sensor diff into a notification or a false state change.
       return {
         accepted: true,
         radarWatchId,
@@ -286,21 +330,45 @@ export class ProductRadarService {
     }
   }
 
+  private async prepareSimilarityTarget(target: ValidatedTarget): Promise<ValidatedTarget> {
+    if (!this.imageMatcher) throw new RadarError('image matcher is unavailable', 'IMAGE_MATCHER_UNAVAILABLE', 503);
+    let reference;
+    try {
+      reference = await this.imageMatcher.prepareReference(referenceInput(target));
+    } catch (error) {
+      throw new RadarError(`reference image could not be prepared: ${error instanceof Error ? error.message : String(error)}`, 'INVALID_REFERENCE_IMAGE', 400);
+    }
+    return { ...persistedSimilarityTarget(target, reference.id), externalId: target.externalId, url: target.url } as ValidatedTarget;
+  }
+
+  private publicTarget(target: WatchTarget): WatchTarget {
+    const { referenceImageBase64: _referenceImageBase64, referenceImageUrl: _referenceImageUrl, ...publicTarget } = target;
+    return publicTarget;
+  }
+
+  private async scoreSimilarity(referenceId: string, listings: Listing[], rules: { similarityThreshold: number; candidateLimit: number }): Promise<Array<{ externalId: string; title: string; url: string; score: number; bestImageUrl?: string }>> {
+    if (!this.imageMatcher || !referenceId) throw new RadarError('image matcher reference is unavailable', 'IMAGE_MATCHER_UNAVAILABLE', 503);
+    const scores: Array<{ externalId: string; title: string; url: string; score: number; bestImageUrl?: string }> = [];
+    for (const listing of listings.slice(0, rules.candidateLimit)) {
+      try {
+        const result = await this.imageMatcher.match(referenceId, listing.imageUrls);
+        scores.push({ externalId: listing.externalId, title: listing.title, url: listing.url, score: result.score, ...(result.bestImageUrl === undefined ? {} : { bestImageUrl: result.bestImageUrl }) });
+      } catch {
+        // Candidate image failures are not a reason to reject the complete preview.
+      }
+    }
+    return scores.sort((a, b) => b.score - a.score);
+  }
+
   private async fetchNormalized(adapter: ListingSourceAdapter, type: ImplementedWatchType, target: ValidatedTarget): Promise<Listing[]> {
     try {
       if (type === 'seller') {
         const rawListings = await adapter.fetchSellerListings(target);
-        const result: Listing[] = [];
-        const seen = new Set<string>();
-        for (const raw of rawListings) {
-          const listing = ensureListing(adapter.normalizeListing(raw, { target }), adapter.id);
-          const identity = `${listing.source}:${listing.externalId}`;
-          if (!seen.has(identity)) {
-            result.push(listing);
-            seen.add(identity);
-          }
-        }
-        return result;
+        return this.normalizeListingCollection(adapter, rawListings, target);
+      }
+      if (type === 'similarity') {
+        const rawListings = await adapter.fetchSearchListings(target);
+        return this.normalizeListingCollection(adapter, rawListings, target);
       }
       const raw = await adapter.fetchProduct(target);
       return [ensureListing(adapter.normalizeProductState(raw, { target }), adapter.id, target.externalId)];
@@ -308,6 +376,20 @@ export class ProductRadarService {
       if (error instanceof RadarError) throw error;
       throw new SourceFetchError(`source ${adapter.id} fetch failed: ${error instanceof Error ? error.message : String(error)}`, { source: adapter.id });
     }
+  }
+
+  private normalizeListingCollection(adapter: ListingSourceAdapter, rawListings: unknown[], target: ValidatedTarget): Listing[] {
+    const result: Listing[] = [];
+    const seen = new Set<string>();
+    for (const raw of rawListings) {
+      const listing = ensureListing(adapter.normalizeListing(raw, { target }), adapter.id);
+      const identity = `${listing.source}:${listing.externalId}`;
+      if (!seen.has(identity)) {
+        result.push(listing);
+        seen.add(identity);
+      }
+    }
+    return result;
   }
 
   private async processSellerWatch(watch: Watch, listings: Listing[]): Promise<Omit<WatchRunResult, 'watchId' | 'status' | 'triggerKey'>> {
@@ -344,6 +426,53 @@ export class ProductRadarService {
     return { newListings, matchedListings, changes: newListings, eventIds };
   }
 
+  private async processSimilarityWatch(watch: Watch, listings: Listing[]): Promise<Omit<WatchRunResult, 'watchId' | 'status' | 'triggerKey'>> {
+    if (!isSimilarityRules(watch.rules)) throw new RadarError('similarity watch has invalid rules', 'INVALID_STATE', 500);
+    const referenceId = typeof watch.target.referenceImageId === 'string' ? watch.target.referenceImageId : '';
+    if (!this.imageMatcher || !referenceId) throw new RadarError('similarity watch reference is unavailable', 'IMAGE_MATCHER_UNAVAILABLE', 503);
+    let newListings = 0;
+    let matchedListings = 0;
+    const eventIds: string[] = [];
+    for (const listing of listings.slice(0, watch.rules.candidateLimit)) {
+      this.store.upsertListing(listing);
+      const isNew = this.store.recordSeenListing(watch.id, listing, this.now(), false, false);
+      if (!isNew) continue;
+      newListings += 1;
+      let result;
+      try {
+        result = await this.imageMatcher.match(referenceId, listing.imageUrls);
+      } catch {
+        continue;
+      }
+      const matched = result.comparedImages > 0 && result.score >= watch.rules.similarityThreshold;
+      this.store.recordSimilarityMatch(watch.id, listing, result.score, result.bestImageUrl, matched, this.now());
+      if (!matched) continue;
+      matchedListings += 1;
+      this.store.markSeenMatched(watch.id, listing);
+      const eventKey = `${watch.id}:SimilarListingMatchedEvent:${listing.source}:${listing.externalId}`;
+      const event: RadarEvent = {
+        id: eventKey,
+        eventKey,
+        watchId: watch.id,
+        source: listing.source,
+        type: 'SimilarListingMatchedEvent',
+        occurredAt: this.now(),
+        before: null,
+        after: listing,
+        payload: {
+          similarity: result.score,
+          threshold: watch.rules.similarityThreshold,
+          ...(result.bestImageUrl === undefined ? {} : { bestImageUrl: result.bestImageUrl }),
+        },
+      };
+      if (this.store.insertEvent(event)) {
+        eventIds.push(event.id);
+        await this.notifications.dispatch(event);
+      }
+    }
+    return { newListings, matchedListings, changes: newListings, eventIds };
+  }
+
   private async processProductWatch(watch: Watch, after: Listing | undefined): Promise<Omit<WatchRunResult, 'watchId' | 'status' | 'triggerKey'>> {
     if (!after) throw new SourceFetchError('product source returned no state');
     const beforeSnapshot = this.store.getLatestProductSnapshot(watch.id);
@@ -354,9 +483,8 @@ export class ProductRadarService {
       return { newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
     }
     this.store.insertProductSnapshot(watch.id, after, fingerprint, this.now(), false);
-    const rules = watch.rules;
-    if (!('trackPrice' in rules)) throw new RadarError('product watch has invalid rules', 'INVALID_STATE', 500);
-    const diff = detectProductChanges(beforeSnapshot.state, after, rules);
+    if (!('trackPrice' in watch.rules)) throw new RadarError('product watch has invalid rules', 'INVALID_STATE', 500);
+    const diff = detectProductChanges(beforeSnapshot.state, after, watch.rules);
     if (!hasMeaningfulProductDiff(diff)) return { newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
     const eventIds: string[] = [];
     const base = `${watch.id}:${after.source}:${after.externalId}`;

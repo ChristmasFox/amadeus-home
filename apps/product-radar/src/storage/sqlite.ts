@@ -158,6 +158,19 @@ export class SqliteRadarStore {
       );
       CREATE INDEX IF NOT EXISTS idx_product_snapshots_latest ON product_snapshots(watch_id, id DESC);
 
+      CREATE TABLE IF NOT EXISTS similarity_matches (
+        watch_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        score REAL NOT NULL,
+        best_image_url TEXT,
+        matched INTEGER NOT NULL DEFAULT 0,
+        evaluated_at TEXT NOT NULL,
+        PRIMARY KEY(watch_id, source, external_id),
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_similarity_matches_watch ON similarity_matches(watch_id, score DESC);
+
       CREATE TABLE IF NOT EXISTS sensor_watches (
         radar_watch_id TEXT PRIMARY KEY,
         sensor_id TEXT NOT NULL UNIQUE,
@@ -352,6 +365,29 @@ export class SqliteRadarStore {
     };
   }
 
+  recordSimilarityMatch(watchId: string, listing: Pick<Listing, 'source' | 'externalId'>, score: number, bestImageUrl: string | undefined, matched: boolean, evaluatedAt: string): void {
+    this.db.prepare(`INSERT INTO similarity_matches
+      (watch_id, source, external_id, score, best_image_url, matched, evaluated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(watch_id, source, external_id) DO UPDATE SET
+        score = excluded.score,
+        best_image_url = excluded.best_image_url,
+        matched = excluded.matched,
+        evaluated_at = excluded.evaluated_at`)
+      .run(watchId, listing.source, listing.externalId, score, bestImageUrl ?? null, matched ? 1 : 0, evaluatedAt);
+  }
+
+  getSimilarityMatch(watchId: string, source: string, externalId: string): { score: number; bestImageUrl?: string; matched: boolean; evaluatedAt: string } | undefined {
+    const row = this.db.prepare('SELECT * FROM similarity_matches WHERE watch_id = ? AND source = ? AND external_id = ?').get(watchId, source, externalId);
+    if (!row) return undefined;
+    return {
+      score: Number(row.score),
+      ...(optionalString(row.best_image_url) === undefined ? {} : { bestImageUrl: String(row.best_image_url) }),
+      matched: bool(row.matched),
+      evaluatedAt: String(row.evaluated_at),
+    };
+  }
+
   upsertSensorWatch(radarWatchId: string, sensorId: string, sensorType: string, sensorUrl: string, state: string, now: string): void {
     this.db.prepare(`INSERT INTO sensor_watches
       (radar_watch_id, sensor_id, sensor_type, sensor_url, state, created_at, updated_at)
@@ -466,7 +502,7 @@ export class SqliteRadarStore {
   }
 
   tableCounts(): Record<string, number> {
-    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs'];
+    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'similarity_matches', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs'];
     return Object.fromEntries(names.map((name) => [name, Number(this.db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).get()?.count ?? 0)]));
   }
 

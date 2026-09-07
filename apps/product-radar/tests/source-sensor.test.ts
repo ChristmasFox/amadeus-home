@@ -59,6 +59,17 @@ test('Bunjang seller adapter uses the public shop search response and normalizes
   assert.equal(normalized.imageUrls[0], 'https://media.bunjang.co.kr/product/99_1_w600.jpg');
 });
 
+test('Bunjang similarity target uses the keyword search feed and keeps image data source-agnostic', async () => {
+  const adapter = new BunjangSourceAdapter({ fetchImpl: async () => response({ data: { responses: { mainGrid: { searchResponse: { data: [{ pid: 101, name: 'hoodie', price: 120000, status: 'SELLING', productImage: 'https://media.bunjang.co.kr/product/101_1_w{res}.jpg', shop: { uid: 7 } }], totalCount: 1 } } } } }) });
+  const target = await adapter.validateTarget('similarity', { referenceImageUrl: 'https://image.test/reference.jpg', searchQuery: '후드티' });
+  assert.equal(target.externalId, 'search:후드티');
+  assert.equal(target.searchUrl, 'https://m.bunjang.co.kr/keywords/%ED%9B%84%EB%93%9C%ED%8B%B0');
+  const listings = await adapter.fetchSearchListings(target);
+  const normalized = adapter.normalizeListing(listings[0], { target });
+  assert.equal(normalized.externalId, '101');
+  assert.equal(normalized.imageUrls[0], 'https://media.bunjang.co.kr/product/101_1_w600.jpg');
+});
+
 test('Bunjang adapter maps explicit deleted product errors to UNAVAILABLE, never guessing from parser failure', async () => {
   const adapter = new BunjangSourceAdapter({ fetchImpl: async () => response({ errorCode: 'ERR_DELETED_PRODUCT', reason: 'deleted' }, 400) });
   const target = await adapter.validateTarget('product', { productExternalId: '123', productUrl: 'https://m.bunjang.co.kr/products/123' });

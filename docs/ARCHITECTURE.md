@@ -105,7 +105,7 @@ changedetection.io (private sensor)
           ▼
 Product Radar :5315
   ├─ source registry → Bunjang adapter (first source)
-  ├─ generic Watch lifecycle (seller / product)
+  ├─ generic Watch lifecycle (seller / product / similarity)
   ├─ deterministic Matcher / ProductSnapshot diff
   ├─ SQLite: watches, listings, seen, snapshots, events, outbox, poll_runs
   └─ LangBot HTTP notification channels → Telegram DM / KOOK DM
@@ -115,7 +115,8 @@ Product Radar :5315
 API。`ListingSourceAdapter` 暴露 source id、capabilities、target validation、raw fetch 和
 generic normalization；新增 Mercari/Xianyu/eBay 的主要变更应限制在
 `sources/<source>/` 与 registry registration。`src/sensors/sensor.ts` 是 replaceable
-port，当前实现为 `ChangedetectionSensorClient`。
+port，当前实现为 `ChangedetectionSensorClient`。V0.2 的 `ImageMatcher` port 位于 core，当前
+实现为独立的 `PerceptualImageMatcher`；reference image feature 写入 Product Radar data volume。
 
 Seller Watch 首次 fetch 全量写入 `watch_seen_listings` baseline，后续 webhook 只触发
 Product Radar 重新 fetch；diff 文本不是新 listing 事实来源。Product Watch 首次写入

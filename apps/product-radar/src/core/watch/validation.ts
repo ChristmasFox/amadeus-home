@@ -34,7 +34,7 @@ export function parseWatchCreateInput(value: unknown): ParsedWatchCreateInput {
   const source = sourceValue(input.source);
   const type = input.type;
   if (typeof type !== 'string' || !isImplementedWatchType(type)) {
-    throw new RadarError('only seller and product watch types are implemented in V0.1', 'UNSUPPORTED_CAPABILITY', 422, { type });
+    throw new RadarError('only seller, product, and similarity watch types are implemented in V0.2', 'UNSUPPORTED_CAPABILITY', 422, { type });
   }
   const target = objectValue(input.target, 'target') as WatchTarget;
   const rules = normalizeRules(type, input.rules);

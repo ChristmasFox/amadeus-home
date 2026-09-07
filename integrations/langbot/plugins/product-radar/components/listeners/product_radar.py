@@ -6,10 +6,11 @@ from components.intent import (
     is_cancel_request,
     is_confirm_request,
     is_list_request,
+    parse_similarity_watch_intent,
     parse_stop_intent,
     parse_watch_intent,
 )
-from components.platform.bridge import callback_parts, conversation_key, event_text, platform_name, reply
+from components.platform.bridge import attachment_sources, callback_parts, conversation_key, event_text, platform_name, reply
 from components.radar_client import create_watch, list_watches, patch_watch, preview_watch
 from langbot_plugin.api.definition.components.common.event_listener import EventListener
 from langbot_plugin.api.entities import context as event_context_module
@@ -44,7 +45,7 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
             '',
             f'如果平台没有按钮，请回复：确认监控 {token}',
         ])
-    else:
+    elif proposal.get('type') == 'product':
         product = preview.get('product') if isinstance(preview.get('product'), dict) else {}
         text = '\n'.join([
             '👀 准备监控',
@@ -58,6 +59,28 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
             '监控：',
             '✓ 价格',
             '✓ 商品状态',
+            '',
+            f'如果平台没有按钮，请回复：确认监控 {token}',
+        ])
+    else:
+        target = proposal.get('target') if isinstance(proposal.get('target'), dict) else {}
+        similarity = preview.get('similarity') if isinstance(preview.get('similarity'), dict) else {}
+        top_matches = similarity.get('topMatches') if isinstance(similarity.get('topMatches'), list) else []
+        best = top_matches[0] if top_matches and isinstance(top_matches[0], dict) else {}
+        best_label = f"当前候选最高相似度：{float(best.get('score', 0)) * 100:.1f}%" if best else '当前候选：已建立扫描范围'
+        text = '\n'.join([
+            '👀 准备监控',
+            '',
+            f'平台：{source_name}',
+            '类型：相似商品监控',
+            f"候选范围：Bunjang「{target.get('searchQuery') or '의류'}」最新商品",
+            '相似度阈值：60%',
+            f'频率：{interval_label}',
+            best_label,
+            '',
+            '监控：',
+            '✓ 新上架商品',
+            '✓ 图片相似度 ≥ 60%',
             '',
             f'如果平台没有按钮，请回复：确认监控 {token}',
         ])
@@ -167,7 +190,9 @@ class ProductRadarListener(EventListener):
             event_context.prevent_postorder()
             return
 
-        proposal = parse_watch_intent(text)
+        proposal = parse_similarity_watch_intent(text, attachment_sources(event))
+        if proposal is None:
+            proposal = parse_watch_intent(text)
         if proposal is None:
             return
         try:

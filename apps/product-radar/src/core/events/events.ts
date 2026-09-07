@@ -5,6 +5,7 @@ export const RADAR_EVENT_TYPES = [
   'ProductPriceChangedEvent',
   'ProductStatusChangedEvent',
   'ProductUpdatedEvent',
+  'SimilarListingMatchedEvent',
 ] as const;
 export type RadarEventType = (typeof RADAR_EVENT_TYPES)[number];
 
@@ -54,7 +55,18 @@ export interface ProductUpdatedEvent extends RadarEvent {
   };
 }
 
-export type TypedRadarEvent = ListingMatchedEvent | ProductPriceChangedEvent | ProductStatusChangedEvent | ProductUpdatedEvent;
+export interface SimilarListingMatchedEvent extends RadarEvent {
+  type: 'SimilarListingMatchedEvent';
+  before: null;
+  after: Listing;
+  payload: {
+    similarity: number;
+    threshold: number;
+    bestImageUrl?: string;
+  };
+}
+
+export type TypedRadarEvent = ListingMatchedEvent | ProductPriceChangedEvent | ProductStatusChangedEvent | ProductUpdatedEvent | SimilarListingMatchedEvent;
 
 export function eventId(eventKey: string): string {
   return eventKey;

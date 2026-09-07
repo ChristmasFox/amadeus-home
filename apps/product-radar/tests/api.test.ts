@@ -10,7 +10,7 @@ import { SourceAdapterRegistry } from '../src/sources/registry.js';
 import type { SensorClient, SensorHealth, SensorWatch, SensorWatchInput } from '../src/sensors/sensor.js';
 import { SqliteRadarStore } from '../src/storage/sqlite.js';
 
-const caps: SourceCapabilities = { sellerWatch: true, productWatch: true, searchWatch: false, categoryWatch: false, supportsPrice: true, supportsImages: true, supportsSeller: true, supportsProductStatus: true };
+const caps: SourceCapabilities = { sellerWatch: true, productWatch: true, similarityWatch: true, searchWatch: false, categoryWatch: false, supportsPrice: true, supportsImages: true, supportsSeller: true, supportsProductStatus: true };
 const item = (id: string, title: string): Listing => ({ source: 'api-fake', externalId: id, title, url: `https://api-fake.test/${id}`, imageUrls: [], status: 'ACTIVE', discoveredAt: new Date().toISOString() });
 
 class ApiSource implements ListingSourceAdapter {
@@ -18,8 +18,9 @@ class ApiSource implements ListingSourceAdapter {
   readonly displayName = 'API Fake';
   readonly capabilities = caps;
   listings: Listing[] = [item('initial', 'Initial')];
-  async validateTarget(_type: 'seller' | 'product' | 'search' | 'category' | 'smart', target: Record<string, unknown>): Promise<ValidatedTarget> { return { ...target, externalId: 'seller-1', url: 'https://api-fake.test/seller-1' }; }
+  async validateTarget(_type: 'seller' | 'product' | 'similarity' | 'search' | 'category' | 'smart', target: Record<string, unknown>): Promise<ValidatedTarget> { return { ...target, externalId: 'seller-1', url: 'https://api-fake.test/seller-1' }; }
   async fetchSellerListings(): Promise<unknown[]> { return this.listings; }
+  async fetchSearchListings(): Promise<unknown[]> { return this.listings; }
   async fetchProduct(): Promise<unknown> { return item('product-1', 'Product'); }
   normalizeListing(raw: unknown): Listing { return { ...(raw as Listing), discoveredAt: new Date().toISOString() }; }
   normalizeProductState(raw: unknown): Listing { return { ...(raw as Listing), discoveredAt: new Date().toISOString() }; }
@@ -54,6 +55,7 @@ test('HTTP API exposes source capabilities and watch lifecycle without platform 
   try {
     const sources = await fetch(`${runtime.base}/api/sources`).then((response) => response.json());
     assert.equal(sources.sources[0].capabilities.sellerWatch, true);
+    assert.equal(sources.sources[0].capabilities.similarityWatch, true);
     assert.equal(sources.sources[0].capabilities.searchWatch, false);
 
     const createdResponse = await fetch(`${runtime.base}/api/watches`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ source: 'api-fake', type: 'seller', target: { sellerExternalId: 'seller-1' }, rules: { keywords: ['new'] } }) });

@@ -34,3 +34,37 @@ class ProductRadarIntentTest(unittest.TestCase):
         self.assertEqual(parse_stop_intent('停止监控')['action'], 'stop')
         self.assertEqual(parse_stop_intent('停止这个商品 https://m.bunjang.co.kr/products/418123655')['url'], 'https://m.bunjang.co.kr/products/418123655')
         self.assertIsNone(parse_stop_intent('停止今天的自动摘要'))
+
+class ProductRadarImageIntentTest(unittest.TestCase):
+    def test_image_only_creates_similarity_watch_with_two_minute_interval(self) -> None:
+        from components.intent import parse_similarity_watch_intent
+
+        result = parse_similarity_watch_intent('', [{'referenceImageBase64': 'data:image/jpeg;base64,abc'}])
+        self.assertEqual(result['type'], 'similarity')
+        self.assertEqual(result['target']['referenceImageBase64'], 'data:image/jpeg;base64,abc')
+        self.assertEqual(result['target']['searchQuery'], '의류')
+        self.assertEqual(result['rules']['similarityThreshold'], 0.6)
+        self.assertEqual(result['intervalSeconds'], 120)
+
+    def test_image_caption_can_narrow_search_query(self) -> None:
+        from components.intent import parse_similarity_watch_intent
+
+        result = parse_similarity_watch_intent('帮我找类似的，关键词：Chrome Hearts hoodie', [{'referenceImageUrl': 'https://image.test/ref.jpg'}])
+        self.assertEqual(result['target']['searchQuery'], 'Chrome Hearts hoodie')
+
+class ProductRadarBridgeTest(unittest.TestCase):
+    def test_message_chain_image_base64_is_extracted_without_platform_api(self) -> None:
+        from components.platform.bridge import attachment_sources
+
+        class Image:
+            type = 'Image'
+            base64 = 'data:image/jpeg;base64,abc'
+            url = ''
+
+        class Chain:
+            root = [Image()]
+
+        class Event:
+            message_chain = Chain()
+
+        self.assertEqual(attachment_sources(Event()), [{'referenceImageBase64': 'data:image/jpeg;base64,abc'}])

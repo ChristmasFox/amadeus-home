@@ -54,6 +54,26 @@ def parse_watch_intent(text: str) -> dict[str, Any] | None:
     return None
 
 
+def parse_similarity_watch_intent(text: str, images: list[dict[str, str]]) -> dict[str, Any] | None:
+    if not images:
+        return None
+    normalized = text.strip().lower()
+    if normalized and any(is_control in normalized for is_control in ('确认监控', '开始监控', '取消监控', '停止监控', '停止', '暂停')):
+        return None
+    # A caption may narrow the candidate search; an image-only message uses a
+    # broad clothing query and lets the deterministic matcher do the filtering.
+    query_match = re.search(r'(?:搜索|搜|只看|关键词|品牌)\s*[:：]?\s*([^，。！？\n]+)', text, flags=re.IGNORECASE)
+    search_query = query_match.group(1).strip() if query_match and query_match.group(1).strip() else '의류'
+    source = images[0]
+    return {
+        'source': 'bunjang',
+        'type': 'similarity',
+        'target': {**source, 'searchQuery': search_query},
+        'rules': {'similarityThreshold': 0.6, 'candidateLimit': 60},
+        'intervalSeconds': DEFAULT_INTERVAL_SECONDS,
+    }
+
+
 def is_list_request(text: str) -> bool:
     normalized = text.strip().lower()
     return normalized in {'我现在盯着什么', '我现在监控什么', '查看监控', '查看 watches', '/watches', '/product-radar'} or '现在盯着什么' in normalized

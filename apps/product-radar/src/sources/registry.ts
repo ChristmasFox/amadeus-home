@@ -5,6 +5,7 @@ import type { ImplementedWatchType, WatchTarget, WatchType } from '../core/watch
 export interface SourceCapabilities {
   sellerWatch: boolean;
   productWatch: boolean;
+  similarityWatch: boolean;
   searchWatch: boolean;
   categoryWatch: boolean;
   supportsPrice: boolean;
@@ -24,6 +25,7 @@ export interface ListingSourceAdapter {
   readonly capabilities: SourceCapabilities;
   validateTarget(type: WatchType, target: WatchTarget): Promise<ValidatedTarget>;
   fetchSellerListings(target: ValidatedTarget): Promise<unknown[]>;
+  fetchSearchListings(target: ValidatedTarget): Promise<unknown[]>;
   fetchProduct(target: ValidatedTarget): Promise<unknown>;
   normalizeListing(raw: unknown, context?: { target?: ValidatedTarget }): Listing;
   normalizeProductState(raw: unknown, context?: { target?: ValidatedTarget }): Listing;
@@ -50,6 +52,7 @@ export class SourceAdapterRegistry {
   supports(adapter: ListingSourceAdapter, type: WatchType): type is ImplementedWatchType {
     if (type === 'seller') return adapter.capabilities.sellerWatch;
     if (type === 'product') return adapter.capabilities.productWatch;
+    if (type === 'similarity') return adapter.capabilities.similarityWatch;
     return false;
   }
 
@@ -66,7 +69,7 @@ export class SourceAdapterRegistry {
       id: adapter.id,
       displayName: adapter.displayName,
       capabilities: adapter.capabilities,
-      supportedWatchTypes: ['seller', 'product'].filter((type) => this.supports(adapter, type as WatchType)),
+      supportedWatchTypes: ['seller', 'product', 'similarity'].filter((type) => this.supports(adapter, type as WatchType)),
       unsupportedWatchTypes: ['search', 'category', 'smart'].filter((type) => !this.supports(adapter, type as WatchType)),
     };
   }

@@ -8,6 +8,7 @@ import { ChangedetectionSensorClient } from './sensors/changedetection/client.js
 import { SqliteRadarStore } from './storage/sqlite.js';
 import { createRadarServer } from './api/server.js';
 import { LangBotNotificationChannel, readOptionalToken } from './integrations/notifications/langbot.js';
+import { PerceptualImageMatcher } from './integrations/images/perceptual-matcher.js';
 
 function numberEnv(name: string, fallback: number): number {
   const value = Number(process.env[name] ?? '');
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   const bunjangOptions = { timeoutMs: numberEnv('BUNJANG_TIMEOUT_MS', 20_000), ...(process.env.BUNJANG_API_BASE_URL?.trim() ? { apiBaseUrl: process.env.BUNJANG_API_BASE_URL.trim() } : {}), ...(process.env.BUNJANG_WEB_BASE_URL?.trim() ? { webBaseUrl: process.env.BUNJANG_WEB_BASE_URL.trim() } : {}) };
   sources.register(new BunjangSourceAdapter(bunjangOptions));
   const store = new SqliteRadarStore(databasePath);
+  const imageMatcher = new PerceptualImageMatcher({ dataDir: dirname(databasePath) });
   const sensorOptions = { baseUrl: process.env.CHANGEDETECTION_BASE_URL?.trim() || 'http://changedetection:5000', timeoutMs: numberEnv('CHANGEDETECTION_TIMEOUT_MS', 10_000), ...(process.env.CHANGEDETECTION_API_KEY?.trim() ? { apiKey: process.env.CHANGEDETECTION_API_KEY.trim() } : {}) };
   const sensor = new ChangedetectionSensorClient(sensorOptions);
   const langBotToken = await readOptionalToken(process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE, process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN);
@@ -43,6 +45,7 @@ async function main(): Promise<void> {
     sensor,
     notifications,
     webhookUrl: process.env.PRODUCT_RADAR_WEBHOOK_URL?.trim() || `http://product-radar:${port}/api/sensors/changedetection/webhook`,
+    imageMatcher,
   });
   const server = createRadarServer({
     service,
@@ -50,6 +53,7 @@ async function main(): Promise<void> {
     sensor,
     store,
     ...(process.env.PRODUCT_RADAR_API_KEY?.trim() ? { apiKey: process.env.PRODUCT_RADAR_API_KEY.trim() } : {}),
+    maxBodyBytes: numberEnv('PRODUCT_RADAR_MAX_BODY_BYTES', 16 * 1024 * 1024),
   });
   const retrySeconds = numberEnv('PRODUCT_RADAR_OUTBOX_RETRY_SECONDS', 60);
   const outboxTimer = setInterval(() => {

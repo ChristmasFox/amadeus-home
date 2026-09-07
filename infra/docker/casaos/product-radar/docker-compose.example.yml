@@ -14,6 +14,7 @@ services:
       PRODUCT_RADAR_PORT: 5315
       PRODUCT_RADAR_DATABASE_PATH: /data/product-radar.sqlite
       PRODUCT_RADAR_WEBHOOK_URL: http://product-radar:5315/api/sensors/changedetection/webhook
+      PRODUCT_RADAR_MAX_BODY_BYTES: ${PRODUCT_RADAR_MAX_BODY_BYTES:-16777216}
       PRODUCT_RADAR_API_KEY: ${PRODUCT_RADAR_API_KEY:-}
       CHANGEDETECTION_BASE_URL: http://changedetection:5000
       CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:?restore outside Git}

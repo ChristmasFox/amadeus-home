@@ -1,14 +1,19 @@
 import type { Listing } from '../listing/model.js';
 
-export const WATCH_TYPES = ['seller', 'product', 'search', 'category', 'smart'] as const;
+export const WATCH_TYPES = ['seller', 'product', 'similarity', 'search', 'category', 'smart'] as const;
 export type WatchType = (typeof WATCH_TYPES)[number];
-export type ImplementedWatchType = Extract<WatchType, 'seller' | 'product'>;
+export type ImplementedWatchType = Extract<WatchType, 'seller' | 'product' | 'similarity'>;
 
 export interface WatchTarget extends Record<string, unknown> {
   sellerExternalId?: string;
   sellerUrl?: string;
   productExternalId?: string;
   productUrl?: string;
+  referenceImageUrl?: string;
+  referenceImageBase64?: string;
+  referenceImageId?: string;
+  searchUrl?: string;
+  searchQuery?: string;
 }
 
 export interface SellerWatchRules {
@@ -28,7 +33,12 @@ export interface ProductWatchRules {
   trackImages: boolean;
 }
 
-export type WatchRules = SellerWatchRules | ProductWatchRules;
+export interface SimilarityWatchRules {
+  similarityThreshold: number;
+  candidateLimit: number;
+}
+
+export type WatchRules = SellerWatchRules | ProductWatchRules | SimilarityWatchRules;
 
 export interface Watch {
   id: string;
@@ -48,19 +58,19 @@ export interface WatchCreateInput {
   source: string;
   type: WatchType;
   target: WatchTarget;
-  rules?: Partial<SellerWatchRules & ProductWatchRules>;
+  rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
 }
 
 export interface WatchPatchInput {
-  rules?: Partial<SellerWatchRules & ProductWatchRules>;
+  rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
 }
 
 export function isImplementedWatchType(type: unknown): type is ImplementedWatchType {
-  return type === 'seller' || type === 'product';
+  return type === 'seller' || type === 'product' || type === 'similarity';
 }
 
 export function isSellerRules(rules: WatchRules): rules is SellerWatchRules {
@@ -71,17 +81,24 @@ export function isProductRules(rules: WatchRules): rules is ProductWatchRules {
   return 'trackPrice' in rules;
 }
 
+export function isSimilarityRules(rules: WatchRules): rules is SimilarityWatchRules {
+  return 'similarityThreshold' in rules;
+}
+
 export function defaultRules(type: ImplementedWatchType): WatchRules {
   if (type === 'seller') {
     return { keywords: [], keywordMode: 'any', excludeKeywords: [] };
   }
-  return {
-    trackPrice: true,
-    trackStatus: true,
-    trackTitle: true,
-    trackSeller: true,
-    trackImages: false,
-  };
+  if (type === 'product') {
+    return {
+      trackPrice: true,
+      trackStatus: true,
+      trackTitle: true,
+      trackSeller: true,
+      trackImages: false,
+    };
+  }
+  return { similarityThreshold: 0.6, candidateLimit: 60 };
 }
 
 function stringArray(value: unknown, field: string): string[] {
@@ -116,20 +133,30 @@ export function normalizeRules(type: ImplementedWatchType, input: unknown): Watc
       ...(currency === undefined ? {} : { currency }),
     };
   }
-
-  const booleanField = (name: keyof ProductWatchRules, fallback: boolean): boolean => {
-    const candidate = value[name];
-    if (candidate === undefined) return fallback;
-    if (typeof candidate !== 'boolean') throw new Error(`${name} must be boolean`);
-    return candidate;
-  };
-  return {
-    trackPrice: booleanField('trackPrice', true),
-    trackStatus: booleanField('trackStatus', true),
-    trackTitle: booleanField('trackTitle', true),
-    trackSeller: booleanField('trackSeller', true),
-    trackImages: booleanField('trackImages', false),
-  };
+  if (type === 'product') {
+    const booleanField = (name: keyof ProductWatchRules, fallback: boolean): boolean => {
+      const candidate = value[name];
+      if (candidate === undefined) return fallback;
+      if (typeof candidate !== 'boolean') throw new Error(`${name} must be boolean`);
+      return candidate;
+    };
+    return {
+      trackPrice: booleanField('trackPrice', true),
+      trackStatus: booleanField('trackStatus', true),
+      trackTitle: booleanField('trackTitle', true),
+      trackSeller: booleanField('trackSeller', true),
+      trackImages: booleanField('trackImages', false),
+    };
+  }
+  const threshold = value.similarityThreshold === undefined ? 0.6 : value.similarityThreshold;
+  if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+    throw new Error('similarityThreshold must be a number between 0 and 1');
+  }
+  const candidateLimit = value.candidateLimit === undefined ? 60 : value.candidateLimit;
+  if (typeof candidateLimit !== 'number' || !Number.isInteger(candidateLimit) || candidateLimit < 1 || candidateLimit > 500) {
+    throw new Error('candidateLimit must be an integer between 1 and 500');
+  }
+  return { similarityThreshold: threshold, candidateLimit };
 }
 
 export function mergeRules(type: ImplementedWatchType, current: WatchRules, patch: unknown): WatchRules {
@@ -138,8 +165,12 @@ export function mergeRules(type: ImplementedWatchType, current: WatchRules, patc
     const rules = current as SellerWatchRules;
     return normalizeRules('seller', { ...rules, ...value });
   }
-  const rules = current as ProductWatchRules;
-  return normalizeRules('product', { ...rules, ...value });
+  if (type === 'product') {
+    const rules = current as ProductWatchRules;
+    return normalizeRules('product', { ...rules, ...value });
+  }
+  const rules = current as SimilarityWatchRules;
+  return normalizeRules('similarity', { ...rules, ...value });
 }
 
 export function watchListingTarget(watch: Watch, listing: Listing): boolean {

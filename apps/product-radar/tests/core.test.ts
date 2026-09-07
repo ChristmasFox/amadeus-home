@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { ProductRadarService } from '../src/core/application.js';
 import { RadarError, SensorUnavailableError } from '../src/core/errors.js';
 import type { Listing } from '../src/core/listing/model.js';
+import type { ImageMatcher, ImageMatchResult, ImageSource, PreparedImageReference } from '../src/core/matching/image.js';
 import { NotificationDispatcher } from '../src/core/notification/dispatcher.js';
 import { matchListing } from '../src/core/matching/matcher.js';
 import type { NotificationChannel, NotificationMessage } from '../src/core/notification/ports.js';
@@ -18,6 +19,7 @@ import { SqliteRadarStore } from '../src/storage/sqlite.js';
 const capabilities: SourceCapabilities = {
   sellerWatch: true,
   productWatch: true,
+  similarityWatch: true,
   searchWatch: false,
   categoryWatch: false,
   supportsPrice: true,
@@ -49,13 +51,18 @@ class FakeSourceAdapter implements ListingSourceAdapter {
   currentProduct = listing();
   fail = false;
 
-  async validateTarget(type: 'seller' | 'product' | 'search' | 'category' | 'smart', target: WatchTarget): Promise<ValidatedTarget> {
+  async validateTarget(type: 'seller' | 'product' | 'similarity' | 'search' | 'category' | 'smart', target: WatchTarget): Promise<ValidatedTarget> {
     const externalId = String(target.sellerExternalId ?? target.productExternalId ?? 'seller-1');
     const url = String(target.sellerUrl ?? target.productUrl ?? `https://fake.test/${type}/${externalId}`);
     return { ...target, externalId, url };
   }
 
   async fetchSellerListings(): Promise<unknown[]> {
+    if (this.fail) throw new Error('fake source failure');
+    return this.currentListings;
+  }
+
+  async fetchSearchListings(): Promise<unknown[]> {
     if (this.fail) throw new Error('fake source failure');
     return this.currentListings;
   }
@@ -71,6 +78,21 @@ class FakeSourceAdapter implements ListingSourceAdapter {
 
   normalizeProductState(raw: unknown): Listing {
     return { ...(raw as Listing), discoveredAt: new Date().toISOString() };
+  }
+}
+
+class FakeImageMatcher implements ImageMatcher {
+  async prepareReference(_source: ImageSource): Promise<PreparedImageReference> {
+    return { id: 'reference-image-1', contentHash: 'reference-hash-1' };
+  }
+
+  async match(_referenceId: string, candidateImageUrls: string[]): Promise<ImageMatchResult> {
+    const bestImageUrl = candidateImageUrls.find((url) => url.includes('similar'));
+    return {
+      score: bestImageUrl ? 0.82 : 0.32,
+      comparedImages: candidateImageUrls.length,
+      ...(bestImageUrl === undefined ? {} : { bestImageUrl }),
+    };
   }
 }
 
@@ -103,13 +125,13 @@ class FakeChannel implements NotificationChannel {
   }
 }
 
-function build(source: FakeSourceAdapter, options: { store?: SqliteRadarStore; sensor?: FakeSensor; channels?: NotificationChannel[] } = {}) {
+function build(source: FakeSourceAdapter, options: { store?: SqliteRadarStore; sensor?: FakeSensor; channels?: NotificationChannel[]; imageMatcher?: ImageMatcher } = {}) {
   const store = options.store ?? new SqliteRadarStore(':memory:');
   const sensor = options.sensor ?? new FakeSensor();
   const registry = new SourceAdapterRegistry();
   registry.register(source);
   const notifications = new NotificationDispatcher(store, options.channels ?? [], { displayName: (id) => registry.get(id)?.displayName ?? id });
-  const service = new ProductRadarService({ store, sources: registry, sensor, notifications, webhookUrl: 'http://radar.test/webhook' });
+  const service = new ProductRadarService({ store, sources: registry, sensor, notifications, webhookUrl: 'http://radar.test/webhook', ...(options.imageMatcher === undefined ? {} : { imageMatcher: options.imageMatcher }) });
   return { service, store, sensor, registry };
 }
 
@@ -128,6 +150,16 @@ async function createProduct(service: ProductRadarService, rules: Partial<Produc
     type: 'product',
     target: { productExternalId: 'p1', productUrl: 'https://fake.test/products/p1' },
     rules,
+  });
+}
+
+async function createSimilarity(service: ProductRadarService, rules: { similarityThreshold?: number; candidateLimit?: number } = {}) {
+  return service.createWatch({
+    source: 'fake',
+    type: 'similarity',
+    target: { referenceImageUrl: 'https://fake.test/reference.jpg', searchQuery: '의류' },
+    rules,
+    intervalSeconds: 120,
   });
 }
 
@@ -234,6 +266,35 @@ test('unmatched listings are still seen and duplicate listings do not notify twi
   assert.equal(second.newListings, 0);
   assert.equal(store.hasSeenListing(created.watch.id, 'fake', 'unmatched'), true);
   assert.equal(store.listEvents().length, 1);
+  assert.equal(channel.calls.length, 1);
+});
+
+test('similarity watch silently baselines candidates, matches new listings at threshold, and deduplicates', async () => {
+  const source = new FakeSourceAdapter();
+  source.currentListings = [listing({ externalId: 'baseline', title: 'baseline', imageUrls: ['https://fake.test/baseline.jpg'] })];
+  const matcher = new FakeImageMatcher();
+  const channel = new FakeChannel('test', 'recipient');
+  const { service, store, sensor } = build(source, { imageMatcher: matcher, channels: [channel] });
+  const created = await createSimilarity(service);
+  assert.equal(created.baselineCount, 1);
+  assert.equal(store.listEvents().length, 0);
+  assert.equal(sensor.created[0]?.intervalSeconds, 120);
+  assert.equal(sensor.created[0]?.url, 'https://fake.test/similarity/seller-1');
+
+  source.currentListings = [
+    listing({ externalId: 'baseline', title: 'baseline', imageUrls: ['https://fake.test/baseline.jpg'] }),
+    listing({ externalId: 'similar', title: 'similar hoodie', imageUrls: ['https://fake.test/similar.jpg'] }),
+    listing({ externalId: 'different', title: 'different item', imageUrls: ['https://fake.test/different.jpg'] }),
+  ];
+  const first = await service.runWatch(created.watch.id);
+  const second = await service.runWatch(created.watch.id);
+  assert.equal(first.newListings, 2);
+  assert.equal(first.matchedListings, 1);
+  assert.equal(second.newListings, 0);
+  assert.equal(store.listEvents().length, 1);
+  assert.equal(store.listEvents()[0]?.type, 'SimilarListingMatchedEvent');
+  assert.equal((store.listEvents()[0]?.payload.similarity as number) > 0.6, true);
+  assert.equal(store.getSimilarityMatch(created.watch.id, 'fake', 'different')?.matched, false);
   assert.equal(channel.calls.length, 1);
 });
 

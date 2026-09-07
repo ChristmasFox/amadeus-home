@@ -96,8 +96,8 @@ pnpm smoke:runtime                 # 非 Docker 的 /healthz + /homehub/health s
 
 `apps/product-radar` 是独立的通用商品监控服务：Core 只处理平台无关 Listing、Watch、
 Matcher、Snapshot、Event 和 Notification Outbox；Bunjang 是 `Source Adapter`，
-changedetection.io 是可替换的 `Sensor`。V0.1 支持 Seller Watch 和 Product Watch，
-SQLite 数据及 sensor 映射持久化在独立 volume。LangBot 通过
+changedetection.io 是可替换的 `Sensor`。V0.1 支持 Seller Watch 和 Product Watch；V0.2 增加 image similarity watch，
+SQLite 数据、sensor 映射和 V0.2 图片特征持久化在独立 volume。LangBot 通过
 `integrations/langbot/plugins/product-radar` 提供自然语言入口，并复用 LangBot 私聊 API
 向外部配置的 Telegram/KOOK Admin recipient 发送通知；不会发送群聊。
 

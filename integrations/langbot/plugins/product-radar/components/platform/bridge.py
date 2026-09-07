@@ -42,6 +42,49 @@ def callback_parts(event: Any) -> tuple[str | None, str | None]:
     return value(event, 'callback_id'), value(event, 'callback_data')
 
 
+def _chain_components(event: Any) -> list[Any]:
+    components: list[Any] = []
+    for candidate in (event, source_object(event)):
+        chain = value(candidate, 'message_chain')
+        if chain is None:
+            continue
+        raw = value(chain, 'root', chain)
+        try:
+            components.extend(list(raw))
+        except TypeError:
+            pass
+    return components
+
+
+def attachment_sources(event: Any) -> list[dict[str, str]]:
+    sources: list[dict[str, str]] = []
+    seen: set[str] = set()
+    raw_attachments = value(event, 'attachments', [])
+    if isinstance(raw_attachments, list):
+        for item in raw_attachments:
+            url = value(item, 'url', value(item, 'image_url'))
+            base64_value = value(item, 'base64')
+            source = {'referenceImageBase64': str(base64_value)} if base64_value else {'referenceImageUrl': str(url)} if url else None
+            if source:
+                key = next(iter(source.values()))
+                if key not in seen:
+                    seen.add(key)
+                    sources.append(source)
+    for component in _chain_components(event):
+        component_type = str(value(component, 'type', component.__class__.__name__) or '').lower()
+        if component_type != 'image':
+            continue
+        base64_value = value(component, 'base64')
+        url = value(component, 'url')
+        source = {'referenceImageBase64': str(base64_value)} if base64_value else {'referenceImageUrl': str(url)} if url else None
+        if source:
+            key = next(iter(source.values()))
+            if key not in seen:
+                seen.add(key)
+                sources.append(source)
+    return sources
+
+
 def event_text(event: Any) -> str:
     _callback_id, callback_data = callback_parts(event)
     if callback_data:
@@ -57,7 +100,14 @@ def event_text(event: Any) -> str:
         message_text = value(message, 'text')
         if message_text:
             return str(message_text)
-    return ''
+    plain_parts = []
+    for component in _chain_components(event):
+        component_type = str(value(component, 'type', component.__class__.__name__) or '').lower()
+        if component_type == 'plain':
+            component_text = value(component, 'text')
+            if component_text:
+                plain_parts.append(str(component_text))
+    return ''.join(plain_parts)
 
 
 def conversation_key(event: Any) -> str:

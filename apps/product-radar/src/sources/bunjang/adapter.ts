@@ -9,6 +9,7 @@ const BUNJANG_WEB_BASE = 'https://m.bunjang.co.kr';
 const BUNJANG_API_BASE = 'https://api.bunjang.co.kr';
 const BUNJANG_SELLER_PATH = /^\/(?:shops?|user)\/(\d+)(?:\/|$)/u;
 const BUNJANG_PRODUCT_PATH = /^\/products_?\/(\d+)(?:\/|$)/u;
+const BUNJANG_KEYWORD_PATH = /^\/keywords\/(.+?)(?:\/|$)/u;
 const UNAVAILABLE_ERROR_CODES = new Set([
   'ERR_DELETED_PRODUCT',
   'ERR_PRODUCT_NOT_FOUND',
@@ -59,6 +60,22 @@ function idFromUrl(value: string, kind: 'seller' | 'product'): string | undefine
   return match?.[1];
 }
 
+function queryFromUrl(value: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return undefined;
+  }
+  if (!/(?:^|\.)bunjang\.co\.kr$/iu.test(url.hostname)) return undefined;
+  const match = BUNJANG_KEYWORD_PATH.exec(url.pathname);
+  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+}
+
+function canonicalSearchUrl(query: string): string {
+  return `${BUNJANG_WEB_BASE}/keywords/${encodeURIComponent(query)}`;
+}
+
 function toImageUrls(imageUrl: string | undefined, imageCount: number | undefined): string[] {
   if (!imageUrl) return [];
   const template = imageUrl.replaceAll('{res}', '600');
@@ -101,6 +118,7 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
   readonly capabilities: SourceCapabilities = {
     sellerWatch: true,
     productWatch: true,
+    similarityWatch: true,
     searchWatch: false,
     categoryWatch: false,
     supportsPrice: true,
@@ -124,10 +142,21 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
   }
 
   async validateTarget(type: WatchType, target: WatchTarget): Promise<ValidatedTarget> {
+    const record = asObject(target);
+    if (type === 'similarity') {
+      const explicitQuery = stringValue(record.searchQuery);
+      const explicitUrl = stringValue(record.searchUrl);
+      const urlQuery = explicitUrl ? queryFromUrl(explicitUrl) : undefined;
+      if (explicitUrl && !urlQuery) throw new RadarError('invalid Bunjang search URL', 'INVALID_TARGET', 400, { target });
+      const searchQuery = explicitQuery ?? urlQuery ?? '의류';
+      if (!searchQuery) throw new RadarError('Bunjang similarity watch requires a search query', 'INVALID_TARGET', 400, { target });
+      if (explicitQuery && urlQuery && explicitQuery !== urlQuery) throw new RadarError('Bunjang search query does not match search URL', 'INVALID_TARGET', 400, { target });
+      const url = explicitUrl ?? `${this.webBaseUrl}/keywords/${encodeURIComponent(searchQuery)}`;
+      return { ...record, externalId: `search:${searchQuery}`, url, searchQuery, searchUrl: url };
+    }
     if (type !== 'seller' && type !== 'product') {
       throw new RadarError(`Bunjang does not support ${type} watch`, 'UNSUPPORTED_CAPABILITY', 422, { source: this.id, type });
     }
-    const record = asObject(target);
     const kind = type;
     const explicitKey = kind === 'seller' ? 'sellerExternalId' : 'productExternalId';
     const urlKey = kind === 'seller' ? 'sellerUrl' : 'productUrl';
@@ -141,13 +170,12 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       throw new RadarError(`invalid Bunjang ${kind} target`, 'INVALID_TARGET', 400, { target });
     }
     const url = explicitUrl ?? (kind === 'seller' ? `${this.webBaseUrl}/shops/${externalId}/products` : `${this.webBaseUrl}/products/${externalId}`);
-    const result: ValidatedTarget = {
+    return {
       ...record,
       externalId,
       url,
       ...(kind === 'seller' ? { sellerExternalId: externalId, sellerUrl: url } : { productExternalId: externalId, productUrl: url }),
     };
-    return result;
   }
 
   async fetchSellerListings(target: ValidatedTarget): Promise<unknown[]> {
@@ -207,6 +235,36 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       result.push(...enrichedCandidates);
       const nextCursor = stringValue(searchResponse.cursor);
       if (!nextCursor) break;
+      cursor = nextCursor;
+    }
+    return result;
+  }
+
+  async fetchSearchListings(target: ValidatedTarget): Promise<unknown[]> {
+    const query = target.searchQuery ?? '의류';
+    const result: unknown[] = [];
+    let cursor: string | undefined;
+    const limit = Math.max(1, Math.min(Number(target.candidateLimit ?? 60), 500));
+    for (let page = 0; page < 10 && result.length < limit; page += 1) {
+      const url = new URL('/api/search/v8/web/search', this.apiBaseUrl);
+      url.searchParams.set('policyKey', 'mw.product.keyword');
+      url.searchParams.set('q', query);
+      url.searchParams.set('size', String(Math.min(this.pageSize, 60)));
+      if (cursor) url.searchParams.set('cursor', cursor);
+      const { status, body } = await this.requestJson(url, target.url);
+      const root = asObject(body);
+      const errorCode = stringValue(root.errorCode);
+      if (errorCode || status >= 400) throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, { status, body });
+      const data = asObject(root.data);
+      const responses = asObject(data.responses);
+      const mainGrid = asObject(responses.mainGrid);
+      const searchResponse = asObject(mainGrid.searchResponse);
+      const candidates = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
+        .find((value) => Array.isArray(value));
+      if (!Array.isArray(candidates)) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+      result.push(...candidates.slice(0, Math.max(0, limit - result.length)));
+      const nextCursor = stringValue(searchResponse.cursor);
+      if (!nextCursor || candidates.length === 0) break;
       cursor = nextCursor;
     }
     return result;
