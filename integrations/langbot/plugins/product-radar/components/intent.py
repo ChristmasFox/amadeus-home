@@ -6,10 +6,16 @@ from typing import Any
 URL_RE = re.compile(r'https?://[^\s<>]+', re.IGNORECASE)
 SELLER_PATH_RE = re.compile(r'/shops?/(\d+)(?:/|$)|/user/(\d+)(?:/|$)', re.IGNORECASE)
 PRODUCT_PATH_RE = re.compile(r'/products?_?/(\d+)(?:/|$)', re.IGNORECASE)
+DEFAULT_INTERVAL_SECONDS = 120
 
 
 def _clean_url(value: str) -> str:
     return value.rstrip('.,，。！？!）)]}')
+
+
+def extract_url(text: str) -> str | None:
+    match = URL_RE.search(text)
+    return _clean_url(match.group(0)) if match else None
 
 
 def _split_keywords(value: str) -> list[str]:
@@ -34,6 +40,7 @@ def parse_watch_intent(text: str) -> dict[str, Any] | None:
             'type': 'seller',
             'target': {'sellerExternalId': seller_id, 'sellerUrl': url},
             'rules': {'keywords': keywords, 'keywordMode': 'any'},
+            'intervalSeconds': DEFAULT_INTERVAL_SECONDS,
         }
     if product_match:
         product_id = product_match.group(1)
@@ -42,6 +49,7 @@ def parse_watch_intent(text: str) -> dict[str, Any] | None:
             'type': 'product',
             'target': {'productExternalId': product_id, 'productUrl': url},
             'rules': {},
+            'intervalSeconds': DEFAULT_INTERVAL_SECONDS,
         }
     return None
 
@@ -49,3 +57,19 @@ def parse_watch_intent(text: str) -> dict[str, Any] | None:
 def is_list_request(text: str) -> bool:
     normalized = text.strip().lower()
     return normalized in {'我现在盯着什么', '我现在监控什么', '查看监控', '查看 watches', '/watches', '/product-radar'} or '现在盯着什么' in normalized
+
+
+def is_confirm_request(text: str) -> bool:
+    return text.strip().lower() in {'确认监控', '开始监控', '确认', '开始'}
+
+
+def is_cancel_request(text: str) -> bool:
+    return text.strip().lower() in {'取消监控', '取消'}
+
+
+def parse_stop_intent(text: str) -> dict[str, Any] | None:
+    without_url = URL_RE.sub('', text).strip()
+    if not re.fullmatch(r'(?:停止|停掉|暂停)(?:监控)?(?:这个|当前)?(?:商品|卖家|监控)?[。！!？?\s]*', without_url, flags=re.IGNORECASE):
+        return None
+    url = extract_url(text)
+    return {'action': 'stop', **({'url': url} if url else {})}

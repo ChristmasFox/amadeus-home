@@ -23,7 +23,9 @@ class ProductRadarCommand(Command):
                 for row in rows:
                     if not isinstance(row, dict):
                         continue
-                    lines.append(f"- {row.get('source', '?')} / {row.get('type', '?')} / {row.get('id', '?')} / {'启用' if row.get('enabled') else '暂停'}")
+                    interval = int(row.get('intervalSeconds') or 0)
+                    frequency = f' / 每 {interval // 60} 分钟' if interval and interval % 60 == 0 else ''
+                    lines.append(f"- {row.get('source', '?')} / {row.get('type', '?')} / {row.get('id', '?')} / {'启用' if row.get('enabled') else '暂停'}{frequency}")
                 yield CommandReturn(text='\n'.join(lines))
             except Exception:
                 yield CommandReturn(text='暂时无法读取 Product Radar 监控，请稍后再试。')

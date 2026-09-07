@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-GENERIC_INLINE_KEYBOARD_MARKER = '__LANGBOT_INLINE_KEYBOARD_V1__:'
+# Keep the same inert marker consumed by the existing Telegram host adapter
+# used by the PUBG plugin. Product Radar only uses the platform bridge; it
+# never calls Telegram/KOOK APIs directly.
+TELEGRAM_INLINE_KEYBOARD_MARKER = '__PUBG_TELEGRAM_INLINE_KEYBOARD_V1__:'
 
 
 def value(source: Any, key: str, default: Any = None) -> Any:
@@ -43,7 +46,25 @@ def event_text(event: Any) -> str:
     _callback_id, callback_data = callback_parts(event)
     if callback_data:
         return str(callback_data)
-    return str(value(event, 'text_message', value(event, 'content', value(event, 'text', ''))) or '')
+    source = source_object(event)
+    candidates = [event, source, value(event, 'message_event')]
+    for candidate in candidates:
+        for key in ('text_message', 'content', 'text'):
+            candidate_value = value(candidate, key)
+            if candidate_value is not None and str(candidate_value).strip():
+                return str(candidate_value)
+        message = value(candidate, 'message')
+        message_text = value(message, 'text')
+        if message_text:
+            return str(message_text)
+    return ''
+
+
+def conversation_key(event: Any) -> str:
+    platform = platform_name(event)
+    chat_id = value(event, 'launcher_id', value(event, 'chat_id', value(event, 'conversation_id', '')))
+    user_id = value(event, 'sender_id', value(event, 'platform_user_id', value(event, 'user_id', '')))
+    return f'{platform}:{str(chat_id or "unknown")}:{str(user_id or "unknown")}'
 
 
 def reply(event_context: Any, text: str, buttons: list[dict[str, str]] | None = None) -> None:
@@ -57,7 +78,10 @@ def reply(event_context: Any, text: str, buttons: list[dict[str, str]] | None = 
                 [{'text': item['text'], 'callback_data': item['callbackData']} for item in buttons[index:index + 2]]
                 for index in range(0, len(buttons), 2)
             ]
-            components.append(platform_message.Unknown(text=GENERIC_INLINE_KEYBOARD_MARKER + json.dumps({'inline_keyboard': keyboard}, ensure_ascii=False, separators=(',', ':'))))
+            marker = TELEGRAM_INLINE_KEYBOARD_MARKER + json.dumps(
+                {'inline_keyboard': keyboard}, ensure_ascii=False, separators=(',', ':')
+            )
+            components.append(platform_message.Unknown(text=marker))
         event.reply_message_chain = platform_message.MessageChain(components)
     except Exception:
         try:

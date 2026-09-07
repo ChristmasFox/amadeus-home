@@ -55,3 +55,7 @@ async def create_watch(plugin: Any, proposal: dict[str, Any]) -> dict[str, Any]:
 
 async def list_watches(plugin: Any) -> dict[str, Any]:
     return await asyncio.to_thread(_request, plugin, 'GET', '/api/watches')
+
+
+async def patch_watch(plugin: Any, watch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'PATCH', f'/api/watches/{watch_id}', payload)
