@@ -422,14 +422,17 @@ def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None
     callback_handler_replacement = """            await query.answer()
             try:
                 callback_data = str(query.data or '')
-                if callback_data.startswith(('pubg:m:', 'hh1:')):
+                if callback_data.startswith(('pubg:m:', 'hh1:', 'pr1:')):
                     await self._enqueue_pubg_callback(update, query)
                     return
                 data = json.loads(query.data)
 """
-    if "callback_data.startswith(('pubg:m:', 'hh1:'))" not in source:
-        if "if callback_data.startswith('pubg:m:'):" in source:
-            source = source.replace("if callback_data.startswith('pubg:m:'):", "if callback_data.startswith(('pubg:m:', 'hh1:')):", 1)
+    if "callback_data.startswith(('pubg:m:', 'hh1:', 'pr1:'))" not in source:
+        legacy_prefixes = "callback_data.startswith(('pubg:m:', 'hh1:'))"
+        if legacy_prefixes in source:
+            source = source.replace(legacy_prefixes, "callback_data.startswith(('pubg:m:', 'hh1:', 'pr1:'))", 1)
+        elif "if callback_data.startswith('pubg:m:'):" in source:
+            source = source.replace("if callback_data.startswith('pubg:m:'):", "if callback_data.startswith(('pubg:m:', 'hh1:', 'pr1:')):", 1)
         else:
             if callback_handler_marker not in source:
                 raise SystemExit("Telegram callback JSON marker not found")
