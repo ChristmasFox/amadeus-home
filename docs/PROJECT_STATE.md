@@ -398,6 +398,4 @@ Evidence:
 - Local runtime `/api/sources` returned Bunjang capabilities; `/health` correctly reported `degraded` with HTTP 503 while changedetection was intentionally absent.
 - Product smoke persisted one baseline snapshot and emitted zero events/notifications. Seller smoke persisted five baseline listings and emitted zero events/notifications.
 
-No Product Radar Docker image was built, no CasaOS compose was modified, no changedetection service
-was started, and no real Telegram/KOOK test notification was sent. Deployment remains an explicit
-RELEASE follow-up.
+Product Radar was deployed through the explicit RELEASE path to `/var/lib/casaos/apps/product-radar/docker-compose.yml` on OrbStack `ubuntu`. The immutable Product Radar image is `local/product-radar:git-dd80fb7a606d`; the changedetection service is healthy and has persistent `/DATA/AppData/changedetection/datastore` storage. LangBot Product Radar plugin install task `24` reached `INSTALL_READY`. Product Radar and changedetection preview checks passed; no real Telegram/KOOK test notification was sent.

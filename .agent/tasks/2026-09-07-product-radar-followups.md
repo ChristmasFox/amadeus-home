@@ -1,5 +1,5 @@
 # Product Radar follow-ups
 
-- Run a real changedetection deployment smoke after explicit RELEASE approval, including create/update/delete and webhook delivery to Product Radar.
-- Install the Product Radar LangBot plugin through the explicit plugin workflow and verify Telegram callback rendering plus KOOK text fallback without sending test notifications to real recipients.
+- User acceptance test: use LangBot to create one real Seller Watch and one real Product Watch, then inspect the resulting state without sending synthetic platform notifications.
+- Verify Telegram callback rendering and KOOK text fallback during the user acceptance test; the plugin is already installed as task `24`.
 - Add retry/backoff scheduling for failed notification outbox rows if operational behavior requires more than the current next-run retry.

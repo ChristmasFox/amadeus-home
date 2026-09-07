@@ -125,4 +125,4 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 已新增独立 `apps/product-radar` generic Seller/Product Watch runtime、SQLite store、changedetection sensor port、Bunjang source adapter、LangBot plugin、Docker/CasaOS templates。
 - TypeScript Product Radar tests 21/21、plugin Python tests 3/3、typecheck/build、secret scan、Compose config 和 LangBot dry-run 均通过。
 - Bunjang product smoke 成功建立 snapshot baseline 且 0 notification；seller smoke 成功取得 5 条公开 listings 并建立 baseline，0 notification，未实现登录/CAPTCHA/代理绕过。
-- Product Radar implementation commits are `83c3557` and `ed394e9`; 本阶段未部署 Docker/CasaOS、未安装 LangBot plugin、未向 Telegram/KOOK 发送测试消息；见 `.agent/checkpoints/2026-09-07-product-radar-v0.1.md`。
+- Product Radar implementation/deployment commits are `83c3557`, `ed394e9`, and `380f132`; runtime image `local/product-radar:git-dd80fb7a606d` is deployed in CasaOS on OrbStack `ubuntu`, changedetection is healthy, and LangBot plugin task `24` is `INSTALL_READY`. No real Telegram/KOOK test notification was sent; see `.agent/checkpoints/2026-09-07-product-radar-deployment.md`.
