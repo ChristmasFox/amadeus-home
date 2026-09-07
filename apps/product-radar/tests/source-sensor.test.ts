@@ -116,3 +116,26 @@ test('changedetection health and API errors are surfaced as unavailable', async 
   assert.equal(health.ok, false);
   await assert.rejects(() => client.createWatch({ radarWatchId: 'radar-1', url: 'https://example.test', title: 'item', intervalSeconds: 300, webhookUrl: 'http://radar.test/webhook' }), (error: unknown) => error instanceof SensorUnavailableError);
 });
+
+test('LangBot notification channel uses configured API header and always sends a person target', async () => {
+  const { LangBotNotificationChannel } = await import('../src/integrations/notifications/langbot.js');
+  let captured: { url: string; init: RequestInit } | undefined;
+  const channel = new LangBotNotificationChannel({
+    id: 'telegram',
+    baseUrl: 'http://langbot.test',
+    botId: 'telegram-bot',
+    recipient: 'admin-id',
+    apiToken: 'secret-token',
+    apiHeaderName: 'X-API-Key',
+    fetchImpl: async (url, init) => {
+      captured = { url: String(url), init: init ?? {} };
+      return response({ code: 0, data: { sent: true } });
+    },
+  });
+  await channel.send({ event: { id: 'event', eventKey: 'event', watchId: 'watch', source: 'fake', type: 'ListingMatchedEvent', occurredAt: new Date().toISOString(), before: null, after: null, payload: {} }, text: 'hello', recipient: 'admin-id' });
+  assert.ok(captured);
+  assert.equal(new Headers(captured!.init.headers).get('X-API-Key'), 'secret-token');
+  const body = JSON.parse(String(captured!.init.body));
+  assert.equal(body.target_type, 'person');
+  assert.equal(body.target_id, 'admin-id');
+});

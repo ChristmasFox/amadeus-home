@@ -28,7 +28,7 @@ The unique keys cover `(source, external_id)`, watch-specific seen listings,
 
 - Product Radar TypeScript typecheck: passed.
 - Product Radar TypeScript build: passed.
-- Product Radar tests: 20 passed.
+- Product Radar tests: 21 passed.
 - Product Radar plugin tests: 3 passed.
 - `pnpm check:secrets`: passed.
 - LangBot plugin dry-run packaging: passed.

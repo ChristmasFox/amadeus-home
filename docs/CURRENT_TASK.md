@@ -13,7 +13,7 @@
 - [x] 新增 LangBot Product Radar plugin：卖家/商品 URL 自然语言解析、确认摘要、Telegram inline callback marker、KOOK 文本 fallback、`我现在盯着什么？` 列表。
 - [x] 新增 LangBot HTTP notification channels；Telegram/KOOK 使用固定外部 Admin recipient 的 private target，单平台失败不阻塞另一平台。
 - [x] 新增 Product Radar Dockerfile、local compose、CasaOS template 和持久化 changedetection datastore；未重建 agent-runtime/HomeHub。
-- [x] 20 项 Product Radar TypeScript tests、Python plugin tests、typecheck/build、Compose config、LangBot dry-run、secret scan 通过。
+- [x] 21 项 Product Radar TypeScript tests、Python plugin tests、typecheck/build、Compose config、LangBot dry-run、secret scan 通过。
 - [x] Bunjang Product smoke（2026-09-07）：公开商品 `418123655` 返回标题、₩1,400,000、ACTIVE、2 张图片和卖家 `4771473/기미히끼잉잉`；SQLite snapshot baseline 建立，baseline notifications 为 0。
 - [x] Bunjang Seller smoke（2026-09-07）：公开卖家 `4771473` 通过 Bunjang shop search endpoint 取得 5 条当前 listings；SQLite seller baseline 建立，baseline notifications 为 0；未登录、未使用代理池或反爬绕过。
 - [x] 本轮未向真实 Telegram/KOOK 发送测试消息；未执行 Docker build、CasaOS apply 或 LangBot API install。

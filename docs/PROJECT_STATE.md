@@ -391,7 +391,7 @@ Evidence:
 
 - `pnpm --filter @agent/product-radar typecheck` passed.
 - `pnpm --filter @agent/product-radar build` passed.
-- `pnpm --filter @agent/product-radar test` passed: 20 tests.
+- `pnpm --filter @agent/product-radar test` passed: 21 tests.
 - `PYTHONPATH=integrations/langbot/plugins/product-radar python3 -m unittest discover -s integrations/langbot/plugins/product-radar/tests` passed: 3 tests.
 - `scripts/deploy-langbot.sh --dry-run --plugin product-radar --skip-runtime-check` passed and produced a local ignored `.lbpkg` only.
 - `pnpm check:secrets` passed.

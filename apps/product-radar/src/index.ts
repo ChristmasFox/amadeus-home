@@ -28,13 +28,14 @@ async function main(): Promise<void> {
   const sensor = new ChangedetectionSensorClient(sensorOptions);
   const langBotToken = await readOptionalToken(process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE, process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN);
   const langBotBaseUrl = process.env.LANGBOT_API_BASE_URL?.trim() || 'http://langbot:5300';
+  const langBotApiHeader = process.env.PRODUCT_RADAR_LANGBOT_API_HEADER?.trim() || 'Authorization';
   const channels = [];
   const telegramRecipient = process.env.TELEGRAM_ADMIN_USER_ID?.trim();
   const telegramBotId = process.env.PRODUCT_RADAR_TELEGRAM_BOT_ID?.trim();
-  if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ id: 'telegram', baseUrl: langBotBaseUrl, botId: telegramBotId, recipient: telegramRecipient, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
+  if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ id: 'telegram', baseUrl: langBotBaseUrl, botId: telegramBotId, recipient: telegramRecipient, apiHeaderName: langBotApiHeader, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
   const kookRecipient = process.env.KOOK_ADMIN_USER_ID?.trim();
   const kookBotId = process.env.PRODUCT_RADAR_KOOK_BOT_ID?.trim();
-  if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ id: 'kook', baseUrl: langBotBaseUrl, botId: kookBotId, recipient: kookRecipient, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
+  if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ id: 'kook', baseUrl: langBotBaseUrl, botId: kookBotId, recipient: kookRecipient, apiHeaderName: langBotApiHeader, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
   const notifications = new NotificationDispatcher(store, channels, { displayName: (source) => sources.get(source)?.displayName ?? source });
   const service = new ProductRadarService({
     store,
