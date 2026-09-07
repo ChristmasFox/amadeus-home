@@ -75,3 +75,20 @@ sets natural-language watches to `intervalSeconds=120` and adds `停止监控` /
 LangBot plugin reinstall task `35` reached `INSTALL_READY`; the API reports both
 `Command` and `EventListener` components. No test Watch or real platform
 notification was created by this fix.
+
+## Telegram callback routing fix
+
+A user acceptance attempt reached the Product Radar confirmation message, but
+clicking the button produced a Telegram callback error. The existing patched host
+router only forwarded `pubg:m:` and `hh1:` data; `pr1:confirm:<token>` fell through
+to its JSON callback parser. Commit `d73b9fc` added `pr1:` to the router.
+
+The patch image was built and activated as:
+
+- `local/langbot-agent:d73b9fcf5ec2-20260907-220006`
+- compose backup: `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260907-220009`
+
+Both `langbot` and `langbot_plugin_runtime` restarted successfully. The active
+Telegram source contains the `pr1:` route, Product Radar and changedetection are
+healthy, and the Product Radar database still has zero Watches because the failed
+callback did not create one.
