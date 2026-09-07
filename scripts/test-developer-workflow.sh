@@ -44,6 +44,11 @@ nested_docs_output="$(scope apps/agent-runtime/README.md)"
 assert_contains "$nested_docs_output" 'CHANGE_SCOPE_LEVEL=FAST'
 assert_contains "$nested_docs_output" 'DOCKER_BUILD=forbidden'
 
+product_radar_output="$(scope apps/product-radar/src/core/application.ts)"
+assert_contains "$product_radar_output" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_contains "$product_radar_output" 'CHANGE_SCOPE_WORKFLOW=PRODUCT_RADAR'
+assert_contains "$product_radar_output" 'DOCKER_BUILD=forbidden'
+
 release_output="$(scope apps/agent-runtime/Dockerfile)"
 assert_contains "$release_output" 'CHANGE_SCOPE_LEVEL=RELEASE'
 assert_contains "$release_output" 'CHANGE_SCOPE_WORKFLOW=RELEASE_BUILD_REQUIRED'

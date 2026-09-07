@@ -1,6 +1,6 @@
 # Project State
 
-更新时间：2026-09-06（Asia/Shanghai）
+更新时间：2026-09-07（Asia/Shanghai）
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
@@ -378,3 +378,26 @@ Meta WhatsApp Cloud API 接入工作已暂停，原因和计划详见 docs/DECIS
 - Runtime 镜像中的 whatsapp 标签仅表示构建时包含相关代码，不会自动启用
 
 恢复条件和操作步骤见 docs/DECISIONS.md。
+
+## Product Radar V0.1（2026-09-07）
+
+Product Radar source implementation is complete and committed separately from the existing
+agent-runtime. It is a standalone Node service at `apps/product-radar`, with SQLite persistence,
+generic source/sensor ports, deterministic matching/diffing, and LangBot private notification
+channels. Bunjang is the first adapter; the 2026-09-07 smoke successfully fetched five public
+seller listings and one public product snapshot without login or anti-bot bypass.
+
+Evidence:
+
+- `pnpm --filter @agent/product-radar typecheck` passed.
+- `pnpm --filter @agent/product-radar build` passed.
+- `pnpm --filter @agent/product-radar test` passed: 20 tests.
+- `PYTHONPATH=integrations/langbot/plugins/product-radar python3 -m unittest discover -s integrations/langbot/plugins/product-radar/tests` passed: 3 tests.
+- `scripts/deploy-langbot.sh --dry-run --plugin product-radar --skip-runtime-check` passed and produced a local ignored `.lbpkg` only.
+- `pnpm check:secrets` passed.
+- Local runtime `/api/sources` returned Bunjang capabilities; `/health` correctly reported `degraded` with HTTP 503 while changedetection was intentionally absent.
+- Product smoke persisted one baseline snapshot and emitted zero events/notifications. Seller smoke persisted five baseline listings and emitted zero events/notifications.
+
+No Product Radar Docker image was built, no CasaOS compose was modified, no changedetection service
+was started, and no real Telegram/KOOK test notification was sent. Deployment remains an explicit
+RELEASE follow-up.

@@ -17,6 +17,7 @@ Adapter / HomeLab 配置的可迁移 Git source of truth。仓库保存系统定
 ```text
 apps/
   agent-runtime/       Mastra/PUBG V3 当前可运行 runtime（source-preserving）
+  product-radar/       通用 Seller/Product Watch 商品监控 runtime
   telemetry-worker/    Telemetry 边界 facade
   whatsapp-adapter/    WhatsApp adapter 边界 facade
 packages/
@@ -90,6 +91,18 @@ pnpm smoke:runtime                 # 非 Docker 的 /healthz + /homehub/health s
   production Docker image。HomeHub 源码变更不会自动升级为 RELEASE。
 - **RELEASE** 只在明确要求实际 CasaOS 部署时执行。Dockerfile、`.dockerignore`、`package.json`
   或 `pnpm-lock.yaml` 变更会标记为 `RELEASE_BUILD_REQUIRED`，但只会给出计划，绝不会自动 build。
+
+### Product Radar V0.1
+
+`apps/product-radar` 是独立的通用商品监控服务：Core 只处理平台无关 Listing、Watch、
+Matcher、Snapshot、Event 和 Notification Outbox；Bunjang 是 `Source Adapter`，
+changedetection.io 是可替换的 `Sensor`。V0.1 支持 Seller Watch 和 Product Watch，
+SQLite 数据及 sensor 映射持久化在独立 volume。LangBot 通过
+`integrations/langbot/plugins/product-radar` 提供自然语言入口，并复用 LangBot 私聊 API
+向外部配置的 Telegram/KOOK Admin recipient 发送通知；不会发送群聊。
+
+源码实现、测试、Compose 模板和 smoke 记录见 `apps/product-radar/`、
+`infra/changedetection/`、`infra/docker/casaos/product-radar/` 及项目状态文档。
 
 完整 scope 矩阵、LangBot/env 特例、BuildKit cache 和 benchmark 见
 `docs/DEVELOPER_WORKFLOW.md`。传统本地命令仍可按需使用：

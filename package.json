@@ -13,6 +13,10 @@
     "workflow:plan": "./scripts/developer-workflow.sh --plan",
     "workflow:verify": "./scripts/developer-workflow.sh --run",
     "test:workflow": "./scripts/test-developer-workflow.sh",
-    "smoke:runtime": "./scripts/smoke-agent-runtime.sh"
+    "smoke:runtime": "./scripts/smoke-agent-runtime.sh",
+    "build:product-radar": "pnpm --filter @agent/product-radar build",
+    "typecheck:product-radar": "pnpm --filter @agent/product-radar typecheck",
+    "test:product-radar": "pnpm --filter @agent/product-radar test",
+    "smoke:product-radar": "pnpm --filter @agent/product-radar smoke:bunjang"
   }
 }

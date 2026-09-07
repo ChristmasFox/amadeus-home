@@ -1,0 +1,149 @@
+import type { Listing } from '../listing/model.js';
+
+export const WATCH_TYPES = ['seller', 'product', 'search', 'category', 'smart'] as const;
+export type WatchType = (typeof WATCH_TYPES)[number];
+export type ImplementedWatchType = Extract<WatchType, 'seller' | 'product'>;
+
+export interface WatchTarget extends Record<string, unknown> {
+  sellerExternalId?: string;
+  sellerUrl?: string;
+  productExternalId?: string;
+  productUrl?: string;
+}
+
+export interface SellerWatchRules {
+  keywords: string[];
+  keywordMode: 'any' | 'all';
+  excludeKeywords: string[];
+  minPrice?: number;
+  maxPrice?: number;
+  currency?: string;
+}
+
+export interface ProductWatchRules {
+  trackPrice: boolean;
+  trackStatus: boolean;
+  trackTitle: boolean;
+  trackSeller: boolean;
+  trackImages: boolean;
+}
+
+export type WatchRules = SellerWatchRules | ProductWatchRules;
+
+export interface Watch {
+  id: string;
+  source: string;
+  type: ImplementedWatchType;
+  target: WatchTarget;
+  rules: WatchRules;
+  enabled: boolean;
+  intervalSeconds: number;
+  sensorId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WatchCreateInput {
+  id?: string;
+  source: string;
+  type: WatchType;
+  target: WatchTarget;
+  rules?: Partial<SellerWatchRules & ProductWatchRules>;
+  enabled?: boolean;
+  intervalSeconds?: number;
+}
+
+export interface WatchPatchInput {
+  rules?: Partial<SellerWatchRules & ProductWatchRules>;
+  enabled?: boolean;
+  intervalSeconds?: number;
+}
+
+export function isImplementedWatchType(type: unknown): type is ImplementedWatchType {
+  return type === 'seller' || type === 'product';
+}
+
+export function isSellerRules(rules: WatchRules): rules is SellerWatchRules {
+  return 'keywords' in rules;
+}
+
+export function isProductRules(rules: WatchRules): rules is ProductWatchRules {
+  return 'trackPrice' in rules;
+}
+
+export function defaultRules(type: ImplementedWatchType): WatchRules {
+  if (type === 'seller') {
+    return { keywords: [], keywordMode: 'any', excludeKeywords: [] };
+  }
+  return {
+    trackPrice: true,
+    trackStatus: true,
+    trackTitle: true,
+    trackSeller: true,
+    trackImages: false,
+  };
+}
+
+function stringArray(value: unknown, field: string): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    throw new Error(`${field} must be an array of strings`);
+  }
+  return value.map((item) => item.trim()).filter(Boolean);
+}
+
+function optionalNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${field} must be a finite number`);
+  return value;
+}
+
+export function normalizeRules(type: ImplementedWatchType, input: unknown): WatchRules {
+  const value = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  if (type === 'seller') {
+    const keywordMode = value.keywordMode === undefined ? 'any' : value.keywordMode;
+    if (keywordMode !== 'any' && keywordMode !== 'all') throw new Error('keywordMode must be any or all');
+    const minPrice = optionalNumber(value.minPrice, 'minPrice');
+    const maxPrice = optionalNumber(value.maxPrice, 'maxPrice');
+    if (minPrice !== undefined && maxPrice !== undefined && minPrice > maxPrice) throw new Error('minPrice cannot exceed maxPrice');
+    const currency = typeof value.currency === 'string' && value.currency.trim() ? value.currency.trim().toUpperCase() : undefined;
+    return {
+      keywords: stringArray(value.keywords, 'keywords'),
+      keywordMode,
+      excludeKeywords: stringArray(value.excludeKeywords, 'excludeKeywords'),
+      ...(minPrice === undefined ? {} : { minPrice }),
+      ...(maxPrice === undefined ? {} : { maxPrice }),
+      ...(currency === undefined ? {} : { currency }),
+    };
+  }
+
+  const booleanField = (name: keyof ProductWatchRules, fallback: boolean): boolean => {
+    const candidate = value[name];
+    if (candidate === undefined) return fallback;
+    if (typeof candidate !== 'boolean') throw new Error(`${name} must be boolean`);
+    return candidate;
+  };
+  return {
+    trackPrice: booleanField('trackPrice', true),
+    trackStatus: booleanField('trackStatus', true),
+    trackTitle: booleanField('trackTitle', true),
+    trackSeller: booleanField('trackSeller', true),
+    trackImages: booleanField('trackImages', false),
+  };
+}
+
+export function mergeRules(type: ImplementedWatchType, current: WatchRules, patch: unknown): WatchRules {
+  const value = patch && typeof patch === 'object' ? patch as Record<string, unknown> : {};
+  if (type === 'seller') {
+    const rules = current as SellerWatchRules;
+    return normalizeRules('seller', { ...rules, ...value });
+  }
+  const rules = current as ProductWatchRules;
+  return normalizeRules('product', { ...rules, ...value });
+}
+
+export function watchListingTarget(watch: Watch, listing: Listing): boolean {
+  if (watch.type !== 'product') return true;
+  const targetId = typeof watch.target.productExternalId === 'string' ? watch.target.productExternalId : undefined;
+  return targetId === undefined || targetId === listing.externalId;
+}

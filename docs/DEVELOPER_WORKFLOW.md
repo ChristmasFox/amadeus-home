@@ -1,6 +1,6 @@
 # Developer Workflow Optimization V1
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-07（Asia/Shanghai）
 
 本规范只改变开发、验证、镜像构建与部署操作方式；不拆分共享的
 `agent-runtime`，不改变 HomeHub / PUBG 业务协议、HTTP 行为或 CasaOS 的持久化数据。
@@ -14,7 +14,7 @@ pnpm workflow:plan
 # 或：./scripts/developer-workflow.sh --plan
 ```
 
-`./scripts/developer-workflow.sh --run` 只会执行 FAST/RUNTIME 的本地检查，绝不会执行
+`./scripts/developer-workflow.sh --run` 只会执行 FAST/RUNTIME/PRODUCT_RADAR 的本地检查，绝不会执行
 Docker build、Compose restart 或 CasaOS 部署。需要在提交前扫描 secrets 时显式增加
 `--check-secrets`。`--files` 可用于确定性检查某组路径，例如：
 
@@ -32,17 +32,33 @@ build 或部署。
 | 级别 | 典型 scope | 默认验证 | 明确禁止的默认动作 |
 | --- | --- | --- | --- |
 | **FAST** | `docs/**`、`.agent/**`、测试、skills、纯逻辑/小功能 | 定向测试、受影响 package typecheck、`git diff --check`；需要时 secrets scan | Docker build、Compose restart、CasaOS deploy |
-| **RUNTIME** | `apps/agent-runtime/src/**`、`packages/homehub-domain/src/**`，以及 runtime schema/team/tsconfig | 受影响 runtime/domain build 或 typecheck、映射后的定向测试、`scripts/smoke-agent-runtime.sh`、`git diff --check` | production Docker image build、Compose restart、CasaOS deploy |
+| **RUNTIME** | `apps/agent-runtime/src/**`、`packages/homehub-domain/src/**`、`apps/product-radar/src/**`，以及 runtime schema/team/tsconfig | 受影响 runtime/domain build 或 typecheck、映射后的定向测试、本地 endpoint smoke、`git diff --check` | production Docker image build、Compose restart、CasaOS deploy |
 | **RELEASE** | 明确要求实际发布，或 Docker/package/lockfile 等 build 输入变更 | 完整 release 序列 | 省略显式 `--apply` 的外部写入 |
 
 **HomeHub 或 runtime TypeScript 源码变更只进入 RUNTIME，不会因为共享
 `local/pubg-query-engine-v3` 镜像名称而自动进入 RELEASE。**
 
+### Product Radar 本地验证
+
+`apps/product-radar` 的源码/测试变更由 `PRODUCT_RADAR` workflow 处理：
+
+```sh
+pnpm --filter @agent/product-radar typecheck
+pnpm --filter @agent/product-radar test
+pnpm --filter @agent/product-radar build
+pnpm --filter @agent/product-radar smoke:bunjang
+```
+
+`smoke:bunjang` 只访问公开 Bunjang source，并使用临时 SQLite + fake sensor/空通知渠道；
+不会触碰 CasaOS、changedetection 或真实 Telegram/KOOK recipient。Product Radar Dockerfile、
+Compose 和 CasaOS 模板仍分别属于 RELEASE_BUILD_REQUIRED / RELEASE_CONFIG_NO_BUILD，除非用户
+明确要求，不得 build、restart 或 deploy。
+
 ### 特殊 scope
 
 | 路径 | 工作流 | 镜像行为 |
 | --- | --- | --- |
-| `apps/agent-runtime/Dockerfile`、`.dockerignore`、任意 `package.json`、`pnpm-lock.yaml` | `RELEASE_BUILD_REQUIRED` | 只在明确 RELEASE 中构建 runtime image |
+| `apps/agent-runtime/Dockerfile`、`apps/product-radar/Dockerfile`、`.dockerignore`、任意 `package.json`、`pnpm-lock.yaml` | `RELEASE_BUILD_REQUIRED` | 只在明确 RELEASE 中构建对应 runtime image |
 | `integrations/langbot/plugins/**` | LangBot plugin workflow | `scripts/deploy-langbot.sh --dry-run` 后才可显式 `--apply`；不构建 runtime image |
 | `integrations/langbot/patches/**` | LangBot image workflow | 先 `--dry-run --patches`；只有显式 `--apply --patches --activate-image` 才构建 LangBot image |
 | 仅 `.env*` / `*.env*` | `ENV_RECREATE_NO_BUILD` | 只允许显式 `docker compose up -d --no-build` 的配置重建 |

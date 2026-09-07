@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-07（Asia/Shanghai）
 
 ## 总体拓扑
 
@@ -56,7 +56,7 @@ macOS host Docker。
 
 integrations/langbot/ 只包含自定义资产：
 
-- plugins/：PUBG V2/V3、organize-emby、macOS NAS control；
+- plugins/：PUBG V2/V3、organize-emby、macOS NAS control、product-radar；
 - patches/：KOOK、Telegram polling、消息转换、PUBG picker、WhatsApp 资源；
 - config-example/：不含 credential 的配置键模板。
 
@@ -94,6 +94,39 @@ hyphenated/camelCase/snake_case 字段，只 POST completion event，并以 `thr
 `target_type: person` 和 `continueOnFail`，固定目标来自外部 `TELEGRAM_ADMIN_USER_ID`、
 `KOOK_ADMIN_USER_ID` variables；不使用 inbound chat/context/payload recipient。LangBot credential
 只在 n8n 实例重新绑定，不存在 workflow source。
+
+## Product Radar V0.1
+
+Product Radar 与 PUBG/HomeHub runtime 解耦，作为独立 Node runtime 运行：
+
+```text
+changedetection.io (private sensor)
+          │ JSON webhook: radarWatchId + sensorWatchId
+          ▼
+Product Radar :5315
+  ├─ source registry → Bunjang adapter (first source)
+  ├─ generic Watch lifecycle (seller / product)
+  ├─ deterministic Matcher / ProductSnapshot diff
+  ├─ SQLite: watches, listings, seen, snapshots, events, outbox, poll_runs
+  └─ LangBot HTTP notification channels → Telegram DM / KOOK DM
+```
+
+`src/core` 不出现 Bunjang domain type，也不直接调用 changedetection 或 Telegram/KOOK
+API。`ListingSourceAdapter` 暴露 source id、capabilities、target validation、raw fetch 和
+generic normalization；新增 Mercari/Xianyu/eBay 的主要变更应限制在
+`sources/<source>/` 与 registry registration。`src/sensors/sensor.ts` 是 replaceable
+port，当前实现为 `ChangedetectionSensorClient`。
+
+Seller Watch 首次 fetch 全量写入 `watch_seen_listings` baseline，后续 webhook 只触发
+Product Radar 重新 fetch；diff 文本不是新 listing 事实来源。Product Watch 首次写入
+`product_snapshots` baseline，只有 price/status/title/seller/images 等有意义状态差异才
+写入事件。事件 key、outbox 唯一约束和 poll trigger key 共同保证 webhook、事件和通知
+幂等；UNKNOWN 状态不会推断为 SOLD/UNAVAILABLE。
+
+`infra/docker/casaos/product-radar/docker-compose.example.yml` 将 Product Radar 与
+changedetection 放在私有 `radar_network`，并把 Product Radar 接入现有
+`langbot_langbot_network`；changedetection 不发布公网端口。实际 CasaOS apply 仍须显式
+RELEASE 操作，默认开发验证不 build、不重启、不部署。
 
 ## 数据所有权与恢复
 

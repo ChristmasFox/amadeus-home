@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: EventListener
+metadata:
+  name: product_radar_listener
+  label:
+    en_US: Product Radar Listener
+    zh_Hans: Product Radar 监控入口
+  description:
+    en_US: Routes natural-language seller and product watch requests to Product Radar.
+    zh_Hans: 将自然语言卖家监控和商品监控请求发送到 Product Radar。
+execution:
+  python:
+    path: product_radar.py
+    attr: ProductRadarListener

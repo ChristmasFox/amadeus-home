@@ -119,3 +119,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 每个阶段结束时更新 docs/CURRENT_TASK.md、docs/PROJECT_STATE.md，并在
 .agent/checkpoints/ 写入带日期的记录。如果后续工作未完成，使用 .agent/tasks/
 保存明确的下一步，不把聊天内容当作唯一上下文。
+
+## Product Radar V0.1（2026-09-07）
+
+- 已新增独立 `apps/product-radar` generic Seller/Product Watch runtime、SQLite store、changedetection sensor port、Bunjang source adapter、LangBot plugin、Docker/CasaOS templates。
+- TypeScript Product Radar tests 20/20、plugin Python tests 3/3、typecheck/build、secret scan、Compose config 和 LangBot dry-run 均通过。
+- Bunjang product smoke 成功建立 snapshot baseline 且 0 notification；seller smoke 成功取得 5 条公开 listings 并建立 baseline，0 notification，未实现登录/CAPTCHA/代理绕过。
+- 本阶段未部署 Docker/CasaOS、未安装 LangBot plugin、未向 Telegram/KOOK 发送测试消息；见 `.agent/checkpoints/2026-09-07-product-radar-v0.1.md`。

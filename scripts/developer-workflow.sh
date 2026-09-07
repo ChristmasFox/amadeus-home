@@ -93,6 +93,7 @@ has_release_build=0
 has_release_config=0
 has_langbot_plugin=0
 has_langbot_patch=0
+has_product_radar=0
 env_count=0
 unknown_paths=()
 runtime_test_files=()
@@ -121,14 +122,17 @@ for path in "${FILES[@]-}"; do
     integrations/langbot/plugins/*)
       has_langbot_plugin=1
       ;;
-    .dockerignore|Dockerfile|Dockerfile.*|*/Dockerfile|*/Dockerfile.*|package.json|*/package.json|pnpm-lock.yaml)
+    .dockerignore|*/.dockerignore|Dockerfile|Dockerfile.*|*/Dockerfile|*/Dockerfile.*|package.json|*/package.json|pnpm-lock.yaml)
       has_release_build=1
       ;;
-    apps/agent-runtime/deploy/*|infra/docker/*|infra/cloudflare/*|scripts/deploy-agent-runtime.sh)
+    apps/agent-runtime/deploy/*|apps/product-radar/docker-compose.yml|infra/docker/*|infra/changedetection/*|infra/cloudflare/*|scripts/deploy-agent-runtime.sh)
       has_release_config=1
       ;;
-    scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/smoke-agent-runtime.sh)
+    scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/smoke-agent-runtime.sh|scripts/deploy-langbot.sh)
       has_fast=1
+      ;;
+    apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json)
+      has_product_radar=1
       ;;
     apps/agent-runtime/src/homehub/*|packages/homehub-domain/src/*|packages/homehub-domain/tsconfig.json)
       has_runtime=1
@@ -191,6 +195,9 @@ elif ((has_release_config)); then
   LEVEL="RELEASE"
   WORKFLOW="RELEASE_CONFIG_NO_BUILD"
   COMPOSE_MODE="explicit --apply: docker compose up -d --no-build"
+elif ((has_product_radar)); then
+  LEVEL="RUNTIME"
+  WORKFLOW="PRODUCT_RADAR"
 elif ((has_runtime)); then
   LEVEL="RUNTIME"
   WORKFLOW="RUNTIME"
@@ -224,6 +231,9 @@ case "$WORKFLOW" in
   RUNTIME)
     printf '%s\n' 'VERIFY=affected runtime/domain typecheck, mapped targeted tests, local endpoint smoke, git diff --check; Docker/Compose/deploy are prohibited by default.'
     ;;
+  PRODUCT_RADAR)
+    printf '%s\n' 'VERIFY=Product Radar typecheck, targeted tests, local /health/API smoke when applicable, git diff --check; Docker/Compose/deploy are prohibited by default.'
+    ;;
   RELEASE_BUILD_REQUIRED)
     printf '%s\n' 'VERIFY=explicit RELEASE only: test -> secrets check -> immutable commit-tag image build -> CasaOS compose update --no-build -> health -> smoke -> rollback checkpoint.'
     ;;
@@ -249,7 +259,7 @@ run() {
   "$@"
 }
 
-if [[ "$WORKFLOW" != "FAST" && "$WORKFLOW" != "RUNTIME" ]]; then
+if [[ "$WORKFLOW" != "FAST" && "$WORKFLOW" != "RUNTIME" && "$WORKFLOW" != "PRODUCT_RADAR" ]]; then
   fail "${WORKFLOW} is plan-only here. Use its explicit workflow; this command will not build or deploy."
 fi
 
@@ -262,6 +272,9 @@ if [[ "$WORKFLOW" == "FAST" ]]; then
   else
     printf '%s\n' 'No affected package test/typecheck was inferred for this FAST change.'
   fi
+elif [[ "$WORKFLOW" == "PRODUCT_RADAR" ]]; then
+  run pnpm --filter @agent/product-radar typecheck
+  run pnpm --filter @agent/product-radar test
 else
   if ((has_homehub)) && ((has_generic_runtime == 0 && has_review == 0 && has_platform == 0 && has_data == 0)); then
     run pnpm --filter @agent/homehub-domain build

@@ -281,13 +281,15 @@ def patch_telegram_adapter() -> None:
         block = """_MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024
 
 _PUBG_INLINE_KEYBOARD_MARKER = '__PUBG_TELEGRAM_INLINE_KEYBOARD_V1__:'
+_GENERIC_INLINE_KEYBOARD_MARKER = '__LANGBOT_INLINE_KEYBOARD_V1__:'
 
 
 def _pubg_inline_keyboard_from_marker(value: str) -> InlineKeyboardMarkup | None:
-    if not value.startswith(_PUBG_INLINE_KEYBOARD_MARKER):
+    marker = next((candidate for candidate in (_PUBG_INLINE_KEYBOARD_MARKER, _GENERIC_INLINE_KEYBOARD_MARKER) if value.startswith(candidate)), None)
+    if marker is None:
         return None
     try:
-        payload = json.loads(value[len(_PUBG_INLINE_KEYBOARD_MARKER):])
+        payload = json.loads(value[len(marker):])
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
     raw_rows = payload.get('inline_keyboard') if isinstance(payload, dict) else None

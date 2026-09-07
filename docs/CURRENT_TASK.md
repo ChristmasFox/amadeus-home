@@ -1,6 +1,24 @@
 # Current Task
 
-更新时间：2026-09-06（Asia/Shanghai）
+更新时间：2026-09-07（Asia/Shanghai）
+
+## Product Radar V0.1（SOURCE COMPLETE；未执行 RELEASE 部署：2026-09-07）
+
+- [x] 新增独立 `apps/product-radar` runtime；Core 使用 generic Listing/Watch/Status/Event/Notification 抽象，不包含 Bunjang-specific domain type。
+- [x] 新增 Source Adapter registry 与 capabilities；Bunjang 支持 Seller/Product，search/category/smart 明确返回 unsupported。
+- [x] Seller Watch 实现目标校验、初始 baseline、seen 去重、ANY/ALL/排除词/价格区间 matcher；未命中 listing 也会写入 seen。
+- [x] Product Watch 实现持久 ProductSnapshot baseline、price/status/title/seller/image 有意义 diff、before/after event，以及 UNKNOWN 安全处理。
+- [x] 新增 SQLite 表：`watches`、`listings`、`watch_seen_listings`、`product_snapshots`、`sensor_watches`、`events`、`notification_outbox`、`poll_runs`；进程重启恢复状态。
+- [x] 新增 `ChangedetectionSensorClient`：create/update/pause/resume/delete/get/health；changedetection webhook 只定位 watch，Product Radar 重新 fetch source。
+- [x] 新增 LangBot Product Radar plugin：卖家/商品 URL 自然语言解析、确认摘要、Telegram inline callback marker、KOOK 文本 fallback、`我现在盯着什么？` 列表。
+- [x] 新增 LangBot HTTP notification channels；Telegram/KOOK 使用固定外部 Admin recipient 的 private target，单平台失败不阻塞另一平台。
+- [x] 新增 Product Radar Dockerfile、local compose、CasaOS template 和持久化 changedetection datastore；未重建 agent-runtime/HomeHub。
+- [x] 20 项 Product Radar TypeScript tests、Python plugin tests、typecheck/build、Compose config、LangBot dry-run、secret scan 通过。
+- [x] Bunjang Product smoke（2026-09-07）：公开商品 `418123655` 返回标题、₩1,400,000、ACTIVE、2 张图片和卖家 `4771473/기미히끼잉잉`；SQLite snapshot baseline 建立，baseline notifications 为 0。
+- [x] Bunjang Seller smoke（2026-09-07）：公开卖家 `4771473` 通过 Bunjang shop search endpoint 取得 5 条当前 listings；SQLite seller baseline 建立，baseline notifications 为 0；未登录、未使用代理池或反爬绕过。
+- [x] 本轮未向真实 Telegram/KOOK 发送测试消息；未执行 Docker build、CasaOS apply 或 LangBot API install。
+
+实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`。
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
