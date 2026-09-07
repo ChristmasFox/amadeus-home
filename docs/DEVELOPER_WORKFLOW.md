@@ -47,6 +47,7 @@ pnpm --filter @agent/product-radar typecheck
 pnpm --filter @agent/product-radar test
 pnpm --filter @agent/product-radar build
 pnpm --filter @agent/product-radar smoke:bunjang
+pnpm --filter @agent/product-radar smoke:similarity
 ```
 
 `smoke:bunjang` 只访问公开 Bunjang source，并使用临时 SQLite + fake sensor/空通知渠道；

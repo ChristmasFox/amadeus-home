@@ -399,3 +399,25 @@ Evidence:
 - Product smoke persisted one baseline snapshot and emitted zero events/notifications. Seller smoke persisted five baseline listings and emitted zero events/notifications.
 
 Product Radar was deployed through the explicit RELEASE path to `/var/lib/casaos/apps/product-radar/docker-compose.yml` on OrbStack `ubuntu`. The immutable Product Radar image is `local/product-radar:git-dd80fb7a606d`; the changedetection service is healthy and has persistent `/DATA/AppData/changedetection/datastore` storage. LangBot Product Radar plugin install task `24` reached `INSTALL_READY`; after adding the missing EventListener `spec: {}` manifest block, reinstall task `32` reached `INSTALL_READY` and both Command/EventListener components loaded. The latest plugin task `35` also uses the existing PUBG Telegram renderer marker, accepts plain `确认监控`, and supports `停止监控`. The patched LangBot image now routes `pr1:` callback data to the plugin listener. Product Radar and changedetection preview checks passed; no real Telegram/KOOK test notification was sent.
+
+## Product Radar V0.2 Image Similarity Watch（2026-09-07）
+
+V0.2 is deployed in the existing Product Radar CasaOS service using image
+`local/product-radar:git-298f8ee28072`. It adds a generic `similarity` Watch,
+image attachment ingestion from LangBot, a persisted deterministic perceptual
+matcher, Bunjang keyword-feed candidate discovery, and
+`SimilarListingMatchedEvent`. The initial candidate scope is the Bunjang Korean
+keyword feed `의류` (up to 60 candidates), not an unrestricted marketplace crawl.
+
+Verification:
+
+- Product Radar TypeScript: 24 tests passed; typecheck and build passed.
+- LangBot plugin Python: 7 tests passed; attachment base64 extraction and image-only intent passed.
+- Real Bunjang image similarity smoke used product `424506121` as the reference. Preview returned 54 current `의류` candidates; top measured score was below 0.60, so no false match was generated.
+- Deployed test Watch `v02-smoke-20260907` was created with `intervalSeconds=120`, sensor `time_between_check.seconds=120`, and baseline count 54 with zero baseline notifications.
+- A real Product Radar webhook returned HTTP 202 and completed successfully; the run recorded one new candidate, zero matches/events, and zero notifications.
+- The test Watch was paused and deleted. The pre-existing user Product Watch remains active and untouched; final Product Radar database watch count is 1 and changedetection contains only the pre-existing watches.
+
+A semantic CLIP/SigLIP provider and live Telegram image acceptance test remain
+follow-ups. V0.2 intentionally keeps the ImageMatcher port replaceable and does
+not perform CAPTCHA/login/proxy bypass or large-scale crawling.

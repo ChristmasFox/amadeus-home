@@ -126,3 +126,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - TypeScript Product Radar tests 21/21、plugin Python tests 4/4、typecheck/build、secret scan、Compose config 和 LangBot dry-run 均通过。
 - Bunjang product smoke 成功建立 snapshot baseline 且 0 notification；seller smoke 成功取得 5 条公开 listings 并建立 baseline，0 notification，未实现登录/CAPTCHA/代理绕过。
 - Product Radar implementation/deployment commits are `83c3557`, `ed394e9`, `380f132`, `efbf19e`, `53d1b84`, and `d73b9fc`; runtime image `local/product-radar:git-dd80fb7a606d` is deployed in CasaOS on OrbStack `ubuntu`, changedetection is healthy, and LangBot plugin task `32` is `INSTALL_READY` with Command and EventListener components loaded. No real Telegram/KOOK test notification was sent; see `.agent/checkpoints/2026-09-07-product-radar-deployment.md`.
+
+## Product Radar V0.2 Image Similarity Watch（2026-09-07）
+
+- 已部署 `local/product-radar:git-298f8ee28072`，新增 similarity Watch、sharp perceptual matcher、Bunjang `의류` keyword feed、图片附件解析和 120 秒默认频率。
+- 24 项 TS tests、7 项 plugin tests、Bunjang similarity smoke、真实部署 preview/create/webhook/pause/delete 均通过；测试 Watch `v02-smoke-20260907` 已清理，原有用户 Watch 未修改。
+- 真实 smoke 未发送 Telegram/KOOK 测试消息；当前实现是可替换 perceptual matcher，CLIP/SigLIP、live Telegram image acceptance 和更宽候选范围列入后续任务。
+- 见 `.agent/checkpoints/2026-09-07-product-radar-v0.2.md`。

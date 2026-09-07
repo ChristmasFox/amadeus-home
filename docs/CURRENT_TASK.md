@@ -21,6 +21,20 @@
 
 实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`；部署 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-deployment.md`；实现 commits：`83c3557`、`ed394e9`、`380f132`、`efbf19e`、`53d1b84`、`d73b9fc`。
 
+## Product Radar V0.2 Image Similarity Watch（DEPLOYED / VERIFIED：2026-09-07）
+
+- [x] 新增 generic `similarity` Watch type、`SimilarityWatchRules`（默认阈值 0.60、candidateLimit 60）与 `similarityWatch` source capability；V0.1 的 seller/product/search/category 语义保持独立。
+- [x] 新增 `ImageMatcher` port 与独立 `PerceptualImageMatcher` 实现：下载/解析图片、持久化 reference/candidate feature、cosine score、单候选图片失败隔离。
+- [x] Bunjang 新增公开 keyword feed candidate discovery，默认使用韩文 `의류`，不做登录、CAPTCHA、代理池或全站大规模 crawling。
+- [x] LangBot 支持图片附件（Telegram Image base64/URL）自动生成 Similarity Watch proposal；确认摘要显示阈值、候选范围和每 2 分钟频率。
+- [x] Similarity baseline 静默写入 `watch_seen_listings`；新候选达到 60% 才产生 `SimilarListingMatchedEvent`；未命中仍写入 seen，事件和 outbox 继续幂等。
+- [x] 产品部署镜像 `local/product-radar:git-298f8ee28072` 已通过 host BuildKit build/load 并在 OrbStack `ubuntu`/CasaOS recreate；`sharp` runtime dependency 已验证可加载。
+- [x] 真实部署 smoke：Similarity preview HTTP 200，Bunjang `의류` 返回 54 个候选；创建测试 Watch `v02-smoke-20260907` HTTP 201，baseline 54、interval 120、baseline notification 0；真实 sensor webhook HTTP 202，执行成功且无假通知。
+- [x] 测试结束：测试 Watch 已 pause（Product Radar enabled=false、changedetection paused=true）并 delete；changedetection 测试 watch 已删除，原有用户 Product Watch 未修改。
+- [x] 24 项 Product Radar TypeScript tests、7 项 Python plugin tests、perceptual similarity smoke、typecheck/build、secret scan、Compose config 通过；本轮未发送 Telegram/KOOK 测试消息。
+
+V0.2 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.2.md`。
+
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
 更新时间：2026-09-06（Asia/Shanghai）

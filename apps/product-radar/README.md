@@ -83,3 +83,27 @@ volume, so a temporary Telegram image URL is not required after creation.
 Current V0.2 intentionally uses a lightweight perceptual matcher rather than a
 large semantic CLIP model. The `ImageMatcher` port leaves room for a local
 CLIP/SigLIP provider after threshold calibration.
+
+Similarity watch API example:
+
+```sh
+curl -X POST http://127.0.0.1:5315/api/watches \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "source": "bunjang",
+    "type": "similarity",
+    "target": {
+      "referenceImageUrl": "https://media.bunjang.co.kr/product/424506121_1_1788506179_w600.jpg",
+      "searchQuery": "의류"
+    },
+    "rules": {"similarityThreshold": 0.6, "candidateLimit": 60},
+    "intervalSeconds": 120
+  }'
+```
+
+The V0.2 default candidate scope is the Bunjang Korean keyword feed
+`의류`, not an unrestricted crawl of the whole marketplace. Use a more
+specific `searchQuery` when the clothing category can be determined. The
+reference image can be a URL or the `referenceImageBase64` data URI emitted by
+LangBot; once the watch is created only the persisted `referenceImageId` is
+kept in the Watch target.
