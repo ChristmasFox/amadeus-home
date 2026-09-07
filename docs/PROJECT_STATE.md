@@ -381,7 +381,7 @@ Meta WhatsApp Cloud API 接入工作已暂停，原因和计划详见 docs/DECIS
 
 ## Product Radar V0.1（2026-09-07）
 
-Product Radar source implementation is complete in commit `83c3557`, separately from the existing
+Product Radar source implementation is complete in commits `83c3557` and `ed394e9`, separately from the existing
 agent-runtime. It is a standalone Node service at `apps/product-radar`, with SQLite persistence,
 generic source/sensor ports, deterministic matching/diffing, and LangBot private notification
 channels. Bunjang is the first adapter; the 2026-09-07 smoke successfully fetched five public

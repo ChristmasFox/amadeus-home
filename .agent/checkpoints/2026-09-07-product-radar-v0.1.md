@@ -1,6 +1,6 @@
 # Product Radar V0.1 checkpoint — 2026-09-07
 
-Implementation commit: `83c3557`.
+Implementation commits: `83c3557`, `ed394e9`.
 
 ## Scope
 

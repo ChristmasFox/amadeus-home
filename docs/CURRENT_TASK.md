@@ -18,7 +18,7 @@
 - [x] Bunjang Seller smoke（2026-09-07）：公开卖家 `4771473` 通过 Bunjang shop search endpoint 取得 5 条当前 listings；SQLite seller baseline 建立，baseline notifications 为 0；未登录、未使用代理池或反爬绕过。
 - [x] 本轮未向真实 Telegram/KOOK 发送测试消息；未执行 Docker build、CasaOS apply 或 LangBot API install。
 
-实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`；实现 commit：`83c3557`。
+实现 checkpoint：`.agent/checkpoints/2026-09-07-product-radar-v0.1.md`；实现 commits：`83c3557`、`ed394e9`。
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
