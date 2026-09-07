@@ -8,6 +8,7 @@ metadata:
   description:
     en_US: Routes natural-language seller and product watch requests to Product Radar.
     zh_Hans: 将自然语言卖家监控和商品监控请求发送到 Product Radar。
+spec: {}
 execution:
   python:
     path: product_radar.py
