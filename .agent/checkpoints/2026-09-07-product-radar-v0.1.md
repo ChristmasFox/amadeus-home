@@ -1,5 +1,7 @@
 # Product Radar V0.1 checkpoint — 2026-09-07
 
+Implementation commit: `83c3557`.
+
 ## Scope
 
 Implemented the standalone generic Seller Watch / Product Watch runtime under
