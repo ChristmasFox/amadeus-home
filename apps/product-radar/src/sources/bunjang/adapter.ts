@@ -119,16 +119,23 @@ function findProductArray(value: unknown, depth = 0): unknown[] | undefined {
   if (!value || typeof value !== 'object') return undefined;
   const object = value as JsonObject;
   const preferredKeys = ['data', 'items', 'products', 'list', 'results', 'records', 'goods'];
+  let emptyArray: unknown[] | undefined;
+  const visit = (child: unknown): unknown[] | undefined => {
+    const result = findProductArray(child, depth + 1);
+    if (result && result.length > 0) return result;
+    if (result && emptyArray === undefined) emptyArray = result;
+    return undefined;
+  };
   for (const key of preferredKeys) {
     if (!(key in object)) continue;
-    const result = findProductArray(object[key], depth + 1);
-    if (result !== undefined) return result;
+    const result = visit(object[key]);
+    if (result) return result;
   }
   for (const child of Object.values(object)) {
-    const result = findProductArray(child, depth + 1);
-    if (result !== undefined) return result;
+    const result = visit(child);
+    if (result) return result;
   }
-  return undefined;
+  return emptyArray;
 }
 
 function searchResponseParts(body: unknown): { candidates?: unknown[]; nextCursor?: string } {
@@ -137,8 +144,9 @@ function searchResponseParts(body: unknown): { candidates?: unknown[]; nextCurso
   const responses = asObject(data.responses);
   const mainGrid = asObject(responses.mainGrid);
   const searchResponse = asObject(mainGrid.searchResponse);
-  const exact = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
-    .find((value) => Array.isArray(value));
+  const exactValues = [searchResponse.data, searchResponse.items, data.products, root.products, root.list];
+  const exact = exactValues.find((value): value is unknown[] => Array.isArray(value) && value.length > 0 && value.some(productLike))
+    ?? exactValues.find((value): value is unknown[] => Array.isArray(value));
   const candidates = exact ?? findProductArray(searchResponse) ?? findProductArray(data) ?? findProductArray(root);
   const nextCursor = stringValue(searchResponse.cursor) ?? stringValue(searchResponse.nextCursor) ?? stringValue(mainGrid.nextCursor) ?? stringValue(data.nextCursor) ?? stringValue(root.nextCursor);
   return { ...(candidates === undefined ? {} : { candidates }), ...(nextCursor === undefined ? {} : { nextCursor }) };
