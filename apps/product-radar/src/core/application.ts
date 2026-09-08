@@ -181,14 +181,22 @@ export class ProductRadarService {
 
     const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
     const normalizedByIdentity = new Map<string, Listing>();
+    const searchWarnings: Array<{ query: string; message: string }> = [];
     for (const query of context.plan.queries) {
-      const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
-      const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
-      const rows = await this.fetchNormalized(adapter, 'similarity', target);
-      for (const listing of rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
+      try {
+        const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
+        const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
+        const rows = await this.fetchNormalized(adapter, 'similarity', target);
+        for (const listing of rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
+      } catch (error) {
+        searchWarnings.push({ query: query.query, message: error instanceof Error ? error.message : String(error) });
+      }
     }
     const normalized = [...normalizedByIdentity.values()];
-    const referenceTarget = await adapter.validateTarget('similarity', { ...parsed.target, searchQuery: context.plan.queries[0]?.query ?? '의류' });
+    const referenceTarget = await adapter.validateTarget('similarity', (() => {
+      const { searchUrl: _searchUrl, ...base } = parsed.target;
+      return { ...base, searchQuery: context.plan.queries[0]?.query ?? '의류' };
+    })());
     const preparedTarget = await this.prepareSimilarityTarget(referenceTarget);
     const scores = await this.scoreSimilarity(preparedTarget.referenceImageId ?? '', normalized, parsed.rules as { similarityThreshold: number; candidateLimit: number });
     return {
@@ -205,6 +213,7 @@ export class ProductRadarService {
         candidateCount: normalized.length,
         topMatches: scores.slice(0, 5),
       },
+      ...(searchWarnings.length === 0 ? {} : { searchWarnings }),
     };
   }
 
@@ -258,7 +267,10 @@ export class ProductRadarService {
   private async createSimilarityWatch(parsed: ReturnType<typeof parseWatchCreateInput>, adapter: ListingSourceAdapter): Promise<WatchCreationResult> {
     const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
     const firstQuery = context.plan.queries[0]?.query ?? '의류';
-    const validated = await adapter.validateTarget('similarity', { ...parsed.target, searchQuery: firstQuery });
+    const validated = await adapter.validateTarget('similarity', (() => {
+      const { searchUrl: _searchUrl, ...base } = parsed.target;
+      return { ...base, searchQuery: firstQuery };
+    })());
     const prepared = await this.prepareSimilarityTarget(validated);
     const id = parsed.id ?? randomUUID();
     if (this.store.getWatch(id)) throw new RadarError(`watch already exists: ${id}`, 'CONFLICT', 409);

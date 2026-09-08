@@ -70,6 +70,19 @@ test('Bunjang similarity target uses the keyword search feed and keeps image dat
   assert.equal(normalized.imageUrls[0], 'https://media.bunjang.co.kr/product/101_1_w600.jpg');
 });
 
+test('Bunjang search parser tolerates nested result arrays and nextCursor response names', async () => {
+  const requests: string[] = [];
+  const adapter = new BunjangSourceAdapter({ fetchImpl: async (input) => {
+    requests.push(String(input));
+    return response({ data: { responses: { mainGrid: { searchResponse: { payload: { items: [{ pid: 202, name: 'nested item', productImage: 'https://media.bunjang.co.kr/product/202_1_w{res}.jpg' }] }, nextCursor: 'cursor-2' } } } } });
+  } });
+  const target = await adapter.validateTarget('similarity', { searchQuery: '후드티' });
+  const page = await adapter.fetchSearchPage({ ...target, searchQuery: target.searchQuery ?? '후드티', pageSize: 60 });
+  assert.equal(page.items.length, 1);
+  assert.equal(page.nextCursor, 'cursor-2');
+  assert.equal(requests[0]?.includes('q=%ED%9B%84%EB%93%9C%ED%8B%B0'), true);
+});
+
 test('Bunjang adapter maps explicit deleted product errors to UNAVAILABLE, never guessing from parser failure', async () => {
   const adapter = new BunjangSourceAdapter({ fetchImpl: async () => response({ errorCode: 'ERR_DELETED_PRODUCT', reason: 'deleted' }, 400) });
   const target = await adapter.validateTarget('product', { productExternalId: '123', productUrl: 'https://m.bunjang.co.kr/products/123' });

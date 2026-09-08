@@ -105,6 +105,45 @@ function findProduct(raw: unknown): JsonObject {
   return Object.keys(product).length > 0 ? product : root;
 }
 
+function productLike(value: unknown): boolean {
+  const object = asObject(value);
+  return object.pid !== undefined || object.productId !== undefined || object.id !== undefined || object.name !== undefined || object.productName !== undefined;
+}
+
+function findProductArray(value: unknown, depth = 0): unknown[] | undefined {
+  if (depth > 8) return undefined;
+  if (Array.isArray(value)) {
+    if (value.length === 0) return value;
+    return value.some(productLike) ? value : undefined;
+  }
+  if (!value || typeof value !== 'object') return undefined;
+  const object = value as JsonObject;
+  const preferredKeys = ['data', 'items', 'products', 'list', 'results', 'records', 'goods'];
+  for (const key of preferredKeys) {
+    if (!(key in object)) continue;
+    const result = findProductArray(object[key], depth + 1);
+    if (result !== undefined) return result;
+  }
+  for (const child of Object.values(object)) {
+    const result = findProductArray(child, depth + 1);
+    if (result !== undefined) return result;
+  }
+  return undefined;
+}
+
+function searchResponseParts(body: unknown): { candidates?: unknown[]; nextCursor?: string } {
+  const root = asObject(body);
+  const data = asObject(root.data);
+  const responses = asObject(data.responses);
+  const mainGrid = asObject(responses.mainGrid);
+  const searchResponse = asObject(mainGrid.searchResponse);
+  const exact = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
+    .find((value) => Array.isArray(value));
+  const candidates = exact ?? findProductArray(searchResponse) ?? findProductArray(data) ?? findProductArray(root);
+  const nextCursor = stringValue(searchResponse.cursor) ?? stringValue(searchResponse.nextCursor) ?? stringValue(mainGrid.nextCursor) ?? stringValue(data.nextCursor) ?? stringValue(root.nextCursor);
+  return { ...(candidates === undefined ? {} : { candidates }), ...(nextCursor === undefined ? {} : { nextCursor }) };
+}
+
 export interface BunjangSourceAdapterOptions {
   apiBaseUrl?: string;
   webBaseUrl?: string;
@@ -258,15 +297,9 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
         status, body, ...(retry === undefined ? {} : { retryAfterSeconds: retry }),
       });
     }
-    const data = asObject(root.data);
-    const responses = asObject(data.responses);
-    const mainGrid = asObject(responses.mainGrid);
-    const searchResponse = asObject(mainGrid.searchResponse);
-    const candidates = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
-      .find((value) => Array.isArray(value));
-    if (!Array.isArray(candidates)) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
-    const nextCursor = stringValue(searchResponse.cursor);
-    return { items: candidates, ...(nextCursor === undefined ? {} : { nextCursor }), raw: body };
+    const parts = searchResponseParts(body);
+    if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+    return { items: parts.candidates, ...(parts.nextCursor === undefined ? {} : { nextCursor: parts.nextCursor }), raw: body };
   }
 
   async fetchSearchListings(target: ValidatedTarget): Promise<unknown[]> {
@@ -284,17 +317,11 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       const root = asObject(body);
       const errorCode = stringValue(root.errorCode);
       if (errorCode || status >= 400) throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, { status, body });
-      const data = asObject(root.data);
-      const responses = asObject(data.responses);
-      const mainGrid = asObject(responses.mainGrid);
-      const searchResponse = asObject(mainGrid.searchResponse);
-      const candidates = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
-        .find((value) => Array.isArray(value));
-      if (!Array.isArray(candidates)) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
-      result.push(...candidates.slice(0, Math.max(0, limit - result.length)));
-      const nextCursor = stringValue(searchResponse.cursor);
-      if (!nextCursor || candidates.length === 0) break;
-      cursor = nextCursor;
+      const parts = searchResponseParts(body);
+      if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+      result.push(...parts.candidates.slice(0, Math.max(0, limit - result.length)));
+      if (!parts.nextCursor || parts.candidates.length === 0) break;
+      cursor = parts.nextCursor;
     }
     return result;
   }
