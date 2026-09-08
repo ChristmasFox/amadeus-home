@@ -79,7 +79,7 @@ def parse_similarity_watch_intent(text: str, images: list[dict[str, str]]) -> di
 
 def is_list_request(text: str) -> bool:
     normalized = text.strip().lower()
-    return normalized in {'我现在盯着什么', '我现在监控什么', '查看监控', '查看 watches', '/watches', '/product-radar'} or '现在盯着什么' in normalized
+    return normalized in {'我在盯着什么', '我现在盯着什么', '我现在监控什么', '当前监控', '有哪些监控', '查看监控', '查看 watches', '/watches', '/product-radar'} or '盯着什么' in normalized or '现在监控什么' in normalized
 
 
 def is_confirm_request(text: str) -> bool:

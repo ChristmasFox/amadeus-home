@@ -27,6 +27,7 @@ class ProductRadarIntentTest(unittest.TestCase):
 
     def test_list_and_confirmation_controls(self) -> None:
         self.assertTrue(is_list_request('我现在盯着什么？'))
+        self.assertTrue(is_list_request('我在盯着什么'))
         self.assertTrue(is_confirm_request('确认监控'))
         self.assertTrue(is_cancel_request('取消'))
 

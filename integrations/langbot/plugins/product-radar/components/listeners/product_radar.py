@@ -98,7 +98,10 @@ def _format_watches(result: dict[str, Any]) -> str:
         if not isinstance(row, dict):
             continue
         target = row.get('target') if isinstance(row.get('target'), dict) else {}
-        target_value = target.get('sellerUrl') or target.get('productUrl') or target.get('sellerExternalId') or target.get('productExternalId') or ''
+        plan = row.get('searchPlan') if isinstance(row.get('searchPlan'), dict) else {}
+        queries = plan.get('queries') if isinstance(plan.get('queries'), list) else []
+        plan_value = '、'.join(str(item.get('query')) for item in queries if isinstance(item, dict) and item.get('query'))
+        target_value = target.get('sellerUrl') or target.get('productUrl') or target.get('sellerExternalId') or target.get('productExternalId') or target.get('searchQuery') or plan_value or row.get('id') or ''
         interval = int(row.get('intervalSeconds') or 0)
         frequency = f'，每 {interval // 60} 分钟' if interval and interval % 60 == 0 else ''
         lines.append(f"- {row.get('source')} / {row.get('type')} / {'启用' if row.get('enabled') else '暂停'}{frequency}\n  {target_value}")

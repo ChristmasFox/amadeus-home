@@ -25,7 +25,11 @@ class ProductRadarCommand(Command):
                         continue
                     interval = int(row.get('intervalSeconds') or 0)
                     frequency = f' / 每 {interval // 60} 分钟' if interval and interval % 60 == 0 else ''
-                    lines.append(f"- {row.get('source', '?')} / {row.get('type', '?')} / {row.get('id', '?')} / {'启用' if row.get('enabled') else '暂停'}{frequency}")
+                    target = row.get('target') if isinstance(row.get('target'), dict) else {}
+                    plan = row.get('searchPlan') if isinstance(row.get('searchPlan'), dict) else {}
+                    queries = plan.get('queries') if isinstance(plan.get('queries'), list) else []
+                    label = target.get('searchQuery') or '、'.join(str(item.get('query')) for item in queries if isinstance(item, dict) and item.get('query')) or target.get('productUrl') or target.get('sellerUrl') or row.get('id', '?')
+                    lines.append(f"- {row.get('source', '?')} / {row.get('type', '?')} / {label} / {'启用' if row.get('enabled') else '暂停'}{frequency}")
                 yield CommandReturn(text='\n'.join(lines))
             except Exception:
                 yield CommandReturn(text='暂时无法读取 Product Radar 监控，请稍后再试。')
