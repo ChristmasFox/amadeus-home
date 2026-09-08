@@ -1,13 +1,16 @@
 # Project State
 
-## Product Radar V0.3 Phase A（SOURCE IMPLEMENTED / RELEASE PENDING：2026-09-08）
+## Product Radar V0.3 Phase A（DEPLOYED / VERIFIED：2026-09-08）
 
-V0.3 Phase A 已在 V0.2 之上完成源码实现，尚未在本段记录 RELEASE apply：
+V0.3 Phase A 已在 V0.2 之上完成源码实现并实际部署到 OrbStack `ubuntu`/CasaOS：
 
 - `apps/product-radar/src/core/target-profile/` 提供 TargetProfile schema、provenance、hard/soft constraint merge 和 provider failure fallback。
 - `apps/product-radar/src/core/search/` 提供 SearchPlan、SearchFeed、deterministic scheduling/backoff、incremental pagination、feed router；`sources/bunjang/search-planner.ts` 只承载 Bunjang localization。
 - SQLite migration additive：`target_profiles`、`search_feeds`、`watch_feed_subscriptions`、`feed_listing_events`、`search_feed_runs`；V0.2 watches/listings/events/outbox/image features 不删除。
-- 本地验证：Product Radar TypeScript 38/38、LangBot Python 7/7、Python compile、Product Radar typecheck/build 已通过；当前工作流分类为 `RUNTIME / PRODUCT_RADAR`，Release 尚待显式 apply。
+- 本地验证：Product Radar TypeScript 38/38、LangBot Python 7/7、Python compile、Product Radar typecheck/build、secret scan 已通过；部署前 workflow 分类为 `RUNTIME / PRODUCT_RADAR`。
+- 部署 image：`local/product-radar:git-8b0b96e4c2c6`（digest `sha256:a60b0b75eaaa192c0fbecc7ba442323b607d0a7f20d193011131066beaa35d26`）；CasaOS env rollback backup：`/var/lib/casaos/apps/product-radar/.env.codex-backup.20260908-130726`。
+- LangBot plugin task `40` 为 `INSTALL_READY`，Product Radar/changedetection/LangBot containers healthy/running；最终 Product Radar `/health` `ok`，原 Product Watch `9ec10408-e55b-43a8-821b-f3427005656e` 保持 enabled、120s，最终 0 SearchFeed/0 test subscriptions。
+- Real smoke baseline 222（one explicit feed）与 full layered preview 1225 候选均未通知；webhook rerun `newListings=0`, `matchedListings=0`, `eventIds=[]`，duplicate webhook 返回 `status=duplicate`；restart 后 TargetProfile/SearchPlan 仍可读。
 - 运行时保留 Sharp matcher、0.60 business threshold、Telegram/KOOK DM、确认/取消/停止、Seller/Product Watch。
 
 

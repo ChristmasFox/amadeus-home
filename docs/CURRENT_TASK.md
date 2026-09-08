@@ -1,6 +1,6 @@
 # Current Task
 
-# Product Radar V0.3 Phase A（SOURCE IMPLEMENTED / RELEASE PENDING：2026-09-08）
+# Product Radar V0.3 Phase A（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 新增平台无关 `TargetProfileExtractor` / `VisionProfileProvider`；用户明确品牌、型号、季节、价格、包含/排除条件优先于 vision/OCR/inferred，并记录 provenance/confidence。
 - [x] LangBot 图片入口保留 base64/URL，接入一次性多模态 TargetProfile 提取；预览显示用户条件、系统识别和最终 SearchPlan；轮询不调用 LLM。
@@ -11,7 +11,10 @@
 - [x] 新增 ListingDiscoveredEvent 数据流和 shared-feed watch router；reference baseline 与 notification/event idempotency 保留。
 - [x] ImageMatcher 增强为 provider/model/rawScore/matchScore abstraction，加入可替换 ImageFeatureProvider/ImageFeatureCache；当前 Sharp 行为和 0.60 阈值保持。
 - [x] 新增 38 项 Product Radar TypeScript tests、7 项 LangBot plugin tests；已通过 typecheck/build、Python compile、git diff check。
-- [ ] RELEASE：提交后构建 immutable Product Radar image、CasaOS `--no-build` recreate、LangBot plugin apply、真实 changedetection/shared-feed smoke。
+- [x] RELEASE：Product Radar immutable image `local/product-radar:git-8b0b96e4c2c6` 已在 OrbStack `ubuntu`/CasaOS 激活；changedetection `0.60.3` 保持 healthy，未重建或删除其 datastore。
+- [x] LangBot Product Radar plugin `0.3.0` 通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装，task `40` 达到 `INSTALL_READY`；rollback dir 为 `.backups/langbot/20260908-130039`。
+- [x] Real smoke：使用 Bunjang 公开服饰图 `424506121`，profile/user text、explicit query、900s interval、SearchFeed baseline、restart persistence、changedetection webhook、duplicate webhook 均验证；baseline/changedetection rerun 均 0 notification / 0 match / 0 event。
+- [x] 清理测试 Watch `v03-smoke-20260908`、`v03-smoke-persist-20260908` 及其独占 Feed/sensor；最终只保留原 Product Watch `9ec10408-e55b-43a8-821b-f3427005656e`，interval 120s，Product Snapshot 与 changedetection sensor 正常。
 
 
 更新时间：2026-09-07（Asia/Shanghai）
