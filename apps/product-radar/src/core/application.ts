@@ -182,14 +182,18 @@ export class ProductRadarService {
     const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
     const normalizedByIdentity = new Map<string, Listing>();
     const searchWarnings: Array<{ query: string; message: string }> = [];
-    for (const query of context.plan.queries) {
-      try {
-        const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
-        const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
-        const rows = await this.fetchNormalized(adapter, 'similarity', target);
-        for (const listing of rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
-      } catch (error) {
-        searchWarnings.push({ query: query.query, message: error instanceof Error ? error.message : String(error) });
+    const queryResults = await Promise.allSettled(context.plan.queries.map(async (query) => {
+      const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
+      const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
+      return { query: query.query, rows: await this.fetchSimilarityPreviewNormalized(adapter, target) };
+    }));
+    for (const result of queryResults) {
+      if (result.status === 'fulfilled') {
+        for (const listing of result.value.rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
+      } else {
+        const index = queryResults.indexOf(result);
+        const query = context.plan.queries[index]?.query ?? 'unknown';
+        searchWarnings.push({ query, message: result.reason instanceof Error ? result.reason.message : String(result.reason) });
       }
     }
     const normalized = [...normalizedByIdentity.values()];
@@ -508,6 +512,16 @@ export class ProductRadarService {
       }
     }
     return scores.sort((a, b) => b.score - a.score);
+  }
+
+  private async fetchSimilarityPreviewNormalized(adapter: ListingSourceAdapter, target: ValidatedTarget): Promise<Listing[]> {
+    if (!adapter.fetchSearchPage) return this.fetchNormalized(adapter, 'similarity', target);
+    const page = await adapter.fetchSearchPage({
+      ...target,
+      searchQuery: target.searchQuery ?? '',
+      pageSize: 60,
+    });
+    return this.normalizeListingCollection(adapter, page.items, target);
   }
 
   private async fetchNormalized(adapter: ListingSourceAdapter, type: ImplementedWatchType, target: ValidatedTarget): Promise<Listing[]> {

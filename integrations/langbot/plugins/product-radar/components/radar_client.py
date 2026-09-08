@@ -31,8 +31,13 @@ def _request(plugin: Any, method: str, path: str, payload: dict[str, Any] | None
     if api_key:
         headers['X-Product-Radar-Key'] = api_key
     request = urllib.request.Request(_url(plugin, path), data=body, headers=headers, method=method)
+    timeout_value = _config(plugin, 'radar_timeout_seconds', 'PRODUCT_RADAR_HTTP_TIMEOUT_SECONDS', '90')
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        timeout = max(20, int(timeout_value))
+    except ValueError:
+        timeout = 90
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             value = json.loads(response.read().decode('utf-8'))
             return value if isinstance(value, dict) else {'data': value}
     except urllib.error.HTTPError as error:
