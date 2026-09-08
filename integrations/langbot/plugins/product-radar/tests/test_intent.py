@@ -36,15 +36,16 @@ class ProductRadarIntentTest(unittest.TestCase):
         self.assertIsNone(parse_stop_intent('停止今天的自动摘要'))
 
 class ProductRadarImageIntentTest(unittest.TestCase):
-    def test_image_only_creates_similarity_watch_with_two_minute_interval(self) -> None:
+    def test_image_only_creates_similarity_watch_with_fifteen_minute_interval(self) -> None:
         from components.intent import parse_similarity_watch_intent
 
         result = parse_similarity_watch_intent('', [{'referenceImageBase64': 'data:image/jpeg;base64,abc'}])
         self.assertEqual(result['type'], 'similarity')
         self.assertEqual(result['target']['referenceImageBase64'], 'data:image/jpeg;base64,abc')
-        self.assertEqual(result['target']['searchQuery'], '의류')
+        self.assertNotIn('searchQuery', result['target'])
         self.assertEqual(result['rules']['similarityThreshold'], 0.6)
-        self.assertEqual(result['intervalSeconds'], 120)
+        from components.intent import DEFAULT_SIMILARITY_INTERVAL_SECONDS
+        self.assertEqual(result['intervalSeconds'], DEFAULT_SIMILARITY_INTERVAL_SECONDS)
 
     def test_image_caption_can_narrow_search_query(self) -> None:
         from components.intent import parse_similarity_watch_intent

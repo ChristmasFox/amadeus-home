@@ -7,6 +7,11 @@ import { matchListing } from './matching/matcher.js';
 import type { ImageMatcher, ImageSource } from './matching/image.js';
 import { NotificationDispatcher } from './notification/dispatcher.js';
 import type { SensorClient, SensorWatch } from '../sensors/sensor.js';
+import { SearchFeedCoordinator } from './search/feed-service.js';
+import type { SearchPlan, SearchQuery } from './search/model.js';
+import { BunjangSearchPlanner } from '../sources/bunjang/search-planner.js';
+import { TargetProfileExtractor } from './target-profile/extractor.js';
+import type { TargetProfile, TargetProfileExtractionInput, VisionProfile } from './target-profile/model.js';
 import type { SqliteRadarStore } from '../storage/sqlite.js';
 import { SourceAdapterRegistry, type ListingSourceAdapter, type ValidatedTarget } from '../sources/registry.js';
 import { isSellerRules, isSimilarityRules, type ImplementedWatchType, type Watch, type WatchTarget } from './watch/model.js';
@@ -19,6 +24,10 @@ export interface RadarServiceOptions {
   notifications: NotificationDispatcher;
   webhookUrl: string;
   imageMatcher?: ImageMatcher;
+  targetProfileExtractor?: TargetProfileExtractor;
+  searchPlanners?: Record<string, { plan(profile: TargetProfile): SearchPlan }>;
+  maxPagesPerRun?: number;
+  maxListingsPerRun?: number;
   now?: () => string;
 }
 
@@ -114,6 +123,9 @@ export class ProductRadarService {
   private readonly notifications: NotificationDispatcher;
   private readonly webhookUrl: string;
   private readonly imageMatcher: ImageMatcher | undefined;
+  private readonly targetProfileExtractor: TargetProfileExtractor;
+  private readonly searchPlanners: Record<string, { plan(profile: TargetProfile): SearchPlan }>;
+  private readonly searchFeeds: SearchFeedCoordinator;
 
   constructor(options: RadarServiceOptions) {
     this.store = options.store;
@@ -122,7 +134,16 @@ export class ProductRadarService {
     this.notifications = options.notifications;
     this.webhookUrl = options.webhookUrl;
     this.imageMatcher = options.imageMatcher;
+    this.targetProfileExtractor = options.targetProfileExtractor ?? new TargetProfileExtractor(options.now === undefined ? {} : { now: options.now });
+    this.searchPlanners = options.searchPlanners ?? { bunjang: new BunjangSearchPlanner(options.now === undefined ? undefined : options.now) };
     this.now = options.now ?? (() => new Date().toISOString());
+    const feedOptions = {
+      store: this.store, sources: this.sources, sensor: this.sensor, notifications: this.notifications,
+      ...(this.imageMatcher === undefined ? {} : { imageMatcher: this.imageMatcher }), webhookUrl: this.webhookUrl, now: this.now,
+      ...(options.maxPagesPerRun === undefined ? {} : { maxPagesPerRun: options.maxPagesPerRun }),
+      ...(options.maxListingsPerRun === undefined ? {} : { maxListingsPerRun: options.maxListingsPerRun }),
+    };
+    this.searchFeeds = new SearchFeedCoordinator(feedOptions);
   }
 
   listWatches(): Watch[] {
@@ -133,45 +154,57 @@ export class ProductRadarService {
     return this.store.getWatch(id);
   }
 
+  listSearchFeeds() {
+    return this.searchFeeds.listFeeds();
+  }
+
   async previewWatch(input: unknown): Promise<Record<string, unknown>> {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);
     this.sources.requireCapability(adapter, parsed.type);
-    const validatedTarget = await adapter.validateTarget(parsed.type, parsed.target);
-    const fetchTarget = parsed.type === 'similarity'
-      ? { ...validatedTarget, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit }
-      : validatedTarget;
-    const target = parsed.type === 'similarity'
-      ? await this.prepareSimilarityTarget(fetchTarget)
-      : validatedTarget;
-    const normalized = await this.fetchNormalized(adapter, parsed.type, fetchTarget);
-    const first = normalized[0];
-    if (parsed.type === 'similarity') {
-      const scores = await this.scoreSimilarity(target.referenceImageId ?? '', normalized, parsed.rules as { similarityThreshold: number; candidateLimit: number });
+    if (parsed.type !== 'similarity') {
+      const validatedTarget = await adapter.validateTarget(parsed.type, parsed.target);
+      const normalized = await this.fetchNormalized(adapter, parsed.type, validatedTarget);
+      const first = normalized[0];
       return {
         source: adapter.id,
         sourceDisplayName: adapter.displayName,
         type: parsed.type,
-        target: this.publicTarget(target),
+        target: validatedTarget,
         rules: parsed.rules,
         baselineCount: normalized.length,
-        similarity: {
-          threshold: (parsed.rules as { similarityThreshold: number }).similarityThreshold,
-          candidateCount: normalized.length,
-          topMatches: scores.slice(0, 5),
-        },
+        ...(parsed.type === 'seller'
+          ? { seller: first?.seller ?? { externalId: validatedTarget.externalId, url: validatedTarget.url }, listings: normalized.slice(0, 10) }
+          : { product: first }),
       };
     }
+
+    const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
+    const normalizedByIdentity = new Map<string, Listing>();
+    for (const query of context.plan.queries) {
+      const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
+      const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
+      const rows = await this.fetchNormalized(adapter, 'similarity', target);
+      for (const listing of rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
+    }
+    const normalized = [...normalizedByIdentity.values()];
+    const referenceTarget = await adapter.validateTarget('similarity', { ...parsed.target, searchQuery: context.plan.queries[0]?.query ?? '의류' });
+    const preparedTarget = await this.prepareSimilarityTarget(referenceTarget);
+    const scores = await this.scoreSimilarity(preparedTarget.referenceImageId ?? '', normalized, parsed.rules as { similarityThreshold: number; candidateLimit: number });
     return {
       source: adapter.id,
       sourceDisplayName: adapter.displayName,
       type: parsed.type,
-      target,
+      target: this.publicTarget(preparedTarget),
+      targetProfile: context.profile,
+      searchPlan: context.plan,
       rules: parsed.rules,
       baselineCount: normalized.length,
-      ...(parsed.type === 'seller'
-        ? { seller: first?.seller ?? { externalId: validatedTarget.externalId, url: validatedTarget.url }, listings: normalized.slice(0, 10) }
-        : { product: first }),
+      similarity: {
+        threshold: (parsed.rules as { similarityThreshold: number }).similarityThreshold,
+        candidateCount: normalized.length,
+        topMatches: scores.slice(0, 5),
+      },
     };
   }
 
@@ -179,42 +212,29 @@ export class ProductRadarService {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);
     this.sources.requireCapability(adapter, parsed.type);
+    if (parsed.type === 'similarity') return this.createSimilarityWatch(parsed, adapter);
+
     const validatedTarget = await adapter.validateTarget(parsed.type, parsed.target);
-    const fetchTarget = parsed.type === 'similarity'
-      ? { ...validatedTarget, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit }
-      : validatedTarget;
-    let persistedTarget: WatchTarget = validatedTarget;
-    if (parsed.type === 'similarity') persistedTarget = await this.prepareSimilarityTarget(fetchTarget);
     const id = parsed.id ?? randomUUID();
     if (this.store.getWatch(id)) throw new RadarError(`watch already exists: ${id}`, 'CONFLICT', 409);
     const now = this.now();
     const watch: Watch = {
-      id,
-      source: adapter.id,
-      type: parsed.type,
-      target: persistedTarget,
-      rules: parsed.rules,
-      enabled: parsed.enabled ?? true,
-      intervalSeconds: parsed.intervalSeconds,
-      createdAt: now,
-      updatedAt: now,
+      id, source: adapter.id, type: parsed.type, target: validatedTarget, rules: parsed.rules,
+      enabled: parsed.enabled ?? true, intervalSeconds: parsed.intervalSeconds, createdAt: now, updatedAt: now,
     };
-    const baseline = await this.fetchNormalized(adapter, watch.type, fetchTarget);
+    const baseline = await this.fetchNormalized(adapter, watch.type, validatedTarget);
     let sensorWatch: SensorWatch | undefined;
     try {
       sensorWatch = await this.sensor.createWatch({
-        radarWatchId: watch.id,
-        url: validatedTarget.url,
-        title: `${adapter.displayName} ${watch.type} watch ${validatedTarget.externalId}`,
-        intervalSeconds: watch.intervalSeconds,
-        webhookUrl: this.webhookUrl,
+        radarWatchId: watch.id, url: validatedTarget.url, title: `${adapter.displayName} ${watch.type} watch ${validatedTarget.externalId}`,
+        intervalSeconds: watch.intervalSeconds, webhookUrl: this.webhookUrl,
       });
       if (!watch.enabled) await this.sensor.pauseWatch(sensorWatch.id);
       const persistedWatch: Watch = { ...watch, sensorId: sensorWatch.id };
       this.store.transaction(() => {
         this.store.createWatch(persistedWatch);
         this.store.upsertSensorWatch(persistedWatch.id, sensorWatch!.id, this.sensor.id, validatedTarget.url, persistedWatch.enabled ? 'active' : 'paused', now);
-        if (watch.type === 'seller' || watch.type === 'similarity') {
+        if (watch.type === 'seller') {
           for (const listing of baseline) {
             this.store.upsertListing(listing);
             this.store.recordSeenListing(watch.id, listing, now, true, false);
@@ -235,23 +255,98 @@ export class ProductRadarService {
     }
   }
 
+  private async createSimilarityWatch(parsed: ReturnType<typeof parseWatchCreateInput>, adapter: ListingSourceAdapter): Promise<WatchCreationResult> {
+    const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
+    const firstQuery = context.plan.queries[0]?.query ?? '의류';
+    const validated = await adapter.validateTarget('similarity', { ...parsed.target, searchQuery: firstQuery });
+    const prepared = await this.prepareSimilarityTarget(validated);
+    const id = parsed.id ?? randomUUID();
+    if (this.store.getWatch(id)) throw new RadarError(`watch already exists: ${id}`, 'CONFLICT', 409);
+    const now = this.now();
+    const target: WatchTarget = {
+      ...prepared,
+      searchQuery: firstQuery,
+      searchUrl: validated.url,
+      searchQueries: context.plan.queries.map((query) => query.query),
+      ...(parsed.target.userText === undefined ? {} : { userText: parsed.target.userText }),
+      ...(parsed.target.explicitSearchTerms === undefined ? {} : { explicitSearchTerms: parsed.target.explicitSearchTerms }),
+    };
+    const watch: Watch = {
+      id, source: adapter.id, type: 'similarity', target, rules: parsed.rules, enabled: parsed.enabled ?? true,
+      intervalSeconds: parsed.intervalSeconds, createdAt: now, updatedAt: now, targetProfile: context.profile, searchPlan: context.plan,
+    };
+    this.store.createWatch(watch);
+    try {
+      const preparedFeeds = await this.searchFeeds.prepareWatch(watch, context.plan, parsed.intervalSecondsExplicit ? 0 : undefined);
+      if (!watch.enabled) {
+        for (const feed of preparedFeeds.feeds) if (feed.sensorWatchId) await this.sensor.pauseWatch(feed.sensorWatchId).catch(() => undefined);
+      }
+      return { watch, baselineCount: preparedFeeds.baselineCount, baselineNotifications: 0 };
+    } catch (error) {
+      await this.searchFeeds.cleanupWatch(watch.id);
+      this.store.deleteWatch(watch.id);
+      throw error;
+    }
+  }
+
   async patchWatch(id: string, input: unknown): Promise<Watch> {
     const current = this.store.getWatch(id);
     if (!current) throw new RadarError(`watch not found: ${id}`, 'NOT_FOUND', 404);
     const patch = parseWatchPatch(input);
-    const updated = applyWatchPatch(current, patch, this.now());
+    let updated = applyWatchPatch(current, patch, this.now());
+    const targetChanged = patch.target !== undefined || patch.targetProfile !== undefined || patch.reanalyze === true;
+    if (current.type === 'similarity' && targetChanged) {
+      const context = await this.similarityContext(current.source, updated.target, patch.targetProfile, undefined, false);
+      const profile = this.mergeTargetProfiles(current.targetProfile, context.profile);
+      const firstQuery = context.plan.queries[0]?.query ?? '의류';
+      const adapter = this.sources.require(current.source);
+      const validated = await adapter.validateTarget('similarity', { ...updated.target, searchQuery: firstQuery });
+      const prepared = updated.target.referenceImageBase64 || updated.target.referenceImageUrl
+        ? await this.prepareSimilarityTarget(validated)
+        : current.target.referenceImageId
+          ? { ...validated, referenceImageId: current.target.referenceImageId }
+          : await this.prepareSimilarityTarget(validated);
+      updated = {
+        ...updated,
+        target: { ...updated.target, ...prepared, searchQuery: firstQuery, searchUrl: validated.url, searchQueries: context.plan.queries.map((query) => query.query) },
+        targetProfile: profile,
+        searchPlan: context.plan,
+      };
+      this.store.updateWatch(updated);
+      await this.searchFeeds.updateWatchPlan(updated, context.plan);
+      await this.searchFeeds.syncWatch(updated, current);
+      return updated;
+    }
     if (current.sensorId !== undefined) {
       if (current.enabled !== updated.enabled) {
         if (updated.enabled) await this.sensor.resumeWatch(current.sensorId);
         else await this.sensor.pauseWatch(current.sensorId);
         this.store.updateSensorState(id, updated.enabled ? 'active' : 'paused', updated.updatedAt);
       }
-      if (current.intervalSeconds !== updated.intervalSeconds) {
-        await this.sensor.updateWatch(current.sensorId, { intervalSeconds: updated.intervalSeconds });
-      }
+      if (current.intervalSeconds !== updated.intervalSeconds) await this.sensor.updateWatch(current.sensorId, { intervalSeconds: updated.intervalSeconds });
     }
     this.store.updateWatch(updated);
+    if (current.type === 'similarity') await this.searchFeeds.syncWatch(updated, current);
     return updated;
+  }
+
+  private mergeTargetProfiles(previous: TargetProfile | undefined, next: TargetProfile): TargetProfile {
+    if (!previous) return next;
+    return {
+      ...previous,
+      ...next,
+      colors: [...new Set([...previous.colors, ...next.colors])],
+      materials: [...new Set([...previous.materials, ...next.materials])],
+      features: [...new Set([...previous.features, ...next.features])],
+      detectedText: [...new Set([...previous.detectedText, ...next.detectedText])],
+      userHints: [...new Set([...previous.userHints, ...next.userHints])],
+      explicitSearchTerms: [...new Set([...previous.explicitSearchTerms, ...next.explicitSearchTerms])],
+      includeKeywords: [...new Set([...previous.includeKeywords, ...next.includeKeywords])],
+      excludeKeywords: [...new Set([...previous.excludeKeywords, ...next.excludeKeywords])],
+      hardConstraints: [...previous.hardConstraints, ...next.hardConstraints],
+      softHints: [...previous.softHints, ...next.softHints],
+      provenance: { ...previous.provenance, ...next.provenance },
+    };
   }
 
   async pauseWatch(id: string): Promise<Watch> {
@@ -265,6 +360,7 @@ export class ProductRadarService {
   async deleteWatch(id: string): Promise<void> {
     const watch = this.store.getWatch(id);
     if (!watch) throw new RadarError(`watch not found: ${id}`, 'NOT_FOUND', 404);
+    if (watch.type === 'similarity') await this.searchFeeds.cleanupWatch(id);
     if (watch.sensorId) {
       try { await this.sensor.deleteWatch(watch.sensorId); } catch { /* local deletion remains authoritative */ }
     }
@@ -275,6 +371,19 @@ export class ProductRadarService {
     const watch = this.store.getWatch(id);
     if (!watch) throw new RadarError(`watch not found: ${id}`, 'NOT_FOUND', 404);
     if (!watch.enabled) return { watchId: id, status: 'disabled', triggerKey, newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
+    if (watch.type === 'similarity') {
+      const prepared = await this.searchFeeds.ensureLegacyWatchFeed(watch);
+      const results = [];
+      for (const feed of prepared.feeds) results.push(await this.searchFeeds.runFeed(feed.id, triggerKey));
+      const status = results.some((result) => result.status === 'degraded') ? 'succeeded' : results.some((result) => result.status === 'duplicate') ? 'duplicate' : 'succeeded';
+      return {
+        watchId: id, status, triggerKey,
+        newListings: results.reduce((sum, result) => sum + result.newListings, 0),
+        matchedListings: results.reduce((sum, result) => sum + result.matchedListings, 0),
+        changes: results.reduce((sum, result) => sum + result.newListings, 0),
+        eventIds: results.flatMap((result) => result.eventIds),
+      };
+    }
     if (watch.sensorId !== undefined) {
       const sensorWatch = await this.sensor.getWatch(watch.sensorId);
       if (!sensorWatch) {
@@ -287,15 +396,8 @@ export class ProductRadarService {
     try {
       const adapter = this.sources.require(watch.source);
       const validatedTarget = await adapter.validateTarget(watch.type, watch.target);
-      const target = watch.type === 'similarity' && isSimilarityRules(watch.rules)
-        ? { ...validatedTarget, candidateLimit: watch.rules.candidateLimit }
-        : validatedTarget;
-      const normalized = await this.fetchNormalized(adapter, watch.type, target);
-      const result = watch.type === 'seller'
-        ? await this.processSellerWatch(watch, normalized)
-        : watch.type === 'similarity'
-          ? await this.processSimilarityWatch(watch, normalized)
-          : await this.processProductWatch(watch, normalized[0]);
+      const normalized = await this.fetchNormalized(adapter, watch.type, validatedTarget);
+      const result = watch.type === 'seller' ? await this.processSellerWatch(watch, normalized) : await this.processProductWatch(watch, normalized[0]);
       this.store.finishPollRun(pollRun.id, 'succeeded', this.now(), { listingsCount: normalized.length, changesCount: result.changes });
       await this.notifications.deliverPending();
       return { ...result, watchId: id, status: 'succeeded', triggerKey };
@@ -307,27 +409,63 @@ export class ProductRadarService {
 
   async handleSensorWebhook(payload: unknown): Promise<Record<string, unknown>> {
     const value = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload as Record<string, unknown> : {};
-    const radarWatchId = webhookString(value, ['radarWatchId', 'radar_watch_id']);
+    const radarId = webhookString(value, ['feedId', 'feed_id', 'radarWatchId', 'radar_watch_id']);
     const sensorWatchId = webhookString(value, ['sensorWatchId', 'sensor_watch_id', 'watch_uuid']);
-    if (!radarWatchId || !sensorWatchId) throw new RadarError('webhook requires radarWatchId and sensorWatchId', 'MALFORMED_WEBHOOK', 400);
-    const watch = this.store.getWatch(radarWatchId);
-    if (!watch) throw new RadarError(`watch not found: ${radarWatchId}`, 'NOT_FOUND', 404);
-    if (!watch.sensorId || watch.sensorId !== sensorWatchId) throw new RadarError('webhook sensor watch does not match radar watch', 'MALFORMED_WEBHOOK', 400);
-    if (!watch.enabled) return { accepted: true, ignored: 'watch_disabled', radarWatchId, sensorWatchId };
+    if (!radarId || !sensorWatchId) throw new RadarError('webhook requires radarWatchId/feedId and sensorWatchId', 'MALFORMED_WEBHOOK', 400);
     const eventId = webhookString(value, ['eventId', 'event_id', 'triggerId', 'trigger_id', 'diff_id', 'id']);
-    const triggerKey = eventId || `sensor:${hash({ radarWatchId, sensorWatchId, payload: value })}`;
+    const triggerKey = eventId || `sensor:${hash({ radarId, sensorWatchId, payload: value })}`;
+    const feed = this.store.getSearchFeed(radarId);
+    if (feed) {
+      try { return await this.searchFeeds.handleWebhook(feed.id, sensorWatchId, triggerKey); }
+      catch (error) { return { accepted: true, feedId: feed.id, sensorWatchId, fetchFailed: true, error: error instanceof Error ? error.message : String(error) }; }
+    }
+    const watch = this.store.getWatch(radarId);
+    if (!watch) throw new RadarError(`watch not found: ${radarId}`, 'NOT_FOUND', 404);
+    if (!watch.sensorId || watch.sensorId !== sensorWatchId) throw new RadarError('webhook sensor watch does not match radar watch', 'MALFORMED_WEBHOOK', 400);
+    if (!watch.enabled) return { accepted: true, ignored: 'watch_disabled', radarWatchId: radarId, sensorWatchId };
     try {
-      const result = await this.runWatch(radarWatchId, triggerKey);
+      const result = await this.runWatch(radarId, triggerKey);
       return { accepted: true, ...result };
     } catch (error) {
-      return {
-        accepted: true,
-        radarWatchId,
-        sensorWatchId,
-        fetchFailed: true,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      return { accepted: true, radarWatchId: radarId, sensorWatchId, fetchFailed: true, error: error instanceof Error ? error.message : String(error) };
     }
+  }
+
+  private async similarityContext(source: string, target: WatchTarget, providedProfile?: TargetProfile, providedPlan?: SearchPlan, preserveTargetQueries = true): Promise<{ profile: TargetProfile; plan: SearchPlan }> {
+    const imageSource = target.referenceImageBase64
+      ? { base64: target.referenceImageBase64 }
+      : target.referenceImageUrl
+        ? { url: target.referenceImageUrl }
+        : undefined;
+    const visionProfile = target.visionProfile as VisionProfile | undefined;
+    const profile = providedProfile ?? await this.targetProfileExtractor.extract({
+      ...(imageSource === undefined ? {} : { referenceImage: imageSource }),
+      ...(target.userText === undefined ? {} : { userText: target.userText }),
+      ...(target.explicitSearchTerms === undefined ? {} : { explicitSearchTerms: target.explicitSearchTerms }),
+      ...(visionProfile === undefined ? {} : { visionProfile, ...(visionProfile.provider === undefined ? {} : { visionProvider: visionProfile.provider }) }),
+    } as TargetProfileExtractionInput);
+    const planner = this.searchPlanners[source] ?? (source === 'bunjang' ? this.searchPlanners.bunjang : undefined);
+    let plan = providedPlan ?? (planner ? planner.plan(profile) : this.fallbackSearchPlan(target, profile));
+    const explicitQueries = preserveTargetQueries ? [...(target.searchQueries ?? []), ...(target.searchQuery ? [target.searchQuery] : [])] : [];
+    if (explicitQueries.length > 0) {
+      const seen = new Set(plan.queries.map((query) => query.canonicalQuery || query.query.normalize('NFKC').toLocaleLowerCase().replace(/[\s\-_/]+/gu, ' ').trim()));
+      const preserved: SearchQuery[] = [];
+      for (const query of explicitQueries) {
+        const canonicalQuery = query.normalize('NFKC').toLocaleLowerCase().replace(/[\s\-_/]+/gu, ' ').trim();
+        if (!canonicalQuery || seen.has(canonicalQuery)) continue;
+        seen.add(canonicalQuery);
+        preserved.push({ query, canonicalQuery, tier: 'explicit', source: 'user' });
+      }
+      if (preserved.length > 0) plan = { ...plan, queries: [...preserved, ...plan.queries].slice(0, 4) };
+    }
+    return { profile, plan };
+  }
+
+  private fallbackSearchPlan(target: WatchTarget, profile: TargetProfile): SearchPlan {
+    const queries = [...(target.searchQueries ?? []), ...(target.searchQuery ? [target.searchQuery] : []), ...profile.explicitSearchTerms];
+    const unique = [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
+    const values = unique.length > 0 ? unique : [profile.category ?? '의류'];
+    return { source: 'bunjang', queries: values.slice(0, 4).map((query, index) => ({ query, canonicalQuery: query.normalize('NFKC').toLocaleLowerCase(), tier: index === 0 ? 'explicit' : 'broad', source: index === 0 ? 'user' : 'inferred' })), generatedAt: this.now(), ...(profile.provider ? { profileProvider: profile.provider } : {}) };
   }
 
   private async prepareSimilarityTarget(target: ValidatedTarget): Promise<ValidatedTarget> {

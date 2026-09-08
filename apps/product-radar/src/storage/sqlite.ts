@@ -3,6 +3,8 @@ import type { Listing } from '../core/listing/model.js';
 import type { RadarEvent } from '../core/events/events.js';
 import type { NotificationChannel, NotificationMessage } from '../core/notification/ports.js';
 import type { Watch, WatchRules, WatchTarget, ImplementedWatchType } from '../core/watch/model.js';
+import type { FeedListingEvent, SearchFeed, WatchFeedSubscription } from '../core/search/model.js';
+import type { TargetProfile } from '../core/target-profile/model.js';
 
 interface SqliteStatement {
   run(...params: unknown[]): { changes: number | bigint; lastInsertRowid?: number | bigint };
@@ -41,6 +43,19 @@ export interface NotificationOutboxRow {
   sentAt?: string;
 }
 
+
+export interface FeedRunResult {
+  id: string;
+  feedId: string;
+  triggerKey: string;
+  status: 'running' | 'succeeded' | 'failed';
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
+  listingsCount?: number;
+  changesCount?: number;
+}
+
 export interface PollRunResult {
   id: string;
   watchId: string;
@@ -77,17 +92,21 @@ function integer(value: number | bigint | undefined): number {
 
 function rowToWatch(row: Record<string, unknown>): Watch {
   const sensorId = optionalString(row.sensor_id);
+  const persistedTarget = jsonParse<WatchTarget & { targetProfile?: TargetProfile; searchPlan?: Watch['searchPlan'] }>(row.target_json, {});
+  const { targetProfile, searchPlan, ...target } = persistedTarget;
   return {
     id: String(row.id),
     source: String(row.source),
     type: String(row.type) as ImplementedWatchType,
-    target: jsonParse<WatchTarget>(row.target_json, {}),
+    target,
     rules: jsonParse<WatchRules>(row.rules_json, {} as WatchRules),
     enabled: bool(row.enabled),
     intervalSeconds: Number(row.interval_seconds),
     ...(sensorId === undefined ? {} : { sensorId }),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+    ...(targetProfile === undefined ? {} : { targetProfile }),
+    ...(searchPlan === undefined ? {} : { searchPlan }),
   };
 }
 
@@ -225,6 +244,76 @@ export class SqliteRadarStore {
         UNIQUE(watch_id, trigger_key)
       );
       CREATE INDEX IF NOT EXISTS idx_poll_runs_watch ON poll_runs(watch_id, started_at DESC);
+
+      CREATE TABLE IF NOT EXISTS target_profiles (
+        watch_id TEXT PRIMARY KEY,
+        profile_json TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        extracted_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS search_feeds (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        target TEXT NOT NULL,
+        query TEXT NOT NULL,
+        canonical_key TEXT NOT NULL UNIQUE,
+        interval_seconds INTEGER NOT NULL,
+        jitter_seconds INTEGER NOT NULL DEFAULT 120,
+        sensor_watch_id TEXT UNIQUE,
+        state TEXT NOT NULL DEFAULT 'ACTIVE',
+        last_successful_run_at TEXT,
+        watermark TEXT,
+        failure_count INTEGER NOT NULL DEFAULT 0,
+        degraded_reason TEXT,
+        potential_candidate_gap INTEGER NOT NULL DEFAULT 0,
+        backoff_until TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_search_feeds_state ON search_feeds(state);
+
+      CREATE TABLE IF NOT EXISTS watch_feed_subscriptions (
+        watch_id TEXT NOT NULL,
+        feed_id TEXT NOT NULL,
+        start_after_event_id TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(watch_id, feed_id),
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE,
+        FOREIGN KEY(feed_id) REFERENCES search_feeds(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_feed_subscriptions_feed ON watch_feed_subscriptions(feed_id);
+
+      CREATE TABLE IF NOT EXISTS feed_listing_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        feed_id TEXT NOT NULL,
+        source TEXT NOT NULL,
+        external_id TEXT NOT NULL,
+        listing_identity TEXT NOT NULL,
+        listing_json TEXT NOT NULL,
+        discovered_at TEXT NOT NULL,
+        UNIQUE(feed_id, source, external_id),
+        FOREIGN KEY(feed_id) REFERENCES search_feeds(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_feed_events_feed_sequence ON feed_listing_events(feed_id, sequence ASC);
+
+      CREATE TABLE IF NOT EXISTS search_feed_runs (
+        id TEXT PRIMARY KEY,
+        feed_id TEXT NOT NULL,
+        trigger_key TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        error TEXT,
+        listings_count INTEGER,
+        changes_count INTEGER,
+        UNIQUE(feed_id, trigger_key),
+        FOREIGN KEY(feed_id) REFERENCES search_feeds(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_search_feed_runs_feed ON search_feed_runs(feed_id, started_at DESC);
     `);
   }
 
@@ -337,6 +426,12 @@ export class SqliteRadarStore {
       (watch_id, source, external_id, first_seen_at, baseline, matched) VALUES (?, ?, ?, ?, ?, ?)`)
       .run(watchId, listing.source, listing.externalId, now, baseline ? 1 : 0, matched ? 1 : 0);
     return integer(result.changes) > 0;
+  }
+
+  listSeenListings(watchId: string): Array<{ source: string; externalId: string; firstSeenAt: string; baseline: boolean; matched: boolean }> {
+    return this.db.prepare('SELECT * FROM watch_seen_listings WHERE watch_id = ? ORDER BY first_seen_at ASC, external_id ASC').all(watchId).map((row) => ({
+      source: String(row.source), externalId: String(row.external_id), firstSeenAt: String(row.first_seen_at), baseline: bool(row.baseline), matched: bool(row.matched),
+    }));
   }
 
   markSeenMatched(watchId: string, listing: Pick<Listing, 'source' | 'externalId'>): void {
@@ -501,8 +596,135 @@ export class SqliteRadarStore {
     }));
   }
 
+
+  createSearchFeed(feed: SearchFeed): void {
+    this.db.prepare(`INSERT INTO search_feeds
+      (id, source, target, query, canonical_key, interval_seconds, jitter_seconds, sensor_watch_id, state, last_successful_run_at, watermark, failure_count, degraded_reason, potential_candidate_gap, backoff_until, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(feed.id, feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.createdAt, feed.updatedAt);
+  }
+
+  updateSearchFeed(feed: SearchFeed): void {
+    this.db.prepare(`UPDATE search_feeds SET source = ?, target = ?, query = ?, canonical_key = ?, interval_seconds = ?, jitter_seconds = ?, sensor_watch_id = ?, state = ?, last_successful_run_at = ?, watermark = ?, failure_count = ?, degraded_reason = ?, potential_candidate_gap = ?, backoff_until = ?, updated_at = ? WHERE id = ?`)
+      .run(feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.updatedAt, feed.id);
+  }
+
+  getSearchFeed(id: string): SearchFeed | undefined {
+    const row = this.db.prepare('SELECT * FROM search_feeds WHERE id = ?').get(id);
+    return row ? this.rowToSearchFeed(row) : undefined;
+  }
+
+  findSearchFeed(source: string, canonicalKey: string): SearchFeed | undefined {
+    const row = this.db.prepare('SELECT * FROM search_feeds WHERE source = ? AND canonical_key = ?').get(source, canonicalKey);
+    return row ? this.rowToSearchFeed(row) : undefined;
+  }
+
+  listSearchFeeds(): SearchFeed[] {
+    return this.db.prepare('SELECT * FROM search_feeds ORDER BY created_at ASC, id ASC').all().map((row) => this.rowToSearchFeed(row));
+  }
+
+  deleteSearchFeed(id: string): void {
+    this.db.prepare('DELETE FROM search_feeds WHERE id = ?').run(id);
+  }
+
+  private rowToSearchFeed(row: Record<string, unknown>): SearchFeed {
+    const optional = (value: unknown): string | undefined => optionalString(value);
+    return {
+      id: String(row.id), source: String(row.source), target: String(row.target), query: String(row.query), canonicalKey: String(row.canonical_key),
+      intervalSeconds: Number(row.interval_seconds), jitterSeconds: Number(row.jitter_seconds),
+      ...(optional(row.sensor_watch_id) === undefined ? {} : { sensorWatchId: String(row.sensor_watch_id) }),
+      state: String(row.state) as SearchFeed['state'],
+      ...(optional(row.last_successful_run_at) === undefined ? {} : { lastSuccessfulRunAt: String(row.last_successful_run_at) }),
+      ...(optional(row.watermark) === undefined ? {} : { watermark: String(row.watermark) }),
+      failureCount: Number(row.failure_count),
+      ...(optional(row.degraded_reason) === undefined ? {} : { degradedReason: String(row.degraded_reason) }),
+      potentialCandidateGap: bool(row.potential_candidate_gap),
+      ...(optional(row.backoff_until) === undefined ? {} : { backoffUntil: String(row.backoff_until) }),
+      createdAt: String(row.created_at), updatedAt: String(row.updated_at),
+    };
+  }
+
+  upsertWatchFeedSubscription(subscription: WatchFeedSubscription): void {
+    this.db.prepare(`INSERT INTO watch_feed_subscriptions (watch_id, feed_id, start_after_event_id, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(watch_id, feed_id) DO UPDATE SET start_after_event_id = excluded.start_after_event_id`)
+      .run(subscription.watchId, subscription.feedId, subscription.startAfterEventId ?? null, subscription.createdAt);
+  }
+
+  getWatchFeedSubscription(watchId: string, feedId: string): WatchFeedSubscription | undefined {
+    const row = this.db.prepare('SELECT * FROM watch_feed_subscriptions WHERE watch_id = ? AND feed_id = ?').get(watchId, feedId);
+    if (!row) return undefined;
+    return { watchId: String(row.watch_id), feedId: String(row.feed_id), ...(optionalString(row.start_after_event_id) === undefined ? {} : { startAfterEventId: String(row.start_after_event_id) }), createdAt: String(row.created_at) };
+  }
+
+  listWatchFeedSubscriptions(filters: { watchId?: string; feedId?: string } = {}): WatchFeedSubscription[] {
+    if (filters.watchId !== undefined && filters.feedId !== undefined) {
+      const row = this.getWatchFeedSubscription(filters.watchId, filters.feedId);
+      return row ? [row] : [];
+    }
+    const rows = filters.watchId !== undefined
+      ? this.db.prepare('SELECT * FROM watch_feed_subscriptions WHERE watch_id = ? ORDER BY feed_id ASC').all(filters.watchId)
+      : filters.feedId !== undefined
+        ? this.db.prepare('SELECT * FROM watch_feed_subscriptions WHERE feed_id = ? ORDER BY watch_id ASC').all(filters.feedId)
+        : this.db.prepare('SELECT * FROM watch_feed_subscriptions ORDER BY watch_id ASC, feed_id ASC').all();
+    return rows.map((row) => ({ watchId: String(row.watch_id), feedId: String(row.feed_id), ...(optionalString(row.start_after_event_id) === undefined ? {} : { startAfterEventId: String(row.start_after_event_id) }), createdAt: String(row.created_at) }));
+  }
+
+  deleteWatchFeedSubscription(watchId: string, feedId: string): void {
+    this.db.prepare('DELETE FROM watch_feed_subscriptions WHERE watch_id = ? AND feed_id = ?').run(watchId, feedId);
+  }
+
+  countFeedSubscribers(feedId: string): number {
+    return integer(this.db.prepare('SELECT COUNT(*) AS count FROM watch_feed_subscriptions WHERE feed_id = ?').get(feedId)?.count as number | bigint | undefined);
+  }
+
+  insertFeedListingEvent(feedId: string, listing: Listing, discoveredAt: string): FeedListingEvent | undefined {
+    const eventId = `${feedId}:${listing.source}:${listing.externalId}`;
+    const result = this.db.prepare(`INSERT OR IGNORE INTO feed_listing_events
+      (event_id, feed_id, source, external_id, listing_identity, listing_json, discovered_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(eventId, feedId, listing.source, listing.externalId, `${listing.source}:${listing.externalId}`, JSON.stringify(listing), discoveredAt);
+    if (integer(result.changes) === 0) return undefined;
+    return { eventId, feedId, source: listing.source, externalId: listing.externalId, listingIdentity: `${listing.source}:${listing.externalId}`, discoveredAt };
+  }
+
+  getFeedListingEvent(eventId: string): { event: FeedListingEvent; listing: Listing; sequence: number } | undefined {
+    const row = this.db.prepare('SELECT * FROM feed_listing_events WHERE event_id = ?').get(eventId);
+    if (!row) return undefined;
+    return { event: { eventId: String(row.event_id), feedId: String(row.feed_id), source: String(row.source), externalId: String(row.external_id), listingIdentity: String(row.listing_identity), discoveredAt: String(row.discovered_at) }, listing: jsonParse<Listing>(row.listing_json, {} as Listing), sequence: Number(row.sequence) };
+  }
+
+  getLatestFeedListingEvent(feedId: string): FeedListingEvent | undefined {
+    const row = this.db.prepare('SELECT * FROM feed_listing_events WHERE feed_id = ? ORDER BY sequence DESC LIMIT 1').get(feedId);
+    if (!row) return undefined;
+    return { eventId: String(row.event_id), feedId: String(row.feed_id), source: String(row.source), externalId: String(row.external_id), listingIdentity: String(row.listing_identity), discoveredAt: String(row.discovered_at) };
+  }
+
+  hasFeedListing(feedId: string, source: string, externalId: string): boolean {
+    return this.db.prepare('SELECT 1 AS present FROM feed_listing_events WHERE feed_id = ? AND source = ? AND external_id = ?').get(feedId, source, externalId) !== undefined;
+  }
+
+  listFeedListingEventsAfter(feedId: string, startAfterEventId?: string): Array<{ event: FeedListingEvent; listing: Listing }> {
+    const boundary = startAfterEventId ? this.getFeedListingEvent(startAfterEventId) : undefined;
+    const rows = boundary
+      ? this.db.prepare('SELECT * FROM feed_listing_events WHERE feed_id = ? AND sequence > ? ORDER BY sequence ASC').all(feedId, boundary.sequence)
+      : this.db.prepare('SELECT * FROM feed_listing_events WHERE feed_id = ? ORDER BY sequence ASC').all(feedId);
+    return rows.map((row) => ({ event: { eventId: String(row.event_id), feedId: String(row.feed_id), source: String(row.source), externalId: String(row.external_id), listingIdentity: String(row.listing_identity), discoveredAt: String(row.discovered_at) }, listing: jsonParse<Listing>(row.listing_json, {} as Listing) }));
+  }
+
+  beginFeedRun(feedId: string, triggerKey: string, now: string): FeedRunResult | undefined {
+    const id = `${feedId}:${triggerKey}`;
+    const result = this.db.prepare(`INSERT OR IGNORE INTO search_feed_runs (id, feed_id, trigger_key, status, started_at) VALUES (?, ?, ?, 'running', ?)`).run(id, feedId, triggerKey, now);
+    if (integer(result.changes) === 0) return undefined;
+    return { id, feedId, triggerKey, status: 'running', startedAt: now };
+  }
+
+  finishFeedRun(id: string, status: 'succeeded' | 'failed', now: string, details: { error?: string; listingsCount?: number; changesCount?: number } = {}): void {
+    this.db.prepare('UPDATE search_feed_runs SET status = ?, finished_at = ?, error = ?, listings_count = ?, changes_count = ? WHERE id = ?').run(status, now, details.error ?? null, details.listingsCount ?? null, details.changesCount ?? null, id);
+  }
+
   tableCounts(): Record<string, number> {
-    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'similarity_matches', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs'];
+    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'similarity_matches', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs', 'target_profiles', 'search_feeds', 'watch_feed_subscriptions', 'feed_listing_events', 'search_feed_runs'];
     return Object.fromEntries(names.map((name) => [name, Number(this.db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).get()?.count ?? 0)]));
   }
 

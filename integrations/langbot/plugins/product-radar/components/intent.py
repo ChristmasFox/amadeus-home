@@ -7,6 +7,7 @@ URL_RE = re.compile(r'https?://[^\s<>]+', re.IGNORECASE)
 SELLER_PATH_RE = re.compile(r'/shops?/(\d+)(?:/|$)|/user/(\d+)(?:/|$)', re.IGNORECASE)
 PRODUCT_PATH_RE = re.compile(r'/products?_?/(\d+)(?:/|$)', re.IGNORECASE)
 DEFAULT_INTERVAL_SECONDS = 120
+DEFAULT_SIMILARITY_INTERVAL_SECONDS = 900
 
 
 def _clean_url(value: str) -> str:
@@ -60,19 +61,21 @@ def parse_similarity_watch_intent(text: str, images: list[dict[str, str]]) -> di
     normalized = text.strip().lower()
     if normalized and any(is_control in normalized for is_control in ('确认监控', '开始监控', '取消监控', '停止监控', '停止', '暂停')):
         return None
-    # A caption may narrow the candidate search; an image-only message uses a
-    # broad clothing query and lets the deterministic matcher do the filtering.
-    query_match = re.search(r'(?:搜索|搜|只看|关键词|品牌)\s*[:：]?\s*([^，。！？\n]+)', text, flags=re.IGNORECASE)
-    search_query = query_match.group(1).strip() if query_match and query_match.group(1).strip() else '의류'
+    query_match = re.search(r'(?:搜索词|搜索|搜|只看|关键词|query|search(?: term)?)\s*[:：]?\s*([^，。！？\n]+)', text, flags=re.IGNORECASE)
+    search_query = query_match.group(1).strip() if query_match and query_match.group(1).strip() else None
+    explicit_terms = [search_query] if search_query else []
     source = images[0]
+    target: dict[str, Any] = {**source, 'userText': text.strip()}
+    if search_query:
+        target['searchQuery'] = search_query
+        target['explicitSearchTerms'] = explicit_terms
     return {
         'source': 'bunjang',
         'type': 'similarity',
-        'target': {**source, 'searchQuery': search_query},
+        'target': target,
         'rules': {'similarityThreshold': 0.6, 'candidateLimit': 60},
-        'intervalSeconds': DEFAULT_INTERVAL_SECONDS,
+        'intervalSeconds': DEFAULT_SIMILARITY_INTERVAL_SECONDS,
     }
-
 
 def is_list_request(text: str) -> bool:
     normalized = text.strip().lower()

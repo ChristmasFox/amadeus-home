@@ -1,5 +1,15 @@
 import type { Listing, Price, ProductStatus } from '../listing/model.js';
 
+
+export interface ListingDiscoveredEvent {
+  eventId: string;
+  feedId: string;
+  source: string;
+  externalId: string;
+  listingIdentity: string;
+  discoveredAt: string;
+}
+
 export const RADAR_EVENT_TYPES = [
   'ListingMatchedEvent',
   'ProductPriceChangedEvent',

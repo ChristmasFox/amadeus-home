@@ -12,6 +12,7 @@ from components.intent import (
 )
 from components.platform.bridge import attachment_sources, callback_parts, conversation_key, event_text, platform_name, reply
 from components.radar_client import create_watch, list_watches, patch_watch, preview_watch
+from components.vision import analyze_target_profile
 from langbot_plugin.api.definition.components.common.event_listener import EventListener
 from langbot_plugin.api.entities import context as event_context_module
 from langbot_plugin.api.entities import events
@@ -29,7 +30,7 @@ def _format_price(value: Any) -> str:
 
 def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: str) -> tuple[str, list[dict[str, str]]]:
     source_name = str(preview.get('sourceDisplayName') or proposal.get('source') or '')
-    interval_seconds = int(proposal.get('intervalSeconds') or 120)
+    interval_seconds = int(proposal.get('intervalSeconds') or (900 if proposal.get('type') == 'similarity' else 120))
     interval_label = f'每 {interval_seconds // 60} 分钟' if interval_seconds % 60 == 0 else f'每 {interval_seconds} 秒'
     if proposal.get('type') == 'seller':
         seller = preview.get('seller') if isinstance(preview.get('seller'), dict) else {}
@@ -64,26 +65,24 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
         ])
     else:
         target = proposal.get('target') if isinstance(proposal.get('target'), dict) else {}
-        similarity = preview.get('similarity') if isinstance(preview.get('similarity'), dict) else {}
-        top_matches = similarity.get('topMatches') if isinstance(similarity.get('topMatches'), list) else []
-        best = top_matches[0] if top_matches and isinstance(top_matches[0], dict) else {}
-        best_label = f"当前候选最高相似度：{float(best.get('score', 0)) * 100:.1f}%" if best else '当前候选：已建立扫描范围'
-        text = '\n'.join([
-            '👀 准备监控',
-            '',
-            f'平台：{source_name}',
-            '类型：相似商品监控',
-            f"候选范围：Bunjang「{target.get('searchQuery') or '의류'}」最新商品",
-            '相似度阈值：60%',
-            f'频率：{interval_label}',
-            best_label,
-            '',
-            '监控：',
-            '✓ 新上架商品',
-            '✓ 图片相似度 ≥ 60%',
-            '',
-            f'如果平台没有按钮，请回复：确认监控 {token}',
-        ])
+        profile = preview.get('targetProfile') if isinstance(preview.get('targetProfile'), dict) else {}
+        plan = preview.get('searchPlan') if isinstance(preview.get('searchPlan'), dict) else {}
+        queries = plan.get('queries') if isinstance(plan.get('queries'), list) else []
+        hard = profile.get('hardConstraints') if isinstance(profile.get('hardConstraints'), list) else []
+        soft = profile.get('softHints') if isinstance(profile.get('softHints'), list) else []
+        user_lines = [str(item.get('value')) for item in hard if isinstance(item, dict) and item.get('source') == 'user' and item.get('value')]
+        vision_lines = [f"{item.get('field')}：{item.get('value')}" for item in soft if isinstance(item, dict) and item.get('source') in {'vision', 'ocr'} and item.get('value')]
+        plan_lines = [str(item.get('query')) for item in queries if isinstance(item, dict) and item.get('query')]
+        target_query = target.get('searchQuery') or '由 TargetProfile 生成'
+        text_lines = [
+            '🎯 准备监控', '', f'平台：{source_name}',
+            '你的条件：', *(f'• {line}' for line in user_lines[:8] or ['未提供明确硬条件']),
+            '', '系统识别：', *(f'• {line}' for line in vision_lines[:8] or ['• 将使用图片和更宽泛的类别搜索']),
+            '', '搜索范围：', *(f'• {line}' for line in plan_lines[:4] or [f'• {target_query}']),
+            '', f'检查频率：{interval_label}', '图片匹配阈值：60%',
+            '', '初始 baseline 不会发送通知。', '', f'如果平台没有按钮，请回复：确认监控 {token}',
+        ]
+        text = '\n'.join(text_lines)
     return text, [
         {'text': '开始监控', 'callbackData': f'pr1:confirm:{token}'},
         {'text': '取消', 'callbackData': f'pr1:cancel:{token}'},
@@ -93,7 +92,7 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
 def _format_watches(result: dict[str, Any]) -> str:
     rows = result.get('watches') if isinstance(result.get('watches'), list) else []
     if not rows:
-        return '目前没有正在监控的 Seller Watch 或 Product Watch。'
+        return '目前没有正在监控的 Seller Watch、Product Watch 或 Similarity Watch。'
     lines = ['👀 当前监控']
     for row in rows:
         if not isinstance(row, dict):
@@ -190,12 +189,19 @@ class ProductRadarListener(EventListener):
             event_context.prevent_postorder()
             return
 
-        proposal = parse_similarity_watch_intent(text, attachment_sources(event))
+        images = attachment_sources(event)
+        proposal = parse_similarity_watch_intent(text, images)
         if proposal is None:
             proposal = parse_watch_intent(text)
         if proposal is None:
             return
         try:
+            if proposal.get('type') == 'similarity' and images:
+                vision_profile = await analyze_target_profile(self.plugin, images, text)
+                if vision_profile:
+                    target = proposal.get('target') if isinstance(proposal.get('target'), dict) else {}
+                    target['visionProfile'] = vision_profile
+                    proposal['target'] = target
             preview = await preview_watch(self.plugin, proposal)
             token = f'{len(pending):x}{id(proposal):x}'[-20:]
             pending[token] = proposal

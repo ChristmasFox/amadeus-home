@@ -4,13 +4,13 @@ metadata:
   author: local
   name: product-radar
   repository: ''
-  version: 0.1.0
+  version: 0.3.0
   description:
-    en_US: Natural-language Seller Watch and Product Watch bridge for Product Radar.
-    zh_Hans: Product Radar 卖家监控与商品监控的自然语言入口。
+    en_US: Smart Visual Watch, Seller Watch, and Product Watch bridge for Product Radar.
+    zh_Hans: Product Radar 图片寻货、卖家监控与商品监控的自然语言入口。
   label:
-    en_US: Product Radar 0.1.0
-    zh_Hans: Product Radar 0.1.0
+    en_US: Product Radar 0.3.0
+    zh_Hans: Product Radar 0.3.0
 spec:
   config: []
   components:

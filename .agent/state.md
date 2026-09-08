@@ -133,3 +133,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 24 项 TS tests、7 项 plugin tests、Bunjang similarity smoke、真实部署 preview/create/webhook/pause/delete 均通过；测试 Watch `v02-smoke-20260907` 已清理，原有用户 Watch 未修改。
 - 真实 smoke 未发送 Telegram/KOOK 测试消息；当前实现是可替换 perceptual matcher，CLIP/SigLIP、live Telegram image acceptance 和更宽候选范围列入后续任务。
 - 见 `.agent/checkpoints/2026-09-07-product-radar-v0.2.md`。
+
+
+## Product Radar V0.3 Phase A（SOURCE IMPLEMENTED / RELEASE PENDING：2026-09-08）
+
+- 已完成 TargetProfile/vision provider boundary、Bunjang SearchPlanner、shared SearchFeed/subscription/event stream、watermark pagination、backoff/jitter、Sharp provider/cache abstraction 和 LangBot preview UX。
+- 本地验证：Product Radar 38/38、LangBot plugin 7/7、Python compile、typecheck/build、diff check 已通过。
+- 当前待执行且必须使用显式 RELEASE 的步骤：clean commit 后 BuildKit image、OrbStack ubuntu CasaOS recreate、LangBot product-radar plugin apply、真实 shared feed/baseline/webhook smoke；不得直接改运行容器。

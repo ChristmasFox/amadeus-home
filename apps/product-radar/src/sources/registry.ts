@@ -1,6 +1,7 @@
 import { RadarError, UnsupportedCapabilityError } from '../core/errors.js';
 import type { Listing } from '../core/listing/model.js';
 import type { ImplementedWatchType, WatchTarget, WatchType } from '../core/watch/model.js';
+import type { SearchPage, SearchPageTarget } from '../core/search/model.js';
 
 export interface SourceCapabilities {
   sellerWatch: boolean;
@@ -26,6 +27,7 @@ export interface ListingSourceAdapter {
   validateTarget(type: WatchType, target: WatchTarget): Promise<ValidatedTarget>;
   fetchSellerListings(target: ValidatedTarget): Promise<unknown[]>;
   fetchSearchListings(target: ValidatedTarget): Promise<unknown[]>;
+  fetchSearchPage?(target: ValidatedTarget & SearchPageTarget): Promise<SearchPage>;
   fetchProduct(target: ValidatedTarget): Promise<unknown>;
   normalizeListing(raw: unknown, context?: { target?: ValidatedTarget }): Listing;
   normalizeProductState(raw: unknown, context?: { target?: ValidatedTarget }): Listing;

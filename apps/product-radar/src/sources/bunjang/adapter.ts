@@ -1,6 +1,7 @@
 import { RadarError, SourceFetchError } from '../../core/errors.js';
 import type { Listing, ProductStatus } from '../../core/listing/model.js';
 import type { WatchTarget, WatchType } from '../../core/watch/model.js';
+import type { SearchPage, SearchPageTarget } from '../../core/search/model.js';
 import type { ListingSourceAdapter, SourceCapabilities, ValidatedTarget } from '../registry.js';
 
 type JsonObject = Record<string, unknown>;
@@ -240,6 +241,34 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
     return result;
   }
 
+  async fetchSearchPage(target: ValidatedTarget & SearchPageTarget): Promise<SearchPage> {
+    const query = target.searchQuery ?? '의류';
+    const url = new URL('/api/search/v8/web/search', this.apiBaseUrl);
+    url.searchParams.set('policyKey', 'mw.product.keyword');
+    url.searchParams.set('q', query);
+    url.searchParams.set('size', String(Math.min(target.pageSize ?? this.pageSize, 60)));
+    if (target.cursor) url.searchParams.set('cursor', target.cursor);
+    const { status, body, retryAfterSeconds } = await this.requestJson(url, target.searchUrl ?? target.url);
+    const root = asObject(body);
+    const errorCode = stringValue(root.errorCode);
+    if (errorCode || status >= 400) {
+      const bodyRetryAfter = Number((root.retryAfter ?? root.retry_after) ?? NaN);
+      const retry = retryAfterSeconds ?? (Number.isFinite(bodyRetryAfter) && bodyRetryAfter > 0 ? Math.ceil(bodyRetryAfter) : undefined);
+      throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, {
+        status, body, ...(retry === undefined ? {} : { retryAfterSeconds: retry }),
+      });
+    }
+    const data = asObject(root.data);
+    const responses = asObject(data.responses);
+    const mainGrid = asObject(responses.mainGrid);
+    const searchResponse = asObject(mainGrid.searchResponse);
+    const candidates = [searchResponse.data, searchResponse.items, data.products, root.products, root.list]
+      .find((value) => Array.isArray(value));
+    if (!Array.isArray(candidates)) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+    const nextCursor = stringValue(searchResponse.cursor);
+    return { items: candidates, ...(nextCursor === undefined ? {} : { nextCursor }), raw: body };
+  }
+
   async fetchSearchListings(target: ValidatedTarget): Promise<unknown[]> {
     const query = target.searchQuery ?? '의류';
     const result: unknown[] = [];
@@ -339,7 +368,7 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
     return this.normalizeListing(raw, context);
   }
 
-  private async requestJson(url: URL, referer: string): Promise<{ status: number; body: unknown }> {
+  private async requestJson(url: URL, referer: string): Promise<{ status: number; body: unknown; retryAfterSeconds?: number }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -359,7 +388,8 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       } catch {
         body = undefined;
       }
-      return { status: response.status, body };
+      const retryAfter = Number(response.headers.get('retry-after') ?? NaN);
+      return { status: response.status, body, ...(Number.isFinite(retryAfter) && retryAfter > 0 ? { retryAfterSeconds: Math.ceil(retryAfter) } : {}) };
     } catch (error) {
       if (error instanceof RadarError) throw error;
       throw new SourceFetchError(`Bunjang request failed: ${error instanceof Error ? error.message : String(error)}`, { url: url.toString() });

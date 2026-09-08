@@ -1,5 +1,19 @@
 # Current Task
 
+# Product Radar V0.3 Phase A（SOURCE IMPLEMENTED / RELEASE PENDING：2026-09-08）
+
+- [x] 新增平台无关 `TargetProfileExtractor` / `VisionProfileProvider`；用户明确品牌、型号、季节、价格、包含/排除条件优先于 vision/OCR/inferred，并记录 provenance/confidence。
+- [x] LangBot 图片入口保留 base64/URL，接入一次性多模态 TargetProfile 提取；预览显示用户条件、系统识别和最终 SearchPlan；轮询不调用 LLM。
+- [x] 新增 `SourceSearchPlanner` / `BunjangSearchPlanner`；生成 explicit/specific/medium/broad 分层韩语 query，保留用户 search term，不再永久只用 `의류`。
+- [x] 新增 `SearchFeed` 独立 domain 与 SQLite `search_feeds`、`watch_feed_subscriptions`、`feed_listing_events`、`target_profiles`、`search_feed_runs`；同 source/query 复用一个 feed/sensor。
+- [x] Similarity 默认 interval 改为 900 秒；feed 使用确定性 ±120 秒 jitter；显式 interval 保持，不影响 Product/Seller Watch。
+- [x] changedetection 只触发 feed refetch；实现 watermark 增量分页（max pages 10、max listings 500）、WATERMARK_NOT_REACHED degraded、失败不推进 watermark、backoff/recovery。
+- [x] 新增 ListingDiscoveredEvent 数据流和 shared-feed watch router；reference baseline 与 notification/event idempotency 保留。
+- [x] ImageMatcher 增强为 provider/model/rawScore/matchScore abstraction，加入可替换 ImageFeatureProvider/ImageFeatureCache；当前 Sharp 行为和 0.60 阈值保持。
+- [x] 新增 38 项 Product Radar TypeScript tests、7 项 LangBot plugin tests；已通过 typecheck/build、Python compile、git diff check。
+- [ ] RELEASE：提交后构建 immutable Product Radar image、CasaOS `--no-build` recreate、LangBot plugin apply、真实 changedetection/shared-feed smoke。
+
+
 更新时间：2026-09-07（Asia/Shanghai）
 
 ## Product Radar V0.1（DEPLOYED / VERIFIED：2026-09-07）

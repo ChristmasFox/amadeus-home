@@ -95,6 +95,37 @@ hyphenated/camelCase/snake_case 字段，只 POST completion event，并以 `thr
 `KOOK_ADMIN_USER_ID` variables；不使用 inbound chat/context/payload recipient。LangBot credential
 只在 n8n 实例重新绑定，不存在 workflow source。
 
+## Product Radar V0.3 Phase A
+
+V0.3 keeps V0.2 compatibility while splitting long-lived visual watches into a generic
+TargetProfile/SearchPlan/SearchFeed pipeline:
+
+```text
+LangBot multimodal intent/profile extraction (Luna once at create/modify)
+             │ TargetProfile + provenance + hard/soft constraints
+             ▼
+Product Radar Core
+  ├─ SourceSearchPlanner → SearchPlan (Bunjang localized layered queries)
+  ├─ shared SearchFeed registry (N watches → one feed → one sensor)
+  ├─ changedetection webhook → source refetch → incremental pagination
+  ├─ feed_listing_events → global Listing Store → watch router
+  ├─ ImageMatcher port → current SharpProvider + feature cache boundary
+  └─ SimilarListingMatchedEvent → idempotent Notification Outbox
+```
+
+`TargetProfileExtractor` is platform/source neutral. User constraints and explicit search
+terms override provider inference; the provider is injected through `VisionProfileProvider`,
+so Product Radar Core does not know a GPT vendor/model. `BunjangSearchPlanner` is the only
+source-specific planner in Phase A; Mercari/Xianyu remain future adapters.
+
+`search_feeds`, `watch_feed_subscriptions`, `feed_listing_events`, and `target_profiles`
+are additive SQLite migrations. A new subscription stores `start_after_event_id` after a
+current-feed baseline, so existing events never create initial notifications. Feed polling
+uses a persisted watermark and paginates up to configurable `maxPagesPerRun=10` and
+`maxListingsPerRun=500`; cap exhaustion or fetch/parser failures mark the feed `DEGRADED`
+and never advance the watermark. Similarity defaults to 900 seconds with deterministic
+±120-second jitter; explicit intervals remain authoritative.
+
 ## Product Radar V0.1
 
 Product Radar 与 PUBG/HomeHub runtime 解耦，作为独立 Node runtime 运行：

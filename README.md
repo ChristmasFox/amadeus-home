@@ -97,9 +97,18 @@ pnpm smoke:runtime                 # 非 Docker 的 /healthz + /homehub/health s
 `apps/product-radar` 是独立的通用商品监控服务：Core 只处理平台无关 Listing、Watch、
 Matcher、Snapshot、Event 和 Notification Outbox；Bunjang 是 `Source Adapter`，
 changedetection.io 是可替换的 `Sensor`。V0.1 支持 Seller Watch 和 Product Watch；V0.2 增加 image similarity watch，
-SQLite 数据、sensor 映射和 V0.2 图片特征持久化在独立 volume。LangBot 通过
+V0.3 Phase A 增加 TargetProfile、Bunjang SearchPlan、共享 SearchFeed、watermark 分页和
+Sharp feature cache abstraction；SQLite 数据、sensor 映射和图片特征持久化在独立 volume。LangBot 通过
 `integrations/langbot/plugins/product-radar` 提供自然语言入口，并复用 LangBot 私聊 API
 向外部配置的 Telegram/KOOK Admin recipient 发送通知；不会发送群聊。
+
+
+
+V0.3 的图片寻货入口支持“只发图片”或“图片 + 用户关键词”：LangBot 只在创建/修改
+Watch 时调用当前多模态模型生成可审阅的 TargetProfile，Product Radar 之后使用确定性
+SearchPlan、SearchFeed、Source Adapter、Sharp ImageMatcher 和通知幂等链路，不在轮询中
+调用 LLM。当前默认 Similarity Feed 为 15 分钟（确定性 ±2 分钟 jitter），用户显式
+interval 不被覆盖。
 
 源码实现、测试、Compose 模板和 smoke 记录见 `apps/product-radar/`、
 `infra/changedetection/`、`infra/docker/casaos/product-radar/` 及项目状态文档。

@@ -90,6 +90,10 @@ export function createRadarServer(options: RadarServerOptions): Server {
         sendJson(response, 200, { watches: options.service.listWatches() });
         return;
       }
+      if (method === 'GET' && path === '/api/search-feeds') {
+        sendJson(response, 200, { feeds: options.service.listSearchFeeds() });
+        return;
+      }
       if (method === 'POST' && path === '/api/watches/preview') {
         const body = await readBody(request, maxBodyBytes);
         sendJson(response, 200, await options.service.previewWatch(body));

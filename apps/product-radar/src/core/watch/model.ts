@@ -1,4 +1,6 @@
 import type { Listing } from '../listing/model.js';
+import type { SearchPlan } from '../search/model.js';
+import type { TargetProfile } from '../target-profile/model.js';
 
 export const WATCH_TYPES = ['seller', 'product', 'similarity', 'search', 'category', 'smart'] as const;
 export type WatchType = (typeof WATCH_TYPES)[number];
@@ -14,6 +16,10 @@ export interface WatchTarget extends Record<string, unknown> {
   referenceImageId?: string;
   searchUrl?: string;
   searchQuery?: string;
+  searchQueries?: string[];
+  userText?: string;
+  explicitSearchTerms?: string[];
+  visionProfile?: Record<string, unknown>;
 }
 
 export interface SellerWatchRules {
@@ -51,6 +57,8 @@ export interface Watch {
   sensorId?: string;
   createdAt: string;
   updatedAt: string;
+  targetProfile?: TargetProfile;
+  searchPlan?: SearchPlan;
 }
 
 export interface WatchCreateInput {
@@ -61,12 +69,17 @@ export interface WatchCreateInput {
   rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
+  targetProfile?: TargetProfile;
+  searchPlan?: SearchPlan;
 }
 
 export interface WatchPatchInput {
   rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
+  target?: Partial<WatchTarget>;
+  targetProfile?: TargetProfile;
+  reanalyze?: boolean;
 }
 
 export function isImplementedWatchType(type: unknown): type is ImplementedWatchType {

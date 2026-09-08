@@ -1,5 +1,16 @@
 # Project State
 
+## Product Radar V0.3 Phase A（SOURCE IMPLEMENTED / RELEASE PENDING：2026-09-08）
+
+V0.3 Phase A 已在 V0.2 之上完成源码实现，尚未在本段记录 RELEASE apply：
+
+- `apps/product-radar/src/core/target-profile/` 提供 TargetProfile schema、provenance、hard/soft constraint merge 和 provider failure fallback。
+- `apps/product-radar/src/core/search/` 提供 SearchPlan、SearchFeed、deterministic scheduling/backoff、incremental pagination、feed router；`sources/bunjang/search-planner.ts` 只承载 Bunjang localization。
+- SQLite migration additive：`target_profiles`、`search_feeds`、`watch_feed_subscriptions`、`feed_listing_events`、`search_feed_runs`；V0.2 watches/listings/events/outbox/image features 不删除。
+- 本地验证：Product Radar TypeScript 38/38、LangBot Python 7/7、Python compile、Product Radar typecheck/build 已通过；当前工作流分类为 `RUNTIME / PRODUCT_RADAR`，Release 尚待显式 apply。
+- 运行时保留 Sharp matcher、0.60 business threshold、Telegram/KOOK DM、确认/取消/停止、Seller/Product Watch。
+
+
 更新时间：2026-09-07（Asia/Shanghai）
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）

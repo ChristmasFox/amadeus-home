@@ -2,19 +2,14 @@ import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import type { ImageMatchResult, ImageMatcher, ImageSource, PreparedImageReference } from '../../core/matching/image.js';
-
-interface ImageFeature {
-  vector: number[];
-  width: number;
-  height: number;
-}
+import type { ImageFeature, ImageFeatureCache, ImageFeatureKey, ImageFeatureProvider, ImageMatchResult, ImageMatcher, ImageSimilarityResult, ImageSource, PreparedImageReference } from '../../core/matching/image.js';
 
 interface PerceptualImageMatcherOptions {
   dataDir: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   maxBytes?: number;
+  featureCache?: ImageFeatureCache;
 }
 
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
@@ -110,22 +105,26 @@ export class PerceptualImageMatcher implements ImageMatcher {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
   private readonly maxBytes: number;
+  private readonly featureCache: ImageFeatureCache;
+  readonly provider = 'sharp';
+  readonly modelVersion = 'sharp-perceptual-v1';
 
   constructor(options: PerceptualImageMatcherOptions) {
     this.dataDir = options.dataDir;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 20_000;
     this.maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+    this.featureCache = options.featureCache ?? new FileImageFeatureCache(join(this.dataDir, 'image-feature-cache'));
   }
 
   async prepareReference(source: ImageSource): Promise<PreparedImageReference> {
     const bytes = source.base64 ? decodeBase64(source.base64) : await this.download(source.url ?? '');
     const hash = contentHash(bytes);
     await this.saveFeature(hash, await featureFromBytes(bytes));
-    return { id: hash, contentHash: hash };
+    return { id: hash, contentHash: hash, provider: this.provider, modelVersion: this.modelVersion };
   }
 
-  async match(referenceId: string, candidateImageUrls: string[]): Promise<ImageMatchResult> {
+  async match(referenceId: string, candidateImageUrls: string[], context: { source?: string; externalId?: string; threshold?: number } = {}): Promise<ImageMatchResult> {
     const reference = await this.loadFeature(referenceId);
     let score = 0;
     let bestImageUrl: string | undefined;
@@ -134,7 +133,7 @@ export class PerceptualImageMatcher implements ImageMatcher {
       try {
         const bytes = await this.download(imageUrl);
         const hash = contentHash(bytes);
-        const feature = await this.loadOrCreateFeature(hash, bytes);
+        const feature = await this.loadOrCreateFeature(hash, bytes, { ...(context.source === undefined ? {} : { source: context.source }), ...(context.externalId === undefined ? {} : { externalId: context.externalId }), imageUrl, imageHash: hash, provider: this.provider, modelVersion: this.modelVersion });
         const cosine = cosineSimilarity(reference.vector, feature.vector);
         const candidateScore = Math.max(0, Math.min(1, cosine));
         comparedImages += 1;
@@ -147,9 +146,15 @@ export class PerceptualImageMatcher implements ImageMatcher {
       }
     }
     return {
+      provider: this.provider,
+      modelVersion: this.modelVersion,
+      rawScore: score,
+      matchScore: score,
+      ...(context.threshold === undefined ? {} : { threshold: context.threshold }),
       score,
       comparedImages,
       ...(bestImageUrl === undefined ? {} : { bestImageUrl }),
+      ...(context.source && context.externalId ? { metadata: { cacheIdentity: `${context.source}:${context.externalId}`, provider: this.provider, modelVersion: this.modelVersion } } : {}),
     };
   }
 
@@ -172,12 +177,17 @@ export class PerceptualImageMatcher implements ImageMatcher {
     }
   }
 
-  private async loadOrCreateFeature(hash: string, bytes: Buffer): Promise<ImageFeature> {
+  private async loadOrCreateFeature(hash: string, bytes: Buffer, key?: ImageFeatureKey): Promise<ImageFeature> {
+    if (key) {
+      const cached = await this.featureCache.get(key);
+      if (cached) return cached;
+    }
     try {
       return await this.loadFeature(hash);
     } catch {
       const feature = await featureFromBytes(bytes);
       await this.saveFeature(hash, feature);
+      if (key) await this.featureCache.set(key, feature);
       return feature;
     }
   }
@@ -201,5 +211,50 @@ export class PerceptualImageMatcher implements ImageMatcher {
     } finally {
       clearTimeout(timer);
     }
+  }
+}
+
+
+function stableCacheKey(key: ImageFeatureKey): string {
+  return createHash('sha256').update(JSON.stringify({
+    source: key.source ?? '', externalId: key.externalId ?? '', imageUrl: key.imageUrl ?? '', imageHash: key.imageHash ?? '',
+    provider: key.provider, modelVersion: key.modelVersion,
+  })).digest('hex');
+}
+
+/** File-backed feature cache that can be replaced by an embedding/vector worker later. */
+export class FileImageFeatureCache implements ImageFeatureCache {
+  constructor(private readonly directory: string) {}
+
+  private path(key: ImageFeatureKey): string {
+    return join(this.directory, `${stableCacheKey(key)}.json`);
+  }
+
+  async get(key: ImageFeatureKey): Promise<ImageFeature | undefined> {
+    try {
+      const value = JSON.parse(await readFile(this.path(key), 'utf8')) as ImageFeature;
+      return Array.isArray(value.vector) ? value : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  async set(key: ImageFeatureKey, feature: ImageFeature): Promise<void> {
+    await mkdir(this.directory, { recursive: true });
+    await writeFile(this.path(key), JSON.stringify(feature), { mode: 0o600 });
+  }
+}
+
+export class SharpPerceptualProvider implements ImageFeatureProvider {
+  readonly id = 'sharp';
+  readonly modelVersion = 'sharp-perceptual-v1';
+
+  async extract(bytes: Buffer): Promise<ImageFeature> {
+    return featureFromBytes(bytes);
+  }
+
+  similarity(reference: ImageFeature, candidate: ImageFeature): ImageSimilarityResult {
+    const rawScore = Math.max(0, Math.min(1, cosineSimilarity(reference.vector, candidate.vector)));
+    return { provider: this.id, modelVersion: this.modelVersion, rawScore, matchScore: rawScore };
   }
 }
