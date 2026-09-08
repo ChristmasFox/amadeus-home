@@ -166,7 +166,10 @@ class ProductRadarListener(EventListener):
         if is_cancel_request(text):
             token = self._latest_pending_token(pending, pending_context, context)
             if token is None:
-                reply(event_context, '目前没有待取消的监控确认。')
+                # "取消监控" must also work after a Watch has already been
+                # confirmed. It is an active-watch stop request, not only a
+                # pending-proposal cancellation.
+                await self._stop_watch(event_context, None, context, watch_context)
             else:
                 await self._confirm_or_cancel(event_context, 'cancel', token, pending, pending_context, watch_context, context)
             event_context.prevent_default()
