@@ -1,5 +1,13 @@
 # Current Task
 
+## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
+
+- [x] 新增一次性 inbound `resolve_product_radar_intent` 语言解析层，负责 list/confirm/cancel/stop/watch/none action，不参与轮询。
+- [x] 保留 deterministic fast path，并在歧义文本上调用当前 GPT-5.6 Luna intent planner；provider 失败自动 fallback。
+- [x] 支持自然表达：`我都在盯哪些东西？`、`刚才那件不要了`、`帮我看看现有监控`，不再依赖固定完整句子。
+- [x] LangBot plugin task `71` 达到 `INSTALL_READY`；intent planner tests 已通过。
+
+
 ## Product Radar existing Watch list / bot offline diagnosis（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 修复用户输入 `我在盯着什么` 未命中 `is_list_request` 的问题；现在支持 `我在盯着什么`、`我现在盯着什么`、`当前监控`、`/watches` 等。

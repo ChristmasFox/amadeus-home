@@ -1,5 +1,18 @@
 # Project State
 
+## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
+
+Product Radar LangBot UX 已增加类似 PUBG planner 的意图解析边界：
+
+- deterministic fast path 处理明确控制词；
+- 对模糊 inbound text 使用一次性 LLM JSON intent extraction；
+- `list/confirm/cancel/stop/watch/none` action 由 listener 路由；
+- provider error 仍 fallback，不影响图片 Watch 创建；
+- 不参与 15 分钟 SearchFeed polling。
+
+最终 plugin task `71` 为 `INSTALL_READY`，Python tests 9/9 通过。
+
+
 ## Product Radar existing Watch list / bot offline diagnosis（DEPLOYED / VERIFIED：2026-09-08）
 
 用户输入 `我在盯着什么` 时，旧 intent 只识别 `我现在盯着什么`，导致 Product Radar list listener 没有稳定命中。现已修复并部署 task `67`：

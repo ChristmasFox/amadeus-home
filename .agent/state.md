@@ -176,3 +176,9 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 
 - 修复 `我在盯着什么` list intent，plugin task `67` `INSTALL_READY`。
 - 当前数据库有 3 个 Watch，plugin runtime HTTP 可访问 Product Radar；LangBot/Telegram/KOOK 容器运行中，近期 Telegram outbound success。
+
+
+## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
+
+- 新增 `intent_planner.py`，让 Product Radar 像 PUBG planner 一样先做 inbound action extraction；支持自然表达，不再依赖固定完整句。
+- LangBot plugin task `71` `INSTALL_READY`；plugin tests 9/9。
