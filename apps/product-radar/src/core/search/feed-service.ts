@@ -63,11 +63,6 @@ function jsonObject(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-function feedUrl(target: Watch['target'], query: string): string {
-  const searchUrl = typeof target.searchUrl === 'string' && target.searchUrl.trim() ? target.searchUrl : undefined;
-  if (searchUrl) return searchUrl;
-  return `https://m.bunjang.co.kr/keywords/${encodeURIComponent(query)}`;
-}
 
 function retryAfterFromError(error: unknown): number | undefined {
   if (!(error instanceof RadarError)) return undefined;
@@ -229,7 +224,8 @@ export class SearchFeedCoordinator {
 
   private async validateQueryTarget(watch: Watch, query: string): Promise<ValidatedTarget> {
     const adapter = this.options.sources.require(watch.source);
-    return adapter.validateTarget('similarity', { ...watch.target, searchQuery: query, searchUrl: feedUrl(watch.target, query) });
+    const { searchUrl: _searchUrl, ...baseTarget } = watch.target;
+    return adapter.validateTarget('similarity', { ...baseTarget, searchQuery: query });
   }
 
   private async ensureFeed(watch: Watch, query: string, url: string, existingSensorId?: string, jitterSeconds = DEFAULT_SIMILARITY_JITTER_SECONDS): Promise<SearchFeed> {
