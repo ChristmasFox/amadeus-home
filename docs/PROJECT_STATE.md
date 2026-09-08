@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar Bunjang Search Response Hotfix（DEPLOYED / VERIFIED：2026-09-08）
+
+用户反馈 `Bunjang search response did not contain a product list` 后，新增 parser resilience 和 preview partial-failure handling：
+
+- Parser 兼容当前/历史 Bunjang response 的嵌套结果数组与 `nextCursor`。
+- Preview 不再因一个 query 的 transient malformed response 直接失败；成功 query 仍生成 TargetProfile/SearchPlan/candidate preview，异常 query 写入 `searchWarnings`。
+- 最终 image-only live preview 返回 54 candidates、0 warning；runtime image `local/product-radar:git-23836b200afe`，health `ok`。
+- 最终真实 Watch、数据库 snapshot、changedetection sensor、notification outbox 均保持正常。
+
+
 ## Product Radar V0.3 Phase A（DEPLOYED / VERIFIED：2026-09-08）
 
 V0.3 Phase A 已在 V0.2 之上完成源码实现并实际部署到 OrbStack `ubuntu`/CasaOS：

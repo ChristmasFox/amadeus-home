@@ -1,5 +1,13 @@
 # Current Task
 
+## Product Radar Bunjang Search Response Hotfix（DEPLOYED / VERIFIED：2026-09-08）
+
+- [x] 修复 Bunjang search response parser：兼容 `searchResponse.data/items`、嵌套 `payload/items/products/results`、`nextCursor` 等返回形状，并优先选择非空 product-like array。
+- [x] Similarity preview 改为 query 级容错：单个 query response 异常时保留其他 query 结果并显示 `searchWarnings`；不会因为一个 Feed 的暂时异常阻断 Watch 预览/创建。
+- [x] 新 image-only preview smoke 已通过：` 의류` query 返回 54 candidates、无 `searchWarnings`，baseline/notification contract 和现有真实 Product Watch 未改变。
+- [x] 已部署 image `local/product-radar:git-23836b200afe`，Product Radar 与 changedetection healthy；现有真实 Product Watch 仍为 enabled、120 秒。
+
+
 # Product Radar V0.3 Phase A（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 新增平台无关 `TargetProfileExtractor` / `VisionProfileProvider`；用户明确品牌、型号、季节、价格、包含/排除条件优先于 vision/OCR/inferred，并记录 provenance/confidence。
