@@ -182,27 +182,28 @@ export class ProductRadarService {
     const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
     const normalizedByIdentity = new Map<string, Listing>();
     const searchWarnings: Array<{ query: string; message: string }> = [];
-    const queryResults = await Promise.allSettled(context.plan.queries.map(async (query) => {
+    const referenceTarget = await adapter.validateTarget('similarity', (() => {
+      const { searchUrl: _searchUrl, ...base } = parsed.target;
+      return { ...base, searchQuery: context.plan.queries[0]?.query ?? '의류' };
+    })());
+    const preparedTargetPromise = this.prepareSimilarityTarget(referenceTarget);
+    const queryResultsPromise = Promise.allSettled(context.plan.queries.map(async (query) => {
       const validated = await adapter.validateTarget('similarity', (() => { const { searchUrl: _searchUrl, ...base } = parsed.target; return { ...base, searchQuery: query.query }; })());
       const target = { ...validated, candidateLimit: (parsed.rules as { candidateLimit: number }).candidateLimit };
       return { query: query.query, rows: await this.fetchSimilarityPreviewNormalized(adapter, target) };
     }));
-    for (const result of queryResults) {
+    const [queryResults, preparedTarget] = await Promise.all([queryResultsPromise, preparedTargetPromise]);
+    for (const [index, result] of queryResults.entries()) {
       if (result.status === 'fulfilled') {
         for (const listing of result.value.rows) normalizedByIdentity.set(`${listing.source}:${listing.externalId}`, listing);
       } else {
-        const index = queryResults.indexOf(result);
         const query = context.plan.queries[index]?.query ?? 'unknown';
         searchWarnings.push({ query, message: result.reason instanceof Error ? result.reason.message : String(result.reason) });
       }
     }
     const normalized = [...normalizedByIdentity.values()];
-    const referenceTarget = await adapter.validateTarget('similarity', (() => {
-      const { searchUrl: _searchUrl, ...base } = parsed.target;
-      return { ...base, searchQuery: context.plan.queries[0]?.query ?? '의류' };
-    })());
-    const preparedTarget = await this.prepareSimilarityTarget(referenceTarget);
-    const scores = await this.scoreSimilarity(preparedTarget.referenceImageId ?? '', normalized, parsed.rules as { similarityThreshold: number; candidateLimit: number });
+    const previewRules = { ...(parsed.rules as { similarityThreshold: number; candidateLimit: number }), candidateLimit: Math.min((parsed.rules as { candidateLimit: number }).candidateLimit, 12) };
+    const scores = await this.scoreSimilarity(preparedTarget.referenceImageId ?? '', normalized, previewRules);
     return {
       source: adapter.id,
       sourceDisplayName: adapter.displayName,
