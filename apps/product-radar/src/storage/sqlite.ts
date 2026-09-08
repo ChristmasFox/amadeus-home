@@ -329,16 +329,37 @@ export class SqliteRadarStore {
     }
   }
 
+  private persistedTarget(watch: Watch): WatchTarget {
+    return {
+      ...watch.target,
+      ...(watch.targetProfile === undefined ? {} : { targetProfile: watch.targetProfile }),
+      ...(watch.searchPlan === undefined ? {} : { searchPlan: watch.searchPlan }),
+    };
+  }
+
   createWatch(watch: Watch): void {
     this.db.prepare(`INSERT INTO watches
       (id, source, type, target_json, rules_json, enabled, interval_seconds, sensor_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(watch.id, watch.source, watch.type, JSON.stringify(watch.target), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.createdAt, watch.updatedAt);
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(watch.id, watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.createdAt, watch.updatedAt);
+    if (watch.targetProfile) this.upsertTargetProfile(watch.id, watch.targetProfile, watch.updatedAt);
   }
 
   updateWatch(watch: Watch): void {
     this.db.prepare(`UPDATE watches SET source = ?, type = ?, target_json = ?, rules_json = ?, enabled = ?, interval_seconds = ?, sensor_id = ?, updated_at = ? WHERE id = ?`)
-      .run(watch.source, watch.type, JSON.stringify(watch.target), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.updatedAt, watch.id);
+      .run(watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.updatedAt, watch.id);
+    if (watch.targetProfile) this.upsertTargetProfile(watch.id, watch.targetProfile, watch.updatedAt);
+  }
+
+  upsertTargetProfile(watchId: string, profile: TargetProfile, now: string): void {
+    this.db.prepare(`INSERT INTO target_profiles (watch_id, profile_json, provider, extracted_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(watch_id) DO UPDATE SET profile_json = excluded.profile_json, provider = excluded.provider, extracted_at = excluded.extracted_at, updated_at = excluded.updated_at`)
+      .run(watchId, JSON.stringify(profile), profile.provider, profile.extractedAt, now);
+  }
+
+  getTargetProfile(watchId: string): TargetProfile | undefined {
+    const row = this.db.prepare('SELECT profile_json FROM target_profiles WHERE watch_id = ?').get(watchId);
+    return row ? jsonParse<TargetProfile | undefined>(row.profile_json, undefined) : undefined;
   }
 
   getWatch(id: string): Watch | undefined {
