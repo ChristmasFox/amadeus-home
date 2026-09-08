@@ -9,6 +9,7 @@ test('Bunjang planner creates localized layered queries for brand season categor
   const queries = plan.queries.map((item) => item.query);
   assert.equal(queries.some((query) => query.includes('요지 야마모토') && query.includes('23AW') && query.includes('패딩')), true);
   assert.equal(queries.some((query) => query.includes('패딩') || query.includes('다운 자켓')), true);
+  assert.equal(queries.includes('羽绒服'), false);
   assert.equal(queries.every((query) => query !== '의류'), true);
   assert.equal(plan.queries.length <= 4, true);
 });

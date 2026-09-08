@@ -56,15 +56,21 @@ function aliases(value: string | undefined): string[] {
 }
 
 
-function preferredAlias(value: string): string {
+function localizedAliases(value: string): string[] {
   const values = aliases(value);
+  const hasHangul = values.some((item) => /[\uac00-\ud7a3]/u.test(item));
+  return hasHangul ? values.filter((item) => !/[\u3400-\u9fff]/u.test(item)) : values;
+}
+
+function preferredAlias(value: string): string {
+  const values = localizedAliases(value);
   return values.find((item) => /[\uac00-\ud7a3]/u.test(item)) ?? values[0] ?? value;
 }
 
 function profileCategories(profile: TargetProfile): string[] {
   const values = [profile.category, profile.subcategory, ...profile.features].filter((value): value is string => Boolean(clean(value)));
   const result: string[] = [];
-  for (const value of values) result.push(preferredAlias(value), ...aliases(value));
+  for (const value of values) result.push(preferredAlias(value), ...localizedAliases(value));
   if (result.some((item) => ['羽绒服', 'down jacket', 'puffer jacket', '패딩', '다운 자켓'].includes(item.toLocaleLowerCase()))) {
     result.push('패딩', '다운 자켓');
   }
@@ -74,12 +80,12 @@ function profileCategories(profile: TargetProfile): string[] {
 function profileBrands(profile: TargetProfile): string[] {
   const values = [profile.brand, ...profile.userHints.filter((hint) => /brand|品牌/iu.test(hint))].filter((value): value is string => Boolean(clean(value)));
   const result: string[] = [];
-  for (const value of values) result.push(preferredAlias(value), ...aliases(value));
+  for (const value of values) result.push(preferredAlias(value), ...localizedAliases(value));
   return [...new Set(result.map((value) => clean(value)).filter((value): value is string => Boolean(value)))];
 }
 
 function profileColors(profile: TargetProfile): string[] {
-  return profile.colors.flatMap((value) => [preferredAlias(value), ...aliases(value)]);
+  return profile.colors.flatMap((value) => [preferredAlias(value), ...localizedAliases(value)]);
 }
 
 export class BunjangSearchPlanner implements SourceSearchPlanner {
