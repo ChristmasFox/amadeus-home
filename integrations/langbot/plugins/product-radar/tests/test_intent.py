@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import unittest
 
+from components.intent_planner import resolve_product_radar_intent
+
 from components.intent import (
     DEFAULT_INTERVAL_SECONDS,
     is_cancel_request,
@@ -70,3 +72,13 @@ class ProductRadarBridgeTest(unittest.TestCase):
             message_chain = Chain()
 
         self.assertEqual(attachment_sources(Event()), [{'referenceImageBase64': 'data:image/jpeg;base64,abc'}])
+
+
+class ProductRadarIntentPlannerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_natural_language_list_request(self) -> None:
+        result = await resolve_product_radar_intent(object(), '我都在盯哪些东西？', False)
+        self.assertEqual(result['action'], 'list')
+
+    async def test_natural_language_active_stop_request(self) -> None:
+        result = await resolve_product_radar_intent(object(), '刚才那件不要了', False)
+        self.assertEqual(result['action'], 'stop')

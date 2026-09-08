@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from components.intent_planner import resolve_product_radar_intent
 from components.intent import (
     is_cancel_request,
     is_confirm_request,
@@ -196,6 +197,29 @@ class ProductRadarListener(EventListener):
             return
 
         images = attachment_sources(event)
+        resolved_intent = await resolve_product_radar_intent(self.plugin, text, bool(images))
+        if resolved_intent and resolved_intent.get('action') == 'list':
+            try:
+                reply(event_context, _format_watches(await list_watches(self.plugin)))
+            except Exception:
+                reply(event_context, '暂时无法读取 Product Radar 监控，请稍后再试。')
+            event_context.prevent_default()
+            event_context.prevent_postorder()
+            return
+        if resolved_intent and resolved_intent.get('action') == 'stop':
+            await self._stop_watch(event_context, resolved_intent.get('url'), context, watch_context)
+            event_context.prevent_default()
+            event_context.prevent_postorder()
+            return
+        if resolved_intent and resolved_intent.get('action') in {'confirm', 'cancel'}:
+            token = self._latest_pending_token(pending, pending_context, context)
+            if token is None:
+                reply(event_context, '目前没有对应的待确认监控。')
+            else:
+                await self._confirm_or_cancel(event_context, str(resolved_intent['action']), token, pending, pending_context, watch_context, context)
+            event_context.prevent_default()
+            event_context.prevent_postorder()
+            return
         proposal = parse_similarity_watch_intent(text, images)
         if proposal is None:
             proposal = parse_watch_intent(text)
