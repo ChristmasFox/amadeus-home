@@ -12,7 +12,7 @@
 - [x] ImageMatcher 增强为 provider/model/rawScore/matchScore abstraction，加入可替换 ImageFeatureProvider/ImageFeatureCache；当前 Sharp 行为和 0.60 阈值保持。
 - [x] 新增 38 项 Product Radar TypeScript tests、7 项 LangBot plugin tests；已通过 typecheck/build、Python compile、git diff check。
 - [x] RELEASE：Product Radar immutable image `local/product-radar:git-8b0b96e4c2c6` 已在 OrbStack `ubuntu`/CasaOS 激活；changedetection `0.60.3` 保持 healthy，未重建或删除其 datastore。
-- [x] LangBot Product Radar plugin `0.3.0` 通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装，task `40` 达到 `INSTALL_READY`；rollback dir 为 `.backups/langbot/20260908-130039`。
+- [x] LangBot Product Radar plugin `0.3.0` 通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装，最终 task `41` 达到 `INSTALL_READY`；最新 rollback dir 为 `.backups/langbot/20260908-131244`；视觉 provider 默认锁定当前 LangBot registry 的 `gpt-5.6-luna`（UUID `581087d4-5793-4116-9aa1-d82e08ec6849`），仍可由外部 config/env 覆盖。
 - [x] Real smoke：使用 Bunjang 公开服饰图 `424506121`，profile/user text、explicit query、900s interval、SearchFeed baseline、restart persistence、changedetection webhook、duplicate webhook 均验证；baseline/changedetection rerun 均 0 notification / 0 match / 0 event。
 - [x] 清理测试 Watch `v03-smoke-20260908`、`v03-smoke-persist-20260908` 及其独占 Feed/sensor；最终只保留原 Product Watch `9ec10408-e55b-43a8-821b-f3427005656e`，interval 120s，Product Snapshot 与 changedetection sensor 正常。
 

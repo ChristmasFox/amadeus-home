@@ -139,6 +139,6 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 
 - 已完成 TargetProfile/vision provider boundary、Bunjang SearchPlanner、shared SearchFeed/subscription/event stream、watermark pagination、backoff/jitter、Sharp provider/cache abstraction 和 LangBot preview UX。
 - 本地验证：Product Radar 38/38、LangBot plugin 7/7、Python compile、typecheck/build、diff check 已通过。
-- 已完成显式 RELEASE：`local/product-radar:git-8b0b96e4c2c6` 在 OrbStack ubuntu/CasaOS 激活，LangBot plugin task `40` `INSTALL_READY`，真实 shared feed/baseline/webhook/restart/cleanup smoke 通过；不得直接改运行容器。
+- 已完成显式 RELEASE：`local/product-radar:git-8b0b96e4c2c6` 在 OrbStack ubuntu/CasaOS 激活，LangBot plugin task `41` `INSTALL_READY`，真实 shared feed/baseline/webhook/restart/cleanup smoke 通过；不得直接改运行容器。
 - 最终真实状态：Product Radar/changedetection healthy，原 Product Watch `9ec10408-e55b-43a8-821b-f3427005656e` 保持 120s，测试 Watch/Feed/sensor 均已清理。
-- 代码提交链：`16d756d`（V0.3 source）、`f360e2d`（per-query feed target fix）、`8b0b96e`（TargetProfile/SearchPlan SQLite persistence）。
+- 代码提交链：`16d756d`（V0.3 source）、`f360e2d`（per-query feed target fix）、`8b0b96e`（TargetProfile/SearchPlan SQLite persistence）、`ce7884d`（GPT-5.6 Luna UUID correction）。
