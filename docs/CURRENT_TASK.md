@@ -1,5 +1,14 @@
 # Current Task
 
+## Product Radar image + 用户文字 Timeout Hotfix（DEPLOYED / VERIFIED：2026-09-08）
+
+- [x] 修复原因：Bunjang 多 query 顺序请求 + Sharp preview scoring + LangBot 20s HTTP timeout 叠加，导致 `Product Radar unavailable: TimeoutError`。
+- [x] Similarity preview query fetch 改为并行；reference image preparation 与 search 并行；预览 Sharp scoring 限制为前 12 个候选，不影响创建后的长期 Feed/Matcher 逻辑。
+- [x] LangBot Product Radar client timeout 从 20s 提升为可配置值，默认 90s（`PRODUCT_RADAR_HTTP_TIMEOUT_SECONDS`）。
+- [x] 使用真实 Bunjang 羽绒服图 `363252234` + `帮我盯着这件羽绒服` 完成验证：preview HTTP 200、18.41s、baseline 49、无 TimeoutError；临时 Watch 创建 HTTP 201、900s、baseline 494、baseline notification 0，随后已删除。
+- [x] 最终只保留原真实 Product Watch，SearchFeed/test sensor 已清理。
+
+
 ## Product Radar Bunjang Search Response Hotfix（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 修复 Bunjang search response parser：兼容 `searchResponse.data/items`、嵌套 `payload/items/products/results`、`nextCursor` 等返回形状，并优先选择非空 product-like array。

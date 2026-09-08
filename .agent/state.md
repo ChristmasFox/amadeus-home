@@ -149,3 +149,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 用户报告 Bunjang search response parser 错误；已增强非空 product-like array 探测、嵌套 response/nextCursor 兼容和 query 级 preview warning fallback。
 - 已部署 `local/product-radar:git-23836b200afe`；live image-only preview 返回 54 candidates、无 warnings；Product Radar/changedetection healthy。
 - 原有真实 Product Watch 与 120s interval 未改变，未新增测试 Watch 或通知。
+
+
+## Product Radar image + 用户文字 Timeout Hotfix（DEPLOYED / VERIFIED：2026-09-08）
+
+- 修复多 query 串行请求、reference/Sharp preview scoring 与 LangBot 20s HTTP timeout 叠加造成的 TimeoutError。
+- Preview query/reference 并行，preview matcher 限制 12 个候选，LangBot plugin timeout 默认 90s。
+- 已部署 runtime `local/product-radar:git-49725f014c47`，LangBot plugin task `51` `INSTALL_READY`。真实羽绒服图 + `帮我盯着这件羽绒服` preview 18.41s/HTTP200，临时 Watch baseline 494/900s/0 notification，已清理。
