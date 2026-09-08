@@ -170,3 +170,9 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - `取消监控` 已从 pending-only 改为 pending cancel 或 active Watch stop；active Similarity Watch 会 disabled + pause sensor。
 - plugin reload 后唯一 active Similarity Watch fallback 可用；Product Watch 不会被误停。
 - LangBot Product Radar plugin task `58` `INSTALL_READY`。
+
+
+## Product Radar existing Watch list / bot offline diagnosis（DEPLOYED / VERIFIED：2026-09-08）
+
+- 修复 `我在盯着什么` list intent，plugin task `67` `INSTALL_READY`。
+- 当前数据库有 3 个 Watch，plugin runtime HTTP 可访问 Product Radar；LangBot/Telegram/KOOK 容器运行中，近期 Telegram outbound success。

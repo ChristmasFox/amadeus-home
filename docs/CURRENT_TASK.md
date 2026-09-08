@@ -1,5 +1,13 @@
 # Current Task
 
+## Product Radar existing Watch list / bot offline diagnosis（DEPLOYED / VERIFIED：2026-09-08）
+
+- [x] 修复用户输入 `我在盯着什么` 未命中 `is_list_request` 的问题；现在支持 `我在盯着什么`、`我现在盯着什么`、`当前监控`、`/watches` 等。
+- [x] Watch list renderer 现在展示 Similarity Watch 的实际 query/SearchPlan，不再显示空 target。
+- [x] LangBot plugin task `67` 达到 `INSTALL_READY`；Product Radar API 从 plugin runtime 网络返回 HTTP 200，实际数据库当前有 3 个 Watch。
+- [x] 诊断确认 LangBot/Telegram/KOOK 容器仍 running，近期 Telegram outbound 有成功记录；“没有监控”来自 list intent 未匹配，而不是 Product Radar 数据库为空。
+
+
 ## Product Radar active Watch 取消监控修复（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] `取消监控` 现在同时支持两种状态：待确认 proposal 取消、已确认 active Similarity Watch 停止轮询。

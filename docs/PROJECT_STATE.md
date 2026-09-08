@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar existing Watch list / bot offline diagnosis（DEPLOYED / VERIFIED：2026-09-08）
+
+用户输入 `我在盯着什么` 时，旧 intent 只识别 `我现在盯着什么`，导致 Product Radar list listener 没有稳定命中。现已修复并部署 task `67`：
+
+- Product Radar API 当前有 3 个 Watch：1 个 Product Watch、2 个羽绒服 Similarity Watch。
+- Plugin runtime 到 `product-radar:5315/api/watches` HTTP 200。
+- LangBot/Telegram/KOOK 容器运行中，近期 Telegram outbound success 可见；没有证据表明 bot 进程全部离线。
+- `/watches` 与自然语言列表现在显示实际 Similarity query，不再显示空 target。
+
+
 ## Product Radar active Watch 取消监控修复（DEPLOYED / VERIFIED：2026-09-08）
 
 用户反馈 active Watch 回复“取消监控”无法真正停止。LangBot listener 原来只把“取消监控”当作 pending proposal cancel，现已修复：
