@@ -273,6 +273,14 @@ class ProductRadarListener(EventListener):
                         matches.append(row)
             else:
                 matches = [row for row in enabled if watch_context.get(str(row.get('id'))) == context]
+                if not matches:
+                    similarity = [row for row in enabled if row.get('type') == 'similarity']
+                    # Context mappings are in-memory plugin state. After a
+                    # plugin reload, a sole Similarity Watch is still the
+                    # safe target for "取消监控"; never stop the unrelated
+                    # Product Watch just because it is also enabled.
+                    if len(similarity) == 1:
+                        matches = similarity
                 if not matches and len(enabled) == 1:
                     matches = enabled
             if not matches:
