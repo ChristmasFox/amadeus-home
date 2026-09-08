@@ -156,3 +156,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 修复多 query 串行请求、reference/Sharp preview scoring 与 LangBot 20s HTTP timeout 叠加造成的 TimeoutError。
 - Preview query/reference 并行，preview matcher 限制 12 个候选，LangBot plugin timeout 默认 90s。
 - 已部署 runtime `local/product-radar:git-49725f014c47`，LangBot plugin task `51` `INSTALL_READY`。真实羽绒服图 + `帮我盯着这件羽绒服` preview 18.41s/HTTP200，临时 Watch baseline 494/900s/0 notification，已清理。
+
+
+## Product Radar 羽绒服 flow final verification（DEPLOYED / VERIFIED：2026-09-08）
+
+- 最终 runtime image：`local/product-radar:git-a147b7fb3fcd`。
+- 真实 Bunjang 羽绒服图 `363252234` + `帮我盯着这件羽绒服`：HTTP 200、19.18s、103 candidates、query `패딩`/`다운 자켓`、0 warnings、0 TimeoutError。
+- Bunjang planner 已过滤会导致异常的原始中文 `羽绒服` query；现有真实 Product Watch 仍 enabled/120s。

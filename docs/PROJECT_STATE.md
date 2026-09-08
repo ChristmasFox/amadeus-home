@@ -7,7 +7,7 @@
 - Runtime image 已更新为 `local/product-radar:git-49725f014c47`（digest `sha256:77d54cfcd93baf4e728a44ba1dac85742c87b29c0b54e9ea64ccca0c5ed56c53`）。
 - Preview 现在并行查询多个 SearchPlan query、并行准备 reference image，并限制 preview Sharp scoring 为 12 个候选。
 - LangBot plugin task `51` 为 `INSTALL_READY`，HTTP client 默认 timeout 为 90 秒且支持外部覆盖。
-- 真实羽绒服图 `363252234` + 用户文字测试：preview 200 / 18.41s / 49 candidates；临时创建 201 / 900s / baseline 494 / 0 baseline notifications；测试 Watch 已删除。
+- 真实羽绒服图 `363252234` + 用户文字测试：preview 200 / 19.18s / 103 candidates / queries `패딩`+`다운 자켓` / 0 warnings；临时创建 201 / 900s / baseline 494 / 0 baseline notifications；测试 Watch 已删除。
 - Product Radar、changedetection healthy；原 Product Watch 仍为 enabled、120 秒。
 
 

@@ -17,9 +17,9 @@ Bunjang SearchPlan queries were fetched serially; reference image preparation an
 
 ## Verification
 
-- Runtime image: `local/product-radar:git-49725f014c47`, digest `sha256:77d54cfcd93baf4e728a44ba1dac85742c87b29c0b54e9ea64ccca0c5ed56c53`.
+- Runtime image: `local/product-radar:git-a147b7fb3fcd`, digest `sha256:77d54cfcd93baf4e728a44ba1dac85742c87b29c0b54e9ea64ccca0c5ed56c53`.
 - LangBot plugin task `51`: `INSTALL_READY`; package includes the 90-second client timeout.
-- Real public Bunjang down-jacket image `363252234` + `帮我盯着这件羽绒服`: preview HTTP 200 in 18.41s, baseline 49, partial warning only for the unavailable `羽绒服` query, no TimeoutError.
+- Real public Bunjang down-jacket image `363252234` + `帮我盯着这件羽绒服`: preview HTTP 200 in 19.18s, 103 candidates, queries `패딩` and `다운 자켓`, zero warnings, no TimeoutError. The raw Chinese `羽绒服` query is no longer generated when localized aliases are available.
 - Temporary end-to-end Watch create: HTTP 201, interval 900s, baseline 494, baseline notifications 0; deleted after smoke.
 - Final state: only the pre-existing Product Watch remains; SearchFeed count 0; Product Radar and changedetection healthy.
 
@@ -27,3 +27,4 @@ Bunjang SearchPlan queries were fetched serially; reference image preparation an
 
 - `169c601` — avoid visual preview timeout on slow search feeds.
 - `49725f0` — parallelize and cap similarity preview scoring.
+- `a147b7f` — localize Bunjang category aliases and avoid the failing raw Chinese query.
