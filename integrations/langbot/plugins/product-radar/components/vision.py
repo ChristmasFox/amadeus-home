@@ -12,7 +12,8 @@ except ImportError:  # pragma: no cover - exercised only outside LangBot
     provider_message = None
 
 LOGGER = logging.getLogger('product-radar.vision')
-KNOWN_VISION_MODEL = '4d608fdb-126b-42cd-a8a5-be1349629713'
+# Current LangBot model registry UUID for GPT-5.6 Luna; configurable via plugin config/env.
+KNOWN_VISION_MODEL = '581087d4-5793-4116-9aa1-d82e08ec6849'
 
 
 def _config(plugin: Any, key: str, env_key: str) -> str:
