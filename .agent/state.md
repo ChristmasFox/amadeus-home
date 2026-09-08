@@ -163,3 +163,10 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 - 最终 runtime image：`local/product-radar:git-a147b7fb3fcd`。
 - 真实 Bunjang 羽绒服图 `363252234` + `帮我盯着这件羽绒服`：HTTP 200、19.18s、103 candidates、query `패딩`/`다운 자켓`、0 warnings、0 TimeoutError。
 - Bunjang planner 已过滤会导致异常的原始中文 `羽绒服` query；现有真实 Product Watch 仍 enabled/120s。
+
+
+## Product Radar active Watch 取消监控修复（DEPLOYED / VERIFIED：2026-09-08）
+
+- `取消监控` 已从 pending-only 改为 pending cancel 或 active Watch stop；active Similarity Watch 会 disabled + pause sensor。
+- plugin reload 后唯一 active Similarity Watch fallback 可用；Product Watch 不会被误停。
+- LangBot Product Radar plugin task `58` `INSTALL_READY`。

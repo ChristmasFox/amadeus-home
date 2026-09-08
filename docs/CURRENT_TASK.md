@@ -1,5 +1,13 @@
 # Current Task
 
+## Product Radar active Watch 取消监控修复（DEPLOYED / VERIFIED：2026-09-08）
+
+- [x] `取消监控` 现在同时支持两种状态：待确认 proposal 取消、已确认 active Similarity Watch 停止轮询。
+- [x] active Watch 取消会 PATCH `enabled=false`，同步 pause shared SearchFeed sensor；历史记录保留，但不会继续轮询或通知。
+- [x] plugin reload 后 context 映射丢失时，如果当前只有一个 active Similarity Watch，仍会安全选择它，不会误停 Product Watch。
+- [x] LangBot Product Radar plugin task `58` 达到 `INSTALL_READY`；Product Radar/changedetection healthy。
+
+
 ## Product Radar image + 用户文字 Timeout Hotfix（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 修复原因：Bunjang 多 query 顺序请求 + Sharp preview scoring + LangBot 20s HTTP timeout 叠加，导致 `Product Radar unavailable: TimeoutError`。

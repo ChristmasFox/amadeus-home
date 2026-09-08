@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar active Watch 取消监控修复（DEPLOYED / VERIFIED：2026-09-08）
+
+用户反馈 active Watch 回复“取消监控”无法真正停止。LangBot listener 原来只把“取消监控”当作 pending proposal cancel，现已修复：
+
+- pending proposal：`取消监控` 仍只取消 proposal。
+- active Watch：`取消监控` 调用 active stop path，PATCH `enabled=false` 并 pause Feed sensor。
+- plugin reload 后没有 in-memory conversation mapping 时，唯一 active Similarity Watch 可安全匹配；不会影响 Product Watch。
+- final LangBot plugin task `58` 为 `INSTALL_READY`。
+
+
 ## Product Radar image + 用户文字 Timeout Hotfix（DEPLOYED / VERIFIED：2026-09-08）
 
 针对用户图片 + `帮我盯着这件羽绒服` 报错 `Product Radar unavailable: TimeoutError`：
