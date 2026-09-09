@@ -58,3 +58,34 @@ Status: deployed; verified; user inbound smoke pending
   `--no-build`.
 - Restore the LangBot plugin package from the deployment backup.
 - Do not remove `/DATA/AppData/product-radar` or changedetection datastore.
+
+## Follow-up release amendment (2026-09-09)
+
+- Fixed additive migration backfill so existing `search_feed_runs` history
+  populates `runCount`, `successCount`, `lastRunAt`, `lastSuccessAt`,
+  `lastError`, and the current consecutive `failureCount` without retaining an
+  old error after a newer successful run.
+- Verification: Product Radar tests 46/46; LangBot tests 23/23 with the
+  plugin directory on `PYTHONPATH`; root tests 129 pass / 1 skip; typecheck,
+  build, Python compile, secret scan and diff check passed.
+- Source commit `a446838fc992a7237e6637c3c1c4cd5a97059425` was pushed to
+  `origin/main`.
+- Host BuildKit image `local/product-radar:git-a446838fc992` was loaded into
+  OrbStack `ubuntu`; active image ID is
+  `sha256:933c98b5b184b655517735d3677762a420c06c86cf4eda85d6848018eeb5f4c8`.
+- CasaOS Product Radar was recreated with `docker compose up -d --no-build`;
+  rollback files are
+  `/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260909-144144`
+  and `/var/lib/casaos/apps/product-radar/.env.codex-backup.20260909-144144`.
+- LangBot Product Radar `0.5.0` install task `97` reached `INSTALL_READY`;
+  package SHA-256 is
+  `17ee72dadfe014715f47863e8e086eeb85f8b6fb00e4d885ad4adc7d0a81bc04`,
+  rollback dir is `.backups/langbot/20260909-144208`.
+- Live verification: Product Radar and changedetection are healthy; `/health`
+  is `ok`, with 3 Watches, 2 SearchFeeds, 2663 listings and 4 historical
+  feed runs. Each historical Similarity Feed now reports 2 runs, 0 successes,
+  2 consecutive failures and `WATERMARK_NOT_REACHED`. `scripts/doctor.sh`
+  reports 0 failures and 0 warnings.
+- User inbound Telegram/KOOK smoke remains pending. The deployed cancellation
+  path is ownership-aware: a unique restored Watch can be deleted; multiple
+  legacy Watches without a binding produce clarification instead of guessing.

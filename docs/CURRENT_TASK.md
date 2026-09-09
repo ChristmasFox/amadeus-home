@@ -7,10 +7,11 @@
 - [x] API：`GET /api/watches/:id/status`、`/stats`、`/usage`，`POST /api/usage` 与上下文绑定接口；状态覆盖 HEALTHY/DEGRADED/PAUSED/ERROR、last/next run、Feed health、token summary。
 - [x] GPT-5.6 Luna structured NLU 增加 status/stats 语义与 usage extraction；创建、修改、状态查询、统计查询均按 Watch 记账，轮询/Sharp 不调用 LLM；取消监控在插件重载后恢复同一 ownership context，多目标继续澄清。
 - [x] Similarity Watch 默认 24h heartbeat digest：无匹配也发送，period/channel/recipient 幂等，Telegram/KOOK 独立失败重试；增加 fake-clock、restart、API、paraphrase/negative routing tests。
-- [x] 本地验证：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、`git diff --check` 通过。
-- [x] RELEASE：source commit `8c502a3a73e5` 已 push；Host BuildKit immutable image `local/product-radar:git-8c502a3a73e5` 已导入并以 CasaOS `docker compose up -d --no-build` 激活，digest 为 `sha256:23160cae30aba2c5853182ce837b815b2ce72cfceab87332f4362c17c216daa7`。
-- [x] LangBot Product Radar plugin `0.5.0` 已通过 API 安装，task `94` 达到 `INSTALL_READY`，package SHA-256 为 `cb8ee31fad24683df691bb4e6939ca77a465fd41d8b4d0f9228bd3832d5f4b94`，rollback dir 为 `.backups/langbot/20260909-142343`。
-- [x] live 核验：Product Radar `healthy`、`/health=status=ok`，3 个既有 Watch、2 个 SearchFeed 和 2663 条 listing 保持；3 条 runtime stats 已由 status smoke 惰性初始化；context API 返回 200；未创建/删除真实 Watch，未发送手工通知。
+- [x] 本地验证：Product Radar 46/46、typecheck/build、LangBot 23/23、Python compile、secret scan、`git diff --check` 通过；根测试 129 pass / 1 skip。
+- [x] RELEASE：source commit `a446838fc992` 已 push；Host BuildKit immutable image `local/product-radar:git-a446838fc992` 已导入并以 CasaOS `docker compose up -d --no-build` 激活，digest 为 `sha256:933c98b5b184b655517735d3677762a420c06c86cf4eda85d6848018eeb5f4c8`。
+- [x] LangBot Product Radar plugin `0.5.0` 已通过 API 安装，task `97` 达到 `INSTALL_READY`，package SHA-256 为 `17ee72dadfe014715f47863e8e086eeb85f8b6fb00e4d885ad4adc7d0a81bc04`，rollback dir 为 `.backups/langbot/20260909-144208`。
+- [x] live 核验：Product Radar、changedetection `0.60.3` 和 LangBot/plugin runtime 均 running/healthy；`/health=status=ok`，3 个既有 Watch、2 个 SearchFeed 和 2663 条 listing 保持；历史 4 条 `search_feed_runs` 已回填为每个旧 Feed 2 次运行、0 次成功、2 次连续失败、`WATERMARK_NOT_REACHED`；未创建/删除真实 Watch，未发送手工通知。
+- [x] 本次 CasaOS 回滚备份为 `/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260909-144144` 与 `/var/lib/casaos/apps/product-radar/.env.codex-backup.20260909-144144`；`scripts/doctor.sh` 为 0 failure / 0 warning。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
