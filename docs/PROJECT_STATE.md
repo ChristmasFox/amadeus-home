@@ -27,13 +27,16 @@
 - 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；`product-radar`、changedetection、LangBot/plugin runtime 均 running/healthy；Product Radar `/health` 为 `ok`，API 仍返回 3 个既有 Watch。未重建 Product Radar runtime image，也未创建/删除/修改真实 Watch。
 - 尚未发送真实 Telegram/KOOK 测试消息；平台入站 smoke 仍待用户在目标会话完成。
 
-## Product Radar status query fallback（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+## Product Radar status query fallback（DEPLOYED / VERIFIED：2026-09-09）
 
 16:01 的真实 LangBot 日志显示，用户消息 `监控的怎么样了` 已进入 LangBot，但 Product Radar 的 Luna intent call 报 `ActionCallError`；Product Radar listener 因此返回未处理，后续普通聊天生成了“之前那件红色羽绒服的监控已经取消”等错误语义。Product Radar API 实际仍有 1 条 enabled Similarity Watch，状态为 `DEGRADED`，两个 Feed 的 `lastError` 都是 `WATERMARK_NOT_REACHED`。
 
 - `intent_planner.py` 增加窄范围、明确 Product Radar 语义的 status offline fallback，Luna 暂时失败时不会让清晰的状态询问落入普通聊天。
 - `product_radar.py` 对没有指定 Watch 的 status/stats 请求按当前列表汇总；单条暂停或降级 Watch 也能返回真实状态；Feed 错误会显示在状态行中。
-- 本地验证：LangBot plugin tests 31/31、Python compile、`git diff --check`、`pnpm workflow:plan`；当前代码尚未安装 live。
+- 本地验证：LangBot plugin tests 31/31、Python compile、`git diff --check`、`pnpm workflow:plan`。
+- source commit `00e6889` 已 push；LangBot Product Radar plugin `0.5.2` 安装 task `109` 达到 `INSTALL_READY`，package SHA-256 为 `3105e395b73344cea48dd78294f917200083ccafa9bdbd5a77fab69ecd3b0912`，rollback dir 为 `.backups/langbot/20260909-160922`。
+- 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；相关容器均 running/healthy，Product Radar `/health` 为 `ok`，API 仍为 1 条 enabled Watch。未重建 Product Radar runtime image，也未创建/删除/修改真实 Watch。
+- 尚未发送真实 Telegram/KOOK 测试消息；平台入站 smoke 仍待用户发送“监控的怎么样了”。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 

@@ -24,14 +24,16 @@
 - [x] 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；Product Radar、changedetection、LangBot/plugin runtime 均 running/healthy，Product Radar `/health` 为 `ok`，API 仍为既有 3 个 Watch；未重建 Product Radar runtime image。
 - [ ] 尚未发送真实 Telegram/KOOK 测试消息；需用户在目标会话发送“我现在盯着什么”或“取消监控”完成最终平台入站 smoke。
 
-## Product Radar status query fallback（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+## Product Radar status query fallback（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 定位 16:01 线上问题：`监控的怎么样了` 已到达 LangBot，但 Product Radar Luna intent call 报 `ActionCallError`；插件返回未处理后由普通聊天接管，产生了“不准确的监控已取消”回复。
 - [x] 增加受明确 Product Radar 语义约束的离线状态 fallback；`监控的怎么样了` 等表达直接进入 `get_watch_status`，不再落入普通聊天。
 - [x] 无明确序号时，单条监控展示真实 status；多条监控汇总每条状态；Feed `lastError` 会随状态展示，便于区分启用但 DEGRADED 与已取消。
 - [x] 线上只读核验：当前 API 有 1 条 enabled Similarity Watch，状态为 `DEGRADED`，两个 Feed 均为 `WATERMARK_NOT_REACHED`；未修改监控数据。
 - [x] LangBot plugin tests 31/31、Python compile、`git diff --check`、`pnpm workflow:plan` 已通过。
-- [ ] 待提交并通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 plugin `0.5.2`，再做 live runtime 核验；不重建 Product Radar runtime image。
+- [x] source commit `00e6889` 已 push 到 `origin/main`；`scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 plugin `0.5.2`，task `109` 达到 `INSTALL_READY`，package SHA-256 为 `3105e395b73344cea48dd78294f917200083ccafa9bdbd5a77fab69ecd3b0912`，rollback dir 为 `.backups/langbot/20260909-160922`。
+- [x] 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；LangBot/plugin runtime、Product Radar 和 changedetection 均 running/healthy，Product Radar `/health` 为 `ok`，API 仍为 1 条 enabled Watch；未重建 Product Radar runtime image。
+- [ ] 尚未发送真实 Telegram/KOOK 测试消息；需用户发送“监控的怎么样了”完成最终平台入站 smoke。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 

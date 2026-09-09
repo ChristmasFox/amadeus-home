@@ -8,9 +8,9 @@
 
 当前 source 已实现编号列表、`取消监控` Telegram 选择按钮、`取消1号`/`取消第2个` structured ordinal 删除，以及删除后刷新列表；watch list 与 callback 选择均绑定完整 normalized Product Radar context，群聊成员不会继承彼此的菜单。LangBot plugin tests 29/29、compile、diff check、secret scan 已通过。source `0de93ca` 已 push，Product Radar plugin `0.5.1` task `102` 已 `INSTALL_READY`，package SHA-256 为 `ebcb43cd290b7634727be8ac3bc3ca21c38dbf7c07780ac63b06a1736a34fa5f`，rollback dir 为 `.backups/langbot/20260909-152749`；doctor 0 failure / 0 warning，Product Radar 3 个既有 Watch 保持不变。尚未发送真实 Telegram/KOOK 测试消息。
 
-## Product Radar status query fallback（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+## Product Radar status query fallback（DEPLOYED / VERIFIED：2026-09-09）
 
-已确认 `监控的怎么样了` 在 16:01 到达 LangBot，但 Luna intent call 报 `ActionCallError`，Product Radar 未声明处理，普通聊天随后生成错误的“监控已取消”回答。当前 source 已加入明确 Product Radar status 语义的离线 fallback，并支持无序号时汇总当前 Watch、显示真实 DEGRADED/Feed error；LangBot plugin tests 31/31、compile、diff check、workflow plan 通过。待 source commit 后安装 plugin `0.5.2`；不重建 Product Radar runtime image。
+已确认 `监控的怎么样了` 在 16:01 到达 LangBot，但 Luna intent call 报 `ActionCallError`，Product Radar 未声明处理，普通聊天随后生成错误的“监控已取消”回答。source 已加入明确 Product Radar status 语义的离线 fallback，并支持无序号时汇总当前 Watch、显示真实 DEGRADED/Feed error；LangBot plugin tests 31/31、compile、diff check、workflow plan 通过。source `00e6889` 已 push，plugin `0.5.2` task `109` 已 `INSTALL_READY`，package SHA-256 为 `3105e395b73344cea48dd78294f917200083ccafa9bdbd5a77fab69ecd3b0912`，rollback dir 为 `.backups/langbot/20260909-160922`；doctor 0 failure / 0 warning，Product Radar 仍为 1 条 enabled Watch。尚未发送真实 Telegram/KOOK 测试消息。
 
 更新时间：2026-09-09（Asia/Shanghai）
 
