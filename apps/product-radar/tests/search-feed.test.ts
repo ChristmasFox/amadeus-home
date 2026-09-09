@@ -152,6 +152,36 @@ test('pagination safety cap degrades without advancing the watermark', async () 
   assert.equal(channel.calls.length, 0);
 });
 
+test('a capped initial scan establishes a silent baseline and the internal scheduler continues polling', async () => {
+  let now = '2026-09-09T00:00:00.000Z';
+  const source = new PaginatedSource();
+  source.pages = [
+    Array.from({ length: 60 }, (_, index) => listing(`baseline-${index}`)),
+    Array.from({ length: 60 }, (_, index) => listing(`older-${index}`)),
+  ];
+  const { service, store, channel } = build(source, { maxPagesPerRun: 1, now: () => now });
+  const created = await service.createWatch(proposal('watch-a'));
+  const feeds = service.listSearchFeeds();
+  const feed = feeds[0]!;
+
+  assert.equal(feed.state, 'ACTIVE');
+  assert.equal(feed.watermark, 'baseline-0');
+  assert.equal(feed.runCount, 1);
+  assert.equal(feed.successCount, 1);
+  assert.equal(channel.calls.length, 0);
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).feedRuns, feeds.length);
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).successfulRuns, feeds.length);
+
+  now = '2026-09-09T00:20:00.000Z';
+  source.pages = [[listing('future-1'), listing('baseline-0')]];
+  const runs = await service.runDueSimilarityFeeds();
+  assert.equal(runs.length, feeds.length);
+  assert.ok(runs.every((run) => run.status === 'succeeded'));
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).feedRuns, feeds.length * 2);
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).successfulRuns, feeds.length * 2);
+  assert.equal(channel.calls.length, 1);
+});
+
 test('a later page failure does not publish staged listings or advance the watermark', async () => {
   const source = new PaginatedSource();
   const { service, store, channel } = build(source, { now: () => '2026-09-09T00:00:00.000Z' });

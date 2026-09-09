@@ -108,7 +108,11 @@ export class SearchFeedCoordinator {
       const existingSubscription = this.options.store.getWatchFeedSubscription(watch.id, feed.id);
       let baselineReady = false;
       try {
-        const result = await this.runFeed(feed.id, `baseline:${watch.id}:${feed.id}`, { route: true });
+        const result = await this.runFeed(feed.id, `baseline:${watch.id}:${feed.id}`, {
+          route: false,
+          allowInitialTruncation: true,
+          trackWatchIds: [watch.id],
+        });
         baselineReady = result.status === 'succeeded';
         if (baselineReady) baselineCount += result.fetchedListings;
       } catch {
@@ -141,7 +145,7 @@ export class SearchFeedCoordinator {
     return this.prepareWatch(watch, plan);
   }
 
-  async runFeed(feedId: string, triggerKey = `manual:${randomUUID()}`, options: { route?: boolean } = {}): Promise<SearchFeedRunResult> {
+  async runFeed(feedId: string, triggerKey = `manual:${randomUUID()}`, options: { route?: boolean; allowInitialTruncation?: boolean; trackWatchIds?: string[] } = {}): Promise<SearchFeedRunResult> {
     const feed = this.options.store.getSearchFeed(feedId);
     if (!feed) throw new RadarError(`search feed not found: ${feedId}`, 'NOT_FOUND', 404);
     const backoffUntil = feed.backoffUntil === undefined ? NaN : Date.parse(feed.backoffUntil);
@@ -153,9 +157,16 @@ export class SearchFeedCoordinator {
     const poll = this.options.store.beginFeedRun(feedId, triggerKey, startedAt);
     if (!poll) return { feedId, status: 'duplicate', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [] };
     const runFeed = this.options.store.getSearchFeed(feedId) ?? feed;
-    const runtimeRuns = new Map<string, string>();
+    const trackedWatchIds = new Set(options.trackWatchIds ?? []);
     for (const subscription of this.options.store.listWatchFeedSubscriptions({ feedId })) {
       const watch = this.options.store.getWatch(subscription.watchId);
+      if (watch?.enabled && watch.type === 'similarity') {
+        trackedWatchIds.add(watch.id);
+      }
+    }
+    const runtimeRuns = new Map<string, string>();
+    for (const watchId of trackedWatchIds) {
+      const watch = this.options.store.getWatch(watchId);
       if (watch?.enabled && watch.type === 'similarity') {
         runtimeRuns.set(watch.id, this.options.store.beginWatchRuntimeRun(watch.id, 'feed', triggerKey, startedAt, feedId));
       }
@@ -163,7 +174,9 @@ export class SearchFeedCoordinator {
     try {
       const adapter = this.options.sources.require(runFeed.source);
       const validated = await adapter.validateTarget('similarity', { searchQuery: runFeed.query, searchUrl: runFeed.target });
-      const pageResult = await this.fetchIncremental(adapter, validated, runFeed);
+      const pageResult = await this.fetchIncremental(adapter, validated, runFeed, {
+        ...(options.allowInitialTruncation === undefined ? {} : { allowInitialTruncation: options.allowInitialTruncation }),
+      });
       if (!pageResult.watermarkReached) {
         const degraded = this.markFeedDegraded(runFeed, 'WATERMARK_NOT_REACHED', true);
         this.options.store.finishFeedRun(poll.id, 'failed', this.now(), { error: 'WATERMARK_NOT_REACHED', listingsCount: pageResult.fetchedListings, changesCount: pageResult.newListings });
@@ -194,6 +207,35 @@ export class SearchFeedCoordinator {
     if (!feed) throw new RadarError(`search feed not found: ${feedId}`, 'NOT_FOUND', 404);
     if (!feed.sensorWatchId || feed.sensorWatchId !== sensorWatchId) throw new RadarError('webhook sensor watch does not match search feed', 'MALFORMED_WEBHOOK', 400);
     return { accepted: true, ...(await this.runFeed(feedId, triggerKey)) };
+  }
+
+  async runDueFeeds(): Promise<SearchFeedRunResult[]> {
+    const nowMs = Date.parse(this.now());
+    if (!Number.isFinite(nowMs)) return [];
+    const results: SearchFeedRunResult[] = [];
+    for (const feed of this.options.store.listSearchFeeds()) {
+      if (feed.state === 'DISABLED') continue;
+      const subscribers = this.options.store.listWatchFeedSubscriptions({ feedId: feed.id })
+        .map((subscription) => this.options.store.getWatch(subscription.watchId))
+        .filter((watch): watch is Watch => watch?.enabled === true && watch.type === 'similarity');
+      if (subscribers.length === 0) continue;
+      const baseMs = Date.parse(feed.lastRunAt ?? feed.createdAt);
+      const scheduledMs = Number.isFinite(baseMs)
+        ? baseMs + scheduledIntervalSeconds(feed.id, feed.intervalSeconds, feed.jitterSeconds) * 1000
+        : nowMs;
+      const backoffMs = feed.backoffUntil === undefined ? NaN : Date.parse(feed.backoffUntil);
+      const dueAt = Number.isFinite(backoffMs) ? Math.max(scheduledMs, backoffMs) : scheduledMs;
+      if (nowMs < dueAt) continue;
+
+      const needsSilentBaseline = feed.watermark === undefined;
+      const result = await this.runFeed(feed.id, `schedule:${feed.id}:${Math.floor(nowMs / 1000)}`, {
+        route: !needsSilentBaseline,
+        allowInitialTruncation: needsSilentBaseline,
+      });
+      results.push(result);
+      if (needsSilentBaseline && result.status === 'succeeded') this.attachSubscribersAfterCurrentBaseline(feed.id);
+    }
+    return results;
   }
 
   async syncWatch(watch: Watch, previous: Watch): Promise<void> {
@@ -298,7 +340,7 @@ export class SearchFeedCoordinator {
     return feed;
   }
 
-  private async fetchIncremental(adapter: ListingSourceAdapter, validated: ValidatedTarget, feed: SearchFeed): Promise<SearchFeedRunResult & { watermarkReached: boolean; watermark?: string; potentialCandidateGap: boolean }> {
+  private async fetchIncremental(adapter: ListingSourceAdapter, validated: ValidatedTarget, feed: SearchFeed, options: { allowInitialTruncation?: boolean } = {}): Promise<SearchFeedRunResult & { watermarkReached: boolean; watermark?: string; potentialCandidateGap: boolean }> {
     let cursor: string | undefined;
     let pages = 0;
     let fetchedListings = 0;
@@ -342,6 +384,15 @@ export class SearchFeedCoordinator {
       cursor = nextCursor;
     }
     if (!watermarkReached && (pages >= this.maxPagesPerRun || fetchedListings >= this.maxListingsPerRun)) potentialCandidateGap = true;
+    // The first scan has no previous boundary. For high-volume searches such
+    // as Bunjang "패딩", requiring the complete historical result set makes a
+    // bounded scan fail forever. A capped first scan can safely establish its
+    // newest listing as a silent baseline: older omitted listings are never
+    // treated as new, while all later scans stop at this boundary.
+    if (!watermarkReached && options.allowInitialTruncation && feed.watermark === undefined && firstListingId !== undefined) {
+      watermarkReached = true;
+      potentialCandidateGap = false;
+    }
     if (watermarkReached && firstListingId !== undefined) watermark = firstListingId;
     let newListings = 0;
     if (watermarkReached) {
@@ -455,6 +506,16 @@ export class SearchFeedCoordinator {
       perWatch.set(watch.id, metrics);
     }
     return { matchedListings, eventIds, perWatch };
+  }
+
+  private attachSubscribersAfterCurrentBaseline(feedId: string): void {
+    const latest = this.options.store.getLatestFeedListingEvent(feedId)?.eventId;
+    for (const subscription of this.options.store.listWatchFeedSubscriptions({ feedId })) {
+      this.options.store.upsertWatchFeedSubscription({
+        ...subscription,
+        ...(latest === undefined ? {} : { startAfterEventId: latest }),
+      });
+    }
   }
 
   private async processListing(watch: Watch, listing: Listing): Promise<{ matched: boolean; eventId?: string; metrics: WatchRuntimeRunMetrics }> {

@@ -459,14 +459,15 @@ test('runtime stats count real similarity executions, notifications, and degrade
   const channel = new FakeChannel('telegram', 'recipient');
   const { service, store } = build(source, { channels: [channel], imageMatcher: new FakeImageMatcher() });
   const created = await createSimilarity(service);
-  assert.equal(store.getWatchRuntimeStats(created.watch.id).feedRuns, 0);
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).feedRuns, 1);
+  assert.equal(store.getWatchRuntimeStats(created.watch.id).successfulRuns, 1);
 
   source.currentListings = [listing({ externalId: 'baseline', title: 'baseline' }), listing({ externalId: 'similar', title: 'similar', imageUrls: ['https://fake.test/similar.jpg'] })];
   const succeeded = await service.runWatch(created.watch.id, 'runtime-success');
   assert.equal(succeeded.status, 'succeeded');
   const healthy = store.getWatchRuntimeStats(created.watch.id);
-  assert.equal(healthy.feedRuns, 1);
-  assert.equal(healthy.successfulRuns, 1);
+  assert.equal(healthy.feedRuns, 2);
+  assert.equal(healthy.successfulRuns, 2);
   assert.equal(healthy.failedRuns, 0);
   assert.equal(healthy.newListings, 1);
   assert.equal(healthy.candidatesProcessed, 1);
@@ -505,7 +506,7 @@ test('zero-match similarity remains healthy and persists usage through restart',
 
     const second = build(source, { store: new SqliteRadarStore(path), imageMatcher: new FakeImageMatcher() });
     const observation = second.service.getWatchObservability(created.watch.id);
-    assert.equal(observation.runtime.successfulRuns, 1);
+    assert.equal(observation.runtime.successfulRuns, 2);
     assert.equal(observation.usage.totalTokens, 14);
     assert.equal(observation.usage.imagesProcessed, 1);
     assert.equal(second.store.tableCounts().usage_ledger, 1);

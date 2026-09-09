@@ -267,6 +267,10 @@ export class ProductRadarService {
     return this.searchFeeds.listFeeds();
   }
 
+  async runDueSimilarityFeeds() {
+    return this.searchFeeds.runDueFeeds();
+  }
+
   async previewWatch(input: unknown): Promise<Record<string, unknown>> {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);

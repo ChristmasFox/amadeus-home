@@ -67,10 +67,27 @@ async function main(): Promise<void> {
   }, heartbeatSeconds * 1000);
   heartbeatTimer.unref();
   void service.runHeartbeatSweep().catch((error: unknown) => console.error('heartbeat startup sweep failed', error));
+  const feedSweepSeconds = numberEnv('PRODUCT_RADAR_FEED_SWEEP_SECONDS', 30);
+  let feedSweepInFlight = false;
+  const runFeedSweep = async (): Promise<void> => {
+    if (feedSweepInFlight) return;
+    feedSweepInFlight = true;
+    try {
+      await service.runDueSimilarityFeeds();
+    } catch (error) {
+      console.error('similarity feed sweep failed', error);
+    } finally {
+      feedSweepInFlight = false;
+    }
+  };
+  const feedSweepTimer = setInterval(() => { void runFeedSweep(); }, feedSweepSeconds * 1000);
+  feedSweepTimer.unref();
+  void runFeedSweep();
   server.listen(port, host, () => console.log(`Product Radar listening on ${host}:${port}`));
   const shutdown = (): void => {
     clearInterval(outboxTimer);
     clearInterval(heartbeatTimer);
+    clearInterval(feedSweepTimer);
     server.close(() => {
       store.close();
       process.exit(0);
