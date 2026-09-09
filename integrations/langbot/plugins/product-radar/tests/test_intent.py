@@ -9,6 +9,7 @@ import components.intent_planner as intent_planner
 from components.command_adapter import watch_create_payload, watch_patch_payload
 from components.context import load_context, set_active_watch, set_watch_list
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_intent, resolve_product_radar_command
+from components.observability_presentation import format_duration, format_observability, format_relative_time
 from components.watch_presentation import delete_choice_buttons, format_delete_choices, format_watches
 from components.platform.normalized import build_normalized_message, context_key
 
@@ -63,6 +64,46 @@ class ProductRadarImageIntentTest(unittest.TestCase):
 
         result = parse_similarity_watch_intent('帮我找类似的，关键词：Chrome Hearts hoodie', [{'referenceImageUrl': 'https://image.test/ref.jpg'}])
         self.assertEqual(result['target']['searchQuery'], 'Chrome Hearts hoodie')
+
+
+class ProductRadarObservabilityPresentationTest(unittest.TestCase):
+    def test_duration_and_relative_time_are_human_readable(self) -> None:
+        self.assertEqual(format_duration(183_845), '2天 3小时 4分钟 5秒')
+        now = __import__('datetime').datetime(2026, 9, 9, 8, 0, 0, tzinfo=__import__('datetime').timezone.utc)
+        self.assertEqual(
+            format_relative_time('2026-09-09T06:57:57Z', now=now, empty='尚未检查'),
+            '1小时 2分钟 3秒前',
+        )
+        self.assertEqual(
+            format_relative_time('2026-09-10T09:02:03Z', now=now, empty='待调度'),
+            '1天 1小时 2分钟 3秒后',
+        )
+
+    def test_status_includes_complete_counters_and_per_feed_errors(self) -> None:
+        now = __import__('datetime').datetime(2026, 9, 9, 8, 0, 0, tzinfo=__import__('datetime').timezone.utc)
+        output = format_observability({
+            'watch': {'id': 'watch-1', 'type': 'similarity', 'target': {'searchQuery': '패딩'}},
+            'status': 'DEGRADED',
+            'runningForSeconds': 183_845,
+            'lastRunAt': '2026-09-09T06:57:57Z',
+            'nextRunAt': '2026-09-10T09:02:03Z',
+            'runtime': {
+                'feedRuns': 12, 'successfulRuns': 9, 'failedRuns': 3,
+                'newListings': 8, 'candidatesProcessed': 7, 'imageComparisons': 6,
+                'aboveThreshold': 2, 'bestScore': 0.875, 'notificationsSent': 1,
+            },
+            'usage': {'totalTokens': 456, 'calls': 3},
+            'feeds': [{'query': '패딩', 'state': 'DEGRADED', 'runCount': 2, 'successCount': 0,
+                       'failureCount': 2, 'lastError': 'WATERMARK_NOT_REACHED'}],
+        }, stats=False, now=now)
+        self.assertIn('运行时长：2天 3小时 4分钟 5秒', output)
+        self.assertIn('上次检查：1小时 2分钟 3秒前', output)
+        self.assertIn('下次检查：1天 1小时 2分钟 3秒后', output)
+        self.assertIn('• 图片对比：6，达到阈值：2', output)
+        self.assertIn('• 最高相似度：87.5%', output)
+        self.assertIn('• 已发送通知：1', output)
+        self.assertIn('패딩：DEGRADED（检查 2，成功 0，失败 2）', output)
+        self.assertIn('原因：WATERMARK_NOT_REACHED', output)
 
 class ProductRadarBridgeTest(unittest.TestCase):
     def test_message_chain_image_base64_is_extracted_without_platform_api(self) -> None:

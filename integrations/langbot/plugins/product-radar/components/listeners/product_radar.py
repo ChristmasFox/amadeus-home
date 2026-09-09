@@ -16,6 +16,7 @@ from components.context import (
     watch_list_ids as context_watch_list_ids,
 )
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_command
+from components.observability_presentation import format_observability as _format_observability
 from components.platform.bridge import platform_name, reply
 from components.platform.normalized import NormalizedBotMessage, normalize_event_message
 from components.radar_client import (
@@ -210,50 +211,6 @@ async def _record_command_usage(plugin: Any, command: dict[str, Any], watch_id: 
     except Exception:
         # Usage accounting must never block the requested Watch operation.
         return
-
-
-def _format_observability(result: dict[str, Any], *, stats: bool) -> str:
-    watch = result.get('watch') if isinstance(result.get('watch'), dict) else {}
-    runtime = result.get('runtime') if isinstance(result.get('runtime'), dict) else {}
-    usage = result.get('usage') if isinstance(result.get('usage'), dict) else {}
-    feeds = result.get('feeds') if isinstance(result.get('feeds'), list) else []
-    status = str(result.get('status') or runtime.get('status') or 'UNKNOWN')
-    label = watch.get('target', {}).get('productUrl') if isinstance(watch.get('target'), dict) else None
-    label = label or watch.get('target', {}).get('searchQuery') if isinstance(watch.get('target'), dict) else None
-    label = label or watch.get('id') or '当前监控'
-    if not stats:
-        lines = [
-            '👀 监控状态', '', f'目标：{label}', f'状态：{status}',
-            f"运行：{result.get('runningForSeconds', 0)} 秒",
-            f"上次检查：{result.get('lastRunAt') or '尚未检查'}",
-            f"下次检查：{result.get('nextRunAt') or '待调度'}",
-        ]
-        if feeds:
-            feed_labels = []
-            for item in feeds:
-                if not isinstance(item, dict):
-                    continue
-                label = f"{item.get('query', item.get('id'))}={item.get('state')}"
-                if item.get('lastError'):
-                    label += f"（{item.get('lastError')}）"
-                feed_labels.append(label)
-            if feed_labels:
-                lines.append('Feed：' + '、'.join(feed_labels))
-        if runtime.get('lastError'):
-            lines.append(f"最近错误：{runtime.get('lastError')}")
-        return '\n'.join(lines)
-    lines = [
-        '📊 监控统计', '', f'目标：{label}', f'状态：{status}',
-        f"检查：{runtime.get('feedRuns', 0)} 次，成功 {runtime.get('successfulRuns', 0)}，失败 {runtime.get('failedRuns', 0)}",
-        f"新商品：{runtime.get('newListings', 0)}，候选：{runtime.get('candidatesProcessed', 0)}",
-        f"图片比较：{runtime.get('imageComparisons', 0)}，达到阈值：{runtime.get('aboveThreshold', 0)}",
-        f"最高相似度：{float(runtime['bestScore']) * 100:.1f}%" if isinstance(runtime.get('bestScore'), (int, float)) else '最高相似度：暂无',
-        f"已发送通知：{runtime.get('notificationsSent', 0)}",
-        f"Token：{usage.get('totalTokens', 0)}（调用 {usage.get('calls', 0)} 次）",
-    ]
-    if runtime.get('lastError'):
-        lines.append(f"最近错误：{runtime.get('lastError')}")
-    return '\n'.join(lines)
 
 
 def _prevent(event_context: Any) -> None:
@@ -507,7 +464,7 @@ class ProductRadarListener(EventListener):
                 )
                 body = _format_observability(observation, stats=stats)
                 body_lines = body.splitlines()
-                if body_lines and body_lines[0] in {'👀 监控状态', '📊 监控统计'}:
+                if body_lines and body_lines[0] in {'👀 监控情况', '📊 监控统计'}:
                     body = '\n'.join(body_lines[2:])
                 sections.append(f'{ordinal}号 · {_watch_target_value(row)}\n{body}')
             except Exception:
