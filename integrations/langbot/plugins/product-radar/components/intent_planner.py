@@ -226,7 +226,20 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
     if normalized in {'确认', '开始', '确认监控', '开始监控'}:
         return _command('create_watch', control='confirm')
     if normalized in {'取消', '取消监控'}:
-        return _command('create_watch', control='cancel')
+        # ``cancel`` is reserved for a pending create proposal.  Once a Watch
+        # already exists, the user's plain cancellation is a delete request;
+        # otherwise the listener would acknowledge a proposal cancellation
+        # while leaving the real Watch enabled.
+        if isinstance(context, dict) and context.get('pendingProposalToken'):
+            return _command('create_watch', control='cancel')
+        if current and current.get('id'):
+            return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.9)
+        return _command(
+            'delete_watch',
+            confidence=0.7,
+            needs_clarification=True,
+            clarification_question='目前没有可直接取消的当前监控，请指定要删除的商品、卖家或 Watch ID。',
+        )
     if normalized in {'/watches', '/product-radar'}:
         return _command('list_watches', confidence=1.0)
 
@@ -245,7 +258,10 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
         return _command('pause_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
     if current and normalized in {'恢复它', '继续监控', '继续盯', '重新开始'}:
         return _command('resume_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
-    if current and normalized in {'不要了', '不用了', '不需要了'}:
+    if current and normalized in {
+        '不要了', '不用了', '不需要了',
+        '不要盯着了', '不要再盯了', '不想盯了',
+    }:
         return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
     return None
 

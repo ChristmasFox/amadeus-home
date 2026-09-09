@@ -288,6 +288,60 @@ class ProductRadarGenericNluTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(delete_command['intent'], 'delete_watch')
         self.assertEqual(delete_command['entities']['watchId'], 'watch-1')
 
+    def test_cancel_existing_watch_deletes_active_watch_not_pending_proposal(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('创建这个', user_id='user-a')
+        set_active_watch(plugin, message, {
+            'id': 'watch-1',
+            'source': 'bunjang',
+            'type': 'similarity',
+            'enabled': True,
+            'target': {},
+            'rules': {},
+        })
+        context = load_context(plugin, _normalized_message('取消监控', user_id='user-a'))
+
+        command = intent_planner._legacy_fast_path(
+            _normalized_message('取消监控', user_id='user-a'),
+            context,
+        )
+        self.assertEqual(command['intent'], 'delete_watch')
+        self.assertEqual(command['entities']['watchId'], 'watch-1')
+        self.assertIsNone(command.get('control'))
+
+    def test_cancel_pending_proposal_keeps_proposal_control(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('创建这个', user_id='user-a')
+        from components.context import set_pending
+
+        set_pending(plugin, message, 'proposal-1')
+        context = load_context(plugin, _normalized_message('取消', user_id='user-a'))
+        command = intent_planner._legacy_fast_path(
+            _normalized_message('取消', user_id='user-a'),
+            context,
+        )
+        self.assertEqual(command['intent'], 'create_watch')
+        self.assertEqual(command['control'], 'cancel')
+
+    def test_natural_stop_fallback_deletes_active_watch(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('创建这个', user_id='user-a')
+        set_active_watch(plugin, message, {
+            'id': 'watch-2',
+            'source': 'bunjang',
+            'type': 'product',
+            'enabled': True,
+            'target': {},
+            'rules': {},
+        })
+        context = load_context(plugin, _normalized_message('不要盯着了', user_id='user-a'))
+        command = intent_planner._legacy_fast_path(
+            _normalized_message('不要盯着了', user_id='user-a'),
+            context,
+        )
+        self.assertEqual(command['intent'], 'delete_watch')
+        self.assertEqual(command['entities']['watchId'], 'watch-2')
+
     def test_context_key_isolated_by_sender_inside_same_group(self) -> None:
         plugin = SimpleNamespace()
         user_a = _normalized_message('创建这个', user_id='user-a')
