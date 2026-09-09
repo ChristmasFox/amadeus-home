@@ -95,6 +95,7 @@ test('HTTP API exposes source capabilities and watch lifecycle without platform 
     const webhook = await fetch(`${runtime.base}/api/sensors/changedetection/webhook`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ radarWatchId: created.watch.id, sensorWatchId: created.watch.sensorId, eventId: 'api-sensor-event' }) }).then((response) => response.json());
     assert.equal(webhook.accepted, true);
     assert.equal(webhook.newListings, 1);
+    assert.equal(webhook.perWatch, undefined);
 
     const deleted = await fetch(`${runtime.base}/api/watches/${created.watch.id}`, { method: 'DELETE' }).then((response) => response.json());
     assert.equal(deleted.deleted, true);

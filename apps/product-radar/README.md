@@ -67,6 +67,20 @@ A changedetection notification is accepted at
 `sensorWatchId`. The service deliberately ignores the sensor diff content and
 refetches the source before creating an event.
 
+Similarity feeds also have an internal scheduler that evaluates due feeds
+every 30 seconds. changedetection remains a compatible trigger, but a dynamic
+search page not producing a text diff cannot permanently stop Product Radar.
+When a high-volume feed reaches the first-scan safety cap, the newest listing
+is stored as a silent watermark; subsequent runs are incremental. A failed
+scan does not publish staged listings or advance the watermark, and records
+the feed as `DEGRADED` until a later successful run recovers it to `ACTIVE`.
+
+For isolated admin/development verification, an API-key-authenticated
+`POST /api/watches/:watchId/test-listing` accepts only `e2e-test-*` listing
+identifiers. It enters the normal feed event, matcher, event, outbox, and
+notification pipeline; it is not a direct notification shortcut. Remove the
+temporary Watch and its test records after the verification run.
+
 ## V0.2 image similarity watch
 
 V0.2 accepts an image attachment through the LangBot plugin and creates a

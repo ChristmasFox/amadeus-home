@@ -192,7 +192,12 @@ export class SearchFeedCoordinator {
         this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'succeeded', this.now(), metrics);
       }
       await this.options.notifications.deliverPending();
-      return { ...pageResult, ...routed, feedId, status: 'succeeded', triggerKey };
+      // perWatch is an internal Map used to close each runtime run. Do not
+      // leak it through the HTTP response: JSON.stringify(new Map()) is {},
+      // which looks like an empty observation rather than a deliberate
+      // internal detail.
+      const { perWatch: _perWatch, ...publicRouted } = routed;
+      return { ...pageResult, ...publicRouted, feedId, status: 'succeeded', triggerKey };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const degraded = this.markFeedFailure(runFeed, error);

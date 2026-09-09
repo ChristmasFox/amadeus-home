@@ -457,7 +457,8 @@ test('runtime stats count real similarity executions, notifications, and degrade
   const source = new FakeSourceAdapter();
   source.currentListings = [listing({ externalId: 'baseline', title: 'baseline' })];
   const channel = new FakeChannel('telegram', 'recipient');
-  const { service, store } = build(source, { channels: [channel], imageMatcher: new FakeImageMatcher() });
+  let now = '2026-09-09T00:00:00.000Z';
+  const { service, store } = build(source, { channels: [channel], imageMatcher: new FakeImageMatcher(), now: () => now });
   const created = await createSimilarity(service);
   assert.equal(store.getWatchRuntimeStats(created.watch.id).feedRuns, 1);
   assert.equal(store.getWatchRuntimeStats(created.watch.id).successfulRuns, 1);
@@ -487,6 +488,24 @@ test('runtime stats count real similarity executions, notifications, and degrade
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.successCount, 2);
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.failureCount, 1);
   assert.equal(service.getWatchObservability(created.watch.id).status, 'DEGRADED');
+
+  now = '2026-09-09T00:05:00.000Z';
+  source.fail = false;
+  source.currentListings = [
+    listing({ externalId: 'baseline', title: 'baseline' }),
+    listing({ externalId: 'similar', title: 'similar', imageUrls: ['https://fake.test/similar.jpg'] }),
+    listing({ externalId: 'recovered', title: 'recovered', imageUrls: ['https://fake.test/similar-recovered.jpg'] }),
+  ];
+  const recovered = await service.runWatch(created.watch.id, 'runtime-recovery');
+  assert.equal(recovered.status, 'succeeded');
+  const restored = store.getWatchRuntimeStats(created.watch.id);
+  assert.equal(restored.feedRuns, 4);
+  assert.equal(restored.successfulRuns, 3);
+  assert.equal(restored.failedRuns, 1);
+  assert.equal(restored.status, 'HEALTHY');
+  assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.successCount, 3);
+  assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.failureCount, 0);
+  assert.equal(service.getWatchObservability(created.watch.id).status, 'HEALTHY');
 });
 
 test('zero-match similarity remains healthy and persists usage through restart', async () => {
