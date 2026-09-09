@@ -30,31 +30,66 @@ function clean(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function uniqueStrings(values: Iterable<unknown>): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const item = clean(value);
+    if (!item) continue;
+    const key = normalizeSearchQuery(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 export function normalizeSearchQuery(value: string): string {
   return value.normalize('NFKC').toLocaleLowerCase().replace(/[\s\-_/]+/gu, ' ').trim();
 }
 
-function uniqueQueries(queries: SearchQuery[]): SearchQuery[] {
+function deduplicateQueries(queries: SearchQuery[]): SearchQuery[] {
   const seen = new Set<string>();
   const result: SearchQuery[] = [];
   for (const query of queries) {
     const text = clean(query.query);
     if (!text) continue;
     const canonicalQuery = normalizeSearchQuery(text);
-    if (seen.has(canonicalQuery)) continue;
+    if (!canonicalQuery || seen.has(canonicalQuery)) continue;
     seen.add(canonicalQuery);
     result.push({ ...query, query: text, canonicalQuery });
-    if (result.length >= 4) break;
   }
   return result;
+}
+
+function selectLayeredQueries(queries: SearchQuery[], limit = 4): SearchQuery[] {
+  const unique = deduplicateQueries(queries);
+  const selected: SearchQuery[] = [];
+  const selectedKeys = new Set<string>();
+  const add = (item: SearchQuery | undefined): void => {
+    if (!item || selected.length >= limit || selectedKeys.has(item.canonicalQuery)) return;
+    selected.push(item);
+    selectedKeys.add(item.canonicalQuery);
+  };
+
+  // Explicit user terms are kept first. The remaining slots deliberately span
+  // specific, medium, and broad coverage instead of being filled by only the
+  // most detailed planner candidates.
+  for (const item of unique.filter((candidate) => candidate.tier === 'explicit')) add(item);
+  const remaining = limit - selected.length;
+  const tiers = remaining >= 3 ? ['specific', 'medium', 'broad'] as const
+    : remaining === 2 ? ['specific', 'broad'] as const
+      : ['specific'] as const;
+  for (const tier of tiers) add(unique.find((item) => item.tier === tier));
+  for (const item of unique) add(item);
+  return selected;
 }
 
 function aliases(value: string | undefined): string[] {
   if (!value) return [];
   const normalized = value.toLocaleLowerCase();
-  return [value, ...(ALIASES[normalized] ?? [])].filter((item, index, list) => list.findIndex((candidate) => normalizeSearchQuery(candidate) === normalizeSearchQuery(item)) === index);
+  return uniqueStrings([value, ...(ALIASES[normalized] ?? [])]);
 }
-
 
 function localizedAliases(value: string): string[] {
   const values = aliases(value);
@@ -68,24 +103,37 @@ function preferredAlias(value: string): string {
 }
 
 function profileCategories(profile: TargetProfile): string[] {
-  const values = [profile.category, profile.subcategory, ...profile.features].filter((value): value is string => Boolean(clean(value)));
+  const values = [profile.category, profile.subcategory, ...(profile.features ?? [])]
+    .filter((value): value is string => Boolean(clean(value)));
   const result: string[] = [];
   for (const value of values) result.push(preferredAlias(value), ...localizedAliases(value));
-  if (result.some((item) => ['羽绒服', 'down jacket', 'puffer jacket', '패딩', '다운 자켓'].includes(item.toLocaleLowerCase()))) {
-    result.push('패딩', '다운 자켓');
-  }
-  return [...new Set(result.map((value) => clean(value)).filter((value): value is string => Boolean(value)))];
+  const hasDownCategory = result.some((item) => ['羽绒服', 'down jacket', 'puffer jacket', '패딩', '다운 자켓'].includes(item.toLocaleLowerCase()));
+  return hasDownCategory ? uniqueStrings(['패딩', '다운 자켓', ...result]) : uniqueStrings(result);
 }
 
 function profileBrands(profile: TargetProfile): string[] {
-  const values = [profile.brand, ...profile.userHints.filter((hint) => /brand|品牌/iu.test(hint))].filter((value): value is string => Boolean(clean(value)));
+  const values = [profile.brand, ...(profile.userHints ?? []).filter((hint) => /brand|品牌/iu.test(hint))]
+    .filter((value): value is string => Boolean(clean(value)));
   const result: string[] = [];
   for (const value of values) result.push(preferredAlias(value), ...localizedAliases(value));
-  return [...new Set(result.map((value) => clean(value)).filter((value): value is string => Boolean(value)))];
+  return uniqueStrings(result);
 }
 
 function profileColors(profile: TargetProfile): string[] {
-  return profile.colors.flatMap((value) => [preferredAlias(value), ...localizedAliases(value)]);
+  return uniqueStrings((profile.colors ?? []).flatMap((value) => [preferredAlias(value), ...localizedAliases(value)]));
+}
+
+function profileMaterials(profile: TargetProfile): string[] {
+  return uniqueStrings(profile.materials ?? []);
+}
+
+function compose(parts: Array<string | undefined>): string | undefined {
+  const values = uniqueStrings(parts);
+  return values.length > 0 ? values.join(' ') : undefined;
+}
+
+function query(queryText: string | undefined, tier: SearchQuery['tier'], source: SearchQuery['source']): SearchQuery | undefined {
+  return queryText === undefined ? undefined : { query: queryText, canonicalQuery: '', tier, source };
 }
 
 export class BunjangSearchPlanner implements SourceSearchPlanner {
@@ -95,39 +143,75 @@ export class BunjangSearchPlanner implements SourceSearchPlanner {
 
   plan(profile: TargetProfile): SearchPlan {
     const queries: SearchQuery[] = [];
-    for (const explicit of profile.explicitSearchTerms) {
-      queries.push({ query: explicit, canonicalQuery: normalizeSearchQuery(explicit), tier: 'explicit', source: 'user' });
+    const userTerms = uniqueStrings(profile.userSearchTerms ?? []);
+    const otherExplicitTerms = uniqueStrings((profile.explicitSearchTerms ?? []).filter((term) => {
+      const key = normalizeSearchQuery(term);
+      return !userTerms.some((userTerm) => normalizeSearchQuery(userTerm) === key);
+    }));
+    for (const term of userTerms) {
+      const item = query(term, 'explicit', 'user');
+      if (item) queries.push(item);
     }
+    for (const term of otherExplicitTerms) {
+      const item = query(term, 'explicit', 'user');
+      if (item) queries.push(item);
+    }
+
     const brands = profileBrands(profile);
     const categories = profileCategories(profile);
-    const seasons = profile.season ? aliases(profile.season) : [];
+    const seasons = aliases(clean(profile.season));
     const colors = profileColors(profile);
+    const materials = profileMaterials(profile);
+    const modelName = clean(profile.modelName);
     const primaryBrand = brands[0];
     const primaryCategory = categories[0];
     const primarySeason = seasons[0];
     const primaryColor = colors[0];
+    const primaryMaterial = materials[0];
+    const includeKeyword = uniqueStrings(profile.includeKeywords ?? [])[0];
 
-    const secondaryCategory = categories[1];
-    const secondaryBrand = brands[1];
-    if (primaryBrand && primarySeason && primaryCategory) {
-      queries.push({ query: `${primaryBrand} ${primarySeason} ${primaryCategory}`, canonicalQuery: '', tier: 'specific', source: 'planner' });
-      if (secondaryCategory) queries.push({ query: `${primaryBrand} ${primarySeason} ${secondaryCategory}`, canonicalQuery: '', tier: 'specific', source: 'planner' });
+    // Keep the source plan small, but make each layer useful. The selector
+    // below guarantees one specific, one medium, and one broad query whenever
+    // the profile contains enough information for those layers.
+    for (const category of categories.slice(0, 2)) {
+      const item = query(compose([primaryBrand, modelName, primarySeason, category, includeKeyword]), 'specific', 'planner');
+      if (item) queries.push(item);
+      const seasonal = query(compose([primaryBrand, primarySeason, category]), 'specific', 'planner');
+      if (seasonal) queries.push(seasonal);
+      const model = query(compose([modelName, primarySeason, category]), 'specific', 'planner');
+      if (model) queries.push(model);
     }
-    if (primaryBrand && primaryCategory) {
-      queries.push({ query: `${primaryBrand} ${primaryCategory}`, canonicalQuery: '', tier: 'medium', source: 'planner' });
-    } else if (primaryBrand && primarySeason) {
-      queries.push({ query: `${primaryBrand} ${primarySeason}`, canonicalQuery: '', tier: 'medium', source: 'planner' });
+
+    const mediumCandidates = [
+      compose([primaryBrand, modelName, primaryCategory]),
+      compose([primaryBrand, primaryCategory]),
+      compose([primaryBrand, primarySeason]),
+      compose([modelName, primaryCategory]),
+      primaryColor && primaryCategory ? compose([primaryColor, primaryCategory]) : undefined,
+      primaryMaterial && primaryCategory ? compose([primaryMaterial, primaryCategory]) : undefined,
+    ];
+    for (const [index, candidate] of mediumCandidates.entries()) {
+      const item = query(candidate, 'medium', index >= 4 ? 'inferred' : 'planner');
+      if (item) queries.push(item);
     }
-    if (primaryColor && primaryCategory) {
-      queries.push({ query: `${primaryColor} ${primaryCategory}`, canonicalQuery: '', tier: 'medium', source: 'inferred' });
+
+    for (const category of categories.slice(0, 2)) {
+      const item = query(category, 'broad', 'inferred');
+      if (item) queries.push(item);
     }
-    if (secondaryBrand && primarySeason && secondaryCategory) {
-      queries.push({ query: `${secondaryBrand} ${primarySeason} ${secondaryCategory}`, canonicalQuery: '', tier: 'medium', source: 'planner' });
+    if (categories.length === 0) {
+      for (const candidate of [primaryMaterial, primaryColor, clean(profile.features?.[0]), includeKeyword, modelName, primaryBrand, primarySeason]) {
+        const item = query(candidate, 'broad', 'inferred');
+        if (item) queries.push(item);
+      }
     }
-    if (primaryCategory) {
-      for (const category of categories.slice(0, 2)) queries.push({ query: category, canonicalQuery: '', tier: 'broad', source: 'inferred' });
-    }
-    if (queries.length === 0) queries.push({ query: '의류', canonicalQuery: '', tier: 'broad', source: 'inferred' });
-    return { source: this.source, queries: uniqueQueries(queries), generatedAt: this.now(), ...(profile.provider ? { profileProvider: profile.provider } : {}) };
+    if (queries.length === 0) queries.push({ query: '패션', canonicalQuery: '', tier: 'broad', source: 'inferred' });
+
+    return {
+      source: this.source,
+      queries: selectLayeredQueries(queries),
+      generatedAt: this.now(),
+      ...(profile.provider ? { profileProvider: profile.provider } : {}),
+    };
   }
 }

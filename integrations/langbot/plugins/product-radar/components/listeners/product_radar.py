@@ -93,12 +93,19 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
         vision_lines = [f"{item.get('field')}：{item.get('value')}" for item in soft if isinstance(item, dict) and item.get('source') in {'vision', 'ocr'} and item.get('value')]
         plan_lines = [str(item.get('query')) for item in queries if isinstance(item, dict) and item.get('query')]
         target_query = target.get('searchQuery') or '由 TargetProfile 生成'
+        similarity = preview.get('similarity') if isinstance(preview.get('similarity'), dict) else {}
+        threshold = similarity.get('threshold')
+        try:
+            threshold_label = f'{float(threshold) * 100:.0f}%'
+        except (TypeError, ValueError):
+            threshold_label = '60%'
+        matcher = str(similarity.get('provider') or 'Sharp perceptual')
         text_lines = [
             '🎯 准备监控', '', f'平台：{source_name}',
             '你的条件：', *(f'• {line}' for line in user_lines[:8] or ['未提供明确硬条件']),
             '', '系统识别：', *(f'• {line}' for line in vision_lines[:8] or ['• 将使用图片和更宽泛的类别搜索']),
             '', '搜索范围：', *(f'• {line}' for line in plan_lines[:4] or [f'• {target_query}']),
-            '', f'检查频率：{interval_label}', '图片匹配阈值：60%',
+            '', f'检查频率：{interval_label}', f'图片匹配器：{matcher}', f'图片匹配阈值：{threshold_label}',
             '', '初始 baseline 不会发送通知。', '', f'如果平台没有按钮，请回复：确认监控 {token}',
         ]
         text = '\n'.join(text_lines)

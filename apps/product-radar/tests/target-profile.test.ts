@@ -48,6 +48,7 @@ test('explicit search terms are retained and hard exclusions stay separate from 
     explicitSearchTerms: ['Chrome Hearts puffer'],
   });
   assert.deepEqual(profile.explicitSearchTerms, ['Chrome Hearts puffer', '크롬하츠 패딩']);
+  assert.deepEqual(profile.userSearchTerms, ['Chrome Hearts puffer', '크롬하츠 패딩']);
   assert.equal(profile.hardConstraints.some((item) => item.operator === 'not_contains' && item.value === '仿品'), true);
   assert.equal(profile.softHints.some((item) => item.field === 'color' && item.source === 'vision'), true);
 });

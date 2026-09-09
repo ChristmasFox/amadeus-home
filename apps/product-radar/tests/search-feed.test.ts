@@ -10,6 +10,7 @@ import { SourceAdapterRegistry } from '../src/sources/registry.js';
 import type { ListingSourceAdapter, SourceCapabilities, ValidatedTarget } from '../src/sources/registry.js';
 import type { SearchPage, SearchPageTarget } from '../src/core/search/model.js';
 import { SqliteRadarStore } from '../src/storage/sqlite.js';
+import { SourceFetchError } from '../src/core/errors.js';
 
 const capabilities: SourceCapabilities = {
   sellerWatch: false, productWatch: false, similarityWatch: true, searchWatch: true, categoryWatch: false,
@@ -26,6 +27,8 @@ class PaginatedSource implements ListingSourceAdapter {
   readonly capabilities = capabilities;
   pages: unknown[][] = [[listing('baseline')]];
   calls = 0;
+  failCursor?: string;
+  failure?: Error;
 
   async validateTarget(_type: 'seller' | 'product' | 'similarity' | 'search' | 'category' | 'smart', target: Record<string, unknown>): Promise<ValidatedTarget> {
     const query = String(target.searchQuery ?? 'outerwear');
@@ -37,6 +40,7 @@ class PaginatedSource implements ListingSourceAdapter {
   async fetchSearchPage(target: ValidatedTarget & SearchPageTarget): Promise<SearchPage> {
     const index = target.cursor ? Number(target.cursor) : 0;
     this.calls += 1;
+    if (this.failure && target.cursor === this.failCursor) throw this.failure;
     const items = this.pages[index] ?? [];
     return { items, ...(index + 1 < this.pages.length ? { nextCursor: String(index + 1) } : {}) };
   }
@@ -69,7 +73,7 @@ class FakeChannel implements NotificationChannel {
   async send(message: NotificationMessage): Promise<void> { this.calls.push(message); }
 }
 
-function build(source: PaginatedSource, options: { maxPagesPerRun?: number; maxListingsPerRun?: number } = {}) {
+function build(source: PaginatedSource, options: { maxPagesPerRun?: number; maxListingsPerRun?: number; now?: () => string } = {}) {
   const store = new SqliteRadarStore(':memory:');
   const sensors = new FakeSensor();
   const channels = [new FakeChannel()];
@@ -132,16 +136,54 @@ test('incremental pagination discovers more than 60 listings before the watermar
 
 test('pagination safety cap degrades without advancing the watermark', async () => {
   const source = new PaginatedSource();
-  const { service } = build(source, { maxPagesPerRun: 1, maxListingsPerRun: 500 });
+  const { service, store, channel } = build(source, { maxPagesPerRun: 1, maxListingsPerRun: 500 });
   const created = await service.createWatch(proposal('watch-a'));
   const before = service.listSearchFeeds()[0]?.watermark;
+  const beforeEvents = store.tableCounts().feed_listing_events;
   source.pages = [Array.from({ length: 60 }, (_, index) => listing(`new-${index}`)), Array.from({ length: 60 }, (_, index) => listing(`newer-${index}`)), [listing('baseline')]];
   const result = await service.runWatch(created.watch.id);
   assert.equal(result.status, 'succeeded');
   assert.equal(service.listSearchFeeds()[0]?.state, 'DEGRADED');
   assert.equal(service.listSearchFeeds()[0]?.degradedReason, 'WATERMARK_NOT_REACHED');
   assert.equal(service.listSearchFeeds()[0]?.watermark, before);
-  assert.equal(result.newListings, 60);
+  assert.equal(result.newListings, 0);
+  assert.equal(store.tableCounts().feed_listing_events, beforeEvents);
+  assert.equal(store.getListing('fake', 'new-0'), undefined);
+  assert.equal(channel.calls.length, 0);
+});
+
+test('a later page failure does not publish staged listings or advance the watermark', async () => {
+  const source = new PaginatedSource();
+  const { service, store, channel } = build(source, { now: () => '2026-09-09T00:00:00.000Z' });
+  const created = await service.createWatch(proposal('watch-a'));
+  const beforeWatermark = service.listSearchFeeds()[0]?.watermark;
+  const beforeEvents = store.tableCounts().feed_listing_events;
+  source.pages = [[listing('new-1'), listing('new-2')], [listing('new-3'), listing('baseline')]];
+  source.failCursor = '1';
+  source.failure = new Error('simulated page timeout');
+
+  await service.runWatch(created.watch.id);
+
+  assert.equal(service.listSearchFeeds()[0]?.watermark, beforeWatermark);
+  assert.equal(store.tableCounts().feed_listing_events, beforeEvents);
+  assert.equal(store.getListing('fake', 'new-1'), undefined);
+  assert.equal(store.getListing('fake', 'new-2'), undefined);
+  assert.equal(channel.calls.length, 0);
+});
+
+test('source Retry-After controls deterministic feed backoff', async () => {
+  const source = new PaginatedSource();
+  const { service } = build(source, { now: () => '2026-09-09T00:00:00.000Z' });
+  const created = await service.createWatch(proposal('watch-a'));
+  source.failure = new SourceFetchError('rate limited', { status: 429, retryAfterSeconds: 4000 });
+  delete source.failCursor;
+
+  await service.runWatch(created.watch.id);
+
+  const feed = service.listSearchFeeds()[0]!;
+  assert.equal(feed.failureCount, 1);
+  assert.equal(feed.degradedReason, 'RATE_LIMITED');
+  assert.equal(feed.backoffUntil, '2026-09-09T01:06:40.000Z');
 });
 
 test('duplicate feed webhook is idempotent', async () => {

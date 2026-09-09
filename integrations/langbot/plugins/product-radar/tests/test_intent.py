@@ -208,6 +208,7 @@ class ProductRadarGenericNluTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(command['watchType'], 'similarity')
             self.assertEqual(command['constraints']['intervalSeconds'], 3600)
             self.assertEqual(command['targetProfile']['brand'], 'VISVIM')
+            self.assertEqual(command['targetProfile']['userSearchTerms'], ['VISVIM jacket'])
             self.assertEqual(command['entities']['referenceImage']['referenceImageBase64'], attachment['base64'])
             self.assertEqual(len(plugin.calls), 1, phrase)
             user_content = plugin.calls[0][1][1].content

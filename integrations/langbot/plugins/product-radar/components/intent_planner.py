@@ -75,6 +75,7 @@ PROFILE_ARRAY_FIELDS = (
     'features',
     'detectedText',
     'userHints',
+    'userSearchTerms',
     'explicitSearchTerms',
     'includeKeywords',
     'excludeKeywords',
@@ -315,6 +316,8 @@ def _normalize_profile(
             normalized[field] = candidate
     for field in PROFILE_ARRAY_FIELDS:
         candidate = profile.get(field)
+        if field == 'userSearchTerms' and 'explicitSearchTerms' in entities:
+            candidate = _unique_strings(entities['explicitSearchTerms']) + _unique_strings(candidate)
         if field == 'explicitSearchTerms' and field in entities:
             candidate = entities[field]
         if field == 'includeKeywords' and 'keywords' in entities:
@@ -359,7 +362,7 @@ def _normalize_profile(
     if isinstance(profile.get('confidence'), dict):
         normalized['confidence'] = profile['confidence']
     provenance = dict(profile.get('provenance')) if isinstance(profile.get('provenance'), dict) else {}
-    for field in ('brand', 'modelName', 'season', 'category', 'minPrice', 'maxPrice', 'explicitSearchTerms', 'includeKeywords', 'excludeKeywords'):
+    for field in ('brand', 'modelName', 'season', 'category', 'minPrice', 'maxPrice', 'userSearchTerms', 'explicitSearchTerms', 'includeKeywords', 'excludeKeywords'):
         if field in entities or field in constraints:
             provenance[field] = {'source': 'user', 'confidence': 1.0}
     if provenance:
@@ -367,7 +370,7 @@ def _normalize_profile(
     if not normalized and not force:
         return None
     if force:
-        for field in ('colors', 'materials', 'features', 'detectedText', 'userHints', 'explicitSearchTerms', 'includeKeywords', 'excludeKeywords'):
+        for field in ('colors', 'materials', 'features', 'detectedText', 'userHints', 'userSearchTerms', 'explicitSearchTerms', 'includeKeywords', 'excludeKeywords'):
             normalized.setdefault(field, [])
         normalized.setdefault('hardConstraints', [])
         normalized.setdefault('softHints', [])
@@ -556,7 +559,7 @@ watchType 只能是 similarity、seller、product 或 null。seller/product 通�
 entities 至少按以下键输出实际识别到的值：source、sellerUrl、productUrl、referenceImage、brand、modelName、season、category、keywords、excludeKeywords、explicitSearchTerms、watchId。
 constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice、currency、intervalSeconds、similarityThreshold。明确的“改成”价格可将 minPrice 与 maxPrice 都设为同一数值；“30万”应输出 300000。频率统一输出秒数。
 
-如果有参考图，请在同一次响应中输出 targetProfile，包括你从图像得到的 brand、modelName、season、category、colors、materials、features、detectedText、confidence 等软信息；不要再要求另一次视觉调用。用户文字明确给出的字段、价格、包含/排除条件和搜索词优先于图片推断，并可写入 targetProfile 的 provenance.source=user / hardConstraints。
+如果有参考图，请在同一次响应中输出 targetProfile，包括你从图像得到的 brand、modelName、season、category、colors、materials、features、detectedText、confidence 等软信息；不要再要求另一次视觉调用。用户文字明确给出的字段、价格、包含/排除条件和搜索词优先于图片推断；把用户明确的搜索词放入 targetProfile.userSearchTerms，并可写入 provenance.source=user / hardConstraints。
 只能使用提供的 activeWatch 解析“它/刚才那个”等指代，不要猜测别人的监控。无法唯一确定时 needsClarification=true，并给出 clarificationQuestion；不要假装已经创建或修改。
 
 如果 context.pendingProposal=true，用户说“好的”“就这个”“可以”可输出 control=confirm；“不用了”“取消这个”可输出 control=cancel，并把 intent 设为 create_watch。control 只用于待确认 proposal，不要把无关的“取消订阅/取消别的事情”强行改成 Product Radar。

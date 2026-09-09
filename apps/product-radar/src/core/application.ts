@@ -184,7 +184,7 @@ export class ProductRadarService {
     const searchWarnings: Array<{ query: string; message: string }> = [];
     const referenceTarget = await adapter.validateTarget('similarity', (() => {
       const { searchUrl: _searchUrl, ...base } = parsed.target;
-      return { ...base, searchQuery: context.plan.queries[0]?.query ?? '의류' };
+      return { ...base, searchQuery: context.plan.queries[0]?.query ?? '패션' };
     })());
     const preparedTargetPromise = this.prepareSimilarityTarget(referenceTarget);
     const queryResultsPromise = Promise.allSettled(context.plan.queries.map(async (query) => {
@@ -271,7 +271,7 @@ export class ProductRadarService {
 
   private async createSimilarityWatch(parsed: ReturnType<typeof parseWatchCreateInput>, adapter: ListingSourceAdapter): Promise<WatchCreationResult> {
     const context = await this.similarityContext(parsed.source, parsed.target, parsed.targetProfile, parsed.searchPlan);
-    const firstQuery = context.plan.queries[0]?.query ?? '의류';
+    const firstQuery = context.plan.queries[0]?.query ?? '패션';
     const validated = await adapter.validateTarget('similarity', (() => {
       const { searchUrl: _searchUrl, ...base } = parsed.target;
       return { ...base, searchQuery: firstQuery };
@@ -315,7 +315,7 @@ export class ProductRadarService {
     if (current.type === 'similarity' && targetChanged) {
       const context = await this.similarityContext(current.source, updated.target, patch.targetProfile, undefined, false);
       const profile = this.mergeTargetProfiles(current.targetProfile, context.profile);
-      const firstQuery = context.plan.queries[0]?.query ?? '의류';
+      const firstQuery = context.plan.queries[0]?.query ?? '패션';
       const adapter = this.sources.require(current.source);
       const validated = await adapter.validateTarget('similarity', { ...updated.target, searchQuery: firstQuery });
       const prepared = updated.target.referenceImageBase64 || updated.target.referenceImageUrl
@@ -357,6 +357,7 @@ export class ProductRadarService {
       features: [...new Set([...previous.features, ...next.features])],
       detectedText: [...new Set([...previous.detectedText, ...next.detectedText])],
       userHints: [...new Set([...previous.userHints, ...next.userHints])],
+      userSearchTerms: [...new Set([...(previous.userSearchTerms ?? []), ...(next.userSearchTerms ?? [])])],
       explicitSearchTerms: [...new Set([...previous.explicitSearchTerms, ...next.explicitSearchTerms])],
       includeKeywords: [...new Set([...previous.includeKeywords, ...next.includeKeywords])],
       excludeKeywords: [...new Set([...previous.excludeKeywords, ...next.excludeKeywords])],
@@ -377,8 +378,14 @@ export class ProductRadarService {
   async deleteWatch(id: string): Promise<void> {
     const watch = this.store.getWatch(id);
     if (!watch) throw new RadarError(`watch not found: ${id}`, 'NOT_FOUND', 404);
+    // Modern similarity sensors belong to the shared feed, so the feed
+    // coordinator must decide whether the last subscriber is gone. A legacy
+    // watch may still carry a direct sensorId; only delete that sensor when it
+    // is not also managed by a shared feed.
+    const sharedSensor = watch.type === 'similarity' && watch.sensorId !== undefined
+      && this.searchFeeds.listFeeds().some((feed) => feed.sensorWatchId === watch.sensorId);
     if (watch.type === 'similarity') await this.searchFeeds.cleanupWatch(id);
-    if (watch.sensorId) {
+    if (watch.sensorId && !sharedSensor) {
       try { await this.sensor.deleteWatch(watch.sensorId); } catch { /* local deletion remains authoritative */ }
     }
     this.store.deleteWatch(id);
@@ -479,9 +486,9 @@ export class ProductRadarService {
   }
 
   private fallbackSearchPlan(target: WatchTarget, profile: TargetProfile): SearchPlan {
-    const queries = [...(target.searchQueries ?? []), ...(target.searchQuery ? [target.searchQuery] : []), ...profile.explicitSearchTerms];
+    const queries = [...(target.searchQueries ?? []), ...(target.searchQuery ? [target.searchQuery] : []), ...(profile.userSearchTerms ?? []), ...profile.explicitSearchTerms];
     const unique = [...new Set(queries.map((query) => query.trim()).filter(Boolean))];
-    const values = unique.length > 0 ? unique : [profile.category ?? '의류'];
+    const values = unique.length > 0 ? unique : [profile.category ?? '패션'];
     return { source: 'bunjang', queries: values.slice(0, 4).map((query, index) => ({ query, canonicalQuery: query.normalize('NFKC').toLocaleLowerCase(), tier: index === 0 ? 'explicit' : 'broad', source: index === 0 ? 'user' : 'inferred' })), generatedAt: this.now(), ...(profile.provider ? { profileProvider: profile.provider } : {}) };
   }
 

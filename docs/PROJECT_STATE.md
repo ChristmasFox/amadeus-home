@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar V0.3 Phase A hardening（SOURCE COMPLETE；RELEASE PENDING：2026-09-09）
+
+本轮在既有 Luna/Mastra/NLU 与 V0.3 shared-feed 架构上做边界硬化，没有引入 PUBG-specific parser，也没有新增视觉模型或抓取绕过：
+
+- TargetProfile 增加可向后兼容的 `userSearchTerms`；用户词保持 `user` provenance，provider-derived explicit terms 不覆盖用户条件。Bunjang planner 支持 modelName，并在最多四条 query 内选择 explicit、specific、medium、broad 层。
+- SearchFeed 扫描改为完整抓取/解析后事务提交 listing/event；中途失败和 `WATERMARK_NOT_REACHED` 保持原 watermark、无 partial candidate/notification。Retry-After 进入 backoff，legacy similarity 删除不会误删仍被共享 feed 使用的 sensor。
+- preview 摘要显示实际 similarity threshold 与 Sharp perceptual matcher；LangBot plugin manifest 升至 `0.4.1`，仍由 GPT-5.6 Luna 在一次 multimodal call 输出 intent/entities/TargetProfile。
+- 本地验证：Product Radar TypeScript 42/42、typecheck/build、LangBot Python 16/16、Python compile、secret scan、workflow plan、diff check 均通过。
+- 当前仍待将本轮 source commit 推送并执行 immutable image + CasaOS/LangBot release；部署前不得把 pending 状态描述为 live verified。
+
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
 Product Radar LangBot source 已从旧的固定文本/图片 fallback 入口升级为独立的通用语义边界：

@@ -105,13 +105,17 @@ export class SearchFeedCoordinator {
       const validated = await this.validateQueryTarget(watch, query.query);
       const feed = await this.ensureFeed(watch, query.query, validated.url, undefined, jitterSeconds);
       const existingSubscription = this.options.store.getWatchFeedSubscription(watch.id, feed.id);
+      let baselineReady = false;
       try {
         const result = await this.runFeed(feed.id, `baseline:${watch.id}:${feed.id}`, { route: true });
-        baselineCount += result.fetchedListings;
+        baselineReady = result.status === 'succeeded';
+        if (baselineReady) baselineCount += result.fetchedListings;
       } catch {
         // A source/sensor outage leaves the feed degraded but must not turn into an empty baseline.
       }
-      if (!existingSubscription) {
+      // A failed or capped initial scan is not a baseline. Delay attaching the
+      // new subscriber so the next successful scan can stay silent.
+      if (!existingSubscription && baselineReady) {
         const latest = this.options.store.getLatestFeedListingEvent(feed.id)?.eventId;
         this.options.store.upsertWatchFeedSubscription({ watchId: watch.id, feedId: feed.id, ...(latest === undefined ? {} : { startAfterEventId: latest }), createdAt: this.now() });
       }
@@ -139,6 +143,11 @@ export class SearchFeedCoordinator {
   async runFeed(feedId: string, triggerKey = `manual:${randomUUID()}`, options: { route?: boolean } = {}): Promise<SearchFeedRunResult> {
     const feed = this.options.store.getSearchFeed(feedId);
     if (!feed) throw new RadarError(`search feed not found: ${feedId}`, 'NOT_FOUND', 404);
+    const backoffUntil = feed.backoffUntil === undefined ? NaN : Date.parse(feed.backoffUntil);
+    const now = Date.parse(this.now());
+    if (Number.isFinite(backoffUntil) && Number.isFinite(now) && backoffUntil > now) {
+      return { feedId, status: 'degraded', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [], potentialCandidateGap: feed.potentialCandidateGap };
+    }
     const poll = this.options.store.beginFeedRun(feedId, triggerKey, this.now());
     if (!poll) return { feedId, status: 'duplicate', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [] };
     try {
@@ -209,7 +218,10 @@ export class SearchFeedCoordinator {
       }
       return { feeds, baselineCount: 0 };
     }
-    const query = typeof watch.target.searchQuery === 'string' && watch.target.searchQuery.trim() ? watch.target.searchQuery : '의류';
+    if (watch.searchPlan?.queries && watch.searchPlan.queries.length > 0) {
+      return this.prepareWatch(watch, watch.searchPlan, watch.intervalSeconds === 900 ? DEFAULT_SIMILARITY_JITTER_SECONDS : 0);
+    }
+    const query = typeof watch.target.searchQuery === 'string' && watch.target.searchQuery.trim() ? watch.target.searchQuery : '패션';
     const validated = await this.validateQueryTarget(watch, query);
     const feed = await this.ensureFeed(watch, query, validated.url, watch.sensorId, watch.intervalSeconds === 900 ? DEFAULT_SIMILARITY_JITTER_SECONDS : 0);
     // Preserve V0.2 seen state as a silent baseline before the first shared-feed run.
@@ -272,32 +284,35 @@ export class SearchFeedCoordinator {
     let cursor: string | undefined;
     let pages = 0;
     let fetchedListings = 0;
-    let newListings = 0;
     let watermarkReached = false;
     let watermark = feed.watermark;
     let firstListingId: string | undefined;
     let potentialCandidateGap = false;
+    const stagedListings: Array<{ listing: Listing; discoveredAt: string }> = [];
     const seenCursors = new Set<string>();
-    while (pages < this.maxPagesPerRun && fetchedListings < this.maxListingsPerRun) {
+    while (pages < this.maxPagesPerRun && fetchedListings < this.maxListingsPerRun && !watermarkReached) {
       const page = await this.fetchPage(adapter, validated, cursor);
       pages += 1;
       const normalized = this.normalizePage(adapter, page.items, validated);
       if (normalized[0] && firstListingId === undefined) firstListingId = normalized[0].externalId;
       let pageBoundary = false;
       for (const listing of normalized) {
-        fetchedListings += 1;
-        if (fetchedListings > this.maxListingsPerRun) {
+        if (this.options.store.hasFeedListing(feed.id, listing.source, listing.externalId)
+          || (feed.watermark !== undefined && listing.externalId === feed.watermark)) {
+          watermarkReached = true;
+          pageBoundary = true;
+          // The current page may contain newer listings around the known
+          // boundary (and some adapters do not guarantee stable ordering).
+          // Finish this already-fetched page, then stop before requesting an
+          // older page.
+          continue;
+        }
+        if (!watermarkReached && fetchedListings >= this.maxListingsPerRun) {
           potentialCandidateGap = true;
           break;
         }
-        if (feed.watermark !== undefined && (listing.externalId === feed.watermark || this.options.store.hasFeedListing(feed.id, listing.source, listing.externalId))) {
-          watermarkReached = true;
-          pageBoundary = true;
-          continue;
-        }
-        this.options.store.upsertListing(listing);
-        const event = this.options.store.insertFeedListingEvent(feed.id, listing, this.now());
-        if (event) newListings += 1;
+        fetchedListings += 1;
+        stagedListings.push({ listing, discoveredAt: this.now() });
       }
       if (potentialCandidateGap || pageBoundary) break;
       const nextCursor = page.nextCursor;
@@ -310,6 +325,20 @@ export class SearchFeedCoordinator {
     }
     if (!watermarkReached && (pages >= this.maxPagesPerRun || fetchedListings >= this.maxListingsPerRun)) potentialCandidateGap = true;
     if (watermarkReached && firstListingId !== undefined) watermark = firstListingId;
+    let newListings = 0;
+    if (watermarkReached) {
+      // Fetch and parse the complete scan first. Only a successful scan may
+      // publish listings/events, so a later page timeout or parse error cannot
+      // leak a partial candidate into a future notification run.
+      newListings = this.options.store.transaction(() => {
+        let inserted = 0;
+        for (const { listing, discoveredAt } of stagedListings) {
+          this.options.store.upsertListing(listing);
+          if (this.options.store.insertFeedListingEvent(feed.id, listing, discoveredAt)) inserted += 1;
+        }
+        return inserted;
+      });
+    }
     return {
       feedId: feed.id, status: watermarkReached ? 'succeeded' : 'degraded', triggerKey: '', pages, fetchedListings, newListings, matchedListings: 0, eventIds: [],
       ...(watermark === undefined ? {} : { watermark }), potentialCandidateGap, watermarkReached,
@@ -366,7 +395,9 @@ export class SearchFeedCoordinator {
     const status = statusFromError(error);
     const retryAfter = retryAfterFromError(error);
     const interval = backoffIntervalSeconds(feed.intervalSeconds, failureCount, retryAfter);
-    const backoffUntil = new Date(Date.now() + interval * 1000).toISOString();
+    const now = Date.parse(this.now());
+    const baseTime = Number.isFinite(now) ? now : Date.now();
+    const backoffUntil = new Date(baseTime + interval * 1000).toISOString();
     const reason = status === 429 ? 'RATE_LIMITED' : error instanceof SensorUnavailableError ? 'SENSOR_UNAVAILABLE' : 'FETCH_FAILED';
     const updated: SearchFeed = { ...feed, state: 'DEGRADED', failureCount, degradedReason: reason, backoffUntil, updatedAt: this.now() };
     this.options.store.updateSearchFeed(updated);

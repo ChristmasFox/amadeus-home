@@ -41,6 +41,8 @@ export interface VisionProfile {
   includeKeywords?: string[];
   excludeKeywords?: string[];
   userHints?: string[];
+  /** Search terms explicitly supplied by the user, kept separate from visual terms. */
+  userSearchTerms?: string[];
   explicitSearchTerms?: string[];
   confidence?: Partial<Record<keyof VisionProfile, number>>;
 }
@@ -68,6 +70,8 @@ export interface TargetProfile {
   features: string[];
   detectedText: string[];
   userHints: string[];
+  /** Backward-compatible optional field; new extraction always returns it. */
+  userSearchTerms?: string[];
   hardConstraints: TargetConstraint[];
   softHints: TargetHint[];
   explicitSearchTerms: string[];

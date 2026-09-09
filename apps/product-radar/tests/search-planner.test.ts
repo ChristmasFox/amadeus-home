@@ -32,3 +32,19 @@ test('category-only fallback is broader than a permanent generic 의류 query', 
   assert.equal(queries.includes('패딩'), true);
   assert.equal(queries.includes('의류'), false);
 });
+
+test('planner keeps user terms, model detail, and layered broad coverage within four queries', () => {
+  const profile = {
+    brand: 'Yohji Yamamoto', modelName: 'Y-3A-01', season: '23AW', category: '羽绒服',
+    colors: [], materials: [], features: [], detectedText: [], userHints: [], hardConstraints: [], softHints: [],
+    userSearchTerms: ['我说的原词'], explicitSearchTerms: ['我说的原词'], includeKeywords: [], excludeKeywords: [],
+    provider: 'gpt-5.6-luna', extractedAt: '2026-09-09T00:00:00.000Z', provenance: {},
+  };
+  const plan = new BunjangSearchPlanner().plan(profile);
+  assert.equal(plan.queries[0]?.query, '我说的原词');
+  assert.equal(plan.queries.some((item) => item.query.includes('Y-3A-01')), true);
+  assert.equal(plan.queries.some((item) => item.tier === 'specific'), true);
+  assert.equal(plan.queries.some((item) => item.tier === 'medium'), true);
+  assert.equal(plan.queries.some((item) => item.tier === 'broad' && item.query === '패딩'), true);
+  assert.equal(plan.queries.length <= 4, true);
+});

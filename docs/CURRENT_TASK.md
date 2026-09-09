@@ -1,5 +1,14 @@
 # Current Task
 
+## Product Radar V0.3 Phase A hardening（SOURCE COMPLETE；RELEASE PENDING：2026-09-09）
+
+- [x] 保持 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 边界；新增 `TargetProfile.userSearchTerms`，用户搜索词与视觉/OCR 词分离并在 planner 中优先。
+- [x] Bunjang `SourceSearchPlanner` 现在保留 explicit/user terms，并在最多 4 条查询内按 specific/medium/broad 分层；支持 modelName，类别存在时保证 broad coverage，不使用永久 `의류` fallback。
+- [x] shared SearchFeed 扫描改为先抓取/解析、成功后事务写入；分页 timeout、4xx/5xx、解析失败或安全上限不会写入部分候选、创建通知或推进 watermark；Retry-After 与确定性 backoff、共享 sensor cleanup 已补齐。
+- [x] similarity preview 显示实际阈值与 Sharp perceptual matcher；LangBot plugin source 升至 `0.4.1`，仍由 GPT-5.6 Luna 完成单次 multimodal structured parsing。
+- [x] 验证通过：Product Radar TypeScript 42/42、typecheck/build、LangBot Python 16/16、Python compile、`pnpm check:secrets`、`pnpm workflow:plan`、`git diff --check`。
+- [ ] 下一阶段：提交并 push source，构建 immutable `local/product-radar:git-<commit>`，更新 OrbStack `ubuntu`/CasaOS compose，重新安装 LangBot plugin，并执行 `/health`、既有 Watch 不变性、shared-feed/changedetection smoke。
+
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 先对照 PUBG V3 已工作的 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 链路，在 Product Radar 内建立独立、平台无关的 normalized message / context / command boundary；未导入 PUBG-specific parser 或 intent。

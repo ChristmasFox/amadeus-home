@@ -31,6 +31,17 @@ function numberValue(value: unknown): number | undefined {
   return undefined;
 }
 
+function retryAfterFromBody(body: unknown): number | undefined {
+  const root = asObject(body);
+  const value = numberValue(root.retryAfter ?? root.retry_after);
+  return value !== undefined && value > 0 ? Math.ceil(value) : undefined;
+}
+
+function sourceFetchDetails(status: number, body: unknown, retryAfterSeconds?: number): JsonObject {
+  const retry = retryAfterSeconds ?? retryAfterFromBody(body);
+  return { status, body, ...(retry === undefined ? {} : { retryAfterSeconds: retry }) };
+}
+
 function productStatus(value: unknown): ProductStatus {
   const normalized = String(value ?? '').trim().toUpperCase();
   if (['SELLING', 'ACTIVE', 'ON_SALE'].includes(normalized)) return 'ACTIVE';
@@ -196,7 +207,7 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       const explicitUrl = stringValue(record.searchUrl);
       const urlQuery = explicitUrl ? queryFromUrl(explicitUrl) : undefined;
       if (explicitUrl && !urlQuery) throw new RadarError('invalid Bunjang search URL', 'INVALID_TARGET', 400, { target });
-      const searchQuery = explicitQuery ?? urlQuery ?? '의류';
+      const searchQuery = explicitQuery ?? urlQuery ?? '패션';
       if (!searchQuery) throw new RadarError('Bunjang similarity watch requires a search query', 'INVALID_TARGET', 400, { target });
       if (explicitQuery && urlQuery && explicitQuery !== urlQuery) throw new RadarError('Bunjang search query does not match search URL', 'INVALID_TARGET', 400, { target });
       const url = explicitUrl ?? `${this.webBaseUrl}/keywords/${encodeURIComponent(searchQuery)}`;
@@ -236,17 +247,17 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       url.searchParams.set('uid', sellerId);
       url.searchParams.set('size', String(Math.min(this.pageSize, 60)));
       if (cursor) url.searchParams.set('cursor', cursor);
-      const { status, body } = await this.requestJson(url, target.url);
+      const { status, body, retryAfterSeconds } = await this.requestJson(url, target.url);
       const root = asObject(body);
       const errorCode = stringValue(root.errorCode);
       if (errorCode || status >= 400) {
         if (root.result === 'unauthorized') {
           throw new SourceFetchError(
             'Bunjang seller listings require an authenticated public endpoint; no login, CAPTCHA, proxy, or anti-bot bypass was attempted',
-            { source: this.id, status, endpoint: url.pathname },
+            { ...sourceFetchDetails(status, body, retryAfterSeconds), source: this.id, endpoint: url.pathname },
           );
         }
-        throw new SourceFetchError(`Bunjang seller listing request failed with HTTP ${status}`, { status, body });
+        throw new SourceFetchError(`Bunjang seller listing request failed with HTTP ${status}`, sourceFetchDetails(status, body, retryAfterSeconds));
       }
       const data = asObject(root.data);
       const responses = asObject(data.responses);
@@ -258,10 +269,10 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
         if (root.result === 'unauthorized') {
           throw new SourceFetchError(
             'Bunjang seller listings require an authenticated public endpoint; no login, CAPTCHA, proxy, or anti-bot bypass was attempted',
-            { source: this.id, status, endpoint: url.pathname },
+            { ...sourceFetchDetails(status, body, retryAfterSeconds), source: this.id, endpoint: url.pathname },
           );
         }
-        throw new SourceFetchError('Bunjang seller listing response did not contain a product list', { body });
+        throw new SourceFetchError('Bunjang seller listing response did not contain a product list', sourceFetchDetails(status, body, retryAfterSeconds));
       }
       let enrichedCandidates = candidates;
       try {
@@ -289,7 +300,7 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
   }
 
   async fetchSearchPage(target: ValidatedTarget & SearchPageTarget): Promise<SearchPage> {
-    const query = target.searchQuery ?? '의류';
+    const query = target.searchQuery ?? '패션';
     const url = new URL('/api/search/v8/web/search', this.apiBaseUrl);
     url.searchParams.set('policyKey', 'mw.product.keyword');
     url.searchParams.set('q', query);
@@ -299,19 +310,15 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
     const root = asObject(body);
     const errorCode = stringValue(root.errorCode);
     if (errorCode || status >= 400) {
-      const bodyRetryAfter = Number((root.retryAfter ?? root.retry_after) ?? NaN);
-      const retry = retryAfterSeconds ?? (Number.isFinite(bodyRetryAfter) && bodyRetryAfter > 0 ? Math.ceil(bodyRetryAfter) : undefined);
-      throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, {
-        status, body, ...(retry === undefined ? {} : { retryAfterSeconds: retry }),
-      });
+      throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, sourceFetchDetails(status, body, retryAfterSeconds));
     }
     const parts = searchResponseParts(body);
-    if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+    if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', sourceFetchDetails(status, body, retryAfterSeconds));
     return { items: parts.candidates, ...(parts.nextCursor === undefined ? {} : { nextCursor: parts.nextCursor }), raw: body };
   }
 
   async fetchSearchListings(target: ValidatedTarget): Promise<unknown[]> {
-    const query = target.searchQuery ?? '의류';
+    const query = target.searchQuery ?? '패션';
     const result: unknown[] = [];
     let cursor: string | undefined;
     const limit = Math.max(1, Math.min(Number(target.candidateLimit ?? 60), 500));
@@ -321,12 +328,12 @@ export class BunjangSourceAdapter implements ListingSourceAdapter {
       url.searchParams.set('q', query);
       url.searchParams.set('size', String(Math.min(this.pageSize, 60)));
       if (cursor) url.searchParams.set('cursor', cursor);
-      const { status, body } = await this.requestJson(url, target.url);
+      const { status, body, retryAfterSeconds } = await this.requestJson(url, target.url);
       const root = asObject(body);
       const errorCode = stringValue(root.errorCode);
-      if (errorCode || status >= 400) throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, { status, body });
+      if (errorCode || status >= 400) throw new SourceFetchError(`Bunjang search request failed with HTTP ${status}`, sourceFetchDetails(status, body, retryAfterSeconds));
       const parts = searchResponseParts(body);
-      if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', { body });
+      if (!parts.candidates) throw new SourceFetchError('Bunjang search response did not contain a product list', sourceFetchDetails(status, body, retryAfterSeconds));
       result.push(...parts.candidates.slice(0, Math.max(0, limit - result.length)));
       if (!parts.nextCursor || parts.candidates.length === 0) break;
       cursor = parts.nextCursor;

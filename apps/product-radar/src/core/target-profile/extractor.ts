@@ -95,6 +95,7 @@ interface UserSignals {
   materials: string[];
   includeKeywords: string[];
   excludeKeywords: string[];
+  userSearchTerms: string[];
   explicitSearchTerms: string[];
   hardConstraints: TargetConstraint[];
   userHints: string[];
@@ -186,6 +187,7 @@ function parseUserSignals(text: string, explicitKeywords: string[] = [], explici
     materials: unique(materials),
     includeKeywords: unique(includes),
     excludeKeywords: unique(excludes),
+    userSearchTerms: unique(searchTerms),
     explicitSearchTerms: unique(searchTerms),
     hardConstraints,
     userHints: unique(userHints),
@@ -269,7 +271,7 @@ export class TargetProfileExtractor {
     }
 
     const profile: Partial<TargetProfile> = {
-      colors: [], materials: [], features: [], detectedText: [], userHints: user.userHints,
+      colors: [], materials: [], features: [], detectedText: [], userHints: user.userHints, userSearchTerms: [],
       hardConstraints: [...user.hardConstraints], softHints: [], explicitSearchTerms: [], includeKeywords: [], excludeKeywords: [],
       provider, extractedAt: this.now(), provenance: {},
     };
@@ -279,6 +281,11 @@ export class TargetProfileExtractor {
     mergeArray('materials', user.materials, vision?.materials, vision, profile, sources);
     mergeArray('features', [], vision?.features, vision, profile, sources);
     mergeArray('detectedText', [], vision?.detectedText, vision, profile, sources);
+    // Keep the user's search wording distinct from provider-derived terms. The
+    // multimodal LangBot boundary can supply this field directly; the core
+    // extractor must not let visual text silently become a user constraint.
+    profile.userSearchTerms = user.userSearchTerms;
+    if (user.userSearchTerms.length > 0) sources.userSearchTerms = provenance('user');
     mergeArray('explicitSearchTerms', user.explicitSearchTerms, vision?.explicitSearchTerms, vision, profile, sources);
     mergeArray('includeKeywords', user.includeKeywords, vision?.includeKeywords, vision, profile, sources);
     mergeArray('excludeKeywords', user.excludeKeywords, vision?.excludeKeywords, vision, profile, sources);

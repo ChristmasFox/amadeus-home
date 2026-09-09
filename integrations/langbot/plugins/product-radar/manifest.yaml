@@ -4,7 +4,7 @@ metadata:
   author: local
   name: product-radar
   repository: ''
-  version: 0.4.0
+  version: 0.4.1
   description:
     en_US: Generic natural-language intent bridge for Product Radar visual, seller, and product watches.
     zh_Hans: Product Radar 图片寻货、卖家监控与商品监控的通用自然语言入口。

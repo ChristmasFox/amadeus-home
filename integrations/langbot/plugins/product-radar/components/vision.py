@@ -81,7 +81,7 @@ async def analyze_target_profile(plugin: Any, images: list[dict[str, str]], user
         return None
     prompt = '''你是商品搜索理解器。只输出 JSON，不要解释，不要做最终同款判定。
 从用户文字和商品图片中提取用于长期二手商品搜索的 TargetProfile。用户明确提供的品牌、型号、季节、价格、必须/不要条件优先于图片推断，不能被图片推断覆盖。
-字段：brand, modelName, season, category, subcategory, colors[], materials[], features[], detectedText[], size, minPrice, maxPrice, includeKeywords[], excludeKeywords[], explicitSearchTerms[], confidence。
+字段：brand, modelName, season, category, subcategory, colors[], materials[], features[], detectedText[], size, minPrice, maxPrice, includeKeywords[], excludeKeywords[], userSearchTerms[], explicitSearchTerms[], confidence。
 视觉字段属于 soft hint；明确“必须/只要/不要”和明确品牌/型号/季节/价格属于 hard constraint。没有把握的字段省略或给低 confidence。
 '''
     content: list[dict[str, Any]] = [{'type': 'text', 'text': f'{prompt}\n用户文字：{user_text or "（无）"}'}]
