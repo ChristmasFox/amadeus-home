@@ -166,3 +166,14 @@ def watch_patch_payload(command: dict[str, Any], watch: dict[str, Any]) -> dict[
 def explicit_watch_id(command: dict[str, Any]) -> str | None:
     value = _entities(command).get('watchId')
     return str(value).strip() if value is not None and str(value).strip() else None
+
+
+def explicit_watch_ordinal(command: dict[str, Any]) -> int | None:
+    value = _entities(command).get('watchOrdinal')
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        ordinal = int(value)
+    except (TypeError, ValueError):
+        return None
+    return ordinal if ordinal > 0 else None

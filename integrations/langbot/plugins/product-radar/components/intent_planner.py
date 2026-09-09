@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from components.context import active_watch, context_for_parser
+from components.context import active_watch, context_for_parser, watch_list_ids
 from components.platform.normalized import (
     NormalizedBotMessage,
     build_normalized_message,
@@ -63,6 +63,7 @@ ENTITY_FIELDS = (
     'excludeKeywords',
     'explicitSearchTerms',
     'watchId',
+    'watchOrdinal',
 )
 CONSTRAINT_FIELDS = (
     'minPrice',
@@ -88,6 +89,16 @@ PROFILE_ARRAY_FIELDS = (
 
 URL_RE = re.compile(r'https?://[^\s<>]+', re.IGNORECASE)
 TOKEN_RE = re.compile(r'^[A-Za-z0-9_-]{4,80}$')
+WATCH_ID_RE = re.compile(r'^[0-9a-f]{8}-[0-9a-f-]{27,}$', re.IGNORECASE)
+WATCH_ORDINAL_RE = re.compile(r'^(?:第\s*)?(\d+)\s*(?:号|个|個|条|條|项|項)?$', re.IGNORECASE)
+CANCEL_ORDINAL_RE = re.compile(
+    r'^(?:取消|删除|刪除|停止|停掉)\s*(?:监控|監控)?\s*(?:第\s*)?(\d+)\s*(?:号|个|個|条|條|项|項)?\s*(?:监控|監控)?$',
+    re.IGNORECASE,
+)
+VIEW_ORDINAL_RE = re.compile(
+    r'^(?:(查看|看看|打开|查|查询|看)\s*)?(?:第\s*)?(\d+)\s*(号|个|個|条|條|项|項)\s*(监控|監控)?(?:的)?\s*(记录|紀錄|详情|詳情|状态|狀態|统计|統計|信息|資訊)?$',
+    re.IGNORECASE,
+)
 
 LEGACY_ACTIONS = {
     'create_watch': 'watch',
@@ -200,6 +211,50 @@ def _number(value: Any, *, field: str) -> int | float | None:
     return int(parsed) if parsed.is_integer() else parsed
 
 
+def _watch_ordinal(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) and value.is_integer() and value > 0 else None
+    if not isinstance(value, str):
+        return None
+    match = WATCH_ORDINAL_RE.fullmatch(value.strip())
+    if not match:
+        return None
+    ordinal = int(match.group(1))
+    return ordinal if ordinal > 0 else None
+
+
+def _cancel_ordinal(value: str) -> int | None:
+    match = CANCEL_ORDINAL_RE.fullmatch(value.strip())
+    if not match:
+        return None
+    ordinal = int(match.group(1))
+    return ordinal if ordinal > 0 else None
+
+
+def _view_ordinal(value: str) -> tuple[int, str] | None:
+    match = VIEW_ORDINAL_RE.fullmatch(value.strip())
+    if not match:
+        return None
+    verb, raw_ordinal, _unit, monitor, suffix = match.groups()
+    if not verb and not monitor and not suffix:
+        return None
+    ordinal = int(raw_ordinal)
+    if ordinal <= 0:
+        return None
+    normalized_suffix = (suffix or '').casefold()
+    if normalized_suffix in {'记录', '紀錄', '统计', '統計'}:
+        intent = 'get_watch_stats'
+    elif normalized_suffix in {'状态', '狀態'}:
+        intent = 'get_watch_status'
+    else:
+        intent = 'get_watch'
+    return ordinal, intent
+
+
 def _boolean(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -246,6 +301,22 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
     text = str((message.get('message') or {}).get('text') or '').strip()
     normalized = text.casefold()
     current = active_watch(context)
+    displayed_watch_ids = watch_list_ids(context)
+
+    # A UUID is a Watch reference, not a pending proposal token.  Keep this
+    # compatibility path deterministic when the user still has an old ID.
+    parts = text.split()
+    if len(parts) == 2 and parts[0].casefold() in {'取消监控', '取消'} and WATCH_ID_RE.fullmatch(parts[1]):
+        return _command('delete_watch', entities={'watchId': parts[1]}, confidence=1.0)
+
+    ordinal = _cancel_ordinal(text)
+    if ordinal and (displayed_watch_ids or current):
+        return _command('delete_watch', entities={'watchOrdinal': ordinal}, confidence=0.95)
+
+    viewed = _view_ordinal(text)
+    if viewed and displayed_watch_ids:
+        ordinal, intent = viewed
+        return _command(intent, entities={'watchOrdinal': ordinal}, confidence=0.85)
 
     token = _control_token(text)
     if token:
@@ -259,9 +330,7 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
         # while leaving the real Watch enabled.
         if isinstance(context, dict) and context.get('pendingProposalToken'):
             return _command('create_watch', control='cancel')
-        if current and current.get('id'):
-            return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.9)
-        return _command('delete_watch', confidence=0.7, clarification_question='请指定要取消的商品链接、卖家链接或 Watch ID。')
+        return _command('delete_watch', confidence=0.9, selection_required=True)
     if normalized in {'/watches', '/product-radar'}:
         return _command('list_watches', confidence=1.0)
 
@@ -294,6 +363,7 @@ def _command(
     confidence: float | None = None,
     needs_clarification: bool = False,
     clarification_question: str | None = None,
+    selection_required: bool = False,
     evidence: list[str] | None = None,
 ) -> dict[str, Any]:
     result: dict[str, Any] = {
@@ -306,6 +376,7 @@ def _command(
         'confidence': confidence,
         'needsClarification': needs_clarification,
         'clarificationQuestion': clarification_question,
+        'selectionRequired': selection_required,
         'evidence': evidence or [],
     }
     # Kept as a compatibility field for older listener code and installed
@@ -463,6 +534,10 @@ def _normalize_model_result(
             values = _unique_strings(candidate)
             if values:
                 entities[field] = values
+        elif field == 'watchOrdinal':
+            ordinal = _watch_ordinal(candidate)
+            if ordinal is not None:
+                entities[field] = ordinal
         else:
             text = _string(candidate)
             if text:
@@ -496,8 +571,9 @@ def _normalize_model_result(
         entities['referenceImage'] = attachments[0]
 
     current = active_watch(context)
+    selection_required = raw.get('selectionRequired') is True
     if current and intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
-        if not entities.get('watchId') and current.get('id'):
+        if not selection_required and not entities.get('watchId') and not entities.get('watchOrdinal') and current.get('id'):
             entities['watchId'] = str(current['id'])
         if not _string(entities.get('source')) and current.get('source'):
             entities['source'] = str(current['source'])
@@ -549,7 +625,7 @@ def _normalize_model_result(
             needs_clarification = True
             clarification_question = clarification_question or '请提供要留意的商品链接。'
     elif intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
-        if intent != 'delete_watch' and not entities.get('watchId') and not entities.get('sellerUrl') and not entities.get('productUrl'):
+        if intent != 'delete_watch' and not entities.get('watchId') and not entities.get('watchOrdinal') and not entities.get('sellerUrl') and not entities.get('productUrl'):
             needs_clarification = True
             clarification_question = clarification_question or '请说明要操作哪一个监控，或先在本次对话中创建一个。'
     if intent == 'update_watch' and not constraints and not any(
@@ -576,6 +652,7 @@ def _normalize_model_result(
         confidence=confidence,
         needs_clarification=needs_clarification,
         clarification_question=clarification_question,
+        selection_required=selection_required,
         evidence=evidence,
     )
     result['sourceText'] = text.strip()
@@ -598,7 +675,7 @@ def apply_active_watch_context(command: dict[str, Any], context: dict[str, Any] 
         return command
     result = dict(command)
     entities = dict(command.get('entities')) if isinstance(command.get('entities'), dict) else {}
-    if not entities.get('watchId') and current.get('id'):
+    if not result.get('selectionRequired') and not entities.get('watchId') and not entities.get('watchOrdinal') and current.get('id'):
         entities['watchId'] = str(current['id'])
     if not entities.get('source') and current.get('source'):
         entities['source'] = str(current['source'])
@@ -623,16 +700,16 @@ intent 只能是：create_watch、list_watches、get_watch、get_watch_status、
 watchType 只能是 similarity、seller、product 或 null。seller/product 通常需要从 sellerUrl/productUrl 判断；带参考图并请求持续发现相似商品时使用 similarity。
 “暂停它”是 pause_watch；“恢复/继续盯它”是 resume_watch；“不要了/不需要了”是 delete_watch；“价格改成30万”“每小时看一次”“刚才那个其实是 VISVIM”是 update_watch。列表是 list_watches，要求查看某一个监控详情是 get_watch；“还在蹲吗”“监控正常吗”“为什么一直没消息”是 get_watch_status；“今天查了多少次”“目前最像的是多少”“花了多少 token”是 get_watch_stats。
 
-entities 至少按以下键输出实际识别到的值：source、sellerUrl、productUrl、referenceImage、brand、modelName、season、category、keywords、excludeKeywords、explicitSearchTerms、watchId。
+entities 至少按以下键输出实际识别到的值：source、sellerUrl、productUrl、referenceImage、brand、modelName、season、category、keywords、excludeKeywords、explicitSearchTerms、watchId、watchOrdinal。watchOrdinal 只用于用户已经看到的当前监控列表，例如“取消1号”“取消第2个”“查看3号”；不要凭空猜测序号。单独说“取消监控”表示先列出监控并让用户选择，不要直接猜某一条；此时输出 selectionRequired=true。用户说“取消1号”“取消第2个”“取消第3条监控”时输出 delete_watch + entities.watchOrdinal；用户说“查看1号”“第2个监控的记录”时同样输出对应 watchOrdinal。
 constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice、currency、intervalSeconds、similarityThreshold；如果用户提到日报/心跳，使用 heartbeatEnabled、heartbeatIntervalSeconds。明确的“改成”价格可将 minPrice 与 maxPrice 都设为同一数值；“30万”应输出 300000。频率统一输出秒数。比如“不要发每日摘要”“关闭心跳”表示 heartbeatEnabled=false，“每周发一次摘要”表示 heartbeatIntervalSeconds=604800；不要把它误当成 SearchFeed intervalSeconds。
 
 如果有参考图，请在同一次响应中输出 targetProfile，包括你从图像得到的 brand、modelName、season、category、colors、materials、features、detectedText、confidence 等软信息；不要再要求另一次视觉调用。用户文字明确给出的字段、价格、包含/排除条件和搜索词优先于图片推断；把用户明确的搜索词放入 targetProfile.userSearchTerms，并可写入 provenance.source=user / hardConstraints。
-只能使用提供的 activeWatch 解析“它/刚才那个”等指代，不要猜测别人的监控。无法唯一确定时 needsClarification=true，并给出 clarificationQuestion；不要假装已经创建或修改。
+只能使用提供的 activeWatch 或当前用户已经看到的 watchListCount 解析“它/刚才那个”和序号，不要猜测别人的监控。无法唯一确定时 needsClarification=true，并给出 clarificationQuestion；不要假装已经创建或修改。
 
 如果 context.pendingProposal=true，用户说“好的”“就这个”“可以”可输出 control=confirm；“不用了”“取消这个”可输出 control=cancel，并把 intent 设为 create_watch。control 只用于待确认 proposal，不要把无关的“取消订阅/取消别的事情”强行改成 Product Radar。
 
 输出形状：
-{"domain":"product_radar|none","intent":"create_watch|list_watches|get_watch|get_watch_status|get_watch_stats|update_watch|pause_watch|resume_watch|delete_watch|none","watchType":"similarity|seller|product|null","entities":{},"constraints":{},"targetProfile":null,"control":"confirm|cancel|null","confidence":0.0,"needsClarification":false,"clarificationQuestion":null,"evidence":[]}
+{"domain":"product_radar|none","intent":"create_watch|list_watches|get_watch|get_watch_status|get_watch_stats|update_watch|pause_watch|resume_watch|delete_watch|none","watchType":"similarity|seller|product|null","entities":{},"constraints":{},"targetProfile":null,"control":"confirm|cancel|null","selectionRequired":false,"confidence":0.0,"needsClarification":false,"clarificationQuestion":null,"evidence":[]}
 '''
 
 

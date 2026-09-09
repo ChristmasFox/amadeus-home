@@ -7,8 +7,9 @@ from unittest.mock import patch
 
 import components.intent_planner as intent_planner
 from components.command_adapter import watch_create_payload, watch_patch_payload
-from components.context import load_context, set_active_watch
+from components.context import load_context, set_active_watch, set_watch_list
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_intent, resolve_product_radar_command
+from components.watch_presentation import delete_choice_buttons, format_delete_choices, format_watches
 from components.platform.normalized import build_normalized_message, context_key
 
 from components.intent import (
@@ -365,8 +366,98 @@ class ProductRadarGenericNluTest(unittest.IsolatedAsyncioTestCase):
             context,
         )
         self.assertEqual(command['intent'], 'delete_watch')
-        self.assertEqual(command['entities']['watchId'], 'watch-1')
+        self.assertTrue(command['selectionRequired'])
+        self.assertNotIn('watchId', command['entities'])
         self.assertIsNone(command.get('control'))
+
+    def test_cancel_ordinal_uses_the_callers_displayed_watch_list(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('我现在盯着什么', user_id='user-a')
+        set_watch_list(plugin, message, ['watch-1', 'watch-2', 'watch-3'])
+        context = load_context(plugin, _normalized_message('取消1号', user_id='user-a'))
+
+        command = intent_planner._legacy_fast_path(
+            _normalized_message('取消1号', user_id='user-a'),
+            context,
+        )
+        self.assertEqual(command['intent'], 'delete_watch')
+        self.assertEqual(command['entities']['watchOrdinal'], 1)
+
+    def test_cancel_ordinal_without_product_radar_context_is_not_routed(self) -> None:
+        command = intent_planner._legacy_fast_path(_normalized_message('取消1号'), None)
+        self.assertIsNone(command)
+
+    def test_view_ordinal_fallback_supports_details_status_and_records(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('我现在盯着什么', user_id='user-a')
+        set_watch_list(plugin, message, ['watch-1', 'watch-2', 'watch-3'])
+        context = load_context(plugin, _normalized_message('查看1号', user_id='user-a'))
+        for phrase, intent, ordinal in (
+            ('查看1号', 'get_watch', 1),
+            ('第2个监控的记录', 'get_watch_stats', 2),
+            ('看3号状态', 'get_watch_status', 3),
+        ):
+            command = intent_planner._legacy_fast_path(
+                _normalized_message(phrase, user_id='user-a'),
+                context,
+            )
+            self.assertEqual(command['intent'], intent)
+            self.assertEqual(command['entities']['watchOrdinal'], ordinal)
+
+    def test_model_result_normalizes_watch_ordinal_without_overriding_it_with_active_watch(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('取消第2个监控', user_id='user-a')
+        set_active_watch(plugin, _normalized_message('创建这个', user_id='user-a'), {
+            'id': 'watch-active', 'source': 'bunjang', 'type': 'product', 'enabled': True, 'target': {}, 'rules': {},
+        })
+        context = load_context(plugin, message)
+        command = intent_planner._normalize_model_result(
+            {
+                'domain': 'product_radar',
+                'intent': 'delete_watch',
+                'watchType': None,
+                'entities': {'watchOrdinal': '2号'},
+            },
+            message,
+            context,
+        )
+        self.assertEqual(command['entities']['watchOrdinal'], 2)
+        self.assertNotIn('watchId', command['entities'])
+
+    def test_model_selection_request_does_not_inherit_active_watch(self) -> None:
+        plugin = SimpleNamespace()
+        message = _normalized_message('帮我取消监控', user_id='user-a')
+        set_active_watch(plugin, _normalized_message('创建这个', user_id='user-a'), {
+            'id': 'watch-active', 'source': 'bunjang', 'type': 'product', 'enabled': True, 'target': {}, 'rules': {},
+        })
+        context = load_context(plugin, message)
+        command = intent_planner._normalize_model_result(
+            {
+                'domain': 'product_radar',
+                'intent': 'delete_watch',
+                'watchType': 'product',
+                'selectionRequired': True,
+            },
+            message,
+            context,
+        )
+        self.assertTrue(command['selectionRequired'])
+        self.assertNotIn('watchId', command['entities'])
+
+    def test_watch_list_numbers_and_delete_buttons_share_the_same_order(self) -> None:
+        rows = [
+            {'id': 'watch-1', 'source': 'bunjang', 'type': 'product', 'enabled': True, 'intervalSeconds': 120, 'target': {'productExternalId': '424506121'}},
+            {'id': 'watch-2', 'source': 'bunjang', 'type': 'similarity', 'enabled': True, 'intervalSeconds': 900, 'target': {'searchQuery': '패딩'}},
+        ]
+        formatted = format_watches({'watches': rows})
+        choices = format_delete_choices(rows)
+        buttons = delete_choice_buttons(rows)
+        self.assertIn('1号 · bunjang / product / 启用 / 每 2 分钟', formatted)
+        self.assertIn('2号 · bunjang / similarity / 启用 / 每 15 分钟', formatted)
+        self.assertIn('请选择要取消的监控：', choices)
+        self.assertEqual([button['text'] for button in buttons], ['取消1号', '取消2号'])
+        self.assertEqual(buttons[0]['callbackData'], 'pr1:delete:watch-1')
+        self.assertEqual(buttons[1]['callbackData'], 'pr1:delete:watch-2')
 
     def test_cancel_pending_proposal_keeps_proposal_control(self) -> None:
         plugin = SimpleNamespace()

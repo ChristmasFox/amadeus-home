@@ -4,6 +4,10 @@
 
 已在既有 Generic Query Runtime/NLU 与 deterministic Product Radar Core 边界上完成并部署运行可观测性：SQLite additive migration 持久化 Watch runtime/feed health、usage ledger、24h heartbeat idempotency 和 ownership-aware context；API 增加 status/stats/usage；Luna structured status/stats + usage extraction 与重载后取消监控 context restore 已接通。Product Radar 46/46、LangBot 23/23、typecheck/build、compile、secret scan、diff check 已通过；source `a446838fc992` 已 push，immutable image `local/product-radar:git-a446838fc992`（`sha256:933c98b5b184b655517735d3677762a420c06c86cf4eda85d6848018eeb5f4c8`）已在 CasaOS `ubuntu` 激活，LangBot plugin `0.5.0` task `97` 已 `INSTALL_READY`。历史 SearchFeed run 已由 additive migration 回填；现有 3 个历史 Watch 没有旧 binding 时，多目标取消会澄清而不是误删。
 
+## Product Radar numbered watch selection UX（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+
+当前 source 已实现编号列表、`取消监控` Telegram 选择按钮、`取消1号`/`取消第2个` structured ordinal 删除，以及删除后刷新列表；watch list 与 callback 选择均绑定完整 normalized Product Radar context，群聊成员不会继承彼此的菜单。LangBot plugin tests 29/29、compile、diff check 已通过。待 source commit 后执行 Product Radar plugin `0.5.1` API 安装和 live manifest/runtime 核验；不重建 Product Radar runtime image。
+
 更新时间：2026-09-09（Asia/Shanghai）
 
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）

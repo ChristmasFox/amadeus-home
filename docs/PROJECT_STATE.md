@@ -14,6 +14,16 @@
 - LangBot Product Radar plugin `0.5.0` 已安装，task `97` 为 `INSTALL_READY`，package SHA-256 为 `17ee72dadfe014715f47863e8e086eeb85f8b6fb00e4d885ad4adc7d0a81bc04`，rollback dir 为 `.backups/langbot/20260909-144208`；`scripts/doctor.sh` 为 0 failure / 0 warning。
 - live `/health` 为 `ok`，既有 3 个 Watch、2 个 SearchFeed、2663 个 listing 保持；迁移已把历史 4 条 SearchFeed run 回填为每个旧 Feed `runCount=2/successCount=0/failureCount=2` 与 `WATERMARK_NOT_REACHED`；status API 返回 Product Watch HEALTHY、两个 Similarity Watch DEGRADED（原因是历史 watermark gap），未创建/删除真实 Watch，未发送手工 Telegram/KOOK 通知。由于现有 3 个历史 Watch 尚无可恢复的旧 ownership binding，多目标取消仍会澄清，不会猜测删除。
 
+## Product Radar numbered watch selection UX（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+
+本次只改 LangBot Product Radar plugin 的交互边界，不修改 Product Radar Core 或现有 Watch 数据：
+
+- `watch_presentation.py` 将列表按 API 返回顺序渲染为 `1号 / 2号 / 3号`，删除选择按钮的 callback data 使用 `pr1:delete:<watchId>`。
+- “取消监控”输出选择菜单；Telegram 通过现有 inline keyboard marker 发送按钮，KOOK 等无按钮平台保留 `取消1号` 文本 fallback。
+- 已显示列表的序号会以 caller context 保存；Luna structured command 支持 `watchOrdinal`，离线 fallback 也支持 `取消1号`、`查看1号`、`第2个监控的记录`。
+- 删除操作完成后重新读取 `list_watches` 并在同一条回复中返回最新列表；回调只接受当前 caller 最近一次列表中的 Watch ID。
+- 本地验证：LangBot plugin tests 29/29、Python compile、`git diff --check`；当前状态尚未安装到 live LangBot。
+
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
 截图反馈对应的根因是 Product Radar fallback 将 `取消监控` 无条件编码为 pending proposal 的 `control=cancel`；当已有 Watch 时 listener 只清理 proposal，或在无 proposal 时回复“没有对应的待确认监控”，不会调用删除 API。现已改为按当前 ownership-aware context 分流：pending proposal 才 cancel，active Watch 执行 `delete_watch`，无唯一上下文则 clarification；`不要盯着了` 等自然停用表达也复用 active Watch 删除路径。

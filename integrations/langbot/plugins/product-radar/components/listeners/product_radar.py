@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from components.command_adapter import explicit_watch_id, watch_create_payload, watch_patch_payload
+from components.command_adapter import explicit_watch_id, explicit_watch_ordinal, watch_create_payload, watch_patch_payload
 from components.context import (
     active_watch,
     clear_active_watch,
@@ -12,6 +12,8 @@ from components.context import (
     record_command,
     set_active_watch,
     set_pending,
+    set_watch_list,
+    watch_list_ids as context_watch_list_ids,
 )
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_command
 from components.platform.bridge import platform_name, reply
@@ -28,6 +30,13 @@ from components.radar_client import (
     patch_watch,
     preview_watch,
     record_usage,
+)
+from components.watch_presentation import (
+    delete_choice_buttons as _delete_choice_buttons,
+    format_delete_choices as _format_delete_choices,
+    format_watches as _format_watches,
+    watch_ids as _watch_ids,
+    watch_rows as _watch_rows,
 )
 from langbot_plugin.api.definition.components.common.event_listener import EventListener
 from langbot_plugin.api.entities import context as event_context_module
@@ -120,22 +129,15 @@ def _proposal_summary(preview: dict[str, Any], proposal: dict[str, Any], token: 
     ]
 
 
-def _format_watches(result: dict[str, Any]) -> str:
-    rows = result.get('watches') if isinstance(result.get('watches'), list) else []
-    if not rows:
-        return '目前没有正在监控的 Seller Watch、Product Watch 或 Similarity Watch。'
-    lines = ['👀 当前监控']
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        target = row.get('target') if isinstance(row.get('target'), dict) else {}
-        plan = row.get('searchPlan') if isinstance(row.get('searchPlan'), dict) else {}
-        queries = plan.get('queries') if isinstance(plan.get('queries'), list) else []
-        plan_value = '、'.join(str(item.get('query')) for item in queries if isinstance(item, dict) and item.get('query'))
-        target_value = target.get('sellerUrl') or target.get('productUrl') or target.get('sellerExternalId') or target.get('productExternalId') or target.get('searchQuery') or plan_value or row.get('id') or ''
-        interval = row.get('intervalSeconds') or 0
-        lines.append(f"- {row.get('source')} / {row.get('type')} / {'启用' if row.get('enabled') else '暂停'} / {_interval_label(interval, 0) if interval else '频率未知'}\n  {target_value}")
-    return '\n'.join(lines)
+def _remember_watch_list(plugin: Any, message: NormalizedBotMessage, rows: list[dict[str, Any]]) -> list[str]:
+    ids = _watch_ids(rows)
+    lists = getattr(plugin, 'product_radar_watch_lists', {})
+    if not isinstance(lists, dict):
+        lists = {}
+    lists[context_key(message)] = ids
+    setattr(plugin, 'product_radar_watch_lists', lists)
+    set_watch_list(plugin, message, ids)
+    return ids
 
 
 def _watch_id_from_command(
@@ -144,10 +146,24 @@ def _watch_id_from_command(
     rows: list[dict[str, Any]] | None = None,
     watch_context: dict[str, str] | None = None,
     owner_key: str | None = None,
+    displayed_watch_ids: list[str] | None = None,
 ) -> str | None:
     direct = explicit_watch_id(command)
     if direct:
         return direct
+    ordinal = explicit_watch_ordinal(command)
+    if ordinal:
+        ordered_ids = displayed_watch_ids or []
+        if ordered_ids:
+            candidate = ordered_ids[ordinal - 1] if ordinal <= len(ordered_ids) else None
+            if candidate and (not rows or any(str(row.get('id')) == candidate for row in rows)):
+                return candidate
+            return None
+        if rows and ordinal <= len(rows):
+            candidate = rows[ordinal - 1].get('id')
+            if candidate:
+                return str(candidate)
+        return None
     current = active_watch(context)
     if current and current.get('id'):
         return str(current['id'])
@@ -291,17 +307,38 @@ class ProductRadarListener(EventListener):
         callback_prefix = callback_data.split(':', 1)[0] if callback_data else ''
         if callback_prefix == 'pr1':
             parts = callback_data.split(':', 2)
-            if len(parts) != 3 or parts[1] not in {'confirm', 'cancel'} or not parts[2]:
-                reply(event_context, '无效或已过期的监控确认。')
+            if len(parts) != 3 or parts[1] not in {'confirm', 'cancel', 'delete'} or not parts[2]:
+                reply(event_context, '无效或已过期的监控操作。')
                 _prevent(event_context)
                 return
+            if parts[1] == 'delete':
+                displayed = getattr(self.plugin, 'product_radar_watch_lists', {})
+                displayed_ids = displayed.get(key, []) if isinstance(displayed, dict) else []
+                if parts[2] not in displayed_ids:
+                    reply(event_context, '这个取消按钮已过期，请先重新查看当前监控。')
+                    _prevent(event_context)
+                    return
             if platform_name(event) == 'telegram':
                 acknowledge = getattr(event_context, 'answer_callback_query', None)
                 if callable(acknowledge):
                     result = acknowledge(text='正在处理商品监控…')
                     if hasattr(result, '__await__'):
                         await result
-            await self._confirm_or_cancel(event_context, parts[1], parts[2], pending, pending_context, watch_context, message, key)
+            if parts[1] == 'delete':
+                await self._handle_watch_operation(
+                    event_context,
+                    message,
+                    context,
+                    {
+                        'domain': 'product_radar',
+                        'intent': 'delete_watch',
+                        'entities': {'watchId': parts[2]},
+                        'constraints': {},
+                    },
+                    watch_context,
+                )
+            else:
+                await self._confirm_or_cancel(event_context, parts[1], parts[2], pending, pending_context, watch_context, message, key)
             _prevent(event_context)
             return
 
@@ -325,6 +362,16 @@ class ProductRadarListener(EventListener):
                 await self._confirm_or_cancel(event_context, str(control), token, pending, pending_context, watch_context, message, key)
             _prevent(event_context)
             return
+        if command.get('selectionRequired'):
+            try:
+                listed = await list_watches(self.plugin)
+                rows = _watch_rows(listed)
+                _remember_watch_list(self.plugin, message, rows)
+                reply(event_context, _format_delete_choices(rows), _delete_choice_buttons(rows))
+            except Exception:
+                reply(event_context, '暂时无法读取当前监控，请稍后再试。')
+            _prevent(event_context)
+            return
         if command.get('needsClarification'):
             reply(event_context, _clarification(command))
             _prevent(event_context)
@@ -333,7 +380,10 @@ class ProductRadarListener(EventListener):
         intent = str(command.get('intent') or '')
         if intent == 'list_watches':
             try:
-                reply(event_context, _format_watches(await list_watches(self.plugin)))
+                listed = await list_watches(self.plugin)
+                rows = _watch_rows(listed)
+                _remember_watch_list(self.plugin, message, rows)
+                reply(event_context, _format_watches(listed))
             except Exception:
                 reply(event_context, '暂时无法读取 Product Radar 监控，请稍后再试。')
             _prevent(event_context)
@@ -436,15 +486,39 @@ class ProductRadarListener(EventListener):
         watch_context: dict[str, str],
     ) -> None:
         intent = str(command.get('intent') or '')
+        if command.get('selectionRequired'):
+            try:
+                listed = await list_watches(self.plugin)
+                rows = _watch_rows(listed)
+                _remember_watch_list(self.plugin, message, rows)
+                reply(event_context, _format_delete_choices(rows), _delete_choice_buttons(rows))
+            except Exception:
+                reply(event_context, '暂时无法读取当前监控，请稍后再试。')
+            return
         rows: list[dict[str, Any]] = []
         if not active_watch(context) or not explicit_watch_id(command):
             try:
                 listed = await list_watches(self.plugin)
-                rows = [row for row in listed.get('watches', []) if isinstance(row, dict)]
+                rows = _watch_rows(listed)
             except Exception:
                 rows = []
-        watch_id = _watch_id_from_command(command, context, rows, watch_context, context_key(message))
+        displayed = getattr(self.plugin, 'product_radar_watch_lists', {})
+        displayed_ids = displayed.get(context_key(message), []) if isinstance(displayed, dict) else []
+        if not displayed_ids:
+            displayed_ids = context_watch_list_ids(context)
+        watch_id = _watch_id_from_command(
+            command,
+            context,
+            rows,
+            watch_context,
+            context_key(message),
+            displayed_ids,
+        )
         if watch_id is None:
+            if intent == 'delete_watch':
+                _remember_watch_list(self.plugin, message, rows)
+                reply(event_context, _format_delete_choices(rows), _delete_choice_buttons(rows))
+                return
             reply(event_context, _clarification(command))
             return
         try:
@@ -499,7 +573,14 @@ class ProductRadarListener(EventListener):
                     await clear_watch_context(self.plugin, context_key(message))
                 except Exception:
                     pass
-                reply(event_context, f'⏹️ 已删除监控\n\nWatch ID：{watch_id}')
+                confirmation = f'⏹️ 已删除监控\n\nWatch ID：{watch_id}'
+                try:
+                    listed = await list_watches(self.plugin)
+                    rows = _watch_rows(listed)
+                    _remember_watch_list(self.plugin, message, rows)
+                    reply(event_context, f'{confirmation}\n\n{_format_watches(listed)}')
+                except Exception:
+                    reply(event_context, confirmation)
                 await _record_command_usage(self.plugin, command, watch_id)
                 return
             reply(event_context, _clarification(command))

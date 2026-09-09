@@ -74,6 +74,7 @@ def _new_context(key: str) -> dict[str, Any]:
         'domain': 'product_radar',
         'contextKey': key,
         'activeWatch': None,
+        'watchListIds': [],
         'pendingProposalToken': None,
         'lastCommand': None,
         'updatedAt': _iso(now),
@@ -132,6 +133,12 @@ def set_active_watch(plugin: Any, message: NormalizedBotMessage, watch: Any) -> 
     return save_context(plugin, message, current)
 
 
+def set_watch_list(plugin: Any, message: NormalizedBotMessage, watch_ids: list[str]) -> dict[str, Any]:
+    current = load_context(plugin, message) or _new_context(context_key(message))
+    current['watchListIds'] = [str(watch_id) for watch_id in watch_ids if str(watch_id).strip()]
+    return save_context(plugin, message, current)
+
+
 def clear_active_watch(plugin: Any, message: NormalizedBotMessage) -> dict[str, Any]:
     current = load_context(plugin, message) or _new_context(context_key(message))
     current['activeWatch'] = None
@@ -142,15 +149,24 @@ def clear_active_watch(plugin: Any, message: NormalizedBotMessage) -> dict[str, 
 def context_for_parser(context: dict[str, Any] | None) -> dict[str, Any]:
     """Return a compact context hint; never pass image bytes to the model."""
     if not isinstance(context, dict):
-        return {'domain': 'product_radar', 'activeWatch': None, 'pendingProposal': False}
+        return {'domain': 'product_radar', 'activeWatch': None, 'pendingProposal': False, 'watchListCount': 0}
     active = _public_watch(context.get('activeWatch'))
+    watch_list_ids = context.get('watchListIds') if isinstance(context.get('watchListIds'), list) else []
     return {
         'domain': 'product_radar',
         'activeWatch': active,
         'pendingProposal': bool(context.get('pendingProposalToken')),
+        'watchListCount': len(watch_list_ids),
     }
 
 
 def active_watch(context: dict[str, Any] | None) -> dict[str, Any] | None:
     value = context.get('activeWatch') if isinstance(context, dict) else None
     return _public_watch(value)
+
+
+def watch_list_ids(context: dict[str, Any] | None) -> list[str]:
+    value = context.get('watchListIds') if isinstance(context, dict) else None
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
