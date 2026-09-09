@@ -28,6 +28,12 @@ export interface SearchFeed {
   jitterSeconds: number;
   sensorWatchId?: string;
   state: SearchFeedState;
+  runCount: number;
+  successCount: number;
+  lastRunAt?: string;
+  lastSuccessAt?: string;
+  lastError?: string;
+  currentBackoff: number;
   lastSuccessfulRunAt?: string;
   watermark?: string;
   failureCount: number;

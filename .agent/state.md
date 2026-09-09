@@ -1,5 +1,9 @@
 # Codex State
 
+## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+
+已在既有 Generic Query Runtime/NLU 与 deterministic Product Radar Core 边界上完成运行可观测性 source implementation：SQLite additive migration 持久化 Watch runtime/feed health、usage ledger、24h heartbeat idempotency 和 ownership-aware context；API 增加 status/stats/usage；Luna structured status/stats + usage extraction 与重载后取消监控 context restore 已接通。Product Radar 45/45、LangBot 21/21、typecheck/build、compile、secret scan、diff check 已通过；source commit/push 与 CasaOS/LangBot production release 待执行。
+
 更新时间：2026-09-09（Asia/Shanghai）
 
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）

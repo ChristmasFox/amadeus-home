@@ -1,5 +1,15 @@
 # Current Task
 
+## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+
+- [x] SQLite additive migration：Watch runtime counters/history、SearchFeed health counters/backoff、AI usage ledger、heartbeat delivery idempotency、ownership-aware persisted context；旧数据库通过 `ensureColumn` 兼容，未删除既有数据。
+- [x] 真执行统计：feed/poll 成功/失败、候选/新商品、Sharp image comparisons、above-threshold、best score、实际成功通知数和最后错误；0 匹配保持 HEALTHY。
+- [x] API：`GET /api/watches/:id/status`、`/stats`、`/usage`，`POST /api/usage` 与上下文绑定接口；状态覆盖 HEALTHY/DEGRADED/PAUSED/ERROR、last/next run、Feed health、token summary。
+- [x] GPT-5.6 Luna structured NLU 增加 status/stats 语义与 usage extraction；创建、修改、状态查询、统计查询均按 Watch 记账，轮询/Sharp 不调用 LLM；取消监控在插件重载后恢复同一 ownership context，多目标继续澄清。
+- [x] Similarity Watch 默认 24h heartbeat digest：无匹配也发送，period/channel/recipient 幂等，Telegram/KOOK 独立失败重试；增加 fake-clock、restart、API、paraphrase/negative routing tests。
+- [x] 本地验证：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、`git diff --check` 通过。
+- [ ] RELEASE：source commit/push、Host BuildKit immutable image、CasaOS `--no-build` recreate、LangBot plugin API install、live health/status/context smoke 仍待执行。
+
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 修复 `取消监控` 被错误当成“取消待确认 proposal”的问题：有 pending proposal 时取消 proposal；已有当前 Watch 时转为真正的 `delete_watch`；没有唯一 active context 时要求指定目标，不再回复成功但保留 Watch。

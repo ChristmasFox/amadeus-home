@@ -1,5 +1,16 @@
 # Project State
 
+## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+
+本轮在既有 Generic Query Runtime/NLU、shared SearchFeed 和 deterministic Core 边界上增加运行可观测性，没有引入 PUBG-specific parser、第二次 Vision、FashionSigLIP/DINO/Qdrant 或抓取绕过：
+
+- SQLite 采用 additive migration，持久化 Watch runtime stats/history、SearchFeed run/success/error/backoff、usage ledger、24h heartbeat delivery 和 `platform + chat + sender + domain` opaque context binding。
+- `GET /api/watches/:id/status|stats|usage` 返回状态、运行时计数、Feed 健康、last/next run、相似度/通知/token；实际通知送达才递增 `notificationsSent`，0 match 不降级。
+- Luna intent/TargetProfile 单次 multimodal structured parse 的 provider usage 记账到对应 Watch；轮询、SearchFeed、Sharp matcher 不新增 LLM 调用或 token 账本记录。
+- Similarity Watch 默认启用 24h heartbeat；period/channel/recipient 唯一约束保证幂等，通道失败互不阻塞并由 outbox 重试；LangBot status/stats 语义复用 active context。
+- 插件重载后从 Product Radar 恢复精确 ownership context，使“取消监控/不要盯着了”继续进入 deterministic delete path；无法唯一确定时澄清，不猜测删除。
+- 本地验证已通过：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、diff check；生产 release 尚未执行。
+
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
 截图反馈对应的根因是 Product Radar fallback 将 `取消监控` 无条件编码为 pending proposal 的 `control=cancel`；当已有 Watch 时 listener 只清理 proposal，或在无 proposal 时回复“没有对应的待确认监控”，不会调用删除 API。现已改为按当前 ownership-aware context 分流：pending proposal 才 cancel，active Watch 执行 `delete_watch`，无唯一上下文则 clarification；`不要盯着了` 等自然停用表达也复用 active Watch 删除路径。

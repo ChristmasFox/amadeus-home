@@ -62,9 +62,24 @@ test('HTTP API exposes source capabilities and watch lifecycle without platform 
     assert.equal(createdResponse.status, 201);
     const created = await createdResponse.json();
     assert.equal(created.baselineNotifications, 0);
+    const contextKey = 'product_radar:telegram:group:chat-1:user-1';
+    const bound = await fetch(`${runtime.base}/api/watch-contexts`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ contextKey, watchId: created.watch.id }) }).then((response) => response.json());
+    assert.equal(bound.watchId, created.watch.id);
+    const restoredContext = await fetch(`${runtime.base}/api/watch-contexts?contextKey=${encodeURIComponent(contextKey)}`).then((response) => response.json());
+    assert.equal(restoredContext.watchId, created.watch.id);
 
     const fetched = await fetch(`${runtime.base}/api/watches/${created.watch.id}`).then((response) => response.json());
     assert.equal(fetched.type, 'seller');
+    const usageResponse = await fetch(`${runtime.base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ watchId: created.watch.id, provider: 'langbot', model: 'luna', operation: 'intent', inputTokens: 3, outputTokens: 2, totalTokens: 5, inferenceCount: 1, imagesProcessed: 0 }) });
+    assert.equal(usageResponse.status, 201);
+    const status = await fetch(`${runtime.base}/api/watches/${created.watch.id}/status`).then((response) => response.json());
+    assert.equal(status.status, 'HEALTHY');
+    assert.equal(status.usage.totalTokens, 5);
+    assert.equal(typeof status.nextRunAt, 'string');
+    const stats = await fetch(`${runtime.base}/api/watches/${created.watch.id}/stats`).then((response) => response.json());
+    assert.equal(stats.runtime.successfulRuns, 0);
+    const usage = await fetch(`${runtime.base}/api/watches/${created.watch.id}/usage`).then((response) => response.json());
+    assert.equal(usage.entries.length, 1);
     const patched = await fetch(`${runtime.base}/api/watches/${created.watch.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: false }) }).then((response) => response.json());
     assert.equal(patched.enabled, false);
     const runDisabled = await fetch(`${runtime.base}/api/watches/${created.watch.id}/run`, { method: 'POST' }).then((response) => response.json());

@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any
 
 try:
@@ -64,6 +65,54 @@ def _parse_json(value: str) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def usage_from_output(value: Any, *, model: str, operation: str, images_processed: int = 0, latency_ms: int | None = None) -> dict[str, Any]:
+    """Normalize provider-specific usage metadata without coupling the Core to LangBot."""
+    found: dict[str, int] = {}
+    aliases = {
+        'inputTokens': ('input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokens'),
+        'outputTokens': ('output_tokens', 'completion_tokens', 'outputTokens', 'completionTokens'),
+        'totalTokens': ('total_tokens', 'totalTokens'),
+    }
+
+    def visit(candidate: Any) -> None:
+        if isinstance(candidate, dict):
+            for field, names in aliases.items():
+                if field in found:
+                    continue
+                for name in names:
+                    raw = candidate.get(name)
+                    if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw >= 0:
+                        found[field] = int(raw)
+                        break
+            for nested in candidate.values():
+                if isinstance(nested, (dict, list, tuple)):
+                    visit(nested)
+        elif isinstance(candidate, (list, tuple)):
+            for nested in candidate:
+                visit(nested)
+        else:
+            for name in ('usage', 'usage_metadata', 'response_metadata'):
+                nested = getattr(candidate, name, None)
+                if nested is not None:
+                    visit(nested)
+
+    visit(value)
+    input_tokens = found.get('inputTokens', 0)
+    output_tokens = found.get('outputTokens', 0)
+    total_tokens = found.get('totalTokens', input_tokens + output_tokens)
+    return {
+        'provider': 'langbot',
+        'model': model,
+        'operation': operation,
+        'inputTokens': input_tokens,
+        'outputTokens': output_tokens,
+        'totalTokens': total_tokens,
+        'inferenceCount': 1,
+        'imagesProcessed': max(0, images_processed),
+        **({'latencyMs': max(0, latency_ms)} if latency_ms is not None else {}),
+    }
+
+
 def _image_block(source: dict[str, str]) -> dict[str, Any] | None:
     if source.get('referenceImageBase64'):
         value = source['referenceImageBase64']
@@ -94,9 +143,11 @@ async def analyze_target_profile(plugin: Any, images: list[dict[str, str]], user
             provider_message.Message(role='system', content='只输出合法 JSON。'),
             provider_message.Message(role='user', content=content),
         ]
+        started = time.monotonic()
         output = await plugin.invoke_llm(model_uuid, messages, funcs=[])
         profile = _parse_json(_content_text(output))
         profile['provider'] = 'langbot-vision'
+        profile['_usage'] = usage_from_output(output, model=model_uuid, operation='target_profile', images_processed=len(images), latency_ms=int((time.monotonic() - started) * 1000))
         return profile
     except Exception as exc:  # pragma: no cover - provider behavior is integration-specific
         LOGGER.warning('target profile extraction fallback: %s', type(exc).__name__)

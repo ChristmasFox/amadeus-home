@@ -61,9 +61,16 @@ async function main(): Promise<void> {
   }, retrySeconds * 1000);
   outboxTimer.unref();
   void notifications.deliverPending().catch((error: unknown) => console.error('notification outbox startup drain failed', error));
+  const heartbeatSeconds = numberEnv('PRODUCT_RADAR_HEARTBEAT_CHECK_SECONDS', 60);
+  const heartbeatTimer = setInterval(() => {
+    void service.runHeartbeatSweep().catch((error: unknown) => console.error('heartbeat sweep failed', error));
+  }, heartbeatSeconds * 1000);
+  heartbeatTimer.unref();
+  void service.runHeartbeatSweep().catch((error: unknown) => console.error('heartbeat startup sweep failed', error));
   server.listen(port, host, () => console.log(`Product Radar listening on ${host}:${port}`));
   const shutdown = (): void => {
     clearInterval(outboxTimer);
+    clearInterval(heartbeatTimer);
     server.close(() => {
       store.close();
       process.exit(0);

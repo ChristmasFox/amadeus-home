@@ -54,6 +54,8 @@ export interface Watch {
   rules: WatchRules;
   enabled: boolean;
   intervalSeconds: number;
+  heartbeatEnabled: boolean;
+  heartbeatIntervalSeconds: number;
   sensorId?: string;
   createdAt: string;
   updatedAt: string;
@@ -69,6 +71,8 @@ export interface WatchCreateInput {
   rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
+  heartbeatEnabled?: boolean;
+  heartbeatIntervalSeconds?: number;
   targetProfile?: TargetProfile;
   searchPlan?: SearchPlan;
 }
@@ -77,6 +81,8 @@ export interface WatchPatchInput {
   rules?: Partial<SellerWatchRules & ProductWatchRules & SimilarityWatchRules>;
   enabled?: boolean;
   intervalSeconds?: number;
+  heartbeatEnabled?: boolean;
+  heartbeatIntervalSeconds?: number;
   target?: Partial<WatchTarget>;
   targetProfile?: TargetProfile;
   reanalyze?: boolean;

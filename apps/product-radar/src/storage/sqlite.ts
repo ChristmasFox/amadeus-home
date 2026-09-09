@@ -1,10 +1,12 @@
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import type { Listing } from '../core/listing/model.js';
 import type { RadarEvent } from '../core/events/events.js';
 import type { NotificationChannel, NotificationMessage } from '../core/notification/ports.js';
 import type { Watch, WatchRules, WatchTarget, ImplementedWatchType } from '../core/watch/model.js';
 import type { FeedListingEvent, SearchFeed, WatchFeedSubscription } from '../core/search/model.js';
 import type { TargetProfile } from '../core/target-profile/model.js';
+import type { UsageLedgerEntry, UsageSummary, WatchRuntimeRunMetrics, WatchRuntimeStats, WatchRuntimeStatus } from '../core/observability/model.js';
 
 interface SqliteStatement {
   run(...params: unknown[]): { changes: number | bigint; lastInsertRowid?: number | bigint };
@@ -33,6 +35,20 @@ export interface ProductSnapshotRow {
 export interface NotificationOutboxRow {
   id: string;
   eventId: string;
+  channelId: string;
+  recipient: string;
+  message: NotificationMessage;
+  status: 'pending' | 'sent' | 'failed';
+  attempts: number;
+  lastError?: string;
+  createdAt: string;
+  sentAt?: string;
+}
+
+export interface HeartbeatDeliveryRow {
+  id: string;
+  watchId: string;
+  periodKey: string;
   channelId: string;
   recipient: string;
   message: NotificationMessage;
@@ -90,6 +106,10 @@ function integer(value: number | bigint | undefined): number {
   return Number(value ?? 0);
 }
 
+function numberOrNull(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value);
+}
+
 function rowToWatch(row: Record<string, unknown>): Watch {
   const sensorId = optionalString(row.sensor_id);
   const persistedTarget = jsonParse<WatchTarget & { targetProfile?: TargetProfile; searchPlan?: Watch['searchPlan'] }>(row.target_json, {});
@@ -102,6 +122,8 @@ function rowToWatch(row: Record<string, unknown>): Watch {
     rules: jsonParse<WatchRules>(row.rules_json, {} as WatchRules),
     enabled: bool(row.enabled),
     intervalSeconds: Number(row.interval_seconds),
+    heartbeatEnabled: row.heartbeat_enabled === undefined ? row.type === 'similarity' : bool(row.heartbeat_enabled),
+    heartbeatIntervalSeconds: Number(row.heartbeat_interval_seconds ?? 86_400),
     ...(sensorId === undefined ? {} : { sensorId }),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
@@ -130,6 +152,8 @@ export class SqliteRadarStore {
         rules_json TEXT NOT NULL,
         enabled INTEGER NOT NULL DEFAULT 1,
         interval_seconds INTEGER NOT NULL,
+        heartbeat_enabled INTEGER NOT NULL DEFAULT 1,
+        heartbeat_interval_seconds INTEGER NOT NULL DEFAULT 86400,
         sensor_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -264,6 +288,12 @@ export class SqliteRadarStore {
         jitter_seconds INTEGER NOT NULL DEFAULT 120,
         sensor_watch_id TEXT UNIQUE,
         state TEXT NOT NULL DEFAULT 'ACTIVE',
+        run_count INTEGER NOT NULL DEFAULT 0,
+        success_count INTEGER NOT NULL DEFAULT 0,
+        last_run_at TEXT,
+        last_success_at TEXT,
+        last_error TEXT,
+        current_backoff INTEGER NOT NULL DEFAULT 0,
         last_successful_run_at TEXT,
         watermark TEXT,
         failure_count INTEGER NOT NULL DEFAULT 0,
@@ -314,7 +344,105 @@ export class SqliteRadarStore {
         FOREIGN KEY(feed_id) REFERENCES search_feeds(id) ON DELETE CASCADE
       );
       CREATE INDEX IF NOT EXISTS idx_search_feed_runs_feed ON search_feed_runs(feed_id, started_at DESC);
+
+      CREATE TABLE IF NOT EXISTS watch_runtime_stats (
+        watch_id TEXT PRIMARY KEY,
+        feed_runs INTEGER NOT NULL DEFAULT 0,
+        successful_runs INTEGER NOT NULL DEFAULT 0,
+        failed_runs INTEGER NOT NULL DEFAULT 0,
+        new_listings INTEGER NOT NULL DEFAULT 0,
+        candidates_processed INTEGER NOT NULL DEFAULT 0,
+        image_comparisons INTEGER NOT NULL DEFAULT 0,
+        above_threshold INTEGER NOT NULL DEFAULT 0,
+        notifications_sent INTEGER NOT NULL DEFAULT 0,
+        best_score REAL,
+        last_run_at TEXT,
+        last_success_at TEXT,
+        last_error_at TEXT,
+        last_error TEXT,
+        status TEXT NOT NULL DEFAULT 'HEALTHY',
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS watch_runtime_runs (
+        id TEXT PRIMARY KEY,
+        watch_id TEXT NOT NULL,
+        feed_id TEXT,
+        run_type TEXT NOT NULL,
+        trigger_key TEXT NOT NULL,
+        status TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        error TEXT,
+        new_listings INTEGER NOT NULL DEFAULT 0,
+        candidates_processed INTEGER NOT NULL DEFAULT 0,
+        image_comparisons INTEGER NOT NULL DEFAULT 0,
+        above_threshold INTEGER NOT NULL DEFAULT 0,
+        best_score REAL,
+        UNIQUE(watch_id, run_type, trigger_key, feed_id),
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_watch_runtime_runs_watch_time ON watch_runtime_runs(watch_id, started_at DESC);
+
+      CREATE TABLE IF NOT EXISTS usage_ledger (
+        id TEXT PRIMARY KEY,
+        watch_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        timestamp TEXT NOT NULL,
+        inference_count INTEGER NOT NULL DEFAULT 0,
+        images_processed INTEGER NOT NULL DEFAULT 0,
+        latency_ms INTEGER,
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_usage_ledger_watch_time ON usage_ledger(watch_id, timestamp DESC);
+
+      CREATE TABLE IF NOT EXISTS heartbeat_deliveries (
+        id TEXT PRIMARY KEY,
+        watch_id TEXT NOT NULL,
+        period_key TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        message_json TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        sent_at TEXT,
+        UNIQUE(watch_id, period_key, channel_id, recipient),
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_heartbeat_deliveries_pending ON heartbeat_deliveries(status, created_at);
+
+      CREATE TABLE IF NOT EXISTS watch_contexts (
+        context_key TEXT PRIMARY KEY,
+        watch_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_watch_contexts_watch ON watch_contexts(watch_id);
     `);
+
+    this.ensureColumn('watches', 'heartbeat_enabled', 'INTEGER NOT NULL DEFAULT 1');
+    this.ensureColumn('watches', 'heartbeat_interval_seconds', 'INTEGER NOT NULL DEFAULT 86400');
+    this.ensureColumn('search_feeds', 'run_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('search_feeds', 'success_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('search_feeds', 'last_run_at', 'TEXT');
+    this.ensureColumn('search_feeds', 'last_success_at', 'TEXT');
+    this.ensureColumn('search_feeds', 'last_error', 'TEXT');
+    this.ensureColumn('search_feeds', 'current_backoff', 'INTEGER NOT NULL DEFAULT 0');
+  }
+
+  private ensureColumn(table: string, column: string, definition: string): void {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all();
+    if (!columns.some((item) => String(item.name) === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   transaction<T>(callback: () => T): T {
@@ -339,15 +467,116 @@ export class SqliteRadarStore {
 
   createWatch(watch: Watch): void {
     this.db.prepare(`INSERT INTO watches
-      (id, source, type, target_json, rules_json, enabled, interval_seconds, sensor_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(watch.id, watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.createdAt, watch.updatedAt);
+      (id, source, type, target_json, rules_json, enabled, interval_seconds, heartbeat_enabled, heartbeat_interval_seconds, sensor_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(watch.id, watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.heartbeatEnabled ? 1 : 0, watch.heartbeatIntervalSeconds, watch.sensorId ?? null, watch.createdAt, watch.updatedAt);
+    this.ensureWatchRuntimeStats(watch.id);
     if (watch.targetProfile) this.upsertTargetProfile(watch.id, watch.targetProfile, watch.updatedAt);
   }
 
   updateWatch(watch: Watch): void {
-    this.db.prepare(`UPDATE watches SET source = ?, type = ?, target_json = ?, rules_json = ?, enabled = ?, interval_seconds = ?, sensor_id = ?, updated_at = ? WHERE id = ?`)
-      .run(watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.sensorId ?? null, watch.updatedAt, watch.id);
+    this.db.prepare(`UPDATE watches SET source = ?, type = ?, target_json = ?, rules_json = ?, enabled = ?, interval_seconds = ?, heartbeat_enabled = ?, heartbeat_interval_seconds = ?, sensor_id = ?, updated_at = ? WHERE id = ?`)
+      .run(watch.source, watch.type, JSON.stringify(this.persistedTarget(watch)), JSON.stringify(watch.rules), watch.enabled ? 1 : 0, watch.intervalSeconds, watch.heartbeatEnabled ? 1 : 0, watch.heartbeatIntervalSeconds, watch.sensorId ?? null, watch.updatedAt, watch.id);
+    this.ensureWatchRuntimeStats(watch.id);
     if (watch.targetProfile) this.upsertTargetProfile(watch.id, watch.targetProfile, watch.updatedAt);
+  }
+
+  ensureWatchRuntimeStats(watchId: string, status: WatchRuntimeStatus = 'HEALTHY'): void {
+    this.db.prepare(`INSERT OR IGNORE INTO watch_runtime_stats (watch_id, status) VALUES (?, ?)`).run(watchId, status);
+  }
+
+  getWatchRuntimeStats(watchId: string): WatchRuntimeStats {
+    this.ensureWatchRuntimeStats(watchId);
+    const row = this.db.prepare('SELECT * FROM watch_runtime_stats WHERE watch_id = ?').get(watchId);
+    if (!row) throw new Error(`watch runtime stats missing: ${watchId}`);
+    return {
+      watchId,
+      feedRuns: Number(row.feed_runs ?? 0),
+      successfulRuns: Number(row.successful_runs ?? 0),
+      failedRuns: Number(row.failed_runs ?? 0),
+      newListings: Number(row.new_listings ?? 0),
+      candidatesProcessed: Number(row.candidates_processed ?? 0),
+      imageComparisons: Number(row.image_comparisons ?? 0),
+      aboveThreshold: Number(row.above_threshold ?? 0),
+      notificationsSent: Number(row.notifications_sent ?? 0),
+      bestScore: numberOrNull(row.best_score),
+      ...(optionalString(row.last_run_at) === undefined ? {} : { lastRunAt: String(row.last_run_at) }),
+      ...(optionalString(row.last_success_at) === undefined ? {} : { lastSuccessAt: String(row.last_success_at) }),
+      ...(optionalString(row.last_error_at) === undefined ? {} : { lastErrorAt: String(row.last_error_at) }),
+      ...(optionalString(row.last_error) === undefined ? {} : { lastError: String(row.last_error) }),
+      status: String(row.status ?? 'HEALTHY') as WatchRuntimeStatus,
+    };
+  }
+
+  beginWatchRuntimeRun(watchId: string, runType: 'feed' | 'poll', triggerKey: string, startedAt: string, feedId?: string): string {
+    this.ensureWatchRuntimeStats(watchId);
+    const id = `${watchId}:${runType}:${feedId ?? ''}:${triggerKey}`;
+    const result = this.db.prepare(`INSERT OR IGNORE INTO watch_runtime_runs
+      (id, watch_id, feed_id, run_type, trigger_key, status, started_at)
+      VALUES (?, ?, ?, ?, ?, 'running', ?)`).run(id, watchId, feedId ?? null, runType, triggerKey, startedAt);
+    if (integer(result.changes) === 0) return id;
+    if (runType === 'feed') {
+      this.db.prepare(`UPDATE watch_runtime_stats SET feed_runs = feed_runs + 1, last_run_at = ? WHERE watch_id = ?`).run(startedAt, watchId);
+    } else {
+      this.db.prepare(`UPDATE watch_runtime_stats SET last_run_at = ? WHERE watch_id = ?`).run(startedAt, watchId);
+    }
+    return id;
+  }
+
+  finishWatchRuntimeRun(id: string, watchId: string, status: 'succeeded' | 'failed', finishedAt: string, metrics: WatchRuntimeRunMetrics = {}, error?: string, runtimeStatus: WatchRuntimeStatus = status === 'succeeded' ? 'HEALTHY' : 'DEGRADED'): void {
+    const values = {
+      newListings: metrics.newListings ?? 0,
+      candidatesProcessed: metrics.candidatesProcessed ?? 0,
+      imageComparisons: metrics.imageComparisons ?? 0,
+      aboveThreshold: metrics.aboveThreshold ?? 0,
+      bestScore: metrics.bestScore ?? null,
+    };
+    const runUpdate = this.db.prepare(`UPDATE watch_runtime_runs SET status = ?, finished_at = ?, error = ?, new_listings = ?, candidates_processed = ?, image_comparisons = ?, above_threshold = ?, best_score = ? WHERE id = ? AND status = 'running'`)
+      .run(status, finishedAt, error ?? null, values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.bestScore, id);
+    if (integer(runUpdate.changes) === 0) return;
+    if (status === 'succeeded') {
+      this.db.prepare(`UPDATE watch_runtime_stats SET successful_runs = successful_runs + 1, new_listings = new_listings + ?, candidates_processed = candidates_processed + ?, image_comparisons = image_comparisons + ?, above_threshold = above_threshold + ?, best_score = CASE WHEN best_score IS NULL OR (? IS NOT NULL AND ? > best_score) THEN ? ELSE best_score END, last_success_at = ?, last_error_at = NULL, last_error = NULL, status = ? WHERE watch_id = ?`)
+        .run(values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.bestScore, values.bestScore, values.bestScore, finishedAt, runtimeStatus, watchId);
+    } else {
+      this.db.prepare(`UPDATE watch_runtime_stats SET failed_runs = failed_runs + 1, last_error_at = ?, last_error = ?, status = ? WHERE watch_id = ?`)
+        .run(finishedAt, error ?? 'watch run failed', runtimeStatus, watchId);
+    }
+  }
+
+  setWatchRuntimeStatus(watchId: string, status: WatchRuntimeStatus): void {
+    this.ensureWatchRuntimeStats(watchId);
+    this.db.prepare('UPDATE watch_runtime_stats SET status = ? WHERE watch_id = ?').run(status, watchId);
+  }
+
+  incrementWatchNotifications(watchId: string, count = 1): void {
+    this.ensureWatchRuntimeStats(watchId);
+    this.db.prepare('UPDATE watch_runtime_stats SET notifications_sent = notifications_sent + ? WHERE watch_id = ?').run(count, watchId);
+  }
+
+  listWatchRuntimeRunsSince(watchId: string, since: string): Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; bestScore: number | null }> {
+    return this.db.prepare(`SELECT status, started_at, new_listings, candidates_processed, image_comparisons, above_threshold, best_score
+      FROM watch_runtime_runs WHERE watch_id = ? AND started_at >= ? ORDER BY started_at ASC`).all(watchId, since).map((row) => ({
+      status: String(row.status), startedAt: String(row.started_at), newListings: Number(row.new_listings ?? 0), candidatesProcessed: Number(row.candidates_processed ?? 0), imageComparisons: Number(row.image_comparisons ?? 0), aboveThreshold: Number(row.above_threshold ?? 0), bestScore: numberOrNull(row.best_score),
+    }));
+  }
+
+  recordUsage(entry: Omit<UsageLedgerEntry, 'id'> & { id?: string }): UsageLedgerEntry {
+    const id = entry.id ?? randomUUID();
+    this.db.prepare(`INSERT OR IGNORE INTO usage_ledger
+      (id, watch_id, provider, model, operation, input_tokens, output_tokens, total_tokens, timestamp, inference_count, images_processed, latency_ms)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, entry.watchId, entry.provider, entry.model, entry.operation, entry.inputTokens, entry.outputTokens, entry.totalTokens, entry.timestamp, entry.inferenceCount, entry.imagesProcessed, entry.latencyMs ?? null);
+    return { ...entry, id };
+  }
+
+  summarizeUsage(watchId: string): UsageSummary {
+    const row = this.db.prepare(`SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens), 0) AS input_tokens, COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(total_tokens), 0) AS total_tokens, COALESCE(SUM(inference_count), 0) AS inference_count, COALESCE(SUM(images_processed), 0) AS images_processed, COALESCE(SUM(latency_ms), 0) AS latency_ms FROM usage_ledger WHERE watch_id = ?`).get(watchId);
+    return { calls: Number(row?.calls ?? 0), inputTokens: Number(row?.input_tokens ?? 0), outputTokens: Number(row?.output_tokens ?? 0), totalTokens: Number(row?.total_tokens ?? 0), inferenceCount: Number(row?.inference_count ?? 0), imagesProcessed: Number(row?.images_processed ?? 0), latencyMs: Number(row?.latency_ms ?? 0) };
+  }
+
+  listUsage(watchId: string): UsageLedgerEntry[] {
+    return this.db.prepare('SELECT * FROM usage_ledger WHERE watch_id = ? ORDER BY timestamp ASC, id ASC').all(watchId).map((row) => ({
+      id: String(row.id), watchId: String(row.watch_id), provider: String(row.provider), model: String(row.model), operation: String(row.operation), inputTokens: Number(row.input_tokens ?? 0), outputTokens: Number(row.output_tokens ?? 0), totalTokens: Number(row.total_tokens ?? 0), timestamp: String(row.timestamp), inferenceCount: Number(row.inference_count ?? 0), imagesProcessed: Number(row.images_processed ?? 0), ...(row.latency_ms === null ? {} : { latencyMs: Number(row.latency_ms) }),
+    }));
   }
 
   upsertTargetProfile(watchId: string, profile: TargetProfile, now: string): void {
@@ -373,6 +602,23 @@ export class SqliteRadarStore {
 
   deleteWatch(id: string): void {
     this.db.prepare('DELETE FROM watches WHERE id = ?').run(id);
+  }
+
+  setWatchContext(contextKey: string, watchId: string, now: string): void {
+    this.db.prepare(`INSERT INTO watch_contexts (context_key, watch_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(context_key) DO UPDATE SET watch_id = excluded.watch_id, updated_at = excluded.updated_at`)
+      .run(contextKey, watchId, now, now);
+  }
+
+  getWatchContext(contextKey: string): string | undefined {
+    const row = this.db.prepare('SELECT watch_id FROM watch_contexts WHERE context_key = ?').get(contextKey);
+    return optionalString(row?.watch_id);
+  }
+
+  clearWatchContext(contextKey: string, watchId?: string): void {
+    if (watchId === undefined) this.db.prepare('DELETE FROM watch_contexts WHERE context_key = ?').run(contextKey);
+    else this.db.prepare('DELETE FROM watch_contexts WHERE context_key = ? AND watch_id = ?').run(contextKey, watchId);
   }
 
   upsertListing(listing: Listing): void {
@@ -578,11 +824,42 @@ export class SqliteRadarStore {
   }
 
   markNotificationSent(id: string, now: string): void {
-    this.db.prepare(`UPDATE notification_outbox SET status = 'sent', attempts = attempts + 1, last_error = NULL, sent_at = ? WHERE id = ?`).run(now, id);
+    const row = this.db.prepare(`SELECT e.watch_id AS watch_id
+      FROM notification_outbox n JOIN events e ON e.id = n.event_id WHERE n.id = ?`).get(id);
+    const result = this.db.prepare(`UPDATE notification_outbox SET status = 'sent', attempts = attempts + 1, last_error = NULL, sent_at = ? WHERE id = ? AND status IN ('pending', 'failed')`).run(now, id);
+    if (integer(result.changes) > 0 && row?.watch_id !== undefined) this.incrementWatchNotifications(String(row.watch_id));
   }
 
   markNotificationFailed(id: string, error: string): void {
     this.db.prepare(`UPDATE notification_outbox SET status = 'failed', attempts = attempts + 1, last_error = ? WHERE id = ?`).run(error.slice(0, 1000), id);
+  }
+
+  enqueueHeartbeat(watchId: string, periodKey: string, channel: NotificationChannel, message: NotificationMessage, now: string): boolean {
+    const id = `${watchId}:${periodKey}:${channel.id}:${channel.recipient}`;
+    const result = this.db.prepare(`INSERT OR IGNORE INTO heartbeat_deliveries
+      (id, watch_id, period_key, channel_id, recipient, message_json, status, attempts, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?)`).run(id, watchId, periodKey, channel.id, channel.recipient, JSON.stringify(message), now);
+    return integer(result.changes) > 0;
+  }
+
+  listPendingHeartbeats(): HeartbeatDeliveryRow[] {
+    return this.db.prepare(`SELECT * FROM heartbeat_deliveries WHERE status IN ('pending', 'failed') ORDER BY created_at ASC, id ASC`).all().map((row) => ({
+      id: String(row.id), watchId: String(row.watch_id), periodKey: String(row.period_key), channelId: String(row.channel_id), recipient: String(row.recipient),
+      message: jsonParse<NotificationMessage>(row.message_json, { event: {} as RadarEvent, text: '', recipient: String(row.recipient) }),
+      status: String(row.status) as HeartbeatDeliveryRow['status'], attempts: Number(row.attempts),
+      ...(optionalString(row.last_error) === undefined ? {} : { lastError: String(row.last_error) }), createdAt: String(row.created_at),
+      ...(optionalString(row.sent_at) === undefined ? {} : { sentAt: String(row.sent_at) }),
+    }));
+  }
+
+  markHeartbeatSent(id: string, now: string): void {
+    const row = this.db.prepare('SELECT watch_id FROM heartbeat_deliveries WHERE id = ?').get(id);
+    const result = this.db.prepare(`UPDATE heartbeat_deliveries SET status = 'sent', attempts = attempts + 1, last_error = NULL, sent_at = ? WHERE id = ? AND status IN ('pending', 'failed')`).run(now, id);
+    if (integer(result.changes) > 0 && row?.watch_id !== undefined) this.incrementWatchNotifications(String(row.watch_id));
+  }
+
+  markHeartbeatFailed(id: string, error: string): void {
+    this.db.prepare(`UPDATE heartbeat_deliveries SET status = 'failed', attempts = attempts + 1, last_error = ? WHERE id = ?`).run(error.slice(0, 1000), id);
   }
 
   beginPollRun(watchId: string, sensorId: string | undefined, triggerKey: string, now: string): PollRunResult | undefined {
@@ -620,14 +897,14 @@ export class SqliteRadarStore {
 
   createSearchFeed(feed: SearchFeed): void {
     this.db.prepare(`INSERT INTO search_feeds
-      (id, source, target, query, canonical_key, interval_seconds, jitter_seconds, sensor_watch_id, state, last_successful_run_at, watermark, failure_count, degraded_reason, potential_candidate_gap, backoff_until, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(feed.id, feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.createdAt, feed.updatedAt);
+      (id, source, target, query, canonical_key, interval_seconds, jitter_seconds, sensor_watch_id, state, run_count, success_count, last_run_at, last_success_at, last_error, current_backoff, last_successful_run_at, watermark, failure_count, degraded_reason, potential_candidate_gap, backoff_until, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(feed.id, feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.runCount, feed.successCount, feed.lastRunAt ?? null, feed.lastSuccessAt ?? null, feed.lastError ?? null, feed.currentBackoff, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.createdAt, feed.updatedAt);
   }
 
   updateSearchFeed(feed: SearchFeed): void {
-    this.db.prepare(`UPDATE search_feeds SET source = ?, target = ?, query = ?, canonical_key = ?, interval_seconds = ?, jitter_seconds = ?, sensor_watch_id = ?, state = ?, last_successful_run_at = ?, watermark = ?, failure_count = ?, degraded_reason = ?, potential_candidate_gap = ?, backoff_until = ?, updated_at = ? WHERE id = ?`)
-      .run(feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.updatedAt, feed.id);
+    this.db.prepare(`UPDATE search_feeds SET source = ?, target = ?, query = ?, canonical_key = ?, interval_seconds = ?, jitter_seconds = ?, sensor_watch_id = ?, state = ?, run_count = ?, success_count = ?, last_run_at = ?, last_success_at = ?, last_error = ?, current_backoff = ?, last_successful_run_at = ?, watermark = ?, failure_count = ?, degraded_reason = ?, potential_candidate_gap = ?, backoff_until = ?, updated_at = ? WHERE id = ?`)
+      .run(feed.source, feed.target, feed.query, feed.canonicalKey, feed.intervalSeconds, feed.jitterSeconds, feed.sensorWatchId ?? null, feed.state, feed.runCount, feed.successCount, feed.lastRunAt ?? null, feed.lastSuccessAt ?? null, feed.lastError ?? null, feed.currentBackoff, feed.lastSuccessfulRunAt ?? null, feed.watermark ?? null, feed.failureCount, feed.degradedReason ?? null, feed.potentialCandidateGap ? 1 : 0, feed.backoffUntil ?? null, feed.updatedAt, feed.id);
   }
 
   getSearchFeed(id: string): SearchFeed | undefined {
@@ -655,6 +932,12 @@ export class SqliteRadarStore {
       intervalSeconds: Number(row.interval_seconds), jitterSeconds: Number(row.jitter_seconds),
       ...(optional(row.sensor_watch_id) === undefined ? {} : { sensorWatchId: String(row.sensor_watch_id) }),
       state: String(row.state) as SearchFeed['state'],
+      runCount: Number(row.run_count ?? 0),
+      successCount: Number(row.success_count ?? 0),
+      ...(optional(row.last_run_at) === undefined ? {} : { lastRunAt: String(row.last_run_at) }),
+      ...(optional(row.last_success_at) === undefined ? {} : { lastSuccessAt: String(row.last_success_at) }),
+      ...(optional(row.last_error) === undefined ? {} : { lastError: String(row.last_error) }),
+      currentBackoff: Number(row.current_backoff ?? 0),
       ...(optional(row.last_successful_run_at) === undefined ? {} : { lastSuccessfulRunAt: String(row.last_successful_run_at) }),
       ...(optional(row.watermark) === undefined ? {} : { watermark: String(row.watermark) }),
       failureCount: Number(row.failure_count),
@@ -737,15 +1020,24 @@ export class SqliteRadarStore {
     const id = `${feedId}:${triggerKey}`;
     const result = this.db.prepare(`INSERT OR IGNORE INTO search_feed_runs (id, feed_id, trigger_key, status, started_at) VALUES (?, ?, ?, 'running', ?)`).run(id, feedId, triggerKey, now);
     if (integer(result.changes) === 0) return undefined;
+    this.db.prepare('UPDATE search_feeds SET run_count = run_count + 1, last_run_at = ?, updated_at = ? WHERE id = ?').run(now, now, feedId);
     return { id, feedId, triggerKey, status: 'running', startedAt: now };
   }
 
   finishFeedRun(id: string, status: 'succeeded' | 'failed', now: string, details: { error?: string; listingsCount?: number; changesCount?: number } = {}): void {
-    this.db.prepare('UPDATE search_feed_runs SET status = ?, finished_at = ?, error = ?, listings_count = ?, changes_count = ? WHERE id = ?').run(status, now, details.error ?? null, details.listingsCount ?? null, details.changesCount ?? null, id);
+    const row = this.db.prepare('SELECT feed_id FROM search_feed_runs WHERE id = ?').get(id);
+    const result = this.db.prepare('UPDATE search_feed_runs SET status = ?, finished_at = ?, error = ?, listings_count = ?, changes_count = ? WHERE id = ? AND status = \'running\'').run(status, now, details.error ?? null, details.listingsCount ?? null, details.changesCount ?? null, id);
+    if (integer(result.changes) === 0 || row?.feed_id === undefined) return;
+    const feedId = String(row.feed_id);
+    if (status === 'succeeded') {
+      this.db.prepare(`UPDATE search_feeds SET success_count = success_count + 1, last_success_at = ?, last_successful_run_at = ?, last_error = NULL, current_backoff = 0, updated_at = ? WHERE id = ?`).run(now, now, now, feedId);
+    } else {
+      this.db.prepare('UPDATE search_feeds SET last_error = ?, updated_at = ? WHERE id = ?').run(details.error ?? 'feed run failed', now, feedId);
+    }
   }
 
   tableCounts(): Record<string, number> {
-    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'similarity_matches', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs', 'target_profiles', 'search_feeds', 'watch_feed_subscriptions', 'feed_listing_events', 'search_feed_runs'];
+    const names = ['watches', 'listings', 'watch_seen_listings', 'product_snapshots', 'similarity_matches', 'sensor_watches', 'events', 'notification_outbox', 'poll_runs', 'target_profiles', 'search_feeds', 'watch_feed_subscriptions', 'feed_listing_events', 'search_feed_runs', 'watch_runtime_stats', 'watch_runtime_runs', 'usage_ledger', 'heartbeat_deliveries', 'watch_contexts'];
     return Object.fromEntries(names.map((name) => [name, Number(this.db.prepare(`SELECT COUNT(*) AS count FROM ${name}`).get()?.count ?? 0)]));
   }
 

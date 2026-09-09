@@ -12,6 +12,7 @@ import type { SearchPlan, SearchQuery } from './search/model.js';
 import { BunjangSearchPlanner } from '../sources/bunjang/search-planner.js';
 import { TargetProfileExtractor } from './target-profile/extractor.js';
 import type { TargetProfile, TargetProfileExtractionInput, VisionProfile } from './target-profile/model.js';
+import type { WatchObservability, WatchRuntimeRunMetrics, WatchRuntimeStatus } from './observability/model.js';
 import type { SqliteRadarStore } from '../storage/sqlite.js';
 import { SourceAdapterRegistry, type ListingSourceAdapter, type ValidatedTarget } from '../sources/registry.js';
 import { isSellerRules, isSimilarityRules, type ImplementedWatchType, type Watch, type WatchTarget } from './watch/model.js';
@@ -102,6 +103,42 @@ function statusOrNull(value: ProductStatus | undefined): ProductStatus | null {
   return value ?? null;
 }
 
+function scoreLabel(value: number | null | undefined): string {
+  return value === null || value === undefined ? '暂无' : `${(value * 100).toFixed(1)}%`;
+}
+
+export function formatHeartbeatDigest(observability: WatchObservability, runs: Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; bestScore: number | null }>): string {
+  const totals = runs.reduce((result, run) => ({
+    checks: result.checks + 1,
+    successful: result.successful + (run.status === 'succeeded' ? 1 : 0),
+    failed: result.failed + (run.status === 'failed' ? 1 : 0),
+    newListings: result.newListings + run.newListings,
+    candidates: result.candidates + run.candidatesProcessed,
+    comparisons: result.comparisons + run.imageComparisons,
+    aboveThreshold: result.aboveThreshold + run.aboveThreshold,
+    bestScore: run.bestScore !== null && (result.bestScore === null || run.bestScore > result.bestScore) ? run.bestScore : result.bestScore,
+  }), { checks: 0, successful: 0, failed: 0, newListings: 0, candidates: 0, comparisons: 0, aboveThreshold: 0, bestScore: null as number | null });
+  const icon = observability.status === 'HEALTHY' ? '🟢' : observability.status === 'DEGRADED' ? '🟡' : observability.status === 'PAUSED' ? '⏸️' : '🔴';
+  const threshold = isSimilarityRules(observability.watch.rules) ? observability.watch.rules.similarityThreshold : undefined;
+  const feedErrors = observability.feeds.filter((feed) => feed.state !== 'ACTIVE' || feed.lastError).map((feed) => feed.lastError || feed.degradedReason || feed.state);
+  return [
+    '📡 Product Radar 日报',
+    '',
+    `🎯 ${observability.watch.source} / ${observability.watch.type}`,
+    `${icon} 状态：${observability.status}`,
+    '',
+    '过去 24 小时：',
+    `• 检查 ${totals.checks} 次（成功 ${totals.successful}，失败 ${totals.failed}）`,
+    `• 新商品 ${totals.newListings} 件，候选 ${totals.candidates} 个`,
+    `• 图片比较 ${totals.comparisons} 次`,
+    `• 最高相似度 ${scoreLabel(totals.bestScore ?? observability.runtime.bestScore)}`,
+    `• 达到阈值 ${totals.aboveThreshold} 个${threshold === undefined ? '' : `（阈值 ${(threshold * 100).toFixed(0)}%）`}`,
+    `• 已发送通知 ${observability.runtime.notificationsSent} 条，Token ${observability.usage.totalTokens}`,
+    totals.aboveThreshold === 0 ? '暂无匹配，继续监控中。' : '发现过达到阈值的候选，已按通知规则处理。',
+    ...(feedErrors.length === 0 ? [] : [`• Feed 状况：${[...new Set(feedErrors)].join('、')}`]),
+  ].join('\n');
+}
+
 function referenceInput(target: WatchTarget): ImageSource {
   const base64 = typeof target.referenceImageBase64 === 'string' && target.referenceImageBase64.trim() ? target.referenceImageBase64 : undefined;
   const url = typeof target.referenceImageUrl === 'string' && target.referenceImageUrl.trim() ? target.referenceImageUrl : undefined;
@@ -152,6 +189,78 @@ export class ProductRadarService {
 
   getWatch(id: string): Watch | undefined {
     return this.store.getWatch(id);
+  }
+
+  getWatchObservability(id: string): WatchObservability {
+    const watch = this.store.getWatch(id);
+    if (!watch) throw new RadarError(`watch not found: ${id}`, 'NOT_FOUND', 404);
+    const runtime = this.store.getWatchRuntimeStats(id);
+    const feeds = watch.type === 'similarity'
+      ? this.store.listWatchFeedSubscriptions({ watchId: id }).map((item) => this.store.getSearchFeed(item.feedId)).filter((item): item is NonNullable<typeof item> => item !== undefined)
+      : [];
+    const status: WatchRuntimeStatus = !watch.enabled
+      ? 'PAUSED'
+      : runtime.status === 'ERROR'
+        ? 'ERROR'
+        : runtime.status === 'DEGRADED' || feeds.some((feed) => feed.state !== 'ACTIVE' || feed.currentBackoff > 0)
+          ? 'DEGRADED'
+          : 'HEALTHY';
+    const nowMs = Date.parse(this.now());
+    const createdMs = Date.parse(watch.createdAt);
+    const runningForSeconds = Number.isFinite(nowMs) && Number.isFinite(createdMs) ? Math.max(0, Math.floor((nowMs - createdMs) / 1000)) : 0;
+    let nextRunAt: string | undefined;
+    if (watch.enabled) {
+      const candidates = feeds.length > 0
+        ? feeds.map((feed) => {
+          const base = Date.parse(feed.lastRunAt ?? feed.lastSuccessAt ?? feed.createdAt);
+          const scheduled = Number.isFinite(base) ? base + feed.intervalSeconds * 1000 : NaN;
+          const backoff = feed.backoffUntil === undefined ? NaN : Date.parse(feed.backoffUntil);
+          const next = Number.isFinite(scheduled) && Number.isFinite(backoff) ? Math.max(scheduled, backoff) : scheduled;
+          return Number.isFinite(next) ? new Date(next).toISOString() : undefined;
+        })
+        : (() => {
+          const base = Date.parse(runtime.lastRunAt ?? watch.createdAt);
+          return Number.isFinite(base) ? [new Date(base + watch.intervalSeconds * 1000).toISOString()] : [];
+        })();
+      nextRunAt = candidates.filter((value): value is string => value !== undefined).sort()[0];
+    }
+    return {
+      watch,
+      status,
+      runningForSeconds,
+      ...(runtime.lastRunAt === undefined ? {} : { lastRunAt: runtime.lastRunAt }),
+      ...(nextRunAt === undefined ? {} : { nextRunAt }),
+      runtime: { ...runtime, status },
+      feeds,
+      usage: this.store.summarizeUsage(id),
+    };
+  }
+
+  getWatchStatus(id: string): WatchObservability {
+    return this.getWatchObservability(id);
+  }
+
+  getWatchStats(id: string): WatchObservability {
+    return this.getWatchObservability(id);
+  }
+
+  async runHeartbeatSweep(): Promise<number> {
+    const now = this.now();
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) return 0;
+    let enqueued = 0;
+    for (const watch of this.store.listWatches()) {
+      if (watch.type !== 'similarity' || !watch.enabled || !watch.heartbeatEnabled) continue;
+      const createdMs = Date.parse(watch.createdAt);
+      if (!Number.isFinite(createdMs) || nowMs < createdMs + watch.heartbeatIntervalSeconds * 1000) continue;
+      const period = Math.floor((nowMs - createdMs) / (watch.heartbeatIntervalSeconds * 1000));
+      const periodKey = `${watch.id}:${period}`;
+      const since = new Date(nowMs - 86_400_000).toISOString();
+      const digest = formatHeartbeatDigest(this.getWatchObservability(watch.id), this.store.listWatchRuntimeRunsSince(watch.id, since));
+      enqueued += this.notifications.enqueueHeartbeat(watch, periodKey, digest) as number;
+    }
+    await this.notifications.deliverPending();
+    return enqueued;
   }
 
   listSearchFeeds() {
@@ -234,7 +343,10 @@ export class ProductRadarService {
     const now = this.now();
     const watch: Watch = {
       id, source: adapter.id, type: parsed.type, target: validatedTarget, rules: parsed.rules,
-      enabled: parsed.enabled ?? true, intervalSeconds: parsed.intervalSeconds, createdAt: now, updatedAt: now,
+      enabled: parsed.enabled ?? true, intervalSeconds: parsed.intervalSeconds,
+      heartbeatEnabled: parsed.heartbeatEnabled,
+      heartbeatIntervalSeconds: parsed.heartbeatIntervalSeconds,
+      createdAt: now, updatedAt: now,
     };
     const baseline = await this.fetchNormalized(adapter, watch.type, validatedTarget);
     let sensorWatch: SensorWatch | undefined;
@@ -290,7 +402,10 @@ export class ProductRadarService {
     };
     const watch: Watch = {
       id, source: adapter.id, type: 'similarity', target, rules: parsed.rules, enabled: parsed.enabled ?? true,
-      intervalSeconds: parsed.intervalSeconds, createdAt: now, updatedAt: now, targetProfile: context.profile, searchPlan: context.plan,
+      intervalSeconds: parsed.intervalSeconds,
+      heartbeatEnabled: parsed.heartbeatEnabled,
+      heartbeatIntervalSeconds: parsed.heartbeatIntervalSeconds,
+      createdAt: now, updatedAt: now, targetProfile: context.profile, searchPlan: context.plan,
     };
     this.store.createWatch(watch);
     try {
@@ -330,6 +445,7 @@ export class ProductRadarService {
         searchPlan: context.plan,
       };
       this.store.updateWatch(updated);
+      this.store.setWatchRuntimeStatus(id, updated.enabled ? 'HEALTHY' : 'PAUSED');
       await this.searchFeeds.updateWatchPlan(updated, context.plan);
       await this.searchFeeds.syncWatch(updated, current);
       return updated;
@@ -343,6 +459,7 @@ export class ProductRadarService {
       if (current.intervalSeconds !== updated.intervalSeconds) await this.sensor.updateWatch(current.sensorId, { intervalSeconds: updated.intervalSeconds });
     }
     this.store.updateWatch(updated);
+    if (current.enabled !== updated.enabled) this.store.setWatchRuntimeStatus(id, updated.enabled ? 'HEALTHY' : 'PAUSED');
     if (current.type === 'similarity') await this.searchFeeds.syncWatch(updated, current);
     return updated;
   }
@@ -417,16 +534,24 @@ export class ProductRadarService {
     }
     const pollRun = this.store.beginPollRun(id, watch.sensorId, triggerKey, this.now());
     if (!pollRun) return { watchId: id, status: 'duplicate', triggerKey, newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
+    const runtimeRunId = this.store.beginWatchRuntimeRun(id, 'poll', triggerKey, pollRun.startedAt);
     try {
       const adapter = this.sources.require(watch.source);
       const validatedTarget = await adapter.validateTarget(watch.type, watch.target);
       const normalized = await this.fetchNormalized(adapter, watch.type, validatedTarget);
       const result = watch.type === 'seller' ? await this.processSellerWatch(watch, normalized) : await this.processProductWatch(watch, normalized[0]);
       this.store.finishPollRun(pollRun.id, 'succeeded', this.now(), { listingsCount: normalized.length, changesCount: result.changes });
+      const runtimeMetrics: WatchRuntimeRunMetrics = {
+        newListings: result.newListings,
+        candidatesProcessed: normalized.length,
+      };
+      this.store.finishWatchRuntimeRun(runtimeRunId, id, 'succeeded', this.now(), runtimeMetrics);
       await this.notifications.deliverPending();
       return { ...result, watchId: id, status: 'succeeded', triggerKey };
     } catch (error) {
-      this.store.finishPollRun(pollRun.id, 'failed', this.now(), { error: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.finishPollRun(pollRun.id, 'failed', this.now(), { error: message });
+      this.store.finishWatchRuntimeRun(runtimeRunId, id, 'failed', this.now(), {}, message, error instanceof SensorUnavailableError ? 'ERROR' : 'DEGRADED');
       throw error;
     }
   }

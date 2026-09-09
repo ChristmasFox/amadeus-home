@@ -116,6 +116,34 @@ class ProductRadarIntentPlannerTest(unittest.IsolatedAsyncioTestCase):
         result = await resolve_product_radar_intent(object(), '刚才那件不要了', False)
         self.assertEqual(result['action'], 'stop')
 
+    async def test_status_and_stats_are_structured_operations(self) -> None:
+        for phrase, intent in (
+            ('我那个羽绒服还在蹲吗？', 'get_watch_status'),
+            ('今天查了多少次？', 'get_watch_stats'),
+            ('目前最像的是多少？', 'get_watch_stats'),
+            ('花了多少 token？', 'get_watch_stats'),
+        ):
+            plugin = _FakeLunaPlugin({'domain': 'product_radar', 'intent': intent, 'watchType': 'similarity'})
+            message = _normalized_message(phrase, user_id='user-a')
+            context_plugin = SimpleNamespace()
+            set_active_watch(context_plugin, _normalized_message('创建', user_id='user-a'), {
+                'id': 'watch-1', 'source': 'bunjang', 'type': 'similarity', 'enabled': True, 'target': {}, 'rules': {},
+            })
+            context = load_context(context_plugin, message)
+            with patch.object(intent_planner, 'provider_message', _FakeProviderMessage):
+                command = await resolve_product_radar_command(plugin, message=message, context=context)
+            self.assertEqual(command['intent'], intent)
+            self.assertEqual(command['entities']['watchId'], 'watch-1')
+            self.assertEqual(command['action'], 'status' if intent == 'get_watch_status' else 'stats')
+            self.assertEqual(command['_usage']['inferenceCount'], 1)
+
+    def test_cancel_without_context_is_not_acknowledged_as_pending_proposal(self) -> None:
+        command = intent_planner._legacy_fast_path(_normalized_message('取消监控'), None)
+        self.assertEqual(command['intent'], 'delete_watch')
+        self.assertFalse(command['needsClarification'])
+        self.assertIsNone(command.get('control'))
+
+
 
 class _FakeProviderMessage:
     class Message:

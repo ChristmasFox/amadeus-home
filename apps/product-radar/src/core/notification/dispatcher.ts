@@ -2,6 +2,7 @@ import type { RadarEvent } from '../events/events.js';
 import { formatNotification } from './formatter.js';
 import type { NotificationChannel, NotificationMessage, NotificationSourceLabelResolver } from './ports.js';
 import type { SqliteRadarStore } from '../../storage/sqlite.js';
+import type { Watch } from '../watch/model.js';
 
 export class NotificationDispatcher {
   private readonly channelsById: Map<string, NotificationChannel>;
@@ -35,6 +36,26 @@ export class NotificationDispatcher {
     await this.deliverPending();
   }
 
+  enqueueHeartbeat(watch: Watch, periodKey: string, text: string): number {
+    const event: RadarEvent = {
+      id: `heartbeat:${watch.id}:${periodKey}`,
+      eventKey: `heartbeat:${watch.id}:${periodKey}`,
+      watchId: watch.id,
+      source: watch.source,
+      type: 'ProductUpdatedEvent',
+      occurredAt: this.now(),
+      before: null,
+      after: null,
+      payload: { heartbeat: true, periodKey },
+    };
+    let inserted = 0;
+    for (const channel of this.channelsById.values()) {
+      const message: NotificationMessage = { event, text, recipient: channel.recipient };
+      if (this.store.enqueueHeartbeat(watch.id, periodKey, channel, message, this.now())) inserted += 1;
+    }
+    return inserted;
+  }
+
   async deliverPending(): Promise<void> {
     for (const row of this.store.listPendingNotifications()) {
       const channel = this.channelsById.get(row.channelId);
@@ -44,6 +65,16 @@ export class NotificationDispatcher {
         this.store.markNotificationSent(row.id, this.now());
       } catch (error) {
         this.store.markNotificationFailed(row.id, error instanceof Error ? error.message : String(error));
+      }
+    }
+    for (const row of this.store.listPendingHeartbeats()) {
+      const channel = this.channelsById.get(row.channelId);
+      if (!channel) continue;
+      try {
+        await channel.send(row.message);
+        this.store.markHeartbeatSent(row.id, this.now());
+      } catch (error) {
+        this.store.markHeartbeatFailed(row.id, error instanceof Error ? error.message : String(error));
       }
     }
   }

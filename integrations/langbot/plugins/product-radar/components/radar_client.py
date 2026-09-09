@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
 
@@ -72,3 +73,25 @@ async def patch_watch(plugin: Any, watch_id: str, payload: dict[str, Any]) -> di
 
 async def delete_watch(plugin: Any, watch_id: str) -> dict[str, Any]:
     return await asyncio.to_thread(_request, plugin, 'DELETE', f'/api/watches/{watch_id}')
+
+
+async def get_watch_observability(plugin: Any, watch_id: str, view: str = 'status') -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'GET', f'/api/watches/{watch_id}/{view}')
+
+
+async def record_usage(plugin: Any, payload: dict[str, Any]) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'POST', '/api/usage', payload)
+
+
+async def get_watch_context(plugin: Any, context_key: str) -> str | None:
+    result = await asyncio.to_thread(_request, plugin, 'GET', f'/api/watch-contexts?contextKey={urllib.parse.quote(context_key, safe="")}')
+    value = result.get('watchId')
+    return str(value) if value else None
+
+
+async def bind_watch_context(plugin: Any, context_key: str, watch_id: str) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'POST', '/api/watch-contexts', {'contextKey': context_key, 'watchId': watch_id})
+
+
+async def clear_watch_context(plugin: Any, context_key: str) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'DELETE', f'/api/watch-contexts?contextKey={urllib.parse.quote(context_key, safe="")}')

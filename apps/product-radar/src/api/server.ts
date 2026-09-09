@@ -94,6 +94,57 @@ export function createRadarServer(options: RadarServerOptions): Server {
         sendJson(response, 200, { feeds: options.service.listSearchFeeds() });
         return;
       }
+      if (method === 'GET' && path === '/api/watch-contexts') {
+        const contextKey = url.searchParams.get('contextKey')?.trim() ?? '';
+        if (!contextKey) throw new RadarError('contextKey is required', 'INVALID_REQUEST', 400);
+        sendJson(response, 200, { watchId: options.store.getWatchContext(contextKey) ?? null });
+        return;
+      }
+      if (method === 'POST' && path === '/api/watch-contexts') {
+        const body = await readBody(request, maxBodyBytes);
+        const value = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+        const contextKey = typeof value.contextKey === 'string' ? value.contextKey.trim() : '';
+        const watchId = typeof value.watchId === 'string' ? value.watchId.trim() : '';
+        if (!contextKey || !watchId) throw new RadarError('contextKey and watchId are required', 'INVALID_REQUEST', 400);
+        if (!options.service.getWatch(watchId)) throw new RadarError('watch not found', 'NOT_FOUND', 404);
+        options.store.setWatchContext(contextKey, watchId, new Date().toISOString());
+        sendJson(response, 200, { contextKey, watchId });
+        return;
+      }
+      if (method === 'DELETE' && path === '/api/watch-contexts') {
+        const contextKey = url.searchParams.get('contextKey')?.trim() ?? '';
+        if (!contextKey) throw new RadarError('contextKey is required', 'INVALID_REQUEST', 400);
+        options.store.clearWatchContext(contextKey);
+        sendJson(response, 200, { cleared: true });
+        return;
+      }
+      if (method === 'POST' && path === '/api/usage') {
+        const body = await readBody(request, maxBodyBytes);
+        const value = body && typeof body === 'object' && !Array.isArray(body) ? body as Record<string, unknown> : {};
+        const watchId = typeof value.watchId === 'string' ? value.watchId.trim() : '';
+        const provider = typeof value.provider === 'string' ? value.provider.trim() : '';
+        const model = typeof value.model === 'string' ? value.model.trim() : '';
+        const operation = typeof value.operation === 'string' ? value.operation.trim() : '';
+        if (!watchId || !provider || !model || !operation) throw new RadarError('usage requires watchId, provider, model, and operation', 'INVALID_REQUEST', 400);
+        if (!options.service.getWatch(watchId)) throw new RadarError('watch not found', 'NOT_FOUND', 404);
+        const nonNegative = (name: string, fallback = 0): number => {
+          const candidate = value[name];
+          if (candidate === undefined) return fallback;
+          if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate < 0) throw new RadarError(`${name} must be a non-negative integer`, 'INVALID_REQUEST', 400);
+          return candidate;
+        };
+        const latencyMs = value.latencyMs === undefined ? undefined : nonNegative('latencyMs');
+        const entry = options.store.recordUsage({
+          ...(typeof value.id === 'string' && value.id.trim() ? { id: value.id.trim() } : {}),
+          watchId, provider, model, operation,
+          inputTokens: nonNegative('inputTokens'), outputTokens: nonNegative('outputTokens'), totalTokens: nonNegative('totalTokens'),
+          timestamp: typeof value.timestamp === 'string' && value.timestamp.trim() ? value.timestamp : new Date().toISOString(),
+          inferenceCount: nonNegative('inferenceCount'), imagesProcessed: nonNegative('imagesProcessed'),
+          ...(latencyMs === undefined ? {} : { latencyMs }),
+        });
+        sendJson(response, 201, entry);
+        return;
+      }
       if (method === 'POST' && path === '/api/watches/preview') {
         const body = await readBody(request, maxBodyBytes);
         sendJson(response, 200, await options.service.previewWatch(body));
@@ -104,7 +155,7 @@ export function createRadarServer(options: RadarServerOptions): Server {
         sendJson(response, 201, await options.service.createWatch(body));
         return;
       }
-      const watchMatch = /^\/api\/watches\/([^/]+)(?:\/(run|pause|resume))?$/u.exec(path);
+      const watchMatch = /^\/api\/watches\/([^/]+)(?:\/(run|pause|resume|status|stats|usage))?$/u.exec(path);
       if (watchMatch) {
         const watchId = decodeURIComponent(watchMatch[1] ?? '');
         const action = watchMatch[2];
@@ -112,6 +163,15 @@ export function createRadarServer(options: RadarServerOptions): Server {
           const watch = options.service.getWatch(watchId);
           if (!watch) throw new RadarError('watch not found', 'NOT_FOUND', 404);
           sendJson(response, 200, watchResponse(options.service, watch));
+          return;
+        }
+        if (method === 'GET' && (action === 'status' || action === 'stats')) {
+          sendJson(response, 200, options.service.getWatchObservability(watchId));
+          return;
+        }
+        if (method === 'GET' && action === 'usage') {
+          if (!options.service.getWatch(watchId)) throw new RadarError('watch not found', 'NOT_FOUND', 404);
+          sendJson(response, 200, { summary: options.store.summarizeUsage(watchId), entries: options.store.listUsage(watchId) });
           return;
         }
         if (method === 'PATCH' && !action) {

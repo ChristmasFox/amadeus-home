@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,7 +30,7 @@ try:
 except ImportError:  # pragma: no cover - outside LangBot
     provider_message = None
 
-from components.vision import _content_text, _image_block, _model_uuid, _parse_json
+from components.vision import _content_text, _image_block, _model_uuid, _parse_json, usage_from_output
 
 
 LOGGER = logging.getLogger('product-radar.intent')
@@ -39,6 +40,8 @@ WATCH_INTENTS = frozenset({
     'create_watch',
     'list_watches',
     'get_watch',
+    'get_watch_status',
+    'get_watch_stats',
     'update_watch',
     'pause_watch',
     'resume_watch',
@@ -88,6 +91,8 @@ LEGACY_ACTIONS = {
     'create_watch': 'watch',
     'list_watches': 'list',
     'get_watch': 'get',
+    'get_watch_status': 'status',
+    'get_watch_stats': 'stats',
     'update_watch': 'update',
     'pause_watch': 'pause',
     'resume_watch': 'resume',
@@ -234,12 +239,7 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
             return _command('create_watch', control='cancel')
         if current and current.get('id'):
             return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.9)
-        return _command(
-            'delete_watch',
-            confidence=0.7,
-            needs_clarification=True,
-            clarification_question='目前没有可直接取消的当前监控，请指定要删除的商品、卖家或 Watch ID。',
-        )
+        return _command('delete_watch', confidence=0.7, clarification_question='请指定要取消的商品链接、卖家链接或 Watch ID。')
     if normalized in {'/watches', '/product-radar'}:
         return _command('list_watches', confidence=1.0)
 
@@ -250,19 +250,14 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
         '我都在盯哪些东西', '我都蹲了什么', '当前监控', '查看监控',
     }:
         return _command('list_watches', confidence=0.85)
-    if normalized == '刚才那件不要了':
+    if normalized in {'刚才那件不要了', '不要盯着了', '不要再盯了', '不想盯了', '不要了', '不用了', '不需要了'}:
         if current and current.get('id'):
             return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
-        return _command('delete_watch', confidence=0.7, needs_clarification=True, clarification_question='请先在本次对话中创建或指定要删除的监控。')
+        return _command('delete_watch', confidence=0.7, clarification_question='请指定要取消的商品链接、卖家链接或 Watch ID。')
     if current and normalized in {'暂停它', '暂停这个', '先停一下', '先暂停'}:
         return _command('pause_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
     if current and normalized in {'恢复它', '继续监控', '继续盯', '重新开始'}:
         return _command('resume_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
-    if current and normalized in {
-        '不要了', '不用了', '不需要了',
-        '不要盯着了', '不要再盯了', '不想盯了',
-    }:
-        return _command('delete_watch', watch_type=current.get('type'), entities={'watchId': current.get('id')}, confidence=0.8)
     return None
 
 
@@ -410,6 +405,11 @@ def _normalize_model_result(
         'create': 'create_watch',
         'list': 'list_watches',
         'get': 'get_watch',
+        'status': 'get_watch_status',
+        'health': 'get_watch_status',
+        'stats': 'get_watch_stats',
+        'usage': 'get_watch_stats',
+        'history': 'get_watch_stats',
         'update': 'update_watch',
         'pause': 'pause_watch',
         'resume': 'resume_watch',
@@ -472,7 +472,7 @@ def _normalize_model_result(
         entities['referenceImage'] = attachments[0]
 
     current = active_watch(context)
-    if current and intent in {'get_watch', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
+    if current and intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
         if not entities.get('watchId') and current.get('id'):
             entities['watchId'] = str(current['id'])
         if not _string(entities.get('source')) and current.get('source'):
@@ -524,8 +524,8 @@ def _normalize_model_result(
         elif watch_type == 'product' and not entities.get('productUrl'):
             needs_clarification = True
             clarification_question = clarification_question or '请提供要留意的商品链接。'
-    elif intent in {'get_watch', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
-        if not entities.get('watchId') and not entities.get('sellerUrl') and not entities.get('productUrl'):
+    elif intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
+        if intent != 'delete_watch' and not entities.get('watchId') and not entities.get('sellerUrl') and not entities.get('productUrl'):
             needs_clarification = True
             clarification_question = clarification_question or '请说明要操作哪一个监控，或先在本次对话中创建一个。'
     if intent == 'update_watch' and not constraints and not any(
@@ -555,7 +555,7 @@ def _normalize_model_result(
         evidence=evidence,
     )
     result['sourceText'] = text.strip()
-    if current and intent in {'get_watch', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
+    if current and intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
         result['resolvedFromContext'] = bool(not raw_entities.get('watchId') and not raw.get('watchId'))
     return result
 
@@ -568,9 +568,9 @@ def _intent_prompt() -> str:
 “这是什么衣服？”、“帮我翻译图片里的韩文”、“这张图好看吗？”属于 none；不要创建 Watch。
 语义不要求出现“监控”“蹲”“相似”等固定词。比如带参考图时，“帮我蹲这件”“这件韩国有人卖了告诉我”“Bunjang 有类似的叫我”“帮我长期留意一下”“韩国那边什么时候出了通知我”“这个有了喊我”“帮我看看以后有没有人上这个”都表示 create_watch + similarity。
 
-intent 只能是：create_watch、list_watches、get_watch、update_watch、pause_watch、resume_watch、delete_watch；无关消息输出 domain=none、intent=none。
+intent 只能是：create_watch、list_watches、get_watch、get_watch_status、get_watch_stats、update_watch、pause_watch、resume_watch、delete_watch；无关消息输出 domain=none、intent=none。
 watchType 只能是 similarity、seller、product 或 null。seller/product 通常需要从 sellerUrl/productUrl 判断；带参考图并请求持续发现相似商品时使用 similarity。
-“暂停它”是 pause_watch；“恢复/继续盯它”是 resume_watch；“不要了/不需要了”是 delete_watch；“价格改成30万”“每小时看一次”“刚才那个其实是 VISVIM”是 update_watch。列表是 list_watches，要求查看某一个监控详情是 get_watch。
+“暂停它”是 pause_watch；“恢复/继续盯它”是 resume_watch；“不要了/不需要了”是 delete_watch；“价格改成30万”“每小时看一次”“刚才那个其实是 VISVIM”是 update_watch。列表是 list_watches，要求查看某一个监控详情是 get_watch；“还在蹲吗”“监控正常吗”“为什么一直没消息”是 get_watch_status；“今天查了多少次”“目前最像的是多少”“花了多少 token”是 get_watch_stats。
 
 entities 至少按以下键输出实际识别到的值：source、sellerUrl、productUrl、referenceImage、brand、modelName、season、category、keywords、excludeKeywords、explicitSearchTerms、watchId。
 constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice、currency、intervalSeconds、similarityThreshold。明确的“改成”价格可将 minPrice 与 maxPrice 都设为同一数值；“30万”应输出 300000。频率统一输出秒数。
@@ -581,7 +581,7 @@ constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice�
 如果 context.pendingProposal=true，用户说“好的”“就这个”“可以”可输出 control=confirm；“不用了”“取消这个”可输出 control=cancel，并把 intent 设为 create_watch。control 只用于待确认 proposal，不要把无关的“取消订阅/取消别的事情”强行改成 Product Radar。
 
 输出形状：
-{"domain":"product_radar|none","intent":"create_watch|list_watches|get_watch|update_watch|pause_watch|resume_watch|delete_watch|none","watchType":"similarity|seller|product|null","entities":{},"constraints":{},"targetProfile":null,"control":"confirm|cancel|null","confidence":0.0,"needsClarification":false,"clarificationQuestion":null,"evidence":[]}
+{"domain":"product_radar|none","intent":"create_watch|list_watches|get_watch|get_watch_status|get_watch_stats|update_watch|pause_watch|resume_watch|delete_watch|none","watchType":"similarity|seller|product|null","entities":{},"constraints":{},"targetProfile":null,"control":"confirm|cancel|null","confidence":0.0,"needsClarification":false,"clarificationQuestion":null,"evidence":[]}
 '''
 
 
@@ -643,9 +643,19 @@ async def resolve_product_radar_command(
             provider_message.Message(role='system', content='只输出合法 JSON。'),
             provider_message.Message(role='user', content=content),
         ]
+        started = time.monotonic()
         output = await plugin.invoke_llm(model_uuid, messages, funcs=[])
         parsed = _parse_json(_content_text(output))
-        return _normalize_model_result(parsed, message, context)
+        command = _normalize_model_result(parsed, message, context)
+        if command is not None:
+            command['_usage'] = usage_from_output(
+                output,
+                model=model_uuid,
+                operation='intent_target_profile' if images else 'intent',
+                images_processed=len(images),
+                latency_ms=int((time.monotonic() - started) * 1000),
+            )
+        return command
     except Exception as exc:  # pragma: no cover - provider integration behavior
         LOGGER.warning('product radar intent extraction failed: %s', type(exc).__name__)
         return None

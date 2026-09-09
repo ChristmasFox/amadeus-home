@@ -114,6 +114,7 @@ def record_command(plugin: Any, message: NormalizedBotMessage, command: dict[str
                 entities.pop(key, None)
     safe_command['entities'] = entities
     safe_command.pop('targetProfile', None)
+    safe_command.pop('_usage', None)
     current['lastCommand'] = safe_command
     return save_context(plugin, message, current)
 

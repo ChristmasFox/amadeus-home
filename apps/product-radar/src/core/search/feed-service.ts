@@ -10,6 +10,7 @@ import type { SqliteRadarStore } from '../../storage/sqlite.js';
 import type { ListingSourceAdapter, SourceAdapterRegistry, ValidatedTarget } from '../../sources/registry.js';
 import { normalizeSearchQuery } from '../../sources/bunjang/search-planner.js';
 import type { SearchFeed, SearchPage, SearchPlan, SearchQuery, WatchFeedSubscription } from './model.js';
+import type { WatchRuntimeRunMetrics } from '../observability/model.js';
 import { backoffIntervalSeconds, DEFAULT_SIMILARITY_JITTER_SECONDS, recoveryIntervalSeconds, retryAfterSeconds, scheduledIntervalSeconds } from './scheduling.js';
 
 export interface SearchFeedCoordinatorOptions {
@@ -148,26 +149,42 @@ export class SearchFeedCoordinator {
     if (Number.isFinite(backoffUntil) && Number.isFinite(now) && backoffUntil > now) {
       return { feedId, status: 'degraded', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [], potentialCandidateGap: feed.potentialCandidateGap };
     }
-    const poll = this.options.store.beginFeedRun(feedId, triggerKey, this.now());
+    const startedAt = this.now();
+    const poll = this.options.store.beginFeedRun(feedId, triggerKey, startedAt);
     if (!poll) return { feedId, status: 'duplicate', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [] };
+    const runFeed = this.options.store.getSearchFeed(feedId) ?? feed;
+    const runtimeRuns = new Map<string, string>();
+    for (const subscription of this.options.store.listWatchFeedSubscriptions({ feedId })) {
+      const watch = this.options.store.getWatch(subscription.watchId);
+      if (watch?.enabled && watch.type === 'similarity') {
+        runtimeRuns.set(watch.id, this.options.store.beginWatchRuntimeRun(watch.id, 'feed', triggerKey, startedAt, feedId));
+      }
+    }
     try {
-      const adapter = this.options.sources.require(feed.source);
-      const validated = await adapter.validateTarget('similarity', { searchQuery: feed.query, searchUrl: feed.target });
-      const pageResult = await this.fetchIncremental(adapter, validated, feed);
+      const adapter = this.options.sources.require(runFeed.source);
+      const validated = await adapter.validateTarget('similarity', { searchQuery: runFeed.query, searchUrl: runFeed.target });
+      const pageResult = await this.fetchIncremental(adapter, validated, runFeed);
       if (!pageResult.watermarkReached) {
-        const degraded = this.markFeedDegraded(feed, 'WATERMARK_NOT_REACHED', true);
+        const degraded = this.markFeedDegraded(runFeed, 'WATERMARK_NOT_REACHED', true);
         this.options.store.finishFeedRun(poll.id, 'failed', this.now(), { error: 'WATERMARK_NOT_REACHED', listingsCount: pageResult.fetchedListings, changesCount: pageResult.newListings });
+        for (const [watchId, runtimeId] of runtimeRuns) this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'failed', this.now(), { candidatesProcessed: pageResult.fetchedListings }, 'WATERMARK_NOT_REACHED', 'DEGRADED');
         return { ...pageResult, feedId, status: 'degraded', triggerKey, potentialCandidateGap: degraded.potentialCandidateGap };
       }
-      const updated = this.markFeedSuccess(feed, pageResult.watermark, pageResult.potentialCandidateGap);
+      const updated = this.markFeedSuccess(runFeed, pageResult.watermark, pageResult.potentialCandidateGap);
       if (updated.sensorWatchId) await this.updateSensorInterval(updated).catch(() => undefined);
-      const routed = options.route === false ? { matchedListings: 0, eventIds: [] as string[] } : await this.routeFeedEvents(updated);
+      const routed = options.route === false ? { matchedListings: 0, eventIds: [] as string[], perWatch: new Map<string, WatchRuntimeRunMetrics>() } : await this.routeFeedEvents(updated);
       this.options.store.finishFeedRun(poll.id, 'succeeded', this.now(), { listingsCount: pageResult.fetchedListings, changesCount: pageResult.newListings });
+      for (const [watchId, runtimeId] of runtimeRuns) {
+        const metrics = routed.perWatch.get(watchId) ?? {};
+        this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'succeeded', this.now(), metrics);
+      }
       await this.options.notifications.deliverPending();
       return { ...pageResult, ...routed, feedId, status: 'succeeded', triggerKey };
     } catch (error) {
-      const degraded = this.markFeedFailure(feed, error);
-      this.options.store.finishFeedRun(poll.id, 'failed', this.now(), { error: error instanceof Error ? error.message : String(error) });
+      const message = error instanceof Error ? error.message : String(error);
+      const degraded = this.markFeedFailure(runFeed, error);
+      this.options.store.finishFeedRun(poll.id, 'failed', this.now(), { error: message });
+      for (const [watchId, runtimeId] of runtimeRuns) this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'failed', this.now(), {}, message, 'DEGRADED');
       return { feedId, status: 'degraded', triggerKey, pages: 0, fetchedListings: 0, newListings: 0, matchedListings: 0, eventIds: [], potentialCandidateGap: degraded.potentialCandidateGap };
     }
   }
@@ -262,7 +279,8 @@ export class SearchFeedCoordinator {
       id: feedIdFor(watch.source, canonicalKey), source: watch.source, target: url, query,
       canonicalKey, intervalSeconds: watch.intervalSeconds, jitterSeconds,
       ...(existingSensorId === undefined ? {} : { sensorWatchId: existingSensorId }),
-      state: 'ACTIVE', failureCount: 0, potentialCandidateGap: false, createdAt: now, updatedAt: now,
+      state: 'ACTIVE', runCount: 0, successCount: 0, currentBackoff: 0,
+      failureCount: 0, potentialCandidateGap: false, createdAt: now, updatedAt: now,
     };
     if (!feed.sensorWatchId) {
       try {
@@ -373,10 +391,10 @@ export class SearchFeedCoordinator {
 
   private markFeedSuccess(feed: SearchFeed, watermark: string | undefined, potentialCandidateGap: boolean): SearchFeed {
     const failureCount = Math.max(0, feed.failureCount - 1);
-    const { degradedReason: _degradedReason, backoffUntil: _backoffUntil, ...cleanFeed } = feed;
+    const { degradedReason: _degradedReason, backoffUntil: _backoffUntil, lastError: _lastError, ...cleanFeed } = feed;
     const updated: SearchFeed = {
       ...cleanFeed, state: feed.degradedReason === 'SENSOR_UNAVAILABLE' ? 'DEGRADED' : 'ACTIVE',
-      ...(watermark === undefined ? {} : { watermark }), lastSuccessfulRunAt: this.now(), failureCount,
+      ...(watermark === undefined ? {} : { watermark }), lastSuccessfulRunAt: this.now(), lastSuccessAt: this.now(), currentBackoff: 0, failureCount,
       ...(feed.degradedReason === 'SENSOR_UNAVAILABLE' ? { degradedReason: feed.degradedReason } : {}),
       potentialCandidateGap, updatedAt: this.now(),
     };
@@ -385,7 +403,7 @@ export class SearchFeedCoordinator {
   }
 
   private markFeedDegraded(feed: SearchFeed, reason: string, potentialCandidateGap: boolean): SearchFeed {
-    const updated: SearchFeed = { ...feed, state: 'DEGRADED', degradedReason: reason, potentialCandidateGap, updatedAt: this.now() };
+    const updated: SearchFeed = { ...feed, state: 'DEGRADED', degradedReason: reason, lastError: reason, currentBackoff: 0, potentialCandidateGap, updatedAt: this.now() };
     this.options.store.updateSearchFeed(updated);
     return updated;
   }
@@ -399,7 +417,7 @@ export class SearchFeedCoordinator {
     const baseTime = Number.isFinite(now) ? now : Date.now();
     const backoffUntil = new Date(baseTime + interval * 1000).toISOString();
     const reason = status === 429 ? 'RATE_LIMITED' : error instanceof SensorUnavailableError ? 'SENSOR_UNAVAILABLE' : 'FETCH_FAILED';
-    const updated: SearchFeed = { ...feed, state: 'DEGRADED', failureCount, degradedReason: reason, backoffUntil, updatedAt: this.now() };
+    const updated: SearchFeed = { ...feed, state: 'DEGRADED', failureCount, degradedReason: reason, lastError: error instanceof Error ? error.message : String(error), currentBackoff: interval, backoffUntil, updatedAt: this.now() };
     this.options.store.updateSearchFeed(updated);
     if (updated.sensorWatchId) void this.options.sensor.updateWatch(updated.sensorWatchId, { intervalSeconds: interval }).catch(() => undefined);
     return updated;
@@ -411,51 +429,63 @@ export class SearchFeedCoordinator {
     await this.options.sensor.updateWatch(feed.sensorWatchId, { intervalSeconds: interval });
   }
 
-  private async routeFeedEvents(feed: SearchFeed): Promise<{ matchedListings: number; eventIds: string[] }> {
+  private async routeFeedEvents(feed: SearchFeed): Promise<{ matchedListings: number; eventIds: string[]; perWatch: Map<string, WatchRuntimeRunMetrics> }> {
     let matchedListings = 0;
     const eventIds: string[] = [];
+    const perWatch = new Map<string, WatchRuntimeRunMetrics>();
     const subscriptions = this.options.store.listWatchFeedSubscriptions({ feedId: feed.id });
     for (const subscription of subscriptions) {
       const watch = this.options.store.getWatch(subscription.watchId);
       if (!watch || !watch.enabled || watch.type !== 'similarity') continue;
       const events = this.options.store.listFeedListingEventsAfter(feed.id, subscription.startAfterEventId);
       let lastEventId = subscription.startAfterEventId;
+      const metrics: WatchRuntimeRunMetrics = {};
       for (const item of events) {
         lastEventId = item.event.eventId;
         const result = await this.processListing(watch, item.listing);
         matchedListings += result.matched ? 1 : 0;
         if (result.eventId) eventIds.push(result.eventId);
+        metrics.newListings = (metrics.newListings ?? 0) + (result.metrics.newListings ?? 0);
+        metrics.candidatesProcessed = (metrics.candidatesProcessed ?? 0) + (result.metrics.candidatesProcessed ?? 0);
+        metrics.imageComparisons = (metrics.imageComparisons ?? 0) + (result.metrics.imageComparisons ?? 0);
+        metrics.aboveThreshold = (metrics.aboveThreshold ?? 0) + (result.metrics.aboveThreshold ?? 0);
+        if (result.metrics.bestScore !== undefined && (metrics.bestScore === undefined || result.metrics.bestScore > metrics.bestScore)) metrics.bestScore = result.metrics.bestScore;
       }
       this.options.store.upsertWatchFeedSubscription({ ...subscription, ...(lastEventId === undefined ? {} : { startAfterEventId: lastEventId }) });
+      perWatch.set(watch.id, metrics);
     }
-    return { matchedListings, eventIds };
+    return { matchedListings, eventIds, perWatch };
   }
 
-  private async processListing(watch: Watch, listing: Listing): Promise<{ matched: boolean; eventId?: string }> {
+  private async processListing(watch: Watch, listing: Listing): Promise<{ matched: boolean; eventId?: string; metrics: WatchRuntimeRunMetrics }> {
     if (!isSimilarityRules(watch.rules)) throw new RadarError('similarity watch has invalid rules', 'INVALID_STATE', 500);
     const isNewForWatch = this.options.store.recordSeenListing(watch.id, listing, this.now(), false, false);
-    if (!isNewForWatch) return { matched: false };
+    if (!isNewForWatch) return { matched: false, metrics: {} };
+    const metrics: WatchRuntimeRunMetrics = { newListings: 1, candidatesProcessed: 1 };
     const referenceId = typeof watch.target.referenceImageId === 'string' ? watch.target.referenceImageId : '';
-    if (!this.options.imageMatcher || !referenceId) return { matched: false };
+    if (!this.options.imageMatcher || !referenceId) return { matched: false, metrics };
     let result;
     try {
       result = await this.options.imageMatcher.match(referenceId, listing.imageUrls, { source: listing.source, externalId: listing.externalId, threshold: watch.rules.similarityThreshold });
     } catch {
-      return { matched: false };
+      return { matched: false, metrics };
     }
     const score = result.matchScore ?? result.score;
+    metrics.imageComparisons = result.comparedImages;
+    metrics.bestScore = score;
     const matched = result.comparedImages > 0 && score >= watch.rules.similarityThreshold;
+    metrics.aboveThreshold = score >= watch.rules.similarityThreshold ? 1 : 0;
     this.options.store.recordSimilarityMatch(watch.id, listing, score, result.bestImageUrl, matched, this.now());
-    if (!matched) return { matched: false };
+    if (!matched) return { matched: false, metrics };
     this.options.store.markSeenMatched(watch.id, listing);
     const eventKey = `${watch.id}:SimilarListingMatchedEvent:${listing.source}:${listing.externalId}`;
     const event: RadarEvent = {
       id: eventKey, eventKey, watchId: watch.id, source: listing.source, type: 'SimilarListingMatchedEvent', occurredAt: this.now(), before: null, after: listing,
       payload: { similarity: score, threshold: watch.rules.similarityThreshold, provider: result.provider ?? 'sharp', modelVersion: result.modelVersion ?? 'unknown', ...(result.bestImageUrl === undefined ? {} : { bestImageUrl: result.bestImageUrl }) },
     };
-    if (!this.options.store.insertEvent(event)) return { matched: true };
+    if (!this.options.store.insertEvent(event)) return { matched: true, metrics };
     await this.options.notifications.dispatch(event);
-    return { matched: true, eventId: event.id };
+    return { matched: true, eventId: event.id, metrics };
   }
 
   private async cleanupIfUnused(feedId: string): Promise<void> {
