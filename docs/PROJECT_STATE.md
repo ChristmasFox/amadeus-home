@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar stalled similarity feed recovery（DEPLOYED / VERIFIED：2026-09-09）
+
+线上 Similarity Watch 之所以两天没有有效检查，不是正常的“0 匹配”：两个 Bunjang 高结果量查询在无 watermark 的首次扫描触及 500 条/10 页安全上限，旧实现因此永远拒绝建立初始 watermark，产生 `WATERMARK_NOT_REACHED`。与此同时，changedetection 虽按时抓取动态 Bunjang 页面，却提取不到可比较的文本，因而未触发 webhook；Product Radar 当时没有独立的 due-feed scheduler。
+
+- 首次截断扫描现在将最新 listing 安全写为静默 baseline，并将订阅游标推进到该 baseline 后，保证不会为存量历史商品发送通知；后续轮询只处理 watermark 之前的新商品。
+- Product Radar runtime 每 30 秒检查一次 due Feed，实际执行仍服从 Feed 的 interval、deterministic jitter 与 backoff。changedetection webhook 继续保留，但不再是 Bunjang SearchFeed 的唯一执行条件。
+- baseline 和正常执行均写入 Watch runtime 计数；状态卡的 Watch 总计与 per-Feed 总计因此可相互验证。
+- 47/47 tests、typecheck、build、secret scan 和 diff check 均通过。commit `58a5305` 已 push；image `local/product-radar:git-58a5305f94e6`（digest `sha256:3b51f6efb4ade8a4b359229ebf06af8816bcd0936cb7d554f2203e4eab55061f`）已在 CasaOS 激活，回滚备份为 `.codex-backup.20260909-163000` / `.env.codex-backup.20260909-163000`。
+- 部署启动 sweep 已对现有 Watch 成功建立两个 baseline：Watch runtime `2 / 2 / 0`（检查/成功/失败），两个 Feed 均为 ACTIVE 且各有 watermark 与成功运行。Product Radar healthy、`/health=ok`、doctor 0 failure / 0 warning；没有手工创建、删除或修改 Watch，也没有手工通知。
+
 ## Product Radar rich status presentation（DEPLOYED / VERIFIED：2026-09-09）
 
 LangBot Product Radar 的单条状态和多条汇总现在复用同一份完整可观测性展示，避免“状态查询”比“统计查询”遗漏关键数据：

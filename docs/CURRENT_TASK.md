@@ -1,5 +1,15 @@
 # Current Task
 
+## Product Radar stalled similarity feed recovery（DEPLOYED / VERIFIED：2026-09-09）
+
+- [x] 定位线上根因：Bunjang 高结果量搜索在首次扫描触及安全页数/条数上限时被永久标记为 `WATERMARK_NOT_REACHED`；而 changedetection 对动态搜索页提取不到文本，未发 webhook，导致两天没有后续 Product Radar 执行。
+- [x] 首次有上限的扫描现在安全建立静默 baseline：保存最新 listing watermark、绝不把历史候选当作新上架或发通知；后续扫描以该 watermark 增量处理。
+- [x] Product Radar 新增进程内 similarity Feed scheduler（默认每 30 秒评估 due Feed，实际按每条 Feed 的 interval/jitter/backoff 执行），因此 Bunjang 轮询不再依赖 changedetection 是否检测到网页文本变化；保留 changedetection 作为兼容触发器。
+- [x] baseline 与后续 Feed 执行都会写入 Watch runtime stats；修复后 `feedRuns/successfulRuns/failedRuns` 不会再与 Feed 明细脱节。
+- [x] 本地验证：Product Radar 47/47、typecheck、build、`pnpm workflow:plan`、`pnpm check:secrets`、`git diff --check` 通过。
+- [x] source commit `58a5305` 已 push；immutable image `local/product-radar:git-58a5305f94e6` 已在 CasaOS 激活，image digest `sha256:3b51f6efb4ade8a4b359229ebf06af8816bcd0936cb7d554f2203e4eab55061f`，回滚备份为 `/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260909-163000` 与 `/var/lib/casaos/apps/product-radar/.env.codex-backup.20260909-163000`。
+- [x] 线上验证：现有 Similarity Watch 已自动完成两个静默 baseline，`feedRuns=2 / successfulRuns=2 / failedRuns=0`；`패딩` 与 `다운 자켓` Feed 均为 `ACTIVE`、各有 watermark 和 1 次成功运行。Product Radar healthy/running、`/health=ok`，`scripts/doctor.sh` 为 0 failure / 0 warning；未创建、删除或修改 Watch，未发送手工通知。
+
 ## Product Radar rich status presentation（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 状态查询与统计查询统一输出完整监控详情：状态、类型、运行时长、上次/下次检查、检查成功/失败、新商品、候选处理、图片对比、达到阈值、最高相似度、通知与 Token 使用。
