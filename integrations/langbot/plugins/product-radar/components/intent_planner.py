@@ -70,6 +70,8 @@ CONSTRAINT_FIELDS = (
     'currency',
     'intervalSeconds',
     'similarityThreshold',
+    'heartbeatEnabled',
+    'heartbeatIntervalSeconds',
 )
 PROFILE_SCALAR_FIELDS = ('brand', 'modelName', 'season', 'category', 'subcategory', 'size', 'minPrice', 'maxPrice')
 PROFILE_ARRAY_FIELDS = (
@@ -145,13 +147,21 @@ def _number(value: Any, *, field: str) -> int | float | None:
     text = value.strip().replace(',', '').replace('，', '')
     if not text:
         return None
-    if field == 'intervalSeconds':
+    if field in {'intervalSeconds', 'heartbeatIntervalSeconds'}:
         interval_aliases = {
             '每小时': 3600,
             '每小時': 3600,
             '每半小时': 1800,
             '每半小時': 1800,
+            '每天': 86400,
+            '每日': 86400,
+            '每24小时': 86400,
+            '每24小時': 86400,
+            '每周': 604800,
+            '每週': 604800,
             'hourly': 3600,
+            'daily': 86400,
+            'weekly': 604800,
         }
         alias = interval_aliases.get(text.casefold())
         if alias is not None:
@@ -172,7 +182,7 @@ def _number(value: Any, *, field: str) -> int | float | None:
         try:
             parsed = float(text) * multiplier
         except ValueError:
-            if field == 'intervalSeconds':
+            if field in {'intervalSeconds', 'heartbeatIntervalSeconds'}:
                 hour = re.fullmatch(r'每?\s*(\d+(?:\.\d+)?)\s*(?:小时|小時|hour|hours|h)', text, re.IGNORECASE)
                 minute = re.fullmatch(r'每?\s*(\d+(?:\.\d+)?)\s*(?:分钟|分鐘|分|minute|minutes|min)', text, re.IGNORECASE)
                 if hour:
@@ -185,9 +195,21 @@ def _number(value: Any, *, field: str) -> int | float | None:
                 return None
     if field == 'similarityThreshold' and parsed > 1 and parsed <= 100:
         parsed /= 100
-    if field == 'intervalSeconds':
+    if field in {'intervalSeconds', 'heartbeatIntervalSeconds'}:
         return int(parsed) if math.isfinite(parsed) else None
     return int(parsed) if parsed.is_integer() else parsed
+
+
+def _boolean(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().casefold()
+        if normalized in {'true', '1', 'yes', 'on', 'enabled', '开启', '打开', '启用'}:
+            return True
+        if normalized in {'false', '0', 'no', 'off', 'disabled', '关闭', '关掉', '停用'}:
+            return False
+    return None
 
 
 def _currency(value: Any) -> str | None:
@@ -449,6 +471,8 @@ def _normalize_model_result(
         candidate = _raw_field(raw, raw_entities, raw_constraints, field)
         if field == 'currency':
             value = _currency(candidate)
+        elif field == 'heartbeatEnabled':
+            value = _boolean(candidate)
         else:
             value = _number(candidate, field=field)
         if value is not None:
@@ -560,6 +584,33 @@ def _normalize_model_result(
     return result
 
 
+def apply_active_watch_context(command: dict[str, Any], context: dict[str, Any] | None) -> dict[str, Any]:
+    """Attach a restored active Watch to an already parsed command.
+
+    This is a structured-result operation, not a second semantic parse.  It is
+    used after a plugin reload when the durable context lookup succeeds, so a
+    natural-language message does not spend a duplicate Luna call merely to
+    add the Watch ID that the context already owns.
+    """
+    current = active_watch(context)
+    intent = command.get('intent')
+    if not current or intent not in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
+        return command
+    result = dict(command)
+    entities = dict(command.get('entities')) if isinstance(command.get('entities'), dict) else {}
+    if not entities.get('watchId') and current.get('id'):
+        entities['watchId'] = str(current['id'])
+    if not entities.get('source') and current.get('source'):
+        entities['source'] = str(current['source'])
+    result['entities'] = entities
+    if not result.get('watchType') and current.get('type') in WATCH_TYPES:
+        result['watchType'] = current['type']
+    if intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'pause_watch', 'resume_watch', 'delete_watch'}:
+        result['needsClarification'] = False
+    result['resolvedFromContext'] = True
+    return result
+
+
 def _intent_prompt() -> str:
     return '''你是 GPT-5.6 Luna，负责 Product Radar 的自然语言语义解析。
 你只输出一个合法 JSON，不回答用户、不调用工具、不搜索商品、不判断最终图片相似度。
@@ -573,7 +624,7 @@ watchType 只能是 similarity、seller、product 或 null。seller/product 通�
 “暂停它”是 pause_watch；“恢复/继续盯它”是 resume_watch；“不要了/不需要了”是 delete_watch；“价格改成30万”“每小时看一次”“刚才那个其实是 VISVIM”是 update_watch。列表是 list_watches，要求查看某一个监控详情是 get_watch；“还在蹲吗”“监控正常吗”“为什么一直没消息”是 get_watch_status；“今天查了多少次”“目前最像的是多少”“花了多少 token”是 get_watch_stats。
 
 entities 至少按以下键输出实际识别到的值：source、sellerUrl、productUrl、referenceImage、brand、modelName、season、category、keywords、excludeKeywords、explicitSearchTerms、watchId。
-constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice、currency、intervalSeconds、similarityThreshold。明确的“改成”价格可将 minPrice 与 maxPrice 都设为同一数值；“30万”应输出 300000。频率统一输出秒数。
+constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice、currency、intervalSeconds、similarityThreshold；如果用户提到日报/心跳，使用 heartbeatEnabled、heartbeatIntervalSeconds。明确的“改成”价格可将 minPrice 与 maxPrice 都设为同一数值；“30万”应输出 300000。频率统一输出秒数。比如“不要发每日摘要”“关闭心跳”表示 heartbeatEnabled=false，“每周发一次摘要”表示 heartbeatIntervalSeconds=604800；不要把它误当成 SearchFeed intervalSeconds。
 
 如果有参考图，请在同一次响应中输出 targetProfile，包括你从图像得到的 brand、modelName、season、category、colors、materials、features、detectedText、confidence 等软信息；不要再要求另一次视觉调用。用户文字明确给出的字段、价格、包含/排除条件和搜索词优先于图片推断；把用户明确的搜索词放入 targetProfile.userSearchTerms，并可写入 provenance.source=user / hardConstraints。
 只能使用提供的 activeWatch 解析“它/刚才那个”等指代，不要猜测别人的监控。无法唯一确定时 needsClarification=true，并给出 clarificationQuestion；不要假装已经创建或修改。

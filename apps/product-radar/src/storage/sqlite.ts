@@ -436,6 +436,7 @@ export class SqliteRadarStore {
     this.ensureColumn('search_feeds', 'last_success_at', 'TEXT');
     this.ensureColumn('search_feeds', 'last_error', 'TEXT');
     this.ensureColumn('search_feeds', 'current_backoff', 'INTEGER NOT NULL DEFAULT 0');
+    this.db.exec('INSERT OR IGNORE INTO watch_runtime_stats (watch_id) SELECT id FROM watches');
   }
 
   private ensureColumn(table: string, column: string, definition: string): void {

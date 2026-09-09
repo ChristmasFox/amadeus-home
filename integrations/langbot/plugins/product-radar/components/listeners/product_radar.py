@@ -13,7 +13,7 @@ from components.context import (
     set_active_watch,
     set_pending,
 )
-from components.intent_planner import resolve_product_radar_command
+from components.intent_planner import apply_active_watch_context, resolve_product_radar_command
 from components.platform.bridge import platform_name, reply
 from components.platform.normalized import NormalizedBotMessage, normalize_event_message
 from components.radar_client import (
@@ -251,6 +251,23 @@ async def _restore_persisted_active_watch(plugin: Any, message: NormalizedBotMes
     return context
 
 
+async def _remember_watch(plugin: Any, message: NormalizedBotMessage, watch_id: str, watch: Any = None) -> dict[str, Any] | None:
+    value = watch
+    if not isinstance(value, dict):
+        try:
+            value = await get_watch(plugin, watch_id)
+        except Exception:
+            return None
+    if not isinstance(value, dict):
+        return None
+    set_active_watch(plugin, message, value)
+    try:
+        await bind_watch_context(plugin, context_key(message), watch_id)
+    except Exception:
+        pass
+    return value
+
+
 class ProductRadarListener(EventListener):
     async def initialize(self) -> None:
         await super().initialize()
@@ -295,9 +312,7 @@ class ProductRadarListener(EventListener):
             restored = await _restore_persisted_active_watch(self.plugin, message, context)
             if active_watch(restored) is not None:
                 context = restored
-                command = await resolve_product_radar_command(self.plugin, message=message, context=context)
-                if command is None or command.get('domain') != 'product_radar':
-                    return
+                command = apply_active_watch_context(command, context)
         record_command(self.plugin, message, command)
         control = command.get('control')
         if control in {'confirm', 'cancel'}:
@@ -435,11 +450,13 @@ class ProductRadarListener(EventListener):
         try:
             if intent == 'get_watch':
                 watch = await get_watch(self.plugin, watch_id)
+                await _remember_watch(self.plugin, message, watch_id, watch)
                 reply(event_context, self._format_watch_detail(watch))
                 await _record_command_usage(self.plugin, command, watch_id)
                 return
             if intent in {'get_watch_status', 'get_watch_stats'}:
                 observation = await get_watch_observability(self.plugin, watch_id, 'stats' if intent == 'get_watch_stats' else 'status')
+                await _remember_watch(self.plugin, message, watch_id, observation.get('watch') if isinstance(observation, dict) else None)
                 reply(event_context, _format_observability(observation, stats=intent == 'get_watch_stats'))
                 await _record_command_usage(self.plugin, command, watch_id)
                 return

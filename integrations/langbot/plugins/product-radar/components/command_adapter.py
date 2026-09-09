@@ -106,6 +106,9 @@ def watch_create_payload(command: dict[str, Any], message: NormalizedBotMessage)
         'rules': rules,
         'intervalSeconds': _interval(command, interval_default),
     }
+    for field in ('heartbeatEnabled', 'heartbeatIntervalSeconds'):
+        if field in constraints:
+            payload[field] = constraints[field]
     profile = _profile(command)
     if watch_type == 'similarity' and profile:
         # The Product Radar Core receives the already structured result.  This
@@ -122,6 +125,9 @@ def watch_patch_payload(command: dict[str, Any], watch: dict[str, Any]) -> dict[
     patch: dict[str, Any] = {}
     if 'intervalSeconds' in constraints:
         patch['intervalSeconds'] = constraints['intervalSeconds']
+    for field in ('heartbeatEnabled', 'heartbeatIntervalSeconds'):
+        if field in constraints:
+            patch[field] = constraints[field]
 
     if watch_type == 'seller':
         rules: dict[str, Any] = {}

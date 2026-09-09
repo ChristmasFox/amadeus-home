@@ -525,17 +525,17 @@ export class ProductRadarService {
         eventIds: results.flatMap((result) => result.eventIds),
       };
     }
-    if (watch.sensorId !== undefined) {
-      const sensorWatch = await this.sensor.getWatch(watch.sensorId);
-      if (!sensorWatch) {
-        this.store.updateSensorState(id, 'deleted', this.now());
-        throw new SensorUnavailableError(`sensor watch was deleted externally: ${watch.sensorId}`, { watchId: id, sensorId: watch.sensorId });
-      }
-    }
     const pollRun = this.store.beginPollRun(id, watch.sensorId, triggerKey, this.now());
     if (!pollRun) return { watchId: id, status: 'duplicate', triggerKey, newListings: 0, matchedListings: 0, changes: 0, eventIds: [] };
     const runtimeRunId = this.store.beginWatchRuntimeRun(id, 'poll', triggerKey, pollRun.startedAt);
     try {
+      if (watch.sensorId !== undefined) {
+        const sensorWatch = await this.sensor.getWatch(watch.sensorId);
+        if (!sensorWatch) {
+          this.store.updateSensorState(id, 'deleted', this.now());
+          throw new SensorUnavailableError(`sensor watch was deleted externally: ${watch.sensorId}`, { watchId: id, sensorId: watch.sensorId });
+        }
+      }
       const adapter = this.sources.require(watch.source);
       const validatedTarget = await adapter.validateTarget(watch.type, watch.target);
       const normalized = await this.fetchNormalized(adapter, watch.type, validatedTarget);

@@ -402,6 +402,10 @@ test('externally deleted sensor watch is recorded and cannot create source event
   source.currentListings = [listing({ externalId: 'new', title: 'new item' })];
   await assert.rejects(() => service.runWatch(created.watch.id), (error: unknown) => error instanceof RadarError && error.code === 'SENSOR_UNAVAILABLE');
   assert.equal(store.listEvents().length, 0);
+  const runtime = store.getWatchRuntimeStats(created.watch.id);
+  assert.equal(runtime.failedRuns, 1);
+  assert.equal(runtime.status, 'ERROR');
+  assert.match(runtime.lastError ?? '', /sensor watch was deleted externally/);
 });
 
 test('notification delivery is idempotent and Telegram failure does not block KOOK', async () => {
@@ -452,6 +456,7 @@ test('runtime stats count real similarity executions, notifications, and degrade
   assert.equal(failed.status, 'DEGRADED');
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.runCount, 3);
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.successCount, 2);
+  assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.failureCount, 1);
   assert.equal(service.getWatchObservability(created.watch.id).status, 'DEGRADED');
 });
 

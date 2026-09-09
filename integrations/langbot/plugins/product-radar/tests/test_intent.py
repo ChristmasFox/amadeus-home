@@ -8,7 +8,7 @@ from unittest.mock import patch
 import components.intent_planner as intent_planner
 from components.command_adapter import watch_create_payload, watch_patch_payload
 from components.context import load_context, set_active_watch
-from components.intent_planner import resolve_product_radar_intent, resolve_product_radar_command
+from components.intent_planner import apply_active_watch_context, resolve_product_radar_intent, resolve_product_radar_command
 from components.platform.normalized import build_normalized_message, context_key
 
 from components.intent import (
@@ -137,11 +137,42 @@ class ProductRadarIntentPlannerTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(command['action'], 'status' if intent == 'get_watch_status' else 'stats')
             self.assertEqual(command['_usage']['inferenceCount'], 1)
 
+    async def test_heartbeat_controls_stay_separate_from_search_interval(self) -> None:
+        plugin = _FakeLunaPlugin({
+            'domain': 'product_radar',
+            'intent': 'update_watch',
+            'watchType': 'similarity',
+            'constraints': {'heartbeatEnabled': 'false', 'heartbeatIntervalSeconds': '每周'},
+        })
+        with patch.object(intent_planner, 'provider_message', _FakeProviderMessage):
+            command = await resolve_product_radar_command(plugin, message=_normalized_message('以后不要发日报，每周一次也行'))
+        self.assertEqual(command['constraints']['heartbeatEnabled'], False)
+        self.assertEqual(command['constraints']['heartbeatIntervalSeconds'], 604800)
+        watch_patch = watch_patch_payload(command, {'type': 'similarity'})
+        self.assertEqual(watch_patch['heartbeatEnabled'], False)
+        self.assertEqual(watch_patch['heartbeatIntervalSeconds'], 604800)
+        self.assertNotIn('intervalSeconds', watch_patch)
+
     def test_cancel_without_context_is_not_acknowledged_as_pending_proposal(self) -> None:
         command = intent_planner._legacy_fast_path(_normalized_message('取消监控'), None)
         self.assertEqual(command['intent'], 'delete_watch')
         self.assertFalse(command['needsClarification'])
         self.assertIsNone(command.get('control'))
+
+    def test_restored_context_is_attached_without_reparsing(self) -> None:
+        context_plugin = SimpleNamespace()
+        set_active_watch(context_plugin, _normalized_message('创建', user_id='user-a'), {
+            'id': 'watch-1', 'source': 'bunjang', 'type': 'similarity', 'enabled': True, 'target': {}, 'rules': {},
+        })
+        context = load_context(context_plugin, _normalized_message('这个还正常吗？', user_id='user-a'))
+        command = apply_active_watch_context({
+            'domain': 'product_radar', 'intent': 'get_watch_status', 'watchType': None,
+            'entities': {}, 'constraints': {}, 'needsClarification': True,
+        }, context)
+        self.assertEqual(command['entities']['watchId'], 'watch-1')
+        self.assertEqual(command['watchType'], 'similarity')
+        self.assertFalse(command['needsClarification'])
+        self.assertTrue(command['resolvedFromContext'])
 
 
 
