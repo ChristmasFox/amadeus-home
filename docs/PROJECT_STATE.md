@@ -1,6 +1,6 @@
 # Project State
 
-## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
 
 本轮在既有 Generic Query Runtime/NLU、shared SearchFeed 和 deterministic Core 边界上增加运行可观测性，没有引入 PUBG-specific parser、第二次 Vision、FashionSigLIP/DINO/Qdrant 或抓取绕过：
 
@@ -9,7 +9,10 @@
 - Luna intent/TargetProfile 单次 multimodal structured parse 的 provider usage 记账到对应 Watch；轮询、SearchFeed、Sharp matcher 不新增 LLM 调用或 token 账本记录。
 - Similarity Watch 默认启用 24h heartbeat；period/channel/recipient 唯一约束保证幂等，通道失败互不阻塞并由 outbox 重试；LangBot status/stats 语义复用 active context。
 - 插件重载后从 Product Radar 恢复精确 ownership context，使“取消监控/不要盯着了”继续进入 deterministic delete path；无法唯一确定时澄清，不猜测删除。
-- 本地验证已通过：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、diff check；生产 release 尚未执行。
+- 本地验证已通过：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、diff check。
+- source commit `8c502a3a73e5` 已 push 到 `origin/main`；Host BuildKit 构建并导入 `local/product-radar:git-8c502a3a73e5`，digest 为 `sha256:23160cae30aba2c5853182ce837b815b2ce72cfceab87332f4362c17c216daa7`；CasaOS `/var/lib/casaos/apps/product-radar` 已备份 `.codex-backup.20260909-142302` / `.env.codex-backup.20260909-142302` 并执行 `docker compose up -d --no-build`。
+- LangBot Product Radar plugin `0.5.0` 已安装，task `94` 为 `INSTALL_READY`，package SHA-256 为 `cb8ee31fad24683df691bb4e6939ca77a465fd41d8b4d0f9228bd3832d5f4b94`，rollback dir 为 `.backups/langbot/20260909-142343`；`scripts/doctor.sh` 为 0 failure / 0 warning。
+- live `/health` 为 `ok`，既有 3 个 Watch、2 个 SearchFeed、2663 个 listing 保持；status API smoke 后 3 个 runtime stats 行存在，context API 返回 200；未创建/删除真实 Watch，未发送手工 Telegram/KOOK 通知。由于现有 3 个历史 Watch 尚无可恢复的旧 ownership binding，多目标取消仍会澄清，不会猜测删除。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 

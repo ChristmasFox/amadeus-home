@@ -1,8 +1,8 @@
 # Codex State
 
-## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
 
-已在既有 Generic Query Runtime/NLU 与 deterministic Product Radar Core 边界上完成运行可观测性 source implementation：SQLite additive migration 持久化 Watch runtime/feed health、usage ledger、24h heartbeat idempotency 和 ownership-aware context；API 增加 status/stats/usage；Luna structured status/stats + usage extraction 与重载后取消监控 context restore 已接通。Product Radar 45/45、LangBot 21/21、typecheck/build、compile、secret scan、diff check 已通过；source commit/push 与 CasaOS/LangBot production release 待执行。
+已在既有 Generic Query Runtime/NLU 与 deterministic Product Radar Core 边界上完成并部署运行可观测性：SQLite additive migration 持久化 Watch runtime/feed health、usage ledger、24h heartbeat idempotency 和 ownership-aware context；API 增加 status/stats/usage；Luna structured status/stats + usage extraction 与重载后取消监控 context restore 已接通。Product Radar 45/45、LangBot 21/21、typecheck/build、compile、secret scan、diff check 已通过；source `8c502a3a73e5` 已 push，immutable image 已在 CasaOS `ubuntu` 激活，LangBot plugin `0.5.0` task `94` 已 `INSTALL_READY`。现有 3 个历史 Watch 没有旧 binding 时，多目标取消会澄清而不是误删。
 
 更新时间：2026-09-09（Asia/Shanghai）
 

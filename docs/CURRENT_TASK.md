@@ -1,6 +1,6 @@
 # Current Task
 
-## Product Radar V0.3.1 Runtime Observability（SOURCE IMPLEMENTED：2026-09-09）
+## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] SQLite additive migration：Watch runtime counters/history、SearchFeed health counters/backoff、AI usage ledger、heartbeat delivery idempotency、ownership-aware persisted context；旧数据库通过 `ensureColumn` 兼容，未删除既有数据。
 - [x] 真执行统计：feed/poll 成功/失败、候选/新商品、Sharp image comparisons、above-threshold、best score、实际成功通知数和最后错误；0 匹配保持 HEALTHY。
@@ -8,7 +8,9 @@
 - [x] GPT-5.6 Luna structured NLU 增加 status/stats 语义与 usage extraction；创建、修改、状态查询、统计查询均按 Watch 记账，轮询/Sharp 不调用 LLM；取消监控在插件重载后恢复同一 ownership context，多目标继续澄清。
 - [x] Similarity Watch 默认 24h heartbeat digest：无匹配也发送，period/channel/recipient 幂等，Telegram/KOOK 独立失败重试；增加 fake-clock、restart、API、paraphrase/negative routing tests。
 - [x] 本地验证：Product Radar 45/45、typecheck/build、LangBot 21/21、Python compile、secret scan、`git diff --check` 通过。
-- [ ] RELEASE：source commit/push、Host BuildKit immutable image、CasaOS `--no-build` recreate、LangBot plugin API install、live health/status/context smoke 仍待执行。
+- [x] RELEASE：source commit `8c502a3a73e5` 已 push；Host BuildKit immutable image `local/product-radar:git-8c502a3a73e5` 已导入并以 CasaOS `docker compose up -d --no-build` 激活，digest 为 `sha256:23160cae30aba2c5853182ce837b815b2ce72cfceab87332f4362c17c216daa7`。
+- [x] LangBot Product Radar plugin `0.5.0` 已通过 API 安装，task `94` 达到 `INSTALL_READY`，package SHA-256 为 `cb8ee31fad24683df691bb4e6939ca77a465fd41d8b4d0f9228bd3832d5f4b94`，rollback dir 为 `.backups/langbot/20260909-142343`。
+- [x] live 核验：Product Radar `healthy`、`/health=status=ok`，3 个既有 Watch、2 个 SearchFeed 和 2663 条 listing 保持；3 条 runtime stats 已由 status smoke 惰性初始化；context API 返回 200；未创建/删除真实 Watch，未发送手工通知。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
