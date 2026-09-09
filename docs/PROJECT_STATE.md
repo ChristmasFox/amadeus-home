@@ -1,6 +1,6 @@
 # Project State
 
-## Product Radar V0.3 Phase A hardening（SOURCE COMPLETE；RELEASE PENDING：2026-09-09）
+## Product Radar V0.3 Phase A hardening（DEPLOYED / VERIFIED：2026-09-09）
 
 本轮在既有 Luna/Mastra/NLU 与 V0.3 shared-feed 架构上做边界硬化，没有引入 PUBG-specific parser，也没有新增视觉模型或抓取绕过：
 
@@ -8,7 +8,8 @@
 - SearchFeed 扫描改为完整抓取/解析后事务提交 listing/event；中途失败和 `WATERMARK_NOT_REACHED` 保持原 watermark、无 partial candidate/notification。Retry-After 进入 backoff，legacy similarity 删除不会误删仍被共享 feed 使用的 sensor。
 - preview 摘要显示实际 similarity threshold 与 Sharp perceptual matcher；LangBot plugin manifest 升至 `0.4.1`，仍由 GPT-5.6 Luna 在一次 multimodal call 输出 intent/entities/TargetProfile。
 - 本地验证：Product Radar TypeScript 42/42、typecheck/build、LangBot Python 16/16、Python compile、secret scan、workflow plan、diff check 均通过。
-- 当前仍待将本轮 source commit 推送并执行 immutable image + CasaOS/LangBot release；部署前不得把 pending 状态描述为 live verified。
+- source commit `0cdba7c37a6a09a0740eedabd17b9adabb511682` 已 push；immutable image `local/product-radar:git-0cdba7c37a6a` 已在 OrbStack `ubuntu`/CasaOS 激活，digest 为 `sha256:ef5c7309eae244cd6c9c2ef9d566f4f4e7a27f9d72474a93bde355dd3f1bb7db`。外部 `.env` 与 compose 备份分别为 `.env.codex-backup.20260909-114724`、`.codex-backup.20260909-114724`；changedetection `0.60.3` 与 datastore 未变更。
+- LangBot Product Radar plugin `0.4.1` 已安装并达到 `INSTALL_READY`（task `84`，package SHA-256 `09d0783fbe072999bf0b8f10a48c9b09adbcb6fc8f73e881cfa08ea7c33c90f3`，rollback dir `.backups/langbot/20260909-114754`）。live `/health` 为 `status=ok`，既有 3 个 Watch（1 Product、2 Similarity）保持不变，`scripts/doctor.sh` 为 0 failure / 0 warning。未发送真实 Telegram/KOOK 消息，真实平台送达仍待人工入站 smoke。
 
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 

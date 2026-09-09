@@ -1,13 +1,17 @@
 # Current Task
 
-## Product Radar V0.3 Phase A hardening（SOURCE COMPLETE；RELEASE PENDING：2026-09-09）
+## Product Radar V0.3 Phase A hardening（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 保持 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 边界；新增 `TargetProfile.userSearchTerms`，用户搜索词与视觉/OCR 词分离并在 planner 中优先。
 - [x] Bunjang `SourceSearchPlanner` 现在保留 explicit/user terms，并在最多 4 条查询内按 specific/medium/broad 分层；支持 modelName，类别存在时保证 broad coverage，不使用永久 `의류` fallback。
 - [x] shared SearchFeed 扫描改为先抓取/解析、成功后事务写入；分页 timeout、4xx/5xx、解析失败或安全上限不会写入部分候选、创建通知或推进 watermark；Retry-After 与确定性 backoff、共享 sensor cleanup 已补齐。
 - [x] similarity preview 显示实际阈值与 Sharp perceptual matcher；LangBot plugin source 升至 `0.4.1`，仍由 GPT-5.6 Luna 完成单次 multimodal structured parsing。
 - [x] 验证通过：Product Radar TypeScript 42/42、typecheck/build、LangBot Python 16/16、Python compile、`pnpm check:secrets`、`pnpm workflow:plan`、`git diff --check`。
-- [ ] 下一阶段：提交并 push source，构建 immutable `local/product-radar:git-<commit>`，更新 OrbStack `ubuntu`/CasaOS compose，重新安装 LangBot plugin，并执行 `/health`、既有 Watch 不变性、shared-feed/changedetection smoke。
+- [x] source commit `0cdba7c37a6a09a0740eedabd17b9adabb511682` 已 push 到 `origin/main`；immutable image `local/product-radar:git-0cdba7c37a6a` 已导入 OrbStack `ubuntu`，digest 为 `sha256:ef5c7309eae244cd6c9c2ef9d566f4f4e7a27f9d72474a93bde355dd3f1bb7db`。
+- [x] CasaOS Product Radar 已通过外部 `.env` 切换到新 image 并以 `docker compose up -d --no-build` recreate；远端备份为 `.codex-backup.20260909-114724` / `.env.codex-backup.20260909-114724`，changedetection `0.60.3` 与持久化 datastore 未变更。
+- [x] LangBot Product Radar plugin `0.4.1` 已安装并达到 `INSTALL_READY`（task `84`，package SHA-256 `09d0783fbe072999bf0b8f10a48c9b09adbcb6fc8f73e881cfa08ea7c33c90f3`，rollback dir `.backups/langbot/20260909-114754`）。
+- [x] live 核验通过：Product Radar 与 changedetection healthy，`/health` 为 `status=ok`，既有 3 个 Watch（1 Product、2 Similarity）保持不变，database watches/feed/listings 计数保持，`scripts/doctor.sh` 为 0 failure / 0 warning。
+- [ ] 未发送真实 Telegram/KOOK 消息；人工平台入站 smoke 仍需用户在目标会话中完成，因此不宣称真实平台送达已验证。
 
 ## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
