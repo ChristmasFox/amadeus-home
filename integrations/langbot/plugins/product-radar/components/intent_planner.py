@@ -99,6 +99,10 @@ VIEW_ORDINAL_RE = re.compile(
     r'^(?:(查看|看看|打开|查|查询|看)\s*)?(?:第\s*)?(\d+)\s*(号|个|個|条|條|项|項)\s*(监控|監控)?(?:的)?\s*(记录|紀錄|详情|詳情|状态|狀態|统计|統計|信息|資訊)?$',
     re.IGNORECASE,
 )
+STATUS_QUERY_RE = re.compile(
+    r'^(?:我(?:现在|目前)?(?:的)?\s*)?(?:监控|監控|监控情况|監控情況|监控状态|監控狀態)(?:的)?\s*(?:怎么样|怎麼樣|怎样|怎樣|如何|正常吗|正常嗎|还正常吗|還正常嗎|运行(?:得|的)?怎么样|運行(?:得|的)?怎麼樣)(?:了)?[？?。！!！.]?$',
+    re.IGNORECASE,
+)
 
 LEGACY_ACTIONS = {
     'create_watch': 'watch',
@@ -255,6 +259,10 @@ def _view_ordinal(value: str) -> tuple[int, str] | None:
     return ordinal, intent
 
 
+def _is_status_query(value: str) -> bool:
+    return bool(STATUS_QUERY_RE.fullmatch(value.strip()))
+
+
 def _boolean(value: Any) -> bool | None:
     if isinstance(value, bool):
         return value
@@ -317,6 +325,13 @@ def _legacy_fast_path(message: NormalizedBotMessage, context: dict[str, Any] | N
     if viewed and displayed_watch_ids:
         ordinal, intent = viewed
         return _command(intent, entities={'watchOrdinal': ordinal}, confidence=0.85)
+
+    # Product Radar status wording is strong domain evidence.  Keep this
+    # narrow fallback available when Luna is temporarily unavailable, so the
+    # message is handled by the deterministic listener instead of falling
+    # through to LangBot's unrelated general chat.
+    if _is_status_query(text):
+        return _command('get_watch_status', confidence=0.85)
 
     token = _control_token(text)
     if token:
@@ -625,7 +640,7 @@ def _normalize_model_result(
             needs_clarification = True
             clarification_question = clarification_question or '请提供要留意的商品链接。'
     elif intent in {'get_watch', 'get_watch_status', 'get_watch_stats', 'update_watch', 'pause_watch', 'resume_watch', 'delete_watch'}:
-        if intent != 'delete_watch' and not entities.get('watchId') and not entities.get('watchOrdinal') and not entities.get('sellerUrl') and not entities.get('productUrl'):
+        if intent not in {'delete_watch', 'get_watch_status', 'get_watch_stats'} and not entities.get('watchId') and not entities.get('watchOrdinal') and not entities.get('sellerUrl') and not entities.get('productUrl'):
             needs_clarification = True
             clarification_question = clarification_question or '请说明要操作哪一个监控，或先在本次对话中创建一个。'
     if intent == 'update_watch' and not constraints and not any(

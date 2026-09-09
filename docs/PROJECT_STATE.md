@@ -27,6 +27,14 @@
 - 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；`product-radar`、changedetection、LangBot/plugin runtime 均 running/healthy；Product Radar `/health` 为 `ok`，API 仍返回 3 个既有 Watch。未重建 Product Radar runtime image，也未创建/删除/修改真实 Watch。
 - 尚未发送真实 Telegram/KOOK 测试消息；平台入站 smoke 仍待用户在目标会话完成。
 
+## Product Radar status query fallback（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+
+16:01 的真实 LangBot 日志显示，用户消息 `监控的怎么样了` 已进入 LangBot，但 Product Radar 的 Luna intent call 报 `ActionCallError`；Product Radar listener 因此返回未处理，后续普通聊天生成了“之前那件红色羽绒服的监控已经取消”等错误语义。Product Radar API 实际仍有 1 条 enabled Similarity Watch，状态为 `DEGRADED`，两个 Feed 的 `lastError` 都是 `WATERMARK_NOT_REACHED`。
+
+- `intent_planner.py` 增加窄范围、明确 Product Radar 语义的 status offline fallback，Luna 暂时失败时不会让清晰的状态询问落入普通聊天。
+- `product_radar.py` 对没有指定 Watch 的 status/stats 请求按当前列表汇总；单条暂停或降级 Watch 也能返回真实状态；Feed 错误会显示在状态行中。
+- 本地验证：LangBot plugin tests 31/31、Python compile、`git diff --check`、`pnpm workflow:plan`；当前代码尚未安装 live。
+
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
 截图反馈对应的根因是 Product Radar fallback 将 `取消监控` 无条件编码为 pending proposal 的 `control=cancel`；当已有 Watch 时 listener 只清理 proposal，或在无 proposal 时回复“没有对应的待确认监控”，不会调用删除 API。现已改为按当前 ownership-aware context 分流：pending proposal 才 cancel，active Watch 执行 `delete_watch`，无唯一上下文则 clarification；`不要盯着了` 等自然停用表达也复用 active Watch 删除路径。

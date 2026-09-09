@@ -160,6 +160,23 @@ class ProductRadarIntentPlannerTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(command['needsClarification'])
         self.assertIsNone(command.get('control'))
 
+    def test_status_query_has_offline_product_radar_fallback(self) -> None:
+        for phrase in ('监控的怎么样了', '监控情况怎么样？', '我现在的监控正常吗'):
+            command = intent_planner._legacy_fast_path(_normalized_message(phrase), None)
+            self.assertIsNotNone(command, phrase)
+            self.assertEqual(command['domain'], 'product_radar')
+            self.assertEqual(command['intent'], 'get_watch_status')
+
+    def test_model_status_without_target_is_eligible_for_overview(self) -> None:
+        command = intent_planner._normalize_model_result(
+            {'domain': 'product_radar', 'intent': 'get_watch_status', 'watchType': None},
+            _normalized_message('监控的怎么样了'),
+            None,
+        )
+        self.assertEqual(command['intent'], 'get_watch_status')
+        self.assertFalse(command['needsClarification'])
+        self.assertNotIn('watchId', command['entities'])
+
     def test_restored_context_is_attached_without_reparsing(self) -> None:
         context_plugin = SimpleNamespace()
         set_active_watch(context_plugin, _normalized_message('创建', user_id='user-a'), {

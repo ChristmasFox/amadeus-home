@@ -37,6 +37,7 @@ from components.watch_presentation import (
     format_watches as _format_watches,
     watch_ids as _watch_ids,
     watch_rows as _watch_rows,
+    watch_target_value as _watch_target_value,
 )
 from langbot_plugin.api.definition.components.common.event_listener import EventListener
 from langbot_plugin.api.entities import context as event_context_module
@@ -228,7 +229,16 @@ def _format_observability(result: dict[str, Any], *, stats: bool) -> str:
             f"下次检查：{result.get('nextRunAt') or '待调度'}",
         ]
         if feeds:
-            lines.append('Feed：' + '、'.join(f"{item.get('query', item.get('id'))}={item.get('state')}" for item in feeds if isinstance(item, dict)))
+            feed_labels = []
+            for item in feeds:
+                if not isinstance(item, dict):
+                    continue
+                label = f"{item.get('query', item.get('id'))}={item.get('state')}"
+                if item.get('lastError'):
+                    label += f"（{item.get('lastError')}）"
+                feed_labels.append(label)
+            if feed_labels:
+                lines.append('Feed：' + '、'.join(feed_labels))
         if runtime.get('lastError'):
             lines.append(f"最近错误：{runtime.get('lastError')}")
         return '\n'.join(lines)
@@ -477,6 +487,34 @@ class ProductRadarListener(EventListener):
             # Keep the proposal so the user can retry after a transient sensor/API failure.
             reply(event_context, f'创建监控失败：{error}')
 
+    async def _handle_watch_overview(
+        self,
+        event_context: Any,
+        message: NormalizedBotMessage,
+        rows: list[dict[str, Any]],
+        *,
+        stats: bool,
+    ) -> None:
+        _remember_watch_list(self.plugin, message, rows)
+        sections: list[str] = []
+        for ordinal, row in enumerate(rows, start=1):
+            watch_id = str(row.get('id') or '')
+            try:
+                observation = await get_watch_observability(
+                    self.plugin,
+                    watch_id,
+                    'stats' if stats else 'status',
+                )
+                body = _format_observability(observation, stats=stats)
+                body_lines = body.splitlines()
+                if body_lines and body_lines[0] in {'👀 监控状态', '📊 监控统计'}:
+                    body = '\n'.join(body_lines[2:])
+                sections.append(f'{ordinal}号 · {_watch_target_value(row)}\n{body}')
+            except Exception:
+                sections.append(f'{ordinal}号 · {_watch_target_value(row)}\n状态：暂时无法读取')
+        heading = '📊 当前监控统计' if stats else '👀 当前监控情况'
+        reply(event_context, f'{heading}\n\n' + '\n\n'.join(sections))
+
     async def _handle_watch_operation(
         self,
         event_context: Any,
@@ -506,14 +544,41 @@ class ProductRadarListener(EventListener):
         displayed_ids = displayed.get(context_key(message), []) if isinstance(displayed, dict) else []
         if not displayed_ids:
             displayed_ids = context_watch_list_ids(context)
-        watch_id = _watch_id_from_command(
-            command,
-            context,
-            rows,
-            watch_context,
-            context_key(message),
-            displayed_ids,
+        entities = command.get('entities') if isinstance(command.get('entities'), dict) else {}
+        has_target_reference = bool(
+            explicit_watch_id(command)
+            or explicit_watch_ordinal(command)
+            or entities.get('sellerUrl')
+            or entities.get('productUrl')
+            or active_watch(context)
         )
+        owned_watch_ids = [
+            watch_id for watch_id, owner in watch_context.items()
+            if owner == context_key(message)
+        ]
+        if intent in {'get_watch_status', 'get_watch_stats'} and not has_target_reference and len(owned_watch_ids) != 1:
+            if len(rows) > 1:
+                await self._handle_watch_overview(
+                    event_context,
+                    message,
+                    rows,
+                    stats=intent == 'get_watch_stats',
+                )
+                return
+            if len(rows) == 1 and rows[0].get('id'):
+                watch_id = str(rows[0]['id'])
+            else:
+                reply(event_context, '目前没有可以查询状态的监控。')
+                return
+        else:
+            watch_id = _watch_id_from_command(
+                command,
+                context,
+                rows,
+                watch_context,
+                context_key(message),
+                displayed_ids,
+            )
         if watch_id is None:
             if intent == 'delete_watch':
                 _remember_watch_list(self.plugin, message, rows)
