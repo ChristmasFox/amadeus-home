@@ -21,4 +21,4 @@
 
 ## Release status
 
-Source/doc changes are ready for commit. Live LangBot installation is pending; Product Radar runtime image and CasaOS compose are intentionally unchanged.
+Source commit `0de93ca` is pushed to `origin/main`. LangBot Product Radar plugin `0.5.1` was installed with task `102` reaching `INSTALL_READY`; package SHA-256 is `ebcb43cd290b7634727be8ac3bc3ca21c38dbf7c07780ac63b06a1736a34fa5f`, rollback dir `.backups/langbot/20260909-152749`. Post-deploy `scripts/doctor.sh` returned 0 failures / 0 warnings, all relevant containers remain running/healthy, and Product Radar still reports the original three Watches. Product Radar runtime image and CasaOS compose were intentionally unchanged. Real Telegram/KOOK inbound smoke is still pending user action.

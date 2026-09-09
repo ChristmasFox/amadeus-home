@@ -13,14 +13,16 @@
 - [x] live 核验：Product Radar、changedetection `0.60.3` 和 LangBot/plugin runtime 均 running/healthy；`/health=status=ok`，3 个既有 Watch、2 个 SearchFeed 和 2663 条 listing 保持；历史 4 条 `search_feed_runs` 已回填为每个旧 Feed 2 次运行、0 次成功、2 次连续失败、`WATERMARK_NOT_REACHED`；未创建/删除真实 Watch，未发送手工通知。
 - [x] 本次 CasaOS 回滚备份为 `/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260909-144144` 与 `/var/lib/casaos/apps/product-radar/.env.codex-backup.20260909-144144`；`scripts/doctor.sh` 为 0 failure / 0 warning。
 
-## Product Radar numbered watch selection UX（IMPLEMENTED / PENDING RELEASE：2026-09-09）
+## Product Radar numbered watch selection UX（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] `list_watches` 统一为当前返回顺序的 `1号 / 2号 / 3号` 展示，并按 `platform + chat + sender + domain` 保存最近一次列表序号映射。
 - [x] 单独说“取消监控”进入选择流程：Telegram 返回每条监控对应的 `取消1号`、`取消2号` 等 inline buttons；无按钮平台显示同样的编号和文字指引。
 - [x] 点击按钮或发送“取消1号 / 取消第2个”均转为结构化 `delete_watch + watchOrdinal`，删除后自动返回新的编号监控列表；“查看1号 / 第2个监控的记录”复用同一序号上下文。
 - [x] 序号解析受当前 Product Radar context 约束，无列表上下文时不把“取消1号”强行路由为 Product Radar；按钮回调校验所属调用者的列表映射，避免群聊成员串用。
-- [x] LangBot plugin tests 29/29、Python compile、`git diff --check` 已通过；未修改 Product Radar 数据库中的真实 Watch。
-- [ ] 待提交并通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 plugin `0.5.1`，再做 live manifest/runtime 核验；不重建 Product Radar runtime image。
+- [x] LangBot plugin tests 29/29、Python compile、`git diff --check`、`pnpm check:secrets` 已通过；未修改 Product Radar 数据库中的真实 Watch。
+- [x] source commit `0de93ca` 已 push 到 `origin/main`；`scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 plugin `0.5.1`，task `102` 达到 `INSTALL_READY`，package SHA-256 为 `ebcb43cd290b7634727be8ac3bc3ca21c38dbf7c07780ac63b06a1736a34fa5f`，rollback dir 为 `.backups/langbot/20260909-152749`。
+- [x] 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；Product Radar、changedetection、LangBot/plugin runtime 均 running/healthy，Product Radar `/health` 为 `ok`，API 仍为既有 3 个 Watch；未重建 Product Radar runtime image。
+- [ ] 尚未发送真实 Telegram/KOOK 测试消息；需用户在目标会话发送“我现在盯着什么”或“取消监控”完成最终平台入站 smoke。
 
 ## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
 
