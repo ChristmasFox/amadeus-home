@@ -11,6 +11,7 @@ import { NotificationDispatcher } from '../src/core/notification/dispatcher.js';
 import { matchListing } from '../src/core/matching/matcher.js';
 import type { NotificationChannel, NotificationMessage } from '../src/core/notification/ports.js';
 import type { ProductWatchRules, SellerWatchRules, WatchTarget } from '../src/core/watch/model.js';
+import type { SearchFeed } from '../src/core/search/model.js';
 import type { ListingSourceAdapter, SourceCapabilities, ValidatedTarget } from '../src/sources/registry.js';
 import { SourceAdapterRegistry } from '../src/sources/registry.js';
 import type { SensorClient, SensorHealth, SensorWatch, SensorWatchInput } from '../src/sensors/sensor.js';
@@ -406,6 +407,33 @@ test('externally deleted sensor watch is recorded and cannot create source event
   assert.equal(runtime.failedRuns, 1);
   assert.equal(runtime.status, 'ERROR');
   assert.match(runtime.lastError ?? '', /sensor watch was deleted externally/);
+});
+
+test('migration backfills SearchFeed counters from persisted run history', () => {
+  const store = new SqliteRadarStore(':memory:');
+  const feed: SearchFeed = {
+    id: 'migration-feed', source: 'fake', target: 'https://fake.test/search', query: 'jacket', canonicalKey: 'fake:jacket',
+    intervalSeconds: 900, jitterSeconds: 0, state: 'DEGRADED', runCount: 0, successCount: 0,
+    failureCount: 0, currentBackoff: 0, potentialCandidateGap: false, degradedReason: 'FETCH_FAILED',
+    createdAt: '2026-09-09T00:00:00.000Z', updatedAt: '2026-09-09T00:00:00.000Z',
+  };
+  store.createSearchFeed(feed);
+  const failed = store.beginFeedRun(feed.id, 'historical-failure', '2026-09-09T00:01:00.000Z');
+  assert.ok(failed);
+  store.finishFeedRun(failed.id, 'failed', '2026-09-09T00:02:00.000Z', { error: 'historical failure' });
+  const succeeded = store.beginFeedRun(feed.id, 'historical-success', '2026-09-09T00:03:00.000Z');
+  assert.ok(succeeded);
+  store.finishFeedRun(succeeded.id, 'succeeded', '2026-09-09T00:04:00.000Z');
+  store.db.prepare('UPDATE search_feeds SET run_count = 0, success_count = 0, last_run_at = NULL, last_success_at = NULL, last_successful_run_at = NULL, last_error = NULL, failure_count = 0 WHERE id = ?').run(feed.id);
+  store.migrate();
+  const restored = store.getSearchFeed(feed.id);
+  assert.equal(restored?.runCount, 2);
+  assert.equal(restored?.successCount, 1);
+  assert.equal(restored?.lastRunAt, '2026-09-09T00:03:00.000Z');
+  assert.equal(restored?.lastSuccessAt, '2026-09-09T00:04:00.000Z');
+  assert.equal(restored?.failureCount, 0);
+  assert.equal(restored?.lastError, undefined);
+  store.close();
 });
 
 test('notification delivery is idempotent and Telegram failure does not block KOOK', async () => {

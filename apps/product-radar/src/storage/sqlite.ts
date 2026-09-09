@@ -436,6 +436,51 @@ export class SqliteRadarStore {
     this.ensureColumn('search_feeds', 'last_success_at', 'TEXT');
     this.ensureColumn('search_feeds', 'last_error', 'TEXT');
     this.ensureColumn('search_feeds', 'current_backoff', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('search_feeds', 'last_successful_run_at', 'TEXT');
+    this.ensureColumn('search_feeds', 'watermark', 'TEXT');
+    this.ensureColumn('search_feeds', 'failure_count', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('search_feeds', 'degraded_reason', 'TEXT');
+    this.ensureColumn('search_feeds', 'potential_candidate_gap', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('search_feeds', 'backoff_until', 'TEXT');
+    this.db.exec(`
+      UPDATE search_feeds
+      SET run_count = CASE WHEN run_count = 0 THEN (
+            SELECT COUNT(*) FROM search_feed_runs WHERE feed_id = search_feeds.id
+          ) ELSE run_count END,
+          success_count = CASE WHEN success_count = 0 THEN (
+            SELECT COUNT(*) FROM search_feed_runs WHERE feed_id = search_feeds.id AND status = 'succeeded'
+          ) ELSE success_count END,
+          last_run_at = COALESCE(last_run_at, (
+            SELECT MAX(started_at) FROM search_feed_runs WHERE feed_id = search_feeds.id
+          )),
+          last_success_at = COALESCE(last_success_at, (
+            SELECT MAX(finished_at) FROM search_feed_runs WHERE feed_id = search_feeds.id AND status = 'succeeded'
+          )),
+          last_successful_run_at = COALESCE(last_successful_run_at, (
+            SELECT MAX(finished_at) FROM search_feed_runs WHERE feed_id = search_feeds.id AND status = 'succeeded'
+          )),
+          last_error = COALESCE(last_error, (
+            SELECT latest.error
+            FROM search_feed_runs AS latest
+            WHERE latest.id = (
+              SELECT newest.id FROM search_feed_runs AS newest
+              WHERE newest.feed_id = search_feeds.id
+              ORDER BY newest.started_at DESC LIMIT 1
+            )
+              AND latest.status = 'failed'
+              AND latest.error IS NOT NULL
+          )),
+          failure_count = CASE WHEN failure_count = 0 THEN (
+            SELECT COUNT(*) FROM search_feed_runs AS failed
+            WHERE failed.feed_id = search_feeds.id
+              AND failed.status = 'failed'
+              AND failed.started_at > COALESCE((
+                SELECT MAX(successful.started_at) FROM search_feed_runs AS successful
+                WHERE successful.feed_id = search_feeds.id AND successful.status = 'succeeded'
+              ), '')
+          ) ELSE failure_count END
+      WHERE EXISTS (SELECT 1 FROM search_feed_runs WHERE feed_id = search_feeds.id)
+    `);
     this.db.exec('INSERT OR IGNORE INTO watch_runtime_stats (watch_id) SELECT id FROM watches');
   }
 
