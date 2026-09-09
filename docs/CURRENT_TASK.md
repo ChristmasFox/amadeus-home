@@ -1,5 +1,15 @@
 # Current Task
 
+## Product Radar rich status presentation（DEPLOYED / VERIFIED：2026-09-09）
+
+- [x] 状态查询与统计查询统一输出完整监控详情：状态、类型、运行时长、上次/下次检查、检查成功/失败、新商品、候选处理、图片对比、达到阈值、最高相似度、通知与 Token 使用。
+- [x] 时间不再直接显示秒数；运行时长及相对上/下次检查统一按 `天 / 小时 / 分钟 / 秒` 显示。
+- [x] 每个 SearchFeed 展开其状态、检查/成功/失败次数和最后错误；因此 `DEGRADED` 可直接看到数据源原因，避免被误读为“没有监控”。
+- [x] 新增纯展示模块回归：人类可读时长、相对时间、完整统计字段和 Feed 错误；LangBot plugin tests 33/33、Python compile、`pnpm workflow:plan`、`git diff --check`、`pnpm check:secrets` 全部通过。
+- [x] source commit `71183b9` 已 push 到 `origin/main`；`scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 plugin `0.5.3`，task `111` 达到 `INSTALL_READY`，package SHA-256 为 `44e49a6a4ca163d0ae04d2000265c8fa79a189a9616b22a858b6405582fcea05`，rollback dir 为 `.backups/langbot/20260909-161810`。
+- [x] 部署后 `scripts/doctor.sh` 为 0 failure / 0 warning；Product Radar `/health` 为 `ok`，Product Radar healthy/running，LangBot 与 plugin runtime running；未重建 Product Radar image，未创建、删除或修改真实 Watch。
+- [ ] 待用户在 Telegram 发送“监控的怎么样了”或“1号监控的记录”完成真实入站与渲染 smoke。
+
 ## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] SQLite additive migration：Watch runtime counters/history、SearchFeed health counters/backoff、AI usage ledger、heartbeat delivery idempotency、ownership-aware persisted context；旧数据库通过 `ensureColumn` 兼容，未删除既有数据。

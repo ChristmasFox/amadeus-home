@@ -1,5 +1,15 @@
 # Project State
 
+## Product Radar rich status presentation（DEPLOYED / VERIFIED：2026-09-09）
+
+LangBot Product Radar 的单条状态和多条汇总现在复用同一份完整可观测性展示，避免“状态查询”比“统计查询”遗漏关键数据：
+
+- `runningForSeconds` 显示为中文可读时长；`lastRunAt` / `nextRunAt` 显示为相对的天、小时、分钟、秒，而非 ISO 时间或原始秒数。
+- 展示 Core 已返回的检查、成功、失败、新商品、候选处理、图片对比、达到阈值、最高相似度、通知、Token/calls，以及每个 Feed 的累计运行计数和最后错误。
+- 这只是 LangBot presentation boundary 变更：不修改 Product Radar Core、调度、数据库或真实 Watch；DEGRADED 的 `WATERMARK_NOT_REACHED` 等原因会被如实呈现。
+- 本地 33/33 plugin tests、Python compile、workflow plan、secret scan 和 diff check 通过。commit `71183b9` 已 push；plugin `0.5.3` 的 LangBot task `111` 已 `INSTALL_READY`，package SHA-256 `44e49a6a4ca163d0ae04d2000265c8fa79a189a9616b22a858b6405582fcea05`，rollback dir `.backups/langbot/20260909-161810`。
+- `scripts/doctor.sh` 为 0 failure / 0 warning；Product Radar `/health=status=ok` 且 healthy/running，LangBot/plugin runtime running。真实 Telegram/KOOK 渲染 smoke 仍待用户发送状态查询。
+
 ## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
 
 本轮在既有 Generic Query Runtime/NLU、shared SearchFeed 和 deterministic Core 边界上增加运行可观测性，没有引入 PUBG-specific parser、第二次 Vision、FashionSigLIP/DINO/Qdrant 或抓取绕过：
