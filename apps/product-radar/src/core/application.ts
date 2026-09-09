@@ -271,6 +271,34 @@ export class ProductRadarService {
     return this.searchFeeds.runDueFeeds();
   }
 
+  async injectTestListing(watchId: string, input: unknown): Promise<Record<string, unknown>> {
+    const watch = this.store.getWatch(watchId);
+    if (!watch) throw new RadarError(`watch not found: ${watchId}`, 'NOT_FOUND', 404);
+    if (watch.type !== 'similarity') throw new RadarError('test listing injection only supports similarity watches', 'UNSUPPORTED_CAPABILITY', 422);
+    const value = input && typeof input === 'object' && !Array.isArray(input) ? input as Record<string, unknown> : {};
+    const source = typeof value.source === 'string' && value.source.trim() ? value.source.trim().toLowerCase() : watch.source;
+    const externalId = typeof value.externalId === 'string' ? value.externalId.trim() : '';
+    const title = typeof value.title === 'string' ? value.title.trim() : '';
+    const url = typeof value.url === 'string' ? value.url.trim() : '';
+    const imageUrls = Array.isArray(value.imageUrls) ? value.imageUrls.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()) : [];
+    if (source !== watch.source) throw new RadarError('test listing source must match the Watch source', 'INVALID_REQUEST', 400);
+    if (!/^e2e-test-[A-Za-z0-9._:-]+$/u.test(externalId)) throw new RadarError('externalId must use the e2e-test- prefix', 'INVALID_REQUEST', 400);
+    if (!title || !url || imageUrls.length === 0) throw new RadarError('test listing requires title, url, and imageUrls', 'INVALID_REQUEST', 400);
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(url); } catch { throw new RadarError('test listing url must be a valid URL', 'INVALID_REQUEST', 400); }
+    if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new RadarError('test listing url must use HTTP or HTTPS', 'INVALID_REQUEST', 400);
+    for (const imageUrl of imageUrls) {
+      let parsedImageUrl: URL;
+      try { parsedImageUrl = new URL(imageUrl); } catch { throw new RadarError('test listing imageUrls must contain valid URLs', 'INVALID_REQUEST', 400); }
+      if (!['http:', 'https:'].includes(parsedImageUrl.protocol)) throw new RadarError('test listing imageUrls must use HTTP or HTTPS', 'INVALID_REQUEST', 400);
+    }
+    const subscriptions = this.searchFeeds.subscriptions(watchId);
+    const feedId = typeof value.feedId === 'string' && value.feedId.trim() ? value.feedId.trim() : subscriptions[0]?.feedId;
+    if (!feedId || !subscriptions.some((subscription) => subscription.feedId === feedId)) throw new RadarError('test listing feedId must belong to the Watch', 'INVALID_REQUEST', 400);
+    const listing: Listing = { source, externalId, title, url, imageUrls, discoveredAt: this.now() };
+    return this.searchFeeds.injectTestListing(feedId, listing);
+  }
+
   async previewWatch(input: unknown): Promise<Record<string, unknown>> {
     const parsed = parseWatchCreateInput(input);
     const adapter = this.sources.require(parsed.source);

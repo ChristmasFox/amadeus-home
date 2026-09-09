@@ -238,6 +238,50 @@ export class SearchFeedCoordinator {
     return results;
   }
 
+  async injectTestListing(feedId: string, listing: Listing): Promise<Record<string, unknown>> {
+    const feed = this.options.store.getSearchFeed(feedId);
+    if (!feed) throw new RadarError(`search feed not found: ${feedId}`, 'NOT_FOUND', 404);
+    const discoveredAt = this.now();
+    const discovered = this.options.store.transaction(() => {
+      this.options.store.upsertListing(listing);
+      return this.options.store.insertFeedListingEvent(feed.id, listing, discoveredAt);
+    });
+    if (!discovered) return { accepted: true, duplicate: true, feedId, externalId: listing.externalId };
+
+    const triggerKey = `test:${discovered.eventId}`;
+    const runtimeRuns = new Map<string, string>();
+    for (const subscription of this.options.store.listWatchFeedSubscriptions({ feedId })) {
+      const watch = this.options.store.getWatch(subscription.watchId);
+      if (watch?.enabled && watch.type === 'similarity') {
+        runtimeRuns.set(watch.id, this.options.store.beginWatchRuntimeRun(watch.id, 'feed', triggerKey, discoveredAt, feedId));
+      }
+    }
+    try {
+      const routed = await this.routeFeedEvents(feed);
+      for (const [watchId, runtimeId] of runtimeRuns) {
+        const metrics = routed.perWatch.get(watchId) ?? {};
+        this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'succeeded', this.now(), metrics);
+      }
+      await this.options.notifications.deliverPending();
+      return {
+        accepted: true,
+        duplicate: false,
+        feedId,
+        externalId: listing.externalId,
+        listingDiscoveredEvent: discovered,
+        matchedListings: routed.matchedListings,
+        eventIds: routed.eventIds,
+        runtimeMetrics: [...routed.perWatch.entries()].map(([watchId, metrics]) => ({ watchId, ...metrics })),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      for (const [watchId, runtimeId] of runtimeRuns) {
+        this.options.store.finishWatchRuntimeRun(runtimeId, watchId, 'failed', this.now(), {}, message, 'DEGRADED');
+      }
+      throw error;
+    }
+  }
+
   async syncWatch(watch: Watch, previous: Watch): Promise<void> {
     const subscriptions = this.options.store.listWatchFeedSubscriptions({ watchId: watch.id });
     for (const subscription of subscriptions) {

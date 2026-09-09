@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { createRadarServer } from '../src/api/server.js';
 import { ProductRadarService } from '../src/core/application.js';
 import type { Listing } from '../src/core/listing/model.js';
+import type { ImageMatcher, ImageMatchResult, ImageSource, PreparedImageReference } from '../src/core/matching/image.js';
 import { NotificationDispatcher } from '../src/core/notification/dispatcher.js';
 import type { ListingSourceAdapter, SourceCapabilities, ValidatedTarget } from '../src/sources/registry.js';
 import { SourceAdapterRegistry } from '../src/sources/registry.js';
@@ -34,6 +35,11 @@ class ApiSensor implements SensorClient {
   async deleteWatch(): Promise<void> {}
   async getWatch(sensorId: string): Promise<SensorWatch> { return { id: sensorId }; }
   async health(): Promise<SensorHealth> { return { ok: true, status: 'ok' }; }
+}
+
+class ApiImageMatcher implements ImageMatcher {
+  async prepareReference(_source: ImageSource): Promise<PreparedImageReference> { return { id: 'api-reference', contentHash: 'api-reference' }; }
+  async match(_referenceId: string, _candidateImageUrls: string[]): Promise<ImageMatchResult> { return { score: 0.9, comparedImages: 1 }; }
 }
 
 async function listen(server: ReturnType<typeof createRadarServer>): Promise<{ base: string; close: () => Promise<void> }> {
@@ -93,6 +99,47 @@ test('HTTP API exposes source capabilities and watch lifecycle without platform 
     const deleted = await fetch(`${runtime.base}/api/watches/${created.watch.id}`, { method: 'DELETE' }).then((response) => response.json());
     assert.equal(deleted.deleted, true);
     assert.equal((await fetch(`${runtime.base}/api/watches/${created.watch.id}`)).status, 404);
+  } finally {
+    await runtime.close();
+    store.close();
+  }
+});
+
+test('admin test-listing injection enters the feed event and matcher pipeline with duplicate protection', async () => {
+  const source = new ApiSource();
+  const registry = new SourceAdapterRegistry();
+  registry.register(source);
+  const store = new SqliteRadarStore(':memory:');
+  const sensor = new ApiSensor();
+  const service = new ProductRadarService({ store, sources: registry, sensor, imageMatcher: new ApiImageMatcher(), notifications: new NotificationDispatcher(store, [], { displayName: (id) => id }), webhookUrl: 'http://test/webhook' });
+  const server = createRadarServer({ service, sources: registry, sensor, store, apiKey: 'admin-test-key' });
+  const runtime = await listen(server);
+  try {
+    const createResponse = await fetch(`${runtime.base}/api/watches`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-product-radar-key': 'admin-test-key' },
+      body: JSON.stringify({
+        id: 'e2e-test-watch', source: 'api-fake', type: 'similarity',
+        target: { referenceImageUrl: 'https://images.test/reference.jpg', searchQuery: 'outerwear' },
+        searchPlan: { source: 'api-fake', queries: [{ query: 'outerwear', canonicalQuery: 'outerwear', tier: 'explicit', source: 'user' }], generatedAt: '2026-09-09T00:00:00.000Z' },
+      }),
+    });
+    assert.equal(createResponse.status, 201);
+    const unauthenticated = await fetch(`${runtime.base}/api/watches/e2e-test-watch/test-listing`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(unauthenticated.status, 401);
+
+    const payload = { externalId: 'e2e-test-positive', title: 'E2E test listing', url: 'https://api-fake.test/e2e-test-positive', imageUrls: ['https://images.test/reference.jpg'] };
+    const injected = await fetch(`${runtime.base}/api/watches/e2e-test-watch/test-listing`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-product-radar-key': 'admin-test-key' }, body: JSON.stringify(payload) }).then((response) => response.json());
+    assert.equal(injected.duplicate, false);
+    assert.equal(injected.listingDiscoveredEvent.externalId, 'e2e-test-positive');
+    assert.equal(injected.matchedListings, 1);
+    assert.equal(store.listEvents('e2e-test-watch').length, 1);
+    assert.equal(store.getWatchRuntimeStats('e2e-test-watch').imageComparisons, 1);
+
+    const duplicate = await fetch(`${runtime.base}/api/watches/e2e-test-watch/test-listing`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-product-radar-key': 'admin-test-key' }, body: JSON.stringify(payload) }).then((response) => response.json());
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(store.listEvents('e2e-test-watch').length, 1);
+    await fetch(`${runtime.base}/api/watches/e2e-test-watch`, { method: 'DELETE', headers: { 'x-product-radar-key': 'admin-test-key' } });
   } finally {
     await runtime.close();
     store.close();

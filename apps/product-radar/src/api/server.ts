@@ -155,6 +155,12 @@ export function createRadarServer(options: RadarServerOptions): Server {
         sendJson(response, 201, await options.service.createWatch(body));
         return;
       }
+      const testListingMatch = /^\/api\/watches\/([^/]+)\/test-listing$/u.exec(path);
+      if (method === 'POST' && testListingMatch) {
+        const body = await readBody(request, maxBodyBytes);
+        sendJson(response, 202, await options.service.injectTestListing(decodeURIComponent(testListingMatch[1] ?? ''), body));
+        return;
+      }
       const watchMatch = /^\/api\/watches\/([^/]+)(?:\/(run|pause|resume|status|stats|usage))?$/u.exec(path);
       if (watchMatch) {
         const watchId = decodeURIComponent(watchMatch[1] ?? '');
