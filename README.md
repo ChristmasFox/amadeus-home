@@ -149,6 +149,17 @@ export LANGBOT_API_KEY='<restore-from-password-manager>'
 `--apply --patches --activate-image` 构建并切换 CasaOS LangBot 镜像。旧镜像、compose
 备份和 `.lbpkg` 回滚包都保留在 Git 外。
 
+KOOK 离线自动恢复 watchdog 的预览与显式应用：
+
+```sh
+./scripts/deploy-kook-watchdog.sh --dry-run
+./scripts/deploy-kook-watchdog.sh --apply
+```
+
+该脚本将 root-owned watchdog 与 systemd timer 安装到 OrbStack `ubuntu`，默认每分钟
+探测 KOOK，连续 3 次明确离线才按 cooldown/上限重启 `langbot`；不构建镜像、不修改
+LangBot Compose。token 只从 CasaOS 外部 secret 读取，不进入仓库或 journal。
+
 ## Codex 全局完成通知
 
 Codex completion notification 是用户级能力，不依赖当前仓库目录。Git source 位于

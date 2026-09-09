@@ -1,5 +1,15 @@
 # Product Radar autonomous E2E acceptance & production repair（DEPLOYED / VERIFIED：2026-09-09）
 
+## KOOK LangBot offline auto-recovery（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-10）
+
+- [x] 复盘确认：重启前 KOOK `/api/v3/user/me` 为 HTTP 200、API code 0 但 `online=false`；LangBot 与 plugin runtime 仍 running，主日志没有对应 KOOK reconnect 记录；重启 LangBot 后连续探测恢复 `online=true`。具体底层 gateway 异常没有足够证据归结为单一原因。
+- [x] 新增独立 `scripts/kook_watchdog.py`：每分钟由 systemd 触发，连续 3 次明确离线且 `langbot` 仍 running 才允许 `docker compose restart langbot`；15 分钟 cooldown，6 小时最多 3 次。
+- [x] 增加 `KOOK_CONNECTION_DEGRADED`、`KOOK_AUTO_RESTART_REQUESTED/STARTED/FAILED`、`KOOK_CONNECTION_RECOVERED`、凭据/API/网络不可达、容器状态和重试耗尽等结构化 journal 事件；token 不进入 Git、日志或状态文件。
+- [x] 已部署到 OrbStack `ubuntu`：`kook-watchdog.service` 与 `kook-watchdog.timer` 安装为 root-owned unit，timer 为 `enabled/active`；状态文件为 0600，监控器立即运行成功。
+- [x] 部署后 live probe 返回 KOOK `online=true`、HTTP 200；LangBot 仍 running、restart count 为 0，未被 watchdog 额外重启；未构建镜像、未修改 LangBot Compose。
+- [x] watchdog 6/6、根测试 129 pass / 1 skip、Python/shell syntax、`pnpm check:secrets`、`pnpm workflow:plan`、`git diff --check` 通过；checkpoint 为 `.agent/checkpoints/2026-09-10-kook-watchdog.md`。
+- [ ] 未通过人为断网、改 token 或 kill 容器强制注入故障；当前验证覆盖正常探测、状态持久化、限频决策和线上安装，未宣称真实离线重启动作已被强制触发。
+
 - [x] 确认并修复高结果量 Bunjang 首扫永久 `WATERMARK_NOT_REACHED` 的停滞路径：首扫达到安全上限时安全建立静默 watermark；后续由进程内 30 秒 scheduler 按 interval/jitter/backoff 主动执行，changedetection 动态页面无文本 diff 不再让监控永久停摆。
 - [x] 修复 feed webhook 公共响应泄漏内部 `Map` 导致 `perWatch={}` 的误导性观测；runtime 统计仍在 SQLite 内按 Watch 正确结算，并补充失败后退避到期恢复 `HEALTHY` 的回归测试。
 - [x] 真实 Bunjang smoke：seller baseline 5、product baseline 1、两者 baseline notification 0；similarity 真实参考商品 `424506121`，抓取 60 个候选，阈值 0.60。

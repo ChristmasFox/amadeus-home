@@ -1,0 +1,12 @@
+[Unit]
+Description=Run KOOK bot liveness watchdog every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+Unit=kook-watchdog.service
+
+[Install]
+WantedBy=timers.target

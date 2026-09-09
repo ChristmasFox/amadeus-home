@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-07（Asia/Shanghai）
+更新时间：2026-09-10（Asia/Shanghai）
 
 ## 总体拓扑
 
@@ -62,6 +62,27 @@ integrations/langbot/ 只包含自定义资产：
 
 第三方 LangBot 本体、运行时数据库、插件安装包和容器层不进入仓库。兼容版本记录在
 integrations/langbot/README.md。
+
+#### KOOK offline recovery
+
+KOOK liveness 由 LangBot 外部的 root-owned systemd watchdog 负责，不依赖 LangBot
+自身日志、healthcheck 或插件 runtime。`scripts/kook_watchdog.py` 使用运行时的
+`/DATA/AppData/langbot/secrets/kook-bot-token` 调用 KOOK `/api/v3/user/me`，只将
+无凭据的结构化事件写入 journal，并将计数和重启历史原子写入
+`/DATA/AppData/langbot/monitoring/kook-watchdog-state.json`。
+
+`infra/systemd/kook-watchdog.timer` 每分钟触发一次；连续 3 次明确的
+`online=false` 且 `langbot` 容器仍 running 时，watchdog 执行
+`docker compose restart langbot`。单次重启至少间隔 15 分钟，6 小时内最多 3 次；
+KOOK 凭据错误、API/网络不可达、容器非 running 或重试耗尽均只记录事件，不进入盲目重启循环。
+首次恢复会记录 `KOOK_CONNECTION_RECOVERED`，异常期间可见
+`KOOK_CONNECTION_DEGRADED`、`KOOK_AUTO_RESTART_*`、`KOOK_PROBE_UNAVAILABLE` 和
+`KOOK_RECOVERY_EXHAUSTED` 等事件。
+
+安装/更新使用 `scripts/deploy-kook-watchdog.sh --apply`，目标固定为 OrbStack
+`ubuntu`；它只安装脚本和 systemd unit，不构建或重建 LangBot 镜像。生产回滚先停止并
+禁用 timer，再删除 unit 并执行 `systemctl daemon-reload`；安装脚本在覆盖旧文件时会保留
+`/var/lib/casaos/backups/kook-watchdog.codex-<timestamp>/` 备份。
 
 ### n8n
 

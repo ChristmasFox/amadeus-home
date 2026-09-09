@@ -6,6 +6,24 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
+## KOOK LangBot offline auto-recovery（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-10）
+
+重启前 KOOK API 明确返回 `online=false`，但 `langbot` 容器仍 running、restart count 为 0，
+且主日志没有对应的 KOOK reconnect 记录；重启 LangBot 后 API 连续返回 `online=true`。现有
+证据支持 gateway/adapter 状态卡住，但不足以将底层原因归结为单一异常。
+
+- 独立 watchdog `scripts/kook_watchdog.py` 已部署到 OrbStack `ubuntu`，由
+  `kook-watchdog.timer` 每分钟触发；连续 3 次明确离线、容器仍 running 才执行
+  `docker compose restart langbot`，15 分钟 cooldown，6 小时最多 3 次。
+- `kook-watchdog.service` 与 timer 为 root-owned；token 只从
+  `/DATA/AppData/langbot/secrets/kook-bot-token` 读取，状态原子写入 0600 文件，journal 只含
+  无凭据的结构化事件。timer 已 `enabled/active`，立即运行和 Ubuntu live probe 均为 HTTP 200、
+  `online=true`。
+- LangBot 当前仍 running、restart count 为 0；本轮没有构建镜像、修改 LangBot Compose 或
+  强制制造断网/kill 故障。watchdog 6/6、根测试 129 pass / 1 skip、secret scan、workflow
+  plan、Python/shell syntax、diff check 均通过。详情与回滚见
+  `.agent/checkpoints/2026-09-10-kook-watchdog.md`。
+
 ## Product Radar stalled similarity feed recovery（DEPLOYED / VERIFIED：2026-09-09）
 
 线上 Similarity Watch 之所以两天没有有效检查，不是正常的“0 匹配”：两个 Bunjang 高结果量查询在无 watermark 的首次扫描触及 500 条/10 页安全上限，旧实现因此永远拒绝建立初始 watermark，产生 `WATERMARK_NOT_REACHED`。与此同时，changedetection 虽按时抓取动态 Bunjang 页面，却提取不到可比较的文本，因而未触发 webhook；Product Radar 当时没有独立的 due-feed scheduler。

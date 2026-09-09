@@ -1,0 +1,29 @@
+[Unit]
+Description=KOOK bot liveness watchdog for CasaOS LangBot
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/local/libexec/kook-watchdog.py
+TimeoutStartSec=120s
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=KOOK_WATCHDOG_TOKEN_FILE=/DATA/AppData/langbot/secrets/kook-bot-token
+Environment=KOOK_WATCHDOG_STATE_FILE=/DATA/AppData/langbot/monitoring/kook-watchdog-state.json
+Environment=KOOK_WATCHDOG_LOCK_FILE=/run/kook-watchdog.lock
+Environment=KOOK_WATCHDOG_COMPOSE_DIR=/var/lib/casaos/apps/langbot
+Environment=KOOK_WATCHDOG_COMPOSE_SERVICE=langbot
+Environment=KOOK_WATCHDOG_CONTAINER=langbot
+Environment=KOOK_WATCHDOG_OFFLINE_THRESHOLD=3
+Environment=KOOK_WATCHDOG_RESTART_COOLDOWN_SECONDS=900
+Environment=KOOK_WATCHDOG_RESTART_WINDOW_SECONDS=21600
+Environment=KOOK_WATCHDOG_MAX_RESTARTS=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/DATA/AppData/langbot/monitoring
