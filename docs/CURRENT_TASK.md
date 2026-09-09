@@ -1,3 +1,14 @@
+# Product Radar autonomous E2E acceptance & production repair（DEPLOYED / VERIFIED：2026-09-09）
+
+- [x] 确认并修复高结果量 Bunjang 首扫永久 `WATERMARK_NOT_REACHED` 的停滞路径：首扫达到安全上限时安全建立静默 watermark；后续由进程内 30 秒 scheduler 按 interval/jitter/backoff 主动执行，changedetection 动态页面无文本 diff 不再让监控永久停摆。
+- [x] 修复 feed webhook 公共响应泄漏内部 `Map` 导致 `perWatch={}` 的误导性观测；runtime 统计仍在 SQLite 内按 Watch 正确结算，并补充失败后退避到期恢复 `HEALTHY` 的回归测试。
+- [x] 真实 Bunjang smoke：seller baseline 5、product baseline 1、两者 baseline notification 0；similarity 真实参考商品 `424506121`，抓取 60 个候选，阈值 0.60。
+- [x] 生产隔离 E2E Watch 通过 API-key 保护的 `e2e-test-*` listing injection 进入真实 `ListingDiscoveredEvent → feed router → ImageMatcher → SimilarListingMatchedEvent → outbox/notifications` 链路：正例 score 1.0、负例 score 0.045 未匹配、重复正例 duplicate 且无新增事件/通知；Telegram 与 KOOK 各 1 条 outbox 最终 sent。
+- [x] 真实 changedetection UUID/URL/900 秒间隔映射核验通过；webhook 触发 Bunjang 真实抓取 1 页/5 条，无误报。E2E Watch、feed、sensor、listing、event、outbox 和 test run 记录均已清理，现有真实 Watch 未被删除或修改。
+- [x] 线上最终状态：真实 Watch 1 条；`패딩`、`다운 자켓` 两条 shared feed 均 `ACTIVE`，最近执行成功、失败 0、watermark 存在；Watch runtime `HEALTHY`，`feedRuns=6 / successfulRuns=6 / failedRuns=0`，`newListings=81 / candidatesProcessed=81 / imageComparisons=81 / aboveThreshold=0 / notificationsSent=0`。
+- [x] Product Radar 48/48、typecheck/build、LangBot plugin 33/33、真实 Bunjang smoke、`pnpm check:secrets`、`git diff --check`、`scripts/doctor.sh`（0 failure / 0 warning）通过。
+- [x] source commit `ab91542` 已 push 到 `origin/main`；immutable image `local/product-radar:git-ab91542`（image id `sha256:bd09352adb493217bd6e89403629176546ba841e19e71e51d293823a35c41551`）已在 CasaOS `ubuntu` 激活；回滚备份为 `/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260909-165853` 与 `/var/lib/casaos/apps/product-radar/.env.codex-backup.20260909-165853`。
+
 # Current Task
 
 ## Product Radar stalled similarity feed recovery（DEPLOYED / VERIFIED：2026-09-09）

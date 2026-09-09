@@ -1,3 +1,9 @@
+# Product Radar autonomous E2E acceptance（DEPLOYED / VERIFIED：2026-09-09）
+
+Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首扫现在以安全 watermark 建立静默 baseline，进程内 scheduler 每 30 秒调度到期 shared feed；changedetection 仍作为兼容 webhook，但动态页面没有文本 diff 不会再阻断轮询。真实 Watch 当前 1 条，`패딩` / `다운 자켓` feed 均 `ACTIVE`，最新运行成功、失败 0，Watch runtime `HEALTHY`。
+
+已通过真实 Bunjang seller/product/similarity smoke、48/48 Product Radar tests、33/33 LangBot tests、真实 changedetection webhook、以及 API-key 保护的正例/负例/重复 listing E2E。正例走完整发现、匹配、事件和通知 outbox，Telegram/KOOK 各一条最终 sent；负例未通知；重复未产生第二事件。E2E 数据已按精确前缀清理。source `ab91542` 已 push，CasaOS 当前 image 为 `local/product-radar:git-ab91542`，container healthy，`/health` 为 `ok`；回滚 checkpoint 见 `.agent/checkpoints/2026-09-09-product-radar-e2e-acceptance.md`。
+
 # Project State
 
 ## Product Radar stalled similarity feed recovery（DEPLOYED / VERIFIED：2026-09-09）

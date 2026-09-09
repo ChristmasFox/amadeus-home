@@ -1,3 +1,7 @@
+# Product Radar autonomous E2E acceptance（DEPLOYED / VERIFIED：2026-09-09）
+
+本阶段已完成并部署 Product Radar feed recovery、完整 E2E listing injection 验收和公共 webhook 响应修复。真实 Bunjang smoke、正/负/重复相似匹配、changedetection webhook、Telegram/KOOK outbox、runtime counters、LangBot 33/33、Product Radar 48/48、typecheck/build、secret scan、doctor 均有证据；E2E 数据已清理。当前 source `ab91542` 与 `origin/main` 同步，CasaOS `ubuntu` 激活 `local/product-radar:git-ab91542`，真实 Watch/feed 为 HEALTHY/ACTIVE。详情与回滚路径见 `.agent/checkpoints/2026-09-09-product-radar-e2e-acceptance.md`。
+
 # Codex State
 
 ## Product Radar V0.3.1 Runtime Observability（DEPLOYED / VERIFIED：2026-09-09）
