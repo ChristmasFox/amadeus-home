@@ -1,6 +1,6 @@
 # Project State
 
-## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
 Product Radar LangBot source 已从旧的固定文本/图片 fallback 入口升级为独立的通用语义边界：
 
@@ -9,7 +9,8 @@ Product Radar LangBot source 已从旧的固定文本/图片 fallback 入口升�
 - `components/context.py` 按 `product_radar + platform + chat + sender` 管理 active Watch/pending proposal；`command_adapter.py` 将结构化结果转成 deterministic Core API payload。
 - listener 支持 create/list/get/update/pause/resume/delete，并复用 active Watch 解析价格、频率、品牌等 follow-up；Product Radar Core 不再被 listener 交给第二次 Vision/NL extraction。
 - 新增 paraphrase、negative routing、multimodal 单调用、explicit-over-vision、Telegram identity 和 context isolation 回归；LangBot Python 16/16、Python compile、secret scan、plugin dry-run 通过。
-- 插件 source manifest 已升至 `0.4.0`。本轮只完成源码与定向验证，未安装到 LangBot、未重启容器、未部署 CasaOS，也未发送真实平台消息。
+- 插件 source manifest 已升至 `0.4.0`。commit `9888e3c58ca5b8cd4fb37b202fb4abc0a3f70bf2` 已 push 到 `origin/main`，并通过 LangBot plugin API 安装；task `83` 达到 `INSTALL_READY`，package SHA-256 为 `7ed45be07f37c9911b50c0bdac8087bb883de0876a1c20108b4826047e34cfc9`，rollback dir 为 `.backups/langbot/20260909-111116`。
+- live 核验：OrbStack `ubuntu` 的 `product-radar` `healthy/running`，LangBot 与 plugin runtime running；Product Radar `/health` 为 `status=ok`，`GET /api/watches` 保持既有 3 个 Watch（1 Product、2 Similarity）；`scripts/doctor.sh` 为 0 failure / 0 warning。未执行 Docker build 或 CasaOS Compose 变更，未创建测试 Watch，未发送真实 Telegram/KOOK 消息；人工平台入站 smoke 仍待用户完成。
 
 
 ## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）

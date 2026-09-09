@@ -1,10 +1,10 @@
 # Codex State
 
-更新时间：2026-09-06（Asia/Shanghai）
+更新时间：2026-09-09（Asia/Shanghai）
 
-## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
-已完成 Product Radar LangBot generic NLU source implementation：独立 normalized message、Luna structured command、ownership-aware context 和 deterministic command adapter 已接通；复用 PUBG V3 的架构理念但没有耦合 PUBG-specific parser。图片-only 与图片问答不会创建 Watch；有图片时 intent/entities/TargetProfile 在同一次 multimodal Luna call 完成，listener 不再调用第二次 Vision。当前源码 manifest 为 `0.4.0`，LangBot Python 16/16、Python compile、secret scan、plugin dry-run 和 diff check 已通过。本阶段未做 plugin apply、容器重启、CasaOS 部署或真实平台消息 smoke。
+已完成并部署 Product Radar LangBot generic NLU source implementation：独立 normalized message、Luna structured command、ownership-aware context 和 deterministic command adapter 已接通；复用 PUBG V3 的架构理念但没有耦合 PUBG-specific parser。图片-only 与图片问答不会创建 Watch；有图片时 intent/entities/TargetProfile 在同一次 multimodal Luna call 完成，listener 不再调用第二次 Vision。commit `9888e3c58ca5b8cd4fb37b202fb4abc0a3f70bf2` 已 push 到 `origin/main`，manifest `0.4.0` 通过 LangBot API 安装，task `83` 达到 `INSTALL_READY`，package SHA-256 为 `7ed45be07f37c9911b50c0bdac8087bb883de0876a1c20108b4826047e34cfc9`。`product-radar` live 为 `healthy/running`，`/health` 返回 `status=ok`，既有 3 个 Watch 未变；`scripts/doctor.sh` 为 0 failure / 0 warning。未发送真实 Telegram/KOOK 消息，人工平台 smoke 尚未完成。
 
 
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）

@@ -1,6 +1,6 @@
 # Current Task
 
-## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+## Product Radar Generic Natural Language Intent Parsing（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 先对照 PUBG V3 已工作的 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 链路，在 Product Radar 内建立独立、平台无关的 normalized message / context / command boundary；未导入 PUBG-specific parser 或 intent。
 - [x] Product Radar structured command 已固定 `domain=product_radar`、七种 watch intent、`similarity/seller/product` 三种 `watchType`，并覆盖 source、URL、reference image、TargetProfile 字段、搜索词、价格、货币、频率和相似度阈值。
@@ -8,7 +8,9 @@
 - [x] Product Radar Core 只接收 structured command 适配后的 payload；similarity 的完整 TargetProfile 通过 API 顶层字段传入，避免 Core 重新执行自然语言或 Vision 提取。
 - [x] Context 绑定 `product_radar + platform + chat type/id + platform user id`；pending proposal 与 active Watch 均按该 key 校验，群聊成员不能继承他人的 context。
 - [x] 图片单独发送不会触发 Product Radar；补充 7 种自然表达的 paraphrase tests、图片问答 negative routing tests、图片-only、Telegram sender/chat 归一化、context 隔离和三类 payload tests；LangBot Python tests 16/16、Python compile、secret scan、plugin dry-run、`git diff --check` 已通过。
-- [ ] 本轮未执行 LangBot API 安装、CasaOS/Compose 操作或真实 Telegram/KOOK 消息；如需生产生效，另行执行显式 plugin apply 并做人工入站 smoke。
+- [x] commit `9888e3c58ca5b8cd4fb37b202fb4abc0a3f70bf2` 已 push 到 `origin/main`；通过 `scripts/deploy-langbot.sh --plugin product-radar --apply` 安装 Product Radar `0.4.0`，LangBot task `83` 达到 `INSTALL_READY`，package SHA-256 为 `7ed45be07f37c9911b50c0bdac8087bb883de0876a1c20108b4826047e34cfc9`，rollback dir 为 `.backups/langbot/20260909-111116`。
+- [x] live 核验通过：OrbStack `ubuntu` 的 `product-radar` 为 `healthy/running`，LangBot 与 plugin runtime running；Product Radar `/health` 返回 `status=ok`，`GET /api/watches` 返回既有 3 个 Watch（1 Product、2 Similarity），未创建或修改测试 Watch；`scripts/doctor.sh` 为 0 failure / 0 warning。
+- [ ] 未发送真实 Telegram/KOOK 消息；人工平台入站 smoke 仍需用户在目标会话中完成，因此不宣称真实平台送达已验证。
 
 
 ## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
