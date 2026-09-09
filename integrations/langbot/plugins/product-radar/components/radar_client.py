@@ -62,5 +62,13 @@ async def list_watches(plugin: Any) -> dict[str, Any]:
     return await asyncio.to_thread(_request, plugin, 'GET', '/api/watches')
 
 
+async def get_watch(plugin: Any, watch_id: str) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'GET', f'/api/watches/{watch_id}')
+
+
 async def patch_watch(plugin: Any, watch_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     return await asyncio.to_thread(_request, plugin, 'PATCH', f'/api/watches/{watch_id}', payload)
+
+
+async def delete_watch(plugin: Any, watch_id: str) -> dict[str, Any]:
+    return await asyncio.to_thread(_request, plugin, 'DELETE', f'/api/watches/{watch_id}')

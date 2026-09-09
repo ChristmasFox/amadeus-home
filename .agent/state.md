@@ -2,6 +2,11 @@
 
 更新时间：2026-09-06（Asia/Shanghai）
 
+## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+
+已完成 Product Radar LangBot generic NLU source implementation：独立 normalized message、Luna structured command、ownership-aware context 和 deterministic command adapter 已接通；复用 PUBG V3 的架构理念但没有耦合 PUBG-specific parser。图片-only 与图片问答不会创建 Watch；有图片时 intent/entities/TargetProfile 在同一次 multimodal Luna call 完成，listener 不再调用第二次 Vision。当前源码 manifest 为 `0.4.0`，LangBot Python 16/16、Python compile、secret scan、plugin dry-run 和 diff check 已通过。本阶段未做 plugin apply、容器重启、CasaOS 部署或真实平台消息 smoke。
+
+
 ## PUBG 对局复盘 V1（DEPLOYED / VERIFIED：2026-09-06）
 
 已基于比赛 `d8c41c10-de9f-40b4-ac88-ede0ab554a31` 的真实 Match API/Telemetry 完成并部署复盘 V1：runtime image `local/pubg-query-engine-v3:git-2f6a63b013ff` 已运行在 OrbStack `ubuntu` / CasaOS，runtime compose 已切换 `telemetry-parser-5` / `review-features-5`，n8n `PUBG Data Gateway v3` 已导入并 active，LangBot `local/pubg-stats` `3.3.0` 已由 API task `14` 安装 ready。

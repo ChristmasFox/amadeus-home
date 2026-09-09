@@ -6,8 +6,8 @@ metadata:
     en_US: Product Radar Listener
     zh_Hans: Product Radar 监控入口
   description:
-    en_US: Routes natural-language seller and product watch requests to Product Radar.
-    zh_Hans: 将自然语言卖家监控和商品监控请求发送到 Product Radar。
+    en_US: Routes normalized natural-language watch commands to Product Radar.
+    zh_Hans: 将标准化的自然语言监控命令发送到 Product Radar。
 spec: {}
 execution:
   python:

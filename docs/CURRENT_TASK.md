@@ -1,5 +1,16 @@
 # Current Task
 
+## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+
+- [x] 先对照 PUBG V3 已工作的 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 链路，在 Product Radar 内建立独立、平台无关的 normalized message / context / command boundary；未导入 PUBG-specific parser 或 intent。
+- [x] Product Radar structured command 已固定 `domain=product_radar`、七种 watch intent、`similarity/seller/product` 三种 `watchType`，并覆盖 source、URL、reference image、TargetProfile 字段、搜索词、价格、货币、频率和相似度阈值。
+- [x] GPT-5.6 Luna 负责自然语言语义解析；有图片时同一次 multimodal structured call 同时返回 Product Radar intent/entities 与 TargetProfile，listener 不再追加 Vision 调用；明确文本字段在归一化层覆盖冲突的视觉字段。
+- [x] Product Radar Core 只接收 structured command 适配后的 payload；similarity 的完整 TargetProfile 通过 API 顶层字段传入，避免 Core 重新执行自然语言或 Vision 提取。
+- [x] Context 绑定 `product_radar + platform + chat type/id + platform user id`；pending proposal 与 active Watch 均按该 key 校验，群聊成员不能继承他人的 context。
+- [x] 图片单独发送不会触发 Product Radar；补充 7 种自然表达的 paraphrase tests、图片问答 negative routing tests、图片-only、Telegram sender/chat 归一化、context 隔离和三类 payload tests；LangBot Python tests 16/16、Python compile、secret scan、plugin dry-run、`git diff --check` 已通过。
+- [ ] 本轮未执行 LangBot API 安装、CasaOS/Compose 操作或真实 Telegram/KOOK 消息；如需生产生效，另行执行显式 plugin apply 并做人工入站 smoke。
+
+
 ## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
 
 - [x] 新增一次性 inbound `resolve_product_radar_intent` 语言解析层，负责 list/confirm/cancel/stop/watch/none action，不参与轮询。

@@ -1,3 +1,10 @@
+"""Legacy payload helpers kept for backwards compatibility.
+
+The live LangBot listener uses ``intent_planner.resolve_product_radar_command``
+and its GPT-5.6 Luna structured boundary.  These helpers are retained for
+older callers and migration tests; they are not the Product Radar router.
+"""
+
 from __future__ import annotations
 
 import re

@@ -1,5 +1,17 @@
 # Project State
 
+## Product Radar Generic Natural Language Intent Parsing（SOURCE COMPLETE / TARGETED VERIFIED：2026-09-09）
+
+Product Radar LangBot source 已从旧的固定文本/图片 fallback 入口升级为独立的通用语义边界：
+
+- `components/platform/normalized.py` 统一 inbound message、attachment、callback 与 ownership key；Telegram raw message 优先使用真实 `from.id` / `chat.id`。
+- `components/intent_planner.py` 以 GPT-5.6 Luna 输出 `domain + intent + watchType + entities + constraints + targetProfile`；非 Product Radar 消息返回 none，图片-only 不进入路由。
+- `components/context.py` 按 `product_radar + platform + chat + sender` 管理 active Watch/pending proposal；`command_adapter.py` 将结构化结果转成 deterministic Core API payload。
+- listener 支持 create/list/get/update/pause/resume/delete，并复用 active Watch 解析价格、频率、品牌等 follow-up；Product Radar Core 不再被 listener 交给第二次 Vision/NL extraction。
+- 新增 paraphrase、negative routing、multimodal 单调用、explicit-over-vision、Telegram identity 和 context isolation 回归；LangBot Python 16/16、Python compile、secret scan、plugin dry-run 通过。
+- 插件 source manifest 已升至 `0.4.0`。本轮只完成源码与定向验证，未安装到 LangBot、未重启容器、未部署 CasaOS，也未发送真实平台消息。
+
+
 ## Product Radar Language Intent Planner（DEPLOYED / VERIFIED：2026-09-08）
 
 Product Radar LangBot UX 已增加类似 PUBG planner 的意图解析边界：

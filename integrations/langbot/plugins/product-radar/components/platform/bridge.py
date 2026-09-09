@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from components.platform.normalized import context_key as normalized_context_key, normalize_event_message
+
 # Keep the same inert marker consumed by the existing Telegram host adapter
 # used by the PUBG plugin. Product Radar only uses the platform bridge; it
 # never calls Telegram/KOOK APIs directly.
@@ -111,10 +113,10 @@ def event_text(event: Any) -> str:
 
 
 def conversation_key(event: Any) -> str:
-    platform = platform_name(event)
-    chat_id = value(event, 'launcher_id', value(event, 'chat_id', value(event, 'conversation_id', '')))
-    user_id = value(event, 'sender_id', value(event, 'platform_user_id', value(event, 'user_id', '')))
-    return f'{platform}:{str(chat_id or "unknown")}:{str(user_id or "unknown")}'
+    # Keep the legacy helper name, but use the same ownership-aware key as the
+    # structured Product Radar context.  It includes platform, chat, sender,
+    # and domain rather than a process-global conversation bucket.
+    return normalized_context_key(normalize_event_message(event))
 
 
 def reply(event_context: Any, text: str, buttons: list[dict[str, str]] | None = None) -> None:
