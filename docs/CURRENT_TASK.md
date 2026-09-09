@@ -1,5 +1,13 @@
 # Current Task
 
+## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
+
+- [x] 修复 `取消监控` 被错误当成“取消待确认 proposal”的问题：有 pending proposal 时取消 proposal；已有当前 Watch 时转为真正的 `delete_watch`；没有唯一 active context 时要求指定目标，不再回复成功但保留 Watch。
+- [x] 离线 fallback 补充 `不要盯着了`、`不要再盯了`、`不想盯了` 对当前 active Watch 的删除映射；保留 Luna structured intent 作为主语义入口。
+- [x] LangBot plugin tests 19/19、Python compile、secret scan、`git diff --check` 通过；source commit `bc8d140220a8` 已 push，plugin task `89` 达到 `INSTALL_READY`，live manifest `0.4.1`。
+- [x] 部署后 Product Radar 与 changedetection 仍 healthy，`/health` 为 `ok`，既有 3 个 Watch 未被验证过程修改；未发送真实 Telegram/KOOK 消息。
+- [ ] 待用户在原 Telegram 会话再次发送 `取消监控` 或 `不要盯着了` 完成人工入站 smoke；若当前会话 active context 已过期，需指定商品 URL 或 Watch ID。
+
 ## Product Radar V0.3 Phase A hardening（DEPLOYED / VERIFIED：2026-09-09）
 
 - [x] 保持 `NormalizedBotMessage → Domain/Intent → structured entities → Context → deterministic Domain` 边界；新增 `TargetProfile.userSearchTerms`，用户搜索词与视觉/OCR 词分离并在 planner 中优先。

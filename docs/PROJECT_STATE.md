@@ -1,5 +1,14 @@
 # Project State
 
+## Product Radar cancellation routing fix（DEPLOYED / VERIFIED：2026-09-09）
+
+截图反馈对应的根因是 Product Radar fallback 将 `取消监控` 无条件编码为 pending proposal 的 `control=cancel`；当已有 Watch 时 listener 只清理 proposal，或在无 proposal 时回复“没有对应的待确认监控”，不会调用删除 API。现已改为按当前 ownership-aware context 分流：pending proposal 才 cancel，active Watch 执行 `delete_watch`，无唯一上下文则 clarification；`不要盯着了` 等自然停用表达也复用 active Watch 删除路径。
+
+- Source commit：`bc8d140220a82b429a84982e0e9f207bcf729f20`，已 push 到 `origin/main`。
+- LangBot plugin task `89` 已 `INSTALL_READY`；live manifest version/label 为 `0.4.1`。
+- LangBot Python tests 19/19、Python compile、secret scan、diff check 通过；部署后 Product Radar `healthy`、`/health=ok`，既有 3 个 Watch 保持不变。
+- 未发送真实 Telegram/KOOK 消息；需用户在原会话重试以验证真实 inbound/delete delivery。若 active context 已因重启过期，应指定商品 URL 或 Watch ID，避免跨用户误删。
+
 ## Product Radar V0.3 Phase A hardening（DEPLOYED / VERIFIED：2026-09-09）
 
 本轮在既有 Luna/Mastra/NLU 与 V0.3 shared-feed 架构上做边界硬化，没有引入 PUBG-specific parser，也没有新增视觉模型或抓取绕过：
