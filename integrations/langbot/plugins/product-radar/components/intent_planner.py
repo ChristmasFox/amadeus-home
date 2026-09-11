@@ -556,7 +556,10 @@ def _normalize_model_result(
         else:
             text = _string(candidate)
             if text:
-                entities[field] = _clean_url(text) if field.endswith('Url') else text
+                if field == 'source':
+                    entities[field] = text.casefold()
+                else:
+                    entities[field] = _clean_url(text) if field.endswith('Url') else text
     for field in CONSTRAINT_FIELDS:
         candidate = _raw_field(raw, raw_entities, raw_constraints, field)
         if field == 'currency':
@@ -728,6 +731,51 @@ constraints 至少按以下键输出实际识别到的值：minPrice、maxPrice�
 '''
 
 
+def _structured_retry_messages(messages: list[object]) -> list[object]:
+    """Add one protocol reminder without changing the user's semantic input."""
+    if not messages or provider_message is None:
+        return messages
+    last = messages[-1]
+    content = getattr(last, 'content', None)
+    reminder = {
+        'type': 'text',
+        'text': '上一条响应不是合法 JSON。请重新解析同一条用户消息，只返回输出形状中的一个 JSON 对象，不要回答用户、不要解释。',
+    }
+    if isinstance(content, list):
+        retry_content = [*content, reminder]
+    elif isinstance(content, str):
+        retry_content = f'{content}\n\n{reminder["text"]}'
+    else:
+        return messages
+    return [
+        *messages[:-1],
+        provider_message.Message(role=getattr(last, 'role', 'user'), content=retry_content),
+    ]
+
+
+async def _invoke_structured_llm(plugin: Any, model_uuid: str, messages: list[object]) -> Any:
+    """Prefer provider-enforced JSON while remaining compatible with older hosts."""
+    try:
+        return await plugin.invoke_llm(
+            model_uuid,
+            messages,
+            funcs=[],
+            extra_args={'response_format': {'type': 'json_object'}},
+        )
+    except TypeError as exc:
+        # The local test doubles and older LangBot plugin SDKs may not expose
+        # call-level extra_args.  Do not turn that compatibility issue into a
+        # Product Radar outage.
+        if 'extra_args' not in str(exc):
+            raise
+        return await plugin.invoke_llm(model_uuid, messages, funcs=[])
+    except Exception:
+        # Some OpenAI-compatible providers do not implement JSON mode. Retry
+        # once without that optional parameter; semantic ownership remains with
+        # Luna and the Core still receives only a validated structured result.
+        return await plugin.invoke_llm(model_uuid, messages, funcs=[])
+
+
 async def _intent_model_uuid(plugin: Any) -> str | None:
     configured = ''
     try:
@@ -787,8 +835,15 @@ async def resolve_product_radar_command(
             provider_message.Message(role='user', content=content),
         ]
         started = time.monotonic()
-        output = await plugin.invoke_llm(model_uuid, messages, funcs=[])
-        parsed = _parse_json(_content_text(output))
+        output = await _invoke_structured_llm(plugin, model_uuid, messages)
+        try:
+            parsed = _parse_json(_content_text(output))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            # A model can still ignore protocol instructions even when the
+            # provider accepts response_format. One bounded retry repairs that
+            # transport/protocol failure without introducing keyword routing.
+            output = await _invoke_structured_llm(plugin, model_uuid, _structured_retry_messages(messages))
+            parsed = _parse_json(_content_text(output))
         command = _normalize_model_result(parsed, message, context)
         if command is not None:
             command['_usage'] = usage_from_output(

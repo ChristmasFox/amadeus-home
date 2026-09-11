@@ -297,6 +297,12 @@ test('similarity watch silently baselines candidates, matches new listings at th
   assert.equal((store.listEvents()[0]?.payload.similarity as number) > 0.6, true);
   assert.equal(store.getSimilarityMatch(created.watch.id, 'fake', 'different')?.matched, false);
   assert.equal(channel.calls.length, 1);
+
+  await service.pauseWatch(created.watch.id);
+  assert.equal(store.getWatch(created.watch.id)?.enabled, false);
+  assert.equal((await service.runWatch(created.watch.id, 'after-pause')).status, 'disabled');
+  await service.deleteWatch(created.watch.id);
+  assert.equal(store.getWatch(created.watch.id), undefined);
 });
 
 test('product baseline, price decrease/increase, status and title/seller changes produce real diff events', async () => {

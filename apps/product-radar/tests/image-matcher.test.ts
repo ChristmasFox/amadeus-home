@@ -27,6 +27,10 @@ test('perceptual matcher persists a reference feature and ranks visually similar
     assert.equal(result.comparedImages, 2);
     assert.equal(result.bestImageUrl, 'https://image.test/near.png');
     assert.ok(result.score > 0.6);
+    const positive = await matcher.match(prepared.id, ['https://image.test/near.png'], { threshold: 0.6 });
+    const negative = await matcher.match(prepared.id, ['https://image.test/different.png'], { threshold: 0.6 });
+    assert.ok((positive.score ?? 0) >= 0.6);
+    assert.ok((negative.score ?? 0) < 0.6);
     const files = await (await import('node:fs/promises')).readdir(join(directory, 'image-features'));
     assert.ok(files.length >= 1);
   } finally {
