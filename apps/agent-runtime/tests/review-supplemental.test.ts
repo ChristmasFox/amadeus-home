@@ -141,6 +141,7 @@ test('default review presentation follows the approved compact report template',
   const query = buildDeterministicQuery({ text: '复盘这场比赛d8c41c10-de9f-40b4-ac88-ede0ab554a31' });
   const presentation = buildReviewPresentation(review, query, null);
   const text = presentation.fallbackText;
+  const environmentText = presentation.sections.find((section) => section.type === 'environment')?.text ?? '';
   assert.equal(text.includes('🎬 PUBG · 对局复盘'), true);
   assert.equal(text.includes('荣都'), true);
   assert.equal(text.includes('🔥 本场主线'), true);
@@ -161,6 +162,9 @@ test('default review presentation follows the approved compact report template',
   assert.equal(text.includes('环境破坏 /'), false);
   assert.equal(text.includes('双向队友拳击'), false);
   assert.equal(text.includes('误伤三件套'), false);
+  assert.equal(text.includes('Panzerfaust'), true);
+  assert.equal(environmentText.includes('开门'), false);
+  assert.equal(environmentText.includes('翻越'), false);
   assert.equal(text.includes('kim_kkl\n-'), true);
   assert.equal(text.includes('本场 Match Store 没有该玩家记录'), false);
   assert.equal(analysis.funEvents?.some((eventItem) => eventItem.targetPlayerIds.includes(DEFAULT_TEAM.players[3]!.id)), false);
@@ -174,6 +178,10 @@ test('default review presentation follows the approved compact report template',
   assert.deepEqual(presentation.sections.map((section) => section.type), [
     'overview', 'players', 'players', 'players', 'players', 'interactions', 'loot', 'environment', 'conclusion',
   ]);
+  assert.deepEqual(
+    presentation.sections.filter((section) => section.type === 'players').map((section) => section.title),
+    [DEFAULT_TEAM.players[0]!.name, DEFAULT_TEAM.players[1]!.name, DEFAULT_TEAM.players[2]!.name, DEFAULT_TEAM.players[3]!.name],
+  );
   assert.deepEqual(presentation.metadata?.sectionKeys, ['overview', 'players', 'interactions', 'loot', 'environment', 'conclusion']);
   assert.equal(presentation.sections.some((section) => section.type === 'turning_points'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'key_fights'), false);

@@ -58,6 +58,19 @@ function ordinalLabel(ordinal: number): string {
   return ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨', '⑩'][ordinal - 1] ?? String(ordinal);
 }
 
+function chineseNumber(value: number, useLiang = false): string {
+  const labels = ['', '一', useLiang ? '两' : '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  return labels[value] ?? String(value);
+}
+
+function waveLabel(value: number): string {
+  return `第${chineseNumber(value)}波`;
+}
+
+function placementNarrative(value: number | null): string {
+  return value === null ? '这个名次' : `第${chineseNumber(value)}名`;
+}
+
 function operationIcon(type: string): string {
   return ({ ENTRY: '🔥', MULTI_KNOCK: '⚡', CLUTCH: '🏆', FLANK: '🧭', TRADE: '🔁', SUPPORT: '🛡️', REVIVE: '❤️', DAMAGE: '💥', POSITIONING_RISK: '⚠️', MISTAKE: '❗', VEHICLE: '🚗', HEAVY_WEAPON: '🚀' } as Record<string, string>)[type] ?? '⭐';
 }
@@ -200,7 +213,7 @@ function resultLabel(result: string): string {
 
 function itemLabel(value: string): string {
   const normalized = value.replace(/^Item_/iu, '').replace(/^Weapon_/iu, '').replace(/_C$/u, '');
-  if (/dot.?sight|red.?dot/u.test(normalized)) return '红点';
+  if (/dot.?sight|red.?dot/iu.test(normalized)) return '红点';
   const labels: Record<string, string> = {
     Ammo_762mm: '7.62mm弹药',
     Ammo_556mm: '5.56mm弹药',
@@ -379,9 +392,16 @@ function vehicleImpactForPlayer(review: MatchReviewResult, playerId: string) {
     .sort((left, right) => right.wheelsDestroyed - left.wheelsDestroyed || right.vehicleDamage - left.vehicleDamage || (left.time ?? Number.POSITIVE_INFINITY) - (right.time ?? Number.POSITIVE_INFINITY))[0] ?? null;
 }
 
-function vehicleImpactWeapon(review: MatchReviewResult, attackId: string): string | null {
-  const event = review.facts.combat.events.find((item) => item.attackId === attackId && item.weaponId);
-  return event?.weaponId ? weaponLabel(event.weaponId) : null;
+function vehicleImpactWeapon(review: MatchReviewResult, impact: { attackId: string; playerId: string; evidenceIds: string[] }): string | null {
+  const event = review.facts.combat.events.find((item) => item.attackId === impact.attackId && item.weaponId);
+  if (event?.weaponId) return weaponLabel(event.weaponId);
+  // Compact cached facts may omit the event stream, but weapon evidence still
+  // overlaps the vehicle-impact evidence and can identify the weapon.
+  const evidenceIds = new Set(impact.evidenceIds);
+  const weapon = review.facts.weapons
+    .filter((item) => item.playerId === impact.playerId && item.evidenceIds.some((id) => evidenceIds.has(id)))
+    .sort((left, right) => right.hits - left.hits || right.damage - left.damage || right.shots - left.shots)[0];
+  return weapon ? weaponLabel(weapon.weapon) : null;
 }
 
 function vehicleImpactDetails(impact: NonNullable<ReturnType<typeof vehicleImpactForPlayer>>): string | null {
@@ -401,8 +421,20 @@ function vehicleImpactText(review: MatchReviewResult, playerId: string): string 
   if (!impact) return null;
   const details = vehicleImpactDetails(impact);
   if (!details) return null;
-  const weapon = vehicleImpactWeapon(review, impact.attackId);
+  const weapon = vehicleImpactWeapon(review, impact);
   return `${weapon ?? '载具链'}${details}`;
+}
+
+function playerVehicleImpactText(review: MatchReviewResult, playerId: string): string | null {
+  const player = review.facts.players.find((item) => item.playerId === playerId);
+  const impacts = (review.facts.vehicleImpacts ?? []).filter((item) => item.playerId === playerId);
+  const totalVehicleDamage = player?.vehicle?.vehicleDamage ?? impacts.reduce((sum, item) => sum + item.vehicleDamage, 0);
+  const wheelsDestroyed = impacts.reduce((sum, item) => sum + item.wheelsDestroyed, 0);
+  if (totalVehicleDamage <= 0 && wheelsDestroyed <= 0) return null;
+  const parts: string[] = [];
+  if (totalVehicleDamage > 0) parts.push(`打出约${integer(totalVehicleDamage)}载具伤害`);
+  if (wheelsDestroyed > 0) parts.push(`击破${wheelsDestroyed}个车辆轮胎`);
+  return parts.join('，');
 }
 
 function armorBreakText(review: MatchReviewResult, playerId: string): string | null {
@@ -416,7 +448,7 @@ function armorBreakText(review: MatchReviewResult, playerId: string): string | n
 function playerWeaponDamageText(review: MatchReviewResult, playerId: string): string | null {
   const weapons = playerWeapons(review, playerId).filter((weapon) => weapon.damage > 0);
   const clauses = weapons.slice(0, 4).map((weapon) => `${weaponLabel(weapon.weapon)}造成约${integer(weapon.damage)}伤害`);
-  const vehicle = vehicleImpactText(review, playerId);
+  const vehicle = playerVehicleImpactText(review, playerId);
   if (vehicle) clauses.push(`另外${vehicle}`);
   return clauses.length ? `${clauses.join('；')}。` : null;
 }
@@ -508,15 +540,15 @@ function templatePlayerCommentaryGroups(review: MatchReviewResult, player: Revie
     const armor = armorBreakText(review, player.playerId);
     const actionSentence: string[] = [];
     if (mainFight && (multiKnock || clutch)) {
-      actionSentence.push(`第${fightOrdinal(review, mainFight.id)}波团战${mainFight.teamKills > 0 && mainFight.teamKnocks > 0 ? `由你主动开火，连续完成${mainFight.teamKnocks}次击倒并收下${mainFight.teamKills}次击杀` : `由你完成${mainFight.teamKills}次击杀`}`);
+      actionSentence.push(`${waveLabel(fightOrdinal(review, mainFight.id))}团战${mainFight.teamKills > 0 && mainFight.teamKnocks > 0 ? `由你主动开火，连续完成${mainFight.teamKnocks}次击倒并收下${mainFight.teamKills}次击杀` : `由你完成${mainFight.teamKills}次击杀`}`);
     }
     if (armor) actionSentence.push(`还用${armor}`);
     if (vehicleImpact && vehicleImpact.wheelsDestroyed >= 4) {
-      const weapon = vehicleImpactWeapon(review, vehicleImpact.attackId);
+      const weapon = vehicleImpactWeapon(review, vehicleImpact);
       actionSentence.push(`${weapon ?? '重火力'}一炮四轮，${vehicleImpactDetails(vehicleImpact) ?? '把载具链打穿'}`);
     }
     if (actionSentence.length) groups.push([`${actionSentence.join('；')}。`]);
-    groups.push([`你是本局${player.kills >= 2 ? '唯一' : '少数'}把“打中人”变成“送人进观战席”的人，队伍能拿${rankLabel(review.match.placement)}，主要靠你把这波团战接住了。`]);
+    groups.push([`你是本局${player.kills >= 2 ? '唯一' : '少数'}把“打中人”变成“送人进观战席”的人，队伍能拿${placementNarrative(review.match.placement)}，主要靠你把这波团战接住了。`]);
   } else if (player.damage >= Math.max(120, review.facts.squad.damage * 0.3)) {
     const weaponText = playerWeaponDamageText(review, player.playerId);
     if (weaponText) groups.push([weaponText]);
@@ -595,6 +627,13 @@ function templatePlayerSection(review: MatchReviewResult, player: ReviewPlayerFa
     text: lines.join('\n'),
     data: { playerId: player.playerId, operationIds: player.keyOperations.map((operation) => operation.id), section: 'players', vehicle: player.vehicle ?? null, heavyWeapons: player.heavyWeapons, matchPresence: player.matchPresence ?? 'recorded', awards },
   };
+}
+
+function templatePlayerOrder(players: ReviewPlayerFacts[]): ReviewPlayerFacts[] {
+  return [
+    ...players.filter((player) => player.matchPresence !== 'not_recorded'),
+    ...players.filter((player) => player.matchPresence === 'not_recorded'),
+  ];
 }
 
 function weaponLine(review: MatchReviewResult, weapon: WeaponStats): string {
@@ -934,7 +973,12 @@ function environmentDestructionParts(item: { destroyedObjects?: Array<{ objectTy
   const destroyed = item.destroyedObjects ?? [];
   let hasWindow = false;
   let hasFence = false;
-  for (const object of destroyed) {
+  const order: Record<string, number> = { '窗': 1, '加油泵': 2, '物资箱': 3, '门': 4, '栅栏': 5 };
+  for (const object of [...destroyed].sort((left, right) => {
+    const leftLabel = environmentObjectLabel(left.objectType);
+    const rightLabel = environmentObjectLabel(right.objectType);
+    return (order[leftLabel] ?? 9) - (order[rightLabel] ?? 9) || leftLabel.localeCompare(rightLabel);
+  })) {
     const label = environmentObjectLabel(object.objectType);
     if (label === '窗') {
       hasWindow = true;
@@ -953,6 +997,25 @@ function environmentDestructionParts(item: { destroyedObjects?: Array<{ objectTy
   return parts;
 }
 
+function templateEndgameCritique(review: MatchReviewResult): string[] {
+  const finalLoss = finalLossFight(review);
+  if (!finalLoss || finalLoss.receivedKills <= 0) return [];
+  const revived = recentReviverBeforeFight(review, finalLoss);
+  const blueZonePlayers = blueZonePlayersInFight(review, finalLoss);
+  const context: string[] = [];
+  if (revived) context.push(`${revived}刚被救起不久`);
+  if (blueZonePlayers.length) context.push(`${blueZonePlayers.join('、')}处于蓝圈压力中`);
+  const lead = context.length
+    ? `${context.join('，')}，队形没重整，枪线没统一，就急着接下一波`
+    : '上一波刚赢完团，队形没重整，枪线没统一，就急着接下一波';
+  return [
+    '',
+    '本局真正应该锐评的不是开车，而是末战：',
+    '',
+    `${lead}。不是敌人闯进了你们的阵地，是你们主动把阵地送给了敌人。`,
+  ];
+}
+
 function templateEnvironmentSection(review: MatchReviewResult): PresentationSection {
   const environment = review.facts.environment ?? [];
   const lines = ['🧱 环境与载具', ''];
@@ -960,12 +1023,6 @@ function templateEnvironmentSection(review: MatchReviewResult): PresentationSect
   for (const item of environment) {
     environmentPlayerIds.add(item.playerId);
     const parts = environmentDestructionParts(item);
-    if (item.doorOpens > 0) parts.push(`开门${item.doorOpens}次`);
-    if (item.doorCloses > 0) parts.push(`关门${item.doorCloses}次`);
-    if (item.vaults > 0) parts.push(`翻越${item.vaults}次`);
-    if (item.ledgeGrabs > 0) parts.push(`抓边${item.ledgeGrabs}次`);
-    if (item.vaultsOnVehicle > 0) parts.push(`车上翻越${item.vaultsOnVehicle}次`);
-    if (item.terrainActions) parts.push(`明确地形动作${item.terrainActions}次`);
     const impact = vehicleImpactText(review, item.playerId);
     if (impact) parts.push(impact);
     if (parts.length) lines.push(`* ${shortPlayerName(review, item.playerId)}：${parts.join('、')}。`);
@@ -998,6 +1055,7 @@ function templateEnvironmentSection(review: MatchReviewResult): PresentationSect
   lines.push(terrainActions > 0
     ? `* 检测到明确地形动作${terrainActions}次。`
     : '* 未检测到明确的挖坑或地形形变事件。');
+  lines.push(...templateEndgameCritique(review));
   return {
     type: 'environment',
     title: 'environment',
@@ -1010,7 +1068,7 @@ function fightMainlineText(review: MatchReviewResult, fight: MatchReviewResult['
   const leaders = fightDamageLeaders(review, fight);
   const leader = leaders[0];
   const actor = leader && leader.damage > 0
-    ? `${playerName(review, leader.playerId)}${repeated ? '再次' : ''}打出约${integer(leader.damage)}伤害`
+    ? `${shortPlayerName(review, leader.playerId)}${repeated ? '再次' : ''}打出约${integer(leader.damage)}伤害`
     : `队伍${repeated ? '再次' : ''}打出约${integer(fight.teamDamage)}伤害`;
   const outcome = fight.teamKnocks > 0 ? `${fight.teamKnocks}倒地` : `${repeated ? '仍然' : ''}0倒地`;
   return `* ${clock(fight.start)}：${actor}，${outcome}。`;
@@ -1029,7 +1087,7 @@ function recentReviverBeforeFight(review: MatchReviewResult, fight: MatchReviewR
       && fight.start - item.timeSeconds <= 90)
     .sort((left, right) => (right.timeSeconds ?? 0) - (left.timeSeconds ?? 0))[0];
   if (!event) return null;
-  return event.victimId ? playerName(review, event.victimId) : '队伍有人';
+  return event.victimId ? shortPlayerName(review, event.victimId) : '队伍有人';
 }
 
 function blueZonePlayersInFight(review: MatchReviewResult, fight: MatchReviewResult['facts']['fights'][number]): string[] {
@@ -1039,7 +1097,7 @@ function blueZonePlayersInFight(review: MatchReviewResult, fight: MatchReviewRes
     if (event.actorId && recordedPlayers(review).some((player) => player.playerId === event.actorId)) ids.add(event.actorId);
     if (event.victimId && recordedPlayers(review).some((player) => player.playerId === event.victimId)) ids.add(event.victimId);
   }
-  return [...ids].map((playerId) => playerName(review, playerId));
+  return [...ids].map((playerId) => shortPlayerName(review, playerId));
 }
 
 function templateMainlineLines(review: MatchReviewResult): string[] {
@@ -1055,11 +1113,11 @@ function templateMainlineLines(review: MatchReviewResult): string[] {
     : fights.filter((fight) => fight.teamKills === 0 && fight.teamKnocks === 0);
   const lines: string[] = [];
   if (earlyFights.length) {
-    lines.push(`前${earlyFights.length}次交火，队伍一直在“打伤害”，但没有把伤害变成击倒：`, ...earlyFights.map((fight, index) => fightMainlineText(review, fight, index > 0)));
+    lines.push(`前${chineseNumber(earlyFights.length, true)}次交火，队伍一直在“打伤害”，但没有把伤害变成击倒：`, ...earlyFights.map((fight, index) => fightMainlineText(review, fight, index > 0)));
   }
   if (mainFight && (mainFight.teamKills > 0 || mainFight.teamKnocks > 0)) {
     const entry = operationForFight(review, mainFight.id, ['ENTRY']);
-    const action = entry?.playerId ? `${playerName(review, entry.playerId)}完成开团，` : '';
+    const action = entry?.playerId ? `${shortPlayerName(review, entry.playerId)}完成开团，` : '';
     const description = winningFights.length === 1 ? '是本局唯一真正赢下来的团战' : '是本局最关键的赢团窗口';
     lines.push('', `${clock(mainFight.start)}—${clock(mainFight.end)}${description}。${action}打出${mainFight.teamKnocks}次倒地和${mainFight.teamKills}次击杀，队伍造成${integer(mainFight.teamDamage)}伤害。`);
   }
@@ -1073,7 +1131,7 @@ function templateMainlineLines(review: MatchReviewResult): string[] {
     if (context.length) lines.push(`${context.join('，')}，随后${finalLoss.receivedKills > 0 ? `${Math.min(finalLoss.receivedKills, recordedPlayers(review).length)}名有记录队员几乎同时被清掉` : '队伍被清掉'}。`);
     else if (finalLoss.receivedKills > 0) lines.push(`随后${Math.min(finalLoss.receivedKills, recordedPlayers(review).length)}名有记录队员被清掉。`);
   }
-  if (mainFight && finalLoss) lines.push('', `这局不是没有输出，是输出和决策没有接上。第${fightOrdinal(review, mainFight.id)}波像战神降临，第${fightOrdinal(review, finalLoss.id)}波像全员排队领盒。`);
+  if (mainFight && finalLoss) lines.push('', `这局不是没有输出，是输出和决策没有接上。${waveLabel(fightOrdinal(review, mainFight.id))}像战神降临，${waveLabel(fightOrdinal(review, finalLoss.id))}像全员排队领盒。`);
   return lines.length ? lines : [review.analysis.teamStory || '当前遥测不足以串起完整战局，只展示已经通过校验的基础事实。'];
 }
 
@@ -1236,7 +1294,7 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
     ? facts.players.filter((player) => query.subject.ids.includes(player.playerId))
     : facts.players;
   if (compactTemplate) {
-    visiblePlayers.forEach((player, index) => sections.push(templatePlayerSection(review, player, index === 0)));
+    templatePlayerOrder(visiblePlayers).forEach((player, index) => sections.push(templatePlayerSection(review, player, index === 0)));
     sections.push(templateInteractionsSection(review));
     sections.push(templateLootSection(review));
     sections.push(templateEnvironmentSection(review));
