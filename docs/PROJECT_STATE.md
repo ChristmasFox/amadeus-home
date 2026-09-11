@@ -1,3 +1,12 @@
+# Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
+
+Product Radar 图片创建监控的第二个入口故障已修复：Luna 在未启用 JSON mode 时可能返回普通中文，导致 `JSONDecodeError` 和普通聊天回退。现在语义调用优先使用 provider JSON mode，并在协议解析失败时进行一次有界重试；没有明确平台时，normalized command 和 deterministic payload 都将 similarity Watch 的 source 规范化/默认到 `bunjang`。没有新增关键词主路由，Luna 仍负责语义解析，Core 只消费 structured command。
+
+- source `59e44fe` 已 push；Product Radar plugin `0.5.5` 已安装并达到 `INSTALL_READY`（task `13`）。
+- LangBot Product Radar tests `34/34`、Product Radar tests `51/51`、Python compile、diff check、secret scan 通过；mock PNG 正负匹配、similarity Watch pause/delete 生命周期通过。
+- 真实 9Router Luna 文本/多模态 JSON-mode smoke 通过；Product Radar `/health` 为 `ok`，当前 Watch 数量为 `0`；`scripts/doctor.sh` 为 0 failure / 0 warning。
+- LangBot 插件回滚包为 `.backups/langbot/20260911-230315/`；真实 Telegram 图片 inbound smoke 尚待用户触发。
+
 # Product Radar Luna semantic route repair（DEPLOYED / VERIFIED：2026-09-11）
 
 Product Radar 图片创建监控曾因插件的 `gpt-5.6-luna` UUID 仍绑定 LangBot Cloud

@@ -1,3 +1,14 @@
+# Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
+
+- [x] 定位截图对应的第二个故障：Luna 已经被调用，但在未启用 JSON mode 时返回普通中文说明，插件记录 `JSONDecodeError`，因此请求没有进入 Product Radar；不是 Bunjang adapter 缺失。
+- [x] Product Radar 语义调用现在优先传递 provider `response_format=json_object`；若 provider 不支持该可选参数会兼容重试；若模型仍返回非 JSON，只额外进行一次协议重试，不增加关键词主路由。
+- [x] normalized structured command 统一把 source 规范化为小写；创建 similarity Watch 在没有明确平台时自动补 `source=bunjang`，下游 payload 与 Bunjang SearchPlan 保持一致。
+- [x] 新增回归：34/34 LangBot Product Radar tests；自然语言多种表达均得到 `create_watch + similarity + bunjang`；普通图片问答仍不创建 Watch。
+- [x] 新增 mock 图片正负匹配及生命周期回归：实际生成的 mock PNG 命中/不命中、similarity Watch 暂停后 run 返回 `disabled`、删除后 Watch 不存在；Product Radar 51/51 通过。
+- [x] 真实 9Router 多模态 smoke 通过：完整 Product Radar prompt + mock image 返回合法结构化结果；线上插件 `0.5.5` 已由 LangBot API 返回 `INSTALL_READY`，task `13`，package SHA-256 为 `9bda01e1a8ab4cfdb1999beb697b54b6b5aad1e7ac8431c17a9718a55c8fbbf0`。
+- [x] 部署后 `product-radar` `/health` 为 `ok`、Watch 数量为 0、changedetection 健康；`scripts/doctor.sh` 为 0 failure / 0 warning；回滚包保留在 `.backups/langbot/20260911-230315/`。
+- [ ] 尚未代发真实 Telegram 图片消息；最后的平台边界验证仍由用户发送图片并说“帮我长期盯着这件，有同款通知我”，确认出现“准备监控 / 开始监控”按钮。
+
 # Product Radar Luna semantic route repair（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 定位到图片创建监控未进入 Product Radar 的直接原因：Product Radar 插件调用的 `gpt-5.6-luna` 仍指向 LangBot Cloud provider，Ubuntu 出站返回 Cloudflare `1010`，插件因此返回 `ActionCallError`，普通聊天接管了消息。

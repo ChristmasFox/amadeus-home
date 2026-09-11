@@ -1,3 +1,7 @@
+# Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
+
+Product Radar 当前线上插件为 `0.5.5`。Luna 结构化解析已启用 OpenAI-compatible `response_format=json_object`，并对非 JSON 结果做一次有界协议重试；source entity 统一小写，未明确平台的 similarity create Watch 自动使用 `bunjang`。mock PNG 命中/不命中、Watch pause/delete、34/34 LangBot plugin tests、51/51 Product Radar tests和真实 9Router 多模态 smoke 均通过。source `59e44fe` 已 push，LangBot API task `13` 为 `INSTALL_READY`，Product Radar `/health` 为 `ok`、Watch count `0`，doctor 0 failure / 0 warning。尚未发送真实 Telegram inbound smoke。
+
 # Product Radar Luna semantic route repair（DEPLOYED / VERIFIED：2026-09-11）
 
 已修复图片创建监控未进入 Product Radar 的 live 路由故障：插件调用的
