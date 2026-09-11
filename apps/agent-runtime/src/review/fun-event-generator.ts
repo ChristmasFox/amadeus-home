@@ -358,7 +358,7 @@ function vehicleEvents(facts: MatchReviewFacts): FunEvent[] {
 }
 
 function playerEvents(facts: MatchReviewFacts): FunEvent[] {
-  const players = facts.players;
+  const players = facts.players.filter((player) => player.matchPresence !== 'not_recorded');
   const result: FunEvent[] = [];
   const teamDamage = facts.squad.damage;
   const summaryEvidence = (player: ReviewPlayerFacts): string[] => [`player-summary-${facts.match.matchId}-${player.playerId}`];

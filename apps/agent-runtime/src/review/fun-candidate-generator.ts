@@ -214,7 +214,7 @@ function vehicleCandidates(facts: MatchReviewFacts): FunCandidate[] {
 
 function playerCandidates(facts: MatchReviewFacts): FunCandidate[] {
   const result: FunCandidate[] = [];
-  const players = facts.players;
+  const players = facts.players.filter((player) => player.matchPresence !== 'not_recorded');
   const teamDamage = facts.squad.damage;
   const topDamage = [...players].sort((left, right) => right.damage - left.damage || left.playerId.localeCompare(right.playerId))[0];
   if (topDamage && topDamage.damage >= Math.max(300, teamDamage * 0.4)) {

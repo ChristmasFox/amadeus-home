@@ -2,7 +2,7 @@
 
 - Date: 2026-09-11 Asia/Shanghai
 - Scope: `apps/agent-runtime` review facts, telemetry normalization, deterministic analysis/presentation, active compose version defaults and regression tests.
-- Status: source implementation complete; commit/push/deploy pending.
+- Status: source implementation complete; final commit/push/deploy pending.
 
 ## Implemented
 
@@ -13,6 +13,7 @@
 - Added destroyed-object breakdown and explicit-only terrain action count.
 - Player commentary now combines combat, weapon, utility, recovery, loot, vehicle, environment and friendly-fire facts; deterministic awards are included.
 - Parser/feature defaults moved to `telemetry-parser-6` / `review-features-6` so old cached facts cannot mask the classification fix.
+- Missing players are excluded from fun-event generation, and player presentation suppresses duplicate `锐评` lines; weapon and armor labels are normalized for the report.
 
 ## Verification
 
@@ -22,7 +23,7 @@
 - `pnpm check:secrets`: passed.
 - `git diff --check`: passed.
 
-## Pending release work
+## Final release plan
 
 - Commit and push source changes while preserving pre-existing branch-ahead commit `ab9356e`.
 - Build and transfer an immutable image through `scripts/deploy-agent-runtime.sh --apply --build`.

@@ -52,6 +52,13 @@ function weaponLabel(value: string): string {
   } as Record<string, string>)[normalized] ?? normalized;
 }
 
+function armorLabel(value: string | null): string {
+  const normalized = (value ?? '').toLowerCase();
+  if (normalized.includes('head')) return '头盔';
+  if (normalized.includes('vest') || normalized.includes('armor')) return '防弹衣';
+  return '护甲';
+}
+
 function playerWeapons(facts: MatchReviewFacts, playerId: string) {
   return facts.weapons
     .filter((weapon) => weapon.playerId === playerId && weapon.evidenceIds.length > 0)
@@ -195,7 +202,7 @@ function commentaryForPlayer(facts: MatchReviewFacts, player: MatchReviewFacts['
     details.push(`重火力${weaponLabel(item.weapon)} ${item.shots}发/${item.hits}次命中记录${item.kills ? `/${item.kills}杀` : ''}${item.vehicleDamage > 0 ? `，${integer(item.vehicleDamage)}载具伤害` : ''}`);
   }
   const armorBreak = facts.armorBreaks?.find((item) => item.actorPlayerId === player.playerId && item.followUp !== null);
-  if (armorBreak) details.push(`${weaponLabel(armorBreak.weapon ?? '攻击')}破${armorBreak.armorSlot?.toLowerCase().includes('head') ? '头盔' : '甲'}后${armorBreak.followUp === 'KILL' ? '接击杀' : '接倒地'}`);
+  if (armorBreak) details.push(`${weaponLabel(armorBreak.weapon ?? '攻击')}破${armorLabel(armorBreak.armorSlot)}后${armorBreak.followUp === 'KILL' ? '接击杀' : '接倒地'}`);
   const vehicleImpact = facts.vehicleImpacts?.find((item) => item.playerId === player.playerId && (item.wheelsDestroyed > 0 || item.vehicleDestroyed > 0 || item.vehicleDamage > 0));
   if (vehicleImpact) details.push(`载具链${vehicleImpact.wheelsDestroyed ? `打掉${vehicleImpact.wheelsDestroyed}个轮胎` : ''}${vehicleImpact.vehicleDamage > 0 ? `、${integer(vehicleImpact.vehicleDamage)}载具伤害` : ''}`);
   const flash = facts.flash?.find((item) => item.playerId === player.playerId && item.uses > 0);

@@ -148,6 +148,9 @@ test('v1 review presentation includes approved report sections and fun combinati
   assert.equal(text.includes('误伤三件套'), true);
   assert.equal(text.includes('👑 kim_kkl\n-'), true);
   assert.equal(text.includes('本场 Match Store 没有该玩家记录'), false);
+  assert.equal(analysis.funEvents?.some((eventItem) => eventItem.targetPlayerIds.includes(DEFAULT_TEAM.players[3]!.id)), false);
+  assert.equal(text.includes(`👻 全场隐身\n${DEFAULT_TEAM.players[3]!.id}`), false);
+  assert.equal(text.includes('⚠️ 锐评：'), false);
   assert.equal(text.includes('破坏窗1'), true);
   assert.equal(text.includes('一炮四轮'), true);
   assert.equal(text.includes('白圈'), false);

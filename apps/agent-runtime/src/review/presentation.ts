@@ -103,6 +103,11 @@ function weaponLabel(value: string): string {
     Molotov: '燃烧瓶',
     StunGun: '电击枪',
     PanzerFaust: 'Panzerfaust',
+    AUGA3: 'AUG',
+    BerylM762: 'Beryl M762',
+    Kar98k: 'Kar98k',
+    M24: 'M24',
+    RPD: 'RPD',
   } as Record<string, string>)[normalized] ?? normalized;
 }
 
@@ -183,7 +188,7 @@ ${operation.impact}`);
       lines.push('— 未发现足够影响战局的关键操作');
     }
     lines.push('', '💬 点评', commentary?.text ?? '暂无点评');
-    if (commentary?.improvements.length) lines.push(`⚠️ ${commentary.improvements.join('；')}`);
+    if (commentary?.improvements.length && !commentary.text.includes('锐评：')) lines.push(`⚠️ ${commentary.improvements.join('；')}`);
   }
   return {
     type: 'players',
