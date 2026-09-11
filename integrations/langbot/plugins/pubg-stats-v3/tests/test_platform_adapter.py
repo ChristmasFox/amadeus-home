@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from components.platform.kook import KookAdapter
-from components.platform.loading import PLUGIN_LOADING_MARKER, loading_marker
+from components.platform.loading import PLUGIN_LOADING_MARKER, loading_marker, send_loading
 from components.platform.contracts import build_normalized_message
 from components.platform.registry import normalize_event_message, normalize_session_message
 from components.platform.telegram import TelegramAdapter
@@ -22,6 +23,20 @@ class PlatformAdapterTest(unittest.TestCase):
         self.assertEqual(data['type'], 'loading')
         self.assertTrue(data['replace'])
         self.assertEqual(data['text'], 'Thinking...')
+
+    def test_kook_does_not_receive_unsupported_loading_placeholder(self) -> None:
+        class Context:
+            event = SimpleNamespace(platform='kook')
+
+            def __init__(self) -> None:
+                self.replies = 0
+
+            async def reply(self, _message: object) -> None:
+                self.replies += 1
+
+        context = Context()
+        asyncio.run(send_loading(context))
+        self.assertEqual(context.replies, 0)
 
     def test_kook_group_and_private(self) -> None:
         adapter = KookAdapter('test-kook')
@@ -301,6 +316,26 @@ class PlatformAdapterTest(unittest.TestCase):
                 result = asyncio.run(classify_pubg_message(None, message=message))
 
             self.assertEqual(result['route'], 'mandatory', text)
+
+    def test_daily_report_wording_stays_mandatory_in_fallback(self) -> None:
+        for text in ('今日战报', '今日战绩'):
+            message = build_normalized_message(
+                platform='kook',
+                bot_id='kook-bot',
+                platform_user_id='user-1',
+                chat_type='group',
+                chat_id='report-group',
+                message_id=f'report-{text}',
+                text=text,
+            )
+            with patch('components.pubg_v3_client._post_json', return_value={
+                'route': 'unknown',
+                'status': 'SOURCE_UNAVAILABLE',
+            }):
+                result = asyncio.run(classify_pubg_message(None, message=message))
+
+            self.assertEqual(result['route'], 'mandatory', text)
+            self.assertTrue(result['fallback'], text)
 
 
 if __name__ == '__main__':

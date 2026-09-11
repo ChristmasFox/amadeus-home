@@ -14,6 +14,23 @@ from components.platform.whatsapp import WhatsAppAdapter
 from components.pubg_v3_client import classify_pubg_message, is_whoami_command, run_pubg_callback, run_pubg_query, run_whoami
 
 
+DOMAIN_CLAIM_QUERY_VAR = '_langbot_domain_claim'
+
+
+def _owns_callback(callback_data: str) -> bool:
+    """Keep callback namespaces isolated between domain plugins."""
+    return callback_data.startswith(('pubg:', 'hh1:'))
+
+
+async def _claim_domain(event_context: Any, domain: str) -> None:
+    try:
+        await event_context.set_query_var(DOMAIN_CLAIM_QUERY_VAR, domain)
+    except Exception:
+        # Domain claiming is an optimization/coordination hint.  The existing
+        # prevent flags remain the authoritative stop mechanism.
+        return
+
+
 class PubgQueryGatewayV3Listener(EventListener):
     async def initialize(self) -> None:
         await super().initialize()
@@ -61,8 +78,10 @@ class PubgQueryGatewayV3Listener(EventListener):
             event_context.prevent_postorder()
             return
         if message.get('callback', {}).get('data'):
+            callback_data = str(message.get('callback', {}).get('data') or '')
+            if not _owns_callback(callback_data):
+                return
             if isinstance(adapter, TelegramAdapter):
-                callback_data = str(message.get('callback', {}).get('data') or '')
                 await adapter.acknowledge_callback(
                     event_context,
                     '正在处理 HomeHub 操作…' if callback_data.startswith('hh1:') else '正在读取这场比赛的战斗记录…',
@@ -81,6 +100,7 @@ class PubgQueryGatewayV3Listener(EventListener):
         )
         if route.get('route') != 'mandatory':
             return
+        await _claim_domain(event_context, 'pubg')
         await send_loading(event_context)
         result = await run_pubg_query(
             self.plugin,

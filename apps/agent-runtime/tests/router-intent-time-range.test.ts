@@ -40,6 +40,16 @@ test('PUBG context accepts a valid short time follow-up', () => {
   assert.equal(dated.reason, 'active_pubg_follow_up');
 });
 
+test('daily report wording stays on the PUBG route', () => {
+  for (const text of ['今日战报', '今日战绩']) {
+    const result = classifyPubgRequest(text, null);
+    assert.equal(result.domain, 'pubg', text);
+    assert.equal(result.route, 'mandatory', text);
+    assert.equal(result.reason, 'explicit_pubg_signal', text);
+    assert.equal(isPubgText(text), true, text);
+  }
+});
+
 test('hardware timing text with a date does not enter PUBG', () => {
   const result = classifyPubgRequest('昨天超的是CL30, tRCD 36, tRP 36, tRAS 80', null);
   assert.equal(result.domain, 'unknown');

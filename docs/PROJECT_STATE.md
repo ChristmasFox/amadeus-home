@@ -1,3 +1,13 @@
+# Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYING：2026-09-12）
+
+本阶段复核了用户在 Kook 发送“今日战报/今日战绩”却收到 Product Radar 监控日志的偶发问题。live 证据表明两个插件共用同一 LangBot Pipeline；PUBG listener 原先没有把“战报”视为明确 PUBG 信号，Product Radar 因而可能先以自然语言语义和群聊 activeWatch 上下文接管。另一个独立问题是 Kook 不支持 Telegram 专用 `Unknown` loading placeholder，宿主转换后发送空消息，日志表现为 `reply_message ActionCallError`，会放大“机器人不回复”的现象。
+
+- 源码已补齐 PUBG 领域 signal（包括“战报”），增加通用 query-var domain claim 和 Product Radar 跨域保护；Product Radar 未耦合 PUBG parser。
+- PUBG 只消费 `pubg:`/`hh1:` callback，Product Radar 继续消费 `pr1:`；Kook 不发送 loading placeholder，Telegram 行为保持不变。
+- Product Radar Luna prompt 明确拒绝游戏/PUBG/战绩/战报/复盘消息，即使当前存在 activeWatch；图片本身仍不是 Product Radar domain evidence。
+- 本地验证：agent-runtime 定向 5/5、PUBG plugin 16/16、Product Radar 39/39、runtime typecheck、Python compile、secret scan、diff check 通过。
+- 当前工作树改动尚未 push/deploy；计划版本为 PUBG V3 `3.3.2`、Product Radar `0.5.8`，部署后保留 LangBot API 安装 task 与回滚目录。
+
 # Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 
 Product Radar 的模型调用现在复用 LangBot 的 `llm-model-selector` 插件配置，不再将

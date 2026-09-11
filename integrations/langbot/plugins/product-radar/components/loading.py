@@ -22,9 +22,12 @@ def loading_marker(text: str = 'Thinking...') -> str:
 
 
 async def send_loading(event_context: Any, text: str = 'Thinking...') -> None:
-    """Send a typed placeholder that the Telegram host replaces on completion."""
+    """Send a typed placeholder only on hosts that replace it in-place."""
 
     try:
+        platform = str(getattr(event_context.event, 'platform', '') or '').strip().lower()
+        if platform not in {'telegram', 'telegram-bot', 'tg'}:
+            return
         from langbot_plugin.api.entities.builtin.platform import message as platform_message
 
         await event_context.reply(

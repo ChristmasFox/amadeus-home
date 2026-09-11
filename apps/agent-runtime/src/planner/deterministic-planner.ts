@@ -395,5 +395,5 @@ export function isPubgText(text: string, context?: PlannerContextHint): boolean 
   // Keep planner-side legacy classification aligned with the domain router:
   // TimeRange tokens are parameters, not standalone PUBG intent.
   if (context?.activeDomain === 'pubg') return true;
-  return /PUBG|绝地求生|吃鸡|战绩|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|最强|最菜|拉完|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/iu.test(text);
+  return /PUBG|绝地求生|吃鸡|战绩|战报|KD|K\/D|击杀|助攻|伤害|倒地|救援|复盘|分析(?:这把|这局|这场|某一局|某一场|战绩|表现|数据)|火箭筒|排名|名次|场均|几把|多少场|最近\s*\d+\s*(?:场|把|局)|最强|最菜|拉完|发挥最好|状态最好|表现最好|整活|离谱|内鬼|打队友|撞人|闪光弹|拳击|队伤|队友伤害|乘车|旅游团|有什么节目|\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b/iu.test(text);
 }

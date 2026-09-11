@@ -1,3 +1,11 @@
+# Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYING：2026-09-12）
+
+- [x] 根因已由 live LangBot DB、消息时序和 Product Radar context 复核：Kook 与 Telegram 共用同一 Pipeline；PUBG 路由漏掉“战报”，导致 Kook 群聊的 Product Radar listener 先消费“今日战报/今日战绩”，随后 activeWatch context 放大误判；Kook 的 `Thinking...` `Unknown` 占位又被宿主转换成空消息，触发 `reply_message ActionCallError`。
+- [x] 修复为 PUBG 先声明领域、Product Radar 尊重跨域 claim；补齐 PUBG “战报”路由；PUBG/Product Radar callback namespace 隔离；Kook 跳过不兼容的空占位消息，Telegram 保留原有占位替换。
+- [x] Product Radar Luna prompt 增加跨领域语义边界：游戏/PUBG/战绩/战报/复盘即使存在 activeWatch 也输出 `none`；未新增 Product Radar 关键词主路由，Core 仍只消费 structured command。
+- [x] 新增 Kook fallback、runtime router、占位消息和 activeWatch 跨域回归；本地 PUBG plugin `16/16`、Product Radar `39/39`、agent-runtime 定向 `5/5`、typecheck、secret scan、diff check 已通过。
+- [ ] 待提交 source、push，并安装 LangBot plugin `pubg-stats 3.3.2` / `product-radar 0.5.8`；待部署后做容器内 listener/package/health smoke。
+
 # Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] Product Radar 不再在源码中内置 `gpt-5.6-luna` 或其他模型 UUID；新增 LangBot 原生 `llm-model-selector` 配置，由 LangBot 下拉选择模型并保存 UUID。

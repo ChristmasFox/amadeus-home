@@ -22,9 +22,19 @@ def loading_marker(text: str = 'Thinking...') -> str:
 
 
 async def send_loading(event_context: Any, text: str = 'Thinking...') -> None:
-    """Send a typed placeholder that the Telegram host replaces on completion."""
+    """Send a typed placeholder only on hosts that replace it in-place.
+
+    KOOK's ``Unknown`` message component is ignored by its text converter,
+    which previously produced an empty API request and an intermittent
+    ``reply_message ActionCallError``.  KOOK receives the deterministic final
+    response through the normal response stage, so it does not need this
+    Telegram-only placeholder.
+    """
 
     try:
+        platform = str(getattr(event_context.event, 'platform', '') or '').strip().lower()
+        if platform not in {'telegram', 'telegram-bot', 'tg'}:
+            return
         from langbot_plugin.api.entities.builtin.platform import message as platform_message
 
         await event_context.reply(

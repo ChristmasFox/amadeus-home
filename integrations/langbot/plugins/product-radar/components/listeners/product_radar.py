@@ -46,6 +46,17 @@ from langbot_plugin.api.entities import context as event_context_module
 from langbot_plugin.api.entities import events
 
 
+DOMAIN_CLAIM_QUERY_VAR = '_langbot_domain_claim'
+
+
+async def _foreign_domain_claimed(event_context: Any) -> bool:
+    try:
+        claim = await event_context.get_query_var(DOMAIN_CLAIM_QUERY_VAR)
+    except Exception:
+        return False
+    return bool(str(claim or '').strip() and str(claim).strip() != 'product_radar')
+
+
 def _format_price(value: Any) -> str:
     if not isinstance(value, dict):
         return '未知'
@@ -265,6 +276,8 @@ class ProductRadarListener(EventListener):
     async def _handle(self, event_context: event_context_module.EventContext) -> None:
         event = event_context.event
         message = normalize_event_message(event, query_id=event_context.query_id)
+        if await _foreign_domain_claimed(event_context):
+            return
         key = context_key(message)
         context = load_context(self.plugin, message)
         pending = getattr(self.plugin, 'pending_product_radar', {})

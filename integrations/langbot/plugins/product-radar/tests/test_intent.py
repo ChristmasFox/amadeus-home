@@ -458,6 +458,20 @@ class ProductRadarGenericNluTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(command)
         self.assertEqual(image_only_plugin.calls, [])
 
+    async def test_external_game_messages_remain_outside_product_radar_with_active_watch(self) -> None:
+        context_plugin = SimpleNamespace()
+        set_active_watch(context_plugin, _normalized_message('创建', user_id='user-a'), {
+            'id': 'watch-1', 'source': 'bunjang', 'type': 'similarity', 'enabled': True,
+            'target': {}, 'rules': {},
+        })
+        for phrase in ('今日战绩', '今日战报', '今日复盘'):
+            plugin = _FakeLunaPlugin({'domain': 'none', 'intent': 'none'})
+            message = _normalized_message(phrase, user_id='user-a')
+            context = load_context(context_plugin, message)
+            with patch.object(intent_planner, 'provider_message', _FakeProviderMessage):
+                command = await resolve_product_radar_command(plugin, message=message, context=context)
+            self.assertIsNone(command, phrase)
+
     async def test_context_followups_resolve_against_the_callers_active_watch(self) -> None:
         message = _normalized_message('创建这个', user_id='user-a')
         plugin = SimpleNamespace()
