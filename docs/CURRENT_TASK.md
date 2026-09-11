@@ -1,4 +1,4 @@
-# PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYMENT PENDING：2026-09-11）
+# PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 近战解析优先采用 `Damage_Kick` / `Damage_Punch` 明确分类，按攻击方向合并展示脚/拳/其他近战；保留原始事件证据并输出命中数对账。
 - [x] 队员卡片对 `not_recorded` 玩家只显示 `-`；记录玩家的点评串联武器命中、倒地转化、道具、恢复、载具、环境和队友误伤，保留证据边界，不凭皮肤结算字段推断拾取。
@@ -6,7 +6,9 @@
 - [x] 增加确定性本局奖项与更长的锐评；未改动真实平台消息发送逻辑。
 - [x] 修复缺席玩家进入趣味榜和锐评重复展示的问题，并补充武器/护甲显示与回归断言。
 - [x] 定向回归 18/18、根测试 130 pass / 1 skip、typecheck、secret scan、diff check 已通过；详见 `.agent/checkpoints/2026-09-11-pubg-review-v2-implementation.md`。
-- [ ] 待提交、push，并按 RELEASE 流程构建 immutable runtime image、更新 CasaOS parser/feature 版本、重算比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` telemetry 后完成 health/smoke。
+- [x] `971d4eb`、`f76d4a4`、`20c4b1f` 已提交并 push；immutable image `local/pubg-query-engine-v3:git-20c4b1f9bbaf` 已在 CasaOS `ubuntu` 激活，parser/feature 为 v6。
+- [x] 指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` live smoke 返回 `OK`：近战账本 `13/13`、友伤 `202.05`、缺席玩家 `-`、垃圾佬榜、环境破坏和护甲文案均核验通过；`/healthz` 与 `/homehub/health` healthy。
+- [x] 最新镜像回滚配置备份：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-123456`；未发送真实 Telegram/KOOK 消息。
 
 # Product Radar autonomous E2E acceptance & production repair（DEPLOYED / VERIFIED：2026-09-09）
 

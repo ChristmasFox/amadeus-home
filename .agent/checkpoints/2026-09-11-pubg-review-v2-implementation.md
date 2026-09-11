@@ -2,7 +2,7 @@
 
 - Date: 2026-09-11 Asia/Shanghai
 - Scope: `apps/agent-runtime` review facts, telemetry normalization, deterministic analysis/presentation, active compose version defaults and regression tests.
-- Status: source implementation complete; final commit/push/deploy pending.
+- Status: implemented, committed, pushed, deployed and live-verified.
 
 ## Implemented
 
@@ -23,9 +23,12 @@
 - `pnpm check:secrets`: passed.
 - `git diff --check`: passed.
 
-## Final release plan
+## Release and live verification
 
-- Commit and push source changes while preserving pre-existing branch-ahead commit `ab9356e`.
-- Build and transfer an immutable image through `scripts/deploy-agent-runtime.sh --apply --build`.
-- Update the live CasaOS compose parser/feature env values to version 6 with a rollback backup.
-- Re-run the exact match ID smoke and verify `10脚 + 3拳`, `13/13` ledger completeness, player `-`, loot/environment sections, health endpoints and active image.
+- Source commits `971d4eb`, `f76d4a4` and `20c4b1f` are on `origin/main`; pre-existing branch-ahead commit `ab9356e` was preserved.
+- `scripts/deploy-agent-runtime.sh --apply --build --no-proxy` built and transferred immutable image `local/pubg-query-engine-v3:git-20c4b1f9bbaf`; CasaOS `ubuntu` container is running and healthy.
+- Live compose uses `PUBG_TELEMETRY_PARSER_VERSION=telemetry-parser-6` and `PUBG_REVIEW_FEATURE_VERSION=review-features-6`.
+- Latest image rollback compose backup: `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-123456`.
+- `/healthz` returned `status=ok`; `/homehub/health` returned `status=healthy`.
+- Exact match `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` returned `status=OK` and the rendered report was checked for `13/13` melee completeness, `202.05` friendly damage, `SG_LabmemNo008` rendered as `-`, no hidden-player fun event, no duplicate `锐评` line, normalized armor text, loot theme and environment destruction.
+- No real Telegram/KOOK outbound message was sent; verification used the local runtime endpoint with a read-only smoke identity.
