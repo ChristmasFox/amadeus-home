@@ -1,3 +1,13 @@
+# Product Radar LangBot Message JSON parsing repair（DEPLOYED / VERIFIED：2026-09-11）
+
+- [x] 复核用户重试后的真实日志：23:10 和 23:12 的图片请求均到达 Telegram/LangBot，但插件记录 `JSONDecodeError`，随后普通聊天完成 19 个 streaming chunks；问题不是 Bunjang 查询失败。
+- [x] 根因是 LangBot `invoke_llm` 线上返回 `provider_message.Message` 对象，旧 `_content_text()` 只解析测试中使用的 dict，未读取对象 `.content`；合法 JSON 被对象字符串包装后无法解析。
+- [x] `_content_text()` 现在兼容 Message 对象、列表内容和 tool-call arguments；保留 JSON mode、一次协议重试和无明确平台默认 `source=bunjang`。
+- [x] 插件回归 35/35、Product Radar 51/51；真实 9Router 多模态 JSON smoke、mock PNG 正负匹配、similarity Watch pause/delete 均通过。
+- [x] Product Radar plugin `0.5.6` 已安装并达到 `INSTALL_READY`（task `17`），Product Radar `/health` 为 `ok`，当前 Watch 数量为 0；部署后尚未出现新的解析错误，`scripts/doctor.sh` 为 0 failure / 0 warning。
+- [x] source `9686530` 已 push；LangBot 回滚包保留在 `.backups/langbot/20260911-231234/`。
+- [ ] 尚未代发真实 Telegram 消息；请再次发送图片+“帮我长期盯着这件，有同款通知我”，验证返回 `🎯 准备监控`、`平台：bunjang` 和按钮。
+
 # Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 定位截图对应的第二个故障：Luna 已经被调用，但在未启用 JSON mode 时返回普通中文说明，插件记录 `JSONDecodeError`，因此请求没有进入 Product Radar；不是 Bunjang adapter 缺失。

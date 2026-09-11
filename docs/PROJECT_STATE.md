@@ -687,3 +687,13 @@ Verification:
 A semantic CLIP/SigLIP provider and live Telegram image acceptance test remain
 follow-ups. V0.2 intentionally keeps the ImageMatcher port replaceable and does
 not perform CAPTCHA/login/proxy bypass or large-scale crawling.
+# Product Radar LangBot Message JSON parsing repair（DEPLOYED / VERIFIED：2026-09-11）
+
+真实 Telegram 请求已确认会到达 LangBot，但之前 Product Radar 仍回退普通聊天。根因不是 source adapter，而是 LangBot `invoke_llm` 的真实返回类型为 `provider_message.Message`；Product Radar 旧 `_content_text()` 仅解析 dict，合法 Luna JSON 被 Message 的字符串表示包裹后触发 `JSONDecodeError`。现已兼容 `.content`、列表内容和 tool-call arguments，并保留 JSON mode、一次协议重试及无明确平台时的 `bunjang` 默认。
+
+- source `9686530` 已 push；Product Radar plugin `0.5.6` 已由 LangBot API 安装并达到 `INSTALL_READY`（task `17`）。
+- LangBot Product Radar tests `35/35`、Product Radar tests `51/51`、真实 9Router 多模态 JSON smoke、mock PNG 正负匹配及 similarity Watch pause/delete 通过。
+- 部署后 `product-radar` `/health` 为 `ok`、Watch 数量为 `0`，`scripts/doctor.sh` 0 failure / 0 warning；部署前最后一次旧错误发生在插件重装前，重装后暂无新解析错误。
+- 回滚包为 `.backups/langbot/20260911-231234/`；真实 Telegram inbound smoke 仍待用户触发。
+
+# Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）

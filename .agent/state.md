@@ -241,3 +241,8 @@ Reliability 实现与定向验证**已完成并提交为 `e0a3ed5`，并已使�
 
 - 新增 `intent_planner.py`，让 Product Radar 像 PUBG planner 一样先做 inbound action extraction；支持自然表达，不再依赖固定完整句。
 - LangBot plugin task `71` `INSTALL_READY`；plugin tests 9/9。
+# Product Radar LangBot Message JSON parsing repair（DEPLOYED / VERIFIED：2026-09-11）
+
+Product Radar `0.5.6` 已上线。线上 `invoke_llm` 返回的 LangBot `Message` 对象现在由 `_content_text()` 正确读取 `.content`，不再把合法 JSON 误判为 `JSONDecodeError`；JSON mode、一次协议重试和缺省 `source=bunjang` 保留。35/35 插件测试、51/51 Product Radar、真实 9Router 多模态 smoke、mock PNG 正负匹配及 Watch pause/delete 通过；LangBot task `17` 为 `INSTALL_READY`，Product Radar `/health` 为 `ok`、Watch count `0`，doctor 0/0。source `9686530` 已 push；尚未由 Codex 代发真实 Telegram inbound smoke。
+
+# Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
