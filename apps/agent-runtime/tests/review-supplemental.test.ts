@@ -128,7 +128,7 @@ test('supplemental telemetry extracts interactions, utilities, loot, environment
   assert.equal(facts.players.find((item) => item.playerId === DEFAULT_TEAM.players[3]!.id)?.matchPresence, 'not_recorded');
 });
 
-test('v1 review presentation includes approved report sections and fun combinations without circle output', () => {
+test('default review presentation follows the approved compact report template', () => {
   const facts = extractMatchReviewFacts(targetMatch(), supplementalTelemetry(), DEFAULT_TEAM, 1);
   const analysis = analyzeMatchReview(facts);
   const review = {
@@ -141,43 +141,71 @@ test('v1 review presentation includes approved report sections and fun combinati
   const query = buildDeterministicQuery({ text: '复盘这场比赛d8c41c10-de9f-40b4-ac88-ede0ab554a31' });
   const presentation = buildReviewPresentation(review, query, null);
   const text = presentation.fallbackText;
+  assert.equal(text.includes('🎬 PUBG · 对局复盘'), true);
   assert.equal(text.includes('荣都'), true);
+  assert.equal(text.includes('🔥 本场主线'), true);
+  assert.equal(text.includes('👥 队员点评'), true);
+  assert.equal(text.includes('🥊 队内伤害账本'), true);
+  assert.equal(text.includes('🗑️ 垃圾佬榜'), true);
+  assert.equal(text.includes('🧱 环境与载具'), true);
+  assert.equal(text.includes('🎯 本局结论'), true);
   assert.equal(text.includes('电击枪'), true);
+  assert.equal(text.includes('一炮四轮'), true);
   assert.equal(text.includes('武器信息'), false);
   assert.equal(text.includes('恢复物品与能量'), false);
-  assert.equal(text.includes('垃圾佬榜'), true);
   assert.equal(text.includes('搜包与物资搬运'), false);
   assert.equal(text.includes('捡武器'), false);
   assert.equal(text.includes('特殊搬运'), false);
   assert.equal(text.includes('车厢：Attach_Weapon_Upper_DotSight_01'), false);
   assert.equal(text.includes('搜包内容'), false);
-  assert.equal(text.includes('环境破坏'), true);
-  assert.equal(text.includes('双向队友拳击'), true);
-  assert.equal(text.includes('误伤三件套'), true);
-  assert.equal(text.includes('👑 kim_kkl\n-'), true);
+  assert.equal(text.includes('环境破坏 /'), false);
+  assert.equal(text.includes('双向队友拳击'), false);
+  assert.equal(text.includes('误伤三件套'), false);
+  assert.equal(text.includes('kim_kkl\n-'), true);
   assert.equal(text.includes('本场 Match Store 没有该玩家记录'), false);
   assert.equal(analysis.funEvents?.some((eventItem) => eventItem.targetPlayerIds.includes(DEFAULT_TEAM.players[3]!.id)), false);
   assert.equal(text.includes(`👻 全场隐身\n${DEFAULT_TEAM.players[3]!.id}`), false);
   assert.equal(text.includes('⚠️ 锐评：'), false);
-  assert.equal(text.includes('破坏窗1'), true);
-  assert.equal(text.includes('一炮四轮'), true);
+  assert.equal(text.includes('破窗1次'), true);
   assert.equal(text.includes('白圈'), false);
   assert.equal(text.includes('圈阶段'), false);
-  assert.deepEqual([...new Set(presentation.sections.map((section) => section.type))], ['overview', 'players', 'interactions', 'loot', 'closing']);
+  assert.equal(text.includes('━━━━━━━━━━━━━━'), false);
+  assert.deepEqual([...new Set(presentation.sections.map((section) => section.type))], ['overview', 'players', 'interactions', 'loot', 'environment', 'conclusion']);
+  assert.deepEqual(presentation.sections.map((section) => section.type), [
+    'overview', 'players', 'players', 'players', 'players', 'interactions', 'loot', 'environment', 'conclusion',
+  ]);
+  assert.deepEqual(presentation.metadata?.sectionKeys, ['overview', 'players', 'interactions', 'loot', 'environment', 'conclusion']);
   assert.equal(presentation.sections.some((section) => section.type === 'turning_points'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'key_fights'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'fun'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'weapons'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'recovery'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'interactions'), true);
-  assert.equal(presentation.sections.some((section) => section.type === 'closing'), true);
   assert.equal(presentation.sections.some((section) => section.type === 'loot'), true);
+  assert.equal(presentation.sections.some((section) => section.type === 'environment'), true);
+  assert.equal(presentation.sections.some((section) => section.type === 'conclusion'), true);
+
+  const interactionSection = presentation.sections.find((section) => section.type === 'interactions');
+  assert.ok(interactionSection);
+  assert.equal(interactionSection!.text!.includes('已核对原始近战事件 2/2，无遗漏、无其他队内近战记录。'), true);
+  assert.equal(interactionSection!.text!.includes('合计：2拳，23点友伤。'), true);
+  assert.equal(interactionSection!.data?.meleeLedgerComplete, true);
+
+  const lootSection = presentation.sections.find((section) => section.type === 'loot');
+  assert.ok(lootSection);
+  assert.equal(lootSection!.text!.includes('死亡盒考古奖'), true);
+  assert.equal(lootSection!.text!.includes('仓库管理员'), true);
+  assert.equal(lootSection!.text!.includes('本场没有可靠的“捡到武器皮肤或衣服”记录'), true);
 
   const playerSection = presentation.sections.find((section) => section.type === 'players' && section.title === DEFAULT_TEAM.players[0]!.name);
   assert.ok(playerSection);
-  const renderedCommentary = playerSection!.text!.split('💬 点评\n')[1]?.split('\n⚠️ ')[0] ?? '';
+  assert.equal(playerSection!.text!.includes('🏆 SG_LabmemNo007'), true);
+  assert.equal(playerSection!.text!.includes('本局MVP'), true);
+  assert.equal(playerSection!.text!.includes('💬 点评'), false);
+  const statsLine = `${facts.players.find((item) => item.playerId === player007)!.kills}杀 · ${facts.players.find((item) => item.playerId === player007)!.dbnos}倒地 · ${Math.round(facts.players.find((item) => item.playerId === player007)!.damage)}伤害 · 全队最高伤害`;
+  const renderedCommentary = playerSection!.text!.split(`${statsLine}\n`)[1] ?? '';
   assert.ok(renderedCommentary.includes('\n'));
-  assert.ok(renderedCommentary.split('\n').every((line) => Array.from(line).length <= 28));
+  assert.ok(renderedCommentary.split('\n').filter((line) => line.length > 0).every((line) => Array.from(line).length <= 28));
 });
 
 test('explicit match ID planning bypasses the default time selector', () => {

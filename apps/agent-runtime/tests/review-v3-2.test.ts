@@ -216,7 +216,7 @@ test('telegram callback deterministically resumes one match and enforces chat bi
   assert.equal(callback.presentation?.type, 'review_match');
   assert.ok(callback.response.includes('Panzerfaust'));
   assert.ok(callback.response.includes('乘车'));
-  assert.equal(callback.response.includes('驾驶'), false);
+  assert.ok(callback.response.includes('没有确认具体驾驶人'));
   assert.equal(callback.normalizedMessage.user.platformUserId, '100');
   assert.equal(callback.callbackAnswer?.text, '已选择第1场');
 
@@ -620,7 +620,7 @@ test('vehicle facts distinguish riding from confirmed driving and omit unreliabl
   };
   const presentation = buildReviewPresentation(review, buildDeterministicQuery({ text: '复盘今天最后一把', now: REVIEW_NOW }), null);
   assert.ok(presentation.fallbackText.includes('乘车7.9km'));
-  assert.equal(presentation.fallbackText.includes('驾驶'), false);
+  assert.ok(presentation.fallbackText.includes('没有确认具体驾驶人'));
   assert.equal(presentation.fallbackText.includes('00:00'), false);
 
   const confirmedDriver = extractMatchReviewFacts(M1, [

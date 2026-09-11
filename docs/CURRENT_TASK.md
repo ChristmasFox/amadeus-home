@@ -1,3 +1,13 @@
+# PUBG 对局复盘示例模板对齐（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+
+- [x] 默认复盘按用户确认的单一模板输出：对局概览 / 本场主线 / 队员点评 / 队内伤害账本 / 简版垃圾佬榜 / 环境与载具 / 本局结论。
+- [x] 默认 presentation unique section type 收敛为 `overview / players / interactions / loot / environment / conclusion`；不再显示旧的战局走势、关键团战、武器、恢复、趣味或 closing 类型。
+- [x] 队员点评合并开火、武器、道具、护甲、载具和末战事实；保留犀利的长点评、奖项、移动端 28 字符断行，缺席队员继续显示 `-`。
+- [x] 队内伤害账本按攻击方向保留完整的脚/拳/其他近战明细，并用原始事件数对账；垃圾佬榜保持简版，明确声明皮肤/衣服只有 item metadata 可靠时才计入。
+- [x] 环境与载具保留破窗、门、物资箱、加油泵、翻越、乘车、轮胎和明确地形动作；没有驾驶人或开车冲房证据时不做结论性扣分。
+- [x] 本地模板夹具 `3/3`、V3.3 与 supplemental `18/18`、agent-runtime typecheck、`git diff --check` 已通过；全量 review 过程还需在部署前完成最终收口。
+- [ ] 待 source commit、CasaOS 镜像部署和指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 只读 live smoke。
+
 # PUBG 复盘五块模板收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 默认完整复盘收敛为 `overview / players / interactions / loot / closing` 五类展示块；四名队员仍各自保留一张点评卡。
