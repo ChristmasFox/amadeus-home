@@ -1,12 +1,15 @@
-# Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYING：2026-09-12）
+# Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-12）
 
 本阶段复核了用户在 Kook 发送“今日战报/今日战绩”却收到 Product Radar 监控日志的偶发问题。live 证据表明两个插件共用同一 LangBot Pipeline；PUBG listener 原先没有把“战报”视为明确 PUBG 信号，Product Radar 因而可能先以自然语言语义和群聊 activeWatch 上下文接管。另一个独立问题是 Kook 不支持 Telegram 专用 `Unknown` loading placeholder，宿主转换后发送空消息，日志表现为 `reply_message ActionCallError`，会放大“机器人不回复”的现象。
 
 - 源码已补齐 PUBG 领域 signal（包括“战报”），增加通用 query-var domain claim 和 Product Radar 跨域保护；Product Radar 未耦合 PUBG parser。
 - PUBG 只消费 `pubg:`/`hh1:` callback，Product Radar 继续消费 `pr1:`；Kook 不发送 loading placeholder，Telegram 行为保持不变。
 - Product Radar Luna prompt 明确拒绝游戏/PUBG/战绩/战报/复盘消息，即使当前存在 activeWatch；图片本身仍不是 Product Radar domain evidence。
-- 本地验证：agent-runtime 定向 5/5、PUBG plugin 16/16、Product Radar 39/39、runtime typecheck、Python compile、secret scan、diff check 通过。
-- 当前工作树改动尚未 push/deploy；计划版本为 PUBG V3 `3.3.2`、Product Radar `0.5.8`，部署后保留 LangBot API 安装 task 与回滚目录。
+- 部署前发现并修正两个插件 manifest 的 YAML 本地化字段缩进错误；真实 LangBot `/install/local/preview` 对两个包均返回 `code=0`。
+- source `1dc5e54` 已 push；LangBot API 安装 task `14/15` 分别将 Product Radar `0.5.8`、PUBG V3 `3.3.2` 置为 `initialized`，线上 DB runtime revision 为 `25/33`。
+- agent-runtime 已激活 `local/pubg-query-engine-v3:git-1dc5e54bd521`；`/healthz`、`/homehub/health`、`scripts/doctor.sh`（0 failure / 0 warning）和 smoke 通过。
+- 定向验证：agent-runtime router `5/5`、PUBG plugin `16/16`、Product Radar `39/39`、typecheck、Python compile、secret scan、diff check 通过。未代发真实 Kook/Telegram 消息；根 `pnpm test` 的既有 `review-v3-2.test.ts` runner 在本次 release 前检查中卡住，未宣称全量通过。
+- 回滚：插件包目录 `.backups/langbot/20260912-003227/`、`.backups/langbot/20260912-003239/`；runtime compose `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260912-003618`。
 
 # Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 

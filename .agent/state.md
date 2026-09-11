@@ -1,10 +1,10 @@
-# 当前任务：Kook 偶发跨域路由与空回复修复（2026-09-12）
+# 当前任务：Kook 偶发跨域路由与空回复修复（DEPLOYED / VERIFIED：2026-09-12）
 
 根因：Kook/Telegram 共用 LangBot Pipeline；PUBG V3 缺少“战报”正向信号，Product Radar listener 可能先接管 Kook 群聊的 PUBG 请求，activeWatch 进一步扩大误判。Kook host converter 忽略 Telegram 专用 `Unknown` loading component，导致 `Thinking...` 变成空 `reply_message` 并记录 `ActionCallError`。
 
 已改源码：PUBG 增加“战报” signal 与 domain claim；Product Radar 尊重 foreign claim，并在 Luna semantic prompt 中拒绝 PUBG/战绩/战报/复盘越域；两个插件 callback namespace 分离；两边 loading placeholder 仅保留 Telegram。
 
-已通过本地定向验证：agent-runtime router 5/5、PUBG plugin 16/16、Product Radar 39/39、typecheck、Python compile、secret scan、diff check。下一步是提交、push、按 plugin/runtime workflow 部署并做 live smoke；未修改 Watch 数据。
+已修正两个插件 manifest 的 YAML 缩进错误；真实 LangBot preview、插件安装 task `14/15`、plugin API `initialized`、agent-runtime image `local/pubg-query-engine-v3:git-1dc5e54bd521`、health、doctor 和 smoke 均通过。source `1dc5e54` 已 push；未修改 Watch 数据，未代发真实 Kook/Telegram 消息。定向测试 5/5、16/16、39/39 和 typecheck/secret scan/diff check 通过；根 `pnpm test` 的既有 `review-v3-2.test.ts` runner 本次卡住，未冒充全量通过。
 
 # Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 
