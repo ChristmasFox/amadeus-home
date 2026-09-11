@@ -1,10 +1,13 @@
-# Product Radar LangBot model selector（IMPLEMENTED / PENDING DEPLOYMENT：2026-09-11）
+# Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] Product Radar 不再在源码中内置 `gpt-5.6-luna` 或其他模型 UUID；新增 LangBot 原生 `llm-model-selector` 配置，由 LangBot 下拉选择模型并保存 UUID。
 - [x] 语义解析和多模态 TargetProfile 共用该配置；保留旧的 `intent_model_uuid` / `vision_model_uuid` 及环境变量兼容入口。
 - [x] 配置的模型不在 LangBot 工作区时安全停止调用，不静默切换到别的模型；配置为空时才使用 LangBot 返回的首个可用模型。
 - [x] Product Radar plugin tests `38/38`、Python compile、workflow plan、dry-run package 和 secret scan 通过。
-- [ ] 待提交、push、安装 Product Radar `0.5.7`，并在 LangBot 插件配置中选择线上 `arthur-combo` 后完成 live invoke smoke。
+- [x] source `5a213ff` 已 push；Product Radar `0.5.7` 通过 LangBot API 安装并达到 `INSTALL_READY`（task `31`），package SHA-256 为 `d889683b2adce0a500c5c7e2f42687ea9d9393d75450af419d9be0db06c6cd8d`。
+- [x] LangBot 插件配置已写入共享 `model_uuid`，对应当前 `arthur-combo`（UUID 仅保存在 LangBot runtime config，未进入 Git）；模型记录的 provider 为现有 `9Router`。
+- [x] LangBot `/api/v1/plugins` 返回 `local/product-radar@0.5.7` 且 manifest 暴露 `llm-model-selector`；Product Radar `/health` 返回 `200 / status=ok`，`scripts/doctor.sh` 为 0 failure / 0 warning。
+- [x] 回滚包保留在 `.backups/langbot/20260911-235421/`；未修改 Product Radar Watch 数据或 LangBot 主体。
 
 # Product Radar LangBot Message JSON parsing repair（DEPLOYED / VERIFIED：2026-09-11）
 

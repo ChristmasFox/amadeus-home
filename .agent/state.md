@@ -1,10 +1,10 @@
-# Product Radar LangBot model selector（IMPLEMENTED / PENDING DEPLOYMENT：2026-09-11）
+# Product Radar LangBot model selector（DEPLOYED / VERIFIED：2026-09-11）
 
 Product Radar `0.5.7` 已改用 LangBot 原生 `llm-model-selector` 配置。源代码不再内置
 Luna/Arthur registry UUID；intent 与 vision 共用 `model_uuid`，旧的专用 config/env 继续
 兼容。模型不存在时 fail closed，未配置时使用 LangBot 首个可用模型。38/38 plugin tests、
-compile、workflow plan、dry-run package 和 secret scan 已通过；待 push、安装并写入线上
-LangBot `arthur-combo` selector 后做真实 invoke smoke。
+compile、workflow plan、dry-run package、secret scan、LangBot API install ready、线上配置
+读取、Product Radar health 和 doctor 均通过；当前共享 selector 已指向 `arthur-combo` / 9Router。
 
 # Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
 

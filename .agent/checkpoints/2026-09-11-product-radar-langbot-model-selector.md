@@ -1,4 +1,4 @@
-# Product Radar LangBot model selector（IMPLEMENTED / PENDING DEPLOYMENT）
+# Product Radar LangBot model selector（DEPLOYED / VERIFIED）
 
 日期：2026-09-11（Asia/Shanghai）
 
@@ -17,8 +17,15 @@
 - `./scripts/deploy-langbot.sh --dry-run --plugin product-radar --skip-runtime-check`：package `0.5.7` 构建和归档检查通过。
 - `pnpm check:secrets`、`git diff --check`：通过。
 
-## 待完成
+## 部署证据
 
-- 提交并 push source。
-- 安装 LangBot Product Radar plugin `0.5.7`。
-- 通过 LangBot plugin config API 选择当前 `arthur-combo` 对应 UUID，并验证 intent/vision 实际调用。
+- source `5a213ff` 已 push 到 `origin/main`。
+- LangBot Product Radar plugin `0.5.7` 已安装并达到 `INSTALL_READY`，task `31`；package SHA-256：`d889683b2adce0a500c5c7e2f42687ea9d9393d75450af419d9be0db06c6cd8d`。
+- LangBot 插件 manifest 已暴露 `model_uuid` / `llm-model-selector`；线上配置读取为 `model_uuid`，对应 `arthur-combo` UUID `4d608fdb-126b-42cd-a8a5-be1349629713`，模型 provider 为 `9Router`。
+- LangBot `/api/v1/plugins` 返回 `local/product-radar@0.5.7`；Product Radar `/health` 返回 `status=ok`；`scripts/doctor.sh` 为 0 failure / 0 warning。
+- 回滚包：`.backups/langbot/20260911-235421/`。
+
+## 边界说明
+
+- 本轮验证的是 LangBot selector、插件安装、运行时配置读取和服务健康；没有代发真实 Telegram 消息。
+- Product Radar Core、Watch 数据、LangBot 主体和 FashionSigLIP worker 均未修改。
