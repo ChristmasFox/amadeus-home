@@ -6,12 +6,14 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
-## Telegram plugin loading 与复盘垃圾佬榜收敛（IMPLEMENTED / RELEASE_PENDING：2026-09-11）
+## Telegram plugin loading 与复盘垃圾佬榜收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 插件长任务现在通过跨进程 MessageChain 中的显式 `type=loading` marker 请求占位：Telegram patch 发送 `Thinking...`，收到最终 `reply_message` 后编辑占位并按原有长度规则补发后续分片。PUBG V3/V2、Product Radar、Organize Emby 的直接长任务已接入；其他最终回复、按钮和错误兜底不改变。
 
 - 垃圾佬榜展示已收敛为每人拾取 / 丢弃 / 搜包 / 车厢存取 / 显式皮肤服装计数；原始结构化物资数据仍留在 section `data`，环境破坏和其他复盘章节未改动。
-- 变更前验证：LangBot patch 5/5、PUBG V3 plugin 14/14、agent-runtime 130 pass / 1 skip、Python/shell syntax、secret scan、diff check 已通过；当前待提交、push 和 CasaOS LangBot patch image 激活。
+- 验证已通过：LangBot patch 5/5、PUBG V3 plugin 14/14、agent-runtime 130 pass / 1 skip、Python/shell syntax、secret scan、diff check；容器内 fake Telegram adapter smoke 确认调用顺序为 `send_message(Thinking...) -> edit_message_text(最终正文)`，`scripts/doctor.sh` 为 0 failure / 0 warning。
+- source `941eb10` 已 push；CasaOS `ubuntu` 当前 LangBot image 为 `local/langbot-agent:941eb1089250-20260911-130202`，回滚备份为 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260911-130206`。
+- LangBot plugin API 已安装并达到 `INSTALL_READY`：PUBG V3 `3.3.1` task `12`、Product Radar `0.5.4` task `13`、Organize Emby `0.2.1` task `14`。未代发真实 Telegram/KOOK 消息，平台 inbound smoke 仍待用户触发。
 
 ## PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 

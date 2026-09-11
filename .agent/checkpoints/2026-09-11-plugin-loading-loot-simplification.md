@@ -1,7 +1,7 @@
 # Plugin loading and loot leaderboard simplification checkpoint
 
 Date: 2026-09-11
-Status: implementation complete; release pending
+Status: deployed and verified (2026-09-11)
 
 ## Scope
 
@@ -18,8 +18,11 @@ Status: implementation complete; release pending
 - Generated Telegram source passed `py_compile` after Telegram patch, picker patch, and Telegram patch re-application.
 - `bash -n scripts/deploy-langbot.sh`, `pnpm check:secrets`, and `git diff --check` passed.
 
-## Release follow-up
+## Release evidence
 
-- Commit and push the source changes.
-- Run `scripts/deploy-langbot.sh --dry-run --patches` and then apply the selected plugin packages plus the patched LangBot image.
-- Verify both LangBot containers, plugin readiness, `/health`, and the resulting image/compose rollback checkpoint.
+- Source commit `941eb10` is pushed to `origin/main`.
+- LangBot image `local/langbot-agent:941eb1089250-20260911-130202` is active in CasaOS `ubuntu`; rollback compose backup is `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-backup.20260911-130206`.
+- PUBG V3 `3.3.1` task `12`, Product Radar `0.5.4` task `13`, and Organize Emby `0.2.1` task `14` all reached `INSTALL_READY` through the LangBot Plugin API.
+- Container source inspection found the typed loading parser, placeholder sender, and final `edit_message_text` branch.
+- Fake Telegram adapter smoke passed with `send_message(Thinking...) -> edit_message_text(最终复盘报告)`; `scripts/doctor.sh` reported 0 failures and 0 warnings.
+- No real Telegram/KOOK message was sent; inbound platform rendering remains a user-triggered smoke step.

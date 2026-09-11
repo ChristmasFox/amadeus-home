@@ -1,3 +1,12 @@
+# Telegram plugin loading 与复盘垃圾佬榜收敛（DEPLOYED / VERIFIED：2026-09-11）
+
+source `941eb10` 已 push。CasaOS `ubuntu` 当前 LangBot 与 plugin runtime 使用
+`local/langbot-agent:941eb1089250-20260911-130202`；Telegram patch 已支持显式
+`type=loading` placeholder，容器内 smoke 确认 `Thinking...` 占位会被最终正文编辑替换。
+PUBG V3 `3.3.1`、Product Radar `0.5.4`、Organize Emby `0.2.1` 已通过 LangBot Plugin API
+达到 `INSTALL_READY`；复盘垃圾佬榜仅保留聚合计数，底层物资与环境数据未删除。doctor 为
+0 failure / 0 warning；未代发真实 Telegram/KOOK 消息。
+
 # Product Radar autonomous E2E acceptance（DEPLOYED / VERIFIED：2026-09-09）
 
 本阶段已完成并部署 Product Radar feed recovery、完整 E2E listing injection 验收和公共 webhook 响应修复。真实 Bunjang smoke、正/负/重复相似匹配、changedetection webhook、Telegram/KOOK outbox、runtime counters、LangBot 33/33、Product Radar 48/48、typecheck/build、secret scan、doctor 均有证据；E2E 数据已清理。当前 source `ab91542` 与 `origin/main` 同步，CasaOS `ubuntu` 激活 `local/product-radar:git-ab91542`，真实 Watch/feed 为 HEALTHY/ACTIVE。详情与回滚路径见 `.agent/checkpoints/2026-09-09-product-radar-e2e-acceptance.md`。
