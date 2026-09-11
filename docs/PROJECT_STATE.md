@@ -6,9 +6,13 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
-## PUBG 对局复盘示例模板对齐（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+## PUBG 对局复盘示例模板对齐（DEPLOYED / VERIFIED：2026-09-11）
 
-默认复盘展示已按用户给出的完整示例收敛。默认输出只保留六类 section type：`overview`、`players`、`interactions`、`loot`、`environment`、`conclusion`；四名配置队员仍逐人出卡，未参与比赛的队员显示 `-`。队员点评承担开火、武器、道具、护甲、载具和末战事实，队内伤害账本承担完整脚/拳方向明细，垃圾佬榜保持三项简评，环境与载具保留破坏和乘车证据。本地模板夹具、V3.3 增量回归和 typecheck 已通过，指定比赛 live smoke 与部署尚未完成。
+默认复盘展示已按用户给出的完整示例收敛。默认输出只保留六类 section type：`overview`、`players`、`interactions`、`loot`、`environment`、`conclusion`；四名配置队员仍逐人出卡，未参与比赛的队员显示 `-`。队员点评承担开火、武器、道具、护甲、载具和末战事实，队内伤害账本承担完整脚/拳方向明细，垃圾佬榜保持三项简评，环境与载具只保留破坏、轮胎和乘车证据，并在末战处给出证据边界内的锐评。
+
+- source `7780418` 已 push；CasaOS `ubuntu` 当前 image 为 `local/pubg-query-engine-v3:git-778041855cc3`，image id 为 `sha256:c9b765cfbc71d108645a1a3ce53f5e68ea8117b3a8069c671bcb9c9354eaf664`，回滚 compose 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-151652`。
+- 定向验证：模板夹具 `3/3`、V3.3 与 supplemental `18/18`、typecheck、secret scan、diff check 通过；指定比赛只读 smoke 返回 `OK`，近战 `13/13` / `202.05`、红点映射、`SG_LabmemNo008` 的 `-`、环境收敛和点评最长 28 字符通过。
+- `/healthz` 和 `/homehub/health` healthy，`scripts/doctor.sh` 为 0 failure / 0 warning；未发送真实 Telegram/KOOK。根全量 runner 的 `review-v3-2.test.ts` 卡点未宣称通过，另记 follow-up。
 
 ## PUBG 复盘五块模板收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 

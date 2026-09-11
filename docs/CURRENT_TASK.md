@@ -1,12 +1,15 @@
-# PUBG 对局复盘示例模板对齐（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+# PUBG 对局复盘示例模板对齐（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 默认复盘按用户确认的单一模板输出：对局概览 / 本场主线 / 队员点评 / 队内伤害账本 / 简版垃圾佬榜 / 环境与载具 / 本局结论。
 - [x] 默认 presentation unique section type 收敛为 `overview / players / interactions / loot / environment / conclusion`；不再显示旧的战局走势、关键团战、武器、恢复、趣味或 closing 类型。
 - [x] 队员点评合并开火、武器、道具、护甲、载具和末战事实；保留犀利的长点评、奖项、移动端 28 字符断行，缺席队员继续显示 `-`。
 - [x] 队内伤害账本按攻击方向保留完整的脚/拳/其他近战明细，并用原始事件数对账；垃圾佬榜保持简版，明确声明皮肤/衣服只有 item metadata 可靠时才计入。
-- [x] 环境与载具保留破窗、门、物资箱、加油泵、翻越、乘车、轮胎和明确地形动作；没有驾驶人或开车冲房证据时不做结论性扣分。
-- [x] 本地模板夹具 `3/3`、V3.3 与 supplemental `18/18`、agent-runtime typecheck、`git diff --check` 已通过；全量 review 过程还需在部署前完成最终收口。
-- [ ] 待 source commit、CasaOS 镜像部署和指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 只读 live smoke。
+- [x] 环境与载具保留破窗、门、物资箱、加油泵、乘车、轮胎和明确地形动作；默认文案不再混入开门/翻越等非破坏动作，没有驾驶人或开车冲房证据时不做结论性扣分。
+- [x] 本地模板夹具 `3/3`、V3.3 与 supplemental `18/18`、agent-runtime typecheck、`git diff --check`、`pnpm check:secrets` 已通过。
+- [x] source commit `7780418` 已 push；CasaOS `ubuntu` 已激活不可变镜像 `local/pubg-query-engine-v3:git-778041855cc3`（image `sha256:c9b765cfbc71d108645a1a3ce53f5e68ea8117b3a8069c671bcb9c9354eaf664`），回滚 compose 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-151652`。
+- [x] 指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 只读 live smoke 返回 `OK`：唯一 section type 为六类，近战账本 `13/13`、`202.05` 友伤且 `meleeLedgerComplete=true`，红点映射和原始 ID 隐藏通过，`SG_LabmemNo008` 显示 `-`，环境不显示开门/翻越，记录队员点评最长 28 字符。
+- [x] `/healthz` 返回 `ok`、`/homehub/health` 返回 `healthy`，`scripts/doctor.sh` 为 0 failure / 0 warning；未发送真实 Telegram/KOOK 消息。
+- [ ] 根 `pnpm test` 的既有 `review-v3-2.test.ts` runner 卡点仍单独记录为 follow-up；本次未将中断的全量 runner 冒充为通过，部署使用已通过的定向验证与构建/运行时验收。
 
 # PUBG 复盘五块模板收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
