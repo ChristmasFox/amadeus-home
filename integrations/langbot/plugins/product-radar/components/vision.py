@@ -49,6 +49,24 @@ def _content_text(value: Any) -> str:
                     return text
     if isinstance(value, list):
         return ''.join(_content_text(item) for item in value)
+    if value is not None:
+        # LangBot's real invoke_llm contract returns a provider Message
+        # object, while older tests and adapters may return a dictionary.
+        # Read the structured fields before falling back to repr/str; the
+        # latter wraps valid JSON in model metadata and causes JSONDecodeError.
+        for key in ('content', 'all_content', 'text', 'message', 'output'):
+            candidate = getattr(value, key, None)
+            if candidate is not None and candidate is not value:
+                text = _content_text(candidate)
+                if text:
+                    return text
+        tool_calls = getattr(value, 'tool_calls', None)
+        if tool_calls:
+            for tool_call in tool_calls:
+                function = getattr(tool_call, 'function', None)
+                arguments = getattr(function, 'arguments', None) if function is not None else None
+                if arguments:
+                    return _content_text(arguments)
     return str(value or '')
 
 

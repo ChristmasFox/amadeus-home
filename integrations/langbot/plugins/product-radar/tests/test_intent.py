@@ -271,6 +271,12 @@ class _FlakyJsonLunaPlugin(_FakeLunaPlugin):
         return {'content': json.dumps(self.result, ensure_ascii=False)}
 
 
+class _ProviderMessageLunaPlugin(_FakeLunaPlugin):
+    async def invoke_llm(self, model_uuid: str, messages: list[object], funcs: list[object], extra_args: dict[str, object] | None = None) -> object:
+        self.calls.append((model_uuid, messages))
+        return SimpleNamespace(content=json.dumps(self.result, ensure_ascii=False))
+
+
 def _normalized_message(
     text: str,
     *,
@@ -375,6 +381,28 @@ class ProductRadarGenericNluTest(unittest.IsolatedAsyncioTestCase):
             ),
         )
         self.assertEqual(payload['source'], 'bunjang')
+
+    async def test_real_langbot_message_object_content_is_parsed(self) -> None:
+        plugin = _ProviderMessageLunaPlugin({
+            'domain': 'product_radar',
+            'intent': 'create_watch',
+            'watchType': 'similarity',
+            'entities': {},
+        })
+        with patch.object(intent_planner, 'provider_message', _FakeProviderMessage):
+            command = await resolve_product_radar_command(
+                plugin,
+                message=_normalized_message(
+                    '帮我长期盯着这件，有同款通知我',
+                    attachments=[{'type': 'image', 'mimeType': 'image/jpeg', 'base64': 'data:image/jpeg;base64,abc'}],
+                ),
+            )
+        self.assertIsNotNone(command)
+        self.assertEqual(command['domain'], 'product_radar')
+        self.assertEqual(command['intent'], 'create_watch')
+        self.assertEqual(command['watchType'], 'similarity')
+        self.assertEqual(command['entities']['source'], 'bunjang')
+        self.assertEqual(len(plugin.calls), 1)
 
     async def test_image_only_and_non_radar_image_questions_do_not_create_watch(self) -> None:
         attachment = {'type': 'image', 'mimeType': 'image/jpeg', 'base64': 'data:image/jpeg;base64,abc'}
