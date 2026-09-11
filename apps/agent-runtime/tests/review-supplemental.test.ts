@@ -5,6 +5,7 @@ import type { NormalizedMatch, NormalizedPlayer } from '../src/data/model.js';
 import { buildDeterministicQuery } from '../src/planner/deterministic-planner.js';
 import { analyzeMatchReview } from '../src/review/review-analyzer.js';
 import { extractMatchReviewFacts } from '../src/review/review-facts.js';
+import { generateBaseFunEvents } from '../src/review/fun-event-generator.js';
 import { buildReviewPresentation } from '../src/review/presentation.js';
 import { normalizeTelemetryEvents } from '../src/review/telemetry-events.js';
 
@@ -122,6 +123,8 @@ test('supplemental telemetry extracts interactions, utilities, loot, environment
   assert.equal(impact?.knocks, 1);
   assert.equal(impact?.kills, 1);
   assert.equal(impact?.vehicleDestroyed, 1);
+  const armorEvent = generateBaseFunEvents(facts).find((item) => item.type === 'ARMOR_BREAK_FOLLOW_UP');
+  assert.equal(armorEvent?.text.includes('M24破头盔后造成倒地'), true);
   assert.equal(facts.players.find((item) => item.playerId === DEFAULT_TEAM.players[3]!.id)?.matchPresence, 'not_recorded');
 });
 

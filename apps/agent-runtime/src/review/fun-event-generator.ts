@@ -17,6 +17,13 @@ function kilometers(value: number): string {
   return `${(value / 1_000).toFixed(1)}km`;
 }
 
+function armorLabel(value: string | null): string {
+  const normalized = (value ?? '').toLowerCase();
+  if (normalized.includes('head')) return '头盔';
+  if (normalized.includes('vest') || normalized.includes('armor')) return '防弹衣';
+  return '护甲';
+}
+
 function playerName(facts: MatchReviewFacts, playerId: string): string {
   return facts.players.find((player) => player.playerId === playerId)?.playerName ?? playerId;
 }
@@ -320,8 +327,8 @@ function armorBreakEvents(facts: MatchReviewFacts): FunEvent[] {
     confidence: 'CONFIRMED',
     funScore: item.followUp === 'KILL' ? 88 : 76,
     category: 'combat',
-    title: item.followUp === 'KILL' ? '🎯 破盔后击杀' : '🎯 破盔后击倒',
-    text: `${playerName(facts, item.actorPlayerId)}\n${item.weapon ?? '攻击'}破坏${item.armorSlot ?? '护甲'}后${item.followUp === 'KILL' ? '完成击杀' : '造成倒地'}`,
+    title: item.followUp === 'KILL' ? `🎯 破${armorLabel(item.armorSlot)}后击杀` : `🎯 破${armorLabel(item.armorSlot)}后击倒`,
+    text: `${playerName(facts, item.actorPlayerId)}\n${item.weapon ?? '攻击'}破${armorLabel(item.armorSlot)}后${item.followUp === 'KILL' ? '完成击杀' : '造成倒地'}`,
     facts: { armorItem: item.armorItem, armorSlot: item.armorSlot, weapon: item.weapon, followUp: item.followUp, distanceMeters: item.distanceMeters },
     tags: ['armor_break', 'follow_up'],
     dedupGroup: `armor-break-follow-up:${item.actorPlayerId}`,
