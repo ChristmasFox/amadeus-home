@@ -13,29 +13,50 @@ except ImportError:  # pragma: no cover - exercised only outside LangBot
     provider_message = None
 
 LOGGER = logging.getLogger('product-radar.vision')
-# Current LangBot model registry UUID for GPT-5.6 Luna; configurable via plugin config/env.
-KNOWN_VISION_MODEL = '581087d4-5793-4116-9aa1-d82e08ec6849'
 
 
-def _config(plugin: Any, key: str, env_key: str) -> str:
+def _configured_model_uuid(plugin: Any, operation: str) -> str:
+    """Read the LangBot-selected model without embedding a registry UUID.
+
+    ``model_uuid`` is the shared selector exposed by the plugin manifest. The
+    operation-specific keys and environment variables remain supported for
+    backwards compatibility with older installations.
+    """
     try:
-        configured = str((plugin.get_config() or {}).get(key) or '').strip()
+        config = plugin.get_config() or {}
     except Exception:
-        configured = ''
-    return configured or os.environ.get(env_key, '').strip()
+        config = {}
+    for key in (f'{operation}_model_uuid', 'model_uuid'):
+        value = str(config.get(key) or '').strip()
+        if value:
+            return value
+    for key in (
+        f'PRODUCT_RADAR_{operation.upper()}_MODEL_UUID',
+        'PRODUCT_RADAR_MODEL_UUID',
+    ):
+        value = os.environ.get(key, '').strip()
+        if value:
+            return value
+    return ''
 
 
-async def _model_uuid(plugin: Any) -> str | None:
-    configured = _config(plugin, 'vision_model_uuid', 'PRODUCT_RADAR_VISION_MODEL_UUID')
+async def _model_uuid(plugin: Any, *, operation: str = 'vision') -> str | None:
+    configured = _configured_model_uuid(plugin, operation)
     try:
         models = await plugin.get_llm_models()
     except Exception:
         models = []
-    if configured and (not models or configured in models):
+    models = [str(model).strip() for model in models if str(model).strip()]
+    if configured:
+        if models and configured not in models:
+            LOGGER.error('configured Product Radar %s model is not available in LangBot', operation)
+            return None
         return configured
-    if KNOWN_VISION_MODEL in models:
-        return KNOWN_VISION_MODEL
-    return str(models[0]) if models else configured or KNOWN_VISION_MODEL
+    if models:
+        LOGGER.info('Product Radar %s model is not configured; using LangBot first available model', operation)
+        return models[0]
+    LOGGER.error('no LangBot model is available for Product Radar %s parsing', operation)
+    return None
 
 
 def _content_text(value: Any) -> str:
@@ -143,7 +164,7 @@ def _image_block(source: dict[str, str]) -> dict[str, Any] | None:
 
 
 async def analyze_target_profile(plugin: Any, images: list[dict[str, str]], user_text: str) -> dict[str, Any] | None:
-    model_uuid = await _model_uuid(plugin)
+    model_uuid = await _model_uuid(plugin, operation='vision')
     if not model_uuid or provider_message is None:
         return None
     prompt = '''你是商品搜索理解器。只输出 JSON，不要解释，不要做最终同款判定。

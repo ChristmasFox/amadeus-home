@@ -1,3 +1,11 @@
+# Product Radar LangBot model selector（IMPLEMENTED / PENDING DEPLOYMENT：2026-09-11）
+
+- [x] Product Radar 不再在源码中内置 `gpt-5.6-luna` 或其他模型 UUID；新增 LangBot 原生 `llm-model-selector` 配置，由 LangBot 下拉选择模型并保存 UUID。
+- [x] 语义解析和多模态 TargetProfile 共用该配置；保留旧的 `intent_model_uuid` / `vision_model_uuid` 及环境变量兼容入口。
+- [x] 配置的模型不在 LangBot 工作区时安全停止调用，不静默切换到别的模型；配置为空时才使用 LangBot 返回的首个可用模型。
+- [x] Product Radar plugin tests `38/38`、Python compile、workflow plan、dry-run package 和 secret scan 通过。
+- [ ] 待提交、push、安装 Product Radar `0.5.7`，并在 LangBot 插件配置中选择线上 `arthur-combo` 后完成 live invoke smoke。
+
 # Product Radar LangBot Message JSON parsing repair（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 复核用户重试后的真实日志：23:10 和 23:12 的图片请求均到达 Telegram/LangBot，但插件记录 `JSONDecodeError`，随后普通聊天完成 19 个 streaming chunks；问题不是 Bunjang 查询失败。

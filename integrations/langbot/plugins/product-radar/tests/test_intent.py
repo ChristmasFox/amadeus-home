@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import components.intent_planner as intent_planner
+import components.vision as vision
 from components.command_adapter import watch_create_payload, watch_patch_payload
 from components.context import load_context, set_active_watch, set_watch_list
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_intent, resolve_product_radar_command
@@ -150,6 +151,38 @@ class ProductRadarBridgeTest(unittest.TestCase):
 
 
 class ProductRadarIntentPlannerTest(unittest.IsolatedAsyncioTestCase):
+    async def test_langbot_selector_controls_both_intent_and_vision_without_source_uuid(self) -> None:
+        class SelectorPlugin:
+            def get_config(self) -> dict[str, str]:
+                return {'model_uuid': 'arthur-model'}
+
+            async def get_llm_models(self) -> list[str]:
+                return ['arthur-model', 'other-model']
+
+        plugin = SelectorPlugin()
+        self.assertEqual(await intent_planner._intent_model_uuid(plugin), 'arthur-model')
+        self.assertEqual(await vision._model_uuid(plugin), 'arthur-model')
+
+    async def test_invalid_langbot_selector_fails_closed_instead_of_switching_models(self) -> None:
+        class SelectorPlugin:
+            def get_config(self) -> dict[str, str]:
+                return {'model_uuid': 'removed-model'}
+
+            async def get_llm_models(self) -> list[str]:
+                return ['arthur-model']
+
+        self.assertIsNone(await intent_planner._intent_model_uuid(SelectorPlugin()))
+
+    async def test_empty_langbot_selector_uses_first_available_model(self) -> None:
+        class SelectorPlugin:
+            def get_config(self) -> dict[str, str]:
+                return {}
+
+            async def get_llm_models(self) -> list[str]:
+                return ['langbot-preferred-model']
+
+        self.assertEqual(await intent_planner._intent_model_uuid(SelectorPlugin()), 'langbot-preferred-model')
+
     async def test_natural_language_list_request(self) -> None:
         result = await resolve_product_radar_intent(object(), '我都在盯哪些东西？', False)
         self.assertEqual(result['action'], 'list')

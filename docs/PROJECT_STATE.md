@@ -1,3 +1,14 @@
+# Product Radar LangBot model selector（IMPLEMENTED / PENDING DEPLOYMENT：2026-09-11）
+
+Product Radar 的模型调用现在复用 LangBot 的 `llm-model-selector` 插件配置，不再将
+`gpt-5.6-luna` 或 `arthur-combo` 的 registry UUID 写进 Product Radar 源码。语义解析和
+图片 TargetProfile 使用同一个可选模型；旧的 operation-specific config/env 仍兼容。配置
+的 UUID 如果不在 LangBot 当前模型列表中会 fail closed，避免模型被删除或重建后静默调用
+错误模型；无配置时仅使用 LangBot 返回的首个可用模型。
+
+- 本地 Product Radar plugin tests `38/38`、Python compile、workflow plan、package dry-run、secret scan 通过。
+- 当前代码版本为待部署的 `0.5.7`；下一步安装插件并将 LangBot 插件配置指向 `arthur-combo`，再验证 intent 与 multimodal 调用的实际模型 UUID。
+
 # Product Radar Bunjang default + structured JSON parser hardening（DEPLOYED / VERIFIED：2026-09-11）
 
 Product Radar 图片创建监控的第二个入口故障已修复：Luna 在未启用 JSON mode 时可能返回普通中文，导致 `JSONDecodeError` 和普通聊天回退。现在语义调用优先使用 provider JSON mode，并在协议解析失败时进行一次有界重试；没有明确平台时，normalized command 和 deterministic payload 都将 similarity Watch 的 source 规范化/默认到 `bunjang`。没有新增关键词主路由，Luna 仍负责语义解析，Core 只消费 structured command。

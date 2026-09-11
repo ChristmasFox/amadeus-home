@@ -12,7 +12,6 @@ domain.
 import json
 import logging
 import math
-import os
 import re
 import time
 from datetime import datetime, timezone
@@ -495,7 +494,7 @@ def _normalize_profile(
         normalized.setdefault('softHints', [])
         normalized.setdefault('provenance', {})
         normalized.setdefault('extractedAt', datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'))
-    normalized['provider'] = _string(profile.get('provider')) or 'gpt-5.6-luna'
+    normalized['provider'] = _string(profile.get('provider')) or 'langbot'
     return normalized
 
 
@@ -777,20 +776,7 @@ async def _invoke_structured_llm(plugin: Any, model_uuid: str, messages: list[ob
 
 
 async def _intent_model_uuid(plugin: Any) -> str | None:
-    configured = ''
-    try:
-        configured = str((plugin.get_config() or {}).get('intent_model_uuid') or '').strip()
-    except Exception:
-        configured = ''
-    configured = configured or os.environ.get('PRODUCT_RADAR_INTENT_MODEL_UUID', '').strip()
-    if configured:
-        try:
-            models = await plugin.get_llm_models()
-        except Exception:
-            models = []
-        if not models or configured in models:
-            return configured
-    return await _model_uuid(plugin)
+    return await _model_uuid(plugin, operation='intent')
 
 
 async def resolve_product_radar_command(
