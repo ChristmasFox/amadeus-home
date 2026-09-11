@@ -1,3 +1,10 @@
+# PUBG 复盘点评移动端排版（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+
+- [x] 仅在队员卡片的 `💬 点评` 展示边界增加移动端换行：优先按句号、问号、分号、逗号等标点断行，过长片段按 28 个字符兜底。
+- [x] 点评原文、事实证据、近战账本、垃圾佬榜、环境破坏和未参赛玩家 `-` 均保持不变；短点评不被强行拆碎。
+- [x] 新增回归断言，确认长点评实际换行且单行不超过 28 个字符；agent-runtime 全量测试 130 pass / 1 skip、typecheck、secret scan、diff check 已通过。
+- [ ] 待构建并部署新的 PUBG runtime 镜像，再执行健康检查与指定比赛复盘渲染 smoke。
+
 # Telegram 插件 loading 与复盘垃圾佬榜收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 为 PUBG V3/V2、Product Radar、Organize Emby 的长任务增加统一 `type=loading` 占位协议；Telegram 宿主收到后发送 `Thinking...`，最终正文编辑回同一条消息，普通最终回复和失败回复行为保持不变。

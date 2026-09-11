@@ -149,6 +149,34 @@ function playerContributionLine(review: MatchReviewResult, player: ReviewPlayerF
   return parts.length ? `📊 ${parts.join(' · ')}` : null;
 }
 
+const MOBILE_COMMENTARY_LINE_LENGTH = 28;
+const COMMENTARY_BREAK_CHARS = new Set(['。', '！', '？', '；', '，', '、', ',', '!', '?', ';', '：', ':']);
+
+/** Keep player comments scannable on narrow screens without changing their content. */
+function mobileCommentaryLines(text: string): string[] {
+  const normalized = text.replace(/\s+/gu, ' ').trim();
+  if (!normalized) return ['暂无点评'];
+
+  const characters = Array.from(normalized);
+  const lines: string[] = [];
+  let offset = 0;
+  while (characters.length - offset > MOBILE_COMMENTARY_LINE_LENGTH) {
+    const limit = offset + MOBILE_COMMENTARY_LINE_LENGTH;
+    let cut = limit;
+    for (let index = limit - 1; index >= offset + Math.floor(MOBILE_COMMENTARY_LINE_LENGTH * 0.55); index -= 1) {
+      if (COMMENTARY_BREAK_CHARS.has(characters[index] ?? '')) {
+        cut = index + 1;
+        break;
+      }
+    }
+    lines.push(characters.slice(offset, cut).join('').trim());
+    offset = cut;
+  }
+  const tail = characters.slice(offset).join('').trim();
+  if (tail) lines.push(tail);
+  return lines.length ? lines : ['暂无点评'];
+}
+
 function playerSection(review: MatchReviewResult, player: ReviewPlayerFacts, profile: string): PresentationSection {
   if (player.matchPresence === 'not_recorded') {
     return {
@@ -187,7 +215,7 @@ ${operation.impact}`);
     } else {
       lines.push('— 未发现足够影响战局的关键操作');
     }
-    lines.push('', '💬 点评', commentary?.text ?? '暂无点评');
+    lines.push('', '💬 点评', ...mobileCommentaryLines(commentary?.text ?? '暂无点评'));
     if (commentary?.improvements.length && !commentary.text.includes('锐评：')) lines.push(`⚠️ ${commentary.improvements.join('；')}`);
   }
   return {

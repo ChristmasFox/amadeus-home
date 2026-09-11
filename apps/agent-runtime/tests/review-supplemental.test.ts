@@ -166,6 +166,12 @@ test('v1 review presentation includes approved report sections and fun combinati
   assert.equal(presentation.sections.some((section) => section.type === 'interactions'), true);
   assert.equal(presentation.sections.some((section) => section.type === 'recovery'), true);
   assert.equal(presentation.sections.some((section) => section.type === 'loot'), true);
+
+  const playerSection = presentation.sections.find((section) => section.type === 'players' && section.title === DEFAULT_TEAM.players[0]!.name);
+  assert.ok(playerSection);
+  const renderedCommentary = playerSection!.text!.split('💬 点评\n')[1]?.split('\n⚠️ ')[0] ?? '';
+  assert.ok(renderedCommentary.includes('\n'));
+  assert.ok(renderedCommentary.split('\n').every((line) => Array.from(line).length <= 28));
 });
 
 test('explicit match ID planning bypasses the default time selector', () => {

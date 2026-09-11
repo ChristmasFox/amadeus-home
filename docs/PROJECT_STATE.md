@@ -6,6 +6,13 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
+## PUBG 复盘点评移动端排版（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+
+队员卡片的 `💬 点评` 现在在 presentation boundary 做移动端友好的显式换行：标点优先、28 个字符兜底。只影响展示文本，不改分析层点评、近战账本、垃圾佬榜、环境破坏、缺席玩家 `-` 或其他复盘章节；短点评保持单行，避免模板被切得过碎。
+
+- 已通过长点评换行回归、agent-runtime 全量 130 pass / 1 skip、typecheck、`pnpm check:secrets` 和 `git diff --check`。
+- 新 runtime 镜像和指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 的线上渲染 smoke 待部署后补录。
+
 ## Telegram plugin loading 与复盘垃圾佬榜收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 插件长任务现在通过跨进程 MessageChain 中的显式 `type=loading` marker 请求占位：Telegram patch 发送 `Thinking...`，收到最终 `reply_message` 后编辑占位并按原有长度规则补发后续分片。PUBG V3/V2、Product Radar、Organize Emby 的直接长任务已接入；其他最终回复、按钮和错误兜底不改变。
