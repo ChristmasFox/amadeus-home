@@ -155,14 +155,14 @@ orb -m "$MACHINE" -u root bash -lc "
   curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health
   worker_ready=0
   for _ in \$(seq 1 180); do
-    if docker exec product-radar node -e 'fetch("http://host.docker.internal:18400/health").then(async r=>{if(!r.ok)process.exit(1); const p=await r.json(); if(p.device!=="mps")process.exit(1)}).catch(()=>process.exit(1))' >/dev/null 2>&1; then
+    if docker exec product-radar node -e 'fetch(\"http://host.docker.internal:18400/health\").then(async r=>{if(!r.ok)process.exit(1); const p=await r.json(); if(p.device!==\"mps\")process.exit(1)}).catch(()=>process.exit(1))' >/dev/null 2>&1; then
       worker_ready=1
       break
     fi
     sleep 5
   done
   test "\$worker_ready" = 1
-  docker exec product-radar node -e 'fetch("http://host.docker.internal:18400/health").then(async r=>{if(!r.ok)process.exit(1); console.log(await r.text())}).catch(()=>process.exit(1))'
+  docker exec product-radar node -e 'fetch(\"http://host.docker.internal:18400/health\").then(async r=>{if(!r.ok)process.exit(1); console.log(await r.text())}).catch(()=>process.exit(1))'
   docker ps --filter name=product-radar --format '{{.Names}} {{.Image}} {{.Status}}'
 "
 
