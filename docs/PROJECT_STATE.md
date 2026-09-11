@@ -1,4 +1,4 @@
-# Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
+# Product Radar FashionSigLIP image matcher（DEPLOYED / VERIFIED：2026-09-11）
 
 当前 Product Radar 已接入独立 `Marqo/marqo-fashionSigLIP` macOS 原生 worker。Node
 侧 `FashionSiglipImageMatcher` 在 `ImageMatcher` port 内完成 reference/candidate
@@ -7,8 +7,14 @@ Watch 的 Sharp reference 不会因切换 provider 失效。CasaOS 模板默认�
 `hybrid`，Ubuntu Product Radar 通过 `host.docker.internal:18400` 调用 Mac mini
 LaunchAgent；worker 使用 Apple MPS，模型缓存位于
 `~/Library/Application Support/ProductRadar/FashionSigLIP`，并通过本机 Clash 出网。
-source 代码与本地回归已完成，仍待 commit/push、Product Radar RELEASE 和 live
-MPS readiness/embedding smoke。
+source `6206563` 已 push，Product Radar 已激活
+`local/product-radar:git-620656340703`（image
+`sha256:5105a328098b2428b904d69ddf80191201ecd513563d98e4c04403388483b8d4`）。Mac
+worker `/health` 与 Ubuntu 容器到 worker 的连通性均返回 `ok / mps / 768`；51/51
+测试、typecheck、Python compile、secret scan 通过。临时真实 Watch 已完成
+reference/candidate embedding 与图片比较后删除，现有 Watch 未变；远端回滚备份为
+`/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260911-214743`
+和对应 `.env.codex-backup.20260911-214743`，当前没有 FashionSigLIP Docker 容器。
 
 # Product Radar autonomous E2E acceptance（DEPLOYED / VERIFIED：2026-09-09）
 

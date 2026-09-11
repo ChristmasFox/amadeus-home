@@ -1,10 +1,13 @@
-# Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
+# Product Radar FashionSigLIP image matcher（DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 在现有平台无关 `ImageMatcher` 边界新增独立 macOS FashionSigLIP worker；Product Radar 只消费 embedding，自己负责缓存、cosine score、阈值和 Watch 语义。
 - [x] CasaOS `hybrid` 适配：新参考图优先持久化 FashionSigLIP 特征，同时准备 Sharp 特征；旧 Sharp reference 或模型暂不可用时自动回退，不影响现有监控。
 - [x] 新增 worker `/health`、`/embed-batch`、macOS arm64 LaunchAgent 安装流程、持久化 Hugging Face cache 和 Clash 代理配置；模型使用 `Marqo/marqo-fashionSigLIP`，优先 Apple MPS。
-- [x] 新增 3 项 matcher 回归测试；Product Radar typecheck、48 项测试、Python compile、`git diff --check` 已通过。
-- [ ] 待执行 RELEASE：提交并 push source，通过电脑终端在 Mac 安装/启动 MPS worker，构建/传输 Product Radar 镜像，更新 CasaOS Compose/.env，等待模型就绪并执行真实 embedding smoke。
+- [x] 新增 3 项 matcher 回归测试；Product Radar 51/51、typecheck、Python compile、`git diff --check`、`pnpm check:secrets` 已通过。
+- [x] source `6206563` 已 push；Mac mini 原生 LaunchAgent 已安装，FashionSigLIP `/health` 返回 `ok / mps / 768`，模型缓存约 775 MB。
+- [x] CasaOS `ubuntu` 已激活 `local/product-radar:git-620656340703`（image `sha256:5105a328098b2428b904d69ddf80191201ecd513563d98e4c04403388483b8d4`），Compose 使用 `hybrid` + `http://host.docker.internal:18400`，未运行 FashionSigLIP Docker 容器。
+- [x] 真实 Watch smoke：临时 similarity Watch 创建、reference embedding、候选注入和 1 次图片比较均成功（`bestScore=0.3538`、未触发通知、状态 `HEALTHY`），随后已删除临时 Watch；现有 Watch 保持 1 条未变。
+- [x] 回滚备份：`/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260911-214743`、`/var/lib/casaos/apps/product-radar/.env.codex-backup.20260911-214743`；LaunchAgent 回滚 plist 由安装器按时间戳保留。
 
 # PUBG 对局复盘示例模板对齐（DEPLOYED / VERIFIED：2026-09-11）
 

@@ -1,11 +1,17 @@
-# Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
+# Product Radar FashionSigLIP image matcher（DEPLOYED / VERIFIED：2026-09-11）
 
 已在 `ImageMatcher` 边界接入独立 macOS 原生 `Marqo/marqo-fashionSigLIP` worker；Product
 Radar 使用 `hybrid` provider，新 Watch 优先 FashionSigLIP，旧 Sharp reference 和
 worker 故障均回退 Sharp。worker 通过 LaunchAgent 使用 Apple MPS、监听 `18400`，
 Ubuntu Product Radar 通过 `host.docker.internal` 调用。源代码、Compose 模板和 3 项
-适配测试已完成；待提交/push、通过电脑终端安装 worker 并执行 Product Radar RELEASE，
-完成真实 health/embedding smoke。
+适配测试已完成。source `6206563` 已 push，CasaOS `ubuntu` 已激活
+`local/product-radar:git-620656340703`，远端 image 为
+`sha256:5105a328098b2428b904d69ddf80191201ecd513563d98e4c04403388483b8d4`。Mac
+worker 和 Ubuntu 容器连通性均返回 `ok / mps / 768`；Product Radar 51/51、typecheck、
+Python compile、secret scan 通过。临时真实 Watch 已走完 reference/candidate 图片
+比较并删除，现有 Watch 未变；远端 Compose/.env 回滚备份为
+`/var/lib/casaos/apps/product-radar/docker-compose.yml.codex-backup.20260911-214743`
+和对应 `.env.codex-backup.20260911-214743`，没有 FashionSigLIP Docker 容器。
 
 # Telegram plugin loading 与复盘垃圾佬榜收敛（DEPLOYED / VERIFIED：2026-09-11）
 
