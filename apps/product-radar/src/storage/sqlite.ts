@@ -354,6 +354,9 @@ export class SqliteRadarStore {
         candidates_processed INTEGER NOT NULL DEFAULT 0,
         image_comparisons INTEGER NOT NULL DEFAULT 0,
         above_threshold INTEGER NOT NULL DEFAULT 0,
+        image_model_calls INTEGER NOT NULL DEFAULT 0,
+        image_model_images_processed INTEGER NOT NULL DEFAULT 0,
+        image_model_cache_hits INTEGER NOT NULL DEFAULT 0,
         notifications_sent INTEGER NOT NULL DEFAULT 0,
         best_score REAL,
         last_run_at TEXT,
@@ -378,6 +381,9 @@ export class SqliteRadarStore {
         candidates_processed INTEGER NOT NULL DEFAULT 0,
         image_comparisons INTEGER NOT NULL DEFAULT 0,
         above_threshold INTEGER NOT NULL DEFAULT 0,
+        image_model_calls INTEGER NOT NULL DEFAULT 0,
+        image_model_images_processed INTEGER NOT NULL DEFAULT 0,
+        image_model_cache_hits INTEGER NOT NULL DEFAULT 0,
         best_score REAL,
         UNIQUE(watch_id, run_type, trigger_key, feed_id),
         FOREIGN KEY(watch_id) REFERENCES watches(id) ON DELETE CASCADE
@@ -442,6 +448,12 @@ export class SqliteRadarStore {
     this.ensureColumn('search_feeds', 'degraded_reason', 'TEXT');
     this.ensureColumn('search_feeds', 'potential_candidate_gap', 'INTEGER NOT NULL DEFAULT 0');
     this.ensureColumn('search_feeds', 'backoff_until', 'TEXT');
+    this.ensureColumn('watch_runtime_stats', 'image_model_calls', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('watch_runtime_stats', 'image_model_images_processed', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('watch_runtime_stats', 'image_model_cache_hits', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('watch_runtime_runs', 'image_model_calls', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('watch_runtime_runs', 'image_model_images_processed', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('watch_runtime_runs', 'image_model_cache_hits', 'INTEGER NOT NULL DEFAULT 0');
     this.db.exec(`
       UPDATE search_feeds
       SET run_count = CASE WHEN run_count = 0 THEN (
@@ -543,6 +555,9 @@ export class SqliteRadarStore {
       candidatesProcessed: Number(row.candidates_processed ?? 0),
       imageComparisons: Number(row.image_comparisons ?? 0),
       aboveThreshold: Number(row.above_threshold ?? 0),
+      imageModelCalls: Number(row.image_model_calls ?? 0),
+      imageModelImagesProcessed: Number(row.image_model_images_processed ?? 0),
+      imageModelCacheHits: Number(row.image_model_cache_hits ?? 0),
       notificationsSent: Number(row.notifications_sent ?? 0),
       bestScore: numberOrNull(row.best_score),
       ...(optionalString(row.last_run_at) === undefined ? {} : { lastRunAt: String(row.last_run_at) }),
@@ -574,14 +589,17 @@ export class SqliteRadarStore {
       candidatesProcessed: metrics.candidatesProcessed ?? 0,
       imageComparisons: metrics.imageComparisons ?? 0,
       aboveThreshold: metrics.aboveThreshold ?? 0,
+      imageModelCalls: metrics.imageModelCalls ?? 0,
+      imageModelImagesProcessed: metrics.imageModelImagesProcessed ?? 0,
+      imageModelCacheHits: metrics.imageModelCacheHits ?? 0,
       bestScore: metrics.bestScore ?? null,
     };
-    const runUpdate = this.db.prepare(`UPDATE watch_runtime_runs SET status = ?, finished_at = ?, error = ?, new_listings = ?, candidates_processed = ?, image_comparisons = ?, above_threshold = ?, best_score = ? WHERE id = ? AND status = 'running'`)
-      .run(status, finishedAt, error ?? null, values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.bestScore, id);
+    const runUpdate = this.db.prepare(`UPDATE watch_runtime_runs SET status = ?, finished_at = ?, error = ?, new_listings = ?, candidates_processed = ?, image_comparisons = ?, above_threshold = ?, image_model_calls = ?, image_model_images_processed = ?, image_model_cache_hits = ?, best_score = ? WHERE id = ? AND status = 'running'`)
+      .run(status, finishedAt, error ?? null, values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.imageModelCalls, values.imageModelImagesProcessed, values.imageModelCacheHits, values.bestScore, id);
     if (integer(runUpdate.changes) === 0) return;
     if (status === 'succeeded') {
-      this.db.prepare(`UPDATE watch_runtime_stats SET successful_runs = successful_runs + 1, new_listings = new_listings + ?, candidates_processed = candidates_processed + ?, image_comparisons = image_comparisons + ?, above_threshold = above_threshold + ?, best_score = CASE WHEN best_score IS NULL OR (? IS NOT NULL AND ? > best_score) THEN ? ELSE best_score END, last_success_at = ?, last_error_at = NULL, last_error = NULL, status = ? WHERE watch_id = ?`)
-        .run(values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.bestScore, values.bestScore, values.bestScore, finishedAt, runtimeStatus, watchId);
+      this.db.prepare(`UPDATE watch_runtime_stats SET successful_runs = successful_runs + 1, new_listings = new_listings + ?, candidates_processed = candidates_processed + ?, image_comparisons = image_comparisons + ?, above_threshold = above_threshold + ?, image_model_calls = image_model_calls + ?, image_model_images_processed = image_model_images_processed + ?, image_model_cache_hits = image_model_cache_hits + ?, best_score = CASE WHEN best_score IS NULL OR (? IS NOT NULL AND ? > best_score) THEN ? ELSE best_score END, last_success_at = ?, last_error_at = NULL, last_error = NULL, status = ? WHERE watch_id = ?`)
+        .run(values.newListings, values.candidatesProcessed, values.imageComparisons, values.aboveThreshold, values.imageModelCalls, values.imageModelImagesProcessed, values.imageModelCacheHits, values.bestScore, values.bestScore, values.bestScore, finishedAt, runtimeStatus, watchId);
     } else {
       this.db.prepare(`UPDATE watch_runtime_stats SET failed_runs = failed_runs + 1, last_error_at = ?, last_error = ?, status = ? WHERE watch_id = ?`)
         .run(finishedAt, error ?? 'watch run failed', runtimeStatus, watchId);
@@ -598,10 +616,10 @@ export class SqliteRadarStore {
     this.db.prepare('UPDATE watch_runtime_stats SET notifications_sent = notifications_sent + ? WHERE watch_id = ?').run(count, watchId);
   }
 
-  listWatchRuntimeRunsSince(watchId: string, since: string): Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; bestScore: number | null }> {
-    return this.db.prepare(`SELECT status, started_at, new_listings, candidates_processed, image_comparisons, above_threshold, best_score
+  listWatchRuntimeRunsSince(watchId: string, since: string): Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; imageModelCalls: number; imageModelImagesProcessed: number; imageModelCacheHits: number; bestScore: number | null }> {
+    return this.db.prepare(`SELECT status, started_at, new_listings, candidates_processed, image_comparisons, above_threshold, image_model_calls, image_model_images_processed, image_model_cache_hits, best_score
       FROM watch_runtime_runs WHERE watch_id = ? AND started_at >= ? ORDER BY started_at ASC`).all(watchId, since).map((row) => ({
-      status: String(row.status), startedAt: String(row.started_at), newListings: Number(row.new_listings ?? 0), candidatesProcessed: Number(row.candidates_processed ?? 0), imageComparisons: Number(row.image_comparisons ?? 0), aboveThreshold: Number(row.above_threshold ?? 0), bestScore: numberOrNull(row.best_score),
+      status: String(row.status), startedAt: String(row.started_at), newListings: Number(row.new_listings ?? 0), candidatesProcessed: Number(row.candidates_processed ?? 0), imageComparisons: Number(row.image_comparisons ?? 0), aboveThreshold: Number(row.above_threshold ?? 0), imageModelCalls: Number(row.image_model_calls ?? 0), imageModelImagesProcessed: Number(row.image_model_images_processed ?? 0), imageModelCacheHits: Number(row.image_model_cache_hits ?? 0), bestScore: numberOrNull(row.best_score),
     }));
   }
 

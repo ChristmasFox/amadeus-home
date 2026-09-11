@@ -54,6 +54,10 @@ test('FashionSigLIP matcher persists semantic features and ranks candidates', as
     assert.equal(result.comparedImages, 2);
     assert.equal(result.bestImageUrl, 'https://image.test/near.jpg');
     assert.equal(result.score, 1);
+    assert.deepEqual(result.modelUsage, { calls: 1, imagesProcessed: 2, cacheHits: 0 });
+
+    const cached = await matcher.match(prepared.id, ['https://image.test/near.jpg', 'https://image.test/different.jpg'], { source: 'bunjang', externalId: 'candidate-1' });
+    assert.deepEqual(cached.modelUsage, { calls: 0, imagesProcessed: 0, cacheHits: 2 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -67,6 +71,7 @@ test('FashionSigLIP matcher uses Sharp for an existing legacy reference', async 
     const result = await matcher.match('legacy-reference', ['https://image.test/legacy.jpg']);
     assert.equal(result.provider, 'sharp');
     assert.equal(result.score, 0.42);
+    assert.equal(result.modelUsage, undefined);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -83,6 +88,7 @@ test('FashionSigLIP outage falls back to Sharp after a new reference was prepare
     const result = await matcher.match(prepared.id, ['https://image.test/legacy.jpg']);
     assert.equal(result.provider, 'sharp');
     assert.equal(result.score, 0.42);
+    assert.deepEqual(result.modelUsage, { calls: 1, imagesProcessed: 0, cacheHits: 0 });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

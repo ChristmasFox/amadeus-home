@@ -1,3 +1,12 @@
+# Product Radar FashionSigLIP usage observability（IMPLEMENTED / VERIFIED LOCAL：2026-09-12）
+
+- [x] 在 ImageMatcher 结果边界记录 FashionSigLIP 实际请求次数、成功生成 embedding 的图片数和特征缓存命中数。
+- [x] 在 Watch runtime stats / runtime runs 增加 SQLite 持久化字段，并为现有数据库提供 additive migration，旧 Watch 不受影响。
+- [x] “Product Radar 日报”按最近 24 小时展示 FashionSigLIP 调用、图片处理和缓存命中统计。
+- [x] “监控情况/监控统计”展示当前 Watch 的累计 FashionSigLIP 使用量；seller/product Watch 不额外显示图片模型行。
+- [x] Product Radar 51/51、LangBot Product Radar 39/39、typecheck、build、Python compile、diff check 已通过。
+- [ ] 尚未部署线上；需要用户明确要求 RELEASE 后，再按 Product Radar immutable image + no-build compose 流程部署并验证真实日报。
+
 # Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-12）
 
 - [x] 根因已由 live LangBot DB、消息时序和 Product Radar context 复核：Kook 与 Telegram 共用同一 Pipeline；PUBG 路由漏掉“战报”，导致 Kook 群聊的 Product Radar listener 先消费“今日战报/今日战绩”，随后 activeWatch context 放大误判；Kook 的 `Thinking...` `Unknown` 占位又被宿主转换成空消息，触发 `reply_message ActionCallError`。

@@ -549,6 +549,9 @@ export class SearchFeedCoordinator {
         metrics.candidatesProcessed = (metrics.candidatesProcessed ?? 0) + (result.metrics.candidatesProcessed ?? 0);
         metrics.imageComparisons = (metrics.imageComparisons ?? 0) + (result.metrics.imageComparisons ?? 0);
         metrics.aboveThreshold = (metrics.aboveThreshold ?? 0) + (result.metrics.aboveThreshold ?? 0);
+        metrics.imageModelCalls = (metrics.imageModelCalls ?? 0) + (result.metrics.imageModelCalls ?? 0);
+        metrics.imageModelImagesProcessed = (metrics.imageModelImagesProcessed ?? 0) + (result.metrics.imageModelImagesProcessed ?? 0);
+        metrics.imageModelCacheHits = (metrics.imageModelCacheHits ?? 0) + (result.metrics.imageModelCacheHits ?? 0);
         if (result.metrics.bestScore !== undefined && (metrics.bestScore === undefined || result.metrics.bestScore > metrics.bestScore)) metrics.bestScore = result.metrics.bestScore;
       }
       this.options.store.upsertWatchFeedSubscription({ ...subscription, ...(lastEventId === undefined ? {} : { startAfterEventId: lastEventId }) });
@@ -582,6 +585,9 @@ export class SearchFeedCoordinator {
     }
     const score = result.matchScore ?? result.score;
     metrics.imageComparisons = result.comparedImages;
+    metrics.imageModelCalls = result.modelUsage?.calls ?? 0;
+    metrics.imageModelImagesProcessed = result.modelUsage?.imagesProcessed ?? 0;
+    metrics.imageModelCacheHits = result.modelUsage?.cacheHits ?? 0;
     metrics.bestScore = score;
     const matched = result.comparedImages > 0 && score >= watch.rules.similarityThreshold;
     metrics.aboveThreshold = score >= watch.rules.similarityThreshold ? 1 : 0;

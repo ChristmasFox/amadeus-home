@@ -53,11 +53,21 @@ export interface ImageMatchContext {
   threshold?: number;
 }
 
+export interface ImageMatcherUsage {
+  /** Number of requests made to the image embedding provider for this match. */
+  calls: number;
+  /** Number of candidate images that produced an embedding in this match. */
+  imagesProcessed: number;
+  /** Number of candidate images served by the feature cache. */
+  cacheHits: number;
+}
+
 export interface ImageMatchResult extends ImageSimilarityResult {
   /** Backward-compatible business score used by the current Sharp matcher. */
   score: number;
   comparedImages: number;
   bestImageUrl?: string;
+  modelUsage?: ImageMatcherUsage;
 }
 
 export interface ImageMatcher {

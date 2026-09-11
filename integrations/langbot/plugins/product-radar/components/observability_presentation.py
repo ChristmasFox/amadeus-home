@@ -69,6 +69,9 @@ def format_observability(result: dict[str, Any], *, stats: bool, now: datetime |
         f"• 检查：{runtime.get('feedRuns', 0)} 次（成功 {runtime.get('successfulRuns', 0)}，失败 {runtime.get('failedRuns', 0)}）",
         f"• 新商品：{runtime.get('newListings', 0)}，候选处理：{runtime.get('candidatesProcessed', 0)}",
         f"• 图片对比：{runtime.get('imageComparisons', 0)}，达到阈值：{runtime.get('aboveThreshold', 0)}",
+        *([] if watch.get('type') != 'similarity' else [
+            f"• FashionSigLIP：调用 {runtime.get('imageModelCalls', 0)} 次，处理图片 {runtime.get('imageModelImagesProcessed', 0)} 张，缓存命中 {runtime.get('imageModelCacheHits', 0)} 张",
+        ]),
         f"• 最高相似度：{_score_label(runtime.get('bestScore'))}",
         f"• 已发送通知：{runtime.get('notificationsSent', 0)}",
         f"• Token：{usage.get('totalTokens', 0)}（调用 {usage.get('calls', 0)} 次）",

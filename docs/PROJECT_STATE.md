@@ -1,3 +1,18 @@
+# Product Radar FashionSigLIP usage observability（IMPLEMENTED / VERIFIED LOCAL：2026-09-12）
+
+Product Radar 现在会在 FashionSigLIP `ImageMatcher` 边界记录每次 similarity Watch
+运行中的模型使用量：实际 embedding provider 请求次数、成功处理图片数以及特征缓存命中数。
+这些字段写入 `watch_runtime_runs` 和 `watch_runtime_stats`；启动时会对已有 SQLite
+数据库执行 additive column migration，历史数据保留，旧 Watch 的新统计从 0 开始。
+
+- 24 小时 Product Radar 日报从 runtime runs 汇总并显示 FashionSigLIP 使用量。
+- “监控情况/监控统计”从累计 Watch runtime stats 显示 FashionSigLIP 使用量。
+- Sharp fallback 仍保持原行为；当 FashionSigLIP 请求失败时，失败尝试也会保留调用计数，
+  但只有成功生成 embedding 的图片计入 `imagesProcessed`。
+- 本地验证：Product Radar 51/51、LangBot Product Radar 39/39、typecheck、build、Python
+  compile、`git diff --check` 通过。
+- 本阶段只完成 source implementation，尚未部署线上；等待明确 RELEASE 请求。
+
 # Kook PUBG/Product Radar 偶发跨域路由修复（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-12）
 
 本阶段复核了用户在 Kook 发送“今日战报/今日战绩”却收到 Product Radar 监控日志的偶发问题。live 证据表明两个插件共用同一 LangBot Pipeline；PUBG listener 原先没有把“战报”视为明确 PUBG 信号，Product Radar 因而可能先以自然语言语义和群聊 activeWatch 上下文接管。另一个独立问题是 Kook 不支持 Telegram 专用 `Unknown` loading placeholder，宿主转换后发送空消息，日志表现为 `reply_message ActionCallError`，会放大“机器人不回复”的现象。

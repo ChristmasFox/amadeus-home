@@ -13,6 +13,9 @@ export interface WatchRuntimeStats {
   candidatesProcessed: number;
   imageComparisons: number;
   aboveThreshold: number;
+  imageModelCalls: number;
+  imageModelImagesProcessed: number;
+  imageModelCacheHits: number;
   notificationsSent: number;
   bestScore: number | null;
   lastRunAt?: string;
@@ -27,6 +30,9 @@ export interface WatchRuntimeRunMetrics {
   candidatesProcessed?: number;
   imageComparisons?: number;
   aboveThreshold?: number;
+  imageModelCalls?: number;
+  imageModelImagesProcessed?: number;
+  imageModelCacheHits?: number;
   bestScore?: number;
 }
 

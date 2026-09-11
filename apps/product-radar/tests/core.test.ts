@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { ProductRadarService } from '../src/core/application.js';
+import { formatHeartbeatDigest, ProductRadarService } from '../src/core/application.js';
 import { RadarError, SensorUnavailableError } from '../src/core/errors.js';
 import type { Listing } from '../src/core/listing/model.js';
 import type { ImageMatcher, ImageMatchResult, ImageSource, PreparedImageReference } from '../src/core/matching/image.js';
@@ -92,6 +92,7 @@ class FakeImageMatcher implements ImageMatcher {
     return {
       score: bestImageUrl ? 0.82 : 0.32,
       comparedImages: candidateImageUrls.length,
+      modelUsage: { calls: 1, imagesProcessed: candidateImageUrls.length, cacheHits: 0 },
       ...(bestImageUrl === undefined ? {} : { bestImageUrl }),
     };
   }
@@ -480,6 +481,9 @@ test('runtime stats count real similarity executions, notifications, and degrade
   assert.equal(healthy.candidatesProcessed, 1);
   assert.equal(healthy.imageComparisons, 1);
   assert.equal(healthy.aboveThreshold, 1);
+  assert.equal(healthy.imageModelCalls, 1);
+  assert.equal(healthy.imageModelImagesProcessed, 1);
+  assert.equal(healthy.imageModelCacheHits, 0);
   assert.equal(healthy.notificationsSent, 1);
   assert.equal(healthy.bestScore, 0.82);
   assert.equal(service.getWatchObservability(created.watch.id).status, 'HEALTHY');
@@ -508,6 +512,8 @@ test('runtime stats count real similarity executions, notifications, and degrade
   assert.equal(restored.feedRuns, 4);
   assert.equal(restored.successfulRuns, 3);
   assert.equal(restored.failedRuns, 1);
+  assert.equal(restored.imageModelCalls, 2);
+  assert.equal(restored.imageModelImagesProcessed, 2);
   assert.equal(restored.status, 'HEALTHY');
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.successCount, 3);
   assert.equal(store.getSearchFeed(store.listSearchFeeds()[0]!.id)?.failureCount, 0);
@@ -549,12 +555,16 @@ test('heartbeat digest is due once, includes no-match status, and keeps channels
   const kook = new FakeChannel('kook', 'kook-admin');
   const { service, store } = build(source, { channels: [telegram, kook], imageMatcher: new FakeImageMatcher(), now: () => now });
   const created = await service.createWatch({ source: 'fake', type: 'similarity', target: { referenceImageUrl: 'https://fake.test/reference.jpg', searchQuery: '패딩' }, rules: { similarityThreshold: 0.9 }, intervalSeconds: 120, heartbeatIntervalSeconds: 300 });
+  source.currentListings = [listing({ externalId: 'baseline' }), listing({ externalId: 'heartbeat-model', imageUrls: ['https://fake.test/heartbeat-model.jpg'] })];
+  now = '2026-09-09T00:04:59.000Z';
+  await service.runWatch(created.watch.id, 'heartbeat-model');
   now = '2026-09-09T00:05:01.000Z';
   const first = await service.runHeartbeatSweep();
   assert.equal(first, 2);
   assert.equal(telegram.calls.length, 1);
   assert.equal(kook.calls.length, 1);
   assert.match(kook.calls[0]!.text, /暂无匹配/);
+  assert.match(kook.calls[0]!.text, /FashionSigLIP：调用 1 次，处理图片 1 张，缓存命中 0 张/);
   assert.equal(store.getWatchRuntimeStats(created.watch.id).notificationsSent, 1);
   assert.equal(await service.runHeartbeatSweep(), 0);
   assert.equal(store.listPendingHeartbeats().length, 1);

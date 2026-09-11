@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ImageFeature, ImageFeatureCache, ImageFeatureKey, ImageMatchContext, ImageMatchResult, ImageMatcher, ImageSource, PreparedImageReference } from '../../core/matching/image.js';
+import type { ImageFeature, ImageFeatureCache, ImageFeatureKey, ImageMatchContext, ImageMatchResult, ImageMatcher, ImageMatcherUsage, ImageSource, PreparedImageReference } from '../../core/matching/image.js';
 import { FileImageFeatureCache, PerceptualImageMatcher } from './perceptual-matcher.js';
 
 interface FashionSiglipImageMatcherOptions {
@@ -138,12 +138,20 @@ export class FashionSiglipImageMatcher implements ImageMatcher {
       else misses.push(entry);
     }
 
+    const modelUsage: ImageMatcherUsage = {
+      calls: 0,
+      imagesProcessed: 0,
+      cacheHits: keys.length - misses.length,
+    };
+
     if (misses.length > 0) {
       let embedded: EmbeddingItem[];
+      modelUsage.calls = 1;
       try {
         embedded = await this.embed(misses.map((entry) => ({ key: entry.requestKey, imageUrl: entry.imageUrl })));
+        modelUsage.imagesProcessed = embedded.filter((item) => item.vector !== undefined).length;
       } catch {
-        return this.fallbackResult(referenceId, candidateImageUrls, context);
+        return this.fallbackResult(referenceId, candidateImageUrls, context, modelUsage);
       }
       const embeddedByKey = new Map(embedded.map((item) => [item.key, item]));
       for (const entry of misses) {
@@ -180,14 +188,16 @@ export class FashionSiglipImageMatcher implements ImageMatcher {
       ...(context.threshold === undefined ? {} : { threshold: context.threshold }),
       score,
       comparedImages,
+      modelUsage,
       ...(bestImageUrl === undefined ? {} : { bestImageUrl }),
       ...(context.source && context.externalId ? { metadata: { cacheIdentity: `${context.source}:${context.externalId}`, provider: this.provider, modelVersion: this.modelVersion } } : {}),
     };
   }
 
-  private async fallbackResult(referenceId: string, candidateImageUrls: string[], context: ImageMatchContext): Promise<ImageMatchResult> {
+  private async fallbackResult(referenceId: string, candidateImageUrls: string[], context: ImageMatchContext, modelUsage?: ImageMatcherUsage): Promise<ImageMatchResult> {
     try {
-      return await this.fallback.match(referenceId, candidateImageUrls, context);
+      const result = await this.fallback.match(referenceId, candidateImageUrls, context);
+      return modelUsage === undefined ? result : { ...result, modelUsage };
     } catch {
       return {
         provider: this.provider,
@@ -197,6 +207,7 @@ export class FashionSiglipImageMatcher implements ImageMatcher {
         ...(context.threshold === undefined ? {} : { threshold: context.threshold }),
         score: 0,
         comparedImages: 0,
+        ...(modelUsage === undefined ? {} : { modelUsage }),
         metadata: { provider: this.provider, modelVersion: this.modelVersion, fallback: 'unavailable' },
       };
     }

@@ -107,7 +107,7 @@ function scoreLabel(value: number | null | undefined): string {
   return value === null || value === undefined ? '暂无' : `${(value * 100).toFixed(1)}%`;
 }
 
-export function formatHeartbeatDigest(observability: WatchObservability, runs: Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; bestScore: number | null }>): string {
+export function formatHeartbeatDigest(observability: WatchObservability, runs: Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; imageModelCalls?: number; imageModelImagesProcessed?: number; imageModelCacheHits?: number; bestScore: number | null }>): string {
   const totals = runs.reduce((result, run) => ({
     checks: result.checks + 1,
     successful: result.successful + (run.status === 'succeeded' ? 1 : 0),
@@ -116,8 +116,11 @@ export function formatHeartbeatDigest(observability: WatchObservability, runs: A
     candidates: result.candidates + run.candidatesProcessed,
     comparisons: result.comparisons + run.imageComparisons,
     aboveThreshold: result.aboveThreshold + run.aboveThreshold,
+    imageModelCalls: result.imageModelCalls + (run.imageModelCalls ?? 0),
+    imageModelImagesProcessed: result.imageModelImagesProcessed + (run.imageModelImagesProcessed ?? 0),
+    imageModelCacheHits: result.imageModelCacheHits + (run.imageModelCacheHits ?? 0),
     bestScore: run.bestScore !== null && (result.bestScore === null || run.bestScore > result.bestScore) ? run.bestScore : result.bestScore,
-  }), { checks: 0, successful: 0, failed: 0, newListings: 0, candidates: 0, comparisons: 0, aboveThreshold: 0, bestScore: null as number | null });
+  }), { checks: 0, successful: 0, failed: 0, newListings: 0, candidates: 0, comparisons: 0, aboveThreshold: 0, imageModelCalls: 0, imageModelImagesProcessed: 0, imageModelCacheHits: 0, bestScore: null as number | null });
   const icon = observability.status === 'HEALTHY' ? '🟢' : observability.status === 'DEGRADED' ? '🟡' : observability.status === 'PAUSED' ? '⏸️' : '🔴';
   const threshold = isSimilarityRules(observability.watch.rules) ? observability.watch.rules.similarityThreshold : undefined;
   const feedErrors = observability.feeds.filter((feed) => feed.state !== 'ACTIVE' || feed.lastError).map((feed) => feed.lastError || feed.degradedReason || feed.state);
@@ -131,6 +134,7 @@ export function formatHeartbeatDigest(observability: WatchObservability, runs: A
     `• 检查 ${totals.checks} 次（成功 ${totals.successful}，失败 ${totals.failed}）`,
     `• 新商品 ${totals.newListings} 件，候选 ${totals.candidates} 个`,
     `• 图片比较 ${totals.comparisons} 次`,
+    `• FashionSigLIP：调用 ${totals.imageModelCalls} 次，处理图片 ${totals.imageModelImagesProcessed} 张，缓存命中 ${totals.imageModelCacheHits} 张`,
     `• 最高相似度 ${scoreLabel(totals.bestScore ?? observability.runtime.bestScore)}`,
     `• 达到阈值 ${totals.aboveThreshold} 个${threshold === undefined ? '' : `（阈值 ${(threshold * 100).toFixed(0)}%）`}`,
     `• 已发送通知 ${observability.runtime.notificationsSent} 条，Token ${observability.usage.totalTokens}`,

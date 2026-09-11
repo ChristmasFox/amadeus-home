@@ -91,7 +91,8 @@ class ProductRadarObservabilityPresentationTest(unittest.TestCase):
             'runtime': {
                 'feedRuns': 12, 'successfulRuns': 9, 'failedRuns': 3,
                 'newListings': 8, 'candidatesProcessed': 7, 'imageComparisons': 6,
-                'aboveThreshold': 2, 'bestScore': 0.875, 'notificationsSent': 1,
+                'aboveThreshold': 2, 'imageModelCalls': 4, 'imageModelImagesProcessed': 18,
+                'imageModelCacheHits': 6, 'bestScore': 0.875, 'notificationsSent': 1,
             },
             'usage': {'totalTokens': 456, 'calls': 3},
             'feeds': [{'query': '패딩', 'state': 'DEGRADED', 'runCount': 2, 'successCount': 0,
@@ -101,6 +102,7 @@ class ProductRadarObservabilityPresentationTest(unittest.TestCase):
         self.assertIn('上次检查：1小时 2分钟 3秒前', output)
         self.assertIn('下次检查：1天 1小时 2分钟 3秒后', output)
         self.assertIn('• 图片对比：6，达到阈值：2', output)
+        self.assertIn('• FashionSigLIP：调用 4 次，处理图片 18 张，缓存命中 6 张', output)
         self.assertIn('• 最高相似度：87.5%', output)
         self.assertIn('• 已发送通知：1', output)
         self.assertIn('패딩：DEGRADED（检查 2，成功 0，失败 2）', output)
