@@ -64,7 +64,14 @@ class ModelRuntime:
         model.eval()
         self.model = model
         self.preprocess = preprocess
-        self.dimension = int(getattr(model.visual, "output_dim", 0))
+        visual = model.visual
+        # open_clip's HF-backed TimmModel exposes the projected image width on
+        # the trunk for Marqo FashionSigLIP, while some OpenCLIP variants use
+        # visual.output_dim. Keep both forms provider-agnostic.
+        self.dimension = int(
+            getattr(visual, "output_dim", 0)
+            or getattr(getattr(visual, "trunk", None), "num_features", 0)
+        )
         if self.dimension <= 0:
             raise RuntimeError("FashionSigLIP model did not expose an image embedding dimension")
 
