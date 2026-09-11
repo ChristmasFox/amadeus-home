@@ -6,12 +6,13 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
-## PUBG 复盘点评移动端排版（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+## PUBG 复盘点评移动端排版（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 队员卡片的 `💬 点评` 现在在 presentation boundary 做移动端友好的显式换行：标点优先、28 个字符兜底。只影响展示文本，不改分析层点评、近战账本、垃圾佬榜、环境破坏、缺席玩家 `-` 或其他复盘章节；短点评保持单行，避免模板被切得过碎。
 
 - 已通过长点评换行回归、agent-runtime 全量 130 pass / 1 skip、typecheck、`pnpm check:secrets` 和 `git diff --check`。
-- 新 runtime 镜像和指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 的线上渲染 smoke 待部署后补录。
+- source `ec1147b` 已 push；CasaOS `ubuntu` 当前 image 为 `local/pubg-query-engine-v3:git-ec1147b196aa`，回滚 compose 备份为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-135154`。
+- `/healthz`、`/homehub/health` 和 `scripts/doctor.sh` 均通过；指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 返回 `OK`，线上 3 个有记录队员点评均已显式换行、最长 28 字符，`SG_LabmemNo008` 仍为 `-`，近战/垃圾佬榜/环境破坏保持可见；未发送真实 Telegram/KOOK 消息。
 
 ## Telegram plugin loading 与复盘垃圾佬榜收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 

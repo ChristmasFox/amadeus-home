@@ -2,7 +2,7 @@
 
 - Date: 2026-09-11 Asia/Shanghai
 - Scope: `apps/agent-runtime/src/review/presentation.ts` player commentary display only, plus regression coverage.
-- Status: implemented, verified locally, ready to deploy.
+- Status: implemented, committed, pushed, deployed and live-verified.
 
 ## Implemented
 
@@ -18,7 +18,10 @@
 - `pnpm check:secrets`: passed.
 - `git diff --check`: passed.
 
-## Release follow-up
+## Release and live verification
 
-- Build and deploy a new immutable PUBG runtime image after commit/push.
-- Re-run `/healthz`, `/homehub/health`, and read-only rendering smoke for match `c2aea5a9-a86a-4f7b-b0a5-3d032541922d`; do not send a real Telegram/KOOK message.
+- Source commit `ec1147b` is on `origin/main`.
+- `scripts/deploy-agent-runtime.sh --apply --build --no-proxy` built and activated `local/pubg-query-engine-v3:git-ec1147b196aa`; image ID starts with `sha256:6907703e137b2e91d`, and the compose rollback backup is `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-135154`.
+- `/healthz` returned `status=ok`; `/homehub/health` returned `status=healthy`; `scripts/doctor.sh` reported 0 failures and 0 warnings.
+- Read-only rendering smoke for match `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` returned `OK`; all four player sections remained present, the recorded players' comments were split into lines of at most 28 characters, `SG_LabmemNo008` remained `-`, and melee, loot and environment sections remained present.
+- No real Telegram/KOOK message was sent.
