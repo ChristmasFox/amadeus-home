@@ -1,10 +1,10 @@
 # Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
 
-- [x] 在现有平台无关 `ImageMatcher` 边界新增独立 FashionSigLIP sidecar；Product Radar 只消费 embedding，自己负责缓存、cosine score、阈值和 Watch 语义。
+- [x] 在现有平台无关 `ImageMatcher` 边界新增独立 macOS FashionSigLIP worker；Product Radar 只消费 embedding，自己负责缓存、cosine score、阈值和 Watch 语义。
 - [x] CasaOS `hybrid` 适配：新参考图优先持久化 FashionSigLIP 特征，同时准备 Sharp 特征；旧 Sharp reference 或模型暂不可用时自动回退，不影响现有监控。
-- [x] 新增 sidecar `/health`、`/embed-batch`、CPU-only arm64 Dockerfile、持久化 Hugging Face cache 和 Clash 代理配置；模型使用 `Marqo/marqo-fashionSigLIP`。
+- [x] 新增 worker `/health`、`/embed-batch`、macOS arm64 LaunchAgent 安装流程、持久化 Hugging Face cache 和 Clash 代理配置；模型使用 `Marqo/marqo-fashionSigLIP`，优先 Apple MPS。
 - [x] 新增 3 项 matcher 回归测试；Product Radar typecheck、48 项测试、Python compile、`git diff --check` 已通过。
-- [ ] 待执行 RELEASE：提交并 push source，BuildKit 构建/传输双镜像，通过电脑终端更新 CasaOS Compose/.env，等待模型就绪并执行真实 embedding smoke。
+- [ ] 待执行 RELEASE：提交并 push source，通过电脑终端在 Mac 安装/启动 MPS worker，构建/传输 Product Radar 镜像，更新 CasaOS Compose/.env，等待模型就绪并执行真实 embedding smoke。
 
 # PUBG 对局复盘示例模板对齐（DEPLOYED / VERIFIED：2026-09-11）
 

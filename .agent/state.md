@@ -1,9 +1,11 @@
 # Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
 
-已在 `ImageMatcher` 边界接入独立 CPU `Marqo/marqo-fashionSigLIP` sidecar；Product
+已在 `ImageMatcher` 边界接入独立 macOS 原生 `Marqo/marqo-fashionSigLIP` worker；Product
 Radar 使用 `hybrid` provider，新 Watch 优先 FashionSigLIP，旧 Sharp reference 和
-sidecar 故障均回退 Sharp。源代码、Compose 模板和 3 项适配测试已完成；待提交/push、
-通过电脑终端执行 CasaOS 双镜像 RELEASE，并完成真实 health/embedding smoke。
+worker 故障均回退 Sharp。worker 通过 LaunchAgent 使用 Apple MPS、监听 `18400`，
+Ubuntu Product Radar 通过 `host.docker.internal` 调用。源代码、Compose 模板和 3 项
+适配测试已完成；待提交/push、通过电脑终端安装 worker 并执行 Product Radar RELEASE，
+完成真实 health/embedding smoke。
 
 # Telegram plugin loading 与复盘垃圾佬榜收敛（DEPLOYED / VERIFIED：2026-09-11）
 

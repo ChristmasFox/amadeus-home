@@ -1,4 +1,4 @@
-"""Small HTTP sidecar for local FashionSigLIP image embeddings.
+"""Small HTTP worker for local FashionSigLIP image embeddings.
 
 The service deliberately exposes only image embedding. Product Radar owns
 watch state, thresholds, cache identity, and fallback behavior.
@@ -23,6 +23,8 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 MODEL_ID = os.environ.get("FASHION_SIGLIP_MODEL_ID", "Marqo/marqo-fashionSigLIP")
 MODEL_VERSION = os.environ.get("FASHION_SIGLIP_MODEL_VERSION", MODEL_ID)
+REQUESTED_DEVICE = os.environ.get("FASHION_SIGLIP_DEVICE", "mps").lower()
+HOST = os.environ.get("FASHION_SIGLIP_BIND", "127.0.0.1")
 PORT = int(os.environ.get("FASHION_SIGLIP_PORT", "8000"))
 MAX_IMAGE_BYTES = int(os.environ.get("FASHION_SIGLIP_MAX_IMAGE_BYTES", str(10 * 1024 * 1024)))
 MAX_REQUEST_BYTES = int(os.environ.get("FASHION_SIGLIP_MAX_REQUEST_BYTES", str(32 * 1024 * 1024)))
@@ -42,6 +44,7 @@ class ModelRuntime:
     def __init__(self) -> None:
         self.model: Any = None
         self.preprocess: Any = None
+        self.device = "cpu"
         self.dimension = 0
         self.lock = threading.Lock()
 
@@ -49,10 +52,14 @@ class ModelRuntime:
         import open_clip
         import torch
 
-        torch.set_num_threads(THREADS)
+        if REQUESTED_DEVICE == "mps" and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
+            torch.set_num_threads(THREADS)
         model, _, preprocess = open_clip.create_model_and_transforms(
             f"hf-hub:{MODEL_ID}",
-            device="cpu",
+            device=self.device,
         )
         model.eval()
         self.model = model
@@ -66,7 +73,7 @@ class ModelRuntime:
 
         if self.model is None or self.preprocess is None:
             raise RuntimeError("FashionSigLIP model is not ready")
-        batch = torch.stack([self.preprocess(item.image) for item in images])
+        batch = torch.stack([self.preprocess(item.image) for item in images]).to(self.device)
         with self.lock, torch.inference_mode():
             embeddings = self.model.encode_image(batch, normalize=True)
         return embeddings.detach().cpu().tolist()
@@ -185,6 +192,7 @@ class Handler(BaseHTTPRequestHandler):
                 "modelId": MODEL_ID,
                 "modelVersion": MODEL_VERSION,
                 "dimension": runtime.dimension,
+                "device": runtime.device,
             },
         )
 
@@ -210,6 +218,7 @@ class Handler(BaseHTTPRequestHandler):
                     "modelId": MODEL_ID,
                     "modelVersion": MODEL_VERSION,
                     "dimension": runtime.dimension,
+                    "device": runtime.device,
                     "items": results,
                 },
             )
@@ -219,10 +228,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     runtime.load()
-    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(
         f"FashionSigLIP ready provider=fashionSigLIP model={MODEL_ID} "
-        f"version={MODEL_VERSION} dimension={runtime.dimension} port={PORT}",
+        f"version={MODEL_VERSION} dimension={runtime.dimension} device={runtime.device} host={HOST} port={PORT}",
         flush=True,
     )
     server.serve_forever()
