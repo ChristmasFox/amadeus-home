@@ -119,9 +119,28 @@ with plist_path.open("wb") as stream:
 PY
 
 uid="$(id -u)"
-launchctl bootout "gui/$uid/$LABEL" >/dev/null 2>&1 || true
-launchctl bootstrap "gui/$uid" "$PLIST"
-launchctl kickstart -k "gui/$uid/$LABEL"
+launch_domain="gui/$uid"
+launch_service="$launch_domain/$LABEL"
+launchctl bootout "$launch_service" >/dev/null 2>&1 || true
+bootstrapped=0
+for attempt in 1 2 3 4 5; do
+  if launchctl bootstrap "$launch_domain" "$PLIST" >/dev/null 2>&1; then
+    bootstrapped=1
+    break
+  fi
+  # launchd can finish unloading a KeepAlive job asynchronously. If the
+  # service is already back in the domain, restart it instead of reporting a
+  # transient bootstrap EIO to the caller.
+  if launchctl print "$launch_service" >/dev/null 2>&1; then
+    if launchctl kickstart -k "$launch_service" >/dev/null 2>&1; then
+      bootstrapped=1
+      break
+    fi
+  fi
+  sleep 1
+done
+((bootstrapped == 1)) || fail 'Could not load the FashionSigLIP LaunchAgent.'
+launchctl kickstart -k "$launch_service"
 
 health=""
 for attempt in $(seq 1 360); do
