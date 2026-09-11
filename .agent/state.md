@@ -1,3 +1,13 @@
+# Product Radar Luna semantic route repair（DEPLOYED / VERIFIED：2026-09-11）
+
+已修复图片创建监控未进入 Product Radar 的 live 路由故障：插件调用的
+`gpt-5.6-luna` 原本指向 LangBot Cloud provider，Ubuntu 出站收到 Cloudflare `1010`，
+因此 `intent_planner` 报 `ActionCallError`，普通聊天接管。现将 workspace 中该模型
+改绑现有 9Router 的 `openai-chat-completions` provider，模型名仍是 `gpt-5.6-luna`，
+默认聊天模型 `arthur-combo` 不变；LangBot 与 plugin runtime 已重载。文本和多模态
+model smoke 均通过，Product Radar `/health` 为 `ok`，当前 Watch 数量为 0。外部 DB
+回滚备份：`/DATA/AppData/langbot/backups/langbot.db.codex-product-radar-luna-20260911-224005`。
+
 # Product Radar FashionSigLIP image matcher（DEPLOYED / VERIFIED：2026-09-11）
 
 已在 `ImageMatcher` 边界接入独立 macOS 原生 `Marqo/marqo-fashionSigLIP` worker；Product
