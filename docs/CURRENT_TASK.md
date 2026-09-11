@@ -1,3 +1,12 @@
+# PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYMENT PENDING：2026-09-11）
+
+- [x] 近战解析优先采用 `Damage_Kick` / `Damage_Punch` 明确分类，按攻击方向合并展示脚/拳/其他近战；保留原始事件证据并输出命中数对账。
+- [x] 队员卡片对 `not_recorded` 玩家只显示 `-`；记录玩家的点评串联武器命中、倒地转化、道具、恢复、载具、环境和队友误伤，保留证据边界，不凭皮肤结算字段推断拾取。
+- [x] 增加垃圾佬物资搬运统计（原始拾取、丢弃、搜包、类别、显式皮肤/服装拾取）和环境破坏对象明细；只有遥测明确命名地形动作时才显示挖坑/地形动作。
+- [x] 增加确定性本局奖项与更长的锐评；未改动真实平台消息发送逻辑。
+- [x] 定向回归 18/18、根测试 130 pass / 1 skip、typecheck、secret scan、diff check 已通过；详见 `.agent/checkpoints/2026-09-11-pubg-review-v2-implementation.md`。
+- [ ] 待提交、push，并按 RELEASE 流程构建 immutable runtime image、更新 CasaOS parser/feature 版本、重算比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` telemetry 后完成 health/smoke。
+
 # Product Radar autonomous E2E acceptance & production repair（DEPLOYED / VERIFIED：2026-09-09）
 
 ## KOOK LangBot offline auto-recovery（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-10）

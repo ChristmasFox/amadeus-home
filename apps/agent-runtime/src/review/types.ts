@@ -106,6 +106,34 @@ export interface LootStats {
   evidenceIds: string[];
 }
 
+/** Item movement is separate from death-box loot so raw pickup counts stay readable. */
+export interface LootActivityStats {
+  id: string;
+  playerId: string;
+  pickupEvents: number;
+  dropEvents: number;
+  lootBoxPickups: number;
+  pickupWeapons: number;
+  pickupThrowables: number;
+  pickupAmmunition: number;
+  pickupHealing: number;
+  pickupBoosts: number;
+  pickupArmor: number;
+  pickupAttachments: number;
+  dropWeapons: number;
+  dropThrowables: number;
+  dropAmmunition: number;
+  dropHealing: number;
+  dropBoosts: number;
+  dropArmor: number;
+  dropAttachments: number;
+  /** Only explicit item-event metadata counts; settlement skin IDs are ignored. */
+  cosmeticPickups: number;
+  clothingPickups: number;
+  notableItems: string[];
+  evidenceIds: string[];
+}
+
 export type VehicleTrunkDirection = 'PUT' | 'PICKUP';
 
 export interface VehicleTrunkTransfer {
@@ -132,6 +160,10 @@ export interface EnvironmentStats {
   vaults: number;
   ledgeGrabs: number;
   vaultsOnVehicle: number;
+  /** Raw object names are retained instead of guessing a destruction cause. */
+  destroyedObjects?: Array<{ objectType: string; count: number }>;
+  /** Counted only when the telemetry explicitly names a terrain/dig action. */
+  terrainActions?: number;
   eventTimes: number[];
   evidenceIds: string[];
 }
@@ -182,6 +214,8 @@ export interface TeamDamageFact {
   timestamps: number[];
   weapon?: string;
   damageTypeCategory?: string;
+  /** Explicit melee action classification; absent on pre-V3.4 cached facts. */
+  meleeKind?: 'PUNCH' | 'KICK' | 'OTHER';
   vehicleId?: string;
   /** Reliable phase is kept separate so pre-match friendly fire is not mixed with in-match facts. */
   phase?: TelemetryEventPhase;
@@ -327,6 +361,7 @@ export interface MatchReviewFacts {
   stunGuns?: StunGunStats[];
   recovery?: RecoveryStats[];
   loot?: LootStats[];
+  lootActivity?: LootActivityStats[];
   vehicleTrunk?: VehicleTrunkTransfer[];
   environment?: EnvironmentStats[];
   armorBreaks?: ArmorBreakFact[];
@@ -369,6 +404,13 @@ export interface PlayerCommentary {
   operationIds: string[];
 }
 
+export interface ReviewAward {
+  playerId: string;
+  title: string;
+  text: string;
+  evidenceIds: string[];
+}
+
 export type ReviewTurningPointType = 'POWER_SPIKE' | 'CLEAN_WIN' | 'FINAL_LOSS' | 'TEAMWORK_RISK';
 
 export interface ReviewTurningPoint {
@@ -392,6 +434,7 @@ export interface ReviewAnalysis {
   good: string[];
   improvements: string[];
   keyPlayers: string[];
+  awards?: ReviewAward[];
   fun: string[];
   funCandidates?: FunCandidate[];
   funEvents?: FunEvent[];

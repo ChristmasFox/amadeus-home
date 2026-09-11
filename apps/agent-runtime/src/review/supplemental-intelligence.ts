@@ -1,6 +1,7 @@
 import type {
   ArmorBreakFact,
   EnvironmentStats,
+  LootActivityStats,
   LootStats,
   RecoveryStats,
   StunGunStats,
@@ -157,6 +158,100 @@ export function extractLootStats(events: NormalizedTelemetryEvent[], teamIds: Se
   return result.sort((left, right) => left.playerId.localeCompare(right.playerId));
 }
 
+type LootCategory = 'weapons' | 'throwables' | 'ammunition' | 'healing' | 'boosts' | 'armor' | 'attachments';
+
+const ACTIVITY_FIELDS: Record<'pickup' | 'drop', Record<LootCategory, keyof LootActivityStats>> = {
+  pickup: {
+    weapons: 'pickupWeapons',
+    throwables: 'pickupThrowables',
+    ammunition: 'pickupAmmunition',
+    healing: 'pickupHealing',
+    boosts: 'pickupBoosts',
+    armor: 'pickupArmor',
+    attachments: 'pickupAttachments',
+  },
+  drop: {
+    weapons: 'dropWeapons',
+    throwables: 'dropThrowables',
+    ammunition: 'dropAmmunition',
+    healing: 'dropHealing',
+    boosts: 'dropBoosts',
+    armor: 'dropArmor',
+    attachments: 'dropAttachments',
+  },
+};
+
+function incrementLootCategory(stats: LootActivityStats, direction: 'pickup' | 'drop', category: LootCategory | null): void {
+  if (!category) return;
+  const field = ACTIVITY_FIELDS[direction][category];
+  const numericStats = stats as unknown as Record<string, number>;
+  numericStats[field] = (numericStats[field] ?? 0) + 1;
+}
+
+function cosmeticKind(event: NormalizedTelemetryEvent): 'skin' | 'clothing' | null {
+  const value = `${event.itemId ?? ''} ${event.itemCategory ?? ''} ${event.itemSubCategory ?? ''}`.toLowerCase();
+  if (!/skin|cosmetic|costume|outfit|clothing|apparel|fashion/u.test(value)) return null;
+  return /costume|outfit|clothing|apparel|fashion/u.test(value) ? 'clothing' : 'skin';
+}
+
+/**
+ * Count item movement without pretending that every pickup is rare loot.
+ * Cosmetic fields use only explicit item-event metadata; kill/settlement
+ * payloads are deliberately not interpreted as pickup records.
+ */
+export function extractLootActivityStats(events: NormalizedTelemetryEvent[], teamIds: Set<string>): LootActivityStats[] {
+  const result: LootActivityStats[] = [];
+  for (const playerId of teamIds) {
+    const owned = playerEvents(events, teamIds, playerId);
+    const pickups = owned.filter((event) => event.type === 'ITEM_ACQUIRE');
+    const drops = owned.filter((event) => event.type === 'ITEM_DROP');
+    const lootBoxes = owned.filter((event) => event.type === 'ITEM_LOOT');
+    if (!pickups.length && !drops.length && !lootBoxes.length) continue;
+    const stats: LootActivityStats = {
+      id: `loot-activity-${playerId}`,
+      playerId,
+      pickupEvents: pickups.length,
+      dropEvents: drops.length,
+      lootBoxPickups: lootBoxes.length,
+      pickupWeapons: 0,
+      pickupThrowables: 0,
+      pickupAmmunition: 0,
+      pickupHealing: 0,
+      pickupBoosts: 0,
+      pickupArmor: 0,
+      pickupAttachments: 0,
+      dropWeapons: 0,
+      dropThrowables: 0,
+      dropAmmunition: 0,
+      dropHealing: 0,
+      dropBoosts: 0,
+      dropArmor: 0,
+      dropAttachments: 0,
+      cosmeticPickups: 0,
+      clothingPickups: 0,
+      notableItems: [],
+      evidenceIds: sortedEvidence([...pickups, ...drops, ...lootBoxes]),
+    };
+    for (const event of pickups) {
+      incrementLootCategory(stats, 'pickup', itemCategory(event));
+      const cosmetic = cosmeticKind(event);
+      if (cosmetic) {
+        stats.cosmeticPickups += 1;
+        if (cosmetic === 'clothing') stats.clothingPickups += 1;
+      }
+      const notable = notableItem(event.itemId ?? '');
+      if (notable && !stats.notableItems.includes(notable)) stats.notableItems.push(notable);
+    }
+    for (const event of drops) incrementLootCategory(stats, 'drop', itemCategory(event));
+    for (const event of lootBoxes) {
+      const notable = notableItem(event.itemId ?? '');
+      if (notable && !stats.notableItems.includes(notable)) stats.notableItems.push(notable);
+    }
+    result.push(stats);
+  }
+  return result.sort((left, right) => left.playerId.localeCompare(right.playerId));
+}
+
 export function extractVehicleTrunkTransfers(events: NormalizedTelemetryEvent[], teamIds: Set<string>): VehicleTrunkTransfer[] {
   return events
     .filter((event) => inMatch(event)
@@ -188,6 +283,12 @@ export function extractEnvironmentStats(events: NormalizedTelemetryEvent[], team
     const destroyed = owned.filter((event) => event.type === 'OBJECT_DESTROY');
     const vaults = owned.filter((event) => event.type === 'VAULT');
     if (!interaction.length && !destroyed.length && !vaults.length) continue;
+    const destroyedObjects = new Map<string, number>();
+    for (const event of destroyed) {
+      const objectType = event.objectType?.trim() || '未命名物体';
+      destroyedObjects.set(objectType, (destroyedObjects.get(objectType) ?? 0) + 1);
+    }
+    const terrainActions = destroyed.filter((event) => /dig|terrain|ground|hole|crater|deform/u.test(`${event.objectType ?? ''} ${event.rawType}`)).length;
     result.push({
       id: `environment-${playerId}`,
       playerId,
@@ -198,6 +299,10 @@ export function extractEnvironmentStats(events: NormalizedTelemetryEvent[], team
       vaults: vaults.length,
       ledgeGrabs: vaults.filter((event) => event.isLedgeGrab === true).length,
       vaultsOnVehicle: vaults.filter((event) => event.isVaultOnVehicle === true).length,
+      destroyedObjects: [...destroyedObjects.entries()]
+        .map(([objectType, count]) => ({ objectType, count }))
+        .sort((left, right) => right.count - left.count || left.objectType.localeCompare(right.objectType)),
+      terrainActions,
       eventTimes: [...new Set([...interaction, ...destroyed, ...vaults].map((event) => event.timeSeconds).filter((time): time is number => time !== null))].sort((left, right) => left - right),
       evidenceIds: sortedEvidence([...interaction, ...destroyed, ...vaults]),
     });

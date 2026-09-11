@@ -95,6 +95,32 @@ test('V3.3 aggregates confirmed teammate punches and combines low enemy damage',
   assertFunEvidence(facts, events);
 });
 
+test('melee ledger keeps explicit kicks separate from punches', () => {
+  const facts = factsFor([
+    event('LogPlayerTakeDamage', 10, {
+      attacker: character(ids[0]!),
+      victim: character(ids[1]!),
+      weapon: { itemId: 'PlayerFemale_A_C' },
+      damageTypeCategory: 'Damage_Kick',
+      damage: 18,
+      attackId: 'kick-1',
+    }),
+    event('LogPlayerTakeDamage', 11, {
+      attacker: character(ids[0]!),
+      victim: character(ids[1]!),
+      weapon: { itemId: 'PlayerFemale_A_C' },
+      damageTypeCategory: 'Damage_Punch',
+      damage: 10,
+      attackId: 'punch-1',
+    }),
+  ]);
+  const melee = facts.teamDamage?.filter((item) => item.source === 'MELEE') ?? [];
+  assert.deepEqual(melee.map((item) => [item.meleeKind, item.hitCount, item.damage]), [
+    ['KICK', 1, 18],
+    ['PUNCH', 1, 10],
+  ]);
+});
+
 test('vehicle team damage attributes driver only when confirmed', () => {
   const confirmed = factsFor([
     event('LogVehicleRide', 10, { character: character(ids[0]!), vehicle: { id: 'car-1' }, driverConfirmed: true }),

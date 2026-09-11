@@ -5,8 +5,8 @@ import type { NormalizedMatch } from '../data/model.js';
 import { extractMatchReviewFacts } from './review-facts.js';
 import type { MatchReviewFacts, ReviewEvidence } from './types.js';
 
-export const DEFAULT_TELEMETRY_PARSER_VERSION = 'telemetry-parser-5';
-export const DEFAULT_REVIEW_FEATURE_VERSION = 'review-features-5';
+export const DEFAULT_TELEMETRY_PARSER_VERSION = 'telemetry-parser-6';
+export const DEFAULT_REVIEW_FEATURE_VERSION = 'review-features-6';
 
 export interface TelemetryFeatureKey {
   matchId: string;
@@ -126,6 +126,13 @@ function compactEvidence(facts: MatchReviewFacts): ReviewEvidence[] {
     'telemetry',
     fact.evidenceIds,
     `${fact.playerId} 的死亡盒搜包事实`,
+  ));
+  facts.lootActivity?.forEach((fact) => add(
+    `evidence-${fact.id}`,
+    'DERIVED',
+    'telemetry',
+    fact.evidenceIds,
+    `${fact.playerId} 的物资拾取与丢弃事实`,
   ));
   facts.vehicleTrunk?.forEach((fact) => add(
     `evidence-${fact.id}`,

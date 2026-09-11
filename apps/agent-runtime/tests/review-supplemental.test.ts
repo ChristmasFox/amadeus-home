@@ -109,8 +109,11 @@ test('supplemental telemetry extracts interactions, utilities, loot, environment
   assert.equal(facts.recovery?.find((item) => item.playerId === player007)?.energyDrinks, 1);
   assert.equal(facts.recovery?.find((item) => item.playerId === player007)?.painkillers, 1);
   assert.equal(facts.loot?.find((item) => item.playerId === player007)?.lootBoxPickups, 1);
+  assert.equal(facts.lootActivity?.find((item) => item.playerId === player007)?.pickupEvents, 1);
+  assert.equal(facts.lootActivity?.find((item) => item.playerId === player007)?.lootBoxPickups, 1);
   assert.equal(facts.vehicleTrunk?.length, 2);
   assert.equal(facts.environment?.find((item) => item.playerId === player004)?.windowsDestroyed, 1);
+  assert.deepEqual(facts.environment?.find((item) => item.playerId === player004)?.destroyedObjects, [{ objectType: 'Window', count: 1 }]);
   assert.equal(facts.environment?.find((item) => item.playerId === player008)?.ledgeGrabs, 1);
   assert.equal(facts.armorBreaks?.[0]?.followUp, 'KNOCK');
   const impact = facts.vehicleImpacts?.find((item) => item.wheelsDestroyed === 4);
@@ -143,6 +146,9 @@ test('v1 review presentation includes approved report sections and fun combinati
   assert.equal(text.includes('环境动作'), true);
   assert.equal(text.includes('双向队友拳击'), true);
   assert.equal(text.includes('误伤三件套'), true);
+  assert.equal(text.includes('👑 kim_kkl\n-'), true);
+  assert.equal(text.includes('本场 Match Store 没有该玩家记录'), false);
+  assert.equal(text.includes('破坏窗1'), true);
   assert.equal(text.includes('一炮四轮'), true);
   assert.equal(text.includes('白圈'), false);
   assert.equal(text.includes('圈阶段'), false);

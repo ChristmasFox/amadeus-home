@@ -1,6 +1,6 @@
 import type { CanonicalQuery } from '../schema/query.js';
 import { PresentationModelSchema, type PresentationModel, type PresentationSection } from '../platform/core/contracts.js';
-import { isPunchWeapon } from './telemetry-events.js';
+import { meleeKindOf } from './telemetry-events.js';
 import type {
   FunEvent,
   MatchPickerModel,
@@ -12,11 +12,16 @@ import type {
 
 const REVIEW_SECTION_KEYS = [
   'overview', 'players', 'key_operations', 'key_fights', 'turning_points', 'weapons',
-  'interactions', 'recovery', 'loot', 'environment', 'vehicles', 'heavy_weapons', 'fun', 'conclusion',
+  'interactions', 'recovery', 'loot', 'environment', 'vehicles', 'heavy_weapons', 'awards', 'fun', 'conclusion',
 ] as const;
 
 function integer(value: number): string {
   return Math.round(value).toLocaleString('zh-CN');
+}
+
+function damage(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return Number.isInteger(rounded) ? integer(rounded) : rounded.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
 }
 
 function percentage(value: number, total: number): string | null {
@@ -129,7 +134,7 @@ function heavyWeaponLine(player: ReviewPlayerFacts): string[] {
 }
 
 function playerContributionLine(review: MatchReviewResult, player: ReviewPlayerFacts): string | null {
-  if (player.matchPresence === 'not_recorded') return 'ℹ️ 本场 Match Store 没有该玩家记录，不把缺失当作0贡献';
+  if (player.matchPresence === 'not_recorded') return null;
   const parts: string[] = [];
   const share = percentage(player.damage, review.facts.squad.damage);
   if (share && player.damage > 0) parts.push(`队伍伤害占比${share}`);
@@ -140,6 +145,21 @@ function playerContributionLine(review: MatchReviewResult, player: ReviewPlayerF
 }
 
 function playerSection(review: MatchReviewResult, player: ReviewPlayerFacts, profile: string): PresentationSection {
+  if (player.matchPresence === 'not_recorded') {
+    return {
+      type: 'players',
+      title: player.playerName,
+      text: `👑 ${player.playerName}\n-`,
+      data: {
+        playerId: player.playerId,
+        operationIds: [],
+        section: 'key_operations',
+        vehicle: null,
+        heavyWeapons: [],
+        matchPresence: 'not_recorded',
+      },
+    };
+  }
   const commentary = review.analysis.playerCommentary.find((item) => item.playerId === player.playerId);
   const lines = [
     '━━━━━━━━━━━━━━',
@@ -204,20 +224,55 @@ function weaponSection(review: MatchReviewResult): PresentationSection | null {
 function interactionsSection(review: MatchReviewResult): PresentationSection | null {
   const facts = review.facts;
   const names = new Map(facts.players.map((player) => [player.playerId, player.playerName]));
-  const lines = ['━━━━━━━━━━━━━━', '🥊 队友互动与误伤', '━━━━━━━━━━━━━━'];
-  const punches = (facts.teamDamage ?? []).filter((fact) => fact.source === 'MELEE' && isPunchWeapon(fact.weapon ?? null, fact.damageTypeCategory ?? null));
-  for (const punch of punches) lines.push(`• ${names.get(punch.actorPlayerId) ?? punch.actorPlayerId} → ${names.get(punch.victimPlayerId) ?? punch.victimPlayerId}：${punch.hitCount}拳 · ${integer(punch.damage)}伤害`);
-  const other = (facts.teamDamage ?? []).filter((fact) => !(fact.source === 'MELEE' && isPunchWeapon(fact.weapon ?? null, fact.damageTypeCategory ?? null)));
+  const lines = ['━━━━━━━━━━━━━━', '🥊 队内伤害账本', '━━━━━━━━━━━━━━'];
+  const melee = (facts.teamDamage ?? []).filter((fact) => fact.source === 'MELEE');
+  const meleeByDirection = new Map<string, { actorPlayerId: string; victimPlayerId: string; phase: Set<string>; hitCount: number; damage: number; evidenceIds: string[]; actions: Map<string, number> }>();
+  for (const fact of melee) {
+    const key = `${fact.actorPlayerId}:${fact.victimPlayerId}`;
+    const current = meleeByDirection.get(key) ?? {
+      actorPlayerId: fact.actorPlayerId,
+      victimPlayerId: fact.victimPlayerId,
+      phase: new Set<string>(),
+      hitCount: 0,
+      damage: 0,
+      evidenceIds: [],
+      actions: new Map<string, number>(),
+    };
+    current.hitCount += fact.hitCount;
+    current.damage += fact.damage;
+    current.evidenceIds.push(...fact.evidenceIds);
+    if (fact.phase) current.phase.add(fact.phase);
+    const kind = fact.meleeKind ?? meleeKindOf(fact.weapon ?? null, fact.damageTypeCategory ?? null);
+    current.actions.set(kind, (current.actions.get(kind) ?? 0) + fact.hitCount);
+    meleeByDirection.set(key, current);
+  }
+  const actionLabels: Record<string, string> = { KICK: '脚', PUNCH: '拳', OTHER: '近战' };
+  for (const item of meleeByDirection.values()) {
+    const actions = [...item.actions.entries()]
+      .sort(([left], [right]) => ({ KICK: 1, PUNCH: 2, OTHER: 3 }[left] ?? 9) - ({ KICK: 1, PUNCH: 2, OTHER: 3 }[right] ?? 9))
+      .map(([kind, count]) => `${count}${actionLabels[kind] ?? '次'}`)
+      .join(' + ');
+    const phase = item.phase.size > 1 ? ` · ${[...item.phase].map((value) => value === 'pre_match' ? '赛前' : value === 'in_match' ? '正赛' : '未知阶段').join('/')}` : '';
+    lines.push(`• ${names.get(item.actorPlayerId) ?? item.actorPlayerId} → ${names.get(item.victimPlayerId) ?? item.victimPlayerId}：${actions} · ${damage(item.damage)}伤害${phase}`);
+  }
+  const other = (facts.teamDamage ?? []).filter((fact) => fact.source !== 'MELEE');
   for (const fact of other) {
     const source = fact.source === 'EXPLOSIVE' ? '手雷/爆炸物' : fact.source === 'GUN' ? '枪械' : fact.source === 'VEHICLE' ? '载具' : '近战';
-    lines.push(`• ${names.get(fact.actorPlayerId) ?? fact.actorPlayerId} → ${names.get(fact.victimPlayerId) ?? fact.victimPlayerId}：${source}${fact.hitCount}次 · ${integer(fact.damage)}伤害`);
+    lines.push(`• ${names.get(fact.actorPlayerId) ?? fact.actorPlayerId} → ${names.get(fact.victimPlayerId) ?? fact.victimPlayerId}：${source}${fact.hitCount}次 · ${damage(fact.damage)}伤害`);
   }
   const stun = (facts.stunGuns ?? []).filter((item) => item.pickups > 0 || item.shots > 0);
   for (const item of stun) lines.push(`• ${names.get(item.playerId) ?? item.playerId}：电击枪拾取${item.pickups}次 · 开火${item.shots}次 · ${item.confirmedHits > 0 ? `确认命中${item.confirmedHits}次` : '未确认命中对象'}`);
-  if (!punches.length && !other.length && !stun.length) return null;
-  if (punches.length >= 2 && punches.some((left) => punches.some((right) => left.actorPlayerId === right.victimPlayerId && left.victimPlayerId === right.actorPlayerId))) lines.push('', '🚨 组合：本场出现双向队友拳击。');
-  if (punches.length && other.some((fact) => fact.source === 'EXPLOSIVE')) lines.push('🚨 组合：双向拳击 + 投掷物误伤，形成误伤三件套。');
-  return { type: 'interactions', title: 'interactions', text: lines.join('\n'), data: { teamDamage: facts.teamDamage ?? [], stunGuns: stun } };
+  if (!melee.length && !other.length && !stun.length) return null;
+  if (melee.length) {
+    const eventCount = new Set(melee.flatMap((fact) => fact.evidenceIds)).size;
+    const hitCount = melee.reduce((sum, fact) => sum + fact.hitCount, 0);
+    const totalDamage = melee.reduce((sum, fact) => sum + fact.damage, 0);
+    lines.push('', `近战对账：${eventCount}/${hitCount}条命中事件 · ${damage(totalDamage)}点友伤${eventCount === hitCount ? ' · 数据齐全' : ' · ⚠️ 事件数与命中数不一致'}`);
+    const directions = [...meleeByDirection.values()];
+    if (directions.length >= 2 && directions.some((left) => directions.some((right) => left.actorPlayerId === right.victimPlayerId && left.victimPlayerId === right.actorPlayerId))) lines.push('🚨 组合：本场出现双向队友拳击/近战，训练场切磋打进了正赛。');
+  }
+  if (melee.length && other.some((fact) => fact.source === 'EXPLOSIVE')) lines.push('🚨 组合：双向队友拳击/近战 + 投掷物误伤，形成误伤三件套，协同安全直接破产。');
+  return { type: 'interactions', title: 'interactions', text: lines.join('\n'), data: { teamDamage: facts.teamDamage ?? [], stunGuns: stun, meleeLedgerComplete: melee.length === 0 || new Set(melee.flatMap((fact) => fact.evidenceIds)).size === melee.reduce((sum, fact) => sum + fact.hitCount, 0) } };
 }
 
 function recoveryLine(review: MatchReviewResult, playerId: string): string | null {
@@ -247,34 +302,84 @@ function recoverySection(review: MatchReviewResult): PresentationSection | null 
 
 function lootSection(review: MatchReviewResult): PresentationSection | null {
   const stats = review.facts.loot ?? [];
+  const activity = review.facts.lootActivity ?? [];
   const transfers = review.facts.vehicleTrunk ?? [];
-  if (!stats.length && !transfers.length) return null;
-  const lines = ['━━━━━━━━━━━━━━', '📦 搜包与物资搬运', '━━━━━━━━━━━━━━'];
+  if (!stats.length && !activity.length && !transfers.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🗑️ 垃圾佬榜 · 搜包与物资搬运', '━━━━━━━━━━━━━━'];
+  const categoryParts = (item: typeof activity[number], prefix: 'pickup' | 'drop'): string[] => {
+    const parts = [
+      item[`${prefix}Weapons`], item[`${prefix}Throwables`], item[`${prefix}Ammunition`],
+      item[`${prefix}Healing`], item[`${prefix}Boosts`], item[`${prefix}Armor`], item[`${prefix}Attachments`],
+    ];
+    const labels = ['武器', '投掷物', '弹药', '治疗', '增益', '防具', '配件'];
+    return parts.flatMap((count, index) => count > 0 ? [`${labels[index]}${count}`] : []);
+  };
+  for (const item of [...activity].sort((left, right) => (right.pickupEvents + right.lootBoxPickups) - (left.pickupEvents + left.lootBoxPickups) || left.playerId.localeCompare(right.playerId))) {
+    const pickup = categoryParts(item, 'pickup');
+    const drop = categoryParts(item, 'drop');
+    const movement = [`原始拾取${item.pickupEvents}`, `丢弃${item.dropEvents}`, `搜包${item.lootBoxPickups}`];
+    if (pickup.length) movement.push(`捡${pickup.join('、')}`);
+    if (drop.length) movement.push(`扔${drop.join('、')}`);
+    if (item.cosmeticPickups > 0) movement.push(`皮肤/服装${item.cosmeticPickups}`);
+    lines.push(`• ${playerName(review, item.playerId)}：${movement.join(' · ')}`);
+    if (item.notableItems.length) lines.push(`  特殊搬运：${item.notableItems.slice(0, 4).join('、')}`);
+  }
   for (const item of stats) {
     const breakdown = [
       item.weapons ? `武器${item.weapons}` : '', item.throwables ? `投掷物${item.throwables}` : '',
       item.ammunition ? `弹药${item.ammunition}` : '', item.healing ? `治疗${item.healing}` : '',
       item.boosts ? `增益${item.boosts}` : '', item.armor ? `防具${item.armor}` : '', item.attachments ? `配件${item.attachments}` : '',
     ].filter(Boolean);
-    lines.push(`• ${playerName(review, item.playerId)}：死亡盒拾取${item.lootBoxPickups}次${breakdown.length ? ` · ${breakdown.join(' · ')}` : ''}`);
-    if (item.notableItems.length) lines.push(`  重点物资：${item.notableItems.join('、')}`);
+    lines.push(`• ${playerName(review, item.playerId)}：搜包内容${item.lootBoxPickups}项${breakdown.length ? ` · ${breakdown.join(' · ')}` : ''}`);
+    if (item.notableItems.length && !activity.some((entry) => entry.playerId === item.playerId && entry.notableItems.length)) lines.push(`  重点物资：${item.notableItems.join('、')}`);
   }
   for (const transfer of transfers) lines.push(`• ${clock(transfer.time)} ${playerName(review, transfer.playerId)}${transfer.direction === 'PUT' ? ' → 车厢' : ' ← 车厢'}：${itemLabel(transfer.item)}${transfer.vehicleId ? `（${transfer.vehicleId}）` : ''}`);
-  lines.push('', '注：不同车辆之间只确认存取动作，不把它们强行解释成同一件物资的完整接力。');
-  return { type: 'loot', title: 'loot', text: lines.join('\n'), data: { loot: stats, vehicleTrunk: transfers } };
+  if (activity.length && activity.every((item) => item.cosmeticPickups === 0)) lines.push('', '皮肤/服装：本局没有可确认的拾取记录。');
+  if (transfers.length) lines.push('', '注：不同车辆之间只确认存取动作，不把它们强行解释成同一件物资的完整接力。');
+  return { type: 'loot', title: 'loot', text: lines.join('\n'), data: { loot: stats, lootActivity: activity, vehicleTrunk: transfers } };
+}
+
+function environmentObjectLabel(value: string): string {
+  const normalized = value.replace(/^BP_/iu, '').replace(/_C$/u, '').toLowerCase();
+  const labels: Record<string, string> = {
+    window: '窗',
+    door: '门',
+    fence: '栅栏',
+    gaspump: '加油泵',
+    itembox: '物资箱',
+    hittableactorspawncontainer: '可破坏物资箱',
+    hay: '稻草堆',
+  };
+  return labels[normalized] ?? value;
 }
 
 function environmentSection(review: MatchReviewResult): PresentationSection | null {
   const stats = review.facts.environment ?? [];
   if (!stats.length) return null;
   const lines = ['━━━━━━━━━━━━━━', '🪟 环境动作', '━━━━━━━━━━━━━━'];
-  for (const item of stats) lines.push(`• ${playerName(review, item.playerId)}：开门${item.doorOpens} · 关门${item.doorCloses} · 破窗${item.windowsDestroyed} · 拆栅栏${item.fencesDestroyed} · 翻越${item.vaults}${item.ledgeGrabs ? `（抓边${item.ledgeGrabs}）` : ''}${item.vaultsOnVehicle ? ` · 车上翻越${item.vaultsOnVehicle}` : ''}`);
+  for (const item of stats) {
+    const actions = [`开门${item.doorOpens}`, `关门${item.doorCloses}`, `翻越${item.vaults}`];
+    if (item.ledgeGrabs) actions.push(`抓边${item.ledgeGrabs}`);
+    if (item.vaultsOnVehicle) actions.push(`车上翻越${item.vaultsOnVehicle}`);
+    const destroyed = (item.destroyedObjects ?? []).map((object) => `${environmentObjectLabel(object.objectType)}${object.count}`);
+    if (destroyed.length) actions.push(`破坏${destroyed.join('、')}`);
+    else if (item.windowsDestroyed || item.fencesDestroyed) actions.push(`破窗${item.windowsDestroyed} · 拆栅栏${item.fencesDestroyed}`);
+    if (item.terrainActions) actions.push(`明确地形动作${item.terrainActions}`);
+    lines.push(`• ${playerName(review, item.playerId)}：${actions.join(' · ')}`);
+  }
   const environmentTimes = stats.flatMap((item) => item.eventTimes);
   const fightsWithEnvironment = review.facts.fights.filter((fight) => environmentTimes.some((time) => time >= fight.start && time <= fight.end));
   lines.push('', fightsWithEnvironment.length
     ? `战斗关联：${fightsWithEnvironment.map((fight) => `第${fightOrdinal(review, fight.id)}波`).join('、')}战斗窗口内出现环境动作。`
     : '战斗关联：精确战斗窗口内未记录开门或翻越，不据此推断战果因果。');
   return { type: 'environment', title: 'environment', text: lines.join('\n'), data: { environment: stats, fightsWithEnvironment: fightsWithEnvironment.map((fight) => fight.id) } };
+}
+
+function awardsSection(review: MatchReviewResult): PresentationSection | null {
+  const awards = review.analysis.awards ?? [];
+  if (!awards.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🏆 本局奖项', '━━━━━━━━━━━━━━', ...awards.map((award) => `• ${award.title}：${playerName(review, award.playerId)} · ${award.text}`)];
+  return { type: 'awards', title: 'awards', text: lines.join('\n'), data: { awards } };
 }
 
 function turningPointLine(review: MatchReviewResult, point: ReviewTurningPoint): string {
@@ -367,6 +472,10 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
     ? facts.players.filter((player) => query.subject.ids.includes(player.playerId))
     : facts.players;
   for (const player of visiblePlayers) sections.push(playerSection(review, player, profile));
+  if (teamProfile) {
+    const awards = awardsSection(review);
+    if (awards) sections.push(awards);
+  }
   if (profile === 'default' || profile === 'combat' || profile === 'detailed' || profile === 'weapon' || profile === 'fun') {
     const weapons = weaponSection(review);
     if (weapons) sections.push(weapons);

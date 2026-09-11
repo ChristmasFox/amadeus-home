@@ -11,6 +11,7 @@ import { extractFlashStats, extractTeamDamageFacts, extractTeamVehicleEvents } f
 import {
   extractArmorBreakFacts,
   extractEnvironmentStats,
+  extractLootActivityStats,
   extractLootStats,
   extractRecoveryStats,
   extractStunGunStats,
@@ -134,6 +135,7 @@ export function extractMatchReviewFacts(
   const stunGuns = extractStunGunStats(events, teamIds);
   const recovery = extractRecoveryStats(events, teamIds);
   const loot = extractLootStats(events, teamIds);
+  const lootActivity = extractLootActivityStats(events, teamIds);
   const vehicleTrunk = extractVehicleTrunkTransfers(events, teamIds);
   const environment = extractEnvironmentStats(events, teamIds);
   const armorBreaks = extractArmorBreakFacts(events, teamIds);
@@ -181,6 +183,7 @@ export function extractMatchReviewFacts(
     stunGuns,
     recovery,
     loot,
+    lootActivity,
     vehicleTrunk,
     environment,
     armorBreaks,
@@ -266,6 +269,13 @@ export function extractMatchReviewFacts(
       source: 'telemetry' as const,
       eventIds: fact.evidenceIds,
       description: `${fact.playerId} 的死亡盒搜包统计`,
+    })),
+    ...lootActivity.map((fact) => ({
+      id: `evidence-${fact.id}`,
+      kind: 'DERIVED' as const,
+      source: 'telemetry' as const,
+      eventIds: fact.evidenceIds,
+      description: `${fact.playerId} 的物资拾取与丢弃统计`,
     })),
     ...vehicleTrunk.map((fact) => ({
       id: `evidence-${fact.id}`,

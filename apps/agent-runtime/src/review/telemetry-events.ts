@@ -30,6 +30,8 @@ export type NormalizedTelemetryEventType =
 
 export type TelemetryEventPhase = 'pre_match' | 'in_match' | 'unknown';
 
+export type MeleeKind = 'PUNCH' | 'KICK' | 'OTHER';
+
 export interface TelemetryLocation {
   label: string | null;
   x: number | null;
@@ -167,7 +169,7 @@ function eventType(type: string): NormalizedTelemetryEventType | null {
   if (normalized.includes('armordestroy')) return 'ARMOR_DESTROY';
   if (normalized.includes('wheeldestroy')) return 'WHEEL_DESTROY';
   if (normalized.includes('objectinteraction')) return 'OBJECT_INTERACTION';
-  if (normalized.includes('objectdestroy')) return 'OBJECT_DESTROY';
+  if (normalized.includes('objectdestroy') || normalized.includes('destroyprop')) return 'OBJECT_DESTROY';
   if (normalized.includes('vaultstart')) return 'VAULT';
   if (normalized.includes('playerattack') || normalized === 'weaponfire') return 'ATTACK';
   if (normalized.includes('playerdamage') || normalized.includes('takedamage')) return 'DAMAGE';
@@ -402,18 +404,31 @@ function normalizedWeapon(value: string | null): string {
   return (value ?? '').replace(/^Item_Weapon_/iu, '').replace(/^Weap/iu, '').replace(/_C$/iu, '').toLowerCase();
 }
 
-export function isPunchWeapon(weapon: string | null, damageCategory: string | null = null): boolean {
+export function meleeKindOf(weapon: string | null, damageCategory: string | null = null): MeleeKind {
   const value = normalizedWeapon(weapon);
   const category = normalizedWeapon(damageCategory);
-  return /damage[_-]?punch/u.test(category)
-    || /player(?:male|female)[_-]?a/u.test(value)
-    || /fist|punch|barehand|unarmed|meleehand/u.test(value);
+  // Damage_Kick and Damage_Punch are authoritative. PUBG commonly reports
+  // both with PlayerMale/PlayerFemale as the causer, so causer-name fallback
+  // must never turn an explicit kick into a punch.
+  if (/damage[_-]?kick/u.test(category)) return 'KICK';
+  if (/damage[_-]?punch/u.test(category)) return 'PUNCH';
+  if (/player(?:male|female)[_-]?a/u.test(value)
+    || /fist|punch|barehand|unarmed|meleehand/u.test(value)) return 'PUNCH';
+  return 'OTHER';
+}
+
+export function isPunchWeapon(weapon: string | null, damageCategory: string | null = null): boolean {
+  return meleeKindOf(weapon, damageCategory) === 'PUNCH';
+}
+
+export function isKickWeapon(weapon: string | null, damageCategory: string | null = null): boolean {
+  return meleeKindOf(weapon, damageCategory) === 'KICK';
 }
 
 export function isMeleeWeapon(weapon: string | null, damageCategory: string | null = null): boolean {
   const value = normalizedWeapon(weapon);
   const category = normalizedWeapon(damageCategory);
-  return isPunchWeapon(weapon, damageCategory)
+  return meleeKindOf(weapon, damageCategory) !== 'OTHER'
     || /damage[_-]?(?:melee|meleethrow)/u.test(category)
     || /pickaxe|pan(?:projectile)?|machete|sickle|crowbar|sword|melee/u.test(value);
 }
@@ -474,7 +489,7 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
     ARMOR_DESTROY: ['attacker', 'character', 'player'],
     WHEEL_DESTROY: ['attacker', 'character', 'player'],
     OBJECT_INTERACTION: ['character', 'player'],
-    OBJECT_DESTROY: ['character', 'player'],
+    OBJECT_DESTROY: ['attacker', 'character', 'player'],
     VAULT: ['character', 'player'],
     VEHICLE_RIDE: ['character', 'player'],
     VEHICLE_LEAVE: ['character', 'player'],
@@ -503,8 +518,19 @@ function normalizeEvent(event: RawObject, index: number, match: NormalizedMatch)
   const item = objectValue(event.item);
   const parentItem = objectValue(event.parentItem);
   const childItem = objectValue(event.childItem);
-  const objectType = stringValue(event.objectType);
-  const objectStatus = stringValue(event.objectTypeStatus ?? event.objectStatus);
+  const object = objectValue(event.object ?? event.destroyedObject ?? event.prop);
+  const objectType = firstString(
+    event.objectType,
+    event.object_type,
+    event.propType,
+    event.prop_type,
+    event.objectName,
+    event.propName,
+    object.type,
+    object.objectType,
+    object.name,
+  );
+  const objectStatus = firstString(event.objectTypeStatus, event.objectStatus, event.status);
   return {
     id: `telemetry-${index + 1}`,
     type,

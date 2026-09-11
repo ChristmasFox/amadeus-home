@@ -1,6 +1,6 @@
 import type { FlashStats, TeamDamageFact, TeamDamageSource, TeamVehicleEvent } from './types.js';
 import type { NormalizedTelemetryEvent } from './telemetry-events.js';
-import { isExplosiveWeapon, isFlashWeapon, isMeleeWeapon, isPunchWeapon, isVehicleWeapon } from './telemetry-events.js';
+import { isExplosiveWeapon, isFlashWeapon, isMeleeWeapon, isVehicleWeapon, meleeKindOf } from './telemetry-events.js';
 
 function weaponOf(event: NormalizedTelemetryEvent): string | null {
   return event.weaponId ?? event.itemId;
@@ -43,12 +43,12 @@ export function extractTeamDamageFacts(events: NormalizedTelemetryEvent[], teamI
     if (!trackedPair(event, teamIds) || !hitConfirmed(event)) continue;
     const source = teamDamageSource(event);
     if (!source || !event.actorId || !event.victimId) continue;
-    // Keep fists separate from other melee weapons. A single player can hit a
-    // teammate with both fists and a pan in the same match; merging them would
-    // make the pan damage look like additional punches.
+    // Keep explicit punches, kicks and other melee weapons separate. A single
+    // player can hit a teammate with both feet and fists in the same match;
+    // merging the buckets would make the ledger lose the action detail.
     const meleeKind = source === 'MELEE'
-      ? isPunchWeapon(weaponOf(event), event.damageTypeCategory) ? 'PUNCH' : 'OTHER'
-      : '';
+      ? meleeKindOf(weaponOf(event), event.damageTypeCategory)
+      : null;
     const key = `${event.actorId}:${event.victimId}:${source}:${meleeKind}:${event.phase ?? 'unknown'}`;
     const existing = grouped.get(key);
     if (existing) {
@@ -73,6 +73,7 @@ export function extractTeamDamageFacts(events: NormalizedTelemetryEvent[], teamI
       timestamps,
       ...(weaponOf(event) ? { weapon: weaponOf(event)! } : {}),
       ...(event.damageTypeCategory ? { damageTypeCategory: event.damageTypeCategory } : {}),
+      ...(meleeKind ? { meleeKind } : {}),
       ...(event.vehicleId ? { vehicleId: event.vehicleId } : {}),
       ...(event.phase ? { phase: event.phase } : {}),
       evidenceIds: [event.id],

@@ -6,6 +6,14 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
+## PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYMENT PENDING：2026-09-11）
+
+当前 source 已完成复盘 V2 的确定性数据层与展示层升级：近战按明确 Damage 类别区分脚/拳，队内账本按方向聚合且用原始证据数/命中数对账；缺席队员显示 `-`；队员点评串联武器、战斗转化、道具/恢复、载具、环境和队友误伤事实；物资搬运和显式环境破坏已结构化，皮肤/服装仅接受 item event 的明确 metadata，未从击杀结算字段反推拾取。
+
+- 默认版本已推进到 `telemetry-parser-6` / `review-features-6`，用于绕过旧的脚拳误分类缓存。
+- 本地定向复盘测试 18/18；根测试 130 pass / 1 skip；typecheck、secret scan、diff check 已通过。
+- 真实比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 的部署、重算和线上报告 smoke 尚待本轮 RELEASE 完成；不宣称未完成的线上状态。
+
 ## KOOK LangBot offline auto-recovery（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-10）
 
 重启前 KOOK API 明确返回 `online=false`，但 `langbot` 容器仍 running、restart count 为 0，
