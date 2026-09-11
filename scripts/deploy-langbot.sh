@@ -271,6 +271,8 @@ except Exception:
 def walk(value):
     if isinstance(value, dict):
         manifest = value.get("manifest") or {}
+        if isinstance(manifest, dict) and isinstance(manifest.get("manifest"), dict):
+            manifest = manifest.get("manifest") or {}
         metadata = manifest.get("metadata") if isinstance(manifest, dict) else {}
         if isinstance(metadata, dict):
             if str(metadata.get("author") or "") == author and str(metadata.get("name") or "") == name:
