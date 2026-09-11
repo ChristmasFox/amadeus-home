@@ -10,7 +10,8 @@ import type {
   WeaponStats,
 } from './types.js';
 
-const REVIEW_SECTION_KEYS = [
+const COMPACT_REVIEW_SECTION_KEYS = ['overview', 'players', 'interactions', 'loot', 'closing'] as const;
+const EXTENDED_REVIEW_SECTION_KEYS = [
   'overview', 'players', 'key_operations', 'key_fights', 'turning_points', 'weapons',
   'interactions', 'recovery', 'loot', 'environment', 'vehicles', 'heavy_weapons', 'awards', 'fun', 'conclusion',
 ] as const;
@@ -338,17 +339,20 @@ function lootSection(review: MatchReviewResult): PresentationSection | null {
   const activity = review.facts.lootActivity ?? [];
   const transfers = review.facts.vehicleTrunk ?? [];
   if (!stats.length && !activity.length && !transfers.length) return null;
-  const lines = ['━━━━━━━━━━━━━━', '🗑️ 垃圾佬榜 · 搜包与物资搬运', '━━━━━━━━━━━━━━'];
+  const lines = ['━━━━━━━━━━━━━━', '🗑️ 垃圾佬榜', '━━━━━━━━━━━━━━'];
   const activityPlayerIds = new Set<string>();
   const trunkCounts = new Map<string, number>();
   for (const transfer of transfers) trunkCounts.set(transfer.playerId, (trunkCounts.get(transfer.playerId) ?? 0) + 1);
   for (const item of [...activity].sort((left, right) => (right.pickupEvents + right.lootBoxPickups) - (left.pickupEvents + left.lootBoxPickups) || left.playerId.localeCompare(right.playerId))) {
     activityPlayerIds.add(item.playerId);
-    const movement = [`拾取${item.pickupEvents}`, `丢弃${item.dropEvents}`, `搜包${item.lootBoxPickups}`];
+    const movement: string[] = [];
+    const pickedUp = item.pickupEvents + item.lootBoxPickups;
+    if (pickedUp > 0) movement.push(`拾取${pickedUp}`);
+    if (item.dropEvents > 0) movement.push(`丢弃${item.dropEvents}`);
     const trunkCount = trunkCounts.get(item.playerId) ?? 0;
-    if (trunkCount > 0) movement.push(`车厢存取${trunkCount}`);
-    if (item.cosmeticPickups > 0) movement.push(`皮肤/服装${item.cosmeticPickups}`);
-    lines.push(`• ${playerName(review, item.playerId)}：${movement.join(' · ')}`);
+    if (trunkCount > 0) movement.push(`车厢${trunkCount}`);
+    if (item.cosmeticPickups > 0) movement.push(`外观${item.cosmeticPickups}`);
+    lines.push(`• ${playerName(review, item.playerId)}：${movement.join(' · ') || '—'}`);
   }
   for (const item of stats) {
     if (activityPlayerIds.has(item.playerId)) continue;
@@ -357,7 +361,6 @@ function lootSection(review: MatchReviewResult): PresentationSection | null {
   for (const [playerId, count] of trunkCounts) {
     if (!activityPlayerIds.has(playerId)) lines.push(`• ${playerName(review, playerId)}：车厢存取${count}`);
   }
-  if (activity.length && activity.every((item) => item.cosmeticPickups === 0)) lines.push('', '皮肤/服装：本局没有可确认的拾取记录。');
   return { type: 'loot', title: 'loot', text: lines.join('\n'), data: { loot: stats, lootActivity: activity, vehicleTrunk: transfers } };
 }
 
@@ -375,10 +378,9 @@ function environmentObjectLabel(value: string): string {
   return labels[normalized] ?? value;
 }
 
-function environmentSection(review: MatchReviewResult): PresentationSection | null {
+function environmentActionLines(review: MatchReviewResult): string[] {
   const stats = review.facts.environment ?? [];
-  if (!stats.length) return null;
-  const lines = ['━━━━━━━━━━━━━━', '🪟 环境动作', '━━━━━━━━━━━━━━'];
+  const lines: string[] = [];
   for (const item of stats) {
     const actions = [`开门${item.doorOpens}`, `关门${item.doorCloses}`, `翻越${item.vaults}`];
     if (item.ledgeGrabs) actions.push(`抓边${item.ledgeGrabs}`);
@@ -394,13 +396,34 @@ function environmentSection(review: MatchReviewResult): PresentationSection | nu
   lines.push('', fightsWithEnvironment.length
     ? `战斗关联：${fightsWithEnvironment.map((fight) => `第${fightOrdinal(review, fight.id)}波`).join('、')}战斗窗口内出现环境动作。`
     : '战斗关联：精确战斗窗口内未记录开门或翻越，不据此推断战果因果。');
+  return lines;
+}
+
+function environmentSection(review: MatchReviewResult): PresentationSection | null {
+  const stats = review.facts.environment ?? [];
+  if (!stats.length) return null;
+  const lines = ['━━━━━━━━━━━━━━', '🪟 环境动作', '━━━━━━━━━━━━━━', ...environmentActionLines(review)];
+  const environmentTimes = stats.flatMap((item) => item.eventTimes);
+  const fightsWithEnvironment = review.facts.fights.filter((fight) => environmentTimes.some((time) => time >= fight.start && time <= fight.end));
   return { type: 'environment', title: 'environment', text: lines.join('\n'), data: { environment: stats, fightsWithEnvironment: fightsWithEnvironment.map((fight) => fight.id) } };
+}
+
+function awardLines(review: MatchReviewResult): string[] {
+  return (review.analysis.awards ?? []).map((award) => `• ${award.title}：${playerName(review, award.playerId)} · ${award.text}`);
+}
+
+function compactHighlightLines(review: MatchReviewResult): string[] {
+  return [...(review.analysis.funEvents ?? [])]
+    .filter((event) => event.funScore >= 90)
+    .sort((left, right) => right.funScore - left.funScore || left.id.localeCompare(right.id))
+    .slice(0, 2)
+    .map((event) => `• ${event.title}：${event.text.split('\n').filter(Boolean).join(' · ')}`);
 }
 
 function awardsSection(review: MatchReviewResult): PresentationSection | null {
   const awards = review.analysis.awards ?? [];
   if (!awards.length) return null;
-  const lines = ['━━━━━━━━━━━━━━', '🏆 本局奖项', '━━━━━━━━━━━━━━', ...awards.map((award) => `• ${award.title}：${playerName(review, award.playerId)} · ${award.text}`)];
+  const lines = ['━━━━━━━━━━━━━━', '🏆 本局奖项', '━━━━━━━━━━━━━━', ...awardLines(review)];
   return { type: 'awards', title: 'awards', text: lines.join('\n'), data: { awards } };
 }
 
@@ -433,6 +456,33 @@ function funSection(review: MatchReviewResult, query: CanonicalQuery, profile: s
   if (!events.length) return null;
   const text = ['🤣 趣味事件组合', ...events.map((event) => `${event.title}\n${event.text}`)].join('\n\n');
   return { type: 'fun', title: 'fun', text, data: { items: events, eventIds: events.map((event) => event.id) } };
+}
+
+function compactClosingSection(review: MatchReviewResult): PresentationSection {
+  const environment = review.facts.environment ?? [];
+  const awards = review.analysis.awards ?? [];
+  const highlights = compactHighlightLines(review);
+  const good = review.analysis.good.length ? review.analysis.good.map((item) => `• ${item}`) : ['• 暂无可确认的正向结论'];
+  const improvements = review.analysis.improvements.length ? review.analysis.improvements.map((item) => `• ${item}`) : ['• 暂无明确改进项'];
+  const actionPlan = review.analysis.actionPlan?.length ? review.analysis.actionPlan.map((item) => `• ${item}`) : ['• 暂无额外行动建议'];
+  const lines = ['━━━━━━━━━━━━━━', '🪟 环境破坏 / 🏆 奖项总结', '━━━━━━━━━━━━━━'];
+  lines.push('🪟 环境破坏', ...(environment.length ? environmentActionLines(review) : ['— 本局没有可确认的环境破坏记录']));
+  lines.push('', '🏆 本局奖项', ...(awards.length ? awardLines(review) : ['• 暂无可确认奖项']));
+  if (highlights.length) lines.push('', '🎯 本场亮点', ...highlights);
+  lines.push('', '✅ 做得好的', ...good, '', '⚠️ 需要改进', ...improvements, '', '🎯 下一局行动', ...actionPlan);
+  return {
+    type: 'closing',
+    title: 'closing',
+    text: lines.join('\n'),
+    data: {
+      environment,
+      awards,
+      highlights,
+      good: review.analysis.good,
+      improvements: review.analysis.improvements,
+      actionPlan: review.analysis.actionPlan ?? [],
+    },
+  };
 }
 
 function buildPickerText(picker: MatchPickerModel, query: CanonicalQuery): string {
@@ -485,8 +535,9 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
   if (review.telemetry.status === 'UNAVAILABLE') overview.push('', '⚠️ 该场基础战绩已经找到，但详细战斗记录暂时无法获取。');
   if (!facts.fightIntegrity.pass) overview.push('', '⚠️ 详细团战数据未通过一致性校验，暂不展示团战结论。');
   const sections: PresentationSection[] = [{ type: 'overview', title: 'overview', text: overview.join('\n'), data: { matchId: match.matchId, telemetry: review.telemetry, turningPointCount: analysis.turningPoints?.length ?? 0 } }];
+  const compactTemplate = profile === 'default';
   const teamProfile = profile !== 'personal' && profile !== 'vehicle' && profile !== 'weapon';
-  if (teamProfile) {
+  if (teamProfile && !compactTemplate) {
     const turningPoints = turningPointSection(review);
     if (turningPoints) sections.push(turningPoints);
   }
@@ -494,37 +545,45 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
     ? facts.players.filter((player) => query.subject.ids.includes(player.playerId))
     : facts.players;
   for (const player of visiblePlayers) sections.push(playerSection(review, player, profile));
-  if (teamProfile) {
-    const awards = awardsSection(review);
-    if (awards) sections.push(awards);
-  }
-  if (profile === 'default' || profile === 'combat' || profile === 'detailed' || profile === 'weapon' || profile === 'fun') {
-    const weapons = weaponSection(review);
-    if (weapons) sections.push(weapons);
-  }
-  const interactions = interactionsSection(review);
-  if (interactions) sections.push(interactions);
-  const recovery = recoverySection(review);
-  if (recovery) sections.push(recovery);
-  const loot = lootSection(review);
-  if (loot) sections.push(loot);
-  const environment = environmentSection(review);
-  if (environment && profile !== 'personal') sections.push(environment);
-  const fun = funSection(review, query, profile);
-  if (fun) sections.push(fun);
-  if (teamProfile) {
-    const fightLines = !facts.fightIntegrity.pass
-      ? ['⚠️ 详细团战数据未通过一致性校验，暂不展示。']
-      : analysis.keyFights.length
-        ? analysis.keyFights.map((fight) => `${fightOrdinal(review, fight.id)} ${clock(fight.start)}–${clock(fight.end)} · ${resultLabel(fight.result)}\n我方：${fight.teamKills}杀 · ${fight.teamKnocks}倒地 · ${integer(fight.teamDamage)}伤害\n我方被击杀：${fight.receivedKills}次 · 被击倒：${fight.receivedKnocks}次 · 承受${integer(fight.receivedDamage)}伤害\n关键人物：${fight.keyPlayers.length ? fight.keyPlayers.map((playerId) => playerName(review, playerId)).join('、') : '暂无'}${fight.location ? `\n地点：${fight.location}` : ''}`)
-        : ['暂无足够战斗事件形成团战'];
-    sections.push({ type: 'key_fights', title: 'key_fights', text: ['━━━━━━━━━━━━━━', '⚔️ 关键团战', '━━━━━━━━━━━━━━', ...fightLines].join('\n'), data: { fights: analysis.keyFights } });
-    const good = analysis.good.length ? analysis.good.map((item) => `• ${item}`).join('\n') : '• 暂无可确认的正向结论';
-    const improvements = analysis.improvements.length ? analysis.improvements.map((item) => `• ${item}`).join('\n') : '• 暂无明确改进项';
-    const keyPlayers = analysis.keyPlayers.length ? analysis.keyPlayers.map((item) => `• ${item}`).join('\n') : '• 暂无足够证据';
-    const actionPlan = analysis.actionPlan?.length ? analysis.actionPlan.map((item) => `• ${item}`).join('\n') : '• 暂无额外行动建议';
-    const conclusion = ['━━━━━━━━━━━━━━', '🧠 本局复盘', '━━━━━━━━━━━━━━', '✅ 做得好的', good, '', '⚠️ 可以改进', improvements, '', '🎯 下一局行动', actionPlan, '', '🏅 本局关键人物', keyPlayers];
-    sections.push({ type: 'conclusion', title: 'conclusion', text: conclusion.join('\n'), data: { good: analysis.good, improvements: analysis.improvements, actionPlan: analysis.actionPlan ?? [], keyPlayers: analysis.keyPlayers } });
+  if (compactTemplate) {
+    const interactions = interactionsSection(review);
+    if (interactions) sections.push(interactions);
+    const loot = lootSection(review);
+    if (loot) sections.push(loot);
+    sections.push(compactClosingSection(review));
+  } else {
+    if (teamProfile) {
+      const awards = awardsSection(review);
+      if (awards) sections.push(awards);
+    }
+    if (profile === 'combat' || profile === 'detailed' || profile === 'weapon' || profile === 'fun') {
+      const weapons = weaponSection(review);
+      if (weapons) sections.push(weapons);
+    }
+    const interactions = interactionsSection(review);
+    if (interactions) sections.push(interactions);
+    const recovery = recoverySection(review);
+    if (recovery) sections.push(recovery);
+    const loot = lootSection(review);
+    if (loot) sections.push(loot);
+    const environment = environmentSection(review);
+    if (environment && profile !== 'personal') sections.push(environment);
+    const fun = funSection(review, query, profile);
+    if (fun) sections.push(fun);
+    if (teamProfile) {
+      const fightLines = !facts.fightIntegrity.pass
+        ? ['⚠️ 详细团战数据未通过一致性校验，暂不展示。']
+        : analysis.keyFights.length
+          ? analysis.keyFights.map((fight) => `${fightOrdinal(review, fight.id)} ${clock(fight.start)}–${clock(fight.end)} · ${resultLabel(fight.result)}\n我方：${fight.teamKills}杀 · ${fight.teamKnocks}倒地 · ${integer(fight.teamDamage)}伤害\n我方被击杀：${fight.receivedKills}次 · 被击倒：${fight.receivedKnocks}次 · 承受${integer(fight.receivedDamage)}伤害\n关键人物：${fight.keyPlayers.length ? fight.keyPlayers.map((playerId) => playerName(review, playerId)).join('、') : '暂无'}${fight.location ? `\n地点：${fight.location}` : ''}`)
+          : ['暂无足够战斗事件形成团战'];
+      sections.push({ type: 'key_fights', title: 'key_fights', text: ['━━━━━━━━━━━━━━', '⚔️ 关键团战', '━━━━━━━━━━━━━━', ...fightLines].join('\n'), data: { fights: analysis.keyFights } });
+      const good = analysis.good.length ? analysis.good.map((item) => `• ${item}`).join('\n') : '• 暂无可确认的正向结论';
+      const improvements = analysis.improvements.length ? analysis.improvements.map((item) => `• ${item}`).join('\n') : '• 暂无明确改进项';
+      const keyPlayers = analysis.keyPlayers.length ? analysis.keyPlayers.map((item) => `• ${item}`).join('\n') : '• 暂无足够证据';
+      const actionPlan = analysis.actionPlan?.length ? analysis.actionPlan.map((item) => `• ${item}`).join('\n') : '• 暂无额外行动建议';
+      const conclusion = ['━━━━━━━━━━━━━━', '🧠 本局复盘', '━━━━━━━━━━━━━━', '✅ 做得好的', good, '', '⚠️ 可以改进', improvements, '', '🎯 下一局行动', actionPlan, '', '🏅 本局关键人物', keyPlayers];
+      sections.push({ type: 'conclusion', title: 'conclusion', text: conclusion.join('\n'), data: { good: analysis.good, improvements: analysis.improvements, actionPlan: analysis.actionPlan ?? [], keyPlayers: analysis.keyPlayers } });
+    }
   }
   const fallbackText = sections.map((section) => section.text ?? '').filter(Boolean).join('\n\n');
   return PresentationModelSchema.parse({
@@ -533,6 +592,6 @@ export function buildReviewPresentation(review: MatchReviewResult, query: Canoni
     title: '对局复盘',
     sections,
     fallbackText,
-    metadata: { queryId: query.queryId, resultSetId, profile, telemetry: review.telemetry, sectionKeys: REVIEW_SECTION_KEYS },
+    metadata: { queryId: query.queryId, resultSetId, profile, telemetry: review.telemetry, sectionKeys: compactTemplate ? COMPACT_REVIEW_SECTION_KEYS : EXTENDED_REVIEW_SECTION_KEYS },
   });
 }

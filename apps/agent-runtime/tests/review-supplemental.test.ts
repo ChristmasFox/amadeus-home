@@ -143,14 +143,15 @@ test('v1 review presentation includes approved report sections and fun combinati
   const text = presentation.fallbackText;
   assert.equal(text.includes('荣都'), true);
   assert.equal(text.includes('电击枪'), true);
-  assert.equal(text.includes('武器信息'), true);
-  assert.equal(text.includes('恢复物品与能量'), true);
-  assert.equal(text.includes('搜包与物资搬运'), true);
+  assert.equal(text.includes('武器信息'), false);
+  assert.equal(text.includes('恢复物品与能量'), false);
+  assert.equal(text.includes('垃圾佬榜'), true);
+  assert.equal(text.includes('搜包与物资搬运'), false);
   assert.equal(text.includes('捡武器'), false);
   assert.equal(text.includes('特殊搬运'), false);
   assert.equal(text.includes('车厢：Attach_Weapon_Upper_DotSight_01'), false);
   assert.equal(text.includes('搜包内容'), false);
-  assert.equal(text.includes('环境动作'), true);
+  assert.equal(text.includes('环境破坏'), true);
   assert.equal(text.includes('双向队友拳击'), true);
   assert.equal(text.includes('误伤三件套'), true);
   assert.equal(text.includes('👑 kim_kkl\n-'), true);
@@ -162,9 +163,14 @@ test('v1 review presentation includes approved report sections and fun combinati
   assert.equal(text.includes('一炮四轮'), true);
   assert.equal(text.includes('白圈'), false);
   assert.equal(text.includes('圈阶段'), false);
-  assert.equal(presentation.sections.some((section) => section.type === 'turning_points'), true);
+  assert.deepEqual([...new Set(presentation.sections.map((section) => section.type))], ['overview', 'players', 'interactions', 'loot', 'closing']);
+  assert.equal(presentation.sections.some((section) => section.type === 'turning_points'), false);
+  assert.equal(presentation.sections.some((section) => section.type === 'key_fights'), false);
+  assert.equal(presentation.sections.some((section) => section.type === 'fun'), false);
+  assert.equal(presentation.sections.some((section) => section.type === 'weapons'), false);
+  assert.equal(presentation.sections.some((section) => section.type === 'recovery'), false);
   assert.equal(presentation.sections.some((section) => section.type === 'interactions'), true);
-  assert.equal(presentation.sections.some((section) => section.type === 'recovery'), true);
+  assert.equal(presentation.sections.some((section) => section.type === 'closing'), true);
   assert.equal(presentation.sections.some((section) => section.type === 'loot'), true);
 
   const playerSection = presentation.sections.find((section) => section.type === 'players' && section.title === DEFAULT_TEAM.players[0]!.name);

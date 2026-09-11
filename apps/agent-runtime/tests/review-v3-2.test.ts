@@ -583,10 +583,10 @@ test('integrity failure suppresses invalid fight output and keeps diagnostics', 
   };
   const query = buildDeterministicQuery({ text: '复盘今天最后一把', now: REVIEW_NOW });
   const presentation = buildReviewPresentation(review, query, null);
-  const fightSection = presentation.sections.find((section) => section.type === 'key_fights');
-  assert.ok(fightSection);
-  assert.ok(fightSection?.text?.includes('详细团战数据未通过一致性校验，暂不展示'));
-  assert.equal(fightSection?.text?.includes('4杀'), false);
+  const overviewSection = presentation.sections.find((section) => section.type === 'overview');
+  assert.ok(overviewSection);
+  assert.ok(overviewSection?.text?.includes('详细团战数据未通过一致性校验，暂不展示'));
+  assert.equal(overviewSection?.text?.includes('4杀'), false);
   assert.equal(review.analysis.keyFights.length, 0);
 });
 
