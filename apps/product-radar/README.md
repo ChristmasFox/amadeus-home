@@ -94,9 +94,20 @@ only newly seen candidates at or above the threshold create
 
 The reference image is persisted as a feature under the Product Radar data
 volume, so a temporary Telegram image URL is not required after creation.
-Current V0.2 intentionally uses a lightweight perceptual matcher rather than a
-large semantic CLIP model. The `ImageMatcher` port leaves room for a local
-CLIP/SigLIP provider after threshold calibration.
+The CasaOS deployment uses `hybrid`: new references are embedded by the local
+`Marqo/marqo-fashionSigLIP` sidecar, while Sharp features are prepared in
+parallel as a recovery path. Existing Sharp-only references and temporary
+FashionSigLIP outages therefore remain usable. The local development default
+is still `sharp`; set `PRODUCT_RADAR_IMAGE_MATCHER_PROVIDER=hybrid` only when a
+FashionSigLIP sidecar is available.
+
+FashionSigLIP is exposed through a narrow `/embed-batch` HTTP port. Product
+Radar owns cache identity, cosine scoring, thresholds, and fallback behavior;
+the model service does not know about Watches or marketplace semantics. The
+first sidecar start downloads the model into
+`/DATA/AppData/product-radar/fashion-siglip-cache` and can take several
+minutes on CPU. The initial similarity threshold remains `0.60` until live
+FashionSigLIP score calibration is completed.
 
 Similarity watch API example:
 

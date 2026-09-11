@@ -1,3 +1,13 @@
+# Product Radar FashionSigLIP image matcher（IMPLEMENTED / READY FOR RELEASE：2026-09-11）
+
+当前 Product Radar 已接入独立 `Marqo/marqo-fashionSigLIP` CPU sidecar。Node
+侧 `FashionSiglipImageMatcher` 在 `ImageMatcher` port 内完成 reference/candidate
+embedding、provider-specific feature cache、cosine score 与 Sharp fallback；旧
+Watch 的 Sharp reference 不会因切换 provider 失效。CasaOS 模板默认启用
+`hybrid`，sidecar 权重缓存挂载到 `/DATA/AppData/product-radar/fashion-siglip-cache`，
+通过 `host.docker.internal:7897` 复用现有 Clash 出网路径。source 代码与本地回归已
+完成，仍待 commit/push、双镜像 RELEASE 和 live model readiness/embedding smoke。
+
 # Product Radar autonomous E2E acceptance（DEPLOYED / VERIFIED：2026-09-09）
 
 Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首扫现在以安全 watermark 建立静默 baseline，进程内 scheduler 每 30 秒调度到期 shared feed；changedetection 仍作为兼容 webhook，但动态页面没有文本 diff 不会再阻断轮询。真实 Watch 当前 1 条，`패딩` / `다운 자켓` feed 均 `ACTIVE`，最新运行成功、失败 0，Watch runtime `HEALTHY`。

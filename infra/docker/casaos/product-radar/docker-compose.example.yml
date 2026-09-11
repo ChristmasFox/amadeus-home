@@ -2,6 +2,32 @@
 # only after an explicit RELEASE apply. Secrets and admin recipients remain
 # in an external env file.
 services:
+  fashion-siglip:
+    image: ${FASHION_SIGLIP_IMAGE:-local/product-radar-fashion-siglip:0.1.0}
+    container_name: product-radar-fashion-siglip
+    restart: unless-stopped
+    networks:
+      - radar_network
+    environment:
+      FASHION_SIGLIP_MODEL_ID: ${FASHION_SIGLIP_MODEL_ID:-Marqo/marqo-fashionSigLIP}
+      FASHION_SIGLIP_MODEL_VERSION: ${FASHION_SIGLIP_MODEL_VERSION:-Marqo/marqo-fashionSigLIP-v1}
+      FASHION_SIGLIP_THREADS: ${FASHION_SIGLIP_THREADS:-2}
+      FASHION_SIGLIP_MAX_IMAGE_BYTES: ${FASHION_SIGLIP_MAX_IMAGE_BYTES:-10485760}
+      HTTP_PROXY: ${FASHION_SIGLIP_HTTP_PROXY:-http://host.docker.internal:7897}
+      HTTPS_PROXY: ${FASHION_SIGLIP_HTTPS_PROXY:-http://host.docker.internal:7897}
+      NO_PROXY: ${FASHION_SIGLIP_NO_PROXY:-localhost,127.0.0.1,::1,fashion-siglip,product-radar,changedetection}
+      no_proxy: ${FASHION_SIGLIP_NO_PROXY:-localhost,127.0.0.1,::1,fashion-siglip,product-radar,changedetection}
+    volumes:
+      - /DATA/AppData/product-radar/fashion-siglip-cache:/models
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 10m
+
   product-radar:
     image: ${PRODUCT_RADAR_IMAGE:-local/product-radar:0.1.0}
     container_name: product-radar
@@ -16,6 +42,9 @@ services:
       PRODUCT_RADAR_WEBHOOK_URL: http://product-radar:5315/api/sensors/changedetection/webhook
       PRODUCT_RADAR_MAX_BODY_BYTES: ${PRODUCT_RADAR_MAX_BODY_BYTES:-16777216}
       PRODUCT_RADAR_API_KEY: ${PRODUCT_RADAR_API_KEY:-}
+      PRODUCT_RADAR_IMAGE_MATCHER_PROVIDER: ${PRODUCT_RADAR_IMAGE_MATCHER_PROVIDER:-hybrid}
+      FASHION_SIGLIP_BASE_URL: ${FASHION_SIGLIP_BASE_URL:-http://fashion-siglip:8000}
+      FASHION_SIGLIP_TIMEOUT_MS: ${FASHION_SIGLIP_TIMEOUT_MS:-60000}
       CHANGEDETECTION_BASE_URL: http://changedetection:5000
       CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:?restore outside Git}
       LANGBOT_API_BASE_URL: ${LANGBOT_API_BASE_URL:-http://langbot:5300}

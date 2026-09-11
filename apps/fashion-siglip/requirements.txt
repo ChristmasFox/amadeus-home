@@ -1,0 +1,2 @@
+open_clip_torch==2.31.0
+Pillow==11.1.0
