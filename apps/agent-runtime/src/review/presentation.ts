@@ -311,36 +311,25 @@ function lootSection(review: MatchReviewResult): PresentationSection | null {
   const transfers = review.facts.vehicleTrunk ?? [];
   if (!stats.length && !activity.length && !transfers.length) return null;
   const lines = ['━━━━━━━━━━━━━━', '🗑️ 垃圾佬榜 · 搜包与物资搬运', '━━━━━━━━━━━━━━'];
-  const categoryParts = (item: typeof activity[number], prefix: 'pickup' | 'drop'): string[] => {
-    const parts = [
-      item[`${prefix}Weapons`], item[`${prefix}Throwables`], item[`${prefix}Ammunition`],
-      item[`${prefix}Healing`], item[`${prefix}Boosts`], item[`${prefix}Armor`], item[`${prefix}Attachments`],
-    ];
-    const labels = ['武器', '投掷物', '弹药', '治疗', '增益', '防具', '配件'];
-    return parts.flatMap((count, index) => count > 0 ? [`${labels[index]}${count}`] : []);
-  };
+  const activityPlayerIds = new Set<string>();
+  const trunkCounts = new Map<string, number>();
+  for (const transfer of transfers) trunkCounts.set(transfer.playerId, (trunkCounts.get(transfer.playerId) ?? 0) + 1);
   for (const item of [...activity].sort((left, right) => (right.pickupEvents + right.lootBoxPickups) - (left.pickupEvents + left.lootBoxPickups) || left.playerId.localeCompare(right.playerId))) {
-    const pickup = categoryParts(item, 'pickup');
-    const drop = categoryParts(item, 'drop');
-    const movement = [`原始拾取${item.pickupEvents}`, `丢弃${item.dropEvents}`, `搜包${item.lootBoxPickups}`];
-    if (pickup.length) movement.push(`捡${pickup.join('、')}`);
-    if (drop.length) movement.push(`扔${drop.join('、')}`);
+    activityPlayerIds.add(item.playerId);
+    const movement = [`拾取${item.pickupEvents}`, `丢弃${item.dropEvents}`, `搜包${item.lootBoxPickups}`];
+    const trunkCount = trunkCounts.get(item.playerId) ?? 0;
+    if (trunkCount > 0) movement.push(`车厢存取${trunkCount}`);
     if (item.cosmeticPickups > 0) movement.push(`皮肤/服装${item.cosmeticPickups}`);
     lines.push(`• ${playerName(review, item.playerId)}：${movement.join(' · ')}`);
-    if (item.notableItems.length) lines.push(`  特殊搬运：${item.notableItems.slice(0, 4).join('、')}`);
   }
   for (const item of stats) {
-    const breakdown = [
-      item.weapons ? `武器${item.weapons}` : '', item.throwables ? `投掷物${item.throwables}` : '',
-      item.ammunition ? `弹药${item.ammunition}` : '', item.healing ? `治疗${item.healing}` : '',
-      item.boosts ? `增益${item.boosts}` : '', item.armor ? `防具${item.armor}` : '', item.attachments ? `配件${item.attachments}` : '',
-    ].filter(Boolean);
-    lines.push(`• ${playerName(review, item.playerId)}：搜包内容${item.lootBoxPickups}项${breakdown.length ? ` · ${breakdown.join(' · ')}` : ''}`);
-    if (item.notableItems.length && !activity.some((entry) => entry.playerId === item.playerId && entry.notableItems.length)) lines.push(`  重点物资：${item.notableItems.join('、')}`);
+    if (activityPlayerIds.has(item.playerId)) continue;
+    lines.push(`• ${playerName(review, item.playerId)}：搜包${item.lootBoxPickups}`);
   }
-  for (const transfer of transfers) lines.push(`• ${clock(transfer.time)} ${playerName(review, transfer.playerId)}${transfer.direction === 'PUT' ? ' → 车厢' : ' ← 车厢'}：${itemLabel(transfer.item)}${transfer.vehicleId ? `（${transfer.vehicleId}）` : ''}`);
+  for (const [playerId, count] of trunkCounts) {
+    if (!activityPlayerIds.has(playerId)) lines.push(`• ${playerName(review, playerId)}：车厢存取${count}`);
+  }
   if (activity.length && activity.every((item) => item.cosmeticPickups === 0)) lines.push('', '皮肤/服装：本局没有可确认的拾取记录。');
-  if (transfers.length) lines.push('', '注：不同车辆之间只确认存取动作，不把它们强行解释成同一件物资的完整接力。');
   return { type: 'loot', title: 'loot', text: lines.join('\n'), data: { loot: stats, lootActivity: activity, vehicleTrunk: transfers } };
 }
 

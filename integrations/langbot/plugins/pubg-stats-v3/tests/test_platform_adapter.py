@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import unittest
 from unittest.mock import patch
 
 from components.platform.kook import KookAdapter
+from components.platform.loading import PLUGIN_LOADING_MARKER, loading_marker
 from components.platform.contracts import build_normalized_message
 from components.platform.registry import normalize_event_message, normalize_session_message
 from components.platform.telegram import TelegramAdapter
@@ -13,6 +15,14 @@ from components.pubg_v3_client import classify_pubg_message, is_whoami_command, 
 
 
 class PlatformAdapterTest(unittest.TestCase):
+    def test_loading_marker_has_explicit_type_and_replace_contract(self) -> None:
+        prefix, payload = loading_marker().split(PLUGIN_LOADING_MARKER, 1)
+        self.assertEqual(prefix, '')
+        data = json.loads(payload)
+        self.assertEqual(data['type'], 'loading')
+        self.assertTrue(data['replace'])
+        self.assertEqual(data['text'], 'Thinking...')
+
     def test_kook_group_and_private(self) -> None:
         adapter = KookAdapter('test-kook')
         group = adapter.normalize_event({

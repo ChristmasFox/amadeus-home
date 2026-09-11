@@ -8,6 +8,7 @@ import urllib.request
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from components.loading import send_loading
 from langbot_plugin.api.definition.components.command.command import Command
 from langbot_plugin.api.entities.builtin.command.context import CommandReturn, ExecuteContext
 
@@ -210,6 +211,7 @@ class OrganizeCommand(Command):
                 yield CommandReturn(text=f"❌ 整理服务暂时不可用\n\n{exc}")
 
     async def _handle(self, context: ExecuteContext) -> AsyncGenerator[CommandReturn, None]:
+        await send_loading(context)
         key = session_key(context)
         arguments = [argument for argument in context.crt_params if argument.strip()]
         action = arguments[0].casefold() if arguments else "list"

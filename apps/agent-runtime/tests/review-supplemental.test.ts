@@ -146,6 +146,10 @@ test('v1 review presentation includes approved report sections and fun combinati
   assert.equal(text.includes('武器信息'), true);
   assert.equal(text.includes('恢复物品与能量'), true);
   assert.equal(text.includes('搜包与物资搬运'), true);
+  assert.equal(text.includes('捡武器'), false);
+  assert.equal(text.includes('特殊搬运'), false);
+  assert.equal(text.includes('车厢：Attach_Weapon_Upper_DotSight_01'), false);
+  assert.equal(text.includes('搜包内容'), false);
   assert.equal(text.includes('环境动作'), true);
   assert.equal(text.includes('双向队友拳击'), true);
   assert.equal(text.includes('误伤三件套'), true);

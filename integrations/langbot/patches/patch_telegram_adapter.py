@@ -152,6 +152,35 @@ _MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024
         raise SystemExit("Telegram media marker not found for think filter")
     source = source.replace(think_marker, think_block, 1)
 
+if "def _plugin_loading_payload" not in source:
+    loading_marker = "_MAX_TELEGRAM_MEDIA_BYTES = 10 * 1024 * 1024\n"
+    loading_block = r'''_LANGBOT_PLUGIN_LOADING_MARKER = '__LANGBOT_PLUGIN_PLACEHOLDER_V1__:'
+_LANGBOT_PLUGIN_LOADING_TYPE = 'loading'
+
+
+def _plugin_loading_payload(message_chain):
+    """Read the explicit typed placeholder used by plugin replies."""
+
+    for component in message_chain:
+        if not isinstance(component, platform_message.Unknown):
+            continue
+        marker = getattr(component, 'text', '')
+        if not isinstance(marker, str) or not marker.startswith(_LANGBOT_PLUGIN_LOADING_MARKER):
+            continue
+        try:
+            payload = json.loads(marker[len(_LANGBOT_PLUGIN_LOADING_MARKER):])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict) and payload.get('type') == _LANGBOT_PLUGIN_LOADING_TYPE:
+            return payload
+    return None
+
+
+'''
+    if loading_marker not in source:
+        raise SystemExit("Telegram media marker not found for plugin loading")
+    source = source.replace(loading_marker, loading_block + loading_marker, 1)
+
 application_marker = "        application = ApplicationBuilder().token(config['token']).build()\n"
 application_replacement = """        # Build both request clients explicitly so the polling bot can be instrumented safely.
         proxy_url = (
@@ -808,6 +837,132 @@ if "Telegram stream state missing at final" not in source:
     if stream_state_marker not in source:
         raise SystemExit("Telegram stream state marker not found")
     source = source.replace(stream_state_marker, stream_state_replacement, 1)
+
+if "async def _reply_plugin_loading" not in source:
+    reply_method_marker = "    async def reply_message(\n"
+    reply_method_block = '''    def _plugin_loading_states(self):
+        states = getattr(self, '_plugin_loading_states_value', None)
+        if states is None:
+            states = {}
+            self._plugin_loading_states_value = states
+        return states
+
+    async def _reply_plugin_loading(self, message_source, payload):
+        assert isinstance(message_source.source_platform_object, Update)
+        update = message_source.source_platform_object
+        chat = update.effective_chat
+        if chat is None:
+            return
+        effective_message = update.effective_message
+        message_thread_id = getattr(effective_message, 'message_thread_id', None) if effective_message else None
+        content = str(payload.get('text') or 'Thinking...').strip()[:120] or 'Thinking...'
+        args = self._build_message_args(chat.id, content, message_thread_id)
+        sent_message = await self._telegram_call('send_message', **args)
+        message_id = getattr(sent_message, 'message_id', None) if sent_message is not None else None
+        if message_id is not None:
+            self._plugin_loading_states()[id(message_source)] = {
+                'chat_id': chat.id,
+                'message_id': message_id,
+            }
+
+    async def _delete_plugin_loading(self, loading_state):
+        if loading_state is None:
+            return
+        try:
+            await self._telegram_call(
+                'delete_message',
+                chat_id=loading_state['chat_id'],
+                message_id=loading_state['message_id'],
+            )
+        except Exception:
+            pass
+
+    async def reply_message(
+'''
+    if reply_method_marker not in source:
+        raise SystemExit("Telegram reply method marker not found for plugin loading")
+    source = source.replace(reply_method_marker, reply_method_block, 1)
+
+reply_loading_start_marker = (
+    "        assert isinstance(message_source.source_platform_object, Update)\n"
+    "        update = message_source.source_platform_object\n"
+    "        components = await TelegramMessageConverter.yiri2target(message, self.bot)\n"
+)
+reply_loading_start_replacement = (
+    "        assert isinstance(message_source.source_platform_object, Update)\n"
+    "        update = message_source.source_platform_object\n"
+    "        plugin_loading = _plugin_loading_payload(message)\n"
+    "        if plugin_loading is not None:\n"
+    "            await self._reply_plugin_loading(message_source, plugin_loading)\n"
+    "            return\n"
+    "\n"
+    "        loading_state = self._plugin_loading_states().pop(id(message_source), None)\n"
+    "        components = await TelegramMessageConverter.yiri2target(message, self.bot)\n"
+)
+if "plugin_loading = _plugin_loading_payload(message)" not in source:
+    if reply_loading_start_marker not in source:
+        raise SystemExit("Telegram reply body marker not found for plugin loading")
+    source = source.replace(reply_loading_start_marker, reply_loading_start_replacement, 1)
+
+reply_empty_marker = "        if text_component is None:\n            return\n"
+reply_empty_replacement = "        if text_component is None:\n            await self._delete_plugin_loading(loading_state)\n            return\n"
+if "await self._delete_plugin_loading(loading_state)" not in source:
+    if reply_empty_marker not in source:
+        raise SystemExit("Telegram text component marker not found for plugin loading")
+    source = source.replace(reply_empty_marker, reply_empty_replacement, 1)
+
+reply_blank_marker = (
+    "        content = _strip_telegram_think_markup(text_component.get('text', ''))\n"
+    "        if not content.strip():\n"
+    "            return\n"
+)
+reply_blank_replacement = (
+    "        content = _strip_telegram_think_markup(text_component.get('text', ''))\n"
+    "        if not content.strip():\n"
+    "            await self._delete_plugin_loading(loading_state)\n"
+    "            return\n"
+)
+if "if not content.strip():\n            await self._delete_plugin_loading(loading_state)" not in source:
+    if reply_blank_marker not in source:
+        raise SystemExit("Telegram blank content marker not found for plugin loading")
+    source = source.replace(reply_blank_marker, reply_blank_replacement, 1)
+
+reply_edit_marker = (
+    "        effective_message = update.effective_message\n"
+    "        message_thread_id = getattr(effective_message, 'message_thread_id', None) if effective_message else None\n"
+    "        for index, chunk in enumerate(content_chunks):\n"
+)
+reply_edit_replacement = (
+    "        if loading_state is not None:\n"
+    "            edit_args = {\n"
+    "                'chat_id': loading_state['chat_id'],\n"
+    "                'message_id': loading_state['message_id'],\n"
+    "                'text': content_chunks[0],\n"
+    "            }\n"
+    "            if self.config['markdown_card'] is True:\n"
+    "                edit_args['parse_mode'] = 'MarkdownV2'\n"
+    "            if reply_markup is not None:\n"
+    "                edit_args['reply_markup'] = reply_markup\n"
+    "            await self._telegram_call('edit_message_text', **edit_args)\n"
+    "            effective_message = update.effective_message\n"
+    "            message_thread_id = getattr(effective_message, 'message_thread_id', None) if effective_message else None\n"
+    "            for chunk in content_chunks[1:]:\n"
+    "                extra_args = {'chat_id': loading_state['chat_id'], 'text': chunk}\n"
+    "                if self.config['markdown_card'] is True:\n"
+    "                    extra_args['parse_mode'] = 'MarkdownV2'\n"
+    "                if message_thread_id:\n"
+    "                    extra_args['message_thread_id'] = message_thread_id\n"
+    "                await self._telegram_call('send_message', **extra_args)\n"
+    "            return\n"
+    "\n"
+    "        effective_message = update.effective_message\n"
+    "        message_thread_id = getattr(effective_message, 'message_thread_id', None) if effective_message else None\n"
+    "        for index, chunk in enumerate(content_chunks):\n"
+)
+if "if loading_state is not None:\n            edit_args =" not in source:
+    if reply_edit_marker not in source:
+        raise SystemExit("Telegram reply chunks marker not found for plugin loading")
+    source = source.replace(reply_edit_marker, reply_edit_replacement, 1)
 
 kill_marker = """    async def kill(self) -> bool:
         if self.application.running:

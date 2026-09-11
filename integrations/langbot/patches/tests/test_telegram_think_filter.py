@@ -47,6 +47,13 @@ class TelegramThinkFilterTests(unittest.TestCase):
         self.assertIn("Telegram send_message accepts at most 4096 characters", picker_source)
         self.assertIn("content_chunks = split_content(content)", picker_source)
 
+    def test_plugin_loading_uses_a_typed_placeholder_and_replaces_it(self):
+        source = PATCH_PATH.read_text(encoding="utf-8")
+        self.assertIn("_LANGBOT_PLUGIN_LOADING_TYPE = 'loading'", source)
+        self.assertIn("plugin_loading = _plugin_loading_payload(message)", source)
+        self.assertIn("await self._reply_plugin_loading(message_source, plugin_loading)", source)
+        self.assertIn("await self._telegram_call('edit_message_text', **edit_args)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

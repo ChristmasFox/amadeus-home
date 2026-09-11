@@ -1,3 +1,10 @@
+# Telegram 插件 loading 与复盘垃圾佬榜收敛（IMPLEMENTED / RELEASE_PENDING：2026-09-11）
+
+- [x] 为 PUBG V3/V2、Product Radar、Organize Emby 的长任务增加统一 `type=loading` 占位协议；Telegram 宿主收到后发送 `Thinking...`，最终正文编辑回同一条消息，普通最终回复和失败回复行为保持不变。
+- [x] Telegram patch 在 picker patch 之后再次应用 loading 生命周期，避免 picker 的 `reply_message` 重写覆盖占位替换逻辑；补充 marker、替换分支和宿主源码 `py_compile` 校验。
+- [x] 垃圾佬榜只保留拾取、丢弃、搜包、车厢存取和显式皮肤/服装计数；底层 `loot / lootActivity / vehicleTrunk` 数据与其他复盘章节不变，不再展开分类、特殊物资和逐条车厢流水。
+- [x] 定向验证：LangBot patch 5/5、PUBG V3 plugin 14/14、agent-runtime 130 pass / 1 skip、Python/shell syntax、secret scan、diff check 均通过；待提交、push 与 CasaOS LangBot patch image 激活后补齐 live 状态。
+
 # PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 近战解析优先采用 `Damage_Kick` / `Damage_Punch` 明确分类，按攻击方向合并展示脚/拳/其他近战；保留原始事件证据并输出命中数对账。

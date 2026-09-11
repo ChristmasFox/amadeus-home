@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from components.loading import send_loading
 from components.pubg_client import UNAVAILABLE_MESSAGE
 from components.pubg_gateway import run_pubg_query
 from langbot_plugin.api.definition.components.command.command import Command
@@ -22,6 +23,7 @@ class PubgCommand(Command):
             context: ExecuteContext,
         ) -> AsyncGenerator[CommandReturn, None]:
             try:
+                await send_loading(context)
                 result = await run_pubg_query(
                     _command.plugin,
                     text='查询今日战绩',

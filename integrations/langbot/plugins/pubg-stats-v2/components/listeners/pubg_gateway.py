@@ -6,6 +6,7 @@ from langbot_plugin.api.entities import events
 from langbot_plugin.api.entities.builtin.platform import message as platform_message
 
 from components.pubg_gateway import is_pubg_message, load_structured_context, run_pubg_query
+from components.loading import send_loading
 
 
 class PubgQueryGatewayListener(EventListener):
@@ -31,6 +32,7 @@ class PubgQueryGatewayListener(EventListener):
         structured_context = await load_structured_context(self.plugin, session_id)
         if not is_pubg_message(text, structured_context):
             return
+        await send_loading(event_context)
         result = await run_pubg_query(
             self.plugin,
             text=text,

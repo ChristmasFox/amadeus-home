@@ -16,6 +16,7 @@ from components.context import (
     watch_list_ids as context_watch_list_ids,
 )
 from components.intent_planner import apply_active_watch_context, resolve_product_radar_command
+from components.loading import send_loading
 from components.observability_presentation import format_observability as _format_observability
 from components.platform.bridge import platform_name, reply
 from components.platform.normalized import NormalizedBotMessage, normalize_event_message
@@ -291,6 +292,7 @@ class ProductRadarListener(EventListener):
                     result = acknowledge(text='正在处理商品监控…')
                     if hasattr(result, '__await__'):
                         await result
+            await send_loading(event_context)
             if parts[1] == 'delete':
                 await self._handle_watch_operation(
                     event_context,
@@ -320,6 +322,7 @@ class ProductRadarListener(EventListener):
         record_command(self.plugin, message, command)
         control = command.get('control')
         if control in {'confirm', 'cancel'}:
+            await send_loading(event_context)
             token = explicit_watch_id(command)
             if token not in pending or pending_context.get(token) != key:
                 token = self._latest_pending_token(pending, pending_context, key)
@@ -331,6 +334,7 @@ class ProductRadarListener(EventListener):
             return
         if command.get('selectionRequired'):
             try:
+                await send_loading(event_context)
                 listed = await list_watches(self.plugin)
                 rows = _watch_rows(listed)
                 _remember_watch_list(self.plugin, message, rows)
@@ -347,6 +351,7 @@ class ProductRadarListener(EventListener):
         intent = str(command.get('intent') or '')
         if intent == 'list_watches':
             try:
+                await send_loading(event_context)
                 listed = await list_watches(self.plugin)
                 rows = _watch_rows(listed)
                 _remember_watch_list(self.plugin, message, rows)
@@ -356,9 +361,11 @@ class ProductRadarListener(EventListener):
             _prevent(event_context)
             return
         if intent == 'create_watch':
+            await send_loading(event_context)
             await self._create_proposal(event_context, message, command, pending, pending_context, key)
             _prevent(event_context)
             return
+        await send_loading(event_context)
         await self._handle_watch_operation(event_context, message, context, command, watch_context)
         _prevent(event_context)
 

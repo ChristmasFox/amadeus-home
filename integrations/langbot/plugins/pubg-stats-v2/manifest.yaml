@@ -4,7 +4,7 @@ metadata:
   author: local
   name: pubg-stats
   repository: ''
-  version: 2.0.1
+  version: 2.0.2
   description:
     en_US: Query PUBG squad statistics and period-based fun rankings through n8n.
     zh_Hans: 通过 n8n 查询 PUBG 小队战绩及指定周期内的趣味排名。

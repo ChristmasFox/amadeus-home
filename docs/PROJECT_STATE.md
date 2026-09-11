@@ -6,6 +6,13 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
+## Telegram plugin loading 与复盘垃圾佬榜收敛（IMPLEMENTED / RELEASE_PENDING：2026-09-11）
+
+插件长任务现在通过跨进程 MessageChain 中的显式 `type=loading` marker 请求占位：Telegram patch 发送 `Thinking...`，收到最终 `reply_message` 后编辑占位并按原有长度规则补发后续分片。PUBG V3/V2、Product Radar、Organize Emby 的直接长任务已接入；其他最终回复、按钮和错误兜底不改变。
+
+- 垃圾佬榜展示已收敛为每人拾取 / 丢弃 / 搜包 / 车厢存取 / 显式皮肤服装计数；原始结构化物资数据仍留在 section `data`，环境破坏和其他复盘章节未改动。
+- 变更前验证：LangBot patch 5/5、PUBG V3 plugin 14/14、agent-runtime 130 pass / 1 skip、Python/shell syntax、secret scan、diff check 已通过；当前待提交、push 和 CasaOS LangBot patch image 激活。
+
 ## PUBG 对局复盘近战与战斗点评升级（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 当前 source 已完成复盘 V2 的确定性数据层与展示层升级：近战按明确 Damage 类别区分脚/拳，队内账本按方向聚合且用原始证据数/命中数对账；缺席队员显示 `-`；队员点评串联武器、战斗转化、道具/恢复、载具、环境和队友误伤事实；物资搬运和显式环境破坏已结构化，皮肤/服装仅接受 item event 的明确 metadata，未从击杀结算字段反推拾取。

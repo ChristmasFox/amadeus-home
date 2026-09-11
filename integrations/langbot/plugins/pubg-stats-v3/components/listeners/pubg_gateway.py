@@ -7,6 +7,7 @@ from langbot_plugin.api.entities import context as event_context_module
 from langbot_plugin.api.entities import events
 
 from components.platform.kook import KookAdapter
+from components.platform.loading import send_loading
 from components.platform.registry import normalize_event_message
 from components.platform.telegram import TelegramAdapter
 from components.platform.whatsapp import WhatsAppAdapter
@@ -49,6 +50,7 @@ class PubgQueryGatewayV3Listener(EventListener):
         else:
             adapter = KookAdapter()
         if is_whoami_command(message.get('message', {}).get('text', '')):
+            await send_loading(event_context)
             result = await run_whoami(
                 self.plugin,
                 message=message,
@@ -65,6 +67,7 @@ class PubgQueryGatewayV3Listener(EventListener):
                     event_context,
                     '正在处理 HomeHub 操作…' if callback_data.startswith('hh1:') else '正在读取这场比赛的战斗记录…',
                 )
+            await send_loading(event_context)
             # The host callback handler ACKs before enqueueing this query. Keep
             # the resume inside the event so reply_message_chain is serialized
             # back to LangBot after the deterministic review completes.
@@ -78,6 +81,7 @@ class PubgQueryGatewayV3Listener(EventListener):
         )
         if route.get('route') != 'mandatory':
             return
+        await send_loading(event_context)
         result = await run_pubg_query(
             self.plugin,
             message=message,

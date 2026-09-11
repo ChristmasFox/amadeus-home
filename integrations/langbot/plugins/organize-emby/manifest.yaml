@@ -4,7 +4,7 @@ metadata:
   author: local
   name: organize-emby
   repository: ''
-  version: 0.2.0
+  version: 0.2.1
   description:
     en_US: Organize one explicitly selected Emby TV download folder.
     zh_Hans: 整理用户明确选择的 Emby 电视剧下载文件夹。

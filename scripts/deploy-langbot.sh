@@ -349,6 +349,7 @@ RUN python /tmp/agent-monorepo-langbot-patches/patch_kook_adapter.py \
  && python /tmp/agent-monorepo-langbot-patches/patch_telegram_adapter.py \
  && python /tmp/agent-monorepo-langbot-patches/patch_message_conversion.py \
  && python /tmp/agent-monorepo-langbot-patches/patch_pubg_telegram_picker.py \
+ && python /tmp/agent-monorepo-langbot-patches/patch_telegram_adapter.py \
  && python -m py_compile \
       /app/src/langbot/pkg/platform/sources/kook.py \
       /app/src/langbot/pkg/platform/sources/telegram.py \
