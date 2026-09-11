@@ -1,7 +1,7 @@
 # PUBG 复盘五块模板收敛 checkpoint
 
 - 日期：2026-09-11
-- 状态：IMPLEMENTED / READY TO DEPLOY
+- 状态：IMPLEMENTED / DEPLOYED / VERIFIED
 - 范围：`apps/agent-runtime/src/review/presentation.ts` 及对应复盘回归测试
 
 ## 本阶段结果
@@ -15,11 +15,15 @@
 ## 已完成验证
 
 - 复盘定向测试：38 pass。
-- agent-runtime 全量测试、typecheck、secret scan、`git diff --check`：已启动，结果待汇总。
+- agent-runtime 全量测试：130 pass / 1 skip。
+- typecheck、secret scan、`git diff --check`：通过。
+- `/healthz`：`status=ok`；`/homehub/health`：`status=healthy`；`scripts/doctor.sh`：0 failure / 0 warning。
+- 指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 只读 smoke：`status=OK`；唯一 section type 为 `overview / players / interactions / loot / closing`，四名队员对应 8 个实际 section；近战对账 `13/13` 且标记数据齐全；环境破坏和简版垃圾佬榜存在；`SG_LabmemNo008` 为 `-`；点评单行最长 28 字符；武器信息和恢复物品没有单独 section。
 - 未发送真实 Telegram/KOOK 消息；指定比赛只做本地/线上只读查询 smoke。
 
 ## 发布后补充
 
-- 提交并 push source commit。
-- 使用 `./scripts/deploy-agent-runtime.sh --apply --build --no-proxy` 构建并部署 CasaOS `ubuntu`。
-- 记录 immutable image、compose 回滚备份、`/healthz`、`/homehub/health`、`scripts/doctor.sh` 和指定比赛 section smoke 结果。
+- source commit：`7f6cb63 fix(pubg): compact replay report template`，已 push 到 `origin/main`。
+- 已使用 `./scripts/deploy-agent-runtime.sh --apply --build --no-proxy` 构建并部署 CasaOS `ubuntu`。
+- immutable image：`local/pubg-query-engine-v3:git-7f6cb631d9c0`。
+- compose 回滚备份：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-141448`。

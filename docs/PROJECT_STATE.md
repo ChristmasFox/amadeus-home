@@ -6,13 +6,15 @@ Product Radar 已完成生产修复和隔离 E2E 验收。高流量 Bunjang 首�
 
 # Project State
 
-## PUBG 复盘五块模板收敛（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+## PUBG 复盘五块模板收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 默认完整复盘现在只输出五类展示块：总览 / 战局主线、队员点评、队内伤害账本、简版垃圾佬榜、环境破坏 / 奖项总结。四名队员继续各自独立成卡，便于移动端逐人阅读；武器、开火、道具、恢复、载具、趣味事件和关键团战不再占用独立类型，而是按证据并入点评、伤害账本或收尾总结。显式请求详细、整活、火箭筒、载具等专用 profile 时仍保留原专用展示。
 
 - 默认 presentation section type 已收敛为 `overview / players / interactions / loot / closing`；近战账本仍按攻击方向展示完整拳脚明细，缺席玩家仍为 `-`。
 - 垃圾佬榜保留简版拾取、丢弃、车厢和外观计数；环境动作、奖项、重点亮点、正负点评和下一局行动合并到 closing。
-- 已完成定向回归 38 pass；待全量测试、提交 push、构建部署和指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 只读 smoke。
+- 已完成定向回归 38 pass；agent-runtime 全量测试 130 pass / 1 skip、typecheck、secret scan、diff check 通过。
+- source `7f6cb63` 已 push；CasaOS `ubuntu` 当前 image 为 `local/pubg-query-engine-v3:git-7f6cb631d9c0`，回滚 compose 备份为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-141448`。
+- `/healthz`、`/homehub/health`、`scripts/doctor.sh` 均通过；指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 返回 `OK`，五类 section type、`13/13` 近战对账/数据齐全、环境破坏、简版垃圾佬榜、缺席玩家 `-` 和点评最长 28 字符均只读核验通过；未发送真实 Telegram/KOOK 消息。
 
 ## PUBG 复盘点评移动端排版（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 

@@ -1,9 +1,11 @@
-# PUBG 复盘五块模板收敛（IMPLEMENTED / READY TO DEPLOY：2026-09-11）
+# PUBG 复盘五块模板收敛（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
 - [x] 默认完整复盘收敛为 `overview / players / interactions / loot / closing` 五类展示块；四名队员仍各自保留一张点评卡。
 - [x] 武器/开火、道具/恢复、载具、趣味事件和关键团战不再单独成栏；重要事实并入队员点评或环境/奖项总结。
 - [x] 垃圾佬榜保留简版拾取、丢弃、车厢和外观计数；队内伤害账本、近战明细、环境数据和未参赛玩家 `-` 未改。
-- [x] 默认模板定向回归 38 pass；待全量验证、提交 push、构建部署和指定比赛 smoke。
+- [x] 默认模板定向回归 38 pass；agent-runtime 全量测试 130 pass / 1 skip、typecheck、secret scan、diff check 通过。
+- [x] `7f6cb63` 已提交并 push；CasaOS `ubuntu` 已激活不可变镜像 `local/pubg-query-engine-v3:git-7f6cb631d9c0`，回滚 compose 备份为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260911-141448`。
+- [x] `/healthz` 返回 `ok`、`/homehub/health` 返回 `healthy`、`scripts/doctor.sh` 为 0 failure / 0 warning；指定比赛 `c2aea5a9-a86a-4f7b-b0a5-3d032541922d` 返回 `OK`，section type 唯一值为五类，近战账本 `13/13` 且标记数据齐全，环境破坏、简版垃圾佬榜、缺席玩家 `-` 和点评最长 28 字符均通过只读 smoke。
 
 # PUBG 复盘点评移动端排版（IMPLEMENTED / DEPLOYED / VERIFIED：2026-09-11）
 
