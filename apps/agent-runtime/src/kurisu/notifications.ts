@@ -399,6 +399,7 @@ export interface LangBotNotificationChannelOptions {
   baseUrl: string;
   botId: string;
   recipient: string;
+  targetType?: 'person' | 'group';
   apiToken?: string;
   apiHeaderName?: string;
   timeoutMs?: number;
@@ -409,6 +410,7 @@ export interface LangBotNotificationChannelOptions {
 export class LangBotNotificationChannel implements NotificationChannel {
   readonly channel: NotificationTarget['channel'];
   readonly recipient: string;
+  private readonly targetType: 'person' | 'group';
   private readonly baseUrl: string;
   private readonly botId: string;
   private readonly apiToken: string;
@@ -419,6 +421,7 @@ export class LangBotNotificationChannel implements NotificationChannel {
   constructor(options: LangBotNotificationChannelOptions) {
     this.channel = options.channel;
     this.recipient = options.recipient;
+    this.targetType = options.targetType === 'group' ? 'group' : 'person';
     this.baseUrl = options.baseUrl.trim().replace(/\/$/u, '');
     this.botId = options.botId;
     this.apiToken = options.apiToken?.trim() ?? '';
@@ -439,7 +442,7 @@ export class LangBotNotificationChannel implements NotificationChannel {
           method: 'POST',
           headers,
           signal: controller.signal,
-          body: JSON.stringify({ target_type: 'person', target_id: this.recipient, message_chain: [{ type: 'Plain', text: context.text }] }),
+          body: JSON.stringify({ target_type: this.targetType, target_id: this.recipient, message_chain: [{ type: 'Plain', text: context.text }] }),
         });
       } catch (error) {
         return { status: 'unknown', reason: error instanceof Error && error.name === 'AbortError' ? 'platform response timed out after the request may have been accepted' : 'platform is unavailable' };

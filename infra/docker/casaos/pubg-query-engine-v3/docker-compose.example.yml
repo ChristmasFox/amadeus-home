@@ -6,6 +6,9 @@ services:
     # Docker API is used through the socket by the restricted HomeHub executor.
     group_add:
       - "${DOCKER_SOCKET_GID:-104}"
+    env_file:
+      - ${PUBG_RUNTIME_IDENTITY_ENV_FILE:-/DATA/AppData/pubg-query-engine-v3/admin-identity.env}
+      - ${KURISU_RUNTIME_ENV_FILE:-/DATA/AppData/pubg-query-engine-v3/kurisu.env}
     environment:
       NODE_ENV: production
       TZ: Asia/Shanghai
@@ -35,6 +38,8 @@ services:
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ${PUBG_API_KEY_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
       - ${KURISU_GATEWAY_SECRET_HOST_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/kurisu-gateway-secret}:/run/secrets/kurisu_gateway_secret:ro
+      - ${KURISU_NOTIFICATION_SECRET_HOST_FILE:-/DATA/AppData/n8n/secrets/codex-notify-secret}:/run/secrets/kurisu_notification_secret:ro
+      - ${KURISU_NOTIFICATION_LANGBOT_API_KEY_HOST_FILE:-/DATA/AppData/product-radar/secrets/langbot-api-token}:/run/secrets/langbot-api-token:ro
       - ${MAC_HOST_AGENT_TOKEN_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
     ports:
       - "${PUBG_QUERY_ENGINE_BIND_ADDRESS:-127.0.0.1}:${PUBG_QUERY_ENGINE_PORT:-5310}:5310"

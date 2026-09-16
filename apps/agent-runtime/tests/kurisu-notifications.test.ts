@@ -11,6 +11,7 @@ import { homehubActionInputSchema, WriteCoordinator } from '../src/kurisu/write-
 import {
   NotificationPreferenceStore,
   NotificationWorker,
+  LangBotNotificationChannel,
   renderNotification,
   type NotificationChannel,
   type NotificationEventInput,
@@ -307,6 +308,26 @@ test('structured HomeHub writes emit a durable central event with task linkage',
     assert.equal(events.length, 1);
     assert.equal((events[0]?.payload as Record<string, unknown>).taskId, 'run-homehub-notification');
     assert.equal(events[0]?.deliveries[0]?.status, 'pending');
+  } finally {
+    store.close();
+  }
+});
+
+test('LangBot notification channel preserves the configured group target type', async () => {
+  const bodies: unknown[] = [];
+  const channel = new LangBotNotificationChannel({
+    channel: 'kook', baseUrl: 'http://langbot:5300', botId: 'bot-1', recipient: 'group-1', targetType: 'group', apiToken: 'token',
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')));
+      return new Response(JSON.stringify({ success: true, data: { messageId: 'message-1' } }), { status: 200 });
+    },
+  });
+  const store = new KurisuStore();
+  try {
+    const worker = new NotificationWorker(store, { channels: [channel], now: () => T0 });
+    worker.ingest(event({ eventKey: 'group:event-1' }), [{ channel: 'kook', recipient: 'group-1' }], T0);
+    assert.equal((await worker.deliverDue(T0)).sent, 1);
+    assert.deepEqual(bodies, [{ target_type: 'group', target_id: 'group-1', message_chain: [{ type: 'Plain', text: 'new listing' }] }]);
   } finally {
     store.close();
   }

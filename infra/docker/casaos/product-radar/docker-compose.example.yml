@@ -28,11 +28,16 @@ services:
       KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
       PRODUCT_RADAR_TELEGRAM_BOT_ID: ${PRODUCT_RADAR_TELEGRAM_BOT_ID:-}
       PRODUCT_RADAR_KOOK_BOT_ID: ${PRODUCT_RADAR_KOOK_BOT_ID:-}
+      PRODUCT_RADAR_NOTIFICATION_OWNER: ${PRODUCT_RADAR_NOTIFICATION_OWNER:-local}
+      PRODUCT_RADAR_KURISU_NOTIFICATION_URL: ${PRODUCT_RADAR_KURISU_NOTIFICATION_URL:-http://pubg-query-engine-v3:5310/kurisu/notifications/events}
+      PRODUCT_RADAR_KURISU_NOTIFICATION_SECRET_FILE: /run/secrets/kurisu_notification_secret
+      PRODUCT_RADAR_KURISU_PRINCIPAL_KEY: ${PRODUCT_RADAR_KURISU_PRINCIPAL_KEY:-telegram:admin}
     ports:
       - "${PRODUCT_RADAR_PUBLIC_PORT:-5315}:5315"
     volumes:
       - /DATA/AppData/product-radar:/data
       - ${PRODUCT_RADAR_LANGBOT_API_TOKEN_HOST_FILE:-/DATA/AppData/product-radar/secrets/langbot-api-token}:/run/secrets/langbot-api-token:ro
+      - ${KURISU_NOTIFICATION_SECRET_HOST_FILE:-/DATA/AppData/n8n/secrets/codex-notify-secret}:/run/secrets/kurisu_notification_secret:ro
     depends_on:
       changedetection:
         condition: service_healthy

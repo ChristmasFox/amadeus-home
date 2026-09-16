@@ -377,10 +377,12 @@ function buildNotificationChannels(apiToken: string): Array<LangBotNotificationC
   const channels: Array<LangBotNotificationChannel> = [];
   const telegramRecipient = process.env.KURISU_NOTIFICATION_TELEGRAM_RECIPIENT?.trim() || process.env.TELEGRAM_ADMIN_USER_ID?.trim();
   const telegramBotId = process.env.KURISU_NOTIFICATION_TELEGRAM_BOT_ID?.trim();
-  if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ channel: 'telegram', baseUrl, botId: telegramBotId, recipient: telegramRecipient, apiToken, apiHeaderName: headerName }));
+  const telegramTargetType = process.env.KURISU_NOTIFICATION_TELEGRAM_TARGET_TYPE === 'group' ? 'group' : 'person';
+  if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ channel: 'telegram', baseUrl, botId: telegramBotId, recipient: telegramRecipient, targetType: telegramTargetType, apiToken, apiHeaderName: headerName }));
   const kookRecipient = process.env.KURISU_NOTIFICATION_KOOK_RECIPIENT?.trim() || process.env.KOOK_ADMIN_USER_ID?.trim();
   const kookBotId = process.env.KURISU_NOTIFICATION_KOOK_BOT_ID?.trim();
-  if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ channel: 'kook', baseUrl, botId: kookBotId, recipient: kookRecipient, apiToken, apiHeaderName: headerName }));
+  const kookTargetType = process.env.KURISU_NOTIFICATION_KOOK_TARGET_TYPE === 'group' ? 'group' : 'person';
+  if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ channel: 'kook', baseUrl, botId: kookBotId, recipient: kookRecipient, targetType: kookTargetType, apiToken, apiHeaderName: headerName }));
   return channels;
 }
 

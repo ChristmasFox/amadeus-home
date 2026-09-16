@@ -1062,7 +1062,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "\nconst text = String($input.first().json.text || '').trim();\nconst config = $('Group Events').first().json.context.config;\nconst delivery = config.delivery || {};\nconst maxLength = Math.max(800, Number(delivery.maxMessageLength || 3500));\nconst paragraphs = text.split(/\\n\\s*\\n/).map((part) => part.trim()).filter(Boolean);\nconst chunks = [];\nlet current = '';\nfor (const paragraph of paragraphs) {\n  if (!current) {\n    current = paragraph;\n  } else if ((current + '\\n\\n' + paragraph).length <= maxLength) {\n    current += '\\n\\n' + paragraph;\n  } else {\n    chunks.push(current);\n    current = paragraph;\n  }\n}\nif (current) chunks.push(current);\nif (!chunks.length) chunks.push('本次简报没有可发送内容。');\nreturn chunks.map((chunk, index) => ({\n  json: {\n    part: index + 1,\n    total: chunks.length,\n    text: chunk,\n    botUuid: delivery.botUuid,\n    body: {\n      target_type: delivery.targetType || 'group',\n      target_id: delivery.targetId,\n      message_chain: [{ type: 'Plain', text: chunk }],\n    },\n  },\n}));\n"
+        "jsCode": "\nconst text = String($input.first().json.text || '').trim();\nconst data = $('Group Events').first().json;\nconst config = data.context.config;\nconst maxLength = Math.max(800, Number(config.delivery?.maxMessageLength || 3500));\nconst paragraphs = text.split(/\\n\\s*\\n/).map((part) => part.trim()).filter(Boolean);\nconst chunks = [];\nlet current = '';\nfor (const paragraph of paragraphs) {\n  if (!current) current = paragraph;\n  else if ((current + '\\n\\n' + paragraph).length <= maxLength) current += '\\n\\n' + paragraph;\n  else { chunks.push(current); current = paragraph; }\n}\nif (current) chunks.push(current);\nif (!chunks.length) chunks.push('本次简报没有可发送内容。');\nreturn chunks.map((chunk, index) => ({\n  json: {\n    eventType: 'briefing.daily.ready',\n    eventKey: 'briefing:' + data.run.runKey + ':part:' + String(index + 1),\n    source: 'briefing',\n    resultType: 'success',\n    occurredAt: new Date().toISOString(),\n    payload: {\n      summary: chunk,\n      runKey: data.run.runKey,\n      edition: data.run.edition,\n      part: index + 1,\n      total: chunks.length,\n      sourceCount: Number(data.context.sources?.filter((source) => source.enabled).length || 0),\n      selectedCount: Number(data.events?.length || 0),\n    },\n  },\n}));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1076,21 +1076,23 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ \"http://langbot:5300/api/v1/platform/bots/\" + $json.botUuid + \"/send_message\" }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "http://pubg-query-engine-v3:5310/kurisu/notifications/events",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "X-Kurisu-Notification-Secret",
+              "value": "={{ $vars.CODEX_NOTIFY_SECRET }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.body }}",
+        "jsonBody": "={{ $json }}",
         "options": {
           "response": {
             "response": {
@@ -1109,13 +1111,7 @@
         180
       ],
       "id": "439a6f20-4f54-471f-a389-9e49b918a6c9",
-      "name": "Send KOOK via LangBot",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "3e1d6a25-5f08-4ab3-a1bf-2c31a6bf1c21",
-          "name": "LangBot API"
-        }
-      },
+      "name": "Ingest Digest via Kurisu",
       "continueOnFail": true,
       "retryOnFail": true,
       "maxTries": 3,
@@ -1124,7 +1120,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "\nfunction usageOf(items) {\n  let inputTokens = 0;\n  let outputTokens = 0;\n  for (const item of items) {\n    const body = item.json?.body ?? item.json ?? {};\n    inputTokens += Number(body.usage?.prompt_tokens || body.usage?.input_tokens || 0);\n    outputTokens += Number(body.usage?.completion_tokens || body.usage?.output_tokens || 0);\n  }\n  return { inputTokens, outputTokens };\n}\nconst results = $input.all().map((item) => item.json || {});\nconst deliveryResults = results.map((result) => result.body ?? result);\nconst successful = deliveryResults.length > 0 && deliveryResults.every((result) => Number(result.statusCode || 200) >= 200 && Number(result.statusCode || 200) < 300 && !result.error);\nconst data = $('Group Events').first().json;\nconst report = $('Format Report').first().json;\nconst usage = usageOf($('AI Analyze').all().concat($('AI Merge Events').all(), $('Generate Report').all()));\nconst errors = deliveryResults.filter((result) => result.error || (result.statusCode && Number(result.statusCode) >= 400)).map((result) => String(result.error || result.statusMessage || result.statusCode)).slice(0, 5);\nreturn [{\n  json: {\n    runKey: data.run.runKey,\n    edition: data.run.edition,\n    startedAt: data.run.startedAt,\n    completedAt: new Date().toISOString(),\n    status: successful ? 'success' : 'delivery_failed',\n    sourceCount: Array.isArray(data.context.sources) ? data.context.sources.filter((source) => source.enabled).length : 0,\n    candidateCount: Number(data.candidateCount || 0),\n    selectedCount: Number(data.events?.length || 0),\n    llmCalls: $('AI Analyze').all().length + $('AI Merge Events').all().length + $('Generate Report').all().length,\n    inputTokens: usage.inputTokens,\n    outputTokens: usage.outputTokens,\n    reportText: report.text || '',\n    deliveryStatus: successful ? 'sent' : 'failed',\n    errorSummary: errors.join('; '),\n  },\n}];\n"
+        "jsCode": "\nfunction usageOf(items) {\n  let inputTokens = 0;\n  let outputTokens = 0;\n  for (const item of items) {\n    const body = item.json?.body ?? item.json ?? {};\n    inputTokens += Number(body.usage?.prompt_tokens || body.usage?.input_tokens || 0);\n    outputTokens += Number(body.usage?.completion_tokens || body.usage?.output_tokens || 0);\n  }\n  return { inputTokens, outputTokens };\n}\nconst results = $input.all().map((item) => item.json || {});\nconst deliveryResults = results.map((result) => result.body ?? result);\nconst successful = deliveryResults.length > 0 && deliveryResults.every((result) => Number(result.statusCode || 200) >= 200 && Number(result.statusCode || 200) < 300 && !result.error && result.accepted !== false);\nconst data = $('Group Events').first().json;\nconst report = $('Format Report').first().json;\nconst usage = usageOf($('AI Analyze').all().concat($('AI Merge Events').all(), $('Generate Report').all()));\nconst errors = deliveryResults.filter((result) => result.error || (result.statusCode && Number(result.statusCode) >= 400)).map((result) => String(result.error || result.statusMessage || result.statusCode)).slice(0, 5);\nreturn [{\n  json: {\n    runKey: data.run.runKey,\n    edition: data.run.edition,\n    startedAt: data.run.startedAt,\n    completedAt: new Date().toISOString(),\n    status: successful ? 'success' : 'delivery_failed',\n    sourceCount: Array.isArray(data.context.sources) ? data.context.sources.filter((source) => source.enabled).length : 0,\n    candidateCount: Number(data.candidateCount || 0),\n    selectedCount: Number(data.events?.length || 0),\n    llmCalls: $('AI Analyze').all().length + $('AI Merge Events').all().length + $('Generate Report').all().length,\n    inputTokens: usage.inputTokens,\n    outputTokens: usage.outputTokens,\n    reportText: report.text || '',\n    deliveryStatus: successful ? 'sent' : 'failed',\n    errorSummary: errors.join('; '),\n  },\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -1762,18 +1758,7 @@
       "main": [
         [
           {
-            "node": "Send KOOK via LangBot",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send KOOK via LangBot": {
-      "main": [
-        [
-          {
-            "node": "Record Run",
+            "node": "Ingest Digest via Kurisu",
             "type": "main",
             "index": 0
           }
@@ -1801,6 +1786,17 @@
           }
         ]
       ]
+    },
+    "Ingest Digest via Kurisu": {
+      "main": [
+        [
+          {
+            "node": "Record Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -1814,5 +1810,5 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "description": "Git-managed source exported from the live n8n workflow. Credentials must be rebound in the target instance; pinData and execution data are intentionally excluded."
+  "description": "Git-managed daily digest producer. It owns scheduling, collection, analysis and run records. Delivery enters the Kurisu event/outbox boundary using an external n8n variable; Runtime is the sole platform sender."
 }
