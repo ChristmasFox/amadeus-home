@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { stableJson, type CallbackReference, type NormalizedInbound, type ToolExecutionObservation, type ToolResponseStatus } from './contracts.js';
@@ -155,10 +155,22 @@ const transitions: Record<RunStatus, readonly RunStatus[]> = {
   cancelled: [],
 };
 
+function restrictDatabaseFilePermissions(filename: string): void {
+  for (const path of [filename, `${filename}-wal`, `${filename}-shm`]) {
+    try {
+      chmodSync(path, 0o600);
+    } catch {
+      // SQLite may not have created a journal sidecar yet.
+    }
+  }
+}
+
 export class KurisuStore {
   readonly db: DatabaseSync;
+  private readonly filename: string;
 
   constructor(filename = ':memory:') {
+    this.filename = filename;
     if (filename !== ':memory:') mkdirSync(dirname(resolve(filename)), { recursive: true });
     this.db = new DatabaseSync(filename);
     this.db.exec('PRAGMA foreign_keys = ON;');
@@ -169,6 +181,7 @@ export class KurisuStore {
     }
     this.db.exec('PRAGMA busy_timeout = 5000;');
     this.migrate();
+    if (filename !== ':memory:') restrictDatabaseFilePermissions(filename);
   }
 
   migrate(): void {
@@ -337,6 +350,7 @@ export class KurisuStore {
     try {
       const result = fn();
       this.db.exec('COMMIT;');
+      if (this.filename !== ':memory:') restrictDatabaseFilePermissions(this.filename);
       return result;
     } catch (error) {
       try { this.db.exec('ROLLBACK;'); } catch { /* preserve original error */ }

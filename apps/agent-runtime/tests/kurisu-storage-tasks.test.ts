@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -52,6 +52,22 @@ test('SQLite store persists inbound idempotency, sessions, and typed run state',
   assert.equal(store.snapshotCounts().kurisu_messages, 2);
   assert.equal(store.snapshotCounts().kurisu_inbound_dedup, 2);
   store.close();
+});
+
+test('SQLite state and WAL sidecars are owner-readable only', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'kurisu-storage-permissions-'));
+  const filename = join(directory, 'state.sqlite');
+  const store = new KurisuStore(filename);
+  try {
+    store.claimInbound(normalizeInbound(inbound('permissions')));
+    for (const path of [filename, `${filename}-wal`, `${filename}-shm`]) {
+      if (!existsSync(path)) continue;
+      assert.equal(statSync(path).mode & 0o777, 0o600, path);
+    }
+  } finally {
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('task engine writes intent before work, survives a crash point, and reconciles once', async () => {

@@ -4,6 +4,8 @@
 
 最新安全状态：Kurisu POST 边界已部署为要求外部 `X-Kurisu-Gateway-Secret`，未配置时 fail-closed；live Compose 宿主端口为 `127.0.0.1` 绑定，secret 位于仓库外且以 `root:docker 0640` 挂载。无 header live 返回 401，正确 secret 才进入应用层。
 
+最新持久化安全状态：`KurisuStore` 源码已在建库/事务提交后保证主库、WAL、SHM 为 `0600`，定向权限回归通过；待下一次 immutable image 发布后复核 live。
+
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
 P0 证据位于 `docs/decisions/KURISU_AGENT_HOST.md`、`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`docs/reports/KURISU_AGENT_P0_BASELINE.json` 和 `docs/reports/KURISU_AGENT_PROGRESS.md`。本阶段未写生产配置、未重启容器、未发送真实 Telegram/KOOK 消息。LangBot 管理 API key 不能替代 WebSocket 所需的 user/support-admin session token，因此 native-agent platform entry 未宣称通过；当前旧 EventListener 尚未迁移，列为 P1。

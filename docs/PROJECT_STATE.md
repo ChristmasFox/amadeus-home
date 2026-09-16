@@ -47,6 +47,7 @@ P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次�
 - `kurisu-gateway` 尚未安装：当前缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，直接安装会绕过 P7 的 single-consumer/灰度前提。真实 LangBot native-agent L2/L3、旧 EventListener 迁移、briefing producer 仍为 blocked。
 - 完整 runtime suite 已在本次修复后通过 `181 passed / 0 failed / 1 skipped`；本次发布依据增加了全量测试证据。
 - 边界硬化已部署并核验：`/kurisu/inbound`、`/kurisu/callback`、`/kurisu/tool-call` 要求 `X-Kurisu-Gateway-Secret`，secret 未配置时 fail-closed；Runtime 宿主端口仅绑定 `127.0.0.1`，容器间私网访问保留。live secret 位于仓库外，权限为 `root:docker 0640`，未写入 Git。
+- `KurisuStore` 已将权限保证写回源码：建库和事务提交后会收紧主库/WAL/SHM 为 `0600`；`kurisu-storage-tasks.test.ts` 专门回归通过。待下一次 immutable image 发布后复核 live 重建行为。
 
 部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 
