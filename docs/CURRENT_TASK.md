@@ -1,6 +1,6 @@
-# Kurisu 统一 Agent（P6 LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_PENDING / BRIEFING_BLOCKED / L3_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-已完成 P0 的本机事实盘点和宿主决策，并完成 P1/P2 的本地结构化边界：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
+已完成 P0–P6 的本机实现、验收和 Release 准备：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。用户明确要求 push 并部署后，已仅发布 Runtime immutable image；未安装 Kurisu 插件、未切换 rollout、未发送真实平台消息。
 
 - [x] 读取并执行 P0 要求，记录 LangBot 4.10.8、`KOOK Pipeline`、Telegram/KOOK bot、`arthur-combo`/9Router 和现有插件/通知生产者。
 - [x] 创建宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
@@ -25,7 +25,10 @@
 - [x] P6 完成 R01 反偏离检查（9/9）、R02 release dry-run、server.ts `/kurisu/*` HTTP smoke、Kurisu SQLite 精确备份/恢复 dry-run、配置模板和回滚 runbook；实现提交为 `24946b9`，报告见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`、`KURISU_AGENT_P6_R01.json`、`KURISU_AGENT_P6_RELEASE_DRY_RUN.md`。
 - [x] P6 分批验证：Kurisu `50/50`、Product Radar `53/53`、runtime/Product Radar typecheck、plugin `4/4`、Python compile、secret scan、diff check 均通过；HTTP smoke 和 R02 均确认无生产写操作。
 - [ ] 全量 agent-runtime runner 仍在既有 `review-v3-2.test.ts` 子进程后无新增输出，本次有界终止，标记 `KNOWN_HANG / NOT_FULL_PASS`；真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
-- [ ] P7 仅在用户单独授权后部署和真实平台验收。
+- [x] 用户明确授权后完成受控部分发布：source `5a015f1` 已 push；Runtime image `local/pubg-query-engine-v3:git-5a015f1b87c7` 已部署到 OrbStack `ubuntu` CasaOS，compose 使用 `docker compose up -d --no-build`，回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
+- [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
+- [ ] `kurisu-gateway` 插件未安装，未切换 session rollout：缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，避免未授权会话看到新工具。
+- [ ] 真实 native-agent L2/L3、旧 EventListener single-consumer 迁移、briefing producer 和 Telegram/KOOK 真实平台验收仍 blocked；不得将当前 Runtime health 当作消息送达或产品完成证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

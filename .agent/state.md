@@ -1,4 +1,4 @@
-# 当前阶段：Kurisu 统一 Agent（P6 LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_PENDING / BRIEFING_BLOCKED / L3_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
@@ -10,7 +10,9 @@ P1 已完成本地结构化边界：`kurisu.v1` 契约、稳定主体/session ke
 
 P6 已完成本地集成验收和 Release 准备，代码提交为 `24946b9`：101 条结构化 L2 场景（60 条独立失败改写）、A16 test-only dummy registration、R01 `9/9 PASS`、R02 `R02_PASS`、server.ts HTTP smoke、配置模板、Kurisu SQLite 备份/恢复 dry-run 与回滚 runbook。Kurisu 定向 `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、diff check 通过；完整脱敏记录见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`。全量 agent-runtime runner 仍在既有 `review-v3-2.test.ts` 子进程后无新增输出并有界终止，记录为 `KNOWN_HANG / NOT_FULL_PASS`。
 
-P7 仍需独立授权；不执行部署、插件安装、生产 state/config 写入或真实 Telegram/KOOK 消息。真实 native-agent platform L2/L3、旧 EventListener single-consumer 迁移和 briefing producer 仍 blocked。
+用户已明确授权 push 并部署。本次已将 `5a015f1` push 到 `origin/main`，构建并部署 Runtime immutable image `local/pubg-query-engine-v3:git-5a015f1b87c7` 到 OrbStack `ubuntu` CasaOS，compose 回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 doctor 通过。部署前 Kurisu state 不存在，部署后精确备份为 `/Volumes/Avalon/backups/agent-monorepo/kurisu/20260916T124511Z/kurisu-state-20260916T124511Z.tar.gz`，主库/WAL/SHM 已为 `0600`。
+
+本次未安装 `kurisu-gateway`、未切换 session rollout、未启用通知/Codex/写工具、未发送真实 Telegram/KOOK 消息；缺少合法 native-agent session 与管理员 DM 灰度对象，避免把工具暴露给未迁移会话。真实 native-agent platform L2/L3、旧 EventListener single-consumer 迁移和 briefing producer 仍 blocked；完整 runtime suite 的既有 `review-v3-2.test.ts` 挂起仍为 `KNOWN_HANG / NOT_FULL_PASS`。
 
 旧任务及运行证据保留如下。
 

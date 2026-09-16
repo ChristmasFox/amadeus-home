@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P6（LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / PLUGIN_PENDING / BRIEFING_BLOCKED / L3_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -34,7 +34,20 @@ P6 本地验证：Kurisu `50/50`、Product Radar `53/53`、agent-runtime/Product
 
 briefing 真实 scheduler/生成/投递 producer 仍未发现，严格标记 `BLOCKED_UNSUPPORTED`；没有伪造日报事件或成功发送证据。真实 LangBot native-agent WebSocket/platform L3（以及依赖合法 session 的平台 L2）仍为 `BLOCKED`，不能以 fake/provider trace 替代。
 
-P6 实现提交为 `24946b9`；P7 仍需独立授权，当前不执行部署、插件安装、生产 state/config 写入或真实平台消息。
+P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次只完成 Runtime 的受控部分发布，未安装 LangBot 插件、未切换 rollout、未写入生产配置、未发送真实平台消息。
+
+## Kurisu Runtime 部分发布（RUNTIME_DEPLOYED / PLUGIN_PENDING：2026-09-16）
+
+- source `5a015f1` 已推送到 `origin/main`；push 前 fetch 确认 `origin/main...HEAD=0/7`，无远端分叉。
+- Host BuildKit 已构建并加载 immutable image `local/pubg-query-engine-v3:git-5a015f1b87c7`，image ID 为 `sha256:a67f287c01e5fd7a906a23511bba9a68e065ac0ccc6d0772c27a50526b354f63`。
+- CasaOS `ubuntu` 已将 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml` 切换到该镜像，并使用 `docker compose up -d --no-build`；回滚副本为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
+- 部署后真实检查：Runtime `running/healthy`，`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 均通过；Kurisu 状态库初始化，17 个结构化工具可见。`scripts/doctor.sh` 为 0 failure / 0 warning。
+- Kurisu 通知、Codex、写工具和 Product Radar central owner 均未启用；LangBot 与 plugin runtime 未重启，现有 Watch/其他服务未改动。
+- 部署前精确 Kurisu state 文件不存在；启动后仅创建 Runtime-owned `/DATA/AppData/pubg-query-engine-v3/data/state.json.kurisu.sqlite`。主库/WAL/SHM 已收紧为 `0600`，精确备份为 `/Volumes/Avalon/backups/agent-monorepo/kurisu/20260916T124511Z/kurisu-state-20260916T124511Z.tar.gz`，恢复预览确认仅含目标 SQLite 文件。
+- `kurisu-gateway` 尚未安装：当前缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，直接安装会绕过 P7 的 single-consumer/灰度前提。真实 LangBot native-agent L2/L3、旧 EventListener 迁移、briefing producer 仍为 blocked。
+- 完整 runtime suite 的既有 `review-v3-2.test.ts` 挂起仍记录为 `KNOWN_HANG / NOT_FULL_PASS`；本次发布依据已通过的 Kurisu 50/50、Product Radar 53/53、runtime build、HTTP smoke、R01、doctor、secret scan 和 diff check。
+
+部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 
 既有实现与部署历史如下。
 
