@@ -1,6 +1,6 @@
 # Kurisu P7 Release 与真实平台验收
 
-状态：PARTIAL_RUNTIME_DEPLOYED / BOUNDARY_HARDENED / PLUGIN_PENDING / PLATFORM_BLOCKED
+状态：PARTIAL_RUNTIME_DEPLOYED / BOUNDARY_HARDENED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING
 
 P6 已完成本地实现、结构化 L2 fixture、R01/R02、release dry-run、备份/恢复预览和回滚 runbook。用户已明确授权 push 并部署；本次已按 immutable image、no-build compose 和精确 state 备份规则完成 Runtime 部分发布，但没有安装插件或切换 rollout。
 
@@ -10,6 +10,8 @@ P6 已完成本地实现、结构化 L2 fixture、R01/R02、release dry-run、�
 
 持久化安全补强已完成并部署：`KurisuStore` 在建库和事务提交后收紧主库/WAL/SHM 为 `0600`，专门回归测试通过，live 新 image 重建后权限核验通过。
 
-剩余开始条件：在安装 `kurisu-gateway`/切换 session rollout 前，必须在合法流程中取得 LangBot user/support-admin session；配置 Runtime 与 LangBot plugin runtime 共享的外部 gateway secret；确认真实 briefing producer、旧 EventListener single-consumer 迁移范围、管理员 Telegram DM 测试对象和回滚 checkpoint。当前条件未齐，插件保持未安装。
+已完成插件安装前置条件：管理员已在专用 Telegram 私聊发送灰度消息；Runtime 与 LangBot plugin runtime 共享外部 gateway secret；`local/kurisu-gateway@0.1.0` 已由 LangBot task `12` 安装并达到 `INSTALL_READY`。当前仍只允许该私聊进行真实 Tool 调用灰度，不能扩大 session rollout。
+
+剩余开始条件：确认该私聊的真实 Tool 调用/回复证据，再确认旧 EventListener single-consumer 迁移范围、真实 briefing producer 和平台回滚验收；通知、Codex、写工具及 Product Radar central owner 继续关闭。
 
 验收范围：仅管理员 Telegram 私聊先做 shadow/灰度，验证真实入站、引用、图片、按钮、审批、Codex 任务恢复、通知补发和回滚；KOOK 未迁移会话保持旧权限与旧功能。不得把 P6 fake/provider 证据当作 L3/L4 通过，也不得向群聊发测试消息。

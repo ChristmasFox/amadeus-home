@@ -1,4 +1,4 @@
-# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_PENDING / BRIEFING_BLOCKED / L3_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 
@@ -18,7 +18,7 @@ P6 已完成本地集成验收和 Release 准备，代码提交为 `24946b9`：1
 
 用户已明确授权 push 并部署。Runtime 最新已发布到 `origin/main` 的 `07efac7`，当前 immutable image 为 `local/pubg-query-engine-v3:git-3e00275d8e70`，运行于 OrbStack `ubuntu` CasaOS；最新 compose 回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-210824`。`/healthz`、`/homehub/health`、Kurisu HTTP 前门和 doctor 通过；宿主端口仅绑定 `127.0.0.1`，POST 入口需要外部 gateway secret，Kurisu 主库/WAL/SHM 为 `0600`，secret 保持在仓库外。
 
-本次未安装 `kurisu-gateway`、未切换 session rollout、未启用通知/Codex/写工具、未发送真实 Telegram/KOOK 消息；缺少合法 native-agent session 与管理员 DM 灰度对象，避免把工具暴露给未迁移会话。真实 native-agent platform L2/L3、旧 EventListener single-consumer 迁移和 briefing producer 仍 blocked；这三项是外部流程/架构前置条件，不是当前 Runtime 健康故障。
+`local/kurisu-gateway@0.1.0` 已由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载 Runtime 的外部 gateway secret。当前只对已确认的管理员 Telegram 私聊进行真实 Tool 调用灰度，未切换其他 session rollout，也未启用通知/Codex/写工具。旧 EventListener single-consumer 迁移、briefing producer 和完整平台验收仍是外部流程/架构前置条件，不是当前 Runtime 健康故障。
 
 旧任务及运行证据保留如下。
 

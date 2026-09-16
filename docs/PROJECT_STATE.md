@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / PLUGIN_PENDING / BRIEFING_BLOCKED / L3_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -50,6 +50,7 @@ P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次�
 - `KurisuStore` 已将权限保证写回源码：建库和事务提交后会收紧主库/WAL/SHM 为 `0600`；`kurisu-storage-tasks.test.ts` 专门回归通过。待下一次 immutable image 发布后复核 live 重建行为。
 - 持久化权限补强已随 `local/pubg-query-engine-v3:git-3e00275d8e70` 发布；live 重建后主库/WAL/SHM 为 `0600`，health、gateway `401`/授权检查和 `127.0.0.1` 绑定均通过。
 - 当前问题盘点与处理结果见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-issue-inventory.md`：本地测试、边界安全、持久化权限和构建 proxy 问题已解决；合法 session、插件灰度、旧 listener 迁移、briefing producer 和真实平台 smoke 仍是明确的外部阻塞。
+- 管理员 Telegram 私聊灰度对象已确认；`langbot_plugin_runtime` 已挂载 Runtime 现有外部 secret，`local/kurisu-gateway@0.1.0` 安装任务 `12` 为 `INSTALL_READY`。此刻只等待该私聊的真实 Tool 调用证据，未切换任何其他会话。
 
 部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 
