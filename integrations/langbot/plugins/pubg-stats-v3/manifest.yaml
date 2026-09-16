@@ -4,20 +4,16 @@ metadata:
   author: local
   name: pubg-stats
   repository: ''
-  version: 3.3.2
+  version: 3.3.3
   description:
-    en_US: Platform-independent PUBG Query Engine v3.3 bridge with Telegram, KOOK, WhatsApp, and read-only identity inspection.
-    zh_Hans: 支持 Telegram、KOOK、WhatsApp 文本消息、对局复盘和只读身份查询的平台无关 PUBG Query Engine v3.3 桥接插件，并隔离跨插件回调与 KOOK 占位消息。
+    en_US: Deterministic PUBG protocol commands and tools for the LangBot native Agent; natural-language messages use Kurisu.
+    zh_Hans: 为 LangBot 原生 Agent 保留确定性 PUBG 协议命令和工具；普通自然语言统一经 Kurisu 处理。
   label:
-    en_US: PUBG Stats v3.3.2
-    zh_Hans: PUBG 战绩 v3.3.2
+    en_US: PUBG Stats v3.3.3
+    zh_Hans: PUBG 战绩 v3.3.3
 spec:
   config: []
   components:
-    EventListener:
-      fromDirs:
-      - path: components/listeners/
-        maxDepth: 1
     Command:
       fromDirs:
       - path: components/commands/
