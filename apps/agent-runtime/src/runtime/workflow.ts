@@ -62,6 +62,7 @@ function toRequest(value: Record<string, unknown>): RuntimeRequest {
   if (value.replyToMessageId !== undefined) request.replyToMessageId = value.replyToMessageId === null ? null : String(value.replyToMessageId);
   if (value.queryId) request.queryId = String(value.queryId);
   if (value.now) request.now = String(value.now);
+  if (value.structuredOnly === true) request.structuredOnly = true;
   if (value.callbackData || value.callback_data) request.callbackData = String(value.callbackData ?? value.callback_data);
   if (value.callbackId || value.callback_id) request.callbackId = String(value.callbackId ?? value.callback_id);
   return request;
@@ -165,7 +166,9 @@ export class PubgMastraRuntime {
             pendingMatchSelection: (envelope.context?.references?.pendingMatchSelection as Record<string, unknown> | undefined) ?? null,
           },
         };
-        const deterministicBoundary = buildDeterministicQuery({ ...plannerInput, queryId }, this.team);
+        const deterministicBoundary = request.structuredOnly
+          ? null
+          : buildDeterministicQuery({ ...plannerInput, queryId }, this.team);
         let plan;
         const provided = request.providedQuery === undefined
           ? null
@@ -174,8 +177,8 @@ export class PubgMastraRuntime {
           // A supplied plan is still subject to the explicit review boundary;
           // callers cannot route an ordinary report through Telemetry by
           // setting operation=review_match themselves.
-          const bounded = provided.data.operation === 'review_match' || deterministicBoundary.operation === 'review_match'
-            ? deterministicBoundary
+          const bounded = !request.structuredOnly && (provided.data.operation === 'review_match' || deterministicBoundary?.operation === 'review_match')
+            ? deterministicBoundary!
             : provided.data;
           plan = {
             ...bounded,

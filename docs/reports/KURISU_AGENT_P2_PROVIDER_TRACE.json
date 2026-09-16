@@ -1,0 +1,54 @@
+{
+  "report": "KURISU_AGENT_P2_PROVIDER_TRACE",
+  "revision": "baa2097",
+  "date": "2026-09-16",
+  "timezone": "Asia/Shanghai",
+  "scope": "provider boundary only; synthetic tool results; no platform messages or production writes",
+  "modelRoute": "arthur-combo",
+  "configFingerprint": "sha256:0e29ad54bd19738adedb4385c23701aa5051b23344add8087e739116483c73a5",
+  "cases": [
+    {
+      "caseId": "P2-9ROUTER-DOTTED-TOOL-NAME",
+      "layer": "P0_REAL_PROVIDER",
+      "inputFixture": "synthetic-radar-status-v1",
+      "expectedInvariants": [
+        "provider accepts the exposed function schema",
+        "internal kurisu.* names remain server-owned",
+        "protocol incompatibility is visible and does not fall through to legacy routing"
+      ],
+      "actualToolCalls": [],
+      "result": "FAIL_FIXED",
+      "evidenceRefs": [
+        "9Router HTTP 503 returned a schema error for a dotted tools[0].name",
+        "LangBot boundary now exposes the legal external function name kurisu_gateway"
+      ]
+    },
+    {
+      "caseId": "P2-9ROUTER-CAUSAL-RADAR",
+      "layer": "P0_REAL_PROVIDER",
+      "inputFixture": "synthetic-radar-status-v1",
+      "expectedInvariants": [
+        "three consecutive HTTP 200 turns",
+        "tool_call IDs are present on every model tool call",
+        "first call lists watches before the dependent status call",
+        "second call consumes the exact watch ID returned by the first synthetic result",
+        "final text is emitted only after the status result"
+      ],
+      "actualToolCalls": [
+        { "turn": 1, "idPresent": true, "externalName": "kurisu_gateway", "internalToolName": "kurisu.radar.list", "inputKeys": ["includeRuns"], "elapsedMs": 2771 },
+        { "turn": 2, "idPresent": true, "externalName": "kurisu_gateway", "internalToolName": "kurisu.radar.status", "inputKeys": ["watchId"], "elapsedMs": 2069 },
+        { "turn": 3, "idPresent": false, "externalName": null, "internalToolName": null, "inputKeys": [], "elapsedMs": 1940 }
+      ],
+      "result": "PASS",
+      "toolResults": "synthetic isolated fixture only",
+      "evidenceRefs": [
+        "same-container 9Router HTTP trace, 2026-09-16",
+        "config fingerprint above; no provider key or private message content recorded"
+      ]
+    }
+  ],
+  "boundary": {
+    "nativeLangBotSession": "BLOCKED",
+    "reason": "No legal user/support-admin session token was available for a real LangBot pipeline conversation; this provider trace is not claimed as L3 platform acceptance."
+  }
+}

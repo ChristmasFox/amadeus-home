@@ -7,6 +7,8 @@ import type { WhoAmIInfo } from '../platform/core/whoami.js';
 
 export interface RuntimeRequest {
   text: string;
+  /** Internal typed-domain adapter marker; never populated from public HTTP text. */
+  structuredOnly?: boolean;
   message?: NormalizedBotMessage;
   botId?: string;
   messageId?: string;

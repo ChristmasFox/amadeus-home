@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Tool
+metadata:
+  name: kurisu_gateway
+  label:
+    en_US: Kurisu Structured Gateway
+    zh_Hans: Kurisu 结构化工具网关
+  description:
+    en_US: Invoke one server-registered Kurisu capability through structured input.
+    zh_Hans: 通过结构化参数调用一个由服务器注册的 Kurisu 能力。
+spec:
+  parameters:
+    type: object
+    properties:
+      toolName:
+        type: string
+        enum:
+          - kurisu.entity.resolve
+          - kurisu.pubg.query
+          - kurisu.pubg.list
+          - kurisu.pubg.review
+          - kurisu.homehub.list
+          - kurisu.homehub.status
+          - kurisu.homehub.diagnose
+          - kurisu.homehub.errors
+          - kurisu.radar.list
+          - kurisu.radar.status
+          - kurisu.radar.stats
+          - kurisu.notifications.diagnose
+        description: Exact server-registered Kurisu capability name.
+      input:
+        type: object
+        additionalProperties: true
+        description: Arguments for the selected capability; do not include identity, role, approval, or recipient fields.
+    required:
+      - toolName
+      - input
+    additionalProperties: false
+  llm_prompt: |
+    Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. This tool never accepts a natural-language query field and cannot start, stop, restart, delete, or modify anything unless a separately registered write capability is exposed.
+execution:
+  python:
+    path: kurisu_gateway.py
+    attr: KurisuGatewayTool

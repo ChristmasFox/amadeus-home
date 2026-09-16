@@ -5,4 +5,5 @@ export * from './gateway.js';
 export * from './policy.js';
 export * from './structured-entry.js';
 export * from './service.js';
+export * from './read-only.js';
 export * from './tools.js';

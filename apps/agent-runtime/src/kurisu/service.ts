@@ -13,6 +13,7 @@ import { InMemoryContextStore } from './context.js';
 import { registerDomainTools, type DomainBackends } from './domain-tools.js';
 import { KurisuGateway, type GatewayResult, type HostDecision, RolloutRegistry } from './gateway.js';
 import { publicReadAuthorization, authorizeTool } from './policy.js';
+import { createNotificationBackend } from './read-only.js';
 import { KurisuStore } from './storage.js';
 import { ToolRegistry } from './tools.js';
 
@@ -87,7 +88,10 @@ export class KurisuService {
         this.store.recordToolExecution(observation, response);
       },
     });
-    registerDomainTools(this.registry, options.backends ?? {});
+    registerDomainTools(this.registry, {
+      ...(options.backends ?? {}),
+      notifications: options.backends?.notifications ?? createNotificationBackend(this.store),
+    });
     this.gateway = new KurisuGateway({
       registry: this.registry,
       rollout: this.rollout,

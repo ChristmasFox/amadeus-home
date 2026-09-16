@@ -64,6 +64,15 @@ export interface DeliveryRecord {
   lastError: string | null;
 }
 
+export interface NotificationEventRecord {
+  id: string;
+  eventType: string;
+  eventKey: string;
+  payload: unknown;
+  createdAt: string;
+  deliveries: DeliveryRecord[];
+}
+
 export interface TaskStepRecord {
   runId: string;
   stepKey: string;
@@ -454,11 +463,41 @@ export class KurisuStore {
   getDelivery(id: string): DeliveryRecord | null {
     const row = this.db.prepare('SELECT * FROM kurisu_deliveries WHERE id=?').get(id) as Record<string, unknown> | undefined;
     if (!row) return null;
-    return {
-      id: String(row.id), eventId: String(row.event_id), channel: String(row.channel), recipient: String(row.recipient),
-      status: String(row.status) as DeliveryRecord['status'], attempts: Number(row.attempts),
-      nextAttemptAt: row.next_attempt_at ? String(row.next_attempt_at) : null, lastError: row.last_error ? String(row.last_error) : null,
-    };
+    return toDelivery(row);
+  }
+
+  /** Read notification evidence only for events explicitly owned by a principal. */
+  listNotificationEvents(
+    eventType: string | undefined,
+    channel: string,
+    principalKey: string,
+    limit = 20,
+  ): NotificationEventRecord[] {
+    if (!principalKey) return [];
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+    const rows = eventType
+      ? this.db.prepare('SELECT id,event_type,event_key,payload_json,created_at FROM kurisu_events WHERE event_type=? ORDER BY created_at DESC LIMIT ?').all(eventType, boundedLimit * 4)
+      : this.db.prepare('SELECT id,event_type,event_key,payload_json,created_at FROM kurisu_events ORDER BY created_at DESC LIMIT ?').all(boundedLimit * 4);
+    const result: NotificationEventRecord[] = [];
+    for (const row of rows as Array<Record<string, unknown>>) {
+      const payload = parseJson(String(row.payload_json));
+      if (!notificationBelongsTo(payload, principalKey)) continue;
+      const deliveries = (this.db.prepare(
+        channel === 'all'
+          ? 'SELECT * FROM kurisu_deliveries WHERE event_id=? ORDER BY updated_at DESC'
+          : 'SELECT * FROM kurisu_deliveries WHERE event_id=? AND channel=? ORDER BY updated_at DESC',
+      ).all(...(channel === 'all' ? [String(row.id)] : [String(row.id), channel])) as Array<Record<string, unknown>>).map(toDelivery);
+      result.push({
+        id: String(row.id),
+        eventType: String(row.event_type),
+        eventKey: String(row.event_key),
+        payload,
+        createdAt: String(row.created_at),
+        deliveries,
+      });
+      if (result.length >= boundedLimit) break;
+    }
+    return result;
   }
 
   updateDelivery(id: string, status: DeliveryRecord['status'], patch: Partial<Pick<DeliveryRecord, 'nextAttemptAt' | 'lastError'>> = {}, now = new Date().toISOString()): DeliveryRecord {
@@ -518,6 +557,20 @@ function toApproval(row: Record<string, unknown>): ApprovalRecord {
     id: String(row.id), runId: String(row.run_id), principalKey: String(row.principal_key), sessionKey: String(row.session_key), action: String(row.action),
     argumentsHash: String(row.arguments_hash), status: String(row.status) as ApprovalRecord['status'], expiresAt: String(row.expires_at), usedAt: row.used_at ? String(row.used_at) : null,
   };
+}
+
+function toDelivery(row: Record<string, unknown>): DeliveryRecord {
+  return {
+    id: String(row.id), eventId: String(row.event_id), channel: String(row.channel), recipient: String(row.recipient),
+    status: String(row.status) as DeliveryRecord['status'], attempts: Number(row.attempts),
+    nextAttemptAt: row.next_attempt_at ? String(row.next_attempt_at) : null, lastError: row.last_error ? String(row.last_error) : null,
+  };
+}
+
+function notificationBelongsTo(payload: unknown, principalKey: string): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const owner = (payload as Record<string, unknown>).principalKey;
+  return typeof owner === 'string' && owner === principalKey;
 }
 
 export function approvalArgumentsHash(action: string, args: unknown): string {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import urllib.error
@@ -47,6 +48,19 @@ def trusted_session_context(session: Any, query_id: Any) -> dict[str, Any]:
     }
 
 
+def stable_call_id(query_id: Any, tool_name: str, tool_input: dict[str, Any]) -> str:
+    """Derive a retry-stable boundary ID without trusting model metadata."""
+    material = json.dumps(
+        {'toolName': tool_name, 'input': tool_input},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(',', ':'),
+    ).encode('utf-8')
+    digest = hashlib.sha256(material).hexdigest()[:32]
+    query_part = str(query_id).strip()[:200] or 'query'
+    return f'{query_part}:{digest}'
+
+
 def _post(url: str, payload: dict[str, Any]) -> dict[str, Any]:
     encoded = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(
@@ -76,11 +90,9 @@ class KurisuGatewayTool(Tool):
             return json.dumps({'status': 'error', 'error': {'code': 'INPUT_INVALID', 'retryable': False}}, ensure_ascii=False)
         tool_name = str(params.get('toolName') or params.get('tool_name') or '').strip()
         tool_input = params.get('input')
-        call_id = str(params.get('callId') or params.get('call_id') or query_id or '').strip()
+        call_id = stable_call_id(query_id, tool_name, tool_input)
         if not tool_name.startswith(ALLOWED_TOOL_PREFIXES) or not isinstance(tool_input, dict):
             return json.dumps({'status': 'error', 'error': {'code': 'STRUCTURED_INPUT_REQUIRED', 'retryable': False}}, ensure_ascii=False)
-        if not call_id:
-            return json.dumps({'status': 'error', 'error': {'code': 'CALL_ID_REQUIRED', 'retryable': False}}, ensure_ascii=False)
         runtime_url = str(os.environ.get('KURISU_RUNTIME_URL') or '').strip().rstrip('/')
         if not runtime_url:
             try:

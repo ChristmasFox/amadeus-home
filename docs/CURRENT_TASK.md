@@ -1,6 +1,6 @@
-# Kurisu 统一 Agent（P1 IMPLEMENTED / VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P2 IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-已完成 P0 的本机事实盘点和宿主决策：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
+已完成 P0 的本机事实盘点和宿主决策，并完成 P1/P2 的本地结构化边界：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
 - [x] 读取并执行 P0 要求，记录 LangBot 4.10.8、`KOOK Pipeline`、Telegram/KOOK bot、`arthur-combo`/9Router 和现有插件/通知生产者。
 - [x] 创建宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
@@ -9,8 +9,11 @@
 - [x] P1 建立 `kurisu.v1` inbound/tool/result/context 契约、稳定主体/session key、trusted context、server-side policy、tool registry/schema 校验、回调绑定/一次消费、SQLite 存储、任务意图/租约/reconcile/cancel、审批参数绑定和媒体路径 allowlist。
 - [x] P1 接入 agent-runtime `/kurisu/tools`、`/kurisu/status`、`/kurisu/inbound`、`/kurisu/callback`、`/kurisu/tool-call`；LangBot `kurisu-gateway` 仅暴露结构化 Tool，不注册自然语言 EventListener/Command；旧入口仍由 rollout 默认 legacy 保护。
 - [x] P1 定向 runtime `18/18`、storage/task/media、HTTP endpoint smoke、LangBot plugin `2/2`、Python compile、workflow plan、secret scan、diff check 通过；无生产安装、重启或平台消息。
-- [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 未宣称通过；P1 仍需迁移历史 EventListener 并通过 L2/L3。
-- [ ] P2–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
+- [x] P2 接入现有 PUBG deterministic runtime、HomeHub registry/diagnostic、Product Radar structured HTTP read API，以及按 principal 隔离的 Kurisu notification event/delivery diagnosis；上游不可达统一保留 `unknown`/source state。
+- [x] P2 增加 provider-compatible 外部工具 `kurisu_gateway`（内部能力仍为受限 `kurisu.*` enum）、retry-stable boundary call ID、只读工具/实体歧义/429/非法 JSON/超时回归。
+- [x] P2 定向 runtime `24/24`、LangBot plugin `4/4`、真实 9Router `arthur-combo` 三轮连续工具轨迹、plugin dry-run/package、typecheck、Python compile、secret scan、diff check 通过；无生产安装、重启或平台消息。
+- [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 与 L2/L3 平台验收仍为 `BLOCKED`；不以 provider/fake 轨迹冒充通过，历史 EventListener 尚未迁移。
+- [ ] P3–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

@@ -182,6 +182,16 @@ export function failure(code: string, message: string, retryable: boolean): Tool
   };
 }
 
+export function unknownResult(code: string, message: string, retryable = true): ToolResponse {
+  return {
+    contractVersion: 'kurisu.v1',
+    status: 'unknown',
+    evidence: [],
+    entityRefs: [],
+    error: { code, message: message.slice(0, 500), retryable },
+  };
+}
+
 function rejectModelOwnedFields(value: unknown): string | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   for (const key of Object.keys(value)) {

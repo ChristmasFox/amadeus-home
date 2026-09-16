@@ -213,6 +213,32 @@ export class HomeHubRuntime {
     return this.diagnosticEngine.systemHealth();
   }
 
+  /** Structured read-only service inventory for the Kurisu tool boundary. */
+  listServices(): Array<Record<string, unknown>> {
+    return this.diagnosticEngine.registry.getAllServices().map((service) => ({
+      serviceId: service.serviceId,
+      displayName: service.displayName,
+      description: service.description ?? null,
+      runtime: service.runtime,
+      executor: service.executor,
+      dependencies: service.dependencies,
+      allowedActions: service.allowedActions,
+      riskLevel: service.riskLevel,
+    }));
+  }
+
+  /** Run deterministic diagnostics only for the explicitly selected services. */
+  async diagnoseServices(serviceIds: readonly string[] = []): Promise<unknown[]> {
+    const selected = serviceIds.length
+      ? serviceIds
+      : this.diagnosticEngine.registry.getAllServices().map((service) => service.serviceId);
+    return Promise.all(selected.map(async (serviceId) => {
+      const parsed = ServiceIdSchema.safeParse(serviceId);
+      if (!parsed.success) return { serviceId, status: 'failed', issues: [{ severity: 'error', category: 'configuration', component: serviceId, message: 'Service not found in registry', actionable: false }], checks: [] };
+      return this.diagnosticEngine.diagnose(parsed.data);
+    }));
+  }
+
   /**
    * Read-only authorization decision endpoint used by platform plugins. It
    * resolves identity from the normalized platform user ID before evaluating

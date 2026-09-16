@@ -13,6 +13,7 @@ import { identityMappingsFromEnvironment } from './config/identity.js';
 import { IdentityRegistry } from './platform/core/identity.js';
 import { isHomeHubCallback } from './homehub/confirmation.js';
 import { KurisuService } from './kurisu/service.js';
+import { createReadOnlyBackends } from './kurisu/read-only.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -59,6 +60,16 @@ const runtime = new PubgMastraRuntime({
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
 const kurisuService = new KurisuService({
   stateFile: process.env.KURISU_STATE_FILE ?? `${stateFile}.kurisu.sqlite`,
+  backends: createReadOnlyBackends({
+    pubgRuntime: runtime,
+    homehubRuntime,
+    ...(process.env.KURISU_RADAR_URL?.trim() ? {
+      radar: {
+        baseUrl: process.env.KURISU_RADAR_URL.trim(),
+        ...(process.env.KURISU_RADAR_API_KEY?.trim() ? { apiKey: process.env.KURISU_RADAR_API_KEY.trim() } : {}),
+      },
+    } : {}),
+  }),
 });
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
