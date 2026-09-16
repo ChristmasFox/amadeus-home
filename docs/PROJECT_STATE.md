@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P5（IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED / L3_BLOCKED；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P6（LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -26,9 +26,15 @@ Product Radar 新增显式 `PRODUCT_RADAR_NOTIFICATION_OWNER=central` handoff，
 
 P5 本地验证：Kurisu 定向 `48/48`、Product Radar `53/53`、Kurisu plugin `4/4`、两个 package typecheck、Codex hook/spool smoke、plugin dry-run、secret scan、diff check 通过。
 
-briefing 真实 scheduler/生成/投递 producer 仍未发现，严格标记 `BLOCKED_UNSUPPORTED`；没有伪造日报事件或成功发送证据。
+P6 已完成本地集成验收与 Release 准备：101 条结构化 L2 场景变体、60 条独立失败改写回归、A16 test-only dummy registration 均有脱敏记录；每条记录含 revision、layer、modelRoute、configFingerprint、inputFixture、expectedInvariants、actualToolCalls、result、evidenceRefs、执行时间、耗时和失败原因。报告见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`。
 
-后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P6；P7 仍需独立授权。
+P6 R01 反偏离检查为 `9/9 PASS`，确认 migrated Kurisu 入口没有关键词先路由、第二 Agent、通用 shell 或空实现伪完成；R02 release dry-run 为 `R02_PASS`，列出了 Runtime compose、`local/kurisu-gateway@0.1.0`、配置模板和精确 Kurisu SQLite 备份/恢复边界，确认没有生产 mutation。`scripts/smoke-kurisu-http.sh` 通过真实 `server.ts` `/kurisu/*` 前门；回滚顺序和 owner/legacy sender 互斥规则见 `docs/runbooks/KURISU_AGENT_ROLLBACK.md`。
+
+P6 本地验证：Kurisu `50/50`、Product Radar `53/53`、agent-runtime/Product Radar typecheck、Kurisu plugin `4/4`、Python compile、R01/R02、HTTP smoke、secret scan、diff check 通过。全量 agent-runtime runner 复测在既有 `review-v3-2.test.ts` 子进程后无新增输出并有界终止，记录为 `KNOWN_HANG / NOT_FULL_PASS`，没有降低验收标准。
+
+briefing 真实 scheduler/生成/投递 producer 仍未发现，严格标记 `BLOCKED_UNSUPPORTED`；没有伪造日报事件或成功发送证据。真实 LangBot native-agent WebSocket/platform L3（以及依赖合法 session 的平台 L2）仍为 `BLOCKED`，不能以 fake/provider trace 替代。
+
+P6 实现提交为 `24946b9`；P7 仍需独立授权，当前不执行部署、插件安装、生产 state/config 写入或真实平台消息。
 
 既有实现与部署历史如下。
 

@@ -1,4 +1,4 @@
-# 当前阶段：Kurisu 统一 Agent（P5 IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED / L3_BLOCKED；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P6 LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
@@ -6,7 +6,11 @@ P0 证据位于 `docs/decisions/KURISU_AGENT_HOST.md`、`docs/reports/KURISU_AGE
 
 P1 已完成本地结构化边界：`kurisu.v1` 契约、稳定主体/session key、trusted context、server-side policy、ToolRegistry、callback 一次消费、SQLite WAL/迁移、任务 intent/reconcile/cancel、审批参数绑定、媒体 allowlist，以及 agent-runtime `/kurisu/*` endpoints。P2 已接入 PUBG deterministic runtime、HomeHub/Radar 只读 facade 和 principal-scoped notification diagnosis；LangBot `kurisu-gateway` 对 provider 暴露单一合法 `kurisu_gateway` Tool，内部能力仍由 `kurisu.*` enum/registry 控制。定向 runtime `24/24`、plugin `4/4`、真实 9Router 三轮 provider 轨迹、typecheck、package dry-run、secret scan、diff check 通过；没有生产安装、重启或平台消息。
 
-真实 LangBot native-agent WebSocket/platform entry 因缺少合法 user/support-admin session token 仍为 `BLOCKED`，不以 provider/fake 结果冒充 L3。P3 已完成 durable write/approval/reconcile/cancel 安全闭环；P4 已完成单一 Codex App Server executor、配置项目 registry、worktree 隔离、持久化 job/thread/turn 和真实临时仓库验证。P5 已完成 Runtime notification Worker、事件/投递幂等、渠道独立退避重试、lease/recovery、unknown/dead/retry、用户主体范围的通知偏好和 Kurisu 语气配置；Codex hook local spool、Product Radar local outbox handoff、HomeHub/Radar/media structured write event 均有本地证据。Kurisu `48/48`、Product Radar `53/53`、plugin `4/4`、typecheck、smoke、secret scan、diff check 通过。briefing producer 未找到，标记 `BLOCKED_UNSUPPORTED`；旧 n8n completion workflow 仅保留 rollback source。P6 继续按实施计划推进，P7 仍需独立授权；全量既有 review 测试挂起不记为通过。
+真实 LangBot native-agent WebSocket/platform entry 因缺少合法 user/support-admin session token 仍为 `BLOCKED`，不以 provider/fake 结果冒充 L3。P3 已完成 durable write/approval/reconcile/cancel 安全闭环；P4 已完成单一 Codex App Server executor、配置项目 registry、worktree 隔离、持久化 job/thread/turn 和真实临时仓库验证。P5 已完成 Runtime notification Worker、事件/投递幂等、渠道独立退避重试、lease/recovery、unknown/dead/retry、用户主体范围的通知偏好和 Kurisu 语气配置；Codex hook local spool、Product Radar local outbox handoff、HomeHub/Radar/media structured write event 均有本地证据。briefing producer 未找到，标记 `BLOCKED_UNSUPPORTED`；旧 n8n completion workflow 仅保留 rollback source。
+
+P6 已完成本地集成验收和 Release 准备，代码提交为 `24946b9`：101 条结构化 L2 场景（60 条独立失败改写）、A16 test-only dummy registration、R01 `9/9 PASS`、R02 `R02_PASS`、server.ts HTTP smoke、配置模板、Kurisu SQLite 备份/恢复 dry-run 与回滚 runbook。Kurisu 定向 `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、diff check 通过；完整脱敏记录见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`。全量 agent-runtime runner 仍在既有 `review-v3-2.test.ts` 子进程后无新增输出并有界终止，记录为 `KNOWN_HANG / NOT_FULL_PASS`。
+
+P7 仍需独立授权；不执行部署、插件安装、生产 state/config 写入或真实 Telegram/KOOK 消息。真实 native-agent platform L2/L3、旧 EventListener single-consumer 迁移和 briefing producer 仍 blocked。
 
 旧任务及运行证据保留如下。
 

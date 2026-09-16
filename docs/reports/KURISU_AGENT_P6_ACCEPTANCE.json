@@ -1,0 +1,4666 @@
+{
+  "phase": "P6",
+  "status": "LOCAL_ACCEPTANCE_PASS",
+  "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+  "layer": "L2-structured-server-boundary",
+  "modelRoute": "none",
+  "executedAt": "2026-09-16T11:45:00.210Z",
+  "scenarioCount": 101,
+  "failureDerivedCount": 60,
+  "categories": [
+    "DUMMY-REGISTRATION",
+    "diagnose",
+    "entity",
+    "invalid",
+    "notification",
+    "offline",
+    "preference",
+    "radar",
+    "report",
+    "service",
+    "task",
+    "trusted",
+    "write"
+  ],
+  "statuses": [
+    "denied",
+    "error",
+    "needs_input",
+    "ok",
+    "unknown"
+  ],
+  "performance": {
+    "medianDurationMs": 0.233,
+    "p95DurationMs": 0.544,
+    "modelCalls": 0,
+    "toolCalls": 101
+  },
+  "variantProvenance": "Test-only routine variants plus independently rewritten failure regressions; these expressions are never inserted into a model prompt or router keyword table.",
+  "l2BoundaryEvidence": [
+    "apps/agent-runtime/src/kurisu/service.ts executeHostTool boundary",
+    "apps/agent-runtime/tests/kurisu-acceptance.test.ts receiveInbound gateway integration",
+    "scripts/smoke-kurisu-http.sh server.ts front-door smoke"
+  ],
+  "l3": {
+    "status": "BLOCKED",
+    "reason": "No legal LangBot user/support-admin session token was available in this development Goal; the P2 9Router provider trace is not native-agent platform evidence."
+  },
+  "knownLimitations": [
+    "The existing full agent-runtime suite has a known review-v3-2.test.ts child-process hang; P6 uses passing bounded batches and does not claim the full suite passed.",
+    "Real producer handoff for the briefing remains BLOCKED_UNSUPPORTED as recorded in the P5 producer inventory."
+  ],
+  "records": [
+    {
+      "caseId": "P6-PUBG-QUERY-01",
+      "category": "report",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "今天的战报给我",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "report",
+          "subject": {
+            "type": "team",
+            "ids": []
+          },
+          "metrics": [
+            "kd",
+            "kills"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 12.287,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "report",
+            "subject": {
+              "type": "team",
+              "ids": []
+            },
+            "metrics": [
+              "kd",
+              "kills"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-001",
+        "kurisu.tool-execution:run_ee5050f5-11d6-49c0-b9f7-ce3f024b98ad:p6-call-001"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-QUERY-02",
+      "category": "report",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "看看今天这组数据",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "per_player",
+          "subject": {
+            "type": "player",
+            "ids": [
+              "player-1"
+            ]
+          },
+          "metrics": [
+            "damage"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.868,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "per_player",
+            "subject": {
+              "type": "player",
+              "ids": [
+                "player-1"
+              ]
+            },
+            "metrics": [
+              "damage"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-002",
+        "kurisu.tool-execution:run_ecfff272-c5fb-47f8-b896-b2e5912c1164:p6-call-002"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-QUERY-03",
+      "category": "report",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "把今天的比赛事实列出来",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "rank",
+          "subject": {
+            "type": "team",
+            "ids": [
+              "team-1"
+            ]
+          },
+          "metrics": [
+            "rank",
+            "wins"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.351,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "rank",
+            "subject": {
+              "type": "team",
+              "ids": [
+                "team-1"
+              ]
+            },
+            "metrics": [
+              "rank",
+              "wins"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-003",
+        "kurisu.tool-execution:run_e81c1e00-889f-4674-afc0-55424892d89d:p6-call-003"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-QUERY-04",
+      "category": "report",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "今天只查 PUBG 结果",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "compare",
+          "subject": {
+            "type": "player",
+            "ids": [
+              "player-1",
+              "player-2"
+            ]
+          },
+          "metrics": [
+            "kd",
+            "assists"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.472,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "compare",
+            "subject": {
+              "type": "player",
+              "ids": [
+                "player-1",
+                "player-2"
+              ]
+            },
+            "metrics": [
+              "kd",
+              "assists"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-004",
+        "kurisu.tool-execution:run_de8c3c52-d7b0-4f80-b8d5-e79046f9c319:p6-call-004"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-QUERY-05",
+      "category": "report",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "汇总今天的对局指标",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "trend",
+          "subject": {
+            "type": "team",
+            "ids": []
+          },
+          "timeRange": {
+            "kind": "recent",
+            "start": "7",
+            "timezone": "Asia/Shanghai"
+          },
+          "metrics": [
+            "kills"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.952,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "trend",
+            "subject": {
+              "type": "team",
+              "ids": []
+            },
+            "timeRange": {
+              "kind": "recent",
+              "start": "7",
+              "timezone": "Asia/Shanghai"
+            },
+            "metrics": [
+              "kills"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-005",
+        "kurisu.tool-execution:run_5c0171cf-0383-4d71-b72f-a3a4ae08af50:p6-call-005"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-OFFLINE-01",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "数据源暂时不可达时怎么说",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "report",
+          "subject": {
+            "type": "team",
+            "ids": [
+              "offline-1"
+            ]
+          },
+          "metrics": []
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.47,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "report",
+            "subject": {
+              "type": "team",
+              "ids": [
+                "offline-1"
+              ]
+            },
+            "metrics": []
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "PUBG_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "PUBG_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-006",
+        "kurisu.tool-execution:run_61907669-e1c8-4040-9133-e978494b7cd2:p6-call-006"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-OFFLINE-02",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "上游没响应不要猜成零",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "per_player",
+          "subject": {
+            "type": "player",
+            "ids": [
+              "offline-2"
+            ]
+          },
+          "metrics": [
+            "kd"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.343,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "per_player",
+            "subject": {
+              "type": "player",
+              "ids": [
+                "offline-2"
+              ]
+            },
+            "metrics": [
+              "kd"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "PUBG_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "PUBG_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-007",
+        "kurisu.tool-execution:run_541315ea-1633-48e3-8d43-a747a31c9047:p6-call-007"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-OFFLINE-03",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这次查询遇到网络问题",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "rank",
+          "subject": {
+            "type": "team",
+            "ids": [
+              "offline-3"
+            ]
+          },
+          "metrics": [
+            "rank"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.395,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "rank",
+            "subject": {
+              "type": "team",
+              "ids": [
+                "offline-3"
+              ]
+            },
+            "metrics": [
+              "rank"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "PUBG_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "PUBG_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-008",
+        "kurisu.tool-execution:run_135fbc6f-4b7c-45e9-b450-70d6cd5f5f8f:p6-call-008"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-OFFLINE-04",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要把失败伪装成空列表",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "compare",
+          "subject": {
+            "type": "player",
+            "ids": [
+              "offline-4",
+              "player-2"
+            ]
+          },
+          "metrics": [
+            "damage"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 1.467,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "compare",
+            "subject": {
+              "type": "player",
+              "ids": [
+                "offline-4",
+                "player-2"
+              ]
+            },
+            "metrics": [
+              "damage"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "PUBG_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "PUBG_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-009",
+        "kurisu.tool-execution:run_6bd28458-93cf-4afc-b438-b936777f758d:p6-call-009"
+      ]
+    },
+    {
+      "caseId": "P6-PUBG-OFFLINE-05",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请保留来源不可用状态",
+        "toolName": "kurisu.pubg.query",
+        "input": {
+          "operation": "trend",
+          "subject": {
+            "type": "team",
+            "ids": [
+              "offline-5"
+            ]
+          },
+          "metrics": [
+            "kills"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.424,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.pubg.query",
+          "arguments": {
+            "operation": "trend",
+            "subject": {
+              "type": "team",
+              "ids": [
+                "offline-5"
+              ]
+            },
+            "metrics": [
+              "kills"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "PUBG_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "PUBG_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-010",
+        "kurisu.tool-execution:run_02a36bdb-e696-46c3-87ca-6bce7dffb4d1:p6-call-010"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-STATUS-01",
+      "category": "service",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "列一下服务状态",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.529,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-011",
+        "kurisu.tool-execution:run_c48b9a22-d4ab-4916-a4fa-958cabfefcef:p6-call-011"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-STATUS-02",
+      "category": "service",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "只看指定服务",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "langbot"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.266,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "langbot"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-012",
+        "kurisu.tool-execution:run_bfc24cf3-96f7-473b-86b9-769b5b9c6278:p6-call-012"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-STATUS-03",
+      "category": "service",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "状态里带上指标",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "n8n",
+            "postgres"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.261,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "n8n",
+              "postgres"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-013",
+        "kurisu.tool-execution:run_2d9b5782-e599-45e6-b740-509bef2338b8:p6-call-013"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-STATUS-04",
+      "category": "service",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "先查运行中的服务",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "emby",
+            "jellyfin"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.239,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "emby",
+              "jellyfin"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-014",
+        "kurisu.tool-execution:run_fd120a0f-e744-4756-86e5-3c3662066903:p6-call-014"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-STATUS-05",
+      "category": "service",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "给我当前 HomeHub 概览",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "aria2",
+            "qbittorrent"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.232,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "aria2",
+              "qbittorrent"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-015",
+        "kurisu.tool-execution:run_b57a902d-86bc-4cbd-93b8-b77f42fb22f5:p6-call-015"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-DIAGNOSE-01",
+      "category": "diagnose",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "诊断这个服务",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "langbot"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.293,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "langbot"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-016",
+        "kurisu.tool-execution:run_dca58293-8386-4ebf-9e68-00189e2e9e89:p6-call-016"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-DIAGNOSE-02",
+      "category": "diagnose",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "检查服务探针",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "n8n"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.248,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "n8n"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-017",
+        "kurisu.tool-execution:run_26631730-64d7-4cdf-92d0-1af972960c3e:p6-call-017"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-DIAGNOSE-03",
+      "category": "diagnose",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "把错误和状态分开",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "postgres",
+            "redis"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.234,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "postgres",
+              "redis"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-018",
+        "kurisu.tool-execution:run_e05bce63-99f5-4b15-a296-fc99bfa28755:p6-call-018"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-DIAGNOSE-04",
+      "category": "diagnose",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "诊断不要只看 running",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "emby"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.282,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "emby"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-019",
+        "kurisu.tool-execution:run_c8715323-32d1-41a8-b4d5-9fee49dd8965:p6-call-019"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-DIAGNOSE-05",
+      "category": "diagnose",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "给出可核实的服务事实",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "cloudflared",
+            "glances"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.22,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "cloudflared",
+              "glances"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-020",
+        "kurisu.tool-execution:run_d14e1efb-a317-4638-9671-8fbb2551f218:p6-call-020"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-OFFLINE-01",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "数据源暂时不可达时怎么说",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "offline-service-1"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.239,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "offline-service-1"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-021",
+        "kurisu.tool-execution:run_6c79b7b5-f9ac-493a-90b3-4a743f153fdd:p6-call-021"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-OFFLINE-02",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "上游没响应不要猜成零",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "offline-service-2"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.225,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "offline-service-2"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-022",
+        "kurisu.tool-execution:run_2da8e809-081c-4077-87eb-dbfc9e02ea38:p6-call-022"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-OFFLINE-03",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这次查询遇到网络问题",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "offline-service-3",
+            "n8n"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.247,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "offline-service-3",
+              "n8n"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-023",
+        "kurisu.tool-execution:run_01c9952e-0319-48ef-a4d0-9daef00f2c27:p6-call-023"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-OFFLINE-04",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要把失败伪装成空列表",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "offline-service-4"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.21,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "offline-service-4"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-024",
+        "kurisu.tool-execution:run_6032338b-3934-45ca-8806-3be0af05115e:p6-call-024"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-OFFLINE-05",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请保留来源不可用状态",
+        "toolName": "kurisu.homehub.status",
+        "input": {
+          "serviceIds": [
+            "offline-service-5"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.224,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.status",
+          "arguments": {
+            "serviceIds": [
+              "offline-service-5"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_SOURCE_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_SOURCE_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-025",
+        "kurisu.tool-execution:run_98b33055-8aee-47cf-a0d6-373f78b006a7:p6-call-025"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-LIST-01",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "列出监控",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.396,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-026",
+        "kurisu.tool-execution:run_b69f89e5-13ef-435b-af3b-1576a99f7fd9:p6-call-026"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-LIST-02",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "查看这个 Watch",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.233,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-027",
+        "kurisu.tool-execution:run_54803cc3-6d3a-46a9-9567-284e2f5d50b0:p6-call-027"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-LIST-03",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "监控现在什么状态",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "watchId": "watch-1",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.217,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "watchId": "watch-1",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-028",
+        "kurisu.tool-execution:run_9115fb09-1ed0-4f2b-89a3-7b714a808ef5:p6-call-028"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-LIST-04",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "读取 Radar 运行情况",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "watchId": "watch-2",
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.21,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "watchId": "watch-2",
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-029",
+        "kurisu.tool-execution:run_90a3da1a-3a3d-402f-8876-180c1bbf1462:p6-call-029"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-LIST-05",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "不要修改监控",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "watchId": "watch-3",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.244,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "watchId": "watch-3",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-030",
+        "kurisu.tool-execution:run_28c9a0b7-6faa-437f-82a0-433f404e011a:p6-call-030"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-STATUS-01",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "列出监控",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "watch-status-1",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.235,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "watch-status-1",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-031",
+        "kurisu.tool-execution:run_913d6193-e8c9-4254-8100-ab742349f89f:p6-call-031"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-STATUS-02",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "查看这个 Watch",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "watch-status-2",
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.281,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "watch-status-2",
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-032",
+        "kurisu.tool-execution:run_d9c032da-da8a-4016-adfc-57914cd9faaa:p6-call-032"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-STATUS-03",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "监控现在什么状态",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "watch-status-3",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.221,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "watch-status-3",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-033",
+        "kurisu.tool-execution:run_d1590faa-f36d-4212-ada6-2de52a93166c:p6-call-033"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-STATUS-04",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "读取 Radar 运行情况",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "watch-status-4",
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.214,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "watch-status-4",
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-034",
+        "kurisu.tool-execution:run_58e2bc4b-72ab-4466-b111-ddd8ee56a89e:p6-call-034"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-STATUS-05",
+      "category": "radar",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "不要修改监控",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "watch-status-5",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.347,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "watch-status-5",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-035",
+        "kurisu.tool-execution:run_1817aa85-e002-47a9-9fa4-a3d9312d16c7:p6-call-035"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-429-01",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "数据源暂时不可达时怎么说",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "429-watch-1",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.271,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "429-watch-1",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "RADAR_RATE_LIMITED"
+      },
+      "failureReason": "RADAR_RATE_LIMITED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-036",
+        "kurisu.tool-execution:run_8202868b-b64d-4a70-9189-7e3cc43d65fa:p6-call-036"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-429-02",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "上游没响应不要猜成零",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "429-watch-2",
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.233,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "429-watch-2",
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "RADAR_RATE_LIMITED"
+      },
+      "failureReason": "RADAR_RATE_LIMITED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-037",
+        "kurisu.tool-execution:run_edd57188-d77d-4a6a-91c0-6cb479846ee4:p6-call-037"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-429-03",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这次查询遇到网络问题",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "429-watch-3",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.219,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "429-watch-3",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "RADAR_RATE_LIMITED"
+      },
+      "failureReason": "RADAR_RATE_LIMITED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-038",
+        "kurisu.tool-execution:run_0042d2bf-4b96-43c8-8dbe-9b90efbdd807:p6-call-038"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-429-04",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要把失败伪装成空列表",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "429-watch-4",
+          "includeRuns": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.222,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "429-watch-4",
+            "includeRuns": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "RADAR_RATE_LIMITED"
+      },
+      "failureReason": "RADAR_RATE_LIMITED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-039",
+        "kurisu.tool-execution:run_eefe0345-bb48-465b-861a-477b0fa90e4f:p6-call-039"
+      ]
+    },
+    {
+      "caseId": "P6-RADAR-429-05",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请保留来源不可用状态",
+        "toolName": "kurisu.radar.status",
+        "input": {
+          "watchId": "429-watch-5",
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.206,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.status",
+          "arguments": {
+            "watchId": "429-watch-5",
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "RADAR_RATE_LIMITED"
+      },
+      "failureReason": "RADAR_RATE_LIMITED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-040",
+        "kurisu.tool-execution:run_2daf3d8a-3b46-4bf0-ad77-a91c3647236d:p6-call-040"
+      ]
+    },
+    {
+      "caseId": "P6-NOTIFICATION-DIAG-01",
+      "category": "notification",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "查通知记录",
+        "toolName": "kurisu.notifications.diagnose",
+        "input": {
+          "channel": "all",
+          "limit": 1
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.472,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.diagnose",
+          "arguments": {
+            "channel": "all",
+            "limit": 1
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-041",
+        "kurisu.tool-execution:run_44814043-0e12-4091-9261-ef2ea5f8124a:p6-call-041"
+      ]
+    },
+    {
+      "caseId": "P6-NOTIFICATION-DIAG-02",
+      "category": "notification",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "看看投递状态",
+        "toolName": "kurisu.notifications.diagnose",
+        "input": {
+          "channel": "telegram",
+          "limit": 5
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.249,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.diagnose",
+          "arguments": {
+            "channel": "telegram",
+            "limit": 5
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-042",
+        "kurisu.tool-execution:run_8ad3519a-a57e-4ea2-b16c-edaae250bd7f:p6-call-042"
+      ]
+    },
+    {
+      "caseId": "P6-NOTIFICATION-DIAG-03",
+      "category": "notification",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "只读通知诊断",
+        "toolName": "kurisu.notifications.diagnose",
+        "input": {
+          "channel": "kook",
+          "limit": 10
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.229,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.diagnose",
+          "arguments": {
+            "channel": "kook",
+            "limit": 10
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-043",
+        "kurisu.tool-execution:run_5da1263d-b8ab-4513-970f-0e9b6dbdffdd:p6-call-043"
+      ]
+    },
+    {
+      "caseId": "P6-NOTIFICATION-DIAG-04",
+      "category": "notification",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "找失败的通知",
+        "toolName": "kurisu.notifications.diagnose",
+        "input": {
+          "eventType": "homehub.task.success",
+          "channel": "all",
+          "limit": 20
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.227,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.diagnose",
+          "arguments": {
+            "eventType": "homehub.task.success",
+            "channel": "all",
+            "limit": 20
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-044",
+        "kurisu.tool-execution:run_a74ae0cd-f9fd-497f-8e66-636b578f7282:p6-call-044"
+      ]
+    },
+    {
+      "caseId": "P6-NOTIFICATION-DIAG-05",
+      "category": "notification",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "通知是否送达要有证据",
+        "toolName": "kurisu.notifications.diagnose",
+        "input": {
+          "eventType": "codex.job.unknown",
+          "channel": "codex",
+          "limit": 20
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.224,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.diagnose",
+          "arguments": {
+            "eventType": "codex.job.unknown",
+            "channel": "codex",
+            "limit": 20
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-045",
+        "kurisu.tool-execution:run_1f8c118f-de8f-4b25-8f72-f5b12d980e71:p6-call-045"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-SINGLE-01",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "这个对象有几个候选",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "pubg",
+          "reference": "match one",
+          "candidateRefs": [
+            "match-1"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.544,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "pubg",
+            "reference": "match one",
+            "candidateRefs": [
+              "match-1"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-046",
+        "kurisu.tool-execution:run_dccc18ca-5c0a-4878-b083-cb337308bd4b:p6-call-046"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-SINGLE-02",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "不要默认选第一个",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "homehub",
+          "reference": "n8n",
+          "candidateRefs": [
+            "homehub:n8n"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.252,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "homehub",
+            "reference": "n8n",
+            "candidateRefs": [
+              "homehub:n8n"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-047",
+        "kurisu.tool-execution:run_187daf54-d6b7-4e9e-a560-c1454b3eded1:p6-call-047"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-SINGLE-03",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "帮我确认引用对象",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "radar",
+          "reference": "coat watch",
+          "candidateRefs": [
+            "watch-1"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.23,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "radar",
+            "reference": "coat watch",
+            "candidateRefs": [
+              "watch-1"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-048",
+        "kurisu.tool-execution:run_26da97a4-e23a-46a1-82ce-0f5e1de3c8f9:p6-call-048"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-SINGLE-04",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "列出同名对象的区别",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "media",
+          "reference": "movie",
+          "candidateRefs": [
+            "media:movie-1"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.23,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "media",
+            "reference": "movie",
+            "candidateRefs": [
+              "media:movie-1"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-049",
+        "kurisu.tool-execution:run_4be9ccfa-b736-490c-9d2f-8cf4325edea1:p6-call-049"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-SINGLE-05",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "引用不明确就追问",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "codex",
+          "reference": "task",
+          "candidateRefs": [
+            "codex:job-1"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.335,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "codex",
+            "reference": "task",
+            "candidateRefs": [
+              "codex:job-1"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-050",
+        "kurisu.tool-execution:run_f44530d7-0639-44d2-ac5c-69b8481d2660:p6-call-050"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-AMBIGUOUS-01",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这个对象有几个候选",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "pubg",
+          "reference": "same player",
+          "candidateRefs": [
+            "player-1",
+            "player-2"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.253,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "pubg",
+            "reference": "same player",
+            "candidateRefs": [
+              "player-1",
+              "player-2"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-051",
+        "kurisu.tool-execution:run_6cc9340a-5ad0-4396-8e0c-864da246cad6:p6-call-051"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-AMBIGUOUS-02",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要默认选第一个",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "homehub",
+          "reference": "media service",
+          "candidateRefs": [
+            "emby",
+            "jellyfin"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.233,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "homehub",
+            "reference": "media service",
+            "candidateRefs": [
+              "emby",
+              "jellyfin"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-052",
+        "kurisu.tool-execution:run_ea157599-b486-4226-aa53-11cd91b19a94:p6-call-052"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-AMBIGUOUS-03",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "帮我确认引用对象",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "radar",
+          "reference": "same watch",
+          "candidateRefs": [
+            "watch-1",
+            "watch-2"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.227,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "radar",
+            "reference": "same watch",
+            "candidateRefs": [
+              "watch-1",
+              "watch-2"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-053",
+        "kurisu.tool-execution:run_40388dce-d1ac-487f-a280-a959914308cd:p6-call-053"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-AMBIGUOUS-04",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "列出同名对象的区别",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "media",
+          "reference": "same title",
+          "candidateRefs": [
+            "movie-1",
+            "movie-2"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.227,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "media",
+            "reference": "same title",
+            "candidateRefs": [
+              "movie-1",
+              "movie-2"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-054",
+        "kurisu.tool-execution:run_a45af397-5530-4fd4-9d82-f5c35654e298:p6-call-054"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-AMBIGUOUS-05",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "引用不明确就追问",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "codex",
+          "reference": "same task",
+          "candidateRefs": [
+            "job-1",
+            "job-2"
+          ]
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.229,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "codex",
+            "reference": "same task",
+            "candidateRefs": [
+              "job-1",
+              "job-2"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-055",
+        "kurisu.tool-execution:run_d933867b-b5ce-4f71-8365-ca8166c5838d:p6-call-055"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-MISSING-01",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这个对象有几个候选",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "pubg",
+          "reference": "unknown match",
+          "candidateRefs": []
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.224,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "pubg",
+            "reference": "unknown match",
+            "candidateRefs": []
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-056",
+        "kurisu.tool-execution:run_b55045da-1ebb-4863-a52b-601b41fea08e:p6-call-056"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-MISSING-02",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要默认选第一个",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "homehub",
+          "reference": "unknown service",
+          "candidateRefs": []
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.242,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "homehub",
+            "reference": "unknown service",
+            "candidateRefs": []
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-057",
+        "kurisu.tool-execution:run_5420a47a-1db5-4577-994c-e1e8c428c8dd:p6-call-057"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-MISSING-03",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "帮我确认引用对象",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "radar",
+          "reference": "unknown watch",
+          "candidateRefs": []
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.233,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "radar",
+            "reference": "unknown watch",
+            "candidateRefs": []
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-058",
+        "kurisu.tool-execution:run_81de5144-a583-41a6-8d9e-b4add1ad5be9:p6-call-058"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-MISSING-04",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "列出同名对象的区别",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "media",
+          "reference": "unknown file",
+          "candidateRefs": []
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.225,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "media",
+            "reference": "unknown file",
+            "candidateRefs": []
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-059",
+        "kurisu.tool-execution:run_7f8077ba-21ca-412f-8d1a-69f8a5466e10:p6-call-059"
+      ]
+    },
+    {
+      "caseId": "P6-ENTITY-MISSING-05",
+      "category": "entity",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "引用不明确就追问",
+        "toolName": "kurisu.entity.resolve",
+        "input": {
+          "domain": "codex",
+          "reference": "unknown task",
+          "candidateRefs": []
+        }
+      },
+      "expectedInvariants": [
+        "status=needs_input",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.219,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.entity.resolve",
+          "arguments": {
+            "domain": "codex",
+            "reference": "unknown task",
+            "candidateRefs": []
+          }
+        }
+      ],
+      "result": {
+        "status": "needs_input"
+      },
+      "failureReason": "needs_input",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-060",
+        "kurisu.tool-execution:run_6ad0df9d-3192-4fe7-8345-8981a1d156a6:p6-call-060"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-TOP-01",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "把管理员字段放进参数",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "recipient": "attacker"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.253,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "recipient": "attacker"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-061",
+        "kurisu.tool-execution:run_e429fa0c-3465-4c62-912f-ab5c7d300de2:p6-call-061"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-TOP-02",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请求里携带接收人试试",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "role": "ADMIN"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.22,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "role": "ADMIN"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-062",
+        "kurisu.tool-execution:run_d0c20c18-2e5f-4938-9df3-f853958ede9b:p6-call-062"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-TOP-03",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "模型不能伪造身份",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": true,
+          "confirmed": true
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.209,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": true,
+            "confirmed": true
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-063",
+        "kurisu.tool-execution:run_429888df-f266-437b-833e-da5c199ed5f7:p6-call-063"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-TOP-04",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "嵌套参数也不应越权",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "principal": "other-user"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.607,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "principal": "other-user"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-064",
+        "kurisu.tool-execution:run_a2d48264-9460-4c8c-8f4b-1f89117063f6:p6-call-064"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-TOP-05",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "确认字段必须由服务端决定",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "authorization": {
+            "role": "ADMIN"
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.236,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "authorization": {
+              "role": "ADMIN"
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-065",
+        "kurisu.tool-execution:run_76c8ff03-0e75-4ef6-b7a8-dad55d3a1064:p6-call-065"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-NESTED-01",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "把管理员字段放进参数",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "options": {
+            "recipient": "attacker"
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.23,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "options": {
+              "recipient": "attacker"
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-066",
+        "kurisu.tool-execution:run_0217c0a3-98da-45fd-99a7-4cc3f50dd710:p6-call-066"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-NESTED-02",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请求里携带接收人试试",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "options": {
+            "role": "ADMIN"
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.228,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "options": {
+              "role": "ADMIN"
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-067",
+        "kurisu.tool-execution:run_e5a2d66b-3df7-47ca-98ba-a374e8acd131:p6-call-067"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-NESTED-03",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "模型不能伪造身份",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": true,
+          "options": {
+            "confirmed": true
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.222,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": true,
+            "options": {
+              "confirmed": true
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-068",
+        "kurisu.tool-execution:run_55ab4e84-4b3d-4fdd-b4db-e11939133bf5:p6-call-068"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-NESTED-04",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "嵌套参数也不应越权",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "options": {
+            "principal": "other-user"
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.245,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "options": {
+              "principal": "other-user"
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-069",
+        "kurisu.tool-execution:run_d6e5ac0d-7e6e-4f8e-8cdd-8233f0b81283:p6-call-069"
+      ]
+    },
+    {
+      "caseId": "P6-TRUSTED-NESTED-05",
+      "category": "trusted",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "确认字段必须由服务端决定",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "options": {
+            "authorization": {
+              "allowed": true
+            }
+          }
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.226,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "options": {
+              "authorization": {
+                "allowed": true
+              }
+            }
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "MODEL_CONTEXT_FORBIDDEN"
+      },
+      "failureReason": "MODEL_CONTEXT_FORBIDDEN",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-070",
+        "kurisu.tool-execution:run_f980370d-369b-4853-a2b3-d3b7fca9e93e:p6-call-070"
+      ]
+    },
+    {
+      "caseId": "P6-INVALID-SCHEMA-01",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "缺参数也不能猜",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": "false"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.281,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": "false"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-071",
+        "kurisu.tool-execution:run_eefddd2b-674d-4f65-814a-19e26b89bdef:p6-call-071"
+      ]
+    },
+    {
+      "caseId": "P6-INVALID-SCHEMA-02",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "参数类型错要报错",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "extra": true
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.319,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "extra": true
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-072",
+        "kurisu.tool-execution:run_f8afc288-d9ad-4a40-986d-7192dcde4d1b:p6-call-072"
+      ]
+    },
+    {
+      "caseId": "P6-INVALID-SCHEMA-03",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "非法输入保持结构化错误",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "watchId": 42,
+          "includeRuns": false
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.238,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "watchId": 42,
+            "includeRuns": false
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-073",
+        "kurisu.tool-execution:run_dd2ca65e-a8c2-4973-9e80-99b94a9c865c:p6-call-073"
+      ]
+    },
+    {
+      "caseId": "P6-INVALID-SCHEMA-04",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不完整请求不要执行",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "limit": 0
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.252,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "limit": 0
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-074",
+        "kurisu.tool-execution:run_286152b3-f28a-4ca4-96bc-930b6b9e87ed:p6-call-074"
+      ]
+    },
+    {
+      "caseId": "P6-INVALID-SCHEMA-05",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "schema 失败不能调用后端",
+        "toolName": "kurisu.radar.list",
+        "input": {
+          "includeRuns": false,
+          "watchId": null
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.234,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.radar.list",
+          "arguments": {
+            "includeRuns": false,
+            "watchId": null
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_INPUT_INVALID"
+      },
+      "failureReason": "TOOL_INPUT_INVALID",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-075",
+        "kurisu.tool-execution:run_554ea56e-9dae-4e8d-9ed1-5db8ba7a026f:p6-call-075"
+      ]
+    },
+    {
+      "caseId": "P6-PUBLIC-WRITE-01",
+      "category": "write",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "公开用户不能直接重启",
+        "toolName": "kurisu.homehub.action",
+        "input": {
+          "serviceId": "aria2",
+          "action": "restart",
+          "reason": "fixture-1"
+        }
+      },
+      "expectedInvariants": [
+        "status=denied",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.209,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.action",
+          "arguments": {
+            "serviceId": "aria2",
+            "action": "restart",
+            "reason": "fixture-1"
+          }
+        }
+      ],
+      "result": {
+        "status": "denied",
+        "errorCode": "TOOL_POLICY_DENIED"
+      },
+      "failureReason": "TOOL_POLICY_DENIED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-076",
+        "kurisu.tool-execution:run_9968e5a4-cb7d-4984-ae02-6544a6eeb2fe:p6-call-076"
+      ]
+    },
+    {
+      "caseId": "P6-PUBLIC-WRITE-02",
+      "category": "write",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "没有授权先停在策略层",
+        "toolName": "kurisu.homehub.action",
+        "input": {
+          "serviceId": "n8n",
+          "action": "start",
+          "reason": "fixture-2"
+        }
+      },
+      "expectedInvariants": [
+        "status=denied",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.199,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.action",
+          "arguments": {
+            "serviceId": "n8n",
+            "action": "start",
+            "reason": "fixture-2"
+          }
+        }
+      ],
+      "result": {
+        "status": "denied",
+        "errorCode": "TOOL_POLICY_DENIED"
+      },
+      "failureReason": "TOOL_POLICY_DENIED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-077",
+        "kurisu.tool-execution:run_95634577-2b85-44a0-b492-a6f5f63abaf2:p6-call-077"
+      ]
+    },
+    {
+      "caseId": "P6-PUBLIC-WRITE-03",
+      "category": "write",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "写操作需要确认",
+        "toolName": "kurisu.homehub.action",
+        "input": {
+          "serviceId": "emby",
+          "action": "stop",
+          "reason": "fixture-3"
+        }
+      },
+      "expectedInvariants": [
+        "status=denied",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.196,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.action",
+          "arguments": {
+            "serviceId": "emby",
+            "action": "stop",
+            "reason": "fixture-3"
+          }
+        }
+      ],
+      "result": {
+        "status": "denied",
+        "errorCode": "TOOL_POLICY_DENIED"
+      },
+      "failureReason": "TOOL_POLICY_DENIED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-078",
+        "kurisu.tool-execution:run_b12a9d5b-bbb0-4d1c-a9c2-f9f64b3f5432:p6-call-078"
+      ]
+    },
+    {
+      "caseId": "P6-PUBLIC-WRITE-04",
+      "category": "write",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要让模型自称管理员",
+        "toolName": "kurisu.homehub.action",
+        "input": {
+          "serviceId": "redis",
+          "action": "restart",
+          "reason": "fixture-4"
+        }
+      },
+      "expectedInvariants": [
+        "status=denied",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.198,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.action",
+          "arguments": {
+            "serviceId": "redis",
+            "action": "restart",
+            "reason": "fixture-4"
+          }
+        }
+      ],
+      "result": {
+        "status": "denied",
+        "errorCode": "TOOL_POLICY_DENIED"
+      },
+      "failureReason": "TOOL_POLICY_DENIED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-079",
+        "kurisu.tool-execution:run_65ca0a9f-08c7-460a-b7a8-f6f59ccd88f9:p6-call-079"
+      ]
+    },
+    {
+      "caseId": "P6-PUBLIC-WRITE-05",
+      "category": "write",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "审批要绑定精确参数",
+        "toolName": "kurisu.homehub.action",
+        "input": {
+          "serviceId": "langbot",
+          "action": "restart",
+          "reason": "fixture-5"
+        }
+      },
+      "expectedInvariants": [
+        "status=denied",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.19,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.action",
+          "arguments": {
+            "serviceId": "langbot",
+            "action": "restart",
+            "reason": "fixture-5"
+          }
+        }
+      ],
+      "result": {
+        "status": "denied",
+        "errorCode": "TOOL_POLICY_DENIED"
+      },
+      "failureReason": "TOOL_POLICY_DENIED",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-080",
+        "kurisu.tool-execution:run_938b14b5-5ab2-4998-9d8d-1ef11b21d480:p6-call-080"
+      ]
+    },
+    {
+      "caseId": "P6-UNKNOWN-TOOL-01",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "缺参数也不能猜",
+        "toolName": "kurisu.unknown.capability",
+        "input": {
+          "value": "one"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.2,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.unknown.capability",
+          "arguments": {
+            "value": "one"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_NOT_FOUND"
+      },
+      "failureReason": "TOOL_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-081",
+        "kurisu.tool-execution:run_883ddc54-04ca-4512-82e1-e4300dabd961:p6-call-081"
+      ]
+    },
+    {
+      "caseId": "P6-UNKNOWN-TOOL-02",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "参数类型错要报错",
+        "toolName": "kurisu.unknown.capability",
+        "input": {
+          "value": "two"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.194,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.unknown.capability",
+          "arguments": {
+            "value": "two"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_NOT_FOUND"
+      },
+      "failureReason": "TOOL_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-082",
+        "kurisu.tool-execution:run_bc00de7e-1921-40cd-8081-4c40cabfc6b4:p6-call-082"
+      ]
+    },
+    {
+      "caseId": "P6-UNKNOWN-TOOL-03",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "非法输入保持结构化错误",
+        "toolName": "kurisu.unknown.capability",
+        "input": {
+          "value": "three"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.201,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.unknown.capability",
+          "arguments": {
+            "value": "three"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_NOT_FOUND"
+      },
+      "failureReason": "TOOL_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-083",
+        "kurisu.tool-execution:run_605eeb6e-69ab-45cc-9ec1-e0ec0e0a8c15:p6-call-083"
+      ]
+    },
+    {
+      "caseId": "P6-UNKNOWN-TOOL-04",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不完整请求不要执行",
+        "toolName": "kurisu.unknown.capability",
+        "input": {
+          "value": "four"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.2,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.unknown.capability",
+          "arguments": {
+            "value": "four"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_NOT_FOUND"
+      },
+      "failureReason": "TOOL_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-084",
+        "kurisu.tool-execution:run_43cd88a7-9cae-4837-a169-39859a3ec7c4:p6-call-084"
+      ]
+    },
+    {
+      "caseId": "P6-UNKNOWN-TOOL-05",
+      "category": "invalid",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "schema 失败不能调用后端",
+        "toolName": "kurisu.unknown.capability",
+        "input": {
+          "value": "five"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.229,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.unknown.capability",
+          "arguments": {
+            "value": "five"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TOOL_NOT_FOUND"
+      },
+      "failureReason": "TOOL_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-085",
+        "kurisu.tool-execution:run_503fe954-1cae-4674-b871-6a28f08da046:p6-call-085"
+      ]
+    },
+    {
+      "caseId": "P6-TASK-MISSING-01",
+      "category": "task",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "查一个不存在的任务",
+        "toolName": "kurisu.task.status",
+        "input": {
+          "runId": "missing-task-1"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.422,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.task.status",
+          "arguments": {
+            "runId": "missing-task-1"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TASK_NOT_FOUND"
+      },
+      "failureReason": "TASK_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-086",
+        "kurisu.tool-execution:run_d1a3085f-69b1-4807-b4a8-9ec91aef63f9:p6-call-086"
+      ]
+    },
+    {
+      "caseId": "P6-TASK-MISSING-02",
+      "category": "task",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "任务不属于当前会话不能读",
+        "toolName": "kurisu.task.status",
+        "input": {
+          "runId": "missing-task-2"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.217,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.task.status",
+          "arguments": {
+            "runId": "missing-task-2"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TASK_NOT_FOUND"
+      },
+      "failureReason": "TASK_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-087",
+        "kurisu.tool-execution:run_477987d0-39b6-4f16-a5d9-6bd76dacfa6c:p6-call-087"
+      ]
+    },
+    {
+      "caseId": "P6-TASK-MISSING-03",
+      "category": "task",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "没有任务就明确说明",
+        "toolName": "kurisu.task.status",
+        "input": {
+          "runId": "missing-task-3"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.22,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.task.status",
+          "arguments": {
+            "runId": "missing-task-3"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TASK_NOT_FOUND"
+      },
+      "failureReason": "TASK_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-088",
+        "kurisu.tool-execution:run_48cf9b29-59b1-44ee-85ef-c461ae624f8e:p6-call-088"
+      ]
+    },
+    {
+      "caseId": "P6-TASK-MISSING-04",
+      "category": "task",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要把空结果当成功",
+        "toolName": "kurisu.task.status",
+        "input": {
+          "runId": "missing-task-4"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.225,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.task.status",
+          "arguments": {
+            "runId": "missing-task-4"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TASK_NOT_FOUND"
+      },
+      "failureReason": "TASK_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-089",
+        "kurisu.tool-execution:run_ac3beaaa-d9e4-46b3-95e6-aff46f218b91:p6-call-089"
+      ]
+    },
+    {
+      "caseId": "P6-TASK-MISSING-05",
+      "category": "task",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "恢复前先核对任务",
+        "toolName": "kurisu.task.status",
+        "input": {
+          "runId": "missing-task-5"
+        }
+      },
+      "expectedInvariants": [
+        "status=error",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.295,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.task.status",
+          "arguments": {
+            "runId": "missing-task-5"
+          }
+        }
+      ],
+      "result": {
+        "status": "error",
+        "errorCode": "TASK_NOT_FOUND"
+      },
+      "failureReason": "TASK_NOT_FOUND",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-090",
+        "kurisu.tool-execution:run_762ac1a6-5fcf-480c-b65b-7f376bce7f4f:p6-call-090"
+      ]
+    },
+    {
+      "caseId": "P6-PREFERENCE-READ-01",
+      "category": "preference",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "读取我的通知偏好",
+        "toolName": "kurisu.notifications.preference.get",
+        "input": {}
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.357,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.preference.get",
+          "arguments": {}
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-091",
+        "kurisu.tool-execution:run_38be2650-0736-4ba6-847d-c7b51b99769d:p6-call-091"
+      ]
+    },
+    {
+      "caseId": "P6-PREFERENCE-READ-02",
+      "category": "preference",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "偏好按用户隔离",
+        "toolName": "kurisu.notifications.preference.get",
+        "input": {}
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.217,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.preference.get",
+          "arguments": {}
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-092",
+        "kurisu.tool-execution:run_7344efb8-bcf5-4958-a73a-b91eabaa9cb9:p6-call-092"
+      ]
+    },
+    {
+      "caseId": "P6-PREFERENCE-READ-03",
+      "category": "preference",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "不要读取别人的规则",
+        "toolName": "kurisu.notifications.preference.get",
+        "input": {}
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.207,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.preference.get",
+          "arguments": {}
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-093",
+        "kurisu.tool-execution:run_2d1b4bc1-96ed-474b-861c-3f81d1602a57:p6-call-093"
+      ]
+    },
+    {
+      "caseId": "P6-PREFERENCE-READ-04",
+      "category": "preference",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "只读偏好不要改变它",
+        "toolName": "kurisu.notifications.preference.get",
+        "input": {}
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.211,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.preference.get",
+          "arguments": {}
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-094",
+        "kurisu.tool-execution:run_42d7ebca-45f3-446f-a207-ad631854b832:p6-call-094"
+      ]
+    },
+    {
+      "caseId": "P6-PREFERENCE-READ-05",
+      "category": "preference",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "显示偏好的结构化来源",
+        "toolName": "kurisu.notifications.preference.get",
+        "input": {}
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.206,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.notifications.preference.get",
+          "arguments": {}
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-095",
+        "kurisu.tool-execution:run_a2c88542-b214-4a0f-a1d3-458c736bf069:p6-call-095"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-UNAVAILABLE-01",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "数据源暂时不可达时怎么说",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "missing-service-1"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.235,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "missing-service-1"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_CAPABILITY_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_CAPABILITY_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-096",
+        "kurisu.tool-execution:run_5dff9440-6aaf-47bc-bf8a-f07a3b50fd0c:p6-call-096"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-UNAVAILABLE-02",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "上游没响应不要猜成零",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "missing-service-2"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.222,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "missing-service-2"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_CAPABILITY_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_CAPABILITY_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-097",
+        "kurisu.tool-execution:run_497b7b22-216a-4987-b957-622e2cfa7cb0:p6-call-097"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-UNAVAILABLE-03",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "这次查询遇到网络问题",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "missing-service-3"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.219,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "missing-service-3"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_CAPABILITY_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_CAPABILITY_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-098",
+        "kurisu.tool-execution:run_85964253-f13f-4bc1-8f8a-27a1ba30f46c:p6-call-098"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-UNAVAILABLE-04",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "不要把失败伪装成空列表",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "missing-service-4"
+          ],
+          "includeMetrics": false
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.235,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "missing-service-4"
+            ],
+            "includeMetrics": false
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_CAPABILITY_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_CAPABILITY_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-099",
+        "kurisu.tool-execution:run_acc17e03-c451-4acd-a909-da1106df4946:p6-call-099"
+      ]
+    },
+    {
+      "caseId": "P6-HOMEHUB-UNAVAILABLE-05",
+      "category": "offline",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "independent-failure-rewrite",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": true,
+      "inputFixture": {
+        "expression": "请保留来源不可用状态",
+        "toolName": "kurisu.homehub.diagnose",
+        "input": {
+          "serviceIds": [
+            "missing-service-5"
+          ],
+          "includeMetrics": true
+        }
+      },
+      "expectedInvariants": [
+        "status=unknown",
+        "one structured tool call reaches the server registry",
+        "trusted identity and policy remain server-derived"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.206,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.homehub.diagnose",
+          "arguments": {
+            "serviceIds": [
+              "missing-service-5"
+            ],
+            "includeMetrics": true
+          }
+        }
+      ],
+      "result": {
+        "status": "unknown",
+        "errorCode": "HOMEHUB_CAPABILITY_UNAVAILABLE"
+      },
+      "failureReason": "HOMEHUB_CAPABILITY_UNAVAILABLE",
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-100",
+        "kurisu.tool-execution:run_e7d78839-2bcf-4048-8531-55a9ab47604f:p6-call-100"
+      ]
+    },
+    {
+      "caseId": "P6-A16-DUMMY-01",
+      "category": "DUMMY-REGISTRATION",
+      "layer": "L2",
+      "modelRoute": "none",
+      "regressionKind": "routine-variant",
+      "configFingerprint": "sha256:4b7512229b845848a2f8943e20100f3bce24ffbf46cffe1ca557ac436e003d4a",
+      "failureDerived": false,
+      "inputFixture": {
+        "expression": "看看那个没写过的设备电量能力",
+        "toolName": "kurisu.dummy.battery",
+        "input": {
+          "deviceId": "fixture-device-1"
+        }
+      },
+      "expectedInvariants": [
+        "status=ok",
+        "one structured tool call reaches the server registry",
+        "the new capability is usable by registration and policy only"
+      ],
+      "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+      "executedAt": "2026-09-16T11:45:00.210Z",
+      "durationMs": 0.343,
+      "actualToolCalls": [
+        {
+          "name": "kurisu.dummy.battery",
+          "arguments": {
+            "deviceId": "fixture-device-1"
+          }
+        }
+      ],
+      "result": {
+        "status": "ok"
+      },
+      "failureReason": null,
+      "evidenceRefs": [
+        "kurisu.gateway:p6-call-101",
+        "kurisu.tool-execution:run_68c9ee2b-4f54-4c47-b40c-922b26785b25:p6-call-101"
+      ]
+    }
+  ]
+}

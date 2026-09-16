@@ -1,0 +1,55 @@
+{
+  "phase": "P6",
+  "check": "R01",
+  "status": "R01_PASS",
+  "revision": "24946b98cdbea8a41a55f596f433c10f46ae0b43",
+  "scope": "migrated Kurisu gateway, server boundary, Codex executor, and LangBot plugin only",
+  "checks": [
+    {
+      "id": "R01-STRUCTURED-ENTRY",
+      "status": "PASS",
+      "evidence": "structured-entry.ts accepts canonical data and contains no text keyword/synonym router"
+    },
+    {
+      "id": "R01-GATEWAY-NO-KEYWORD-ROUTE",
+      "status": "PASS",
+      "evidence": "gateway.ts performs normalization, rollout, policy, and typed tool execution only"
+    },
+    {
+      "id": "R01-SINGLE-LANGBOT-COMPONENT",
+      "status": "PASS",
+      "evidence": "kurisu-gateway exposes one Tool component and no natural-language listener/command hook"
+    },
+    {
+      "id": "R01-SINGLE-STRUCTURED-TOOL",
+      "status": "PASS",
+      "evidence": "LangBot host receives one provider-compatible structured gateway with server-registered capability names"
+    },
+    {
+      "id": "R01-NO-SECOND-AGENT",
+      "status": "PASS",
+      "evidence": "Kurisu boundary does not construct a second LLM agent or planner"
+    },
+    {
+      "id": "R01-NO-GENERIC-SHELL",
+      "status": "PASS",
+      "evidence": "Codex executor has no shell passthrough; its process boundary is the controlled app-server command and fixed git argv calls"
+    },
+    {
+      "id": "R01-NO-PSEUDO-COMPLETE",
+      "status": "PASS",
+      "evidence": "missing capabilities return an explicit unavailable/error contract rather than an empty success"
+    },
+    {
+      "id": "R01-SERVER-FRONT-DOOR",
+      "status": "PASS",
+      "evidence": "server.ts exposes the structured host tool-call front door to KurisuService"
+    },
+    {
+      "id": "R01-DYNAMIC-DUMMY-REGISTRATION",
+      "status": "PASS",
+      "evidence": "A16 is exercised by test-only registration and a previously unseen expression fixture, without prompt edits"
+    }
+  ],
+  "note": "This static check supplements behavioral tests; it does not claim real platform or L3 model access."
+}

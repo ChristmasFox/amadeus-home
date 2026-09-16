@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P5 IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED / L3_BLOCKED；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P6 LOCAL_COMPLETE / BRIEFING_BLOCKED / L3_BLOCKED；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已完成 P0 的本机事实盘点和宿主决策，并完成 P1/P2 的本地结构化边界：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
@@ -21,7 +21,11 @@
 - [x] P5 增加 Kurisu 语气配置与严重告警/legacy Codex unknown 渲染；定向 runtime `48/48`、Product Radar `53/53`、Kurisu plugin `4/4`、typecheck、Codex hook/spool smoke、secret scan、diff check 通过。
 - [ ] P5 briefing 真实 producer 未在仓库或当前 inventory 中发现，已记录 `BLOCKED_UNSUPPORTED`；需要真实 scheduler/生成/投递记录后再接入，不能以模板或手工事件替代。
 - [ ] 合法 LangBot user/support-admin session、native-agent WebSocket/platform L2/L3 与旧 EventListener single-consumer 迁移仍 blocked；不以 provider/fake 证据冒充。
-- [ ] P6 集成验收、100 个实际场景变体、R01/R02、backup/restore、release dry-run 与 runbook 待继续；P7 仅在用户单独授权后部署和真实平台验收。
+- [x] P6 完成 101 条结构化 L2 场景变体，其中 60 条为独立失败改写回归；每条记录含 revision、层级、配置指纹、输入夹具、实际工具调用、结果、证据和耗时；A16 dummy battery 仅通过测试注册验证，不改 prompt/router。
+- [x] P6 完成 R01 反偏离检查（9/9）、R02 release dry-run、server.ts `/kurisu/*` HTTP smoke、Kurisu SQLite 精确备份/恢复 dry-run、配置模板和回滚 runbook；实现提交为 `24946b9`，报告见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`、`KURISU_AGENT_P6_R01.json`、`KURISU_AGENT_P6_RELEASE_DRY_RUN.md`。
+- [x] P6 分批验证：Kurisu `50/50`、Product Radar `53/53`、runtime/Product Radar typecheck、plugin `4/4`、Python compile、secret scan、diff check 均通过；HTTP smoke 和 R02 均确认无生产写操作。
+- [ ] 全量 agent-runtime runner 仍在既有 `review-v3-2.test.ts` 子进程后无新增输出，本次有界终止，标记 `KNOWN_HANG / NOT_FULL_PASS`；真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
+- [ ] P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 
