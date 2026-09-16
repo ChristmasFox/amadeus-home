@@ -39,4 +39,5 @@
 - 在无媒体挂载的核心恢复态再次执行旧 Runtime/插件切换：`local/pubg-query-engine-v3:git-e6dba61a5fdb` health `healthy`，`/healthz` 与 `/homehub/health` 通过；旧 Gateway `0.1.0`、PUBG `3.3.3`、Organize `0.2.1`、NAS `0.1.4` 均 `INSTALL_READY`，旧 Tool 清单恢复，doctor 为 0 failure。
 - 随后恢复当前插件（Gateway `0.1.1`、PUBG `3.3.4`、Product Radar `0.6.0`、Organize `0.2.2`、NAS `0.1.6`）和 Runtime `local/pubg-query-engine-v3:git-015df8f`；当前 health、doctor、Kurisu HTTP smoke、HomeHub Docker smoke 均通过。
 - 因 Avalon 未连接，R05 目前只能判定为“核心入口/镜像/插件回滚通过，媒体挂载场景 blocked”，不是完整 R05/PRODUCT_COMPLETE 证据。
+- `scripts/deploy-kurisu-production-features.sh` 已增加 Avalon 四个媒体目录的 preflight：磁盘缺失时在任何 secret/env/Compose mutation 前 fail closed；当前 `--apply` 已验证返回明确缺失路径。
 - 不得用 provider/fake trace、HTTP 200、容器健康或插件 `INSTALL_READY` 替代真实平台入站/外部执行/最终送达证据；在上述证据补齐前不得标记 `PRODUCT_COMPLETE`。

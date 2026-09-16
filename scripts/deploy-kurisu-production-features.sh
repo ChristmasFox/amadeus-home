@@ -51,6 +51,15 @@ langbot_token = root / 'product-radar/secrets/langbot-api-token'
 for path in (runtime_dir, n8n_db, digest_config, notification_secret, langbot_token):
     if not path.exists() or not path.is_file() and path != runtime_dir:
         raise SystemExit(f'required external path is unavailable: {path}')
+media_roots = [
+    Path('/Volumes/Avalon/downloads'),
+    Path('/Volumes/Avalon/media/movies'),
+    Path('/Volumes/Avalon/media/tv'),
+    Path('/Volumes/Avalon/backups/media-organizer'),
+]
+for path in media_roots:
+    if not path.exists() or not path.is_dir():
+        raise SystemExit(f'required media path is unavailable; mount the real Avalon volume first: {path}')
 if not notification_secret.read_text().strip() or not langbot_token.read_text().strip():
     raise SystemExit('required external secret file is empty')
 # Both n8n and the Runtime deliberately run as the unprivileged `node` user
