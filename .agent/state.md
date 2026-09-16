@@ -1,3 +1,11 @@
+# 当前规划：Kurisu 统一 Agent（PLAN_ONLY：2026-09-16）
+
+用户要求把实施规格提交仓库，再由本机 Codex Goal 实施。读取 `docs/KURISU_CODEX_GOAL.md`、`docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`、`docs/KURISU_AGENT_ACCEPTANCE.md`。
+
+P0–P7 尚未开始。优先复用现有 LangBot/9Router 主 Agent，P0 核验后固定唯一宿主；禁止两个主 Agent 和已迁移消息的关键词抢占。计划保留现有领域逻辑并补齐任务、Codex 和通知闭环。当前只交付文档，不代表部署或测试了新实现。
+
+旧任务及运行证据保留如下。
+
 # 当前任务：Kook 偶发跨域路由与空回复修复（DEPLOYED / VERIFIED：2026-09-12）
 
 根因：Kook/Telegram 共用 LangBot Pipeline；PUBG V3 缺少“战报”正向信号，Product Radar listener 可能先接管 Kook 群聊的 PUBG 请求，activeWatch 进一步扩大误判。Kook host converter 忽略 Telegram 专用 `Unknown` loading component，导致 `Thinking...` 变成空 `reply_message` 并记录 `ActionCallError`。

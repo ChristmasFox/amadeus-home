@@ -1,3 +1,14 @@
+# Kurisu 统一 Agent（PLANNED / NOT_STARTED：2026-09-16）
+
+用户已要求先提交可用于 Codex Goal 的实施计划，后续在本机实施。本节不代表代码或生产环境已改变。
+
+- [x] 编写 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`，明确单一主 Agent、复用现有 LangBot/9Router 的宿主门槛、领域工具与 P0–P7。
+- [x] 编写 `docs/KURISU_AGENT_ACCEPTANCE.md` 和 `docs/KURISU_CODEX_GOAL.md`，定义验收证据、开发/恢复/部署入口。
+- [ ] P0 本机能力验证与宿主 ADR；之后依计划实施 P1–P6。
+- [ ] P7 仅在用户单独授权后部署和真实平台验收。
+
+历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
+
 # Product Radar FashionSigLIP usage observability（IMPLEMENTED / VERIFIED LOCAL：2026-09-12）
 
 - [x] 在 ImageMatcher 结果边界记录 FashionSigLIP 实际请求次数、成功生成 embedding 的图片数和特征缓存命中数。

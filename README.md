@@ -218,6 +218,8 @@ GitHub 远端；恢复流程本身仍不会自动 push，发布必须由用户�
 
 ## 当前状态
 
+- Kurisu 统一 Agent 实施计划（PLANNED，尚未部署）：见 [计划书](docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md)、[验收矩阵](docs/KURISU_AGENT_ACCEPTANCE.md) 和 [Codex Goal 入口](docs/KURISU_CODEX_GOAL.md)。
+
 - 迁移状态：见 `docs/PROJECT_STATE.md`。
 - 当前任务：见 `docs/CURRENT_TASK.md`。
 - 运行时与部署拓扑：见 `docs/ARCHITECTURE.md`。

@@ -1,5 +1,14 @@
 # Agent Monorepo 工作规则
 
+## Kurisu 统一 Agent 实施范围
+
+实施该功能时必须先读取 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`、
+`docs/KURISU_AGENT_ACCEPTANCE.md` 和 `docs/KURISU_CODEX_GOAL.md`。当前仅有计划，不能把它当作已上线架构。
+P0 按证据选择并记录唯一主 Agent 宿主，优先复用用户现有 LangBot/9Router；后续不并行建设两个主 Agent。
+已迁移的普通自然语言不得通过关键词/正则领域路由或旧 fast path 抢先执行；协议命令、schema 校验和确定性业务规则仍保留。
+执行按阶段提交和验收，禁止删除失败用例、降低验收标准、用 mock 代替真实环境完成证明，或把回合结束当任务成功。
+开发 Goal 不自动授权生产 RELEASE；部署范围以用户后续明确指令为准。其余工程与预算规则保持有效。
+
 ## Source of Truth
 
 - 本 Git 仓库是系统定义的唯一 source of truth。源码、插件、patch、workflow、Compose 模板、文档和 Codex 状态都必须从 Git 可重建。

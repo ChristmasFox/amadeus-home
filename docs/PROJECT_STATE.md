@@ -1,3 +1,15 @@
+# Kurisu 统一 Agent 实施计划（PLANNED：2026-09-16）
+
+已编写规划文档，尚无新 runtime、模型配置或生产部署变化。审阅基线为 `b77a2d6`。
+
+- 规格：`docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`；验收：`docs/KURISU_AGENT_ACCEPTANCE.md`。
+- Goal 入口：`docs/KURISU_CODEX_GOAL.md`；任务：`.agent/tasks/2026-09-16-kurisu-agent-implementation.md`。
+- 目标是复用现有 LangBot/9Router 主 Agent，按 P0 实测决定唯一宿主；保留 PUBG/HomeHub/Radar/n8n 业务。
+- 需要实施统一工具/上下文、持久化任务、Codex executor、可靠通知和 Kurisu 表达；本节不代表这些能力已经实现。
+- 文档交付 checkpoint：`.agent/checkpoints/2026-09-16-kurisu-agent-plan.md`。
+
+既有实现与部署历史如下。
+
 # Product Radar FashionSigLIP usage observability（IMPLEMENTED / VERIFIED LOCAL：2026-09-12）
 
 Product Radar 现在会在 FashionSigLIP `ImageMatcher` 边界记录每次 similarity Watch
