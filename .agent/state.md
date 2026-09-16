@@ -1,6 +1,13 @@
-# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_SOURCE_EXPORTED / HANDOFF_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
-本轮全量完成 Goal 已授权。2026-09-16 从 live n8n 发现并脱敏导出 `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）：真实定时、去重、采集、AI 分析、运行记录和 KOOK 直发均存在。`BRIEFING_BLOCKED` 已失效，sender 已交接至 Runtime notification outbox 并完成真实重跑：n8n `6165` 是 `success/sent`，Kurisu KOOK delivery 是 `sent`/1 attempt/无错误。首次 503 是 n8n secret root-only bind mount 使 Runtime 启动时读空；脚本现设为 `root:gid1000 0640` 后 force-recreate。Runtime 的 rollout 状态为 `native_agent_global`。Codex production executor、写工具与平台全量交互验收仍未完成。
+本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.1`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。当前仍需真实 Telegram/KOOK 入站证据和一次 R05 可恢复回滚，未满足前不标记 `PRODUCT_COMPLETE`。
+
+## 2026-09-17 当前线上快照
+
+- Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。
+- `scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、R01、R02 和 backup dry-run 通过；HomeHub Docker smoke 取得真实 macOS host metrics。
+- LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；Kurisu 是唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
+- 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R05 仍为 `PENDING/BLOCKED`；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 

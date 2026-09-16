@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / CROSS_PLATFORM_SMOKE_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
 ## 当前全量完成 Goal（进行中）
 
@@ -6,9 +6,12 @@
 - [x] 核验它是真实简报 producer：每日 09:30/23:00 调度、运行去重、RSS/API 采集、AI 分析、事件/运行 Data Table 与 KOOK 发送均在 live 定义中；此前 `BRIEFING_BLOCKED` 结论已过期。
 - [x] 简报 sender 已交接到 Runtime notification outbox：live workflow 的 `Ingest Digest via Kurisu` 使用共享外部 secret；n8n 重跑 `6165` 在 2026-09-16 15:32:59 成功记录为 `success/sent`，对应 Kurisu event/delivery 均为 KOOK `sent`（1 attempt、无错误）。旧 `Send to KOOK via LangBot` 节点不在 live workflow 连接中。
 - [x] 修复真实 handoff 首次失败：n8n secret 是 root-only bind mount，Runtime 启动时读为空而返回 503。部署脚本现在将其设为 `root:gid1000 0640` 并强制 recreate Runtime；Compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-233013`。
-- [ ] 仍需上线并实际验证写工具、Codex host executor、Telegram/KOOK 引用/图片/按钮/群聊回归，以及受控回滚演练；完成前不得标记 `PRODUCT_COMPLETE`。
+- [x] 已完成生产发布：Runtime `local/pubg-query-engine-v3:git-015df8f`、Kurisu 生产开关、通知/Codex/写工具、Radar central owner 和受限媒体目录挂载均已在 OrbStack `ubuntu` CasaOS 生效。
+- [x] 已完成 LangBot 插件发布：`kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6` 均启用；Kurisu 为唯一 Tool，旧插件不再暴露自然语言 Tool/EventListener。
+- [x] 已完成线上只读验收：Runtime/HomeHub/Kurisu HTTP、受限 Docker API、doctor、R01/R02 和插件 API/DB 状态核验通过；媒体 scan/preview/move 已有真实目录边界和 post-execution verify。
+- [ ] 尚待真实 Telegram/KOOK 入站（含引用/图片/按钮/审批等代表场景）和一次 R05 可恢复回滚；当前没有新入站记录，完成前不得标记 `PRODUCT_COMPLETE`。
 
-已完成 P0–P6 的本机实现、验收和 Release 准备：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。用户明确要求 push 并部署后，已仅发布 Runtime immutable image；未安装 Kurisu 插件、未切换 rollout、未发送真实平台消息。
+当前真实架构为 LangBot 原生 `local-agent` + 当前 9Router 作为唯一自然语言决策宿主，Mastra 仅保留 PUBG deterministic subworkflow。P0–P6 已完成；本次 P7 已完成 Runtime immutable image、生产配置、Kurisu Gateway 与 legacy plugin 清理、媒体工具边界和全会话切流。仍需真实平台入站与受控回滚证据，不把 health、插件安装或 provider trace 单独当作产品完成。
 
 - [x] 读取并执行 P0 要求，记录 LangBot 4.10.8、`KOOK Pipeline`、Telegram/KOOK bot、`arthur-combo`/9Router 和现有插件/通知生产者。
 - [x] 创建宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
@@ -35,13 +38,12 @@
 - [x] 修复默认复盘模板遗漏逐人载具里程导致的 `review-v3-2.test.ts` runner 卡点；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
 - [x] 完成 Kurisu POST 边界硬化源码：`inbound/callback/tool-call` 要求外部 gateway secret，未配置时 fail-closed；Runtime Compose 模板仅将宿主端口绑定到 `127.0.0.1`，插件调用约定改为携带 `X-Kurisu-Gateway-Secret`。
 - [x] 将 Kurisu SQLite 主库/WAL/SHM `0600` 保证写回 `KurisuStore`，并补充新建磁盘库权限回归；新 Runtime immutable image 重建后 live 权限核验通过。
-- [x] 完成 P7 问题盘点：doctor `0 failure / 0 warning`、LangBot plugin package dry-run、secret scan 通过；已修正 `.agent/state.md` 中残留的旧 runner hang/旧 image 状态，详见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-issue-inventory.md`。
-- [x] 用户明确授权后完成受控部分发布：source `5a015f1` 已 push；Runtime image `local/pubg-query-engine-v3:git-5a015f1b87c7` 已部署到 OrbStack `ubuntu` CasaOS，compose 使用 `docker compose up -d --no-build`，回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
-- [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
-- [x] `kurisu-gateway` 已作为 `local/kurisu-gateway@0.1.0` 由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载外部 gateway secret。仅管理员 Telegram 私聊可继续真实 Tool 调用灰度，未切换其他 session rollout。
-- [x] 首次 Telegram 工具灰度暴露遗漏的 `KURISU_RADAR_URL`，已补为 `http://product-radar:5315` 并无构建重建 Runtime；管理员 Telegram 私聊重发 `kurisu.radar.list` 后 Runtime 为 `ok`，LangBot 最终消息回写成功。仅验证只读 Watch 查询，未扩大 rollout。
-- [x] 用户明确授权后完成全会话自然语言 rollout：PUBG `3.3.3` 与 Product Radar `0.6.0` 的线上 manifest 均为 `eventListener=false`，plugin runtime 已强制重建；保留确定性命令/工具，普通 Telegram/KOOK 会话统一由 LangBot 原生 Agent + Kurisu Tool 处理。
-- [ ] 真实 native-agent L2/L3、旧 EventListener single-consumer 迁移、briefing producer 和 Telegram/KOOK 真实平台验收仍 blocked；不得将当前 Runtime health 当作消息送达或产品完成证据。
+- [x] 完成 P7 问题盘点与修复：doctor `0 failure / 0 warning`、LangBot package dry-run、secret scan、R01/R02 和关键 HTTP/Docker smoke 通过；`macos-nas-control` 空组件 manifest 已修复为 `0.1.6` 并 ready，详见 `.agent/checkpoints/2026-09-17-kurisu-agent-p7-full-rollout.md`。
+- [x] source `38af693`、`015df8f`、`c4f2e65` 已 push；Runtime image `local/pubg-query-engine-v3:git-015df8f` 已部署到 OrbStack `ubuntu` CasaOS，使用 `docker compose up -d --no-build` 切换，当前回滚副本见 checkpoint。
+- [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools`、`scripts/doctor.sh`、`smoke-kurisu-http.sh` 和 `smoke-homehub-docker.sh` 通过；主库/WAL/SHM 权限与外部 secrets 保持受控。
+- [x] LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；前者为唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
+- [x] 已启用 `native_agent_global`、通知、Codex、写工具、Product Radar central owner；媒体 scan/preview/move 已接入 Runtime，目录挂载限定为 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv` 和 backup 根目录。
+- [ ] 真实 Telegram/KOOK 新入站（引用、图片、按钮/审批和必要群聊）及 R05 可恢复回滚仍 pending；当前没有部署后新入站记录，不得将 health、插件 ready 或 provider trace 当作消息送达证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

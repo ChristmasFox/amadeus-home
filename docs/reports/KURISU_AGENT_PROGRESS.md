@@ -1,8 +1,8 @@
 # Kurisu Agent 开发进度报告
 
-更新时间：2026-09-16（Asia/Shanghai）  
-P6 实现提交：`24946b9`；本报告和验收证据随后在同一阶段补齐。
-范围：本机仓库开发 Goal；P7 生产部署与真实平台验收不在授权内。
+更新时间：2026-09-17（Asia/Shanghai）
+当前生产提交：`c4f2e65`（包含 `38af693`、`015df8f`）；P0–P6 已完成，P7 已部署并完成全会话自然语言切流。
+范围：Kurisu 全量实现与 CasaOS 生产发布；真实 Telegram/KOOK 入站和 R05 回滚仍需补齐，未将其伪报为 PRODUCT_COMPLETE。
 
 ## 阶段状态
 
@@ -15,7 +15,7 @@ P6 实现提交：`24946b9`；本报告和验收证据随后在同一阶段补�
 | P4 | `IMPLEMENTED / VERIFIED_LOCAL` | 单一 Codex App Server executor、server-owned project registry、worktree 隔离、start/status/list/resume/cancel、持久化 thread/turn/审批/输入状态；fake server 与真实 `codex-cli 0.153.4` 隔离仓库小修复通过，报告见 `KURISU_CODEX_P4_REAL_TRACE.json` | 真实 Codex approval 本次隔离小任务未触发；平台消息通知交由 P5，真实平台/L4 仍不宣称 |
 | P5 | `IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED` | Runtime notification Worker、Codex spool、Radar central handoff、structured write events、偏好/语气、producer 清单；Kurisu `48/48`、Radar `53/53`、plugin `4/4` | briefing 真实 scheduler/生成/投递 producer 未发现；旧 n8n sender 仅 rollback source；P7 才能切真实 owner |
 | P6 | `IMPLEMENTED / LOCAL_COMPLETE / L3_BLOCKED / BRIEFING_BLOCKED` | 101 条结构化 L2 场景（60 条独立失败改写）、R01/R02、HTTP smoke、配置/备份/恢复/runbook；实现提交 `24946b9` | Kurisu `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、R01/R02、L2 HTTP smoke 通过；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，既有 runner 卡点已修复 |
-| P7 | `RUNTIME_DEPLOYED / BOUNDARY_HARDENED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING` | Runtime immutable image 已发布；Kurisu POST secret、localhost 宿主绑定、外部 secret 权限和 live 401/授权 smoke 已核验；`local/kurisu-gateway@0.1.0` 已安装；PUBG `3.3.3` 与 Product Radar `0.6.0` 已取消自然语言 EventListener 注册，所有会话的普通自然语言由 LangBot 原生 Agent + Kurisu Tool 处理 | Telegram 私聊只读链路通过；KOOK/群聊/媒体等跨平台 smoke、briefing producer、写工具/通知/Codex 灰度和完整平台回滚验收仍未完成 |
+| P7 | `DEPLOYED / BOUNDARY_HARDENED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / L4_PLATFORM_PENDING` | Runtime `local/pubg-query-engine-v3:git-015df8f`、生产开关、通知/Codex/写工具、Radar central owner、受限媒体挂载已上线；`kurisu-gateway@0.1.1` 与 legacy plugin 更新均 `INSTALL_READY`；Kurisu 是唯一 Tool，普通自然语言统一由 LangBot Native Agent + Kurisu 处理；doctor、R01/R02、HTTP/Docker smoke 通过 | 部署后没有新的真实 Telegram/KOOK 入站；R03/R04/R05 的引用/图片/按钮/审批、群聊边界、真实回滚仍待证据 |
 
 ## P0 结论
 

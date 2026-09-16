@@ -1,14 +1,20 @@
 # Kurisu 统一 Agent 实施任务
 
-状态：P0_COMPLETE_LOCAL / P1_COMPLETE_LOCAL / P2_COMPLETE_LOCAL / P3_COMPLETE_LOCAL / P4_COMPLETE_LOCAL / P5_COMPLETE_LOCAL_WITH_BRIEFING_BLOCKER / P6_COMPLETE_LOCAL_WITH_L3_AND_BRIEFING_BLOCKERS。用户要求先提交实施计划，随后由本机 Codex Goal 完成 P0–P6；P7 仍未授权。
+状态：P0_COMPLETE / P1_COMPLETE / P2_COMPLETE / P3_COMPLETE / P4_COMPLETE / P5_COMPLETE / P6_COMPLETE / P7_DEPLOYED_WITH_L4_BLOCKER。用户已授权本机 Codex Goal 完成实现、push 和 CasaOS 全量上线；真实平台 L4 与 R05 回滚仍待证据。
 
 入口：`docs/KURISU_CODEX_GOAL.md`。
 规格：`docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`。
 验收：`docs/KURISU_AGENT_ACCEPTANCE.md`。
 
+## 当前权威快照（2026-09-17）
+
+P0–P6 已完成，P7 已完成生产 Runtime、LangBot 插件、生产开关、媒体工具边界、日报 handoff 和全会话自然语言切流。当前线上 Runtime 为 `local/pubg-query-engine-v3:git-015df8f`；`kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6` 均已启用，Kurisu 是唯一 Tool。doctor、Kurisu HTTP smoke、HomeHub Docker smoke、R01/R02 和 secrets scan 已通过。
+
+剩余仅为真实 Telegram/KOOK 入站及 R05 可恢复回滚证据；监控库在部署后尚无新的真实平台入站。完成前保持 `P7_DEPLOYED_WITH_L4_BLOCKER`，不得标记 `PRODUCT_COMPLETE`，也不得用 provider/fake/health/plugin ready 替代真实入站、外部执行或送达。
+
 P0 已完成：Path A 固定为 LangBot 4.10.8 原生 `local-agent` + 9Router；已创建 ADR、能力/生产者盘点、脱敏 baseline、复现记录和 fake host probe。真实 provider 层 tool/JSON/图文/失败传播通过；由于缺少合法 LangBot user/support-admin session token，真实 native-agent WebSocket/platform entry 保持 BLOCKED，不把 API key 当作用户身份。
 
-后续顺序：P1 契约与结构化工具、P2 只读主 Agent 闭环、P3 持久化任务及安全写、P4 Codex executor、P5 统一通知/偏好/记忆/表达、P6 集成验收与 Release 准备均已完成本地实现与对应证据；P7 单独授权后部署。
+后续顺序：P1 契约与结构化工具、P2 只读主 Agent 闭环、P3 持久化任务及安全写、P4 Codex executor、P5 统一通知/偏好/记忆/表达、P6 集成验收与 Release 准备均已完成；P7 已完成生产部署、插件切流、媒体边界和关键 smoke，剩余真实平台 L4 与 R05 回滚。
 
 P1 已完成：结构化 inbound/tool/result/context 契约、stable identity/session、trusted server-side policy、ToolRegistry、callback binding/replay protection、SQLite WAL/migration、task intent/reconcile/cancel、审批参数绑定、媒体路径 allowlist，agent-runtime `/kurisu/*` 边界，以及只含 Tool component 的 LangBot `kurisu-gateway` 插件。P2 已接入 PUBG deterministic runtime、HomeHub/Radar 只读适配、principal-scoped notification diagnosis 和 provider-compatible 单一外部工具名；真实 provider 三轮连续工具轨迹见 `docs/reports/KURISU_AGENT_P2_PROVIDER_TRACE.json`。P3/P4 已完成 durable write/approval/reconcile/cancel、Codex App Server executor、Git project registry/worktree isolation 和真实临时仓库验证，具体命令/边界见阶段 checkpoint。P5 证据：Runtime notification worker、Codex hook/spool、Product Radar central handoff、structured write event、偏好/语气测试和 producer 清单已提交到当前工作区；P6 证据：101 条场景、R01/R02、HTTP smoke、配置/备份/恢复/runbook 见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`、`KURISU_AGENT_P6_R01.json` 和 `KURISU_AGENT_P6_RELEASE_DRY_RUN.md`。未完成项：真实 briefing producer（`BLOCKED_UNSUPPORTED`）、旧 PUBG/Product Radar EventListener 的 session rollout/single-consumer 迁移、合法 LangBot native session L2/L3、全量既有 `review-v3-2.test.ts` runner 挂起；生产配置、平台消息、插件安装和部署均保持未触碰。
 

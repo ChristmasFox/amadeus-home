@@ -1,6 +1,15 @@
-# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / CROSS_PLATFORM_SMOKE_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P7 生产发布（DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
-当前全量完成 Goal 已授权并进行中。live n8n `Daily Tech & Market Digest`（`681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox，避免双 sender。重跑的真实简报 `6165` 已在 n8n 记录为 `success/sent`，对应 Runtime event/delivery 为 KOOK `sent`、1 attempt、无错误；首次 503 的共享 secret 权限问题已修复。Runtime `/kurisu/status` 如实报告 `native_agent_global` rollout。Codex host executor、跨平台真实交互和回滚演练仍未完成。
+当前全量完成 Goal 已授权并进行中。live n8n `Daily Tech & Market Digest`（`681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox，真实重跑 `6165` 为 `success/sent`，对应 Runtime KOOK delivery 为 `sent`、1 attempt、无错误。生产已启用 `native_agent_global`、通知、Codex、写工具、Radar central owner 和受限媒体目录；Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.1` 及 legacy plugin 清理均已上线。当前只剩真实 Telegram/KOOK 入站验收和 R05 可恢复回滚，未满足前不得标记 `PRODUCT_COMPLETE`。
+
+## 2026-09-17 当前线上证据
+
+- Runtime `pubg-query-engine-v3`：`running/healthy`；`/healthz`、`/homehub/health` 返回 200，Kurisu `/status` 为 `contractVersion=kurisu.v1`、`rollout=native_agent_global`、29 个工具。
+- HomeHub Docker smoke：受限 Docker API 列出 10 个 allowlisted 服务；`/status` 为 9 healthy、3 degraded、1 down、0 unknown，并取得真实 macOS host metrics。
+- LangBot API/DB：`local/kurisu-gateway@0.1.1`、`local/pubg-stats@3.3.4`、`local/product-radar@0.6.0`、`local/organize-emby@0.2.2`、`local/macos-nas-control@0.1.6` 均 enabled；Kurisu 是唯一 Tool，legacy plugin 不再暴露自然语言 EventListener/Tool。
+- Runtime media mounts：仅 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv`、`backups/media-organizer`，均为受控路径；媒体写入流程包含 preview、allowlist、确定性 plan 和执行后 verify。
+- 代码与安全：`38af693`、`015df8f`、`c4f2e65` 已 push；相关定向测试、typecheck、R01/R02、`scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、`pnpm check:secrets` 和 `git diff --check` 通过。
+- 未完成证据：部署后尚未出现新的真实 Telegram/KOOK 入站；R03/R04/R05 的真实平台和可恢复回滚记录待补。不能用 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 

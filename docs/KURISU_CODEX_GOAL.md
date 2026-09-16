@@ -1,27 +1,27 @@
 # Codex Goal 执行入口
 
-当前状态：计划已编写，P0–P7 尚未实施。先使用开发 Goal；上线使用后面的独立部署 Goal。
+当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体边界和全会话自然语言切流。当前生产版本已上线，仍需真实 Telegram/KOOK 入站证据与一次受控回滚，完成后才可标记 `PRODUCT_COMPLETE`。
 
 主规格：[实施计划](KURISU_AGENT_IMPLEMENTATION_PLAN.md)。必过条件：[验收矩阵](KURISU_AGENT_ACCEPTANCE.md)。
 
-## 1. 在本机仓库启动开发
+## 1. 当前全量实现与上线 Goal
 
 先检查工作区，按既有 Git 流程取回本计划；工作区干净且位于 main 时可用 `git pull --ff-only`。有未提交改动或分叉时不得 reset/覆盖，先隔离并保留。
 
-在该仓库的 Codex 会话中输入：
+在该仓库的 Codex 会话中输入以下命令，继续当前 Goal，不重复已经完成的阶段：
 
 ```text
-/goal 按 docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md 和 docs/KURISU_AGENT_ACCEPTANCE.md 实施 Kurisu 统一 Agent，完成 P0–P6 的实现、本地验证与 Release 准备。先读取 AGENTS.md 要求的启动文件并检查 Git 状态；优先复用现有 LangBot 主 Agent 与 9Router 配置，按 P0 实测门槛固定唯一宿主，后续只实现选中的路径。保留 PUBG/HomeHub/Radar/n8n 业务底座，统一结构化工具、上下文、持久化任务、Codex Executor 与可靠通知，消除已迁移自然语言入口的关键词路由及重复决策。按阶段实现并提交，维护进度报告、状态文档、验收证据和 checkpoint，继续完成所有未阻塞工作，不停在分析或骨架。禁止删除失败用例、降低验收标准、伪造完成状态、绕过权限或擅改模型。仅在实质架构变更或无法解除的必要外部阻塞时请求用户决策。本 Goal 不授权生产部署、生产写操作或向真实聊天发送测试消息；不设置 token_budget。完成条件以两份规格和本文完成状态为准。
+/goal 基于当前仓库和 OrbStack ubuntu/CasaOS 的真实状态，继续完成 docs/KURISU_CODEX_GOAL.md、docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md 和 docs/KURISU_AGENT_ACCEPTANCE.md 的全部 Kurisu 产品目标，直到满足 PRODUCT_COMPLETE。先读取 AGENTS.md、README.md、docs/ARCHITECTURE.md、docs/PROJECT_STATE.md、docs/CURRENT_TASK.md、.agent/state.md 和最新 checkpoint，以当前 Git/源码/线上证据为准，不重做已完成工作。已明确授权：完成必要开发、提交并 push、构建并部署 CasaOS、更新 LangBot 插件和 n8n workflow，启用已实现的生产功能，让所有已接入平台的私聊和群聊普通自然语言统一进入 LangBot Native Agent + 唯一 Kurisu Gateway；保留协议命令、确定性业务规则、鉴权、审批、幂等和媒体路径安全。继续补齐 PUBG、Product Radar、HomeHub、媒体、Codex、通知和日报生产者闭环，核验真实平台、引用/图片/按钮/审批、群聊边界和一次可恢复回滚。减少耗时测试：复用已有证据，只运行改动相关的定向测试、必要 typecheck/build、secrets scan、diff check、关键线上 smoke；不得删除失败用例、降低验收标准、用 mock/HTTP 200/容器健康替代真实业务证据，也不得伪造入站。先完成所有不依赖用户输入的工作；若只剩真实平台入站等外部步骤，明确给出最短动作并保持 BLOCKED。每阶段更新 docs/CURRENT_TASK.md、docs/PROJECT_STATE.md、docs/reports/KURISU_AGENT_PROGRESS.md、.agent/state.md 和 dated checkpoint，保留 rollback。不要设置 token_budget。
 ```
 
 `/goal` 是 Codex 会话内命令，不是 shell 命令。本仓库不替用户设置 Goal token 预算；若本机版本不提供该命令，将同一段目标作为普通任务输入并保留阶段 checkpoint，不擅自修改 Codex 全局配置。
 
-## 2. 恢复同一实施任务
+## 2. 恢复同一全量任务
 
 优先继续已有 Goal/会话；需要新会话时输入：
 
 ```text
-/goal 继续本仓库 Kurisu 统一 Agent 的 P0–P6 开发。读取 AGENTS.md、docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md、docs/KURISU_AGENT_ACCEPTANCE.md、docs/reports/KURISU_AGENT_PROGRESS.md（存在时）及最新 checkpoint，核验 Git 与实际证据，从第一个未完成门槛继续。沿用已记录的宿主 ADR 和模型配置，不重做已完成阶段，不把已知阻塞当完成，不擅自部署或发真实消息。完成所有可执行工作并逐阶段提交；不设置 token_budget。
+/goal 继续当前 Kurisu 全量实现与上线任务。读取 AGENTS.md、项目启动文件、docs/KURISU_CODEX_GOAL.md、验收矩阵、最新进度和 checkpoint，核验 Git 与 CasaOS 真实状态，从第一个未完成验收门槛继续。沿用当前唯一 LangBot Native Agent + 9Router + Kurisu Gateway 架构，不重做已完成阶段；完成所有可执行部署、真实平台回归和受控回滚，外部阻塞必须如实记录，不得用 fake/provider/health 替代。只运行最低必要验证，提交并 push 所有仓库变更；不设置 token_budget。
 ```
 
 ## 3. 开发完成状态
@@ -30,25 +30,25 @@ P0 首先创建 `docs/reports/KURISU_AGENT_PROGRESS.md`，至少维护下表并�
 
 | 阶段 | 状态 | 提交/路径 | 已通过证据 | 阻塞与下一步 |
 | --- | --- | --- | --- | --- |
-| P0 | NOT_STARTED | — | — | 核对本机主 Agent 能力 |
-| P1 | NOT_STARTED | — | — | — |
-| P2 | NOT_STARTED | — | — | — |
-| P3 | NOT_STARTED | — | — | — |
-| P4 | NOT_STARTED | — | — | — |
-| P5 | NOT_STARTED | — | — | — |
-| P6 | NOT_STARTED | — | — | — |
-| P7 | NOT_AUTHORIZED | — | — | 单独部署 Goal |
+| P0 | COMPLETE | `docs/decisions/KURISU_AGENT_HOST.md` | Host/9Router 证据、fake/provider trace | — |
+| P1 | COMPLETE | `apps/agent-runtime/src/kurisu/` | L1/L2、契约、鉴权、持久化 | — |
+| P2 | COMPLETE | Kurisu read adapters/Gateway | L1/L2/L3 provider trace | — |
+| P3 | COMPLETE | durable write/approval/task | 定向写工具与故障恢复测试 | — |
+| P4 | COMPLETE | Codex App Server executor | 隔离仓库真实 Codex trace | — |
+| P5 | COMPLETE | Runtime notification Worker | 通知/重试/去重与日报 handoff | — |
+| P6 | COMPLETE | 验收报告/R01/R02 | 101 场景、R01/R02、HTTP smoke | — |
+| P7 | DEPLOYED / L4_PENDING | `.agent/checkpoints/2026-09-17-kurisu-agent-p7-full-rollout.md` | Runtime、插件、开关、媒体挂载、生产 smoke | 真实平台入站与 R05 回滚 |
 
 开发完成必须有：唯一宿主 ADR、可运行代码和非空工具、真实模型证据、所需 Codex 隔离任务证据、L1/L2 通过、L3 达标、发布 dry-run、回滚方案、状态/checkpoint 同步、secret scan、干净且已提交的本阶段差异。正常保留的无关用户修改应单独说明。
 
-若凭据、真实生产者或必要接口不可用：完成所有不依赖它的实现/测试，保存明确 BLOCKED 条目与解除条件。此时只能报告 CODE_COMPLETE_WITH_BLOCKERS 等真实状态，不能把 Goal/产品标为全部完成。不得为达到完成条件绕过访问控制。
+若凭据、真实生产者或必要接口不可用：完成所有不依赖它的实现/测试，保存明确 BLOCKED 条目与解除条件。此时只能报告 DEPLOYED_WITH_L4_BLOCKER 等真实状态，不能把 Goal/产品标为全部完成。不得为达到完成条件绕过访问控制。
 
-## 4. 开发验收后，再由用户启动部署 Goal
+## 4. 当前生产状态与剩余验收
 
-以下命令包含真实部署与针对管理员私聊的测试授权。不要在开发 Goal 内自行复制执行；用户选择执行此命令才启用这一阶段。
+生产部署授权已由当前 Goal 明确给出并已执行。当前线上已使用 immutable Runtime image、`--no-build` Compose 切换和 LangBot API 插件安装；以下命令仅用于恢复/继续未完成的真实平台验收：
 
 ```text
-/goal 在核验 docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md 的 P0–P6、docs/KURISU_AGENT_ACCEPTANCE.md 的 L1–L3 和实际代码已达标后，执行 P7 的 CasaOS RELEASE 与管理员 Telegram DM 灰度。遵守 AGENTS.md 的 immutable image、插件 preview/install、no-build compose、备份和回滚规则；先 dry-run，再 apply。本 Goal 授权受控部署和向已配置、经核验的管理员私聊发送必要测试通知，不授权向群聊或其他人发送测试消息，不授权删除用户真实 Watch、媒体、数据或扩大 Codex 权限。使用隔离测试对象验证引用、图文、审批、任务恢复、通知补发与回滚；需要真实用户入站时明确提供最短测试步骤并记录待验收，不伪造。保持未迁移 KOOK 功能，证据完整后才标 PRODUCT_COMPLETE；不设置 token_budget。
+/goal 继续 Kurisu P7 L4 验收：在不重复无关测试、不伪造入站的前提下，核验当前已部署的 Telegram/KOOK 真实私聊与必要群聊链路，覆盖文本、引用、图片、按钮/审批、媒体预览/执行、Codex 任务回执和通知；执行一次可恢复的 R05 回滚并重新部署当前版本。每一步保留真实 tool-call、外部执行、最终送达和回滚证据，更新状态文档与 checkpoint。若缺少用户可操作的真实入站，只完成线上诊断并明确要求用户在目标私聊发送一条测试消息，不得标 PRODUCT_COMPLETE；不设置 token_budget。
 ```
 
 ## 5. 每阶段交付摘要
