@@ -36,6 +36,7 @@ if ((APPLY == 0)); then exit 0; fi
 
 orb -m "$MACHINE" -u root python3 - <<'PY'
 import json
+import os
 import shutil
 import sqlite3
 from datetime import datetime
@@ -56,7 +57,7 @@ if not notification_secret.read_text().strip() or not langbot_token.read_text().
 # (uid/gid 1000).  A root-only bind mount looks present in docker inspect but
 # makes Runtime silently start with an empty ingress secret.  Keep the secret
 # root-owned while granting that one shared service group read access.
-notification_secret.chown(0, 1000)
+os.chown(notification_secret, 0, 1000)
 notification_secret.chmod(0o640)
 
 con = sqlite3.connect(f'file:{n8n_db}?mode=ro', uri=True)
