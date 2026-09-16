@@ -4,7 +4,7 @@ metadata:
   author: local
   name: macos-nas-control
   repository: https://github.com/langbot-app/LangBot
-  version: 0.1.5
+  version: 0.1.6
   description:
     en_US: Legacy explicit NAS resources; ordinary natural-language requests use Kurisu HomeHub capabilities.
     zh_Hans: 仅保留旧的显式 NAS 资源；普通自然语言请求统一经 Kurisu HomeHub 能力处理。
@@ -13,7 +13,7 @@ metadata:
     zh_Hans: macOS NAS 控制
 spec:
   config: []
-  components:
+  components: {}
 execution:
   python:
     path: main.py
