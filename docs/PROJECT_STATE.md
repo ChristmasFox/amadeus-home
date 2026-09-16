@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -52,6 +52,7 @@ P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次�
 - 当前问题盘点与处理结果见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-issue-inventory.md`：本地测试、边界安全、持久化权限和构建 proxy 问题已解决；合法 session、插件灰度、旧 listener 迁移、briefing producer 和真实平台 smoke 仍是明确的外部阻塞。
 - 管理员 Telegram 私聊灰度对象已确认；`langbot_plugin_runtime` 已挂载 Runtime 现有外部 secret，`local/kurisu-gateway@0.1.0` 安装任务 `12` 为 `INSTALL_READY`。此刻只等待该私聊的真实 Tool 调用证据，未切换任何其他会话。
 - 首次真实 `kurisu.radar.list` 已证明 LangBot 会选择并调用 Kurisu Tool，但 Runtime 当时缺少 `KURISU_RADAR_URL` 而安全返回 `CAPABILITY_UNAVAILABLE`。现已将 Product Radar 内网地址 `http://product-radar:5315` 配置进 Git 与 live Runtime；同一管理员私聊复测的 Runtime execution 为 `ok`，LangBot 最终渲染回复成功，且未修改任何 Watch。
+- 用户明确授权全会话切换后，`local/pubg-stats@3.3.3` 与 `local/product-radar@0.6.0` 已安装并在 live API 中确认无 `EventListener`；强制重建 plugin runtime 后普通 Telegram/KOOK 自然语言不再被 legacy listener 抢先消费，进入 LangBot 原生 Agent + `kurisu_gateway`。确定性协议命令/工具保留。
 
 部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 

@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已完成 P0–P6 的本机实现、验收和 Release 准备：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。用户明确要求 push 并部署后，已仅发布 Runtime immutable image；未安装 Kurisu 插件、未切换 rollout、未发送真实平台消息。
 
@@ -32,6 +32,7 @@
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
 - [x] `kurisu-gateway` 已作为 `local/kurisu-gateway@0.1.0` 由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载外部 gateway secret。仅管理员 Telegram 私聊可继续真实 Tool 调用灰度，未切换其他 session rollout。
 - [x] 首次 Telegram 工具灰度暴露遗漏的 `KURISU_RADAR_URL`，已补为 `http://product-radar:5315` 并无构建重建 Runtime；管理员 Telegram 私聊重发 `kurisu.radar.list` 后 Runtime 为 `ok`，LangBot 最终消息回写成功。仅验证只读 Watch 查询，未扩大 rollout。
+- [x] 用户明确授权后完成全会话自然语言 rollout：PUBG `3.3.3` 与 Product Radar `0.6.0` 的线上 manifest 均为 `eventListener=false`，plugin runtime 已强制重建；保留确定性命令/工具，普通 Telegram/KOOK 会话统一由 LangBot 原生 Agent + Kurisu Tool 处理。
 - [ ] 真实 native-agent L2/L3、旧 EventListener single-consumer 迁移、briefing producer 和 Telegram/KOOK 真实平台验收仍 blocked；不得将当前 Runtime health 当作消息送达或产品完成证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。

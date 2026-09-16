@@ -1,5 +1,7 @@
 # Kurisu P7 当前问题盘点与处理结果
 
+> 此为全会话 rollout 前的历史盘点；插件安装、管理员 Telegram 灰度和 legacy EventListener 迁移已在后续 checkpoint 完成。当前状态以 `2026-09-16-kurisu-agent-p7-global-nlu-rollout.md` 为准。
+
 - 日期：2026-09-16（Asia/Shanghai）
 - 当前 Git：`07efac7`，`main` 与 `origin/main` 已同步，工作区 clean。
 - 当前 Runtime：`local/pubg-query-engine-v3:git-3e00275d8e70`，OrbStack `ubuntu`/CasaOS，`running/healthy`。

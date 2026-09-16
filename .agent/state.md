@@ -1,4 +1,4 @@
-# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 
@@ -21,6 +21,8 @@ P6 已完成本地集成验收和 Release 准备，代码提交为 `24946b9`：1
 `local/kurisu-gateway@0.1.0` 已由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载 Runtime 的外部 gateway secret。当前只对已确认的管理员 Telegram 私聊进行真实 Tool 调用灰度，未切换其他 session rollout，也未启用通知/Codex/写工具。旧 EventListener single-consumer 迁移、briefing producer 和完整平台验收仍是外部流程/架构前置条件，不是当前 Runtime 健康故障。
 
 该私聊的首个 `kurisu.radar.list` 已进入 Runtime，但发现生产 Compose 漏配 `KURISU_RADAR_URL`，返回 `CAPABILITY_UNAVAILABLE`。已补为内部 `http://product-radar:5315`，以现有 immutable image 无构建重建；同一私聊复测的 Runtime execution 返回 `ok`，LangBot 已成功渲染并回写最终消息。该灰度只读取 Product Radar Watch，不涉及写入。
+
+用户明确授权后已将普通自然语言全会话切换至 Kurisu：live `pubg-stats@3.3.3` 和 `product-radar@0.6.0` 均不再注册 `EventListener`，并已重建 plugin runtime 清除旧进程注册；协议命令与确定性工具保留。Telegram 私聊只读链路通过，KOOK/群聊/媒体/按钮/审批的跨平台 smoke 仍待验证。
 
 旧任务及运行证据保留如下。
 
