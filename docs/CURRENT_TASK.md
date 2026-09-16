@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P4 IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P5 IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED / L3_BLOCKED；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已完成 P0 的本机事实盘点和宿主决策，并完成 P1/P2 的本地结构化边界：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
@@ -15,7 +15,13 @@
 - [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 与 L2/L3 平台验收仍为 `BLOCKED`；不以 provider/fake 轨迹冒充通过，历史 EventListener 尚未迁移。
 - [x] P3 完成持久化写闭环：审批参数/callback server binding、HomeHub/Radar/media write coordinator、intent/reconcile/cancel、crash injection、并发/timeout/unknown 与任务引用；定向证据见 P3 checkpoint。
 - [x] P4 完成唯一 Codex App Server executor：项目白名单、dirty-root 拒绝、worktree 隔离、durable job/thread/turn、审批/输入等待、断线续作和取消；fake server 定向测试与真实 `codex-cli 0.153.4` 隔离仓库 README 小修复通过，报告见 `docs/reports/KURISU_CODEX_P4_REAL_TRACE.json`。
-- [ ] P5–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
+- [x] P5 落地 Runtime-owned notification events/deliveries Worker：事件与投递分离幂等、跨渠道独立重试、lease/recovery、unknown/dead、显式 retry、principal-scoped preferences 及到期恢复；Codex job/write 结果带 task/run 引用进入事件账本。
+- [x] P5 将 Codex legacy hook 默认切到 `/kurisu/notifications/events`，网络失败写本地安全 spool；补发脚本默认 dry-run，成功文件移入可恢复的 `processed/`。
+- [x] P5 增加 Product Radar central owner opt-in：保留原 SQLite `notification_outbox` 作为跨库 handoff，旧 pending 可被 central channel 接管；默认仍为 local，避免未经授权改变线上发送时刻。
+- [x] P5 增加 Kurisu 语气配置与严重告警/legacy Codex unknown 渲染；定向 runtime `48/48`、Product Radar `53/53`、Kurisu plugin `4/4`、typecheck、Codex hook/spool smoke、secret scan、diff check 通过。
+- [ ] P5 briefing 真实 producer 未在仓库或当前 inventory 中发现，已记录 `BLOCKED_UNSUPPORTED`；需要真实 scheduler/生成/投递记录后再接入，不能以模板或手工事件替代。
+- [ ] 合法 LangBot user/support-admin session、native-agent WebSocket/platform L2/L3 与旧 EventListener single-consumer 迁移仍 blocked；不以 provider/fake 证据冒充。
+- [ ] P6 集成验收、100 个实际场景变体、R01/R02、backup/restore、release dry-run 与 runbook 待继续；P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

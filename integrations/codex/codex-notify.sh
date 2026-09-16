@@ -4,9 +4,10 @@
 set -u
 
 CODEX_HOME_DIR="${CODEX_HOME:-${HOME:-/tmp}/.codex}"
-WEBHOOK_URL="${CODEX_NOTIFY_URL:-http://127.0.0.1:5679/webhook/codex-complete}"
+WEBHOOK_URL="${CODEX_NOTIFY_URL:-http://127.0.0.1:5310/kurisu/notifications/events}"
 SECRET_FILE="${CODEX_NOTIFY_SECRET_FILE:-$CODEX_HOME_DIR/secrets/codex-notify-secret}"
 LOG_FILE="${CODEX_NOTIFY_LOG_FILE:-$CODEX_HOME_DIR/logs/codex-notify.log}"
+SPOOL_DIR="${CODEX_NOTIFY_SPOOL_DIR:-$CODEX_HOME_DIR/spool/kurisu-notifications}"
 
 log_event() {
   local level="$1"
@@ -15,6 +16,22 @@ log_event() {
   parent="$(dirname "$LOG_FILE")"
   mkdir -p "$parent" 2>/dev/null || true
   printf '%s level=%s event=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$level" "$event" >>"$LOG_FILE" 2>/dev/null || true
+}
+
+spool_payload() {
+  local payload="$1"
+  local spool_key
+  local temp_file
+  spool_key="$(printf '%s' "$payload" | shasum -a 256 | awk '{print $1}')"
+  mkdir -p "$SPOOL_DIR" 2>/dev/null || return 1
+  chmod 700 "$SPOOL_DIR" 2>/dev/null || true
+  temp_file="$SPOOL_DIR/.${spool_key}.$$"
+  if (umask 077; printf '%s' "$payload" >"$temp_file" && mv -f "$temp_file" "$SPOOL_DIR/$spool_key.json") 2>/dev/null; then
+    log_event warn notification_spooled
+    return 0
+  fi
+  rm -f "$temp_file" 2>/dev/null || true
+  return 1
 }
 
 # Codex's legacy notify hook passes the JSON as argv[1]. Reading stdin as a
@@ -122,6 +139,7 @@ if [[ -z "$secret" ]]; then
   exit 0
 fi
 if ! command -v curl >/dev/null 2>&1; then
+  spool_payload "$normalized_payload" || true
   log_event warn curl_unavailable
   exit 0
 fi
@@ -132,12 +150,13 @@ http_code="$(printf '%s' "$normalized_payload" | curl \
   --silent --show-error --output /dev/null --write-out '%{http_code}' \
   --connect-timeout 2 --max-time 5 \
   -H 'Content-Type: application/json' \
-  -H "X-Codex-Notify-Secret: $secret" \
+  -H "X-Kurisu-Notification-Secret: $secret" \
   --data-binary @- "$WEBHOOK_URL" 2>/dev/null)"
 curl_status=$?
 if [[ "$curl_status" -eq 0 && "$http_code" =~ ^2[0-9][0-9]$ ]]; then
   log_event info webhook_sent
 else
+  spool_payload "$normalized_payload" || true
   log_event warn webhook_failed
 fi
 exit 0

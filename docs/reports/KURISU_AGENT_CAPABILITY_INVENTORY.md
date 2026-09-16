@@ -54,6 +54,16 @@
 | HomeHub | 现有 runtime/插件通知与状态边界 | 需要统一 failure/unknown 语义，不把容器 running 当业务成功 |
 | briefing | 仓库未发现独立可核验 producer | P5/P6 标记 gap；不得用空日报或假成功补齐 |
 
+## P5 交接更新（2026-09-16）
+
+| Producer | 当前交接实现 | 状态 |
+| --- | --- | --- |
+| Codex legacy hook | `integrations/codex/codex-notify.sh` → Runtime `/kurisu/notifications/events`；失败写 `CODEX_NOTIFY_SPOOL_DIR`，由 `scripts/drain-codex-notification-spool.sh` 补发 | `IMPLEMENTED_LOCAL`；未安装/切换全局配置 |
+| Product Radar | `apps/product-radar/src/integrations/notifications/kurisu.ts`；Product Radar 原 `notification_outbox` 在 `PRODUCT_RADAR_NOTIFICATION_OWNER=central` 时只作为跨库 handoff queue | `IMPLEMENTED_OPT_IN`；默认 local，P7 才切 owner |
+| HomeHub structured writes | `WriteCoordinator` 将 HomeHub/Radar/media task 结果写入 Runtime event ledger，并保留 `taskId/runId` | `IMPLEMENTED_LOCAL`；既有外部主动 producer 仍待核实 |
+| Codex legacy n8n | `integrations/n8n/workflows/codex-completion-notification.workflow.json` | `ROLLBACK_ONLY_SOURCE`；禁止与 Runtime sender 双开 |
+| briefing | 未找到真实 scheduler/生成/投递 producer | `BLOCKED_UNSUPPORTED`；不以模板或手工事件代替 |
+
 ## 基线版本与状态
 
 - `codex-cli 0.153.4`；`codex app-server --help` 可用，支持 `daemon`、`proxy`、`generate-ts`、`generate-json-schema`。

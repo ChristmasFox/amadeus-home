@@ -7,6 +7,7 @@ import { ApprovalService } from './approvals.js';
 import { MediaPathPolicy } from './media.js';
 import { approvalArgumentsHash, KurisuStore, type RunRecord, type TaskStepRecord } from './storage.js';
 import { TaskEngine, type TaskStep, type TaskStepOutcome } from './tasks.js';
+import type { NotificationTarget, NotificationWorker } from './notifications.js';
 import { accepted, evidence, failure, ok, unknownResult, type ToolDefinition, ToolRegistry } from './tools.js';
 
 const homeHubServiceIds = [
@@ -79,6 +80,8 @@ export interface StructuredHomeHubWriter {
 export interface WriteCoordinatorOptions {
   owner?: string;
   now?: () => string;
+  notificationWorker?: NotificationWorker;
+  notificationTargets?: readonly NotificationTarget[];
 }
 
 /**
@@ -89,12 +92,16 @@ export class WriteCoordinator {
   private readonly approval: ApprovalService;
   private readonly taskEngine: TaskEngine;
   private readonly now: () => string;
+  private readonly notificationWorker: NotificationWorker | undefined;
+  private readonly notificationTargets: readonly NotificationTarget[];
   private readonly operations = new Map<string, WriteOperationDefinition>();
 
   constructor(private readonly store: KurisuStore, options: WriteCoordinatorOptions = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.approval = new ApprovalService(store, this.now);
     this.taskEngine = new TaskEngine(store, { ...(options.owner ? { owner: options.owner } : {}), now: this.now });
+    this.notificationWorker = options.notificationWorker;
+    this.notificationTargets = options.notificationTargets ?? [];
   }
 
   register(operation: WriteOperationDefinition): void {
@@ -180,7 +187,37 @@ export class WriteCoordinator {
     } catch (error) {
       return unknownResult('TASK_EXECUTION_UNCERTAIN', error instanceof Error ? error.message : 'write task state is uncertain', true);
     }
+    this.emitTaskNotification(operation.name, input, context, completed);
     return this.responseForRun(completed, operation.name);
+  }
+
+  private emitTaskNotification(operationName: string, input: unknown, context: TrustedExecutionContext, run: RunRecord): void {
+    if (!this.notificationWorker) return;
+    const source = operationName.startsWith('kurisu.homehub.') ? 'homehub'
+      : operationName.startsWith('kurisu.radar.') ? 'radar'
+        : operationName.startsWith('kurisu.media.') ? 'media'
+          : 'kurisu';
+    const resultType = run.status === 'succeeded' ? 'success'
+      : ['failed', 'cancelled'].includes(run.status) ? 'failure'
+        : ['reconciling', 'blocked'].includes(run.status) ? 'unknown'
+          : 'info';
+    const step = this.store.getTaskStep(run.id, `write:${operationName}`);
+    this.notificationWorker.ingest({
+      eventType: `${source}.task.${resultType}`,
+      eventKey: `task:${run.id}:${operationName}:${run.status}`,
+      principalKey: context.principalKey,
+      source,
+      resultType,
+      taskId: run.id,
+      runId: run.id,
+      payload: {
+        summary: `${operationName} ${run.status}`,
+        operation: operationName,
+        inputKeys: input && typeof input === 'object' && !Array.isArray(input) ? Object.keys(input as Record<string, unknown>) : [],
+        stepStatus: step?.status ?? 'unknown',
+      },
+      occurredAt: this.now(),
+    }, this.notificationTargets, this.now());
   }
 
   private responseForRun(run: RunRecord, operationName: string): ToolResponse {

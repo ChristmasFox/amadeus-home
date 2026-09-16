@@ -27,6 +27,10 @@ spec:
           - kurisu.radar.status
           - kurisu.radar.stats
           - kurisu.notifications.diagnose
+          - kurisu.notifications.preference.get
+          - kurisu.notifications.preference.set
+          - kurisu.notifications.preference.forget
+          - kurisu.notifications.delivery.retry
           - kurisu.homehub.action
           - kurisu.radar.mutate
           - kurisu.radar.create
@@ -48,7 +52,7 @@ spec:
       - input
     additionalProperties: false
   llm_prompt: |
-    Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. Write capabilities may return a server-bound approval challenge or an uncertainty state; never treat a requested write as proof that it happened.
+    Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, principal, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. Write capabilities may return a server-bound approval challenge or an uncertainty state; never treat a requested write as proof that it happened. Notification preferences are explicit structured rules with a source, result type, channel, and optional expiry; do not broaden or silently apply a preference to other sources. Keep ordinary replies rational and concise; keep notifications factual, and state serious failures directly without jokes or false success.
 execution:
   python:
     path: kurisu_gateway.py

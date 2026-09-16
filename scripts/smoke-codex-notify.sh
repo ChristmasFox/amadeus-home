@@ -81,11 +81,12 @@ for _ in $(seq 1 40); do
 done
 [[ -s "$TMP_DIR/port" ]] || { echo 'smoke server did not start.' >&2; exit 1; }
 PORT="$(cat "$TMP_DIR/port")"
-URL="http://127.0.0.1:${PORT}/webhook/codex-complete"
+URL="http://127.0.0.1:${PORT}/kurisu/notifications/events"
 LOG_FILE="$TMP_DIR/notify.log"
 
 valid_payload='{"type":"agent-turn-complete","thread-id":"thread-fixture","turn-id":"turn-fixture","cwd":"/Users/example/project-a","client":"codex_exec","last-assistant-message":"smoke complete api_key=hidden","timestamp":"2026-09-06T03:00:00Z"}'
-CODEX_NOTIFY_URL="$URL" CODEX_NOTIFY_SECRET=fixture CODEX_NOTIFY_LOG_FILE="$LOG_FILE" "$SCRIPT" "$valid_payload"
+SMOKE_SECRET='smoke-secret-value-20260916'
+CODEX_NOTIFY_URL="$URL" CODEX_NOTIFY_SECRET="$SMOKE_SECRET" CODEX_NOTIFY_LOG_FILE="$LOG_FILE" CODEX_NOTIFY_SPOOL_DIR="$TMP_DIR/spool" "$SCRIPT" "$valid_payload"
 
 python3 - "$TMP_DIR/requests.jsonl" <<'PY'
 import json
@@ -94,7 +95,7 @@ from pathlib import Path
 rows = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines() if line.strip()]
 assert len(rows) == 1, rows
 record = rows[0]
-assert record['headers']['x-codex-notify-secret'] == 'fixture'
+assert record['headers']['x-kurisu-notification-secret'] == 'smoke-secret-value-20260916'
 body = record['body']
 assert body['event'] == 'agent-turn-complete'
 assert body['threadId'] == 'thread-fixture'
@@ -106,17 +107,27 @@ assert body['timestamp'] == '2026-09-06T03:00:00Z'
 PY
 
 ignored_payload='{"type":"item.completed","thread-id":"thread-fixture","turn-id":"turn-tool","cwd":"/Users/example/project-a","last-assistant-message":"must be ignored"}'
-CODEX_NOTIFY_URL="$URL" CODEX_NOTIFY_SECRET=fixture CODEX_NOTIFY_LOG_FILE="$LOG_FILE" "$SCRIPT" "$ignored_payload"
+CODEX_NOTIFY_URL="$URL" CODEX_NOTIFY_SECRET="$SMOKE_SECRET" CODEX_NOTIFY_LOG_FILE="$LOG_FILE" CODEX_NOTIFY_SPOOL_DIR="$TMP_DIR/spool" "$SCRIPT" "$ignored_payload"
 [[ "$(wc -l <"$TMP_DIR/requests.jsonl" | tr -d ' ')" == 1 ]] || { echo 'non-completion event was forwarded.' >&2; exit 1; }
 
 set +e
-CODEX_NOTIFY_URL='http://127.0.0.1:9/webhook/codex-complete' CODEX_NOTIFY_SECRET=fixture CODEX_NOTIFY_LOG_FILE="$LOG_FILE" "$SCRIPT" "$valid_payload"
+SPOOL_DIR="$TMP_DIR/spool"
+CODEX_NOTIFY_URL='http://127.0.0.1:9/kurisu/notifications/events' CODEX_NOTIFY_SECRET="$SMOKE_SECRET" CODEX_NOTIFY_LOG_FILE="$LOG_FILE" CODEX_NOTIFY_SPOOL_DIR="$SPOOL_DIR" "$SCRIPT" "$valid_payload"
 network_status=$?
 set -e
 [[ "$network_status" -eq 0 ]] || { echo 'network failure changed notify hook exit status.' >&2; exit 1; }
-if grep -F 'fixture' "$LOG_FILE" >/dev/null 2>&1; then
+[[ "$(find "$SPOOL_DIR" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" == 1 ]] || { echo 'network failure did not create one durable spool item.' >&2; exit 1; }
+CODEX_NOTIFY_URL='http://127.0.0.1:9/kurisu/notifications/events' CODEX_NOTIFY_SECRET="$SMOKE_SECRET" CODEX_NOTIFY_LOG_FILE="$LOG_FILE" CODEX_NOTIFY_SPOOL_DIR="$SPOOL_DIR" "$SCRIPT" "$valid_payload"
+[[ "$(find "$SPOOL_DIR" -maxdepth 1 -type f -name '*.json' | wc -l | tr -d ' ')" == 1 ]] || { echo 'duplicate spool item was not collapsed by payload hash.' >&2; exit 1; }
+if grep -F "$SMOKE_SECRET" "$SPOOL_DIR"/*.json >/dev/null 2>&1; then
+  echo 'spooled notification leaked the shared secret.' >&2
+  exit 1
+fi
+if grep -F "$SMOKE_SECRET" "$LOG_FILE" >/dev/null 2>&1; then
   echo 'notify log leaked the shared secret.' >&2
   exit 1
 fi
+drain_output="$(CODEX_NOTIFY_URL='http://127.0.0.1:9/kurisu/notifications/events' CODEX_NOTIFY_SPOOL_DIR="$SPOOL_DIR" "$ROOT_DIR/scripts/drain-codex-notification-spool.sh" --dry-run)"
+printf '%s\n' "$drain_output" | grep -F 'SPOOL_COUNT=1' >/dev/null || { echo 'spool drain dry-run did not enumerate the pending item.' >&2; exit 1; }
 
 printf '%s\n' 'Codex notify script smoke passed: completion normalization, event filtering, redaction, timeout/fail-open, and secret-safe logging.'

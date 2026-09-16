@@ -6,6 +6,7 @@ import type { Watch } from '../watch/model.js';
 
 export class NotificationDispatcher {
   private readonly channelsById: Map<string, NotificationChannel>;
+  private readonly centralChannel: NotificationChannel | undefined;
 
   constructor(
     private readonly store: SqliteRadarStore,
@@ -14,6 +15,7 @@ export class NotificationDispatcher {
     private readonly now: () => string = () => new Date().toISOString(),
   ) {
     this.channelsById = new Map(channels.map((channel) => [channel.id, channel]));
+    this.centralChannel = this.channelsById.get('kurisu-central');
   }
 
   get channels(): NotificationChannel[] {
@@ -58,7 +60,10 @@ export class NotificationDispatcher {
 
   async deliverPending(): Promise<void> {
     for (const row of this.store.listPendingNotifications()) {
-      const channel = this.channelsById.get(row.channelId);
+      // During an owner switch, pending rows created for the old local sender
+      // are handed to the central producer. The Runtime event key deduplicates
+      // rows from multiple legacy channels before any platform send occurs.
+      const channel = this.channelsById.get(row.channelId) ?? this.centralChannel;
       if (!channel) continue;
       try {
         await channel.send(row.message);
@@ -68,7 +73,7 @@ export class NotificationDispatcher {
       }
     }
     for (const row of this.store.listPendingHeartbeats()) {
-      const channel = this.channelsById.get(row.channelId);
+      const channel = this.channelsById.get(row.channelId) ?? this.centralChannel;
       if (!channel) continue;
       try {
         await channel.send(row.message);

@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { JsonContextStore } from './context/context-store.js';
 import { N8nDataProvider } from './data/provider.js';
@@ -17,6 +18,7 @@ import { createReadOnlyBackends } from './kurisu/read-only.js';
 import { MediaPathPolicy } from './kurisu/media.js';
 import { homeHubActionHandler, mediaMoveHandler, radarWriteHandlers } from './kurisu/write-tools.js';
 import { CodexProjectRegistry } from './kurisu/codex.js';
+import { LangBotNotificationChannel, notificationEventInputSchema, type NotificationTarget } from './kurisu/notifications.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -61,6 +63,13 @@ const runtime = new PubgMastraRuntime({
 });
 
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
+const notificationsEnabled = process.env.KURISU_NOTIFICATIONS_ENABLE === '1';
+const notificationSecret = (process.env.KURISU_NOTIFICATION_SECRET?.trim() || readSecretFile(process.env.KURISU_NOTIFICATION_SECRET_FILE ?? '')).trim();
+const notificationPrincipalKey = process.env.KURISU_NOTIFICATION_PRINCIPAL_KEY?.trim() || 'codex:external';
+const notificationLangBotToken = process.env.KURISU_NOTIFICATION_LANGBOT_API_KEY?.trim()
+  || readSecretFile(process.env.KURISU_NOTIFICATION_LANGBOT_API_KEY_FILE ?? '');
+const notificationChannels = notificationsEnabled ? buildNotificationChannels(notificationLangBotToken) : [];
+const notificationTargets: NotificationTarget[] = notificationChannels.map((channel) => ({ channel: channel.channel, recipient: channel.recipient }));
 const radarUrl = process.env.KURISU_RADAR_URL?.trim() ?? '';
 const radarClient = radarUrl
   ? {
@@ -102,6 +111,9 @@ const kurisuService = new KurisuService({
     codexProjects,
     ...(process.env.KURISU_CODEX_MODEL?.trim() ? { codexOptions: { model: process.env.KURISU_CODEX_MODEL.trim() } } : {}),
   } : {}),
+  ...(notificationChannels.length ? { notificationChannels } : {}),
+  ...(notificationTargets.length ? { notificationTargets } : {}),
+  ...(notificationsEnabled ? { notificationPollMs: Number(process.env.KURISU_NOTIFICATION_POLL_MS ?? 5_000) } : {}),
 });
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
@@ -200,6 +212,50 @@ const server = createServer(async (request, response) => {
       const body = await readBody(request);
       const result = await kurisuService.executeHostTool(body);
       json(response, 200, result);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/kurisu/notifications/events') {
+      if (!notificationSecret) {
+        json(response, 503, { accepted: false, error: 'notification ingress is not configured' });
+        return;
+      }
+      if (!matchesSecret(request.headers['x-kurisu-notification-secret'] ?? request.headers['x-codex-notify-secret'], notificationSecret)) {
+        json(response, 401, { accepted: false, error: 'unauthorized' });
+        return;
+      }
+      const body = await readBody(request);
+      if (typeof body.eventType === 'string' && typeof body.eventKey === 'string' && typeof body.source === 'string' && typeof body.resultType === 'string' && Object.prototype.hasOwnProperty.call(body, 'payload')) {
+        // External producers identify an event, never its recipient or
+        // principal. Runtime configuration owns both the principal scope and
+        // the platform targets before the event is persisted.
+        const parsed = notificationEventInputSchema.parse({
+          eventType: body.eventType,
+          eventKey: body.eventKey,
+          principalKey: notificationPrincipalKey,
+          source: body.source,
+          resultType: body.resultType,
+          payload: body.payload,
+          ...(typeof body.taskId === 'string' ? { taskId: body.taskId } : {}),
+          ...(typeof body.runId === 'string' ? { runId: body.runId } : {}),
+          ...(typeof body.occurredAt === 'string' ? { occurredAt: body.occurredAt } : {}),
+        });
+        const result = kurisuService.notifications.ingest(parsed, notificationTargets);
+        json(response, 202, { accepted: true, duplicate: !result.inserted, eventId: result.eventId, deliveries: result.deliveries.map(({ id, channel, recipient, muted }) => ({ id, channel, recipient, muted })) });
+        return;
+      }
+      const threadId = String(body.threadId ?? body.thread_id ?? body['thread-id'] ?? '').trim();
+      const turnId = String(body.turnId ?? body.turn_id ?? body['turn-id'] ?? '').trim();
+      const cwd = String(body.cwd ?? body.workingDirectory ?? body.working_directory ?? '').trim();
+      if (!threadId || !turnId || !cwd) throw new Error('legacy Codex event is missing threadId, turnId, or cwd');
+      const result = kurisuService.notifications.ingestLegacyCodex({
+        threadId,
+        turnId,
+        cwd,
+        ...(body.projectName ? { projectName: String(body.projectName) } : {}),
+        ...(body.lastAssistantMessage || body.last_assistant_message || body['last-assistant-message'] ? { lastAssistantMessage: String(body.lastAssistantMessage ?? body.last_assistant_message ?? body['last-assistant-message']) } : {}),
+        ...(body.timestamp || body.completedAt || body.completed_at ? { timestamp: String(body.timestamp ?? body.completedAt ?? body.completed_at) } : {}),
+      }, notificationTargets, notificationPrincipalKey);
+      json(response, 202, { accepted: true, duplicate: !result.inserted, eventId: result.eventId, deliveries: result.deliveries.map(({ id, channel, recipient, muted }) => ({ id, channel, recipient, muted })) });
       return;
     }
     if (request.method === 'POST' && ['/homehub/route', '/api/homehub/route'].includes(url.pathname)) {
@@ -309,3 +365,24 @@ function shutdown(): void {
 
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
+
+function buildNotificationChannels(apiToken: string): Array<LangBotNotificationChannel> {
+  if (!apiToken) return [];
+  const baseUrl = process.env.KURISU_NOTIFICATION_LANGBOT_URL?.trim() || 'http://langbot:5300';
+  const headerName = process.env.KURISU_NOTIFICATION_LANGBOT_HEADER?.trim() || 'Authorization';
+  const channels: Array<LangBotNotificationChannel> = [];
+  const telegramRecipient = process.env.KURISU_NOTIFICATION_TELEGRAM_RECIPIENT?.trim() || process.env.TELEGRAM_ADMIN_USER_ID?.trim();
+  const telegramBotId = process.env.KURISU_NOTIFICATION_TELEGRAM_BOT_ID?.trim();
+  if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ channel: 'telegram', baseUrl, botId: telegramBotId, recipient: telegramRecipient, apiToken, apiHeaderName: headerName }));
+  const kookRecipient = process.env.KURISU_NOTIFICATION_KOOK_RECIPIENT?.trim() || process.env.KOOK_ADMIN_USER_ID?.trim();
+  const kookBotId = process.env.KURISU_NOTIFICATION_KOOK_BOT_ID?.trim();
+  if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ channel: 'kook', baseUrl, botId: kookBotId, recipient: kookRecipient, apiToken, apiHeaderName: headerName }));
+  return channels;
+}
+
+function matchesSecret(value: string | string[] | undefined, expected: string): boolean {
+  const supplied = Array.isArray(value) ? value[0] ?? '' : value ?? '';
+  const left = Buffer.from(supplied);
+  const right = Buffer.from(expected);
+  return left.length === right.length && left.length > 0 && timingSafeEqual(left, right);
+}

@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P4（IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P5（IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED / L3_BLOCKED；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -18,7 +18,17 @@ P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-ag
 - P3/P4 定向 runtime 测试、typecheck、secret scan、diff check 与真实隔离 Codex 验证通过；全量测试中的既有 `review-v3-2.test.ts` 子进程出现异常长时间 CPU 占用，本次不记为全量通过，P6 分批复测并保留该风险。
 - 真实 LangBot native-agent WebSocket/platform entry 因缺少合法 user/support-admin session token 仍为 `BLOCKED`；历史 EventListener 尚未迁移，provider/fake 证据不替代 L3。
 
-后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P5–P6；P7 仍需独立授权。
+P5 已完成 Runtime-owned notification outbox/worker：事件/投递双层幂等、渠道独立 retry/backoff、lease、unknown/dead、显式 delivery retry、principal-scoped 偏好及到期恢复；Codex job 与 structured HomeHub/Radar/media write 结果均可留下 task/run 关联事件。
+
+Codex legacy hook 默认进入 `/kurisu/notifications/events`；runtime 不在线时归一化 payload 进入权限收紧的 local spool，`scripts/drain-codex-notification-spool.sh` 默认 dry-run，成功补发移到 `processed/`。旧 n8n completion sender 仅保留为 rollback source，不可与 Runtime sender 双开。
+
+Product Radar 新增显式 `PRODUCT_RADAR_NOTIFICATION_OWNER=central` handoff，沿用本地 `notification_outbox`/heartbeat queue 作为跨 SQLite 交接；默认仍为 local，P7 才切换真实 owner。P5 producer 清单见 `docs/reports/KURISU_AGENT_P5_PRODUCERS.md`。
+
+P5 本地验证：Kurisu 定向 `48/48`、Product Radar `53/53`、Kurisu plugin `4/4`、两个 package typecheck、Codex hook/spool smoke、plugin dry-run、secret scan、diff check 通过。
+
+briefing 真实 scheduler/生成/投递 producer 仍未发现，严格标记 `BLOCKED_UNSUPPORTED`；没有伪造日报事件或成功发送证据。
+
+后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P6；P7 仍需独立授权。
 
 既有实现与部署历史如下。
 

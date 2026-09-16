@@ -22,7 +22,7 @@ notify = ["zsh", "/Users/blacksidev/.codex/bin/codex-notify.sh"]
 `integrations/codex/codex-notify.sh` 安装，不能改成项目内相对路径。安装脚本只更新
 `~/.codex/config.toml` 的 root-level `notify`，不会创建项目级配置，也不会写入 secret。
 
-## Payload and fail-open boundary
+## Runtime-owned payload and fail-open boundary
 
 当前 Codex legacy notify hook 将 JSON 作为 argv[1] 传给 command，V1 payload 使用
 `type: agent-turn-complete`、`thread-id`、`turn-id`、`cwd`、`client`、`input-messages` 和
@@ -43,24 +43,37 @@ notify = ["zsh", "/Users/blacksidev/.codex/bin/codex-notify.sh"]
 只有 `agent-turn-complete` 会 POST；tool/intermediate event 会被忽略。项目名始终从 cwd
 最后路径段安全解析，payload 中的 recipient/chat/channel 字段不会被转发为接收人。脚本
 使用 curl `--connect-timeout 2 --max-time 5`，丢弃 response body，网络失败、secret 缺失、
-解析失败都只写不含 payload/secret 的日志并返回 0，不影响 Codex turn。
+解析失败都只写不含 payload/secret 的日志并返回 0，不影响 Codex turn。默认目标是
+Runtime `/kurisu/notifications/events`；Runtime 先持久化 event/delivery，再由 Worker 发送到已配置
+的 Telegram/KOOK。Codex legacy hook 没有关联 durable task 时固定使用“本轮结束，结果待核实”，不推断
+工程任务、测试或部署成功。
+
+Runtime 不在线或 curl 不可用时，归一化 JSON 以 payload hash 写入本地安全 spool（目录权限 0700、文件
+权限受 umask 077 保护）；相同 payload 会覆盖同名文件而不会无限增殖。补发默认只 dry-run：
+
+```sh
+./scripts/drain-codex-notification-spool.sh --dry-run
+./scripts/drain-codex-notification-spool.sh --apply
+```
+
+成功补发的 spool 文件移动到同目录 `processed/`，便于审计和恢复；`--apply` 需要外部 secret。
 
 ## External runtime configuration
 
-- webhook：`CODEX_NOTIFY_URL`，默认 `http://127.0.0.1:5679/webhook/codex-complete`；
+- webhook：`CODEX_NOTIFY_URL`，默认 `http://127.0.0.1:5310/kurisu/notifications/events`；
 - shared secret：用户级 `~/.codex/secrets/codex-notify-secret`，权限 0600；
-- n8n secret/recipient values：只在 OrbStack Ubuntu 的 `/DATA/AppData` 和 n8n global
-  variables 中恢复，Git 不保存值；
+- spool：`CODEX_NOTIFY_SPOOL_DIR`，默认 `~/.codex/spool/kurisu-notifications`；
+- Runtime secret/recipient values：只在外部运行时配置恢复，Git 不保存值；
 - `scripts/provision-codex-notify-secret.sh --apply` 负责建立/同步 shared secret；
-- `scripts/sync-n8n-admin-identities.sh --apply` 负责从外部 admin identity env 和 secret
-  file 同步 `TELEGRAM_ADMIN_USER_ID`、`KOOK_ADMIN_USER_ID`、`CODEX_NOTIFY_SECRET`。
+- 旧 n8n sender 的 secret/recipient values 仍只在外部恢复；当前 central owner 不读取 Codex payload
+  中的 recipient/channel。
 
-## n8n flow
+## Legacy n8n rollback flow
 
-Git workflow：`integrations/n8n/workflows/codex-completion-notification.workflow.json`，
-名称 `Codex Completion Notification`。生产 ID 为
-`codex-completion-notification-20260906`，Webhook path 是 `codex-complete`。
-流程为：
+Git workflow `integrations/n8n/workflows/codex-completion-notification.workflow.json` 保留为
+legacy rollback source。它的生产 ID 是 `codex-completion-notification-20260906`、Webhook path 是
+`codex-complete`；当前 Codex hook 默认不再指向该路径。切换时不能让它和 Runtime sender 同时激活。
+历史流程为：
 
 ```text
 Codex Completion Webhook
@@ -87,7 +100,7 @@ Telegram/KOOK sender 都调用 LangBot `/api/v1/platform/bots/<bot_uuid>/send_me
 payload recipient 或 channel。Telegram 和 KOOK HTTP nodes 均 `continueOnFail: true`，最终
 记录分别为 `telegram: {status: sent|failed}`、`kook: {status: sent|failed}`。
 
-部署/导入必须使用显式 apply：
+若 P7 回滚需要恢复该流程，部署/导入必须使用显式 apply，并先停用 Runtime sender：
 
 ```sh
 ./scripts/create-n8n-codex-idempotency-table.sh --apply
@@ -99,14 +112,13 @@ payload recipient 或 channel。Telegram 和 KOOK HTTP nodes 均 `continueOnFail
 n8n API credential `LangBot API` 只通过目标实例重新绑定，workflow JSON 不包含 credential
 secret。Webhook 仅在 HomeLab n8n 上提供，并要求 shared secret。
 
-## Verification
+## Local verification
 
 ```sh
 ./scripts/smoke-codex-notify.sh
 ./scripts/test-codex-notification-workflow.sh
-./scripts/smoke-codex-notification-runtime.sh
 ```
 
-最后一个 smoke 会实际向两个固定 Admin 私聊发送一条带有 smoke 标记的通知，再重复提交
-相同 `threadId + turnId`，检查双平台 `sent` 和重复请求不再发送。不要把 smoke payload 中的
-真实 ID、token 或 secret 写入 Git。
+`smoke-codex-notify.sh` 只使用本机 fake HTTP server，验证归一化、过滤、脱敏、fail-open 和 spool；
+`smoke-codex-notification-runtime.sh` 属于 P7 真实平台验收，会向固定管理员私聊发送消息，本 Goal
+不执行。

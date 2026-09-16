@@ -117,6 +117,9 @@ export interface DeliveryRecord {
   attempts: number;
   nextAttemptAt: string | null;
   lastError: string | null;
+  platformMessageId: string | null;
+  leaseOwner: string | null;
+  leaseExpiresAt: string | null;
 }
 
 export interface NotificationEventRecord {
@@ -310,6 +313,9 @@ export class KurisuStore {
         attempts INTEGER NOT NULL DEFAULT 0,
         next_attempt_at TEXT,
         last_error TEXT,
+        platform_message_id TEXT,
+        lease_owner TEXT,
+        lease_expires_at TEXT,
         updated_at TEXT NOT NULL,
         UNIQUE(event_id, channel, recipient)
       );
@@ -317,6 +323,9 @@ export class KurisuStore {
       CREATE INDEX IF NOT EXISTS ix_kurisu_deliveries_due ON kurisu_deliveries(status, next_attempt_at);
     `);
     try { this.db.exec("ALTER TABLE kurisu_approvals ADD COLUMN arguments_json TEXT NOT NULL DEFAULT '{}'"); } catch { /* already migrated */ }
+    try { this.db.exec('ALTER TABLE kurisu_deliveries ADD COLUMN platform_message_id TEXT'); } catch { /* already migrated */ }
+    try { this.db.exec('ALTER TABLE kurisu_deliveries ADD COLUMN lease_owner TEXT'); } catch { /* already migrated */ }
+    try { this.db.exec('ALTER TABLE kurisu_deliveries ADD COLUMN lease_expires_at TEXT'); } catch { /* already migrated */ }
   }
 
   close(): void {
@@ -673,6 +682,11 @@ export class KurisuStore {
     return parseJson(row.value_json);
   }
 
+  deletePreference(sessionKey: string, key: string): boolean {
+    const result = this.db.prepare('DELETE FROM kurisu_preferences WHERE session_key=? AND preference_key=?').run(sessionKey, key);
+    return Number(result.changes) === 1;
+  }
+
   createEvent(eventType: string, eventKey: string, payload: unknown, id = `evt_${randomUUID()}`, now = new Date().toISOString()): { id: string; inserted: boolean } {
     const result = this.db.prepare('INSERT INTO kurisu_events(id,event_type,event_key,payload_json,created_at) VALUES (?,?,?,?,?) ON CONFLICT(event_key) DO NOTHING').run(id, eventType, eventKey, JSON.stringify(payload), now);
     const existing = this.db.prepare('SELECT id FROM kurisu_events WHERE event_key=?').get(eventKey) as { id?: string } | undefined;
@@ -689,6 +703,55 @@ export class KurisuStore {
     const row = this.db.prepare('SELECT * FROM kurisu_deliveries WHERE id=?').get(id) as Record<string, unknown> | undefined;
     if (!row) return null;
     return toDelivery(row);
+  }
+
+  getNotificationEvent(id: string): NotificationEventRecord | null {
+    const row = this.db.prepare('SELECT id,event_type,event_key,payload_json,created_at FROM kurisu_events WHERE id=?').get(id) as Record<string, unknown> | undefined;
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      eventType: String(row.event_type),
+      eventKey: String(row.event_key),
+      payload: parseJson(String(row.payload_json)),
+      createdAt: String(row.created_at),
+      deliveries: this.listDeliveries(String(row.id)),
+    };
+  }
+
+  listDeliveries(eventId?: string, limit = 500): DeliveryRecord[] {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 1_000);
+    const rows = eventId
+      ? this.db.prepare('SELECT * FROM kurisu_deliveries WHERE event_id=? ORDER BY updated_at ASC LIMIT ?').all(eventId, boundedLimit)
+      : this.db.prepare('SELECT * FROM kurisu_deliveries ORDER BY updated_at ASC LIMIT ?').all(boundedLimit);
+    return (rows as Array<Record<string, unknown>>).map(toDelivery);
+  }
+
+  listDueDeliveries(now = new Date().toISOString(), limit = 50): DeliveryRecord[] {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const rows = this.db.prepare(`
+      SELECT * FROM kurisu_deliveries
+      WHERE (status IN ('pending','retryable_failed') AND (next_attempt_at IS NULL OR next_attempt_at <= ?))
+         OR (status='sending' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?)
+      ORDER BY updated_at ASC, id ASC LIMIT ?
+    `).all(now, now, boundedLimit);
+    return (rows as Array<Record<string, unknown>>).map(toDelivery);
+  }
+
+  claimDelivery(id: string, owner: string, now = new Date(), leaseMs = 30_000): DeliveryRecord | null {
+    const nowIso = now.toISOString();
+    const expiresAt = new Date(now.getTime() + Math.max(1_000, leaseMs)).toISOString();
+    return this.transaction(() => {
+      const current = this.getDelivery(id);
+      if (!current) return null;
+      const due = (current.status === 'pending' || current.status === 'retryable_failed')
+        && (!current.nextAttemptAt || current.nextAttemptAt <= nowIso);
+      const expired = current.status === 'sending' && Boolean(current.leaseExpiresAt && current.leaseExpiresAt <= nowIso);
+      if (!due && !expired) return null;
+      this.db.prepare('UPDATE kurisu_deliveries SET status=?, lease_owner=?, lease_expires_at=?, updated_at=? WHERE id=?').run(
+        'sending', owner, expiresAt, nowIso, id,
+      );
+      return this.getDelivery(id);
+    });
   }
 
   /** Read notification evidence only for events explicitly owned by a principal. */
@@ -726,8 +789,32 @@ export class KurisuStore {
   }
 
   updateDelivery(id: string, status: DeliveryRecord['status'], patch: Partial<Pick<DeliveryRecord, 'nextAttemptAt' | 'lastError'>> = {}, now = new Date().toISOString()): DeliveryRecord {
-    this.db.prepare('UPDATE kurisu_deliveries SET status=?, attempts=attempts+1, next_attempt_at=?, last_error=?, updated_at=? WHERE id=?').run(status, patch.nextAttemptAt ?? null, patch.lastError ?? null, now, id);
+    this.db.prepare('UPDATE kurisu_deliveries SET status=?, attempts=attempts+1, next_attempt_at=?, last_error=?, platform_message_id=NULL, lease_owner=NULL, lease_expires_at=NULL, updated_at=? WHERE id=?').run(status, patch.nextAttemptAt ?? null, patch.lastError ?? null, now, id);
     return this.getDelivery(id)!;
+  }
+
+  markDelivery(
+    id: string,
+    status: DeliveryRecord['status'],
+    patch: Partial<Pick<DeliveryRecord, 'nextAttemptAt' | 'lastError' | 'platformMessageId'>> = {},
+    now = new Date().toISOString(),
+  ): DeliveryRecord {
+    this.db.prepare('UPDATE kurisu_deliveries SET status=?, attempts=attempts+1, next_attempt_at=?, last_error=?, platform_message_id=?, lease_owner=NULL, lease_expires_at=NULL, updated_at=? WHERE id=?').run(
+      status, patch.nextAttemptAt ?? null, patch.lastError ?? null, patch.platformMessageId ?? null, now, id,
+    );
+    return this.getDelivery(id)!;
+  }
+
+  /** Requeue only a terminal/uncertain delivery owned by the event principal. */
+  retryDelivery(id: string, principalKey: string, now = new Date().toISOString()): DeliveryRecord | null {
+    return this.transaction(() => {
+      const current = this.getDelivery(id);
+      if (!current || !['dead', 'unknown', 'retryable_failed'].includes(current.status)) return null;
+      const event = this.getNotificationEvent(current.eventId);
+      if (!event || !notificationBelongsTo(event.payload, principalKey)) return null;
+      this.db.prepare('UPDATE kurisu_deliveries SET status=?, next_attempt_at=NULL, last_error=NULL, platform_message_id=NULL, lease_owner=NULL, lease_expires_at=NULL, updated_at=? WHERE id=?').run('pending', now, id);
+      return this.getDelivery(id);
+    });
   }
 
   snapshotCounts(): Record<string, number> {
@@ -854,6 +941,9 @@ function toDelivery(row: Record<string, unknown>): DeliveryRecord {
     id: String(row.id), eventId: String(row.event_id), channel: String(row.channel), recipient: String(row.recipient),
     status: String(row.status) as DeliveryRecord['status'], attempts: Number(row.attempts),
     nextAttemptAt: row.next_attempt_at ? String(row.next_attempt_at) : null, lastError: row.last_error ? String(row.last_error) : null,
+    platformMessageId: row.platform_message_id ? String(row.platform_message_id) : null,
+    leaseOwner: row.lease_owner ? String(row.lease_owner) : null,
+    leaseExpiresAt: row.lease_expires_at ? String(row.lease_expires_at) : null,
   };
 }
 

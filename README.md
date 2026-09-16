@@ -166,26 +166,24 @@ Codex completion notification 是用户级能力，不依赖当前仓库目录�
 `integrations/codex/codex-notify.sh`，安装到 `~/.codex/bin/codex-notify.sh`，并由全局
 `~/.codex/config.toml` 的 root-level `notify` 配置调用。它只接受
 `agent-turn-complete`，将 `threadId + turnId`、cwd、从 cwd 安全解析的项目名、最后回复和
-时间发送到本机/HomeLab n8n `/webhook/codex-complete`；网络失败 fail-open，不影响 Codex。
+时间发送到 agent-runtime `/kurisu/notifications/events`；Runtime 负责事件/投递持久化与平台发送。
+网络失败时写本地安全 spool，仍 fail-open，不影响 Codex。
 
-n8n workflow source 是 `integrations/n8n/workflows/codex-completion-notification.workflow.json`。
-它校验外部 shared secret，把 completion key 写入唯一 Data Table，然后通过现有 LangBot
-`send_message` outbound sender 同时发送固定 Telegram/KOOK `person` DM。目标 ID 只来自外部
-`TELEGRAM_ADMIN_USER_ID` / `KOOK_ADMIN_USER_ID`，不读取当前 chat、channel 或 payload recipient；
-两个平台的发送结果独立记录。真实 secret、n8n credential、variables 和 Data Table 只在
-运行时恢复，不入 Git。
+n8n workflow source `integrations/n8n/workflows/codex-completion-notification.workflow.json` 仍作为
+legacy rollback source 保留，不能与 Runtime sender 同时启用。真实 secret、n8n credential、variables
+和 Data Table 只在运行时恢复，不入 Git。Radar 的 central owner 也保留自己的本地 outbox 作为跨库
+交接，不向 Runtime 转发 platform recipient。
 
 安装、配置和验证：
 
 ```sh
 ./scripts/provision-codex-notify-secret.sh --apply
 ./scripts/install-codex-notify.sh --apply
-./scripts/create-n8n-codex-idempotency-table.sh --apply
-./scripts/deploy-n8n-workflow.sh --workflow integrations/n8n/workflows/codex-completion-notification.workflow.json --id codex-completion-notification-20260906 --apply
 ./scripts/smoke-codex-notify.sh
-./scripts/test-codex-notification-workflow.sh
-./scripts/smoke-codex-notification-runtime.sh
+./scripts/drain-codex-notification-spool.sh --dry-run
 ```
+
+n8n workflow 导入和真实 Telegram/KOOK smoke 只属于 P7 的独立授权回滚/验收路径。
 
 ## Codex 持久化协议
 

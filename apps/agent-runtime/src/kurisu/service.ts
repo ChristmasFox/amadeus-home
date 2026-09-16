@@ -14,6 +14,8 @@ import { registerDomainTools, type DomainBackends } from './domain-tools.js';
 import { KurisuGateway, type GatewayResult, type HostDecision, RolloutRegistry } from './gateway.js';
 import { publicReadAuthorization, authorizeTool } from './policy.js';
 import { createNotificationBackend } from './read-only.js';
+import { registerNotificationPreferenceTools } from './notification-tools.js';
+import { NotificationWorker, type NotificationChannel, type NotificationTarget } from './notifications.js';
 import { KurisuStore } from './storage.js';
 import { ToolRegistry, unknownResult } from './tools.js';
 import { registerWriteTools, taskCancelHandler, WriteCoordinator, type WriteOperationHandlers } from './write-tools.js';
@@ -66,6 +68,10 @@ export interface KurisuServiceOptions {
   codexExecutor?: CodexAppServerExecutor;
   codexProjects?: CodexProjectRegistry;
   codexOptions?: CodexExecutorOptions;
+  notificationWorker?: NotificationWorker;
+  notificationChannels?: readonly NotificationChannel[];
+  notificationTargets?: readonly NotificationTarget[];
+  notificationPollMs?: number;
 }
 
 /**
@@ -79,6 +85,7 @@ export class KurisuService {
   readonly registry: ToolRegistry;
   readonly writeCoordinator: WriteCoordinator | null;
   readonly codexExecutor: CodexAppServerExecutor | null;
+  readonly notifications: NotificationWorker;
 
   private readonly now: () => string;
   private readonly authorization: (inbound: ReturnType<typeof normalizeInbound>) => TrustedAuthorization;
@@ -87,6 +94,8 @@ export class KurisuService {
     this.now = options.now ?? (() => new Date().toISOString());
     this.authorization = options.authorization ?? (() => publicReadAuthorization());
     this.store = new KurisuStore(options.stateFile ?? ':memory:');
+    const notificationOptions = { now: this.now, ...(options.notificationChannels ? { channels: options.notificationChannels } : {}) };
+    this.notifications = options.notificationWorker ?? new NotificationWorker(this.store, notificationOptions);
     this.rollout = new RolloutRegistry();
     const context = new InMemoryContextStore();
     this.registry = new ToolRegistry({
@@ -102,14 +111,24 @@ export class KurisuService {
       ...(options.backends ?? {}),
       notifications: options.backends?.notifications ?? createNotificationBackend(this.store),
     });
+    registerNotificationPreferenceTools(this.registry, this.notifications.preferenceStore, this.notifications);
     registerTaskStatusTool(this.registry, this.store);
     const writeHandlers = options.writeHandlers
       ? { ...options.writeHandlers, taskCancel: options.writeHandlers.taskCancel ?? taskCancelHandler(this.store) }
       : undefined;
-    this.writeCoordinator = writeHandlers ? new WriteCoordinator(this.store, { now: this.now }) : null;
+    this.writeCoordinator = writeHandlers ? new WriteCoordinator(this.store, {
+      now: this.now,
+      notificationWorker: this.notifications,
+      notificationTargets: options.notificationTargets ?? [],
+    }) : null;
     if (this.writeCoordinator && writeHandlers) registerWriteTools(this.registry, this.writeCoordinator, writeHandlers);
-    this.codexExecutor = options.codexExecutor ?? (options.codexProjects ? new CodexAppServerExecutor(this.store, options.codexProjects, options.codexOptions) : null);
+    this.codexExecutor = options.codexExecutor ?? (options.codexProjects ? new CodexAppServerExecutor(this.store, options.codexProjects, {
+      ...(options.codexOptions ?? {}),
+      notificationWorker: this.notifications,
+      notificationTargets: options.notificationTargets ?? [],
+    }) : null);
     if (this.codexExecutor) registerCodexTools(this.registry, this.codexExecutor);
+    if (options.notificationPollMs !== undefined) this.notifications.start(options.notificationPollMs);
     this.gateway = new KurisuGateway({
       registry: this.registry,
       rollout: this.rollout,
@@ -121,6 +140,7 @@ export class KurisuService {
   }
 
   close(): void {
+    this.notifications.stop();
     void this.codexExecutor?.close();
     this.store.close();
   }

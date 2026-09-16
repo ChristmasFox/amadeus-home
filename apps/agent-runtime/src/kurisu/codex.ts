@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { ApprovalService } from './approvals.js';
 import { argumentsHash, makeCallback, parseCallback, stableJson, type CallbackReference, type ToolResponse, type ToolEvidence, type TrustedExecutionContext } from './contracts.js';
 import { KurisuStore, type CodexJobRecord, type CodexJobStatus, type CodexPendingRequest } from './storage.js';
+import type { NotificationTarget, NotificationWorker } from './notifications.js';
 import { accepted, evidence, failure, ok, unknownResult } from './tools.js';
 
 const execFileAsync = promisify(execFile);
@@ -368,6 +369,8 @@ export interface CodexExecutorOptions {
   clientFactory?: () => CodexAppServerClient;
   appServer?: ProcessCodexAppServerClientOptions;
   model?: string;
+  notificationWorker?: NotificationWorker;
+  notificationTargets?: readonly NotificationTarget[];
 }
 
 interface CodexApprovalEnvelope {
@@ -387,6 +390,8 @@ export class CodexAppServerExecutor {
   private readonly approvals: ApprovalService;
   private readonly clientFactory: () => CodexAppServerClient;
   private readonly model: string | undefined;
+  private readonly notificationWorker: NotificationWorker | null;
+  private readonly notificationTargets: readonly NotificationTarget[];
   private client: CodexAppServerClient | null = null;
   private unsubscribe: (() => void) | null = null;
   private readonly pendingRpc = new Map<string, PendingRpc>();
@@ -397,6 +402,8 @@ export class CodexAppServerExecutor {
     this.approvals = new ApprovalService(store, this.now);
     this.clientFactory = options.clientFactory ?? (() => new ProcessCodexAppServerClient(options.appServer));
     this.model = options.model;
+    this.notificationWorker = options.notificationWorker ?? null;
+    this.notificationTargets = options.notificationTargets ?? [];
   }
 
   async close(): Promise<void> {
@@ -822,7 +829,11 @@ export class CodexAppServerExecutor {
       ...(ref ? { ref } : {}),
     };
     const eventKey = `codex:${job.jobId}:${eventType}:${argumentsHash(payload).slice(0, 32)}`;
-    this.store.createEvent(eventType, eventKey, payload, undefined, this.now());
+    if (this.notificationWorker) {
+      this.notificationWorker.ingestCodexJobEvent(job, eventType, summary, this.notificationTargets, ref, this.now());
+    } else {
+      this.store.createEvent(eventType, eventKey, payload, undefined, this.now());
+    }
   }
 
   private transitionRun(runId: string, target: 'running' | 'waiting_job' | 'waiting_approval' | 'waiting_input' | 'succeeded' | 'failed' | 'cancelled' | 'reconciling', observation: string): void {

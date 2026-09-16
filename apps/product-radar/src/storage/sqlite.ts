@@ -612,6 +612,10 @@ export class SqliteRadarStore {
   }
 
   incrementWatchNotifications(watchId: string, count = 1): void {
+    // A legacy notification row can outlive a deleted Watch during an owner
+    // handoff. Delivery evidence must still be marked sent; the optional
+    // per-Watch counter cannot recreate a deleted domain object.
+    if (!this.db.prepare('SELECT 1 FROM watches WHERE id = ?').get(watchId)) return;
     this.ensureWatchRuntimeStats(watchId);
     this.db.prepare('UPDATE watch_runtime_stats SET notifications_sent = notifications_sent + ? WHERE watch_id = ?').run(count, watchId);
   }

@@ -103,13 +103,16 @@ Codex completion notification 是用户级边界，不依赖当前 repository cw
 把脚本复制到 `~/.codex/bin` 并更新 `~/.codex/config.toml` 的 root-level `notify`。当前 Codex
 legacy notify payload 作为 argv[1] 传入，事件类型为 `agent-turn-complete`；脚本归一化
 hyphenated/camelCase/snake_case 字段，只 POST completion event，并以 `threadId + turnId`
-交给 n8n 做唯一 claim。tool call、streaming/intermediate event 和无效 payload 不发送。
+交给 agent-runtime 的统一 events/deliveries Worker 做唯一 claim。tool call、streaming/intermediate
+event 和无效 payload 不发送。
 
-本机脚本默认 POST `http://127.0.0.1:5679/webhook/codex-complete`，使用外部
+本机脚本默认 POST `http://127.0.0.1:5310/kurisu/notifications/events`，使用外部
 `~/.codex/secrets/codex-notify-secret`。它有 2 秒连接/5 秒总超时、只写无 payload 的状态日志，
-所有网络/配置失败都返回 0，保证不影响 Codex。n8n workflow source
-`integrations/n8n/workflows/codex-completion-notification.workflow.json` 在 HomeLab n8n 中校验
-`CODEX_NOTIFY_SECRET` global variable，并用唯一 external Data Table `eventKey` claim 去重。
+所有网络/配置失败都返回 0，并把归一化 payload 写入 0700 local spool，保证不影响 Codex。
+`scripts/drain-codex-notification-spool.sh` 默认 dry-run，成功补发后移动到 `processed/`。
+
+旧 workflow source `integrations/n8n/workflows/codex-completion-notification.workflow.json` 只作为
+rollback source 保留；切换时不能和 Runtime sender 同时启用。
 
 发送节点固定调用 LangBot `/api/v1/platform/bots/<bot_uuid>/send_message`，两个节点均使用
 `target_type: person` 和 `continueOnFail`，固定目标来自外部 `TELEGRAM_ADMIN_USER_ID`、
@@ -186,11 +189,13 @@ RELEASE 操作，默认开发验证不 build、不重启、不部署。
 | 数据 | canonical 位置 | Git 策略 | 恢复策略 |
 | --- | --- | --- | --- |
 | Runtime state/context/features/selections | /DATA/AppData/pubg-query-engine-v3/data | 不提交 | backup.sh |
+| Kurisu events/deliveries/preferences | Runtime state file 同目录的 Kurisu SQLite | 不提交 | Runtime backup/restore，保留 unknown 与审计记录 |
 | LangBot data/plugins/SQLite | /DATA/AppData/langbot | 只提交自定义源 | volume 备份 + 重新安装插件 |
 | n8n workflows | 仓库 JSON | 提交 | 导入 workflow |
 | n8n credentials/executions | /DATA/AppData/n8n 与外部 secret | 不提交 | volume 备份，credentials 重新核验 |
 | Codex notify secret / n8n Admin variables | ~/.codex/secrets、/DATA/AppData/n8n 与 n8n DB | 不提交 | provision/sync 脚本恢复 |
 | Codex completion idempotency table | n8n Data Table `codex-completion-idempotency-20260906` | schema/workflow 提交，rows 不提交 | create table script |
+| Product Radar producer outbox | Product Radar data volume 的 `notification_outbox`/`heartbeat_deliveries` | 不提交数据 | 中央 owner 切换时作为 local handoff queue drain |
 | n8n sandbox TLS/data | /DATA/AppData/n8n-sandbox | 不提交 | volume 备份或重新生成 |
 | Postgres | 对应 CasaOS AppData / volume | 不提交 | 数据库备份后恢复 |
 | Redis | 对应 volume | 不提交 | 默认可重建缓存 |
