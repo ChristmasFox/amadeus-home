@@ -1,6 +1,6 @@
-# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_SOURCE_EXPORTED / HANDOFF_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P7 部分发布（RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / CROSS_PLATFORM_SMOKE_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-当前全量完成 Goal 已授权并进行中。live n8n 已发现并脱敏导出 `Daily Tech & Market Digest`（`681f9db4-6666-4e58-aa6a-7ecc86316182`）；该流程已有真实调度、去重、采集、AI 分析、持久化和 KOOK 直发，接下来必须交接至 Runtime notification outbox，避免双 sender。Runtime `/kurisu/status` 也已改为如实报告 `native_agent_global` rollout。写工具、Codex host executor、跨平台真实交互和回滚演练仍未完成。
+当前全量完成 Goal 已授权并进行中。live n8n `Daily Tech & Market Digest`（`681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox，避免双 sender。重跑的真实简报 `6165` 已在 n8n 记录为 `success/sent`，对应 Runtime event/delivery 为 KOOK `sent`、1 attempt、无错误；首次 503 的共享 secret 权限问题已修复。Runtime `/kurisu/status` 如实报告 `native_agent_global` rollout。Codex host executor、跨平台真实交互和回滚演练仍未完成。
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 

@@ -1,10 +1,11 @@
-# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_SOURCE_EXPORTED / HANDOFF_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / CROSS_PLATFORM_SMOKE_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 ## 当前全量完成 Goal（进行中）
 
 - [x] 已从 live n8n 脱敏导出 `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）到 `integrations/n8n/workflows/daily-tech-market-digest.workflow.json`；移除了 `pinData` 与实例元数据，保留 workflow/credential 引用供目标实例重绑。
 - [x] 核验它是真实简报 producer：每日 09:30/23:00 调度、运行去重、RSS/API 采集、AI 分析、事件/运行 Data Table 与 KOOK 发送均在 live 定义中；此前 `BRIEFING_BLOCKED` 结论已过期。
-- [ ] 仍需将简报的 n8n 直连 LangBot sender 交接到 Kurisu Runtime notification outbox，并验证旧 sender 停止、pending 交接和实际送达。
+- [x] 简报 sender 已交接到 Runtime notification outbox：live workflow 的 `Ingest Digest via Kurisu` 使用共享外部 secret；n8n 重跑 `6165` 在 2026-09-16 15:32:59 成功记录为 `success/sent`，对应 Kurisu event/delivery 均为 KOOK `sent`（1 attempt、无错误）。旧 `Send to KOOK via LangBot` 节点不在 live workflow 连接中。
+- [x] 修复真实 handoff 首次失败：n8n secret 是 root-only bind mount，Runtime 启动时读为空而返回 503。部署脚本现在将其设为 `root:gid1000 0640` 并强制 recreate Runtime；Compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-233013`。
 - [ ] 仍需上线并实际验证写工具、Codex host executor、Telegram/KOOK 引用/图片/按钮/群聊回归，以及受控回滚演练；完成前不得标记 `PRODUCT_COMPLETE`。
 
 已完成 P0–P6 的本机实现、验收和 Release 准备：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。用户明确要求 push 并部署后，已仅发布 Runtime immutable image；未安装 Kurisu 插件、未切换 rollout、未发送真实平台消息。
