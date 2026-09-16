@@ -33,4 +33,10 @@
 - 本 checkpoint 之后 LangBot monitoring DB 尚无新的真实 Telegram/KOOK 入站，因此 R03/R04 的引用、图片、按钮/审批、必要群聊和真实 Gateway 平台身份链路仍为 `PENDING/BLOCKED`。
 - R05 可恢复回滚尚未执行成功。已实际暂停 `langbot`、`langbot_plugin_runtime` 和 Runtime，并尝试切换上一版 `local/pubg-query-engine-v3:git-e6dba61a5fdb`；因宿主机当前没有 `/Volumes/Avalon`，Docker 创建媒体 bind mount 返回 `mkdir /Volumes/Avalon: permission denied`，未执行任何写操作重放。当前已用无媒体挂载 Compose 恢复 `local/pubg-query-engine-v3:git-015df8f`，并重新启动 LangBot/plugin runtime。
 - R05 后续解除条件：重新挂载真实 Avalon 磁盘后，使用 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260917-062321` 恢复生产 Compose，验证媒体挂载和健康，再完成旧版本切换/恢复闭环。
+
+## R05 核心回滚补充结果
+
+- 在无媒体挂载的核心恢复态再次执行旧 Runtime/插件切换：`local/pubg-query-engine-v3:git-e6dba61a5fdb` health `healthy`，`/healthz` 与 `/homehub/health` 通过；旧 Gateway `0.1.0`、PUBG `3.3.3`、Organize `0.2.1`、NAS `0.1.4` 均 `INSTALL_READY`，旧 Tool 清单恢复，doctor 为 0 failure。
+- 随后恢复当前插件（Gateway `0.1.1`、PUBG `3.3.4`、Product Radar `0.6.0`、Organize `0.2.2`、NAS `0.1.6`）和 Runtime `local/pubg-query-engine-v3:git-015df8f`；当前 health、doctor、Kurisu HTTP smoke、HomeHub Docker smoke 均通过。
+- 因 Avalon 未连接，R05 目前只能判定为“核心入口/镜像/插件回滚通过，媒体挂载场景 blocked”，不是完整 R05/PRODUCT_COMPLETE 证据。
 - 不得用 provider/fake trace、HTTP 200、容器健康或插件 `INSTALL_READY` 替代真实平台入站/外部执行/最终送达证据；在上述证据补齐前不得标记 `PRODUCT_COMPLETE`。
