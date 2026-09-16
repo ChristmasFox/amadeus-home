@@ -1,12 +1,15 @@
-# Kurisu 统一 Agent 实施计划（PLANNED：2026-09-16）
+# Kurisu 统一 Agent P0（HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-已编写规划文档，尚无新 runtime、模型配置或生产部署变化。审阅基线为 `b77a2d6`。
+P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
-- 规格：`docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`；验收：`docs/KURISU_AGENT_ACCEPTANCE.md`。
-- Goal 入口：`docs/KURISU_CODEX_GOAL.md`；任务：`.agent/tasks/2026-09-16-kurisu-agent-implementation.md`。
-- 目标是复用现有 LangBot/9Router 主 Agent，按 P0 实测决定唯一宿主；保留 PUBG/HomeHub/Radar/n8n 业务。
-- 需要实施统一工具/上下文、持久化任务、Codex executor、可靠通知和 Kurisu 表达；本节不代表这些能力已经实现。
-- 文档交付 checkpoint：`.agent/checkpoints/2026-09-16-kurisu-agent-plan.md`。
+- 宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
+- 能力/生产者盘点：`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`。
+- 脱敏 baseline/复现：`docs/reports/KURISU_AGENT_P0_BASELINE.json`；进度：`docs/reports/KURISU_AGENT_PROGRESS.md`。
+- fake host loop：`apps/agent-runtime/src/kurisu/host-probe.ts`，定向测试已通过。
+- 实际 9Router provider probe：文本 tool call、合法 JSON 参数、tool result continuation、结构化失败传播、图文 tool call 均 HTTP 200；LangBot native session 层因缺少合法 user/support-admin token 未宣称通过。
+- 当前生产 Pipeline 仍有旧 EventListener，P1 必须完成 session rollout/single-consumer 迁移；该事实不能被 P0 宿主选择覆盖。
+
+后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P1–P6；P7 仍需独立授权。
 
 既有实现与部署历史如下。
 

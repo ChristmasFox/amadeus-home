@@ -1,8 +1,10 @@
-# 当前规划：Kurisu 统一 Agent（PLAN_ONLY：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-用户要求把实施规格提交仓库，再由本机 Codex Goal 实施。读取 `docs/KURISU_CODEX_GOAL.md`、`docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`、`docs/KURISU_AGENT_ACCEPTANCE.md`。
+已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
-P0–P7 尚未开始。优先复用现有 LangBot/9Router 主 Agent，P0 核验后固定唯一宿主；禁止两个主 Agent 和已迁移消息的关键词抢占。计划保留现有领域逻辑并补齐任务、Codex 和通知闭环。当前只交付文档，不代表部署或测试了新实现。
+P0 证据位于 `docs/decisions/KURISU_AGENT_HOST.md`、`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`docs/reports/KURISU_AGENT_P0_BASELINE.json` 和 `docs/reports/KURISU_AGENT_PROGRESS.md`。本阶段未写生产配置、未重启容器、未发送真实 Telegram/KOOK 消息。LangBot 管理 API key 不能替代 WebSocket 所需的 user/support-admin session token，因此 native-agent platform entry 未宣称通过；当前旧 EventListener 尚未迁移，列为 P1。
+
+P1–P6 继续按实施计划推进，P7 仍需独立授权。
 
 旧任务及运行证据保留如下。
 

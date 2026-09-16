@@ -1,0 +1,85 @@
+{
+  "report": "KURISU_AGENT_P0_BASELINE",
+  "revision": "042d5c3",
+  "date": "2026-09-16",
+  "timezone": "Asia/Shanghai",
+  "scope": "local development only; no production writes or platform messages",
+  "runtime": {
+    "host": "OrbStack ubuntu / CasaOS",
+    "langbot": "4.10.8",
+    "langbot_image": "local/langbot-agent:941eb1089250-20260911-130202",
+    "router": "9Router 0.5.65",
+    "codex_cli": "0.153.4",
+    "node": "22.20.0",
+    "pnpm": "9.9.0"
+  },
+  "langbot": {
+    "workspace_count": 1,
+    "pipeline_count": 1,
+    "pipeline_name": "KOOK Pipeline",
+    "pipeline_uuid": "2cc265c7-0dd1-4221-b594-0a6b38d7c1d5",
+    "runner": "local-agent",
+    "max_round": 10000,
+    "enable_all_tools": true,
+    "primary_model_alias": "arthur-combo",
+    "model_abilities": ["vision", "func_call", "reasoning"],
+    "bot_adapters": ["kook", "telegram"],
+    "installed_plugin_count": 6
+  },
+  "reproductions": [
+    {
+      "caseId": "P0-FAKE-HOST-LOOP",
+      "layer": "L1",
+      "result": "PASS",
+      "evidence": "apps/agent-runtime/src/kurisu/host-probe.ts and kurisu-host-probe.test.ts",
+      "invariants": ["typed tool calls", "status then dependent query", "tool_call_id correlation", "no final success after missing tool"]
+    },
+    {
+      "caseId": "P0-9ROUTER-TEXT-TOOLS",
+      "layer": "P0_REAL",
+      "result": "PASS",
+      "evidence": "9Router HTTP 200; tool call id/name present; arguments parsed as JSON; tool result follow-up returned assistant final",
+      "invariants": ["continuous tool loop at provider boundary", "JSON arguments", "correlated result"]
+    },
+    {
+      "caseId": "P0-9ROUTER-ERROR",
+      "layer": "P0_REAL",
+      "result": "PASS",
+      "evidence": "structured error tool result returned bounded assistant final; no success status was inferred",
+      "invariants": ["failure propagation remains observable", "no fake success"]
+    },
+    {
+      "caseId": "P0-9ROUTER-IMAGE",
+      "layer": "P0_REAL",
+      "result": "PASS",
+      "evidence": "1x1 PNG data URI request to arthur-combo returned HTTP 200 and one JSON tool call",
+      "invariants": ["vision input accepted", "tool_call id present", "JSON arguments"]
+    },
+    {
+      "caseId": "P0-LANGBOT-READONLY-DISCOVERY",
+      "layer": "P0",
+      "result": "PASS",
+      "evidence": "authenticated read-only API returned pipeline/plugins/platform bot inventory",
+      "invariants": ["native local-agent selected", "Telegram and KOOK current bindings recorded"]
+    },
+    {
+      "caseId": "P0-LANGBOT-SESSION-AUTH",
+      "layer": "P0_REAL",
+      "result": "BLOCKED",
+      "evidence": "dashboard WebSocket requires user/support-admin token plus workspace UUID; available management API key is not a session identity",
+      "invariants": ["do not impersonate user", "do not send platform message", "do not modify production pipeline"]
+    },
+    {
+      "caseId": "P0-LEGACY-LISTENERS",
+      "layer": "P0",
+      "result": "OPEN-P1",
+      "evidence": "PUBG and Product Radar EventListener components remain installed in the current shared pipeline",
+      "invariants": ["no dual consumer after migration", "legacy default remains until rollout"]
+    }
+  ],
+  "secrets": {
+    "stored": false,
+    "source": "external runtime files only",
+    "redaction": "provider/API keys, bot tokens, adapter configs, prompts, and message bodies omitted"
+  }
+}

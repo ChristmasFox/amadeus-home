@@ -1,11 +1,13 @@
-# Kurisu 统一 Agent（PLANNED / NOT_STARTED：2026-09-16）
+# Kurisu 统一 Agent（P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
-用户已要求先提交可用于 Codex Goal 的实施计划，后续在本机实施。本节不代表代码或生产环境已改变。
+已完成 P0 的本机事实盘点和宿主决策：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
-- [x] 编写 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`，明确单一主 Agent、复用现有 LangBot/9Router 的宿主门槛、领域工具与 P0–P7。
-- [x] 编写 `docs/KURISU_AGENT_ACCEPTANCE.md` 和 `docs/KURISU_CODEX_GOAL.md`，定义验收证据、开发/恢复/部署入口。
-- [ ] P0 本机能力验证与宿主 ADR；之后依计划实施 P1–P6。
-- [ ] P7 仅在用户单独授权后部署和真实平台验收。
+- [x] 读取并执行 P0 要求，记录 LangBot 4.10.8、`KOOK Pipeline`、Telegram/KOOK bot、`arthur-combo`/9Router 和现有插件/通知生产者。
+- [x] 创建宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
+- [x] 创建能力/生产者盘点、脱敏 baseline、复现记录：`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`KURISU_AGENT_P0_BASELINE.json`、`KURISU_AGENT_PROGRESS.md`。
+- [x] fake host probe 验证 typed tool → status → dependent query → final 以及缺失工具的 bounded error；真实 9Router provider 验证文本 tool call、tool result、结构化失败和图文 tool call。
+- [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 未宣称通过；P1 仍需迁移历史 EventListener 并通过 L2/L3。
+- [ ] P1–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 
