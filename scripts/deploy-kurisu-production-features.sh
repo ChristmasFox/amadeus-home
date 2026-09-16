@@ -63,7 +63,7 @@ target_id = str(delivery.get('targetId') or '').strip()
 bot_id = str(delivery.get('botUuid') or '').strip()
 if target_type not in {'person', 'group'} or not target_id or not bot_id:
     raise SystemExit('digest delivery config is incomplete')
-radar_env = root / 'product-radar/.env'
+radar_env = Path('/var/lib/casaos/apps/product-radar/.env')
 if not radar_env.exists():
     raise SystemExit('Product Radar external env is unavailable')
 radar_values = {}
