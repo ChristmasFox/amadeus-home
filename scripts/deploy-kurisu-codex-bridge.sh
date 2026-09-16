@@ -36,7 +36,11 @@ payload = {
 with open(path,'wb') as f: plistlib.dump(payload,f)
 PY
 launchctl bootout "gui/$USER_ID/com.local.homehub.mac-host-agent" 2>/dev/null || true
-launchctl bootstrap "gui/$USER_ID" "$PLIST"
+for _ in $(seq 1 3); do
+  launchctl bootstrap "gui/$USER_ID" "$PLIST" 2>/dev/null && break
+  sleep 1
+done
+launchctl print "gui/$USER_ID/com.local.homehub.mac-host-agent" >/dev/null
 for _ in $(seq 1 20); do
   result="$(curl --silent --max-time 3 -H "Authorization: Bearer $(<"$TOKEN_FILE")" http://127.0.0.1:49152/v1/codex/health || true)"
   [[ "$result" == *'"enabled":true'* ]] && break

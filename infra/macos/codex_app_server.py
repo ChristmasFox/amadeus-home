@@ -157,7 +157,9 @@ class CodexAppServerBridge:
             return
         if not Path(self.command).is_file():
             raise CodexBridgeError("CODEX_UNAVAILABLE", "configured Codex CLI is unavailable")
-        env = {"HOME": self.home, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"}
+        # launchd has a minimal PATH; the configured Codex binary may be an
+        # nvm shim whose adjacent Node binary is required by its shebang.
+        env = {"HOME": self.home, "PATH": f"{Path(self.command).parent}:/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin"}
         self.process = subprocess.Popen([self.command, "app-server", "--stdio"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1, env=env)
         threading.Thread(target=self._read_loop, daemon=True).start()
         result = self._request("initialize", {"clientInfo": {"name": "kurisu-macos-bridge", "version": "0.1.0"}}, internal=True)
