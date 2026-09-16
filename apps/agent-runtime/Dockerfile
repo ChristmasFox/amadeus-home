@@ -25,7 +25,7 @@ COPY apps/agent-runtime/pubg-query.schema.json apps/agent-runtime/pubg-query.sch
 
 RUN pnpm --filter @agent/agent-runtime build
 RUN --mount=type=cache,id=agent-runtime-pnpm-store,target=/pnpm/store \
-    pnpm --offline --filter @agent/agent-runtime deploy --prod /prod && \
+    pnpm --filter @agent/agent-runtime deploy --prod /prod && \
     cp -R apps/agent-runtime/dist /prod/dist && \
     cp -R apps/agent-runtime/teams /prod/teams && \
     cp apps/agent-runtime/pubg-query.schema.json /prod/pubg-query.schema.json
