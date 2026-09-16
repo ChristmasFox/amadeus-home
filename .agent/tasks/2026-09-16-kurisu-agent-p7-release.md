@@ -16,6 +16,6 @@ P6 已完成本地实现、结构化 L2 fixture、R01/R02、release dry-run、�
 
 已完成全会话自然语言切换：PUBG `3.3.4`、Product Radar `0.6.0`、Organize Emby `0.2.2` 不再注册自然语言 EventListener/Tool，NAS `0.1.6` 无组件；线上 API/DB 确认 Kurisu Gateway 仍为唯一 Tool-only natural-language bridge。普通 Telegram/KOOK 会话现进入 LangBot 原生 Agent + Kurisu，不再由 legacy listener 抢先消费。
 
-剩余：部署后尚无新的真实 Telegram/KOOK 入站记录，因此引用、图片、按钮/审批、必要群聊和真实 Gateway 平台身份链路未完成；R05 可恢复回滚也尚未执行。通知、Codex、写工具与 Product Radar central owner 已启用，但其真实平台触发/送达仍需 L4 证据。
+剩余：部署后尚无新的真实 Telegram/KOOK 入站记录，因此引用、图片、按钮/审批、必要群聊和真实 Gateway 平台身份链路未完成。R05 已实际尝试但因宿主 Avalon 未挂载无法切换旧 Runtime，随后已恢复核心服务；媒体 bind mount 与成功回滚仍待外部磁盘恢复。通知、Codex、写工具与 Product Radar central owner 已启用，但其真实平台触发/送达仍需 L4 证据。
 
 验收范围：仅管理员 Telegram 私聊先做 shadow/灰度，验证真实入站、引用、图片、按钮、审批、Codex 任务恢复、通知补发和回滚；KOOK 未迁移会话保持旧权限与旧功能。不得把 P6 fake/provider 证据当作 L3/L4 通过，也不得向群聊发测试消息。

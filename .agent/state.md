@@ -4,10 +4,10 @@
 
 ## 2026-09-17 当前线上快照
 
-- Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。
+- Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。当前为核心恢复态，Avalon 未挂载，live Compose 暂无媒体 bind mount。
 - `scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、R01、R02 和 backup dry-run 通过；HomeHub Docker smoke 取得真实 macOS host metrics。
 - LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；Kurisu 是唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
-- 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R05 仍为 `PENDING/BLOCKED`；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
+- 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R05 仍为 `PENDING/BLOCKED`；R05 实际尝试因 Avalon 未挂载失败后已恢复核心服务；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 

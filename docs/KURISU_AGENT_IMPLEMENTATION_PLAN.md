@@ -1,6 +1,8 @@
 # Kurisu 统一 Agent 实施计划
 
-状态：PLANNED，尚未实施或部署。版本：1.0，2026-09-16。
+状态：IMPLEMENTED；P0–P6 已完成，P7 已部署但真实平台 L4、Avalon 媒体 live mount 和成功 R05 回滚仍待完成。版本：1.0，2026-09-16。
+
+说明：本文最初是实现规格；当前生产授权来自用户后续 Goal，不由本计划单独授予。线上状态和证据以 `docs/PROJECT_STATE.md`、`docs/CURRENT_TASK.md` 及最新 checkpoint 为准。
 
 代码审阅基线：`b77a2d6a978cfda4e85c40d292d3f4bfb7bc0f97`。实施时必须对照新的 HEAD 复核；本文件不是线上配置或验收证明。
 

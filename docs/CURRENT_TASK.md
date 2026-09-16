@@ -6,10 +6,10 @@
 - [x] 核验它是真实简报 producer：每日 09:30/23:00 调度、运行去重、RSS/API 采集、AI 分析、事件/运行 Data Table 与 KOOK 发送均在 live 定义中；此前 `BRIEFING_BLOCKED` 结论已过期。
 - [x] 简报 sender 已交接到 Runtime notification outbox：live workflow 的 `Ingest Digest via Kurisu` 使用共享外部 secret；n8n 重跑 `6165` 在 2026-09-16 15:32:59 成功记录为 `success/sent`，对应 Kurisu event/delivery 均为 KOOK `sent`（1 attempt、无错误）。旧 `Send to KOOK via LangBot` 节点不在 live workflow 连接中。
 - [x] 修复真实 handoff 首次失败：n8n secret 是 root-only bind mount，Runtime 启动时读为空而返回 503。部署脚本现在将其设为 `root:gid1000 0640` 并强制 recreate Runtime；Compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-233013`。
-- [x] 已完成生产发布：Runtime `local/pubg-query-engine-v3:git-015df8f`、Kurisu 生产开关、通知/Codex/写工具、Radar central owner 和受限媒体目录挂载均已在 OrbStack `ubuntu` CasaOS 生效。
+- [x] 已完成生产发布：Runtime `local/pubg-query-engine-v3:git-015df8f`、Kurisu 生产开关、通知/Codex/写工具和 Radar central owner 已在 OrbStack `ubuntu` CasaOS 生效；媒体目录挂载已写入生产配置，但因宿主 Avalon 当前未挂载，live 暂不加载。
 - [x] 已完成 LangBot 插件发布：`kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6` 均启用；Kurisu 为唯一 Tool，旧插件不再暴露自然语言 Tool/EventListener。
-- [x] 已完成线上只读验收：Runtime/HomeHub/Kurisu HTTP、受限 Docker API、doctor、R01/R02 和插件 API/DB 状态核验通过；媒体 scan/preview/move 已有真实目录边界和 post-execution verify。
-- [ ] 尚待真实 Telegram/KOOK 入站（含引用/图片/按钮/审批等代表场景）和一次 R05 可恢复回滚；当前没有新入站记录，完成前不得标记 `PRODUCT_COMPLETE`。
+- [x] 已完成线上只读验收：Runtime/HomeHub/Kurisu HTTP、受限 Docker API、doctor、R01/R02 和插件 API/DB 状态核验通过；媒体 scan/preview/move 的源码边界和 post-execution verify 已完成。
+- [ ] 尚待真实 Telegram/KOOK 入站（含引用/图片/按钮/审批等代表场景）、Avalon 重新挂载后的媒体 live smoke 和一次成功的 R05 可恢复回滚；当前没有新入站记录，完成前不得标记 `PRODUCT_COMPLETE`。
 
 当前真实架构为 LangBot 原生 `local-agent` + 当前 9Router 作为唯一自然语言决策宿主，Mastra 仅保留 PUBG deterministic subworkflow。P0–P6 已完成；本次 P7 已完成 Runtime immutable image、生产配置、Kurisu Gateway 与 legacy plugin 清理、媒体工具边界和全会话切流。仍需真实平台入站与受控回滚证据，不把 health、插件安装或 provider trace 单独当作产品完成。
 

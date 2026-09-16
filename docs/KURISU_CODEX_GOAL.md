@@ -1,6 +1,6 @@
 # Codex Goal 执行入口
 
-当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体边界和全会话自然语言切流。当前生产版本已上线，仍需真实 Telegram/KOOK 入站证据与一次受控回滚，完成后才可标记 `PRODUCT_COMPLETE`。
+当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体安全边界和全会话自然语言切流。当前生产版本已上线，核心服务已恢复；宿主 Avalon 当前未挂载，媒体 live mount、真实 Telegram/KOOK 入站和成功 R05 回滚仍待完成，完成后才可标记 `PRODUCT_COMPLETE`。
 
 主规格：[实施计划](KURISU_AGENT_IMPLEMENTATION_PLAN.md)。必过条件：[验收矩阵](KURISU_AGENT_ACCEPTANCE.md)。
 
