@@ -15,7 +15,7 @@ P6 实现提交：`24946b9`；本报告和验收证据随后在同一阶段补�
 | P4 | `IMPLEMENTED / VERIFIED_LOCAL` | 单一 Codex App Server executor、server-owned project registry、worktree 隔离、start/status/list/resume/cancel、持久化 thread/turn/审批/输入状态；fake server 与真实 `codex-cli 0.153.4` 隔离仓库小修复通过，报告见 `KURISU_CODEX_P4_REAL_TRACE.json` | 真实 Codex approval 本次隔离小任务未触发；平台消息通知交由 P5，真实平台/L4 仍不宣称 |
 | P5 | `IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED` | Runtime notification Worker、Codex spool、Radar central handoff、structured write events、偏好/语气、producer 清单；Kurisu `48/48`、Radar `53/53`、plugin `4/4` | briefing 真实 scheduler/生成/投递 producer 未发现；旧 n8n sender 仅 rollback source；P7 才能切真实 owner |
 | P6 | `IMPLEMENTED / LOCAL_COMPLETE / L3_BLOCKED / BRIEFING_BLOCKED` | 101 条结构化 L2 场景（60 条独立失败改写）、R01/R02、HTTP smoke、配置/备份/恢复/runbook；实现提交 `24946b9` | Kurisu `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、R01/R02、L2 HTTP smoke 通过；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，既有 runner 卡点已修复 |
-| P7 | `PARTIAL_RUNTIME_DEPLOYED / BOUNDARY_HARDENED / PLUGIN_INSTALLED / PLATFORM_GRAY_PENDING` | Runtime immutable image 已发布；Kurisu POST secret、localhost 宿主绑定、外部 secret 权限和 live 401/授权 smoke 已核验；`local/kurisu-gateway@0.1.0` 已安装并注册 | 单一管理员 Telegram 私聊的真实 Tool 调用灰度、session rollout、旧 EventListener single-consumer 迁移、briefing producer 和真实平台回滚验收仍未完成 |
+| P7 | `PARTIAL_RUNTIME_DEPLOYED / BOUNDARY_HARDENED / PLUGIN_INSTALLED / PLATFORM_GRAY_RETEST_PENDING` | Runtime immutable image 已发布；Kurisu POST secret、localhost 宿主绑定、外部 secret 权限和 live 401/授权 smoke 已核验；`local/kurisu-gateway@0.1.0` 已安装并注册；Radar read backend 配置已补齐并得到 live `ok` 结果 | 单一管理员 Telegram 私聊的修复后真实 Tool 调用/渲染回复、session rollout、旧 EventListener single-consumer 迁移、briefing producer 和真实平台回滚验收仍未完成 |
 
 ## P0 结论
 

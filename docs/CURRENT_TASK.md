@@ -31,6 +31,7 @@
 - [x] 用户明确授权后完成受控部分发布：source `5a015f1` 已 push；Runtime image `local/pubg-query-engine-v3:git-5a015f1b87c7` 已部署到 OrbStack `ubuntu` CasaOS，compose 使用 `docker compose up -d --no-build`，回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
 - [x] `kurisu-gateway` 已作为 `local/kurisu-gateway@0.1.0` 由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载外部 gateway secret。仅管理员 Telegram 私聊可继续真实 Tool 调用灰度，未切换其他 session rollout。
+- [x] 首次 Telegram 工具灰度暴露遗漏的 `KURISU_RADAR_URL`，已补为 `http://product-radar:5315` 并无构建重建 Runtime；同类授权 `kurisu.radar.list` live 请求返回 `ok`。等待该私聊重发只读请求，验证 LangBot 最终渲染回复。
 - [ ] 真实 native-agent L2/L3、旧 EventListener single-consumer 迁移、briefing producer 和 Telegram/KOOK 真实平台验收仍 blocked；不得将当前 Runtime health 当作消息送达或产品完成证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
