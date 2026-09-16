@@ -52,6 +52,12 @@ for path in (runtime_dir, n8n_db, digest_config, notification_secret, langbot_to
         raise SystemExit(f'required external path is unavailable: {path}')
 if not notification_secret.read_text().strip() or not langbot_token.read_text().strip():
     raise SystemExit('required external secret file is empty')
+# Both n8n and the Runtime deliberately run as the unprivileged `node` user
+# (uid/gid 1000).  A root-only bind mount looks present in docker inspect but
+# makes Runtime silently start with an empty ingress secret.  Keep the secret
+# root-owned while granting that one shared service group read access.
+notification_secret.chown(0, 1000)
+notification_secret.chmod(0o640)
 
 con = sqlite3.connect(f'file:{n8n_db}?mode=ro', uri=True)
 row = con.execute("select value from variables where key='CODEX_NOTIFY_SECRET'").fetchone()
@@ -164,5 +170,6 @@ orb -m "$MACHINE" -u root bash -lc '
   curl --fail --silent --max-time 5 http://127.0.0.1:5315/health >/dev/null
   docker inspect pubg-query-engine-v3 --format "{{range .Config.Env}}{{println .}}{{end}}" | grep -Fx "KURISU_NOTIFICATIONS_ENABLE=1" >/dev/null
   docker inspect product-radar --format "{{range .Config.Env}}{{println .}}{{end}}" | grep -Fx "PRODUCT_RADAR_NOTIFICATION_OWNER=central" >/dev/null
+  docker exec pubg-query-engine-v3 sh -lc "test -r /run/secrets/kurisu_notification_secret && test -s /run/secrets/kurisu_notification_secret"
   echo KURISU_PRODUCTION_FEATURES_CONFIGURED
 '
