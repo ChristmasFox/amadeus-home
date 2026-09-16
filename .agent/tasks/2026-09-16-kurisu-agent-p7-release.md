@@ -8,7 +8,7 @@ P6 已完成本地实现、结构化 L2 fixture、R01/R02、release dry-run、�
 
 已完成并部署边界硬化：Kurisu POST 入口要求外部 secret，未配置时 fail-closed；Runtime 宿主端口仅绑定 `127.0.0.1`，容器间私网访问不变。当前生产插件仍未安装。
 
-持久化安全补强已完成源码实现：`KurisuStore` 在建库和事务提交后收紧主库/WAL/SHM 为 `0600`，并有专门回归测试；需随下一次 Runtime immutable image 发布。
+持久化安全补强已完成并部署：`KurisuStore` 在建库和事务提交后收紧主库/WAL/SHM 为 `0600`，专门回归测试通过，live 新 image 重建后权限核验通过。
 
 剩余开始条件：在安装 `kurisu-gateway`/切换 session rollout 前，必须在合法流程中取得 LangBot user/support-admin session；配置 Runtime 与 LangBot plugin runtime 共享的外部 gateway secret；确认真实 briefing producer、旧 EventListener single-consumer 迁移范围、管理员 Telegram DM 测试对象和回滚 checkpoint。当前条件未齐，插件保持未安装。
 

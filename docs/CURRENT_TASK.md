@@ -26,7 +26,7 @@
 - [x] P6 分批验证：Kurisu `50/50`、Product Radar `53/53`、runtime/Product Radar typecheck、plugin `4/4`、Python compile、secret scan、diff check 均通过；HTTP smoke 和 R02 均确认无生产写操作。
 - [x] 修复默认复盘模板遗漏逐人载具里程导致的 `review-v3-2.test.ts` runner 卡点；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
 - [x] 完成 Kurisu POST 边界硬化源码：`inbound/callback/tool-call` 要求外部 gateway secret，未配置时 fail-closed；Runtime Compose 模板仅将宿主端口绑定到 `127.0.0.1`，插件调用约定改为携带 `X-Kurisu-Gateway-Secret`。
-- [x] 将 Kurisu SQLite 主库/WAL/SHM `0600` 保证写回 `KurisuStore`，并补充新建磁盘库权限回归；下一步随 Runtime immutable image 发布核验 live。
+- [x] 将 Kurisu SQLite 主库/WAL/SHM `0600` 保证写回 `KurisuStore`，并补充新建磁盘库权限回归；新 Runtime immutable image 重建后 live 权限核验通过。
 - [x] 用户明确授权后完成受控部分发布：source `5a015f1` 已 push；Runtime image `local/pubg-query-engine-v3:git-5a015f1b87c7` 已部署到 OrbStack `ubuntu` CasaOS，compose 使用 `docker compose up -d --no-build`，回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
 - [ ] `kurisu-gateway` 插件未安装，未切换 session rollout：缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，避免未授权会话看到新工具。

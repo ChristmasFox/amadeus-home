@@ -4,7 +4,7 @@
 
 最新安全状态：Kurisu POST 边界已部署为要求外部 `X-Kurisu-Gateway-Secret`，未配置时 fail-closed；live Compose 宿主端口为 `127.0.0.1` 绑定，secret 位于仓库外且以 `root:docker 0640` 挂载。无 header live 返回 401，正确 secret 才进入应用层。
 
-最新持久化安全状态：`KurisuStore` 源码已在建库/事务提交后保证主库、WAL、SHM 为 `0600`，定向权限回归通过；待下一次 immutable image 发布后复核 live。
+最新持久化安全状态：`KurisuStore` 源码已在建库/事务提交后保证主库、WAL、SHM 为 `0600`，定向权限回归通过；新 image `local/pubg-query-engine-v3:git-3e00275d8e70` live 重建后仍为 `0600`。
 
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
