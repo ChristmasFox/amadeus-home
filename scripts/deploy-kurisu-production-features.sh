@@ -63,6 +63,20 @@ target_id = str(delivery.get('targetId') or '').strip()
 bot_id = str(delivery.get('botUuid') or '').strip()
 if target_type not in {'person', 'group'} or not target_id or not bot_id:
     raise SystemExit('digest delivery config is incomplete')
+radar_env = root / 'product-radar/.env'
+if not radar_env.exists():
+    raise SystemExit('Product Radar external env is unavailable')
+radar_values = {}
+for line in radar_env.read_text().splitlines():
+    if '=' in line and not line.lstrip().startswith('#'):
+        key, value = line.split('=', 1)
+        radar_values[key.strip()] = value.strip()
+telegram_recipient = radar_values.get('TELEGRAM_ADMIN_USER_ID', '')
+telegram_bot = radar_values.get('PRODUCT_RADAR_TELEGRAM_BOT_ID', '')
+kook_recipient = radar_values.get('KOOK_ADMIN_USER_ID', '')
+kook_bot = radar_values.get('PRODUCT_RADAR_KOOK_BOT_ID', '')
+if not all((telegram_recipient, telegram_bot, kook_recipient, kook_bot)):
+    raise SystemExit('Product Radar admin notification targets are incomplete')
 
 stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
 env_file = runtime_dir / 'kurisu.env'
@@ -76,9 +90,15 @@ env_file.write_text('\n'.join([
     'KURISU_NOTIFICATION_LANGBOT_URL=http://langbot:5300',
     'KURISU_NOTIFICATION_LANGBOT_HEADER=X-API-Key',
     'KURISU_NOTIFICATION_LANGBOT_API_KEY_FILE=/run/secrets/langbot-api-token',
-    f'KURISU_NOTIFICATION_KOOK_RECIPIENT={target_id}',
-    f'KURISU_NOTIFICATION_KOOK_BOT_ID={bot_id}',
-    f'KURISU_NOTIFICATION_KOOK_TARGET_TYPE={target_type}',
+    f'KURISU_NOTIFICATION_TELEGRAM_RECIPIENT={telegram_recipient}',
+    f'KURISU_NOTIFICATION_TELEGRAM_BOT_ID={telegram_bot}',
+    'KURISU_NOTIFICATION_TELEGRAM_TARGET_TYPE=person',
+    f'KURISU_NOTIFICATION_KOOK_RECIPIENT={kook_recipient}',
+    f'KURISU_NOTIFICATION_KOOK_BOT_ID={kook_bot}',
+    'KURISU_NOTIFICATION_KOOK_TARGET_TYPE=person',
+    f'KURISU_NOTIFICATION_BRIEFING_KOOK_RECIPIENT={target_id}',
+    f'KURISU_NOTIFICATION_BRIEFING_KOOK_BOT_ID={bot_id}',
+    f'KURISU_NOTIFICATION_BRIEFING_KOOK_TARGET_TYPE={target_type}',
     'KURISU_ENABLE_WRITE_TOOLS=1',
     '',
 ]))

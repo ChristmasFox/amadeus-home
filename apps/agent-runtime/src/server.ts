@@ -69,8 +69,11 @@ const notificationSecret = (process.env.KURISU_NOTIFICATION_SECRET?.trim() || re
 const notificationPrincipalKey = process.env.KURISU_NOTIFICATION_PRINCIPAL_KEY?.trim() || 'codex:external';
 const notificationLangBotToken = process.env.KURISU_NOTIFICATION_LANGBOT_API_KEY?.trim()
   || readSecretFile(process.env.KURISU_NOTIFICATION_LANGBOT_API_KEY_FILE ?? '');
-const notificationChannels = notificationsEnabled ? buildNotificationChannels(notificationLangBotToken) : [];
-const notificationTargets: NotificationTarget[] = notificationChannels.map((channel) => ({ channel: channel.channel, recipient: channel.recipient }));
+const defaultNotificationChannels = notificationsEnabled ? buildNotificationChannels(notificationLangBotToken) : [];
+const briefingNotificationChannels = notificationsEnabled ? buildBriefingNotificationChannels(notificationLangBotToken) : [];
+const notificationChannels = [...defaultNotificationChannels, ...briefingNotificationChannels];
+const notificationTargets: NotificationTarget[] = defaultNotificationChannels.map((channel) => ({ channel: channel.channel, recipient: channel.recipient }));
+const briefingNotificationTargets: NotificationTarget[] = briefingNotificationChannels.map((channel) => ({ channel: channel.channel, recipient: channel.recipient }));
 const radarUrl = process.env.KURISU_RADAR_URL?.trim() ?? '';
 const radarClient = radarUrl
   ? {
@@ -243,7 +246,7 @@ const server = createServer(async (request, response) => {
           ...(typeof body.runId === 'string' ? { runId: body.runId } : {}),
           ...(typeof body.occurredAt === 'string' ? { occurredAt: body.occurredAt } : {}),
         });
-        const result = kurisuService.notifications.ingest(parsed, notificationTargets);
+        const result = kurisuService.notifications.ingest(parsed, parsed.source === 'briefing' ? briefingNotificationTargets : notificationTargets);
         json(response, 202, { accepted: true, duplicate: !result.inserted, eventId: result.eventId, deliveries: result.deliveries.map(({ id, channel, recipient, muted }) => ({ id, channel, recipient, muted })) });
         return;
       }
@@ -384,6 +387,23 @@ function buildNotificationChannels(apiToken: string): Array<LangBotNotificationC
   const kookTargetType = process.env.KURISU_NOTIFICATION_KOOK_TARGET_TYPE === 'group' ? 'group' : 'person';
   if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ channel: 'kook', baseUrl, botId: kookBotId, recipient: kookRecipient, targetType: kookTargetType, apiToken, apiHeaderName: headerName }));
   return channels;
+}
+
+/** Briefings retain their configured group/channel while all other sources use admin targets. */
+function buildBriefingNotificationChannels(apiToken: string): Array<LangBotNotificationChannel> {
+  if (!apiToken) return [];
+  const recipient = process.env.KURISU_NOTIFICATION_BRIEFING_KOOK_RECIPIENT?.trim();
+  const botId = process.env.KURISU_NOTIFICATION_BRIEFING_KOOK_BOT_ID?.trim();
+  if (!recipient || !botId) return [];
+  return [new LangBotNotificationChannel({
+    channel: 'kook',
+    baseUrl: process.env.KURISU_NOTIFICATION_LANGBOT_URL?.trim() || 'http://langbot:5300',
+    botId,
+    recipient,
+    targetType: process.env.KURISU_NOTIFICATION_BRIEFING_KOOK_TARGET_TYPE === 'person' ? 'person' : 'group',
+    apiToken,
+    apiHeaderName: process.env.KURISU_NOTIFICATION_LANGBOT_HEADER?.trim() || 'Authorization',
+  })];
 }
 
 function matchesSecret(value: string | string[] | undefined, expected: string): boolean {
