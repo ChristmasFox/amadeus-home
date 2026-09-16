@@ -161,8 +161,11 @@ PY
 
 orb -m "$MACHINE" -u root bash -lc '
   set -euo pipefail
-  cd /var/lib/casaos/apps/pubg-query-engine-v3 && docker compose config >/dev/null && docker compose up -d --no-build
-  cd /var/lib/casaos/apps/product-radar && docker compose config >/dev/null && docker compose up -d --no-build
+  # Secret file permission changes are not part of the Compose config hash.
+  # Runtime reads the ingress secret at process start, so force recreation is
+  # required even when all compose lines are already present.
+  cd /var/lib/casaos/apps/pubg-query-engine-v3 && docker compose config >/dev/null && docker compose up -d --force-recreate --no-build
+  cd /var/lib/casaos/apps/product-radar && docker compose config >/dev/null && docker compose up -d --force-recreate --no-build
   for _ in $(seq 1 30); do
     curl --fail --silent --max-time 3 http://127.0.0.1:5310/healthz >/dev/null && curl --fail --silent --max-time 3 http://127.0.0.1:5315/health >/dev/null && break
     sleep 2
