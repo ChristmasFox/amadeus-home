@@ -48,6 +48,24 @@ def trusted_session_context(session: Any, query_id: Any) -> dict[str, Any]:
     }
 
 
+async def trusted_session_context_from_plugin(session: Any, query_id: Any, plugin: Any) -> dict[str, Any]:
+    """Resolve the real platform from LangBot's bot registry, not Session guesses."""
+    bot_uuid = str(_value(session, 'bot_uuid', '') or '').strip()
+    if not bot_uuid:
+        raise RuntimeError('bot_uuid is missing from LangBot session')
+    try:
+        bot_info = await plugin.get_bot_info(bot_uuid)
+    except Exception as exc:
+        raise RuntimeError('LangBot bot metadata is unavailable') from exc
+    platform = _platform(_value(bot_info, 'adapter', ''))
+    if platform not in {'telegram', 'kook'}:
+        raise RuntimeError('LangBot bot adapter is unsupported')
+    context = trusted_session_context(session, query_id)
+    context['platform'] = platform
+    context['botId'] = bot_uuid
+    return context
+
+
 def stable_call_id(query_id: Any, tool_name: str, tool_input: dict[str, Any]) -> str:
     """Derive a retry-stable boundary ID without trusting model metadata."""
     material = json.dumps(
@@ -122,11 +140,19 @@ class KurisuGatewayTool(Tool):
         secret = runtime_secret()
         if not secret:
             return json.dumps({'status': 'unsupported', 'error': {'code': 'RUNTIME_SECRET_UNCONFIGURED', 'retryable': False}}, ensure_ascii=False)
+        try:
+            host_context = await trusted_session_context_from_plugin(session, query_id, self.plugin)
+        except RuntimeError:
+            return json.dumps(
+                {'status': 'error', 'error': {'code': 'SESSION_CONTEXT_UNAVAILABLE', 'retryable': False}},
+                ensure_ascii=False,
+                separators=(',', ':'),
+            )
         payload = {
             'callId': call_id,
             'toolName': tool_name,
             'input': tool_input,
-            'hostContext': trusted_session_context(session, query_id),
+            'hostContext': host_context,
         }
         result = await asyncio.to_thread(_post, f'{runtime_url}/kurisu/tool-call', payload, secret)
         return json.dumps(result, ensure_ascii=False, separators=(',', ':'))

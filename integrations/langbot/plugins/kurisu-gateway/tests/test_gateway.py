@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import sys
@@ -7,7 +8,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from components.tools.kurisu_gateway import stable_call_id, trusted_session_context  # noqa: E402
+from components.tools.kurisu_gateway import (  # noqa: E402
+    stable_call_id,
+    trusted_session_context,
+    trusted_session_context_from_plugin,
+)
 
 
 class KurisuGatewayTests(unittest.TestCase):
@@ -25,6 +30,41 @@ class KurisuGatewayTests(unittest.TestCase):
 
     def test_tool_input_is_structured(self):
         self.assertIsInstance(json.loads('{"toolName":"kurisu.homehub.status","input":{}}'), dict)
+
+    def test_context_resolves_platform_from_langbot_bot_registry(self):
+        class FakePlugin:
+            def __init__(self):
+                self.requested_bot_uuid = None
+
+            async def get_bot_info(self, bot_uuid):
+                self.requested_bot_uuid = bot_uuid
+                return {'adapter': 'telegram'}
+
+        plugin = FakePlugin()
+        context = asyncio.run(
+            trusted_session_context_from_plugin(
+                {'bot_uuid': 'telegram-bot-uuid', 'sender_id': '42', 'launcher_id': '42', 'launcher_type': 'person'},
+                'q-1',
+                plugin,
+            )
+        )
+        self.assertEqual(plugin.requested_bot_uuid, 'telegram-bot-uuid')
+        self.assertEqual(context['platform'], 'telegram')
+        self.assertEqual(context['botId'], 'telegram-bot-uuid')
+
+    def test_context_fails_closed_without_bot_registry_identity(self):
+        class FakePlugin:
+            async def get_bot_info(self, bot_uuid):
+                return {'adapter': 'unknown'}
+
+        with self.assertRaises(RuntimeError):
+            asyncio.run(
+                trusted_session_context_from_plugin(
+                    {'bot_uuid': 'bot-uuid', 'sender_id': '42', 'launcher_id': '42', 'launcher_type': 'person'},
+                    'q-1',
+                    FakePlugin(),
+                )
+            )
 
     def test_call_id_is_stable_without_model_owned_metadata(self):
         first = stable_call_id('query-1', 'kurisu.radar.list', {'includeRuns': False})
