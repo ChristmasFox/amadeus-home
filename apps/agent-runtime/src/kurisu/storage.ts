@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { stableJson, type NormalizedInbound, type ToolExecutionObservation, type ToolResponseStatus } from './contracts.js';
+import { stableJson, type CallbackReference, type NormalizedInbound, type ToolExecutionObservation, type ToolResponseStatus } from './contracts.js';
 
 export type RunStatus =
   | 'queued'
@@ -41,6 +41,50 @@ export interface JobRecord {
   updatedAt: string;
 }
 
+export type CodexJobStatus = 'queued' | 'running' | 'waiting_approval' | 'waiting_input' | 'succeeded' | 'failed' | 'cancelled' | 'unknown';
+
+export interface CodexPendingRequest {
+  requestId: string;
+  method: string;
+  itemId: string | null;
+  reason: string | null;
+  callback: string | null;
+  receivedAt: string;
+}
+
+export interface CodexJobRecord {
+  jobId: string;
+  runId: string;
+  principalKey: string;
+  sessionKey: string;
+  idempotencyKey: string;
+  projectId: string;
+  workspaceRef: string;
+  threadId: string | null;
+  turnId: string | null;
+  goal: string;
+  constraints: string[];
+  status: CodexJobStatus;
+  evidence: Array<{
+    source: string;
+    observedAt: string;
+    summary: string;
+    ref?: string;
+  }>;
+  lastMessage: string | null;
+  pendingRequest: CodexPendingRequest | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MessageTaskLinkRecord {
+  sessionKey: string;
+  updateId: string;
+  runId: string;
+  relation: string;
+  createdAt: string;
+}
+
 export interface ApprovalRecord {
   id: string;
   runId: string;
@@ -48,9 +92,20 @@ export interface ApprovalRecord {
   sessionKey: string;
   action: string;
   argumentsHash: string;
+  arguments: unknown;
   status: 'pending' | 'used' | 'expired' | 'rejected';
   expiresAt: string;
   usedAt: string | null;
+}
+
+export interface CallbackBindingRecord {
+  value: string;
+  reference: CallbackReference;
+  principalKey: string;
+  sessionKey: string;
+  runId: string;
+  createdAt: string;
+  consumedAt: string | null;
 }
 
 export interface DeliveryRecord {
@@ -146,6 +201,14 @@ export class KurisuStore {
         created_at TEXT NOT NULL,
         UNIQUE(session_key, update_id)
       );
+      CREATE TABLE IF NOT EXISTS kurisu_message_task_links (
+        session_key TEXT NOT NULL REFERENCES kurisu_sessions(session_key),
+        update_id TEXT NOT NULL,
+        run_id TEXT NOT NULL REFERENCES kurisu_runs(id),
+        relation TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(session_key, update_id, run_id)
+      );
       CREATE TABLE IF NOT EXISTS kurisu_inbound_dedup (
         idempotency_key TEXT PRIMARY KEY,
         session_key TEXT NOT NULL,
@@ -206,9 +269,22 @@ export class KurisuStore {
         session_key TEXT NOT NULL,
         action TEXT NOT NULL,
         arguments_hash TEXT NOT NULL,
+        arguments_json TEXT NOT NULL DEFAULT '{}',
         status TEXT NOT NULL,
         expires_at TEXT NOT NULL,
         used_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS kurisu_callbacks (
+        callback_value TEXT PRIMARY KEY,
+        namespace TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        action TEXT NOT NULL,
+        callback_id TEXT NOT NULL,
+        principal_key TEXT NOT NULL,
+        session_key TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        consumed_at TEXT
       );
       CREATE TABLE IF NOT EXISTS kurisu_preferences (
         session_key TEXT NOT NULL,
@@ -240,6 +316,7 @@ export class KurisuStore {
       CREATE INDEX IF NOT EXISTS ix_kurisu_runs_status_lease ON kurisu_runs(status, lease_expires_at);
       CREATE INDEX IF NOT EXISTS ix_kurisu_deliveries_due ON kurisu_deliveries(status, next_attempt_at);
     `);
+    try { this.db.exec("ALTER TABLE kurisu_approvals ADD COLUMN arguments_json TEXT NOT NULL DEFAULT '{}'"); } catch { /* already migrated */ }
   }
 
   close(): void {
@@ -303,6 +380,34 @@ export class KurisuStore {
     this.db.prepare('UPDATE kurisu_inbound_dedup SET result_json = ? WHERE idempotency_key = ?').run(JSON.stringify(result), idempotencyKey);
   }
 
+  linkMessageToRun(
+    message: Pick<NormalizedInbound, 'sessionKey' | 'updateId'>,
+    runId: string,
+    relation = 'primary',
+    now = new Date().toISOString(),
+  ): MessageTaskLinkRecord {
+    this.db.prepare(`
+      INSERT INTO kurisu_message_task_links(session_key,update_id,run_id,relation,created_at)
+      VALUES (?,?,?,?,?) ON CONFLICT(session_key,update_id,run_id) DO UPDATE SET relation=excluded.relation
+    `).run(message.sessionKey, message.updateId, runId, relation, now);
+    return this.getMessageTaskLink(message.sessionKey, message.updateId, runId)!;
+  }
+
+  getMessageTaskLink(sessionKey: string, updateId: string, runId: string): MessageTaskLinkRecord | null {
+    const row = this.db.prepare('SELECT * FROM kurisu_message_task_links WHERE session_key=? AND update_id=? AND run_id=?').get(sessionKey, updateId, runId) as Record<string, unknown> | undefined;
+    return row ? toMessageTaskLink(row) : null;
+  }
+
+  listRunsForMessage(sessionKey: string, updateId: string): RunRecord[] {
+    const rows = this.db.prepare(`
+      SELECT r.* FROM kurisu_runs r
+      INNER JOIN kurisu_message_task_links l ON l.run_id=r.id
+      WHERE l.session_key=? AND l.update_id=?
+      ORDER BY l.created_at ASC
+    `).all(sessionKey, updateId) as Array<Record<string, unknown>>;
+    return rows.map(toRun);
+  }
+
   createRun(sessionKey: string, id = `run_${randomUUID()}`, now = new Date().toISOString()): RunRecord {
     this.db.prepare('INSERT INTO kurisu_runs(id, session_key, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)').run(id, sessionKey, 'queued', now, now);
     return this.getRun(id)!;
@@ -352,6 +457,7 @@ export class KurisuStore {
   cancelRun(id: string, now = new Date().toISOString()): RunRecord {
     const current = this.getRun(id);
     if (!current) throw new Error(`run not found: ${id}`);
+    if (['succeeded', 'failed', 'cancelled'].includes(current.status)) return current;
     if (current.status !== 'cancelled') return this.transitionRun(id, 'cancelled', { lastObservation: 'cancel requested; no later steps allowed' }, now);
     return current;
   }
@@ -399,6 +505,16 @@ export class KurisuStore {
     };
   }
 
+  listTaskSteps(runId: string): TaskStepRecord[] {
+    const rows = this.db.prepare('SELECT * FROM kurisu_task_steps WHERE run_id=? ORDER BY updated_at ASC, step_key ASC').all(runId) as Array<Record<string, unknown>>;
+    return rows.map((row) => ({
+      runId: String(row.run_id), stepKey: String(row.step_key), status: String(row.status) as TaskStepRecord['status'],
+      intent: (parseJson(String(row.intent_json)) as Record<string, unknown> | null) ?? {},
+      result: parseJson(row.result_json ? String(row.result_json) : null), externalId: row.external_id ? String(row.external_id) : null,
+      attempts: Number(row.attempts), updatedAt: String(row.updated_at),
+    }));
+  }
+
   completeTaskStep(runId: string, stepKey: string, status: TaskStepRecord['status'], result: unknown = null, externalId: string | null = null, now = new Date().toISOString()): TaskStepRecord {
     this.db.prepare('UPDATE kurisu_task_steps SET status=?, result_json=?, external_id=?, updated_at=? WHERE run_id=? AND step_key=?').run(status, JSON.stringify(result), externalId, now, runId, stepKey);
     return this.getTaskStep(runId, stepKey)!;
@@ -409,14 +525,102 @@ export class KurisuStore {
     return row ? toJob(row) : null;
   }
 
+  listJobs(runId: string): JobRecord[] {
+    const rows = this.db.prepare('SELECT * FROM kurisu_jobs WHERE run_id=? ORDER BY created_at ASC').all(runId) as Array<Record<string, unknown>>;
+    return rows.map(toJob);
+  }
+
   updateJob(id: string, status: string, externalId: string | null = null, now = new Date().toISOString()): JobRecord {
     this.db.prepare('UPDATE kurisu_jobs SET status=?, external_id=?, updated_at=? WHERE id=?').run(status, externalId, now, id);
     return this.getJob(id)!;
   }
 
+  createCodexJob(input: Omit<CodexJobRecord, 'jobId' | 'createdAt' | 'updatedAt' | 'status' | 'threadId' | 'turnId' | 'evidence' | 'lastMessage' | 'pendingRequest'> & { jobId?: string }, now = new Date().toISOString()): CodexJobRecord {
+    const jobId = input.jobId ?? `job_${randomUUID()}`;
+    const payload = {
+      principalKey: input.principalKey,
+      sessionKey: input.sessionKey,
+      idempotencyKey: input.idempotencyKey,
+      projectId: input.projectId,
+      workspaceRef: input.workspaceRef,
+      threadId: null,
+      turnId: null,
+      goal: input.goal,
+      constraints: [...input.constraints],
+      evidence: [],
+      lastMessage: null,
+      pendingRequest: null,
+    } satisfies Record<string, unknown>;
+    this.db.prepare('INSERT INTO kurisu_jobs(id,run_id,kind,status,external_id,payload_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)').run(
+      jobId, input.runId, 'codex', 'queued', null, JSON.stringify(payload), now, now,
+    );
+    return this.getCodexJob(jobId)!;
+  }
+
+  getCodexJob(jobId: string): CodexJobRecord | null {
+    const job = this.getJob(jobId);
+    return job?.kind === 'codex' ? toCodexJob(job) : null;
+  }
+
+  listCodexJobs(): CodexJobRecord[] {
+    const rows = this.db.prepare('SELECT * FROM kurisu_jobs WHERE kind=? ORDER BY created_at ASC').all('codex') as Array<Record<string, unknown>>;
+    return rows.map((row) => toCodexJob(toJob(row)));
+  }
+
+  findCodexJobByIdempotencyKey(idempotencyKey: string): CodexJobRecord | null {
+    const jobs = this.listCodexJobs();
+    return jobs.find((job) => job.idempotencyKey === idempotencyKey) ?? null;
+  }
+
+  updateCodexJob(
+    jobId: string,
+    patch: Partial<Pick<CodexJobRecord, 'status' | 'threadId' | 'turnId' | 'evidence' | 'lastMessage' | 'pendingRequest' | 'workspaceRef'>>,
+    now = new Date().toISOString(),
+  ): CodexJobRecord {
+    const current = this.getCodexJob(jobId);
+    if (!current) throw new Error(`codex job not found: ${jobId}`);
+    const payload: Record<string, unknown> = {
+      principalKey: current.principalKey,
+      sessionKey: current.sessionKey,
+      idempotencyKey: current.idempotencyKey,
+      projectId: current.projectId,
+      workspaceRef: patch.workspaceRef ?? current.workspaceRef,
+      threadId: 'threadId' in patch ? patch.threadId ?? null : current.threadId,
+      turnId: 'turnId' in patch ? patch.turnId ?? null : current.turnId,
+      goal: current.goal,
+      constraints: current.constraints,
+      evidence: patch.evidence ?? current.evidence,
+      lastMessage: patch.lastMessage ?? current.lastMessage,
+      pendingRequest: patch.pendingRequest === undefined ? current.pendingRequest : patch.pendingRequest,
+    };
+    this.db.prepare('UPDATE kurisu_jobs SET status=?, external_id=?, payload_json=?, updated_at=? WHERE id=? AND kind=?').run(
+      patch.status ?? current.status,
+      typeof payload.threadId === 'string' ? payload.threadId : null,
+      JSON.stringify(payload),
+      now,
+      jobId,
+      'codex',
+    );
+    return this.getCodexJob(jobId)!;
+  }
+
+  listEvents(eventType?: string, limit = 100): Array<{ id: string; eventType: string; eventKey: string; payload: unknown; createdAt: string }> {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 500);
+    const rows = eventType
+      ? this.db.prepare('SELECT id,event_type,event_key,payload_json,created_at FROM kurisu_events WHERE event_type=? ORDER BY created_at ASC LIMIT ?').all(eventType, boundedLimit)
+      : this.db.prepare('SELECT id,event_type,event_key,payload_json,created_at FROM kurisu_events ORDER BY created_at ASC LIMIT ?').all(boundedLimit);
+    return (rows as Array<Record<string, unknown>>).map((row) => ({
+      id: String(row.id),
+      eventType: String(row.event_type),
+      eventKey: String(row.event_key),
+      payload: parseJson(String(row.payload_json)),
+      createdAt: String(row.created_at),
+    }));
+  }
+
   createApproval(input: Omit<ApprovalRecord, 'status' | 'usedAt'>, now = new Date().toISOString()): ApprovalRecord {
-    this.db.prepare('INSERT INTO kurisu_approvals(id,run_id,principal_key,session_key,action,arguments_hash,status,expires_at) VALUES (?,?,?,?,?,?,?,?)').run(
-      input.id, input.runId, input.principalKey, input.sessionKey, input.action, input.argumentsHash, 'pending', input.expiresAt,
+    this.db.prepare('INSERT INTO kurisu_approvals(id,run_id,principal_key,session_key,action,arguments_hash,arguments_json,status,expires_at) VALUES (?,?,?,?,?,?,?,?,?)').run(
+      input.id, input.runId, input.principalKey, input.sessionKey, input.action, input.argumentsHash, JSON.stringify(input.arguments), 'pending', input.expiresAt,
     );
     return this.getApproval(input.id)!;
   }
@@ -432,6 +636,27 @@ export class KurisuStore {
       if (!current || current.status !== 'pending' || current.principalKey !== principal || current.sessionKey !== session || current.action !== action || current.argumentsHash !== hash || current.expiresAt <= now) return null;
       this.db.prepare('UPDATE kurisu_approvals SET status=?, used_at=? WHERE id=? AND status=?').run('used', now, id, 'pending');
       return this.getApproval(id);
+    });
+  }
+
+  bindCallback(value: string, reference: CallbackReference, context: { principalKey: string; sessionKey: string; runId: string }, now = new Date().toISOString()): void {
+    this.db.prepare(`
+      INSERT INTO kurisu_callbacks(callback_value,namespace,kind,action,callback_id,principal_key,session_key,run_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(callback_value) DO NOTHING
+    `).run(value, reference.namespace, reference.kind, reference.action, reference.id, context.principalKey, context.sessionKey, context.runId, now);
+  }
+
+  getCallbackBinding(value: string): CallbackBindingRecord | null {
+    const row = this.db.prepare('SELECT * FROM kurisu_callbacks WHERE callback_value=?').get(value) as Record<string, unknown> | undefined;
+    return row ? toCallbackBinding(row) : null;
+  }
+
+  consumeCallbackBinding(value: string, principalKey: string, sessionKey: string, now = new Date().toISOString()): CallbackBindingRecord | null {
+    return this.transaction(() => {
+      const current = this.getCallbackBinding(value);
+      if (!current || current.consumedAt || current.principalKey !== principalKey || current.sessionKey !== sessionKey) return null;
+      this.db.prepare('UPDATE kurisu_callbacks SET consumed_at=? WHERE callback_value=? AND consumed_at IS NULL').run(now, value);
+      return this.getCallbackBinding(value);
     });
   }
 
@@ -506,7 +731,7 @@ export class KurisuStore {
   }
 
   snapshotCounts(): Record<string, number> {
-    const tables = ['kurisu_sessions', 'kurisu_messages', 'kurisu_inbound_dedup', 'kurisu_runs', 'kurisu_jobs', 'kurisu_tool_executions', 'kurisu_task_steps', 'kurisu_approvals', 'kurisu_preferences', 'kurisu_events', 'kurisu_deliveries'];
+    const tables = ['kurisu_sessions', 'kurisu_messages', 'kurisu_message_task_links', 'kurisu_inbound_dedup', 'kurisu_runs', 'kurisu_jobs', 'kurisu_tool_executions', 'kurisu_task_steps', 'kurisu_approvals', 'kurisu_callbacks', 'kurisu_preferences', 'kurisu_events', 'kurisu_deliveries'];
     return Object.fromEntries(tables.map((table) => [table, Number((this.db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count)]));
   }
 
@@ -552,10 +777,75 @@ function toJob(row: Record<string, unknown>): JobRecord {
   };
 }
 
+function toCodexJob(job: JobRecord): CodexJobRecord {
+  const payload = job.payload;
+  const evidenceItems = Array.isArray(payload.evidence) ? payload.evidence : [];
+  const pending = payload.pendingRequest && typeof payload.pendingRequest === 'object' && !Array.isArray(payload.pendingRequest)
+    ? payload.pendingRequest as Record<string, unknown>
+    : null;
+  return {
+    jobId: job.id,
+    runId: job.runId,
+    principalKey: String(payload.principalKey ?? ''),
+    sessionKey: String(payload.sessionKey ?? ''),
+    idempotencyKey: String(payload.idempotencyKey ?? ''),
+    projectId: String(payload.projectId ?? ''),
+    workspaceRef: String(payload.workspaceRef ?? ''),
+    threadId: typeof payload.threadId === 'string' ? payload.threadId : null,
+    turnId: typeof payload.turnId === 'string' ? payload.turnId : null,
+    goal: String(payload.goal ?? ''),
+    constraints: Array.isArray(payload.constraints) ? payload.constraints.filter((value): value is string => typeof value === 'string') : [],
+    status: job.status as CodexJobStatus,
+    evidence: evidenceItems.filter((value): value is CodexJobRecord['evidence'][number] => (
+      Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof (value as Record<string, unknown>).source === 'string' && typeof (value as Record<string, unknown>).observedAt === 'string' && typeof (value as Record<string, unknown>).summary === 'string'
+    )),
+    lastMessage: typeof payload.lastMessage === 'string' ? payload.lastMessage : null,
+    pendingRequest: pending && typeof pending.requestId === 'string' && typeof pending.method === 'string' && typeof pending.receivedAt === 'string'
+      ? {
+          requestId: pending.requestId,
+          method: pending.method,
+          itemId: typeof pending.itemId === 'string' ? pending.itemId : null,
+          reason: typeof pending.reason === 'string' ? pending.reason : null,
+          callback: typeof pending.callback === 'string' ? pending.callback : null,
+          receivedAt: pending.receivedAt,
+        }
+      : null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
+  };
+}
+
+function toMessageTaskLink(row: Record<string, unknown>): MessageTaskLinkRecord {
+  return {
+    sessionKey: String(row.session_key),
+    updateId: String(row.update_id),
+    runId: String(row.run_id),
+    relation: String(row.relation),
+    createdAt: String(row.created_at),
+  };
+}
+
 function toApproval(row: Record<string, unknown>): ApprovalRecord {
   return {
     id: String(row.id), runId: String(row.run_id), principalKey: String(row.principal_key), sessionKey: String(row.session_key), action: String(row.action),
-    argumentsHash: String(row.arguments_hash), status: String(row.status) as ApprovalRecord['status'], expiresAt: String(row.expires_at), usedAt: row.used_at ? String(row.used_at) : null,
+    argumentsHash: String(row.arguments_hash), arguments: parseJson(String(row.arguments_json ?? '{}')), status: String(row.status) as ApprovalRecord['status'], expiresAt: String(row.expires_at), usedAt: row.used_at ? String(row.used_at) : null,
+  };
+}
+
+function toCallbackBinding(row: Record<string, unknown>): CallbackBindingRecord {
+  return {
+    value: String(row.callback_value),
+    reference: {
+      namespace: 'ku1',
+      kind: String(row.kind) as CallbackReference['kind'],
+      action: String(row.action),
+      id: String(row.callback_id),
+    },
+    principalKey: String(row.principal_key),
+    sessionKey: String(row.session_key),
+    runId: String(row.run_id),
+    createdAt: String(row.created_at),
+    consumedAt: row.consumed_at ? String(row.consumed_at) : null,
   };
 }
 

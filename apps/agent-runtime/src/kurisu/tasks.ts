@@ -13,6 +13,7 @@ export type TaskStepOutcome =
   | { status: 'waiting_job'; result: unknown; externalId: string }
   | { status: 'waiting_input'; result: unknown }
   | { status: 'waiting_approval'; result: unknown }
+  | { status: 'retry'; result: unknown }
   | { status: 'unknown'; result: unknown; externalId?: string }
   | { status: 'blocked'; result: unknown };
 
@@ -20,17 +21,20 @@ export interface TaskEngineOptions {
   owner?: string;
   now?: () => string;
   faultAfterIntent?: (step: TaskStep) => void | Promise<void>;
+  faultBeforeOutcomePersist?: (step: TaskStep, outcome: TaskStepOutcome) => void | Promise<void>;
 }
 
 export class TaskEngine {
   private readonly owner: string;
   private readonly now: () => string;
   private readonly faultAfterIntent: ((step: TaskStep) => void | Promise<void>) | undefined;
+  private readonly faultBeforeOutcomePersist: ((step: TaskStep, outcome: TaskStepOutcome) => void | Promise<void>) | undefined;
 
   constructor(private readonly store: KurisuStore, options: TaskEngineOptions = {}) {
     this.owner = options.owner ?? `worker_${newRunId('task')}`;
     this.now = options.now ?? (() => new Date().toISOString());
     this.faultAfterIntent = options.faultAfterIntent;
+    this.faultBeforeOutcomePersist = options.faultBeforeOutcomePersist;
   }
 
   createRun(sessionKey: string): RunRecord {
@@ -48,19 +52,57 @@ export class TaskEngine {
         const prior = this.store.getTaskStep(runId, step.key);
         if (prior?.status === 'succeeded') continue;
         let outcome: TaskStepOutcome;
-        if (prior?.status === 'unknown' || prior?.status === 'running') {
+        const stepContext = taskContextForStep(current, context, step);
+        if (prior?.status === 'unknown' || prior?.status === 'running' || prior?.status === 'waiting_job') {
+          if (prior.status === 'waiting_job' && !step.reconcile) return current;
           if (!step.reconcile) {
             current = this.store.transitionRun(runId, 'blocked', { lastObservation: `step ${step.key} requires reconciliation`, nextStep: step.key }, this.now());
             return current;
           }
           current = this.store.transitionRun(runId, 'reconciling', { lastObservation: `reconciling step ${step.key}`, nextStep: step.key }, this.now());
-          outcome = await step.reconcile(context, prior);
+          try {
+            outcome = await step.reconcile(stepContext, prior);
+          } catch (error) {
+            outcome = {
+              status: 'unknown',
+              result: {
+                code: 'TASK_RECONCILE_EXCEPTION',
+                message: error instanceof Error ? error.message.slice(0, 500) : 'task reconciliation failed',
+              },
+            };
+          }
+          if (outcome.status === 'retry') {
+            current = this.store.transitionRun(runId, 'running', { nextStep: step.key, lastObservation: `reconciliation confirmed no external effect for ${step.key}` }, this.now());
+            this.store.beginTaskStep(runId, step.key, { action: step.action, argumentsHash: argumentsHash(step.action) }, this.now());
+            try {
+              outcome = await step.execute(taskContextForStep(current, context, step));
+            } catch (error) {
+              outcome = {
+                status: 'unknown',
+                result: {
+                  code: 'TASK_STEP_EXCEPTION',
+                  message: error instanceof Error ? error.message.slice(0, 500) : 'task step failed after its intent was recorded',
+                },
+              };
+            }
+          }
         } else {
           current = this.store.transitionRun(runId, 'running', { nextStep: step.key }, this.now());
           this.store.beginTaskStep(runId, step.key, { action: step.action, argumentsHash: argumentsHash(step.action) }, this.now());
           if (this.faultAfterIntent) await this.faultAfterIntent(step);
-          outcome = await step.execute(context);
+          try {
+            outcome = await step.execute(taskContextForStep(current, context, step));
+          } catch (error) {
+            outcome = {
+              status: 'unknown',
+              result: {
+                code: 'TASK_STEP_EXCEPTION',
+                message: error instanceof Error ? error.message.slice(0, 500) : 'task step failed after its intent was recorded',
+              },
+            };
+          }
         }
+        if (this.faultBeforeOutcomePersist) await this.faultBeforeOutcomePersist(step, outcome);
         current = this.applyOutcome(runId, step.key, outcome);
         if (['waiting_job', 'waiting_input', 'waiting_approval', 'blocked', 'reconciling'].includes(current.status)) return current;
       }
@@ -81,25 +123,46 @@ export class TaskEngine {
   private applyOutcome(runId: string, stepKey: string, outcome: TaskStepOutcome): RunRecord {
     const now = this.now();
     const statusMap: Record<TaskStepOutcome['status'], TaskStepRecord['status']> = {
-      succeeded: 'succeeded', waiting_job: 'waiting_job', waiting_input: 'blocked', waiting_approval: 'blocked', unknown: 'unknown', blocked: 'blocked',
+      succeeded: 'succeeded', waiting_job: 'waiting_job', waiting_input: 'blocked', waiting_approval: 'blocked', retry: 'unknown', unknown: 'unknown', blocked: 'blocked',
     };
     const stepStatus = statusMap[outcome.status];
     this.store.completeTaskStep(runId, stepKey, stepStatus, outcome.result, 'externalId' in outcome ? outcome.externalId ?? null : null, now);
+    if (outcome.status === 'waiting_job') {
+      const jobId = `job_${argumentsHash({ runId, stepKey }).slice(0, 32)}`;
+      if (!this.store.getJob(jobId)) {
+        const payload = outcome.result && typeof outcome.result === 'object' && !Array.isArray(outcome.result)
+          ? outcome.result as Record<string, unknown>
+          : { result: outcome.result };
+        this.store.createJob(runId, stepKey, payload, jobId, now);
+      }
+    }
+    const persisted = this.store.getRun(runId);
+    if (persisted?.status === 'cancelled') return persisted;
     const runStatus: RunStatus = outcome.status === 'succeeded'
       ? 'running'
       : outcome.status === 'waiting_job'
         ? 'waiting_job'
         : outcome.status === 'waiting_input'
           ? 'waiting_input'
-          : outcome.status === 'waiting_approval'
-            ? 'waiting_approval'
-            : outcome.status === 'unknown'
-              ? 'reconciling'
-              : 'blocked';
+            : outcome.status === 'waiting_approval'
+              ? 'waiting_approval'
+              : outcome.status === 'retry'
+                ? 'reconciling'
+              : outcome.status === 'unknown'
+                ? 'reconciling'
+                : 'blocked';
     return this.store.transitionRun(runId, runStatus, { nextStep: stepKey, lastObservation: `step ${stepKey}: ${outcome.status}`, ...(outcome.status === 'waiting_job' && 'externalId' in outcome ? { externalJobId: outcome.externalId } : {}) }, now);
   }
 }
 
 export function taskContextFromRun(run: RunRecord, context: TrustedExecutionContext): TrustedExecutionContext {
   return { ...context, runId: run.id };
+}
+
+function taskContextForStep(run: RunRecord, context: TrustedExecutionContext, step: TaskStep): TrustedExecutionContext {
+  const idempotencyKey = typeof step.action.idempotencyKey === 'string' ? step.action.idempotencyKey : undefined;
+  return {
+    ...taskContextFromRun(run, context),
+    ...(idempotencyKey ? { idempotencyKey, requestId: idempotencyKey } : {}),
+  };
 }

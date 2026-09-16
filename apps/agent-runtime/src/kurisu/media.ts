@@ -40,6 +40,7 @@ export class MediaPathPolicy {
     const sourcePath = this.validateSource(source);
     const targetPath = this.validateTarget(target);
     if (sourcePath === targetPath) throw new Error('media source and target must differ');
+    if (existsSync(targetPath)) throw new Error('media target already exists');
     return { source: sourcePath, target: targetPath, backup: `${sourcePath}.kurisu-backup`, reason: reason.slice(0, 500) };
   }
 
@@ -48,6 +49,7 @@ export class MediaPathPolicy {
     const source = this.validateSource(plan.source);
     const target = this.validateTarget(plan.target);
     if (source !== plan.source || target !== plan.target) throw new Error('media move plan changed');
+    if (existsSync(target)) throw new Error('media target already exists');
     mkdirSync(dirname(target), { recursive: true });
     if (existsSync(plan.backup)) throw new Error('media backup already exists');
     copyFileSync(source, plan.backup);

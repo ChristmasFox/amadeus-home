@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P2（IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P4（IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -13,9 +13,12 @@ P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-ag
 - P2 已接入 PUBG deterministic runtime、HomeHub registry/diagnostic、Product Radar structured HTTP read API，以及按 principal 隔离的 notification event/delivery diagnosis；上游失败返回 `unknown`/source state，不推断空数据。
 - P2 本地定向验证 `24/24`、plugin `4/4`、真实 9Router `arthur-combo` 三轮连续工具轨迹、provider-compatible `kurisu_gateway` package dry-run、typecheck、Python compile、secret scan、diff check 已通过；trace 见 `docs/reports/KURISU_AGENT_P2_PROVIDER_TRACE.json`。
 - provider 首次拒绝 dotted function name 的协议问题已修复为外部合法 `kurisu_gateway` + 内部受限 `kurisu.*` enum，模型路由未改变。
+- P3 已将写操作放入 durable intent/task/approval/reconcile 边界：审批参数与 callback 绑定持久化、任务引用、HomeHub/Radar/media coordinator、取消、幂等、未知结果和 crash recovery 均由 runtime 所有；生产默认不注册写 handler，未改 CasaOS。
+- P4 已固定单一 `codex app-server --stdio` executor：服务端 project registry 只允许配置的 Git root，默认 worktree 隔离；状态持久化 job/thread/turn、server request 等待、回调和事件，不把 turn ended 当作 succeeded。fake server 覆盖等待/断线/失败，真实 `codex-cli 0.153.4` 仅在临时 Git repo/worktree 完成 README 单文件修复，未使用生产项目。
+- P3/P4 定向 runtime 测试、typecheck、secret scan、diff check 与真实隔离 Codex 验证通过；全量测试中的既有 `review-v3-2.test.ts` 子进程出现异常长时间 CPU 占用，本次不记为全量通过，P6 分批复测并保留该风险。
 - 真实 LangBot native-agent WebSocket/platform entry 因缺少合法 user/support-admin session token 仍为 `BLOCKED`；历史 EventListener 尚未迁移，provider/fake 证据不替代 L3。
 
-后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P3–P6；P7 仍需独立授权。
+后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P5–P6；P7 仍需独立授权。
 
 既有实现与部署历史如下。
 

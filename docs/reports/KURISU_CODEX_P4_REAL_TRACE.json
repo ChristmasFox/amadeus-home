@@ -1,0 +1,28 @@
+{
+  "phase": "P4",
+  "status": "REAL_TASK_VERIFIED",
+  "verifiedAt": "2026-09-16",
+  "command": "pnpm --filter @agent/agent-runtime exec node --import tsx/esm ../../scripts/verify-kurisu-codex.mjs",
+  "cli": "codex-cli 0.153.4 via codex app-server --stdio",
+  "projectId": "isolated",
+  "workspaceMode": "worktree",
+  "jobId": "job_4240c9eaa800919b44508eb595234ad2",
+  "threadId": "01a0a9d9-b20a-77b2-b46b-d2b04b37fac4",
+  "turnId": "01a0a9d9-b291-7581-b4a2-c1fb00f60800",
+  "sourceRepositoryClean": true,
+  "changedFiles": [
+    "README.md"
+  ],
+  "requestedMarkerVerified": true,
+  "diffCheck": true,
+  "realApprovalRequests": 0,
+  "eventTypes": [
+    "codex.job.created",
+    "codex.job.thread_started",
+    "codex.job.turn_started",
+    "codex.job.succeeded"
+  ],
+  "goalDigest": "17eb234306fa16d7fcc6fe1f591c3459387e165d54d37440fefad706ebc98579",
+  "boundary": "temporary Git repository and executor-owned worktree only; no production project or platform message was used",
+  "approvalCoverage": "waiting approval and callback resolution are covered by deterministic fake App Server tests in kurisu-codex.test.ts"
+}

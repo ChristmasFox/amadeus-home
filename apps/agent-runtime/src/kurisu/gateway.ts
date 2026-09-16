@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { makeCallback, normalizeInbound, parseCallback, trustedContextFromInbound, type CallbackReference, type InboundMessageInput, type NormalizedInbound, type ToolCall, type ToolResponse, type TrustedAuthorization, type TrustedExecutionContext } from './contracts.js';
 import { InMemoryContextStore } from './context.js';
+import type { KurisuStore } from './storage.js';
 import { ToolRegistry } from './tools.js';
 
 export interface HostDecision {
@@ -18,6 +19,7 @@ export interface GatewayResult {
   toolResults: Array<{ call: ToolCall; response: ToolResponse }>;
   finalText: string | null;
   callback?: CallbackReference | null;
+  approvalResponse?: ToolResponse;
   trace: Array<{ event: string; at: string; details: Record<string, unknown> }>;
 }
 
@@ -59,6 +61,7 @@ export interface GatewayOptions {
   rollout?: RolloutRegistry;
   context?: InMemoryContextStore;
   authorization?: (inbound: NormalizedInbound) => TrustedAuthorization;
+  callbackStore?: KurisuStore;
   now?: () => string;
 }
 
@@ -68,6 +71,7 @@ export class KurisuGateway {
   readonly context: InMemoryContextStore;
   private readonly registry: ToolRegistry;
   private readonly authorization: (inbound: NormalizedInbound) => TrustedAuthorization;
+  private readonly callbackStore: KurisuStore | null;
   private readonly now: () => string;
   private readonly seen = new Map<string, GatewayResult>();
   private readonly callbacks = new Map<string, {
@@ -82,7 +86,8 @@ export class KurisuGateway {
     this.rollout = options.rollout ?? new RolloutRegistry();
     this.legacyGuard = new LegacyListenerGuard(this.rollout);
     this.context = options.context ?? new InMemoryContextStore();
-    this.authorization = options.authorization ?? (() => ({ role: 'PUBLIC', allowedActions: ['read'], approvalRequiredActions: ['write', 'high'] }));
+    this.authorization = options.authorization ?? (() => ({ role: 'PUBLIC', allowedActions: ['read'], approvalRequiredActions: [] }));
+    this.callbackStore = options.callbackStore ?? null;
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -122,6 +127,7 @@ export class KurisuGateway {
     for (const call of decision?.toolCalls ?? []) {
       const response = await this.registry.execute(call, context);
       toolResults.push({ call, response });
+      for (const reference of response.callbackReferences ?? []) this.registerCallback(reference, context);
     }
     const hasError = toolResults.some(({ response }) => ['error', 'unknown', 'denied'].includes(response.status));
     const result: GatewayResult = {
@@ -170,14 +176,23 @@ export class KurisuGateway {
     };
     const previous = this.seen.get(inbound.idempotencyKey);
     if (previous) return { ...previous, status: 'duplicate', trace: [...previous.trace, this.trace('duplicate_callback', { idempotencyKey: inbound.idempotencyKey })] };
+    const binding = this.callbackStore?.getCallbackBinding(inbound.callbackData ?? '') ?? this.callbacks.get(inbound.callbackData ?? '');
     if (!callback) return rejected('invalid_namespace');
-    if (!rollout.migrated) return rejected('rollout_not_enabled');
-    const binding = this.callbacks.get(inbound.callbackData ?? '');
+    // A persisted server-generated binding is a continuation of an already
+    // migrated host task and survives a process restart. Unbound callbacks
+    // still require the explicit session rollout and remain rejected by the
+    // legacy boundary.
+    if (!rollout.migrated && !binding) return rejected('rollout_not_enabled');
     if (!binding) return rejected('binding_missing');
     if (binding.principalKey !== inbound.principalKey || binding.sessionKey !== inbound.sessionKey) {
       return rejected('binding_mismatch', binding.runId);
     }
-    this.callbacks.delete(inbound.callbackData ?? '');
+    if (this.callbackStore) {
+      const consumed = this.callbackStore.consumeCallbackBinding(inbound.callbackData ?? '', inbound.principalKey, inbound.sessionKey, this.now());
+      if (!consumed) return rejected('binding_missing', binding.runId);
+    } else {
+      this.callbacks.delete(inbound.callbackData ?? '');
+    }
     const result: GatewayResult = {
       mode: 'kurisu',
       status: 'accepted',
@@ -197,6 +212,7 @@ export class KurisuGateway {
     const value = typeof reference === 'string' ? reference : makeCallback(reference);
     const parsed = parseCallback(value);
     if (!parsed) throw new Error('invalid Kurisu callback reference');
+    this.callbackStore?.bindCallback(value, parsed, context, this.now());
     this.callbacks.set(value, {
       principalKey: context.principalKey,
       sessionKey: context.sessionKey,

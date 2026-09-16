@@ -27,6 +27,17 @@ spec:
           - kurisu.radar.status
           - kurisu.radar.stats
           - kurisu.notifications.diagnose
+          - kurisu.homehub.action
+          - kurisu.radar.mutate
+          - kurisu.radar.create
+          - kurisu.media.move
+          - kurisu.task.status
+          - kurisu.task.cancel
+          - kurisu.codex.start
+          - kurisu.codex.status
+          - kurisu.codex.list
+          - kurisu.codex.resume
+          - kurisu.codex.cancel
         description: Exact server-registered Kurisu capability name.
       input:
         type: object
@@ -37,7 +48,7 @@ spec:
       - input
     additionalProperties: false
   llm_prompt: |
-    Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. This tool never accepts a natural-language query field and cannot start, stop, restart, delete, or modify anything unless a separately registered write capability is exposed.
+    Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. Write capabilities may return a server-bound approval challenge or an uncertainty state; never treat a requested write as proof that it happened.
 execution:
   python:
     path: kurisu_gateway.py

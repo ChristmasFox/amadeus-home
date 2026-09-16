@@ -15,7 +15,11 @@ import { KurisuGateway, type GatewayResult, type HostDecision, RolloutRegistry }
 import { publicReadAuthorization, authorizeTool } from './policy.js';
 import { createNotificationBackend } from './read-only.js';
 import { KurisuStore } from './storage.js';
-import { ToolRegistry } from './tools.js';
+import { ToolRegistry, unknownResult } from './tools.js';
+import { registerWriteTools, taskCancelHandler, WriteCoordinator, type WriteOperationHandlers } from './write-tools.js';
+import { registerTaskStatusTool } from './task-tools.js';
+import { registerCodexTools } from './codex-tools.js';
+import { CodexAppServerExecutor, type CodexExecutorOptions, type CodexProjectRegistry } from './codex.js';
 
 const hostContextSchema = z.object({
   platform: z.enum(['telegram', 'kook', 'whatsapp', 'test']),
@@ -58,6 +62,10 @@ export interface KurisuServiceOptions {
   backends?: DomainBackends;
   authorization?: (inbound: ReturnType<typeof normalizeInbound>) => TrustedAuthorization;
   now?: () => string;
+  writeHandlers?: WriteOperationHandlers;
+  codexExecutor?: CodexAppServerExecutor;
+  codexProjects?: CodexProjectRegistry;
+  codexOptions?: CodexExecutorOptions;
 }
 
 /**
@@ -69,6 +77,8 @@ export class KurisuService {
   readonly rollout: RolloutRegistry;
   readonly gateway: KurisuGateway;
   readonly registry: ToolRegistry;
+  readonly writeCoordinator: WriteCoordinator | null;
+  readonly codexExecutor: CodexAppServerExecutor | null;
 
   private readonly now: () => string;
   private readonly authorization: (inbound: ReturnType<typeof normalizeInbound>) => TrustedAuthorization;
@@ -92,16 +102,26 @@ export class KurisuService {
       ...(options.backends ?? {}),
       notifications: options.backends?.notifications ?? createNotificationBackend(this.store),
     });
+    registerTaskStatusTool(this.registry, this.store);
+    const writeHandlers = options.writeHandlers
+      ? { ...options.writeHandlers, taskCancel: options.writeHandlers.taskCancel ?? taskCancelHandler(this.store) }
+      : undefined;
+    this.writeCoordinator = writeHandlers ? new WriteCoordinator(this.store, { now: this.now }) : null;
+    if (this.writeCoordinator && writeHandlers) registerWriteTools(this.registry, this.writeCoordinator, writeHandlers);
+    this.codexExecutor = options.codexExecutor ?? (options.codexProjects ? new CodexAppServerExecutor(this.store, options.codexProjects, options.codexOptions) : null);
+    if (this.codexExecutor) registerCodexTools(this.registry, this.codexExecutor);
     this.gateway = new KurisuGateway({
       registry: this.registry,
       rollout: this.rollout,
       context,
       authorization: this.authorization,
+      callbackStore: this.store,
       now: this.now,
     });
   }
 
   close(): void {
+    void this.codexExecutor?.close();
     this.store.close();
   }
 
@@ -119,12 +139,14 @@ export class KurisuService {
         trace: [...claimed.result.trace, { event: 'duplicate_inbound_persistent', at: this.now(), details: { idempotencyKey: inbound.idempotencyKey } }],
       };
     }
+    if (!claimed.claimed) return inFlightGatewayResult(inbound, this.rollout.decide(inbound.sessionKey).migrated, this.now());
 
     const parsedDecision = decisionInput === undefined ? undefined : hostDecisionSchema.parse(decisionInput);
     const rollout = this.rollout.decide(inbound.sessionKey);
     const runId = rollout.migrated ? (parsedDecision?.runId ?? newRunId()) : null;
     if (runId) {
       this.store.createRun(inbound.sessionKey, runId, this.now());
+      this.store.linkMessageToRun(inbound, runId, 'primary', this.now());
       this.store.transitionRun(runId, 'running', { nextStep: 'host_turn' }, this.now());
     }
     const decision: HostDecision | undefined = rollout.migrated
@@ -151,7 +173,22 @@ export class KurisuService {
         trace: [...claimed.result.trace, { event: 'duplicate_callback_persistent', at: this.now(), details: { idempotencyKey: inbound.idempotencyKey } }],
       };
     }
+    if (!claimed.claimed) return inFlightGatewayResult(inbound, true, this.now());
     const result = await this.gateway.handleCallback(inbound);
+    if (result.status === 'accepted' && result.callback?.kind === 'approval' && result.runId) {
+      const context = trustedContextFromInbound(inbound, this.authorization(inbound), {
+        runId: result.runId,
+        requestId: `approval_${inbound.updateId}`,
+        source: 'runtime',
+      });
+      if (this.codexExecutor && this.codexExecutor.handlesCallback(context, result.callback)) {
+        result.approvalResponse = await this.codexExecutor.approveCallback(context, result.callback);
+      } else if (this.writeCoordinator) {
+        result.approvalResponse = await this.writeCoordinator.approveCallback(context, result.callback);
+      }
+      if (result.approvalResponse) this.finishRun(result.runId, result.approvalResponse.status, [result.approvalResponse]);
+    }
+    if (result.runId && this.store.getRun(result.runId)) this.store.linkMessageToRun(inbound, result.runId, 'callback', this.now());
     this.store.saveInboundResult(inbound.idempotencyKey, result);
     return result;
   }
@@ -172,8 +209,17 @@ export class KurisuService {
     } satisfies InboundMessageInput, this.now());
     const claimed = this.store.claimInbound(inbound);
     if (!claimed.claimed && isToolResponse(claimed.result)) return claimed.result;
+    if (!claimed.claimed) {
+      const recovered = this.recoverToolResponse(inbound, callId);
+      if (recovered) {
+        this.store.saveInboundResult(inbound.idempotencyKey, recovered);
+        return recovered;
+      }
+      return unknownResult('INBOUND_IN_FLIGHT', 'another worker owns this request; external execution was not repeated', true);
+    }
     const runId = newRunId();
     this.store.createRun(inbound.sessionKey, runId, this.now());
+    this.store.linkMessageToRun(inbound, runId, 'tool-call', this.now());
     this.store.transitionRun(runId, 'running', { nextStep: request.toolName }, this.now());
     const context = trustedContextFromInbound(inbound, this.authorizationFor(inbound), {
       runId,
@@ -181,6 +227,7 @@ export class KurisuService {
       source: 'langbot-native-agent',
     });
     const response = await this.registry.execute({ id: callId, name: request.toolName, arguments: request.input }, context);
+    for (const reference of response.callbackReferences ?? []) this.gateway.registerCallback(reference, context);
     this.finishRun(runId, response.status, [response]);
     this.store.saveInboundResult(inbound.idempotencyKey, response);
     return response;
@@ -193,6 +240,15 @@ export class KurisuService {
     return this.authorization(inbound);
   }
 
+  private recoverToolResponse(inbound: ReturnType<typeof normalizeInbound>, callId: string): ToolResponse | null {
+    const linkedRuns = this.store.listRunsForMessage(inbound.sessionKey, inbound.updateId);
+    for (const run of linkedRuns.reverse()) {
+      const execution = this.store.getToolExecution(run.id, callId);
+      if (execution && isToolResponse(execution.response)) return execution.response;
+    }
+    return null;
+  }
+
   private finishRun(runId: string, status: GatewayResult['status'] | ToolResponse['status'], responses: ToolResponse[]): void {
     const run = this.store.getRun(runId);
     if (!run || ['succeeded', 'failed', 'cancelled'].includes(run.status)) return;
@@ -203,12 +259,17 @@ export class KurisuService {
       : hasFailure || status === 'error'
         ? 'failed'
         : status === 'needs_input'
-          ? 'waiting_input'
+          ? responses.some((response) => response.status === 'needs_input' && isApprovalChallenge(response)) ? 'waiting_approval' : 'waiting_input'
           : status === 'accepted'
             ? 'waiting_job'
             : 'succeeded';
     this.store.transitionRun(runId, target, { lastObservation: `kurisu result: ${status}` }, this.now());
   }
+}
+
+function isApprovalChallenge(response: ToolResponse): boolean {
+  if (!response.data || typeof response.data !== 'object' || Array.isArray(response.data)) return false;
+  return typeof (response.data as Record<string, unknown>).approvalId === 'string';
 }
 
 function isGatewayResult(value: unknown): value is GatewayResult {
@@ -221,4 +282,21 @@ function isToolResponse(value: unknown): value is ToolResponse {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Record<string, unknown>;
   return candidate.contractVersion === 'kurisu.v1' && typeof candidate.status === 'string' && Array.isArray(candidate.evidence);
+}
+
+function inFlightGatewayResult(
+  inbound: ReturnType<typeof normalizeInbound>,
+  migrated: boolean,
+  at: string,
+): GatewayResult {
+  return {
+    mode: migrated ? 'kurisu' : 'legacy',
+    status: 'accepted',
+    runId: null,
+    inbound,
+    toolResults: [],
+    finalText: null,
+    callback: null,
+    trace: [{ event: 'inbound_claim_in_flight', at, details: { idempotencyKey: inbound.idempotencyKey } }],
+  };
 }

@@ -1,7 +1,7 @@
 # Kurisu Agent 开发进度报告
 
 更新时间：2026-09-16（Asia/Shanghai）  
-当前提交：`baa2097`（P2；基线 `58b33d5`）
+当前提交：P3/P4 implementation workspace；P2 基线 `8c12728`
 范围：本机仓库开发 Goal；P7 生产部署与真实平台验收不在授权内。
 
 ## 阶段状态
@@ -11,8 +11,8 @@
 | P0 | `HOST_FIXED_LOCAL / REAL_PARTIAL` | 宿主 ADR、能力/生产者盘点、脱敏基线、复现 JSON、fake host probe；9Router 文本/工具结果/错误/图文 provider probe 通过 | 合法 LangBot session identity 缺失，原生宿主平台入口未宣称通过；legacy listener 尚未迁移 |
 | P1 | `IMPLEMENTED / VERIFIED_LOCAL` | `apps/agent-runtime/src/kurisu/`、`apps/agent-runtime/src/server.ts`、`integrations/langbot/plugins/kurisu-gateway/`、`scripts/deploy-langbot.sh`；`kurisu.v1` 契约、stable identity/session、trusted policy、tool catalog/validation、server-bound callback、SQLite WAL/migration、task/approval/media safety；runtime `18/18`、plugin `2/2`、HTTP endpoint smoke、typecheck、Python compile、secret scan、diff check | 尚未迁移旧 EventListener 或取得合法 LangBot user/support-admin session |
 | P2 | `IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED` | PUBG deterministic read adapter、HomeHub registry/diagnostic、Radar bounded HTTP adapter、principal-scoped notification diagnosis、provider-compatible `kurisu_gateway`、runtime `24/24`、plugin `4/4`、真实 9Router 三轮 provider trace、package dry-run、typecheck、Python compile、secret scan、diff check | 缺少合法 LangBot user/support-admin session；真实 native-agent WebSocket/platform 与 L2/L3 未宣称通过，历史 EventListener 尚未迁移 |
-| P3 | `NOT_STARTED` | — | SQLite 任务/审批/ledger/reconcile/cancel 待实现 |
-| P4 | `NOT_STARTED` | — | 唯一 Codex App Server executor 与隔离任务实测待实现 |
+| P3 | `IMPLEMENTED / VERIFIED_LOCAL` | 持久化 message-task links、审批参数与 callback binding、写工具协调器、HomeHub/Radar/media 受控写闭环、intent/reconcile/cancel、三处 crash injection、并发/timeout/unknown；`kurisu-write-tools.test.ts` 定向通过 | 未启用生产写工具；真实平台入口/外部生产写仍留在 P7 授权范围 |
+| P4 | `IMPLEMENTED / VERIFIED_LOCAL` | 单一 Codex App Server executor、server-owned project registry、worktree 隔离、start/status/list/resume/cancel、持久化 thread/turn/审批/输入状态；fake server 与真实 `codex-cli 0.153.4` 隔离仓库小修复通过，报告见 `KURISU_CODEX_P4_REAL_TRACE.json` | 真实 Codex approval 本次隔离小任务未触发；平台消息通知交由 P5，真实平台/L4 仍不宣称 |
 | P5 | `NOT_STARTED` | — | event/delivery worker、producer handoff、偏好/风格待实现 |
 | P6 | `NOT_STARTED` | — | 100 场景、20 failure-derived、R01、release dry-run、backup/restore 待实现 |
 | P7 | `NOT_AUTHORIZED` | — | 需单独 Goal 明确授权后才可部署/真实平台验收 |
@@ -36,6 +36,15 @@ Path A 已按实测门槛固定为唯一主 Agent 宿主：LangBot 原生 `local
 - Provider trace：[`KURISU_AGENT_P2_PROVIDER_TRACE.json`](KURISU_AGENT_P2_PROVIDER_TRACE.json)
 - P2 checkpoint：`.agent/checkpoints/2026-09-16-kurisu-agent-p2.md`
 
+## P3/P4 验收索引
+
+- P3 checkpoint：`.agent/checkpoints/2026-09-16-kurisu-agent-p3.md`
+- P4 checkpoint：`.agent/checkpoints/2026-09-16-kurisu-agent-p4.md`
+- P4 real Codex trace：[`KURISU_CODEX_P4_REAL_TRACE.json`](KURISU_CODEX_P4_REAL_TRACE.json)
+- P4 real verification script：[`scripts/verify-kurisu-codex.mjs`](../../scripts/verify-kurisu-codex.mjs)
+
 ## 证据规则
 
 每个后续 case 必须记录 `caseId/revision/layer/modelRoute/configFingerprint/inputFixture/expectedInvariants/actualToolCalls/result/evidenceRefs`，并区分 `PASS`、`BLOCKED`、`OPEN` 与 `NOT_APPLICABLE`。任何容器 running、HTTP 200、`getMe` 或 turn ended 都不能单独作为终端交付成功证据。
+
+本次全量 `tests/**/*.test.ts` 曾在既有 `review-v3-2.test.ts` 子进程持续占用 CPU 且无新增输出时中断；不把它记为全量通过。P3/P4 使用定向集合和实际隔离 Codex 脚本留存可复核证据，P6 将按分批策略复测并单列该已知挂起。

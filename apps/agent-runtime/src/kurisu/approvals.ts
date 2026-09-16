@@ -27,9 +27,13 @@ export class ApprovalService {
       sessionKey: context.sessionKey,
       action: request.action,
       argumentsHash: approvalArgumentsHash(request.action, request.arguments),
+      arguments: request.arguments,
       expiresAt,
     });
-    return { approval, callback: makeCallback({ kind: 'approval', action: 'approve', id: approvalId }) };
+    const callback = makeCallback({ kind: 'approval', action: 'approve', id: approvalId });
+    const reference = parseCallback(callback);
+    if (reference) this.store.bindCallback(callback, reference, { principalKey: context.principalKey, sessionKey: context.sessionKey, runId: context.runId }, this.now());
+    return { approval, callback };
   }
 
   consume(context: TrustedExecutionContext, approvalId: string, action: string, args: unknown): ToolResponse {
@@ -49,6 +53,13 @@ export class ApprovalService {
     const callback = parseCallback(callbackValue);
     if (!callback || callback.kind !== 'approval' || callback.action !== 'approve') return failure('CALLBACK_INVALID', 'callback namespace or action is invalid', false);
     return this.consume(context, callback.id, action, args);
+  }
+
+  /** Consume a callback-bound approval using the server-persisted arguments. */
+  consumeBound(context: TrustedExecutionContext, approvalId: string): ToolResponse {
+    const approval = this.store.getApproval(approvalId);
+    if (!approval || approval.runId !== context.runId) return failure('APPROVAL_INVALID', 'approval is missing or bound to another run', false);
+    return this.consume(context, approvalId, approval.action, approval.arguments);
   }
 }
 

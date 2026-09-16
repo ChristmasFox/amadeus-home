@@ -14,6 +14,9 @@ import { IdentityRegistry } from './platform/core/identity.js';
 import { isHomeHubCallback } from './homehub/confirmation.js';
 import { KurisuService } from './kurisu/service.js';
 import { createReadOnlyBackends } from './kurisu/read-only.js';
+import { MediaPathPolicy } from './kurisu/media.js';
+import { homeHubActionHandler, mediaMoveHandler, radarWriteHandlers } from './kurisu/write-tools.js';
+import { CodexProjectRegistry } from './kurisu/codex.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -58,18 +61,47 @@ const runtime = new PubgMastraRuntime({
 });
 
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
+const radarUrl = process.env.KURISU_RADAR_URL?.trim() ?? '';
+const radarClient = radarUrl
+  ? {
+      baseUrl: radarUrl,
+      ...(process.env.KURISU_RADAR_API_KEY?.trim() ? { apiKey: process.env.KURISU_RADAR_API_KEY.trim() } : {}),
+      ...(process.env.KURISU_RADAR_TIMEOUT_MS ? { timeoutMs: Number(process.env.KURISU_RADAR_TIMEOUT_MS) } : {}),
+    }
+  : undefined;
+const writeHandlers = process.env.KURISU_ENABLE_WRITE_TOOLS === '1'
+  ? {
+      homehubAction: homeHubActionHandler(homehubRuntime),
+      ...(radarClient ? radarWriteHandlers(radarClient) : {}),
+      mediaMove: mediaMoveHandler(new MediaPathPolicy({
+        downloads: process.env.KURISU_MEDIA_DOWNLOADS_ROOT ?? '/Volumes/Avalon/downloads',
+        movies: process.env.KURISU_MEDIA_MOVIES_ROOT ?? '/Volumes/Avalon/media/movies',
+        tv: process.env.KURISU_MEDIA_TV_ROOT ?? '/Volumes/Avalon/media/tv',
+      })),
+    }
+  : undefined;
+const codexProjectRoot = process.env.KURISU_CODEX_PROJECT_ROOT?.trim() ?? '';
+const codexProjects = process.env.KURISU_CODEX_ENABLE === '1' && codexProjectRoot
+  ? new CodexProjectRegistry([{
+      projectId: process.env.KURISU_CODEX_PROJECT_ID?.trim() || 'agent-monorepo',
+      root: codexProjectRoot,
+      workspaceMode: 'worktree',
+    }], {
+      ...(process.env.KURISU_CODEX_WORKTREE_ROOT?.trim() ? { worktreeParent: process.env.KURISU_CODEX_WORKTREE_ROOT.trim() } : {}),
+    })
+  : undefined;
 const kurisuService = new KurisuService({
   stateFile: process.env.KURISU_STATE_FILE ?? `${stateFile}.kurisu.sqlite`,
   backends: createReadOnlyBackends({
     pubgRuntime: runtime,
     homehubRuntime,
-    ...(process.env.KURISU_RADAR_URL?.trim() ? {
-      radar: {
-        baseUrl: process.env.KURISU_RADAR_URL.trim(),
-        ...(process.env.KURISU_RADAR_API_KEY?.trim() ? { apiKey: process.env.KURISU_RADAR_API_KEY.trim() } : {}),
-      },
-    } : {}),
+    ...(radarClient ? { radar: radarClient } : {}),
   }),
+  ...(writeHandlers ? { writeHandlers } : {}),
+  ...(codexProjects ? {
+    codexProjects,
+    ...(process.env.KURISU_CODEX_MODEL?.trim() ? { codexOptions: { model: process.env.KURISU_CODEX_MODEL.trim() } } : {}),
+  } : {}),
 });
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {

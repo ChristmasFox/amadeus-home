@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P2 IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P4 IMPLEMENTED / VERIFIED_LOCAL / L3_BLOCKED；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已完成 P0 的本机事实盘点和宿主决策，并完成 P1/P2 的本地结构化边界：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
@@ -13,7 +13,9 @@
 - [x] P2 增加 provider-compatible 外部工具 `kurisu_gateway`（内部能力仍为受限 `kurisu.*` enum）、retry-stable boundary call ID、只读工具/实体歧义/429/非法 JSON/超时回归。
 - [x] P2 定向 runtime `24/24`、LangBot plugin `4/4`、真实 9Router `arthur-combo` 三轮连续工具轨迹、plugin dry-run/package、typecheck、Python compile、secret scan、diff check 通过；无生产安装、重启或平台消息。
 - [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 与 L2/L3 平台验收仍为 `BLOCKED`；不以 provider/fake 轨迹冒充通过，历史 EventListener 尚未迁移。
-- [ ] P3–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
+- [x] P3 完成持久化写闭环：审批参数/callback server binding、HomeHub/Radar/media write coordinator、intent/reconcile/cancel、crash injection、并发/timeout/unknown 与任务引用；定向证据见 P3 checkpoint。
+- [x] P4 完成唯一 Codex App Server executor：项目白名单、dirty-root 拒绝、worktree 隔离、durable job/thread/turn、审批/输入等待、断线续作和取消；fake server 定向测试与真实 `codex-cli 0.153.4` 隔离仓库 README 小修复通过，报告见 `docs/reports/KURISU_CODEX_P4_REAL_TRACE.json`。
+- [ ] P5–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

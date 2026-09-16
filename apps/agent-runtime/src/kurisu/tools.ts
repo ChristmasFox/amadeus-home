@@ -117,11 +117,13 @@ export class ToolRegistry {
           try {
             response = await withTimeout(definition.handler(parsed.data, context), definition.timeoutMs);
           } catch (error) {
-            response = failure(
-              'TOOL_EXECUTION_ERROR',
-              error instanceof Error ? error.message.slice(0, 500) : 'tool execution failed',
-              true,
-            );
+            response = error instanceof ToolTimeoutError
+              ? unknownResult('TOOL_TIMEOUT', 'tool execution timed out; external state is not assumed', true)
+              : failure(
+                'TOOL_EXECUTION_ERROR',
+                error instanceof Error ? error.message.slice(0, 500) : 'tool execution failed',
+                true,
+              );
           }
         }
       }
@@ -192,12 +194,31 @@ export function unknownResult(code: string, message: string, retryable = true): 
   };
 }
 
-function rejectModelOwnedFields(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  for (const key of Object.keys(value)) {
-    if (forbiddenModelFields.has(key)) return `model cannot provide trusted field: ${key}`;
+function rejectModelOwnedFields(value: unknown, path = '', seen = new Set<object>()): string | null {
+  if (!value || typeof value !== 'object') return null;
+  if (seen.has(value)) return 'model arguments contain a cyclic object';
+  seen.add(value);
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const violation = rejectModelOwnedFields(value[index], `${path}[${index}]`, seen);
+      if (violation) return violation;
+    }
+    return null;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    const fieldPath = path ? `${path}.${key}` : key;
+    if (forbiddenModelFields.has(key)) return `model cannot provide trusted field: ${fieldPath}`;
+    const violation = rejectModelOwnedFields(child, fieldPath, seen);
+    if (violation) return violation;
   }
   return null;
+}
+
+class ToolTimeoutError extends Error {
+  constructor() {
+    super('tool timeout');
+    this.name = 'ToolTimeoutError';
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -206,7 +227,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     return await Promise.race([
       promise,
       new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('tool timeout')), timeoutMs);
+        timer = setTimeout(() => reject(new ToolTimeoutError()), timeoutMs);
       }),
     ]);
   } finally {

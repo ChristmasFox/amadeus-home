@@ -17,6 +17,9 @@ import { renderForPlatform } from '../platform/core/renderer.js';
 import { PresentationModelSchema, type BotResponse, type NormalizedBotMessage, type PresentationModel } from '../platform/core/contracts.js';
 import { parseHomeHubCallback, homeHubCallbackData } from '../homehub/confirmation.js';
 import type { RuntimeRequest, RuntimeTraceEvent } from './types.js';
+import type { TrustedExecutionContext } from '../kurisu/contracts.js';
+import type { TaskStepOutcome } from '../kurisu/tasks.js';
+import type { TaskStepRecord } from '../kurisu/storage.js';
 
 export interface HomeHubRuntimeResponse {
   queryId: string;
@@ -304,6 +307,55 @@ export class HomeHubRuntime {
 
   async getAuditLogs(userId: string, limit: number = 20) {
     return this.auditLogger.getUserAuditLogs(userId, limit);
+  }
+
+  /** Structured write adapter; callers still own approval and durable task state. */
+  async executeStructuredAction(
+    input: { serviceId: string; action: 'start' | 'restart' | 'stop'; reason: string },
+    context: TrustedExecutionContext,
+  ): Promise<TaskStepOutcome> {
+    const serviceId = ServiceIdSchema.safeParse(input.serviceId);
+    if (!serviceId.success) return { status: 'blocked', result: { code: 'SERVICE_NOT_FOUND', serviceId: input.serviceId } };
+    // The synthetic test platform is accepted by the Kurisu contract, while
+    // HomeHub's legacy domain only knows real adapter platforms.
+    const platform = context.identity.platform === 'test' ? 'kook' : context.identity.platform;
+    const identity = this.identityRegistry.authorizationCore.resolve({ platform, platformUserId: context.identity.platformUserId });
+    const result = await this.actionEngine.executeAction({
+      serviceId: serviceId.data,
+      action: input.action,
+      userId: context.identity.platformUserId,
+      platform,
+      platformUserId: context.identity.platformUserId,
+      internalUserId: identity.internalUserId,
+      chatId: context.conversation.chatId,
+      reason: input.reason,
+      confirmed: true,
+    }, identity);
+    if (result.status === 'success' && result.verification.passed) {
+      return { status: 'succeeded', result, externalId: result.requestId };
+    }
+    if (result.result.success && !result.verification.passed) {
+      return { status: 'unknown', result, externalId: result.requestId };
+    }
+    return { status: 'blocked', result };
+  }
+
+  /** Reconcile a prior HomeHub mutation from fresh read-only diagnostics. */
+  async reconcileStructuredAction(
+    input: { serviceId: string; action: 'start' | 'restart' | 'stop'; reason: string },
+    _context: TrustedExecutionContext,
+    previous: TaskStepRecord,
+  ): Promise<TaskStepOutcome> {
+    const diagnoses = await this.diagnoseServices([input.serviceId]);
+    const diagnosis = diagnoses[0] && typeof diagnoses[0] === 'object' ? diagnoses[0] as Record<string, unknown> : null;
+    const checks = diagnosis?.checks;
+    const allPassed = Array.isArray(checks) && checks.length > 0 && checks.every((check) => (
+      check && typeof check === 'object' && (check as Record<string, unknown>).status === 'passed'
+    ));
+    if (allPassed && diagnosis?.status === 'resolved') {
+      return { status: 'succeeded', result: { reconciled: true, action: input.action, diagnosis, previous: previous.result } };
+    }
+    return { status: 'unknown', result: { reconciled: false, action: input.action, diagnosis, previous: previous.result } };
   }
 
   getActiveSessionsCount(): number {

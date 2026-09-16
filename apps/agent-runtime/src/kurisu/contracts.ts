@@ -87,6 +87,7 @@ export interface ToolResponse<T = unknown> {
     retryable: boolean;
   };
   toolExecutionId?: string;
+  callbackReferences?: CallbackReference[];
 }
 
 export type ToolRisk = 'read' | 'write' | 'high';
@@ -107,6 +108,8 @@ export interface TrustedExecutionContext {
   botId: string;
   authorization: TrustedAuthorization;
   now: string;
+  /** Server-generated stable key for a durable external mutation. */
+  idempotencyKey?: string;
   source: 'langbot-native-agent' | 'test-harness' | 'runtime';
 }
 
@@ -240,6 +243,7 @@ export function trustedContextFromInbound(
     botId: inbound.botId,
     authorization,
     now: inbound.receivedAt ?? new Date().toISOString(),
+    idempotencyKey: inbound.idempotencyKey,
     source: options.source ?? 'runtime',
   };
 }
