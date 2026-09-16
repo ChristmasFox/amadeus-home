@@ -19,6 +19,7 @@ import { MediaPathPolicy } from './kurisu/media.js';
 import { homeHubActionHandler, mediaMoveHandler, radarWriteHandlers } from './kurisu/write-tools.js';
 import { CodexProjectRegistry, RemoteCodexAppServerClient, RemoteCodexProjectRegistry } from './kurisu/codex.js';
 import { LangBotNotificationChannel, notificationEventInputSchema, type NotificationTarget } from './kurisu/notifications.js';
+import { adminAuthorization, publicReadAuthorization, userAuthorization } from './kurisu/policy.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -108,6 +109,15 @@ const codexProjects = codexEnabled && codexProjectRoot
   : codexEnabled && codexRemoteUrl && codexRemoteToken
     ? new RemoteCodexProjectRegistry({ baseUrl: codexRemoteUrl, token: codexRemoteToken })
     : undefined;
+const kurisuAuthorization = (inbound: { identity: { platform: 'telegram' | 'kook' | 'whatsapp' | 'test'; platformUserId: string } }) => {
+  // The identity registry uses stable platform user IDs from the adapter; a
+  // chat/group label or host/model-supplied role never changes this decision.
+  const platform = inbound.identity.platform === 'test' ? 'kook' : inbound.identity.platform;
+  const resolved = identityRegistry.authorizationCore.resolve({ platform, platformUserId: inbound.identity.platformUserId });
+  if (resolved.role === 'ADMIN') return adminAuthorization();
+  if (resolved.role === 'TRUSTED') return userAuthorization();
+  return publicReadAuthorization();
+};
 const kurisuService = new KurisuService({
   stateFile: process.env.KURISU_STATE_FILE ?? `${stateFile}.kurisu.sqlite`,
   backends: createReadOnlyBackends({
@@ -116,6 +126,7 @@ const kurisuService = new KurisuService({
     ...(radarClient ? { radar: radarClient } : {}),
   }),
   ...(writeHandlers ? { writeHandlers } : {}),
+  authorization: kurisuAuthorization,
   ...(codexProjects ? {
     codexProjects,
     codexOptions: {
