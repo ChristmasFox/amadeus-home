@@ -2,7 +2,7 @@
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 
-最新安全状态：Kurisu POST 边界源码已改为要求外部 `X-Kurisu-Gateway-Secret`，未配置时 fail-closed；Compose 模板宿主端口已改为 `127.0.0.1` 绑定。等待下一次 immutable image 部署后复核 live。
+最新安全状态：Kurisu POST 边界已部署为要求外部 `X-Kurisu-Gateway-Secret`，未配置时 fail-closed；live Compose 宿主端口为 `127.0.0.1` 绑定，secret 位于仓库外且以 `root:docker 0640` 挂载。无 header live 返回 401，正确 secret 才进入应用层。
 
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 

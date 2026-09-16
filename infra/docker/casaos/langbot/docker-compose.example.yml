@@ -5,13 +5,15 @@ services:
     restart: unless-stopped
     env_file:
       - ${LANGBOT_ENV_FILE:-/DATA/AppData/langbot/.env}
-    environment:
-      TZ: Asia/Shanghai
     volumes:
       - ${LANGBOT_DATA_DIR:-/DATA/AppData/langbot/data/plugins}:/app/data/plugins
       - ${LANGBOT_SSH_DIR:-/DATA/AppData/langbot/ssh}:/run/langbot-ssh:ro
       - ${LANGBOT_KOOK_TOKEN_FILE:-/DATA/AppData/langbot/secrets/kook-bot-token}:/run/secrets/kook-bot-token:ro
+      - ${KURISU_GATEWAY_SECRET_HOST_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/kurisu-gateway-secret}:/run/secrets/kurisu_gateway_secret:ro
     command: ["uv", "run", "--no-sync", "-m", "langbot_plugin.cli.__init__", "rt"]
+    environment:
+      TZ: Asia/Shanghai
+      KURISU_GATEWAY_SECRET_FILE: /run/secrets/kurisu_gateway_secret
     networks:
       - langbot_network
 
