@@ -12,6 +12,7 @@ import { HomeHubRuntime } from './runtime/homehub-runtime.js';
 import { identityMappingsFromEnvironment } from './config/identity.js';
 import { IdentityRegistry } from './platform/core/identity.js';
 import { isHomeHubCallback } from './homehub/confirmation.js';
+import { KurisuService } from './kurisu/service.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
 const host = process.env.PUBG_QUERY_ENGINE_HOST ?? '0.0.0.0';
@@ -56,6 +57,9 @@ const runtime = new PubgMastraRuntime({
 });
 
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
+const kurisuService = new KurisuService({
+  stateFile: process.env.KURISU_STATE_FILE ?? `${stateFile}.kurisu.sqlite`,
+});
 
 function json(response: ServerResponse, statusCode: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -118,6 +122,41 @@ const server = createServer(async (request, response) => {
         health: 'ok',
       };
       json(response, 200, polling);
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/kurisu/tools') {
+      json(response, 200, { contractVersion: 'kurisu.v1', tools: kurisuService.tools() });
+      return;
+    }
+    if (request.method === 'GET' && url.pathname === '/kurisu/status') {
+      json(response, 200, {
+        contractVersion: 'kurisu.v1',
+        rollout: 'session_opt_in_legacy_default',
+        toolCount: kurisuService.tools().length,
+        storage: kurisuService.store.snapshotCounts(),
+      });
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/kurisu/inbound') {
+      const body = await readBody(request);
+      const inbound = body.inbound;
+      if (!inbound || typeof inbound !== 'object' || Array.isArray(inbound)) throw new Error('kurisu inbound must be an object');
+      const result = await kurisuService.receiveInbound(inbound, body.decision);
+      json(response, 200, result);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/kurisu/callback') {
+      const body = await readBody(request);
+      const inbound = body.inbound;
+      if (!inbound || typeof inbound !== 'object' || Array.isArray(inbound)) throw new Error('kurisu callback inbound must be an object');
+      const result = await kurisuService.receiveCallback(inbound);
+      json(response, 200, result);
+      return;
+    }
+    if (request.method === 'POST' && url.pathname === '/kurisu/tool-call') {
+      const body = await readBody(request);
+      const result = await kurisuService.executeHostTool(body);
+      json(response, 200, result);
       return;
     }
     if (request.method === 'POST' && ['/homehub/route', '/api/homehub/route'].includes(url.pathname)) {
@@ -219,7 +258,10 @@ server.listen(port, host, () => {
 });
 
 function shutdown(): void {
-  server.close(() => process.exit(0));
+  server.close(() => {
+    kurisuService.close();
+    process.exit(0);
+  });
 }
 
 process.on('SIGTERM', shutdown);

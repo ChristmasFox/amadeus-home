@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent（P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent（P1 IMPLEMENTED / VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 已完成 P0 的本机事实盘点和宿主决策：固定 LangBot 原生 `local-agent` + 当前 9Router 为唯一自然语言决策宿主；Mastra 保留为 PUBG deterministic subworkflow。没有改生产配置、重启服务或发送真实平台消息。
 
@@ -6,8 +6,11 @@
 - [x] 创建宿主 ADR：`docs/decisions/KURISU_AGENT_HOST.md`。
 - [x] 创建能力/生产者盘点、脱敏 baseline、复现记录：`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`KURISU_AGENT_P0_BASELINE.json`、`KURISU_AGENT_PROGRESS.md`。
 - [x] fake host probe 验证 typed tool → status → dependent query → final 以及缺失工具的 bounded error；真实 9Router provider 验证文本 tool call、tool result、结构化失败和图文 tool call。
+- [x] P1 建立 `kurisu.v1` inbound/tool/result/context 契约、稳定主体/session key、trusted context、server-side policy、tool registry/schema 校验、回调绑定/一次消费、SQLite 存储、任务意图/租约/reconcile/cancel、审批参数绑定和媒体路径 allowlist。
+- [x] P1 接入 agent-runtime `/kurisu/tools`、`/kurisu/status`、`/kurisu/inbound`、`/kurisu/callback`、`/kurisu/tool-call`；LangBot `kurisu-gateway` 仅暴露结构化 Tool，不注册自然语言 EventListener/Command；旧入口仍由 rollout 默认 legacy 保护。
+- [x] P1 定向 runtime `18/18`、storage/task/media、HTTP endpoint smoke、LangBot plugin `2/2`、Python compile、workflow plan、secret scan、diff check 通过；无生产安装、重启或平台消息。
 - [ ] 合法 LangBot user/support-admin session token 不在本 Goal scope 内，故真实 native-agent WebSocket/platform entry 未宣称通过；P1 仍需迁移历史 EventListener 并通过 L2/L3。
-- [ ] P1–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
+- [ ] P2–P6 继续按计划实施；P7 仅在用户单独授权后部署和真实平台验收。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

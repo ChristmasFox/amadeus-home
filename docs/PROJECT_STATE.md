@@ -1,4 +1,4 @@
-# Kurisu 统一 Agent P0（HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# Kurisu 统一 Agent P1（IMPLEMENTED / VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
@@ -8,6 +8,9 @@ P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-ag
 - fake host loop：`apps/agent-runtime/src/kurisu/host-probe.ts`，定向测试已通过。
 - 实际 9Router provider probe：文本 tool call、合法 JSON 参数、tool result continuation、结构化失败传播、图文 tool call 均 HTTP 200；LangBot native session 层因缺少合法 user/support-admin token 未宣称通过。
 - 当前生产 Pipeline 仍有旧 EventListener，P1 必须完成 session rollout/single-consumer 迁移；该事实不能被 P0 宿主选择覆盖。
+- P1 已将结构化契约、server-derived trusted context、ToolRegistry、callback binding、SQLite WAL/迁移、task intent/reconcile/cancel、审批和媒体路径策略接入 `apps/agent-runtime/src/kurisu/`；runtime 提供 `/kurisu/*` 结构化边界。
+- `integrations/langbot/plugins/kurisu-gateway` 只有 Tool component，明确不监听自然语言；默认 rollout 仍是 legacy，未做生产安装或配置切换。
+- P1 本地定向验证 `18/18`、plugin `2/2`、HTTP endpoint smoke、typecheck、Python compile、secret scan、diff check 已通过；P2 开始接入只读业务 adapter。
 
 后续继续执行 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md` 的 P1–P6；P7 仍需独立授权。
 

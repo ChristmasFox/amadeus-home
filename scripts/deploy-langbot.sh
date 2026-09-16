@@ -34,8 +34,8 @@ LangBot local-plugin API. The default mode is dry-run.
 Options:
   --plugin NAME           Deploy one plugin (repeatable). Use all for the
                           production set: pubg-stats-v3, organize-emby,
-                          macos-nas-control, product-radar. pubg-stats-v2 is
-                          explicit legacy.
+                          macos-nas-control, product-radar. kurisu-gateway
+                          and pubg-stats-v2 are explicit.
   --patches               Prepare/build the LangBot image overlay with tracked
                           build-time patches.
   --patches-only          Skip plugin packaging and only handle patches.
@@ -123,7 +123,7 @@ expand_plugins() {
         add_plugin macos-nas-control
         add_plugin product-radar
         ;;
-      pubg-stats-v2|pubg-stats-v3|organize-emby|macos-nas-control|product-radar)
+      pubg-stats-v2|pubg-stats-v3|organize-emby|macos-nas-control|product-radar|kurisu-gateway)
         add_plugin "$requested"
         ;;
       *)
