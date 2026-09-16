@@ -24,7 +24,7 @@
 - [x] P6 完成 101 条结构化 L2 场景变体，其中 60 条为独立失败改写回归；每条记录含 revision、层级、配置指纹、输入夹具、实际工具调用、结果、证据和耗时；A16 dummy battery 仅通过测试注册验证，不改 prompt/router。
 - [x] P6 完成 R01 反偏离检查（9/9）、R02 release dry-run、server.ts `/kurisu/*` HTTP smoke、Kurisu SQLite 精确备份/恢复 dry-run、配置模板和回滚 runbook；实现提交为 `24946b9`，报告见 `docs/reports/KURISU_AGENT_P6_ACCEPTANCE.json`、`KURISU_AGENT_P6_R01.json`、`KURISU_AGENT_P6_RELEASE_DRY_RUN.md`。
 - [x] P6 分批验证：Kurisu `50/50`、Product Radar `53/53`、runtime/Product Radar typecheck、plugin `4/4`、Python compile、secret scan、diff check 均通过；HTTP smoke 和 R02 均确认无生产写操作。
-- [ ] 全量 agent-runtime runner 仍在既有 `review-v3-2.test.ts` 子进程后无新增输出，本次有界终止，标记 `KNOWN_HANG / NOT_FULL_PASS`；真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
+- [x] 修复默认复盘模板遗漏逐人载具里程导致的 `review-v3-2.test.ts` runner 卡点；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，真实 native-agent L3、旧 EventListener 迁移和 briefing producer 仍 blocked。
 - [x] 用户明确授权后完成受控部分发布：source `5a015f1` 已 push；Runtime image `local/pubg-query-engine-v3:git-5a015f1b87c7` 已部署到 OrbStack `ubuntu` CasaOS，compose 使用 `docker compose up -d --no-build`，回滚为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-204409`。
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools` 和 `scripts/doctor.sh` 通过；Kurisu state 精确备份与恢复预览通过，主库/WAL/SHM 权限为 `0600`。
 - [ ] `kurisu-gateway` 插件未安装，未切换 session rollout：缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，避免未授权会话看到新工具。

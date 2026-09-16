@@ -1042,6 +1042,16 @@ function templateEnvironmentSection(review: MatchReviewResult): PresentationSect
     const recordedCount = recordedPlayers(review).length;
     const vehicleSubject = vehicles.length === recordedCount ? `${recordedCount}名有记录队员均有` : `${vehicles.length}名有记录队员有`;
     lines.push(`* ${vehicleSubject}乘车轨迹${maxSpeed > 0 ? `，最高速度约${maxSpeed.toFixed(1)}km/h` : ''}。`);
+    for (const player of recordedPlayers(review)) {
+      const vehicle = player.vehicle;
+      if (!vehicle || (vehicle.rideDistance <= 0 && vehicle.driveDistance <= 0)) continue;
+      const distance = vehicle.driverConfirmed && vehicle.driveDistance > 0
+        ? `驾驶${(vehicle.driveDistance / 1_000).toFixed(1)}km`
+        : `乘车${(vehicle.rideDistance / 1_000).toFixed(1)}km`;
+      const details = [distance];
+      if (vehicle.maxSpeed > 0) details.push(`最高${Math.round(vehicle.maxSpeed)}km/h`);
+      lines.push(`* ${shortPlayerName(review, player.playerId)}：${details.join(' · ')}。`);
+    }
   } else {
     lines.push('* 未检测到可靠的乘车轨迹。');
   }

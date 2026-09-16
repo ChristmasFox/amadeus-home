@@ -15,7 +15,7 @@ P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-ag
 - provider 首次拒绝 dotted function name 的协议问题已修复为外部合法 `kurisu_gateway` + 内部受限 `kurisu.*` enum，模型路由未改变。
 - P3 已将写操作放入 durable intent/task/approval/reconcile 边界：审批参数与 callback 绑定持久化、任务引用、HomeHub/Radar/media coordinator、取消、幂等、未知结果和 crash recovery 均由 runtime 所有；生产默认不注册写 handler，未改 CasaOS。
 - P4 已固定单一 `codex app-server --stdio` executor：服务端 project registry 只允许配置的 Git root，默认 worktree 隔离；状态持久化 job/thread/turn、server request 等待、回调和事件，不把 turn ended 当作 succeeded。fake server 覆盖等待/断线/失败，真实 `codex-cli 0.153.4` 仅在临时 Git repo/worktree 完成 README 单文件修复，未使用生产项目。
-- P3/P4 定向 runtime 测试、typecheck、secret scan、diff check 与真实隔离 Codex 验证通过；全量测试中的既有 `review-v3-2.test.ts` 子进程出现异常长时间 CPU 占用，本次不记为全量通过，P6 分批复测并保留该风险。
+- P3/P4 定向 runtime 测试、typecheck、secret scan、diff check 与真实隔离 Codex 验证通过；此前全量测试中的 `review-v3-2.test.ts` 卡点已修复，现已完成全量 agent-runtime 验证。
 - 真实 LangBot native-agent WebSocket/platform entry 因缺少合法 user/support-admin session token 仍为 `BLOCKED`；历史 EventListener 尚未迁移，provider/fake 证据不替代 L3。
 
 P5 已完成 Runtime-owned notification outbox/worker：事件/投递双层幂等、渠道独立 retry/backoff、lease、unknown/dead、显式 delivery retry、principal-scoped 偏好及到期恢复；Codex job 与 structured HomeHub/Radar/media write 结果均可留下 task/run 关联事件。
@@ -30,7 +30,7 @@ P6 已完成本地集成验收与 Release 准备：101 条结构化 L2 场景变
 
 P6 R01 反偏离检查为 `9/9 PASS`，确认 migrated Kurisu 入口没有关键词先路由、第二 Agent、通用 shell 或空实现伪完成；R02 release dry-run 为 `R02_PASS`，列出了 Runtime compose、`local/kurisu-gateway@0.1.0`、配置模板和精确 Kurisu SQLite 备份/恢复边界，确认没有生产 mutation。`scripts/smoke-kurisu-http.sh` 通过真实 `server.ts` `/kurisu/*` 前门；回滚顺序和 owner/legacy sender 互斥规则见 `docs/runbooks/KURISU_AGENT_ROLLBACK.md`。
 
-P6 本地验证：Kurisu `50/50`、Product Radar `53/53`、agent-runtime/Product Radar typecheck、Kurisu plugin `4/4`、Python compile、R01/R02、HTTP smoke、secret scan、diff check 通过。全量 agent-runtime runner 复测在既有 `review-v3-2.test.ts` 子进程后无新增输出并有界终止，记录为 `KNOWN_HANG / NOT_FULL_PASS`，没有降低验收标准。
+P6 本地验证：Kurisu `50/50`、Product Radar `53/53`、agent-runtime/Product Radar typecheck、Kurisu plugin `4/4`、Python compile、R01/R02、HTTP smoke、secret scan、diff check 通过；全量 agent-runtime 为 `181 passed / 0 failed / 1 skipped`。此前 `review-v3-2.test.ts` 的默认复盘载具里程断言已修复。
 
 briefing 真实 scheduler/生成/投递 producer 仍未发现，严格标记 `BLOCKED_UNSUPPORTED`；没有伪造日报事件或成功发送证据。真实 LangBot native-agent WebSocket/platform L3（以及依赖合法 session 的平台 L2）仍为 `BLOCKED`，不能以 fake/provider trace 替代。
 
@@ -45,7 +45,7 @@ P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次�
 - Kurisu 通知、Codex、写工具和 Product Radar central owner 均未启用；LangBot 与 plugin runtime 未重启，现有 Watch/其他服务未改动。
 - 部署前精确 Kurisu state 文件不存在；启动后仅创建 Runtime-owned `/DATA/AppData/pubg-query-engine-v3/data/state.json.kurisu.sqlite`。主库/WAL/SHM 已收紧为 `0600`，精确备份为 `/Volumes/Avalon/backups/agent-monorepo/kurisu/20260916T124511Z/kurisu-state-20260916T124511Z.tar.gz`，恢复预览确认仅含目标 SQLite 文件。
 - `kurisu-gateway` 尚未安装：当前缺少合法 native-agent session 和管理员 Telegram DM 灰度对象，直接安装会绕过 P7 的 single-consumer/灰度前提。真实 LangBot native-agent L2/L3、旧 EventListener 迁移、briefing producer 仍为 blocked。
-- 完整 runtime suite 的既有 `review-v3-2.test.ts` 挂起仍记录为 `KNOWN_HANG / NOT_FULL_PASS`；本次发布依据已通过的 Kurisu 50/50、Product Radar 53/53、runtime build、HTTP smoke、R01、doctor、secret scan 和 diff check。
+- 完整 runtime suite 已在本次修复后通过 `181 passed / 0 failed / 1 skipped`；本次发布依据增加了全量测试证据。
 
 部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 

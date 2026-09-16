@@ -14,7 +14,7 @@ P6 实现提交：`24946b9`；本报告和验收证据随后在同一阶段补�
 | P3 | `IMPLEMENTED / VERIFIED_LOCAL` | 持久化 message-task links、审批参数与 callback binding、写工具协调器、HomeHub/Radar/media 受控写闭环、intent/reconcile/cancel、三处 crash injection、并发/timeout/unknown；`kurisu-write-tools.test.ts` 定向通过 | 未启用生产写工具；真实平台入口/外部生产写仍留在 P7 授权范围 |
 | P4 | `IMPLEMENTED / VERIFIED_LOCAL` | 单一 Codex App Server executor、server-owned project registry、worktree 隔离、start/status/list/resume/cancel、持久化 thread/turn/审批/输入状态；fake server 与真实 `codex-cli 0.153.4` 隔离仓库小修复通过，报告见 `KURISU_CODEX_P4_REAL_TRACE.json` | 真实 Codex approval 本次隔离小任务未触发；平台消息通知交由 P5，真实平台/L4 仍不宣称 |
 | P5 | `IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED` | Runtime notification Worker、Codex spool、Radar central handoff、structured write events、偏好/语气、producer 清单；Kurisu `48/48`、Radar `53/53`、plugin `4/4` | briefing 真实 scheduler/生成/投递 producer 未发现；旧 n8n sender 仅 rollback source；P7 才能切真实 owner |
-| P6 | `IMPLEMENTED / LOCAL_COMPLETE / L3_BLOCKED / BRIEFING_BLOCKED` | 101 条结构化 L2 场景（60 条独立失败改写）、R01/R02、HTTP smoke、配置/备份/恢复/runbook；实现提交 `24946b9` | Kurisu `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、R01/R02、L2 HTTP smoke 通过；全量既有 `review-v3-2.test.ts` runner 挂起，未宣称通过 |
+| P6 | `IMPLEMENTED / LOCAL_COMPLETE / L3_BLOCKED / BRIEFING_BLOCKED` | 101 条结构化 L2 场景（60 条独立失败改写）、R01/R02、HTTP smoke、配置/备份/恢复/runbook；实现提交 `24946b9` | Kurisu `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、R01/R02、L2 HTTP smoke 通过；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，既有 runner 卡点已修复 |
 | P7 | `NOT_AUTHORIZED` | — | 需单独 Goal 明确授权后才可部署/真实平台验收 |
 
 ## P0 结论
@@ -74,11 +74,11 @@ Path A 已按实测门槛固定为唯一主 Agent 宿主：LangBot 原生 `local
 - `pnpm --filter @agent/agent-runtime typecheck`：PASS；`PYTHONPATH=. python3 -m unittest discover -s integrations/langbot/plugins/kurisu-gateway/tests`：`4/4 PASS`；Python compile：PASS。
 - `node scripts/verify-kurisu-r01.mjs`：`R01_PASS`；`scripts/smoke-kurisu-http.sh`：PASS；`scripts/verify-kurisu-release-dry-run.sh`：`R02_PASS`；`scripts/backup-kurisu-state.sh --dry-run` 与安全临时归档的 `scripts/restore-kurisu-state.sh --dry-run`：PASS。
 - `pnpm check:secrets`、`git diff --check`：PASS。
-- `pnpm --filter @agent/agent-runtime test` 全量复测输出至既有 `review-v3-2.test.ts` 后 10 秒无新增输出，本次有界终止且无残留进程；因此报告为 `KNOWN_HANG / NOT_FULL_PASS`，不降低验收标准。
+- `pnpm --filter @agent/agent-runtime test` 全量复测已通过：`181 passed / 0 failed / 1 skipped`。此前 `review-v3-2.test.ts` 的卡点来自默认复盘模板缺少逐人载具里程，现已补回并保留回归断言。
 - 真实当前 LangBot native-agent WebSocket/platform L3 仍为 `BLOCKED`：没有合法 user/support-admin session token；P2 9Router provider trace 继续作为 provider evidence，不能替代该层。
 
 ## 证据规则
 
 每个后续 case 必须记录 `caseId/revision/layer/modelRoute/configFingerprint/inputFixture/expectedInvariants/actualToolCalls/result/evidenceRefs`，并区分 `PASS`、`BLOCKED`、`OPEN` 与 `NOT_APPLICABLE`。任何容器 running、HTTP 200、`getMe` 或 turn ended 都不能单独作为终端交付成功证据。
 
-本次全量 `tests/**/*.test.ts` 仍在既有 `review-v3-2.test.ts` 子进程后持续无新增输出；不把它记为全量通过。P6 使用分批策略和实际 L2 HTTP smoke 留存可复核证据，并单列该已知挂起。
+本次全量 `tests/**/*.test.ts` 已完成，结果为 `181 passed / 0 failed / 1 skipped`；剩余 1 项为真实 V3.2 fixture 的显式 skip，不影响测试进程退出。
