@@ -20,7 +20,7 @@ P6 已完成本地集成验收和 Release 准备，代码提交为 `24946b9`：1
 
 `local/kurisu-gateway@0.1.0` 已由 LangBot task `12` 安装并达到 `INSTALL_READY`；plugin runtime 已挂载 Runtime 的外部 gateway secret。当前只对已确认的管理员 Telegram 私聊进行真实 Tool 调用灰度，未切换其他 session rollout，也未启用通知/Codex/写工具。旧 EventListener single-consumer 迁移、briefing producer 和完整平台验收仍是外部流程/架构前置条件，不是当前 Runtime 健康故障。
 
-该私聊的首个 `kurisu.radar.list` 已进入 Runtime，但发现生产 Compose 漏配 `KURISU_RADAR_URL`，返回 `CAPABILITY_UNAVAILABLE`。已补为内部 `http://product-radar:5315`，以现有 immutable image 无构建重建；同类 gateway request 已返回 `ok`，仅待同一私聊复测 LangBot 的最终渲染回复。
+该私聊的首个 `kurisu.radar.list` 已进入 Runtime，但发现生产 Compose 漏配 `KURISU_RADAR_URL`，返回 `CAPABILITY_UNAVAILABLE`。已补为内部 `http://product-radar:5315`，以现有 immutable image 无构建重建；同一私聊复测的 Runtime execution 返回 `ok`，LangBot 已成功渲染并回写最终消息。该灰度只读取 Product Radar Watch，不涉及写入。
 
 旧任务及运行证据保留如下。
 

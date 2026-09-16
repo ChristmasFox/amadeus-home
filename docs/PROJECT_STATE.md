@@ -51,7 +51,7 @@ P6 实现提交为 `24946b9`。用户随后明确授权 push 并部署；本次�
 - 持久化权限补强已随 `local/pubg-query-engine-v3:git-3e00275d8e70` 发布；live 重建后主库/WAL/SHM 为 `0600`，health、gateway `401`/授权检查和 `127.0.0.1` 绑定均通过。
 - 当前问题盘点与处理结果见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-issue-inventory.md`：本地测试、边界安全、持久化权限和构建 proxy 问题已解决；合法 session、插件灰度、旧 listener 迁移、briefing producer 和真实平台 smoke 仍是明确的外部阻塞。
 - 管理员 Telegram 私聊灰度对象已确认；`langbot_plugin_runtime` 已挂载 Runtime 现有外部 secret，`local/kurisu-gateway@0.1.0` 安装任务 `12` 为 `INSTALL_READY`。此刻只等待该私聊的真实 Tool 调用证据，未切换任何其他会话。
-- 首次真实 `kurisu.radar.list` 已证明 LangBot 会选择并调用 Kurisu Tool，但 Runtime 当时缺少 `KURISU_RADAR_URL` 而安全返回 `CAPABILITY_UNAVAILABLE`。现已将 Product Radar 内网地址 `http://product-radar:5315` 配置进 Git 与 live Runtime，直接授权请求返回 `ok`；等待同一私聊复测其最终渲染回复。
+- 首次真实 `kurisu.radar.list` 已证明 LangBot 会选择并调用 Kurisu Tool，但 Runtime 当时缺少 `KURISU_RADAR_URL` 而安全返回 `CAPABILITY_UNAVAILABLE`。现已将 Product Radar 内网地址 `http://product-radar:5315` 配置进 Git 与 live Runtime；同一管理员私聊复测的 Runtime execution 为 `ok`，LangBot 最终渲染回复成功，且未修改任何 Watch。
 
 部署记录与下一步见 `.agent/checkpoints/2026-09-16-kurisu-agent-p7-runtime-deployment.md` 和 `.agent/tasks/2026-09-16-kurisu-agent-p7-release.md`。
 
