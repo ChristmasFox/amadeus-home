@@ -17,6 +17,7 @@
 - Runtime 回滚副本：`/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260917-002049`（部署前 compose）；生产开关/挂载变更另保留 `...20260917-002101`。
 - LangBot 插件安装回滚目录：`.backups/langbot/20260917-002127`（批量发布前包）、`.backups/langbot/20260917-002443`（NAS 修复前包）。
 - LangBot DB 只读核验：五个 local plugin 均 `enabled=1`；当前版本分别为 Gateway `0.1.1`、PUBG `3.3.4`、Product Radar `0.6.0`、Organize Emby `0.2.2`、NAS `0.1.6`。Gateway 是唯一 Tool；legacy plugin 不再暴露自然语言 EventListener/Tool，显式 Command 保留。
+- LangBot Bot/Pipeline 只读核验：Telegram 与 KOOK 两个 Bot 均 enabled，共用 `KOOK Pipeline`（v4.10.8，pipeline UUID 保留在运行时）；`enable_all_plugins=true`。外部 GroupChatSummary/ScheNotify 仍是既有独立能力，本次迁移边界只保证本地 PUBG/Radar/HomeHub/媒体自然语言不再由 legacy listener/tool 抢占。
 - Runtime：`/healthz`、`/homehub/health` 返回 200；Kurisu `contractVersion=kurisu.v1`、`rollout=native_agent_global`、29 tools；Product Radar owner 为 `central`。
 - 真实只读线上 smoke：`scripts/doctor.sh` 为 0 failure / 0 warning；`smoke-kurisu-http.sh` 通过；`smoke-homehub-docker.sh` 通过，受限 Docker API 列出 10 个 allowlisted service，HomeHub `/status` 为 9 healthy、3 degraded、1 down、0 unknown，取得真实 macOS host metrics。
 

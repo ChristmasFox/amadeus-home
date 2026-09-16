@@ -7,6 +7,7 @@
 - Runtime `pubg-query-engine-v3`：`running/healthy`；`/healthz`、`/homehub/health` 返回 200，Kurisu `/status` 为 `contractVersion=kurisu.v1`、`rollout=native_agent_global`、29 个工具。
 - HomeHub Docker smoke：受限 Docker API 列出 10 个 allowlisted 服务；`/status` 为 9 healthy、3 degraded、1 down、0 unknown，并取得真实 macOS host metrics。
 - LangBot API/DB：`local/kurisu-gateway@0.1.1`、`local/pubg-stats@3.3.4`、`local/product-radar@0.6.0`、`local/organize-emby@0.2.2`、`local/macos-nas-control@0.1.6` 均 enabled；Kurisu 是唯一 Tool，legacy plugin 不再暴露自然语言 EventListener/Tool。
+- LangBot Bot/Pipeline：Telegram 与 KOOK 均 enabled，共用 `KOOK Pipeline` v4.10.8，pipeline `enable_all_plugins=true`；GroupChatSummary/ScheNotify 是未迁移的既有独立插件，不纳入本地业务 Kurisu Gateway 唯一 Tool 结论。
 - Runtime media mounts：源码/生产配置仅允许 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv`、`backups/media-organizer`；因宿主 Avalon 当前未挂载，live Compose 暂不加载这四个 bind mount。媒体写入流程包含 preview、allowlist、确定性 plan 和执行后 verify，磁盘恢复后需重新 smoke。
 - 代码与安全：`38af693`、`015df8f`、`c4f2e65` 已 push；相关定向测试、typecheck、R01/R02、`scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、`pnpm check:secrets` 和 `git diff --check` 通过。
 - 未完成证据：部署后尚未出现新的真实 Telegram/KOOK 入站；R03/R04 仍待真实平台证据，R05 核心镜像/插件回滚已通过但包含 Avalon 挂载的回滚仍因磁盘未连接而待补。不能用 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
