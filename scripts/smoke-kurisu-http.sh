@@ -36,6 +36,7 @@ command -v node >/dev/null 2>&1 || { printf '%s\n' 'node is required.' >&2; exit
   PUBG_FEATURE_STATE_FILE="$TEMP_DIR/features.json" \
   PUBG_SELECTION_STATE_FILE="$TEMP_DIR/selections.json" \
   KURISU_STATE_FILE="$TEMP_DIR/kurisu.sqlite" \
+  KURISU_GATEWAY_SECRET='kurisu-http-smoke-secret' \
   KURISU_NOTIFICATIONS_ENABLE=0 \
   KURISU_ENABLE_WRITE_TOOLS=0 \
   KURISU_CODEX_ENABLE=0 \
@@ -72,8 +73,18 @@ const names=new Set((body.tools ?? []).map((tool) => tool.name));
 if (body.contractVersion !== "kurisu.v1" || !names.has("kurisu.pubg.query") || !names.has("kurisu.notifications.preference.get")) process.exit(1);
 '
 
+unauthorized_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 3 \
+  -H 'content-type: application/json' \
+  -d '{"toolName":"kurisu.radar.list","input":{"includeRuns":false},"callId":"http-smoke-unauthorized","hostContext":{"platform":"test","platformUserId":"http-smoke-user","conversation":{"kind":"private","chatId":"http-smoke-chat"},"botId":"http-smoke-bot","queryId":"http-smoke-query"}}' \
+  "$BASE_URL/kurisu/tool-call")"
+if [[ "$unauthorized_status" != '401' ]]; then
+  printf '%s\n' "Expected unauthorized Kurisu tool call to return 401, got $unauthorized_status" >&2
+  exit 1
+fi
+
 tool_response="$(curl --silent --show-error --max-time 3 \
   -H 'content-type: application/json' \
+  -H 'x-kurisu-gateway-secret: kurisu-http-smoke-secret' \
   -d '{"toolName":"kurisu.radar.list","input":{"includeRuns":false},"callId":"http-smoke-1","hostContext":{"platform":"test","platformUserId":"http-smoke-user","conversation":{"kind":"private","chatId":"http-smoke-chat"},"botId":"http-smoke-bot","queryId":"http-smoke-query"}}' \
   "$BASE_URL/kurisu/tool-call")"
 printf '%s' "$tool_response" | node --input-type=module -e '

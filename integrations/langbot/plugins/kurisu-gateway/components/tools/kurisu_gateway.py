@@ -61,12 +61,30 @@ def stable_call_id(query_id: Any, tool_name: str, tool_input: dict[str, Any]) ->
     return f'{query_part}:{digest}'
 
 
-def _post(url: str, payload: dict[str, Any]) -> dict[str, Any]:
+def runtime_secret() -> str:
+    direct = str(os.environ.get('KURISU_GATEWAY_SECRET') or '').strip()
+    if direct:
+        return direct
+    file_path = str(os.environ.get('KURISU_GATEWAY_SECRET_FILE') or '').strip()
+    if not file_path:
+        return ''
+    try:
+        with open(file_path, encoding='utf-8') as handle:
+            return handle.read().strip()
+    except OSError:
+        return ''
+
+
+def _post(url: str, payload: dict[str, Any], secret: str) -> dict[str, Any]:
     encoded = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(
         url,
         data=encoded,
-        headers={'Content-Type': 'application/json', 'Accept': 'application/json'},
+        headers={
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Kurisu-Gateway-Secret': secret,
+        },
         method='POST',
     )
     try:
@@ -101,11 +119,14 @@ class KurisuGatewayTool(Tool):
                 runtime_url = ''
         if not runtime_url:
             return json.dumps({'status': 'unsupported', 'error': {'code': 'RUNTIME_URL_UNCONFIGURED', 'retryable': False}}, ensure_ascii=False)
+        secret = runtime_secret()
+        if not secret:
+            return json.dumps({'status': 'unsupported', 'error': {'code': 'RUNTIME_SECRET_UNCONFIGURED', 'retryable': False}}, ensure_ascii=False)
         payload = {
             'callId': call_id,
             'toolName': tool_name,
             'input': tool_input,
             'hostContext': trusted_session_context(session, query_id),
         }
-        result = await asyncio.to_thread(_post, f'{runtime_url}/kurisu/tool-call', payload)
+        result = await asyncio.to_thread(_post, f'{runtime_url}/kurisu/tool-call', payload, secret)
         return json.dumps(result, ensure_ascii=False, separators=(',', ':'))

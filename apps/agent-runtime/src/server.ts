@@ -63,6 +63,7 @@ const runtime = new PubgMastraRuntime({
 });
 
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
+const kurisuGatewaySecret = (process.env.KURISU_GATEWAY_SECRET?.trim() || readSecretFile(process.env.KURISU_GATEWAY_SECRET_FILE ?? '')).trim();
 const notificationsEnabled = process.env.KURISU_NOTIFICATIONS_ENABLE === '1';
 const notificationSecret = (process.env.KURISU_NOTIFICATION_SECRET?.trim() || readSecretFile(process.env.KURISU_NOTIFICATION_SECRET_FILE ?? '')).trim();
 const notificationPrincipalKey = process.env.KURISU_NOTIFICATION_PRINCIPAL_KEY?.trim() || 'codex:external';
@@ -193,6 +194,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === 'POST' && url.pathname === '/kurisu/inbound') {
+      if (!requireKurisuGatewaySecret(request, response)) return;
       const body = await readBody(request);
       const inbound = body.inbound;
       if (!inbound || typeof inbound !== 'object' || Array.isArray(inbound)) throw new Error('kurisu inbound must be an object');
@@ -201,6 +203,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === 'POST' && url.pathname === '/kurisu/callback') {
+      if (!requireKurisuGatewaySecret(request, response)) return;
       const body = await readBody(request);
       const inbound = body.inbound;
       if (!inbound || typeof inbound !== 'object' || Array.isArray(inbound)) throw new Error('kurisu callback inbound must be an object');
@@ -209,6 +212,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === 'POST' && url.pathname === '/kurisu/tool-call') {
+      if (!requireKurisuGatewaySecret(request, response)) return;
       const body = await readBody(request);
       const result = await kurisuService.executeHostTool(body);
       json(response, 200, result);
@@ -385,4 +389,16 @@ function matchesSecret(value: string | string[] | undefined, expected: string): 
   const left = Buffer.from(supplied);
   const right = Buffer.from(expected);
   return left.length === right.length && left.length > 0 && timingSafeEqual(left, right);
+}
+
+function requireKurisuGatewaySecret(request: IncomingMessage, response: ServerResponse): boolean {
+  if (!kurisuGatewaySecret) {
+    json(response, 503, { contractVersion: 'kurisu.v1', error: 'kurisu gateway ingress is not configured' });
+    return false;
+  }
+  if (!matchesSecret(request.headers['x-kurisu-gateway-secret'], kurisuGatewaySecret)) {
+    json(response, 401, { contractVersion: 'kurisu.v1', error: 'unauthorized' });
+    return false;
+  }
+  return true;
 }

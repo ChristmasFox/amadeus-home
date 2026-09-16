@@ -24,6 +24,7 @@ services:
       PUBG_TELEMETRY_PARSER_VERSION: ${PUBG_TELEMETRY_PARSER_VERSION:-telemetry-parser-6}
       PUBG_REVIEW_FEATURE_VERSION: ${PUBG_REVIEW_FEATURE_VERSION:-review-features-6}
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      KURISU_GATEWAY_SECRET_FILE: /run/secrets/kurisu_gateway_secret
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
       KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
       MAC_HOST_AGENT_URL: ${MAC_HOST_AGENT_URL:-http://host.docker.internal:49152}
@@ -32,9 +33,10 @@ services:
       - ${PUBG_RUNTIME_DATA_DIR:-/DATA/AppData/pubg-query-engine-v3/data}:/data
       - ${DOCKER_SOCKET_PATH:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ${PUBG_API_KEY_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
+      - ${KURISU_GATEWAY_SECRET_HOST_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/kurisu-gateway-secret}:/run/secrets/kurisu_gateway_secret:ro
       - ${MAC_HOST_AGENT_TOKEN_FILE:-/DATA/AppData/pubg-query-engine-v3/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
     ports:
-      - "${PUBG_QUERY_ENGINE_PORT:-5310}:5310"
+      - "${PUBG_QUERY_ENGINE_BIND_ADDRESS:-127.0.0.1}:${PUBG_QUERY_ENGINE_PORT:-5310}:5310"
     networks:
       - langbot_network
 
