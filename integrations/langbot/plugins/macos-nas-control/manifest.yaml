@@ -4,20 +4,16 @@ metadata:
   author: local
   name: macos-nas-control
   repository: https://github.com/langbot-app/LangBot
-  version: 0.1.4
+  version: 0.1.5
   description:
-    en_US: Safely control a macOS NAS and inspect the current KOOK server through allowlisted integrations.
-    zh_Hans: 通过白名单集成安全控制 macOS NAS，查询主机、CPU、内存、磁盘、网络和 cloudflared 状态，并查询当前 KOOK 服务器成员。
+    en_US: Legacy explicit NAS resources; ordinary natural-language requests use Kurisu HomeHub capabilities.
+    zh_Hans: 仅保留旧的显式 NAS 资源；普通自然语言请求统一经 Kurisu HomeHub 能力处理。
   label:
     en_US: macOS NAS Control
     zh_Hans: macOS NAS 控制
 spec:
   config: []
   components:
-    Tool:
-      fromDirs:
-        - path: components/tools/
-          maxDepth: 1
 execution:
   python:
     path: main.py

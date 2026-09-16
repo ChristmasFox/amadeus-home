@@ -209,6 +209,7 @@ test('MediaOperations scopes preview and execution to download and library roots
     const result = await operations.executePlan(plan);
     assert.equal(result.success, true);
     assert.equal(result.operationsExecuted, 2);
+    await assert.rejects(stat(source));
 
     const destination = join(movies, 'Example Movie (2024)', 'Example Movie (2024).mkv');
     assert.equal(await readFile(destination, 'utf8'), 'test-video');

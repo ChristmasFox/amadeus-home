@@ -15,6 +15,7 @@ import { IdentityRegistry } from './platform/core/identity.js';
 import { isHomeHubCallback } from './homehub/confirmation.js';
 import { KurisuService } from './kurisu/service.js';
 import { createReadOnlyBackends } from './kurisu/read-only.js';
+import { MediaOperations } from './homehub/operations/media-operations.js';
 import { MediaPathPolicy } from './kurisu/media.js';
 import { homeHubActionHandler, mediaMoveHandler, radarWriteHandlers } from './kurisu/write-tools.js';
 import { CodexProjectRegistry, RemoteCodexAppServerClient, RemoteCodexProjectRegistry } from './kurisu/codex.js';
@@ -64,6 +65,20 @@ const runtime = new PubgMastraRuntime({
 });
 
 const homehubRuntime = new HomeHubRuntime({ identityRegistry });
+const mediaRoots = {
+  downloads: process.env.KURISU_MEDIA_DOWNLOADS_ROOT ?? '/Volumes/Avalon/downloads',
+  movies: process.env.KURISU_MEDIA_MOVIES_ROOT ?? '/Volumes/Avalon/media/movies',
+  tv: process.env.KURISU_MEDIA_TV_ROOT ?? '/Volumes/Avalon/media/tv',
+};
+const mediaOperations = new MediaOperations({
+  downloadsPaths: [`${mediaRoots.downloads}/complete`, mediaRoots.downloads],
+  libraryPaths: {
+    movies: mediaRoots.movies,
+    tv: mediaRoots.tv,
+  },
+  backupPath: process.env.KURISU_MEDIA_BACKUP_ROOT ?? '/Volumes/Avalon/backups/media-organizer',
+});
+const mediaPathPolicy = new MediaPathPolicy(mediaRoots);
 const kurisuGatewaySecret = (process.env.KURISU_GATEWAY_SECRET?.trim() || readSecretFile(process.env.KURISU_GATEWAY_SECRET_FILE ?? '')).trim();
 const notificationsEnabled = process.env.KURISU_NOTIFICATIONS_ENABLE === '1';
 const notificationSecret = (process.env.KURISU_NOTIFICATION_SECRET?.trim() || readSecretFile(process.env.KURISU_NOTIFICATION_SECRET_FILE ?? '')).trim();
@@ -87,11 +102,7 @@ const writeHandlers = process.env.KURISU_ENABLE_WRITE_TOOLS === '1'
   ? {
       homehubAction: homeHubActionHandler(homehubRuntime),
       ...(radarClient ? radarWriteHandlers(radarClient) : {}),
-      mediaMove: mediaMoveHandler(new MediaPathPolicy({
-        downloads: process.env.KURISU_MEDIA_DOWNLOADS_ROOT ?? '/Volumes/Avalon/downloads',
-        movies: process.env.KURISU_MEDIA_MOVIES_ROOT ?? '/Volumes/Avalon/media/movies',
-        tv: process.env.KURISU_MEDIA_TV_ROOT ?? '/Volumes/Avalon/media/tv',
-      })),
+      mediaMove: mediaMoveHandler(mediaOperations, mediaPathPolicy),
     }
   : undefined;
 const codexProjectRoot = process.env.KURISU_CODEX_PROJECT_ROOT?.trim() ?? '';
@@ -123,6 +134,7 @@ const kurisuService = new KurisuService({
   backends: createReadOnlyBackends({
     pubgRuntime: runtime,
     homehubRuntime,
+    mediaOperations,
     ...(radarClient ? { radar: radarClient } : {}),
   }),
   ...(writeHandlers ? { writeHandlers } : {}),

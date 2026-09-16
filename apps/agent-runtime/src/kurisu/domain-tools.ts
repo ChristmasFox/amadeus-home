@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolResponse, TrustedExecutionContext } from './contracts.js';
 import { evidence, failure, ok, type ToolDefinition, ToolRegistry } from './tools.js';
+import type { MediaOperations } from '../homehub/operations/media-operations.js';
 
 const timeRangeSchema = z.object({
   kind: z.enum(['today', 'yesterday', 'date', 'range', 'recent']).optional(),
@@ -54,6 +55,14 @@ export const notificationDiagnosisInputSchema = z.object({
   limit: z.number().int().min(1).max(100).default(20),
 }).strict();
 
+export const mediaScanInputSchema = z.object({
+  targetPattern: z.string().trim().max(256).optional(),
+}).strict();
+
+export const mediaPreviewInputSchema = z.object({
+  sourcePath: z.string().trim().min(1).max(2048),
+}).strict();
+
 export const entityResolveInputSchema = z.object({
   domain: z.enum(['pubg', 'homehub', 'radar', 'media', 'codex']),
   reference: z.string().trim().min(1).max(256),
@@ -80,6 +89,10 @@ export interface DomainBackends {
   notifications?: {
     diagnosis(input: z.infer<typeof notificationDiagnosisInputSchema>, context: TrustedExecutionContext): Promise<unknown>;
   };
+  media?: {
+    scan(input: z.infer<typeof mediaScanInputSchema>, context: TrustedExecutionContext): Promise<unknown>;
+    preview(input: z.infer<typeof mediaPreviewInputSchema>, context: TrustedExecutionContext): Promise<unknown>;
+  };
   entities?: {
     resolve(input: z.infer<typeof entityResolveInputSchema>, context: TrustedExecutionContext): Promise<unknown>;
   };
@@ -99,6 +112,8 @@ export function registerDomainTools(registry: ToolRegistry, backends: DomainBack
     definition('kurisu.radar.status', 'Read Product Radar watch/feed status without changing a watch.', 'read', radarWatchInputSchema, backends.radar ? (input, context) => backends.radar!.status(input as z.infer<typeof radarWatchInputSchema>, context) : undefined),
     definition('kurisu.radar.stats', 'Read Product Radar run and match statistics.', 'read', radarWatchInputSchema, backends.radar ? (input, context) => backends.radar!.stats(input as z.infer<typeof radarWatchInputSchema>, context) : undefined),
     definition('kurisu.notifications.diagnose', 'Inspect notification events and delivery states by channel.', 'read', notificationDiagnosisInputSchema, backends.notifications ? (input, context) => backends.notifications!.diagnosis(input as z.infer<typeof notificationDiagnosisInputSchema>, context) : undefined),
+    definition('kurisu.media.scan', 'List explicitly selected media items in the allowlisted download roots.', 'read', mediaScanInputSchema, backends.media ? (input, context) => backends.media!.scan(input as z.infer<typeof mediaScanInputSchema>, context) : undefined),
+    definition('kurisu.media.preview', 'Create a read-only, allowlisted media organization preview for one source folder.', 'read', mediaPreviewInputSchema, backends.media ? (input, context) => backends.media!.preview(input as z.infer<typeof mediaPreviewInputSchema>, context) : undefined),
   ]);
 }
 

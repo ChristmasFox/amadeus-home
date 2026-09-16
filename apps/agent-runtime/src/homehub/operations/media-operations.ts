@@ -446,6 +446,16 @@ export class MediaOperations {
         }
       }
 
+      // A completed download folder is only an inbox container. Remove it
+      // after all files have moved, but never recursively remove leftovers.
+      try {
+        const remaining = await fs.readdir(plan.item.sourcePath);
+        if (remaining.length === 0) await fs.rmdir(plan.item.sourcePath);
+      } catch {
+        // The file moves above remain authoritative; verification will report
+        // any unexpected source residue to the caller.
+      }
+
       return {
         success: true,
         message: `成功整理 ${plan.item.title}，已备份到 ${plan.backupPath}`,

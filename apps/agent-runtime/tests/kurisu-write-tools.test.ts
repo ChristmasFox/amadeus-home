@@ -18,6 +18,7 @@ import {
 } from '../src/kurisu/contracts.js';
 import { KurisuService } from '../src/kurisu/service.js';
 import { KurisuStore } from '../src/kurisu/storage.js';
+import { MediaOperations } from '../src/homehub/operations/media-operations.js';
 import { MediaPathPolicy } from '../src/kurisu/media.js';
 import {
   mediaMoveHandler,
@@ -476,17 +477,24 @@ test('approved media move reuses the allowlist and refuses an existing target', 
   const movies = join(directory, 'movies');
   const tv = join(directory, 'tv');
   mkdirSync(downloads); mkdirSync(movies); mkdirSync(tv);
-  const source = join(downloads, 'movie.mkv');
-  const target = join(movies, 'Movie (2020).mkv');
-  writeFileSync(source, 'fixture');
-  const policy = new MediaPathPolicy({ downloads, movies, tv });
+  const source = join(downloads, 'Movie.2020');
+  const sourceFile = join(source, 'Movie.2020.mkv');
+  const target = join(movies, 'Movie (2020)');
+  mkdirSync(source);
+  writeFileSync(sourceFile, 'fixture');
+  const operations = new MediaOperations({
+    downloadsPaths: [downloads],
+    libraryPaths: { movies, tv },
+    backupPath: join(directory, 'backups'),
+  });
   const store = new KurisuStore();
   const session = normalizeInbound(inbound('media-write'));
   store.claimInbound(session);
   const run = store.createRun(session.sessionKey, 'run-media-write', FIXED_NOW);
   const coordinator = new WriteCoordinator(store, { owner: 'media-write-test', now: () => FIXED_NOW });
   const registry = new ToolRegistry({ authorize: authorizeTool });
-  registerWriteTools(registry, coordinator, { mediaMove: mediaMoveHandler(policy) });
+  const policy = new MediaPathPolicy({ downloads, movies, tv });
+  registerWriteTools(registry, coordinator, { mediaMove: mediaMoveHandler(operations, policy) });
   try {
     const trusted = context(run.id, session.sessionKey);
     const pending = await coordinator.request('kurisu.media.move', { source, target, reason: 'explicit media organization' }, trusted);
@@ -499,13 +507,17 @@ test('approved media move reuses the allowlist and refuses an existing target', 
     assert.equal(result.status, 'ok');
     assert.equal(existsSync(source), false);
     assert.equal(existsSync(target), true);
-    assert.equal(existsSync(`${source}.kurisu-backup`), true);
+    assert.equal(existsSync(join(directory, 'backups')), true);
 
-    const existingTarget = join(movies, 'existing.mkv');
-    writeFileSync(existingTarget, 'existing');
-    const secondSource = join(downloads, 'second.mkv');
-    writeFileSync(secondSource, 'second');
-    assert.throws(() => policy.plan(secondSource, existingTarget, 'should reject'), /target already exists/u);
+    const existingTarget = join(movies, 'Existing (2020)');
+    mkdirSync(existingTarget);
+    const secondSource = join(downloads, 'Existing.2020');
+    mkdirSync(secondSource);
+    writeFileSync(join(secondSource, 'Existing.2020.mkv'), 'second');
+    await assert.rejects(
+      operations.createOperationPlan((await operations.scanDownloads(secondSource))[0]!),
+      /目标路径已存在/u,
+    );
   } finally {
     store.close();
     rmSync(directory, { recursive: true, force: true });

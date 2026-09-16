@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { access, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { DEFAULT_TEAM } from '../src/config/team.js';
 import { FixtureDataProvider } from '../src/data/provider.js';
@@ -8,6 +11,7 @@ import { createNotificationBackend, createReadOnlyBackends } from '../src/kurisu
 import { publicReadAuthorization } from '../src/kurisu/policy.js';
 import type { ToolResponse, TrustedExecutionContext } from '../src/kurisu/contracts.js';
 import { KurisuStore } from '../src/kurisu/storage.js';
+import { MediaOperations } from '../src/homehub/operations/media-operations.js';
 import type { HomeHubRuntime } from '../src/runtime/homehub-runtime.js';
 import { PubgMastraRuntime } from '../src/runtime/workflow.js';
 import type { Coverage, SourceInfo } from '../src/schema/status.js';
@@ -144,6 +148,30 @@ test('HomeHub read adapters preserve service selection, diagnostics, and princip
   assert.deepEqual(diagnosisCalls, [['emby']]);
   assert.equal((errors.data as { principalKey: string }).principalKey, 'test:principal-scoped');
   assert.deepEqual(auditCalls, [{ principalKey: 'test:principal-scoped', limit: 20 }]);
+});
+
+test('media read adapters scan and preview without changing the filesystem', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'kurisu-media-read-'));
+  const downloads = join(root, 'downloads');
+  const source = join(downloads, 'Example.Movie.2026');
+  const movies = join(root, 'movies');
+  const tv = join(root, 'tv');
+  try {
+    await mkdir(source, { recursive: true });
+    await writeFile(join(source, 'Example.Movie.2026.mkv'), 'fixture');
+    const operations = new MediaOperations({ downloadsPaths: [downloads], libraryPaths: { movies, tv }, backupPath: join(root, 'backups') });
+    const backends = createReadOnlyBackends({ mediaOperations: operations });
+    const scanned = toolResponse(await backends.media!.scan({ targetPattern: 'Example' }, trustedContext()));
+    assert.equal(scanned.status, 'ok');
+    assert.equal((scanned.data as { count: number }).count, 1);
+    const preview = toolResponse(await backends.media!.preview({ sourcePath: source }, trustedContext()));
+    assert.equal(preview.status, 'ok');
+    assert.equal((preview.data as { preview: { success: boolean } }).preview.success, true);
+    assert.equal((preview.data as { plan: { targetPath: string } }).plan.targetPath, join(movies, 'Example Movie (2026)'));
+    assert.equal(await access(source).then(() => true, () => false), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test('Product Radar adapter reports structured data, rate limiting, invalid JSON, and timeout as distinct outcomes', async () => {

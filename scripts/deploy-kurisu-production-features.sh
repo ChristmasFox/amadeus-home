@@ -133,6 +133,10 @@ def patch_compose(path: Path, app: str) -> Path:
         mounts = [
             '      - /DATA/AppData/n8n/secrets/codex-notify-secret:/run/secrets/kurisu_notification_secret:ro\n',
             '      - /DATA/AppData/product-radar/secrets/langbot-api-token:/run/secrets/langbot-api-token:ro\n',
+            '      - /Volumes/Avalon/downloads:/Volumes/Avalon/downloads:rw\n',
+            '      - /Volumes/Avalon/media/movies:/Volumes/Avalon/media/movies:rw\n',
+            '      - /Volumes/Avalon/media/tv:/Volumes/Avalon/media/tv:rw\n',
+            '      - /Volumes/Avalon/backups/media-organizer:/Volumes/Avalon/backups/media-organizer:rw\n',
         ]
         marker = '    volumes:\n'
         if marker not in text: raise SystemExit('runtime compose volumes block is missing')

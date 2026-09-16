@@ -2,6 +2,7 @@ import { CanonicalQuerySchema, type CanonicalQuery } from '../schema/query.js';
 import type { RuntimeResponse } from '../runtime/types.js';
 import type { PubgMastraRuntime } from '../runtime/workflow.js';
 import type { HomeHubRuntime } from '../runtime/homehub-runtime.js';
+import type { MediaOperations } from '../homehub/operations/media-operations.js';
 import {
   entityResolveInputSchema,
   homehubServicesInputSchema,
@@ -32,6 +33,7 @@ export interface ReadOnlyBackendOptions {
   pubgRuntime?: PubgMastraRuntime;
   homehubRuntime?: HomeHubRuntime;
   radar?: RadarReadOnlyClientOptions;
+  mediaOperations?: MediaOperations;
 }
 
 /** Expose persisted notification facts without turning diagnosis into sending. */
@@ -51,8 +53,35 @@ export function createReadOnlyBackends(options: ReadOnlyBackendOptions = {}): Do
     ...(options.pubgRuntime ? { pubg: pubgBackends(options.pubgRuntime) } : {}),
     ...(options.homehubRuntime ? { homehub: homehubBackends(options.homehubRuntime) } : {}),
     ...(options.radar?.baseUrl ? { radar: radarBackends(options.radar) } : {}),
+    ...(options.mediaOperations ? { media: mediaBackends(options.mediaOperations) } : {}),
     entities: {
       resolve: async (input) => resolveEntity(input),
+    },
+  };
+}
+
+function mediaBackends(operations: MediaOperations): NonNullable<DomainBackends['media']> {
+  return {
+    scan: async (input) => {
+      try {
+        const items = await operations.scanDownloads(input.targetPattern);
+        return ok({ items, count: items.length }, [evidence('media.organizer', 'allowlisted download scan returned structured items')]);
+      } catch (error) {
+        return unknownResult('MEDIA_SCAN_UNAVAILABLE', error instanceof Error ? error.message : 'media scan failed', true);
+      }
+    },
+    preview: async (input) => {
+      try {
+        const items = await operations.scanDownloads(input.sourcePath);
+        if (items.length !== 1) return failure('MEDIA_SOURCE_AMBIGUOUS', 'sourcePath must identify exactly one supported media folder', false);
+        const item = items[0]!;
+        const plan = await operations.createOperationPlan(item);
+        const preview = await operations.previewPlan(plan);
+        if (!preview.success) return failure('MEDIA_PREVIEW_BLOCKED', preview.message, false);
+        return ok({ item, plan, preview }, [evidence('media.organizer', 'allowlist and no-overwrite preview completed')]);
+      } catch (error) {
+        return failure('MEDIA_PREVIEW_INVALID', error instanceof Error ? error.message : 'media preview failed', false);
+      }
     },
   };
 }

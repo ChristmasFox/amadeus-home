@@ -31,6 +31,8 @@ spec:
           - kurisu.notifications.preference.set
           - kurisu.notifications.preference.forget
           - kurisu.notifications.delivery.retry
+          - kurisu.media.scan
+          - kurisu.media.preview
           - kurisu.homehub.action
           - kurisu.radar.mutate
           - kurisu.radar.create

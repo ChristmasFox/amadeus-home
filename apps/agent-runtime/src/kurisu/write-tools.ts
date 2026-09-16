@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import type { CallbackReference, ToolResponse, TrustedExecutionContext } from './contracts.js';
 import { parseCallback } from './contracts.js';
 import { ApprovalService } from './approvals.js';
+import type { MediaOperations } from '../homehub/operations/media-operations.js';
 import { MediaPathPolicy } from './media.js';
 import { approvalArgumentsHash, KurisuStore, type RunRecord, type TaskStepRecord } from './storage.js';
 import { TaskEngine, type TaskStep, type TaskStepOutcome } from './tasks.js';
@@ -266,18 +268,32 @@ function writeDefinition(operation: WriteOperationDefinition, coordinator: Write
 }
 
 /** Adapt the existing path policy to the durable task boundary. */
-export function mediaMoveHandler(policy: MediaPathPolicy): StructuredWriteHandler {
+export function mediaMoveHandler(operations: MediaOperations, policy: MediaPathPolicy): StructuredWriteHandler {
   return {
     async execute(input) {
       const value = mediaMoveInputSchema.parse(input);
-      const plan = policy.plan(value.source, value.target, value.reason);
-      policy.execute(plan, true);
-      return { status: 'succeeded', result: { plan } };
+      const source = policy.validateSource(value.source);
+      const target = policy.validateTarget(value.target);
+      const items = await operations.scanDownloads(source);
+      if (items.length !== 1) return { status: 'blocked', result: { code: 'MEDIA_SOURCE_AMBIGUOUS', source: value.source } };
+      const plan = await operations.createOperationPlan(items[0]!);
+      if (target !== resolve(plan.targetPath)) {
+        return { status: 'blocked', result: { code: 'MEDIA_TARGET_MISMATCH', expected: plan.targetPath, received: value.target } };
+      }
+      const preview = await operations.previewPlan(plan);
+      if (!preview.success) return { status: 'blocked', result: { code: 'MEDIA_PREVIEW_BLOCKED', preview } };
+      const result = await operations.executePlan(plan);
+      if (!result.success) return { status: result.operationsExecuted > 0 ? 'unknown' : 'blocked', result: { plan, result } };
+      const verification = await operations.verifyPlan(plan);
+      if (!verification.passed) return { status: 'unknown', result: { plan, result, verification } };
+      return { status: 'succeeded', result: { plan, result, verification } };
     },
     async reconcile(input) {
       const value = mediaMoveInputSchema.parse(input);
-      const sourceExists = (() => { try { policy.validateSource(value.source); return true; } catch { return false; } })();
-      const targetExists = (() => { try { return existsSync(policy.validateTarget(value.target)); } catch { return false; } })();
+      let sourceExists = false;
+      let targetExists = false;
+      try { sourceExists = existsSync(policy.validateSource(value.source)); } catch { /* source may have moved */ }
+      try { targetExists = existsSync(policy.validateTarget(value.target)); } catch { /* invalid target remains unknown */ }
       if (!sourceExists && targetExists) return { status: 'succeeded', result: { source: value.source, target: value.target, reconciled: true } };
       return { status: 'unknown', result: { source: value.source, target: value.target, reconciled: false } };
     },
