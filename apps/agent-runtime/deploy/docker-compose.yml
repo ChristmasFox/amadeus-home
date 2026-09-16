@@ -25,6 +25,7 @@ services:
       PUBG_REVIEW_FEATURE_VERSION: ${PUBG_REVIEW_FEATURE_VERSION:-review-features-6}
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
       KURISU_GATEWAY_SECRET_FILE: /run/secrets/kurisu_gateway_secret
+      KURISU_RADAR_URL: http://product-radar:5315
       TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
       KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
       MAC_HOST_AGENT_URL: ${MAC_HOST_AGENT_URL:-http://host.docker.internal:49152}
