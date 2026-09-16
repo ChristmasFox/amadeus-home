@@ -16,7 +16,7 @@ Runtime 的 `kurisu_events` / `kurisu_deliveries` 是统一通知账本。跨应
 | PUBG / n8n | `integrations/n8n/workflows/pubg-*.workflow.json` | `PENDING_OWNER_REVIEW`：现有数据同步/日报 workflow 仍是业务事实源，本阶段没有擅自改发送时刻或把 n8n 双写到 Runtime | P7 前需逐个 workflow 核实 event owner、发送节点和交接队列；不以 HTTP 200 代替 delivery evidence |
 | Codex legacy n8n sender | `integrations/n8n/workflows/codex-completion-notification.workflow.json` | `ROLLBACK_ONLY_SOURCE`：保留可回滚 JSON；当前 Codex source 默认不再指向它。新旧 sender 不可同时激活 | P7 切换时先停旧 webhook/发送节点，保留外部 backup，再验证 Runtime outbox |
 | HomeHub | `apps/agent-runtime/src/runtime/homehub-runtime.ts` 与 Kurisu structured backends | `OPEN_PRODUCER`：已有诊断/动作边界，没有在仓库发现可核验的独立主动通知 producer；Runtime 已提供 failure/unknown 事件入口 | 找到真实 producer 与事件触发点后补 adapter、fake/recovery tests；不能用手工注入冒充生产证明 |
-| briefing / 简报 | 仓库与当前 source inventory 未发现独立可核验 producer | `BLOCKED_UNSUPPORTED`：不生成空日报、不伪造调度/生成/投递成功 | 需要真实 scheduler、生成执行记录和投递记录后，分别接入 event owner；缺失时回答来源不可达/无记录 |
+| briefing / 简报 | n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`） | `DISCOVERED_LIVE / SOURCE_EXPORTED / HANDOFF_PENDING`：每天 09:30、23:00 调度，已具备去重、采集、AI 分析、运行记录与 KOOK 发送；脱敏 workflow source 已导入 Git | 先把发送从 n8n 直连 LangBot 改为 Runtime event/outbox，再以 Runtime 为唯一 sender；原 n8n 版本保留外部备份用于回滚 |
 
 ## 双发保护
 

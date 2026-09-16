@@ -187,7 +187,7 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/kurisu/status') {
       json(response, 200, {
         contractVersion: 'kurisu.v1',
-        rollout: 'session_opt_in_legacy_default',
+        rollout: process.env.KURISU_NLU_ROLLOUT?.trim() || 'native_agent_global',
         toolCount: kurisuService.tools().length,
         storage: kurisuService.store.snapshotCounts(),
       });

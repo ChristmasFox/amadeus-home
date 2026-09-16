@@ -9,6 +9,7 @@ integrations/n8n/workflows/ 中的 JSON 是 workflow 的 Git source of truth：
 - legacy/pubg-query-gateway-v2.workflow.json：V2 查询兼容；
 - legacy/pubg-sync-matches-v2.workflow.json：V2 同步兼容；
 - pubg-daily-stats.workflow.json：历史每日战绩 workflow（KD 展示统一 1 位小数）；
+- daily-tech-market-digest.workflow.json：每日科技与市场简报 producer；它保留调度、采集、去重和报告持久化，发送方将在 Kurisu 通知交接完成后由 Runtime 统一管理；
 - organize-workflows.json：媒体整理 workflow；
 - pubg-api-credential.placeholder.json：credential 结构 placeholder，不含真实 key。
 

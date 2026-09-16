@@ -1,4 +1,6 @@
-# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_BLOCKED；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+# 当前阶段：Kurisu 统一 Agent（P7 RUNTIME_DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / CROSS_PLATFORM_SMOKE_PENDING / BRIEFING_SOURCE_EXPORTED / HANDOFF_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-16）
+
+本轮全量完成 Goal 已授权。2026-09-16 从 live n8n 发现并脱敏导出 `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）：真实定时、去重、采集、AI 分析、运行记录和 KOOK 直发均存在。`BRIEFING_BLOCKED` 已失效；待将发送方交接为 Runtime notification outbox 并做真实送达/回滚验证。Runtime 的 rollout 状态已改为 `native_agent_global`。Codex production executor、写工具与平台全量交互验收仍未完成。
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 
