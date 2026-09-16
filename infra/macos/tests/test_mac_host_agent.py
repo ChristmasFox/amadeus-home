@@ -82,7 +82,12 @@ class MacHostAgentTest(unittest.TestCase):
 
             connection = HTTPConnection("127.0.0.1", port, timeout=3)
             connection.request("POST", "/v1/health", headers={"Authorization": "Bearer test-token"})
-            self.assertEqual(connection.getresponse().status, 405)
+            self.assertEqual(connection.getresponse().status, 404)
+            connection.close()
+
+            connection = HTTPConnection("127.0.0.1", port, timeout=3)
+            connection.request("GET", "/v1/codex/health", headers={"Authorization": "Bearer test-token"})
+            self.assertEqual(connection.getresponse().status, 503)
             connection.close()
         finally:
             server.shutdown()

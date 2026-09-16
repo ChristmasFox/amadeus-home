@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Read-only macOS host telemetry agent for HomeHub V1.2.
+"""Authenticated macOS host telemetry plus an optional narrowed Codex bridge.
 
 The HTTP surface is deliberately limited to /v1/health, /v1/host/status and
 /v1/cloudflared/status. There is no generic command, shell or exec endpoint.
-All host commands are fixed, local observations and never include caller input.
+All telemetry commands are fixed, local observations. The optional Codex
+bridge has its own fixed project/method allowlists and is disabled by default.
 """
 from __future__ import annotations
 
@@ -19,11 +20,17 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Sequence
 
+try:  # package import for tests, direct sibling import for launchd execution
+    from infra.macos.codex_app_server import CodexAppServerBridge, CodexBridgeError, CodexWorkspaceRegistry
+except ModuleNotFoundError:  # pragma: no cover - launchd executes this file directly
+    from codex_app_server import CodexAppServerBridge, CodexBridgeError, CodexWorkspaceRegistry
+
 VERSION = "1.2.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 49152
 DEFAULT_TOKEN_FILE = "/Users/Shared/HomeHub/mac-host-agent.token"
-ALLOWED_PATHS = frozenset({"/v1/health", "/v1/host/status", "/v1/cloudflared/status"})
+ALLOWED_PATHS = frozenset({"/v1/health", "/v1/host/status", "/v1/cloudflared/status", "/v1/codex/health", "/v1/codex/events"})
+CODEX_POST_PATHS = frozenset({"/v1/codex/workspace/prepare", "/v1/codex/workspace/restore", "/v1/codex/rpc", "/v1/codex/respond"})
 
 CommandRunner = Callable[[Sequence[str], float], tuple[int, str, str]]
 
@@ -282,12 +289,59 @@ class MacHostAgentHandler(BaseHTTPRequestHandler):
             body = {"status": "ok", "service": "mac-host-agent", "version": VERSION, "hostname": collector.hostname()}
         elif path == "/v1/cloudflared/status":
             body = collector.cloudflared()
+        elif path == "/v1/codex/health":
+            if not self.agent_server.codex:
+                self.send_json(503, {"error": "codex_disabled"})
+                return
+            body = self.agent_server.codex.health()
+        elif path == "/v1/codex/events":
+            if not self.agent_server.codex:
+                self.send_json(503, {"error": "codex_disabled"})
+                return
+            try:
+                cursor = max(0, int(self.query_value("cursor") or "0"))
+                timeout_ms = max(0, min(25000, int(self.query_value("timeoutMs") or "0")))
+            except ValueError:
+                self.send_json(400, {"error": "invalid_request"})
+                return
+            body = self.agent_server.codex.poll(cursor, timeout_ms)
         else:
             body = collector.host_status()
         self.send_json(200, body)
 
     def do_POST(self) -> None:  # noqa: N802
-        self.send_json(405, {"error": "method_not_allowed"})
+        path = self.path.split("?", 1)[0]
+        if path not in CODEX_POST_PATHS:
+            self.send_json(404, {"error": "not_found"})
+            return
+        if not self.authorized():
+            self.send_json(401, {"error": "unauthorized"})
+            return
+        if not self.agent_server.codex:
+            self.send_json(503, {"error": "codex_disabled"})
+            return
+        body = self.read_json()
+        if body is None:
+            self.send_json(400, {"error": "invalid_request"})
+            return
+        try:
+            if path == "/v1/codex/workspace/prepare":
+                result = self.agent_server.codex.prepare(str(body.get("projectId") or ""))
+            elif path == "/v1/codex/workspace/restore":
+                result = self.agent_server.codex.restore(str(body.get("projectId") or ""), str(body.get("workspaceRef") or ""))
+            elif path == "/v1/codex/rpc":
+                params = body.get("params")
+                if not isinstance(params, dict):
+                    self.send_json(400, {"error": "invalid_request"})
+                    return
+                result = {"result": self.agent_server.codex.request(str(body.get("method") or ""), params)}
+            else:
+                self.agent_server.codex.respond(body.get("id"), body.get("result"))
+                result = {"accepted": True}
+        except CodexBridgeError as exc:
+            self.send_json(409 if exc.code.startswith("PROJECT_") or exc.code.startswith("WORKSPACE_") else 502, {"error": exc.code, "message": str(exc)})
+            return
+        self.send_json(200, result)
 
     def authorized(self) -> bool:
         expected = self.agent_server.token
@@ -307,15 +361,30 @@ class MacHostAgentHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def read_json(self) -> dict[str, Any] | None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 2 or length > 256 * 1024:
+                return None
+            value = json.loads(self.rfile.read(length))
+            return value if isinstance(value, dict) else None
+        except (ValueError, json.JSONDecodeError):
+            return None
+
+    def query_value(self, key: str) -> str | None:
+        from urllib.parse import parse_qs, urlsplit
+        return (parse_qs(urlsplit(self.path).query).get(key) or [None])[0]
+
 
 class MacHostAgentServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], token: str, collector: MacHostCollector | None = None):
+    def __init__(self, address: tuple[str, int], token: str, collector: MacHostCollector | None = None, codex: CodexAppServerBridge | None = None):
         super().__init__(address, MacHostAgentHandler)
         self.token = token
         self.collector = collector or MacHostCollector()
+        self.codex = codex
 
 
 def load_token(token_file: str | None = None) -> str:
@@ -334,16 +403,28 @@ def main() -> int:
     parser.add_argument("--host", default=os.environ.get("MAC_HOST_AGENT_HOST", DEFAULT_HOST))
     parser.add_argument("--port", type=int, default=int(os.environ.get("MAC_HOST_AGENT_PORT", str(DEFAULT_PORT))))
     parser.add_argument("--token-file", default=os.environ.get("MAC_HOST_AGENT_TOKEN_FILE", DEFAULT_TOKEN_FILE))
+    parser.add_argument("--codex-project-id", default=os.environ.get("KURISU_CODEX_PROJECT_ID", ""))
+    parser.add_argument("--codex-project-root", default=os.environ.get("KURISU_CODEX_PROJECT_ROOT", ""))
+    parser.add_argument("--codex-worktree-root", default=os.environ.get("KURISU_CODEX_WORKTREE_ROOT", ""))
+    parser.add_argument("--codex-command", default=os.environ.get("KURISU_CODEX_COMMAND", ""))
     args = parser.parse_args()
     token = load_token(args.token_file)
     if not token:
         raise SystemExit("MAC_HOST_AGENT_TOKEN or a non-empty token file is required")
-    server = MacHostAgentServer((args.host, args.port), token)
+    codex = None
+    configured = [args.codex_project_id, args.codex_project_root, args.codex_worktree_root, args.codex_command]
+    if any(configured):
+        if not all(configured):
+            raise SystemExit("Codex bridge requires project id, root, worktree root, and command")
+        codex = CodexAppServerBridge(args.codex_command, CodexWorkspaceRegistry(args.codex_project_id, args.codex_project_root, args.codex_worktree_root), os.path.expanduser("~"))
+    server = MacHostAgentServer((args.host, args.port), token, codex=codex)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if codex:
+            codex.close()
         server.server_close()
     return 0
 

@@ -21,7 +21,7 @@ import { ToolRegistry, unknownResult } from './tools.js';
 import { registerWriteTools, taskCancelHandler, WriteCoordinator, type WriteOperationHandlers } from './write-tools.js';
 import { registerTaskStatusTool } from './task-tools.js';
 import { registerCodexTools } from './codex-tools.js';
-import { CodexAppServerExecutor, type CodexExecutorOptions, type CodexProjectRegistry } from './codex.js';
+import { CodexAppServerExecutor, type CodexExecutorOptions, type CodexWorkspaceRegistry } from './codex.js';
 
 const hostContextSchema = z.object({
   platform: z.enum(['telegram', 'kook', 'whatsapp', 'test']),
@@ -66,7 +66,7 @@ export interface KurisuServiceOptions {
   now?: () => string;
   writeHandlers?: WriteOperationHandlers;
   codexExecutor?: CodexAppServerExecutor;
-  codexProjects?: CodexProjectRegistry;
+  codexProjects?: CodexWorkspaceRegistry;
   codexOptions?: CodexExecutorOptions;
   notificationWorker?: NotificationWorker;
   notificationChannels?: readonly NotificationChannel[];

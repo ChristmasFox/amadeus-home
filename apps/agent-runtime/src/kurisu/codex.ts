@@ -51,6 +51,12 @@ export interface CodexWorkspace {
   head: string;
 }
 
+/** Local or authenticated macOS registry; model input never selects a path. */
+export interface CodexWorkspaceRegistry {
+  prepare(projectId: string): Promise<CodexWorkspace>;
+  restore(projectId: string, workspaceRef: string): Promise<CodexWorkspace>;
+}
+
 export class CodexProjectRegistry {
   private readonly projects = new Map<string, CodexProjectDefinition>();
   private readonly worktreeParent: string;
@@ -134,6 +140,28 @@ export class CodexProjectRegistry {
     const gitRoot = await gitOutput(root, ['rev-parse', '--show-toplevel']).then((value) => realpath(value.trim())).catch(() => null);
     if (!gitRoot || gitRoot !== root) throw new CodexProjectError('PROJECT_NOT_GIT', 'configured Codex project root is not the expected Git root');
     return root;
+  }
+}
+
+export interface RemoteCodexOptions { baseUrl: string; token: string; timeoutMs?: number; }
+
+/** Typed client for the macOS fixed-project bridge; there is no remote shell API. */
+export class RemoteCodexProjectRegistry implements CodexWorkspaceRegistry {
+  private readonly baseUrl: string;
+  private readonly token: string;
+  private readonly timeoutMs: number;
+  constructor(options: RemoteCodexOptions) {
+    this.baseUrl = options.baseUrl.replace(/\/+$/u, ''); this.token = options.token; this.timeoutMs = options.timeoutMs ?? 15_000;
+  }
+  prepare(projectId: string): Promise<CodexWorkspace> { return this.call('/v1/codex/workspace/prepare', { projectId }); }
+  restore(projectId: string, workspaceRef: string): Promise<CodexWorkspace> { return this.call('/v1/codex/workspace/restore', { projectId, workspaceRef }); }
+  private async call(path: string, body: Record<string, unknown>): Promise<CodexWorkspace> {
+    const response = await remoteFetch(this.baseUrl, this.token, path, { method: 'POST', body: JSON.stringify(body) }, this.timeoutMs);
+    const parsed = await remoteBody(response);
+    if (!response.ok) throw new CodexProjectError(String(parsed.error ?? 'CODEX_REMOTE_FAILED'), String(parsed.message ?? 'macOS Codex bridge rejected the workspace request'));
+    const value = { projectId: String(parsed.project_id ?? parsed.projectId ?? ''), root: String(parsed.root ?? ''), workspaceRef: String(parsed.workspace_ref ?? parsed.workspaceRef ?? ''), mode: String(parsed.mode ?? '') as CodexWorkspaceMode, head: String(parsed.head ?? '') };
+    if (!value.projectId || !value.root || !value.workspaceRef || value.mode !== 'worktree' || !value.head) throw new CodexProjectError('CODEX_REMOTE_INVALID', 'macOS Codex bridge returned an invalid workspace');
+    return value;
   }
 }
 
@@ -364,6 +392,61 @@ export class ProcessCodexAppServerClient implements CodexAppServerClient {
   }
 }
 
+/** HTTP transport for the macOS bridge. It forwards only JSON-RPC App Server frames. */
+export class RemoteCodexAppServerClient implements CodexAppServerClient {
+  private readonly baseUrl: string;
+  private readonly token: string;
+  private readonly timeoutMs: number;
+  private readonly listeners = new Set<(message: CodexAppServerMessage) => void | Promise<void>>();
+  private cursor = 0;
+  private closed = false;
+  private pollAbort: AbortController | null = null;
+  constructor(options: RemoteCodexOptions) { this.baseUrl = options.baseUrl.replace(/\/+$/u, ''); this.token = options.token; this.timeoutMs = options.timeoutMs ?? 30_000; }
+  async request(method: string, params: Record<string, unknown>): Promise<unknown> {
+    const response = await remoteFetch(this.baseUrl, this.token, '/v1/codex/rpc', { method: 'POST', body: JSON.stringify({ method, params }) }, Math.max(this.timeoutMs, 125_000));
+    const parsed = await remoteBody(response);
+    if (!response.ok) throw new Error(String(parsed.message ?? parsed.error ?? 'macOS Codex bridge request failed').slice(0, 500));
+    return parsed.result;
+  }
+  respond(id: string | number, result: unknown): void {
+    void remoteFetch(this.baseUrl, this.token, '/v1/codex/respond', { method: 'POST', body: JSON.stringify({ id, result }) }, this.timeoutMs).then((response) => { if (!response.ok) throw new Error('macOS Codex bridge response was rejected'); }).catch(() => undefined);
+  }
+  subscribe(listener: (message: CodexAppServerMessage) => void | Promise<void>): () => void {
+    this.listeners.add(listener); if (!this.pollAbort) void this.poll(); return () => this.listeners.delete(listener);
+  }
+  async close(): Promise<void> { this.closed = true; this.pollAbort?.abort(); this.pollAbort = null; }
+  private async poll(): Promise<void> {
+    while (!this.closed && this.listeners.size > 0) {
+      this.pollAbort = new AbortController();
+      try {
+        const response = await remoteFetch(this.baseUrl, this.token, `/v1/codex/events?cursor=${this.cursor}&timeoutMs=25000`, { signal: this.pollAbort.signal }, 30_000);
+        const parsed = await remoteBody(response); if (!response.ok) throw new Error(String(parsed.error ?? 'macOS Codex bridge event poll failed'));
+        this.cursor = Number(parsed.cursor ?? this.cursor);
+        for (const item of Array.isArray(parsed.events) ? parsed.events : []) this.dispatchRemoteEvent(item);
+      } catch {
+        if (!this.closed) { await new Promise((resolvePromise) => setTimeout(resolvePromise, 500)); }
+      } finally { this.pollAbort = null; }
+    }
+  }
+  private dispatchRemoteEvent(item: unknown): void {
+    const envelope = asRecord(item); const raw = asRecord(envelope.message);
+    const message = raw.kind === 'process_exit' ? { kind: 'process_exit', code: null, signal: null } as CodexAppServerMessage
+      : typeof raw.method === 'string' && (typeof raw.id === 'string' || typeof raw.id === 'number') ? { kind: 'request', id: raw.id, method: raw.method, params: raw.params } as CodexAppServerMessage
+      : typeof raw.method === 'string' ? { kind: 'notification', method: raw.method, params: raw.params } as CodexAppServerMessage : null;
+    if (message) for (const listener of this.listeners) void Promise.resolve(listener(message)).catch(() => undefined);
+  }
+}
+
+async function remoteFetch(baseUrl: string, token: string, path: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  if (!token) throw new Error('macOS Codex bridge token is unavailable');
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = init.signal ?? controller.signal;
+  try { return await fetch(`${baseUrl}${path}`, { ...init, signal, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) } }); }
+  finally { clearTimeout(timer); }
+}
+
+async function remoteBody(response: Response): Promise<Record<string, unknown>> { try { const value = await response.json(); return asRecord(value); } catch { return {}; } }
+
 export interface CodexExecutorOptions {
   now?: () => string;
   clientFactory?: () => CodexAppServerClient;
@@ -397,7 +480,7 @@ export class CodexAppServerExecutor {
   private readonly pendingRpc = new Map<string, PendingRpc>();
   private readonly cancelRequested = new Set<string>();
 
-  constructor(private readonly store: KurisuStore, private readonly projects: CodexProjectRegistry, options: CodexExecutorOptions = {}) {
+  constructor(private readonly store: KurisuStore, private readonly projects: CodexWorkspaceRegistry, options: CodexExecutorOptions = {}) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.approvals = new ApprovalService(store, this.now);
     this.clientFactory = options.clientFactory ?? (() => new ProcessCodexAppServerClient(options.appServer));

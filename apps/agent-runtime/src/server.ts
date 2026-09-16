@@ -17,7 +17,7 @@ import { KurisuService } from './kurisu/service.js';
 import { createReadOnlyBackends } from './kurisu/read-only.js';
 import { MediaPathPolicy } from './kurisu/media.js';
 import { homeHubActionHandler, mediaMoveHandler, radarWriteHandlers } from './kurisu/write-tools.js';
-import { CodexProjectRegistry } from './kurisu/codex.js';
+import { CodexProjectRegistry, RemoteCodexAppServerClient, RemoteCodexProjectRegistry } from './kurisu/codex.js';
 import { LangBotNotificationChannel, notificationEventInputSchema, type NotificationTarget } from './kurisu/notifications.js';
 
 const port = Number(process.env.PUBG_QUERY_ENGINE_PORT ?? 5310);
@@ -94,7 +94,10 @@ const writeHandlers = process.env.KURISU_ENABLE_WRITE_TOOLS === '1'
     }
   : undefined;
 const codexProjectRoot = process.env.KURISU_CODEX_PROJECT_ROOT?.trim() ?? '';
-const codexProjects = process.env.KURISU_CODEX_ENABLE === '1' && codexProjectRoot
+const codexRemoteUrl = process.env.KURISU_CODEX_REMOTE_URL?.trim() ?? '';
+const codexRemoteToken = (process.env.KURISU_CODEX_REMOTE_TOKEN?.trim() || readSecretFile(process.env.KURISU_CODEX_REMOTE_TOKEN_FILE ?? '')).trim();
+const codexEnabled = process.env.KURISU_CODEX_ENABLE === '1';
+const codexProjects = codexEnabled && codexProjectRoot
   ? new CodexProjectRegistry([{
       projectId: process.env.KURISU_CODEX_PROJECT_ID?.trim() || 'agent-monorepo',
       root: codexProjectRoot,
@@ -102,7 +105,9 @@ const codexProjects = process.env.KURISU_CODEX_ENABLE === '1' && codexProjectRoo
     }], {
       ...(process.env.KURISU_CODEX_WORKTREE_ROOT?.trim() ? { worktreeParent: process.env.KURISU_CODEX_WORKTREE_ROOT.trim() } : {}),
     })
-  : undefined;
+  : codexEnabled && codexRemoteUrl && codexRemoteToken
+    ? new RemoteCodexProjectRegistry({ baseUrl: codexRemoteUrl, token: codexRemoteToken })
+    : undefined;
 const kurisuService = new KurisuService({
   stateFile: process.env.KURISU_STATE_FILE ?? `${stateFile}.kurisu.sqlite`,
   backends: createReadOnlyBackends({
@@ -113,7 +118,10 @@ const kurisuService = new KurisuService({
   ...(writeHandlers ? { writeHandlers } : {}),
   ...(codexProjects ? {
     codexProjects,
-    ...(process.env.KURISU_CODEX_MODEL?.trim() ? { codexOptions: { model: process.env.KURISU_CODEX_MODEL.trim() } } : {}),
+    codexOptions: {
+      ...(process.env.KURISU_CODEX_MODEL?.trim() ? { model: process.env.KURISU_CODEX_MODEL.trim() } : {}),
+      ...(codexRemoteUrl && codexRemoteToken ? { clientFactory: () => new RemoteCodexAppServerClient({ baseUrl: codexRemoteUrl, token: codexRemoteToken }) } : {}),
+    },
   } : {}),
   ...(notificationChannels.length ? { notificationChannels } : {}),
   ...(notificationTargets.length ? { notificationTargets } : {}),

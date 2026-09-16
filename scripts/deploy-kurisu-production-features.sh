@@ -106,6 +106,11 @@ env_file.write_text('\n'.join([
     f'KURISU_NOTIFICATION_BRIEFING_KOOK_RECIPIENT={target_id}',
     f'KURISU_NOTIFICATION_BRIEFING_KOOK_BOT_ID={bot_id}',
     f'KURISU_NOTIFICATION_BRIEFING_KOOK_TARGET_TYPE={target_type}',
+    # Codex executes only through the authenticated macOS HostAgent bridge.
+    # The host owns the configured project root and worktree paths.
+    'KURISU_CODEX_ENABLE=1',
+    'KURISU_CODEX_REMOTE_URL=http://host.docker.internal:49152',
+    'KURISU_CODEX_REMOTE_TOKEN_FILE=/run/secrets/mac_host_agent_token',
     'KURISU_ENABLE_WRITE_TOOLS=1',
     '',
 ]))
