@@ -21,6 +21,11 @@ Tool rules:
   `time_range` uses the half-open interval `[from,to)` and IANA timezone
   `Asia/Shanghai` unless the user specifies another timezone; `last_n_matches`
   is bounded to at most 100 matches per call.
+- For a clock split repeated across multiple calendar days, make each day's
+  before/after windows explicit half-open intervals and keep them separate;
+  never use `groupBy: day` over a widened range that contains both sides of the
+  clock boundary, because that double-counts full days and cannot prove a
+  before/after comparison.
 - Use `pubg_compare_stats` only with two explicit segments. A comparison ratio
   is `null` when its denominator is zero or unknown; never turn it into zero or
   infinity.
