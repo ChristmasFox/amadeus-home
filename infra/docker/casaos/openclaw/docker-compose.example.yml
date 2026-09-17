@@ -31,7 +31,7 @@ services:
       - ${PUBG_API_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
       - ${OPENCLAW_TELEGRAM_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
     ports:
-      - "${OPENCLAW_BIND_ADDRESS:-127.0.0.1}:${OPENCLAW_PORT:-18789}:18789"
+      - "${OPENCLAW_BIND_ADDRESS:-0.0.0.0}:${OPENCLAW_PORT:-18789}:18789"
     networks:
       - nine_router_network
     healthcheck:

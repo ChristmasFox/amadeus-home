@@ -16,6 +16,8 @@ S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭�
 ## 已固定的实现
 
 - OpenClaw：官方 ghcr.io/openclaw/openclaw:2026.9.4，插件加载目录 /app/extensions/pubg。
+- Gateway UI：CasaOS 端口 `18789` 当前绑定 `0.0.0.0`，局域网入口为
+  `http://192.168.5.3:18789/`；Control UI 仍需使用外部保存的 gateway token 完成认证。
 - provider：现有 9Router，模型 route nine_router/arthur-combo，不换模型绕过验收。
 - Telegram：OpenClaw native channel；私聊 numeric allowlist 来自外部配置，群聊关闭。
 - Plugin：pubg_resolve_players、pubg_search_matches、pubg_query_stats、

@@ -19,6 +19,9 @@
 - S4：PASS（Telegram 外部闭环除外）。17 个真实 OpenClaw/9Router 回合已保存工具轨迹、输入、
   结果和耗时；旧代码/入口清理、数据迁移、文档和验收报告完成。Telegram 原生连接为 ready，
   但验收窗口没有自然入站或独立测试账号，未虚构查询/连续追问送达。
+- 运行配置增量：按用户要求将 OpenClaw CasaOS 端口绑定从 `127.0.0.1` 改为
+  `0.0.0.0:18789`；容器健康检查通过，并从 `192.168.5.3:18789/healthz` 实测 HTTP 200。
+  原 compose 已备份至 `/DATA/AppData/openclaw/backups/openclaw-bind-20260917-100930`。
 
 ## 已完成的本地证据
 
