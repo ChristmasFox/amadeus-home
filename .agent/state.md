@@ -21,6 +21,8 @@
 
 三次修复状态：隔离子进程可读取 `/run/secrets/kurisu_gateway_secret`，但不会继承 `KURISU_GATEWAY_SECRET_FILE` 环境变量，故 `0.1.2` 返回 `RUNTIME_SECRET_UNCONFIGURED`。已发布 `kurisu-gateway@0.1.3`，源码默认使用已挂载的 secret 文件；API task `29` 已 `INSTALL_READY`，仍需用户重新发送真实消息确认最终回复。
 
+隔离进程自测状态：在实际 `0.1.3` artifact 中清除 URL/secret 环境变量后，`kurisu.radar.list` 返回 `status=ok`；默认 URL、挂载 secret 和 Runtime tool-call 均已验证，未修改 Watch 数据。Telegram/KOOK 最终送达仍需真实平台入站。
+
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
 P0 证据位于 `docs/decisions/KURISU_AGENT_HOST.md`、`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`docs/reports/KURISU_AGENT_P0_BASELINE.json` 和 `docs/reports/KURISU_AGENT_PROGRESS.md`。本阶段未写生产配置、未重启容器、未发送真实 Telegram/KOOK 消息。LangBot 管理 API key 不能替代 WebSocket 所需的 user/support-admin session token，因此 native-agent platform entry 未宣称通过；当前旧 EventListener 尚未迁移，列为 P1。

@@ -14,6 +14,7 @@
 - 真实 Telegram 配置回归：2026-09-17 09:39–09:40 的三条私聊已进入 `kurisu_gateway`，但 plugin runtime 缺少 `KURISU_RUNTIME_URL`，返回 `RUNTIME_URL_UNCONFIGURED`。已修复仓库模板与 live CasaOS Compose，使用 `docker compose up -d --no-build langbot_plugin_runtime` 重建；live plugin runtime 环境已确认配置，容器内访问 `http://pubg-query-engine-v3:5310/healthz` 返回 200。该三条历史消息已经失败，不重放；待用户重新发送真实消息完成最终送达证据。
 - 二次修复：LangBot 隔离子进程不会继承 plugin runtime 容器环境，导致前一修复仍返回 `RUNTIME_URL_UNCONFIGURED`。`kurisu-gateway@0.1.2` 已把 `http://pubg-query-engine-v3:5310` 作为源码默认值，API task `27` 为 `INSTALL_READY`，artifact SHA-256 为 `b6a0b6a9af8a535dee90553afa38ee34baa3ceb0a63f32813b11bca40b757678`；仍需修复后的真实 Telegram/KOOK 最终送达证据。
 - 三次修复：隔离插件子进程能看到已挂载的 secret 文件，但环境变量 `KURISU_GATEWAY_SECRET_FILE` 被清除，导致 `RUNTIME_SECRET_UNCONFIGURED`。`kurisu-gateway@0.1.3` 已使用 `/run/secrets/kurisu_gateway_secret` 默认路径，API task `29` 为 `INSTALL_READY`，artifact SHA-256 为 `7ea0d3c88b61121ef4d6313e5a7910dbeeaa754dad737c3ff4bd559fb904077a`；仍需修复后的真实 Telegram/KOOK 最终送达证据。
+- 隔离进程自测：在实际 artifact `7ea0d3c88b61121ef4d6313e5a7910dbeeaa754dad737c3ff4bd559fb904077a` 中清除 `KURISU_RUNTIME_URL`、`KURISU_GATEWAY_SECRET`、`KURISU_GATEWAY_SECRET_FILE` 后，`kurisu.radar.list` 仍返回 `contractVersion=kurisu.v1`、`status=ok`；未修改 Watch 数据。该证据验证插件→Runtime，不能替代 Telegram/KOOK 最终送达。
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
