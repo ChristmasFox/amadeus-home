@@ -10,12 +10,12 @@ def main() -> None:
     langbot_db, n8n_db, radar_compose, telegram_uuid = sys.argv[1:5]
     conn = sqlite3.connect(langbot_db)
     target = conn.execute(
-        "select uuid from bots where uuid = ? and lower(adapter) = 'telegram' and enable != 0",
+        "select uuid from bots where uuid = ? and lower(adapter) = 'telegram'",
         (telegram_uuid,),
     ).fetchone()
     if not target:
         conn.close()
-        raise SystemExit("selected legacy Telegram bot is missing or already disabled")
+        raise SystemExit("selected legacy Telegram bot is missing")
     telegram = conn.execute("update bots set enable = 0 where uuid = ?", (telegram_uuid,))
     plugins = conn.execute(
         "update plugin_settings set enabled = 0 where plugin_name in ('pubg-stats', 'kurisu-gateway')"

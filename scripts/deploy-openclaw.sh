@@ -160,10 +160,10 @@ import sqlite3
 import sys
 
 conn = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
-rows = conn.execute("select uuid from bots where lower(adapter) = 'telegram' and enable != 0").fetchall()
+rows = conn.execute("select uuid from bots where lower(adapter) = 'telegram'").fetchall()
 conn.close()
 if len(rows) != 1:
-    raise SystemExit('expected exactly one enabled legacy LangBot Telegram bot, found ' + str(len(rows)))
+    raise SystemExit('expected exactly one legacy LangBot Telegram bot, found ' + str(len(rows)))
 print(rows[0][0])
 PY
 )"
