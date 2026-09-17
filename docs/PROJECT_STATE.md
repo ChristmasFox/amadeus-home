@@ -10,8 +10,8 @@
 
 ## 当前阶段
 
-S0、S1、S2 已完成；S3/S4 正在收尾。代码已完成旧 PUBG 主链源码清理和 Product Radar
-旧通知端点断开，尚未在本次收尾提交上执行生产切换。
+S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭环项是 Telegram 自然入站
+私聊验收：原生 channel 已连接，但没有测试账号或自然入站，不能伪造送达。
 
 ## 已固定的实现
 
@@ -37,12 +37,13 @@ S0、S1、S2 已完成；S3/S4 正在收尾。代码已完成旧 PUBG 主链源�
 
 ## 已有证据
 
-- Domain 8 tests、plugin 2 tests、Product Radar 51 tests；OpenClaw native config/plugin
-  inspect 已通过。
-- 真实旧数据迁移 smoke：1151 输入、267 唯一比赛、57 Telemetry feature；重复 apply
-  不新增比赛，目标 SQLite migration_runs 仅一条。
-- 迁移前后的真实 CasaOS checkpoint、镜像 digest、Telegram channel、OpenClaw/9Router
-  agent loop 和最终私聊消息，待 S3/S4 写入本文件。
+- Domain 9 tests、plugin 3 tests、Product Radar 51 tests；OpenClaw native config/plugin
+  inspect、bundled Skill preflight 已通过。
+- 真实旧数据迁移：1151 输入、267 唯一比赛、57 初始 Telemetry feature；重复 apply
+  不新增比赛，目标 SQLite migration_runs 一条；运行态按需新增到 58 features。
+- 最终 CasaOS checkpoint：`/DATA/AppData/openclaw/backups/openclaw-pubg-20260917-091502`；
+  镜像、Telegram probe、OpenClaw/9Router agent loop 和旧链停用证据见
+  `docs/reports/OPENCLAW_PUBG_ACCEPTANCE.md`。
 
 ## 恢复与安全
 
