@@ -22,8 +22,10 @@
 
 ## Remaining blocker
 
-Telegram native polling is connected and the bot is ready, but the acceptance window had no
-natural inbound message or independent test account. `lastInboundAt=null` and
-`lastOutboundAt=null`; therefore Telegram query plus continuous follow-up delivery is BLOCKED
-and has not been fabricated. This is the only remaining external acceptance blocker recorded by
-the Goal.
+Telegram native polling is connected and the bot is ready. An acceptance prompt was sent through
+the channel with `status=ok`, and `lastOutboundAt` changed; the external evidence is stored in
+`telegram-acceptance-outbound.json` and `telegram-acceptance-channel.json` in the checkpoint.
+The observation window still had no natural inbound message or independent test account:
+`lastInboundAt=null`. Therefore Telegram query plus continuous follow-up delivery is BLOCKED and
+has not been fabricated. This is the only remaining external acceptance blocker recorded by the
+Goal.

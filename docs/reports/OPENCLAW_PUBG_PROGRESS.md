@@ -12,7 +12,7 @@
 | 旧代码/入口清理 | PASS | 旧 Runtime、PUBG LangBot plugin、PUBG n8n workflow、facade、generator、旧通知桥已从当前树删除；LangBot/n8n 独立非 PUBG 资产保留 |
 | S3 CasaOS 一次性切换 | PASS | 最终 checkpoint `/DATA/AppData/openclaw/backups/openclaw-pubg-20260917-091502`；新镜像健康、原生 plugin/Skill、迁移、旧 consumer/producer 停用和旧定义清理均已核验 |
 | S4 真实 OpenClaw/9Router 场景 | PASS（含真实覆盖失败证据） | `docs/reports/OPENCLAW_PUBG_ACCEPTANCE.md`；17 个真实回合，含 4 条独立改写、真实 Telemetry MISS 和 18 个 SOURCE_UNAVAILABLE 结果 |
-| Telegram 私聊查询+连续追问 | BLOCKED | 原生 polling probe connected，但验收窗口没有自然入站/独立测试账号；`lastInboundAt=null`，未伪造送达证据 |
+| Telegram 私聊查询+连续追问 | BLOCKED | 已发出验收提示且 `lastOutboundAt` 更新；原生 polling probe connected，但仍无自然入站/独立测试账号，`lastInboundAt=null`，未伪造送达证据 |
 
 ## 约束
 

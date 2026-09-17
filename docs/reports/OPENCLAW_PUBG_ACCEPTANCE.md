@@ -13,7 +13,7 @@
   `pubg_compare_stats`、`pubg_get_match`、`pubg_get_review_facts`。
 - bundled Skill `pubg` 已加载且有有效 description；最终容器日志中 `Skipping invalid skill` 次数为 0。
 - Telegram 原生 channel probe：`configured=true`、`running=true`、`connected=true`、`lifecycle=ready`、
-  `mode=polling`、`lastError=null`。
+  `mode=polling`、`lastError=null`；验收提示发送后 `lastOutboundAt` 已更新。
 
 原始 OpenClaw JSON、工具轨迹索引和最终汇总均在仓库外 checkpoint：
 `/DATA/AppData/openclaw/backups/openclaw-pubg-20260917-091502/`。其中
@@ -49,6 +49,11 @@
 
 ## Telegram 外部阻塞
 
-Telegram token、allowlist 和原生 polling 连接均已验证，但验收时 `lastInboundAt=null`、`lastOutboundAt=null`，没有可用的自然入站消息或独立测试账号。因此没有伪造“真实私聊查询 + 连续追问已送达”，也没有把 gateway/webchat agent 回合当作 Telegram 闭环证据。
+Telegram token、allowlist 和原生 polling 连接均已验证；已通过该 channel 发出一条验收提示，
+发送命令返回 `status=ok`，且 `lastOutboundAt` 已更新。观察窗口内仍为
+`lastInboundAt=null`，没有收到可用的自然入站消息或独立测试账号。因此没有伪造“真实私聊查询 +
+连续追问已送达”，也没有把 gateway/webchat agent 回合当作 Telegram 闭环证据。发送原始结果和
+脱敏 channel 状态保存在 checkpoint 的 `telegram-acceptance-outbound.json` 与
+`telegram-acceptance-channel.json`。
 
 按 Goal 第 10/11 节，这使“Telegram 私聊真实闭环”仍为 BLOCKED；其余可执行的重构、迁移、旧链清理、真实 9Router/OpenClaw 场景和业务数据链均已完成并留存证据。
