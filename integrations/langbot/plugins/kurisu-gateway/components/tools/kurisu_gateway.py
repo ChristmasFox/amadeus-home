@@ -17,6 +17,7 @@ except ImportError:
 
 ALLOWED_TOOL_PREFIXES = ('kurisu.',)
 MAX_RESPONSE_BYTES = 256 * 1024
+DEFAULT_RUNTIME_URL = 'http://pubg-query-engine-v3:5310'
 
 
 def _value(source: Any, name: str, default: Any = '') -> Any:
@@ -93,6 +94,17 @@ def runtime_secret() -> str:
         return ''
 
 
+def runtime_url(plugin: Any = None) -> str:
+    """Resolve the private Runtime URL inside LangBot's isolated plugin process."""
+    configured = str(os.environ.get('KURISU_RUNTIME_URL') or '').strip()
+    if not configured and plugin is not None:
+        try:
+            configured = str((plugin.get_config() or {}).get('runtime_url') or '').strip()
+        except Exception:
+            configured = ''
+    return (configured or DEFAULT_RUNTIME_URL).rstrip('/')
+
+
 def _post(url: str, payload: dict[str, Any], secret: str) -> dict[str, Any]:
     encoded = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(
@@ -129,14 +141,7 @@ class KurisuGatewayTool(Tool):
         call_id = stable_call_id(query_id, tool_name, tool_input)
         if not tool_name.startswith(ALLOWED_TOOL_PREFIXES) or not isinstance(tool_input, dict):
             return json.dumps({'status': 'error', 'error': {'code': 'STRUCTURED_INPUT_REQUIRED', 'retryable': False}}, ensure_ascii=False)
-        runtime_url = str(os.environ.get('KURISU_RUNTIME_URL') or '').strip().rstrip('/')
-        if not runtime_url:
-            try:
-                runtime_url = str(self.plugin.get_config().get('runtime_url') or '').strip().rstrip('/')
-            except Exception:
-                runtime_url = ''
-        if not runtime_url:
-            return json.dumps({'status': 'unsupported', 'error': {'code': 'RUNTIME_URL_UNCONFIGURED', 'retryable': False}}, ensure_ascii=False)
+        target_runtime_url = runtime_url(self.plugin)
         secret = runtime_secret()
         if not secret:
             return json.dumps({'status': 'unsupported', 'error': {'code': 'RUNTIME_SECRET_UNCONFIGURED', 'retryable': False}}, ensure_ascii=False)
@@ -154,5 +159,5 @@ class KurisuGatewayTool(Tool):
             'input': tool_input,
             'hostContext': host_context,
         }
-        result = await asyncio.to_thread(_post, f'{runtime_url}/kurisu/tool-call', payload, secret)
+        result = await asyncio.to_thread(_post, f'{target_runtime_url}/kurisu/tool-call', payload, secret)
         return json.dumps(result, ensure_ascii=False, separators=(',', ':'))

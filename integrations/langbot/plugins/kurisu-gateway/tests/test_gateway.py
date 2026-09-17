@@ -9,6 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from components.tools.kurisu_gateway import (  # noqa: E402
+    DEFAULT_RUNTIME_URL,
+    runtime_url,
     stable_call_id,
     trusted_session_context,
     trusted_session_context_from_plugin,
@@ -16,6 +18,13 @@ from components.tools.kurisu_gateway import (  # noqa: E402
 
 
 class KurisuGatewayTests(unittest.TestCase):
+    def test_runtime_url_has_private_service_default_for_isolated_plugin_process(self):
+        class FakePlugin:
+            def get_config(self):
+                return {}
+
+        self.assertEqual(runtime_url(FakePlugin()), DEFAULT_RUNTIME_URL)
+
     def test_context_uses_stable_session_fields(self):
         context = trusted_session_context({
             'platform': 'telegram',

@@ -4,13 +4,13 @@ metadata:
   author: local
   name: kurisu-gateway
   repository: ''
-  version: 0.1.1
+  version: 0.1.2
   description:
     en_US: Structured Kurisu tools for the existing LangBot native Agent.
     zh_Hans: 为现有 LangBot 原生主 Agent 提供结构化 Kurisu 工具；不监听自然语言事件。
   label:
-    en_US: Kurisu Gateway 0.1.0
-    zh_Hans: Kurisu 统一工具网关 0.1.0
+    en_US: Kurisu Gateway 0.1.2
+    zh_Hans: Kurisu 统一工具网关 0.1.2
 spec:
   config:
   - name: runtime_url
