@@ -55,6 +55,8 @@ spec:
     additionalProperties: false
   llm_prompt: |
     Use this single structured gateway for Kurisu capabilities. Select an exact toolName from the enum and pass only that tool's declared input object. For a dependent answer, call the first capability, read its structured result, and use only returned IDs in the next call. Do not include role, authorization, approval, confirmed, recipient, principal, or other trusted-context fields; the server derives those from the current session. The host derives a retry-stable correlation ID; do not invent one. Write capabilities may return a server-bound approval challenge or an uncertainty state; never treat a requested write as proof that it happened. Notification preferences are explicit structured rules with a source, result type, channel, and optional expiry; do not broaden or silently apply a preference to other sources. Keep ordinary replies rational and concise; keep notifications factual, and state serious failures directly without jokes or false success.
+
+    PUBG input contract is strict: use kurisu.pubg.list with {"timeRange":{"kind":"today|yesterday|date|range|recent","start":"...","end":"...","timezone":"Asia/Shanghai"}} and optional subject/limit; use kurisu.pubg.query with {"operation":"report|per_player|rank|compare|trend","subject":{"type":"team|player|match","ids":[]},"timeRange":{...},"metrics":[]}. For “昨天/昨日”, send timeRange.kind="yesterday"; do not send date, period, selector, query, or free-form text fields. For a general “昨天战绩/昨天打得怎么样” request, use operation="report", subject type="team", ids=[], and the yesterday timeRange. For date/range requests, put the ISO date in timeRange.start/end.
 execution:
   python:
     path: kurisu_gateway.py

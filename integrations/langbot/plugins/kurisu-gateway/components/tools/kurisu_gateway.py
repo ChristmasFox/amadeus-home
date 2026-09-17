@@ -19,6 +19,7 @@ ALLOWED_TOOL_PREFIXES = ('kurisu.',)
 MAX_RESPONSE_BYTES = 256 * 1024
 DEFAULT_RUNTIME_URL = 'http://pubg-query-engine-v3:5310'
 DEFAULT_SECRET_FILE = '/run/secrets/kurisu_gateway_secret'
+RELATIVE_PERIODS = {'today', 'yesterday'}
 
 
 def _value(source: Any, name: str, default: Any = '') -> Any:
@@ -106,6 +107,38 @@ def runtime_url(plugin: Any = None) -> str:
     return (configured or DEFAULT_RUNTIME_URL).rstrip('/')
 
 
+def normalize_tool_input(tool_name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+    """Normalize known legacy PUBG shapes before the Runtime schema check."""
+    if tool_name not in {'kurisu.pubg.query', 'kurisu.pubg.list'}:
+        return dict(tool_input)
+
+    normalized = dict(tool_input)
+    time_range = normalized.get('timeRange')
+    if not isinstance(time_range, dict):
+        legacy_date = normalized.pop('date', None)
+        legacy_period = normalized.pop('period', None)
+        legacy_selector = normalized.pop('selector', None)
+        if legacy_date:
+            time_range = {'kind': 'date', 'start': str(legacy_date), 'timezone': 'Asia/Shanghai'}
+        elif isinstance(legacy_selector, dict) and legacy_selector.get('type') == 'relative_period':
+            value = str(legacy_selector.get('value') or '').strip().lower()
+            if value in RELATIVE_PERIODS:
+                time_range = {'kind': value, 'timezone': 'Asia/Shanghai'}
+        elif str(legacy_period or '').strip().lower() in RELATIVE_PERIODS:
+            time_range = {'kind': str(legacy_period).strip().lower(), 'timezone': 'Asia/Shanghai'}
+        if time_range is not None:
+            normalized['timeRange'] = time_range
+
+    if tool_name == 'kurisu.pubg.query' and 'operation' not in normalized:
+        normalized = {
+            'operation': 'report',
+            'subject': {'type': 'team', 'ids': []},
+            'timeRange': normalized.get('timeRange', {'kind': 'today', 'timezone': 'Asia/Shanghai'}),
+            'metrics': [],
+        }
+    return normalized
+
+
 def _post(url: str, payload: dict[str, Any], secret: str) -> dict[str, Any]:
     encoded = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(
@@ -139,9 +172,10 @@ class KurisuGatewayTool(Tool):
             return json.dumps({'status': 'error', 'error': {'code': 'INPUT_INVALID', 'retryable': False}}, ensure_ascii=False)
         tool_name = str(params.get('toolName') or params.get('tool_name') or '').strip()
         tool_input = params.get('input')
-        call_id = stable_call_id(query_id, tool_name, tool_input)
         if not tool_name.startswith(ALLOWED_TOOL_PREFIXES) or not isinstance(tool_input, dict):
             return json.dumps({'status': 'error', 'error': {'code': 'STRUCTURED_INPUT_REQUIRED', 'retryable': False}}, ensure_ascii=False)
+        tool_input = normalize_tool_input(tool_name, tool_input)
+        call_id = stable_call_id(query_id, tool_name, tool_input)
         target_runtime_url = runtime_url(self.plugin)
         secret = runtime_secret()
         if not secret:

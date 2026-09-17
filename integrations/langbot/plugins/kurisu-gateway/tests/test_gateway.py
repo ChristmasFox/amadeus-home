@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT))
 from components.tools.kurisu_gateway import (  # noqa: E402
     DEFAULT_RUNTIME_URL,
     DEFAULT_SECRET_FILE,
+    normalize_tool_input,
     runtime_secret,
     runtime_url,
     stable_call_id,
@@ -22,6 +23,23 @@ from components.tools.kurisu_gateway import (  # noqa: E402
 
 
 class KurisuGatewayTests(unittest.TestCase):
+    def test_legacy_pubg_date_is_normalized_to_report_time_range(self):
+        self.assertEqual(
+            normalize_tool_input('kurisu.pubg.query', {'date': '2026-09-16'}),
+            {
+                'operation': 'report',
+                'subject': {'type': 'team', 'ids': []},
+                'timeRange': {'kind': 'date', 'start': '2026-09-16', 'timezone': 'Asia/Shanghai'},
+                'metrics': [],
+            },
+        )
+
+    def test_legacy_pubg_selector_is_normalized_to_yesterday(self):
+        self.assertEqual(
+            normalize_tool_input('kurisu.pubg.list', {'selector': {'type': 'relative_period', 'value': 'yesterday'}}),
+            {'timeRange': {'kind': 'yesterday', 'timezone': 'Asia/Shanghai'}},
+        )
+
     def test_runtime_secret_uses_mounted_default_file_when_env_is_scrubbed(self):
         self.assertEqual(DEFAULT_SECRET_FILE, '/run/secrets/kurisu_gateway_secret')
         with patch.dict(os.environ, {'KURISU_GATEWAY_SECRET': '', 'KURISU_GATEWAY_SECRET_FILE': ''}):
