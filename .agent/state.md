@@ -1,12 +1,12 @@
 # 当前阶段：Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / R05_MEDIA_ROLLBACK_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
-本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.3`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。Avalon 四个媒体挂载、媒体 live scan 和含媒体挂载的 R05 回滚/恢复已通过。当前仍需真实 Telegram/KOOK 入站证据，未满足前不标记 `PRODUCT_COMPLETE`。
+本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.4`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。Avalon 四个媒体挂载、媒体 live scan 和含媒体挂载的 R05 回滚/恢复已通过。当前仍需真实 Telegram/KOOK 入站证据，未满足前不标记 `PRODUCT_COMPLETE`。
 
 ## 2026-09-17 当前线上快照
 
 - Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。Avalon 四个目录已挂载到 live Compose/Runtime，`kurisu.media.scan` structured smoke 返回 `ok`。
 - `scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、R01、R02 和 backup dry-run 通过；HomeHub Docker smoke 取得真实 macOS host metrics。
-- LangBot 当前启用 `kurisu-gateway@0.1.3`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；Kurisu 是唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
+- LangBot 当前启用 `kurisu-gateway@0.1.4`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；Kurisu 是唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
 - 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R03/R04 仍为 `PENDING/BLOCKED`；R05 已在四个 Avalon 挂载下完成旧版 Runtime/插件切换与当前版本恢复，未执行任何业务写入重放；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代真实平台证据。
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
@@ -22,6 +22,8 @@
 三次修复状态：隔离子进程可读取 `/run/secrets/kurisu_gateway_secret`，但不会继承 `KURISU_GATEWAY_SECRET_FILE` 环境变量，故 `0.1.2` 返回 `RUNTIME_SECRET_UNCONFIGURED`。已发布 `kurisu-gateway@0.1.3`，源码默认使用已挂载的 secret 文件；API task `29` 已 `INSTALL_READY`，仍需用户重新发送真实消息确认最终回复。
 
 隔离进程自测状态：在实际 `0.1.3` artifact 中清除 URL/secret 环境变量后，`kurisu.radar.list` 返回 `status=ok`；默认 URL、挂载 secret 和 Runtime tool-call 均已验证，未修改 Watch 数据。Telegram/KOOK 最终送达仍需真实平台入站。
+
+PUBG 时间参数修复状态：2026-09-17 10:05–10:06 的真实 Telegram“昨天战绩”被 Native Agent 生成旧式 `date`/`selector` 参数，Runtime 返回 `TOOL_INPUT_INVALID`。已发布 `kurisu-gateway@0.1.4`（LangBot task `35`，实际 artifact SHA-256 `e5600e1886e43b0df71c1aca65edc323d4534b432eb3804045e37259733308e2`），增加明确 PUBG schema/prompt 和已知旧形状兼容转换。实际隔离插件进程在清除 URL/secret 环境变量后，`selector=yesterday` 返回 `status=ok`、5 场比赛，`date=2026-09-16` 返回 `status=ok`、4 条汇总记录；仍需真实 Telegram/KOOK 新入站确认最终送达。
 
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
