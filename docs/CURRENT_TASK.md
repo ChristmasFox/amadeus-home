@@ -22,6 +22,12 @@
 - 运行配置增量：按用户要求将 OpenClaw CasaOS 端口绑定从 `127.0.0.1` 改为
   `0.0.0.0:18789`；容器健康检查通过，并从 `192.168.5.3:18789/healthz` 实测 HTTP 200。
   原 compose 已备份至 `/DATA/AppData/openclaw/backups/openclaw-bind-20260917-100930`。
+- Telegram 群聊配置增量：已启用所有群的接入并关闭强制 @；群内发送者策略为
+  `groupPolicy=open`，所有群成员均可触发回复。
+- 附属 VPS 运维：`amadeus-gateway` 已部署官方 Xray 26.3.27，使用 systemd 提供个人
+  VLESS + Reality + Vision，监听 TCP `443`；另以官方 Caddy 2.11.4/systemd 提供
+  `sub.nyannyan.top:8443` HTTPS 订阅入口。SSH 配置未改、VPS 未重启。架构和无凭据模板见
+  `infra/vps/`，真实运行 secret 只保留在 VPS。
 
 ## 已完成的本地证据
 
