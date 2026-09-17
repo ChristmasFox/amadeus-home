@@ -49,6 +49,21 @@ git log -5 --oneline --decorate
 - 第三方 LangBot 的修改必须使用可追踪的仓库 patch，并通过镜像构建应用；禁止直接在运行容器内手工改文件作为长期方案。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
 
+## Amadeus Gateway VPS
+
+- 本项目的个人公网 VPS 逻辑名称为 `amadeus-gateway`，运行 Ubuntu 24.04，定位为轻量公网 Gateway，而不是 Codex 执行主机。
+- Codex 运行在 Mac 控制端；VPS 运维统一通过本机 SSH alias `amadeus-gateway` 连接。需要在 VPS 执行命令时使用 `ssh amadeus-gateway ...`，不要询问或硬编码公网 IP、密码、私钥路径或私钥内容。
+- 当用户在本项目上下文中说“我的 VPS”、“VPS”、“Amadeus gateway”或“gateway”，且没有指定其他服务器时，默认指 `amadeus-gateway`。
+- 对明确的 VPS 运维请求，可直接通过该 SSH alias 检查日志、查看状态、安装轻量软件、修改应用配置和管理对应服务；无需再次询问主机地址、SSH 用户名或连接方式。
+- 当前 VPS 资源预算为 2 vCPU / 1 GiB RAM / 20 GiB SSD。设计和部署时优先低常驻内存方案；Codex、构建任务、数据库和其他重型工作负载默认留在 Mac/HomeLab，不常驻 VPS。
+- 计划用途包括 `frps`、Caddy/HTTPS 入口、个人网络服务及少量轻量基础服务。新增长期服务必须说明端口、systemd/容器管理方式、持久化位置和大致资源影响。
+- 不把公网 IP、SSH 私钥、密码、Cloudflare API Token、Origin Certificate 私钥、代理凭据或其他 secret 写入 Git。域名、SSH alias、端口规划等非敏感声明式配置可以入库。
+- SSH 公钥登录是远程管理生命线。禁止在未验证替代登录路径前关闭/破坏公钥认证、修改到不可达 SSH 端口、启用可能锁死当前连接的防火墙规则或删除当前授权 key。
+- 对可能导致 SSH 失联、网络中断、批量数据删除、磁盘/文件系统破坏、系统无法启动或不可逆安全影响的操作，执行前必须请求用户确认。普通只读诊断和可恢复的应用级运维不需要重复确认。
+- 修改防火墙时先显式保留当前 SSH 通路，再应用规则并从新的 SSH 会话验证；修改 sshd 时先 `sshd -t`/等价配置检查，再 reload，避免直接 restart 导致失联。
+- VPS 是运行时目标，不是唯一 source of truth。可声明化的 Caddy、frps、systemd、部署脚本和运维文档应回写本仓库；运行时 secret 只保留在目标环境或受控 secret store。
+- 任何针对 VPS 的自动化不得依赖聊天记忆中的 IP。连接细节的 canonical source 是 Mac 的 `~/.ssh/config` 中 `Host amadeus-gateway`。
+
 ## 开发验证与部署等级（FAST / RUNTIME / RELEASE）
 
 - 默认先运行 `pnpm workflow:plan`（或 `./scripts/developer-workflow.sh --plan`）按 Git diff 选择
