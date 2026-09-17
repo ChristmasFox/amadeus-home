@@ -1,0 +1,385 @@
+import { readFileSync } from 'node:fs';
+import type { AnyAgentTool, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import { jsonResult } from 'openclaw/plugin-sdk/core';
+import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
+import { Static, Type, type TSchema as TypeSchema } from 'typebox';
+import {
+  PubgApiClient,
+  PubgApiError,
+  PubgDomainService,
+  SqlitePubgRepository,
+  loadTeamConfig,
+  type CompareToolInput,
+  type GetMatchInput,
+  type GetReviewFactsInput,
+  type GroupBy,
+  type Metric,
+  type ResolvePlayersInput,
+  type SearchMatchesInput,
+  type StatsToolInput,
+  type ToolEnvelope,
+  type ToolSelectorInput,
+} from '@agent/pubg-domain';
+
+const PLUGIN_ID = 'pubg';
+const MAX_SUBJECT_ITEMS = 12;
+const MAX_CATEGORIES = 16;
+
+const PluginConfigSchema = Type.Object({
+  databasePath: Type.Optional(Type.String({ maxLength: 1024 })),
+  teamConfigFile: Type.Optional(Type.String({ maxLength: 1024 })),
+  apiKeyFile: Type.Optional(Type.String({ maxLength: 1024 })),
+  apiBaseUrl: Type.Optional(Type.String({ maxLength: 512 })),
+  timezone: Type.Optional(Type.String({ maxLength: 128 })),
+  businessDayStart: Type.Optional(Type.String({ pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' })),
+  maxMatches: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+  freshnessMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 86_400_000 })),
+}, { additionalProperties: false });
+
+type PluginConfig = Static<typeof PluginConfigSchema>;
+
+const SessionId = Type.Optional(Type.String({ maxLength: 256 }));
+const PlayerIds = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_SUBJECT_ITEMS }));
+const PlayerNames = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_SUBJECT_ITEMS }));
+const SubjectProperties = {
+  sessionId: SessionId,
+  playerIds: PlayerIds,
+  playerNames: PlayerNames,
+};
+
+const TimeRangeSelector = Type.Object({
+  type: Type.Literal('time_range'),
+  from: Type.String({ minLength: 1, maxLength: 128 }),
+  to: Type.String({ minLength: 1, maxLength: 128 }),
+  timezone: Type.Optional(Type.String({ maxLength: 128 })),
+  businessDayStart: Type.Optional(Type.String({ pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' })),
+}, { additionalProperties: false });
+const LastMatchesSelector = Type.Object({
+  type: Type.Literal('last_n_matches'),
+  count: Type.Integer({ minimum: 1, maximum: 100 }),
+  offset: Type.Optional(Type.Integer({ minimum: 0, maximum: 1000 })),
+}, { additionalProperties: false });
+const ResultSetSelector = Type.Object({
+  type: Type.Literal('result_set'),
+  resultSetId: Type.String({ minLength: 1, maxLength: 256 }),
+}, { additionalProperties: false });
+const Selector = Type.Union([TimeRangeSelector, LastMatchesSelector, ResultSetSelector]);
+
+const Metrics = Type.Union([
+  Type.Literal('matches'), Type.Literal('kills'), Type.Literal('assists'), Type.Literal('damage'),
+  Type.Literal('avg_damage'), Type.Literal('kd'), Type.Literal('deaths'), Type.Literal('wins'),
+  Type.Literal('top10'), Type.Literal('rank'), Type.Literal('dbnos'), Type.Literal('revives'),
+  Type.Literal('headshot_kills'), Type.Literal('survival_time'), Type.Literal('longest_kill'),
+  Type.Literal('performance_score'), Type.Literal('chicken_index'),
+]);
+const GroupBySchema = Type.Union([
+  Type.Literal('player'), Type.Literal('match'), Type.Literal('day'), Type.Literal('map'),
+  Type.Literal('mode'), Type.Literal('team'),
+]);
+const OrderBy = Type.Object({
+  metric: Metrics,
+  direction: Type.Union([Type.Literal('asc'), Type.Literal('desc')]),
+}, { additionalProperties: false });
+
+const ToolOutputStatus = Type.Union([
+  Type.Literal('ok'), Type.Literal('partial'), Type.Literal('no_matches'), Type.Literal('error'),
+]);
+const ToolOutputSchema = Type.Object({
+  status: ToolOutputStatus,
+  data: Type.Unknown(),
+  coverage: Type.Object({
+    status: Type.String(),
+    complete: Type.Boolean(),
+    coverageStart: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    coverageEnd: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    checkedAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+    failedMatchIds: Type.Array(Type.String(), { maxItems: 1000 }),
+    sourceUnavailable: Type.Boolean(),
+    freshness: Type.Union([Type.Literal('fresh'), Type.Literal('stale'), Type.Literal('unknown')]),
+  }, { additionalProperties: true }),
+  asOf: Type.String(),
+  metricVersion: Type.String(),
+  queryResolved: Type.Record(Type.String(), Type.Unknown()),
+  evidenceRefs: Type.Object({
+    matchIds: Type.Array(Type.String(), { maxItems: 1000 }),
+    playerIds: Type.Array(Type.String(), { maxItems: MAX_SUBJECT_ITEMS }),
+    fields: Type.Array(Type.String(), { maxItems: 128 }),
+    calculation: Type.String(),
+  }, { additionalProperties: true }),
+  resultSetId: Type.Optional(Type.String({ maxLength: 256 })),
+  error: Type.Optional(Type.Object({
+    code: Type.String({ maxLength: 128 }),
+    retryable: Type.Boolean(),
+    reason: Type.String({ maxLength: 512 }),
+  }, { additionalProperties: false })),
+}, { additionalProperties: false });
+
+const QueryStatsParameters = Type.Object({
+  ...SubjectProperties,
+  selector: Selector,
+  metrics: Type.Array(Metrics, { minItems: 1, maxItems: 16 }),
+  operation: Type.Optional(Type.Union([
+    Type.Literal('report'), Type.Literal('detail'), Type.Literal('rank'), Type.Literal('strongest'),
+    Type.Literal('weakest'), Type.Literal('trend'), Type.Literal('list'),
+  ])),
+  groupBy: Type.Optional(GroupBySchema),
+  orderBy: Type.Optional(OrderBy),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+const CompareParameters = Type.Object({
+  ...SubjectProperties,
+  segments: Type.Array(Type.Object({
+    label: Type.String({ minLength: 1, maxLength: 128 }),
+    selector: Selector,
+  }, { additionalProperties: false }), { minItems: 2, maxItems: 2 }),
+  metrics: Type.Array(Metrics, { minItems: 1, maxItems: 16 }),
+  groupBy: Type.Optional(Type.Union([Type.Literal('player'), Type.Literal('day'), Type.Literal('map'), Type.Literal('mode'), Type.Literal('team')])),
+  orderBy: Type.Optional(OrderBy),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+const ResolvePlayersParameters = Type.Object({
+  ...SubjectProperties,
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+const SearchMatchesParameters = Type.Object({
+  ...SubjectProperties,
+  from: Type.Optional(Type.String({ maxLength: 128 })),
+  to: Type.Optional(Type.String({ maxLength: 128 })),
+  timezone: Type.Optional(Type.String({ maxLength: 128 })),
+  gameMode: Type.Optional(Type.String({ maxLength: 64 })),
+  mapName: Type.Optional(Type.String({ maxLength: 128 })),
+  sort: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')])),
+  page: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
+  pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+  recentN: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+const MatchParameters = Type.Object({
+  ...SubjectProperties,
+  matchId: Type.String({ minLength: 1, maxLength: 256 }),
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+const ReviewParameters = Type.Object({
+  ...SubjectProperties,
+  matchId: Type.String({ minLength: 1, maxLength: 256 }),
+  categories: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: MAX_CATEGORIES })),
+  refresh: Type.Optional(Type.Boolean()),
+}, { additionalProperties: false });
+
+type QueryStatsParameters = Static<typeof QueryStatsParameters>;
+type CompareParameters = Static<typeof CompareParameters>;
+type ResolvePlayersParameters = Static<typeof ResolvePlayersParameters>;
+type SearchMatchesParameters = Static<typeof SearchMatchesParameters>;
+type MatchParameters = Static<typeof MatchParameters>;
+type ReviewParameters = Static<typeof ReviewParameters>;
+
+const serviceCache = new Map<string, PubgDomainService>();
+
+function configString(config: PluginConfig, key: keyof PluginConfig, envKey: string): string | undefined {
+  const configured = config[key];
+  return typeof configured === 'string' && configured.trim() ? configured.trim() : process.env[envKey]?.trim() || undefined;
+}
+
+function makeService(config: PluginConfig): PubgDomainService {
+  const databasePath = configString(config, 'databasePath', 'PUBG_DATABASE_PATH') ?? '/data/pubg.sqlite';
+  const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE');
+  const team = loadTeamConfig({ path: teamConfigFile, required: true });
+  const apiKeyFile = configString(config, 'apiKeyFile', 'PUBG_API_KEY_FILE');
+  const apiKey = apiKeyFile ? readFileSync(apiKeyFile, 'utf8').trim() : process.env.PUBG_API_KEY?.trim();
+  const apiBaseUrl = configString(config, 'apiBaseUrl', 'PUBG_API_BASE_URL');
+  const apiClient = apiKey
+    ? new PubgApiClient({ apiKey, ...(apiBaseUrl ? { baseUrl: apiBaseUrl } : {}) })
+    : undefined;
+  return new PubgDomainService({
+    team,
+    repository: new SqlitePubgRepository(databasePath),
+    ...(apiClient ? { apiClient } : {}),
+    ...(configString(config, 'timezone', 'PUBG_TIMEZONE') ? { timezone: configString(config, 'timezone', 'PUBG_TIMEZONE') } : {}),
+    ...(configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') ? { businessDayStart: configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') } : {}),
+    ...(config.maxMatches ? { maxMatches: config.maxMatches } : {}),
+    ...(config.freshnessMs ? { freshnessMs: config.freshnessMs } : {}),
+  });
+}
+
+function serviceFor(config: PluginConfig): PubgDomainService {
+  const databasePath = configString(config, 'databasePath', 'PUBG_DATABASE_PATH') ?? '/data/pubg.sqlite';
+  const teamConfigFile = configString(config, 'teamConfigFile', 'PUBG_TEAM_CONFIG_FILE') ?? '';
+  const apiBaseUrl = configString(config, 'apiBaseUrl', 'PUBG_API_BASE_URL') ?? '';
+  const key = JSON.stringify({ databasePath, teamConfigFile, apiBaseUrl });
+  const current = serviceCache.get(key);
+  if (current) return current;
+  const service = makeService(config);
+  serviceCache.set(key, service);
+  return service;
+}
+
+function contextSessionId(input: { sessionId?: string }, toolContext: OpenClawPluginToolContext): string {
+  return toolContext.sessionId?.trim()
+    || toolContext.sessionKey?.trim()
+    || input.sessionId?.trim()
+    || process.env.PUBG_DEFAULT_SESSION_ID?.trim()
+    || 'openclaw:pubg:default';
+}
+
+function runtimeError(error: unknown): ToolEnvelope {
+  const apiError = error instanceof PubgApiError;
+  const errorDetails = apiError
+    ? { code: error.code, retryable: error.retryable, reason: error.message }
+    : { code: 'plugin_runtime_error', retryable: false, reason: 'PUBG plugin configuration or execution failed' };
+  return {
+    status: 'error',
+    data: {},
+    coverage: {
+      status: 'SOURCE_UNAVAILABLE',
+      complete: false,
+      coverageStart: null,
+      coverageEnd: null,
+      checkedAt: new Date().toISOString(),
+      failedMatchIds: [],
+      sourceUnavailable: true,
+      freshness: 'unknown',
+    },
+    asOf: new Date().toISOString(),
+    metricVersion: 'pubg-metrics-v1',
+    queryResolved: { tool: PLUGIN_ID },
+    evidenceRefs: { matchIds: [], playerIds: [], fields: [], calculation: 'pubg_plugin_runtime' },
+    error: errorDetails,
+  };
+}
+
+function makeTool<Schema extends TypeSchema>(
+  name: string,
+  description: string,
+  parameters: Schema,
+  config: PluginConfig,
+  toolContext: OpenClawPluginToolContext,
+  execute: (service: PubgDomainService, input: Static<Schema>, sessionId: string, signal?: AbortSignal) => Promise<ToolEnvelope>,
+): AnyAgentTool {
+  return {
+    name,
+    label: name,
+    description,
+    parameters,
+    outputSchema: ToolOutputSchema,
+    async execute(_toolCallId, rawParams, signal) {
+      try {
+        const input = rawParams as Static<Schema>;
+        return jsonResult(await execute(serviceFor(config), input, contextSessionId(input as { sessionId?: string }, toolContext), signal));
+      } catch (error) {
+        return jsonResult(runtimeError(error));
+      }
+    },
+  };
+}
+
+function selectorInput(value: unknown): ToolSelectorInput {
+  return value as ToolSelectorInput;
+}
+
+const entry = defineToolPlugin({
+  id: PLUGIN_ID,
+  name: 'PUBG Stats',
+  description: 'Deterministic PUBG match statistics and telemetry review tools.',
+  configSchema: PluginConfigSchema,
+  tools: (tool) => [
+    tool({
+      name: 'pubg_resolve_players',
+      description: 'Resolve configured PUBG players and aliases, or look up one exact official player name.',
+      parameters: ResolvePlayersParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_resolve_players',
+        'Resolve configured PUBG players and aliases, or look up one exact official player name.',
+        ResolvePlayersParameters,
+        config,
+        toolContext,
+        (service, input, sessionId) => service.resolvePlayers({ ...(input as ResolvePlayersParameters), sessionId } as ResolvePlayersInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_search_matches',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review.',
+      parameters: SearchMatchesParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_search_matches',
+        'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review.',
+        SearchMatchesParameters,
+        config,
+        toolContext,
+        (service, input, sessionId) => service.searchMatches({ ...(input as SearchMatchesParameters), sessionId } as SearchMatchesInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_query_stats',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector.',
+      parameters: QueryStatsParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_query_stats',
+        'Query deterministic PUBG aggregates over an explicit bounded selector.',
+        QueryStatsParameters,
+        config,
+        toolContext,
+        (service, input, sessionId, signal) => service.queryStats({
+          ...(input as QueryStatsParameters),
+          sessionId,
+          selector: selectorInput((input as QueryStatsParameters).selector),
+          metrics: (input as QueryStatsParameters).metrics as Metric[],
+          ...(signal ? { signal } : {}),
+        } as StatsToolInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_compare_stats',
+      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios.',
+      parameters: CompareParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_compare_stats',
+        'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios.',
+        CompareParameters,
+        config,
+        toolContext,
+        (service, input, sessionId, signal) => service.compareStats({
+          ...(input as CompareParameters),
+          sessionId,
+          segments: (input as CompareParameters).segments.map((segment) => ({ ...segment, selector: selectorInput(segment.selector) })),
+          metrics: (input as CompareParameters).metrics as Metric[],
+          ...(signal ? { signal } : {}),
+        } as CompareToolInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_get_match',
+      description: 'Get one concrete PUBG Match API record after a match ID has been selected.',
+      parameters: MatchParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_get_match',
+        'Get one concrete PUBG Match API record after a match ID has been selected.',
+        MatchParameters,
+        config,
+        toolContext,
+        (service, input, sessionId, signal) => service.getMatch({ ...(input as MatchParameters), sessionId, ...(signal ? { signal } : {}) } as GetMatchInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_get_review_facts',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match.',
+      parameters: ReviewParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_get_review_facts',
+        'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match.',
+        ReviewParameters,
+        config,
+        toolContext,
+        (service, input, sessionId, signal) => service.getReviewFacts({ ...(input as ReviewParameters), sessionId, ...(signal ? { signal } : {}) } as GetReviewFactsInput),
+      ),
+    }),
+  ],
+});
+
+export default entry;

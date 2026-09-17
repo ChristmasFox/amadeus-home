@@ -1,193 +1,81 @@
-# Agent Monorepo
+# amadeus-home
 
-这是 LangBot / Mastra Runtime / PUBG Domain / n8n / Telemetry / Platform
-Adapter / HomeLab 配置的可迁移 Git source of truth。仓库保存系统定义、源代码、
-插件、patch、workflow、文档和 Codex 状态；运行时数据与 secrets 保留在仓库外。
+这是一个以 Git 为唯一 source of truth 的 HomeLab monorepo。当前 PUBG 主链是：
 
-## 目标与边界
+Telegram 私聊 → OpenClaw/Kurisu → 原生 PUBG plugin → 独立 `@agent/pubg-domain`
+→ 官方 PUBG API 与 SQLite。
 
-- 使用 pnpm workspace，不引入 Nx、Kubernetes 或其他编排层。
-- 长期 HomeLab 服务运行在 OrbStack Linux machine `ubuntu` 内的 CasaOS。
-- LangBot 第三方本体不复制到仓库，只追踪自定义插件、patch、资源和兼容版本。
-- n8n workflow JSON 是版本化源文件；n8n credentials 必须在恢复后手动重新绑定。
-- Git 不保存 Bot Token、API Key、密码、Tunnel Token、`.env` 或业务数据库快照。
+OpenClaw 负责自然语言理解、会话、模型路由、人格和工具循环；PUBG plugin 只做
+SDK 适配，领域层只返回确定性事实。PUBG 不依赖 LangBot、Mastra、n8n、旧 Runtime、
+额外 HTTP 服务或 Docker socket。
 
-## 仓库结构
+## 目录
 
-```text
-apps/
-  agent-runtime/       Mastra/PUBG V3 当前可运行 runtime（source-preserving）
-  product-radar/       通用 Seller/Product Watch 商品监控 runtime
-  telemetry-worker/    Telemetry 边界 facade
-  whatsapp-adapter/    WhatsApp adapter 边界 facade
-packages/
-  contracts/           跨模块契约
-  platform-core/       平台核心边界
-  pubg-domain/         PUBG domain 与 legacy V2
-  presentation/        展示层边界
-integrations/
-  langbot/             自定义插件、patch、配置模板
-  n8n/                 workflow source 与 credential placeholder
-infra/
-  docker/              CasaOS/Docker 脱敏模板
-  cloudflare/          Tunnel 配置模板
-  macos/               Mac mini 辅助脚本
-scripts/               bootstrap、doctor、backup、restore、检查工具
-docs/                  架构、状态、决策、迁移清单和历史归档
-.agent/                Codex 持久化状态与 checkpoint
-skills/                可迁移的 Codex skill source
-```
+- `plugins/pubg/`：唯一业务 plugin，注册六个原生工具并携带 PUBG Skill。
+- `packages/pubg-domain/`：官方 API client、SQLite、查询/比较、Telemetry 事实和迁移器。
+- `integrations/openclaw/`：脱敏配置、workspace 人格和部署说明。
+- `infra/docker/casaos/openclaw/`：固定 OpenClaw 版本的 CasaOS 模板。
+- `apps/product-radar/`：独立商品监控应用，不是 PUBG 运行依赖。
+- `integrations/langbot/`、`integrations/n8n/`：仍独立运行的非 PUBG 资产。
+- `docs/`、`.agent/`：架构、状态、验收和可恢复 checkpoint。
 
-## 新机器恢复
+## 本地验证
 
-以下命令只在本地执行，不会自动 push 公网仓库：
+需要 Node 24.16+、pnpm 11 和 Python 3：
 
 ```sh
-git clone <private-repository-url> agent-monorepo
-cd agent-monorepo
 ./scripts/bootstrap.sh --check
-./scripts/bootstrap.sh --init-env
 pnpm install
-pnpm check:secrets
-```
-
-然后按下面顺序操作：
-
-1. 在 OrbStack 中创建并启动 Linux machine `ubuntu`，安装/启用 CasaOS。
-2. 从离线密码管理器恢复 `/DATA/AppData/*` 下的 `.env`、secret file 和证书；不要复制到 Git。
-3. 根据 `infra/docker/casaos/` 与 `infra/docker/homelab/` 模板，在 Ubuntu 的
-   `/var/lib/casaos/apps/<app>/docker-compose.yml` 建立实际 CasaOS 定义。
-4. 构建或恢复 `apps/agent-runtime` 镜像，启动 LangBot、n8n、n8n sandbox 和 runtime。
-5. 在 n8n 导入 `integrations/n8n/workflows/` 下的 workflow，重新创建 credentials，
-   并确认 Data Table / webhook URL 已指向新实例。
-6. 如有备份，先预览再恢复：
-
-   ```sh
-   ./scripts/restore.sh --dry-run /Volumes/Avalon/backups/agent-monorepo/<stamp>/data-<stamp>.tar.gz
-   ./scripts/restore.sh --confirm /Volumes/Avalon/backups/agent-monorepo/<stamp>/data-<stamp>.tar.gz
-   ```
-
-7. 启动服务后执行 `./scripts/doctor.sh`，并用 `docs/PROJECT_STATE.md` 对照验证。
-
-`restore.sh` 默认拒绝在目标服务运行时写入 `/DATA/AppData`；只有确认停机或明确
-传入 `--allow-running` 才会执行。Redis 被视为可重建缓存，核心恢复依赖是 Postgres、
-n8n data、LangBot data、runtime state 和其他明确列入备份清单的 volume。
-
-## 开发与验证
-
-要求 Node.js `>=22`、pnpm `9.9.x`、Git 和 Python 3。先按 Git diff 选择最低足够的验证等级：
-
-```sh
-pnpm workflow:plan                 # FAST / RUNTIME / RELEASE scope 预览
-pnpm workflow:verify               # 只运行 FAST/RUNTIME 本地验证；绝不 build/deploy
-pnpm test:workflow                 # 分类规则回归测试
-pnpm smoke:runtime                 # 非 Docker 的 /healthz + /homehub/health smoke
-```
-
-- **FAST** 是 docs、`.agent`、tests、skills、纯逻辑和小功能的默认流程：定向测试、受影响
-  package typecheck、`git diff --check`，必要时 secrets scan；不 build、不 restart、不 deploy。
-- **RUNTIME** 用于 `apps/agent-runtime/src/**`、`packages/homehub-domain/src/**` 及 runtime assets：
-  运行受影响 package 的 typecheck/build、映射后的定向 tests 与本地 endpoint smoke；仍不 build
-  production Docker image。HomeHub 源码变更不会自动升级为 RELEASE。
-- **RELEASE** 只在明确要求实际 CasaOS 部署时执行。Dockerfile、`.dockerignore`、`package.json`
-  或 `pnpm-lock.yaml` 变更会标记为 `RELEASE_BUILD_REQUIRED`，但只会给出计划，绝不会自动 build。
-
-### Product Radar V0.1
-
-`apps/product-radar` 是独立的通用商品监控服务：Core 只处理平台无关 Listing、Watch、
-Matcher、Snapshot、Event 和 Notification Outbox；Bunjang 是 `Source Adapter`，
-changedetection.io 是可替换的 `Sensor`。V0.1 支持 Seller Watch 和 Product Watch；V0.2 增加 image similarity watch，
-V0.3 Phase A 增加 TargetProfile、Bunjang SearchPlan、共享 SearchFeed、watermark 分页和
-Sharp feature cache abstraction；SQLite 数据、sensor 映射和图片特征持久化在独立 volume。LangBot 通过
-`integrations/langbot/plugins/product-radar` 提供自然语言入口，并复用 LangBot 私聊 API
-向外部配置的 Telegram/KOOK Admin recipient 发送通知；不会发送群聊。
-
-
-
-V0.3 的图片寻货入口支持“只发图片”或“图片 + 用户关键词”：LangBot 只在创建/修改
-Watch 时调用当前多模态模型生成可审阅的 TargetProfile，Product Radar 之后使用确定性
-SearchPlan、SearchFeed、Source Adapter、Sharp ImageMatcher 和通知幂等链路，不在轮询中
-调用 LLM。当前默认 Similarity Feed 为 15 分钟（确定性 ±2 分钟 jitter），用户显式
-interval 不被覆盖。
-
-源码实现、测试、Compose 模板和 smoke 记录见 `apps/product-radar/`、
-`infra/changedetection/`、`infra/docker/casaos/product-radar/` 及项目状态文档。
-
-完整 scope 矩阵、LangBot/env 特例、BuildKit cache 和 benchmark 见
-`docs/DEVELOPER_WORKFLOW.md`。传统本地命令仍可按需使用：
-
-```sh
-pnpm install
-pnpm typecheck
 pnpm build
+pnpm typecheck
 pnpm test
-pnpm test:legacy-v2
 pnpm check:secrets
 ```
 
-插件构建：
+只验证 PUBG：
 
 ```sh
-./scripts/build_pubg_plugin.sh
-./scripts/build_pubg_v3_plugin.sh
+pnpm build:pubg
+pnpm typecheck:pubg
+pnpm test:pubg
+pnpm --filter @agent/pubg-plugin exec openclaw plugins validate --entry ./dist/index.js --json
 ```
 
-生成的 `.lbpkg` 只用于本地安装，已被 `.gitignore` 排除；插件源文件仍在
-`integrations/langbot/plugins/` 中版本化。
-
-LangBot 部署预览与显式应用：
+开发 workflow 会根据 Git 改动选择 FAST、PUBG/Runtime 或 RELEASE；默认不构建镜像、不
+重启服务：
 
 ```sh
-./scripts/deploy-langbot.sh --dry-run
-export LANGBOT_API_KEY='<restore-from-password-manager>'
-./scripts/deploy-langbot.sh --apply --plugin pubg-stats-v3
+pnpm workflow:plan
+pnpm workflow:verify
+pnpm test:workflow
 ```
 
-`deploy-langbot.sh` 默认只构建和检查，不写入 LangBot。插件应用通过 LangBot
-`/api/v1/plugins/install/local` API 完成，API key 只从外部环境读取。patch 是
-第三方镜像的 build-time 变更；需要先预览 `--patches`，再显式使用
-`--apply --patches --activate-image` 构建并切换 CasaOS LangBot 镜像。旧镜像、compose
-备份和 `.lbpkg` 回滚包都保留在 Git 外。
+## CasaOS 部署
 
-KOOK 离线自动恢复 watchdog 的预览与显式应用：
+长期服务运行在 OrbStack Linux machine `ubuntu` 的 CasaOS。OpenClaw 的 canonical
+Compose 路径是 `/var/lib/casaos/apps/openclaw/docker-compose.yml`，持久化数据是
+`/DATA/AppData/openclaw`。生产 secret、Telegram owner、队伍配置和数据库都在仓库外。
+
+默认只预览。一次性切换在确认代码已提交后执行：
 
 ```sh
-./scripts/deploy-kook-watchdog.sh --dry-run
-./scripts/deploy-kook-watchdog.sh --apply
+./scripts/deploy-openclaw.sh --dry-run
+./scripts/deploy-openclaw.sh --apply --build --cleanup
+./scripts/doctor.sh
 ```
 
-该脚本将 root-owned watchdog 与 systemd timer 安装到 OrbStack `ubuntu`，默认每分钟
-探测 KOOK，连续 3 次明确离线才按 cooldown/上限重启 `langbot`；不构建镜像、不修改
-LangBot Compose。token 只从 CasaOS 外部 secret 读取，不进入仓库或 journal。
+脚本会先建立仓库外 dated checkpoint，再迁移旧比赛/Telemetry 数据，停用旧 PUBG
+Telegram/n8n producer，启动唯一 OpenClaw，检查 Telegram channel 和 SQLite；不会把
+旧服务的数据库或 secrets 写入 Git。详见 [OpenClaw 部署说明](integrations/openclaw/README.md)
+和 [当前状态](docs/PROJECT_STATE.md)。
 
-## Codex 全局完成通知
+## 安全与恢复
 
-Codex completion notification 是用户级能力，不依赖当前仓库目录。Git source 位于
-`integrations/codex/codex-notify.sh`，安装到 `~/.codex/bin/codex-notify.sh`，并由全局
-`~/.codex/config.toml` 的 root-level `notify` 配置调用。它只接受
-`agent-turn-complete`，将 `threadId + turnId`、cwd、从 cwd 安全解析的项目名、最后回复和
-时间发送到 agent-runtime `/kurisu/notifications/events`；Runtime 负责事件/投递持久化与平台发送。
-网络失败时写本地安全 spool，仍 fail-open，不影响 Codex。
+Bot token、API key、密码、证书、`.env` 和业务数据永不入库。使用 `scripts/backup.sh`
+备份 OrbStack `ubuntu` 的 AppData，使用 `scripts/restore.sh` 先预览再恢复。修改
+CasaOS 时只使用明确的 `--apply`；不要在 macOS host Docker 中部署持久服务。
 
-n8n workflow source `integrations/n8n/workflows/codex-completion-notification.workflow.json` 仍作为
-legacy rollback source 保留，不能与 Runtime sender 同时启用。真实 secret、n8n credential、variables
-和 Data Table 只在运行时恢复，不入 Git。Radar 的 central owner 也保留自己的本地 outbox 作为跨库
-交接，不向 Runtime 转发 platform recipient。
-
-安装、配置和验证：
-
-```sh
-./scripts/provision-codex-notify-secret.sh --apply
-./scripts/install-codex-notify.sh --apply
-./scripts/smoke-codex-notify.sh
-./scripts/drain-codex-notification-spool.sh --dry-run
-```
-
-n8n workflow 导入和真实 Telegram/KOOK smoke 只属于 P7 的独立授权回滚/验收路径。
-
-## Codex 持久化协议
-
-每次新会话先读取：
+新会话入口依次读取：
 
 ```text
 README.md
@@ -197,29 +85,4 @@ docs/CURRENT_TASK.md
 .agent/state.md
 ```
 
-再执行 `git status --short --branch` 和 `git log -5 --oneline --decorate`。
-需要理解目录责任时继续读取 `docs/PROJECT_MAP.md`；按需读取 `skills/*/SKILL.md`。
-阶段完成后更新 `docs/CURRENT_TASK.md`、`docs/PROJECT_STATE.md`，并在
-`.agent/checkpoints/` 写入 checkpoint。详细规则见 `AGENTS.md`。
-
-## 数据、备份与 secrets
-
-- `/DATA/AppData` 是 Linux 本地持久化应用数据。
-- `/Volumes/Avalon/media`、`/Volumes/Avalon/downloads` 是共享存储。
-- `/Volumes/Avalon/backups/agent-monorepo` 是默认备份位置；没有共享卷时才使用被忽略的 `.backups/`。
-- `./scripts/backup.sh` 默认排除 `.env` 与 secrets；`--include-secrets` 只生成独立的受限归档，
-  仍必须离线加密保存。
-- `.env.example` 和各组件配置模板只包含空值或明确 placeholder。
-
-提交前必须运行 `pnpm check:secrets`。当前 `main` 已配置用户指定的 `origin` 和
-GitHub 远端；恢复流程本身仍不会自动 push，发布必须由用户明确执行。
-
-## 当前状态
-
-- Kurisu 统一 Agent 实施计划（PLANNED，尚未部署）：见 [计划书](docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md)、[验收矩阵](docs/KURISU_AGENT_ACCEPTANCE.md) 和 [Codex Goal 入口](docs/KURISU_CODEX_GOAL.md)。
-
-- 迁移状态：见 `docs/PROJECT_STATE.md`。
-- 当前任务：见 `docs/CURRENT_TASK.md`。
-- 运行时与部署拓扑：见 `docs/ARCHITECTURE.md`。
-- 文件迁移清单：见 `docs/INVENTORY.md`。
-- 重要取舍：见 `docs/DECISIONS.md`。
+旧 Kurisu/Mastra/PUBG 设计文档已经被当前 Goal 取代，仅作为 Git 历史，不是可执行入口。

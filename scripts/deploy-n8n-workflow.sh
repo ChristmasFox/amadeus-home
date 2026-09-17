@@ -106,17 +106,6 @@ if row is None:
 name, active, nodes = row
 if not active:
     raise SystemExit('workflow is not active after import')
-node_values = json.loads(nodes)
-code = '\\n'.join(str(node.get('parameters', {}).get('jsCode', '')) for node in node_values)
-if workflow_id == 'pubg-sync-matches-v3-20260902' and 'deathSemantics' not in code:
-    raise SystemExit('PUBG v3 workflow did not contain the KD normalization marker')
-if workflow_id == 'codex-completion-notification-20260906':
-    node_names = {str(node.get('name')) for node in node_values}
-    required_nodes = {'Codex Completion Webhook', 'Validate Completion', 'Format Notification', 'Send Telegram DM', 'Send KOOK DM', 'Record Delivery'}
-    if not required_nodes.issubset(node_names):
-        raise SystemExit('Codex notification workflow is missing required nodes')
-    if 'target_type' not in code or '\$vars.TELEGRAM_ADMIN_USER_ID' not in code or '\$vars.KOOK_ADMIN_USER_ID' not in code:
-        raise SystemExit('Codex notification workflow does not resolve fixed admin recipients')
 print(f'Verified n8n workflow active: {name}')
 PY
 "

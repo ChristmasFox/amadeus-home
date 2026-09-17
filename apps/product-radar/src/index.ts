@@ -8,7 +8,6 @@ import { ChangedetectionSensorClient } from './sensors/changedetection/client.js
 import { SqliteRadarStore } from './storage/sqlite.js';
 import { createRadarServer } from './api/server.js';
 import { LangBotNotificationChannel, readOptionalToken } from './integrations/notifications/langbot.js';
-import { KurisuNotificationChannel } from './integrations/notifications/kurisu.js';
 import { PerceptualImageMatcher } from './integrations/images/perceptual-matcher.js';
 import { FashionSiglipImageMatcher } from './integrations/images/fashion-siglip-matcher.js';
 
@@ -44,17 +43,8 @@ async function main(): Promise<void> {
   const langBotBaseUrl = process.env.LANGBOT_API_BASE_URL?.trim() || 'http://langbot:5300';
   const langBotApiHeader = process.env.PRODUCT_RADAR_LANGBOT_API_HEADER?.trim() || 'Authorization';
   const channels = [];
-  const notificationOwner = process.env.PRODUCT_RADAR_NOTIFICATION_OWNER?.trim().toLowerCase() || 'local';
-  if (notificationOwner === 'central') {
-    const centralSecret = await readOptionalToken(process.env.PRODUCT_RADAR_KURISU_NOTIFICATION_SECRET_FILE, process.env.PRODUCT_RADAR_KURISU_NOTIFICATION_SECRET);
-    if (!centralSecret) throw new Error('PRODUCT_RADAR_NOTIFICATION_OWNER=central requires a Kurisu notification secret');
-    channels.push(new KurisuNotificationChannel({
-      endpoint: process.env.PRODUCT_RADAR_KURISU_NOTIFICATION_URL?.trim() || 'http://agent-runtime:5310/kurisu/notifications/events',
-      secret: centralSecret,
-      principalKey: process.env.PRODUCT_RADAR_KURISU_PRINCIPAL_KEY?.trim() || 'telegram:admin',
-      timeoutMs: numberEnv('PRODUCT_RADAR_KURISU_NOTIFICATION_TIMEOUT_MS', 5_000),
-    }));
-  } else {
+  const notificationOwner = process.env.PRODUCT_RADAR_NOTIFICATION_OWNER?.trim().toLowerCase() || 'disabled';
+  if (notificationOwner !== 'disabled') {
     const telegramRecipient = process.env.TELEGRAM_ADMIN_USER_ID?.trim();
     const telegramBotId = process.env.PRODUCT_RADAR_TELEGRAM_BOT_ID?.trim();
     if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ id: 'telegram', baseUrl: langBotBaseUrl, botId: telegramBotId, recipient: telegramRecipient, apiHeaderName: langBotApiHeader, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));

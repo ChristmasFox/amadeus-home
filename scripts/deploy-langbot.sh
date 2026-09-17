@@ -32,10 +32,8 @@ Build repository-owned LangBot plugins and optionally install them through the
 LangBot local-plugin API. The default mode is dry-run.
 
 Options:
-  --plugin NAME           Deploy one plugin (repeatable). Use all for the
-                          production set: pubg-stats-v3, organize-emby,
-                          macos-nas-control, product-radar. kurisu-gateway
-                          and pubg-stats-v2 are explicit.
+  --plugin NAME           Deploy one independent plugin (repeatable). Use all
+                          for organize-emby, macos-nas-control, product-radar.
   --patches               Prepare/build the LangBot image overlay with tracked
                           build-time patches.
   --patches-only          Skip plugin packaging and only handle patches.
@@ -118,12 +116,11 @@ expand_plugins() {
   for requested in "${REQUESTED_PLUGINS[@]}"; do
     case "$requested" in
       all)
-        add_plugin pubg-stats-v3
         add_plugin organize-emby
         add_plugin macos-nas-control
         add_plugin product-radar
         ;;
-      pubg-stats-v2|pubg-stats-v3|organize-emby|macos-nas-control|product-radar|kurisu-gateway)
+      organize-emby|macos-nas-control|product-radar)
         add_plugin "$requested"
         ;;
       *)
@@ -144,23 +141,13 @@ build_plugin() {
   [ -f "$manifest" ] || die "plugin manifest is missing: $manifest"
 
   mkdir -p "$BUILD_DIR"
-  case "$plugin" in
-    pubg-stats-v2)
-      "$REPO_ROOT/scripts/build_pubg_plugin.sh" "$output" >/dev/null
-      ;;
-    pubg-stats-v3)
-      "$REPO_ROOT/scripts/build_pubg_v3_plugin.sh" "$output" >/dev/null
-      ;;
-    *)
-      stage="$(mktemp -d "${TMPDIR:-/tmp}/agent-langbot-plugin.XXXXXX")"
-      cp -R "$source_dir/." "$stage/"
-      find "$stage" -type d -name __pycache__ -prune -exec rm -rf {} +
-      find "$stage" -type f \( -name '*.pyc' -o -name '*.lbpkg' \) -delete
-      rm -f "$output"
-      (cd "$stage" && zip -qr "$output" . -x '*/__pycache__/*' -x '*.pyc' -x '*.lbpkg')
-      rm -rf "$stage"
-      ;;
-  esac
+  stage="$(mktemp -d "${TMPDIR:-/tmp}/agent-langbot-plugin.XXXXXX")"
+  cp -R "$source_dir/." "$stage/"
+  find "$stage" -type d -name __pycache__ -prune -exec rm -rf {} +
+  find "$stage" -type f \( -name '*.pyc' -o -name '*.lbpkg' \) -delete
+  rm -f "$output"
+  (cd "$stage" && zip -qr "$output" . -x '*/__pycache__/*' -x '*.pyc' -x '*.lbpkg')
+  rm -rf "$stage"
 
   unzip -tq "$output" >/dev/null || die "invalid plugin package: $output"
   if unzip -Z1 "$output" | rg -n -i '(^|/)(\.env|\.env\.|.*\.(pem|key|p12|pfx|sqlite|sqlite3|db))$' >/dev/null; then
@@ -334,7 +321,6 @@ prepare_patch_context() {
     patch_kook_adapter.py \
     patch_telegram_adapter.py \
     patch_message_conversion.py \
-    patch_pubg_telegram_picker.py \
     whatsapp.py \
     whatsapp.yaml \
     whatsapp.svg; do
@@ -350,8 +336,6 @@ COPY patches/whatsapp.svg /app/src/langbot/pkg/platform/sources/whatsapp.svg
 RUN python /tmp/agent-monorepo-langbot-patches/patch_kook_adapter.py \
  && python /tmp/agent-monorepo-langbot-patches/patch_telegram_adapter.py \
  && python /tmp/agent-monorepo-langbot-patches/patch_message_conversion.py \
- && python /tmp/agent-monorepo-langbot-patches/patch_pubg_telegram_picker.py \
- && python /tmp/agent-monorepo-langbot-patches/patch_telegram_adapter.py \
  && python -m py_compile \
       /app/src/langbot/pkg/platform/sources/kook.py \
       /app/src/langbot/pkg/platform/sources/telegram.py \

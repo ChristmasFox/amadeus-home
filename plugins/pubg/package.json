@@ -1,0 +1,41 @@
+{
+  "name": "@agent/pubg-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "skills",
+    "openclaw.plugin.json",
+    "package.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --external:openclaw --external:openclaw/* --outfile=dist/index.js --sourcemap && esbuild src/migration-cli.ts --bundle --platform=node --format=esm --outfile=dist/migrate.js --sourcemap",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/**/*.test.ts"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.17"
+  },
+  "devDependencies": {
+    "@agent/pubg-domain": "workspace:*",
+    "@types/node": "22.18.6",
+    "esbuild": "0.28.2",
+    "openclaw": "2026.9.4",
+    "tsx": "4.23.13",
+    "typebox": "1.1.38",
+    "typescript": "5.9.2"
+  },
+  "openclaw": {
+    "extensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.5.17"
+    },
+    "build": {
+      "openclawVersion": "2026.9.4"
+    }
+  }
+}

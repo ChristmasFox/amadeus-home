@@ -1,19 +1,18 @@
 # 当前任务优先约束（2026-09-17）
 
-用户最新决定以 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md` 取代下文旧 Kurisu/LangBot 实施范围。只落地 OpenClaw 原生 PUBG 插件、独立 Domain 和 Telegram 私聊，直接到最终形态，不做灰度、shadow、双跑、兼容过渡或回滚演练。执行该 Goal 时已授权必要构建、CasaOS 一次性切换、数据迁移、提交和 push；使用显式 apply 执行，无需逐阶段再次请求。保留必要数据备份、权限、secret 保护与真实验收。本次提交仅创建实施计划，尚未实施新架构。
+用户最新决定以 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md` 取代下文旧 Kurisu/LangBot 实施范围。只落地 OpenClaw 原生 PUBG 插件、独立 Domain 和 Telegram 私聊，直接到最终形态，不做灰度、shadow、双跑、兼容过渡或回滚演练。执行该 Goal 时已授权必要构建、CasaOS 一次性切换、数据迁移、提交和 push；使用显式 apply 执行，无需逐阶段再次请求。保留必要数据备份、权限、secret 保护与真实验收。当前实现以 Git、live CasaOS 和最新 checkpoint 为准。
 
 旧多领域验收矩阵由新计划第 10 节替代；不能把不在本轮范围的功能扩展成新任务。其余 source of truth、用户改动保护、预算、checkpoint 和工程规则仍有效。以下架构/发布范围冲突以用户最新决定及新计划为准。
 
 # Agent Monorepo 工作规则
 
-## Kurisu 统一 Agent 实施范围
+## OpenClaw PUBG 实施范围
 
-实施该功能时必须先读取 `docs/KURISU_AGENT_IMPLEMENTATION_PLAN.md`、
-`docs/KURISU_AGENT_ACCEPTANCE.md` 和 `docs/KURISU_CODEX_GOAL.md`。当前仅有计划，不能把它当作已上线架构。
-P0 按证据选择并记录唯一主 Agent 宿主，优先复用用户现有 LangBot/9Router；后续不并行建设两个主 Agent。
-已迁移的普通自然语言不得通过关键词/正则领域路由或旧 fast path 抢先执行；协议命令、schema 校验和确定性业务规则仍保留。
-执行按阶段提交和验收，禁止删除失败用例、降低验收标准、用 mock 代替真实环境完成证明，或把回合结束当任务成功。
-开发 Goal 不自动授权生产 RELEASE；部署范围以用户后续明确指令为准。其余工程与预算规则保持有效。
+本仓库当前唯一产品 Goal 是 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md`：Telegram 私聊经由
+唯一 OpenClaw/Kurisu 和当前 9Router，调用唯一原生 PUBG plugin 与独立 Domain。旧
+LangBot/Mastra/Runtime PUBG 主链已经退出；不要恢复旧入口、关键词路由、兼容双跑或第二
+个 Agent。执行该 Goal 已授权必要的 build、CasaOS 一次性切换、迁移、提交和 push。
+执行仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
 
 ## Source of Truth
 
@@ -56,17 +55,16 @@ git log -5 --oneline --decorate
   **最低足够**的验证等级；不得把完整 release discovery 或 Docker build 当成每个 Goal 的默认动作。
 - **FAST**：docs、`.agent`、tests、skills、纯逻辑和小功能。运行定向 tests、受影响 package
   typecheck、`git diff --check`，按需 secrets scan；默认禁止 Docker build、Compose restart 和 deploy。
-- **RUNTIME**：`apps/agent-runtime/src/**`、`packages/homehub-domain/src/**` 与 runtime assets。运行受影响
-  typecheck/build、定向 tests、`scripts/smoke-agent-runtime.sh`；RUNTIME 不意味着 Docker build，HomeHub
-  source 变更不得自动升级 RELEASE。
+- **RUNTIME**：`packages/pubg-domain/**`、`plugins/pubg/**` 或独立 Product Radar 源码。运行受影响
+  typecheck/build 和定向 tests；RUNTIME 不意味着 Docker build 或 Compose restart。
 - **RELEASE**：只有用户明确要求实际 CasaOS 部署时才执行。Dockerfile、`.dockerignore`、`package.json`
   或 `pnpm-lock.yaml` 只标记 `RELEASE_BUILD_REQUIRED`，不会自行构建。顺序为 test -> secrets -> host
   BuildKit build -> immutable commit tag -> compose update -> `docker compose up -d --no-build` -> health/smoke
   -> rollback checkpoint。
 - `integrations/langbot/plugins/**` 走 plugin workflow；`integrations/langbot/patches/**` 走 LangBot image
   workflow；仅 env 改动只允许显式 `--apply` 的 no-build recreate。
-- `scripts/deploy-agent-runtime.sh` 默认 dry-run；普通 `--apply` 永远使用 `--no-build`。只有明确
-  `--apply --build` 才能创建并传入新的 runtime image。详细矩阵见 `docs/DEVELOPER_WORKFLOW.md`。
+- `scripts/deploy-openclaw.sh` 默认 dry-run；只有明确 `--apply` 才能切换、迁移或重建
+  CasaOS。只有明确 `--apply --build` 才能创建并传入新的 OpenClaw image。
 
 ## Codex Goal 预算（强制）
 
@@ -86,10 +84,9 @@ git log -5 --oneline --decorate
 
 ## 目录与运行时
 
-- `apps/agent-runtime` 是当前 Mastra/PUBG V3 的可运行 source-preserving 实现。
-- `apps/telemetry-worker` 和 `apps/whatsapp-adapter` 是稳定边界 facade；实现暂保留在 runtime，避免搬迁时改变线上行为。
-- `integrations/langbot` 只保存自定义插件、patch、WhatsApp 平台资源和示例配置；不复制 LangBot 第三方本体。
-- `integrations/n8n/workflows` 是 workflow 的 Git source of truth；n8n credentials 必须在仓库外重新绑定。
+- `plugins/pubg` 是唯一 PUBG 业务 plugin；`packages/pubg-domain` 是唯一 PUBG 领域实现。
+- `integrations/langbot` 与 `integrations/n8n` 只保存独立非 PUBG 资产，不是 PUBG 启动依赖。
+- 旧 Runtime、PUBG LangBot plugin、PUBG n8n workflow 和旧 facade 不在当前树中。
 - 长期 HomeLab 服务部署到 OrbStack Linux machine `ubuntu` 的 CasaOS，不默认使用 macOS host Docker。
 - CasaOS compose 真正位置：`/var/lib/casaos/apps/<app>/docker-compose.yml`；持久化数据：`/DATA/AppData/<app>`；共享存储：`/Volumes/Avalon/...`。
 
@@ -113,7 +110,7 @@ pnpm check:secrets
 
 ## LangBot 与 n8n 工作流
 
-- LangBot 插件源在 `integrations/langbot/plugins/`，构建产物 `.lbpkg` 被忽略；优先使用 `scripts/deploy-langbot.sh --dry-run` 预览，再显式传入 `--apply`。
+- 独立 LangBot 插件源在 `integrations/langbot/plugins/`，构建产物 `.lbpkg` 被忽略；优先使用 `scripts/deploy-langbot.sh --dry-run` 预览，再显式传入 `--apply`。
 - `integrations/langbot/patches/` 是第三方镜像的 build-time patch 集合。升级 LangBot 时必须重新应用、编译检查并更新兼容版本、状态文档和 checkpoint。
 - n8n workflow 的 source path 是 `integrations/n8n/workflows/`；导入、导出和 credential 重绑都要记录在状态文档中。
 

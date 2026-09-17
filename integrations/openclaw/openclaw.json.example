@@ -1,0 +1,101 @@
+{
+  "gateway": {
+    "mode": "local",
+    "bind": "lan",
+    "port": 18789,
+    "auth": {
+      "mode": "token"
+    },
+    "controlUi": {
+      "enabled": true,
+      "allowedOrigins": [
+        "http://127.0.0.1:18789",
+        "http://localhost:18789"
+      ]
+    }
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "/home/node/.openclaw/workspace",
+      "model": {
+        "primary": "nine_router/arthur-combo"
+      },
+      "userTimezone": "Asia/Shanghai",
+      "timeoutSeconds": 300
+    }
+  },
+  "models": {
+    "mode": "replace",
+    "providers": {
+      "nine_router": {
+        "baseUrl": "http://9router:20128/v1",
+        "apiKey": {
+          "source": "env",
+          "provider": "default",
+          "id": "OPENCLAW_9ROUTER_API_KEY"
+        },
+        "api": "openai-completions",
+        "timeoutSeconds": 300,
+        "models": [
+          {
+            "id": "arthur-combo",
+            "name": "arthur-combo",
+            "reasoning": true,
+            "input": ["text", "image"],
+            "contextWindow": 1000000,
+            "maxTokens": 32768
+          }
+        ]
+      }
+    }
+  },
+  "tools": {
+    "allow": [
+      "pubg_resolve_players",
+      "pubg_search_matches",
+      "pubg_query_stats",
+      "pubg_compare_stats",
+      "pubg_get_match",
+      "pubg_get_review_facts"
+    ]
+  },
+  "plugins": {
+    "enabled": true,
+    "allow": ["pubg"],
+    "load": {
+      "paths": ["/app/extensions/pubg"]
+    },
+    "entries": {
+      "pubg": {
+        "enabled": true,
+        "config": {
+          "databasePath": "/data/pubg.sqlite",
+          "teamConfigFile": "/run/secrets/pubg_team.json",
+          "apiKeyFile": "/run/secrets/pubg_api_key",
+          "apiBaseUrl": "https://api.pubg.com",
+          "timezone": "Asia/Shanghai",
+          "businessDayStart": "00:00",
+          "maxMatches": 500,
+          "freshnessMs": 300000
+        }
+      }
+    }
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "tokenFile": "/run/secrets/telegram_bot_token",
+      "dmPolicy": "allowlist",
+      "allowFrom": [],
+      "groupPolicy": "disabled",
+      "streaming": {
+        "mode": "off"
+      },
+      "configWrites": false,
+      "commands": {
+        "native": false,
+        "nativeSkills": false
+      }
+    }
+  }
+}

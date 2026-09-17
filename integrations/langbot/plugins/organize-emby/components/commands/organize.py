@@ -13,7 +13,7 @@ from langbot_plugin.api.definition.components.command.command import Command
 from langbot_plugin.api.entities.builtin.command.context import CommandReturn, ExecuteContext
 
 N8N_BASE_URL = os.environ.get("ORGANIZE_N8N_BASE_URL", "http://n8n:5678").rstrip("/")
-HOMEHUB_AUTH_URL = os.environ.get("HOMEHUB_AUTH_URL", "http://pubg-query-engine-v3:5310").rstrip("/")
+HOMEHUB_AUTH_URL = os.environ.get("HOMEHUB_AUTH_URL", "").rstrip("/")
 N8N_TIMEOUT_SECONDS = 45
 AUTH_TIMEOUT_SECONDS = 10
 PENDING_PREVIEWS: dict[str, dict[str, Any]] = {}
@@ -89,6 +89,8 @@ def authorize_session(
     target: str | None = None,
 ) -> dict[str, Any]:
     """Ask the shared HomeHub AuthorizationCore and fail closed on transport errors."""
+    if not HOMEHUB_AUTH_URL:
+        raise RuntimeError("HomeHub Authorization service is not configured，已拒绝媒体整理")
     payload = json.dumps(
         authorization_payload(session, action=action, confirmed=confirmed, target=target),
         ensure_ascii=False,

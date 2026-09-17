@@ -81,7 +81,7 @@ command -v orb >/dev/null 2>&1 || { printf '%s\n' 'OrbStack CLI not found.' >&2;
 
 if [ "$ALLOW_RUNNING" -eq 0 ]; then
   running="$(orb -m "$MACHINE" -u root docker ps --format '{{.Names}}' 2>/dev/null || true)"
-  if printf '%s\n' "$running" | awk '$1 == "langbot" || $1 == "n8n" || $1 == "pubg-query-engine-v3" || $1 == "langbot_plugin_runtime" { found = 1 } END { exit found ? 0 : 1 }'; then
+  if printf '%s\n' "$running" | awk '$1 == "openclaw" || $1 == "langbot" || $1 == "n8n" || $1 == "product-radar" || $1 == "langbot_plugin_runtime" { found = 1 } END { exit found ? 0 : 1 }'; then
     printf '%s\n' 'Target services are running. Stop them first or pass --allow-running explicitly.' >&2
     exit 1
   fi

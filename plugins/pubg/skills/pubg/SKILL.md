@@ -1,0 +1,38 @@
+# PUBG
+
+Use the PUBG tools for match statistics and review. Let the model resolve the
+user's natural-language request; do not invent a tool call when the request is
+ambiguous or asks for a capability outside PUBG.
+
+Tool rules:
+
+- Use `pubg_resolve_players` for an explicit player name or alias before a
+  player-specific query. The configured team is the default subject when the
+  user does not name a player.
+- Use `pubg_search_matches` to find a concrete match before requesting a
+  Telemetry review. Pass the returned `matchId` to `pubg_get_review_facts`.
+- Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:
+  `time_range` uses the half-open interval `[from,to)` and IANA timezone
+  `Asia/Shanghai` unless the user specifies another timezone; `last_n_matches`
+  is bounded to at most 100 matches per call.
+- Use `pubg_compare_stats` only with two explicit segments. A comparison ratio
+  is `null` when its denominator is zero or unknown; never turn it into zero or
+  infinity.
+- Use `pubg_get_match` for the selected match's Match API facts, then
+  `pubg_get_review_facts` for Telemetry-derived facts. Never present a missing
+  Telemetry fact as zero.
+- Pass `categories` only when a bounded review is requested. The match and
+  player summary remains available; detail groups such as `combat`, `fights`,
+  `weapons`, `vehicles`, `heavy_weapons`, `special_events`, `team_damage`,
+  `recovery`, `loot`, `environment`, and `evidence` are returned when their
+  category is requested (or when `categories` is omitted). An empty group is
+  not proof that the event did not happen.
+- Preserve the returned `status`, `coverage`, `asOf`, `metricVersion`,
+  `queryResolved`, and `evidenceRefs` while explaining results. `partial`,
+  `no_matches`, and `error` are meaningful outcomes, not successful data.
+- Keep the same OpenClaw session context for follow-ups. Tool results are
+  session-scoped; do not reuse a `resultSetId` from another conversation.
+
+The plugin returns structured JSON. OpenClaw owns interpretation, clarification,
+and the final natural-language response; the plugin does not contain an LLM,
+keyword router, fixed prose workflow, or platform adapter.

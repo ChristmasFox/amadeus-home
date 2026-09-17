@@ -2,25 +2,20 @@
 
 ## Source of truth
 
-integrations/n8n/workflows/ 中的 JSON 是 workflow 的 Git source of truth：
+integrations/n8n/workflows/ 中的 JSON 是仍保留 workflow 的 Git source of truth：
 
-- pubg-data-gateway-v3.workflow.json：V3 查询 data gateway；
-- pubg-sync-matches-v3.workflow.json：V3 同步；
-- legacy/pubg-query-gateway-v2.workflow.json：V2 查询兼容；
-- legacy/pubg-sync-matches-v2.workflow.json：V2 同步兼容；
-- pubg-daily-stats.workflow.json：历史每日战绩 workflow（KD 展示统一 1 位小数）；
-- daily-tech-market-digest.workflow.json：每日科技与市场简报 producer；它保留调度、采集、去重和报告持久化，发送方将在 Kurisu 通知交接完成后由 Runtime 统一管理；
-- organize-workflows.json：媒体整理 workflow；
-- pubg-api-credential.placeholder.json：credential 结构 placeholder，不含真实 key。
+- organize-workflows.json：媒体整理 workflow。
+
+PUBG 数据同步、日报、旧 gateway 和旧通知 producer 已随 OpenClaw 一次性迁移退出；
+它们的运行数据只保留在仓库外备份，不作为新 PUBG 启动依赖。
 
 ## 导入流程
 
 1. 先启动目标 n8n，并在外部恢复 n8n data。
-2. 在 Credentials 页面重新创建 PUBG API、媒体整理或其他所需 credentials。
-3. 导入对应 workflow JSON，重新选择 credential，检查 webhook path、Data Table、
-   timezone、base URL 和 active 状态。
-4. 使用测试请求验证 data gateway，再启用同步 workflow。
-5. 把目标实例的 workflow ID / active 状态和验证结果写回 docs/PROJECT_STATE.md。
+2. 在 Credentials 页面重新创建仍保留业务所需的 credentials。
+3. 导入对应 workflow JSON，重新选择 credential，检查 webhook path、timezone、
+   base URL 和 active 状态。
+4. 把目标实例的 workflow ID / active 状态和验证结果写回 docs/PROJECT_STATE.md。
 
 workflow JSON 不应包含 API key、Authorization header 的真实值、n8n credential
 导出值或用户数据。发现 credential export 时先删除敏感值，再提交。

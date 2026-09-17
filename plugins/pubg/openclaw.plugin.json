@@ -1,0 +1,62 @@
+{
+  "id": "pubg",
+  "name": "PUBG Stats",
+  "description": "Deterministic PUBG match statistics and telemetry review tools.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "databasePath": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "teamConfigFile": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "apiKeyFile": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "apiBaseUrl": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "timezone": {
+        "type": "string",
+        "maxLength": 128
+      },
+      "businessDayStart": {
+        "type": "string",
+        "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+      },
+      "maxMatches": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000
+      },
+      "freshnessMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 86400000
+      }
+    },
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "skills": [
+    "skills/pubg"
+  ],
+  "contracts": {
+    "tools": [
+      "pubg_resolve_players",
+      "pubg_search_matches",
+      "pubg_query_stats",
+      "pubg_compare_stats",
+      "pubg_get_match",
+      "pubg_get_review_facts"
+    ]
+  }
+}

@@ -1,0 +1,315 @@
+import { strict as assert } from 'node:assert';
+import { createRequire } from 'node:module';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import test from 'node:test';
+import {
+  DeterministicQueryEngine,
+  PubgApiClient,
+  PubgApiError,
+  SqlitePubgRepository,
+  businessDayLabel,
+  extractMatchReviewFacts,
+  importLegacyPubgData,
+  normalizeRecords,
+  selectMatchReviewFactCategories,
+  type Coverage,
+  type NormalizedMatch,
+  type TeamConfig,
+} from '../src/index.js';
+
+const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+  DatabaseSync: new (path: string) => {
+    exec(sql: string): void;
+    prepare(sql: string): { run(...params: unknown[]): unknown };
+    close(): void;
+  };
+};
+
+const TEAM: TeamConfig = {
+  id: 'team-test',
+  label: 'Test Team',
+  platform: 'steam',
+  players: [
+    { id: 'p1', name: 'Alice', aliases: ['a'] },
+    { id: 'p2', name: 'Bob', aliases: ['b'] },
+  ],
+};
+
+const SOURCE = { store: 'fixture', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: 3 };
+const COVERAGE: Coverage = {
+  status: 'OK',
+  complete: true,
+  coverageStart: '2026-09-15T00:00:00.000Z',
+  coverageEnd: '2026-09-17T00:00:00.000Z',
+  checkedAt: '2026-09-17T00:00:00.000Z',
+  failedMatchIds: [],
+  sourceUnavailable: false,
+  freshness: 'fresh',
+  queryCovered: true,
+  requiredMatchCount: 3,
+  availableMatchCount: 3,
+};
+
+function rawMatch(
+  matchId: string,
+  createdAt: string,
+  players: Array<Record<string, unknown>>,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    schemaVersion: 3,
+    matchId,
+    shard: 'steam',
+    createdAt,
+    matchType: 'competitive',
+    gameMode: 'squad-fpp',
+    isCompetitive: true,
+    mapName: 'Erangel',
+    duration: 1200,
+    patchVersion: 'test',
+    players,
+    ...extra,
+  };
+}
+
+const RAW_RECORDS = [
+  rawMatch('m1', '2026-09-15T16:00:00.000Z', [
+    { accountId: 'p1', playerName: 'Alice', kills: 4, deaths: 2, assists: 1, damage: 100, rank: 3 },
+    { accountId: 'p2', playerName: 'Bob', kills: 3, deaths: 0, damage: 50, rank: 1 },
+  ]),
+  rawMatch('m2', '2026-09-16T12:00:00.000Z', [
+    { accountId: 'p1', playerName: 'Alice', kills: 2, deaths: 1, assists: 2, damage: 80, rank: 5 },
+    { accountId: 'p2', playerName: 'Bob', kills: 1, deaths: 0, assists: 0, damage: 10, rank: 2 },
+  ], { mapName: 'Taego', gameMode: 'duo-fpp' }),
+  rawMatch('m3', '2026-09-17T00:00:00.000Z', [
+    { accountId: 'p1', playerName: 'Alice', kills: 99, deaths: 1, rank: 1 },
+  ]),
+];
+
+function query(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    version: 3,
+    queryId: 'q-test',
+    domain: 'pubg',
+    subject: { type: 'players', ids: ['p1', 'p2'] },
+    operation: 'report',
+    selector: {
+      type: 'time_range',
+      start: '2026-09-15T00:00:00.000Z',
+      end: '2026-09-17T00:00:00.000Z',
+      timezone: 'Asia/Shanghai',
+      businessDayStart: '00:00',
+    },
+    matchSelector: null,
+    segments: [],
+    groupBy: 'player',
+    metrics: ['kills', 'kd', 'assists'],
+    filters: {},
+    orderBy: { metric: 'kills', direction: 'desc' },
+    limit: null,
+    reference: {
+      sessionId: 'telegram:chat-a:user-a:pubg',
+      selectorExplicit: true,
+      subjectExplicit: true,
+      useResultSet: false,
+      inheritedFromContext: false,
+      planner: 'provided',
+    },
+    presentation: { compact: true },
+    ...overrides,
+  };
+}
+
+test('normalization deduplicates match IDs and preserves unknown death semantics', () => {
+  const records = normalizeRecords([
+    ...RAW_RECORDS,
+    rawMatch('m1', '2026-09-15T16:00:00.000Z', [
+      { accountId: 'p1', playerName: 'Alice', kills: 4, deaths: 2, assists: 1, damage: 100, rank: 3 },
+      { accountId: 'p2', playerName: 'Bob', kills: 3, deaths: 0, damage: 50, rank: 1 },
+      { accountId: 'p3', playerName: 'Other', kills: 1, deaths: 1, rank: 8 },
+    ]),
+  ]);
+  assert.equal(records.length, 3);
+  assert.equal(records.find((record) => record.matchId === 'm1')?.players.length, 3);
+  const unknown = normalizeRecords([rawMatch('unknown', '2026-09-16T00:00:00.000Z', [{ accountId: 'p1', kills: 1 }])])[0]!;
+  assert.equal(unknown.players[0]?.deaths, null);
+  assert.equal(unknown.players[0]?.deathSemantics, 'unknown');
+  assert.ok(unknown.players.every((player) => Number.isFinite(player.kills)));
+});
+
+test('query engine uses half-open time ranges, zero-safe KD, missing assists, and category grouping', () => {
+  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const result = engine.execute(query(), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.equal(result.status, 'OK');
+  assert.equal(result.evidence.matchIds.includes('m3'), false);
+  const alice = result.data.rows.find((row) => row.key === 'p1')!;
+  const bob = result.data.rows.find((row) => row.key === 'p2')!;
+  assert.equal(alice.metrics.kills, 6);
+  assert.equal(alice.metrics.kd, 2);
+  assert.equal(alice.metrics.assists, 3);
+  assert.equal(bob.metrics.kd, null);
+  assert.equal(bob.metrics.denominatorZero, 1);
+
+  const mapResult = engine.execute(query({ groupBy: 'map' }), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.deepEqual(mapResult.data.rows.map((row) => row.label), ['Erangel', 'Taego']);
+  const modeResult = engine.execute(query({ groupBy: 'mode' }), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.deepEqual(modeResult.data.rows.map((row) => row.label), ['squad-fpp', 'duo-fpp']);
+});
+
+test('business-day labels handle cross-midnight boundaries in Asia/Shanghai', () => {
+  const beforeStart = Date.parse('2026-09-15T21:59:00.000Z');
+  const atStart = Date.parse('2026-09-15T22:00:00.000Z');
+  assert.equal(businessDayLabel(beforeStart, 'Asia/Shanghai', '06:00'), '2026-09-15');
+  assert.equal(businessDayLabel(atStart, 'Asia/Shanghai', '06:00'), '2026-09-16');
+});
+
+test('compare emits null ratios when a denominator is zero and never serializes Infinity or NaN', () => {
+  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const compared = engine.execute(query({
+    operation: 'compare',
+    segments: [
+      { label: 'first', selector: { type: 'time_range', start: '2026-09-15T00:00:00.000Z', end: '2026-09-16T00:00:00.000Z', timezone: 'Asia/Shanghai', businessDayStart: '00:00' } },
+      { label: 'second', selector: { type: 'time_range', start: '2026-09-16T00:00:00.000Z', end: '2026-09-17T00:00:00.000Z', timezone: 'Asia/Shanghai', businessDayStart: '00:00' } },
+    ],
+  }), RAW_RECORDS, COVERAGE, SOURCE);
+  const alice = compared.data.rows.find((row) => row.key === 'p1')!;
+  assert.equal(alice.comparisonRatios?.kd, 1);
+  const bob = compared.data.rows.find((row) => row.key === 'p2')!;
+  assert.equal(bob.comparisonRatios?.kd, null);
+  assert.equal(bob.metrics.kd, null);
+  const serialized = JSON.stringify(compared);
+  assert.equal(serialized.includes('Infinity'), false);
+  assert.equal(serialized.includes('NaN'), false);
+});
+
+test('PUBG API retries bounded 5xx responses and never exposes credentials in errors', async () => {
+  let calls = 0;
+  const delays: number[] = [];
+  const client = new PubgApiClient({
+    apiKey: 'secret-api-key',
+    baseUrl: 'https://api.example.test',
+    maxRetries: 2,
+    sleep: async (ms) => { delays.push(ms); },
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) return new Response(JSON.stringify({ errors: [{ title: 'temporary' }] }), { status: 503 });
+      return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'content-type': 'application/vnd.api+json' } });
+    },
+  });
+  assert.deepEqual(await client.discoverPlayers('steam', ['p1']), []);
+  assert.equal(calls, 2);
+  assert.deepEqual(delays, [1000]);
+
+  const failing = new PubgApiClient({
+    apiKey: 'secret-api-key',
+    maxRetries: 0,
+    fetchImpl: async () => new Response(JSON.stringify({ errors: [{ title: 'unauthorized' }] }), { status: 401 }),
+  });
+  await assert.rejects(failing.discoverPlayers('steam', ['p1']), (error: unknown) => {
+    assert.ok(error instanceof PubgApiError);
+    assert.equal(error.code, 'unauthorized');
+    assert.equal(error.name, 'PubgApiError');
+    assert.equal(String(error).includes('secret-api-key'), false);
+    return true;
+  });
+});
+
+test('SQLite repository survives restart, counts duplicate inputs, and isolates result sets by session', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-repository-'));
+  const dbPath = join(root, 'pubg.sqlite');
+  try {
+    const first = new SqlitePubgRepository(dbPath);
+    const write = first.upsertMatches([RAW_RECORDS[0], RAW_RECORDS[0], RAW_RECORDS[1]]);
+    assert.equal(write.inserted, 2);
+    assert.equal(write.duplicateInputs, 1);
+    assert.equal(first.countMatches(), 2);
+    const storedResult = {
+      id: 'rs-a', queryId: 'q', sessionId: 'session-a', resolvedQuery: query(), resolvedSelector: query().selector,
+      playerIds: ['p1'], matchIds: ['m1'], rows: [], aggregates: {}, rankings: [], coverage: COVERAGE,
+      status: 'OK', source: SOURCE, createdAt: '2026-09-17T00:00:00.000Z', expiresAt: '2099-01-01T00:00:00.000Z',
+    } as never;
+    first.setResultSet(storedResult);
+    first.close();
+
+    const second = new SqlitePubgRepository(dbPath);
+    assert.equal(second.countMatches(), 2);
+    assert.equal(second.getMatch('m1')?.players.length, 2);
+    assert.ok(second.getResultSet('session-a', 'rs-a'));
+    assert.equal(second.getResultSet('session-b', 'rs-a'), null);
+    second.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('legacy importer is dry-run first, idempotent on apply, and reports invalid/duplicate data', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-import-'));
+  const legacyPath = join(root, 'n8n.sqlite');
+  const statePath = join(root, 'state.json');
+  const featuresPath = join(root, 'features.json');
+  const targetPath = join(root, 'target.sqlite');
+  try {
+    const legacy = new DatabaseSync(legacyPath);
+    legacy.exec('CREATE TABLE "data_table_user_fixture" (payload TEXT)');
+    const insert = legacy.prepare('INSERT INTO "data_table_user_fixture" (payload) VALUES (?)');
+    insert.run(JSON.stringify(RAW_RECORDS[0]));
+    insert.run(JSON.stringify(RAW_RECORDS[0]));
+    insert.run('{invalid-json');
+    legacy.close();
+    writeFileSync(statePath, JSON.stringify({ contexts: { stale: true }, records: [RAW_RECORDS[1]] }));
+    writeFileSync(featuresPath, JSON.stringify({ features: { f1: { matchId: 'm1', parserVersion: 'p1', featureVersion: 'f1', facts: { evidence: [] }, createdAt: '2026-09-17T00:00:00.000Z' } } }));
+
+    const dryRepository = new SqlitePubgRepository(targetPath);
+    const dry = importLegacyPubgData(dryRepository, { n8nDatabasePath: legacyPath, stateJsonPath: statePath, featuresJsonPath: featuresPath, migrationId: 'migration-1', apply: false });
+    assert.equal(dry.apply, false);
+    assert.equal(dry.uniqueMatchIds, 2);
+    assert.equal(dry.duplicateInputs, 1);
+    assert.equal(dry.invalidInputs, 0);
+    assert.ok(dry.errors.length > 0);
+    assert.equal(dryRepository.countMatches(), 0);
+    dryRepository.close();
+
+    const appliedRepository = new SqlitePubgRepository(targetPath);
+    const applied = importLegacyPubgData(appliedRepository, { n8nDatabasePath: legacyPath, stateJsonPath: statePath, featuresJsonPath: featuresPath, migrationId: 'migration-1', apply: true });
+    assert.equal(applied.inserted, 2);
+    assert.equal(applied.importedFeatures, 1);
+    assert.equal(appliedRepository.snapshot().matches, 2);
+    assert.ok(appliedRepository.getMigration('migration-1'));
+    const rerun = importLegacyPubgData(appliedRepository, { n8nDatabasePath: legacyPath, stateJsonPath: statePath, featuresJsonPath: featuresPath, migrationId: 'migration-1', apply: true });
+    assert.equal(rerun.inserted, 0);
+    assert.equal(rerun.updated, 2);
+    assert.equal(appliedRepository.snapshot().matches, 2);
+    appliedRepository.close();
+    assert.ok(readFileSync(targetPath).byteLength > 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('review facts retain evidence IDs for Match Store facts', () => {
+  const match = normalizeRecords([RAW_RECORDS[0]])[0]!;
+  const facts = extractMatchReviewFacts(match, { events: [] }, TEAM);
+  const evidenceIds = new Set(facts.evidence.map((item) => item.id));
+  assert.ok(evidenceIds.has('match-summary-m1'));
+  assert.ok(evidenceIds.has('player-summary-m1-p1'));
+  assert.ok(evidenceIds.has('player-summary-m1-p2'));
+  for (const evidenceId of facts.players.flatMap((player) => player.keyOperations.flatMap((operation) => operation.evidenceIds))) {
+    assert.ok(evidenceIds.has(evidenceId));
+  }
+});
+
+test('review fact categories bound detail groups without losing the match summary', () => {
+  const match = normalizeRecords([RAW_RECORDS[0]!])[0]!;
+  const facts = extractMatchReviewFacts(match, { events: [] }, TEAM);
+  const selected = selectMatchReviewFactCategories(facts, ['weapons']);
+  assert.equal(selected.match.matchId, 'm1');
+  assert.deepEqual(selected.squad.playerIds, ['p1', 'p2']);
+  assert.deepEqual(selected.fights, []);
+  assert.deepEqual(selected.combat.events, []);
+  assert.equal(selected.combat.eventCount, 0);
+  assert.deepEqual(selected.vehicles, []);
+  assert.deepEqual(selected.evidence, []);
+  assert.deepEqual(selectMatchReviewFactCategories(facts, []), facts);
+});

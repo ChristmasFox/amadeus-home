@@ -2,7 +2,7 @@
 
 The adapter uses LangBot's unified ``/bots/<bot_uuid>`` webhook route.  Meta's
 POST is authenticated and parsed before a listener task is scheduled; the
-HTTP response is returned without waiting for aggregation, Mastra, or PUBG.
+HTTP response is returned without waiting for downstream processing.
 """
 
 from __future__ import annotations

@@ -1,62 +1,31 @@
 # Decisions
 
-## 2026-09-05：仓库边界
+更新时间：2026-09-17（Asia/Shanghai）
 
-不把 /Users/blacksidev 整体初始化为 Git 仓库，而是在
-/Users/blacksidev/agent-monorepo 建立独立仓库。这样不会把无关的个人文件、
-临时状态和其他项目意外纳入迁移范围。
+## OpenClaw 是唯一 PUBG Agent 宿主
 
-## 2026-09-05：source-preserving runtime
+采用 OpenClaw 2026.9.4 原生 plugin 机制，当前 9Router route nine_router/arthur-combo
+保持不变。OpenClaw 负责自然语言、会话和最终回复；PUBG plugin 不做二次规划、不调用
+LLM，也不套旧 HTTP gateway。
 
-apps/agent-runtime 保留现有 Mastra/PUBG V3 相对导入和部署形态；
-packages/* 与独立 app 先作为稳定 facade。迁移的首要目标是可恢复和不改变线上
-行为，真正拆包另行进行并配套测试。
+## Domain 与平台解耦
 
-## 2026-09-05：LangBot 第三方本体不入库
+PUBG Domain 位于 packages/pubg-domain，只接收结构化输入并输出确定性事实、coverage、
+版本和 evidenceRefs。Telegram 身份、OpenClaw SDK 和外部文件读取停留在 plugin/config 边界。
 
-只追踪自定义插件、patch、WhatsApp 资源、配置键模板和兼容版本。第三方源码、
-容器层和运行时数据通过版本化镜像或外部恢复流程提供。
+## 一次性迁移
 
-## 2026-09-05：数据与 Git 分离
+旧比赛/Telemetry 数据在切换前导入 OpenClaw SQLite。导入器 dry-run 默认、apply 显式、
+按 matchId 和 feature key 幂等。迁移前保留一次仓库外 checkpoint；不做 shadow、双写、灰度
+或旧架构回滚演练。
 
-Git 只保存系统定义。Postgres、n8n data、LangBot data、runtime state 和重要
-volume 使用 backup/restore；Redis 默认视为可重建缓存。备份脚本默认排除
-credentials，秘密归档必须独立并在仓库外加密保存。
+## 非 PUBG 服务独立保留
 
-## 2026-09-05：CasaOS 是 canonical runtime
+Product Radar、LangBot、n8n 只按各自业务运行，不成为 PUBG 启动依赖。依赖已退休通知端点
+的 Product Radar owner、日报和旧 Codex producer 停用；不删除这些服务的无关业务数据。
 
-长期 HomeLab 服务部署在 OrbStack ubuntu 的 CasaOS。仓库的 Docker 文件是
-脱敏模板，实际修改应落在 /var/lib/casaos/apps/<app>/docker-compose.yml，
-不默认使用 macOS host Docker。
+## Secrets 与部署
 
-## 2026-09-05：workflow source of truth
-
-n8n workflow JSON 进入 Git；credential 由 n8n 目标实例重新建立。这样 workflow
-可以审查和回滚，又不会把 n8n credential export 误当成安全配置。
-
-## 2026-09-05：不自动推送
-
-初始化只在本地执行 git init / git commit。除非用户单独授权，否则不添加
-公网 remote、不 push，也不把备份归档放入仓库。
-
-## 2026-09-05：WhatsApp 接入暂缓
-
-Meta WhatsApp Cloud API 的商业版能力（如 webhook 批量验证、会话模板、
-高并发消息队列）是接入稳定性与合规的必要前提。当前开源版限制与平台变更
-频率较高，暂不继续投入实现和部署。
-
-保留原因：
-- 已完成的 Adapter、实验代码和 LangBot patch 作为 future integration reference
-- Cloudflare Tunnel 配置保留，后续仍可用于 Webhook / HomeLab API
-- 代码不影响 KOOK / Telegram runtime，相关导出和能力定义保持静态配置
-
-恢复条件：
-- 获得 WhatsApp Business API 商业版授权
-- 明确所需的消息模板、会话状态和 webhook 验签能力
-- 完成与现有 runtime 的集成测试和性能基准
-
-恢复操作：
-1. 重新评估 Meta Cloud API 最新能力与合规要求
-2. 更新 docs/CURRENT_TASK.md 状态
-3. 启用 apps/agent-runtime/src/platform/whatsapp 相关代码
-4. 配置 Cloudflare Tunnel 和 LangBot webhook 集成
+生产 secret、Telegram owner、队伍配置、API key 和数据库只存在 OrbStack ubuntu 的
+外部路径。CasaOS compose 位于 /var/lib/casaos/apps，服务使用 docker compose up -d
+--no-build；需构建时先由 host BuildKit 生成固定 image，再显式 apply。

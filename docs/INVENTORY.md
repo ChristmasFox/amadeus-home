@@ -1,49 +1,27 @@
 # Migration Inventory
 
-更新时间：2026-09-05（Asia/Shanghai）
+更新时间：2026-09-17（Asia/Shanghai）
 
-## 已迁移的系统定义
+## 当前源代码
 
-| 区域 | 内容 |
-| --- | --- |
-| apps/agent-runtime | Mastra/PUBG V3 server、query engine、planner、telemetry、review、platform adapter、WhatsApp、tests、Dockerfile、部署 compose |
-| apps/telemetry-worker | Telemetry public facade 与说明 |
-| apps/whatsapp-adapter | WhatsApp public facade 与说明 |
-| packages/contracts | 共享 contract facade |
-| packages/platform-core | platform core facade |
-| packages/pubg-domain | V3 facade 与 V2 Python domain/tests |
-| packages/presentation | presentation facade |
-| integrations/langbot/plugins | pubg-stats V2/V3、organize-emby、macOS NAS control 及测试 |
-| integrations/langbot/patches | KOOK、Telegram polling、message conversion、PUBG picker、WhatsApp patch/resource |
-| integrations/n8n/workflows | V3、V2 legacy、PUBG daily stats、organize-emby、credential placeholder |
-| docs/archive | CasaOS、PUBG V3、Platform Adapter 和脱敏 baseline 历史资料 |
-| infra | Docker/CasaOS、Cloudflare、macOS 迁移模板 |
-| scripts | bootstrap、doctor、backup、restore、secret scan、插件构建和 workflow 工具 |
-| .agent | 会话状态、任务规则、checkpoint |
+- `plugins/pubg`：唯一本项目 OpenClaw 业务 plugin。
+- `packages/pubg-domain`：独立 PUBG Domain、SQLite 和一次性迁移器。
+- `integrations/openclaw`：OpenClaw 配置/workspace 模板。
+- `infra/docker/casaos/openclaw`：CasaOS 部署模板。
+- `apps/product-radar`：独立、非 PUBG 应用。
+- `integrations/langbot`、`integrations/n8n`：独立非 PUBG 资产。
 
-## 明确排除
+旧 PUBG Runtime、Mastra facade、PUBG LangBot plugins、PUBG n8n workflows、旧
+generators、旧通知桥和 V2 compatibility source 已从当前树删除；Git 历史仍可审计，
+不作为运行时 fallback。
 
-- 第三方 LangBot 本体；
-- node_modules、编译产物 dist、Python cache、.pyc；
-- LangBot .lbpkg 构建产物；
-- 日志、临时目录和真实比赛压缩数据；
-- .env、secret files、证书、token、API key、数据库密码；
-- Postgres / n8n / LangBot / Redis 的运行时 volume；
-- 原始含真实密钥的 9router 与 aria2 compose。
+## 仓库外数据
 
-## 兼容版本基线
+迁移前的 LangBot DB、n8n SQLite、旧 state/features、PUBG API key 和 Telegram identity
+只存在 OrbStack `ubuntu` 的 AppData/secrets。一次性切换脚本会在
+`/DATA/AppData/openclaw/backups/<id>` 生成 checkpoint；其中数据库和配置备份不提交。
 
-- LangBot：当前运行定制版本基于 4.10.8；
-- Mastra：@mastra/core 1.63.2；
-- Node：>=22；
-- pnpm：9.9.x；
-- Telemetry parser：telemetry-parser-6；
-- Review features：review-features-6；
-- n8n sandbox：当前 compose 使用 1.1.1 API/runner service；
-- HomeLab 服务镜像版本与路径以 infra/docker/ 模板及目标 CasaOS 实例为准。
+## Secrets
 
-## 来源与审计
-
-迁移遵循“只复制明确在本任务范围内的代码和配置”原则。生成目录、容器层和机器
-本地状态没有作为源码归档；运行时基线中的敏感值已经以 placeholder 或
-<redacted> 形式处理。提交前使用 pnpm check:secrets 再次扫描。
+禁止提交 Bot token、API key、密码、`.env`、证书、n8n credentials 和真实业务数据。
+提交前运行 `pnpm check:secrets`。

@@ -1,0 +1,47 @@
+# CasaOS template. Copy to /var/lib/casaos/apps/openclaw/docker-compose.yml
+# only after an explicit RELEASE apply. The deployment script replaces the
+# image with an immutable locally loaded tag and writes the config separately.
+services:
+  openclaw:
+    image: ${OPENCLAW_IMAGE:-local/openclaw-pubg:unbuilt}
+    container_name: openclaw
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${OPENCLAW_ENV_FILE:-/DATA/AppData/openclaw/openclaw.env}
+    environment:
+      HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      PUBG_DATABASE_PATH: /data/pubg.sqlite
+      PUBG_TEAM_CONFIG_FILE: /run/secrets/pubg_team.json
+      PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      TZ: Asia/Shanghai
+      HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
+      HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
+      NO_PROXY: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
+      http_proxy: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
+      https_proxy: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
+      no_proxy: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
+    volumes:
+      - ${OPENCLAW_CONFIG_DIR:-/DATA/AppData/openclaw/config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_DIR:-/DATA/AppData/openclaw/workspace}:/home/node/.openclaw/workspace
+      - ${OPENCLAW_PUBG_DATA_DIR:-/DATA/AppData/openclaw/data}:/data
+      - ${OPENCLAW_TEAM_CONFIG_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-team.json}:/run/secrets/pubg_team.json:ro
+      - ${PUBG_API_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
+      - ${OPENCLAW_TELEGRAM_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
+    ports:
+      - "${OPENCLAW_BIND_ADDRESS:-127.0.0.1}:${OPENCLAW_PORT:-18789}:18789"
+    networks:
+      - nine_router_network
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  nine_router_network:
+    external: true
+    name: 9router_default

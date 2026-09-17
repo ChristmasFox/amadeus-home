@@ -6,6 +6,8 @@ node_modules
 **/node_modules
 dist
 **/dist
+!plugins/pubg/dist/
+!plugins/pubg/dist/**
 coverage
 **/__pycache__
 **/*.pyc
@@ -16,7 +18,6 @@ coverage
 *.lbpkg
 *.tar
 *.tar.gz
-apps/agent-runtime/inspect_*.ts
 docs/archive
 .local/
 **/.DS_Store

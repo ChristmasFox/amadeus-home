@@ -103,9 +103,9 @@ fi
 if command -v node >/dev/null 2>&1 && ! command -v pnpm >/dev/null 2>&1 && [ "$CHECK_ONLY" -eq 0 ]; then
   if command -v corepack >/dev/null 2>&1; then
     corepack enable
-    corepack prepare pnpm@9.9.0 --activate
+    corepack prepare pnpm@11.19.0 --activate
   else
-    npm install --global pnpm@9.9.0
+    npm install --global pnpm@11.19.0
   fi
 fi
 
@@ -115,7 +115,7 @@ if command -v pnpm >/dev/null 2>&1; then
     (cd "$REPO_ROOT" && pnpm install --frozen-lockfile)
   fi
 else
-  note_missing 'pnpm 9.9.x'
+  note_missing 'pnpm 11.19.x'
 fi
 
 if command -v orb >/dev/null 2>&1; then
