@@ -18,6 +18,7 @@ except ImportError:
 ALLOWED_TOOL_PREFIXES = ('kurisu.',)
 MAX_RESPONSE_BYTES = 256 * 1024
 DEFAULT_RUNTIME_URL = 'http://pubg-query-engine-v3:5310'
+DEFAULT_SECRET_FILE = '/run/secrets/kurisu_gateway_secret'
 
 
 def _value(source: Any, name: str, default: Any = '') -> Any:
@@ -84,7 +85,7 @@ def runtime_secret() -> str:
     direct = str(os.environ.get('KURISU_GATEWAY_SECRET') or '').strip()
     if direct:
         return direct
-    file_path = str(os.environ.get('KURISU_GATEWAY_SECRET_FILE') or '').strip()
+    file_path = str(os.environ.get('KURISU_GATEWAY_SECRET_FILE') or DEFAULT_SECRET_FILE).strip()
     if not file_path:
         return ''
     try:

@@ -1,15 +1,19 @@
 import asyncio
 import json
+import os
 import re
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import mock_open, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from components.tools.kurisu_gateway import (  # noqa: E402
     DEFAULT_RUNTIME_URL,
+    DEFAULT_SECRET_FILE,
+    runtime_secret,
     runtime_url,
     stable_call_id,
     trusted_session_context,
@@ -18,6 +22,12 @@ from components.tools.kurisu_gateway import (  # noqa: E402
 
 
 class KurisuGatewayTests(unittest.TestCase):
+    def test_runtime_secret_uses_mounted_default_file_when_env_is_scrubbed(self):
+        self.assertEqual(DEFAULT_SECRET_FILE, '/run/secrets/kurisu_gateway_secret')
+        with patch.dict(os.environ, {'KURISU_GATEWAY_SECRET': '', 'KURISU_GATEWAY_SECRET_FILE': ''}):
+            with patch('builtins.open', mock_open(read_data='secret-from-mounted-file')):
+                self.assertEqual(runtime_secret(), 'secret-from-mounted-file')
+
     def test_runtime_url_has_private_service_default_for_isolated_plugin_process(self):
         class FakePlugin:
             def get_config(self):
