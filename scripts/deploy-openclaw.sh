@@ -300,8 +300,31 @@ run_migration() {
   orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; $command"
 }
 
-run_migration dry-run
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-dry-run.json" <<'PY'
+MIGRATION_COUNT="$(orb -m "$MACHINE" -u root python3 - "$DATA_DIR/data/pubg.sqlite" <<'PY'
+import sqlite3
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.is_file():
+    print(0)
+else:
+    conn = sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)
+    try:
+        print(conn.execute('select count(*) from migration_runs').fetchone()[0])
+    except sqlite3.DatabaseError:
+        print(0)
+    finally:
+        conn.close()
+PY
+)"
+if [[ ! "$MIGRATION_COUNT" =~ ^[0-9]+$ ]]; then
+  fail "invalid existing PUBG migration count: $MIGRATION_COUNT"
+fi
+
+if ((MIGRATION_COUNT == 0)); then
+  run_migration dry-run
+  orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-dry-run.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -317,8 +340,8 @@ print('MIGRATION_DRY_RUN input=%s unique=%s duplicates=%s invalid=%s features=%s
     report.get('featureRows', 0)))
 PY
 
-run_migration apply --apply
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-apply.json" <<'PY'
+  run_migration apply --apply
+  orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-apply.json" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -331,8 +354,11 @@ print('MIGRATION_APPLY inserted=%s updated=%s duplicates=%s invalid=%s features=
     report.get('duplicateInputs', 0), report.get('invalidInputs', 0),
     report.get('importedFeatures', 0)))
 PY
+else
+  printf 'PUBG_MIGRATION=already_applied runs=%s\n' "$MIGRATION_COUNT"
+fi
 
-orb -m "$MACHINE" -u root python3 - "$DATA_DIR/data/pubg.sqlite" "$CHECKPOINT_ID" <<'PY'
+orb -m "$MACHINE" -u root python3 - "$DATA_DIR/data/pubg.sqlite" "$CHECKPOINT_ID" "$MIGRATION_COUNT" <<'PY'
 import sqlite3
 import sys
 
@@ -340,11 +366,12 @@ conn = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
 matches = conn.execute('select count(*) from matches').fetchone()[0]
 players = conn.execute('select count(*) from match_players').fetchone()[0]
 features = conn.execute('select count(*) from telemetry_features').fetchone()[0]
-migrations = conn.execute('select count(*) from migration_runs where id = ?', (sys.argv[2],)).fetchone()[0]
+migrations = conn.execute('select count(*) from migration_runs').fetchone()[0]
+current = conn.execute('select count(*) from migration_runs where id = ?', (sys.argv[2],)).fetchone()[0]
 conn.close()
-if matches <= 0 or migrations != 1:
+if matches <= 0 or migrations <= 0:
     raise SystemExit('new PUBG SQLite verification failed')
-print('PUBG_SQLITE=verified matches=%s players=%s features=%s migration_runs=%s' % (matches, players, features, migrations))
+print('PUBG_SQLITE=verified matches=%s players=%s features=%s migration_runs=%s current_run=%s' % (matches, players, features, migrations, current))
 PY
 
 orb -m "$MACHINE" -u root chown -R 1000:1000 "$DATA_DIR/data"

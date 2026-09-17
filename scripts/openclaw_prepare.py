@@ -168,8 +168,11 @@ def main() -> None:
     for base in [config_dir, workspace_dir, pubg_data_dir]:
         os.chown(base, 1000, 1000)
         for root, dirs, files in os.walk(base):
-            for name in dirs + files:
-                os.chown(Path(root) / name, 1000, 1000)
+            dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
+            for name in files:
+                target = Path(root) / name
+                if not target.is_symlink():
+                    os.chown(target, 1000, 1000)
     print("EXTERNAL_CONFIG=prepared")
     print("TELEGRAM_ALLOWLIST=validated")
     print("SECRET_FILES=prepared")
