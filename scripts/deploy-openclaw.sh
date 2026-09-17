@@ -218,7 +218,7 @@ remote_compose_dir="$(quote_remote "$COMPOSE_DIR")"
 remote_checkpoint="$(quote_remote "$CHECKPOINT_DIR")"
 remote_image="$(quote_remote "$IMAGE")"
 
-orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; cd $remote_compose_dir; docker compose config >/dev/null; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > $remote_checkpoint/config-validate.json; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > $remote_checkpoint/plugin-inspect.json"
+orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; cd $remote_compose_dir; docker compose config >/dev/null; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > $remote_checkpoint/config-validate.json; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > $remote_checkpoint/plugin-inspect.json; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > $remote_checkpoint/skills-list.json"
 
 orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/plugin-inspect.json" <<'PY'
 import json
@@ -234,6 +234,18 @@ expected = [
 if 'loaded' not in text or any(name not in text for name in expected):
     raise SystemExit('OpenClaw PUBG plugin did not report all six loaded tools')
 print('PLUGIN_PREFLIGHT=passed')
+PY
+
+orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/skills-list.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+value = json.loads(Path(sys.argv[1]).read_text())
+skills = [item for item in value.get('skills', []) if item.get('name') == 'pubg']
+if not skills or any(not str(item.get('description', '')).strip() for item in skills):
+    raise SystemExit('OpenClaw did not load the PUBG bundled Skill with a description')
+print('SKILL_PREFLIGHT=passed count=%s' % len(skills))
 PY
 
 OLD_LANGBOT_RUNNING=0

@@ -32,3 +32,9 @@ test('manifest contracts match runtime metadata and do not carry secret values',
   assert.ok(!JSON.stringify(manifest).match(/(?:api[_-]?key|token|secret)\s*[:=]\s*[^"{}]/iu));
   assert.ok(manifest.configSchema?.properties?.apiKeyFile);
 });
+
+test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
+  const skill = readFileSync(fileURLToPath(new URL('../skills/pubg/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(skill, /^---\n[\s\S]*^name:\s*pubg\s*$/m);
+  assert.match(skill, /^description:\s*"[^"\n]+"\s*$/m);
+});

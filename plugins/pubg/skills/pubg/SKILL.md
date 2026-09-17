@@ -1,3 +1,9 @@
+---
+name: pubg
+description: "Use deterministic PUBG match statistics and evidence-backed review tools."
+user-invocable: false
+---
+
 # PUBG
 
 Use the PUBG tools for match statistics and review. Let the model resolve the
