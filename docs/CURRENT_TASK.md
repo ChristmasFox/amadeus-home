@@ -41,9 +41,10 @@
 - [x] 完成 P7 问题盘点与修复：doctor `0 failure / 0 warning`、LangBot package dry-run、secret scan、R01/R02 和关键 HTTP/Docker smoke 通过；`macos-nas-control` 空组件 manifest 已修复为 `0.1.6` 并 ready，详见 `.agent/checkpoints/2026-09-17-kurisu-agent-p7-full-rollout.md`。
 - [x] source `38af693`、`015df8f`、`c4f2e65` 已 push；Runtime image `local/pubg-query-engine-v3:git-015df8f` 已部署到 OrbStack `ubuntu` CasaOS，使用 `docker compose up -d --no-build` 切换，当前回滚副本见 checkpoint。
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools`、`scripts/doctor.sh`、`smoke-kurisu-http.sh` 和 `smoke-homehub-docker.sh` 通过；主库/WAL/SHM 权限与外部 secrets 保持受控。
+- [x] 已修复首次真实 Telegram 私聊暴露的配置缺口：消息已真实进入 LangBot Native Agent 与 `kurisu_gateway`，但 `langbot_plugin_runtime` 未注入 `KURISU_RUNTIME_URL`，因此返回 `RUNTIME_URL_UNCONFIGURED`。已将 `http://pubg-query-engine-v3:5310` 写入 LangBot Compose 模板并同步 CasaOS live Compose，保留回滚副本 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-kurisu-runtime-url.20260917-094342`；plugin runtime 已用 `--no-build` 重建，容器内访问 Runtime `/healthz` 返回 200。
 - [x] LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；前者为唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
 - [x] 已启用 `native_agent_global`、通知、Codex、写工具、Product Radar central owner；媒体 scan/preview/move 已接入 Runtime，四个目录挂载限定为 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv` 和 backup 根目录，并已通过 live scan。
-- [ ] 真实 Telegram/KOOK 新入站（引用、图片、按钮/审批和必要群聊）仍 pending；R05 已在四个媒体挂载下完成回滚/恢复，当前没有部署后新入站记录，不得将 health、插件 ready 或 provider trace 当作消息送达证据。
+- [ ] 真实 Telegram/KOOK 新入站（引用、图片、按钮/审批和必要群聊）仍 pending；Telegram 首次真实入站已证明路由正确但因上述配置缺口失败，修复后需由用户重新发送并取得成功最终回复；R05 已在四个媒体挂载下完成回滚/恢复，不得将 health、插件 ready 或 provider trace 当作消息送达证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 

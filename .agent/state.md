@@ -15,6 +15,8 @@
 
 最新持久化安全状态：`KurisuStore` 源码已在建库/事务提交后保证主库、WAL、SHM 为 `0600`，定向权限回归通过；新 image `local/pubg-query-engine-v3:git-3e00275d8e70` live 重建后仍为 `0600`。
 
+最新 Telegram 回归状态：2026-09-17 09:39–09:40 的真实私聊已进入 LangBot Native Agent 与 `kurisu_gateway`，失败原因为 plugin runtime 未配置 `KURISU_RUNTIME_URL`，返回 `RUNTIME_URL_UNCONFIGURED`。已将 `http://pubg-query-engine-v3:5310` 写入 LangBot Compose 模板与 CasaOS live Compose，并重建 `langbot_plugin_runtime`；容器内 `/healthz` 返回 200。原消息不重放，仍需用户重新发送真实消息取得成功最终回复。
+
 已读取并执行 `docs/KURISU_CODEX_GOAL.md` 的 P0：通过只读 LangBot API/容器源码、当前 9Router provider probe 和本地 fake host probe，固定 Path A 为 LangBot 原生 `local-agent` + 9Router 的唯一自然语言主 Agent；Mastra 只保留 PUBG deterministic subworkflow。
 
 P0 证据位于 `docs/decisions/KURISU_AGENT_HOST.md`、`docs/reports/KURISU_AGENT_CAPABILITY_INVENTORY.md`、`docs/reports/KURISU_AGENT_P0_BASELINE.json` 和 `docs/reports/KURISU_AGENT_PROGRESS.md`。本阶段未写生产配置、未重启容器、未发送真实 Telegram/KOOK 消息。LangBot 管理 API key 不能替代 WebSocket 所需的 user/support-admin session token，因此 native-agent platform entry 未宣称通过；当前旧 EventListener 尚未迁移，列为 P1。

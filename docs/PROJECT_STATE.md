@@ -11,6 +11,7 @@
 - Runtime media mounts：源码/生产配置仅允许 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv`、`backups/media-organizer`；四个 bind mount 已在 live Compose 和 Runtime 容器中确认，`kurisu.media.scan` live structured smoke 通过。媒体写入流程包含 preview、allowlist、确定性 plan 和执行后 verify。
 - 代码与安全：`38af693`、`015df8f`、`c4f2e65` 已 push；相关定向测试、typecheck、R01/R02、`scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、`pnpm check:secrets` 和 `git diff --check` 通过。
 - 未完成证据：部署后尚未出现新的真实 Telegram/KOOK 入站；R03/R04 仍待真实平台证据，R05 已在含 Avalon 挂载的旧版本切换和当前版本恢复中通过。不能用 provider/fake trace、HTTP 200、容器健康或插件 ready 替代真实平台入站/外部执行/最终送达证据。
+- 真实 Telegram 配置回归：2026-09-17 09:39–09:40 的三条私聊已进入 `kurisu_gateway`，但 plugin runtime 缺少 `KURISU_RUNTIME_URL`，返回 `RUNTIME_URL_UNCONFIGURED`。已修复仓库模板与 live CasaOS Compose，使用 `docker compose up -d --no-build langbot_plugin_runtime` 重建；live plugin runtime 环境已确认配置，容器内访问 `http://pubg-query-engine-v3:5310/healthz` 返回 200。该三条历史消息已经失败，不重放；待用户重新发送真实消息完成最终送达证据。
 
 P0 已完成本机事实盘点并固定 Path A：LangBot 4.10.8 原生 `local-agent` 作为唯一自然语言主 Agent，当前 9Router/`arthur-combo` 作为 provider，Mastra 只保留 PUBG deterministic subworkflow。P0 只写入仓库证据和本地 fake probe；未改生产配置、未重启 CasaOS、未发真实消息。
 
