@@ -1,3 +1,5 @@
+> 当前目标：按 docs/OPENCLAW_PUBG_REFACTOR_GOAL.md 完成 OpenClaw 原生 PUBG 插件一次性重构。状态 READY_TO_IMPLEMENT；以下旧架构状态仅作历史参考。停止继续旧 P7 多领域 Goal，不代表新架构已实现或已部署。
+
 # 当前阶段：Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / R05_MEDIA_ROLLBACK_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
 本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.4`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。Avalon 四个媒体挂载、媒体 live scan 和含媒体挂载的 R05 回滚/恢复已通过。当前仍需真实 Telegram/KOOK 入站证据，未满足前不标记 `PRODUCT_COMPLETE`。

@@ -1,3 +1,5 @@
+> 当前执行目标已于 2026-09-17 被 [OpenClaw + PUBG 一次性重构计划](OPENCLAW_PUBG_REFACTOR_GOAL.md) 取代。以下为历史记录，不再执行其中 LangBot、多领域扩展、灰度或回滚演练要求。新架构尚未实施，不能据此宣称已上线。
+
 # Kurisu Agent 验收矩阵
 
 状态：SPECIFICATION ONLY。下表是必须实现的验收用例，不是已有测试通过记录。

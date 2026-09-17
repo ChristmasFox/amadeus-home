@@ -1,3 +1,9 @@
+# 当前任务优先约束（2026-09-17）
+
+用户最新决定以 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md` 取代下文旧 Kurisu/LangBot 实施范围。只落地 OpenClaw 原生 PUBG 插件、独立 Domain 和 Telegram 私聊，直接到最终形态，不做灰度、shadow、双跑、兼容过渡或回滚演练。执行该 Goal 时已授权必要构建、CasaOS 一次性切换、数据迁移、提交和 push；使用显式 apply 执行，无需逐阶段再次请求。保留必要数据备份、权限、secret 保护与真实验收。本次提交仅创建实施计划，尚未实施新架构。
+
+旧多领域验收矩阵由新计划第 10 节替代；不能把不在本轮范围的功能扩展成新任务。其余 source of truth、用户改动保护、预算、checkpoint 和工程规则仍有效。以下架构/发布范围冲突以用户最新决定及新计划为准。
+
 # Agent Monorepo 工作规则
 
 ## Kurisu 统一 Agent 实施范围

@@ -1,3 +1,5 @@
+> 当前执行目标已于 2026-09-17 被 [OpenClaw + PUBG 一次性重构计划](OPENCLAW_PUBG_REFACTOR_GOAL.md) 取代。以下为历史记录，不再执行其中 LangBot、多领域扩展、灰度或回滚演练要求。新架构尚未实施，不能据此宣称已上线。
+
 # Codex Goal 执行入口
 
 当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体安全边界和全会话自然语言切流。当前生产版本已上线，Avalon 四个生产媒体挂载已恢复，媒体 live scan 与包含媒体挂载的完整 R05 回滚均已通过；只剩部署后的真实 Telegram/KOOK 入站验收，完成后才可标记 `PRODUCT_COMPLETE`。
