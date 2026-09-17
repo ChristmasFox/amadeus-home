@@ -7,7 +7,7 @@
 - [x] 简报 sender 已交接到 Runtime notification outbox：live workflow 的 `Ingest Digest via Kurisu` 使用共享外部 secret；n8n 重跑 `6165` 在 2026-09-16 15:32:59 成功记录为 `success/sent`，对应 Kurisu event/delivery 均为 KOOK `sent`（1 attempt、无错误）。旧 `Send to KOOK via LangBot` 节点不在 live workflow 连接中。
 - [x] 修复真实 handoff 首次失败：n8n secret 是 root-only bind mount，Runtime 启动时读为空而返回 503。部署脚本现在将其设为 `root:gid1000 0640` 并强制 recreate Runtime；Compose rollback 为 `/var/lib/casaos/apps/pubg-query-engine-v3/docker-compose.yml.codex-backup.20260916-233013`。
 - [x] 已完成生产发布：Runtime `local/pubg-query-engine-v3:git-015df8f`、Kurisu 生产开关、通知/Codex/写工具和 Radar central owner 已在 OrbStack `ubuntu` CasaOS 生效；Avalon 四个媒体目录已实际挂载并由 Runtime 使用。
-- [x] 已完成 LangBot 插件发布：`kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6` 均启用；Kurisu 为唯一 Tool，旧插件不再暴露自然语言 Tool/EventListener。
+- [x] 已完成 LangBot 插件发布：`kurisu-gateway@0.1.2`、`pubg-stats@3.3.4`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6` 均启用；Kurisu 为唯一 Tool，旧插件不再暴露自然语言 Tool/EventListener。
 - [x] 已完成线上只读验收：Runtime/HomeHub/Kurisu HTTP、受限 Docker API、doctor、R01/R02 和插件 API/DB 状态核验通过；媒体 scan/preview/move 的源码边界和 post-execution verify 已完成。
 - [ ] 尚待部署后的真实 Telegram/KOOK 入站（含引用/图片/按钮/审批等代表场景）与最终送达证据；媒体 live smoke 和包含媒体挂载的 R05 可恢复回滚已通过，当前仍没有新的真实入站记录，完成前不得标记 `PRODUCT_COMPLETE`。
 
@@ -42,9 +42,10 @@
 - [x] source `38af693`、`015df8f`、`c4f2e65` 已 push；Runtime image `local/pubg-query-engine-v3:git-015df8f` 已部署到 OrbStack `ubuntu` CasaOS，使用 `docker compose up -d --no-build` 切换，当前回滚副本见 checkpoint。
 - [x] 部署后 Runtime `running/healthy`；`/healthz`、`/homehub/health`、`/kurisu/status`、`/kurisu/tools`、`scripts/doctor.sh`、`smoke-kurisu-http.sh` 和 `smoke-homehub-docker.sh` 通过；主库/WAL/SHM 权限与外部 secrets 保持受控。
 - [x] 已修复首次真实 Telegram 私聊暴露的配置缺口：消息已真实进入 LangBot Native Agent 与 `kurisu_gateway`，但 `langbot_plugin_runtime` 未注入 `KURISU_RUNTIME_URL`，因此返回 `RUNTIME_URL_UNCONFIGURED`。已将 `http://pubg-query-engine-v3:5310` 写入 LangBot Compose 模板并同步 CasaOS live Compose，保留回滚副本 `/var/lib/casaos/apps/langbot/docker-compose.yml.codex-kurisu-runtime-url.20260917-094342`；plugin runtime 已用 `--no-build` 重建，容器内访问 Runtime `/healthz` 返回 200。
-- [x] LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；前者为唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
+- [x] 已修复隔离插件子进程不继承 Compose 环境变量的二次问题：`kurisu-gateway@0.1.2` 在源码中使用与 manifest 一致的私有默认 Runtime 地址；LangBot API task `27` 返回 `INSTALL_READY`，artifact SHA-256 为 `b6a0b6a9af8a535dee90553afa38ee34baa3ceb0a63f32813b11bca40b757678`。
+- [x] LangBot 当前启用 `kurisu-gateway@0.1.2`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；前者为唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
 - [x] 已启用 `native_agent_global`、通知、Codex、写工具、Product Radar central owner；媒体 scan/preview/move 已接入 Runtime，四个目录挂载限定为 `/Volumes/Avalon/downloads`、`media/movies`、`media/tv` 和 backup 根目录，并已通过 live scan。
-- [ ] 真实 Telegram/KOOK 新入站（引用、图片、按钮/审批和必要群聊）仍 pending；Telegram 首次真实入站已证明路由正确但因上述配置缺口失败，修复后需由用户重新发送并取得成功最终回复；R05 已在四个媒体挂载下完成回滚/恢复，不得将 health、插件 ready 或 provider trace 当作消息送达证据。
+- [ ] 真实 Telegram/KOOK 新入站（引用、图片、按钮/审批和必要群聊）仍 pending；Telegram 已有两轮真实入站但旧版本均因隔离子进程 URL 缺口失败，`0.1.2` 已发布，需用户再次发送并取得成功最终回复；R05 已在四个媒体挂载下完成回滚/恢复，不得将 health、插件 ready 或 provider trace 当作消息送达证据。
 
 历史任务和原有部署状态保留如下，不能将本计划视为已替换现有架构。
 
