@@ -14,6 +14,8 @@
 - bundled Skill `pubg` 已加载且有有效 description；最终容器日志中 `Skipping invalid skill` 次数为 0。
 - Telegram 原生 channel probe：`configured=true`、`running=true`、`connected=true`、`lifecycle=ready`、
   `mode=polling`、`lastError=null`；验收提示发送后 `lastOutboundAt` 已更新。
+- 后续运行配置：按用户要求启用 Telegram 群聊，使用 `groups["*"]` 且
+  `requireMention=false`；`groupPolicy=open`，所有群成员均可触发回复。
 
 原始 OpenClaw JSON、工具轨迹索引和最终汇总均在仓库外 checkpoint：
 `/DATA/AppData/openclaw/backups/openclaw-pubg-20260917-091502/`。其中

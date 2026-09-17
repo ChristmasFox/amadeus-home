@@ -87,7 +87,12 @@
       "tokenFile": "/run/secrets/telegram_bot_token",
       "dmPolicy": "allowlist",
       "allowFrom": [],
-      "groupPolicy": "disabled",
+      "groupPolicy": "open",
+      "groups": {
+        "*": {
+          "requireMention": false
+        }
+      },
       "streaming": {
         "mode": "off"
       },

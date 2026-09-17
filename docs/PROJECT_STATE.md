@@ -19,7 +19,8 @@ S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭�
 - Gateway UI：CasaOS 端口 `18789` 当前绑定 `0.0.0.0`，局域网入口为
   `http://192.168.5.3:18789/`；Control UI 仍需使用外部保存的 gateway token 完成认证。
 - provider：现有 9Router，模型 route nine_router/arthur-combo，不换模型绕过验收。
-- Telegram：OpenClaw native channel；私聊 numeric allowlist 来自外部配置，群聊关闭。
+- Telegram：OpenClaw native channel；私聊 numeric allowlist 来自外部配置；群聊已启用，
+  所有群默认 `requireMention=false`，`groupPolicy=open`，所有群成员均可触发回复。
 - Plugin：pubg_resolve_players、pubg_search_matches、pubg_query_stats、
   pubg_compare_stats、pubg_get_match、pubg_get_review_facts。
 - Domain：packages/pubg-domain 只接收结构化 selector，确定性返回 status/coverage/
@@ -36,6 +37,16 @@ S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭�
 - 需保留运行但不参与 PUBG 的服务：9Router；LangBot、n8n、Product Radar 是否运行由其
   各自独立业务决定，不能反向成为 PUBG 依赖。
 - 旧 Runtime/插件/工作流/facade/generator 已从 Git 当前树删除；历史不复制到新 legacy 目录。
+
+## 附属 VPS 运维状态
+
+- `amadeus-gateway` 当前以 systemd 运行官方 Xray 26.3.27，个人 VLESS + Reality + Vision
+  服务监听 TCP `443`；另运行官方 Caddy 2.11.4/systemd，在 `8443` 提供仅含 QX 节点的 HTTPS
+  订阅文件。Caddy 不参与 Xray 代理流量；本次未修改 SSH 登录方式、未启用 Docker/Nginx、未重启 VPS。
+- VPS 架构、安装/升级/卸载方法、systemd 模板和无凭据配置模板位于 `infra/vps/`；公网地址、
+  UUID、Reality private key 和其他真实 secret 均在仓库外。
+- QX 最终 Reality 握手仍需用户在手机端导入交付节点后验证；服务端配置测试、systemd、监听
+  和外部 TCP smoke 已通过。
 
 ## 已有证据
 
