@@ -1,6 +1,6 @@
 # Codex Goal 执行入口
 
-当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体安全边界和全会话自然语言切流。当前生产版本已上线，核心服务已恢复；宿主 Avalon 当前未挂载，媒体 live mount、真实 Telegram/KOOK 入站和包含媒体挂载的完整 R05 回滚仍待完成，完成后才可标记 `PRODUCT_COMPLETE`。
+当前状态：P0–P6 已完成；P7 已完成 Runtime、LangBot 插件、生产开关、媒体安全边界和全会话自然语言切流。当前生产版本已上线，Avalon 四个生产媒体挂载已恢复，媒体 live scan 与包含媒体挂载的完整 R05 回滚均已通过；只剩部署后的真实 Telegram/KOOK 入站验收，完成后才可标记 `PRODUCT_COMPLETE`。
 
 主规格：[实施计划](KURISU_AGENT_IMPLEMENTATION_PLAN.md)。必过条件：[验收矩阵](KURISU_AGENT_ACCEPTANCE.md)。
 
@@ -37,7 +37,7 @@ P0 首先创建 `docs/reports/KURISU_AGENT_PROGRESS.md`，至少维护下表并�
 | P4 | COMPLETE | Codex App Server executor | 隔离仓库真实 Codex trace | — |
 | P5 | COMPLETE | Runtime notification Worker | 通知/重试/去重与日报 handoff | — |
 | P6 | COMPLETE | 验收报告/R01/R02 | 101 场景、R01/R02、HTTP smoke | — |
-| P7 | DEPLOYED / L4_PENDING | `.agent/checkpoints/2026-09-17-kurisu-agent-p7-full-rollout.md` | Runtime、插件、开关、媒体挂载、生产 smoke | 真实平台入站与 R05 回滚 |
+| P7 | DEPLOYED / L4_PLATFORM_PENDING | `.agent/checkpoints/2026-09-17-kurisu-agent-r05-media-rollback.md` | Runtime、插件、开关、四个媒体挂载、媒体 scan、生产 smoke、含媒体挂载 R05 回滚/恢复 | R03/R04 真实 Telegram/KOOK 入站与最终送达 |
 
 开发完成必须有：唯一宿主 ADR、可运行代码和非空工具、真实模型证据、所需 Codex 隔离任务证据、L1/L2 通过、L3 达标、发布 dry-run、回滚方案、状态/checkpoint 同步、secret scan、干净且已提交的本阶段差异。正常保留的无关用户修改应单独说明。
 
@@ -45,10 +45,10 @@ P0 首先创建 `docs/reports/KURISU_AGENT_PROGRESS.md`，至少维护下表并�
 
 ## 4. 当前生产状态与剩余验收
 
-生产部署授权已由当前 Goal 明确给出并已执行。当前线上已使用 immutable Runtime image、`--no-build` Compose 切换和 LangBot API 插件安装；以下命令仅用于恢复/继续未完成的真实平台验收：
+生产部署授权已由当前 Goal 明确给出并已执行。当前线上已使用 immutable Runtime image、`--no-build` Compose 切换和 LangBot API 插件安装；媒体挂载和 R05 已完成，以下命令仅用于继续未完成的真实平台验收：
 
 ```text
-/goal 继续 Kurisu P7 L4 验收：在不重复无关测试、不伪造入站的前提下，核验当前已部署的 Telegram/KOOK 真实私聊与必要群聊链路，覆盖文本、引用、图片、按钮/审批、媒体预览/执行、Codex 任务回执和通知；执行一次可恢复的 R05 回滚并重新部署当前版本。每一步保留真实 tool-call、外部执行、最终送达和回滚证据，更新状态文档与 checkpoint。若缺少用户可操作的真实入站，只完成线上诊断并明确要求用户在目标私聊发送一条测试消息，不得标 PRODUCT_COMPLETE；不设置 token_budget。
+/goal 继续 Kurisu P7 L4 验收：在不重复无关测试、不伪造入站的前提下，核验当前已部署的 Telegram/KOOK 真实私聊与必要群聊链路，覆盖文本、引用、图片、按钮/审批、媒体预览/执行、Codex 任务回执和通知；媒体挂载与 R05 已完成，不要重复回滚。每一步保留真实 tool-call、外部执行、最终送达证据，更新状态文档与 checkpoint。若缺少用户可操作的真实入站，只完成线上诊断并明确要求用户在目标私聊发送最小测试消息，不得标 PRODUCT_COMPLETE；不设置 token_budget。
 ```
 
 ## 5. 每阶段交付摘要

@@ -1,13 +1,13 @@
-# 当前阶段：Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
+# 当前阶段：Kurisu 统一 Agent（P7 DEPLOYED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_DEPLOYED / BRIEFING_HANDOFF_VERIFIED / R05_MEDIA_ROLLBACK_VERIFIED / L4_PLATFORM_PENDING；P6 LOCAL_COMPLETE；P5 VERIFIED_LOCAL；P4 VERIFIED_LOCAL；P3 VERIFIED_LOCAL；P2 VERIFIED_LOCAL；P1 VERIFIED_LOCAL；P0 HOST_FIXED_LOCAL / REAL_PARTIAL：2026-09-17）
 
-本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.1`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。当前仍需真实 Telegram/KOOK 入站证据和一次 R05 可恢复回滚，未满足前不标记 `PRODUCT_COMPLETE`。
+本轮全量完成 Goal 已授权。live n8n `Daily Tech & Market Digest`（ID `681f9db4-6666-4e58-aa6a-7ecc86316182`）已脱敏导出并交接到 Runtime notification outbox；真实重跑 `6165` 为 `success/sent`，Kurisu KOOK delivery 为 `sent`/1 attempt/无错误。Runtime image `local/pubg-query-engine-v3:git-015df8f`、Kurisu Gateway `0.1.1`、legacy plugin 清理、生产通知/Codex/写工具、Radar central owner 与受限媒体挂载均已上线。Avalon 四个媒体挂载、媒体 live scan 和含媒体挂载的 R05 回滚/恢复已通过。当前仍需真实 Telegram/KOOK 入站证据，未满足前不标记 `PRODUCT_COMPLETE`。
 
 ## 2026-09-17 当前线上快照
 
-- Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。当前为核心恢复态，Avalon 未挂载，live Compose 暂无媒体 bind mount。
+- Runtime `pubg-query-engine-v3` 为 `running/healthy`；`/healthz`、`/homehub/health` 返回 200；Kurisu 为 `native_agent_global`，注册 29 个工具。Avalon 四个目录已挂载到 live Compose/Runtime，`kurisu.media.scan` structured smoke 返回 `ok`。
 - `scripts/doctor.sh`、`smoke-kurisu-http.sh`、`smoke-homehub-docker.sh`、R01、R02 和 backup dry-run 通过；HomeHub Docker smoke 取得真实 macOS host metrics。
 - LangBot 当前启用 `kurisu-gateway@0.1.1`、`pubg-stats@3.3.4`、`product-radar@0.6.0`、`organize-emby@0.2.2`、`macos-nas-control@0.1.6`；Kurisu 是唯一 Tool，旧插件不再暴露自然语言 EventListener/Tool，显式 Command 保留。
-- 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R03/R04 仍为 `PENDING/BLOCKED`；R05 核心 Runtime/插件旧版切换与恢复已通过，但包含 Avalon 挂载的完整回滚因磁盘未挂载而 blocked；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代。
+- 部署后监控库尚无新的真实平台入站，因此引用、图片、按钮/审批、KOOK/群聊和 R03/R04 仍为 `PENDING/BLOCKED`；R05 已在四个 Avalon 挂载下完成旧版 Runtime/插件切换与当前版本恢复，未执行任何业务写入重放；不以 provider/fake trace、HTTP 200、容器健康或插件 ready 替代真实平台证据。
 
 最新验证：全量 agent-runtime 已为 `181 passed / 0 failed / 1 skipped`；此前 `review-v3-2.test.ts` 的逐人载具里程缺失已修复。
 

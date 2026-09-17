@@ -1,8 +1,8 @@
 # Kurisu Agent 开发进度报告
 
 更新时间：2026-09-17（Asia/Shanghai）
-当前生产提交：`c4f2e65`（包含 `38af693`、`015df8f`）；P0–P6 已完成，P7 已部署并完成全会话自然语言切流。
-范围：Kurisu 全量实现与 CasaOS 生产发布；真实 Telegram/KOOK 入站和 R05 回滚仍需补齐，未将其伪报为 PRODUCT_COMPLETE。
+当前生产源码提交：`f670787`（生产 Runtime image 基于 `015df8f`，包含 `38af693`、`015df8f`、`c4f2e65`）；P0–P6 已完成，P7 已部署并完成全会话自然语言切流。
+范围：Kurisu 全量实现与 CasaOS 生产发布；媒体 live mount 与含媒体挂载的 R05 回滚已补齐，真实 Telegram/KOOK 入站仍待完成，未将其伪报为 PRODUCT_COMPLETE。
 
 ## 阶段状态
 
@@ -15,7 +15,7 @@
 | P4 | `IMPLEMENTED / VERIFIED_LOCAL` | 单一 Codex App Server executor、server-owned project registry、worktree 隔离、start/status/list/resume/cancel、持久化 thread/turn/审批/输入状态；fake server 与真实 `codex-cli 0.153.4` 隔离仓库小修复通过，报告见 `KURISU_CODEX_P4_REAL_TRACE.json` | 真实 Codex approval 本次隔离小任务未触发；平台消息通知交由 P5，真实平台/L4 仍不宣称 |
 | P5 | `IMPLEMENTED / VERIFIED_LOCAL / BRIEFING_BLOCKED` | Runtime notification Worker、Codex spool、Radar central handoff、structured write events、偏好/语气、producer 清单；Kurisu `48/48`、Radar `53/53`、plugin `4/4` | briefing 真实 scheduler/生成/投递 producer 未发现；旧 n8n sender 仅 rollback source；P7 才能切真实 owner |
 | P6 | `IMPLEMENTED / LOCAL_COMPLETE / L3_BLOCKED / BRIEFING_BLOCKED` | 101 条结构化 L2 场景（60 条独立失败改写）、R01/R02、HTTP smoke、配置/备份/恢复/runbook；实现提交 `24946b9` | Kurisu `50/50`、Product Radar `53/53`、typecheck、plugin `4/4`、Python compile、secret scan、R01/R02、L2 HTTP smoke 通过；全量 agent-runtime `181 passed / 0 failed / 1 skipped`，既有 runner 卡点已修复 |
-| P7 | `DEPLOYED / BOUNDARY_HARDENED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_SOURCE_DEPLOYED / L4_PLATFORM_PENDING` | Runtime `local/pubg-query-engine-v3:git-015df8f`、生产开关、通知/Codex/写工具、Radar central owner、媒体安全边界已部署；`kurisu-gateway@0.1.1` 与 legacy plugin 更新均 `INSTALL_READY`；Kurisu 是唯一 Tool，普通自然语言统一由 LangBot Native Agent + Kurisu 处理；doctor、R01/R02、HTTP/Docker smoke 通过；R05 核心旧 Runtime/插件切换与恢复已通过 | Avalon 当前未挂载，live 暂无媒体 bind mount；R03/R04 真实平台入站、引用/图片/按钮/审批、群聊边界和包含媒体挂载的完整 R05 仍待证据 |
+| P7 | `DEPLOYED / BOUNDARY_HARDENED / GLOBAL_NLU_ROLLOUT_DEPLOYED / MEDIA_TOOLS_SOURCE_DEPLOYED / R05_MEDIA_ROLLBACK_VERIFIED / L4_PLATFORM_PENDING` | Runtime `local/pubg-query-engine-v3:git-015df8f`、生产开关、通知/Codex/写工具、Radar central owner、四个媒体 bind mount 已部署；`kurisu-gateway@0.1.1` 与 legacy plugin 更新均 `INSTALL_READY`；Kurisu 是唯一 Tool，普通自然语言统一由 LangBot Native Agent + Kurisu 处理；媒体 scan、doctor、R01/R02、HTTP/Docker smoke 通过；旧 Runtime/插件切换和当前版本恢复均在媒体挂载下通过 | R03/R04 真实 Telegram/KOOK 入站、引用/图片/按钮/审批、群聊边界和最终送达仍待证据 |
 
 ## P0 结论
 
