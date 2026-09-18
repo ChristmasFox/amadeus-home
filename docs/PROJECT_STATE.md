@@ -67,7 +67,11 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   hook/description 回归断言、受影响 typecheck/build/test 和 secrets scan 已通过；已随 `083f26b`
   构建并 apply `local/openclaw-amadeus:git-083f26b1fb13-20260918125134`，runtime inspect
   已确认 `before_prompt_build` 在线且 `pubg`/`identity`/`amadeus` Skill eligible/model-visible。
-  仍待重新做真实群聊验证，以确认实际工具调用链。
+  无投递线上 smoke 已确认模型实际调用 `identity_resolve` → `pubg_query_stats`，但第二层发现
+  用户提供的 `SG_Labmem007/008/004` 与 production team config 的 `SG_LabmemNo007/008/004`
+  不一致，导致 007/008/004 的 canonical player ID 未命中并返回
+  `identity_pubg_account_unresolved`。Git team fixture 已加入这三个用户确认账号名作为 alias；
+  生产外部 team config 备份/同步和真实群聊战绩验证仍待完成。
 
 ## 本轮实现
 
