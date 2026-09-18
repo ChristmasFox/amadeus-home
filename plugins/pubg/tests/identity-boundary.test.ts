@@ -18,6 +18,14 @@ const TEAM: TeamConfig = {
   ],
 };
 
+const TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES: TeamConfig = {
+  ...TEAM,
+  players: [
+    { id: 'p1', name: 'SG_LabmemNo008', aliases: ['008', 'SG_Labmem008'] },
+    { id: 'p2', name: 'Other', aliases: [] },
+  ],
+};
+
 function toolContext(senderId = 'telegram-user-1'): OpenClawPluginToolContext {
   return {
     messageChannel: 'telegram',
@@ -101,6 +109,22 @@ test('PUBG boundary maps multiple canonical Persons to explicit compare subjects
       'telegram-compare-turn',
     );
     assert.deepEqual(prepared, { playerIds: ['p1', 'p2'] });
+  } finally {
+    service.repository.db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('PUBG boundary maps the confirmed external account alias to the configured canonical player', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pubg-identity-account-alias-'));
+  const identityPath = join(directory, 'identity.sqlite');
+  const presetsPath = join(directory, 'presets.json');
+  await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'jiao', displayName: '胶', externalAccounts: [{ provider: 'pubg', externalId: 'SG_Labmem008' }] }] }));
+  const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
+  const service = new PubgDomainService({ team: TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  try {
+    const prepared = await prepareIdentitySubject(service, config, { personIds: ['jiao'] }, toolContext(), 'telegram-account-alias-turn');
+    assert.deepEqual(prepared, { playerIds: ['p1'] });
   } finally {
     service.repository.db.close();
     await rm(directory, { recursive: true, force: true });

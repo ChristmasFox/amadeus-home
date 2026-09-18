@@ -67,7 +67,11 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 定向测试、`git diff --check` 和 secrets scan 已通过；已随 `083f26b` 构建并 apply 新镜像
 `local/openclaw-amadeus:git-083f26b1fb13-20260918125134`，runtime 已确认
 `before_prompt_build` 注册、三个相关 Skill eligible/model-visible。仍待真实群聊重新发送昵称
-战绩请求，确认本轮实际产生 `identity_resolve` → PUBG tool 调用。
+战绩请求，确认本轮实际产生 `identity_resolve` → PUBG tool 调用。无投递 smoke 已确认这条
+工具链已发生，但暴露出第二层配置问题：用户确认的 `SG_Labmem007/008/004` 与现有
+`SG_LabmemNo007/008/004` production team names 不一致，导致 canonical player ID 未命中，
+随后官方 exact lookup 返回 `identity_pubg_account_unresolved`。本轮已把用户提供的三个名字加入
+Git team fixture alias，并准备在备份后同步生产外部 team config；同步和真实群聊战绩仍待完成。
 
 ## 当前进度
 
