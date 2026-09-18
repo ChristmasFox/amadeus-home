@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     networks:
       - radar_network
-      - langbot_network
+      - amadeus_network
     environment:
       PRODUCT_RADAR_HOST: 0.0.0.0
       PRODUCT_RADAR_PORT: 5315
@@ -17,17 +17,12 @@ services:
       PRODUCT_RADAR_API_KEY: ${PRODUCT_RADAR_API_KEY:-}
       CHANGEDETECTION_BASE_URL: http://changedetection:5000
       CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
-      LANGBOT_API_BASE_URL: ${LANGBOT_API_BASE_URL:-http://langbot:5300}
-      PRODUCT_RADAR_LANGBOT_API_HEADER: ${PRODUCT_RADAR_LANGBOT_API_HEADER:-X-API-Key}
-      PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE: ${PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE:-}
-      TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
-      KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
-      PRODUCT_RADAR_TELEGRAM_BOT_ID: ${PRODUCT_RADAR_TELEGRAM_BOT_ID:-}
-      PRODUCT_RADAR_KOOK_BOT_ID: ${PRODUCT_RADAR_KOOK_BOT_ID:-}
+      OWNER_NOTIFICATION_OUTBOX_DIR: /notifications
     ports:
       - "${PRODUCT_RADAR_PORT:-5315}:5315"
     volumes:
       - product-radar-data:/data
+      - ./.local/owner-notifications:/notifications
     depends_on:
       changedetection:
         condition: service_healthy
@@ -59,9 +54,9 @@ services:
 networks:
   radar_network:
     driver: bridge
-  langbot_network:
-    driver: bridge
-
+  amadeus_network:
+    external: true
+    name: langbot_langbot_network
 volumes:
   product-radar-data:
   changedetection-data:

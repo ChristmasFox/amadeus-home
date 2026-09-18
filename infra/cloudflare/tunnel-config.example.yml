@@ -3,8 +3,8 @@ tunnel: REPLACE_WITH_TUNNEL_ID
 credentials-file: /DATA/AppData/cloudflared/credentials.json
 
 ingress:
-  - hostname: n8n.example.invalid
-    service: http://n8n:5678
-  - hostname: langbot.example.invalid
-    service: http://langbot:5300
+  - hostname: claw.example.invalid
+    service: http://openclaw:18789
+  - hostname: radar.example.invalid
+    service: http://product-radar:5315
   - service: http_status:404

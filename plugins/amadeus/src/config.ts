@@ -1,0 +1,78 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+
+export interface AmadeusConfig {
+  productRadarBaseUrl: string;
+  productRadarApiKeyFile?: string;
+  mediaAdapterBaseUrl: string;
+  homeLabBaseUrl: string;
+  homeLabGlancesUrl: string;
+  homeLabUptimeUrl: string;
+  macSshHost: string;
+  macSshUser: string;
+  macSshKeyFile: string;
+  macSshKnownHostsFile?: string;
+  kookApiBaseUrl: string;
+  kookTokenFile?: string;
+  ownerTargetFile: string;
+  ownerWhatsappAccountId: string;
+  notificationOutboxDir: string;
+  briefingConfigDir: string;
+  briefingStateFile: string;
+  nineRouterBaseUrl: string;
+  nineRouterApiKeyFile?: string;
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+export function configFor(api: OpenClawPluginApi): AmadeusConfig {
+  const value = api.pluginConfig ?? {};
+  const rootDir = api.rootDir ?? '/app/extensions/amadeus';
+  const env = (name: string): string | undefined => process.env[name]?.trim() || undefined;
+  const file = (key: string, envName: string, fallback: string): string => stringValue(value[key] ?? env(envName), fallback);
+  const optionalFile = (key: string, envName: string): string | undefined => stringValue(value[key] ?? env(envName), '') || undefined;
+  const productRadarApiKeyFile = optionalFile('productRadarApiKeyFile', 'PRODUCT_RADAR_API_KEY_FILE');
+  const macSshKnownHostsFile = optionalFile('macSshKnownHostsFile', 'MAC_CONTROL_KNOWN_HOSTS_FILE');
+  const kookTokenFile = optionalFile('kookTokenFile', 'KOOK_BOT_TOKEN_FILE');
+  const nineRouterApiKeyFile = optionalFile('nineRouterApiKeyFile', 'OPENCLAW_9ROUTER_API_KEY_FILE');
+  return {
+    productRadarBaseUrl: file('productRadarBaseUrl', 'PRODUCT_RADAR_BASE_URL', 'http://product-radar:5315').replace(/\/$/u, ''),
+    ...(productRadarApiKeyFile ? { productRadarApiKeyFile } : {}),
+    mediaAdapterBaseUrl: file('mediaAdapterBaseUrl', 'MEDIA_ADAPTER_BASE_URL', 'http://media-organizer-adapter:8765').replace(/\/$/u, ''),
+    homeLabBaseUrl: file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, ''),
+    homeLabGlancesUrl: file('homeLabGlancesUrl', 'HOME_LAB_GLANCES_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/quicklook`),
+    homeLabUptimeUrl: file('homeLabUptimeUrl', 'HOME_LAB_UPTIME_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/uptime`),
+    macSshHost: file('macSshHost', 'MAC_CONTROL_HOST', 'host.docker.internal'),
+    macSshUser: file('macSshUser', 'MAC_CONTROL_USER', 'blacksidev'),
+    macSshKeyFile: file('macSshKeyFile', 'MAC_CONTROL_KEY', '/run/secrets/mac_ssh_key'),
+    ...(macSshKnownHostsFile ? { macSshKnownHostsFile } : {}),
+    kookApiBaseUrl: file('kookApiBaseUrl', 'KOOK_API_BASE_URL', 'https://www.kookapp.cn/api/v3').replace(/\/$/u, ''),
+    ...(kookTokenFile ? { kookTokenFile } : {}),
+    ownerTargetFile: file('ownerTargetFile', 'OWNER_WHATSAPP_TARGET_FILE', '/run/secrets/owner_whatsapp_target'),
+    ownerWhatsappAccountId: file('ownerWhatsappAccountId', 'OWNER_WHATSAPP_ACCOUNT_ID', 'secondary'),
+    notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
+    briefingConfigDir: file('briefingConfigDir', 'BRIEFING_CONFIG_DIR', join(rootDir, 'briefing')),
+    briefingStateFile: file('briefingStateFile', 'BRIEFING_STATE_FILE', '/data/briefing-state.json'),
+    nineRouterBaseUrl: file('nineRouterBaseUrl', 'OPENCLAW_9ROUTER_BASE_URL', 'http://9router:20128/v1').replace(/\/$/u, ''),
+    ...(nineRouterApiKeyFile ? { nineRouterApiKeyFile } : {}),
+  };
+}
+
+export async function readOptionalFile(path: string | undefined): Promise<string | undefined> {
+  if (!path) return undefined;
+  try {
+    const value = await readFile(path, 'utf8');
+    return value.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function readRequiredFile(path: string, label: string): Promise<string> {
+  const value = await readOptionalFile(path);
+  if (!value) throw new Error(`${label} is unavailable`);
+  return value;
+}

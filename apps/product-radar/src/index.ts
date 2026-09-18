@@ -7,7 +7,7 @@ import { SourceAdapterRegistry } from './sources/registry.js';
 import { ChangedetectionSensorClient } from './sensors/changedetection/client.js';
 import { SqliteRadarStore } from './storage/sqlite.js';
 import { createRadarServer } from './api/server.js';
-import { LangBotNotificationChannel, readOptionalToken } from './integrations/notifications/langbot.js';
+import { OwnerNotificationChannel } from './integrations/notifications/owner.js';
 import { PerceptualImageMatcher } from './integrations/images/perceptual-matcher.js';
 import { FashionSiglipImageMatcher } from './integrations/images/fashion-siglip-matcher.js';
 
@@ -39,19 +39,8 @@ async function main(): Promise<void> {
   console.log(`Product Radar image matcher provider=${imageMatcherProvider === 'hybrid' || imageMatcherProvider === 'fashionsiglip' ? 'fashionSigLIP+sharp-fallback' : 'sharp'}`);
   const sensorOptions = { baseUrl: process.env.CHANGEDETECTION_BASE_URL?.trim() || 'http://changedetection:5000', timeoutMs: numberEnv('CHANGEDETECTION_TIMEOUT_MS', 10_000), ...(process.env.CHANGEDETECTION_API_KEY?.trim() ? { apiKey: process.env.CHANGEDETECTION_API_KEY.trim() } : {}) };
   const sensor = new ChangedetectionSensorClient(sensorOptions);
-  const langBotToken = await readOptionalToken(process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE, process.env.PRODUCT_RADAR_LANGBOT_API_TOKEN);
-  const langBotBaseUrl = process.env.LANGBOT_API_BASE_URL?.trim() || 'http://langbot:5300';
-  const langBotApiHeader = process.env.PRODUCT_RADAR_LANGBOT_API_HEADER?.trim() || 'Authorization';
-  const channels = [];
-  const notificationOwner = process.env.PRODUCT_RADAR_NOTIFICATION_OWNER?.trim().toLowerCase() || 'disabled';
-  if (notificationOwner !== 'disabled') {
-    const telegramRecipient = process.env.TELEGRAM_ADMIN_USER_ID?.trim();
-    const telegramBotId = process.env.PRODUCT_RADAR_TELEGRAM_BOT_ID?.trim();
-    if (telegramRecipient && telegramBotId) channels.push(new LangBotNotificationChannel({ id: 'telegram', baseUrl: langBotBaseUrl, botId: telegramBotId, recipient: telegramRecipient, apiHeaderName: langBotApiHeader, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
-    const kookRecipient = process.env.KOOK_ADMIN_USER_ID?.trim();
-    const kookBotId = process.env.PRODUCT_RADAR_KOOK_BOT_ID?.trim();
-    if (kookRecipient && kookBotId) channels.push(new LangBotNotificationChannel({ id: 'kook', baseUrl: langBotBaseUrl, botId: kookBotId, recipient: kookRecipient, apiHeaderName: langBotApiHeader, ...(langBotToken === undefined ? {} : { apiToken: langBotToken }) }));
-  }
+  const outboxDir = process.env.OWNER_NOTIFICATION_OUTBOX_DIR?.trim() || '/notifications';
+  const channels = [new OwnerNotificationChannel(outboxDir)];
   const notifications = new NotificationDispatcher(store, channels, { displayName: (source) => sources.get(source)?.displayName ?? source });
   const service = new ProductRadarService({
     store,

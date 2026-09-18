@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Prepare external OpenClaw config and secret files on the CasaOS host."""
+"""Prepare OpenClaw Amadeus config and runtime-only secrets on CasaOS."""
+
+from __future__ import annotations
 
 import base64
 import json
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import sys
 from pathlib import Path
@@ -16,20 +19,36 @@ def ensure_owner(path: Path, mode: int = 0o600) -> None:
     os.chown(path, 1000, 1000)
 
 
-def write_secret_if_missing(path: Path, content: bytes) -> None:
-    if path.exists():
-        if path.is_symlink() or not path.is_file() or not path.read_bytes().strip():
-            raise SystemExit("invalid external secret file: " + str(path))
-        ensure_owner(path)
+def ensure_regular(path: Path, label: str) -> None:
+    if path.is_symlink() or not path.is_file() or not path.read_bytes().strip():
+        raise SystemExit(f"{label} is not a non-empty regular file: {path}")
+
+
+def install_if_missing(target: Path, source: Path, label: str, mode: int = 0o600) -> None:
+    if target.exists():
+        ensure_regular(target, label)
+        ensure_owner(target, mode)
         return
-    path.write_bytes(content)
-    ensure_owner(path)
+    ensure_regular(source, label + " source")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    ensure_owner(target, mode)
+
+
+def write_if_missing(target: Path, content: bytes, label: str, mode: int = 0o600) -> None:
+    if target.exists():
+        ensure_regular(target, label)
+        ensure_owner(target, mode)
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+    ensure_owner(target, mode)
 
 
 def read_env(path: Path) -> dict[str, str]:
-    if not path.is_file():
-        return {}
     values: dict[str, str] = {}
+    if not path.is_file():
+        return values
     for raw in path.read_text().splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -42,7 +61,7 @@ def read_env(path: Path) -> dict[str, str]:
     return values
 
 
-def set_env_line(lines: list[str], key: str, value: str) -> None:
+def set_env(lines: list[str], key: str, value: str) -> None:
     prefix = key + "="
     for index, line in enumerate(lines):
         normalized = line.strip()
@@ -54,127 +73,187 @@ def set_env_line(lines: list[str], key: str, value: str) -> None:
     lines.append(prefix + value)
 
 
-def find_telegram_token(value: object) -> str | None:
+def find_token(value: object) -> str | None:
     if isinstance(value, dict):
         for key, item in value.items():
-            if re.search(r"(?:^|[_-])token$", str(key), re.I):
-                if isinstance(item, str) and ":" in item and len(item.strip()) >= 20:
+            if re.search(r"(?:^|[_-])token$", str(key), re.IGNORECASE):
+                if isinstance(item, str) and len(item.strip()) >= 20:
                     return item.strip()
-            found = find_telegram_token(item)
+            found = find_token(item)
             if found:
                 return found
     elif isinstance(value, list):
         for item in value:
-            found = find_telegram_token(item)
+            found = find_token(item)
             if found:
                 return found
     return None
 
 
+def token_from_legacy(db_path: Path, adapter: str) -> str:
+    if not db_path.is_file():
+        raise SystemExit(f"legacy LangBot database is unavailable for {adapter} token recovery")
+    conn = sqlite3.connect("file:" + str(db_path) + "?mode=ro", uri=True)
+    rows = conn.execute(
+        "select adapter_config from bots where lower(adapter) = lower(?) order by enable desc",
+        (adapter,),
+    ).fetchall()
+    conn.close()
+    for (raw,) in rows:
+        try:
+            token = find_token(json.loads(raw))
+        except (TypeError, json.JSONDecodeError):
+            token = None
+        if token:
+            return token
+    raise SystemExit(f"{adapter} token was not found in the legacy LangBot database")
+
+
+def existing_or_legacy_token(target: Path, db_path: Path, adapter: str) -> None:
+    if target.exists():
+        ensure_regular(target, adapter + " token")
+        ensure_owner(target)
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(token_from_legacy(db_path, adapter) + "\n")
+    ensure_owner(target)
+
+
+def merge_preserved(config: dict, existing: dict) -> None:
+    for key in ("commands", "meta", "security"):
+        if key in existing:
+            config[key] = existing[key]
+    current_whatsapp = existing.get("channels", {}).get("whatsapp")
+    if isinstance(current_whatsapp, dict):
+        config.setdefault("channels", {}).setdefault("whatsapp", {}).update(current_whatsapp)
+
+
+def valid_owner_targets(existing: dict) -> list[str]:
+    values = existing.get("commands", {}).get("ownerAllowFrom", [])
+    if not isinstance(values, list):
+        return []
+    return [str(value).strip() for value in values if isinstance(value, (str, int)) and str(value).strip().startswith("whatsapp:")]
+
+
+def owner_phone(owner_target: str) -> str:
+    value = owner_target.strip()
+    if not value.startswith("whatsapp:"):
+        raise SystemExit("WhatsApp owner target must use the whatsapp:+e164 form")
+    phone = value.split(":", 1)[1].strip()
+    if not re.fullmatch(r"\+[1-9][0-9]{6,14}", phone):
+        raise SystemExit("WhatsApp owner target is not a valid E.164 number")
+    return phone
+
+
 def main() -> None:
+    if len(sys.argv) != 9:
+        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64 LANGBOT_DB MAC_SSH_KEY")
     data_dir = Path(sys.argv[1])
-    team_bytes = base64.b64decode(sys.argv[2])
-    config_bytes = base64.b64decode(sys.argv[3])
+    config_template = json.loads(base64.b64decode(sys.argv[2]).decode())
+    team_bytes = base64.b64decode(sys.argv[3])
     workspace = {
         "AGENTS.md": base64.b64decode(sys.argv[4]),
         "SOUL.md": base64.b64decode(sys.argv[5]),
         "USER.md": base64.b64decode(sys.argv[6]),
     }
-    legacy_api = Path(sys.argv[7])
-    langbot_db = Path(sys.argv[8])
-    identity_file = Path(sys.argv[9])
-    env_file = Path(sys.argv[10])
+    langbot_db = Path(sys.argv[7])
+    mac_ssh_source = Path(sys.argv[8])
 
     config_dir = data_dir / "config"
     workspace_dir = data_dir / "workspace"
     pubg_data_dir = data_dir / "data"
     secrets_dir = data_dir / "secrets"
-    for directory in [data_dir, config_dir, workspace_dir, pubg_data_dir, secrets_dir]:
+    outbox_dir = data_dir / "notifications"
+    for directory in (data_dir, config_dir, workspace_dir, pubg_data_dir, secrets_dir, outbox_dir):
         directory.mkdir(parents=True, exist_ok=True)
+        os.chown(directory, 1000, 1000)
+        os.chmod(directory, 0o700)
 
-    if legacy_api.is_symlink() or not legacy_api.is_file():
-        raise SystemExit("legacy PUBG API key file is not a regular file")
-    api_bytes = legacy_api.read_bytes()
-    if not api_bytes.strip():
-        raise SystemExit("legacy PUBG API key file is empty")
+    existing_config_path = config_dir / "openclaw.json"
+    existing_config: dict = {}
+    if existing_config_path.is_file():
+        existing_config = json.loads(existing_config_path.read_text())
+
+    api_source = Path("/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key")
     api_target = secrets_dir / "pubg-api-key"
-    if api_target.exists() and api_target.read_bytes() != api_bytes:
-        raise SystemExit("existing OpenClaw PUBG API key differs from legacy source")
-    write_secret_if_missing(api_target, api_bytes)
+    if not api_target.exists() and not api_source.is_file():
+        raise SystemExit("PUBG API key is unavailable in both the existing OpenClaw and legacy locations")
+    if not api_target.exists():
+        install_if_missing(api_target, api_source, "PUBG API key")
+    else:
+        ensure_regular(api_target, "PUBG API key")
+        ensure_owner(api_target)
 
     team_target = secrets_dir / "pubg-team.json"
     if team_target.exists():
-        if team_target.is_symlink() or not team_target.is_file():
-            raise SystemExit("invalid external team config file")
+        ensure_regular(team_target, "PUBG team config")
         json.loads(team_target.read_text())
         ensure_owner(team_target)
     else:
         json.loads(team_bytes.decode())
-        team_target.write_bytes(team_bytes)
-        ensure_owner(team_target)
+        write_if_missing(team_target, team_bytes, "PUBG team config")
 
-    telegram_target = secrets_dir / "telegram-bot-token"
-    if telegram_target.exists():
-        if telegram_target.is_symlink() or not telegram_target.is_file() or not telegram_target.read_text().strip():
-            raise SystemExit("invalid external Telegram token file")
-        ensure_owner(telegram_target)
+    existing_or_legacy_token(secrets_dir / "telegram-bot-token", langbot_db, "telegram")
+    existing_or_legacy_token(secrets_dir / "kook-bot-token", langbot_db, "kook")
+    install_if_missing(secrets_dir / "mac-ssh-key", mac_ssh_source, "Mac SSH key")
+
+    owner_candidates = valid_owner_targets(existing_config)
+    owner_target = secrets_dir / "owner-whatsapp-target"
+    if owner_target.exists():
+        ensure_regular(owner_target, "WhatsApp owner target")
+        current_owner = owner_target.read_text().strip()
+        if owner_candidates and current_owner != owner_candidates[0]:
+            raise SystemExit("existing WhatsApp owner target differs from OpenClaw ownerAllowFrom")
+        ensure_owner(owner_target)
+    elif len(owner_candidates) != 1:
+        raise SystemExit("exactly one whatsapp:* OpenClaw ownerAllowFrom entry is required")
     else:
-        db = sqlite3.connect("file:" + str(langbot_db) + "?mode=ro", uri=True)
-        rows = db.execute(
-            "select adapter_config from bots where lower(adapter) = 'telegram' order by enable desc"
-        ).fetchall()
-        db.close()
-        token = None
-        for row in rows:
-            try:
-                token = find_telegram_token(json.loads(row[0]))
-            except (TypeError, json.JSONDecodeError):
-                continue
-            if token:
-                break
-        if not token:
-            raise SystemExit("Telegram token was not found in the legacy LangBot database")
-        telegram_target.write_text(token + "\n")
-        ensure_owner(telegram_target)
+        write_if_missing(owner_target, (owner_candidates[0] + "\n").encode(), "WhatsApp owner target")
 
-    old_identity = read_env(identity_file)
-    env_values = read_env(env_file)
-    owner = env_values.get("TELEGRAM_ALLOWED_USER_ID") or old_identity.get("TELEGRAM_ADMIN_USER_ID")
-    if not owner or not re.fullmatch(r"[1-9][0-9]*", owner):
-        raise SystemExit("a positive numeric TELEGRAM_ALLOWED_USER_ID is required")
+    env_path = data_dir / "openclaw.env"
+    env_values = read_env(env_path)
+    env_lines = env_path.read_text().splitlines() if env_path.is_file() else []
+    set_env(env_lines, "OPENCLAW_GATEWAY_TOKEN", env_values.get("OPENCLAW_GATEWAY_TOKEN", "").strip() or secrets.token_urlsafe(32))
+    if not env_values.get("OPENCLAW_9ROUTER_API_KEY", "").strip():
+        set_env(env_lines, "OPENCLAW_9ROUTER_API_KEY", "local")
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+    env_path.write_text("\n".join(env_lines) + "\n")
+    ensure_owner(env_path)
 
-    lines = env_file.read_text().splitlines() if env_file.is_file() else []
-    gateway_token = env_values.get("OPENCLAW_GATEWAY_TOKEN", "").strip() or secrets.token_urlsafe(32)
-    router_key = env_values.get("OPENCLAW_9ROUTER_API_KEY", "").strip() or "local"
-    set_env_line(lines, "OPENCLAW_GATEWAY_TOKEN", gateway_token)
-    set_env_line(lines, "OPENCLAW_9ROUTER_API_KEY", router_key)
-    set_env_line(lines, "TELEGRAM_ALLOWED_USER_ID", owner)
-    env_file.parent.mkdir(parents=True, exist_ok=True)
-    env_file.write_text("\n".join(lines) + "\n")
-    ensure_owner(env_file)
+    config = dict(config_template)
+    if config.get("tools", {}).get("profile") != "full":
+        raise SystemExit('OpenClaw Amadeus deployment requires tools.profile="full" for the owner agent')
+    merge_preserved(config, existing_config)
+    current_allow = existing_config.get("channels", {}).get("telegram", {}).get("allowFrom", [])
+    if not isinstance(current_allow, list) or not current_allow:
+        raise SystemExit("OpenClaw Telegram allowFrom is empty; refuse to widen identity scope")
+    config.setdefault("channels", {}).setdefault("telegram", {})["allowFrom"] = current_allow
+    owner_target_value = owner_candidates[0] if owner_candidates else owner_target.read_text().strip()
+    config.setdefault("commands", {})["ownerAllowFrom"] = [owner_target_value]
 
-    config = json.loads(config_bytes.decode())
-    config["channels"]["telegram"]["allowFrom"] = [int(owner)]
-    config_path = config_dir / "openclaw.json"
-    temp_config = config_dir / "openclaw.json.codex-tmp"
-    temp_config.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
-    ensure_owner(temp_config)
-    os.replace(temp_config, config_path)
+    whatsapp = config.setdefault("channels", {}).setdefault("whatsapp", {})
+    phone = owner_phone(owner_target_value)
+    whatsapp["dmPolicy"] = "allowlist"
+    whatsapp["allowFrom"] = [phone]
+    groups = whatsapp.setdefault("groups", {})
+    for group in groups.values():
+        if isinstance(group, dict):
+            group.pop("tools", None)
+            group.pop("toolsBySender", None)
+
+    temporary = config_dir / "openclaw.json.codex-tmp"
+    temporary.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")
+    ensure_owner(temporary)
+    os.replace(temporary, config_dir / "openclaw.json")
 
     for name, content in workspace.items():
         target = workspace_dir / name
         target.write_bytes(content)
         ensure_owner(target, 0o644)
-    for base in [config_dir, workspace_dir, pubg_data_dir]:
-        os.chown(base, 1000, 1000)
-        for root, dirs, files in os.walk(base):
-            dirs[:] = [name for name in dirs if not (Path(root) / name).is_symlink()]
-            for name in files:
-                target = Path(root) / name
-                if not target.is_symlink():
-                    os.chown(target, 1000, 1000)
+
     print("EXTERNAL_CONFIG=prepared")
-    print("TELEGRAM_ALLOWLIST=validated")
+    print("OWNER_TARGET=validated")
+    print("TELEGRAM_ALLOWLIST=preserved")
     print("SECRET_FILES=prepared")
 
 

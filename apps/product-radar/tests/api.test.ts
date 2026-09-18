@@ -76,7 +76,7 @@ test('HTTP API exposes source capabilities and watch lifecycle without platform 
 
     const fetched = await fetch(`${runtime.base}/api/watches/${created.watch.id}`).then((response) => response.json());
     assert.equal(fetched.type, 'seller');
-    const usageResponse = await fetch(`${runtime.base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ watchId: created.watch.id, provider: 'langbot', model: 'luna', operation: 'intent', inputTokens: 3, outputTokens: 2, totalTokens: 5, inferenceCount: 1, imagesProcessed: 0 }) });
+    const usageResponse = await fetch(`${runtime.base}/api/usage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ watchId: created.watch.id, provider: 'nine-router', model: 'luna', operation: 'intent', inputTokens: 3, outputTokens: 2, totalTokens: 5, inferenceCount: 1, imagesProcessed: 0 }) });
     assert.equal(usageResponse.status, 201);
     const status = await fetch(`${runtime.base}/api/watches/${created.watch.id}/status`).then((response) => response.json());
     assert.equal(status.status, 'HEALTHY');

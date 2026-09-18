@@ -86,7 +86,7 @@ export interface TargetProfile {
 }
 
 export interface TargetProfileExtractionInput extends VisionProfileInput {
-  /** A previously analyzed provider result, supplied by a platform adapter such as LangBot. */
+  /** A previously analyzed provider result supplied by an external boundary. */
   visionProfile?: VisionProfile;
   visionProvider?: string;
 }

@@ -1,420 +1,361 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 MACHINE="ubuntu"
-COMPOSE_DIR="/var/lib/casaos/apps/openclaw"
-DATA_DIR="/DATA/AppData/openclaw"
-OLD_PUBG_COMPOSE_DIR="/var/lib/casaos/apps/pubg-query-engine-v3"
-OLD_OPENCLAW_COMPOSE_DIR="/var/lib/casaos/apps/big-bear-openclaw"
-N8N_DB="/DATA/AppData/n8n/database.sqlite"
-LANGBOT_DB="/DATA/AppData/langbot/data/langbot.db"
-RADAR_COMPOSE_FILE="/var/lib/casaos/apps/product-radar/docker-compose.yml"
-LEGACY_STATE="/DATA/AppData/pubg-query-engine-v3/data/state.json"
-LEGACY_FEATURES="/DATA/AppData/pubg-query-engine-v3/data/features.json"
-LEGACY_API_KEY="/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key"
-LEGACY_IDENTITY="/DATA/AppData/pubg-query-engine-v3/admin-identity.env"
+OPENCLAW_APP_DIR="/var/lib/casaos/apps/openclaw"
+OPENCLAW_DATA_DIR="/DATA/AppData/openclaw"
+RADAR_APP_DIR="/var/lib/casaos/apps/product-radar"
+LANGBOT_APP_DIR="/var/lib/casaos/apps/langbot"
+N8N_APP_DIR="/var/lib/casaos/apps/n8n"
+N8N_SANDBOX_APP_DIR="/var/lib/casaos/apps/n8n-sandbox"
+LANGBOT_DATA_DIR="/DATA/AppData/langbot"
+N8N_DATA_DIR="/DATA/AppData/n8n"
+N8N_SANDBOX_DATA_DIR="/DATA/AppData/n8n-sandbox"
 IMAGE=""
+RADAR_IMAGE=""
 APPLY=0
 BUILD=0
-CLEANUP=0
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/deploy-openclaw.sh [--dry-run] [--apply] [--build] [--cleanup]
-      [--image <tag>] [--machine <name>] [--compose-dir <path>]
+  ./scripts/deploy-openclaw.sh --dry-run
+  ./scripts/deploy-openclaw.sh --apply --build
+  ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
 
-Default is a dry-run. --apply performs the one-time OpenClaw PUBG switch:
-preflight, external config/secret preparation, old Telegram/n8n consumer stop,
-migration dry-run and apply, then new CasaOS startup. --cleanup retires the
-dedicated old PUBG and unused legacy OpenClaw app definitions after health passes.
+Default is a dry-run. Apply performs the one-time Amadeus switch, checkpoints
+external state, retires LangBot/n8n paths, and verifies owner WhatsApp delivery.
 USAGE
 }
 
-fail() {
-  printf '%s\n' "$*" >&2
-  exit 2
-}
-
-quote_remote() {
-  printf '%q' "$1"
-}
-
-base64_file() {
-  base64 < "$1" | tr -d '\n'
-}
+fail() { printf '%s\n' "$*" >&2; exit 2; }
+base64_file() { base64 < "$1" | tr -d '\n'; }
 
 while (($#)); do
   case "$1" in
     --dry-run) APPLY=0 ;;
     --apply) APPLY=1 ;;
     --build) BUILD=1 ;;
-    --cleanup) CLEANUP=1 ;;
-    --image)
-      (($# >= 2)) || fail '--image requires a tag.'
-      IMAGE="$2"
-      shift
-      ;;
-    --machine)
-      (($# >= 2)) || fail '--machine requires a value.'
-      MACHINE="$2"
-      shift
-      ;;
-    --compose-dir)
-      (($# >= 2)) || fail '--compose-dir requires a value.'
-      COMPOSE_DIR="$2"
-      shift
-      ;;
-    --help|-h)
-      usage
-      exit 0
-      ;;
+    --image) (($# >= 2)) || fail '--image requires a value.'; IMAGE="$2"; shift ;;
+    --radar-image) (($# >= 2)) || fail '--radar-image requires a value.'; RADAR_IMAGE="$2"; shift ;;
+    --machine) (($# >= 2)) || fail '--machine requires a value.'; MACHINE="$2"; shift ;;
+    --help|-h) usage; exit 0 ;;
     *) fail "Unknown option: $1" ;;
   esac
   shift
 done
 
-[[ "$IMAGE" != *$'\n'* ]] || fail 'Image tag must not contain newlines.'
-[[ "$IMAGE" != *[[:space:]]* ]] || fail 'Image tag must not contain whitespace.'
-if ((CLEANUP)) && ((APPLY == 0)); then
-  fail '--cleanup requires --apply.'
-fi
-if ((BUILD)) && [[ -z "$IMAGE" ]]; then
-  IMAGE="local/openclaw-pubg:git-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)-$(date -u +%Y%m%d%H%M%S)"
-fi
+[[ "$IMAGE" != *$'\n'* && "$IMAGE" != *[[:space:]]* ]] || fail 'OpenClaw image tag contains whitespace.'
+[[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
+STAMP="$(date -u +%Y%m%d%H%M%S)"
+COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
+if [[ -z "$IMAGE" && "$BUILD" -eq 1 ]]; then IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"; fi
+if [[ -z "$RADAR_IMAGE" && "$BUILD" -eq 1 ]]; then RADAR_IMAGE="local/product-radar:git-$COMMIT-$STAMP"; fi
 
+shown_image="$IMAGE"
+shown_radar_image="$RADAR_IMAGE"
+[[ -n "$shown_image" ]] || shown_image="requires --image for apply without --build"
+[[ -n "$shown_radar_image" ]] || shown_radar_image="requires --radar-image for apply without --build"
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'BUILD=%s\n' "$([[ $BUILD -eq 1 ]] && printf explicit || printf disabled)"
-printf 'CLEANUP=%s\n' "$([[ $CLEANUP -eq 1 ]] && printf explicit || printf disabled)"
-printf 'IMAGE=%s\n' "${IMAGE:-requires --image for apply without --build}"
+printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
+printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
-printf 'COMPOSE_DIR=%s\n' "$COMPOSE_DIR"
-printf '%s\n' 'COMPOSE_COMMAND=docker compose up -d --no-build'
 
 if ((APPLY == 0)); then
-  if ((BUILD)); then
-    printf '%s\n' 'PLAN=run tests, secret scan, host BuildKit image build/load, external preparation, one-time migration, old consumer stop, health checks, and optional legacy cleanup.'
-  else
-    printf '%s\n' 'PLAN=no image build or runtime write; apply requires an existing --image and performs the one-time switch.'
-  fi
+  printf '%s\n' 'PLAN=verify, build/load ARM64 images, checkpoint, switch Product Radar/OpenClaw, retire old paths, register briefings, test owner WhatsApp.'
   exit 0
 fi
-[[ -n "$IMAGE" ]] || fail 'Apply without --build requires --image <tag>.'
 
+[[ -n "$IMAGE" && -n "$RADAR_IMAGE" ]] || fail 'Apply without --build requires --image and --radar-image.'
 git -C "$ROOT_DIR" diff --check
+git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
+git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
+
 (
   cd "$ROOT_DIR"
-  source /Users/blacksidev/.nvm/nvm.sh
-  nvm use 24.16.0 >/dev/null
-  pnpm build:pubg
-  pnpm typecheck:pubg
-  pnpm test:pubg
+  if [[ -f /Users/blacksidev/.nvm/nvm.sh ]]; then
+    source /Users/blacksidev/.nvm/nvm.sh
+    nvm use 24.16.0 >/dev/null
+  fi
+  pnpm build
+  pnpm typecheck
+  pnpm test
   pnpm check:secrets
 )
 
 if ((BUILD)); then
-  git -C "$ROOT_DIR" diff --quiet || fail 'Refusing RELEASE build with unstaged/uncommitted worktree changes.'
-  git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing RELEASE build with staged-but-uncommitted changes.'
-  docker buildx build --platform linux/arm64 --load --progress=plain \
-    --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" \
-    --tag "$IMAGE" "$ROOT_DIR"
+  docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
   docker save "$IMAGE" | orb -m "$MACHINE" -u root docker load
+  docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR/apps/product-radar"
+  docker save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 else
-  orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "Remote image not found: $IMAGE"
+  orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
+  orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
 fi
 
-CHECKPOINT_ID="openclaw-pubg-$(date -u +%Y%m%d-%H%M%S)"
-CHECKPOINT_DIR="$DATA_DIR/backups/$CHECKPOINT_ID"
-COMPOSE_FILE="$COMPOSE_DIR/docker-compose.yml"
-TEMPLATE_FILE="$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml"
-CONFIG_TEMPLATE="$ROOT_DIR/integrations/openclaw/openclaw.json.example"
-TEAM_TEMPLATE="$ROOT_DIR/packages/pubg-domain/config/default-team.json"
-AGENTS_TEMPLATE="$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md"
-SOUL_TEMPLATE="$ROOT_DIR/integrations/openclaw/workspace/SOUL.md"
-USER_TEMPLATE="$ROOT_DIR/integrations/openclaw/workspace/USER.md"
-
-for required_file in "$TEMPLATE_FILE" "$CONFIG_TEMPLATE" "$TEAM_TEMPLATE" "$AGENTS_TEMPLATE" "$SOUL_TEMPLATE" "$USER_TEMPLATE"; do
-  [[ -f "$required_file" ]] || fail "Missing deployment source: $required_file"
+CHECKPOINT_ID="amadeus-openclaw-$STAMP"
+CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/backups/$CHECKPOINT_ID"
+OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
+RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
+RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
+PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
+for source in \
+  "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
+  "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
+  "$ROOT_DIR/integrations/openclaw/openclaw.json.example" \
+  "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
+  "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace/USER.md" "$PREPARE"; do
+  [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
-orb -m "$MACHINE" -u root python3 - \
-  "$N8N_DB" "$LANGBOT_DB" "$LEGACY_STATE" "$LEGACY_FEATURES" \
-  "$LEGACY_API_KEY" "$LEGACY_IDENTITY" "9router_default" <<'PY'
-import subprocess
-import sys
-from pathlib import Path
-
-missing = [str(Path(value)) for value in sys.argv[1:7] if not Path(value).is_file()]
-if missing:
-    raise SystemExit('missing legacy source(s): ' + ', '.join(missing))
-try:
-    subprocess.run(['docker', 'network', 'inspect', sys.argv[7]], check=True, stdout=subprocess.DEVNULL)
-except subprocess.CalledProcessError as exc:
-    raise SystemExit('required 9router network is unavailable') from exc
-print('PREFLIGHT=passed')
-PY
-
-TELEGRAM_BOT_UUID="$(orb -m "$MACHINE" -u root python3 - "$LANGBOT_DB" <<'PY'
-import sqlite3
-import sys
-
-conn = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
-rows = conn.execute("select uuid from bots where lower(adapter) = 'telegram'").fetchall()
-conn.close()
-if len(rows) != 1:
-    raise SystemExit('expected exactly one legacy LangBot Telegram bot, found ' + str(len(rows)))
-print(rows[0][0])
-PY
-)"
-
-TEAM_B64="$(base64_file "$TEAM_TEMPLATE")"
-CONFIG_B64="$(base64_file "$CONFIG_TEMPLATE")"
-COMPOSE_B64="$(base64_file "$TEMPLATE_FILE")"
-AGENTS_B64="$(base64_file "$AGENTS_TEMPLATE")"
-SOUL_B64="$(base64_file "$SOUL_TEMPLATE")"
-USER_B64="$(base64_file "$USER_TEMPLATE")"
+OPENCLAW_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml")"
+RADAR_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml")"
+CONFIG_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/openclaw.json.example")"
+TEAM_B64="$(base64_file "$ROOT_DIR/packages/pubg-domain/config/default-team.json")"
+AGENTS_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md")"
+SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md")"
+USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/USER.md")"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR" \
-  "$COMPOSE_FILE" \
-  "$OLD_PUBG_COMPOSE_DIR/docker-compose.yml" \
-  "$OLD_OPENCLAW_COMPOSE_DIR/docker-compose.yml" \
-  "$RADAR_COMPOSE_FILE" \
-  "$LANGBOT_DB" "$N8N_DB" "$LEGACY_STATE" "$LEGACY_FEATURES" \
-  "$DATA_DIR/data/pubg.sqlite" < "$ROOT_DIR/scripts/openclaw_checkpoint.py"
-
-orb -m "$MACHINE" -u root python3 - \
-  "$DATA_DIR" "$TEAM_B64" "$CONFIG_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" \
-  "$LEGACY_API_KEY" "$LANGBOT_DB" "$LEGACY_IDENTITY" "$DATA_DIR/openclaw.env" \
-  < "$ROOT_DIR/scripts/openclaw_prepare.py"
-
-orb -m "$MACHINE" -u root python3 - \
-  "$COMPOSE_DIR" "$COMPOSE_FILE" "$COMPOSE_B64" "$IMAGE" <<'PY'
-import base64
-import os
-import re
-import sys
+  "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml \
+  "$RADAR_COMPOSE_FILE" product-radar-compose.before.yml \
+  "$RADAR_ENV_FILE" product-radar.env.before \
+  "$LANGBOT_APP_DIR" langbot-app.before \
+  "$N8N_APP_DIR" n8n-app.before \
+  "$N8N_SANDBOX_APP_DIR" n8n-sandbox-app.before \
+  /var/lib/casaos/apps/media-organizer-adapter/docker-compose.yml media-organizer-compose.before.yml \
+  "$OPENCLAW_DATA_DIR/config/openclaw.json" openclaw-config.before.json \
+  "$OPENCLAW_DATA_DIR/openclaw.env" openclaw.env.before \
+  "$OPENCLAW_DATA_DIR/secrets" openclaw-secrets.before \
+  "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
+  "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
+import json, shutil, subprocess, sys
+from datetime import datetime, timezone
 from pathlib import Path
+checkpoint = Path(sys.argv[1])
+if checkpoint.exists(): raise SystemExit('checkpoint already exists: ' + str(checkpoint))
+checkpoint.mkdir(parents=True)
+args = sys.argv[2:]
+if len(args) % 2: raise SystemExit('checkpoint pairs are unbalanced')
+for i in range(0, len(args), 2):
+    source, destination = Path(args[i]), checkpoint / args[i + 1]
+    if not source.exists(): continue
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if source.is_dir(): shutil.copytree(source, destination, symlinks=True)
+    else: shutil.copy2(source, destination)
+containers = {}
+for name in ['openclaw','product-radar','media-organizer-adapter','langbot','langbot_plugin_runtime','n8n','n8n-sandbox-api','n8n-sandbox-runner-1']:
+    try: containers[name] = subprocess.check_output(['docker','inspect','--format','{{.State.Status}}',name], text=True).strip()
+    except subprocess.CalledProcessError: containers[name] = 'absent'
+(checkpoint / 'checkpoint.json').write_text(json.dumps({
+    'createdAt': datetime.now(timezone.utc).isoformat(),
+    'checkpointId': checkpoint.name,
+    'containersBeforeSwitch': containers,
+    'note': 'External checkpoint; contains runtime secrets/data needed for recovery.'
+}, ensure_ascii=False, indent=2) + '\n')
+print('CHECKPOINT=' + str(checkpoint))
+PY
 
-compose_dir = Path(sys.argv[1])
-compose_file = Path(sys.argv[2])
-content = base64.b64decode(sys.argv[3]).decode()
-image = sys.argv[4]
-if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image):
-    raise SystemExit('invalid image tag')
+orb -m "$MACHINE" -u root python3 - \
+  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" \
+  /DATA/AppData/langbot/data/langbot.db /DATA/AppData/langbot/ssh/id_ed25519 < "$PREPARE"
+
+orb -m "$MACHINE" -u root python3 - \
+  "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'
+import base64, os, re, sys
+from pathlib import Path
+app_dir, compose_path, encoded, image = sys.argv[1:]
+if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
+content = base64.b64decode(encoded).decode()
 matches = list(re.finditer(r'(?m)^(\s*)image:\s*.*$', content))
-if len(matches) != 1:
-    raise SystemExit('deployment compose must contain exactly one image line')
-match = matches[0]
-content = content[:match.start()] + match.group(1) + 'image: ' + image + content[match.end():]
-compose_dir.mkdir(parents=True, exist_ok=True)
-compose_file.write_text(content)
-os.chmod(compose_file, 0o644)
-print('COMPOSE=installed')
+if len(matches) != 1: raise SystemExit('OpenClaw compose must have one image line')
+m = matches[0]
+content = content[:m.start()] + m.group(1) + 'image: ' + image + content[m.end():]
+Path(app_dir).mkdir(parents=True, exist_ok=True)
+temporary = Path(compose_path + '.codex-tmp')
+temporary.write_text(content); os.chmod(temporary, 0o644); os.replace(temporary, compose_path)
+print('OPENCLAW_COMPOSE=installed')
 PY
 
-remote_compose_dir="$(quote_remote "$COMPOSE_DIR")"
-remote_checkpoint="$(quote_remote "$CHECKPOINT_DIR")"
-remote_image="$(quote_remote "$IMAGE")"
-
-orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; cd $remote_compose_dir; docker compose config >/dev/null; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > $remote_checkpoint/config-validate.json; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > $remote_checkpoint/plugin-inspect.json; docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > $remote_checkpoint/skills-list.json"
-
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/plugin-inspect.json" <<'PY'
-import json
-import sys
+orb -m "$MACHINE" -u root python3 - \
+  "$RADAR_APP_DIR" "$RADAR_COMPOSE_FILE" "$RADAR_COMPOSE_B64" "$RADAR_IMAGE" "$RADAR_ENV_FILE" <<'PY'
+import base64, os, re, sys
 from pathlib import Path
-
-value = json.loads(Path(sys.argv[1]).read_text())
-text = json.dumps(value, ensure_ascii=False)
-expected = [
-    'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats',
-    'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts',
-]
-if 'loaded' not in text or any(name not in text for name in expected):
-    raise SystemExit('OpenClaw PUBG plugin did not report all six loaded tools')
-print('PLUGIN_PREFLIGHT=passed')
+app_dir, compose_path, encoded, image, env_path = sys.argv[1:]
+if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid Product Radar image tag')
+content = base64.b64decode(encoded).decode()
+lines, replaced = [], False
+for line in content.splitlines(keepends=True):
+    if line.lstrip().startswith('image:') and 'PRODUCT_RADAR_IMAGE' in line:
+        indent = line[:len(line)-len(line.lstrip())]
+        lines.append(indent + 'image: ' + image + ('\n' if line.endswith('\n') else ''))
+        replaced = True
+    else: lines.append(line)
+if not replaced: raise SystemExit('Product Radar image line missing')
+Path(app_dir).mkdir(parents=True, exist_ok=True)
+temporary = Path(compose_path + '.codex-tmp')
+temporary.write_text(''.join(lines)); os.chmod(temporary, 0o644); os.replace(temporary, compose_path)
+allowed = {'PRODUCT_RADAR_API_KEY','CHANGEDETECTION_API_KEY','PRODUCT_RADAR_IMAGE_MATCHER_PROVIDER','FASHION_SIGLIP_BASE_URL','FASHION_SIGLIP_TIMEOUT_MS','PRODUCT_RADAR_MAX_BODY_BYTES','PRODUCT_RADAR_PUBLIC_PORT','PRODUCT_RADAR_PORT'}
+env = Path(env_path)
+old = env.read_text().splitlines() if env.is_file() else []
+filtered, found = [], False
+for line in old:
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'): filtered.append(line); continue
+    key = stripped.split('=', 1)[0].strip()
+    if key == 'PRODUCT_RADAR_IMAGE':
+        filtered.append('PRODUCT_RADAR_IMAGE=' + image); found = True
+    elif key in allowed: filtered.append(line)
+if not found: filtered.append('PRODUCT_RADAR_IMAGE=' + image)
+env.write_text('\n'.join(filtered) + '\n'); os.chmod(env, 0o600)
+print('PRODUCT_RADAR_COMPOSE=installed')
+print('PRODUCT_RADAR_ENV=legacy_notification_keys_removed')
 PY
 
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/skills-list.json" <<'PY'
-import json
-import sys
+orb -m "$MACHINE" -u root docker network inspect langbot_langbot_network >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create langbot_langbot_network >/dev/null
+orb -m "$MACHINE" -u root docker network inspect 9router_default >/dev/null 2>&1 || fail '9router_default network is unavailable.'
+orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect amadeus --runtime --json > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
+
+orb -m "$MACHINE" -u root python3 - \
+  "$CHECKPOINT_DIR/plugin-pubg-preflight.json" "$CHECKPOINT_DIR/plugin-amadeus-preflight.json" "$CHECKPOINT_DIR/skills-preflight.json" <<'PY'
+import json, sys
 from pathlib import Path
-
-value = json.loads(Path(sys.argv[1]).read_text())
-skills = [item for item in value.get('skills', []) if item.get('name') == 'pubg']
-if not skills or any(not str(item.get('description', '')).strip() for item in skills):
-    raise SystemExit('OpenClaw did not load the PUBG bundled Skill with a description')
-print('SKILL_PREFLIGHT=passed count=%s' % len(skills))
+pubg = json.dumps(json.loads(Path(sys.argv[1]).read_text()), ensure_ascii=False)
+amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=False)
+skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
+for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts']:
+    if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_notify_owner','amadeus_briefing']:
+    if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
+for name in ['pubg','amadeus']:
+    if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
+print('OPENCLAW_PREFLIGHT=passed')
 PY
 
-OLD_LANGBOT_RUNNING=0
-OLD_N8N_RUNNING=0
-OLD_LANGBOT_STOPPED=0
-OLD_N8N_STOPPED=0
+orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/config/openclaw.json" <<'PY'
+import json, sys
+from pathlib import Path
+config = json.loads(Path(sys.argv[1]).read_text())
+if config.get('tools', {}).get('profile') != 'full':
+    raise SystemExit('owner tool policy is not tools.profile=full')
+if 'allow' in config.get('tools', {}):
+    raise SystemExit('strict tools.allow list would hide future native tools')
+if 'amadeus' not in config.get('plugins', {}).get('allow', []):
+    raise SystemExit('Amadeus plugin is not in the OpenClaw plugin allowlist')
+owner_targets = config.get('commands', {}).get('ownerAllowFrom', [])
+if len(owner_targets) != 1 or not str(owner_targets[0]).startswith('whatsapp:+'):
+    raise SystemExit('exactly one WhatsApp owner identity is required')
+owner_phone = str(owner_targets[0]).split(':', 1)[1]
+whatsapp = config.get('channels', {}).get('whatsapp', {})
+if whatsapp.get('dmPolicy') != 'allowlist' or owner_phone not in whatsapp.get('allowFrom', []):
+    raise SystemExit('WhatsApp DM allowlist is not restricted to the owner identity')
+wildcard_group = whatsapp.get('groups', {}).get('*', {})
+if 'tools' in wildcard_group or 'toolsBySender' in wildcard_group:
+    raise SystemExit('WhatsApp group tool policy must inherit the full agent profile')
+print('OWNER_TOOL_POLICY=full')
+PY
 
-restore_legacy_on_error() {
-  status=$?
-  if ((status != 0)); then
-    if ((OLD_LANGBOT_STOPPED == 1)) && ((OLD_LANGBOT_RUNNING == 1)); then
-      orb -m "$MACHINE" -u root docker start langbot >/dev/null 2>&1 || true
-    fi
-    if ((OLD_N8N_STOPPED == 1)) && ((OLD_N8N_RUNNING == 1)); then
-      orb -m "$MACHINE" -u root docker start n8n >/dev/null 2>&1 || true
-    fi
+for old_compose in "$N8N_SANDBOX_APP_DIR/docker-compose.yml" "$N8N_APP_DIR/docker-compose.yml" "$LANGBOT_APP_DIR/docker-compose.yml"; do
+  if orb -m "$MACHINE" -u root test -f "$old_compose" >/dev/null 2>&1; then
+    orb -m "$MACHINE" -u root docker compose -f "$old_compose" down --remove-orphans >/dev/null
   fi
-  exit "$status"
+done
+
+orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/retired-apps" "$CHECKPOINT_DIR/retired-data" \
+  "$LANGBOT_APP_DIR" "$N8N_APP_DIR" "$N8N_SANDBOX_APP_DIR" \
+  "$LANGBOT_DATA_DIR" "$N8N_DATA_DIR" "$N8N_SANDBOX_DATA_DIR" <<'PY'
+import shutil, sys
+from pathlib import Path
+apps, data = Path(sys.argv[1]), Path(sys.argv[2])
+apps.mkdir(parents=True, exist_ok=True); data.mkdir(parents=True, exist_ok=True)
+for raw in sys.argv[3:6]:
+    source = Path(raw)
+    if source.exists(): shutil.move(str(source), str(apps / source.name))
+for raw in sys.argv[6:]:
+    source = Path(raw)
+    if source.exists(): shutil.move(str(source), str(data / source.name))
+print('LEGACY_APP_PATHS=retired')
+print('LEGACY_APPDATA=retired')
+PY
+
+orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null"
+
+for attempt in $(seq 1 40); do
+  if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then break; fi
+  sleep 2
+done
+orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null
+orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null
+orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null blacksidev@host.docker.internal nas.status' >/dev/null
+orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
+
+ensure_cron() {
+  local name="$1" expression="$2" message="$3"
+  if ! orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); raise SystemExit(0 if any(x.get("name")==n for x in v.get("jobs",[])) else 1)' "$name"; then
+    orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
+      --name "$name" --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
+      --message "$message" --no-deliver --tools amadeus_briefing --exact \
+      --declaration-key "amadeus-$name-v1" --json >/dev/null
+  fi
 }
-trap restore_legacy_on_error EXIT
+ensure_cron amadeus-briefing-morning '30 9 * * *' '调用 amadeus_briefing 工具，edition=morning，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。'
+ensure_cron amadeus-briefing-evening '0 23 * * *' '调用 amadeus_briefing 工具，edition=evening，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。'
+orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
-old_langbot_state="$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Running}}' langbot 2>/dev/null || true)"
-if [[ "$old_langbot_state" == "true" ]]; then
-  OLD_LANGBOT_RUNNING=1
-  orb -m "$MACHINE" -u root docker stop langbot >/dev/null
-  OLD_LANGBOT_STOPPED=1
-fi
-old_n8n_state="$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Running}}' n8n 2>/dev/null || true)"
-if [[ "$old_n8n_state" == "true" ]]; then
-  OLD_N8N_RUNNING=1
-  orb -m "$MACHINE" -u root docker stop n8n >/dev/null
-  OLD_N8N_STOPPED=1
-fi
+HOOK_PATH="/Users/blacksidev/.codex/bin/codex-notify.sh"
+HOOK_BACKUP_DIR="/Users/blacksidev/.codex/backups/$CHECKPOINT_ID"
+mkdir -p "$HOOK_BACKUP_DIR"
+if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
+install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
-old_radar_state="$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Running}}' product-radar 2>/dev/null || true)"
-orb -m "$MACHINE" -u root python3 - "$LANGBOT_DB" "$N8N_DB" "$RADAR_COMPOSE_FILE" "$TELEGRAM_BOT_UUID" < "$ROOT_DIR/scripts/openclaw_retire_legacy.py"
-
-if ((OLD_N8N_STOPPED == 1)) && ((OLD_N8N_RUNNING == 1)); then
-  orb -m "$MACHINE" -u root docker start n8n >/dev/null
-  OLD_N8N_STOPPED=0
-fi
-
-if [[ "$old_radar_state" == "true" ]]; then
-  orb -m "$MACHINE" -u root bash -lc 'set -euo pipefail; cd /var/lib/casaos/apps/product-radar; docker compose up -d --no-build product-radar'
-fi
-
-run_migration() {
-  local report_name="$1"
-  local apply_flag="${2:-}"
-  local remote_report="$(quote_remote "$CHECKPOINT_DIR/migration-$report_name.json")"
-  local command="docker run --rm --user 0:0 --entrypoint node --mount type=bind,source=$(quote_remote "$DATA_DIR/data"),target=/data --mount type=bind,source=$(quote_remote "$N8N_DB"),target=/migration/n8n.sqlite,readonly --mount type=bind,source=$(quote_remote "$LEGACY_STATE"),target=/migration/state.json,readonly --mount type=bind,source=$(quote_remote "$LEGACY_FEATURES"),target=/migration/features.json,readonly $remote_image /app/extensions/pubg/dist/migrate.js --target /data/pubg.sqlite --n8n /migration/n8n.sqlite --state /migration/state.json --features /migration/features.json --migration-id $(quote_remote "$CHECKPOINT_ID") $apply_flag > $remote_report"
-  orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; $command"
-}
-
-MIGRATION_COUNT="$(orb -m "$MACHINE" -u root python3 - "$DATA_DIR/data/pubg.sqlite" <<'PY'
-import sqlite3
-import sys
+ACCEPTANCE_KEY="amadeus-owner-smoke:$CHECKPOINT_ID"
+orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/notifications" "$ACCEPTANCE_KEY" <<'PY'
+import hashlib, json, os, sys, tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-
-path = Path(sys.argv[1])
-if not path.is_file():
-    print(0)
-else:
-    conn = sqlite3.connect('file:' + str(path) + '?mode=ro', uri=True)
-    try:
-        print(conn.execute('select count(*) from migration_runs').fetchone()[0])
-    except sqlite3.DatabaseError:
-        print(0)
-    finally:
-        conn.close()
+directory = Path(sys.argv[1])
+event = {'version':1,'eventKey':sys.argv[2],'source':'amadeus-release','title':'Amadeus 迁移验收','message':'OpenClaw 原生 owner 通知 outbox 已开始经 WhatsApp owner DM 验证。','occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
+directory.mkdir(parents=True, exist_ok=True); os.chmod(directory, 0o700); os.chown(directory, 1000, 1000)
+event_id = hashlib.sha256(event['eventKey'].encode()).hexdigest()[:40]
+pending, sent = directory / (event_id + '.pending.json'), directory / (event_id + '.sent.json')
+if not pending.exists() and not sent.exists():
+    fd, temporary = tempfile.mkstemp(prefix='.' + event_id + '.', suffix='.tmp', dir=directory)
+    os.fchmod(fd, 0o600); os.chown(temporary, 1000, 1000)
+    with os.fdopen(fd, 'w', encoding='utf-8') as handle: json.dump(event, handle, ensure_ascii=False); handle.write('\n')
+    os.replace(temporary, pending)
+print('OWNER_SMOKE=queued')
 PY
-)"
-if [[ ! "$MIGRATION_COUNT" =~ ^[0-9]+$ ]]; then
-  fail "invalid existing PUBG migration count: $MIGRATION_COUNT"
+
+owner_smoke_id="$(printf '%s' "$ACCEPTANCE_KEY" | shasum -a 256 | cut -c1-40)"
+for attempt in $(seq 1 12); do
+  if orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json" >/dev/null 2>&1; then break; fi
+  sleep 5
+done
+orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json" || fail 'WhatsApp owner outbox smoke did not reach sent state.'
+
+if orb -m "$MACHINE" -u root docker ps -a --format '{{.Names}}' | grep -E '^(langbot|langbot_plugin_runtime|n8n|n8n-sandbox-api|n8n-sandbox-runner-1|n8n-sandbox-tls-init)$' >/dev/null 2>&1; then
+  fail 'A retired LangBot/n8n container still exists.'
 fi
+for retired_path in "$LANGBOT_APP_DIR" "$N8N_APP_DIR" "$N8N_SANDBOX_APP_DIR" "$LANGBOT_DATA_DIR" "$N8N_DATA_DIR" "$N8N_SANDBOX_DATA_DIR"; do
+  orb -m "$MACHINE" -u root test ! -e "$retired_path" || fail "Retired path still exists: $retired_path"
+done
 
-if ((MIGRATION_COUNT == 0)); then
-  run_migration dry-run
-  orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-dry-run.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-report = json.loads(Path(sys.argv[1]).read_text())
-if report.get('errors'):
-    raise SystemExit('PUBG migration dry-run reported source errors: ' + json.dumps(report['errors'], ensure_ascii=False))
-if int(report.get('uniqueMatchIds', 0)) <= 0:
-    raise SystemExit('PUBG migration dry-run found no match IDs')
-print('MIGRATION_DRY_RUN input=%s unique=%s duplicates=%s invalid=%s features=%s' % (
-    report.get('inputMatchRows', 0), report.get('uniqueMatchIds', 0),
-    report.get('duplicateInputs', 0), report.get('invalidInputs', 0),
-    report.get('featureRows', 0)))
-PY
-
-  run_migration apply --apply
-  orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/migration-apply.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-report = json.loads(Path(sys.argv[1]).read_text())
-if report.get('errors'):
-    raise SystemExit('PUBG migration apply reported source errors: ' + json.dumps(report['errors'], ensure_ascii=False))
-print('MIGRATION_APPLY inserted=%s updated=%s duplicates=%s invalid=%s features=%s' % (
-    report.get('inserted', 0), report.get('updated', 0),
-    report.get('duplicateInputs', 0), report.get('invalidInputs', 0),
-    report.get('importedFeatures', 0)))
-PY
-else
-  printf 'PUBG_MIGRATION=already_applied runs=%s\n' "$MIGRATION_COUNT"
-fi
-
-orb -m "$MACHINE" -u root python3 - "$DATA_DIR/data/pubg.sqlite" "$CHECKPOINT_ID" "$MIGRATION_COUNT" <<'PY'
-import sqlite3
-import sys
-
-conn = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
-matches = conn.execute('select count(*) from matches').fetchone()[0]
-players = conn.execute('select count(*) from match_players').fetchone()[0]
-features = conn.execute('select count(*) from telemetry_features').fetchone()[0]
-migrations = conn.execute('select count(*) from migration_runs').fetchone()[0]
-current = conn.execute('select count(*) from migration_runs where id = ?', (sys.argv[2],)).fetchone()[0]
-conn.close()
-if matches <= 0 or migrations <= 0:
-    raise SystemExit('new PUBG SQLite verification failed')
-print('PUBG_SQLITE=verified matches=%s players=%s features=%s migration_runs=%s current_run=%s' % (matches, players, features, migrations, current))
-PY
-
-orb -m "$MACHINE" -u root chown -R 1000:1000 "$DATA_DIR/data"
-orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; cd $remote_compose_dir; docker compose up -d --no-build; for attempt in \$(seq 1 30); do if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then break; fi; sleep 2; done; curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null; docker exec openclaw node dist/index.js channels status --json > $remote_checkpoint/channels-status.json"
-
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/channels-status.json" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-value = json.loads(Path(sys.argv[1]).read_text())
-text = json.dumps(value, ensure_ascii=False).lower()
-if 'telegram' not in text or not any(item in text for item in ['running', 'connected', 'healthy', 'ok']):
-    raise SystemExit('OpenClaw Telegram channel did not report a healthy state')
-print('TELEGRAM_CHANNEL=verified')
-PY
-
-if ((OLD_LANGBOT_STOPPED == 1)) && ((OLD_LANGBOT_RUNNING == 1)); then
-  orb -m "$MACHINE" -u root docker start langbot >/dev/null
-  OLD_LANGBOT_STOPPED=0
-fi
-
-orb -m "$MACHINE" -u root python3 - "$LANGBOT_DB" <<'PY'
-import sqlite3
-import sys
-
-conn = sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True)
-enabled = conn.execute("select count(*) from bots where lower(adapter) = 'telegram' and enable != 0").fetchone()[0]
-conn.close()
-if enabled:
-    raise SystemExit('legacy LangBot Telegram bot became enabled again')
-print('LEGACY_TELEGRAM=still_disabled')
-PY
-
-if ((CLEANUP)); then
-  remote_old_pubg="$(quote_remote "$OLD_PUBG_COMPOSE_DIR/docker-compose.yml")"
-  remote_old_openclaw="$(quote_remote "$OLD_OPENCLAW_COMPOSE_DIR/docker-compose.yml")"
-  orb -m "$MACHINE" -u root bash -lc "set -euo pipefail; if docker inspect --format '{{.State.Running}}' pubg-query-engine-v3 >/dev/null 2>&1; then docker stop pubg-query-engine-v3 >/dev/null; fi; if docker inspect pubg-query-engine-v3 >/dev/null 2>&1; then docker rm pubg-query-engine-v3 >/dev/null; fi; if docker inspect big-bear-openclaw >/dev/null 2>&1; then if [ \"\$(docker inspect --format '{{.State.Running}}' big-bear-openclaw)\" = true ]; then docker stop big-bear-openclaw >/dev/null; fi; docker rm big-bear-openclaw >/dev/null; fi; if [ -f $remote_old_pubg ]; then mv $remote_old_pubg $remote_checkpoint/legacy-pubg-compose.retired.yml; fi; if [ -f $remote_old_openclaw ]; then mv $remote_old_openclaw $remote_checkpoint/legacy-openclaw-compose.retired.yml; fi"
-  printf '%s\n' 'LEGACY_APP_DEFINITIONS=retired'
-else
-  printf '%s\n' 'LEGACY_APP_DEFINITIONS=retained (rerun with --cleanup for final one-time retirement)'
-fi
-
-trap - EXIT
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
-printf '%s\n' 'OpenClaw PUBG deployment checks passed.'
+printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
+printf 'PRODUCT_RADAR_IMAGE=%s\n' "$RADAR_IMAGE"
+printf '%s\n' 'OPENCLAW_HEALTH=passed'
+printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
+printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
+printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
+printf '%s\n' 'OWNER_WHATSAPP_OUTBOX_SMOKE=passed'
+printf '%s\n' 'LEGACY_RUNTIME=retired'
+printf '%s\n' 'Amadeus OpenClaw migration completed.'

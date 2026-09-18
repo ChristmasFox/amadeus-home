@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-SOURCE_FILE="$ROOT_DIR/integrations/langbot/plugins/macos-nas-control/nas-control.sh"
+SOURCE_FILE="$ROOT_DIR/infra/macos/nas-control.sh"
 TARGET_FILE="${NAS_CONTROL_TARGET:-$HOME/.local/bin/nas-control}"
 BACKUP_STAMP="$(date +%Y%m%d-%H%M%S)"
 APPLY=0

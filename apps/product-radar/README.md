@@ -83,7 +83,7 @@ temporary Watch and its test records after the verification run.
 
 ## V0.2 image similarity watch
 
-V0.2 accepts an image attachment through the LangBot plugin and creates a
+V0.2 accepts an image attachment through the OpenClaw native Product Radar tool and creates a
 `similarity` watch. It queries the Bunjang public keyword feed (default Korean
 clothing query `의류`, up to 60 newest candidates), downloads candidate images,
 and compares them with a persisted deterministic perceptual feature vector.
@@ -93,7 +93,7 @@ only newly seen candidates at or above the threshold create
 `SimilarListingMatchedEvent`.
 
 The reference image is persisted as a feature under the Product Radar data
-volume, so a temporary Telegram image URL is not required after creation.
+volume, so a temporary chat image URL is not required after creation.
 The CasaOS deployment uses `hybrid`: Product Radar remains in OrbStack
 Ubuntu, while new references are embedded by the native macOS
 `Marqo/marqo-fashionSigLIP` worker through `host.docker.internal:18400`.
@@ -131,5 +131,5 @@ The V0.2 default candidate scope is the Bunjang Korean keyword feed
 `의류`, not an unrestricted crawl of the whole marketplace. Use a more
 specific `searchQuery` when the clothing category can be determined. The
 reference image can be a URL or the `referenceImageBase64` data URI emitted by
-LangBot; once the watch is created only the persisted `referenceImageId` is
+the OpenClaw boundary; once the watch is created only the persisted `referenceImageId` is
 kept in the Watch target.

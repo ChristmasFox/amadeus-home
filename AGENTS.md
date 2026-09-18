@@ -1,24 +1,24 @@
-# 当前任务优先约束（2026-09-17）
+# 当前任务优先约束（2026-09-18）
 
-用户最新决定以 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md` 取代下文旧 Kurisu/LangBot 实施范围。只落地 OpenClaw 原生 PUBG 插件、独立 Domain 和 Telegram 私聊，直接到最终形态，不做灰度、shadow、双跑、兼容过渡或回滚演练。执行该 Goal 时已授权必要构建、CasaOS 一次性切换、数据迁移、提交和 push；使用显式 apply 执行，无需逐阶段再次请求。保留必要数据备份、权限、secret 保护与真实验收。当前实现以 Git、live CasaOS 和最新 checkpoint 为准。
+当前 Amadeus 迁移目标见 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md`。所有仍有价值的能力统一进入唯一 OpenClaw/Kurisu：Telegram、WhatsApp 和未来渠道只负责入口，原生 plugin/tool 调用确定性 Domain 或明确的外部服务；旧 LangBot、n8n、旧 Runtime、旧通知路径和关键词路由必须退休，不做灰度、shadow、双跑或兼容 fallback。用户已授权本 Goal 所需的构建、CasaOS 一次性切换、数据迁移、删除、提交和 push；仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
 
-旧多领域验收矩阵由新计划第 10 节替代；不能把不在本轮范围的功能扩展成新任务。其余 source of truth、用户改动保护、预算、checkpoint 和工程规则仍有效。以下架构/发布范围冲突以用户最新决定及新计划为准。
+当前实现以 Git、live CasaOS 和最新 checkpoint 为准；历史报告仅供审计，不是运行时指令。
 
 # Agent Monorepo 工作规则
 
-## OpenClaw PUBG 实施范围
+## OpenClaw Amadeus 实施范围
 
-本仓库当前唯一产品 Goal 是 `docs/OPENCLAW_PUBG_REFACTOR_GOAL.md`：Telegram 私聊经由
-唯一 OpenClaw/Kurisu 和当前 9Router，调用唯一原生 PUBG plugin 与独立 Domain。旧
-LangBot/Mastra/Runtime PUBG 主链已经退出；不要恢复旧入口、关键词路由、兼容双跑或第二
-个 Agent。执行该 Goal 已授权必要的 build、CasaOS 一次性切换、迁移、提交和 push。
-执行仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
+本仓库当前唯一产品 Goal 是 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md`：PUBG 保持原生
+plugin/domain，Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 Codex
+通知等仍有价值的能力迁移到原生 `plugins/amadeus` 与 owner outbox。OpenClaw 是唯一
+Agent runtime；不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套
+sender。执行仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
 
 ## Source of Truth
 
 - 本 Git 仓库是系统定义的唯一 source of truth。源码、插件、patch、workflow、Compose 模板、文档和 Codex 状态都必须从 Git 可重建。
-- 不允许只修改运行中的容器、volume、LangBot 安装目录或 n8n 实例而不同步仓库源码。运行时修复必须回写到对应源码或模板。
-- 第三方 LangBot 本体不复制进仓库；只保留自定义插件、patch、资源、配置模板和兼容版本说明。
+- 不允许只修改运行中的容器、volume 或 CasaOS 实例而不同步仓库源码。运行时修复必须回写到对应源码或模板。
+- 已退休的 LangBot、n8n、旧 Runtime 和旧通知资产不再作为 source、fallback 或部署依赖；其外部数据只在迁移 checkpoint 中保留可恢复副本。
 - 仓库内的 `skills/` 是可迁移的 Codex skill source；使用某个 skill 前先读取对应 `SKILL.md`。
 
 ## 新会话启动
@@ -43,10 +43,8 @@ git log -5 --oneline --decorate
 ## 全局工程规则
 
 - Secrets 永远不入库：Bot Token、API Key、Access Token、APP_SECRET、数据库密码、Tunnel Token、n8n credentials、`.env`、真实证书和业务数据都必须在仓库外恢复。
-- Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 LangBot API 细节写入 PUBG/domain package；平台差异放在 adapter、renderer 或 integration 层。
+- Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 OpenClaw API 细节写入 PUBG/domain package；平台差异放在 plugin、adapter 或 integration 层。
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
-- n8n 的修改必须先导出并提交对应 JSON workflow；不得只在在线实例中编辑。credentials 只能通过目标实例重新绑定。
-- 第三方 LangBot 的修改必须使用可追踪的仓库 patch，并通过镜像构建应用；禁止直接在运行容器内手工改文件作为长期方案。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
 
 ## Amadeus Gateway VPS
@@ -70,14 +68,12 @@ git log -5 --oneline --decorate
   **最低足够**的验证等级；不得把完整 release discovery 或 Docker build 当成每个 Goal 的默认动作。
 - **FAST**：docs、`.agent`、tests、skills、纯逻辑和小功能。运行定向 tests、受影响 package
   typecheck、`git diff --check`，按需 secrets scan；默认禁止 Docker build、Compose restart 和 deploy。
-- **RUNTIME**：`packages/pubg-domain/**`、`plugins/pubg/**` 或独立 Product Radar 源码。运行受影响
+- **RUNTIME**：`packages/pubg-domain/**`、`plugins/pubg/**`、`plugins/amadeus/**` 或独立 Product Radar 源码。运行受影响
   typecheck/build 和定向 tests；RUNTIME 不意味着 Docker build 或 Compose restart。
 - **RELEASE**：只有用户明确要求实际 CasaOS 部署时才执行。Dockerfile、`.dockerignore`、`package.json`
   或 `pnpm-lock.yaml` 只标记 `RELEASE_BUILD_REQUIRED`，不会自行构建。顺序为 test -> secrets -> host
   BuildKit build -> immutable commit tag -> compose update -> `docker compose up -d --no-build` -> health/smoke
   -> rollback checkpoint。
-- `integrations/langbot/plugins/**` 走 plugin workflow；`integrations/langbot/patches/**` 走 LangBot image
-  workflow；仅 env 改动只允许显式 `--apply` 的 no-build recreate。
 - `scripts/deploy-openclaw.sh` 默认 dry-run；只有明确 `--apply` 才能切换、迁移或重建
   CasaOS。只有明确 `--apply --build` 才能创建并传入新的 OpenClaw image。
 
@@ -99,9 +95,8 @@ git log -5 --oneline --decorate
 
 ## 目录与运行时
 
-- `plugins/pubg` 是唯一 PUBG 业务 plugin；`packages/pubg-domain` 是唯一 PUBG 领域实现。
-- `integrations/langbot` 与 `integrations/n8n` 只保存独立非 PUBG 资产，不是 PUBG 启动依赖。
-- 旧 Runtime、PUBG LangBot plugin、PUBG n8n workflow 和旧 facade 不在当前树中。
+- `plugins/pubg` 和 `plugins/amadeus` 是当前 OpenClaw 业务 plugin；`packages/pubg-domain` 是 PUBG 领域实现。
+- `integrations/openclaw`、`infra/docker/casaos/openclaw`、`apps/product-radar` 和 `infra/macos` 是当前运行定义；LangBot/n8n 执行源和旧 facade 不在当前树中。
 - 长期 HomeLab 服务部署到 OrbStack Linux machine `ubuntu` 的 CasaOS，不默认使用 macOS host Docker。
 - CasaOS compose 真正位置：`/var/lib/casaos/apps/<app>/docker-compose.yml`；持久化数据：`/DATA/AppData/<app>`；共享存储：`/Volumes/Avalon/...`。
 
@@ -123,11 +118,12 @@ pnpm check:secrets
 
 备份脚本生成的归档默认放在仓库外或被 `.gitignore` 忽略的位置；不要把备份归档上传到公共仓库。
 
-## LangBot 与 n8n 工作流
+## 已退休执行路径
 
-- 独立 LangBot 插件源在 `integrations/langbot/plugins/`，构建产物 `.lbpkg` 被忽略；优先使用 `scripts/deploy-langbot.sh --dry-run` 预览，再显式传入 `--apply`。
-- `integrations/langbot/patches/` 是第三方镜像的 build-time patch 集合。升级 LangBot 时必须重新应用、编译检查并更新兼容版本、状态文档和 checkpoint。
-- n8n workflow 的 source path 是 `integrations/n8n/workflows/`；导入、导出和 credential 重绑都要记录在状态文档中。
+LangBot、n8n、旧 Runtime、KOOK watchdog 和 Telegram/KOOK proactive sender 已从当前
+source tree 与生产切换目标中删除。迁移脚本只会把外部数据库、配置和 app 定义移动到
+`/DATA/AppData/openclaw/backups/<checkpoint>`，不会重新启用这些服务；媒体 adapter
+保留为独立外部服务，并通过 `amadeus_media_organize` 调用。
 
 ## 任务完成定义
 

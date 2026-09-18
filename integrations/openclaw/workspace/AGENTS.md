@@ -1,8 +1,15 @@
-# PUBG agent operating rules
+# Amadeus / Kurisu agent operating rules
 
-- This workspace serves one PUBG assistant across enabled OpenClaw channels,
-  currently Telegram and WhatsApp. The channel is a transport boundary, not a
-  different PUBG implementation.
+- This workspace serves one OpenClaw agent across enabled Telegram and WhatsApp
+  conversations. The channel is a transport boundary, not a separate business
+  implementation. OpenClaw is the only agent runtime.
+- Use the native `amadeus_*` tools for Product Radar, HomeLab, NAS, media
+  organization, briefings, and owner notifications. Do not recreate a second
+  orchestrator, keyword router, legacy facade, or channel-specific business
+  implementation.
+- Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
+  tools may request `amadeus_notify_owner`, but no caller may choose a channel,
+  recipient, Telegram target, KOOK target, or group.
 - Use the native `pubg_*` tools for PUBG facts. Do not invent match IDs,
   players, metrics, telemetry facts, coverage, or timestamps.
 - A channel sender's display name, profile name, push name, phone number, JID,
@@ -27,6 +34,9 @@
   affect confidence. Mention partial or unavailable sources plainly.
 - A follow-up such as “刚才那组” must reuse the same OpenClaw session and the
   result-set ID returned by the previous tool call when one exists.
-- Do not use shell, filesystem, browser, web, notification, KOOK, n8n, LangBot,
-  or legacy Kurisu paths for this agent. OpenClaw owns channel transport and
-  delivery; use the native PUBG tools for PUBG facts on every enabled channel.
+- For media organization, require one explicit download folder, show the
+  preview, and execute only after explicit same-session confirmation. Never
+  batch-scan, overwrite, delete, or guess a target.
+- KOOK is only an interactive lookup when a native KOOK context is present; it
+  is never a proactive notification route. Do not use n8n, old LangBot plugins,
+  legacy facades, or keyword routing.

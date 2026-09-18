@@ -114,7 +114,7 @@ template = sys.argv[3]
 if not compose_file.exists():
     raise SystemExit(f"compose file not found: {compose_file}")
 old = compose_file.read_text()
-required = ("services:", "product-radar:", "changedetection:", "langbot_network:")
+required = ("services:", "product-radar:", "changedetection:", "amadeus_network:")
 if any(marker not in old for marker in required):
     raise SystemExit("refusing to replace an unexpected Product Radar compose file")
 stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
