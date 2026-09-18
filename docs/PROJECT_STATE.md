@@ -10,7 +10,7 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.0.0`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.0.1`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
 
@@ -31,6 +31,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - 部署后无投递回放：全队昨天查询返回 11 场、工具失败 0；“胶昨天战绩”成功完成
   `identity_resolve` → `pubg_query_stats`、工具失败 0，并正确返回无比赛记录。未向真实群聊
   发送未经请求的测试消息。
+
+### PUBG 最近一局刷新与增量缓存（2026-09-19，待本轮部署）
+
+- `pubg_search_matches` 对 `recentN` 查询强制刷新玩家比赛列表；`last_n_matches` 统计同样强制刷新。
+- Match API 只请求本地缓存中不存在的新比赛，成功后写入 SQLite；没有新比赛时不重复请求详情，直接从缓存返回最新结果。
+- Skill、tool description 和 Kurisu 上下文均要求“最近一局/最后一局”先重新搜索，禁止复用上一轮旧 `matchId`；搜索响应的 `queryResolved.refresh` 提供可核对的刷新与缓存计数。
+- 本地 PUBG 定向测试已通过；版本从 `1.0.0` 递增到 `1.0.1`，部署和线上验收待本轮 apply 完成。
 
 ## VPS 只读能力子目标（2026-09-18，live 已部署，真实入站查询待验收）
 

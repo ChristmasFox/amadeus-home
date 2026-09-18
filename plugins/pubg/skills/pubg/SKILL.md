@@ -63,6 +63,12 @@ Tool rules:
   quoted label, or nickname alone.
 - Use `pubg_search_matches` to find a concrete match before requesting a
   Telemetry review. Pass the returned `matchId` to `pubg_get_review_facts`.
+- “最近一局”“最后一局”“最新比赛”以及“复盘最近一局”每次都必须重新调用
+  `pubg_search_matches`，固定使用 `sort: "desc"`、`recentN: 1`、`refresh: true`。
+  即使当前会话里已经有旧的 `matchId` 或旧结果，也不能跳过这次搜索；先用搜索返回的
+  最新 `matchId`，再调用 `pubg_get_review_facts`。底层会刷新比赛列表，只请求新比赛的
+  详情，并在没有新增比赛时复用缓存。只有用户明确说“这把/刚才查到的那一把”时，才可
+  沿用当前会话的具体 `matchId`。
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:
   `time_range` uses the half-open interval `[from,to)` and IANA timezone
   `Asia/Shanghai` unless the user specifies another timezone; `last_n_matches`

@@ -27,6 +27,13 @@ test('native OpenClaw plugin loads with the pinned SDK and declares only the six
   assert.match(statsTool.description, /personIds/);
   assert.match(statsTool.description, /reference=self/);
   assert.match(statsTool.description, /team=true only for an explicit whole-team request/);
+  const searchTool = metadata.tools.find((tool) => tool.name === 'pubg_search_matches');
+  assert.ok(searchTool);
+  assert.match(searchTool.description, /recentN=1/);
+  assert.match(searchTool.description, /refresh=true/);
+  const reviewTool = metadata.tools.find((tool) => tool.name === 'pubg_get_review_facts');
+  assert.ok(reviewTool);
+  assert.match(reviewTool.description, /Never use this tool alone/);
 });
 
 test('manifest contracts match runtime metadata and do not carry secret values', () => {
@@ -43,4 +50,6 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   const skill = readFileSync(fileURLToPath(new URL('../skills/pubg/SKILL.md', import.meta.url)), 'utf8');
   assert.match(skill, /^---\n[\s\S]*^name:\s*pubg\s*$/m);
   assert.match(skill, /^description:\s*"[^"\n]+"\s*$/m);
+  assert.match(skill, /最近一局/);
+  assert.match(skill, /refresh: true/);
 });
