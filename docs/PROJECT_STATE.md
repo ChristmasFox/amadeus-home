@@ -81,6 +81,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   替换留下的 root-only 权限为运行时 `node(1000):node(1000)`、`0600`；“胶昨天战绩”和
   “猴昨天战绩”均实际完成 `read` → `identity_resolve` → `pubg_query_stats`，各 3 次调用、
   0 失败并返回 4 场真实数据。未向群聊发未经请求的测试消息，真实 WhatsApp 入口仍由用户触发验收。
+- 真实群聊 transcript 进一步定位到 scope bug：模型传入 `identity_resolve(scope=group)`，旧实现
+  把 group 当成 group-only，导致全局预设的“胶/猴”返回 `alias_not_found`，随后错误要求用户
+  确认 PUBG ID。本轮已改为 group alias 优先、缺失时回退全局预设 alias，并在 Skill/tool
+  guidance 中声明预设成员无需二次确认。提交 `6ec7538` 已 apply，线上无投递 smoke 的“胶昨天
+  战绩”实际完成 `read` → `identity_resolve` → `pubg_query_stats`，3 次调用、0 失败并返回
+  4 场真实数据；未知或 observed candidate 仍保留确认门槛。
 
 ## 本轮实现
 

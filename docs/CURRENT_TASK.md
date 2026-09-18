@@ -84,6 +84,16 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 各 3 次调用、0 失败并返回 4 场真实数据。为避免未经请求向群聊发测试消息，最后一步仍由用户
 在真实群里发送一句昵称战绩请求完成入口验收。
 
+### 群内预设昵称免确认修复（2026-09-18）
+
+随后真实群聊 transcript 显示，模型虽然调用了 `identity_resolve`，但传入
+`scope=group`；Identity 旧实现把这个 scope 当成 group-only，因此查不到属于全局预设的
+“胶/猴”，返回 `alias_not_found` 后才要求用户确认 PUBG ID。本轮已改为 group alias 优先、
+找不到时回退全局预设 alias，并在 Skill/tool guidance 中明确预设成员无需二次确认。提交
+`6ec7538` 已构建并 apply，线上无投递 smoke 的“胶昨天战绩”已实际完成
+`read` → `identity_resolve` → `pubg_query_stats`，3 次调用、0 失败并返回 4 场真实数据；
+未知或 observed candidate 仍保持确认门槛。
+
 ## 当前进度
 
 - 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、
