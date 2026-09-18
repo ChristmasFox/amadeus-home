@@ -71,7 +71,11 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 工具链已发生，但暴露出第二层配置问题：用户确认的 `SG_Labmem007/008/004` 与现有
 `SG_LabmemNo007/008/004` production team names 不一致，导致 canonical player ID 未命中，
 随后官方 exact lookup 返回 `identity_pubg_account_unresolved`。本轮已把用户提供的三个名字加入
-Git team fixture alias，并准备在备份后同步生产外部 team config；同步和真实群聊战绩仍待完成。
+Git team fixture alias，并在备份 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918125744-pubg-account-alias`
+后同步生产外部 team config。新镜像 `local/openclaw-amadeus:git-a990bda023b1-20260918125753`
+已 apply；无投递线上 smoke 的“胶昨天战绩”和“猴昨天战绩”均实际调用
+`identity_resolve` → `pubg_query_stats`，失败数均为 0 并返回真实战绩。为避免未经请求向群聊发
+测试消息，最后一步仍由用户在真实群里发送一句昵称战绩请求完成入口验收。
 
 ## 当前进度
 
@@ -121,7 +125,8 @@ manifest JSON validation 和 `git diff --check` 已通过。
 - 昵称匹配修复 evidence：Amadeus 10、PUBG plugin 8 定向测试，受影响 package
   typecheck/build、`pnpm check:secrets` 和 `git diff --check` 已通过；新镜像已 live apply，
   恢复点为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918125134`，真实群聊
-  端到端工具调用验证待完成。
+  端到端无投递工具调用验证已通过（“胶”与“猴”各一次，失败数 0）；未向群聊发送未经请求的
+  测试消息，真实 WhatsApp 入口由用户触发验收。
 
 ## PUBG-only 根因修复验收
 

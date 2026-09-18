@@ -71,7 +71,11 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   用户提供的 `SG_Labmem007/008/004` 与 production team config 的 `SG_LabmemNo007/008/004`
   不一致，导致 007/008/004 的 canonical player ID 未命中并返回
   `identity_pubg_account_unresolved`。Git team fixture 已加入这三个用户确认账号名作为 alias；
-  生产外部 team config 备份/同步和真实群聊战绩验证仍待完成。
+  生产外部 team config 已在备份 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918125744-pubg-account-alias`
+  后同步；新镜像 `local/openclaw-amadeus:git-a990bda023b1-20260918125753` 已 apply。无投递
+  线上 smoke 的“胶昨天战绩”和“猴昨天战绩”均实际调用 `identity_resolve` →
+  `pubg_query_stats` 且失败数为 0，分别返回 4 局/4 场真实数据；未向群聊发未经请求的测试消息，
+  真实 WhatsApp 入口仍由用户触发验收。
 
 ## 本轮实现
 
