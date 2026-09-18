@@ -666,6 +666,7 @@ export class IdentityStore {
     const id = clean(candidateId, 'identity_candidate_id', 128);
     const row = this.db.prepare('SELECT * FROM aliases WHERE alias_id = ?').get(id);
     if (!row) throw new Error('identity_candidate_not_found');
+    if (rowText(row, 'source') !== 'observed') throw new Error('identity_candidate_not_observed');
     const timestamp = nowIso(this.now);
     this.db.prepare('UPDATE aliases SET source = ?, confidence = ?, updated_at = ? WHERE alias_id = ?').run('confirmed', 1, timestamp, id);
     return this.aliasFromRow(this.db.prepare('SELECT * FROM aliases WHERE alias_id = ?').get(id)!);
