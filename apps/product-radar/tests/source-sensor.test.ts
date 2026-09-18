@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { BunjangSourceAdapter } from '../src/sources/bunjang/adapter.js';
 import { SensorUnavailableError } from '../src/core/errors.js';
@@ -141,25 +144,23 @@ test('changedetection health and API errors are surfaced as unavailable', async 
   await assert.rejects(() => client.createWatch({ radarWatchId: 'radar-1', url: 'https://example.test', title: 'item', intervalSeconds: 300, webhookUrl: 'http://radar.test/webhook' }), (error: unknown) => error instanceof SensorUnavailableError);
 });
 
-test('LangBot notification channel uses configured API header and always sends a person target', async () => {
-  const { LangBotNotificationChannel } = await import('../src/integrations/notifications/langbot.js');
-  let captured: { url: string; init: RequestInit } | undefined;
-  const channel = new LangBotNotificationChannel({
-    id: 'telegram',
-    baseUrl: 'http://langbot.test',
-    botId: 'telegram-bot',
-    recipient: 'admin-id',
-    apiToken: 'secret-token',
-    apiHeaderName: 'X-API-Key',
-    fetchImpl: async (url, init) => {
-      captured = { url: String(url), init: init ?? {} };
-      return response({ code: 0, data: { sent: true } });
-    },
-  });
-  await channel.send({ event: { id: 'event', eventKey: 'event', watchId: 'watch', source: 'fake', type: 'ListingMatchedEvent', occurredAt: new Date().toISOString(), before: null, after: null, payload: {} }, text: 'hello', recipient: 'admin-id' });
-  assert.ok(captured);
-  assert.equal(new Headers(captured!.init.headers).get('X-API-Key'), 'secret-token');
-  const body = JSON.parse(String(captured!.init.body));
-  assert.equal(body.target_type, 'person');
-  assert.equal(body.target_id, 'admin-id');
+test('owner notification channel writes a channel-free idempotent outbox event', async () => {
+  const { OwnerNotificationChannel } = await import('../src/integrations/notifications/owner.js');
+  const directory = await mkdtemp(join(tmpdir(), 'product-radar-owner-'));
+  try {
+    const channel = new OwnerNotificationChannel(directory);
+    const event = { id: 'event', eventKey: 'event', watchId: 'watch', source: 'fake', type: 'ListingMatchedEvent' as const, occurredAt: new Date().toISOString(), before: null, after: null, payload: {} };
+    await channel.send({ event, text: 'hello', recipient: 'owner' });
+    await channel.send({ event, text: 'hello', recipient: 'owner' });
+    const files = await readdir(directory);
+    assert.equal(files.length, 1);
+    const file = files[0]!;
+    const body = JSON.parse(await readFile(join(directory, file), 'utf8')) as Record<string, unknown>;
+    assert.equal(body.version, 1);
+    assert.equal(body.eventKey, 'event');
+    assert.equal(body.source, 'product-radar:ListingMatchedEvent');
+    assert.equal(body.message, 'hello');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

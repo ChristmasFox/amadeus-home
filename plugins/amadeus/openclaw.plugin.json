@@ -1,0 +1,45 @@
+{
+  "id": "amadeus",
+  "name": "Amadeus capabilities",
+  "description": "Native OpenClaw tools for HomeLab, Product Radar, media safety, briefing, and owner notifications.",
+  "version": "1.0.0",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "productRadarBaseUrl": { "type": "string", "maxLength": 512 },
+      "productRadarApiKeyFile": { "type": "string", "maxLength": 1024 },
+      "mediaAdapterBaseUrl": { "type": "string", "maxLength": 512 },
+      "homeLabBaseUrl": { "type": "string", "maxLength": 512 },
+      "homeLabGlancesUrl": { "type": "string", "maxLength": 512 },
+      "homeLabUptimeUrl": { "type": "string", "maxLength": 512 },
+      "macSshHost": { "type": "string", "maxLength": 256 },
+      "macSshUser": { "type": "string", "maxLength": 128 },
+      "macSshKeyFile": { "type": "string", "maxLength": 1024 },
+      "macSshKnownHostsFile": { "type": "string", "maxLength": 1024 },
+      "kookApiBaseUrl": { "type": "string", "maxLength": 512 },
+      "kookTokenFile": { "type": "string", "maxLength": 1024 },
+      "ownerTargetFile": { "type": "string", "maxLength": 1024 },
+      "ownerWhatsappAccountId": { "type": "string", "maxLength": 128 },
+      "notificationOutboxDir": { "type": "string", "maxLength": 1024 },
+      "briefingConfigDir": { "type": "string", "maxLength": 1024 },
+      "briefingStateFile": { "type": "string", "maxLength": 1024 },
+      "nineRouterBaseUrl": { "type": "string", "maxLength": 512 },
+      "nineRouterApiKeyFile": { "type": "string", "maxLength": 1024 }
+    },
+    "additionalProperties": false
+  },
+  "skills": ["skills/amadeus"],
+  "contracts": {
+    "tools": [
+      "amadeus_product_radar",
+      "amadeus_media_organize",
+      "amadeus_nas",
+      "amadeus_homelab_status",
+      "amadeus_kook_group_members",
+      "amadeus_notify_owner",
+      "amadeus_briefing"
+    ],
+    "services": ["amadeus-owner-notification-worker"]
+  }
+}

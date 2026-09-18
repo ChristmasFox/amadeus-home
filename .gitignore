@@ -32,7 +32,6 @@ backups/
 *.orig
 
 # Generated deployment/build output
-integrations/langbot/build/
 infra/**/rendered/
 
 # Generated and local tool state

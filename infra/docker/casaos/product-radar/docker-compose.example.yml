@@ -1,6 +1,7 @@
 # CasaOS template. Copy to /var/lib/casaos/apps/product-radar/docker-compose.yml
 # only after an explicit RELEASE apply. Secrets and admin recipients remain
-# in an external env file.
+# in an external env file. OpenClaw uses the shared Amadeus network only for
+# the native Product Radar tool; notification delivery is an owner outbox.
 services:
   product-radar:
     image: ${PRODUCT_RADAR_IMAGE:-local/product-radar:0.1.0}
@@ -8,7 +9,7 @@ services:
     restart: unless-stopped
     networks:
       - radar_network
-      - langbot_network
+      - amadeus_network
     environment:
       PRODUCT_RADAR_HOST: 0.0.0.0
       PRODUCT_RADAR_PORT: 5315
@@ -21,19 +22,12 @@ services:
       FASHION_SIGLIP_TIMEOUT_MS: ${FASHION_SIGLIP_TIMEOUT_MS:-60000}
       CHANGEDETECTION_BASE_URL: http://changedetection:5000
       CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:?restore outside Git}
-      LANGBOT_API_BASE_URL: ${LANGBOT_API_BASE_URL:-http://langbot:5300}
-      PRODUCT_RADAR_LANGBOT_API_HEADER: ${PRODUCT_RADAR_LANGBOT_API_HEADER:-X-API-Key}
-      PRODUCT_RADAR_LANGBOT_API_TOKEN_FILE: /run/secrets/langbot-api-token
-      TELEGRAM_ADMIN_USER_ID: ${TELEGRAM_ADMIN_USER_ID:-}
-      KOOK_ADMIN_USER_ID: ${KOOK_ADMIN_USER_ID:-}
-      PRODUCT_RADAR_TELEGRAM_BOT_ID: ${PRODUCT_RADAR_TELEGRAM_BOT_ID:-}
-      PRODUCT_RADAR_KOOK_BOT_ID: ${PRODUCT_RADAR_KOOK_BOT_ID:-}
-      PRODUCT_RADAR_NOTIFICATION_OWNER: ${PRODUCT_RADAR_NOTIFICATION_OWNER:-disabled}
+      OWNER_NOTIFICATION_OUTBOX_DIR: /notifications
     ports:
       - "${PRODUCT_RADAR_PUBLIC_PORT:-5315}:5315"
     volumes:
       - /DATA/AppData/product-radar:/data
-      - ${PRODUCT_RADAR_LANGBOT_API_TOKEN_HOST_FILE:-/DATA/AppData/product-radar/secrets/langbot-api-token}:/run/secrets/langbot-api-token:ro
+      - ${OPENCLAW_OWNER_OUTBOX_HOST_DIR:-/DATA/AppData/openclaw/notifications}:/notifications
     depends_on:
       changedetection:
         condition: service_healthy
@@ -66,6 +60,6 @@ services:
 networks:
   radar_network:
     driver: bridge
-  langbot_network:
+  amadeus_network:
     external: true
     name: langbot_langbot_network

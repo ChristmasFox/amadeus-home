@@ -282,7 +282,7 @@ export class TargetProfileExtractor {
     mergeArray('features', [], vision?.features, vision, profile, sources);
     mergeArray('detectedText', [], vision?.detectedText, vision, profile, sources);
     // Keep the user's search wording distinct from provider-derived terms. The
-    // multimodal LangBot boundary can supply this field directly; the core
+    // A channel or native OpenClaw boundary can supply this field directly; the core
     // extractor must not let visual text silently become a user constraint.
     profile.userSearchTerms = user.userSearchTerms;
     if (user.userSearchTerms.length > 0) sources.userSearchTerms = provenance('user');

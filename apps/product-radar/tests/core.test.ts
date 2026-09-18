@@ -443,21 +443,21 @@ test('migration backfills SearchFeed counters from persisted run history', () =>
   store.close();
 });
 
-test('notification delivery is idempotent and Telegram failure does not block KOOK', async () => {
+test('notification delivery is idempotent and one failed channel does not block the owner channel', async () => {
   const source = new FakeSourceAdapter();
   source.currentListings = [listing({ externalId: 'baseline' })];
-  const telegram = new FakeChannel('telegram', 'tg-admin', true);
-  const kook = new FakeChannel('kook', 'kook-admin');
-  const { service, store } = build(source, { channels: [telegram, kook] });
+  const failed = new FakeChannel('failed-test-channel', 'failed-recipient', true);
+  const owner = new FakeChannel('owner-whatsapp', 'owner');
+  const { service, store } = build(source, { channels: [failed, owner] });
   const created = await createSeller(service, { keywords: ['new'] });
   source.currentListings = [listing({ externalId: 'new', title: 'new item' })];
   await service.runWatch(created.watch.id);
   const outbox = store.listPendingNotifications();
   assert.equal(outbox.length, 1);
-  assert.equal(outbox[0]?.channelId, 'telegram');
-  assert.equal(kook.calls.length, 1);
+  assert.equal(outbox[0]?.channelId, 'failed-test-channel');
+  assert.equal(owner.calls.length, 1);
   await service.runWatch(created.watch.id);
-  assert.equal(kook.calls.length, 1);
+  assert.equal(owner.calls.length, 1);
 });
 
 test('runtime stats count real similarity executions, notifications, and degraded failures', async () => {
@@ -530,7 +530,7 @@ test('zero-match similarity remains healthy and persists usage through restart',
     const created = await createSimilarity(first.service, { similarityThreshold: 0.9 });
     source.currentListings = [listing({ externalId: 'baseline' }), listing({ externalId: 'different', imageUrls: ['https://fake.test/different.jpg'] })];
     await first.service.runWatch(created.watch.id, 'zero-match');
-    first.store.recordUsage({ watchId: created.watch.id, provider: 'langbot', model: 'luna', operation: 'intent_target_profile', inputTokens: 10, outputTokens: 4, totalTokens: 14, timestamp: '2026-09-09T00:00:00.000Z', inferenceCount: 1, imagesProcessed: 1, latencyMs: 25 });
+    first.store.recordUsage({ watchId: created.watch.id, provider: 'nine-router', model: 'luna', operation: 'target_profile', inputTokens: 10, outputTokens: 4, totalTokens: 14, timestamp: '2026-09-09T00:00:00.000Z', inferenceCount: 1, imagesProcessed: 1, latencyMs: 25 });
     assert.equal(first.service.getWatchObservability(created.watch.id).status, 'HEALTHY');
     assert.equal(first.store.getWatchRuntimeStats(created.watch.id).aboveThreshold, 0);
     first.store.close();
@@ -551,9 +551,9 @@ test('heartbeat digest is due once, includes no-match status, and keeps channels
   const source = new FakeSourceAdapter();
   source.currentListings = [listing({ externalId: 'baseline' })];
   let now = '2026-09-09T00:00:00.000Z';
-  const telegram = new FakeChannel('telegram', 'tg-admin', true);
-  const kook = new FakeChannel('kook', 'kook-admin');
-  const { service, store } = build(source, { channels: [telegram, kook], imageMatcher: new FakeImageMatcher(), now: () => now });
+  const failed = new FakeChannel('failed-test-channel', 'failed-recipient', true);
+  const owner = new FakeChannel('owner-whatsapp', 'owner');
+  const { service, store } = build(source, { channels: [failed, owner], imageMatcher: new FakeImageMatcher(), now: () => now });
   const created = await service.createWatch({ source: 'fake', type: 'similarity', target: { referenceImageUrl: 'https://fake.test/reference.jpg', searchQuery: '패딩' }, rules: { similarityThreshold: 0.9 }, intervalSeconds: 120, heartbeatIntervalSeconds: 300 });
   source.currentListings = [listing({ externalId: 'baseline' }), listing({ externalId: 'heartbeat-model', imageUrls: ['https://fake.test/heartbeat-model.jpg'] })];
   now = '2026-09-09T00:04:59.000Z';
@@ -561,10 +561,10 @@ test('heartbeat digest is due once, includes no-match status, and keeps channels
   now = '2026-09-09T00:05:01.000Z';
   const first = await service.runHeartbeatSweep();
   assert.equal(first, 2);
-  assert.equal(telegram.calls.length, 1);
-  assert.equal(kook.calls.length, 1);
-  assert.match(kook.calls[0]!.text, /暂无匹配/);
-  assert.match(kook.calls[0]!.text, /FashionSigLIP：调用 1 次，处理图片 1 张，缓存命中 0 张/);
+  assert.equal(failed.calls.length, 1);
+  assert.equal(owner.calls.length, 1);
+  assert.match(owner.calls[0]!.text, /暂无匹配/);
+  assert.match(owner.calls[0]!.text, /FashionSigLIP：调用 1 次，处理图片 1 张，缓存命中 0 张/);
   assert.equal(store.getWatchRuntimeStats(created.watch.id).notificationsSent, 1);
   assert.equal(await service.runHeartbeatSweep(), 0);
   assert.equal(store.listPendingHeartbeats().length, 1);

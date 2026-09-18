@@ -9,7 +9,7 @@ else
   DEFAULT_BACKUP_ROOT="$REPO_ROOT/.backups"
 fi
 BACKUP_ROOT="${BACKUP_ROOT:-$DEFAULT_BACKUP_ROOT}"
-BACKUP_APP_DIRS="${BACKUP_APP_DIRS:-openclaw langbot n8n n8n-sandbox product-radar}"
+BACKUP_APP_DIRS="${BACKUP_APP_DIRS:-openclaw product-radar media-organizer-adapter}"
 INCLUDE_SECRETS=0
 DRY_RUN=0
 

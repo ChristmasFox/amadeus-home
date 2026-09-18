@@ -48,22 +48,19 @@ else
   fail '9Router container is not running'
 fi
 
-if container_line n8n >/dev/null 2>&1; then
-  pass 'Independent n8n container is running'
-else
-  warn 'Independent n8n container is not running'
-fi
-if container_line langbot >/dev/null 2>&1; then
-  pass 'Independent LangBot container is running'
-else
-  warn 'Independent LangBot container is not running'
-fi
+check_required_container 'Product Radar' product-radar
+check_required_container 'Media adapter' media-organizer-adapter
 
 if command -v curl >/dev/null 2>&1; then
   if curl -fsS --max-time 5 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then
     pass 'OpenClaw health endpoint :18789/healthz'
   else
     fail 'OpenClaw health endpoint :18789/healthz'
+  fi
+  if curl -fsS --max-time 5 http://127.0.0.1:5315/health >/dev/null 2>&1; then
+    pass 'Product Radar health endpoint :5315/health'
+  else
+    fail 'Product Radar health endpoint :5315/health'
   fi
 else
   warn 'curl is unavailable; HTTP health checks skipped'
