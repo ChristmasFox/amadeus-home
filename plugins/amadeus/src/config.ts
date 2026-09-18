@@ -30,7 +30,7 @@ function stringValue(value: unknown, fallback: string): string {
 
 export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const value = api.pluginConfig ?? {};
-  const rootDir = api.rootDir ?? '/app/extensions/amadeus';
+  const rootDir = api.rootDir ?? '/app/dist/extensions/amadeus';
   const env = (name: string): string | undefined => process.env[name]?.trim() || undefined;
   const file = (key: string, envName: string, fallback: string): string => stringValue(value[key] ?? env(envName), fallback);
   const optionalFile = (key: string, envName: string): string | undefined => stringValue(value[key] ?? env(envName), '') || undefined;

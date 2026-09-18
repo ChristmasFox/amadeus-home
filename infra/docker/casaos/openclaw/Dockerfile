@@ -9,20 +9,24 @@ WORKDIR /app
 # The plugin bundle is self-contained; the OpenClaw SDK remains provided by
 # the pinned base image. No source, credentials, media directory, or Docker
 # socket is copied into the image.
-COPY plugins/pubg/dist/index.js /app/extensions/pubg/dist/index.js
-COPY plugins/pubg/dist/index.js.map /app/extensions/pubg/dist/index.js.map
-COPY plugins/pubg/dist/migrate.js /app/extensions/pubg/dist/migrate.js
-COPY plugins/pubg/dist/migrate.js.map /app/extensions/pubg/dist/migrate.js.map
-COPY plugins/pubg/openclaw.plugin.json /app/extensions/pubg/openclaw.plugin.json
-COPY plugins/pubg/package.json /app/extensions/pubg/package.json
-COPY plugins/pubg/README.md /app/extensions/pubg/README.md
-COPY plugins/pubg/skills /app/extensions/pubg/skills
-COPY plugins/amadeus/dist/index.js /app/extensions/amadeus/dist/index.js
-COPY plugins/amadeus/dist/index.js.map /app/extensions/amadeus/dist/index.js.map
-COPY plugins/amadeus/openclaw.plugin.json /app/extensions/amadeus/openclaw.plugin.json
-COPY plugins/amadeus/package.json /app/extensions/amadeus/package.json
-COPY plugins/amadeus/README.md /app/extensions/amadeus/README.md
-COPY plugins/amadeus/briefing /app/extensions/amadeus/briefing
-COPY plugins/amadeus/skills /app/extensions/amadeus/skills
+# Install our business plugins in OpenClaw's bundled-extension tree. This keeps
+# the plugin runtime trusted for narrow host-owned capabilities such as the
+# in-process WhatsApp owner notifier; load.paths would classify them as local
+# external plugins and deny Gateway runtime requests.
+COPY plugins/pubg/dist/index.js /app/dist/extensions/pubg/dist/index.js
+COPY plugins/pubg/dist/index.js.map /app/dist/extensions/pubg/dist/index.js.map
+COPY plugins/pubg/dist/migrate.js /app/dist/extensions/pubg/dist/migrate.js
+COPY plugins/pubg/dist/migrate.js.map /app/dist/extensions/pubg/dist/migrate.js.map
+COPY plugins/pubg/openclaw.plugin.json /app/dist/extensions/pubg/openclaw.plugin.json
+COPY plugins/pubg/package.json /app/dist/extensions/pubg/package.json
+COPY plugins/pubg/README.md /app/dist/extensions/pubg/README.md
+COPY plugins/pubg/skills /app/dist/extensions/pubg/skills
+COPY plugins/amadeus/dist/index.js /app/dist/extensions/amadeus/dist/index.js
+COPY plugins/amadeus/dist/index.js.map /app/dist/extensions/amadeus/dist/index.js.map
+COPY plugins/amadeus/openclaw.plugin.json /app/dist/extensions/amadeus/openclaw.plugin.json
+COPY plugins/amadeus/package.json /app/dist/extensions/amadeus/package.json
+COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
+COPY plugins/amadeus/briefing /app/dist/extensions/amadeus/briefing
+COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
 
 USER node
