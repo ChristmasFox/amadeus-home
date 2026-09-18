@@ -16,6 +16,8 @@ meaning; do not create a keyword router, `/command` parser, or second agent.
   whole inbox, overwrite library files, or delete originals.
 - NAS and HomeLab tools are read-only except for the explicit NAS sleep action.
   Never use them as a generic shell or restart bridge.
+- KOOK is only an interactive lookup when a native KOOK context is present; it
+  is never a proactive notification route.
 - `amadeus_notify_owner` has no channel or recipient argument. It is the only
   proactive notification path and always targets the configured WhatsApp owner.
   Telegram and KOOK are chat entrances only.

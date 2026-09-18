@@ -20,6 +20,11 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   releases/API、早报/晚报和 9Router summary；不再依赖 n8n/LangBot credential。
 - NAS 控制脚本移到 infra/macos/nas-control.sh，旧 LangBot plugin 源退出主链。
 - CasaOS 模板、OpenClaw workspace、部署脚本和配置已切换到 Amadeus。
+- 全局 `workspace/AGENTS.md` 只保留架构、工具真实性、会话、owner 通知和副作用安全原则；
+  PUBG 身份、selector、Telemetry、比较和证据规则全部位于 `plugins/pubg/skills/pubg/SKILL.md`。
+  `SOUL.md` 只描述 Kurisu 的通用行为，不把全局上下文锁成 PUBG-only。
+- `openclaw_prepare.py` 只验证 OpenClaw 当前 secret 文件，不读取旧 LangBot DB 或旧凭据；
+  Codex hook 会把事件写入远端 OpenClaw owner outbox。
 - OpenClaw owner agent 使用 `tools.profile="full"`；WhatsApp owner identity 仍由
   `commands.ownerAllowFrom` 和外部 owner target 注入，新增 native tools 不会再次被 PUBG-only
   allowlist 隐藏。
@@ -35,7 +40,7 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
 
 ## 最终线上状态（2026-09-18）
 
-- source commit `5e76709` 构建的镜像已部署：
+- 上一版 source commit `5e76709` 构建的镜像已部署：
   `local/openclaw-amadeus:git-5e767097adda-20260918080012` 和
   `local/product-radar:git-5e767097adda-20260918080012`。
 - 最终 checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918080634`。
@@ -61,6 +66,8 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
 - scripts/deploy-openclaw.sh --dry-run、三次 apply 路径所需的 shell/python syntax、git
   diff --check、最终全量 build/typecheck/test/secrets scan 已通过；最终 apply 以 exit 0
   完成。
+- 本次上下文拆分、部署脚本和 Codex hook 修复的本地 build/typecheck/test/secrets scan 已通过；
+  新 skill 与 workspace 文件需随下一次 OpenClaw image rebuild 生效。
 - 媒体整理继续受 organize-emby-media Skill 的备份、单项、preview-confirm、碰撞检查
   和不修改现有媒体库约束保护。
 
