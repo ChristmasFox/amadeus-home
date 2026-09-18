@@ -32,12 +32,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   `identity_resolve` → `pubg_query_stats`、工具失败 0，并正确返回无比赛记录。未向真实群聊
   发送未经请求的测试消息。
 
-### PUBG 最近一局刷新与增量缓存（2026-09-19，待本轮部署）
+### PUBG 最近一局刷新与增量缓存（2026-09-19，已部署）
 
 - `pubg_search_matches` 对 `recentN` 查询强制刷新玩家比赛列表；`last_n_matches` 统计同样强制刷新。
 - Match API 只请求本地缓存中不存在的新比赛，成功后写入 SQLite；没有新比赛时不重复请求详情，直接从缓存返回最新结果。
 - Skill、tool description 和 Kurisu 上下文均要求“最近一局/最后一局”先重新搜索，禁止复用上一轮旧 `matchId`；搜索响应的 `queryResolved.refresh` 提供可核对的刷新与缓存计数。
-- 本地 PUBG 定向测试已通过；版本从 `1.0.0` 递增到 `1.0.1`，部署和线上验收待本轮 apply 完成。
+- 本地 PUBG 定向测试已通过；版本从 `1.0.0` 递增到 `1.0.1`。提交 `db0a2df` 已通过 `--apply --build-auto` 部署；线上镜像为 `local/openclaw-amadeus:git-db0a2dfa5c75-20260918164913`，恢复 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918164913`。OpenClaw/Product Radar health、媒体 adapter network、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过；真实 WhatsApp 群聊入口仍待用户触发验收。
 
 ## VPS 只读能力子目标（2026-09-18，live 已部署，真实入站查询待验收）
 
