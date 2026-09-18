@@ -256,7 +256,10 @@ function identityFor(config: PluginConfig): IdentityStore {
   const presetsFile = identityConfigString(config, 'identityPresetsFile', 'IDENTITY_PRESETS_FILE');
   const key = `${databasePath}\u0000${presetsFile ?? ''}`;
   const existing = identityStoreCache.get(key);
-  if (existing) return existing;
+  if (existing) {
+    if (presetsFile) existing.refreshPresets(presetsFile);
+    return existing;
+  }
   const store = new IdentityStore(databasePath, presetsFile ? { presetsFile } : {});
   identityStoreCache.set(key, store);
   return store;

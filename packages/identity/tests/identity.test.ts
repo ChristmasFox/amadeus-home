@@ -100,6 +100,17 @@ test('authoritative global aliases are not shadowed by group observations', () =
   store.close();
 });
 
+test('candidate confirmation only upgrades observed aliases', () => {
+  const store = new IdentityStore();
+  store.seedPresets([{ personId: 'wang', displayName: '小王', aliases: ['王哥'] }]);
+  const presetAlias = store.resolve({ type: 'alias', alias: '王哥' });
+  assert.equal(presetAlias.status, 'resolved');
+  const aliasId = presetAlias.person?.aliases.find((alias) => alias.alias === '王哥')?.aliasId;
+  assert.ok(aliasId);
+  assert.throws(() => store.confirmCandidate(aliasId), /identity_candidate_not_observed/u);
+  store.close();
+});
+
 test('confirmed channel and external bindings are not downgraded by preset writes', () => {
   const store = new IdentityStore();
   store.seedPresets([{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }]);

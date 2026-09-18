@@ -52,3 +52,32 @@ test('PUBG boundary maps canonical Person to PUBG account and never falls back t
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('PUBG boundary refreshes presets after its cached IdentityStore was created', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pubg-identity-refresh-'));
+  const identityPath = join(directory, 'identity.sqlite');
+  const presetsPath = join(directory, 'presets.json');
+  await writeFile(presetsPath, JSON.stringify({ persons: [] }));
+  const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
+  const service = new PubgDomainService({ team: TEAM, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  try {
+    const beforePreset = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-refresh-turn');
+    assert.equal('status' in beforePreset && beforePreset.status, 'error');
+    if ('status' in beforePreset) assert.equal(beforePreset.error?.code, 'identity_sender_unbound');
+
+    await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'p1' }] }] }));
+    const store = new IdentityStore(identityPath, { presetsFile: presetsPath });
+    store.bindChannel({
+      personId: 'wang',
+      identity: { channel: 'telegram', accountId: 'default', conversationId: '-1001', platformUserId: 'telegram-user-1' },
+      source: 'confirmed',
+    });
+    store.close();
+
+    const afterPreset = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-refresh-turn');
+    assert.deepEqual(afterPreset, { playerIds: ['p1'] });
+  } finally {
+    service.repository.db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
