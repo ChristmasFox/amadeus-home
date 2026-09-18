@@ -48,8 +48,9 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   使用远端 owner outbox，且不再因缺少 `os` 导入而静默丢弃事件。
 - 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
   media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
-- 部署后阶段：PASS。最终 checkpoint 为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；旧 LangBot/n8n
+- 部署后阶段：PASS。基础迁移 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；Identity reply bridge
+  的最新 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918093413`；旧 LangBot/n8n
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
