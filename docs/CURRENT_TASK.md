@@ -52,8 +52,10 @@ trusted channel metadata 的 CasaOS build/apply 均已完成；线上运行
 `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`。最近真实 WhatsApp 群入站已调用
 `identity_resolve(self)` 并返回 `unbound / trusted_channel_identity_is_not_bound`，随后没有调用
 PUBG tool；用户已提供 4 个 WhatsApp 人员的昵称、别名和 PUBG 外部账号，外部 preset 已加载为
-4 个 Person、8 个 alias、4 个 `provider=pubg` account。手机号/LID 不进入 Git 或 preset，线上
-真实 Telegram/WhatsApp sender binding、群 alias confirm 和重启持久化仍需由真实用户入口完成。
+4 个 Person、8 个 alias、4 个 `provider=pubg` account。随后按用户明确授权通过现有
+`identity_bind_channel` 逻辑，为当前 `secondary` 群账号写入 4 人各自的 LID/手机号 confirmed
+binding，共 8 条；自然语言请求是否主动调用 alias resolver、真实群内 PUBG 端到端体验和重启后
+持久化仍需继续验收。
 
 ## 当前进度
 
@@ -79,8 +81,9 @@ PUBG tool；用户已提供 4 个 WhatsApp 人员的昵称、别名和 PUBG 外�
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；OpenClaw、Product Radar、
   media adapter network、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过。外部
   `identity-presets.json` 已由用户提供的 4 人映射填充并经运行时读取验证；当前 Identity 表为
-  `persons=4`、`aliases=8`、`external_accounts=4`、`channel_identities=0`。平台 sender/LID
-  绑定仍只允许通过 trusted OpenClaw metadata 和 owner-confirmed tool 完成。
+  `persons=4`、`aliases=8`、`external_accounts=4`、`channel_identities=8`。本次绑定前的可恢复
+  备份为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918203921-identity-bind`；
+  身份数据仍留在 CasaOS 外部运行时目录。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
   `--build-auto`、`--build-openclaw`、`--build-radar` 和 `--no-build`；按 live image 的
   Git commit 选择性构建，并对未构建镜像做 stale check。该流程已用于本次 Identity reply
