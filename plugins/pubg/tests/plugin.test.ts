@@ -44,6 +44,7 @@ test('manifest contracts match runtime metadata and do not carry secret values',
   assert.deepEqual(manifest.contracts?.tools, EXPECTED_TOOLS);
   assert.ok(!JSON.stringify(manifest).match(/(?:api[_-]?key|token|secret)\s*[:=]\s*[^"{}]/iu));
   assert.ok(manifest.configSchema?.properties?.apiKeyFile);
+  assert.equal((manifest.configSchema?.properties?.businessDayStart as { default?: unknown } | undefined)?.default, '06:00');
 });
 
 test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {

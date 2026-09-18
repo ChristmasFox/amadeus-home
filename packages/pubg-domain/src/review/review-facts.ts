@@ -309,6 +309,124 @@ export function extractMatchReviewFacts(
   return facts;
 }
 
+function filterPlayerFacts<T extends { playerId: string }>(values: T[] | undefined, playerIds: Set<string>): T[] | undefined {
+  return values?.filter((value) => playerIds.has(value.playerId));
+}
+
+function filterActorVictimFacts<T extends { actorPlayerId: string; victimPlayerId: string | null }>(values: T[] | undefined, playerIds: Set<string>): T[] | undefined {
+  return values?.filter((value) => playerIds.has(value.actorPlayerId) || (value.victimPlayerId !== null && playerIds.has(value.victimPlayerId)));
+}
+
+/**
+ * Keep a person-specific review from silently expanding back to the full
+ * configured squad after identity_resolve has already selected a PUBG account.
+ * The durable Telemetry feature cache remains squad-scoped; this is a bounded
+ * presentation/analysis view over those cached facts.
+ */
+export function scopeMatchReviewFacts(facts: MatchReviewFacts, playerIds: string[]): MatchReviewFacts {
+  const requested = new Set(playerIds.map((value) => value.trim()).filter(Boolean));
+  if (!requested.size) return facts;
+
+  const players = facts.players.filter((player) => requested.has(player.playerId));
+  const scopedIds = new Set(players.map((player) => player.playerId));
+  const vehicles = filterPlayerFacts(facts.vehicles, scopedIds) ?? [];
+  const heavyWeapons = filterPlayerFacts(facts.heavyWeapons, scopedIds) ?? [];
+  const scopedPlayers = players.map((player) => ({
+    ...player,
+    keyOperations: player.keyOperations.filter((operation) => scopedIds.has(operation.playerId)),
+    ...(player.vehicle && scopedIds.has(player.vehicle.playerId) ? { vehicle: player.vehicle } : {}),
+    heavyWeapons: heavyWeapons.filter((weapon) => weapon.playerId === player.playerId),
+  }));
+  const fights = facts.fights.filter((fight) => fight.participants.some((id) => scopedIds.has(id)) || fight.keyPlayers.some((id) => scopedIds.has(id)));
+  const combatEvents = facts.combat.events.filter((event) => scopedIds.has(event.actorId ?? '') || scopedIds.has(event.victimId ?? ''));
+  const relevantCombat = dedupeRelevantCombatEvents(combatEvents, scopedIds);
+  const trackedCombat = relevantCombat.filter((event) => isTrackedOffensiveEvent(event, scopedIds) || isTrackedReviveEvent(event, scopedIds));
+  const opponentCombat = relevantCombat.filter((event) => isOpponentOffensiveEvent(event, scopedIds) || isOpponentReviveEvent(event, scopedIds));
+  const combat = facts.combat.events.length === 0
+    ? facts.combat
+    : {
+      ...facts.combat,
+      eventCount: relevantCombat.length,
+      damage: trackedCombat.filter((event) => event.type === 'DAMAGE').reduce((sum, event) => sum + event.damage, 0),
+      knocks: trackedCombat.filter((event) => event.type === 'KNOCK').length,
+      kills: trackedCombat.filter((event) => event.type === 'KILL').length,
+      revives: trackedCombat.filter((event) => event.type === 'REVIVE').length,
+      opponentDamage: opponentCombat.filter((event) => event.type === 'DAMAGE').reduce((sum, event) => sum + event.damage, 0),
+      opponentKnocks: opponentCombat.filter((event) => event.type === 'KNOCK').length,
+      opponentKills: opponentCombat.filter((event) => event.type === 'KILL').length,
+      opponentRevives: opponentCombat.filter((event) => event.type === 'REVIVE').length,
+      events: combatEvents,
+    };
+  const teamDamage = filterActorVictimFacts(facts.teamDamage, scopedIds);
+  const teamVehicleEvents = filterActorVictimFacts(facts.teamVehicleEvents, scopedIds);
+  const flash = filterPlayerFacts(facts.flash, scopedIds);
+  const stunGuns = filterPlayerFacts(facts.stunGuns, scopedIds);
+  const recovery = filterPlayerFacts(facts.recovery, scopedIds);
+  const loot = filterPlayerFacts(facts.loot, scopedIds);
+  const lootActivity = filterPlayerFacts(facts.lootActivity, scopedIds);
+  const vehicleTrunk = filterPlayerFacts(facts.vehicleTrunk, scopedIds);
+  const environment = filterPlayerFacts(facts.environment, scopedIds);
+  const vehicleImpacts = filterPlayerFacts(facts.vehicleImpacts, scopedIds);
+  const armorBreaks = facts.armorBreaks?.filter((fact) => scopedIds.has(fact.actorPlayerId) || (fact.victimPlayerId !== null && scopedIds.has(fact.victimPlayerId)));
+  const specialEvents = facts.specialEvents.filter((event) => !event.playerId || scopedIds.has(event.playerId));
+  const squad: ReviewSquadSummary = {
+    ...facts.squad,
+    playerIds: scopedPlayers.map((player) => player.playerId),
+    kills: scopedPlayers.reduce((sum, player) => sum + player.kills, 0),
+    assists: scopedPlayers.reduce((sum, player) => sum + player.assists, 0),
+    damage: scopedPlayers.reduce((sum, player) => sum + player.damage, 0),
+    knocks: scopedPlayers.reduce((sum, player) => sum + player.dbnos, 0),
+    revives: scopedPlayers.reduce((sum, player) => sum + player.revives, 0),
+  };
+  const scopedEvidenceIds = new Set<string>([
+    `match-summary-${facts.match.matchId}`,
+    ...scopedPlayers.map((player) => `player-summary-${facts.match.matchId}-${player.playerId}`),
+  ]);
+  const addEvidenceIds = (values: Array<{ evidenceIds: string[] }> | undefined): void => {
+    for (const value of values ?? []) for (const evidenceId of value.evidenceIds) scopedEvidenceIds.add(evidenceId);
+  };
+  addEvidenceIds(scopedPlayers.flatMap((player) => player.keyOperations));
+  addEvidenceIds(fights);
+  addEvidenceIds(vehicles);
+  addEvidenceIds(heavyWeapons);
+  addEvidenceIds(teamDamage);
+  addEvidenceIds(teamVehicleEvents);
+  addEvidenceIds(flash);
+  addEvidenceIds(stunGuns);
+  addEvidenceIds(recovery);
+  addEvidenceIds(loot);
+  addEvidenceIds(lootActivity);
+  addEvidenceIds(vehicleTrunk);
+  addEvidenceIds(environment);
+  addEvidenceIds(armorBreaks);
+  addEvidenceIds(vehicleImpacts);
+  addEvidenceIds(specialEvents);
+  const relevantEventIds = new Set(combatEvents.map((event) => event.id));
+  return {
+    ...facts,
+    squad,
+    players: scopedPlayers,
+    combat,
+    fights,
+    weapons: filterPlayerFacts(facts.weapons, scopedIds) ?? [],
+    vehicles,
+    heavyWeapons,
+    specialEvents,
+    ...(teamDamage === undefined ? {} : { teamDamage }),
+    ...(teamVehicleEvents === undefined ? {} : { teamVehicleEvents }),
+    ...(flash === undefined ? {} : { flash }),
+    ...(stunGuns === undefined ? {} : { stunGuns }),
+    ...(recovery === undefined ? {} : { recovery }),
+    ...(loot === undefined ? {} : { loot }),
+    ...(lootActivity === undefined ? {} : { lootActivity }),
+    ...(vehicleTrunk === undefined ? {} : { vehicleTrunk }),
+    ...(environment === undefined ? {} : { environment }),
+    ...(armorBreaks === undefined ? {} : { armorBreaks }),
+    ...(vehicleImpacts === undefined ? {} : { vehicleImpacts }),
+    evidence: facts.evidence.filter((item) => scopedEvidenceIds.has(item.id) || item.eventIds.some((eventId) => relevantEventIds.has(eventId))),
+  };
+}
+
 function normalizedReviewCategory(value: string): string {
   return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
 }

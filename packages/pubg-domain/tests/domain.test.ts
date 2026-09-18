@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import {
   DeterministicQueryEngine,
+  BUSINESS_DAY_START,
   PubgApiClient,
   PubgApiError,
   PubgDomainService,
@@ -14,7 +15,9 @@ import {
   extractMatchReviewFacts,
   importLegacyPubgData,
   normalizeRecords,
+  resolveSelector,
   selectMatchReviewFactCategories,
+  scopeMatchReviewFacts,
   type Coverage,
   type NormalizedMatch,
   type TeamConfig,
@@ -208,6 +211,45 @@ test('business-day labels handle cross-midnight boundaries in Asia/Shanghai', ()
   assert.equal(businessDayLabel(atStart, 'Asia/Shanghai', '06:00'), '2026-09-16');
 });
 
+test('PUBG relative selectors use the canonical 06:00 business day', () => {
+  assert.equal(BUSINESS_DAY_START, '06:00');
+  const resolved = resolveSelector(
+    { type: 'relative_period', value: 'yesterday' },
+    { now: new Date('2026-09-19T00:30:00.000Z'), timezone: 'Asia/Shanghai' },
+  );
+  assert.equal(resolved.start, '2026-09-17T22:00:00.000Z');
+  assert.equal(resolved.end, '2026-09-18T22:00:00.000Z');
+});
+
+test('day grouping honors the selector business-day boundary', () => {
+  const records = normalizeRecords([rawMatch('boundary', '2026-09-18T21:00:00.000Z', [
+    { accountId: 'p1', playerName: 'Alice', kills: 1, deaths: 1, damage: 10, rank: 5 },
+  ])]);
+  const engine = new DeterministicQueryEngine({ team: TEAM, timezone: 'Asia/Shanghai', businessDayStart: '00:00' });
+  const result = engine.execute(query({
+    subject: { type: 'player', ids: ['p1'] },
+    selector: {
+      type: 'time_range',
+      start: '2026-09-18T00:00:00.000Z',
+      end: '2026-09-20T00:00:00.000Z',
+      timezone: 'Asia/Shanghai',
+      businessDayStart: '06:00',
+    },
+    groupBy: 'day',
+  }), records, COVERAGE, SOURCE);
+  assert.deepEqual(result.data.rows.map((row) => row.label), ['2026-09-18']);
+});
+
+test('unknown metrics stay out of ranking and performance scoring', () => {
+  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const ranked = engine.execute(query({ operation: 'rank', orderBy: { metric: 'kd', direction: 'desc' } }), RAW_RECORDS, COVERAGE, SOURCE);
+  const bob = ranked.data.rows.find((row) => row.key === 'p2')!;
+  assert.equal(bob.metrics.kd, null);
+  assert.equal(bob.position, undefined);
+  const strongest = engine.execute(query({ operation: 'strongest' }), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.equal(strongest.data.rows.find((row) => row.key === 'p2')?.metrics.performance_score, null);
+});
+
 test('compare emits null ratios when a denominator is zero and never serializes Infinity or NaN', () => {
   const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
   const compared = engine.execute(query({
@@ -225,6 +267,16 @@ test('compare emits null ratios when a denominator is zero and never serializes 
   const serialized = JSON.stringify(compared);
   assert.equal(serialized.includes('Infinity'), false);
   assert.equal(serialized.includes('NaN'), false);
+});
+
+test('person-scoped review facts do not expand back to the full squad', () => {
+  const match = normalizeRecords([RAW_RECORDS[0]!])[0]!;
+  const facts = extractMatchReviewFacts(match, { events: [] }, TEAM);
+  const scoped = scopeMatchReviewFacts(facts, ['p1']);
+  assert.deepEqual(scoped.squad.playerIds, ['p1']);
+  assert.deepEqual(scoped.players.map((player) => player.playerId), ['p1']);
+  assert.equal(scoped.squad.kills, 4);
+  assert.ok(scoped.evidence.every((item) => !item.id.includes('-p2')));
 });
 
 test('PUBG API retries bounded 5xx responses and never exposes credentials in errors', async () => {
@@ -329,6 +381,39 @@ test('recent PUBG searches force fresh discovery and reuse cached details when n
     assert.equal((third.data as { matches: Array<{ matchId: string }> }).matches[0]?.matchId, 'm2');
     assert.equal(requestedMatchIds.length, matchCallsAfterNewMatch);
     assert.deepEqual(requestedMatchIds, ['m1', 'm2']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('cached PUBG records become stale partial data when discovery is unavailable', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-stale-cache-'));
+  try {
+    const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+    repository.upsertMatches([RAW_RECORDS[0]]);
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      maxRetries: 0,
+      fetchImpl: async () => { throw new Error('offline'); },
+    });
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      now: () => new Date('2026-09-19T00:00:00.000Z'),
+    });
+    const result = await service.queryStats({
+      sessionId: 'session-stale',
+      playerIds: ['p1'],
+      selector: { type: 'time_range', from: '2026-09-15T00:00:00.000Z', to: '2026-09-17T00:00:00.000Z' },
+      metrics: ['matches', 'kills'],
+      refresh: true,
+    });
+    assert.equal(result.status, 'partial');
+    assert.equal(result.error, undefined);
+    assert.equal(result.coverage.status, 'STALE');
+    assert.equal((result.data as { rows: unknown[] }).rows.length, 1);
+    repository.close();
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

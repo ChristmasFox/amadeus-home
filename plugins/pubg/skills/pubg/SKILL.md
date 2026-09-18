@@ -71,8 +71,10 @@ Tool rules:
   沿用当前会话的具体 `matchId`。
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:
   `time_range` uses the half-open interval `[from,to)` and IANA timezone
-  `Asia/Shanghai` unless the user specifies another timezone; `last_n_matches`
-  is bounded to at most 100 matches per call.
+  `Asia/Shanghai` unless the user specifies another timezone. PUBG's canonical
+  business day runs from `06:00` through the next `06:00`; preserve that
+  boundary when resolving date-based selectors. `last_n_matches` is bounded to
+  at most 100 matches per call.
 - For a clock split repeated across multiple calendar days, make each day's
   before/after windows explicit half-open intervals and keep them separate;
   never use `groupBy: day` over a widened range that contains both sides of the

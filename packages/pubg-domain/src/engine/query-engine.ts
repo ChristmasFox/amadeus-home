@@ -7,7 +7,7 @@ import type { Coverage, DataStatus, Evidence, SourceInfo } from '../schema/statu
 import type { NormalizedMatch, NormalizedPlayer, OperationData, QueryRow, ResultSetRecord, StructuredResult } from '../data/model.js';
 import { normalizeRecords, numberOr } from '../data/model.js';
 import { CHICKEN_INDEX_WEIGHTS, normalizeChickenIndexWeights, type ChickenIndexWeights } from '../config/chicken-index.js';
-import { businessDayLabel, describeRange, resolveQuerySelectors, resolveSelector, type ResolverOptions } from '../time/selector-resolver.js';
+import { BUSINESS_DAY_START, DEFAULT_TIMEZONE, businessDayLabel, describeRange, resolveQuerySelectors, resolveSelector, type ResolverOptions } from '../time/selector-resolver.js';
 
 export interface QueryEngineOptions extends ResolverOptions {
   team?: TeamConfig;
@@ -32,8 +32,6 @@ interface Accumulator {
   top10: number;
   deathSemantics: Set<string>;
 }
-
-const POSITIVE_METRICS: Metric[] = ['kd', 'damage', 'avg_damage', 'kills', 'assists', 'dbnos', 'revives', 'wins', 'top10', 'matches', 'headshot_kills', 'survival_time', 'longest_kill', 'performance_score'];
 
 function emptyAccumulator(): Accumulator {
   return {
@@ -79,15 +77,6 @@ function round(value: number | null, digits = 2): number | null {
   if (value === null || !Number.isFinite(value)) return value;
   const scale = 10 ** digits;
   return Math.round(value * scale) / scale;
-}
-
-function metricNumber(row: QueryRow, metric: Metric): number {
-  const value = row.metrics[metric];
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 function metricNullableNumber(row: QueryRow | undefined, metric: Metric): number | null {
@@ -295,29 +284,39 @@ function normalizeComponent(value: number, values: number[], higherIsBetter: boo
 function applyChickenIndex(rows: QueryRow[], override: Partial<ChickenIndexWeights> = {}): void {
   const weights = normalizeChickenIndexWeights(override);
   const eligible = rows.filter((row) => row.activityStatus !== 'NO_ACTIVITY');
-  const values = (metric: Metric, fallback = 0): number[] => eligible.map((row) => {
-    const value = metricNumber(row, metric);
-    return Number.isFinite(value) ? value : fallback;
+  const knownValues = (metric: Metric): number[] => eligible.flatMap((row) => {
+    const value = metricNullableNumber(row, metric);
+    return value === null ? [] : [value];
   });
-  const kdValues = values('kd');
-  const damageValues = values('avg_damage');
-  const killsValues = eligible.map((row) => metricNumber(row, 'kills') / Math.max(1, metricNumber(row, 'matches')));
-  const rankValues = eligible.map((row) => {
-    const value = row.metrics.rank;
-    return typeof value === 'number' && Number.isFinite(value) ? value : 100;
+  const rateValues = (metric: Metric): number[] => eligible.flatMap((row) => {
+    const value = metricNullableNumber(row, metric);
+    const matches = metricNullableNumber(row, 'matches');
+    return value === null || matches === null || matches <= 0 ? [] : [value / matches];
   });
-  const top10Values = eligible.map((row) => metricNumber(row, 'top10') / Math.max(1, metricNumber(row, 'matches')));
+  const kdValues = knownValues('kd');
+  const damageValues = knownValues('avg_damage');
+  const killsValues = rateValues('kills');
+  const rankValues = knownValues('rank');
+  const top10Values = rateValues('top10');
   for (const row of rows) {
     if (row.activityStatus === 'NO_ACTIVITY') {
       row.metrics.performance_score = null;
       row.metrics.chicken_index = null;
       continue;
     }
-    const kd = metricNumber(row, 'kd');
-    const avgDamage = metricNumber(row, 'avg_damage');
-    const avgKills = metricNumber(row, 'kills') / Math.max(1, metricNumber(row, 'matches'));
-    const avgRank = typeof row.metrics.rank === 'number' ? row.metrics.rank : 100;
-    const top10Rate = metricNumber(row, 'top10') / Math.max(1, metricNumber(row, 'matches'));
+    const kd = metricNullableNumber(row, 'kd');
+    const avgDamage = metricNullableNumber(row, 'avg_damage');
+    const kills = metricNullableNumber(row, 'kills');
+    const matches = metricNullableNumber(row, 'matches');
+    const avgRank = metricNullableNumber(row, 'rank');
+    const top10 = metricNullableNumber(row, 'top10');
+    if (kd === null || avgDamage === null || kills === null || matches === null || matches <= 0 || avgRank === null || top10 === null) {
+      row.metrics.performance_score = null;
+      row.metrics.chicken_index = null;
+      continue;
+    }
+    const avgKills = kills / matches;
+    const top10Rate = top10 / matches;
     const score = normalizeComponent(kd, kdValues, true) * weights.kd
       + normalizeComponent(avgDamage, damageValues, true) * weights.avgDamage
       + normalizeComponent(avgKills, killsValues, true) * weights.avgKills
@@ -330,8 +329,12 @@ function applyChickenIndex(rows: QueryRow[], override: Partial<ChickenIndexWeigh
 
 function sortRows(rows: QueryRow[], metric: Metric, direction: 'asc' | 'desc'): QueryRow[] {
   return [...rows].sort((left, right) => {
-    const leftValue = metricNumber(left, metric);
-    const rightValue = metricNumber(right, metric);
+    const leftValue = metricNullableNumber(left, metric);
+    const rightValue = metricNullableNumber(right, metric);
+    if (leftValue === null || rightValue === null) {
+      if (leftValue === null && rightValue === null) return left.label.localeCompare(right.label);
+      return leftValue === null ? 1 : -1;
+    }
     if (leftValue !== rightValue) return direction === 'desc' ? rightValue - leftValue : leftValue - rightValue;
     return left.label.localeCompare(right.label);
   });
@@ -341,10 +344,11 @@ function positionRows(rows: QueryRow[], metric: Metric): QueryRow[] {
   let previous: number | null = null;
   let position = 0;
   return rows.map((row, index) => {
-    const value = metricNumber(row, metric);
+    const value = metricNullableNumber(row, metric);
+    if (value === null) return { ...row, tied: false };
     if (previous === null || value !== previous) position = index + 1;
     previous = value;
-    return { ...row, position, tied: index > 0 && value === metricNumber(rows[index - 1]!, metric) };
+    return { ...row, position, tied: index > 0 && value === metricNullableNumber(rows[index - 1]!, metric) };
   });
 }
 
@@ -352,8 +356,13 @@ function highlights(rows: QueryRow[]): Record<string, QueryRow[]> {
   const eligible = rows.filter((row) => row.activityStatus !== 'NO_ACTIVITY');
   const result: Record<string, QueryRow[]> = {};
   const highest = (metric: Metric) => {
-    const max = Math.max(...eligible.map((row) => metricNumber(row, metric)), 0);
-    return eligible.filter((row) => metricNumber(row, metric) === max);
+    const known = eligible.flatMap((row) => {
+      const value = metricNullableNumber(row, metric);
+      return value === null ? [] : [value];
+    });
+    if (!known.length) return [];
+    const max = Math.max(...known);
+    return eligible.filter((row) => metricNullableNumber(row, metric) === max);
   };
   result.kd = highest('kd');
   result.kills = highest('kills');
@@ -361,9 +370,18 @@ function highlights(rows: QueryRow[]): Record<string, QueryRow[]> {
   result.dbnos = highest('dbnos');
   result.revives = highest('revives');
   result.longest_kill = highest('longest_kill');
-  const maxChicken = Math.max(...eligible.map((row) => metricNumber(row, 'chicken_index')), 0);
-  result.chicken_index = eligible.filter((row) => metricNumber(row, 'chicken_index') === maxChicken);
+  const chickenValues = eligible.flatMap((row) => {
+    const value = metricNullableNumber(row, 'chicken_index');
+    return value === null ? [] : [value];
+  });
+  const maxChicken = chickenValues.length ? Math.max(...chickenValues) : null;
+  result.chicken_index = maxChicken === null ? [] : eligible.filter((row) => metricNullableNumber(row, 'chicken_index') === maxChicken);
   return result;
+}
+
+function selectorTimeOptions(selector: CanonicalQuery['selector'], options: QueryEngineOptions): { timezone: string; businessDayStart: string } {
+  if (selector.type === 'time_range') return { timezone: selector.timezone, businessDayStart: selector.businessDayStart };
+  return { timezone: options.timezone ?? DEFAULT_TIMEZONE, businessDayStart: options.businessDayStart ?? BUSINESS_DAY_START };
 }
 
 function statusFor(coverage: Coverage, selectedCount: number): DataStatus {
@@ -426,14 +444,15 @@ export class DeterministicQueryEngine {
     const baseStatus = statusFor(coverage, selected.length);
     if (resolved.operation === 'compare') return this.executeCompare(resolved, records, coverage, source, team, subjectIds, mergedOptions, baseStatus, querySessionId);
     if (resolved.selector.type === 'result_set' && !mergedOptions.resultSetMatchIds) return this.invalid(resolved.queryId, querySessionId, 'INVALID_QUERY', ['RESULT_SET_NOT_FOUND'], coverage, source);
+    const selectorTime = selectorTimeOptions(resolved.selector, mergedOptions);
     const data = this.executeSingle(
       resolved,
       selected,
       subjectIds,
       ids,
       team,
-      mergedOptions.timezone ?? 'Asia/Shanghai',
-      mergedOptions.businessDayStart ?? '06:00',
+      selectorTime.timezone,
+      selectorTime.businessDayStart,
       mergedOptions.chickenIndexWeights ?? CHICKEN_INDEX_WEIGHTS,
     );
     const status: DataStatus = selected.length === 0 && coverage.complete && baseStatus === 'OK' ? 'NO_MATCHES' : baseStatus;
@@ -502,14 +521,15 @@ export class DeterministicQueryEngine {
       const first = ordered[0];
       const last = ordered[ordered.length - 1];
       const metricNames: Metric[] = ['kd', 'avg_damage', 'kills'];
-      const changes: Record<string, { from: number; to: number; delta: number }> = {};
+      const changes: Record<string, { from: number | null; to: number | null; delta: number | null }> = {};
       for (const metric of metricNames) {
-        const from = first ? metricNumber(first, metric) : 0;
-        const to = last ? metricNumber(last, metric) : 0;
-        changes[metric] = { from: round(from) ?? 0, to: round(to) ?? 0, delta: round(to - from) ?? 0 };
+        const from = first ? metricNullableNumber(first, metric) : null;
+        const to = last ? metricNullableNumber(last, metric) : null;
+        const delta = from === null || to === null ? null : round(to - from);
+        changes[metric] = { from: round(from), to: round(to), delta };
       }
-      const positive = (changes.kd?.delta ?? 0) > 0 || (changes.avg_damage?.delta ?? 0) > 0 || (changes.kills?.delta ?? 0) > 0;
-      const negative = (changes.kd?.delta ?? 0) < 0 && (changes.avg_damage?.delta ?? 0) < 0;
+      const positive = [changes.kd?.delta, changes.avg_damage?.delta, changes.kills?.delta].some((value) => typeof value === 'number' && value > 0);
+      const negative = [changes.kd?.delta, changes.avg_damage?.delta].every((value) => typeof value === 'number' && value < 0);
       result.dailySeries = ordered;
       result.change = { direction: positive && !negative ? 'up' : negative ? 'down' : 'stable', metrics: changes };
     }
@@ -520,14 +540,15 @@ export class DeterministicQueryEngine {
     const segmentData = query.segments.map((segment) => {
       const selected = selectBySelector(records, segment.selector, ids, options);
       const segmentQuery = { ...query, operation: 'report' as const, selector: segment.selector, segments: [] };
+      const segmentTime = selectorTimeOptions(segment.selector, options);
       const data = this.executeSingle(
         segmentQuery,
         selected,
         ids,
         [...ids],
         team,
-        options.timezone ?? 'Asia/Shanghai',
-        options.businessDayStart ?? '06:00',
+        segmentTime.timezone,
+        segmentTime.businessDayStart,
         options.chickenIndexWeights ?? CHICKEN_INDEX_WEIGHTS,
       );
       return { label: segment.label, selector: segment.selector, rows: data.rows, summary: data.summary };
@@ -547,14 +568,11 @@ export class DeterministicQueryEngine {
         const comparisonMetrics = ['matches', 'kills', 'assists', 'damage', 'avg_damage', 'kd', 'deaths', 'wins', 'top10', 'rank', 'dbnos', 'revives', 'performance_score', 'chicken_index'] as Metric[];
         const comparisonRatios: Record<string, number | null> = {};
         for (const metric of comparisonMetrics) {
-          const firstValue = firstRow ? metricNullableNumber(firstRow, metric) ?? 0 : 0;
-          const secondValue = secondRow ? metricNullableNumber(secondRow, metric) ?? 0 : 0;
           const firstKnown = metricNullableNumber(firstRow, metric);
           const secondKnown = metricNullableNumber(secondRow, metric);
-          const ratioMetric = metric === 'kd' || metric === 'avg_damage' || metric === 'rank' || metric === 'performance_score' || metric === 'chicken_index';
-          metrics[metric] = ratioMetric && (firstKnown === null || secondKnown === null)
+          metrics[metric] = firstKnown === null || secondKnown === null
             ? null
-            : round(firstValue - secondValue);
+            : round(firstKnown - secondKnown);
           comparisonRatios[metric] = ratio(firstKnown, secondKnown);
         }
         deltaRows.push({

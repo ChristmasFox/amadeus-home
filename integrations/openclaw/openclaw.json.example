@@ -70,7 +70,7 @@
           "identityPresetsFile": "/data/identity-presets.json",
           "apiBaseUrl": "https://api.pubg.com",
           "timezone": "Asia/Shanghai",
-          "businessDayStart": "00:00",
+          "businessDayStart": "06:00",
           "maxMatches": 500,
           "freshnessMs": 300000
         }
