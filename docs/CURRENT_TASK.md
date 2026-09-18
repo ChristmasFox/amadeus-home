@@ -76,8 +76,13 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 并把外部 `identity-presets.json` 与 Identity SQLite 的三条 PUBG external account 记录改为
 `No` 版本，同时重算对应 `account_id`。修改前可恢复备份为
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130716-identity-pubg-no-correction`；
-当前源代码更正和运行时数据已核验，待本轮镜像重新 apply 后复跑无投递 smoke。为避免未经请求
-向群聊发测试消息，最后一步仍由用户在真实群里发送一句昵称战绩请求完成入口验收。
+更正提交 `c3ec1ac` 已构建并 apply，线上镜像为
+`local/openclaw-amadeus:git-c3ec1acca74d-20260918130917`，部署恢复点为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130917`。部署后发现 preset 原子替换
+留下了 root-only 权限，已将该外部文件恢复为运行时 `node(1000):node(1000)`、`0600`；随后
+“胶昨天战绩”和“猴昨天战绩”均实际完成 `read` → `identity_resolve` → `pubg_query_stats`，
+各 3 次调用、0 失败并返回 4 场真实数据。为避免未经请求向群聊发测试消息，最后一步仍由用户
+在真实群里发送一句昵称战绩请求完成入口验收。
 
 ## 当前进度
 

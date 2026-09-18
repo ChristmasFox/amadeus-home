@@ -74,9 +74,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   正确值为 `SG_LabmemNo007`、`SG_LabmemNo008`、`SG_LabmemNo004`。本轮已移除 Git fixture
   和 production team config 中的三个错误 alias，并把外部 `identity-presets.json` 与 Identity
   SQLite 的对应记录改为 `No` 版本且重算 `account_id`。修改前可恢复备份为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130716-identity-pubg-no-correction`；
-  源代码和运行时数据已核验，待更正镜像 apply 后复跑无投递 smoke。未向群聊发未经请求的测试消息，
-  真实 WhatsApp 入口仍由用户触发验收。
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130716-identity-pubg-no-correction`。
+  更正提交 `c3ec1ac` 已构建并 apply，线上镜像为
+  `local/openclaw-amadeus:git-c3ec1acca74d-20260918130917`，部署恢复点为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130917`。部署后已修正 preset 原子
+  替换留下的 root-only 权限为运行时 `node(1000):node(1000)`、`0600`；“胶昨天战绩”和
+  “猴昨天战绩”均实际完成 `read` → `identity_resolve` → `pubg_query_stats`，各 3 次调用、
+  0 失败并返回 4 场真实数据。未向群聊发未经请求的测试消息，真实 WhatsApp 入口仍由用户触发验收。
 
 ## 本轮实现
 
