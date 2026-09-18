@@ -1,5 +1,7 @@
-# Follow-up: release PUBG query boundary hardening
+# Follow-up: verify PUBG query boundary hardening through real inbound traffic
 
-- Source changes are verified but not deployed.
-- Before applying, rebuild the affected OpenClaw image, switch the runtime PUBG config to `businessDayStart: 06:00`, preserve a rollback checkpoint, and run the release smoke matrix.
-- Complete one real Telegram/WhatsApp inbound test for a nickname query, a first-person query, a team query, a 06:00 boundary query, and a recent-match review.
+- Deployment completed from commit `1c2a585`.
+- Live OpenClaw uses `businessDayStart: 06:00`; rollback checkpoint:
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918172435`.
+- Release smoke passed: OpenClaw/Product Radar health, PUBG runtime preflight, media network, NAS read-only smoke, owner WhatsApp outbox, and retired-runtime checks.
+- Remaining acceptance: complete one real Telegram/WhatsApp inbound test for a nickname query, a first-person query, a team query, a 06:00 boundary query, and a recent-match review.

@@ -14,13 +14,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
 
-## PUBG 查询边界加固（2026-09-19，源码已验证，尚未部署）
+## PUBG 查询边界加固（2026-09-19，已部署，真实入口验收待完成）
 
 - PUBG 业务日已确定为 `Asia/Shanghai` 的 `06:00`–次日 `06:00`；Domain 默认、配置模板、插件 manifest、Skill、按日聚合和 compare 分段统一该口径。
 - API 玩家发现失败时，如果 SQLite 已有比赛缓存，查询返回 `partial`/`STALE` 并保留可用 rows；没有本地覆盖时仍返回 `SOURCE_UNAVAILABLE`/error。
 - `pubg_get_review_facts` 现在按 `playerIds` 裁剪人物、队伍摘要、细节事实和 evidence；`queryResolved` 记录实际人物范围。
 - 排名、Chicken Index、highlight、trend 和 compare delta 保留未知值为 `null`，不再把未知数据当作零。
-- 本地验证：PUBG Domain 16/16、PUBG plugin 9/9、受影响 typecheck、`pnpm check:secrets` 和 `git diff --check` 通过；没有 CasaOS apply，当前线上镜像和 runtime 配置尚未切换。
+- 本地验证：`pnpm test:pubg` 35/35、受影响 build/typecheck、`pnpm check:secrets` 和 `git diff --check` 通过。提交 `1c2a585` 已通过 `--apply --build-auto` 部署，线上镜像为 `local/openclaw-amadeus:git-1c2a585b2eef-20260918172435`，恢复 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918172435`；live `businessDayStart=06:00`，健康、PUBG runtime tools、owner outbox 和外围 smoke 均通过。仍待真实 Telegram/WhatsApp 群聊入口验收。
 
 ## 最新 follow-up（2026-09-19，已部署）
 
