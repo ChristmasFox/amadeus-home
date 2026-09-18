@@ -50,6 +50,15 @@ enforce their own owner/confirmation checks. The current runtime account id is
 `secondary`; the previous default account's credentials were archived outside
 the repository before the switch.
 
+`workspace/SOUL.md` and `workspace/MEMORY.md` are tracked runtime context and are
+injected into the external OpenClaw workspace on every prepare/apply. The
+identity SQLite database, channel credentials, pairing state, and other runtime
+memory remain outside Git. The pinned OpenClaw 2026.9.4 Telegram bundle and the
+persisted WhatsApp channel package receive the same source-controlled,
+version-anchored metadata patch during image build/apply; it carries only
+provider-native IDs into the existing Identity tool context and never infers an
+identity from prompt text, display names, phone text, or usernames.
+
 ## Local verification
 
 ```sh

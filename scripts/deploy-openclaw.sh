@@ -60,7 +60,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -210,6 +210,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
       python3 -m py_compile scripts/openclaw_prepare.py
     fi
   fi
+  node --check scripts/patch-openclaw-channel-identity.mjs
   pnpm check:secrets
 )
 
@@ -232,6 +233,7 @@ OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
 RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
 PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
+PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
@@ -239,7 +241,8 @@ for source in \
   "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
   "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md" \
   "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace/USER.md" "$PREPARE"; do
+  "$ROOT_DIR/integrations/openclaw/workspace/USER.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace/MEMORY.md" "$PREPARE" "$PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -250,6 +253,7 @@ TEAM_B64="$(base64_file "$ROOT_DIR/packages/pubg-domain/config/default-team.json
 AGENTS_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md")"
 SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md")"
 USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/USER.md")"
+MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/MEMORY.md")"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR" \
@@ -293,7 +297,10 @@ print('CHECKPOINT=' + str(checkpoint))
 PY
 
 orb -m "$MACHINE" -u root python3 - \
-  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" < "$PREPARE"
+  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
+
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'

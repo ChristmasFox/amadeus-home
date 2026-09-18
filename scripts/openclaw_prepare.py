@@ -92,8 +92,8 @@ def owner_phone(owner_target: str) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 7:
-        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64")
+    if len(sys.argv) != 8:
+        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64 MEMORY_B64")
     data_dir = Path(sys.argv[1])
     config_template = json.loads(base64.b64decode(sys.argv[2]).decode())
     team_bytes = base64.b64decode(sys.argv[3])
@@ -101,6 +101,7 @@ def main() -> None:
         "AGENTS.md": base64.b64decode(sys.argv[4]),
         "SOUL.md": base64.b64decode(sys.argv[5]),
         "USER.md": base64.b64decode(sys.argv[6]),
+        "MEMORY.md": base64.b64decode(sys.argv[7]),
     }
     config_dir = data_dir / "config"
     workspace_dir = data_dir / "workspace"

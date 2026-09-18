@@ -166,6 +166,8 @@ const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (path: string) => SqliteDatabase };
 
 const SOURCE_RANK: Record<AliasSource, number> = { observed: 1, preset: 2, confirmed: 3 };
+const CHANNEL_SOURCE_RANK: Record<ChannelIdentitySource, number> = { platform: 1, preset: 2, confirmed: 3 };
+const EXTERNAL_SOURCE_RANK: Record<Exclude<AliasSource, 'observed'>, number> = { preset: 1, confirmed: 2 };
 
 function clean(value: unknown, label: string, maxLength: number): string {
   const normalized = String(value ?? '').replace(/[\u0000\r\n]+/gu, ' ').replace(/\s+/gu, ' ').trim();
@@ -491,7 +493,11 @@ export class IdentityStore {
     const existing = this.db.prepare('SELECT * FROM channel_identities WHERE channel = ? AND account_id = ? AND platform_user_id = ?').get(channel, accountId, platformUserId);
     if (existing && rowText(existing, 'person_id') !== personId) throw new Error('identity_channel_already_bound');
     if (!existing) throw new Error('identity_channel_write_failed');
-    this.db.prepare('UPDATE channel_identities SET source = ?, confidence = ?, conversation_id = ?, updated_at = ? WHERE channel = ? AND account_id = ? AND platform_user_id = ?').run(source, Math.max(confidence, rowNumber(existing, 'confidence'), rowNumber(existingBeforeWrite ?? {}, 'confidence')), conversationId, timestamp, channel, accountId, platformUserId);
+    const existingSource = rowText(existing, 'source');
+    if (!(existingSource in CHANNEL_SOURCE_RANK)) throw new Error('identity_channel_source_invalid');
+    const finalSource = CHANNEL_SOURCE_RANK[source] >= CHANNEL_SOURCE_RANK[existingSource as ChannelIdentitySource] ? source : existingSource as ChannelIdentitySource;
+    const finalConversationId = conversationId || rowOptional(existing, 'conversation_id') || '';
+    this.db.prepare('UPDATE channel_identities SET source = ?, confidence = ?, conversation_id = ?, updated_at = ? WHERE channel = ? AND account_id = ? AND platform_user_id = ?').run(finalSource, Math.max(confidence, rowNumber(existing, 'confidence'), rowNumber(existingBeforeWrite ?? {}, 'confidence')), finalConversationId, timestamp, channel, accountId, platformUserId);
     return this.channelFromRow(this.db.prepare('SELECT * FROM channel_identities WHERE channel = ? AND account_id = ? AND platform_user_id = ?').get(channel, accountId, platformUserId)!);
   }
 
@@ -512,7 +518,10 @@ export class IdentityStore {
     const existing = this.db.prepare('SELECT * FROM external_accounts WHERE provider = ? AND external_key = ?').get(provider, externalKey);
     if (existing && rowText(existing, 'person_id') !== personId) throw new Error('identity_external_already_bound');
     if (!existing) throw new Error('identity_external_write_failed');
-    this.db.prepare('UPDATE external_accounts SET external_id = ?, label = ?, source = ?, confidence = ?, updated_at = ? WHERE account_id = ?').run(externalId, label ?? rowOptional(existing, 'label') ?? null, source, Math.max(confidence, rowNumber(existing, 'confidence'), rowNumber(existingBeforeWrite ?? {}, 'confidence')), timestamp, accountId);
+    const existingSource = rowText(existing, 'source');
+    if (!(existingSource in EXTERNAL_SOURCE_RANK)) throw new Error('identity_external_source_invalid');
+    const finalSource = EXTERNAL_SOURCE_RANK[source] >= EXTERNAL_SOURCE_RANK[existingSource as Exclude<AliasSource, 'observed'>] ? source : existingSource as Exclude<AliasSource, 'observed'>;
+    this.db.prepare('UPDATE external_accounts SET external_id = ?, label = ?, source = ?, confidence = ?, updated_at = ? WHERE account_id = ?').run(externalId, label ?? rowOptional(existing, 'label') ?? null, finalSource, Math.max(confidence, rowNumber(existing, 'confidence'), rowNumber(existingBeforeWrite ?? {}, 'confidence')), timestamp, accountId);
     return this.externalFromRow(this.db.prepare('SELECT * FROM external_accounts WHERE account_id = ?').get(accountId)!);
   }
 
@@ -569,6 +578,7 @@ export class IdentityStore {
       if (groupId) scopes.push({ scope: 'group', scopeId: groupId, path: 'group-alias' });
     }
     if (scope === undefined || scope === 'global') scopes.push({ scope: 'global', scopeId: '', path: 'global-alias' });
+    const observedCandidates: IdentityResolutionCandidate[] = [];
     for (const candidateScope of scopes) {
       const matches = this.aliasesFor(alias, candidateScope.scope, candidateScope.scopeId);
       const authoritative = matches.filter((item) => item.source !== 'observed');
@@ -590,18 +600,13 @@ export class IdentityStore {
         };
       }
       if (matches.length) {
-        return {
-          status: 'candidate',
-          reliable: false,
-          resolutionPath: 'learned-candidate',
-          candidates: matches.flatMap((item) => {
+        observedCandidates.push(...matches.flatMap((item) => {
             const person = this.getPerson(item.personId);
             return person ? [{ alias: item, person }] : [];
-          }),
-          reason: 'observed_alias_requires_confirmation',
-        };
+          }));
       }
     }
+    if (observedCandidates.length) return { status: 'candidate', reliable: false, resolutionPath: 'learned-candidate', candidates: observedCandidates, reason: 'observed_alias_requires_confirmation' };
     return { status: 'not_found', reliable: false, resolutionPath: 'unbound', reason: 'alias_not_found' };
   }
 

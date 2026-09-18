@@ -38,7 +38,7 @@ test('presets persist persons, aliases, and provider-neutral accounts across reo
 test('group aliases take precedence over global aliases and observed candidates stay unreliable', () => {
   const store = new IdentityStore();
   store.seedPresets([
-    { personId: 'global', displayName: '全局胖子', aliases: ['胖子'] },
+    { personId: 'global', displayName: '全局胖子' },
     { personId: 'group', displayName: '群内胖子' },
   ]);
   store.addAlias({ personId: 'group', alias: '胖子', scope: 'group', scopeId: 'group-1@g.us', source: 'confirmed' });
@@ -57,6 +57,87 @@ test('group aliases take precedence over global aliases and observed candidates 
   assert.equal(confirmed.status, 'resolved');
   assert.equal(confirmed.reliable, true);
   store.close();
+});
+
+test('authoritative global aliases are not shadowed by group observations', () => {
+  const store = new IdentityStore();
+  store.seedPresets([
+    { personId: 'global', displayName: '全局小王' },
+    { personId: 'group', displayName: '群内候选' },
+  ]);
+  store.addAlias({ personId: 'global', alias: '胖子', scope: 'global', source: 'confirmed' });
+  store.addAlias({ personId: 'group', alias: '胖子', scope: 'group', scopeId: 'group-1@g.us', source: 'observed', confidence: 0.9 });
+
+  const resolved = store.resolve({ type: 'alias', alias: '胖子' }, { conversationId: 'group-1@g.us' });
+  assert.equal(resolved.status, 'resolved');
+  assert.equal(resolved.person?.personId, 'global');
+  assert.equal(resolved.resolutionPath, 'global-alias');
+  store.close();
+});
+
+test('confirmed channel and external bindings are not downgraded by preset writes', () => {
+  const store = new IdentityStore();
+  store.seedPresets([{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }]);
+
+  const confirmedChannel = store.bindChannel({
+    personId: 'wang',
+    identity: { channel: 'whatsapp', accountId: 'secondary', platformUserId: '551', conversationId: 'group-1@g.us' },
+    source: 'confirmed',
+  });
+  const presetChannel = store.bindChannel({
+    personId: 'wang',
+    identity: { channel: 'whatsapp', accountId: 'secondary', platformUserId: '551' },
+    source: 'preset',
+  });
+  assert.equal(confirmedChannel.source, 'confirmed');
+  assert.equal(presetChannel.source, 'confirmed');
+  assert.equal(presetChannel.conversationId, 'group-1@g.us');
+
+  const confirmedAccount = store.linkAccount({ personId: 'wang', provider: 'pubg', externalId: 'Wang233', source: 'confirmed' });
+  const presetAccount = store.linkAccount({ personId: 'wang', provider: 'pubg', externalId: 'Wang233', source: 'preset' });
+  assert.equal(confirmedAccount.source, 'confirmed');
+  assert.equal(presetAccount.source, 'confirmed');
+  store.close();
+});
+
+test('confirmed identity bindings, aliases, and external accounts survive restart', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'identity-restart-'));
+  const database = join(directory, 'identity.sqlite');
+  try {
+    const first = new IdentityStore(database);
+    first.seedPresets([{ personId: 'wang', displayName: '小王' }]);
+    first.bindChannel({
+      personId: 'wang',
+      identity: { channel: 'telegram', accountId: 'default', platformUserId: '991', conversationId: '-1001' },
+      source: 'confirmed',
+    });
+    const observed = first.addAlias({
+      personId: 'wang',
+      alias: '胖子',
+      scope: 'group',
+      scopeId: '-1001',
+      source: 'observed',
+      confidence: 0.8,
+      evidenceSummary: '群聊中反复出现',
+    });
+    first.confirmCandidate(observed.aliasId);
+    first.linkAccount({ personId: 'wang', provider: 'pubg', externalId: 'Wang233', source: 'confirmed' });
+    first.close();
+
+    const second = new IdentityStore(database);
+    const self = second.resolve({ type: 'self' }, { channel: 'telegram', accountId: 'default', conversationId: '-1001', senderId: '991' });
+    assert.equal(self.status, 'resolved');
+    assert.equal(self.channelIdentity?.source, 'confirmed');
+    assert.equal(self.channelIdentity?.conversationId, '-1001');
+    const alias = second.resolve({ type: 'alias', alias: '胖子' }, { conversationId: '-1001' });
+    assert.equal(alias.status, 'resolved');
+    assert.equal(alias.person?.personId, 'wang');
+    assert.equal(alias.person?.aliases.find((item) => item.alias === '胖子')?.source, 'confirmed');
+    assert.equal(alias.person?.externalAccounts.find((item) => item.provider === 'pubg')?.externalId, 'Wang233');
+    second.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('self and mention resolve only trusted channel metadata, never display names', () => {
