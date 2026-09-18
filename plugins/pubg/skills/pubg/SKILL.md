@@ -31,7 +31,8 @@ subject. For each such request:
    tools.
 
 Never ask the user for a PUBG ID or say that the account is unconfirmed before
-the identity lookup. `pubg_resolve_players` is not a substitute for
+the identity lookup. Preloaded nickname/account mappings are already confirmed
+for this deployment; use the resolved `personId` directly. `pubg_resolve_players` is not a substitute for
 `identity_resolve`: `playerNames` is for an explicit PUBG in-game name, while a
 chat nickname must first become a canonical `personId`.
 
