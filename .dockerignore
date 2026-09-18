@@ -8,6 +8,8 @@ dist
 **/dist
 !plugins/pubg/dist/
 !plugins/pubg/dist/**
+!plugins/amadeus/dist/
+!plugins/amadeus/dist/**
 coverage
 **/__pycache__
 **/*.pyc
