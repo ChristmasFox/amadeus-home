@@ -35,6 +35,31 @@ test('presets persist persons, aliases, and provider-neutral accounts across reo
   }
 });
 
+test('a preset file added after startup is imported without replacing confirmed data', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'identity-refresh-'));
+  const database = join(directory, 'identity.sqlite');
+  const presets = join(directory, 'presets.json');
+  const store = new IdentityStore(database, { presetsFile: presets });
+  try {
+    assert.equal(store.refreshPresets(presets), false);
+    store.seedPresets([{ personId: 'wang', displayName: '小王' }]);
+    store.bindChannel({
+      personId: 'wang',
+      identity: { channel: 'whatsapp', accountId: 'secondary', platformUserId: '551' },
+      source: 'confirmed',
+    });
+    await writeFile(presets, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王', aliases: ['狗王'], externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }] }));
+    assert.equal(store.refreshPresets(presets), true);
+    const person = store.getPerson('wang');
+    assert.equal(person?.aliases.some((alias) => alias.alias === '狗王' && alias.source === 'preset'), true);
+    assert.equal(person?.channelIdentities[0]?.source, 'confirmed');
+    assert.equal(person?.externalAccounts[0]?.externalId, 'Wang233');
+  } finally {
+    store.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('group aliases take precedence over global aliases and observed candidates stay unreliable', () => {
   const store = new IdentityStore();
   store.seedPresets([

@@ -76,7 +76,10 @@ function object(value: unknown): Record<string, unknown> | undefined {
 function identityStore(config: AmadeusConfig): IdentityStore {
   const key = `${config.identityDatabasePath}\u0000${config.identityPresetsFile ?? ''}`;
   const existing = stores.get(key);
-  if (existing) return existing;
+  if (existing) {
+    if (config.identityPresetsFile) existing.refreshPresets(config.identityPresetsFile);
+    return existing;
+  }
   const store = new IdentityStore(config.identityDatabasePath, config.identityPresetsFile ? { presetsFile: config.identityPresetsFile } : {});
   stores.set(key, store);
   return store;
