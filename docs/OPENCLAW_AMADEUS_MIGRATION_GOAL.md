@@ -26,6 +26,10 @@ shadow/double-run 或兼容 fallback。
 - Mac/NAS：status、disk、owner-only sleep；SSH key 只在运行时 secret。
 - HomeLab Status：Glances、uptime 和固定服务探针；读取为主，通知为显式 owner action，
   不负责重启。
+- VPS Read-only Capability：通过固定 KiwiVM API 读取 service info、live status 和 raw usage，
+  通过固定只读 SSH probe 读取 uptime/load/memory/root filesystem 与 Caddy、Xray、Hysteria2、
+  frps 状态；只持久化 \`lastSuccessfulCounter\`/\`lastSuccessfulAt\`，不接受任意 shell 或 VPS
+  控制操作。VPS 晨间/晚间报告在 09:30/23:00 Asia/Shanghai 只发送 WhatsApp owner DM。
 - KOOK group members：仅在 KOOK 当前会话内交互查询，不保留主动推送。
 - Daily Tech & Market Digest：保留来源、主题、筛选、去重和 9Router 总结，改为 OpenClaw
   原生 briefing tool/cron，早报和晚报只发送 WhatsApp owner DM。
@@ -54,3 +58,5 @@ Telegram/KOOK proactive notification、watchdog、旧 facade/adapter/generator �
    运行，9Router、Product Radar、changedetection、media adapter 等独立依赖仍按需要运行。
 6. 真实切换前存在包含 compose、数据库、配置和 secret 恢复位置的外部 checkpoint；不把
    token、API key、数据库或业务数据提交到 Git。
+7. 自然语言 VPS 查询由 OpenClaw 自主选择一个或多个只读工具；流量计算、stale/error 语义、
+   十格进度条和 09:30/23:00 WhatsApp owner DM 报告均有本地测试与真实运行证据。

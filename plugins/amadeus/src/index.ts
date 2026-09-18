@@ -27,6 +27,7 @@ import { organizeMedia } from './media.js';
 import { nas } from './nas.js';
 import { isTrustedOwnerContext, OwnerNotifier, ownerEvent } from './owner.js';
 import { productRadar } from './radar.js';
+import { getVpsLiveStatus, getVpsServices, getVpsServiceInfo, getVpsSystemStatus, getVpsUsage } from './vps.js';
 
 const pluginConfigSchema = {
   jsonSchema: { type: 'object', additionalProperties: true },
@@ -74,6 +75,8 @@ const BriefingParameters = Type.Object({
   edition: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('morning'), Type.Literal('evening')])),
   deliver: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
+
+const VpsParameters = Type.Object({}, { additionalProperties: false });
 
 const IdentityResolveParameters = Type.Object({
   reference: Type.Union([
@@ -215,6 +218,11 @@ const entry = definePluginEntry({
       return notifier.notify(ownerEvent(params));
     });
     registerTool(api, 'amadeus_briefing', 'Generate the configured technology/market morning or evening briefing from curated feeds and optionally deliver it to the WhatsApp owner.', BriefingParameters, async (params, context, notifier, signal) => runBriefing(config, params.edition ?? 'auto', params.deliver === true, isTrustedOwnerContext(context), notifier, signal));
+    registerTool(api, 'amadeus_vps_service_info', 'Read VPS basic service and plan facts through the fixed read-only KiwiVM service-info API. No control endpoint or credential is exposed.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsServiceInfo(config, signal));
+    registerTool(api, 'amadeus_vps_live_status', 'Read the VPS Running/Stopped state, KiwiVM live resource facts, and CPU throttling through the fixed read-only live-status API.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsLiveStatus(config, signal));
+    registerTool(api, 'amadeus_vps_usage', 'Read KiwiVM traffic counters, quota, remaining bytes, reset time, bounded traffic history, and the persisted delta since the previous successful sample.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsUsage(config, signal));
+    registerTool(api, 'amadeus_vps_system_status', 'Read VPS uptime, load average, memory, and root filesystem usage through one fixed read-only SSH probe. It never accepts a shell command.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsSystemStatus(config, signal));
+    registerTool(api, 'amadeus_vps_services', 'Read the fixed critical VPS systemd services Caddy, Xray, Hysteria2, and frps through a bounded read-only SSH probe.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsServices(config, signal));
     api.logger.info('amadeus native capability plugin registered');
   },
 });

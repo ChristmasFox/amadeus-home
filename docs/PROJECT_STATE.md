@@ -8,6 +8,25 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## VPS 只读能力子目标（2026-09-18，代码完成，外部 secret/真实报告待验收）
+
+- `plugins/amadeus` 已新增五个结构化、只读 native tools：`amadeus_vps_service_info`、
+  `amadeus_vps_live_status`、`amadeus_vps_usage`、`amadeus_vps_system_status`、
+  `amadeus_vps_services`，并新增 `skills/vps`。OpenClaw 负责自然语言意图和多工具组合，
+  plugin 不实现关键词路由。
+- KiwiVM 仅调用固定 `getServiceInfo`、`getLiveServiceInfo`、`getRawUsageStats`；VEID/API key
+  从仓库外 JSON secret 文件读取，使用表单 POST，不进入 URL、日志或工具结果。SSH 仅执行固定
+  uptime/load/memory/rootfs probe 和 Caddy/Xray/Hysteria2/frps `systemctl is-active/is-enabled`，
+  使用独立 key、known-hosts 和受限 SSH user，不暴露通用 shell。
+- `/data/vps-usage-state.json` 原子持久化 `lastSuccessfulCounter` 与 `lastSuccessfulAt`，并保留
+  返回 stale 完整流量事实所需的上次 quota/reset 元数据；成功查询返回
+  used/total/remaining/usedPercent/resetAt/delta/history，API 失败保留上一份成功数据并返回
+  `stale/error`，不会把失败当成 0。
+- 部署模板和迁移脚本已加入三份 VPS secret mount、状态 checkpoint、VPS Skill preflight，
+  并声明 09:30/23:00 `Asia/Shanghai` VPS report cron；真实 secret、受限 SSH key、KiwiVM
+  响应和 WhatsApp owner DM 尚未完成 live 验收。受限 SSH probe/key 已在
+  `amadeus-gateway` provision 并通过真实插件调用验证。
+
 ## 跨渠道 Identity 实现（2026-09-18，已部署，真实入口验收待完成）
 
 - `packages/identity` 提供 SQLite `persons`、`channel_identities`、`aliases` 和
@@ -116,6 +135,9 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
 - `1ccd6f0` 又使 PUBG plugin 的缓存 IdentityStore 在 preset 文件运行后新增或修改时同步
   刷新；Identity 9、PUBG plugin 8、Amadeus 7 定向测试、受影响 build/typecheck、secrets
   scan 和 live apply 均通过。
+- VPS 子目标本地验证：Amadeus typecheck/build、9 个 Amadeus tests、脚本 syntax、manifest JSON
+  和 `git diff --check` 已通过；尚未把缺失的 KiwiVM/SSH secret 填入 CasaOS，也没有把未部署
+  的代码冒充真实 WhatsApp 报告送达。
 - 媒体整理继续受 organize-emby-media Skill 的备份、单项、preview-confirm、碰撞检查
   和不修改现有媒体库约束保护。
 

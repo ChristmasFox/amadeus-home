@@ -24,10 +24,23 @@ export interface AmadeusConfig {
   briefingStateFile: string;
   nineRouterBaseUrl: string;
   nineRouterApiKeyFile?: string;
+  kiwiVmBaseUrl: string;
+  kiwiVmCredentialsFile: string;
+  vpsSshHost: string;
+  vpsSshUser: string;
+  vpsSshPort: number;
+  vpsSshKeyFile: string;
+  vpsSshKnownHostsFile: string;
+  vpsUsageStateFile: string;
 }
 
 function stringValue(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function integerValue(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65_535 ? parsed : fallback;
 }
 
 export function configFor(api: OpenClawPluginApi): AmadeusConfig {
@@ -63,6 +76,14 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     briefingStateFile: file('briefingStateFile', 'BRIEFING_STATE_FILE', '/data/briefing-state.json'),
     nineRouterBaseUrl: file('nineRouterBaseUrl', 'OPENCLAW_9ROUTER_BASE_URL', 'http://9router:20128/v1').replace(/\/$/u, ''),
     ...(nineRouterApiKeyFile ? { nineRouterApiKeyFile } : {}),
+    kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
+    kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
+    vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),
+    vpsSshUser: file('vpsSshUser', 'VPS_SSH_USER', 'vps-readonly'),
+    vpsSshPort: integerValue(value.vpsSshPort ?? env('VPS_SSH_PORT'), 22),
+    vpsSshKeyFile: file('vpsSshKeyFile', 'VPS_SSH_KEY_FILE', '/run/secrets/vps_ssh_key'),
+    vpsSshKnownHostsFile: file('vpsSshKnownHostsFile', 'VPS_SSH_KNOWN_HOSTS_FILE', '/run/secrets/vps_ssh_known_hosts'),
+    vpsUsageStateFile: file('vpsUsageStateFile', 'VPS_USAGE_STATE_FILE', '/data/vps-usage-state.json'),
   };
 }
 

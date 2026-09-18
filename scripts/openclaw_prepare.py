@@ -133,6 +133,16 @@ def main() -> None:
     require_existing(secrets_dir / "telegram-bot-token", "Telegram token")
     require_existing(secrets_dir / "kook-bot-token", "KOOK token")
     require_existing(secrets_dir / "mac-ssh-key", "Mac SSH key")
+    kiwivm_credentials = secrets_dir / "kiwivm-credentials.json"
+    require_existing(kiwivm_credentials, "KiwiVM credentials")
+    try:
+        credentials = json.loads(kiwivm_credentials.read_text())
+    except json.JSONDecodeError as exc:
+        raise SystemExit("KiwiVM credentials are not valid JSON") from exc
+    if not isinstance(credentials, dict) or not str(credentials.get("veid", "")).strip() or not str(credentials.get("apiKey", credentials.get("api_key", ""))).strip():
+        raise SystemExit("KiwiVM credentials require veid and apiKey")
+    require_existing(secrets_dir / "vps-readonly-ssh-key", "VPS read-only SSH key")
+    require_existing(secrets_dir / "vps-ssh-known-hosts", "VPS SSH known-hosts file")
 
     owner_candidates = valid_owner_targets(existing_config)
     owner_target = secrets_dir / "owner-whatsapp-target"

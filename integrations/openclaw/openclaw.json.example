@@ -98,7 +98,12 @@
           "identityPresetsFile": "/data/identity-presets.json",
           "briefingConfigDir": "/app/dist/extensions/amadeus/briefing",
           "briefingStateFile": "/data/briefing-state.json",
-          "nineRouterBaseUrl": "http://9router:20128/v1"
+          "nineRouterBaseUrl": "http://9router:20128/v1",
+          "kiwiVmBaseUrl": "https://api.64clouds.com/v1",
+          "kiwiVmCredentialsFile": "/run/secrets/kiwivm_credentials.json",
+          "vpsSshKeyFile": "/run/secrets/vps_ssh_key",
+          "vpsSshKnownHostsFile": "/run/secrets/vps_ssh_known_hosts",
+          "vpsUsageStateFile": "/data/vps-usage-state.json"
         }
       }
     }

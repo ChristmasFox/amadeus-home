@@ -29,11 +29,19 @@ and the Telegram owner ID stay outside Git:
   WhatsApp owner target; it is never stored in the repository.
 - `/DATA/AppData/openclaw/secrets/mac-ssh-key` and the optional KOOK token are
   mounted read-only for the native NAS and interactive KOOK tools.
+- `/DATA/AppData/openclaw/secrets/kiwivm-credentials.json` contains only the
+  external KiwiVM `veid`/API key JSON; `/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key`
+  and `/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts` are the dedicated
+  forced-command SSH credentials. They are mounted read-only and never committed.
 - `/DATA/AppData/openclaw/data/identity.sqlite` stores canonical Persons,
   aliases, trusted Telegram/WhatsApp bindings, and provider-neutral external
   accounts. An optional `/DATA/AppData/openclaw/data/identity-presets.json`
   may seed Arthur's fixed friends; production channel IDs/JIDs are learned at
   runtime and never committed. See `identity-presets.example.json` for shape.
+- `/DATA/AppData/openclaw/data/vps-usage-state.json` stores the last successful
+  traffic counter/time and survives an OpenClaw restart. Provision the fixed
+  VPS probe/key with `scripts/provision-vps-readonly.sh --apply --public-key
+  <external-public-key>` before the OpenClaw release apply.
 
 The checked-in `openclaw.json.example` intentionally has an empty Telegram
 allowlist and an enabled WhatsApp channel without persisted session secrets.

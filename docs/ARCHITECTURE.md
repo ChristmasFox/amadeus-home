@@ -19,6 +19,7 @@ packages/pubg-domain             ├─ media-organizer-adapter
        │                         ├─ Mac NAS fixed SSH commands
        ▼                         ├─ Glances / HomeLab probes
 official PUBG API + SQLite       ├─ KOOK API, current-session only
+                                 ├─ KiwiVM + bounded read-only VPS SSH probes
                                  ├─ curated RSS/JSON + 9Router briefing
                                  └─ WhatsApp owner outbox/delivery
 \`\`\`
@@ -67,6 +68,10 @@ identity error，不静默使用默认队伍。
   固定 WhatsApp owner。
 - \`amadeus_briefing\`：读取 Git 内 curated source/config，做时间过滤、关键词主题评分、
   去重和 9Router 总结；早报/晚报只交给 owner notifier。
+- \`amadeus_vps_service_info\`、\`amadeus_vps_live_status\`、\`amadeus_vps_usage\`、
+  \`amadeus_vps_system_status\`、\`amadeus_vps_services\`：只读 KiwiVM/API 与固定 SSH probe；
+  不接受 endpoint、unit、shell、VPS 控制动作或通知目标。traffic state 保存在 \`/data\` 外部
+  文件，失败返回 stale/error，不能把未知值归零。
 - Identity tools：\`identity_resolve\`、\`identity_get_person\`、
   \`identity_bind_channel\`、\`identity_add_alias\`、\`identity_link_account\`、
   \`identity_list_candidates\`、\`identity_confirm_candidate\`。observed alias 只作为候选，
@@ -100,6 +105,8 @@ WhatsApp owner 投递、长消息分段、sent marker 和幂等 retry。Telegram
   backup mount；OpenClaw 不挂载媒体目录、不挂 Docker socket。
 - NAS SSH key、Telegram/KOOK token、PUBG key/team、WhatsApp owner target 和 9Router
   credential 都在运行时 secret 文件或外部 env。
+- KiwiVM VEID/API key、VPS read-only SSH key 和 known-hosts 文件都在运行时 secret；VPS
+  SSH user 应使用受限 forced-command key，OpenClaw 容器不挂载通用 root SSH key。
 - briefing source/config 在 \`plugins/amadeus/briefing/config\`，不再读取 n8n Git 工作树
   或 LangBot API credential。
 
@@ -112,6 +119,8 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 - OpenClaw AppData：\`/DATA/AppData/openclaw\`
 - Identity SQLite：\`/DATA/AppData/openclaw/data/identity.sqlite\`；可选外部预设文件为
   \`/DATA/AppData/openclaw/data/identity-presets.json\`，生产 channel ID/JID 只留运行时数据。
+- VPS traffic state：\`/DATA/AppData/openclaw/data/vps-usage-state.json\`；KiwiVM credentials、
+  read-only SSH key 和 known-hosts 文件位于 \`/DATA/AppData/openclaw/secrets/\`，不进入 Git。
 - 固定基础镜像：\`ghcr.io/openclaw/openclaw:2026.9.4\`，使用已核验 ARM64 digest
 - provider：\`9router:20128/v1\`，默认 route \`nine_router/arthur-combo\`
 - media adapter、Product Radar、changedetection 和 9Router 作为独立依赖保留
@@ -136,7 +145,8 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
    app/data 和旧凭据只留在仓库外 checkpoint 用于审计/人工恢复，不参与运行时 fallback。
 5. 新 compose/config 预检，确认两个 plugin 和两个 Skill 都已加载。
 6. 停止 LangBot、n8n、n8n-sandbox，移除其 canonical app/data 路径到 checkpoint。
-7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai briefing cron。
+7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai briefing cron 和 VPS report
+   cron；VPS cron 只 allow-list 四个 VPS read tools 与 \`amadeus_notify_owner\`。
 8. 检查 health、media adapter、NAS read-only SSH、channel status 和真实 WhatsApp owner outbox。
 
 旧数据仅用于备份/审计/恢复，不作为运行时 fallback；未执行旧架构回滚演练。
