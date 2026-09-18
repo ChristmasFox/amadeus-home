@@ -55,6 +55,25 @@ test('PUBG boundary maps canonical Person to PUBG account and never falls back t
     const prepared = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-turn');
     assert.deepEqual(prepared, { playerIds: ['p1'] });
     assert.deepEqual(await prepareIdentitySubject(service, config, { team: true }, toolContext(), 'telegram-turn'), { playerIds: ['p1', 'p2'] });
+
+    const teamQuery = {
+      team: true,
+      selector: { type: 'time_range', from: '2026-09-18T00:00:00+08:00', to: '2026-09-19T00:00:00+08:00' },
+      metrics: ['matches', 'kills'],
+      operation: 'report',
+      groupBy: 'player',
+      limit: 100,
+      refresh: false,
+    } as IdentitySubjectInput & Record<string, unknown>;
+    assert.deepEqual(await prepareIdentitySubject(service, config, teamQuery, toolContext(), 'telegram-turn'), {
+      selector: teamQuery.selector,
+      metrics: teamQuery.metrics,
+      operation: teamQuery.operation,
+      groupBy: teamQuery.groupBy,
+      limit: teamQuery.limit,
+      refresh: teamQuery.refresh,
+      playerIds: ['p1', 'p2'],
+    });
   } finally {
     service.repository.db.close();
     await rm(directory, { recursive: true, force: true });

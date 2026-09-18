@@ -6,6 +6,22 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-18 follow-up：VPS 手动 eventKey 隔离、部署文案与 PUBG team 查询修复
+
+当前实现状态：`SOURCE_FIXED_DEPLOY_PENDING`。VPS owner 通知现在识别 OpenClaw isolated
+cron 的 `:run:manual:` session 标记；手动、调试或补跑即使误传正式
+`vps-report:<date>:<morning|evening>`，也会在 owner tool 边界改写到独立的
+`vps-report:manual:...` key，不再消费正式 09:30/23:00 定时任务的 sent marker。部署脚本和
+VPS Skill 同时要求模型主动使用 manual key，正式定时 key 保持稳定。部署成功验收文案已改为
+Amadeus/世界线风格，但仍保留 owner outbox 与 WhatsApp sent marker 的事实语义。
+
+PUBG team 查询的根因是 `prepareIdentitySubject(team=true)` 只返回 `playerIds`，丢失了
+selector、metrics、operation、groupBy、limit 和 refresh，随后 domain 查询访问缺失 selector
+而进入 `plugin_runtime_error`。现在只替换身份字段并保留完整查询参数，新增回归覆盖了完整的
+team stats input。Amadeus 11、PUBG plugin 9 定向测试、受影响 typecheck、脚本语法、secrets
+scan 和 diff 检查通过；尚未执行 CasaOS build/apply，因此线上 cron 和 PUBG 容器仍需部署后再
+做真实入口验收。
+
 ## VPS Read-only Capability + Daily Report 子目标（2026-09-18）
 
 当前实现状态：`LIVE_DEPLOYED_REPORT_SMOKE_PASS_INTERACTIVE_INBOUND_PENDING`。Amadeus 已加入五个只读 VPS native

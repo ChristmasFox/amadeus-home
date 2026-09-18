@@ -8,6 +8,18 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 最新源码 follow-up（2026-09-18，待部署）
+
+- Owner outbox 已在插件边界隔离手动 VPS cron：检测到 isolated cron session 的
+  `:run:manual:` 标记时，正式 `vps-report:<date>:<period>` 会被改写为独立 manual key；正式
+  09:30/23:00 运行仍使用稳定 key。部署脚本和 `skills/vps` 也已同步 manual key 约束。
+- `prepareIdentitySubject(team=true)` 已修复为保留完整 stats 查询参数，只替换 player identity；
+  新回归覆盖 team + selector + metrics + groupBy 等组合，修复此前线上返回
+  `plugin_runtime_error`/`SOURCE_UNAVAILABLE` 的路径。
+- 部署成功 owner smoke 文案已改为 `Amadeus 迁移验收 · 世界线收束`，并明确 WhatsApp owner
+  outbox 的 sent marker 才是送达验收事实。
+- 本轮源码验证通过，但未执行 CasaOS build/apply；当前 live image/cron 不因本轮源码修改而变化。
+
 ## VPS 只读能力子目标（2026-09-18，live 已部署，真实入站查询待验收）
 
 - `plugins/amadeus` 已新增五个结构化、只读 native tools：`amadeus_vps_service_info`、

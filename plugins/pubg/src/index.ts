@@ -352,7 +352,7 @@ export async function prepareIdentitySubject(
   const explicitPersons = input.personIds?.length ?? 0;
   if (input.team === true) {
     if (explicitPlayerIds || explicitPlayerNames || explicitPersons) return subjectError('identity_subject_conflict', 'team cannot be combined with another subject');
-    return { playerIds: service.team.players.map((player) => player.id) };
+    return { ...stripIdentityFields(input), playerIds: service.team.players.map((player) => player.id) };
   }
   if (explicitPlayerIds || explicitPlayerNames) {
     if (explicitPersons) return subjectError('identity_subject_conflict', 'personIds cannot be combined with playerIds or playerNames');
