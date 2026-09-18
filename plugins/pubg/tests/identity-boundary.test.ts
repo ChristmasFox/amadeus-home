@@ -21,7 +21,7 @@ const TEAM: TeamConfig = {
 const TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES: TeamConfig = {
   ...TEAM,
   players: [
-    { id: 'p1', name: 'SG_LabmemNo008', aliases: ['008', 'SG_Labmem008'] },
+    { id: 'p1', name: 'SG_LabmemNo008', aliases: ['008', 'SG_LabmemNo008'] },
     { id: 'p2', name: 'Other', aliases: [] },
   ],
 };
@@ -115,11 +115,11 @@ test('PUBG boundary maps multiple canonical Persons to explicit compare subjects
   }
 });
 
-test('PUBG boundary maps the confirmed external account alias to the configured canonical player', async () => {
+test('PUBG boundary maps the corrected confirmed external account to the configured canonical player', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'pubg-identity-account-alias-'));
   const identityPath = join(directory, 'identity.sqlite');
   const presetsPath = join(directory, 'presets.json');
-  await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'jiao', displayName: '胶', externalAccounts: [{ provider: 'pubg', externalId: 'SG_Labmem008' }] }] }));
+  await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'jiao', displayName: '胶', externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }] }] }));
   const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
   const service = new PubgDomainService({ team: TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
   try {
