@@ -1,7 +1,7 @@
 # OpenClaw PUBG deployment
 
 This directory is the source for the single production OpenClaw agent used by
-the PUBG private-chat flow. OpenClaw owns natural-language understanding,
+the PUBG chat flow across Telegram and WhatsApp. OpenClaw owns natural-language understanding,
 session context, model routing, and the tool loop. `plugins/pubg` is the only
 domain plugin loaded by this deployment; its six tools expose deterministic
 facts from `packages/pubg-domain`.
@@ -21,10 +21,17 @@ and the Telegram owner ID stay outside Git:
   source file remains outside the repository and is retained for rollback.
 
 The checked-in `openclaw.json.example` intentionally has an empty Telegram
-allowlist. `scripts/deploy-openclaw.sh --apply` reads the numeric
+allowlist and an enabled WhatsApp channel without persisted session secrets.
+`scripts/deploy-openclaw.sh --apply` reads the numeric
 `TELEGRAM_ALLOWED_USER_ID` from the external env file, writes the concrete
 allowlist to the mounted config with a backup, and refuses to start if the
 identity or required secret files are missing.
+
+WhatsApp Web pairing state is runtime data under `/DATA/AppData/openclaw`; it
+is never copied into Git. Channel policy is configured as open groups with
+`requireMention=false`, while WhatsApp direct messages remain pairing-gated by
+default. The current runtime account id is `secondary`; the previous default
+account's credentials were archived outside the repository before the switch.
 
 ## Local verification
 

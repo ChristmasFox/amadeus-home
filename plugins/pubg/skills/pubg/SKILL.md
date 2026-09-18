@@ -12,9 +12,15 @@ ambiguous or asks for a capability outside PUBG.
 
 Tool rules:
 
-- Use `pubg_resolve_players` for an explicit player name or alias before a
-  player-specific query. The configured team is the default subject when the
-  user does not name a player.
+- The configured team is the default subject when the user does not explicitly
+  name a PUBG player. This includes “昨天战绩”, “我的战绩”, and similar
+  unqualified requests: omit both `playerNames` and `playerIds`.
+- A transport sender name is never a PUBG name. Never use WhatsApp/Telegram
+  display names, profile names, push names, phone numbers, JIDs, or quoted
+  sender labels as `playerNames`. If the user explicitly gives an in-game name
+  or alias, use `pubg_resolve_players` before the player-specific query.
+- In a group, “我” still means the configured team unless an independent PUBG
+  identity binding is present; do not derive identity from the current sender.
 - Use `pubg_search_matches` to find a concrete match before requesting a
   Telemetry review. Pass the returned `matchId` to `pubg_get_review_facts`.
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:

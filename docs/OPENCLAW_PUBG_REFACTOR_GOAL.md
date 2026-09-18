@@ -8,7 +8,7 @@
 
 把 amadeus-home 的聊天与 PUBG 主链一次性改造成：
 
-Telegram 私聊 → OpenClaw / Kurisu（当前 9Router 模型）→ 原生 PUBG 插件薄入口 → 独立 PUBG Domain → PUBG 官方 API + SQLite。
+Telegram/WhatsApp 聊天 → OpenClaw / Kurisu（当前 9Router 模型）→ 原生 PUBG 插件及其渠道适配层 → 独立 PUBG Domain → PUBG 官方 API + SQLite。
 
 本轮只实现一个业务插件 PUBG，保留普通聊天。OpenClaw 独占理解、规划、工具循环、会话、记忆及人格；插件提供确定性数据和事实，不再调用 LLM。使用 OpenClaw 原生插件发现、加载和工具注册，不再自建 Amadeus Core、Plugin Registry 或 Plugin SDK。
 
@@ -20,7 +20,7 @@ Telegram 私聊 → OpenClaw / Kurisu（当前 9Router 模型）→ 原生 PUBG 
 
 - 不实现 Radar、Homelab、Codex、Media、Briefing、通知中心业务插件。
 - 不建立通用 job/approval/notification 框架、插件市场、热加载、跨框架 SDK 或管理界面。
-- 不接入 KOOK/WhatsApp 新链路；此次产品入口为 Telegram 私聊。
+- 不接入 KOOK 等未启用渠道；Telegram 和 WhatsApp 使用 OpenClaw 原生渠道，PUBG 插件在边界通过 adapter 归一化会话上下文。
 - 不为纯函数或 Tool 单独建 HTTP 微服务、独立 Docker、Redis、队列或 Kubernetes。
 - 不通过关键词、正则、意图枚举或固定问法 workflow 调度自然语言。
 - 不把“没有用户”理解成可删除凭据、媒体文件、NAS 数据或其他服务的数据。
@@ -73,7 +73,7 @@ Domain 不 import OpenClaw/Mastra/LangBot，不通过 ../../../apps 反向导出
 
 9Router 继续用现有有效 endpoint/model route，key 从外部 secrets 注入。不得偷偷换模型来通过验收。独立工具注册，不用一个 action enum 的万能网关遮住全部能力。先验证一次真实 tool call → tool result → 最终回答，再验证多步组合。API 名称采用 provider 兼容字符，例如 pubg_query_stats。
 
-Telegram 使用原生渠道；同一 bot token 只能有一个有效消费方。切换前停止旧 LangBot 消费并处理既有 webhook/polling 配置。可信用户/会话身份由渠道提供；插件参数不能覆盖身份。私聊允许用户来自外部配置。默认不开放群聊，不把用户名当认证身份。
+Telegram 和 WhatsApp 使用 OpenClaw 原生渠道；同一账号/会话只能有一个有效消费方。切换前停止旧 LangBot 消费并处理既有 webhook/polling 或 WhatsApp Web 会话配置。可信用户/会话身份由渠道提供；插件参数不能覆盖身份。Telegram 私聊允许用户来自外部配置，WhatsApp 私聊默认 pairing。群聊策略由渠道配置控制，不把用户名当认证身份。
 
 Persona 放在所选版本实际支持的 OpenClaw workspace 文件：理性、技术型、偶尔轻微吐槽，不每句傲娇；保留事实、单位、失败状态；不装作有不存在的能力。会话记忆与“上一组比赛”引用不重新造一个全局聊天状态仓库。
 
@@ -142,7 +142,7 @@ Persona 放在所选版本实际支持的 OpenClaw workspace 文件：理性、�
 
 bundled PUBG Skill 写清工具用途、默认队伍/时间/时区来源、缺数据处理、指标口径、追问引用、比较限制和证据纪律。给少量组合例子，不能硬编码每种用户句子或把评测保留集抄进 prompt。
 
-“KD 多少”简短回答；详细战绩可以榜单与队伍汇总，保留助攻/倒地/救援及娱乐亮点；复盘根据问题详略。Telegram 移动端优先短段落，避免宽表。Plugin 返回结构化事实，最终文案由同一个 Kurisu 组织；数字不可改写。
+“KD 多少”简短回答；详细战绩可以榜单与队伍汇总，保留助攻/倒地/救援及娱乐亮点；复盘根据问题详略。Telegram/WhatsApp 移动端优先短段落，避免宽表。Plugin 返回结构化事实，最终文案由同一个 Kurisu 组织；数字不可改写。
 
 ## 8. 一次性迁移与彻底清理
 
@@ -157,7 +157,7 @@ bundled PUBG Skill 写清工具用途、默认队伍/时间/时区来源、缺�
 7. 清理默认 Compose、workspace、bootstrap、doctor、backup、CI 与 README 中旧启动必需项。保留非 PUBG 应用须能独立构建，不能反向依赖删除的 Runtime；不允许留下失效 importer。
 8. 更新 AGENTS、旧计划入口与状态文件，明确新架构唯一入口与本轮延期功能。旧设计文档可标 SUPERSEDED 作为历史，但无可执行旧 Goal 继续引导实现。
 
-最终正常启动仅需 OpenClaw、PUBG 插件数据卷、当前 9Router 和外部 PUBG/Telegram；PUBG 路径对 LangBot/Mastra/n8n/旧 Runtime 的运行依赖为零。
+最终正常启动仅需 OpenClaw、PUBG 插件数据卷、当前 9Router 和外部 PUBG/Telegram/WhatsApp；PUBG 路径对 LangBot/Mastra/n8n/旧 Runtime 的运行依赖为零。
 
 ## 9. 执行顺序与阶段交付
 
@@ -213,7 +213,7 @@ bundled PUBG Skill 写清工具用途、默认队伍/时间/时区来源、缺�
 ## 11. 完成定义与防跑偏规则
 
 只有全部满足才标 COMPLETE：
-- 唯一 OpenClaw 主 Agent，实际 9Router 路由可用，Telegram 私聊真实闭环。
+- 唯一 OpenClaw 主 Agent，实际 9Router 路由可用，Telegram/WhatsApp 渠道闭环。
 - 只安装一个本项目业务插件 PUBG；原生插件内薄适配 + bundled Skill + 独立 Domain。
 - 通用查询/比较/复盘组合可用，现有有价值 PUBG 事实能力不因换壳丢失。
 - API/cache 覆盖、指标/时间口径、错误与证据可核验。

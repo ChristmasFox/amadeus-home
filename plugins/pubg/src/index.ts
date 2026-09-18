@@ -3,6 +3,7 @@ import type { AnyAgentTool, OpenClawPluginToolContext } from 'openclaw/plugin-sd
 import { jsonResult } from 'openclaw/plugin-sdk/core';
 import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
+import { openClawConversationAdapter } from './adapters/openclaw.js';
 import {
   PubgApiClient,
   PubgApiError,
@@ -40,7 +41,11 @@ type PluginConfig = Static<typeof PluginConfigSchema>;
 
 const SessionId = Type.Optional(Type.String({ maxLength: 256 }));
 const PlayerIds = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_SUBJECT_ITEMS }));
-const PlayerNames = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_SUBJECT_ITEMS }));
+const PlayerNames = Type.Optional(Type.Array(Type.String({
+  minLength: 1,
+  maxLength: 128,
+  description: 'An explicit PUBG in-game name or configured alias only; never a channel sender/profile name, phone number, or JID.',
+}), { maxItems: MAX_SUBJECT_ITEMS }));
 const SubjectProperties = {
   sessionId: SessionId,
   playerIds: PlayerIds,
@@ -221,11 +226,7 @@ function serviceFor(config: PluginConfig): PubgDomainService {
 }
 
 function contextSessionId(input: { sessionId?: string }, toolContext: OpenClawPluginToolContext): string {
-  return toolContext.sessionId?.trim()
-    || toolContext.sessionKey?.trim()
-    || input.sessionId?.trim()
-    || process.env.PUBG_DEFAULT_SESSION_ID?.trim()
-    || 'openclaw:pubg:default';
+  return openClawConversationAdapter.adapt(toolContext, input.sessionId).sessionId;
 }
 
 function runtimeError(error: unknown): ToolEnvelope {
