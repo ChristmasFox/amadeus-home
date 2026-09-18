@@ -25,11 +25,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   线上 SQLite 已创建但四张身份表均为 0 行。
 - follow-up 已使用 pinned OpenClaw 2026.9.4 的 typed `before_dispatch` hook 捕获可信
   `replyToSender`，按 session 短时桥接到 Identity tools，并在 `agent_end` 清理；本地测试覆盖
-  hook registration、session isolation 和无 metadata 的 fail-closed。`56a0df5` 已完成新的
-  immutable image build/apply；线上 runtime inspect 显示 `before_dispatch`、`agent_end` 两个
-  typed hook，mention 仍只接受 host 的结构化 platform ID binding。
-- 当前线上镜像为 `local/openclaw-amadeus:git-56a0df53595e-20260918093413`，恢复 checkpoint
-  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918093413`；
+  hook registration、session isolation 和无 metadata 的 fail-closed。`4831659` 又把
+  Telegram `text_mention` user ID、WhatsApp `mentionedJid` 和稳定 sender JID 通过同一
+  `GatewayRunToolBindings.identity`/sender context 传入，且不解析 prompt、昵称、手机号文本或
+  username；Telegram 镜像 bundle 与外部 WhatsApp package 均已通过版本锚定补丁部署。
+- 当前线上镜像为 `local/openclaw-amadeus:git-4831659fc216-20260918100611`，恢复 checkpoint
+  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918100611`；
   真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
   alias confirmation 和重启后有数据持久化仍待用户入口验收。
 
@@ -102,7 +103,8 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
   diff --check、最终全量 build/typecheck/test/secrets scan 已通过；最终 apply 以 exit 0
   完成。
 - 本次上下文拆分、部署脚本和 Codex hook 修复的本地 build/typecheck/test/secrets scan 已通过；
-  Identity 变更随后由 `05471a8` image 发布，见上方 Identity 线上状态。
+  Identity reply bridge 随后由 `56a0df5` 发布，trusted channel metadata 又由 `4831659` 发布，见上方
+  Identity 线上状态。
 - 自然语言 Product Radar 只读 smoke 成功选择 `amadeus_product_radar` 并返回 1 个监控项；
   Codex hook smoke 的远端 sent marker 已确认，outbox event 无 channel/recipient/to 字段。
 - OpenClaw 内部 service names 已加入 `NO_PROXY`，修复代理环境下 Amadeus 工具访问 Product
