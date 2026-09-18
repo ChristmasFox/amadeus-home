@@ -3,7 +3,17 @@ import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { enqueueOwnerEvent } from '../src/owner.js';
+import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import { enqueueOwnerEvent, isTrustedOwnerContext } from '../src/owner.js';
+
+test('owner context trusts only owner senders or OpenClaw cron sessions', () => {
+  const base = {} as OpenClawPluginToolContext;
+  assert.equal(isTrustedOwnerContext({ ...base, senderIsOwner: true }), true);
+  assert.equal(isTrustedOwnerContext({ ...base, sessionKey: 'cron:job:run:id' }), true);
+  assert.equal(isTrustedOwnerContext({ ...base, sessionKey: 'agent:main:cron:job:run:id' }), true);
+  assert.equal(isTrustedOwnerContext({ ...base, sessionKey: 'agent:main:chat' }), false);
+  assert.equal(isTrustedOwnerContext({ ...base, senderIsOwner: false, sessionKey: 'agent:main:cronical:chat' }), false);
+});
 
 test('owner outbox is channel-free, atomic, and idempotent', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'amadeus-owner-'));

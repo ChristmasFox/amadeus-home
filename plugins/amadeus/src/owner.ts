@@ -15,7 +15,8 @@ export interface OwnerEvent {
 }
 
 export function isTrustedOwnerContext(context: OpenClawPluginToolContext): boolean {
-  return context.senderIsOwner === true || context.sessionKey?.startsWith('cron:') === true;
+  const sessionKey = context.sessionKey?.trim() ?? '';
+  return context.senderIsOwner === true || sessionKey.startsWith('cron:') || sessionKey.includes(':cron:');
 }
 
 function idFor(eventKey: string): string {
