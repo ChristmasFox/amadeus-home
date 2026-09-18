@@ -104,10 +104,21 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 - provider：\`9router:20128/v1\`，默认 route \`nine_router/arthur-combo\`
 - media adapter、Product Radar、changedetection 和 9Router 作为独立依赖保留
 
-\`scripts/deploy-openclaw.sh --apply --build\` 的顺序是：
+部署脚本的镜像策略是：
 
-1. Git clean、全量 build/typecheck/test/secrets scan。
-2. BuildKit 构建并加载 OpenClaw Amadeus 与 Product Radar ARM64 immutable images。
+- \`--apply --build-auto\` 读取 CasaOS 当前容器的 immutable Git image tag，只构建受影响的
+  OpenClaw 或 Product Radar 镜像；workspace、SOUL/AGENTS、config、Compose 和脚本改动不
+  会触发镜像构建。
+- \`--apply --no-build\` 复用现有两个镜像，并对镜像 source commit 做 stale check；若业务
+  source 已经超出镜像，脚本 fail closed，要求改用选择性的 build 选项。
+- \`--apply --build-openclaw\`、\`--apply --build-radar\` 是单镜像构建入口；\`--apply --build\`
+  是保留的全量双镜像 release 入口，并执行完整验证。
+
+无论是否构建，apply 的切换/验收顺序是：
+
+1. Git clean、按受影响镜像执行定向验证和 secrets scan；全量 \`--build\` 额外执行完整
+   build/typecheck/test。
+2. 只构建并加载需要更新的 ARM64 immutable image，其他服务复用已加载 image。
 3. 在仓库外备份 compose、config、secret、OpenClaw SQLite 和旧 app 状态。
 4. 只验证现有 OpenClaw 运行时 secret 文件和 owner/Telegram 配置；旧 LangBot DB、旧
    app/data 和旧凭据只留在仓库外 checkpoint 用于审计/人工恢复，不参与运行时 fallback。

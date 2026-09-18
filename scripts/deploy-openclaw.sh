@@ -16,27 +16,92 @@ IMAGE=""
 RADAR_IMAGE=""
 APPLY=0
 BUILD=0
+BUILD_OPENCLAW=0
+BUILD_RADAR=0
+AUTO_BUILD=0
+NO_BUILD=0
+FULL_VERIFY=0
 
 usage() {
   cat <<'USAGE'
 Usage:
   ./scripts/deploy-openclaw.sh --dry-run
   ./scripts/deploy-openclaw.sh --apply --build
+  ./scripts/deploy-openclaw.sh --apply --build-auto
+  ./scripts/deploy-openclaw.sh --apply --build-openclaw
+  ./scripts/deploy-openclaw.sh --apply --build-radar
+  ./scripts/deploy-openclaw.sh --apply --no-build
   ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
 
-Default is a dry-run. Apply performs the one-time Amadeus switch, checkpoints
-external state, retires LangBot/n8n paths, and verifies owner WhatsApp delivery.
+Default is a dry-run. --build performs a full two-image release. --build-auto
+compares the current Git tree with the live image commit and builds only affected
+images. --build-openclaw and --build-radar build one image. --no-build reuses
+the live images for workspace/compose/config-only updates and rejects stale
+images when plugin or service source changed.
 USAGE
 }
 
 fail() { printf '%s\n' "$*" >&2; exit 2; }
 base64_file() { base64 < "$1" | tr -d '\n'; }
+resolve_live_image() {
+  local container="$1" value
+  value="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Config.Image}}' "$container" 2>/dev/null || true)"
+  value="${value%%$'\n'*}"
+  [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
+}
+image_source_commit() {
+  local image="$1"
+  if [[ "$image" =~ :git-([0-9a-fA-F]{7,40})-[0-9]{14}$ ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+is_openclaw_image_path() {
+  case "$1" in
+    plugins/pubg/*|plugins/amadeus/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+is_radar_image_path() {
+  case "$1" in
+    apps/product-radar/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+image_needs_rebuild() {
+  local image="$1" target="$2" source_commit path
+  source_commit="$(image_source_commit "$image")" || fail "$target image tag must contain a git commit and timestamp: $image"
+  git -C "$ROOT_DIR" cat-file -e "$source_commit^{commit}" 2>/dev/null || fail "Image source commit is not available locally: $source_commit"
+  while IFS= read -r path; do
+    [[ -n "$path" ]] || continue
+    if [[ "$target" == openclaw ]] && is_openclaw_image_path "$path"; then
+      return 0
+    fi
+    if [[ "$target" == radar ]] && is_radar_image_path "$path"; then
+      return 0
+    fi
+  done < <(git -C "$ROOT_DIR" diff --name-only "$source_commit..HEAD")
+  return 1
+}
+assert_image_fresh() {
+  local image="$1" target="$2"
+  if image_needs_rebuild "$image" "$target"; then
+    fail "$target image is stale for the current Git tree; use --build-auto, --build-$target, or --build."
+  fi
+}
 
 while (($#)); do
   case "$1" in
     --dry-run) APPLY=0 ;;
     --apply) APPLY=1 ;;
-    --build) BUILD=1 ;;
+    --build) BUILD=1; BUILD_OPENCLAW=1; BUILD_RADAR=1 ;;
+    --build-auto) AUTO_BUILD=1 ;;
+    --build-openclaw) BUILD_OPENCLAW=1 ;;
+    --build-radar) BUILD_RADAR=1 ;;
+    --no-build) NO_BUILD=1 ;;
+    --full-verify) FULL_VERIFY=1 ;;
     --image) (($# >= 2)) || fail '--image requires a value.'; IMAGE="$2"; shift ;;
     --radar-image) (($# >= 2)) || fail '--radar-image requires a value.'; RADAR_IMAGE="$2"; shift ;;
     --machine) (($# >= 2)) || fail '--machine requires a value.'; MACHINE="$2"; shift ;;
@@ -46,32 +111,75 @@ while (($#)); do
   shift
 done
 
+if ((AUTO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || NO_BUILD))); then
+  fail '--build-auto cannot be combined with an explicit build or no-build option.'
+fi
+if ((NO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || AUTO_BUILD))); then
+  fail '--no-build cannot be combined with a build option.'
+fi
+((FULL_VERIFY == 0 || APPLY == 1)) || fail '--full-verify requires --apply.'
 [[ "$IMAGE" != *$'\n'* && "$IMAGE" != *[[:space:]]* ]] || fail 'OpenClaw image tag contains whitespace.'
 [[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
 STAMP="$(date -u +%Y%m%d%H%M%S)"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
-if [[ -z "$IMAGE" && "$BUILD" -eq 1 ]]; then IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"; fi
-if [[ -z "$RADAR_IMAGE" && "$BUILD" -eq 1 ]]; then RADAR_IMAGE="local/product-radar:git-$COMMIT-$STAMP"; fi
+if ((APPLY)); then
+  if ((AUTO_BUILD)); then
+    [[ -z "$IMAGE" && -z "$RADAR_IMAGE" ]] || fail '--build-auto resolves both images from the live CasaOS containers; omit --image/--radar-image.'
+    IMAGE="$(resolve_live_image openclaw)" || fail 'Could not resolve the live OpenClaw image for --build-auto.'
+    RADAR_IMAGE="$(resolve_live_image product-radar)" || fail 'Could not resolve the live Product Radar image for --build-auto.'
+    if image_needs_rebuild "$IMAGE" openclaw; then
+      BUILD_OPENCLAW=1
+      IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"
+    fi
+    if image_needs_rebuild "$RADAR_IMAGE" radar; then
+      BUILD_RADAR=1
+      RADAR_IMAGE="local/product-radar:git-$COMMIT-$STAMP"
+    fi
+  else
+    if [[ -z "$IMAGE" && "$BUILD_OPENCLAW" -eq 1 ]]; then IMAGE="local/openclaw-amadeus:git-$COMMIT-$STAMP"; fi
+    if [[ -z "$RADAR_IMAGE" && "$BUILD_RADAR" -eq 1 ]]; then RADAR_IMAGE="local/product-radar:git-$COMMIT-$STAMP"; fi
+    if [[ -z "$IMAGE" ]]; then IMAGE="$(resolve_live_image openclaw)" || fail 'Could not resolve the live OpenClaw image; pass --image or use --build.'; fi
+    if [[ -z "$RADAR_IMAGE" ]]; then RADAR_IMAGE="$(resolve_live_image product-radar)" || fail 'Could not resolve the live Product Radar image; pass --radar-image or use --build.'; fi
+  fi
+fi
+
+if ((NO_BUILD)); then
+  ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) || fail '--no-build cannot be combined with any build option.'
+fi
+if ((BUILD_OPENCLAW == 1 && BUILD_RADAR == 1)); then
+  BUILD_MODE='all'
+elif ((BUILD_OPENCLAW == 1)); then
+  BUILD_MODE='openclaw-only'
+elif ((BUILD_RADAR == 1)); then
+  BUILD_MODE='product-radar-only'
+elif ((AUTO_BUILD)); then
+  BUILD_MODE='auto/no-build'
+else
+  BUILD_MODE='no-build'
+fi
 
 shown_image="$IMAGE"
 shown_radar_image="$RADAR_IMAGE"
-[[ -n "$shown_image" ]] || shown_image="requires --image for apply without --build"
-[[ -n "$shown_radar_image" ]] || shown_radar_image="requires --radar-image for apply without --build"
+[[ -n "$shown_image" ]] || shown_image='resolved from live CasaOS container on apply'
+[[ -n "$shown_radar_image" ]] || shown_radar_image='resolved from live CasaOS container on apply'
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
-printf 'BUILD=%s\n' "$([[ $BUILD -eq 1 ]] && printf explicit || printf disabled)"
+printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
 
 if ((APPLY == 0)); then
-  printf '%s\n' 'PLAN=verify, build/load ARM64 images, checkpoint, switch Product Radar/OpenClaw, retire old paths, register briefings, test owner WhatsApp.'
+  printf '%s\n' 'PLAN=on apply, reuse live images by default; --build-auto rebuilds only affected images; --build remains the explicit full two-image migration path.'
   exit 0
 fi
 
-[[ -n "$IMAGE" && -n "$RADAR_IMAGE" ]] || fail 'Apply without --build requires --image and --radar-image.'
+[[ -n "$IMAGE" && -n "$RADAR_IMAGE" ]] || fail 'Apply requires resolvable OpenClaw and Product Radar images.'
 git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
+
+if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
+if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 
 (
   cd "$ROOT_DIR"
@@ -79,19 +187,42 @@ git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but
     source /Users/blacksidev/.nvm/nvm.sh
     nvm use 24.16.0 >/dev/null
   fi
-  pnpm build
-  pnpm typecheck
-  pnpm test
+  if ((FULL_VERIFY || (BUILD_OPENCLAW && BUILD_RADAR))); then
+    pnpm build
+    pnpm typecheck
+    pnpm test
+  else
+    if ((BUILD_OPENCLAW)); then
+      pnpm build:pubg
+      pnpm build:amadeus
+      pnpm typecheck:pubg
+      pnpm typecheck:amadeus
+      pnpm test:pubg
+      pnpm test:amadeus
+    fi
+    if ((BUILD_RADAR)); then
+      pnpm build:product-radar
+      pnpm typecheck:product-radar
+      pnpm test:product-radar
+    fi
+    if ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0)); then
+      bash -n scripts/deploy-openclaw.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh
+      python3 -m py_compile scripts/openclaw_prepare.py
+    fi
+  fi
   pnpm check:secrets
 )
 
-if ((BUILD)); then
+if ((BUILD_OPENCLAW)); then
   docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load
+else
+  orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
+fi
+if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR/apps/product-radar"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 else
-  orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
 fi
 

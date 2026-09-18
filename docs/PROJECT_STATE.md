@@ -31,6 +31,17 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - 删除/退休清单已落到新部署入口：LangBot、n8n、n8n-sandbox、旧业务插件、旧通知/
   watchdog/workflow/facade 路径。
 
+## 部署构建优化（2026-09-18，源码已实现）
+
+- `scripts/deploy-openclaw.sh --apply --build-auto` 从 CasaOS 当前容器 image tag 读取 source
+  commit：只要 `plugins/pubg`、`plugins/amadeus`、`packages/pubg-domain` 或 OpenClaw
+  Dockerfile 变化才构建 OpenClaw；只有 `apps/product-radar` 变化才构建 Product Radar。
+- `--apply --no-build` 复用现有 immutable images，但发现业务 source 超出 image commit 时
+  fail closed；`--build-openclaw`/`--build-radar` 支持单镜像发布，`--build` 仍是全量入口。
+- 选择性发布使用受影响 package 的 build/typecheck/test；只有双镜像 `--build` 或显式
+  `--full-verify` 才执行全量验证。此项尚未 apply 到线上，避免把部署优化本身与当前生产
+  checkpoint 混在一起。
+
 ## 真实切换前 baseline
 
 在本次 apply 前，CasaOS 仍有旧 langbot、langbot_plugin_runtime、n8n、

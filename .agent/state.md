@@ -8,7 +8,7 @@ OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n�
 
 当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
-app/data 退休均 PASS；只剩提交本次最终状态文档并复核 Git。
+app/data 退休均 PASS；本轮新增部署脚本的选择性镜像构建优化，源码尚未 apply 到线上。
 
 已落地：
 
@@ -28,8 +28,10 @@ app/data 退休均 PASS；只剩提交本次最终状态文档并复核 Git。
 
 下一步：
 
-1. 提交最终状态文档和部署 checkpoint，并复核 Git/secrets scan。
-2. 用户可在 WhatsApp 群内发一条普通能力消息，做不打扰成员的体验确认。
+1. 提交本轮部署优化文档和 checkpoint，并复核 Git/secrets scan。
+2. 如需让线上部署入口立即采用优化后的脚本，再显式执行 `--apply --build-auto`；否则下次
+   发布时使用该入口即可。
+3. 用户可在 WhatsApp 群内发一条普通能力消息，做不打扰成员的体验确认。
 
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚
 演练；不提交 secret/业务数据；不修改现有 Avalon media library；长期服务只部署在

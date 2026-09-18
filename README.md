@@ -62,15 +62,27 @@ pnpm test:workflow
 
 \`\`\`sh
 ./scripts/deploy-openclaw.sh --dry-run
+# 推荐：按 live image 的 Git commit 自动只构建受影响镜像
+./scripts/deploy-openclaw.sh --apply --build-auto
+# workspace/config/compose-only 改动：复用现有镜像
+./scripts/deploy-openclaw.sh --apply --no-build
+# 明确要求全量双镜像发布时才使用
 ./scripts/deploy-openclaw.sh --apply --build
 ./scripts/doctor.sh
 \`\`\`
 
-切换脚本会备份旧 compose/config/secrets/数据库，准备 OpenClaw owner/Telegram/KOOK/NAS
-运行时 secret，构建 ARM64 immutable image，更新 Product Radar，注册早报/晚报 cron，
-验证 OpenClaw、Product Radar、media adapter、NAS read-only SSH 和 WhatsApp owner outbox，
-然后把旧 LangBot/n8n/sandbox app/data 移到外部 checkpoint。不会在 macOS host Docker
-部署持久服务，也不会把 backup、token、API key 或业务数据写入 Git。
+部署脚本默认不会因为任意改动重建两个镜像：
+
+- \`--build-auto\` 比较当前 Git 与线上镜像 tag 中的 commit；只要 \`plugins/pubg\`、
+  \`plugins/amadeus\`、\`packages/pubg-domain\` 或 OpenClaw Dockerfile 变化才构建 OpenClaw，
+  只有 \`apps/product-radar\` 变化才构建 Product Radar。
+- \`--no-build\` 复用线上两个 immutable image；如果检测到业务源代码比镜像更新，会直接拒绝，
+  不会静默上线旧代码。
+- \`--build-openclaw\`、\`--build-radar\` 可只构建一个镜像；\`--build\` 保留为明确的全量双镜像发布。
+
+所有 apply 仍会备份外部状态、执行匹配的验证、更新 Compose 并使用
+\`docker compose up -d --no-build\`；不会在 macOS host Docker 部署持久服务，也不会把
+backup、token、API key 或业务数据写入 Git。
 
 媒体整理仍遵循明确单项的 \`scan → preview → 同一会话显式确认 → execute\`；不批量猜测、
 不覆盖、不删除现有媒体库。详见 \`organize-emby-media\` Skill。
