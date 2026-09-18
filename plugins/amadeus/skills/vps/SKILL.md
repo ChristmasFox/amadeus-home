@@ -39,12 +39,15 @@ the tool. Use a ten-cell bar from the numeric `usedPercent`:
 `filled = clamp(floor(usedPercent / 10), 0, 10)`, then
 `"█".repeat(filled) + "░".repeat(10 - filled)`. Show used/total, remaining,
 `deltaSincePreviousSampleBytes`, and `resetAt` only when those values are
-known. Convert bytes consistently and say when a value is unavailable.
+known. Convert bytes consistently and say when a value is unavailable. A
+traffic report is invalid without one dedicated line containing exactly ten
+`█`/`░` cells followed by the percentage, including when the percentage is
+below 1% (for example `░░░░░░░░░░ 0.9%`).
 
 Scheduled morning/evening VPS reports must call all of
 `amadeus_vps_live_status`, `amadeus_vps_usage`, `amadeus_vps_system_status`,
 and `amadeus_vps_services`, compose a concise Chinese report from returned
-facts, explicitly highlight every anomaly, and then call
+facts, include the mandatory ten-cell traffic line, explicitly highlight every anomaly, and then call
 `amadeus_notify_owner` with a stable report event key. That notifier has one
 fixed destination: the WhatsApp owner DM. Do not use Telegram, KOOK, a group,
 cron fallback delivery, or an invented healthy status.
