@@ -8,7 +8,7 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## 2026-09-18 follow-up：VPS 手动 eventKey 隔离、部署文案与 PUBG team 查询修复
 
-当前实现状态：`SOURCE_FIXED_DEPLOY_PENDING`。VPS owner 通知现在识别 OpenClaw isolated
+当前实现状态：`DEPLOYED_LIVE_REPLAY_PASS_INTERACTIVE_INBOUND_PENDING`。VPS owner 通知现在识别 OpenClaw isolated
 cron 的 `:run:manual:` session 标记；手动、调试或补跑即使误传正式
 `vps-report:<date>:<morning|evening>`，也会在 owner tool 边界改写到独立的
 `vps-report:manual:...` key，不再消费正式 09:30/23:00 定时任务的 sent marker。部署脚本和
@@ -19,8 +19,11 @@ PUBG team 查询的根因是 `prepareIdentitySubject(team=true)` 只返回 `play
 selector、metrics、operation、groupBy、limit 和 refresh，随后 domain 查询访问缺失 selector
 而进入 `plugin_runtime_error`。现在只替换身份字段并保留完整查询参数，新增回归覆盖了完整的
 team stats input。Amadeus 11、PUBG plugin 9 定向测试、受影响 typecheck、脚本语法、secrets
-scan 和 diff 检查通过；尚未执行 CasaOS build/apply，因此线上 cron 和 PUBG 容器仍需部署后再
-做真实入口验收。
+scan 和 diff 检查通过。提交 `05b3be7` 已通过 `--apply --build-auto` 部署，线上镜像为
+`local/openclaw-amadeus:git-05b3be7caa7a-20260918161553`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918161553`。部署后无投递回放已确认全队
+查询和“胶昨天战绩”均成功，未向真实群聊发送未经请求的测试消息；仍待用户从 WhatsApp 入口做
+最终体验确认。
 
 ## VPS Read-only Capability + Daily Report 子目标（2026-09-18）
 

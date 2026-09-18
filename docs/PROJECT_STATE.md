@@ -8,7 +8,7 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
-## 最新源码 follow-up（2026-09-18，待部署）
+## 最新 follow-up（2026-09-19，已部署）
 
 - Owner outbox 已在插件边界隔离手动 VPS cron：检测到 isolated cron session 的
   `:run:manual:` 标记时，正式 `vps-report:<date>:<period>` 会被改写为独立 manual key；正式
@@ -18,7 +18,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   `plugin_runtime_error`/`SOURCE_UNAVAILABLE` 的路径。
 - 部署成功 owner smoke 文案已改为 `Amadeus 迁移验收 · 世界线收束`，并明确 WhatsApp owner
   outbox 的 sent marker 才是送达验收事实。
-- 本轮源码验证通过，但未执行 CasaOS build/apply；当前 live image/cron 不因本轮源码修改而变化。
+- 提交 `05b3be7` 已通过 `--apply --build-auto` 部署到 CasaOS；线上镜像为
+  `local/openclaw-amadeus:git-05b3be7caa7a-20260918161553`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918161553`。健康、插件 preflight、
+  owner outbox、Product Radar、NAS smoke 均通过。
+- 部署后无投递回放：全队昨天查询返回 11 场、工具失败 0；“胶昨天战绩”成功完成
+  `identity_resolve` → `pubg_query_stats`、工具失败 0，并正确返回无比赛记录。未向真实群聊
+  发送未经请求的测试消息。
 
 ## VPS 只读能力子目标（2026-09-18，live 已部署，真实入站查询待验收）
 
