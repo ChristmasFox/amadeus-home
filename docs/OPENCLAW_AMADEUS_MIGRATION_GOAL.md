@@ -31,8 +31,6 @@ shadow/double-run 或兼容 fallback。
   frps 状态；只持久化 \`lastSuccessfulCounter\`/\`lastSuccessfulAt\`，不接受任意 shell 或 VPS
   控制操作。VPS 晨间/晚间报告在 09:30/23:00 Asia/Shanghai 只发送 WhatsApp owner DM。
 - KOOK group members：仅在 KOOK 当前会话内交互查询，不保留主动推送。
-- Daily Tech & Market Digest：保留来源、主题、筛选、去重和 9Router 总结，改为 OpenClaw
-  原生 briefing tool/cron，早报和晚报只发送 WhatsApp owner DM。
 - Codex completion/failure/cancel、Product Radar、媒体完成、HomeLab 状态和未来业务告警：
   统一为 channel-free owner event，由 OpenClaw 唯一决定 WhatsApp owner 投递。
 
@@ -50,7 +48,7 @@ Telegram/KOOK proactive notification、watchdog、旧 facade/adapter/generator �
 
 1. Git 可从源码构建 OpenClaw Amadeus image、PUBG plugin/domain 和 Product Radar。
 2. OpenClaw config/plugin inspect 显示 PUBG 六工具与 Amadeus 原生工具，且无旧业务插件。
-3. Product Radar、media adapter、NAS、HomeLab、KOOK lookup、briefing 的定向测试或真实
+3. Product Radar、media adapter、NAS、HomeLab、KOOK lookup、VPS read-only capability 的定向测试或真实
    smoke 有可检查结果。
 4. Codex/业务事件进入 channel-free outbox，并由 OpenClaw worker 以幂等方式经 WhatsApp
    owner DM 送达；outbox 不包含 channel/recipient 字段。

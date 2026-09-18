@@ -1,6 +1,6 @@
 ---
 name: amadeus
-description: Use the native Amadeus OpenClaw tools for Product Radar, HomeLab/NAS status, safe Emby media organization, early/evening briefings, KOOK member lookup, and owner WhatsApp notifications.
+description: Use the native Amadeus OpenClaw tools for Product Radar, HomeLab/NAS status, safe Emby media organization, KOOK member lookup, Identity, VPS status, and owner WhatsApp notifications.
 ---
 
 # Amadeus capabilities
@@ -21,10 +21,6 @@ meaning; do not create a keyword router, `/command` parser, or second agent.
 - `amadeus_notify_owner` has no channel or recipient argument. It is the only
   proactive notification path and always targets the configured WhatsApp owner.
   Telegram and KOOK are chat entrances only.
-- Scheduled briefings use `amadeus_briefing` with `deliver=true`; the tool
-  returns the generated report and sends the same report through the owner
-  notification capability. Do not send the report directly to a group.
-
 Identity is a shared native capability, not a keyword router:
 
 - Use `identity_resolve` for `self`, trusted mentions/replies, canonical

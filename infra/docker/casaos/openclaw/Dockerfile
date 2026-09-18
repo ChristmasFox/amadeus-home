@@ -34,7 +34,6 @@ COPY plugins/amadeus/dist/index.js.map /app/dist/extensions/amadeus/dist/index.j
 COPY plugins/amadeus/openclaw.plugin.json /app/dist/extensions/amadeus/openclaw.plugin.json
 COPY plugins/amadeus/package.json /app/dist/extensions/amadeus/package.json
 COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
-COPY plugins/amadeus/briefing /app/dist/extensions/amadeus/briefing
 COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
 
 USER node

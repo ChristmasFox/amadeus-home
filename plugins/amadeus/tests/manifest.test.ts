@@ -27,6 +27,7 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
     'amadeus_vps_system_status',
     'amadeus_vps_services',
   ]) assert.equal(tools.has(name), true, `missing VPS manifest tool: ${name}`);
+  assert.equal(tools.has('amadeus_briefing'), false, 'retired technology briefing tool is still exposed');
   assert.equal(manifest.skills?.includes('skills/identity'), true);
   assert.equal(manifest.skills?.includes('skills/vps'), true);
 });

@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 
 export interface AmadeusConfig {
@@ -20,10 +19,6 @@ export interface AmadeusConfig {
   notificationOutboxDir: string;
   identityDatabasePath: string;
   identityPresetsFile?: string;
-  briefingConfigDir: string;
-  briefingStateFile: string;
-  nineRouterBaseUrl: string;
-  nineRouterApiKeyFile?: string;
   kiwiVmBaseUrl: string;
   kiwiVmCredentialsFile: string;
   vpsSshHost: string;
@@ -45,14 +40,12 @@ function integerValue(value: unknown, fallback: number): number {
 
 export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const value = api.pluginConfig ?? {};
-  const rootDir = api.rootDir ?? '/app/dist/extensions/amadeus';
   const env = (name: string): string | undefined => process.env[name]?.trim() || undefined;
   const file = (key: string, envName: string, fallback: string): string => stringValue(value[key] ?? env(envName), fallback);
   const optionalFile = (key: string, envName: string): string | undefined => stringValue(value[key] ?? env(envName), '') || undefined;
   const productRadarApiKeyFile = optionalFile('productRadarApiKeyFile', 'PRODUCT_RADAR_API_KEY_FILE');
   const macSshKnownHostsFile = optionalFile('macSshKnownHostsFile', 'MAC_CONTROL_KNOWN_HOSTS_FILE');
   const kookTokenFile = optionalFile('kookTokenFile', 'KOOK_BOT_TOKEN_FILE');
-  const nineRouterApiKeyFile = optionalFile('nineRouterApiKeyFile', 'OPENCLAW_9ROUTER_API_KEY_FILE');
   const identityPresetsFile = optionalFile('identityPresetsFile', 'IDENTITY_PRESETS_FILE');
   return {
     productRadarBaseUrl: file('productRadarBaseUrl', 'PRODUCT_RADAR_BASE_URL', 'http://product-radar:5315').replace(/\/$/u, ''),
@@ -72,10 +65,6 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
     identityDatabasePath: file('identityDatabasePath', 'IDENTITY_DATABASE_PATH', '/data/identity.sqlite'),
     ...(identityPresetsFile ? { identityPresetsFile } : {}),
-    briefingConfigDir: file('briefingConfigDir', 'BRIEFING_CONFIG_DIR', join(rootDir, 'briefing')),
-    briefingStateFile: file('briefingStateFile', 'BRIEFING_STATE_FILE', '/data/briefing-state.json'),
-    nineRouterBaseUrl: file('nineRouterBaseUrl', 'OPENCLAW_9ROUTER_BASE_URL', 'http://9router:20128/v1').replace(/\/$/u, ''),
-    ...(nineRouterApiKeyFile ? { nineRouterApiKeyFile } : {}),
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
     kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
     vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),
