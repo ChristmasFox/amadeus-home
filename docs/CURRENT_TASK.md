@@ -8,7 +8,7 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## 跨渠道 Identity 子目标（2026-09-18）
 
-当前实现状态：`IMPLEMENTED_LOCAL_NOT_DEPLOYED`。新增 platform-neutral
+当前实现状态：`DEPLOYED_LIVE_REAL_INPUT_PENDING`。新增 platform-neutral
 `packages/identity` SQLite 库和 Amadeus native Identity tools：
 `identity_resolve`、`identity_get_person`、`identity_bind_channel`、
 `identity_add_alias`、`identity_link_account`、`identity_list_candidates`、
@@ -19,7 +19,11 @@ OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。当前只完成源码、配置、Skill
-和本地测试；线上仍是上一 checkpoint 的 Amadeus image，尚未重新 build/apply。
+和本地测试；已在 CasaOS 一次性 build/apply，线上运行
+`local/openclaw-amadeus:git-05471a8618f1-20260918091819`。Gateway 只读 smoke 实际调用
+`identity_resolve(self)` 并返回 `unbound / trusted_sender_metadata_unavailable`；线上真实
+Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
+用户入口完成。
 
 ## 当前进度
 
@@ -29,7 +33,7 @@ PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  PUBG domain 9、PUBG plugin 5、Amadeus 1、Product Radar 51。
+  Identity 3、PUBG domain 9、PUBG plugin 6、Amadeus 4、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际

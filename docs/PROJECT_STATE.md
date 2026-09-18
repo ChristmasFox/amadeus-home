@@ -8,7 +8,7 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
-## 跨渠道 Identity 实现（2026-09-18，本地未部署）
+## 跨渠道 Identity 实现（2026-09-18，已部署，真实入口验收待完成）
 
 - `packages/identity` 提供 SQLite `persons`、`channel_identities`、`aliases` 和
   `external_accounts`，支持预设导入、跨 Telegram/WhatsApp trusted sender/mention/reply
@@ -19,8 +19,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - `plugins/pubg` 只在 plugin 边界把 Person 的 `provider=pubg` account 转换为配置团队中的
   player id，或通过官方 resolve 得到 account id，再传给 `packages/pubg-domain`；Domain 不
   感知渠道身份。缺少可信 binding/account 时 fail closed，不回退默认队伍。
-- 定向 identity、Amadeus、PUBG adapter/boundary 测试和受影响 build/typecheck 已通过；尚未
-  重新构建或 apply CasaOS，也未声称线上已加载 Identity tools。
+- 定向 identity、Amadeus、PUBG adapter/boundary 测试和受影响 build/typecheck 已通过；新
+  OpenClaw image 已 apply 到 CasaOS，运行时 inspect 显示七个 Identity tools 和 `identity`
+  Skill 均 loaded/eligible。只读 Gateway smoke 已实际调用 `identity_resolve` 并 fail closed；
+  线上 SQLite 已创建但四张身份表均为 0 行。
+- 线上切换 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918091819`；
+  真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
+  alias confirmation 和重启后有数据持久化仍待用户入口验收。
 
 ## 本轮实现
 
@@ -45,16 +50,15 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - 删除/退休清单已落到新部署入口：LangBot、n8n、n8n-sandbox、旧业务插件、旧通知/
   watchdog/workflow/facade 路径。
 
-## 部署构建优化（2026-09-18，源码已实现）
+## 部署构建优化（2026-09-18，已用于本次 Identity 发布）
 
 - `scripts/deploy-openclaw.sh --apply --build-auto` 从 CasaOS 当前容器 image tag 读取 source
   commit：只要 `plugins/pubg`、`plugins/amadeus`、`packages/pubg-domain` 或 OpenClaw
   Dockerfile 变化才构建 OpenClaw；只有 `apps/product-radar` 变化才构建 Product Radar。
 - `--apply --no-build` 复用现有 immutable images，但发现业务 source 超出 image commit 时
   fail closed；`--build-openclaw`/`--build-radar` 支持单镜像发布，`--build` 仍是全量入口。
-- 选择性发布使用受影响 package 的 build/typecheck/test；只有双镜像 `--build` 或显式
-  `--full-verify` 才执行全量验证。此项尚未 apply 到线上，避免把部署优化本身与当前生产
-  checkpoint 混在一起。
+- 选择性发布使用受影响 package 的 build/typecheck/test；本次 `--build-auto` 只重建了
+  OpenClaw，复用了未受影响的 Product Radar image。
 
 ## 真实切换前 baseline
 
@@ -63,7 +67,7 @@ n8n-sandbox-api，以及独立的 Product Radar、media-organizer-adapter、chan
 9Router 和旧 OpenClaw。旧 LangBot Telegram bot 已禁用；KOOK token、NAS SSH key 和
 WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不打印或提交。
 
-## 最终线上状态（2026-09-18）
+## 前一阶段线上状态（2026-09-18，Identity 发布前）
 
 - 部署配置 Git commit 为 `42ef93a`；当前运行镜像由 `5fd139d` 构建：
   `local/openclaw-amadeus:git-5fd139d3e58d-20260918081806` 和
@@ -92,7 +96,7 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
   diff --check、最终全量 build/typecheck/test/secrets scan 已通过；最终 apply 以 exit 0
   完成。
 - 本次上下文拆分、部署脚本和 Codex hook 修复的本地 build/typecheck/test/secrets scan 已通过；
-  新 skill 与 workspace 文件已随 `5fd139d` OpenClaw image rebuild 生效。
+  Identity 变更随后由 `05471a8` image 发布，见上方 Identity 线上状态。
 - 自然语言 Product Radar 只读 smoke 成功选择 `amadeus_product_radar` 并返回 1 个监控项；
   Codex hook smoke 的远端 sent marker 已确认，outbox event 无 channel/recipient/to 字段。
 - OpenClaw 内部 service names 已加入 `NO_PROXY`，修复代理环境下 Amadeus 工具访问 Product
