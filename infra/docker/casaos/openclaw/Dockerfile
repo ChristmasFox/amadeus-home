@@ -9,6 +9,14 @@ WORKDIR /app
 # The plugin bundle is self-contained; the OpenClaw SDK remains provided by
 # the pinned base image. No source, credentials, media directory, or Docker
 # socket is copied into the image.
+# Carry provider-native identity metadata through the pinned OpenClaw 2026.9.4
+# Telegram ingress. The WhatsApp package is installed outside this image and is
+# patched from the same source-controlled script during an apply.
+COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-identity.mjs
+USER root
+RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
+    && rm /tmp/patch-openclaw-channel-identity.mjs
+
 # Install our business plugins in OpenClaw's bundled-extension tree. This keeps
 # the plugin runtime trusted for narrow host-owned capabilities such as the
 # in-process WhatsApp owner notifier; load.paths would classify them as local
