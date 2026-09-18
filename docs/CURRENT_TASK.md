@@ -68,14 +68,16 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 `local/openclaw-amadeus:git-083f26b1fb13-20260918125134`，runtime 已确认
 `before_prompt_build` 注册、三个相关 Skill eligible/model-visible。仍待真实群聊重新发送昵称
 战绩请求，确认本轮实际产生 `identity_resolve` → PUBG tool 调用。无投递 smoke 已确认这条
-工具链已发生，但暴露出第二层配置问题：用户确认的 `SG_Labmem007/008/004` 与现有
+工具链已发生，但暴露出第二层配置问题：此前登记的 `SG_Labmem007/008/004` 与现有
 `SG_LabmemNo007/008/004` production team names 不一致，导致 canonical player ID 未命中，
-随后官方 exact lookup 返回 `identity_pubg_account_unresolved`。本轮已把用户提供的三个名字加入
-Git team fixture alias，并在备份 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918125744-pubg-account-alias`
-后同步生产外部 team config。新镜像 `local/openclaw-amadeus:git-a990bda023b1-20260918125753`
-已 apply；无投递线上 smoke 的“胶昨天战绩”和“猴昨天战绩”均实际调用
-`identity_resolve` → `pubg_query_stats`，失败数均为 0 并返回真实战绩。为避免未经请求向群聊发
-测试消息，最后一步仍由用户在真实群里发送一句昵称战绩请求完成入口验收。
+随后官方 exact lookup 返回 `identity_pubg_account_unresolved`。当时的临时兼容 alias 已在用户
+随后更正原始账号后撤回：三个账号的正确值是 `SG_LabmemNo007`、`SG_LabmemNo008`、
+`SG_LabmemNo004`。本轮同步移除了 Git fixture 和 production team config 中的三个错误 alias，
+并把外部 `identity-presets.json` 与 Identity SQLite 的三条 PUBG external account 记录改为
+`No` 版本，同时重算对应 `account_id`。修改前可恢复备份为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918130716-identity-pubg-no-correction`；
+当前源代码更正和运行时数据已核验，待本轮镜像重新 apply 后复跑无投递 smoke。为避免未经请求
+向群聊发测试消息，最后一步仍由用户在真实群里发送一句昵称战绩请求完成入口验收。
 
 ## 当前进度
 
