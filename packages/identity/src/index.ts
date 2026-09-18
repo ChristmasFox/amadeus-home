@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -279,6 +279,7 @@ function personIdForPreset(preset: IdentityPreset): string {
 export class IdentityStore {
   readonly db: SqliteDatabase;
   private readonly now: () => Date;
+  private presetFingerprint: string | undefined;
 
   constructor(readonly filename = ':memory:', options: IdentityStoreOptions = {}) {
     if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true });
@@ -286,11 +287,27 @@ export class IdentityStore {
     this.db = new DatabaseSync(filename);
     this.db.exec('PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA journal_mode = WAL;');
     this.migrate();
-    if (options.presetsFile) this.seedPresets(parsePresetFile(options.presetsFile));
+    if (options.presetsFile) this.refreshPresets(options.presetsFile);
   }
 
   close(): void {
     this.db.close();
+  }
+
+  refreshPresets(presetsFile: string): boolean {
+    let fingerprint: string | undefined;
+    try {
+      const stats = statSync(presetsFile);
+      fingerprint = `${stats.mtimeMs}:${stats.size}`;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error(`identity_presets_unreadable:${presetsFile}`, { cause: error });
+      this.presetFingerprint = undefined;
+      return false;
+    }
+    if (fingerprint === this.presetFingerprint) return false;
+    this.seedPresets(parsePresetFile(presetsFile));
+    this.presetFingerprint = fingerprint;
+    return true;
   }
 
   private migrate(): void {

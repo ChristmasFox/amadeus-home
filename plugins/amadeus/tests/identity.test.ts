@@ -9,6 +9,7 @@ import {
   identityBindChannel,
   identityConfirmCandidate,
   forgetTrustedInboundReply,
+  identityGetPerson,
   identityLinkAccount,
   identityListCandidates,
   identityResolve,
@@ -79,6 +80,25 @@ test('identity mutations require owner confirmation', async () => {
   await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
   try {
     await assert.rejects(identityBindChannel(config(databasePath, presetsFile), { personId: 'wang' }, context(false)), /owner_confirmation/u);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('cached plugin stores refresh presets written after OpenClaw startup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-identity-refresh-'));
+  const databasePath = join(directory, 'identity.sqlite');
+  const presetsFile = join(directory, 'presets.json');
+  await writeFile(presetsFile, JSON.stringify({ persons: [] }));
+  const runtimeConfig = config(databasePath, presetsFile);
+  try {
+    const before = await identityResolve(runtimeConfig, { reference: 'person', personId: 'wang' }, context()) as { status: string };
+    assert.equal(before.status, 'not_found');
+    await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王', aliases: ['狗王'], externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }] }));
+    const after = await identityGetPerson(runtimeConfig, { personId: 'wang' }) as { status: string; person?: { aliases: Array<{ alias: string }>; externalAccounts: Array<{ externalId: string }> } };
+    assert.equal(after.status, 'resolved');
+    assert.equal(after.person?.aliases.some((alias) => alias.alias === '狗王'), true);
+    assert.equal(after.person?.externalAccounts[0]?.externalId, 'Wang233');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
