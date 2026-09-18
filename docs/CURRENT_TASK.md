@@ -110,7 +110,7 @@ PUBG plugin 9、Amadeus 10 定向测试及受影响 typecheck/build、secrets sc
 
 ## 当前进度
 
-- 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、
+- 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、VPS 只读通知、
   Codex hook 和 CasaOS 模板；Product Radar 已去掉旧通知依赖；OpenClaw owner 工具策略改为
   `tools.profile="full"`，不再用只包含 PUBG 的严格 allowlist。全局 workspace 已收敛为
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
@@ -118,11 +118,11 @@ PUBG plugin 9、Amadeus 10 定向测试及受影响 typecheck/build、secrets sc
 - 本地测试阶段：PASS。最新 apply 前 build、typecheck、测试和 secrets scan 复跑通过：
   Identity 9、PUBG domain 9、PUBG plugin 8、Amadeus 10、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
-  checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
+  checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、VPS report cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
   使用远端 owner outbox，且不再因缺少 `os` 导入而静默丢弃事件。
 - 真实切换阶段：PASS。最新镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
-  media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
+  media adapter、NAS 只读 smoke、VPS report cron 和 owner WhatsApp outbox 均通过。
 - 部署后阶段：PASS。基础迁移 checkpoint 为
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；Telegram username/trusted
   channel metadata 的最新 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918101625`；旧 LangBot/n8n
@@ -146,7 +146,7 @@ PUBG plugin 9、Amadeus 10 定向测试及受影响 typecheck/build、secrets sc
   `local/openclaw-amadeus:git-e15607cdbbfb-20260918122319`。两个 VPS cron 为
   `30 9`/`0 23 Asia/Shanghai`，allowlist 仅包含四个 VPS read tools 与
   `amadeus_notify_owner`；OpenClaw 重启后 schedule、VPS usage baseline 和 progress-bar prompt
-  均保留。晨报首次暴露的 cron owner-context bug 已由 `c1fe427` 修复；随后晚报真实发送并以
+  均保留。VPS 晨间报告首次暴露的 cron owner-context bug 已由 `c1fe427` 修复；随后 VPS 晚间报告真实发送并以
   `sent` marker 与 WhatsApp provider message ID 验证。最新 `e15607c` 将十格进度条设为 Skill
   和已有 cron 的硬格式。CPU throttling 若 API 返回 unknown 必须继续标为 unknown，不得当作健康。
 

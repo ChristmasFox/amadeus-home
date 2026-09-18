@@ -5,10 +5,10 @@
 ## 当前源代码
 
 - `plugins/pubg`：PUBG 的原生 OpenClaw plugin。
-- `plugins/amadeus`：Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 owner 通知工具。
+- `plugins/amadeus`：Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 群成员和 owner 通知工具。
 - `packages/pubg-domain`：独立 PUBG Domain、SQLite 和一次性数据迁移器。
 - `apps/product-radar`：独立商品监控服务；事件只写 channel-free owner outbox。
-- `integrations/openclaw`：OpenClaw 配置、workspace、briefing source 和 Codex hook。
+- `integrations/openclaw`：OpenClaw 配置、workspace 和 Codex hook。
 - `infra/docker/casaos/openclaw`、`infra/docker/casaos/product-radar`：CasaOS 部署模板。
 - `infra/macos`：NAS 只读/休眠命令的宿主机脚本。
 
@@ -19,7 +19,7 @@
 
 - OpenClaw/Kurisu 是唯一 agent runtime 和规划入口。
 - Telegram、WhatsApp 和未来渠道只做入口；主动通知只投递 WhatsApp owner DM。
-- Product Radar、日报、媒体执行结果、Codex 完成/失败和 HomeLab 事件都使用统一的
+- Product Radar、媒体执行结果、Codex 完成/失败和 HomeLab 事件都使用统一的
   channel-free outbox，由 OpenClaw owner worker 负责幂等投递。
 - 媒体整理继续由独立 `media-organizer-adapter` 执行；plugin 只做 preview/execute
   policy 和结果呈现，不直接移动媒体文件。

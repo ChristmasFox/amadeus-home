@@ -21,7 +21,7 @@ OpenClaw 工具面和已加载 native plugins；工具自身的 owner 检查与�
 - \`plugins/pubg/\`：唯一 PUBG 原生 OpenClaw plugin，六个受限工具和 Skill。
 - \`packages/pubg-domain/\`：官方 PUBG API、SQLite、查询/比较、Telemetry 事实和迁移器。
 - \`plugins/amadeus/\`：Product Radar、媒体安全流程、NAS、HomeLab、只读 VPS、KOOK lookup、
-  briefing 和 owner notification 的原生 OpenClaw plugin。
+  Identity 和 owner notification 的原生 OpenClaw plugin。
 - \`apps/product-radar/\`：独立商品监控服务；业务事件只写 channel-free owner outbox。
 - \`integrations/openclaw/\`：脱敏配置、workspace、Skills 和部署说明。
 - \`infra/docker/casaos/\`：固定版本 OpenClaw/Product Radar 的 CasaOS 模板。

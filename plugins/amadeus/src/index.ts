@@ -2,7 +2,6 @@ import type { AnyAgentTool, OpenClawPluginApi, OpenClawPluginToolContext } from 
 import { definePluginEntry, jsonResult } from 'openclaw/plugin-sdk/core';
 import { Static, Type, type TSchema } from 'typebox';
 import { configFor } from './config.js';
-import { runBriefing } from './briefing.js';
 import { homelabStatus } from './homelab.js';
 import {
   identityAddAlias,
@@ -69,11 +68,6 @@ const NotifyOwnerParameters = Type.Object({
   source: Type.String({ minLength: 1, maxLength: 128 }),
   title: Type.String({ maxLength: 200 }),
   message: Type.String({ minLength: 1, maxLength: 16_000 }),
-}, { additionalProperties: false });
-
-const BriefingParameters = Type.Object({
-  edition: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('morning'), Type.Literal('evening')])),
-  deliver: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
 const VpsParameters = Type.Object({}, { additionalProperties: false });
@@ -227,7 +221,6 @@ const entry = definePluginEntry({
       if (!isTrustedOwnerContext(context)) throw new Error('owner notification requires owner identity');
       return notifier.notify(ownerEvent(params));
     });
-    registerTool(api, 'amadeus_briefing', 'Generate the configured technology/market morning or evening briefing from curated feeds and optionally deliver it to the WhatsApp owner.', BriefingParameters, async (params, context, notifier, signal) => runBriefing(config, params.edition ?? 'auto', params.deliver === true, isTrustedOwnerContext(context), notifier, signal));
     registerTool(api, 'amadeus_vps_service_info', 'Read VPS basic service and plan facts through the fixed read-only KiwiVM service-info API. No control endpoint or credential is exposed.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsServiceInfo(config, signal));
     registerTool(api, 'amadeus_vps_live_status', 'Read the VPS Running/Stopped state, KiwiVM live resource facts, and CPU throttling through the fixed read-only live-status API.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsLiveStatus(config, signal));
     registerTool(api, 'amadeus_vps_usage', 'Read KiwiVM traffic counters, quota, remaining bytes, reset time, bounded traffic history, and the persisted delta since the previous successful sample.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsUsage(config, signal));

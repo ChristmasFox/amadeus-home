@@ -9,7 +9,7 @@
 ## OpenClaw Amadeus 实施范围
 
 本仓库当前唯一产品 Goal 是 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md`：PUBG 保持原生
-plugin/domain，Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 Codex
+plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 群成员和 Codex
 通知等仍有价值的能力迁移到原生 `plugins/amadeus` 与 owner outbox。OpenClaw 是唯一
 Agent runtime；不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套
 sender。执行仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。

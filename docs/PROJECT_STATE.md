@@ -101,13 +101,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 ## 本轮实现
 
 - 新增 plugins/amadeus：Product Radar、媒体 scan/preview/execute、NAS、HomeLab、
-  KOOK current-channel lookup、briefing、owner notifier 和 retry worker。
+  KOOK current-channel lookup、VPS read-only capability、owner notifier 和 retry worker。
 - Product Radar 已去除 LangBot/Telegram/KOOK notification bridge，业务事件改写
   channel-free owner outbox。
 - Codex completion/failure/cancel hook 改为写 owner outbox；OpenClaw worker 是唯一
   WhatsApp owner delivery。
-- briefing 配置保留旧日报的 AI、前端、基础设施、芯片/市场、日本、官方 RSS/Atom、GitHub
-  releases/API、早报/晚报和 9Router summary；不再依赖 n8n/LangBot credential。
+- 科技情报早报/晚报能力已从 Amadeus plugin、部署配置和 cron 中删除；VPS 晨间/晚间
+  状态通知继续保留，并通过固定只读工具和 owner outbox 投递。
 - NAS 控制脚本移到 infra/macos/nas-control.sh，旧 LangBot plugin 源退出主链。
 - CasaOS 模板、OpenClaw workspace、部署脚本和配置已切换到 Amadeus。
 - 全局 `workspace/AGENTS.md` 只保留架构、工具真实性、会话、owner 通知和副作用安全原则；
@@ -145,8 +145,8 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
   `local/product-radar:git-5fd139d3e58d-20260918081806`。
 - 最终 checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`。
 - OpenClaw/Product Radar health、media adapter network、NAS read-only smoke 和 owner
-  WhatsApp outbox smoke 均 PASS；briefing cron `amadeus-briefing-morning`、
-  `amadeus-briefing-evening` 已注册。
+  WhatsApp outbox smoke 均 PASS；历史 briefing cron 已在本轮退休，VPS morning/evening
+  cron 保留。
 - `tools.profile=full` 且没有 `tools.allow`；WhatsApp 群组是 open、免 mention，并且没有
   群组级 tools/toolsBySender 限制。WhatsApp owner DM 仍为 allowlist，高风险工具继续按
   owner/confirmation policy 保护。

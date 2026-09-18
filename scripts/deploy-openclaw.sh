@@ -370,7 +370,7 @@ amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=Fal
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
 for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
-for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_briefing','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
 for name in ['pubg','amadeus','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
@@ -452,8 +452,16 @@ ensure_cron() {
       --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
   fi
 }
-ensure_cron amadeus-briefing-morning '30 9 * * *' '调用 amadeus_briefing 工具，edition=morning，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
-ensure_cron amadeus-briefing-evening '0 23 * * *' '调用 amadeus_briefing 工具，edition=evening，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
+remove_cron() {
+  local name="$1" existing_id
+  existing_id="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print(next((x.get("id", "") for x in v.get("jobs",[]) if x.get("name")==n), ""))' "$name")"
+  if [[ -n "$existing_id" ]]; then
+    orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron rm "$existing_id" --json >/dev/null
+  fi
+}
+remove_cron amadeus-briefing-morning
+remove_cron amadeus-briefing-evening
 ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:morning，source=vps-report，title=🛰 VPS 晨间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:evening，source=vps-report，title=🛰 VPS 晚间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"

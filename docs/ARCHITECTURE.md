@@ -20,7 +20,6 @@ packages/pubg-domain             ├─ media-organizer-adapter
        ▼                         ├─ Glances / HomeLab probes
 official PUBG API + SQLite       ├─ KOOK API, current-session only
                                  ├─ KiwiVM + bounded read-only VPS SSH probes
-                                 ├─ curated RSS/JSON + 9Router briefing
                                  └─ WhatsApp owner outbox/delivery
 \`\`\`
 
@@ -31,8 +30,8 @@ provider-neutral external account。OpenClaw 只提供可信 channel/account/sen
 `packages/pubg-domain` 不接触 Telegram/WhatsApp、昵称、手机号或 JID。
 
 OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facade、关键词路由、
-第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界和 briefing summary
-边界；统计、权限、预览确认、状态转换和排序保持 deterministic。
+第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界；统计、权限、预览确认、
+状态转换和排序保持 deterministic。
 
 ## 原生插件边界
 
@@ -66,8 +65,6 @@ identity error，不静默使用默认队伍。
 - \`amadeus_kook_group_members\`：只能读取当前 KOOK channel/guild，不主动推送。
 - \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只能写入或经 OpenClaw 投递
   固定 WhatsApp owner。
-- \`amadeus_briefing\`：读取 Git 内 curated source/config，做时间过滤、关键词主题评分、
-  去重和 9Router 总结；早报/晚报只交给 owner notifier。
 - \`amadeus_vps_service_info\`、\`amadeus_vps_live_status\`、\`amadeus_vps_usage\`、
   \`amadeus_vps_system_status\`、\`amadeus_vps_services\`：只读 KiwiVM/API 与固定 SSH probe；
   不接受 endpoint、unit、shell、VPS 控制动作或通知目标。traffic state 保存在 \`/data\` 外部
@@ -79,7 +76,7 @@ identity error，不静默使用默认队伍。
 
 ### Owner notification contract
 
-Product Radar、Codex hook、媒体完成、HomeLab 和 briefing 都使用同一 v1 event：
+Product Radar、Codex hook、媒体完成和 HomeLab 都使用同一 v1 event：
 
 \`\`\`json
 {
@@ -107,8 +104,6 @@ WhatsApp owner 投递、长消息分段、sent marker 和幂等 retry。Telegram
   credential 都在运行时 secret 文件或外部 env。
 - KiwiVM VEID/API key、VPS read-only SSH key 和 known-hosts 文件都在运行时 secret；VPS
   SSH user 应使用受限 forced-command key，OpenClaw 容器不挂载通用 root SSH key。
-- briefing source/config 在 \`plugins/amadeus/briefing/config\`，不再读取 n8n Git 工作树
-  或 LangBot API credential。
 
 ## CasaOS 发布
 
@@ -145,8 +140,8 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
    app/data 和旧凭据只留在仓库外 checkpoint 用于审计/人工恢复，不参与运行时 fallback。
 5. 新 compose/config 预检，确认两个 plugin 和两个 Skill 都已加载。
 6. 停止 LangBot、n8n、n8n-sandbox，移除其 canonical app/data 路径到 checkpoint。
-7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai briefing cron 和 VPS report
-   cron；VPS cron 只 allow-list 四个 VPS read tools 与 \`amadeus_notify_owner\`。
+7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai VPS report cron；VPS cron
+   只 allow-list 四个 VPS read tools 与 \`amadeus_notify_owner\`。
 8. 检查 health、media adapter、NAS read-only SSH、channel status 和真实 WhatsApp owner outbox。
 
 旧数据仅用于备份/审计/恢复，不作为运行时 fallback；未执行旧架构回滚演练。

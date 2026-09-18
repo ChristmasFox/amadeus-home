@@ -15,7 +15,7 @@ PUBG Domain 位于 `packages/pubg-domain`，只接收结构化输入并输出确
 
 ## 能力迁移与退休
 
-Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 Codex 通知进入
+Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 群成员和 Codex 通知进入
 `plugins/amadeus`；Product Radar 保持独立服务。旧 LangBot plugin、n8n workflow、旧
 通知 sender、watchdog 和 Runtime 已删除，不保留双实现或 fallback。
 
@@ -30,7 +30,7 @@ Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 Codex 
 迁移脚本默认 dry-run；`--apply --build-auto` 按 live immutable image 的 Git commit 只
 构建受影响的 OpenClaw/Product Radar 镜像，`--apply --no-build` 复用未过期镜像；只有
 `--apply --build` 才强制全量双镜像构建和完整验证。所有 apply 仍会备份、启动/更新
-OpenClaw 与 Product Radar、注册 briefing cron，并以真实 owner WhatsApp smoke 作为交付
+OpenClaw 与 Product Radar、注册 VPS 报告 cron，并以真实 owner WhatsApp smoke 作为交付
 验收。所有旧数据先进入仓库外 checkpoint；不做 shadow、双写、灰度或回滚演练。
 
 ## Secrets 与部署

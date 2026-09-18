@@ -1,7 +1,7 @@
 {
   "id": "amadeus",
   "name": "Amadeus capabilities",
-  "description": "Native OpenClaw tools for HomeLab, Product Radar, media safety, read-only VPS status, briefing, and owner notifications.",
+  "description": "Native OpenClaw tools for HomeLab, Product Radar, media safety, read-only VPS status, Identity, and owner notifications.",
   "version": "1.0.0",
   "activation": { "onStartup": true },
   "configSchema": {
@@ -24,10 +24,6 @@
       "notificationOutboxDir": { "type": "string", "maxLength": 1024 },
       "identityDatabasePath": { "type": "string", "maxLength": 1024 },
       "identityPresetsFile": { "type": "string", "maxLength": 1024 },
-      "briefingConfigDir": { "type": "string", "maxLength": 1024 },
-      "briefingStateFile": { "type": "string", "maxLength": 1024 },
-      "nineRouterBaseUrl": { "type": "string", "maxLength": 512 },
-      "nineRouterApiKeyFile": { "type": "string", "maxLength": 1024 },
       "kiwiVmBaseUrl": { "type": "string", "maxLength": 512 },
       "kiwiVmCredentialsFile": { "type": "string", "maxLength": 1024 },
       "vpsSshHost": { "type": "string", "maxLength": 256 },
@@ -55,7 +51,6 @@
       "identity_list_candidates",
       "identity_confirm_candidate",
       "amadeus_notify_owner",
-      "amadeus_briefing",
       "amadeus_vps_service_info",
       "amadeus_vps_live_status",
       "amadeus_vps_usage",

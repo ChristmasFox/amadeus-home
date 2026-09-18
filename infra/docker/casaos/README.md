@@ -2,7 +2,7 @@
 
 模板对应当前保留的自定义服务：
 
-- openclaw：唯一 Amadeus Agent、原生 PUBG/Amadeus plugins、briefing 和 SQLite；
+- openclaw：唯一 Amadeus Agent、原生 PUBG/Amadeus plugins、VPS 通知和 SQLite；
 - product-radar：独立商品监控服务；
 - media-organizer-adapter：外部媒体预览/执行服务，保留在用户既有环境，不由本仓库重建。
 
