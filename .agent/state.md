@@ -14,7 +14,7 @@ provider-neutral external account；Identity reply metadata bridge、provider-na
 当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
 app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity preset 动态刷新已通过
-选择性镜像构建重新 apply 到线上。
+选择性镜像构建重新 apply 到线上；PUBG plugin 现会同步刷新缓存的 IdentityStore。
 
 已落地：
 
@@ -34,7 +34,7 @@ app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity pr
 - `packages/identity`、Amadeus `identity_*` tools/Skill 和 PUBG identity boundary 已加入源码；
   identity SQLite 与 presets 使用 `/data` 外部路径，确认写入受 owner gate，observed alias
   只能作为 candidate。线上已运行
-  `local/openclaw-amadeus:git-29ad1b946051-20260918102434`，SOUL/MEMORY 与 Git 哈希一致，四张
+  `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`，SOUL/MEMORY 与 Git 哈希一致，四张
   身份表仍为空；外部 `identity-presets.json` 可在运行后安全刷新，等待用户填写。
 - Amadeus typed `before_dispatch` hook 只把 OpenClaw 可信 `replyToSender` 短时传给同一
   session 的 Identity tools，`agent_end` 清理；没有 reply metadata 时仍 fail closed。mention
@@ -48,7 +48,7 @@ app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity pr
    candidate/confirm 和重启持久化验收；不能用伪造 ID 或 provider trace 代替。
 2. 记录真实 inbound/outbound 结果和数据库重启前后摘要；当前 live DB 只有 schema、四张表
    均为 0 行，安全地等待真实用户确认。
-3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918102434` 作为最新恢复点，
+3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442` 作为最新恢复点，
    不恢复已退休的 LangBot/n8n/旧 Runtime。
 
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚

@@ -30,8 +30,8 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   `@username` 对应 ID、WhatsApp `mentionedJid` 和稳定 sender JID 通过同一
   `GatewayRunToolBindings.identity`/sender context 传入；过期/冲突 username fail closed，且不解析
   prompt、昵称或手机号文本。Telegram 镜像 bundle 与外部 WhatsApp package 均已通过版本锚定补丁部署。
-- 当前线上镜像为 `local/openclaw-amadeus:git-29ad1b946051-20260918102434`，恢复 checkpoint
-  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918102434`；外部
+- 当前线上镜像为 `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`，恢复 checkpoint
+  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；外部
   `identity-presets.json` 支持运行后按文件指纹刷新，已确认数据不会被预设覆盖；
   真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
   alias confirmation 和重启后有数据持久化仍待用户入口验收。
@@ -113,6 +113,9 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
   Radar 的 fetch failure。
 - 本次 `29ad1b9` 的 Identity preset refresh 定向测试、受影响 build/typecheck、secrets scan
   和 CasaOS apply 已通过；线上四张 Identity 表仍为 0 行，等待用户填写外部预设。
+- `1ccd6f0` 又使 PUBG plugin 的缓存 IdentityStore 在 preset 文件运行后新增或修改时同步
+  刷新；Identity 8、PUBG plugin 7、Amadeus 7 定向测试、受影响 build/typecheck、secrets
+  scan 和 live apply 均通过。
 - 媒体整理继续受 organize-emby-media Skill 的备份、单项、preview-confirm、碰撞检查
   和不修改现有媒体库约束保护。
 

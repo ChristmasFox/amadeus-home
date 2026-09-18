@@ -24,16 +24,16 @@ channel package 现在也通过 source-controlled、版本锚定补丁，把 Tel
 真实 user ID、同一会话内已由 trusted sender metadata 观察到的 `@username` 对应 ID、WhatsApp
 `mentionedJid` 和稳定 sender JID 送入同一 `toolBindings.identity.mentions`/sender context；不从
 prompt、昵称、手机号文本或未观察到的用户名推断，过期/冲突用户名 fail closed。该 follow-up 已随
-`c33684a` 构建并 apply；随后 `29ad1b9` 增加外部 preset 文件的运行时安全刷新并完成选择性
-build/apply；线上镜像为
-`local/openclaw-amadeus:git-29ad1b946051-20260918102434`，runtime inspect 已确认
+`c33684a` 构建并 apply；随后 `29ad1b9` 增加外部 preset 文件的运行时安全刷新，`1ccd6f0`
+补上 PUBG plugin 缓存 IdentityStore 的同等刷新，并完成选择性 build/apply；线上镜像为
+`local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`，runtime inspect 已确认
 `before_dispatch` 和 `agent_end` 两个 typed hook 在线。
 
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。源码、配置、Skill、本地测试和
 trusted channel metadata 的 CasaOS build/apply 均已完成；线上运行
-`local/openclaw-amadeus:git-29ad1b946051-20260918102434`。最近真实 WhatsApp 群入站已调用
+`local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`。最近真实 WhatsApp 群入站已调用
 `identity_resolve(self)` 并返回 `unbound / trusted_channel_identity_is_not_bound`，随后没有调用
 PUBG tool；线上真实
 Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
@@ -47,7 +47,7 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  Identity 7、PUBG domain 9、PUBG plugin 6、Amadeus 7、Product Radar 51。
+  Identity 8、PUBG domain 9、PUBG plugin 7、Amadeus 7、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
@@ -60,7 +60,7 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
 - Identity preset refresh 部署阶段：PASS。最新 checkpoint 为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918102434`；OpenClaw、Product Radar、
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；OpenClaw、Product Radar、
   media adapter network、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过。外部
   `identity-presets.json` 当前不存在，线上 Identity 四张表仍为空，等待用户填写真实映射。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
