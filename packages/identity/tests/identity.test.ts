@@ -84,6 +84,20 @@ test('group aliases take precedence over global aliases and observed candidates 
   store.close();
 });
 
+test('group-scoped lookup falls back to preloaded global aliases', () => {
+  const store = new IdentityStore();
+  store.seedPresets([{ personId: 'jiao', displayName: '胶', aliases: ['胶'] }]);
+
+  const resolved = store.resolve(
+    { type: 'alias', alias: '胶', scope: 'group' },
+    { conversationId: 'group-1@g.us' },
+  );
+  assert.equal(resolved.status, 'resolved');
+  assert.equal(resolved.person?.personId, 'jiao');
+  assert.equal(resolved.resolutionPath, 'global-alias');
+  store.close();
+});
+
 test('authoritative global aliases are not shadowed by group observations', () => {
   const store = new IdentityStore();
   store.seedPresets([

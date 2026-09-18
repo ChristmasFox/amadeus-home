@@ -594,7 +594,10 @@ export class IdentityStore {
     if (scope === undefined || scope === 'group') {
       if (groupId) scopes.push({ scope: 'group', scopeId: groupId, path: 'group-alias' });
     }
-    if (scope === undefined || scope === 'global') scopes.push({ scope: 'global', scopeId: '', path: 'global-alias' });
+    // A group lookup is group-first, not group-only: preloaded global aliases
+    // must still resolve in a group unless the caller explicitly asks for
+    // global-only resolution.
+    if (scope === undefined || scope === 'group' || scope === 'global') scopes.push({ scope: 'global', scopeId: '', path: 'global-alias' });
     const observedCandidates: IdentityResolutionCandidate[] = [];
     for (const candidateScope of scopes) {
       const matches = this.aliasesFor(alias, candidateScope.scope, candidateScope.scopeId);

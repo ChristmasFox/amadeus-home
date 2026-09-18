@@ -30,8 +30,11 @@ called.
 2. `reference=mention` or `reference=reply_sender` uses only the trusted
    mention/reply metadata supplied by OpenClaw.
 3. A confirmed channel binding wins over names. A confirmed group alias wins
-   over a confirmed global alias. An observed alias is always a candidate.
-4. `unbound`, `ambiguous`, and `candidate` results are not safe PUBG subjects.
+   over a confirmed global alias; if no group alias exists, fall back to the
+   preloaded/confirmed global alias. An observed alias is always a candidate.
+4. Preloaded members and aliases are already deployment-confirmed; do not ask
+   Arthur or the group to reconfirm their external ID. Only `unbound`,
+   `ambiguous`, and `candidate` results are not safe PUBG subjects.
    Ask for clarification or Arthur's confirmation instead of guessing.
 
 ## Learning and confirmation
