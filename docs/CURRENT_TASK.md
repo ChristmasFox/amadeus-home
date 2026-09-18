@@ -11,16 +11,28 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 - 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、
   Codex hook 和 CasaOS 模板；Product Radar 已去掉旧通知依赖；OpenClaw owner 工具策略改为
   `tools.profile="full"`，不再用只包含 PUBG 的严格 allowlist。
-- 本地测试阶段：PASS。Amadeus/Product Radar 定向测试、typecheck、脚本 syntax 和 diff
-  whitespace 检查通过；收尾前仍需复跑全量 build/typecheck/test/secrets。
+- 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
+  PUBG domain 9、PUBG plugin 5、Amadeus 1、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、secret 恢复、镜像构建、旧 app/data 退休、briefing cron 和 owner WhatsApp
   smoke。
-- 真实切换阶段：待执行。当前 live baseline 已确认 `tools.allow` 只有六个 PUBG tool 且
-  Amadeus 未加载；切换前必须提交并 push reviewed Git source，然后运行：
-  scripts/deploy-openclaw.sh --apply --build。
-- 部署后阶段：更新本文件、PROJECT_STATE、.agent/state.md，写 dated checkpoint，检查
-  Git diff/status、OpenClaw/Product Radar/owner outbox/cron/旧容器，并记录实际结果。
+- 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
+  media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
+- 部署后阶段：PASS。最终 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918080634`；旧 LangBot/n8n
+  容器、app/data 路径和 KOOK watchdog timer 已退休，当前 Git 状态待本次文档 checkpoint
+  提交后复核。
+
+## PUBG-only 根因修复验收
+
+- live `tools.profile=full`，没有 `tools.allow` 严格白名单；WhatsApp 群组为 `open`、
+  `requireMention=false`，群组没有 `tools`/`toolsBySender` 限制，因此成员继承完整 OpenClaw
+  工具能力，而不是只继承 PUBG。
+- `pubg` 6 个工具和 `amadeus` 7 个工具均显示 `origin= bundled`、`trust= bundled`、
+  `status=loaded`；这也修复了 Amadeus owner notifier 被非信任插件拒绝的问题。
+- WhatsApp secondary account 为 linked/healthy，真实 owner outbox smoke 已生成 sent marker。
+  未向群聊发送未经请求的测试消息；群聊能力边界已由 live config 和 plugin/tool inspect 验证，
+  可由用户在群内发一条普通能力消息做最终体验确认。
 
 ## 不接受的替代
 
