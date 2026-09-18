@@ -25,6 +25,8 @@ test('native OpenClaw plugin loads with the pinned SDK and declares only the six
   assert.ok(statsTool);
   assert.match(statsTool.description, /identity_resolve/);
   assert.match(statsTool.description, /personIds/);
+  assert.match(statsTool.description, /reference=self/);
+  assert.match(statsTool.description, /team=true only for an explicit whole-team request/);
 });
 
 test('manifest contracts match runtime metadata and do not carry secret values', () => {

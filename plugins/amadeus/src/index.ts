@@ -81,6 +81,8 @@ const VpsParameters = Type.Object({}, { additionalProperties: false });
 const IDENTITY_DISPATCH_GUIDANCE = [
   'Native identity dispatch contract for person-specific PUBG requests:',
   'when the user names a person by nickname or alias (for example “胶昨天战绩” or “猴昨天战绩”), call identity_resolve with reference=alias and the exact alias before replying or calling a PUBG tool; omit scope for a preloaded nickname so the resolver checks the group alias first and then the global preset.',
+  'when the user uses a first-person reference such as “我”, “我的”, “本人”, or “自己” in a PUBG request, call identity_resolve with reference=self before any PUBG tool, then pass the resolved person.personId as personIds; “我昨天战绩” is never an implicit team request.',
+  'Use team=true only when the user explicitly asks for the configured team, the whole squad, or the full team; never use team=true for “我/我的/本人/自己”.',
   'If identity_resolve returns status=resolved, immediately pass result.person.personId as personIds to the relevant PUBG tool.',
   'Do not ask for a PUBG ID or claim that an account is unconfirmed before this lookup; a previous assistant reply is not current identity state.',
 ].join('\n');

@@ -30,6 +30,11 @@ subject. For each such request:
    nickname is unconfirmed is not evidence; resolve it again with the current
    tools.
 
+First-person PUBG requests such as “我昨天战绩”“我的战绩” or “本人最后一把”
+must call `identity_resolve` with `reference=self` first and then pass the
+returned canonical `personId` as `personIds`. They must never be converted to
+`team=true`; `team=true` is reserved for an explicit whole-team/squad request.
+
 Never ask the user for a PUBG ID or say that the account is unconfirmed before
 the identity lookup. Preloaded nickname/account mappings are already confirmed
 for this deployment; use the resolved `personId` directly. `pubg_resolve_players` is not a substitute for
