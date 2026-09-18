@@ -2,7 +2,7 @@
 
 - 时间：2026-09-19 Asia/Shanghai
 - 版本：Amadeus 1.0.1
-- 状态：源码与本地验证完成，等待 CasaOS apply
+- 状态：已通过 CasaOS apply，运行态核对通过；真实 WhatsApp 群聊入口待用户触发
 
 ## 变更
 
@@ -23,4 +23,13 @@
 
 ## 线上验收边界
 
-本 checkpoint 记录 apply 前源码状态。部署完成后必须补写实际 immutable image、CasaOS backup checkpoint、health/preflight 和 smoke 结果；不得把本地测试当作真实 WhatsApp 入站验收。
+本 checkpoint 同时保留 apply 前源码验证和下方实际部署证据；不得把本地测试当作真实 WhatsApp 入站验收。
+
+## 部署结果
+
+- 提交：`db0a2df`
+- immutable image：`local/openclaw-amadeus:git-db0a2dfa5c75-20260918164913`
+- CasaOS backup：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918164913`
+- OpenClaw/Product Radar health：passed；运行态容器均为 `healthy`
+- `MEDIA_ADAPTER_NETWORK`、`NAS_SSH_READONLY_SMOKE`、`OWNER_WHATSAPP_OUTBOX_SMOKE`：passed
+- Product Radar image 复用：`local/product-radar:git-5fd139d3e58d-20260918081806`
