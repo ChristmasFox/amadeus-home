@@ -22,6 +22,8 @@
       "ownerTargetFile": { "type": "string", "maxLength": 1024 },
       "ownerWhatsappAccountId": { "type": "string", "maxLength": 128 },
       "notificationOutboxDir": { "type": "string", "maxLength": 1024 },
+      "identityDatabasePath": { "type": "string", "maxLength": 1024 },
+      "identityPresetsFile": { "type": "string", "maxLength": 1024 },
       "briefingConfigDir": { "type": "string", "maxLength": 1024 },
       "briefingStateFile": { "type": "string", "maxLength": 1024 },
       "nineRouterBaseUrl": { "type": "string", "maxLength": 512 },
@@ -29,7 +31,7 @@
     },
     "additionalProperties": false
   },
-  "skills": ["skills/amadeus"],
+  "skills": ["skills/amadeus", "skills/identity"],
   "contracts": {
     "tools": [
       "amadeus_product_radar",
@@ -37,6 +39,13 @@
       "amadeus_nas",
       "amadeus_homelab_status",
       "amadeus_kook_group_members",
+      "identity_resolve",
+      "identity_get_person",
+      "identity_bind_channel",
+      "identity_add_alias",
+      "identity_link_account",
+      "identity_list_candidates",
+      "identity_confirm_candidate",
       "amadeus_notify_owner",
       "amadeus_briefing"
     ],

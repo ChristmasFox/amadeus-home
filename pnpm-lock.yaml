@@ -24,6 +24,18 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  packages/identity:
+    devDependencies:
+      '@types/node':
+        specifier: 22.18.6
+        version: 22.18.6
+      tsx:
+        specifier: 4.23.13
+        version: 4.23.13
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/pubg-domain:
     dependencies:
       zod:
@@ -42,6 +54,9 @@ importers:
 
   plugins/amadeus:
     devDependencies:
+      '@agent/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -63,6 +78,9 @@ importers:
 
   plugins/pubg:
     devDependencies:
+      '@agent/identity':
+        specifier: workspace:*
+        version: link:../../packages/identity
       '@agent/pubg-domain':
         specifier: workspace:*
         version: link:../../packages/pubg-domain

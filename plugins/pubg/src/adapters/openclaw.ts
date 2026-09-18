@@ -1,4 +1,5 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import type { IdentityContext } from '@agent/identity';
 import type { PubgConversationAdapter, PubgConversationContext } from './types.js';
 
 type OpenClawConversationSource = Pick<
@@ -56,6 +57,19 @@ export const openClawConversationAdapter: PubgConversationAdapter<OpenClawConver
       ...(firstText(delivery?.accountId, source.agentAccountId) ? { accountId: firstText(delivery?.accountId, source.agentAccountId) } : {}),
       ...(firstText(source.nativeChannelId, delivery?.to, delivery?.threadId) ? { conversationId: firstText(source.nativeChannelId, delivery?.to, delivery?.threadId) } : {}),
       ...(firstText(source.requesterSenderId) ? { senderId: firstText(source.requesterSenderId) } : {}),
+      identityContext: identityContext(source, channel),
     };
   },
 };
+
+function identityContext(source: OpenClawConversationSource, channel: string): IdentityContext {
+  const accountId = firstText(source.deliveryContext?.accountId, source.agentAccountId);
+  const conversationId = firstText(source.nativeChannelId, source.deliveryContext?.to, source.deliveryContext?.threadId);
+  const senderId = firstText(source.requesterSenderId);
+  return {
+    channel,
+    ...(accountId ? { accountId } : {}),
+    ...(conversationId ? { conversationId } : {}),
+    ...(senderId ? { senderId } : {}),
+  };
+}

@@ -39,6 +39,14 @@
         "type": "integer",
         "minimum": 1000,
         "maximum": 86400000
+      },
+      "identityDatabasePath": {
+        "type": "string",
+        "maxLength": 1024
+      },
+      "identityPresetsFile": {
+        "type": "string",
+        "maxLength": 1024
       }
     },
     "additionalProperties": false

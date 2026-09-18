@@ -23,6 +23,12 @@ official PUBG API + SQLite       ├─ KOOK API, current-session only
                                  └─ WhatsApp owner outbox/delivery
 \`\`\`
 
+Identity 是共享的 native capability：`plugins/amadeus` 暴露工具，platform-neutral
+`packages/identity` 持久化 canonical Person、可信 channel binding、群/全局 alias 和
+provider-neutral external account。OpenClaw 只提供可信 channel/account/sender metadata；
+`plugins/pubg` 在边界将 `provider=pubg` account 转换成 Domain 可理解的 player id/name，
+`packages/pubg-domain` 不接触 Telegram/WhatsApp、昵称、手机号或 JID。
+
 OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facade、关键词路由、
 第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界和 briefing summary
 边界；统计、权限、预览确认、状态转换和排序保持 deterministic。
@@ -42,8 +48,8 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 
 \`packages/pubg-domain\` 不导入 OpenClaw、Telegram、WhatsApp、LangBot 或旧 app。它接收
 校验后的 platform-neutral selector，返回 status、coverage、asOf、metricVersion、
-queryResolved 和 evidenceRefs。身份来自可信 tool context；渠道显示名、手机号和 JID
-不能成为 PUBG 玩家名。
+queryResolved 和 evidenceRefs。未绑定 sender 或缺少 PUBG account 时，plugin 返回明确
+identity error，不静默使用默认队伍。
 
 ### Amadeus
 
@@ -61,6 +67,10 @@ queryResolved 和 evidenceRefs。身份来自可信 tool context；渠道显示�
   固定 WhatsApp owner。
 - \`amadeus_briefing\`：读取 Git 内 curated source/config，做时间过滤、关键词主题评分、
   去重和 9Router 总结；早报/晚报只交给 owner notifier。
+- Identity tools：\`identity_resolve\`、\`identity_get_person\`、
+  \`identity_bind_channel\`、\`identity_add_alias\`、\`identity_link_account\`、
+  \`identity_list_candidates\`、\`identity_confirm_candidate\`。observed alias 只作为候选，
+  必须经 Arthur 确认后才成为 authoritative binding。
 
 ### Owner notification contract
 
@@ -100,6 +110,8 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 - OpenClaw Compose：\`/var/lib/casaos/apps/openclaw/docker-compose.yml\`
 - Product Radar Compose：\`/var/lib/casaos/apps/product-radar/docker-compose.yml\`
 - OpenClaw AppData：\`/DATA/AppData/openclaw\`
+- Identity SQLite：\`/DATA/AppData/openclaw/data/identity.sqlite\`；可选外部预设文件为
+  \`/DATA/AppData/openclaw/data/identity-presets.json\`，生产 channel ID/JID 只留运行时数据。
 - 固定基础镜像：\`ghcr.io/openclaw/openclaw:2026.9.4\`，使用已核验 ARM64 digest
 - provider：\`9router:20128/v1\`，默认 route \`nine_router/arthur-combo\`
 - media adapter、Product Radar、changedetection 和 9Router 作为独立依赖保留

@@ -6,6 +6,21 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 跨渠道 Identity 子目标（2026-09-18）
+
+当前实现状态：`IMPLEMENTED_LOCAL_NOT_DEPLOYED`。新增 platform-neutral
+`packages/identity` SQLite 库和 Amadeus native Identity tools：
+`identity_resolve`、`identity_get_person`、`identity_bind_channel`、
+`identity_add_alias`、`identity_link_account`、`identity_list_candidates`、
+`identity_confirm_candidate`，以及 `skills/identity`。预设从仓库外
+`identityPresetsFile` 导入；Telegram/WhatsApp sender/account/conversation metadata 只从
+OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
+
+PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
+PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
+群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。当前只完成源码、配置、Skill
+和本地测试；线上仍是上一 checkpoint 的 Amadeus image，尚未重新 build/apply。
+
 ## 当前进度
 
 - 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、

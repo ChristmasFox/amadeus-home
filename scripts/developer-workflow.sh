@@ -54,6 +54,8 @@ is_env_path() {
 }
 
 has_pubg=0
+has_identity=0
+has_amadeus=0
 has_product=0
 has_package_meta=0
 has_openclaw_deploy=0
@@ -66,8 +68,10 @@ for path in "${FILES[@]-}"; do
   if is_env_path "$path"; then env_count=$((env_count + 1)); continue; fi
   case "$path" in
     packages/pubg-domain/*|plugins/pubg/*) has_pubg=1 ;;
+    packages/identity/*) has_identity=1 ;;
+    plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
-    infra/docker/casaos/openclaw/*|scripts/deploy-openclaw.sh)
+    infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh)
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
@@ -94,8 +98,9 @@ elif ((has_package_meta)); then
 elif ((has_openclaw_deploy)); then
   LEVEL=RELEASE; WORKFLOW=OPENCLAW_RELEASE_CONFIG
   COMPOSE_MODE='explicit --apply: scripts/deploy-openclaw.sh --apply --build-auto|--no-build'
-elif ((has_pubg)); then
+elif ((has_pubg || has_identity || has_amadeus)); then
   LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
+  if ((has_identity || has_amadeus)) && ((has_pubg == 0)); then WORKFLOW=AMADEUS_IDENTITY; fi
 elif ((has_product)); then
   LEVEL=RUNTIME; WORKFLOW=PRODUCT_RADAR
 fi
@@ -111,6 +116,7 @@ if ((${#unknown[@]})); then printf 'UNKNOWN_PATHS=%s\n' "${unknown[*]}"; fi
 case "$WORKFLOW" in
   FAST) printf '%s\n' 'VERIFY=targeted local tests, affected typecheck, git diff --check; Docker/Compose/deploy are prohibited by default.' ;;
   PUBG_DOMAIN_PLUGIN) printf '%s\n' 'VERIFY=pnpm typecheck:pubg, pnpm test:pubg, git diff --check; deployment remains explicit.' ;;
+  AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
   RELEASE_BUILD_REQUIRED) printf '%s\n' 'VERIFY=tests -> secrets -> immutable image build -> CasaOS compose --no-build -> health/smoke.' ;;
   OPENCLAW_RELEASE_CONFIG) printf '%s\n' 'VERIFY=explicit OpenClaw apply with migration/checkpoint and docker compose up -d --no-build.' ;;
@@ -123,6 +129,10 @@ git diff --check
 if ((has_pubg)); then
   printf '+ pnpm typecheck:pubg\n'; pnpm typecheck:pubg
   printf '+ pnpm test:pubg\n'; pnpm test:pubg
+fi
+if ((has_identity || has_amadeus)); then
+  printf '+ pnpm typecheck:amadeus\n'; pnpm typecheck:amadeus
+  printf '+ pnpm test:amadeus\n'; pnpm test:amadeus
 fi
 if ((has_product)); then
   printf '+ pnpm typecheck:product-radar\n'; pnpm typecheck:product-radar

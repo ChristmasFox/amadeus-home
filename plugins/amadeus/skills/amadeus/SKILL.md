@@ -24,3 +24,19 @@ meaning; do not create a keyword router, `/command` parser, or second agent.
 - Scheduled briefings use `amadeus_briefing` with `deliver=true`; the tool
   returns the generated report and sends the same report through the owner
   notification capability. Do not send the report directly to a group.
+
+Identity is a shared native capability, not a keyword router:
+
+- Use `identity_resolve` for `self`, trusted mentions/replies, canonical
+  `personId`, or an explicit alias. The current sender and mention identities
+  come from OpenClaw metadata; never reconstruct them from a display name,
+  phone number, or JID in message text.
+- For an unbound sender, return `unbound` and ask Arthur for a natural-language
+  confirmation. Use `identity_bind_channel` only when Arthur confirms the
+  selected trusted sender/mention/reply. Do not guess a PUBG account.
+- Group aliases are preferred over global aliases. Use
+  `identity_add_alias` with `source=observed` only for a bounded candidate;
+  candidates are not reliable until Arthur calls `identity_confirm_candidate`.
+- Use `identity_link_account` only for an explicit confirmed provider/account
+  pair. Accounts are provider-neutral; PUBG consumes only the `provider=pubg`
+  account returned through Identity.

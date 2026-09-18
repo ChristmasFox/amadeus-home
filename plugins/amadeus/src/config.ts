@@ -18,6 +18,8 @@ export interface AmadeusConfig {
   ownerTargetFile: string;
   ownerWhatsappAccountId: string;
   notificationOutboxDir: string;
+  identityDatabasePath: string;
+  identityPresetsFile?: string;
   briefingConfigDir: string;
   briefingStateFile: string;
   nineRouterBaseUrl: string;
@@ -38,6 +40,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const macSshKnownHostsFile = optionalFile('macSshKnownHostsFile', 'MAC_CONTROL_KNOWN_HOSTS_FILE');
   const kookTokenFile = optionalFile('kookTokenFile', 'KOOK_BOT_TOKEN_FILE');
   const nineRouterApiKeyFile = optionalFile('nineRouterApiKeyFile', 'OPENCLAW_9ROUTER_API_KEY_FILE');
+  const identityPresetsFile = optionalFile('identityPresetsFile', 'IDENTITY_PRESETS_FILE');
   return {
     productRadarBaseUrl: file('productRadarBaseUrl', 'PRODUCT_RADAR_BASE_URL', 'http://product-radar:5315').replace(/\/$/u, ''),
     ...(productRadarApiKeyFile ? { productRadarApiKeyFile } : {}),
@@ -54,6 +57,8 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     ownerTargetFile: file('ownerTargetFile', 'OWNER_WHATSAPP_TARGET_FILE', '/run/secrets/owner_whatsapp_target'),
     ownerWhatsappAccountId: file('ownerWhatsappAccountId', 'OWNER_WHATSAPP_ACCOUNT_ID', 'secondary'),
     notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
+    identityDatabasePath: file('identityDatabasePath', 'IDENTITY_DATABASE_PATH', '/data/identity.sqlite'),
+    ...(identityPresetsFile ? { identityPresetsFile } : {}),
     briefingConfigDir: file('briefingConfigDir', 'BRIEFING_CONFIG_DIR', join(rootDir, 'briefing')),
     briefingStateFile: file('briefingStateFile', 'BRIEFING_STATE_FILE', '/data/briefing-state.json'),
     nineRouterBaseUrl: file('nineRouterBaseUrl', 'OPENCLAW_9ROUTER_BASE_URL', 'http://9router:20128/v1').replace(/\/$/u, ''),

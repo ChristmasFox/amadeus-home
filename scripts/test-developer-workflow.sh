@@ -22,6 +22,13 @@ assert_line "$pubg" 'DOCKER_BUILD=forbidden'
 plugin="$(scope plugins/pubg/src/index.ts)"
 assert_line "$plugin" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
 
+identity="$(scope packages/identity/src/index.ts)"
+assert_line "$identity" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_line "$identity" 'CHANGE_SCOPE_WORKFLOW=AMADEUS_IDENTITY'
+
+amadeus="$(scope plugins/amadeus/src/identity.ts)"
+assert_line "$amadeus" 'CHANGE_SCOPE_WORKFLOW=AMADEUS_IDENTITY'
+
 product="$(scope apps/product-radar/src/core/application.ts)"
 assert_line "$product" 'CHANGE_SCOPE_LEVEL=RUNTIME'
 assert_line "$product" 'CHANGE_SCOPE_WORKFLOW=PRODUCT_RADAR'
