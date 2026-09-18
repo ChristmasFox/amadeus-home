@@ -64,8 +64,10 @@ binding，共 8 条；自然语言请求是否主动调用 alias resolver、真�
 源码现已把昵称请求固定为 `identity_resolve(alias/mention/reply)` → `personIds` → PUBG tool：
 PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt_build` 静态上下文
 均已补上强制顺序与示例，并增加对应 hook/description 回归断言。Amadeus/PUBG typecheck、build、
-定向测试、`git diff --check` 和 secrets scan 已通过；待本次 OpenClaw 镜像 apply 后，用真实群聊
-重新验证工具调用和返回战绩。
+定向测试、`git diff --check` 和 secrets scan 已通过；已随 `083f26b` 构建并 apply 新镜像
+`local/openclaw-amadeus:git-083f26b1fb13-20260918125134`，runtime 已确认
+`before_prompt_build` 注册、三个相关 Skill eligible/model-visible。仍待真实群聊重新发送昵称
+战绩请求，确认本轮实际产生 `identity_resolve` → PUBG tool 调用。
 
 ## 当前进度
 
@@ -112,9 +114,10 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 VPS 子目标当前本地 evidence：`pnpm --filter @agent/amadeus-plugin typecheck`、`build:amadeus`、
 Amadeus 10 tests、`bash -n scripts/deploy-openclaw.sh`、`py_compile scripts/openclaw_prepare.py`、
 manifest JSON validation 和 `git diff --check` 已通过。
-- 昵称匹配修复当前本地 evidence：Amadeus 10、PUBG plugin 8 定向测试，受影响 package
-  typecheck/build、`pnpm check:secrets` 和 `git diff --check` 已通过；live apply 和真实群聊
-  端到端验证待完成。
+- 昵称匹配修复 evidence：Amadeus 10、PUBG plugin 8 定向测试，受影响 package
+  typecheck/build、`pnpm check:secrets` 和 `git diff --check` 已通过；新镜像已 live apply，
+  恢复点为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918125134`，真实群聊
+  端到端工具调用验证待完成。
 
 ## PUBG-only 根因修复验收
 

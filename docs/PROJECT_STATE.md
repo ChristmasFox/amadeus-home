@@ -64,8 +64,10 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   调用 `identity_resolve`，而是沿用旧回复称账号未确认。本轮源码已在 PUBG/Identity Skill、
   Identity/PUBG tool descriptions 和 Amadeus `before_prompt_build` 静态上下文中固定
   `identity_resolve(alias/mention/reply)` → `personIds` → PUBG tool 顺序，并覆盖“胶/猴”示例；
-  hook/description 回归断言、受影响 typecheck/build/test 和 secrets scan 已通过，等待 live apply
-  后重新做真实群聊验证。
+  hook/description 回归断言、受影响 typecheck/build/test 和 secrets scan 已通过；已随 `083f26b`
+  构建并 apply `local/openclaw-amadeus:git-083f26b1fb13-20260918125134`，runtime inspect
+  已确认 `before_prompt_build` 在线且 `pubg`/`identity`/`amadeus` Skill eligible/model-visible。
+  仍待重新做真实群聊验证，以确认实际工具调用链。
 
 ## 本轮实现
 
