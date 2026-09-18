@@ -87,9 +87,9 @@ git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but
 
 if ((BUILD)); then
   docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
-  docker save "$IMAGE" | orb -m "$MACHINE" -u root docker load
+  docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load
   docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR/apps/product-radar"
-  docker save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
+  docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
