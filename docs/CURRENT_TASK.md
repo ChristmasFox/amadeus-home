@@ -25,6 +25,10 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；旧 LangBot/n8n
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
+- 部署构建优化阶段：IMPLEMENTED_LOCAL。`scripts/deploy-openclaw.sh` 新增
+  `--build-auto`、`--build-openclaw`、`--build-radar` 和 `--no-build`；按 live image 的
+  Git commit 选择性构建，并对未构建镜像做 stale check。当前只完成源码和文档修改，未重新
+  apply 到 CasaOS；线上仍保持上方记录的已验证镜像。
 
 ## PUBG-only 根因修复验收
 

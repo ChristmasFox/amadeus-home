@@ -27,9 +27,11 @@ Product Radar、媒体整理、NAS、HomeLab、日报、KOOK 群成员和 Codex 
 
 ## 一次性切换
 
-迁移脚本默认 dry-run；`--apply --build` 才能构建、备份、移动旧 app/data、启动 OpenClaw
-与 Product Radar、注册 briefing cron，并以真实 owner WhatsApp smoke 作为交付验收。所有
-旧数据先进入仓库外 checkpoint；不做 shadow、双写、灰度或回滚演练。
+迁移脚本默认 dry-run；`--apply --build-auto` 按 live immutable image 的 Git commit 只
+构建受影响的 OpenClaw/Product Radar 镜像，`--apply --no-build` 复用未过期镜像；只有
+`--apply --build` 才强制全量双镜像构建和完整验证。所有 apply 仍会备份、启动/更新
+OpenClaw 与 Product Radar、注册 briefing cron，并以真实 owner WhatsApp smoke 作为交付
+验收。所有旧数据先进入仓库外 checkpoint；不做 shadow、双写、灰度或回滚演练。
 
 ## Secrets 与部署
 

@@ -93,7 +93,7 @@ elif ((has_package_meta)); then
   COMPOSE_MODE='explicit --apply: docker compose up -d --no-build after image transfer'
 elif ((has_openclaw_deploy)); then
   LEVEL=RELEASE; WORKFLOW=OPENCLAW_RELEASE_CONFIG
-  COMPOSE_MODE='explicit --apply: scripts/deploy-openclaw.sh --apply [--build]'
+  COMPOSE_MODE='explicit --apply: scripts/deploy-openclaw.sh --apply --build-auto|--no-build'
 elif ((has_pubg)); then
   LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
 elif ((has_product)); then

@@ -12,7 +12,7 @@
 | `infra/docker/casaos/openclaw` | 固定镜像和 OpenClaw Compose 模板 | OrbStack `ubuntu` |
 | `infra/docker/casaos/product-radar` | Product Radar Compose 模板 | OrbStack `ubuntu` |
 | `infra/macos` | NAS 宿主机命令 | macOS SSH target |
-| `scripts/deploy-openclaw.sh` | 预检、备份、构建、一次性切换和验收 | 明确 `--apply --build` |
+| `scripts/deploy-openclaw.sh` | 预检、备份、选择性构建、切换和验收 | `--apply --build-auto`；全量才用 `--build` |
 
 ## 请求路径
 
