@@ -6,9 +6,9 @@
 OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n、旧 runtime、
 旧通知 bridge 和旧 proactive producer。
 
-当前状态：上一版实现、提交/push、CasaOS 一次性 apply、外部 checkpoint、真实 WhatsApp owner
-smoke 和旧 app/data 退休均 PASS；本次已完成全局上下文拆分、旧 secret fallback 清理和 Codex
-hook 修复，正在提交后重建镜像并做最终 live 复核。
+当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
+提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
+app/data 退休均 PASS；只剩提交本次最终状态文档并复核 Git。
 
 已落地：
 
@@ -28,10 +28,8 @@ hook 修复，正在提交后重建镜像并做最终 live 复核。
 
 下一步：
 
-1. 提交本次上下文与部署修复，重建并 apply OpenClaw image。
-2. 做 Codex outbox、自然语言工具选择、Git、secrets scan、OpenClaw/Product Radar/WhatsApp
-   的最终复核，并写入新的部署 checkpoint。
-3. 用户可在 WhatsApp 群内发一条普通能力消息，做不打扰成员的体验确认。
+1. 提交最终状态文档和部署 checkpoint，并复核 Git/secrets scan。
+2. 用户可在 WhatsApp 群内发一条普通能力消息，做不打扰成员的体验确认。
 
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚
 演练；不提交 secret/业务数据；不修改现有 Avalon media library；长期服务只部署在
