@@ -51,9 +51,10 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   prompt、昵称或手机号文本。Telegram 镜像 bundle 与外部 WhatsApp package 均已通过版本锚定补丁部署。
 - 当前线上镜像为 `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`，恢复 checkpoint
   为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；外部
-  `identity-presets.json` 支持运行后按文件指纹刷新，已确认数据不会被预设覆盖；
-  真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
-  alias confirmation 和重启后有数据持久化仍待用户入口验收。
+  `identity-presets.json` 支持运行后按文件指纹刷新，已确认数据不会被预设覆盖；本次用户提供
+  的 4 人昵称/别名/PUBG 映射已加载，线上表计数为 `persons=4`、`aliases=8`、
+  `external_accounts=4`、`channel_identities=0`。真实 Telegram/WhatsApp inbound sender
+  metadata、owner channel binding、alias confirmation 和重启后有数据持久化仍待用户入口验收。
 
 ## 本轮实现
 

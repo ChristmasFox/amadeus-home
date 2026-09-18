@@ -49,9 +49,9 @@ PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确
 trusted channel metadata 的 CasaOS build/apply 均已完成；线上运行
 `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`。最近真实 WhatsApp 群入站已调用
 `identity_resolve(self)` 并返回 `unbound / trusted_channel_identity_is_not_bound`，随后没有调用
-PUBG tool；线上真实
-Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
-用户入口完成。
+PUBG tool；用户已提供 4 个 WhatsApp 人员的昵称、别名和 PUBG 外部账号，外部 preset 已加载为
+4 个 Person、8 个 alias、4 个 `provider=pubg` account。手机号/LID 不进入 Git 或 preset，线上
+真实 Telegram/WhatsApp sender binding、群 alias confirm 和重启持久化仍需由真实用户入口完成。
 
 ## 当前进度
 
@@ -76,7 +76,9 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
 - Identity preset refresh 部署阶段：PASS。最新 checkpoint 为
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；OpenClaw、Product Radar、
   media adapter network、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过。外部
-  `identity-presets.json` 当前不存在，线上 Identity 四张表仍为空，等待用户填写真实映射。
+  `identity-presets.json` 已由用户提供的 4 人映射填充并经运行时读取验证；当前 Identity 表为
+  `persons=4`、`aliases=8`、`external_accounts=4`、`channel_identities=0`。平台 sender/LID
+  绑定仍只允许通过 trusted OpenClaw metadata 和 owner-confirmed tool 完成。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
   `--build-auto`、`--build-openclaw`、`--build-radar` 和 `--no-build`；按 live image 的
   Git commit 选择性构建，并对未构建镜像做 stale check。该流程已用于本次 Identity reply
