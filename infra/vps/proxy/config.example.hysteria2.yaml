@@ -1,0 +1,12 @@
+# Hysteria 2 server template. Replace placeholders only on the VPS.
+# The live setup uses the existing Caddy-managed certificate for the same domain.
+listen: :2053
+
+tls:
+  cert: <CADDY_CERT_PATH>/<DOMAIN>.crt
+  key: <CADDY_CERT_PATH>/<DOMAIN>.key
+  sniGuard: strict
+
+auth:
+  type: password
+  password: <HY2_PASSWORD_ONLY_ON_VPS>

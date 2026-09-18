@@ -1,0 +1,23 @@
+[Unit]
+Description=frp server
+Documentation=https://github.com/fatedier/frp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=frps
+Group=frps
+ExecStart=/usr/local/bin/frps -c /etc/frp/frps.toml
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=1048576
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/frps
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

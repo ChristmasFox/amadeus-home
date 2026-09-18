@@ -1,0 +1,6 @@
+# Public HTTPS Control UI. Caddy terminates TLS and proxies WebSocket traffic
+# through the local frps mapping to the HomeLab OpenClaw gateway.
+claw.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:18789
+}
