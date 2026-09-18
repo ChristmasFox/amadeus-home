@@ -2,7 +2,7 @@
 
 这是一个以 Git 为唯一 source of truth 的 HomeLab monorepo。当前 PUBG 主链是：
 
-Telegram 私聊 → OpenClaw/Kurisu → 原生 PUBG plugin → 独立 `@agent/pubg-domain`
+Telegram/WhatsApp 聊天 → OpenClaw/Kurisu 原生渠道适配 → PUBG plugin 适配层 → 独立 `@agent/pubg-domain`
 → 官方 PUBG API 与 SQLite。
 
 OpenClaw 负责自然语言理解、会话、模型路由、人格和工具循环；PUBG plugin 只做
@@ -13,7 +13,7 @@ SDK 适配，领域层只返回确定性事实。PUBG 不依赖 LangBot、Mastra
 
 - `plugins/pubg/`：唯一业务 plugin，注册六个原生工具并携带 PUBG Skill。
 - `packages/pubg-domain/`：官方 API client、SQLite、查询/比较、Telemetry 事实和迁移器。
-- `integrations/openclaw/`：脱敏配置、workspace 人格和部署说明。
+- `integrations/openclaw/`：脱敏配置、跨渠道 workspace 人格和部署说明。
 - `infra/docker/casaos/openclaw/`：固定 OpenClaw 版本的 CasaOS 模板。
 - `apps/product-radar/`：独立商品监控应用，不是 PUBG 运行依赖。
 - `integrations/langbot/`、`integrations/n8n/`：仍独立运行的非 PUBG 资产。

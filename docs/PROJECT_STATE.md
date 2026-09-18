@@ -1,11 +1,11 @@
 # Project State
 
-更新时间：2026-09-17（Asia/Shanghai）
+更新时间：2026-09-18（Asia/Shanghai）
 
 ## 当前目标
 
-唯一执行目标是 OPENCLAW_PUBG_REFACTOR_GOAL.md：Telegram 私聊 → 唯一 OpenClaw/Kurisu
-→ 当前 9Router → 原生 PUBG plugin → 独立 PUBG Domain → 官方 PUBG API/SQLite。旧多领域
+唯一执行目标是 OPENCLAW_PUBG_REFACTOR_GOAL.md：Telegram/WhatsApp 聊天 → 唯一 OpenClaw/Kurisu
+→ 当前 9Router → 原生 PUBG plugin 及渠道适配层 → 独立 PUBG Domain → 官方 PUBG API/SQLite。旧多领域
 实现和历史状态文档不再是可执行依据。
 
 ## 当前阶段
@@ -18,9 +18,19 @@ S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭�
 - OpenClaw：官方 ghcr.io/openclaw/openclaw:2026.9.4，插件加载目录 /app/extensions/pubg。
 - Gateway UI：CasaOS 端口 `18789` 当前绑定 `0.0.0.0`，局域网入口为
   `http://192.168.5.3:18789/`；Control UI 仍需使用外部保存的 gateway token 完成认证。
+  公开入口 `https://claw.nyannyan.top/` 由 Cloudflare 代理，经 VPS Caddy HTTPS 和 FRP
+  `openclaw-tcp` 回源到该端口；Control UI WebSocket 来源已加入 `allowedOrigins`。
 - provider：现有 9Router，模型 route nine_router/arthur-combo，不换模型绕过验收。
 - Telegram：OpenClaw native channel；私聊 numeric allowlist 来自外部配置；群聊已启用，
   所有群默认 `requireMention=false`，`groupPolicy=open`，所有群成员均可触发回复。
+- WhatsApp：OpenClaw WhatsApp Web 的 `secondary` 账号已完成配对并在线，作为默认账号；私聊
+  默认 `dmPolicy=pairing`，群聊 `groupPolicy=open` 且通配配置 `requireMention=false`，所有
+  群成员可直接触发 PUBG 回复。旧默认账号配对目录已移入仓库外备份。
+- Plugin adapter：`plugins/pubg/src/adapters/` 只归一化 OpenClaw 渠道/session context；
+  Domain 不依赖 Telegram、WhatsApp 或其他平台，后续接入只新增 adapter/渠道配置。
+- 群聊身份边界：sender display/profile/push name、手机号和 JID 只属于渠道元数据，不能作为
+  PUBG `playerNames`；“昨天战绩/我的战绩”等未指定玩家的请求使用外部配置团队，不从群成员
+  名称推断玩家。该约束已进入 workspace AGENTS、bundled Skill 和工具 schema 描述。
 - Plugin：pubg_resolve_players、pubg_search_matches、pubg_query_stats、
   pubg_compare_stats、pubg_get_match、pubg_get_review_facts。
 - Domain：packages/pubg-domain 只接收结构化 selector，确定性返回 status/coverage/
@@ -41,12 +51,22 @@ S0、S1、S2、S3 已完成；S4 的所有可执行项已完成。唯一未闭�
 ## 附属 VPS 运维状态
 
 - `amadeus-gateway` 当前以 systemd 运行官方 Xray 26.3.27，个人 VLESS + Reality + Vision
-  服务监听 TCP `443`；另运行官方 Caddy 2.11.4/systemd，在 `8443` 提供仅含 QX 节点的 HTTPS
-  订阅文件。Caddy 不参与 Xray 代理流量；本次未修改 SSH 登录方式、未启用 Docker/Nginx、未重启 VPS。
+  服务监听 TCP `2053`；另运行官方 Hysteria 2 v2.12.3 的 `hysteria-server.service`，
+  监听 UDP `2053`。官方 Caddy 2.11.4/systemd 接管 TCP `443` 提供 HTTPS 站点，并在 `sub`
+  提供 QX、Clash/Mihomo、Shadowrocket 三种格式订阅（同时兼容 `8443`）。另运行与 HomeLab
+  frpc 匹配的官方 frps 0.69.0/systemd，控制端口为 TCP `7000`，现有服务映射已恢复；
+  `emby.nyannyan.top` 的 Let’s Encrypt 证书和 HTTPS 回源已验证。Caddy 证书供 HY2 读取，
+  Caddy 不参与 Xray/HY2 代理流量；本次未修改 SSH 登录方式或防火墙，未启用 Docker/Nginx，
+  未重启 VPS。
 - VPS 架构、安装/升级/卸载方法、systemd 模板和无凭据配置模板位于 `infra/vps/`；公网地址、
   UUID、Reality private key 和其他真实 secret 均在仓库外。
-- QX 最终 Reality 握手仍需用户在手机端导入交付节点后验证；服务端配置测试、systemd、监听
-  和外部 TCP smoke 已通过。
+- QX 订阅节点端口已从 443 更新为 2053；Clash/Mihomo 与 Shadowrocket 通过独立格式入口
+  使用 HY2 UDP `2053`，QX 继续使用 VLESS Reality。服务端配置测试、systemd、TCP/UDP 监听、
+  外部 Xray/HY2 smoke、Caddy ACME 和 Emby HTTPS smoke 已通过。
+- 2026-09-18 新增 OpenClaw 公开入口：Cloudflare `claw.nyannyan.top` 解析/代理已生效，VPS
+  Caddy 为该域名签发有效 Let's Encrypt 证书并反代到 `127.0.0.1:18789`；HomeLab frpc
+  新增 `openclaw-tcp`（本地 `127.0.0.1:18789` → VPS `18789`），frps `maxPortsPerClient`
+  提升为 10 以保留原有 qBittorrent 映射。真实配置备份见对应 checkpoint。
 
 ## 已有证据
 

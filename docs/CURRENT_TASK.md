@@ -1,6 +1,6 @@
 # 当前任务
 
-更新时间：2026-09-17（Asia/Shanghai）
+更新时间：2026-09-18（Asia/Shanghai）
 
 执行唯一目标：OpenClaw + PUBG 一次性重构 Goal。S3 已完成，S4 已完成所有可执行项；旧的
 多领域 Kurisu/Mastra 计划不再执行。Telegram 自然入站闭环因缺少测试账号仍 BLOCKED。
@@ -24,10 +24,30 @@
   原 compose 已备份至 `/DATA/AppData/openclaw/backups/openclaw-bind-20260917-100930`。
 - Telegram 群聊配置增量：已启用所有群的接入并关闭强制 @；群内发送者策略为
   `groupPolicy=open`，所有群成员均可触发回复。
+- WhatsApp/PUBG 渠道扩展：WhatsApp Web 已配对并在线；群聊 `groupPolicy=open`、
+  `requireMention=false`。PUBG plugin 新增平台无关的 OpenClaw conversation adapter，
+  工作区不再把助手限制为 Telegram；WhatsApp 私聊默认保持 pairing。
+- WhatsApp 账号切换：新账号 `secondary` 已完成扫码并在线，已设为默认账号；旧账号已停止
+  使用，其配对目录移入仓库外备份，不再与新账号同时收发消息。
+- 群聊“昨天战绩”修复：已确认入站/出站链路和 `Asia/Shanghai` 昨日时间窗正常，原问题是
+  Agent 把 WhatsApp 显示名误当作 PUBG 玩家名。已在 workspace、bundled Skill 和工具参数
+  描述中明确禁止从显示名/手机号/JID 推断 PUBG 身份；无明确游戏名时强制使用配置团队。
+  新镜像已部署，待用户重试一条真实群聊查询完成最终送达验收。
+- OpenClaw 公开 Control UI 入口已完成：Cloudflare 代理域名为
+  `https://claw.nyannyan.top/`，VPS Caddy 自动证书和 HTTPS 反代已生效；HomeLab
+  frpc 的 `openclaw-tcp` 已在线回源到 `127.0.0.1:18789`，OpenClaw `allowedOrigins`
+  已允许该 HTTPS 来源。`/healthz` 经公网 HTTPS 实测 HTTP 200。
 - 附属 VPS 运维：`amadeus-gateway` 已部署官方 Xray 26.3.27，使用 systemd 提供个人
-  VLESS + Reality + Vision，监听 TCP `443`；另以官方 Caddy 2.11.4/systemd 提供
-  `sub.nyannyan.top:8443` HTTPS 订阅入口。SSH 配置未改、VPS 未重启。架构和无凭据模板见
-  `infra/vps/`，真实运行 secret 只保留在 VPS。
+  VLESS + Reality + Vision，监听 TCP `2053`；并新增官方 Hysteria 2 v2.12.3，使用
+  `hysteria-server.service` 监听 UDP `2053`。官方 Caddy 2.11.4/systemd 接管 TCP `443`
+  提供 `emby.nyannyan.top` HTTPS 反代，并在 `sub.nyannyan.top`（同时兼容 `:8443`）提供
+  QX、Clash/Mihomo、Shadowrocket 三种格式的订阅文件。HY2 复用 `sub` 的 Caddy 证书，
+  secret 只保留在 VPS。已部署与 HomeLab frpc 匹配的官方 frps 0.69.0/systemd，控制端口为
+  TCP `7000`，现有服务映射已恢复。Emby 的 Let’s Encrypt 证书签发、HTTPS 302 回源和
+  HY2 外部官方客户端 smoke test 均通过。SSH 配置未改、防火墙未改、VPS 未重启。架构和
+  无凭据模板见 `infra/vps/`。
+- 本次公开入口变更的回滚备份：VPS `/var/backups/openclaw-claw-20260918-102140`；
+  HomeLab `/DATA/AppData/openclaw/backups/openclaw-claw-20260918-102138`。
 
 ## 已完成的本地证据
 

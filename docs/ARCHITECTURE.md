@@ -1,18 +1,19 @@
 # Architecture
 
-更新时间：2026-09-17（Asia/Shanghai）
+更新时间：2026-09-18（Asia/Shanghai）
 
 ## PUBG 主链
 
 ```text
-Telegram private DM
-       │ native channel; numeric allowlist
+Telegram / WhatsApp / future OpenClaw channel
+       │ native channel transport and delivery
        ▼
 OpenClaw 2026.9.4 / Kurisu workspace
        │ current 9Router route: nine_router/arthur-combo
        │ model-owned planning, session, memory and final response
        ▼
-plugins/pubg (native OpenClaw plugin)
+plugins/pubg (native OpenClaw plugin + conversation adapter)
+       │ channel/session context normalized at the boundary
        │ six bounded tools; no LLM; no HTTP hop
        ▼
 packages/pubg-domain
@@ -44,7 +45,11 @@ OpenClaw 的 plugin 目录是 `/app/extensions/pubg`，数据卷是
 `pubg_compare_stats`、`pubg_get_match`、`pubg_get_review_facts`。
 
 schema 限制列表、分页、时间和输出大小；身份来自 OpenClaw tool context，插件参数不能
-覆盖 Telegram session 身份。最终中文表达由 OpenClaw 生成，事实数字不能被改写。
+覆盖 Telegram/WhatsApp session 身份。最终中文表达由 OpenClaw 生成，事实数字不能被改写。
+
+插件的 `src/adapters/` 是渠道适配边界：当前 OpenClaw adapter 只归一化
+Telegram/WhatsApp 及未来渠道的可信 session/channel metadata；Domain 只接收
+platform-neutral 的 session 和结构化 selector。新增渠道不需要修改 Domain 或统计核心。
 
 ### 独立应用
 
