@@ -21,6 +21,10 @@ test('native OpenClaw plugin loads with the pinned SDK and declares only the six
   assert.deepEqual(metadata.tools.map((tool) => tool.name), EXPECTED_TOOLS);
   assert.ok(metadata.tools.every((tool) => tool.parameters.type === 'object'));
   assert.equal(metadata.activation.onStartup, true);
+  const statsTool = metadata.tools.find((tool) => tool.name === 'pubg_query_stats');
+  assert.ok(statsTool);
+  assert.match(statsTool.description, /identity_resolve/);
+  assert.match(statsTool.description, /personIds/);
 });
 
 test('manifest contracts match runtime metadata and do not carry secret values', () => {

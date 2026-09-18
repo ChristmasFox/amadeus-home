@@ -60,6 +60,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   secondary WhatsApp 群的 8 条 LID/手机号绑定；线上表计数为 `persons=4`、`aliases=8`、
   `external_accounts=4`、`channel_identities=8`。自然语言 alias resolver 调用和重启后有数据
   持久化仍待用户入口验收。
+- 昵称匹配失败的根因已由真实群聊 transcript 定位：模型在“胶昨天战绩”“猴昨天战绩”前没有
+  调用 `identity_resolve`，而是沿用旧回复称账号未确认。本轮源码已在 PUBG/Identity Skill、
+  Identity/PUBG tool descriptions 和 Amadeus `before_prompt_build` 静态上下文中固定
+  `identity_resolve(alias/mention/reply)` → `personIds` → PUBG tool 顺序，并覆盖“胶/猴”示例；
+  hook/description 回归断言、受影响 typecheck/build/test 和 secrets scan 已通过，等待 live apply
+  后重新做真实群聊验证。
 
 ## 本轮实现
 

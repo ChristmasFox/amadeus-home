@@ -78,6 +78,13 @@ const BriefingParameters = Type.Object({
 
 const VpsParameters = Type.Object({}, { additionalProperties: false });
 
+const IDENTITY_DISPATCH_GUIDANCE = [
+  'Native identity dispatch contract for person-specific PUBG requests:',
+  'when the user names a person by nickname or alias (for example “胶昨天战绩” or “猴昨天战绩”), call identity_resolve with reference=alias and the exact alias before replying or calling a PUBG tool.',
+  'If identity_resolve returns status=resolved, immediately pass result.person.personId as personIds to the relevant PUBG tool.',
+  'Do not ask for a PUBG ID or claim that an account is unconfirmed before this lookup; a previous assistant reply is not current identity state.',
+].join('\n');
+
 const IdentityResolveParameters = Type.Object({
   reference: Type.Union([
     Type.Literal('self'), Type.Literal('alias'), Type.Literal('person'), Type.Literal('mention'), Type.Literal('reply_sender'),
@@ -174,6 +181,7 @@ const entry = definePluginEntry({
   configSchema: pluginConfigSchema,
   register(api) {
     const config = configFor(api);
+    api.on('before_prompt_build', () => ({ appendSystemContext: IDENTITY_DISPATCH_GUIDANCE }));
     api.on('before_dispatch', (event, hookContext) => {
       rememberTrustedInboundReply({
         sessionKey: hookContext.sessionKey ?? event.sessionKey,
@@ -206,7 +214,7 @@ const entry = definePluginEntry({
     registerTool(api, 'amadeus_nas', 'Read NAS status or disk usage, or put the Mac NAS to sleep. Sleep requires the trusted owner identity.', NasParameters, async (params, context, _notifier, signal) => nas(config, params.action, context, signal));
     registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status. It never restarts or modifies services; notifyOwner is an explicit owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(config, context, notifier, params.notifyOwner === true, signal));
     registerTool(api, 'amadeus_kook_group_members', 'Read members of the active KOOK group/channel only. This is an interactive lookup and never a proactive notification path.', KookParameters, async (params, context, _notifier, signal) => kookGroupMembers(config, context, params.maxMembers ?? 200, signal));
-    registerTool(api, 'identity_resolve', 'Resolve a canonical Person from trusted current sender/mention metadata, a confirmed alias, or a person id. This tool never treats a channel display name, phone number, or JID as a PUBG account.', IdentityResolveParameters, async (params, context) => identityResolve(config, params as IdentityResolveInput, context));
+    registerTool(api, 'identity_resolve', 'Resolve a canonical Person from trusted current sender/mention metadata, a confirmed alias, or a person id. For any person-specific PUBG request expressed with a nickname or alias, call this tool first and pass the resolved personId to the PUBG tool. This tool never treats a channel display name, phone number, or JID as a PUBG account.', IdentityResolveParameters, async (params, context) => identityResolve(config, params as IdentityResolveInput, context));
     registerTool(api, 'identity_get_person', 'Read one canonical Person, including confirmed aliases, channel bindings, and provider-neutral external accounts.', IdentityGetPersonParameters, async (params) => identityGetPerson(config, params as IdentityGetPersonInput));
     registerTool(api, 'identity_bind_channel', 'Owner-confirm a trusted current sender, mention, or replied sender as a canonical Person. Channel identity comes only from OpenClaw metadata, never from tool text.', IdentityBindChannelParameters, async (params, context) => identityBindChannel(config, params as IdentityBindChannelInput, context));
     registerTool(api, 'identity_add_alias', 'Add a confirmed alias or a group-scoped observed alias candidate. Observed candidates never become reliable without confirmation.', IdentityAddAliasParameters, async (params, context) => identityAddAlias(config, params as IdentityAddAliasInput, context));

@@ -6,10 +6,34 @@ user-invocable: false
 
 # PUBG
 
-Use the PUBG tools for match statistics and review. Let the model resolve the
-user's natural-language request; do not invent a tool call when the request is
-ambiguous or asks for a capability outside PUBG. These rules are scoped to
-PUBG requests and must not limit Kurisu's other native capabilities.
+Use the PUBG tools for match statistics and review. OpenClaw resolves the
+user's natural-language request, but the identity-first dispatch contract below
+is mandatory. Do not answer a person-specific PUBG request before completing
+that tool sequence. These rules are scoped to PUBG requests and must not limit
+Kurisu's other native capabilities.
+
+## Mandatory identity-first dispatch
+
+Any PUBG request that names a person by a human nickname, alias, or mention is
+person-specific, including short messages such as “胶昨天战绩”, “猴昨天战绩”,
+“帮我看八戒最后一把”, or “胶呢” when the surrounding context makes PUBG the
+subject. For each such request:
+
+1. Call `identity_resolve` with `reference=alias` and the exact nickname text
+   (or use `reference=mention` / `reference=reply_sender` for a trusted native
+   mention or reply).
+2. If the result is `status=resolved`, immediately call the relevant PUBG tool
+   with `personIds=[result.person.personId]`.
+3. Only report an identity/account problem when the tools return
+   `unbound`, `ambiguous`, `candidate`, `not_found`, or
+   `identity_pubg_account_unbound`. A previous assistant reply claiming that a
+   nickname is unconfirmed is not evidence; resolve it again with the current
+   tools.
+
+Never ask the user for a PUBG ID or say that the account is unconfirmed before
+the identity lookup. `pubg_resolve_players` is not a substitute for
+`identity_resolve`: `playerNames` is for an explicit PUBG in-game name, while a
+chat nickname must first become a canonical `personId`.
 
 Tool rules:
 

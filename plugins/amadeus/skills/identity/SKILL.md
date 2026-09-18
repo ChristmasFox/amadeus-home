@@ -10,6 +10,19 @@ Identity is the canonical Person capability shared by Telegram, WhatsApp, and
 future OpenClaw channels. OpenClaw owns natural-language interpretation; these
 tools accept only structured references and metadata-backed targets.
 
+## Required use before person-specific domain work
+
+When a user asks for facts about a person using a nickname or alias, invoke
+`identity_resolve` before answering or calling the domain tool. For example,
+“胶昨天战绩” and “猴昨天战绩” require
+`identity_resolve({reference: "alias", alias: "胶"})` or the equivalent exact
+alias, followed by the PUBG tool with the returned canonical `personId`.
+Never ask for the external account first when the resolver can answer it, and
+never treat a previous assistant claim that an account is missing as current
+state. A domain tool may report an account problem only after a current
+identity resolution has returned `resolved` and the domain tool has been
+called.
+
 ## Resolution order
 
 1. `reference=self` means the current trusted `requesterSenderId` on the

@@ -52,7 +52,7 @@ const PlayerNames = Type.Optional(Type.Array(Type.String({
 const PersonIds = Type.Optional(Type.Array(Type.String({
   minLength: 1,
   maxLength: 128,
-  description: 'Canonical Person IDs returned by identity_resolve; never a channel display name or JID.',
+  description: 'Canonical Person IDs returned by identity_resolve. For a human nickname in a PUBG request, call identity_resolve first and pass its resolved personId here; never use a channel display name, phone number, or JID.',
 }), { maxItems: MAX_SUBJECT_ITEMS }));
 const ExplicitTeam = Type.Optional(Type.Boolean({
   description: 'Explicitly request the configured PUBG team. This is never an implicit fallback for an unbound sender.',
@@ -446,7 +446,7 @@ const entry = defineToolPlugin({
   tools: (tool) => [
     tool({
       name: 'pubg_resolve_players',
-      description: 'Resolve configured PUBG players and aliases, or look up one exact official player name.',
+      description: 'Resolve configured PUBG players and aliases, or look up one exact official player name. This is not the chat-identity resolver: for a human nickname, call identity_resolve first and do not put the nickname in playerNames.',
       parameters: ResolvePlayersParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_resolve_players',
@@ -460,7 +460,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -474,7 +474,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. For requests such as “胶昨天战绩” or “猴昨天战绩”, call identity_resolve first, then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
@@ -494,7 +494,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_compare_stats',
-      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios.',
+      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: CompareParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_compare_stats',
@@ -514,7 +514,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_match',
-      description: 'Get one concrete PUBG Match API record after a match ID has been selected.',
+      description: 'Get one concrete PUBG Match API record after a match ID has been selected. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: MatchParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_match',
@@ -528,7 +528,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
