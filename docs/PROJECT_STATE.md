@@ -8,7 +8,7 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
-## VPS 只读能力子目标（2026-09-18，代码完成，外部 secret/真实报告待验收）
+## VPS 只读能力子目标（2026-09-18，live 已部署，真实入站查询待验收）
 
 - `plugins/amadeus` 已新增五个结构化、只读 native tools：`amadeus_vps_service_info`、
   `amadeus_vps_live_status`、`amadeus_vps_usage`、`amadeus_vps_system_status`、
@@ -23,9 +23,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   used/total/remaining/usedPercent/resetAt/delta/history，API 失败保留上一份成功数据并返回
   `stale/error`，不会把失败当成 0。
 - 部署模板和迁移脚本已加入三份 VPS secret mount、状态 checkpoint、VPS Skill preflight，
-  并声明 09:30/23:00 `Asia/Shanghai` VPS report cron；真实 secret、受限 SSH key、KiwiVM
-  响应和 WhatsApp owner DM 尚未完成 live 验收。受限 SSH probe/key 已在
-  `amadeus-gateway` provision 并通过真实插件调用验证。
+  并声明 09:30/23:00 `Asia/Shanghai` VPS report cron；KiwiVM secret、受限 SSH key 和
+  known-hosts 已在 CasaOS 外部就绪。最新 image/checkpoint 已 apply，Gateway 自然语言 smoke
+  实际调用五个 VPS tools 且无失败；晚间 report 已通过真实 WhatsApp provider message ID 和
+  outbox `sent` marker 验证，未使用 Telegram/KOOK/group fallback。首次 cron owner-context
+  拒绝已由 `c1fe427` 修复，十格流量条硬格式由 `e15607c` 修复。受限 SSH probe/key 已在
+  `amadeus-gateway` provision 并通过真实插件调用验证；仍待用户触发真实 WhatsApp 入站查询。
 
 ## 跨渠道 Identity 实现（2026-09-18，已部署，真实入口验收待完成）
 
