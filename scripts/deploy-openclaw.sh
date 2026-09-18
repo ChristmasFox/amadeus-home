@@ -438,18 +438,24 @@ orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js chan
 
 ensure_cron() {
   local name="$1" expression="$2" message="$3" tools="$4"
-  if ! orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
-    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); raise SystemExit(0 if any(x.get("name")==n for x in v.get("jobs",[])) else 1)' "$name"; then
+  local existing_id
+  existing_id="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print(next((x.get("id", "") for x in v.get("jobs",[]) if x.get("name")==n), ""))' "$name")"
+  if [[ -z "$existing_id" ]]; then
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
       --name "$name" --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact \
       --declaration-key "amadeus-$name-v1" --json >/dev/null
+  else
+    orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
+      --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
+      --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
   fi
 }
 ensure_cron amadeus-briefing-morning '30 9 * * *' '调用 amadeus_briefing 工具，edition=morning，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
 ensure_cron amadeus-briefing-evening '0 23 * * *' '调用 amadeus_briefing 工具，edition=evening，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
-ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间状态报告，突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:morning，source=vps-report，title=🛰 VPS 晨间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
-ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:evening，source=vps-report，title=🛰 VPS 晚间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:morning，source=vps-report，title=🛰 VPS 晨间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:evening，source=vps-report，title=🛰 VPS 晚间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
 HOOK_PATH="/Users/blacksidev/.codex/bin/codex-notify.sh"
