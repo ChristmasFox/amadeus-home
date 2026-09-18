@@ -19,14 +19,16 @@ OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
 2026-09-18 follow-up 已补上 OpenClaw typed `before_dispatch` → tool context 的短时 reply
 metadata bridge，并在 `agent_end` 清理；只保留可信 channel-native sender id，按 session 隔离，
 不保存消息正文或显示名。mention 仍只接受 host 提供的结构化
-`toolBindings.identity.mentions` 平台 ID，不从 prompt/昵称推断；该 follow-up 需重新构建并
-apply 后才在线。
+`toolBindings.identity.mentions` 平台 ID，不从 prompt/昵称推断。该 follow-up 已随
+`56a0df5` 构建并 apply；线上镜像为
+`local/openclaw-amadeus:git-56a0df53595e-20260918093413`，runtime inspect 已确认
+`before_dispatch` 和 `agent_end` 两个 typed hook 在线。
 
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。当前只完成源码、配置、Skill
-和本地测试；已在 CasaOS 一次性 build/apply，线上运行
-`local/openclaw-amadeus:git-05471a8618f1-20260918091819`。Gateway 只读 smoke 实际调用
+和本地测试；Identity reply bridge 已在 CasaOS 完成一次 build/apply，线上运行
+`local/openclaw-amadeus:git-56a0df53595e-20260918093413`。Gateway 只读 smoke 实际调用
 `identity_resolve(self)` 并返回 `unbound / trusted_sender_metadata_unavailable`；线上真实
 Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
 用户入口完成。
@@ -50,10 +52,11 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；旧 LangBot/n8n
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
-- 部署构建优化阶段：IMPLEMENTED_LOCAL。`scripts/deploy-openclaw.sh` 新增
+- 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
   `--build-auto`、`--build-openclaw`、`--build-radar` 和 `--no-build`；按 live image 的
-  Git commit 选择性构建，并对未构建镜像做 stale check。当前只完成源码和文档修改，未重新
-  apply 到 CasaOS；线上仍保持上方记录的已验证镜像。
+  Git commit 选择性构建，并对未构建镜像做 stale check。该流程已用于本次 Identity reply
+  bridge，线上镜像和恢复点见上述 Identity 状态及
+  `.agent/checkpoints/2026-09-18-openclaw-identity-reply-bridge-deployed.md`。
 
 ## PUBG-only 根因修复验收
 
