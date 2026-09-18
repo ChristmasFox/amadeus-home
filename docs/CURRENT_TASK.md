@@ -13,7 +13,8 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 `identity_resolve`、`identity_get_person`、`identity_bind_channel`、
 `identity_add_alias`、`identity_link_account`、`identity_list_candidates`、
 `identity_confirm_candidate`，以及 `skills/identity`。预设从仓库外
-`identityPresetsFile` 导入；Telegram/WhatsApp sender/account/conversation metadata 只从
+`identityPresetsFile` 导入；文件在 OpenClaw 运行后新增或修改时，会按文件指纹在下一次 Identity
+tool 调用前安全刷新，已确认数据不会被预设覆盖；Telegram/WhatsApp sender/account/conversation metadata 只从
 OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
 
 2026-09-18 follow-up 已补上 OpenClaw typed `before_dispatch` → tool context 的短时 reply
@@ -23,15 +24,16 @@ channel package 现在也通过 source-controlled、版本锚定补丁，把 Tel
 真实 user ID、同一会话内已由 trusted sender metadata 观察到的 `@username` 对应 ID、WhatsApp
 `mentionedJid` 和稳定 sender JID 送入同一 `toolBindings.identity.mentions`/sender context；不从
 prompt、昵称、手机号文本或未观察到的用户名推断，过期/冲突用户名 fail closed。该 follow-up 已随
-`c33684a` 构建并 apply；线上镜像为
-`local/openclaw-amadeus:git-c33684a77a7a-20260918101625`，runtime inspect 已确认
+`c33684a` 构建并 apply；随后 `29ad1b9` 增加外部 preset 文件的运行时安全刷新并完成选择性
+build/apply；线上镜像为
+`local/openclaw-amadeus:git-29ad1b946051-20260918102434`，runtime inspect 已确认
 `before_dispatch` 和 `agent_end` 两个 typed hook 在线。
 
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。源码、配置、Skill、本地测试和
 trusted channel metadata 的 CasaOS build/apply 均已完成；线上运行
-`local/openclaw-amadeus:git-c33684a77a7a-20260918101625`。最近真实 WhatsApp 群入站已调用
+`local/openclaw-amadeus:git-29ad1b946051-20260918102434`。最近真实 WhatsApp 群入站已调用
 `identity_resolve(self)` 并返回 `unbound / trusted_channel_identity_is_not_bound`，随后没有调用
 PUBG tool；线上真实
 Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
@@ -45,7 +47,7 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  Identity 6、PUBG domain 9、PUBG plugin 6、Amadeus 6、Product Radar 51。
+  Identity 7、PUBG domain 9、PUBG plugin 6、Amadeus 7、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
@@ -57,6 +59,10 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   channel metadata 的最新 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918101625`；旧 LangBot/n8n
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
+- Identity preset refresh 部署阶段：PASS。最新 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918102434`；OpenClaw、Product Radar、
+  media adapter network、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过。外部
+  `identity-presets.json` 当前不存在，线上 Identity 四张表仍为空，等待用户填写真实映射。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增
   `--build-auto`、`--build-openclaw`、`--build-radar` 和 `--no-build`；按 live image 的
   Git commit 选择性构建，并对未构建镜像做 stale check。该流程已用于本次 Identity reply
