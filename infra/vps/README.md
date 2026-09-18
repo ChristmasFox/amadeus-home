@@ -22,6 +22,10 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - frps 配置：`/etc/frp/frps.toml`；认证 token：`/etc/frp/token`，均只保留在 VPS。
 - 订阅文件：`/var/lib/caddy/subscription/<token>/qx.conf`、`clash.yaml` 和
   `shadowrocket.txt`，由 Caddy 以 HTTPS 提供；三种格式共用 token，但正文不是同一份文本。
+- OpenClaw VPS 只读探针：`/usr/local/sbin/amadeus-vps-readonly-probe`，由专用
+  `amadeus-vps-readonly` SSH 用户的 forced-command key 调用；它只输出固定的 uptime/load/memory/
+  rootfs 和四个 systemd unit 状态。账号无密码，authorized key 禁用交互命令、端口转发、agent
+  forwarding、X11 和 pty。
 - Emby 回源：Caddy `emby.<domain>:443` → frps 本机 `127.0.0.1:8096` → HomeLab Emby。
 
 端口用途：
@@ -45,6 +49,20 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 3. 使用 `proxy/config.example.json` 生成运行配置；真实 UUID 和 Reality 私钥只在 VPS 上生成和保存。
 4. 使用 `systemd/xray.service.example` 作为 Xray unit 模板；订阅入口按 `subscription/README.md` 使用官方 Caddy 包和 `caddy.service`。
 5. 替换配置前先执行 `xray run -test -config <candidate.json>` 或 `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`；通过后再原子替换、reload/restart 对应服务。
+
+### OpenClaw 只读探针
+
+将仓库的 `amadeus-vps-readonly-probe.sh` 安装为 root 拥有的
+`/usr/local/sbin/amadeus-vps-readonly-probe`（`0755`），再为 OpenClaw 单独创建无密码、仅由
+forced command 限制的 `amadeus-vps-readonly` 用户。把专用公钥写入该用户的 `authorized_keys`，
+并在同一行加入：
+
+```text
+command="/usr/local/sbin/amadeus-vps-readonly-probe",no-port-forwarding,no-agent-forwarding,no-X11-forwarding,no-pty,no-user-rc
+```
+
+OpenClaw 容器只挂载对应私钥和严格的 known-hosts 文件。不要复用 root 运维私钥，也不要把
+`SSH_ORIGINAL_COMMAND` 传给 shell；工具只调用固定 probe 路径。
 
 ### Hysteria 2
 

@@ -20,7 +20,15 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
     'identity_list_candidates',
     'identity_confirm_candidate',
   ]) assert.equal(tools.has(name), true, `missing manifest tool: ${name}`);
+  for (const name of [
+    'amadeus_vps_service_info',
+    'amadeus_vps_live_status',
+    'amadeus_vps_usage',
+    'amadeus_vps_system_status',
+    'amadeus_vps_services',
+  ]) assert.equal(tools.has(name), true, `missing VPS manifest tool: ${name}`);
   assert.equal(manifest.skills?.includes('skills/identity'), true);
+  assert.equal(manifest.skills?.includes('skills/vps'), true);
 });
 
 test('Amadeus registers typed inbound identity context hooks', () => {

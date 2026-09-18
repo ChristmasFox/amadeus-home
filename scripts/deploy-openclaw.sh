@@ -206,7 +206,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
       pnpm test:product-radar
     fi
     if ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0)); then
-      bash -n scripts/deploy-openclaw.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh
+      bash -n scripts/deploy-openclaw.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh scripts/provision-vps-readonly.sh
+      sh -n infra/vps/amadeus-vps-readonly-probe.sh
       python3 -m py_compile scripts/openclaw_prepare.py
     fi
   fi
@@ -268,6 +269,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/openclaw.env" openclaw.env.before \
   "$OPENCLAW_DATA_DIR/secrets" openclaw-secrets.before \
   "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
+  "$OPENCLAW_DATA_DIR/data/vps-usage-state.json" vps-usage-state.json.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
 import json, shutil, subprocess, sys
 from datetime import datetime, timezone
@@ -368,9 +370,9 @@ amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=Fal
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
 for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
-for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_briefing']:
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_briefing','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus']:
+for name in ['pubg','amadeus','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY
@@ -435,17 +437,19 @@ orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'ssh -i /run/secrets/mac_s
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
 
 ensure_cron() {
-  local name="$1" expression="$2" message="$3"
+  local name="$1" expression="$2" message="$3" tools="$4"
   if ! orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
     | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); raise SystemExit(0 if any(x.get("name")==n for x in v.get("jobs",[])) else 1)' "$name"; then
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
       --name "$name" --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
-      --message "$message" --no-deliver --tools amadeus_briefing --exact \
+      --message "$message" --no-deliver --tools "$tools" --exact \
       --declaration-key "amadeus-$name-v1" --json >/dev/null
   fi
 }
-ensure_cron amadeus-briefing-morning '30 9 * * *' '调用 amadeus_briefing 工具，edition=morning，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。'
-ensure_cron amadeus-briefing-evening '0 23 * * *' '调用 amadeus_briefing 工具，edition=evening，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。'
+ensure_cron amadeus-briefing-morning '30 9 * * *' '调用 amadeus_briefing 工具，edition=morning，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
+ensure_cron amadeus-briefing-evening '0 23 * * *' '调用 amadeus_briefing 工具，edition=evening，deliver=true。只发送给 WhatsApp owner；不要使用 cron fallback delivery。' 'amadeus_briefing'
+ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间状态报告，突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:morning，source=vps-report，title=🛰 VPS 晨间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner，eventKey 使用 vps-report:当天日期:evening，source=vps-report，title=🛰 VPS 晚间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
 HOOK_PATH="/Users/blacksidev/.codex/bin/codex-notify.sh"

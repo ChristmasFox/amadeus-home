@@ -37,6 +37,9 @@ services:
       - ${OPENCLAW_OWNER_TARGET_HOST_FILE:-/DATA/AppData/openclaw/secrets/owner-whatsapp-target}:/run/secrets/owner_whatsapp_target:ro
       - ${OPENCLAW_MAC_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-ssh-key}:/run/secrets/mac_ssh_key:ro
       - ${OPENCLAW_KOOK_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/kook-bot-token}:/run/secrets/kook_bot_token:ro
+      - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro
+      - ${OPENCLAW_VPS_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key}:/run/secrets/vps_ssh_key:ro
+      - ${OPENCLAW_VPS_SSH_KNOWN_HOSTS_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts}:/run/secrets/vps_ssh_known_hosts:ro
       - ${OPENCLAW_OWNER_OUTBOX_HOST_DIR:-/DATA/AppData/openclaw/notifications}:/var/lib/openclaw/notifications
     ports:
       - "${OPENCLAW_BIND_ADDRESS:-0.0.0.0}:${OPENCLAW_PORT:-18789}:18789"

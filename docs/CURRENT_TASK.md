@@ -6,6 +6,20 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## VPS Read-only Capability + Daily Report 子目标（2026-09-18）
+
+当前实现状态：`CODE_COMPLETE_EXTERNAL_LIVE_PENDING`。Amadeus 已加入五个只读 VPS native
+tools 和 `skills/vps`：KiwiVM 固定 service/live/raw-usage API，固定 SSH uptime/resource
+probe，固定 Caddy/Xray/Hysteria2/frps service probe；没有 restart/stop/start/reinstall/password
+reset/任意 shell/关键词路由。流量状态原子持久化在 `/data/vps-usage-state.json`，以成功 counter/time
+为 baseline 并保留 quota/reset 元数据；失败保持上一份成功数据并返回 stale/error。
+
+部署模板已声明外部 KiwiVM credentials、VPS read-only SSH key、known-hosts mount，迁移脚本已
+加入 secret 校验、状态 checkpoint、工具/Skill preflight 和 09:30/23:00 Asia/Shanghai VPS
+report cron。受限 SSH key/user 和固定 probe 已在 `amadeus-gateway` provision 并通过插件真实
+调用验证；真实 KiwiVM secret、自然语言入口和 WhatsApp owner DM 仍待部署后验收；在这些证据
+出现前不得宣称 Definition of Done。
+
 ## 跨渠道 Identity 子目标（2026-09-18）
 
 当前实现状态：`DEPLOYED_LIVE_REAL_INPUT_PENDING`。新增 platform-neutral
@@ -68,6 +82,10 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   Git commit 选择性构建，并对未构建镜像做 stale check。该流程已用于本次 Identity reply
   bridge，线上镜像和恢复点见上述 Identity 状态及
   `.agent/checkpoints/2026-09-18-openclaw-identity-reply-bridge-deployed.md`。
+
+VPS 子目标当前本地 evidence：`pnpm --filter @agent/amadeus-plugin typecheck`、`build:amadeus`、
+Amadeus 9 tests、`bash -n scripts/deploy-openclaw.sh`、`py_compile scripts/openclaw_prepare.py`、
+manifest JSON validation 和 `git diff --check` 已通过。
 
 ## PUBG-only 根因修复验收
 
