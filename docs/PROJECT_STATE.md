@@ -8,6 +8,12 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## Amadeus 版本管理（2026-09-19）
+
+当前产品版本为 `1.0.0`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
+通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
+
 ## 最新 follow-up（2026-09-19，已部署）
 
 - Owner outbox 已在插件边界隔离手动 VPS cron：检测到 isolated cron session 的

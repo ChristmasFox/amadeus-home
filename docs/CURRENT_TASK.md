@@ -6,6 +6,13 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## Amadeus 版本管理（2026-09-19）
+
+版本源为根目录 `VERSION`，当前基线 `1.0.0`。`scripts/amadeus-version.sh` 提供
+`show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
+能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
+标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
+
 ## 2026-09-18 follow-up：VPS 手动 eventKey 隔离、部署文案与 PUBG team 查询修复
 
 当前实现状态：`DEPLOYED_LIVE_REPLAY_PASS_INTERACTIVE_INBOUND_PENDING`。VPS owner 通知现在识别 OpenClaw isolated

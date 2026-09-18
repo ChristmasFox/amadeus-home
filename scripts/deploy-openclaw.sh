@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+VERSION_TOOL="$ROOT_DIR/scripts/amadeus-version.sh"
 MACHINE="ubuntu"
 OPENCLAW_APP_DIR="/var/lib/casaos/apps/openclaw"
 OPENCLAW_DATA_DIR="/DATA/AppData/openclaw"
@@ -122,6 +123,10 @@ fi
 [[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
 STAMP="$(date -u +%Y%m%d%H%M%S)"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
+AMADEUS_VERSION="$(bash "$VERSION_TOOL" show)"
+bash "$VERSION_TOOL" check >/dev/null
+RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
+RELEASE_NOTES_B64="$(printf '%s' "$RELEASE_NOTES" | base64 | tr -d '\n')"
 if ((APPLY)); then
   if ((AUTO_BUILD)); then
     [[ -z "$IMAGE" && -z "$RADAR_IMAGE" ]] || fail '--build-auto resolves both images from the live CasaOS containers; omit --image/--radar-image.'
@@ -164,6 +169,7 @@ shown_radar_image="$RADAR_IMAGE"
 [[ -n "$shown_radar_image" ]] || shown_radar_image='resolved from live CasaOS container on apply'
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
+printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
 printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
@@ -206,7 +212,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
       pnpm test:product-radar
     fi
     if ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0)); then
-      bash -n scripts/deploy-openclaw.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh scripts/provision-vps-readonly.sh
+      bash -n scripts/deploy-openclaw.sh scripts/amadeus-version.sh scripts/test-amadeus-version.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh scripts/provision-vps-readonly.sh
       sh -n infra/vps/amadeus-vps-readonly-probe.sh
       python3 -m py_compile scripts/openclaw_prepare.py
     fi
@@ -473,12 +479,13 @@ if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
 ACCEPTANCE_KEY="amadeus-owner-smoke:$CHECKPOINT_ID"
-orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/notifications" "$ACCEPTANCE_KEY" <<'PY'
-import hashlib, json, os, sys, tempfile
+orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/notifications" "$ACCEPTANCE_KEY" "$AMADEUS_VERSION" "$RELEASE_NOTES_B64" <<'PY'
+import base64, hashlib, json, os, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 directory = Path(sys.argv[1])
-event = {'version':1,'eventKey':sys.argv[2],'source':'amadeus-release','title':'Amadeus 迁移验收 · 世界线收束','message':'Amadeus，迁移已完成。OpenClaw 原生 owner outbox 已切入 WhatsApp owner DM 观测线路；待 sent marker 出现，即确认这条世界线的送达成立。','occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
+release_notes = base64.b64decode(sys.argv[4]).decode('utf-8').strip()
+event = {'version':1,'eventKey':sys.argv[2],'source':'amadeus-release','title':f'Amadeus {sys.argv[3]} · 世界线收束','message':release_notes + '\n\nEl Psy Kongroo.','occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z')}
 directory.mkdir(parents=True, exist_ok=True); os.chmod(directory, 0o700); os.chown(directory, 1000, 1000)
 event_id = hashlib.sha256(event['eventKey'].encode()).hexdigest()[:40]
 pending, sent = directory / (event_id + '.pending.json'), directory / (event_id + '.sent.json')
@@ -513,4 +520,4 @@ printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
 printf '%s\n' 'OWNER_WHATSAPP_OUTBOX_SMOKE=passed'
 printf '%s\n' 'LEGACY_RUNTIME=retired'
-printf '%s\n' 'Amadeus OpenClaw migration completed.'
+printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."

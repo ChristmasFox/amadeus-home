@@ -52,6 +52,22 @@ pnpm workflow:verify
 pnpm test:workflow
 \`\`\`
 
+## Amadeus 版本管理
+
+产品版本唯一记录在根目录 `VERSION`，当前基线为 `1.0.0`。部署完成通知的正文来自
+`RELEASE_NOTES.md`，部署前会校验版本标题、正文非空，并拒绝把运行时名称写进通知。
+
+```sh
+./scripts/amadeus-version.sh show
+./scripts/amadeus-version.sh bump patch  # 修复、兼容性或运维调整：1.0.0 -> 1.0.1
+./scripts/amadeus-version.sh bump minor  # 新增向后兼容能力：1.0.0 -> 1.1.0
+./scripts/amadeus-version.sh bump major  # 破坏性契约或架构变更：1.0.0 -> 2.0.0
+./scripts/amadeus-version.sh check
+```
+
+每次递增后先更新 `RELEASE_NOTES.md` 的首行版本和本次更新内容。部署通知标题固定为
+`Amadeus <版本> · 世界线收束`，正文末尾自动追加 `El Psy Kongroo.`。
+
 ## CasaOS 部署
 
 长期服务运行在 OrbStack Linux machine \`ubuntu\` 的 CasaOS。OpenClaw canonical Compose
