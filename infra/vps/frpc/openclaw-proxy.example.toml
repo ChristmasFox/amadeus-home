@@ -1,0 +1,8 @@
+# Append this proxy to the live HomeLab frpc config at
+# /DATA/AppData/frpc/frpc.toml. The frps token remains external.
+[[proxies]]
+name = "openclaw-tcp"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 18789
+remotePort = 18789

@@ -1,0 +1,2 @@
+# Shadowrocket accepts the Hysteria 2 URI form. Replace placeholders only locally.
+hysteria2://<HY2_PASSWORD>@<VPS_DOMAIN>:2053/?sni=<VPS_DOMAIN>&insecure=0&alpn=h3#Amadeus-HY2

@@ -1,0 +1,32 @@
+# Replace the token with a random value generated on the VPS.
+sub.example.com {
+    @subscription path /REPLACE_WITH_RANDOM_TOKEN/qx.conf /REPLACE_WITH_RANDOM_TOKEN/server.snippet /REPLACE_WITH_RANDOM_TOKEN/clash.yaml /REPLACE_WITH_RANDOM_TOKEN/shadowrocket.txt
+    handle @subscription {
+        root * /var/lib/caddy/subscription
+        header Content-Type "text/plain; charset=utf-8"
+        header Cache-Control "no-store, no-cache, must-revalidate"
+        file_server
+    }
+    handle {
+        respond 404
+    }
+}
+
+# Optional legacy port; keep this block if clients still use :8443.
+sub.example.com:8443 {
+    @subscription path /REPLACE_WITH_RANDOM_TOKEN/qx.conf /REPLACE_WITH_RANDOM_TOKEN/server.snippet /REPLACE_WITH_RANDOM_TOKEN/clash.yaml /REPLACE_WITH_RANDOM_TOKEN/shadowrocket.txt
+    handle @subscription {
+        root * /var/lib/caddy/subscription
+        header Content-Type "text/plain; charset=utf-8"
+        header Cache-Control "no-store, no-cache, must-revalidate"
+        file_server
+    }
+    handle {
+        respond 404
+    }
+}
+
+# Optional HTTPS site. Caddy obtains and renews the certificate automatically.
+emby.example.com {
+    reverse_proxy 127.0.0.1:8096
+}

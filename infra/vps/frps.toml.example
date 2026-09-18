@@ -1,0 +1,33 @@
+bindAddr = "0.0.0.0"
+bindPort = 7000
+proxyBindAddr = "0.0.0.0"
+
+transport.maxPoolCount = 2
+transport.tcpMux = true
+
+webServer.addr = "127.0.0.1"
+webServer.port = 7500
+webServer.pprofEnable = false
+
+log.to = "console"
+log.level = "info"
+log.maxDays = 7
+detailedErrorsToClient = false
+
+auth.method = "token"
+auth.tokenSource.type = "file"
+auth.tokenSource.file.path = "/etc/frp/token"
+
+allowPorts = [
+  { single = 8096 },
+  { single = 2283 },
+  { single = 6880 },
+  { single = 6800 },
+  { single = 20128 },
+  { single = 8080 },
+  { single = 8097 },
+  { single = 7575 },
+  { single = 61208 },
+  { single = 18789 },
+]
+maxPortsPerClient = 10

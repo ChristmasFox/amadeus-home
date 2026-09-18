@@ -1,0 +1,21 @@
+[Unit]
+Description=Hysteria 2 server
+After=network-online.target caddy.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=caddy
+Group=caddy
+WorkingDirectory=/var/lib/caddy
+ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+# Clash Meta / Mihomo subscription fragment. Never replace placeholders in Git.
+proxies:
+  - name: Amadeus-HY2
+    type: hysteria2
+    server: <VPS_DOMAIN>
+    port: 2053
+    password: <HY2_PASSWORD>
+    sni: <VPS_DOMAIN>
+    skip-cert-verify: false
+    alpn:
+      - h3
