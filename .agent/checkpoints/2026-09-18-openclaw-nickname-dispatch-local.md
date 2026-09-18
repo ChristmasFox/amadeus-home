@@ -1,0 +1,21 @@
+# OpenClaw nickname-to-PUBG dispatch fix (local)
+
+- Date: 2026-09-18 Asia/Shanghai
+- Scope: fix the live natural-language path that answered about confirmed nicknames without calling Identity or PUBG tools.
+- Evidence: the runtime Identity store already contained the confirmed Persons, aliases, PUBG accounts, and current WhatsApp channel bindings; the recent group transcript contained no `identity_resolve` or PUBG tool calls for nickname-based PUBG questions.
+- Source changes:
+  - `plugins/pubg/skills/pubg/SKILL.md` now requires `identity_resolve` before every person-specific nickname PUBG request and passes the resolved canonical `personId` as `personIds`.
+  - `plugins/amadeus/skills/identity/SKILL.md` documents the same cross-capability contract.
+  - `plugins/amadeus/src/index.ts` adds a bundled `before_prompt_build` static dispatch reminder and strengthens the Identity tool description.
+  - `plugins/pubg/src/index.ts` strengthens subject/tool descriptions so human nicknames cannot be mistaken for PUBG player names.
+  - Amadeus/PUBG tests assert the hook and identity-first tool guidance remain present.
+- Verification:
+  - `pnpm --filter @agent/amadeus-plugin typecheck`
+  - `pnpm --filter @agent/amadeus-plugin test` (10 passed)
+  - `pnpm --filter @agent/pubg-plugin typecheck`
+  - `pnpm --filter @agent/pubg-plugin test` (8 passed)
+  - `pnpm build:amadeus`
+  - `pnpm build:pubg`
+  - `pnpm check:secrets`
+  - `git diff --check`
+- Status: local source fix ready for the explicit OpenClaw image build/apply; no group message was sent by this checkpoint.
