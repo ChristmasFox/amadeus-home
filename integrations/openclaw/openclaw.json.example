@@ -59,9 +59,6 @@
   "plugins": {
     "enabled": true,
     "allow": ["pubg", "amadeus", "whatsapp", "telegram"],
-    "load": {
-      "paths": ["/app/extensions/pubg", "/app/extensions/amadeus"]
-    },
     "entries": {
       "pubg": {
         "enabled": true,
@@ -95,7 +92,7 @@
           "ownerTargetFile": "/run/secrets/owner_whatsapp_target",
           "ownerWhatsappAccountId": "secondary",
           "notificationOutboxDir": "/var/lib/openclaw/notifications",
-          "briefingConfigDir": "/app/extensions/amadeus/briefing",
+          "briefingConfigDir": "/app/dist/extensions/amadeus/briefing",
           "briefingStateFile": "/data/briefing-state.json",
           "nineRouterBaseUrl": "http://9router:20128/v1"
         }
