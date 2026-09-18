@@ -19,9 +19,9 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 PUBG Skill、native tool description 和 Kurisu workspace context 已明确禁止从上一轮直接复用旧 matchId；必须先搜索本次最新 matchId，再读取 Telemetry。搜索结果的 `queryResolved.refresh` 记录了本次刷新、API 调用和新增/缓存比赛数量，便于验收。新增 domain 增量同步与 recent search 回归测试均已通过。本轮已通过 `--apply --build-auto` 部署：线上镜像为 `local/openclaw-amadeus:git-db0a2dfa5c75-20260918164913`，恢复 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918164913`；OpenClaw/Product Radar 健康、媒体网络、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过。仍待用户从真实 WhatsApp 群聊触发一次“最近一局”完成入口体验验收。
 
-## 2026-09-19 follow-up：PUBG 业务日与查询边界加固（源码已验证，尚未部署）
+## 2026-09-19 follow-up：PUBG 业务日与查询边界加固（已部署，真实入口验收待完成）
 
-当前实现状态：`SOURCE_ONLY_RUNTIME_PENDING`。用户确认 PUBG 继续沿用旧业务日：`Asia/Shanghai` 每日
+当前实现状态：`DEPLOYED_LIVE_REAL_INPUT_PENDING`。用户确认 PUBG 继续沿用旧业务日：`Asia/Shanghai` 每日
 `06:00` 到次日 `06:00`。Domain 默认、OpenClaw 配置模板、插件 manifest、Skill 和按日聚合现在统一
 使用 `06:00`；显式 selector 的 `timezone/businessDayStart` 也会真正作用于 `groupBy=day` 和比较分段。
 
@@ -29,9 +29,14 @@ PUBG Skill、native tool description 和 Kurisu workspace context 已明确禁�
 包装成 `error + SOURCE_UNAVAILABLE`；人物复盘按已解析的 `playerIds` 裁剪，不再从昵称查询膨胀回完整队伍；
 未知 KD/排名/比例不会再被转换为 0 参与排名、Chicken Index、highlight、trend 或 compare delta。
 
-新增回归覆盖 06:00 相对日期、按日边界、未知指标、人物复盘范围和 API 不可用缓存降级。PUBG Domain
-定向测试 16/16、PUBG plugin 9/9、受影响 typecheck 和 secrets scan 已通过；本轮未执行 CasaOS
-apply，live runtime 仍需在后续 release 中切换到 06:00 配置并完成真实入站验收。
+新增回归覆盖 06:00 相对日期、按日边界、未知指标、人物复盘范围和 API 不可用缓存降级。提交
+`1c2a585` 已通过 `--apply --build-auto` 部署；线上镜像为
+`local/openclaw-amadeus:git-1c2a585b2eef-20260918172435`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918172435`。live config 已核实
+`timezone=Asia/Shanghai`、`businessDayStart=06:00`，PUBG 六个 native tools runtime inspect
+均已加载；OpenClaw/Product Radar health、媒体网络、NAS 只读 smoke、owner WhatsApp outbox
+smoke 和旧 LangBot/n8n 退休检查均通过。仍待用户从真实 Telegram/WhatsApp 群聊触发昵称、本人、
+队伍、06:00 边界和最近一局复盘，完成入口体验验收。
 
 ## 2026-09-18 follow-up：VPS 手动 eventKey 隔离、部署文案与 PUBG team 查询修复
 
