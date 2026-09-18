@@ -40,10 +40,10 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
 
 ## 最终线上状态（2026-09-18）
 
-- 上一版 source commit `5e76709` 构建的镜像已部署：
-  `local/openclaw-amadeus:git-5e767097adda-20260918080012` 和
-  `local/product-radar:git-5e767097adda-20260918080012`。
-- 最终 checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918080634`。
+- 部署配置 Git commit 为 `42ef93a`；当前运行镜像由 `5fd139d` 构建：
+  `local/openclaw-amadeus:git-5fd139d3e58d-20260918081806` 和
+  `local/product-radar:git-5fd139d3e58d-20260918081806`。
+- 最终 checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`。
 - OpenClaw/Product Radar health、media adapter network、NAS read-only smoke 和 owner
   WhatsApp outbox smoke 均 PASS；briefing cron `amadeus-briefing-morning`、
   `amadeus-briefing-evening` 已注册。
@@ -67,7 +67,11 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
   diff --check、最终全量 build/typecheck/test/secrets scan 已通过；最终 apply 以 exit 0
   完成。
 - 本次上下文拆分、部署脚本和 Codex hook 修复的本地 build/typecheck/test/secrets scan 已通过；
-  新 skill 与 workspace 文件需随下一次 OpenClaw image rebuild 生效。
+  新 skill 与 workspace 文件已随 `5fd139d` OpenClaw image rebuild 生效。
+- 自然语言 Product Radar 只读 smoke 成功选择 `amadeus_product_radar` 并返回 1 个监控项；
+  Codex hook smoke 的远端 sent marker 已确认，outbox event 无 channel/recipient/to 字段。
+- OpenClaw 内部 service names 已加入 `NO_PROXY`，修复代理环境下 Amadeus 工具访问 Product
+  Radar 的 fetch failure。
 - 媒体整理继续受 organize-emby-media Skill 的备份、单项、preview-confirm、碰撞检查
   和不修改现有媒体库约束保护。
 

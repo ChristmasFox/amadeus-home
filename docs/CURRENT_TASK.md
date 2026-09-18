@@ -21,10 +21,10 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
   使用远端 owner outbox，且不再因缺少 `os` 导入而静默丢弃事件。
 - 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
   media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
-- 部署后阶段：PASS（前一版本）。最终 checkpoint 为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918080634`；旧 LangBot/n8n
-  容器、app/data 路径和 KOOK watchdog timer 已退休；本次全局上下文/部署脚本修复已通过本地
-  build、typecheck、tests 和 secrets scan，待重建镜像后做最终 live 复核。
+- 部署后阶段：PASS。最终 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；旧 LangBot/n8n
+  容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
+  proxy bypass 和自然语言工具选择均已完成 live 复核。
 
 ## PUBG-only 根因修复验收
 
@@ -36,6 +36,15 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 - WhatsApp secondary account 为 linked/healthy，真实 owner outbox smoke 已生成 sent marker。
   未向群聊发送未经请求的测试消息；群聊能力边界已由 live config 和 plugin/tool inspect 验证，
   可由用户在群内发一条普通能力消息做最终体验确认。
+
+## 迁移后能力选择验收
+
+- OpenClaw 自然语言只读请求成功选择 `amadeus_product_radar`，返回当前 1 个监控项；
+  `successfulToolNames` 只有 `amadeus_product_radar`，tool failures 为 0，未发送通知或修改配置。
+- Codex hook smoke 已写入远端 outbox 并生成 sent marker；事件没有 channel/recipient/to 字段，
+  仍由 OpenClaw owner worker 负责 WhatsApp 送达。
+- OpenClaw 内部服务名已加入 `NO_PROXY`，Product Radar 原生工具不会再误走宿主代理；
+  `tools.profile=full`、WhatsApp group `open`、免 mention 且无群组工具限制仍保持。
 
 ## 不接受的替代
 
