@@ -153,6 +153,18 @@ function coverageForLocal(records: NormalizedMatch[], now: Date, state: ReturnTy
   };
 }
 
+function coverageWithRecords(coverage: Coverage, records: NormalizedMatch[], now: Date): Coverage {
+  const timestamps = records.map((record) => record.timestamp).filter((value) => Number.isFinite(value));
+  return {
+    ...coverage,
+    coverageStart: timestamps.length ? new Date(Math.min(...timestamps)).toISOString() : coverage.coverageStart ?? null,
+    coverageEnd: now.toISOString(),
+    checkedAt: now.toISOString(),
+    requiredMatchCount: records.length + coverage.failedMatchIds.length,
+    availableMatchCount: records.length,
+  };
+}
+
 function uniqueStrings(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
@@ -347,7 +359,11 @@ export class PubgDomainService {
       return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'fresh_cache' } };
     }
     if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'api_not_configured' } };
-    const synced = await this.apiClient.syncTeam(this.team, { maxMatches, now, ...(signal ? { signal } : {}) });
+    const synced = await this.apiClient.syncTeam(this.team, {
+      maxMatches,
+      knownMatchIds: existing.map((record) => record.matchId),
+      ...(signal ? { signal } : {}),
+    });
     if (synced.records.length) {
       this.repository.upsertMatches(synced.records, { source: 'pubg-api', fetchedAt: now.toISOString(), checkedPlayerIds: this.team.players.map((player) => player.id) });
     }
@@ -355,7 +371,7 @@ export class PubgDomainService {
     const stateValue = {
       key: 'team:' + this.team.id,
       checkedAt: now.toISOString(),
-      coverage: { ...synced.coverage, availableMatchCount: merged.length },
+      coverage: coverageWithRecords(synced.coverage, merged, now),
       source: { ...synced.source, localMatchCount: merged.length },
       discoveredMatchIds: synced.discoveredMatchIds,
       failedMatchIds: synced.coverage.failedMatchIds,
@@ -434,7 +450,7 @@ export class PubgDomainService {
   async queryStats(input: StatsToolInput): Promise<ToolEnvelope> {
     const subject = this.resolveSubject(input);
     if (subject.error) return this.errorEnvelope(subject.error.code, subject.error.retryable, subject.error.reason);
-    const source = await this.refresh(input.refresh !== false, this.maxMatches, input.signal);
+    const source = await this.refresh(input.refresh !== false || input.selector.type === 'last_n_matches', this.maxMatches, input.signal);
     let resultSetMatchIds: string[] | undefined;
     if (input.selector.type === 'result_set') {
       const resultSet = this.repository.getResultSet(input.sessionId, input.selector.resultSetId, this.now());
@@ -466,7 +482,7 @@ export class PubgDomainService {
   async searchMatches(input: SearchMatchesInput): Promise<ToolEnvelope> {
     const subject = this.resolveSubject(input);
     if (subject.error) return this.errorEnvelope(subject.error.code, subject.error.retryable, subject.error.reason);
-    const source = await this.refresh(input.refresh !== false, this.maxMatches, input.signal);
+    const source = await this.refresh(input.refresh !== false || input.recentN !== undefined, this.maxMatches, input.signal);
     const now = this.now();
     const from = input.from ? asFiniteDate(input.from) : 0;
     const to = input.to ? asFiniteDate(input.to) : now.getTime();
@@ -506,6 +522,16 @@ export class PubgDomainService {
       order: input.sort ?? 'desc',
       page,
       pageSize,
+      refresh: {
+        requested: input.refresh !== false,
+        forcedForRecent: input.recentN !== undefined,
+        syncInvoked: source.source.syncInvoked,
+        playerApiCalls: source.source.playerApiCalls,
+        matchApiCalls: source.source.matchApiCalls,
+        newMatchCount: source.diagnostics.newMatchCount ?? 0,
+        cachedMatchCount: source.diagnostics.cachedMatchCount ?? 0,
+        cacheReason: source.diagnostics.reason ?? null,
+      },
     };
     const resultSetId = 'mrs_' + randomUUID();
     const resultSet: ResultSetRecord = {

@@ -8,6 +8,7 @@ import {
   DeterministicQueryEngine,
   PubgApiClient,
   PubgApiError,
+  PubgDomainService,
   SqlitePubgRepository,
   businessDayLabel,
   extractMatchReviewFacts,
@@ -87,6 +88,48 @@ const RAW_RECORDS = [
     { accountId: 'p1', playerName: 'Alice', kills: 99, deaths: 1, rank: 1 },
   ]),
 ];
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'content-type': 'application/vnd.api+json' },
+  });
+}
+
+function playerDiscovery(matchIds: string[]): Record<string, unknown> {
+  return {
+    data: TEAM.players.map((player) => ({
+      type: 'player',
+      id: player.id,
+      attributes: { name: player.name },
+      relationships: { matches: { data: matchIds.map((id) => ({ type: 'match', id })) } },
+    })),
+  };
+}
+
+function matchPayload(matchId: string, createdAt: string): Record<string, unknown> {
+  return {
+    data: {
+      type: 'match',
+      id: matchId,
+      attributes: {
+        createdAt,
+        matchType: 'competitive',
+        gameMode: 'squad-fpp',
+        mapName: 'Erangel',
+        duration: 1200,
+        patchVersion: 'test',
+      },
+      relationships: { assets: { data: [] } },
+    },
+    included: TEAM.players.map((player, index) => ({
+      type: 'participant',
+      id: 'participant-' + player.id,
+      attributes: { stats: { playerId: player.id, winPlace: index + 1, kills: index + 1, assists: 0, damageDealt: 100 } },
+      relationships: {},
+    })),
+  };
+}
 
 function query(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -214,6 +257,81 @@ test('PUBG API retries bounded 5xx responses and never exposes credentials in er
     assert.equal(String(error).includes('secret-api-key'), false);
     return true;
   });
+});
+
+test('PUBG API sync refreshes the match list but fetches only matches missing from cache', async () => {
+  const requestedPaths: string[] = [];
+  const client = new PubgApiClient({
+    apiKey: 'test-api-key',
+    baseUrl: 'https://api.example.test',
+    maxRetries: 0,
+    fetchImpl: async (input) => {
+      const url = String(input);
+      requestedPaths.push(new URL(url).pathname + new URL(url).search);
+      if (url.includes('/players?')) return jsonResponse(playerDiscovery(['m1', 'm2']));
+      if (url.endsWith('/matches/m2')) return jsonResponse(matchPayload('m2', '2026-09-18T12:00:00.000Z'));
+      throw new Error('unexpected PUBG API request: ' + url);
+    },
+  });
+
+  const synced = await client.syncTeam(TEAM, {
+    knownMatchIds: new Set(['m1']),
+    now: new Date('2026-09-19T00:00:00.000Z'),
+  });
+  assert.equal(synced.records.length, 1);
+  assert.equal(synced.records[0]?.matchId, 'm2');
+  assert.equal(synced.diagnostics?.cachedMatchCount, 1);
+  assert.equal(synced.diagnostics?.newMatchCount, 1);
+  assert.equal(requestedPaths.filter((path) => path.endsWith('/matches/m1')).length, 0);
+  assert.equal(requestedPaths.filter((path) => path.endsWith('/matches/m2')).length, 1);
+});
+
+test('recent PUBG searches force fresh discovery and reuse cached details when no match is new', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-latest-cache-'));
+  const dbPath = join(root, 'pubg.sqlite');
+  let discoveredMatchIds = ['m1'];
+  const requestedMatchIds: string[] = [];
+  try {
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 0,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes('/players?')) return jsonResponse(playerDiscovery(discoveredMatchIds));
+        const matchId = url.split('/matches/')[1];
+        requestedMatchIds.push(matchId ?? '');
+        if (matchId === 'm1') return jsonResponse(matchPayload('m1', '2026-09-18T11:00:00.000Z'));
+        if (matchId === 'm2') return jsonResponse(matchPayload('m2', '2026-09-18T12:00:00.000Z'));
+        throw new Error('unexpected PUBG match: ' + matchId);
+      },
+    });
+    const repository = new SqlitePubgRepository(dbPath);
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      now: () => new Date('2026-09-19T00:00:00.000Z'),
+    });
+
+    const first = await service.searchMatches({ sessionId: 'session-latest', recentN: 1, refresh: false });
+    assert.equal(first.status, 'ok');
+    assert.equal((first.data as { matches: Array<{ matchId: string }> }).matches[0]?.matchId, 'm1');
+
+    discoveredMatchIds = ['m1', 'm2'];
+    const second = await service.searchMatches({ sessionId: 'session-latest', recentN: 1, refresh: false });
+    assert.equal(second.status, 'ok');
+    assert.equal((second.data as { matches: Array<{ matchId: string }> }).matches[0]?.matchId, 'm2');
+
+    const matchCallsAfterNewMatch = requestedMatchIds.length;
+    const third = await service.searchMatches({ sessionId: 'session-latest', recentN: 1, refresh: false });
+    assert.equal(third.status, 'ok');
+    assert.equal((third.data as { matches: Array<{ matchId: string }> }).matches[0]?.matchId, 'm2');
+    assert.equal(requestedMatchIds.length, matchCallsAfterNewMatch);
+    assert.deepEqual(requestedMatchIds, ['m1', 'm2']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('SQLite repository survives restart, counts duplicate inputs, and isolates result sets by session', () => {

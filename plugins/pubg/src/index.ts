@@ -460,7 +460,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛”, always call this tool with sort=desc, recentN=1, refresh=true on every user request before using any prior match context; the tool refreshes the match list and fetches only new match details, then reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -528,7 +528,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match selected by a current pubg_search_matches result. Never use this tool alone to answer “最近一局/最后一局”; search fresh first. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',

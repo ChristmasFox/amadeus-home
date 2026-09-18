@@ -8,10 +8,16 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前基线 `1.0.0`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.0.1`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
 标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
+
+## 2026-09-19 follow-up：PUBG 最近一局刷新与增量缓存
+
+当前实现状态：`SOURCE_READY_DEPLOY_PENDING`。`pubg_search_matches` 在请求“最近一局/最后一局/最新比赛”时强制刷新玩家比赛列表；只把不在 SQLite 缓存中的比赛 ID 请求到 Match API，新增详情写回缓存，列表没有新增时继续使用缓存详情。`last_n_matches` 统计也强制走同一刷新路径。
+
+PUBG Skill、native tool description 和 Kurisu workspace context 已明确禁止从上一轮直接复用旧 matchId；必须先搜索本次最新 matchId，再读取 Telemetry。搜索结果的 `queryResolved.refresh` 记录了本次刷新、API 调用和新增/缓存比赛数量，便于验收。新增 domain 增量同步与 recent search 回归测试均已通过；待本轮正式 apply 后完成线上镜像和健康检查记录。
 
 ## 2026-09-18 follow-up：VPS 手动 eventKey 隔离、部署文案与 PUBG team 查询修复
 
