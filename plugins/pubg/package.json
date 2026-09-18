@@ -19,6 +19,7 @@
     "openclaw": ">=2026.5.17"
   },
   "devDependencies": {
+    "@agent/identity": "workspace:*",
     "@agent/pubg-domain": "workspace:*",
     "@types/node": "22.18.6",
     "esbuild": "0.28.2",

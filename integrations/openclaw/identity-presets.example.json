@@ -1,0 +1,16 @@
+{
+  "persons": [
+    {
+      "personId": "person-example-friend",
+      "displayName": "示例朋友",
+      "aliases": ["示例昵称"],
+      "externalAccounts": [
+        {
+          "provider": "pubg",
+          "externalId": "EXAMPLE_PUBG_ACCOUNT_OR_NAME",
+          "label": "PUBG"
+        }
+      ]
+    }
+  ]
+}

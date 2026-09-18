@@ -10,6 +10,10 @@
 - Keep business logic platform-neutral. Channel SDKs, sender names, phone
   numbers, JIDs, and group labels are transport metadata, not business
   identity unless a capability explicitly defines a verified binding.
+- For person-specific work, use the native Identity capability: `self` is the
+  trusted current sender, group aliases outrank global aliases, and observed
+  nickname candidates require Arthur's confirmation. Never turn a channel
+  display name, phone number, or JID into a PUBG account.
 - Treat tool results as the source of truth. Do not invent facts, IDs,
   timestamps, coverage, or successful execution. Preserve meaningful status,
   coverage, freshness, query-resolution, and evidence fields; report

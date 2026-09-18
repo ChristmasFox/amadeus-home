@@ -11,9 +11,11 @@ export interface PubgConversationContext {
   accountId?: string;
   conversationId?: string;
   senderId?: string;
+  identityContext: IdentityContext;
 }
 
 export interface PubgConversationAdapter<RuntimeContext> {
   readonly id: string;
   adapt(runtimeContext: RuntimeContext, requestedSessionId?: string): PubgConversationContext;
 }
+import type { IdentityContext } from '@agent/identity';

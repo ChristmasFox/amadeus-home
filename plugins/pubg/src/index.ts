@@ -4,6 +4,7 @@ import { jsonResult } from 'openclaw/plugin-sdk/core';
 import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
+import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   PubgApiClient,
   PubgApiError,
@@ -35,9 +36,11 @@ const PluginConfigSchema = Type.Object({
   businessDayStart: Type.Optional(Type.String({ pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' })),
   maxMatches: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
   freshnessMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 86_400_000 })),
+  identityDatabasePath: Type.Optional(Type.String({ maxLength: 1024 })),
+  identityPresetsFile: Type.Optional(Type.String({ maxLength: 1024 })),
 }, { additionalProperties: false });
 
-type PluginConfig = Static<typeof PluginConfigSchema>;
+export type PluginConfig = Static<typeof PluginConfigSchema>;
 
 const SessionId = Type.Optional(Type.String({ maxLength: 256 }));
 const PlayerIds = Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 128 }), { maxItems: MAX_SUBJECT_ITEMS }));
@@ -46,10 +49,20 @@ const PlayerNames = Type.Optional(Type.Array(Type.String({
   maxLength: 128,
   description: 'An explicit PUBG in-game name or configured alias only; never a channel sender/profile name, phone number, or JID.',
 }), { maxItems: MAX_SUBJECT_ITEMS }));
+const PersonIds = Type.Optional(Type.Array(Type.String({
+  minLength: 1,
+  maxLength: 128,
+  description: 'Canonical Person IDs returned by identity_resolve; never a channel display name or JID.',
+}), { maxItems: MAX_SUBJECT_ITEMS }));
+const ExplicitTeam = Type.Optional(Type.Boolean({
+  description: 'Explicitly request the configured PUBG team. This is never an implicit fallback for an unbound sender.',
+}));
 const SubjectProperties = {
   sessionId: SessionId,
   playerIds: PlayerIds,
   playerNames: PlayerNames,
+  personIds: PersonIds,
+  team: ExplicitTeam,
 };
 
 const TimeRangeSelector = Type.Object({
@@ -185,7 +198,15 @@ type SearchMatchesParameters = Static<typeof SearchMatchesParameters>;
 type MatchParameters = Static<typeof MatchParameters>;
 type ReviewParameters = Static<typeof ReviewParameters>;
 
+export type IdentitySubjectInput = {
+  playerIds?: string[];
+  playerNames?: string[];
+  personIds?: string[];
+  team?: boolean;
+};
+
 const serviceCache = new Map<string, PubgDomainService>();
+const identityStoreCache = new Map<string, IdentityStore>();
 
 function configString(config: PluginConfig, key: keyof PluginConfig, envKey: string): string | undefined {
   const configured = config[key];
@@ -225,6 +246,129 @@ function serviceFor(config: PluginConfig): PubgDomainService {
   return service;
 }
 
+function identityConfigString(config: PluginConfig, key: 'identityDatabasePath' | 'identityPresetsFile', envKey: string): string | undefined {
+  const configured = config[key];
+  return typeof configured === 'string' && configured.trim() ? configured.trim() : process.env[envKey]?.trim() || undefined;
+}
+
+function identityFor(config: PluginConfig): IdentityStore {
+  const databasePath = identityConfigString(config, 'identityDatabasePath', 'IDENTITY_DATABASE_PATH') ?? '/data/identity.sqlite';
+  const presetsFile = identityConfigString(config, 'identityPresetsFile', 'IDENTITY_PRESETS_FILE');
+  const key = `${databasePath}\u0000${presetsFile ?? ''}`;
+  const existing = identityStoreCache.get(key);
+  if (existing) return existing;
+  const store = new IdentityStore(databasePath, presetsFile ? { presetsFile } : {});
+  identityStoreCache.set(key, store);
+  return store;
+}
+
+function stripIdentityFields(input: IdentitySubjectInput): Omit<IdentitySubjectInput, 'personIds' | 'team'> {
+  const { personIds: _personIds, team: _team, ...rest } = input;
+  return rest;
+}
+
+function subjectError(code: string, reason: string): ToolEnvelope {
+  return {
+    status: 'error',
+    data: {},
+    coverage: {
+      status: 'SOURCE_UNAVAILABLE',
+      complete: false,
+      coverageStart: null,
+      coverageEnd: null,
+      checkedAt: new Date().toISOString(),
+      failedMatchIds: [],
+      sourceUnavailable: false,
+      freshness: 'unknown',
+    },
+    asOf: new Date().toISOString(),
+    metricVersion: 'pubg-metrics-v1',
+    queryResolved: { tool: PLUGIN_ID, identity: 'required' },
+    evidenceRefs: { matchIds: [], playerIds: [], fields: [], calculation: 'identity_resolution' },
+    error: { code, retryable: false, reason },
+  };
+}
+
+function accountIdsForPerson(person: PersonSnapshot, service: PubgDomainService): { playerIds: string[]; playerNames: string[] } {
+  const accounts = person.externalAccounts.filter((account) => account.provider.toLowerCase() === 'pubg');
+  const playerIds: string[] = [];
+  const playerNames: string[] = [];
+  for (const account of accounts) {
+    const match = service.team.players.find((player) => [player.id, player.name, ...player.aliases].some((value) => value.toLocaleLowerCase() === account.externalId.toLocaleLowerCase()));
+    if (match) playerIds.push(match.id);
+    else playerNames.push(account.externalId);
+  }
+  return { playerIds: [...new Set(playerIds)], playerNames: [...new Set(playerNames)] };
+}
+
+async function resolvePersonAccounts(
+  personIds: string[],
+  service: PubgDomainService,
+  config: PluginConfig,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<{ playerIds: string[]; playerNames: string[] } | ToolEnvelope> {
+  const store = identityFor(config);
+  const playerIds: string[] = [];
+  const unresolvedNames: string[] = [];
+  for (const personId of [...new Set(personIds.map((value) => value.trim()).filter(Boolean))]) {
+    const person = store.getPerson(personId);
+    if (!person) return subjectError('identity_person_not_found', personId);
+    const accounts = accountIdsForPerson(person, service);
+    if (!accounts.playerIds.length && !accounts.playerNames.length) return subjectError('identity_pubg_account_unbound', person.displayName);
+    playerIds.push(...accounts.playerIds);
+    unresolvedNames.push(...accounts.playerNames);
+  }
+  if (unresolvedNames.length) {
+    const resolved = await service.resolvePlayers({ sessionId, playerNames: [...new Set(unresolvedNames)], ...(signal ? { signal } : {}) });
+    const data = resolved.data && typeof resolved.data === 'object' ? resolved.data as Record<string, unknown> : {};
+    const matches = Array.isArray(data.matches) ? data.matches : [];
+    const resolvedIds = matches.flatMap((value) => {
+      if (!value || typeof value !== 'object') return [];
+      const accountId = (value as Record<string, unknown>).accountId;
+      return typeof accountId === 'string' && accountId.trim() ? [accountId.trim()] : [];
+    });
+    if (resolved.status !== 'ok' || resolvedIds.length !== unresolvedNames.length) {
+      return subjectError('identity_pubg_account_unresolved', unresolvedNames.join(','));
+    }
+    playerIds.push(...resolvedIds);
+  }
+  return { playerIds: [...new Set(playerIds)], playerNames: [] };
+}
+
+export async function prepareIdentitySubject(
+  service: PubgDomainService,
+  config: PluginConfig,
+  input: IdentitySubjectInput,
+  toolContext: OpenClawPluginToolContext,
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<IdentitySubjectInput | ToolEnvelope> {
+  const explicitPlayerIds = input.playerIds?.length ?? 0;
+  const explicitPlayerNames = input.playerNames?.length ?? 0;
+  const explicitPersons = input.personIds?.length ?? 0;
+  if (input.team === true) {
+    if (explicitPlayerIds || explicitPlayerNames || explicitPersons) return subjectError('identity_subject_conflict', 'team cannot be combined with another subject');
+    return { playerIds: service.team.players.map((player) => player.id) };
+  }
+  if (explicitPlayerIds || explicitPlayerNames) {
+    if (explicitPersons) return subjectError('identity_subject_conflict', 'personIds cannot be combined with playerIds or playerNames');
+    return stripIdentityFields(input);
+  }
+  let personIds = input.personIds;
+  if (!personIds?.length) {
+    const context = openClawConversationAdapter.adapt(toolContext, sessionId).identityContext;
+    const resolution: IdentityResolution = identityFor(config).resolve({ type: 'self' }, context);
+    if (resolution.status !== 'resolved' || !resolution.person) {
+      return subjectError('identity_sender_unbound', resolution.reason ?? 'current sender is not bound to a canonical Person');
+    }
+    personIds = [resolution.person.personId];
+  }
+  const accounts = await resolvePersonAccounts(personIds, service, config, sessionId, signal);
+  if (!('playerIds' in accounts)) return accounts;
+  return { ...stripIdentityFields(input), playerIds: accounts.playerIds, ...(accounts.playerNames.length ? { playerNames: accounts.playerNames } : {}) };
+}
+
 function contextSessionId(input: { sessionId?: string }, toolContext: OpenClawPluginToolContext): string {
   return openClawConversationAdapter.adapt(toolContext, input.sessionId).sessionId;
 }
@@ -261,6 +405,7 @@ function makeTool<Schema extends TypeSchema>(
   parameters: Schema,
   config: PluginConfig,
   toolContext: OpenClawPluginToolContext,
+  requiresIdentitySubject: boolean,
   execute: (service: PubgDomainService, input: Static<Schema>, sessionId: string, signal?: AbortSignal) => Promise<ToolEnvelope>,
 ): AnyAgentTool {
   return {
@@ -272,7 +417,13 @@ function makeTool<Schema extends TypeSchema>(
     async execute(_toolCallId, rawParams, signal) {
       try {
         const input = rawParams as Static<Schema>;
-        return jsonResult(await execute(serviceFor(config), input, contextSessionId(input as { sessionId?: string }, toolContext), signal));
+        const service = serviceFor(config);
+        const sessionId = contextSessionId(input as { sessionId?: string }, toolContext);
+        const prepared = requiresIdentitySubject
+          ? await prepareIdentitySubject(service, config, input as Static<Schema> & IdentitySubjectInput, toolContext, sessionId, signal)
+          : stripIdentityFields(input as Static<Schema> & IdentitySubjectInput);
+        if ('status' in prepared && prepared.status === 'error') return jsonResult(prepared);
+        return jsonResult(await execute(service, prepared as Static<Schema>, sessionId, signal));
       } catch (error) {
         return jsonResult(runtimeError(error));
       }
@@ -300,6 +451,7 @@ const entry = defineToolPlugin({
         ResolvePlayersParameters,
         config,
         toolContext,
+        true,
         (service, input, sessionId) => service.resolvePlayers({ ...(input as ResolvePlayersParameters), sessionId } as ResolvePlayersInput),
       ),
     }),
@@ -313,6 +465,7 @@ const entry = defineToolPlugin({
         SearchMatchesParameters,
         config,
         toolContext,
+        true,
         (service, input, sessionId) => service.searchMatches({ ...(input as SearchMatchesParameters), sessionId } as SearchMatchesInput),
       ),
     }),
@@ -326,6 +479,7 @@ const entry = defineToolPlugin({
         QueryStatsParameters,
         config,
         toolContext,
+        true,
         (service, input, sessionId, signal) => service.queryStats({
           ...(input as QueryStatsParameters),
           sessionId,
@@ -345,6 +499,7 @@ const entry = defineToolPlugin({
         CompareParameters,
         config,
         toolContext,
+        true,
         (service, input, sessionId, signal) => service.compareStats({
           ...(input as CompareParameters),
           sessionId,
@@ -364,6 +519,7 @@ const entry = defineToolPlugin({
         MatchParameters,
         config,
         toolContext,
+        false,
         (service, input, sessionId, signal) => service.getMatch({ ...(input as MatchParameters), sessionId, ...(signal ? { signal } : {}) } as GetMatchInput),
       ),
     }),
@@ -377,6 +533,7 @@ const entry = defineToolPlugin({
         ReviewParameters,
         config,
         toolContext,
+        true,
         (service, input, sessionId, signal) => service.getReviewFacts({ ...(input as ReviewParameters), sessionId, ...(signal ? { signal } : {}) } as GetReviewFactsInput),
       ),
     }),

@@ -66,6 +66,8 @@
           "databasePath": "/data/pubg.sqlite",
           "teamConfigFile": "/run/secrets/pubg_team.json",
           "apiKeyFile": "/run/secrets/pubg_api_key",
+          "identityDatabasePath": "/data/identity.sqlite",
+          "identityPresetsFile": "/data/identity-presets.json",
           "apiBaseUrl": "https://api.pubg.com",
           "timezone": "Asia/Shanghai",
           "businessDayStart": "00:00",
@@ -92,6 +94,8 @@
           "ownerTargetFile": "/run/secrets/owner_whatsapp_target",
           "ownerWhatsappAccountId": "secondary",
           "notificationOutboxDir": "/var/lib/openclaw/notifications",
+          "identityDatabasePath": "/data/identity.sqlite",
+          "identityPresetsFile": "/data/identity-presets.json",
           "briefingConfigDir": "/app/dist/extensions/amadeus/briefing",
           "briefingStateFile": "/data/briefing-state.json",
           "nineRouterBaseUrl": "http://9router:20128/v1"

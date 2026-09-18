@@ -8,6 +8,20 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 跨渠道 Identity 实现（2026-09-18，本地未部署）
+
+- `packages/identity` 提供 SQLite `persons`、`channel_identities`、`aliases` 和
+  `external_accounts`，支持预设导入、跨 Telegram/WhatsApp trusted sender/mention/reply
+  绑定、群级 alias 优先级、observed candidate 和 owner-confirmed 升级；不保存完整聊天历史。
+- `plugins/amadeus` 新增七个 `identity_*` native tools 及 `skills/identity`。confirmed 绑定、
+  alias 和 external account 的写入受 owner/Arthur gate；工具参数是结构化数据，不解析命令或
+  关键词。生产身份数据库和预设路径在 `/data` 外部持久化，未把个人 ID/JID 写入仓库。
+- `plugins/pubg` 只在 plugin 边界把 Person 的 `provider=pubg` account 转换为配置团队中的
+  player id，或通过官方 resolve 得到 account id，再传给 `packages/pubg-domain`；Domain 不
+  感知渠道身份。缺少可信 binding/account 时 fail closed，不回退默认队伍。
+- 定向 identity、Amadeus、PUBG adapter/boundary 测试和受影响 build/typecheck 已通过；尚未
+  重新构建或 apply CasaOS，也未声称线上已加载 Identity tools。
+
 ## 本轮实现
 
 - 新增 plugins/amadeus：Product Radar、媒体 scan/preview/execute、NAS、HomeLab、

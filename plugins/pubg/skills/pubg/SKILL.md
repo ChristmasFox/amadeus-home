@@ -15,15 +15,22 @@ Tool rules:
 
 - Never invent match IDs, players, metrics, telemetry facts, coverage, or
   timestamps. Use the native tools as the only source of PUBG facts.
-- The configured team is the default subject when the user does not explicitly
-  name a PUBG player. This includes “昨天战绩”, “我的战绩”, and similar
-  unqualified requests: omit both `playerNames` and `playerIds`.
+- Resolve a person before a person-specific PUBG query. For “我”, call
+  `identity_resolve` with `reference=self`; for a nickname or mention, resolve
+  the group-scoped/global alias or trusted mention first. Pass the returned
+  canonical `personId` as `personIds` to the PUBG tool, or pass an explicit
+  PUBG account returned by the identity/PUBG tools.
+- Never treat the configured team as an implicit subject for a sender. If
+  `identity_resolve` returns `unbound`, `ambiguous`, or `candidate`, stop and
+  explain that identity must be bound or confirmed. `team=true` is the only
+  explicit request for the configured team.
 - A transport sender name is never a PUBG name. Never use WhatsApp/Telegram
   display names, profile names, push names, phone numbers, JIDs, or quoted
   sender labels as `playerNames`. If the user explicitly gives an in-game name
   or alias, use `pubg_resolve_players` before the player-specific query.
-- In a group, “我” still means the configured team unless an independent PUBG
-  identity binding is present; do not derive identity from the current sender.
+- In a group or DM, “我” always means the current trusted channel sender. Do
+  not derive a Person or PUBG account from a display name, phone number, JID,
+  quoted label, or nickname alone.
 - Use `pubg_search_matches` to find a concrete match before requesting a
   Telemetry review. Pass the returned `matchId` to `pubg_get_review_facts`.
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:

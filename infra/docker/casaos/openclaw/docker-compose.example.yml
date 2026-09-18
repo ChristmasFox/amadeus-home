@@ -16,6 +16,8 @@ services:
       PUBG_DATABASE_PATH: /data/pubg.sqlite
       PUBG_TEAM_CONFIG_FILE: /run/secrets/pubg_team.json
       PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      IDENTITY_DATABASE_PATH: /data/identity.sqlite
+      IDENTITY_PRESETS_FILE: /data/identity-presets.json
       OWNER_NOTIFICATION_OUTBOX_DIR: /var/lib/openclaw/notifications
       OWNER_WHATSAPP_ACCOUNT_ID: ${OWNER_WHATSAPP_ACCOUNT_ID:-secondary}
       TZ: Asia/Shanghai
