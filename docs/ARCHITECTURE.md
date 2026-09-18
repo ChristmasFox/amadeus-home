@@ -109,7 +109,8 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 1. Git clean、全量 build/typecheck/test/secrets scan。
 2. BuildKit 构建并加载 OpenClaw Amadeus 与 Product Radar ARM64 immutable images。
 3. 在仓库外备份 compose、config、secret、OpenClaw SQLite 和旧 app 状态。
-4. 从现有 OpenClaw owner/Telegram 配置恢复身份，按需从旧 LangBot DB 恢复 KOOK token/NAS key。
+4. 只验证现有 OpenClaw 运行时 secret 文件和 owner/Telegram 配置；旧 LangBot DB、旧
+   app/data 和旧凭据只留在仓库外 checkpoint 用于审计/人工恢复，不参与运行时 fallback。
 5. 新 compose/config 预检，确认两个 plugin 和两个 Skill 都已加载。
 6. 停止 LangBot、n8n、n8n-sandbox，移除其 canonical app/data 路径到 checkpoint。
 7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai briefing cron。

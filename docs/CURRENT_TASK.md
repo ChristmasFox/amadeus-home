@@ -10,18 +10,21 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 - 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、
   Codex hook 和 CasaOS 模板；Product Radar 已去掉旧通知依赖；OpenClaw owner 工具策略改为
-  `tools.profile="full"`，不再用只包含 PUBG 的严格 allowlist。
+  `tools.profile="full"`，不再用只包含 PUBG 的严格 allowlist。全局 workspace 已收敛为
+  架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
+  不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
   PUBG domain 9、PUBG plugin 5、Amadeus 1、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
-  checkpoint、secret 恢复、镜像构建、旧 app/data 退休、briefing cron 和 owner WhatsApp
-  smoke。
+  checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
+  WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
+  使用远端 owner outbox，且不再因缺少 `os` 导入而静默丢弃事件。
 - 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
   media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
-- 部署后阶段：PASS。最终 checkpoint 为
+- 部署后阶段：PASS（前一版本）。最终 checkpoint 为
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918080634`；旧 LangBot/n8n
-  容器、app/data 路径和 KOOK watchdog timer 已退休，当前 Git 状态待本次文档 checkpoint
-  提交后复核。
+  容器、app/data 路径和 KOOK watchdog timer 已退休；本次全局上下文/部署脚本修复已通过本地
+  build、typecheck、tests 和 secrets scan，待重建镜像后做最终 live 复核。
 
 ## PUBG-only 根因修复验收
 

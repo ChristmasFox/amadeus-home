@@ -162,8 +162,7 @@ print('CHECKPOINT=' + str(checkpoint))
 PY
 
 orb -m "$MACHINE" -u root python3 - \
-  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" \
-  /DATA/AppData/langbot/data/langbot.db /DATA/AppData/langbot/ssh/id_ed25519 < "$PREPARE"
+  "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" < "$PREPARE"
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'

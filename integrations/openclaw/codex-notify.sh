@@ -11,7 +11,7 @@ elif [[ -x "$ROOT_DIR/agent-monorepo/scripts/notify-owner.sh" ]]; then
 else
   exit 0
 fi
-OUTBOX_DIR="${OWNER_NOTIFICATION_OUTBOX_DIR:-${CODEX_NOTIFICATION_OUTBOX_DIR:-/tmp/openclaw-owner-notifications}}"
+OUTBOX_DIR="${OWNER_NOTIFICATION_OUTBOX_DIR:-${CODEX_NOTIFICATION_OUTBOX_DIR:-/DATA/AppData/openclaw/notifications}}"
 LOG_FILE="${CODEX_NOTIFY_LOG_FILE:-/tmp/openclaw-codex-notify.log}"
 raw_payload="${1:-}"
 if [[ -z "$raw_payload" ]]; then raw_payload="$(cat 2>/dev/null || true)"; fi
@@ -22,6 +22,7 @@ mkdir -p "$(dirname -- "$LOG_FILE")" 2>/dev/null || true
 python3 - "$NOTIFY_SCRIPT" "$OUTBOX_DIR" "$raw_payload" "$LOG_FILE" <<'PY' >/dev/null 2>&1 || true
 import datetime
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -72,7 +73,7 @@ body = f"项目：{project}\n状态：{status}\n时间：{timestamp}\n"
 if thread_id:
     body += f"线程：{thread_id}\n"
 body += f"\n{message}"
-subprocess.run([notify_script, "--event-key", f"codex:{identity}", "--source", "codex", "--title", title, "--message", body, "--outbox-dir", "/DATA/AppData/openclaw/notifications", "--remote-machine", os.environ.get("OPENCLAW_REMOTE_MACHINE", "ubuntu")], timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.run([notify_script, "--event-key", f"codex:{identity}", "--source", "codex", "--title", title, "--message", body, "--outbox-dir", outbox, "--remote-machine", os.environ.get("OPENCLAW_REMOTE_MACHINE", "ubuntu")], timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     with open(log_file, "a", encoding="utf-8") as handle:
         handle.write(f"{timestamp} event={event} project={project}\n")

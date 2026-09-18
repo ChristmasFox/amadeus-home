@@ -8,8 +8,6 @@ import json
 import os
 import re
 import secrets
-import shutil
-import sqlite3
 import sys
 from pathlib import Path
 
@@ -24,14 +22,8 @@ def ensure_regular(path: Path, label: str) -> None:
         raise SystemExit(f"{label} is not a non-empty regular file: {path}")
 
 
-def install_if_missing(target: Path, source: Path, label: str, mode: int = 0o600) -> None:
-    if target.exists():
-        ensure_regular(target, label)
-        ensure_owner(target, mode)
-        return
-    ensure_regular(source, label + " source")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target)
+def require_existing(target: Path, label: str, mode: int = 0o600) -> None:
+    ensure_regular(target, label)
     ensure_owner(target, mode)
 
 
@@ -73,52 +65,6 @@ def set_env(lines: list[str], key: str, value: str) -> None:
     lines.append(prefix + value)
 
 
-def find_token(value: object) -> str | None:
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if re.search(r"(?:^|[_-])token$", str(key), re.IGNORECASE):
-                if isinstance(item, str) and len(item.strip()) >= 20:
-                    return item.strip()
-            found = find_token(item)
-            if found:
-                return found
-    elif isinstance(value, list):
-        for item in value:
-            found = find_token(item)
-            if found:
-                return found
-    return None
-
-
-def token_from_legacy(db_path: Path, adapter: str) -> str:
-    if not db_path.is_file():
-        raise SystemExit(f"legacy LangBot database is unavailable for {adapter} token recovery")
-    conn = sqlite3.connect("file:" + str(db_path) + "?mode=ro", uri=True)
-    rows = conn.execute(
-        "select adapter_config from bots where lower(adapter) = lower(?) order by enable desc",
-        (adapter,),
-    ).fetchall()
-    conn.close()
-    for (raw,) in rows:
-        try:
-            token = find_token(json.loads(raw))
-        except (TypeError, json.JSONDecodeError):
-            token = None
-        if token:
-            return token
-    raise SystemExit(f"{adapter} token was not found in the legacy LangBot database")
-
-
-def existing_or_legacy_token(target: Path, db_path: Path, adapter: str) -> None:
-    if target.exists():
-        ensure_regular(target, adapter + " token")
-        ensure_owner(target)
-        return
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(token_from_legacy(db_path, adapter) + "\n")
-    ensure_owner(target)
-
-
 def merge_preserved(config: dict, existing: dict) -> None:
     for key in ("commands", "meta", "security"):
         if key in existing:
@@ -146,8 +92,8 @@ def owner_phone(owner_target: str) -> str:
 
 
 def main() -> None:
-    if len(sys.argv) != 9:
-        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64 LANGBOT_DB MAC_SSH_KEY")
+    if len(sys.argv) != 7:
+        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64")
     data_dir = Path(sys.argv[1])
     config_template = json.loads(base64.b64decode(sys.argv[2]).decode())
     team_bytes = base64.b64decode(sys.argv[3])
@@ -156,9 +102,6 @@ def main() -> None:
         "SOUL.md": base64.b64decode(sys.argv[5]),
         "USER.md": base64.b64decode(sys.argv[6]),
     }
-    langbot_db = Path(sys.argv[7])
-    mac_ssh_source = Path(sys.argv[8])
-
     config_dir = data_dir / "config"
     workspace_dir = data_dir / "workspace"
     pubg_data_dir = data_dir / "data"
@@ -174,15 +117,8 @@ def main() -> None:
     if existing_config_path.is_file():
         existing_config = json.loads(existing_config_path.read_text())
 
-    api_source = Path("/DATA/AppData/pubg-query-engine-v3/secrets/pubg-api-key")
     api_target = secrets_dir / "pubg-api-key"
-    if not api_target.exists() and not api_source.is_file():
-        raise SystemExit("PUBG API key is unavailable in both the existing OpenClaw and legacy locations")
-    if not api_target.exists():
-        install_if_missing(api_target, api_source, "PUBG API key")
-    else:
-        ensure_regular(api_target, "PUBG API key")
-        ensure_owner(api_target)
+    require_existing(api_target, "PUBG API key")
 
     team_target = secrets_dir / "pubg-team.json"
     if team_target.exists():
@@ -193,9 +129,9 @@ def main() -> None:
         json.loads(team_bytes.decode())
         write_if_missing(team_target, team_bytes, "PUBG team config")
 
-    existing_or_legacy_token(secrets_dir / "telegram-bot-token", langbot_db, "telegram")
-    existing_or_legacy_token(secrets_dir / "kook-bot-token", langbot_db, "kook")
-    install_if_missing(secrets_dir / "mac-ssh-key", mac_ssh_source, "Mac SSH key")
+    require_existing(secrets_dir / "telegram-bot-token", "Telegram token")
+    require_existing(secrets_dir / "kook-bot-token", "KOOK token")
+    require_existing(secrets_dir / "mac-ssh-key", "Mac SSH key")
 
     owner_candidates = valid_owner_targets(existing_config)
     owner_target = secrets_dir / "owner-whatsapp-target"

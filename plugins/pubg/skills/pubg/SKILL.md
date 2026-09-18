@@ -8,10 +8,13 @@ user-invocable: false
 
 Use the PUBG tools for match statistics and review. Let the model resolve the
 user's natural-language request; do not invent a tool call when the request is
-ambiguous or asks for a capability outside PUBG.
+ambiguous or asks for a capability outside PUBG. These rules are scoped to
+PUBG requests and must not limit Kurisu's other native capabilities.
 
 Tool rules:
 
+- Never invent match IDs, players, metrics, telemetry facts, coverage, or
+  timestamps. Use the native tools as the only source of PUBG facts.
 - The configured team is the default subject when the user does not explicitly
   name a PUBG player. This includes “昨天战绩”, “我的战绩”, and similar
   unqualified requests: omit both `playerNames` and `playerIds`.
@@ -35,6 +38,9 @@ Tool rules:
 - Use `pubg_compare_stats` only with two explicit segments. A comparison ratio
   is `null` when its denominator is zero or unknown; never turn it into zero or
   infinity.
+- Treat `null` as unknown. Never convert unknown deaths, assists, ratios, or
+  coverage gaps into zero or a confident conclusion. Preserve the requested
+  business-day boundary when resolving a date or clock-based selector.
 - Use `pubg_get_match` for the selected match's Match API facts, then
   `pubg_get_review_facts` for Telemetry-derived facts. Never present a missing
   Telemetry fact as zero.
