@@ -8,9 +8,11 @@ import {
   identityAddAlias,
   identityBindChannel,
   identityConfirmCandidate,
+  forgetTrustedInboundReply,
   identityLinkAccount,
   identityListCandidates,
   identityResolve,
+  rememberTrustedInboundReply,
 } from '../src/identity.js';
 import type { AmadeusConfig } from '../src/config.js';
 
@@ -78,6 +80,38 @@ test('identity mutations require owner confirmation', async () => {
   try {
     await assert.rejects(identityBindChannel(config(databasePath, presetsFile), { personId: 'wang' }, context(false)), /owner_confirmation/u);
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('typed inbound reply metadata is session-scoped and never inferred from text', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-identity-reply-'));
+  const databasePath = join(directory, 'identity.sqlite');
+  const presetsFile = join(directory, 'presets.json');
+  await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
+  const runtimeConfig = config(databasePath, presetsFile);
+  const replyContext = { ...context(), sessionKey: 'agent:main:reply-session' };
+  delete (replyContext as unknown as { toolBindings?: unknown }).toolBindings;
+  try {
+    rememberTrustedInboundReply({
+      sessionKey: replyContext.sessionKey,
+      channel: 'whatsapp',
+      accountId: 'secondary',
+      conversationId: 'group-1@g.us',
+      replyToSender: 'reply-1',
+    });
+    const bound = await identityBindChannel(runtimeConfig, { personId: 'wang', target: 'reply_sender' }, replyContext) as { status: string };
+    assert.equal(bound.status, 'bound');
+    const resolved = await identityResolve(runtimeConfig, { reference: 'reply_sender' }, replyContext) as { status: string; person?: { personId: string } };
+    assert.equal(resolved.status, 'resolved');
+    assert.equal(resolved.person?.personId, 'wang');
+
+    const otherSession = { ...replyContext, sessionKey: 'agent:main:other-session' } as OpenClawPluginToolContext;
+    const isolated = await identityResolve(runtimeConfig, { reference: 'reply_sender' }, otherSession) as { status: string; reason?: string };
+    assert.equal(isolated.status, 'unbound');
+    assert.equal(isolated.reason, 'trusted_reply_sender_metadata_unavailable');
+  } finally {
+    forgetTrustedInboundReply(replyContext.sessionKey);
     await rm(directory, { recursive: true, force: true });
   }
 });

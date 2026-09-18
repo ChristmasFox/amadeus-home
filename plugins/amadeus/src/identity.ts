@@ -55,6 +55,14 @@ export interface IdentityConfirmCandidateInput {
 
 const stores = new Map<string, IdentityStore>();
 
+interface TrustedInboundReply {
+  replySender: TrustedChannelIdentity;
+  expiresAt: number;
+}
+
+const trustedInboundReplies = new Map<string, TrustedInboundReply>();
+const TRUSTED_INBOUND_REPLY_TTL_MS = 5 * 60 * 1000;
+
 function text(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -72,6 +80,60 @@ function identityStore(config: AmadeusConfig): IdentityStore {
   const store = new IdentityStore(config.identityDatabasePath, config.identityPresetsFile ? { presetsFile: config.identityPresetsFile } : {});
   stores.set(key, store);
   return store;
+}
+
+/**
+ * Bridge the host's typed inbound hook to the later plugin-tool context.
+ *
+ * OpenClaw exposes reply metadata on inbound hooks but intentionally does not
+ * copy it into every plugin tool context. Keep only the channel-native sender
+ * id, scoped to the canonical session and a short TTL; never persist message
+ * text or display names. Explicit toolBindings remain the first source when a
+ * host integration supplies them.
+ */
+export function rememberTrustedInboundReply(input: {
+  sessionKey?: unknown;
+  channel?: unknown;
+  accountId?: unknown;
+  conversationId?: unknown;
+  replyToSender?: unknown;
+}): void {
+  const sessionKey = text(input.sessionKey);
+  if (!sessionKey) return;
+  const channel = text(input.channel);
+  const replyToSender = text(input.replyToSender);
+  if (!channel || !replyToSender) {
+    trustedInboundReplies.delete(sessionKey);
+    return;
+  }
+  const accountId = text(input.accountId);
+  const conversationId = text(input.conversationId);
+  trustedInboundReplies.set(sessionKey, {
+    replySender: {
+      channel,
+      ...(accountId ? { accountId } : {}),
+      ...(conversationId ? { conversationId } : {}),
+      platformUserId: replyToSender,
+    },
+    expiresAt: Date.now() + TRUSTED_INBOUND_REPLY_TTL_MS,
+  });
+}
+
+export function forgetTrustedInboundReply(sessionKey: unknown): void {
+  const normalized = text(sessionKey);
+  if (normalized) trustedInboundReplies.delete(normalized);
+}
+
+function trustedInboundReplyFor(sessionKey: unknown): TrustedChannelIdentity | undefined {
+  const normalized = text(sessionKey);
+  if (!normalized) return undefined;
+  const current = trustedInboundReplies.get(normalized);
+  if (!current) return undefined;
+  if (current.expiresAt <= Date.now()) {
+    trustedInboundReplies.delete(normalized);
+    return undefined;
+  }
+  return current.replySender;
 }
 
 function baseContext(context: OpenClawPluginToolContext): IdentityContext {
@@ -118,6 +180,10 @@ function baseContext(context: OpenClawPluginToolContext): IdentityContext {
       ...(replyAccountId ? { accountId: replyAccountId } : {}),
       ...(replyConversationId ? { conversationId: replyConversationId } : {}),
     };
+  }
+  if (!result.replySender) {
+    const inboundReply = trustedInboundReplyFor(context.sessionKey);
+    if (inboundReply) result.replySender = inboundReply;
   }
   return result;
 }

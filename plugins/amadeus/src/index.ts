@@ -8,10 +8,12 @@ import {
   identityAddAlias,
   identityBindChannel,
   identityConfirmCandidate,
+  forgetTrustedInboundReply,
   identityGetPerson,
   identityLinkAccount,
   identityListCandidates,
   identityResolve,
+  rememberTrustedInboundReply,
   type IdentityAddAliasInput,
   type IdentityBindChannelInput,
   type IdentityConfirmCandidateInput,
@@ -169,6 +171,18 @@ const entry = definePluginEntry({
   configSchema: pluginConfigSchema,
   register(api) {
     const config = configFor(api);
+    api.on('before_dispatch', (event, hookContext) => {
+      rememberTrustedInboundReply({
+        sessionKey: hookContext.sessionKey ?? event.sessionKey,
+        channel: hookContext.channelId ?? event.channel,
+        accountId: hookContext.accountId,
+        conversationId: hookContext.conversationId,
+        replyToSender: hookContext.replyToSender ?? event.replyToSender,
+      });
+    });
+    api.on('agent_end', (_event, hookContext) => {
+      forgetTrustedInboundReply(hookContext.sessionKey);
+    });
     let workerTimer: ReturnType<typeof setInterval> | undefined;
     api.registerService({
       id: 'amadeus-owner-notification-worker',

@@ -16,6 +16,12 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 `identityPresetsFile` 导入；Telegram/WhatsApp sender/account/conversation metadata 只从
 OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
 
+2026-09-18 follow-up 已补上 OpenClaw typed `before_dispatch` → tool context 的短时 reply
+metadata bridge，并在 `agent_end` 清理；只保留可信 channel-native sender id，按 session 隔离，
+不保存消息正文或显示名。mention 仍只接受 host 提供的结构化
+`toolBindings.identity.mentions` 平台 ID，不从 prompt/昵称推断；该 follow-up 需重新构建并
+apply 后才在线。
+
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。当前只完成源码、配置、Skill
@@ -33,7 +39,7 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  Identity 3、PUBG domain 9、PUBG plugin 6、Amadeus 4、Product Radar 51。
+  Identity 3、PUBG domain 9、PUBG plugin 6、Amadeus 6、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
