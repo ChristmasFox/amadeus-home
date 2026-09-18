@@ -94,6 +94,20 @@ PUBG/Identity Skill、Identity/PUBG tool descriptions 和 Amadeus `before_prompt
 `read` → `identity_resolve` → `pubg_query_stats`，3 次调用、0 失败并返回 4 场真实数据；
 未知或 observed candidate 仍保持确认门槛。
 
+### 第一人称 PUBG 身份解析修复（2026-09-18）
+
+新的真实群聊 transcript 显示，当前发送者的可信 WhatsApp LID
+`263376739561510@lid` 已绑定到 `Arthur`，外部 PUBG 账号也已是
+`SG_LabmemNo007`；但处理“我昨天战绩呢”时，模型错误把请求生成成 `team=true`，跳过了
+`identity_resolve(reference=self)`，随后误报 Arthur 未绑定账号。本轮已在 Amadeus dispatch
+guidance、Identity/PUBG Skill 和 `pubg_query_stats` description 中明确：`我/我的/本人/自己`
+必须先解析当前可信发送者并把 `personId` 传给 PUBG tool；`team=true` 仅用于用户明确要求全队，
+不能用于第一人称请求。提交 `f4abc5d` 已构建并 apply，线上镜像为
+`local/openclaw-amadeus:git-f4abc5dafb60-20260918132941`，恢复点为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918132941`。Identity 10、PUBG domain 9、
+PUBG plugin 9、Amadeus 10 定向测试及受影响 typecheck/build、secrets scan 和部署 smoke 均通过；
+未向真实群聊发送未经请求的测试消息，仍待用户触发一条“我昨天战绩”完成入口验收。
+
 ## 当前进度
 
 - 代码阶段：PASS。新增 native plugins/amadeus、owner outbox、briefing source/config、

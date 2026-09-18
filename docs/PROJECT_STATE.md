@@ -87,6 +87,16 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   guidance 中声明预设成员无需二次确认。提交 `6ec7538` 已 apply，线上无投递 smoke 的“胶昨天
   战绩”实际完成 `read` → `identity_resolve` → `pubg_query_stats`，3 次调用、0 失败并返回
   4 场真实数据；未知或 observed candidate 仍保留确认门槛。
+- 第一人称请求的真实群聊 transcript 进一步显示：可信发送者
+  `263376739561510@lid` 已绑定 `Arthur`，其 PUBG external account 为 `SG_LabmemNo007`，但模型
+  处理“我昨天战绩呢”时错误生成 `team=true`，跳过 `identity_resolve(reference=self)`，随后误报
+  Arthur 未绑定账号。本轮提交 `f4abc5d` 已在 dispatch guidance、Identity/PUBG Skill 和
+  `pubg_query_stats` description 中强制 `我/我的/本人/自己` 先做 self 解析并传入 `personIds`，
+  `team=true` 仅保留给明确的全队请求；已构建并 apply 镜像
+  `local/openclaw-amadeus:git-f4abc5dafb60-20260918132941`，恢复点为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918132941`。Identity 10、PUBG domain 9、
+  PUBG plugin 9、Amadeus 10 定向测试、受影响 typecheck/build、secrets scan 和部署 smoke 均通过；
+  未向真实群聊发送未经请求的测试消息，入口仍待用户触发验收。
 
 ## 本轮实现
 
