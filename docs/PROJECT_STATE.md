@@ -43,8 +43,9 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   感知渠道身份。缺少可信 binding/account 时 fail closed，不回退默认队伍。
 - 定向 identity、Amadeus、PUBG adapter/boundary 测试和受影响 build/typecheck 已通过；新
   OpenClaw image 已 apply 到 CasaOS，运行时 inspect 显示七个 Identity tools 和 `identity`
-  Skill 均 loaded/eligible。只读 Gateway smoke 已实际调用 `identity_resolve` 并 fail closed；
-  线上 SQLite 已创建但四张身份表均为 0 行。
+  Skill 均 loaded/eligible。线上 SQLite 当前为 `persons=4`、`aliases=8`、
+  `external_accounts=4`、`channel_identities=8`；每个当前 secondary WhatsApp 群成员同时保留
+  LID 和手机号运行时 binding。
 - follow-up 已使用 pinned OpenClaw 2026.9.4 的 typed `before_dispatch` hook 捕获可信
   `replyToSender`，按 session 短时桥接到 Identity tools，并在 `agent_end` 清理；本地测试覆盖
   hook registration、session isolation 和无 metadata 的 fail-closed。`4831659` 又把
@@ -55,9 +56,10 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - 当前线上镜像为 `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`，恢复 checkpoint
   为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918103442`；外部
   `identity-presets.json` 支持运行后按文件指纹刷新，已确认数据不会被预设覆盖；本次用户提供
-  的 4 人昵称/别名/PUBG 映射已加载，线上表计数为 `persons=4`、`aliases=8`、
-  `external_accounts=4`、`channel_identities=0`。真实 Telegram/WhatsApp inbound sender
-  metadata、owner channel binding、alias confirmation 和重启后有数据持久化仍待用户入口验收。
+  的 4 人昵称/别名/PUBG 映射已加载，随后通过现有 owner-confirmed binding 逻辑完成当前
+  secondary WhatsApp 群的 8 条 LID/手机号绑定；线上表计数为 `persons=4`、`aliases=8`、
+  `external_accounts=4`、`channel_identities=8`。自然语言 alias resolver 调用和重启后有数据
+  持久化仍待用户入口验收。
 
 ## 本轮实现
 
