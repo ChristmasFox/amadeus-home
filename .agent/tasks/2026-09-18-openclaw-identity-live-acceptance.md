@@ -1,6 +1,6 @@
 # OpenClaw Identity 线上验收
 
-状态：部分完成；RELEASE 已执行，真实 Telegram/WhatsApp 身份数据验收待用户入口。
+状态：部分完成；Identity reply bridge 的 RELEASE 已执行，真实 Telegram/WhatsApp 身份数据验收待用户入口。
 
 执行前提：保留外部可恢复 checkpoint，确认目标是 OrbStack `ubuntu` 内的 CasaOS；不要恢复
 LangBot、n8n、旧 Runtime、关键词路由或第二套 sender。
@@ -14,12 +14,13 @@ LangBot、n8n、旧 Runtime、关键词路由或第二套 sender。
 - 运行时 inspect 确认七个 Identity tools、PUBG tools 和 `identity` Skill 已加载；Gateway
   只读 smoke 实际调用 `identity_resolve(self)`，返回 `unbound / trusted_sender_metadata_unavailable`。
 - `/data/identity.sqlite` 已创建，四张身份表存在且当前均为 0 行；没有伪造或写入生产身份记录。
+- `56a0df5` 的 typed reply metadata bridge 已重新构建并 apply；线上镜像为
+  `local/openclaw-amadeus:git-56a0df53595e-20260918093413`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918093413`；runtime inspect 已确认
+  `before_dispatch` 和 `agent_end` typed hooks loaded。
 
 待完成：
 
-- 当前 Identity image 已完成一次 RELEASE apply；本轮新增的 typed reply metadata bridge 需
-  按 `scripts/deploy-openclaw.sh` 的 RELEASE 流程重新构建 immutable OpenClaw image，更新
-  CasaOS compose 并以 `--no-build` 启动。
 - 只使用运行时外部文件 `/DATA/AppData/openclaw/data/identity.sqlite` 和可选
   `/DATA/AppData/openclaw/data/identity-presets.json`；不要把真实 Telegram/WhatsApp ID、
   JID、手机号、PUBG account 或 secret 回写仓库。

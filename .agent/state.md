@@ -7,12 +7,12 @@ OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n�
 旧通知 bridge 和旧 proactive producer。
 
 当前子目标：实现跨 Telegram/WhatsApp 的 canonical Person identity、昵称候选学习和
-provider-neutral external account；Identity 已完成一次 CasaOS apply，reply metadata bridge
-已在本地补齐但尚未重新发布，线上真实 sender binding/账号 linking 仍待真实用户入口验收。
+provider-neutral external account；Identity reply metadata bridge 已完成新的 CasaOS apply，
+线上真实 sender binding/账号 linking 仍待真实用户入口验收。
 
 当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
-app/data 退休均 PASS；本轮新增部署脚本的选择性镜像构建优化，源码尚未 apply 到线上。
+app/data 退休均 PASS；本轮 Identity reply bridge 已通过选择性镜像构建优化重新 apply 到线上。
 
 已落地：
 
@@ -31,18 +31,19 @@ app/data 退休均 PASS；本轮新增部署脚本的选择性镜像构建优化
   因此 Amadeus owner notifier 可正常调用 Gateway runtime。
 - `packages/identity`、Amadeus `identity_*` tools/Skill 和 PUBG identity boundary 已加入源码；
   identity SQLite 与 presets 使用 `/data` 外部路径，确认写入受 owner gate，observed alias
-  只能作为 candidate。线上已运行 `local/openclaw-amadeus:git-05471a8618f1-20260918091819`。
+  只能作为 candidate。线上已运行
+  `local/openclaw-amadeus:git-56a0df53595e-20260918093413`，四张身份表仍为空。
 - Amadeus typed `before_dispatch` hook 只把 OpenClaw 可信 `replyToSender` 短时传给同一
   session 的 Identity tools，`agent_end` 清理；没有 reply metadata 时仍 fail closed。mention
   仍要求 host 提供结构化 platform ID，不解析昵称或 prompt。
 
 下一步：
 
-1. 重新构建并 apply 含 reply bridge 的 OpenClaw image，然后在真实 Telegram/WhatsApp 私聊和群聊入口完成 sender binding、PUBG account/link、群 alias
+1. 在真实 Telegram/WhatsApp 私聊和群聊入口完成 sender binding、PUBG account/link、群 alias
    candidate/confirm 和重启持久化验收；不能用伪造 ID 或 provider trace 代替。
 2. 记录真实 inbound/outbound 结果和数据库重启前后摘要；当前 live DB 只有 schema、四张表
    均为 0 行，安全地等待真实用户确认。
-3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918091819` 作为恢复点，
+3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918093413` 作为最新恢复点，
    不恢复已退休的 LangBot/n8n/旧 Runtime。
 
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚

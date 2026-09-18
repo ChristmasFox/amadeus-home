@@ -25,9 +25,11 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   线上 SQLite 已创建但四张身份表均为 0 行。
 - follow-up 已使用 pinned OpenClaw 2026.9.4 的 typed `before_dispatch` hook 捕获可信
   `replyToSender`，按 session 短时桥接到 Identity tools，并在 `agent_end` 清理；本地测试覆盖
-  hook registration、session isolation 和无 metadata 的 fail-closed。该源码 follow-up 尚未进入
-  当前线上 image；mention 仍只接受 host 的结构化 platform ID binding。
-- 线上切换 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918091819`；
+  hook registration、session isolation 和无 metadata 的 fail-closed。`56a0df5` 已完成新的
+  immutable image build/apply；线上 runtime inspect 显示 `before_dispatch`、`agent_end` 两个
+  typed hook，mention 仍只接受 host 的结构化 platform ID binding。
+- 当前线上镜像为 `local/openclaw-amadeus:git-56a0df53595e-20260918093413`，恢复 checkpoint
+  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918093413`；
   真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
   alias confirmation 和重启后有数据持久化仍待用户入口验收。
 
