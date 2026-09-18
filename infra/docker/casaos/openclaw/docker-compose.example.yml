@@ -21,10 +21,10 @@ services:
       TZ: Asia/Shanghai
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
-      NO_PROXY: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
+      NO_PROXY: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,product-radar,media-organizer-adapter,changedetection,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
       http_proxy: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       https_proxy: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
-      no_proxy: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
+      no_proxy: ${OPENCLAW_NO_PROXY:-localhost,127.0.0.1,::1,openclaw,9router,product-radar,media-organizer-adapter,changedetection,host.docker.internal,.local,10.0.0.0/8,172.16.0.0/12,192.168.5.0/24,192.168.97.0/24}
     volumes:
       - ${OPENCLAW_CONFIG_DIR:-/DATA/AppData/openclaw/config}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR:-/DATA/AppData/openclaw/workspace}:/home/node/.openclaw/workspace
