@@ -48,6 +48,10 @@ Scheduled morning/evening VPS reports must call all of
 `amadeus_vps_live_status`, `amadeus_vps_usage`, `amadeus_vps_system_status`,
 and `amadeus_vps_services`, compose a concise Chinese report from returned
 facts, include the mandatory ten-cell traffic line, explicitly highlight every anomaly, and then call
-`amadeus_notify_owner` with a stable report event key. That notifier has one
-fixed destination: the WhatsApp owner DM. Do not use Telegram, KOOK, a group,
-cron fallback delivery, or an invented healthy status.
+`amadeus_notify_owner` with a stable report event key such as
+`vps-report:2026-09-18:evening`. A manually triggered cron run must never use
+the scheduled key; use `vps-report:manual:<current ISO time>:evening` instead.
+The plugin also isolates an accidentally reused scheduled key at the tool
+boundary. That notifier has one fixed destination: the WhatsApp owner DM. Do
+not use Telegram, KOOK, a group, cron fallback delivery, or an invented
+healthy status.

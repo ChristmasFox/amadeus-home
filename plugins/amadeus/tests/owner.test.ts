@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
-import { enqueueOwnerEvent, isTrustedOwnerContext } from '../src/owner.js';
+import { enqueueOwnerEvent, isTrustedOwnerContext, ownerEventForContext } from '../src/owner.js';
 
 test('owner context trusts only owner senders or OpenClaw cron sessions', () => {
   const base = {} as OpenClawPluginToolContext;
@@ -13,6 +13,20 @@ test('owner context trusts only owner senders or OpenClaw cron sessions', () => 
   assert.equal(isTrustedOwnerContext({ ...base, sessionKey: 'agent:main:cron:job:run:id' }), true);
   assert.equal(isTrustedOwnerContext({ ...base, sessionKey: 'agent:main:chat' }), false);
   assert.equal(isTrustedOwnerContext({ ...base, senderIsOwner: false, sessionKey: 'agent:main:cronical:chat' }), false);
+});
+
+test('manual VPS cron runs cannot consume the scheduled report event key', () => {
+  const input = {
+    eventKey: 'vps-report:2026-09-18:evening',
+    source: 'vps-report',
+    title: 'VPS 晚间状态',
+    message: 'ok',
+    occurredAt: '2026-09-18T20:26:17.000Z',
+  };
+  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
+  assert.equal(manual.eventKey, 'vps-report:manual:2026-09-18T20:26:17.000Z:evening');
+  const scheduled = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:scheduled-run-id' } as OpenClawPluginToolContext);
+  assert.equal(scheduled.eventKey, input.eventKey);
 });
 
 test('owner outbox is channel-free, atomic, and idempotent', async () => {

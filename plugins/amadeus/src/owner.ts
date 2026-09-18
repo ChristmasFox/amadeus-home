@@ -19,6 +19,12 @@ export function isTrustedOwnerContext(context: OpenClawPluginToolContext): boole
   return context.senderIsOwner === true || sessionKey.startsWith('cron:') || sessionKey.includes(':cron:');
 }
 
+function isManualCronContext(context: OpenClawPluginToolContext): boolean {
+  return /(?:^|:)run:manual:/u.test(context.sessionKey?.trim() ?? '');
+}
+
+const scheduledVpsReportEventKey = /^vps-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u;
+
 function idFor(eventKey: string): string {
   return createHash('sha256').update(eventKey).digest('hex').slice(0, 40);
 }
@@ -188,4 +194,17 @@ export class OwnerNotifier {
 
 export function ownerEvent(input: { eventKey: string; source: string; title: string; message: string; occurredAt?: string }): OwnerEvent {
   return normalize({ version: 1, ...input, occurredAt: input.occurredAt ?? new Date().toISOString() });
+}
+
+export function ownerEventForContext(
+  input: { eventKey: string; source: string; title: string; message: string; occurredAt?: string },
+  context: OpenClawPluginToolContext,
+): OwnerEvent {
+  const event = ownerEvent(input);
+  const scheduledMatch = event.eventKey.match(scheduledVpsReportEventKey);
+  if (!isManualCronContext(context) || !scheduledMatch) return event;
+  return {
+    ...event,
+    eventKey: `vps-report:manual:${event.occurredAt}:${scheduledMatch[1]}`,
+  };
 }

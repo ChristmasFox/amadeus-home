@@ -24,7 +24,7 @@ import {
 import { kookGroupMembers } from './kook.js';
 import { organizeMedia } from './media.js';
 import { nas } from './nas.js';
-import { isTrustedOwnerContext, OwnerNotifier, ownerEvent } from './owner.js';
+import { isTrustedOwnerContext, OwnerNotifier, ownerEventForContext } from './owner.js';
 import { productRadar } from './radar.js';
 import { getVpsLiveStatus, getVpsServices, getVpsServiceInfo, getVpsSystemStatus, getVpsUsage } from './vps.js';
 
@@ -217,9 +217,9 @@ const entry = definePluginEntry({
     registerTool(api, 'identity_link_account', 'Owner-confirm a provider-neutral external account for a Person, such as a PUBG account. The provider and external id are explicit structured values.', IdentityLinkAccountParameters, async (params, context) => identityLinkAccount(config, params as IdentityLinkAccountInput, context));
     registerTool(api, 'identity_list_candidates', 'List persisted observed nickname candidates for the current conversation or requested scope; this does not resolve them as reliable identities.', IdentityListCandidatesParameters, async (params, context) => identityListCandidates(config, params as IdentityListCandidatesInput, context));
     registerTool(api, 'identity_confirm_candidate', 'Owner-confirm one persisted observed nickname candidate so it becomes an authoritative alias.', IdentityConfirmCandidateParameters, async (params, context) => identityConfirmCandidate(config, params as IdentityConfirmCandidateInput, context));
-    registerTool(api, 'amadeus_notify_owner', 'Send a proactive owner notification. The recipient and channel are fixed by deployment to the WhatsApp owner; callers cannot select Telegram, KOOK, or another target.', NotifyOwnerParameters, async (params, context, notifier) => {
+    registerTool(api, 'amadeus_notify_owner', 'Send a proactive owner notification to the fixed WhatsApp owner DM. For scheduled VPS reports, use the stable date/period eventKey; manual cron runs are automatically isolated under a separate key and must never consume the scheduled key.', NotifyOwnerParameters, async (params, context, notifier) => {
       if (!isTrustedOwnerContext(context)) throw new Error('owner notification requires owner identity');
-      return notifier.notify(ownerEvent(params));
+      return notifier.notify(ownerEventForContext(params, context));
     });
     registerTool(api, 'amadeus_vps_service_info', 'Read VPS basic service and plan facts through the fixed read-only KiwiVM service-info API. No control endpoint or credential is exposed.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsServiceInfo(config, signal));
     registerTool(api, 'amadeus_vps_live_status', 'Read the VPS Running/Stopped state, KiwiVM live resource facts, and CPU throttling through the fixed read-only live-status API.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsLiveStatus(config, signal));
