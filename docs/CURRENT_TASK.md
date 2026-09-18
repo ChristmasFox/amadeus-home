@@ -20,18 +20,20 @@ OpenClaw trusted context 读取，生产 ID/JID 不进入 Git。
 metadata bridge，并在 `agent_end` 清理；只保留可信 channel-native sender id，按 session 隔离，
 不保存消息正文或显示名。Pinned OpenClaw 2026.9.4 的 Telegram bundle 和外部持久化 WhatsApp
 channel package 现在也通过 source-controlled、版本锚定补丁，把 Telegram `text_mention` 的
-真实 user ID、WhatsApp `mentionedJid` 和稳定 sender JID 送入同一
-`toolBindings.identity.mentions`/sender context；不从 prompt、昵称、手机号文本或用户名推断。
-该 follow-up 已随 `4831659` 构建并 apply；线上镜像为
-`local/openclaw-amadeus:git-4831659fc216-20260918100611`，runtime inspect 已确认
+真实 user ID、同一会话内已由 trusted sender metadata 观察到的 `@username` 对应 ID、WhatsApp
+`mentionedJid` 和稳定 sender JID 送入同一 `toolBindings.identity.mentions`/sender context；不从
+prompt、昵称、手机号文本或未观察到的用户名推断，过期/冲突用户名 fail closed。该 follow-up 已随
+`c33684a` 构建并 apply；线上镜像为
+`local/openclaw-amadeus:git-c33684a77a7a-20260918101625`，runtime inspect 已确认
 `before_dispatch` 和 `agent_end` 两个 typed hook 在线。
 
 PUBG plugin 已在边界消费 canonical Person 的 `provider=pubg` account；没有 binding、没有
 PUBG account、alias 仍是 observed candidate 或解析歧义时，返回明确 identity error，不再把
 群成员的“我”静默解析成默认队伍。`team=true` 是显式队伍请求。源码、配置、Skill、本地测试和
 trusted channel metadata 的 CasaOS build/apply 均已完成；线上运行
-`local/openclaw-amadeus:git-4831659fc216-20260918100611`。Gateway 只读 smoke 实际调用
-`identity_resolve(self)` 并返回 `unbound / trusted_sender_metadata_unavailable`；线上真实
+`local/openclaw-amadeus:git-c33684a77a7a-20260918101625`。最近真实 WhatsApp 群入站已调用
+`identity_resolve(self)` 并返回 `unbound / trusted_channel_identity_is_not_bound`，随后没有调用
+PUBG tool；线上真实
 Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重启持久化尚未由真实
 用户入口完成。
 
@@ -51,8 +53,8 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
 - 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
   media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
 - 部署后阶段：PASS。基础迁移 checkpoint 为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；trusted channel metadata
-  的最新 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918100611`；旧 LangBot/n8n
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；Telegram username/trusted
+  channel metadata 的最新 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918101625`；旧 LangBot/n8n
   容器、app/data 路径和 KOOK watchdog timer 已退休。全局上下文、Codex hook、内部服务
   proxy bypass 和自然语言工具选择均已完成 live 复核。
 - 部署构建优化阶段：PASS。`scripts/deploy-openclaw.sh` 新增

@@ -7,12 +7,13 @@ OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n�
 旧通知 bridge 和旧 proactive producer。
 
 当前子目标：实现跨 Telegram/WhatsApp 的 canonical Person identity、昵称候选学习和
-provider-neutral external account；Identity reply metadata bridge 与 provider-native channel
-metadata patch 已完成新的 CasaOS apply，线上真实 sender binding/账号 linking 仍待真实用户入口验收。
+provider-neutral external account；Identity reply metadata bridge、provider-native channel metadata
+和 Telegram trusted username patch 已完成新的 CasaOS apply，线上真实 sender binding/账号 linking
+仍待真实用户入口验收。
 
 当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
-app/data 退休均 PASS；本轮 Identity reply bridge 已通过选择性镜像构建优化重新 apply 到线上。
+app/data 退休均 PASS；本轮 Telegram trusted username patch 已通过选择性镜像构建重新 apply 到线上。
 
 已落地：
 
@@ -32,12 +33,13 @@ app/data 退休均 PASS；本轮 Identity reply bridge 已通过选择性镜像�
 - `packages/identity`、Amadeus `identity_*` tools/Skill 和 PUBG identity boundary 已加入源码；
   identity SQLite 与 presets 使用 `/data` 外部路径，确认写入受 owner gate，observed alias
   只能作为 candidate。线上已运行
-  `local/openclaw-amadeus:git-4831659fc216-20260918100611`，SOUL/MEMORY 与 Git 哈希一致，四张
+  `local/openclaw-amadeus:git-c33684a77a7a-20260918101625`，SOUL/MEMORY 与 Git 哈希一致，四张
   身份表仍为空。
 - Amadeus typed `before_dispatch` hook 只把 OpenClaw 可信 `replyToSender` 短时传给同一
   session 的 Identity tools，`agent_end` 清理；没有 reply metadata 时仍 fail closed。mention
   仍要求 host 提供结构化 platform ID，不解析昵称或 prompt。Pinned Telegram bundle 和外部
-  WhatsApp package 现已通过 source-controlled、版本锚定补丁传递真实 mention/sender ID。
+  WhatsApp package 现已通过 source-controlled、版本锚定补丁传递真实 mention/sender ID；Telegram
+  `@username` 只有在同一会话内由 trusted sender metadata 先建立对应关系时才可解析。
 
 下一步：
 
@@ -45,7 +47,7 @@ app/data 退休均 PASS；本轮 Identity reply bridge 已通过选择性镜像�
    candidate/confirm 和重启持久化验收；不能用伪造 ID 或 provider trace 代替。
 2. 记录真实 inbound/outbound 结果和数据库重启前后摘要；当前 live DB 只有 schema、四张表
    均为 0 行，安全地等待真实用户确认。
-3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918100611` 作为最新恢复点，
+3. 继续保留 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918101625` 作为最新恢复点，
    不恢复已退休的 LangBot/n8n/旧 Runtime。
 
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚
