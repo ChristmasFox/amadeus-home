@@ -8,7 +8,7 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## VPS Read-only Capability + Daily Report 子目标（2026-09-18）
 
-当前实现状态：`CODE_COMPLETE_EXTERNAL_LIVE_PENDING`。Amadeus 已加入五个只读 VPS native
+当前实现状态：`LIVE_DEPLOYED_REPORT_SMOKE_PASS_INTERACTIVE_INBOUND_PENDING`。Amadeus 已加入五个只读 VPS native
 tools 和 `skills/vps`：KiwiVM 固定 service/live/raw-usage API，固定 SSH uptime/resource
 probe，固定 Caddy/Xray/Hysteria2/frps service probe；没有 restart/stop/start/reinstall/password
 reset/任意 shell/关键词路由。流量状态原子持久化在 `/data/vps-usage-state.json`，以成功 counter/time
@@ -17,8 +17,10 @@ reset/任意 shell/关键词路由。流量状态原子持久化在 `/data/vps-u
 部署模板已声明外部 KiwiVM credentials、VPS read-only SSH key、known-hosts mount，迁移脚本已
 加入 secret 校验、状态 checkpoint、工具/Skill preflight 和 09:30/23:00 Asia/Shanghai VPS
 report cron。受限 SSH key/user 和固定 probe 已在 `amadeus-gateway` provision 并通过插件真实
-调用验证；真实 KiwiVM secret、自然语言入口和 WhatsApp owner DM 仍待部署后验收；在这些证据
-出现前不得宣称 Definition of Done。
+调用验证；KiwiVM secret 已放入 CasaOS 外部 secrets，最新镜像已 apply。Gateway 自然语言 smoke
+实际调用五个 VPS tools 且无失败；晚间 cron 已通过 WhatsApp provider 返回真实 sent message，报文
+包含十格流量条、增量和四个服务。仍待用户从真实 WhatsApp 入站发送一条自然语言 VPS 查询，以
+完成最终聊天入口证据；在该证据出现前不得宣称 Definition of Done。
 
 ## 跨渠道 Identity 子目标（2026-09-18）
 
@@ -60,13 +62,13 @@ PUBG tool；用户已提供 4 个 WhatsApp 人员的昵称、别名和 PUBG 外�
   `tools.profile="full"`，不再用只包含 PUBG 的严格 allowlist。全局 workspace 已收敛为
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
-- 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  Identity 9、PUBG domain 9、PUBG plugin 8、Amadeus 7、Product Radar 51。
+- 本地测试阶段：PASS。最新 apply 前 build、typecheck、测试和 secrets scan 复跑通过：
+  Identity 9、PUBG domain 9、PUBG plugin 8、Amadeus 10、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际
   使用远端 owner outbox，且不再因缺少 `os` 导入而静默丢弃事件。
-- 真实切换阶段：PASS。最终镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
+- 真实切换阶段：PASS。最新镜像已在 OrbStack Ubuntu CasaOS 运行；OpenClaw、Product Radar、
   media adapter、NAS 只读 smoke、briefing cron 和 owner WhatsApp outbox 均通过。
 - 部署后阶段：PASS。基础迁移 checkpoint 为
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918082357`；Telegram username/trusted
@@ -85,8 +87,17 @@ PUBG tool；用户已提供 4 个 WhatsApp 人员的昵称、别名和 PUBG 外�
   bridge，线上镜像和恢复点见上述 Identity 状态及
   `.agent/checkpoints/2026-09-18-openclaw-identity-reply-bridge-deployed.md`。
 
+- VPS live acceptance 阶段：PASS（真实入站查询待用户触发）。最新 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918122319`，线上镜像为
+  `local/openclaw-amadeus:git-e15607cdbbfb-20260918122319`。两个 VPS cron 为
+  `30 9`/`0 23 Asia/Shanghai`，allowlist 仅包含四个 VPS read tools 与
+  `amadeus_notify_owner`；OpenClaw 重启后 schedule、VPS usage baseline 和 progress-bar prompt
+  均保留。晨报首次暴露的 cron owner-context bug 已由 `c1fe427` 修复；随后晚报真实发送并以
+  `sent` marker 与 WhatsApp provider message ID 验证。最新 `e15607c` 将十格进度条设为 Skill
+  和已有 cron 的硬格式。CPU throttling 若 API 返回 unknown 必须继续标为 unknown，不得当作健康。
+
 VPS 子目标当前本地 evidence：`pnpm --filter @agent/amadeus-plugin typecheck`、`build:amadeus`、
-Amadeus 9 tests、`bash -n scripts/deploy-openclaw.sh`、`py_compile scripts/openclaw_prepare.py`、
+Amadeus 10 tests、`bash -n scripts/deploy-openclaw.sh`、`py_compile scripts/openclaw_prepare.py`、
 manifest JSON validation 和 `git diff --check` 已通过。
 
 ## PUBG-only 根因修复验收
