@@ -7,9 +7,9 @@ LangBot、n8n、旧 Runtime、关键词路由或第二套 sender。
 
 已完成：
 
-- 运行 `05471a8` 对应的受影响 package build/typecheck/test/secrets scan，并构建
+- 首轮运行 `05471a8` 对应的受影响 package build/typecheck/test/secrets scan，并构建
   `local/openclaw-amadeus:git-05471a8618f1-20260918091819`。
-- CasaOS compose 已以 `--no-build` 切换；外部 checkpoint 为
+- 首轮 CasaOS compose 已以 `--no-build` 切换；外部 checkpoint 为
   `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918091819`。
 - 运行时 inspect 确认七个 Identity tools、PUBG tools 和 `identity` Skill 已加载；Gateway
   只读 smoke 实际调用 `identity_resolve(self)`，返回 `unbound / trusted_sender_metadata_unavailable`。
