@@ -474,7 +474,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. For requests such as “胶昨天战绩” or “猴昨天战绩”, call identity_resolve first, then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',

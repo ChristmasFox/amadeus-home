@@ -17,6 +17,9 @@ When a user asks for facts about a person using a nickname or alias, invoke
 “胶昨天战绩” and “猴昨天战绩” require
 `identity_resolve({reference: "alias", alias: "胶"})` or the equivalent exact
 alias, followed by the PUBG tool with the returned canonical `personId`.
+For first-person references such as “我”“我的”“本人” or “自己”, invoke
+`identity_resolve({reference: "self"})` first; the current trusted channel
+sender is the subject, including in a group and when the sender is Arthur.
 Never ask for the external account first when the resolver can answer it, and
 never treat a previous assistant claim that an account is missing as current
 state. A domain tool may report an account problem only after a current
