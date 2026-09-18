@@ -26,11 +26,12 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - follow-up 已使用 pinned OpenClaw 2026.9.4 的 typed `before_dispatch` hook 捕获可信
   `replyToSender`，按 session 短时桥接到 Identity tools，并在 `agent_end` 清理；本地测试覆盖
   hook registration、session isolation 和无 metadata 的 fail-closed。`4831659` 又把
-  Telegram `text_mention` user ID、WhatsApp `mentionedJid` 和稳定 sender JID 通过同一
-  `GatewayRunToolBindings.identity`/sender context 传入，且不解析 prompt、昵称、手机号文本或
-  username；Telegram 镜像 bundle 与外部 WhatsApp package 均已通过版本锚定补丁部署。
-- 当前线上镜像为 `local/openclaw-amadeus:git-4831659fc216-20260918100611`，恢复 checkpoint
-  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918100611`；
+  Telegram `text_mention` user ID、同一会话内从 trusted sender metadata 观察到的
+  `@username` 对应 ID、WhatsApp `mentionedJid` 和稳定 sender JID 通过同一
+  `GatewayRunToolBindings.identity`/sender context 传入；过期/冲突 username fail closed，且不解析
+  prompt、昵称或手机号文本。Telegram 镜像 bundle 与外部 WhatsApp package 均已通过版本锚定补丁部署。
+- 当前线上镜像为 `local/openclaw-amadeus:git-c33684a77a7a-20260918101625`，恢复 checkpoint
+  为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260918101625`；
   真实 Telegram/WhatsApp inbound sender metadata、owner binding、provider account/link、
   alias confirmation 和重启后有数据持久化仍待用户入口验收。
 
