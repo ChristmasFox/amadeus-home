@@ -47,7 +47,7 @@ Telegram/WhatsApp sender binding、PUBG account/link、群 alias confirm 和重�
   架构、工具真实性、通知和安全原则；PUBG 领域规则全部下沉到 `plugins/pubg` skill，SOUL
   不再固化 PUBG 能力清单。
 - 本地测试阶段：PASS。全量 build、typecheck、测试和 secrets scan 在最终 apply 前复跑通过：
-  Identity 8、PUBG domain 9、PUBG plugin 7、Amadeus 7、Product Radar 51。
+  Identity 9、PUBG domain 9、PUBG plugin 8、Amadeus 7、Product Radar 51。
 - 部署脚本阶段：PASS。scripts/deploy-openclaw.sh 已改为显式 apply 的一次性迁移入口，包含
   checkpoint、当前 OpenClaw secret 校验、镜像构建、旧 app/data 退休、briefing cron 和 owner
   WhatsApp smoke；不再从旧 LangBot DB 或旧路径做运行时 fallback。Codex hook 已修复为实际

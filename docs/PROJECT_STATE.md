@@ -114,7 +114,7 @@ WhatsApp owner target 只在切换脚本中从外部运行状态恢复，绝不�
 - 本次 `29ad1b9` 的 Identity preset refresh 定向测试、受影响 build/typecheck、secrets scan
   和 CasaOS apply 已通过；线上四张 Identity 表仍为 0 行，等待用户填写外部预设。
 - `1ccd6f0` 又使 PUBG plugin 的缓存 IdentityStore 在 preset 文件运行后新增或修改时同步
-  刷新；Identity 8、PUBG plugin 7、Amadeus 7 定向测试、受影响 build/typecheck、secrets
+  刷新；Identity 9、PUBG plugin 8、Amadeus 7 定向测试、受影响 build/typecheck、secrets
   scan 和 live apply 均通过。
 - 媒体整理继续受 organize-emby-media Skill 的备份、单项、preview-confirm、碰撞检查
   和不修改现有媒体库约束保护。

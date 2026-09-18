@@ -81,3 +81,28 @@ test('PUBG boundary refreshes presets after its cached IdentityStore was created
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('PUBG boundary maps multiple canonical Persons to explicit compare subjects', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pubg-identity-compare-'));
+  const identityPath = join(directory, 'identity.sqlite');
+  const presetsPath = join(directory, 'presets.json');
+  await writeFile(presetsPath, JSON.stringify({ persons: [
+    { personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'p1' }] },
+    { personId: 'other', displayName: '另一位', externalAccounts: [{ provider: 'pubg', externalId: 'p2' }] },
+  ] }));
+  const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
+  const service = new PubgDomainService({ team: TEAM, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  try {
+    const prepared = await prepareIdentitySubject(
+      service,
+      config,
+      { personIds: ['wang', 'other'] },
+      toolContext(),
+      'telegram-compare-turn',
+    );
+    assert.deepEqual(prepared, { playerIds: ['p1', 'p2'] });
+  } finally {
+    service.repository.db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

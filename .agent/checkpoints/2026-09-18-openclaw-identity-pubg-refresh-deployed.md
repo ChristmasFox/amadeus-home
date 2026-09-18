@@ -5,7 +5,7 @@
 
 ## 发布结果
 
-- 提交 `1ccd6f0` 已完成 Identity 8、PUBG domain 9、PUBG plugin 7、Amadeus 7 定向测试，
+- 提交 `1ccd6f0` 已完成 Identity 9、PUBG domain 9、PUBG plugin 8、Amadeus 7 定向测试，
   受影响 build/typecheck、secrets scan、Docker image build 和 live apply。
 - 新 OpenClaw image：
   `local/openclaw-amadeus:git-1ccd6f09c6f1-20260918103442`；容器状态 `running`、health

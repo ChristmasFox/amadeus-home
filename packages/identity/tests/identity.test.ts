@@ -176,6 +176,29 @@ test('confirmed identity bindings, aliases, and external accounts survive restar
   }
 });
 
+test('one canonical Person resolves through confirmed Telegram and WhatsApp identities', () => {
+  const store = new IdentityStore();
+  store.seedPresets([{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }]);
+  store.bindChannel({
+    personId: 'wang',
+    identity: { channel: 'telegram', accountId: 'default', platformUserId: 'tg-991' },
+    source: 'confirmed',
+  });
+  store.bindChannel({
+    personId: 'wang',
+    identity: { channel: 'whatsapp', accountId: 'secondary', platformUserId: '+8613800000000' },
+    source: 'confirmed',
+  });
+
+  const telegram = store.resolve({ type: 'self' }, { channel: 'telegram', accountId: 'default', senderId: 'tg-991' });
+  const whatsapp = store.resolve({ type: 'self' }, { channel: 'whatsapp', accountId: 'secondary', senderId: '+8613800000000' });
+  assert.equal(telegram.person?.personId, 'wang');
+  assert.equal(whatsapp.person?.personId, 'wang');
+  assert.equal(telegram.person?.externalAccounts[0]?.externalId, 'Wang233');
+  assert.equal(whatsapp.person?.externalAccounts[0]?.externalId, 'Wang233');
+  store.close();
+});
+
 test('self and mention resolve only trusted channel metadata, never display names', () => {
   const store = new IdentityStore();
   store.seedPresets([{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'Wang233' }] }]);
