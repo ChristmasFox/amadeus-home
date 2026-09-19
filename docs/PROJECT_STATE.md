@@ -13,17 +13,26 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 当前产品版本为 `1.1.5`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
-正文最后追加 `El Psy Kongroo.`。
+正文最后追加一次 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不应自行重复写该句，部署边界会做去重保护。
 
-## PUBG 全部时间统一北京时间（2026-09-19，待部署）
+## 部署通知结尾去重（2026-09-19，待部署）
+
+- 根因是 1.1.5 发布说明正文包含 `El Psy Kongroo.`，而部署脚本无条件追加，导致 owner 部署通知出现两遍。
+- `scripts/deploy-openclaw.sh` 现在会移除发布说明中独立的同名结尾，再统一追加一次；1.1.6 发布说明不再手写该句。
+
+## PUBG 全部时间统一北京时间（2026-09-19，已部署）
 
 - 根因是查询边界内部已经正确使用 UTC 表示的 `Asia/Shanghai 06:00` 业务日，但最终展示直接输出
   UTC 时钟组件并误标为 `Asia/Shanghai`，因此出现 `22:00`；不是 9/18 22:00 之后的比赛被排除。
 - PUBG tool 现在保留 UTC 原始字段作为机器证据，并输出 `dataUpdatedAtLocal`、`asOfLocal`、各时间字段
   的 `*Local` 版本，以及 `dataSourceRange.fromLocal/toLocal`；所有用户可见时间必须使用这些北京时间字段。
 - D-mail 的 `数据更新时间` 同样按 `Asia/Shanghai` 展示；回归覆盖 UTC 到北京时间的换算和用户可见契约。
-- 本地 PUBG Domain 20/20、Plugin 9/9、Identity 10/10、Amadeus 11/11、受影响 typecheck 已通过；
-  版本 `1.1.5` 已生成，待 release build/apply。
+- 本地 PUBG Domain 20/20、Plugin 9/9、Identity 10/10、Amadeus 11/11、受影响 typecheck/build、
+  `pnpm check:secrets` 和 `git diff --check` 已通过。版本 `1.1.5`、提交 `fdf331c` 已通过
+  `--apply --build-auto` 部署；线上镜像为 `local/openclaw-amadeus:git-fdf331cbca89-20260919071937`，
+  恢复 checkpoint 为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919071937`；live 容器为
+  `running/healthy`，bundle 已核实北京时间字段和规则，部署 health、preflight、媒体网络、NAS
+  只读和 owner outbox smoke 均通过。未发送未经请求的真实群聊测试消息。
 
 ## PUBG 方向性结果与来源时间范围（2026-09-19，已部署）
 
