@@ -11,8 +11,9 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 ## Amadeus 版本管理（2026-09-19）
 
 当前产品版本为 `1.1.2`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
-校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
-通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
+校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
+新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
+正文最后追加 `El Psy Kongroo.`。
 
 ## PUBG 周期复盘排序修复（2026-09-19，已部署）
 
