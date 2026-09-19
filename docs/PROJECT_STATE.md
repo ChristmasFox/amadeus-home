@@ -10,7 +10,7 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.1.5`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.1.7`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加一次 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不应自行重复写该句，部署边界会做去重保护。
@@ -18,7 +18,7 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 ## 部署通知结尾去重（2026-09-19，待部署）
 
 - 根因是 1.1.5 发布说明正文包含 `El Psy Kongroo.`，而部署脚本无条件追加，导致 owner 部署通知出现两遍。
-- `scripts/deploy-openclaw.sh` 现在会移除发布说明中独立的同名结尾，再统一追加一次；1.1.6 发布说明不再手写该句。
+- `scripts/deploy-openclaw.sh` 现在会移除发布说明中独立的同名结尾，再统一追加一次；1.1.7 发布说明不再手写该句。
 
 ## PUBG 全部时间统一北京时间（2026-09-19，已部署）
 
