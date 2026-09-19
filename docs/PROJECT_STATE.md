@@ -15,15 +15,19 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加 `El Psy Kongroo.`。
 
-## PUBG 方向性结果与来源时间范围（2026-09-19，待部署）
+## PUBG 方向性结果与来源时间范围（2026-09-19，已部署）
 
 - 队友误伤、踢击、拳击等关系事实统一按 `行为者 → 受害者` 处理；“反过来”是独立查询，
   不会把另一方向的正确结果渲染成错误，也不会把两个方向合并。
 - 每个 PUBG native tool 输出增加必填 `dataSourceRange`；Telemetry 复盘从当前刷新搜索的
   result set 传递精确来源区间，并要求最终回复同时展示 `dataUpdatedAt`、来源时间范围、时区和
   06:00 业务日边界；比较查询分别展示两个分段。
-- 本地 PUBG Domain 20/20、Plugin 9/9、受影响 typecheck、`pnpm check:secrets` 和 `git diff --check`
-  已通过，CasaOS release apply 待完成。
+- 本地 PUBG Domain 20/20、Plugin 9/9、Amadeus 11/11、build/typecheck、`pnpm check:secrets` 和
+  `git diff --check` 已通过。
+- 版本 `1.1.4`、提交 `04e8902` 已通过 `--apply --build-auto` 部署；线上镜像为
+  `local/openclaw-amadeus:git-04e8902c815a-20260919064258`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919064258`；容器 `running/healthy`，
+  live workspace、Skill、native bundle 和启动日志均已核实新契约。
 
 ## PUBG 路由事实强制走工具（2026-09-19，已部署）
 
