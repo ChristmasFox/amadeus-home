@@ -18,11 +18,18 @@
   timestamps, coverage, or successful execution. Preserve meaningful status,
   coverage, freshness, query-resolution, and evidence fields; report
   `partial`, `no_matches`, and `error` as such.
-- Reuse the same OpenClaw session and returned result-set/context identifiers
-  for ordinary follow-up questions when the user is continuing the same request.
-  PUBG latest-match and period-review requests are the exception: the LLM must
-  classify the semantic intent, request a fresh match search, and use only its
-  current resultSetId/facts; never answer a new review from an earlier turn.
+- Reuse the same OpenClaw session for conversational continuity, but do not use
+  prior prose or tool results as business facts. Every new PUBG factual request
+  (stats, match counts, damage, kills, friendly fire, Telemetry, review, or
+  comparison) must call the relevant native PUBG tool, even when the session
+  already contains an answer. The tool reads the persistent SQLite cache and
+  uses its default refresh policy; context may resolve only identity, period,
+  and scope. Never answer a new PUBG fact from an earlier turn's numbers.
+- PUBG latest-match and period-review requests additionally require a fresh
+  match search and only its current resultSetId/facts; never answer a new
+  review from an earlier turn. Only an explicitly deictic request such as
+  “这把/刚才查到的那一把” may reuse a match reference, and the relevant
+  native tool must still be called for the facts.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.

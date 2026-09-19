@@ -29,6 +29,8 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.match(statsTool.description, /personIds/);
   assert.match(statsTool.description, /reference=self/);
   assert.match(statsTool.description, /team=true only for an explicit whole-team request/);
+  assert.match(statsTool.description, /Every new PUBG factual request must call this tool/);
+  assert.match(statsTool.description, /persistent SQLite cache/);
   const searchTool = metadata.tools.find((tool) => tool.name === 'pubg_search_matches');
   assert.ok(searchTool);
   assert.match(searchTool.description, /recentN/);
@@ -39,6 +41,7 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.ok(reviewTool);
   assert.match(reviewTool.description, /current turn/);
   assert.match(reviewTool.description, /stale/);
+  assert.match(reviewTool.description, /instead of quoting prior conversation context/);
   const prefetchTool = metadata.tools.find((tool) => tool.name === 'pubg_prefetch_telemetry');
   assert.ok(prefetchTool);
   assert.match(prefetchTool.description, /status=FETCHED/);
@@ -65,6 +68,8 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /^---\n[\s\S]*^name:\s*pubg\s*$/m);
   assert.match(skill, /^description:\s*"[^"\n]+"\s*$/m);
   assert.match(skill, /最近一局/);
+  assert.match(skill, /Every new PUBG factual request must call the relevant native tool/);
+  assert.match(skill, /persistent SQLite cache/);
   assert.match(skill, /refresh: true/);
   assert.match(skill, /数据更新时间/);
 });
