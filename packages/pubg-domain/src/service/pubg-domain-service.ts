@@ -11,11 +11,12 @@ import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
 import type { MatchReviewResult } from '../review/types.js';
-import { BUSINESS_DAY_START, localDateLabel } from '../time/selector-resolver.js';
+import { BUSINESS_DAY_START, localDateLabel, resolveSelector } from '../time/selector-resolver.js';
 
 export const PUBGMETRIC_VERSION = 'pubg-metrics-v1';
 export const PUBG_QUERY_VERSION = 'pubg-query-v1';
 export const PUBG_RESULT_SET_TTL_MS = 30 * 60 * 1000;
+export const PUBG_REVIEW_SEARCH_MAX_AGE_MS = 5 * 60 * 1000;
 
 export type ToolStatus = 'ok' | 'partial' | 'no_matches' | 'error';
 
@@ -51,6 +52,12 @@ export interface TimeRangeInput {
   businessDayStart?: string;
 }
 
+export interface RelativePeriodInput {
+  type: 'relative_period';
+  value: string;
+  label?: string;
+}
+
 export interface LastMatchesInput {
   type: 'last_n_matches';
   count: number;
@@ -62,7 +69,9 @@ export interface ResultSetInput {
   resultSetId: string;
 }
 
-export type ToolSelectorInput = TimeRangeInput | LastMatchesInput | ResultSetInput;
+export type ToolSelectorInput = TimeRangeInput | RelativePeriodInput | LastMatchesInput | ResultSetInput;
+
+export type SearchSelectorInput = TimeRangeInput | RelativePeriodInput;
 
 export interface StatsToolInput extends SubjectInput {
   sessionId: string;
@@ -87,6 +96,7 @@ export interface CompareToolInput extends SubjectInput {
 
 export interface SearchMatchesInput extends SubjectInput {
   sessionId: string;
+  selector?: SearchSelectorInput;
   from?: string;
   to?: string;
   timezone?: string;
@@ -115,6 +125,7 @@ export interface GetMatchInput {
 }
 
 export interface GetReviewFactsInput extends GetMatchInput {
+  searchResultSetId: string;
   playerIds?: string[];
   categories?: string[];
 }
@@ -348,6 +359,9 @@ function selectorToCanonical(selector: ToolSelectorInput, timezone: string, busi
       timezone: selector.timezone ?? timezone,
       businessDayStart: selector.businessDayStart ?? businessDayStart,
     };
+  }
+  if (selector.type === 'relative_period') {
+    return { type: 'relative_period', value: selector.value, ...(selector.label ? { label: selector.label } : {}) };
   }
   if (selector.type === 'last_n_matches') {
     return { type: 'last_n_matches', count: Math.min(Math.max(Math.trunc(selector.count), 1), 100), offset: Math.max(0, Math.trunc(selector.offset ?? 0)) };
@@ -619,10 +633,27 @@ export class PubgDomainService {
   async searchMatches(input: SearchMatchesInput): Promise<ToolEnvelope> {
     const subject = this.resolveSubject(input);
     if (subject.error) return this.errorEnvelope(subject.error.code, subject.error.retryable, subject.error.reason);
-    const source = await this.refresh(input.refresh !== false || input.recentN !== undefined, this.maxMatches, input.signal);
+    const forceFreshSearch = input.recentN !== undefined || input.selector !== undefined;
+    const source = await this.refresh(input.refresh !== false || forceFreshSearch, this.maxMatches, input.signal);
     const now = this.now();
-    const from = input.from ? asFiniteDate(input.from) : 0;
-    const to = input.to ? asFiniteDate(input.to) : now.getTime();
+    const selectorTimezone = input.selector?.type === 'time_range' ? input.selector.timezone ?? this.timezone : this.timezone;
+    const selectorBusinessDayStart = input.selector?.type === 'time_range' ? input.selector.businessDayStart ?? this.businessDayStart : this.businessDayStart;
+    const resolvedSelector = input.selector
+      ? resolveSelector(
+        input.selector.type === 'relative_period'
+          ? { type: 'relative_period', value: input.selector.value, ...(input.selector.label ? { label: input.selector.label } : {}) }
+          : {
+            type: 'time_range',
+            start: input.selector.from,
+            end: input.selector.to,
+            timezone: input.selector.timezone ?? this.timezone,
+            businessDayStart: input.selector.businessDayStart ?? this.businessDayStart,
+          },
+        { timezone: selectorTimezone, businessDayStart: selectorBusinessDayStart, now },
+      )
+      : null;
+    const from = resolvedSelector ? Date.parse(resolvedSelector.start) : input.from ? asFiniteDate(input.from) : 0;
+    const to = resolvedSelector ? Date.parse(resolvedSelector.end) : input.to ? asFiniteDate(input.to) : now.getTime();
     if (from === null || to === null || from >= to) return this.errorEnvelope('invalid_time_range', false, 'from/to must be valid and from < to');
     const selected = source.records.filter((match) => match.timestamp >= from && match.timestamp < to
       && match.isCompetitive !== false
@@ -653,15 +684,22 @@ export class PubgDomainService {
     const query = {
       tool: 'pubg_search_matches',
       sessionId: input.sessionId,
-      selector: { from: new Date(from).toISOString(), to: new Date(to).toISOString(), timezone: input.timezone ?? this.timezone },
+      selector: {
+        ...(input.selector ?? { type: 'time_range' }),
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        timezone: resolvedSelector?.timezone ?? input.timezone ?? this.timezone,
+        businessDayStart: resolvedSelector?.businessDayStart ?? selectorBusinessDayStart,
+      },
       subject: subject.ids,
       filters: { gameMode: input.gameMode ?? null, mapName: input.mapName ?? null },
       order: input.sort ?? 'desc',
       page,
       pageSize,
       refresh: {
-        requested: input.refresh !== false,
+        requested: input.refresh !== false || forceFreshSearch,
         forcedForRecent: input.recentN !== undefined,
+        forcedForSelector: input.selector !== undefined,
         syncInvoked: source.source.syncInvoked,
         playerApiCalls: source.source.playerApiCalls,
         matchApiCalls: source.source.matchApiCalls,
@@ -676,7 +714,7 @@ export class PubgDomainService {
       queryId: 'search-' + randomUUID(),
       sessionId: input.sessionId,
       resolvedQuery: queryForStats({ sessionId: input.sessionId, selector: { type: 'time_range', from: new Date(from).toISOString(), to: new Date(to).toISOString() }, metrics: ['matches'], operation: 'list', groupBy: 'match' }, subject.ids, this.timezone, this.businessDayStart),
-      resolvedSelector: { type: 'time_range', start: new Date(from).toISOString(), end: new Date(to).toISOString(), timezone: this.timezone, businessDayStart: this.businessDayStart },
+      resolvedSelector: { type: 'time_range', start: new Date(from).toISOString(), end: new Date(to).toISOString(), timezone: resolvedSelector?.timezone ?? selectorTimezone, businessDayStart: resolvedSelector?.businessDayStart ?? selectorBusinessDayStart },
       playerIds: subject.ids,
       matchIds: recent.map((match) => match.matchId),
       rows: [],
@@ -927,6 +965,19 @@ export class PubgDomainService {
   }
 
   async getReviewFacts(input: GetReviewFactsInput): Promise<ToolEnvelope> {
+    const searchResultSet = this.repository.getResultSet(input.sessionId, input.searchResultSetId, this.now());
+    const searchCreatedAt = searchResultSet ? Date.parse(searchResultSet.createdAt) : Number.NaN;
+    const searchAge = Number.isFinite(searchCreatedAt) ? this.now().getTime() - searchCreatedAt : Number.POSITIVE_INFINITY;
+    if (!searchResultSet || !searchResultSet.source.syncInvoked || searchAge < 0 || searchAge > PUBG_REVIEW_SEARCH_MAX_AGE_MS) {
+      return this.errorEnvelope(
+        'review_search_required',
+        true,
+        'call pubg_search_matches with refresh=true in the current turn, then pass its resultSetId to pubg_get_review_facts',
+      );
+    }
+    if (!searchResultSet.matchIds.includes(input.matchId)) {
+      return this.errorEnvelope('match_not_in_search_result', false, input.matchId);
+    }
     const match = this.repository.getMatch(input.matchId);
     if (!match) {
       const result = await this.getMatch({
@@ -953,6 +1004,7 @@ export class PubgDomainService {
       telemetry: {
         status: telemetry.status,
         cacheStatus: telemetry.cacheStatus,
+        cacheLookup: telemetry.cacheLookup,
         availability: telemetry.availability,
         parserVersion: telemetry.parserVersion,
         featureVersion: telemetry.featureVersion,
@@ -966,7 +1018,7 @@ export class PubgDomainService {
       coverage: coverageForLocal(this.repository.listMatches(), this.now(), this.repository.getSyncState('team:' + this.team.id)),
       asOf: this.now().toISOString(),
       metricVersion: PUBGMETRIC_VERSION,
-      queryResolved: { tool: 'pubg_get_review_facts', matchId: input.matchId, playerIds: input.playerIds ?? null, categories: input.categories ?? null },
+      queryResolved: { tool: 'pubg_get_review_facts', matchId: input.matchId, searchResultSetId: input.searchResultSetId, playerIds: input.playerIds ?? null, categories: input.categories ?? null },
       evidenceRefs: { matchIds: [target.matchId], playerIds: facts.squad.playerIds, fields: ['match', 'players', 'combat', 'fights', 'weapons', 'vehicles', 'evidence'], calculation: 'telemetry_facts_v1' },
     };
     if (telemetry.status === 'UNAVAILABLE') result.error = { code: 'telemetry_unavailable', retryable: true, reason: telemetry.error ?? 'telemetry unavailable' };

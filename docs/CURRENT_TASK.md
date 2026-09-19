@@ -8,16 +8,29 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.1.0`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.1.1`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
 标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
 
+## 2026-09-19 follow-up：PUBG Telemetry 复盘新鲜度与缓存语义修复（本轮）
+
+本轮已完成源码、回归验证和待部署的 release 变更：LLM 只负责识别 PUBG 操作与周期，工具接受
+结构化 `relative_period` selector，Domain 统一按 `Asia/Shanghai` 的 `06:00` 业务日解析，避免
+模型直接计算日历午夜。`pubg_search_matches` 在存在 selector 或 `recentN` 时强制刷新；
+`pubg_get_review_facts` 必须接收当前会话、当前 5 分钟内、由刷新搜索产生且包含目标 Match 的
+`resultSetId`，否则返回 `review_search_required` 或 `match_not_in_search_result`。
+
+Telemetry 用户可见语义改为 `HIT`、`FETCHED`、`UNAVAILABLE`；成功请求写入缓存返回
+`status=FETCHED/cacheStatus=FETCHED/cacheLookup=MISS/availability=AVAILABLE`，不再把成功抓取渲染为
+裸 `MISS`。新增 relative-period 与 result-set 新鲜度回归，PUBG Domain 19/19、Plugin 9/9 测试、
+受影响 typecheck 已通过。版本由 `1.1.0` 升至 `1.1.1`，下一步执行 `--apply --build-auto` 发布。
+
 ## 2026-09-19 follow-up：PUBG Telemetry 小时预取、MISS 语义与 D-mail 汇总
 
-源码实现已完成，待本轮 release build/apply：每小时 `Asia/Shanghai` 的 `05` 分刷新所有配置玩家，
+源码已部署的基础能力：每小时 `Asia/Shanghai` 的 `05` 分刷新所有配置玩家，
 只拉取新比赛详情，并以并发 2 预取新 Telemetry；失败写入 retry ledger，下一轮只重试到期项目，
-不会把 1 小时内的每场新对局重复请求。Telemetry 成功拉取返回 `FETCHED/cacheStatus=MISS/availability=AVAILABLE`，
+不会把 1 小时内的每场新对局重复请求。Telemetry 成功拉取返回 `FETCHED/cacheStatus=FETCHED/cacheLookup=MISS/availability=AVAILABLE`，
 缓存读取返回 `HIT`，真正不可用返回 `UNAVAILABLE`。所有 PUBG 工具输出 `dataUpdatedAt`，最终回复必须展示该时间。
 
 每天 00:00 运行 `pubg_telemetry_sync_report`，汇总上一自然日 00:00–24:00，再把工具返回的

@@ -285,7 +285,10 @@ export interface TelemetryWorkerOptions {
 export interface TelemetryEnsureResult {
   /** HIT is a cache read; FETCHED is a successful upstream fetch and cache write. */
   status: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
-  cacheStatus: 'HIT' | 'MISS';
+  /** User-facing cache resolution. Do not use MISS for a successful fetch. */
+  cacheStatus: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
+  /** Low-level diagnostic: whether the feature cache was populated before this call. */
+  cacheLookup: 'HIT' | 'MISS';
   availability: 'AVAILABLE' | 'UNAVAILABLE';
   facts?: MatchReviewFacts;
   parserVersion: string;
@@ -323,6 +326,7 @@ export class TelemetryWorker {
       return {
         status: 'HIT',
         cacheStatus: 'HIT',
+        cacheLookup: 'HIT',
         availability: 'AVAILABLE',
         facts: factsForOrdinal(cached.facts, ordinal),
         parserVersion: this.parserVersion,
@@ -353,7 +357,8 @@ export class TelemetryWorker {
     if (!this.downloader) {
       return {
         status: 'UNAVAILABLE',
-        cacheStatus: 'MISS',
+        cacheStatus: 'UNAVAILABLE',
+        cacheLookup: 'MISS',
         availability: 'UNAVAILABLE',
         parserVersion: this.parserVersion,
         featureVersion: this.featureVersion,
@@ -369,7 +374,8 @@ export class TelemetryWorker {
       // analysis and presentation consume derived facts/evidence only.
       return {
         status: 'FETCHED',
-        cacheStatus: 'MISS',
+        cacheStatus: 'FETCHED',
+        cacheLookup: 'MISS',
         availability: 'AVAILABLE',
         facts: persistedFacts,
         parserVersion: this.parserVersion,
@@ -378,7 +384,8 @@ export class TelemetryWorker {
     } catch (error) {
       return {
         status: 'UNAVAILABLE',
-        cacheStatus: 'MISS',
+        cacheStatus: 'UNAVAILABLE',
+        cacheLookup: 'MISS',
         availability: 'UNAVAILABLE',
         parserVersion: this.parserVersion,
         featureVersion: this.featureVersion,

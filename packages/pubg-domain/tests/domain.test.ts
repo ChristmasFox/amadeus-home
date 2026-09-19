@@ -387,6 +387,75 @@ test('recent PUBG searches force fresh discovery and reuse cached details when n
   }
 });
 
+test('relative-period match search uses the 06:00 business day and review requires a fresh result set', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-review-freshness-'));
+  let currentNow = new Date('2026-09-19T00:30:00.000Z');
+  try {
+    const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 0,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes('/players?')) return jsonResponse(playerDiscovery(['m1']));
+        if (url.endsWith('/matches/m1')) return jsonResponse(matchPayload('m1', '2026-09-18T12:00:00.000Z'));
+        throw new Error('unexpected PUBG API request: ' + url);
+      },
+    });
+    const worker = new TelemetryWorker({
+      team: TEAM,
+      store: repository,
+      downloader: { async download() { return { events: [] }; } },
+    });
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      telemetryWorker: worker,
+      now: () => currentNow,
+    });
+
+    const search = await service.searchMatches({
+      sessionId: 'session-review-freshness',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      refresh: false,
+      pageSize: 50,
+    });
+    assert.equal(search.status, 'ok');
+    assert.deepEqual((search.data as { matches: Array<{ matchId: string }> }).matches.map((match) => match.matchId), ['m1']);
+    const resolved = search.queryResolved as { selector: { from: string; to: string; businessDayStart: string }; refresh: { forcedForSelector: boolean } };
+    assert.equal(resolved.selector.from, '2026-09-17T22:00:00.000Z');
+    assert.equal(resolved.selector.to, '2026-09-18T22:00:00.000Z');
+    assert.equal(resolved.selector.businessDayStart, '06:00');
+    assert.equal(resolved.refresh.forcedForSelector, true);
+    assert.ok(search.resultSetId);
+
+    const review = await service.getReviewFacts({
+      sessionId: 'session-review-freshness',
+      matchId: 'm1',
+      searchResultSetId: search.resultSetId!,
+    });
+    const reviewData = review.data as { telemetry: { status: string; cacheStatus: string; cacheLookup: string; availability: string } };
+    assert.equal(reviewData.telemetry.status, 'FETCHED');
+    assert.equal(reviewData.telemetry.cacheStatus, 'FETCHED');
+    assert.equal(reviewData.telemetry.cacheLookup, 'MISS');
+    assert.equal(reviewData.telemetry.availability, 'AVAILABLE');
+
+    currentNow = new Date('2026-09-19T00:36:00.000Z');
+    const staleReview = await service.getReviewFacts({
+      sessionId: 'session-review-freshness',
+      matchId: 'm1',
+      searchResultSetId: search.resultSetId!,
+    });
+    assert.equal(staleReview.status, 'error');
+    assert.equal(staleReview.error?.code, 'review_search_required');
+    repository.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Telemetry distinguishes a successful cache miss from unavailable data', async () => {
   const match = normalizeRecords([RAW_RECORDS[0]!])[0]!;
   let downloads = 0;
@@ -401,17 +470,20 @@ test('Telemetry distinguishes a successful cache miss from unavailable data', as
   });
   const fetched = await worker.ensure(match);
   assert.equal(fetched.status, 'FETCHED');
-  assert.equal(fetched.cacheStatus, 'MISS');
+  assert.equal(fetched.cacheStatus, 'FETCHED');
+  assert.equal(fetched.cacheLookup, 'MISS');
   assert.equal(fetched.availability, 'AVAILABLE');
   const hit = await worker.ensure(match);
   assert.equal(hit.status, 'HIT');
   assert.equal(hit.cacheStatus, 'HIT');
+  assert.equal(hit.cacheLookup, 'HIT');
   assert.equal(hit.availability, 'AVAILABLE');
   assert.equal(downloads, 1);
 
   const unavailable = await new TelemetryWorker({ team: TEAM }).ensure(match);
   assert.equal(unavailable.status, 'UNAVAILABLE');
-  assert.equal(unavailable.cacheStatus, 'MISS');
+  assert.equal(unavailable.cacheStatus, 'UNAVAILABLE');
+  assert.equal(unavailable.cacheLookup, 'MISS');
   assert.equal(unavailable.availability, 'UNAVAILABLE');
 });
 

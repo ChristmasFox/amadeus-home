@@ -69,6 +69,14 @@ Tool rules:
   最新 `matchId`，再调用 `pubg_get_review_facts`。底层会刷新比赛列表，只请求新比赛的
   详情，并在没有新增比赛时复用缓存。只有用户明确说“这把/刚才查到的那一把”时，才可
   沿用当前会话的具体 `matchId`。
+- Any period review request such as “复盘今天/昨天”“回顾这段时间” or “总结今天对局”
+  is also a fresh-data intent. Let the LLM emit a structured semantic selector rather than
+  calculating timestamps: use `pubg_search_matches` with
+  `selector: { type: "relative_period", value: "today" | "yesterday" }`, `refresh: true`,
+  and `pageSize: 50`. The Domain resolves this selector with the configured
+  `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to every
+  `pubg_get_review_facts` call for that review; do not reuse facts or a result set from an
+  earlier turn. The review tool rejects an omitted, unrelated, or stale search result set.
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:
   `time_range` uses the half-open interval `[from,to)` and IANA timezone
   `Asia/Shanghai` unless the user specifies another timezone. PUBG's canonical
@@ -102,10 +110,10 @@ Tool rules:
   latest relevant tool result. `dataUpdatedAt` is the tool's authoritative snapshot
   timestamp; do not replace it with the current chat time or an invented match time.
 - Telemetry status is explicit: `HIT` means the feature cache was read,
-  `FETCHED` + `cacheStatus=MISS` + `availability=AVAILABLE` means the cache was
-  missed but the official Telemetry was fetched successfully and written to cache,
-  and `UNAVAILABLE` means the data could not be obtained. Never describe a successful
-  `FETCHED` result as missing Telemetry.
+  `FETCHED` + `cacheStatus=FETCHED` + `cacheLookup=MISS` + `availability=AVAILABLE`
+  means the cache was empty but the official Telemetry was fetched successfully and
+  written to cache, and `UNAVAILABLE` means the data could not be obtained. Never
+  describe a successful `FETCHED` result or `cacheLookup=MISS` as missing Telemetry.
 - `pubg_prefetch_telemetry` is a bounded team-wide scheduled operation. It refreshes
   player match lists hourly, fetches only new Match API records, and prefetches only
   missing Telemetry; its retry state is persistent. `pubg_telemetry_sync_report`

@@ -1,5 +1,5 @@
-# Amadeus 1.1.0
+# Amadeus 1.1.1
 
-PUBG Telemetry 现在按小时自动同步：每轮先刷新所有配置玩家的最新对局，只请求新 Match API 详情，再以有限并发获取新对局或到期重试对局的 Telemetry 并写入持久化缓存。
-缓存语义已拆开：`HIT` 是缓存命中，`FETCHED + cacheStatus=MISS + availability=AVAILABLE` 是缓存未命中但请求成功并已落盘，`UNAVAILABLE` 才是数据不可用；所有 PUBG 工具结果都携带 `dataUpdatedAt`。
-每天 00:00 生成上一自然日的 PUBG 自动同步结果，并通过唯一 owner outbox 发送 `Amadeus • D-mail` 通知；通知保留真实计数、数据更新时间、重试状态，并以 `El Psy Kongroo.` 收束。
+PUBG 复盘链路现在由 LLM 识别语义意图，再使用结构化 `relative_period` selector；Domain 统一按 Asia/Shanghai 的 06:00 业务日解析，不再让模型自行计算日界线。
+复盘必须使用当前会话内新鲜的 `pubg_search_matches` resultSetId；旧 matchId、旧 facts 或超过 5 分钟的搜索结果会被拒绝。Telemetry 状态改为 `HIT`、`FETCHED`、`UNAVAILABLE`，其中 `FETCHED` 明确表示官方请求成功并已写入缓存，底层 `cacheLookup=MISS` 不再被渲染成数据缺失。
+小时预取、每日 00:00 的 `Amadeus • D-mail` 同步通知和 `dataUpdatedAt` 契约保持不变，通知继续以 `El Psy Kongroo.` 收束。

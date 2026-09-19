@@ -13,7 +13,7 @@ provider-neutral external account；Identity reply metadata bridge、provider-na
 仍待真实用户入口验收；VPS 只读查询、真实 WhatsApp 早晚报告 smoke 和重启持久化已完成，仍待
 用户从真实 WhatsApp 入站发送一条自然语言 VPS 查询。
 
-当前状态：PUBG Telemetry 预取与 D-mail 已部署，首轮 hourly 回放成功，等待首个 daily D-mail 与真实 PUBG 回复；全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
+当前状态：PUBG Telemetry 预取与 D-mail 基础能力已部署；本轮已完成复盘新鲜度、relative_period 06:00 解析和缓存语义修复的源码与定向回归，待 release build/apply 和 live fresh-review 验证；全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
 app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity preset 动态刷新已通过
 选择性镜像构建重新 apply 到线上；PUBG plugin 现会同步刷新缓存的 IdentityStore。
