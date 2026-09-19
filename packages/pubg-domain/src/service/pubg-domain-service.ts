@@ -277,6 +277,27 @@ function previousLocalDate(now: Date, timezone: string): string {
   return localDateLabel(now.getTime() - 24 * 60 * 60 * 1000, timezone);
 }
 
+function formatDisplayTime(value: string, timezone: string): string {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return value;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(timestamp));
+    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
+  } catch {
+    return value;
+  }
+}
+
 function summarizePrefetchRuns(reportDate: string, timezone: string, runs: TelemetryPrefetchRun[]): TelemetrySyncSummary {
   const sum = (selector: (run: TelemetryPrefetchRun) => number): number => runs.reduce((total, run) => total + selector(run), 0);
   return {
@@ -297,11 +318,12 @@ function summarizePrefetchRuns(reportDate: string, timezone: string, runs: Telem
 
 function pubgSyncNotification(summary: TelemetrySyncSummary, asOf: string): { title: string; source: string; eventKey: string; message: string; occurredAt: string } {
   const state = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? '部分同步，未完成项已保留并会继续重试' : '同步完成，当前世界线稳定';
+  const displayAsOf = formatDisplayTime(asOf, summary.timezone);
   const message = [
     '收件人：Arthur',
     '主题：PUBG 今日自动同步结果',
     `日期：${summary.reportDate}（${summary.timezone}，自然日）`,
-    `数据更新时间：${asOf}`,
+    `数据更新时间：${displayAsOf}（${summary.timezone}）`,
     '',
     '观测记录：',
     `- 定时检查：${summary.runCount} 次`,

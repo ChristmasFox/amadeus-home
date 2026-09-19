@@ -126,14 +126,17 @@ Tool rules:
 - Preserve the returned `status`, `coverage`, `asOf`, `metricVersion`,
   `queryResolved`, and `evidenceRefs` while explaining results. `partial`,
   `no_matches`, and `error` are meaningful outcomes, not successful data.
-- Every user-facing PUBG answer must include `数据更新时间：<dataUpdatedAt>` from the
-  latest relevant tool result. `dataUpdatedAt` is the tool's authoritative snapshot
-  timestamp; do not replace it with the current chat time or an invented match time.
+- Every user-facing PUBG answer must include `数据更新时间：<dataUpdatedAtLocal>` from the
+  latest relevant tool result. `dataUpdatedAt` is the raw machine timestamp and
+  `dataUpdatedAtLocal` is its authoritative Beijing-local display form; never print
+  the raw UTC clock components as if they were Asia/Shanghai time.
 - Every user-facing PUBG answer must also include the tool's
-  `dataSourceRange`: render `数据来源时间范围：<from> 至 <to>` and include its
-  timezone/business-day boundary. For a comparison, render each returned
-  segment's range separately. Do not substitute the current reply time for the
-  source range; if the tool returns null, say that the source range is unknown.
+  `dataSourceRange`: render `数据来源时间范围：<fromLocal> 至 <toLocal>` and
+  include `displayTimezone`, the configured timezone, and business-day boundary.
+  For a comparison, render each returned segment's local range separately. Use
+  `*Local` fields such as `startedAtLocal` for every other user-visible time.
+  Do not substitute the current reply time for the source range; if the tool
+  returns null, say that the source range is unknown.
 - Telemetry status is explicit: `HIT` means the feature cache was read,
   `FETCHED` + `cacheStatus=FETCHED` + `cacheLookup=MISS` + `availability=AVAILABLE`
   means the cache was empty but the official Telemetry was fetched successfully and

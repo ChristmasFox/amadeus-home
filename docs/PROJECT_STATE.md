@@ -10,10 +10,20 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.1.4`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.1.5`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加 `El Psy Kongroo.`。
+
+## PUBG 全部时间统一北京时间（2026-09-19，待部署）
+
+- 根因是查询边界内部已经正确使用 UTC 表示的 `Asia/Shanghai 06:00` 业务日，但最终展示直接输出
+  UTC 时钟组件并误标为 `Asia/Shanghai`，因此出现 `22:00`；不是 9/18 22:00 之后的比赛被排除。
+- PUBG tool 现在保留 UTC 原始字段作为机器证据，并输出 `dataUpdatedAtLocal`、`asOfLocal`、各时间字段
+  的 `*Local` 版本，以及 `dataSourceRange.fromLocal/toLocal`；所有用户可见时间必须使用这些北京时间字段。
+- D-mail 的 `数据更新时间` 同样按 `Asia/Shanghai` 展示；回归覆盖 UTC 到北京时间的换算和用户可见契约。
+- 本地 PUBG Domain 20/20、Plugin 9/9、Identity 10/10、Amadeus 11/11、受影响 typecheck 已通过；
+  版本 `1.1.5` 已生成，待 release build/apply。
 
 ## PUBG 方向性结果与来源时间范围（2026-09-19，已部署）
 
