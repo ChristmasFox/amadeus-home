@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import urlopen
+from unittest.mock import patch
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -33,6 +34,32 @@ class FakeUsageProvider:
 
 
 class SubscriptionResponderTests(unittest.TestCase):
+    def test_usage_provider_sends_gateway_user_agent_and_persists_sample(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self, _limit: int) -> bytes:
+                return b'{"error": 0, "data_counter": 300, "plan_monthly_data": 1000}'
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            credentials = root / "credentials.json"
+            credentials.write_text('{"veid":"test-veid","apiKey":"test-key"}\n', encoding="utf-8")
+            state = root / "usage-state.json"
+            with patch("amadeus_gateway_subscription.urlopen", return_value=FakeResponse()) as opener:
+                from amadeus_gateway_subscription import UsageProvider
+
+                snapshot = UsageProvider("https://example.invalid/v1", credentials, state).snapshot()
+                self.assertIsNotNone(snapshot)
+                self.assertFalse(snapshot.stale if snapshot else True)
+                request = opener.call_args.args[0]
+                self.assertEqual(request.get_header("User-agent"), "AmadeusGatewaySubscription/1")
+            self.assertTrue(state.is_file())
+
     def test_usage_headers_use_vps_aggregate_and_derive_remaining(self) -> None:
         reset = datetime.now(timezone.utc) + timedelta(days=5)
         snapshot = UsageSnapshot(used_bytes=300, total_bytes=1000, reset_at=reset, checked_at=datetime.now(timezone.utc))
