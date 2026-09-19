@@ -10,10 +10,23 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.1.2`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.1.3`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加 `El Psy Kongroo.`。
+
+## PUBG 路由事实强制走工具（2026-09-19，已部署）
+
+- 只要消息被识别为 PUBG 并路由到任一 PUBG native tool，用户可见事实必须来自本轮工具返回的
+  持久化 SQLite 缓存/更新结果；禁止从会话里的旧 assistant 文本、旧 tool result 或旧复盘结论直接回答。
+- 上下文只用于解析人物、时间范围、查询范围和明确的比赛引用；默认查询先刷新比赛发现，再读取缓存，
+  只请求新增 Match 或缺失 Telemetry。`refresh=false` 仅在用户明确要求 cache-only 时使用。
+- workspace `AGENTS.md`/`SOUL.md`、PUBG Skill、native tool descriptions 和插件回归均已同步；本地
+  PUBG Domain 20/20、Plugin 9/9、Amadeus 11/11、build/typecheck/secrets scan 通过。
+- 版本 `1.1.3`、提交 `36020fc` 已部署；线上镜像为
+  `local/openclaw-amadeus:git-36020fc00a21-20260919062713`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919062713`；容器 `running/healthy`，live
+  bundle 已核实新规则。
 
 ## PUBG 周期复盘排序修复（2026-09-19，已部署）
 

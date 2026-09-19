@@ -13,7 +13,7 @@ provider-neutral external account；Identity reply metadata bridge、provider-na
 仍待真实用户入口验收；VPS 只读查询、真实 WhatsApp 早晚报告 smoke 和重启持久化已完成，仍待
 用户从真实 WhatsApp 入站发送一条自然语言 VPS 查询。
 
-当前状态：PUBG Telemetry 预取与 D-mail 基础能力已部署；本轮复盘新鲜度、relative_period 06:00 解析、缓存语义和周期复盘顺序修复已完成 release build/apply，live Amadeus 1.1.2 已加载并通过健康、preflight、插件注册和定时任务核验；本次排序改动仅在 PUBG Domain/plugin，周期复盘默认正序、最近一局保持倒序；部署通知已改为只读取单次发布摘要，不累计历史内容；全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
+当前状态：PUBG Telemetry 预取与 D-mail 基础能力已部署；本轮复盘新鲜度、relative_period 06:00 解析、缓存语义、周期复盘顺序和“所有 PUBG 路由事实必须走工具”修复已完成 release build/apply，live Amadeus 1.1.3 已加载并通过健康、preflight、插件注册和定时任务核验；PUBG 工具默认从持久化 SQLite 缓存/更新结果取事实，上下文只解析参数，不提供数据；本次排序改动仅在 PUBG Domain/plugin，周期复盘默认正序、最近一局保持倒序；部署通知已改为只读取单次发布摘要，不累计历史内容；全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
 app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity preset 动态刷新已通过
 选择性镜像构建重新 apply 到线上；PUBG plugin 现会同步刷新缓存的 IdentityStore。
@@ -49,8 +49,8 @@ app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity pr
   Gateway 自然语言 smoke 已实际调用五个 VPS tools；晚间 report 已真实到达 WhatsApp owner DM，
   重启后 cron、usage baseline 和十格进度条提示仍存在。只剩真实 WhatsApp 入站查询证据。
 
-最新 PUBG 部署：提交 `956853c`，镜像 `local/openclaw-amadeus:git-956853caa816-20260919060947`，恢复点
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919061408`；未发送未经请求的真实群聊测试消息。
+最新 PUBG 部署：提交 `36020fc`，镜像 `local/openclaw-amadeus:git-36020fc00a21-20260919062713`，恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919062713`；未发送未经请求的真实群聊测试消息。
 
 下一步：
 
