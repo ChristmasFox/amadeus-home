@@ -8,10 +8,25 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.1.1`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.1.2`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
 标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
+
+## 2026-09-19 follow-up：PUBG 周期复盘顺序修复（已部署）
+
+本轮改动仅位于 PUBG Domain/plugin：周期复盘在没有显式 `sort` 时按比赛实际开局时间升序输出，
+保证从第一局到最后一局阅读；“最近一局/最后一局/最新比赛”使用 `recentN` 时仍按最新优先，
+显式 `sort` 仍由调用方控制。LLM 通过 PUBG tool description/Skill 识别意图并发出
+`sort="asc"`，全局 OpenClaw/Amadeus 路由和其他插件未改变。
+
+新增回归覆盖周期查询与 recent 查询的相反排序契约。PUBG Domain 20/20、Plugin 9/9、Amadeus
+11/11、受影响 typecheck/build 和 secrets scan 均通过。版本由 `1.1.1` 升至 `1.1.2`，提交
+`956853c` 已部署到 CasaOS；线上镜像为
+`local/openclaw-amadeus:git-956853caa816-20260919060947`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919061408`。OpenClaw/Product Radar health、
+preflight、媒体网络、NAS 只读 smoke 和 owner WhatsApp outbox smoke 均通过；容器为
+`running/healthy`，live bundle 已核实新排序契约。未发送未经请求的真实群聊测试消息。
 
 ## 2026-09-19 follow-up：PUBG Telemetry 复盘新鲜度与缓存语义修复（已部署）
 
