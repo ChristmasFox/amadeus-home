@@ -2,10 +2,7 @@
 sub.example.com {
     @subscription path /REPLACE_WITH_RANDOM_TOKEN/qx.conf /REPLACE_WITH_RANDOM_TOKEN/server.snippet /REPLACE_WITH_RANDOM_TOKEN/clash.yaml /REPLACE_WITH_RANDOM_TOKEN/shadowrocket.txt
     handle @subscription {
-        root * /var/lib/caddy/subscription
-        header Content-Type "text/plain; charset=utf-8"
-        header Cache-Control "no-store, no-cache, must-revalidate"
-        file_server
+        reverse_proxy 127.0.0.1:8787
     }
     handle {
         respond 404
@@ -16,10 +13,7 @@ sub.example.com {
 sub.example.com:8443 {
     @subscription path /REPLACE_WITH_RANDOM_TOKEN/qx.conf /REPLACE_WITH_RANDOM_TOKEN/server.snippet /REPLACE_WITH_RANDOM_TOKEN/clash.yaml /REPLACE_WITH_RANDOM_TOKEN/shadowrocket.txt
     handle @subscription {
-        root * /var/lib/caddy/subscription
-        header Content-Type "text/plain; charset=utf-8"
-        header Cache-Control "no-store, no-cache, must-revalidate"
-        file_server
+        reverse_proxy 127.0.0.1:8787
     }
     handle {
         respond 404

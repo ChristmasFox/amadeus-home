@@ -11,7 +11,9 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - 备用代理：官方 Hysteria 2 `v2.12.3` 二进制，原生 systemd 管理，监听 UDP `2053`；
   服务名为 `hysteria-server.service`，使用 `sub.nyannyan.top` 的 Caddy 证书。
 - Reality 目标：`www.apple.com:443`；客户端 `serverName` 使用 `www.apple.com`。
-- Caddy 由官方包提供 `caddy.service`，在 443 提供 HTTPS 站点、在 8443 提供订阅文件；不参与 Xray 代理流量。
+- Caddy 由官方包提供 `caddy.service`，在 443 提供 HTTPS 站点、在 8443 提供订阅入口；本地
+  `amadeus-gateway-subscription.service` 在 `127.0.0.1:8787` 返回原订阅正文、统一文件名
+  `amadeus-gateway` 和整台 VPS 的 KiwiVM 流量响应头，不参与 Xray 代理流量。
 - frps 使用与现有 frpc 匹配的官方 `0.69.0` 二进制，由 `frps.service` 管理。
 - OpenClaw Control UI：HomeLab `frpc` 的 `openclaw-tcp` 映射把 `127.0.0.1:18789`
   送到 VPS 的 frps `18789`，Caddy 以 `claw.nyannyan.top` 终止 HTTPS 并反代到该本机端口；
@@ -20,8 +22,9 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - 运行时配置：`/etc/xray/config.json`，权限应为 `root:xray`、`0640`。
 - 工作目录：`/var/lib/xray`，权限应为 `xray:xray`、`0750`。
 - frps 配置：`/etc/frp/frps.toml`；认证 token：`/etc/frp/token`，均只保留在 VPS。
-- 订阅文件：`/var/lib/caddy/subscription/<token>/qx.conf`、`clash.yaml` 和
-  `shadowrocket.txt`，由 Caddy 以 HTTPS 提供；三种格式共用 token，但正文不是同一份文本。
+- 订阅文件：`/var/lib/caddy/subscription/<token>/qx.conf`、`server.snippet`、`clash.yaml` 和
+  `shadowrocket.txt`，由动态订阅响应器经 Caddy HTTPS 提供；四种格式共用 token，但正文不是
+  同一份文本，下载响应名统一为 `amadeus-gateway`。
 - OpenClaw VPS 只读探针：`/usr/local/sbin/amadeus-vps-readonly-probe`，由专用
   `amadeus-vps-readonly` SSH 用户的 forced-command key 调用；它只输出固定的 uptime/load/memory/
   rootfs 和四个 systemd unit 状态。账号无密码，authorized key 禁用交互命令、端口转发、agent
