@@ -387,6 +387,57 @@ test('recent PUBG searches force fresh discovery and reuse cached details when n
   }
 });
 
+test('period searches default to chronological order while recent searches stay newest-first', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-search-order-'));
+  const requestedMatchIds: string[] = [];
+  try {
+    const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 0,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes('/players?')) return jsonResponse(playerDiscovery(['m1', 'm2']));
+        const matchId = url.split('/matches/')[1];
+        requestedMatchIds.push(matchId ?? '');
+        if (matchId === 'm1') return jsonResponse(matchPayload('m1', '2026-09-18T11:00:00.000Z'));
+        if (matchId === 'm2') return jsonResponse(matchPayload('m2', '2026-09-18T12:00:00.000Z'));
+        throw new Error('unexpected PUBG match: ' + matchId);
+      },
+    });
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      now: () => new Date('2026-09-19T00:30:00.000Z'),
+    });
+
+    const period = await service.searchMatches({
+      sessionId: 'session-search-order',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      refresh: false,
+      pageSize: 50,
+    });
+    assert.equal(period.status, 'ok');
+    assert.deepEqual((period.data as { matches: Array<{ matchId: string }> }).matches.map((match) => match.matchId), ['m1', 'm2']);
+    assert.equal((period.queryResolved as { order: string }).order, 'asc');
+
+    const recent = await service.searchMatches({
+      sessionId: 'session-search-order',
+      recentN: 1,
+      refresh: false,
+    });
+    assert.equal(recent.status, 'ok');
+    assert.deepEqual((recent.data as { matches: Array<{ matchId: string }> }).matches.map((match) => match.matchId), ['m2']);
+    assert.equal((recent.queryResolved as { order: string }).order, 'desc');
+    assert.deepEqual(requestedMatchIds, ['m1', 'm2']);
+    repository.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('relative-period match search uses the 06:00 business day and review requires a fresh result set', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pubg-domain-review-freshness-'));
   let currentNow = new Date('2026-09-19T00:30:00.000Z');
