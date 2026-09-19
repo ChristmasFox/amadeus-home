@@ -126,6 +126,9 @@ COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
 AMADEUS_VERSION="$(bash "$VERSION_TOOL" show)"
 bash "$VERSION_TOOL" check >/dev/null
 RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
+# The deployment envelope owns the world-line closing. Strip an accidentally
+# repeated standalone closing from release notes before appending it once.
+RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | sed '/^[[:space:]]*El Psy Kongroo\.[[:space:]]*$/d')"
 RELEASE_NOTES_B64="$(printf '%s' "$RELEASE_NOTES" | base64 | tr -d '\n')"
 if ((APPLY)); then
   if ((AUTO_BUILD)); then

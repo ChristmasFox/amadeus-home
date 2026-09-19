@@ -67,7 +67,8 @@ pnpm test:workflow
 ```
 
 每次递增后先替换 `RELEASE_NOTES.md` 的首行版本和正文，只写本次更新内容，不重复上一版本说明。部署通知标题固定为
-`Amadeus <版本> · 世界线收束`，正文末尾自动追加 `El Psy Kongroo.`。
+`Amadeus <版本> · 世界线收束`，部署脚本会统一在正文末尾追加一次 `El Psy Kongroo.`；
+`RELEASE_NOTES.md` 不要自行重复写这句。
 
 ## CasaOS 部署
 
