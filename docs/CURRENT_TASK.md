@@ -25,6 +25,15 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 末尾为 `El Psy Kongroo.`。交互查询仍保持旧业务日 06:00。官方 API 限流以
 [PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html) 为准，定时器不做高频循环。
 
+当前 live 状态：`DEPLOYED_LIVE_SCHEDULED_PREFETCH_PENDING_FIRST_DAILY_REPORT`。提交 `4cf3f40` 已通过
+`--apply --build-auto` 部署到 CasaOS，线上镜像为
+`local/openclaw-amadeus:git-4cf3f4011d61-20260919045321`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919045321`。8 个 PUBG native tools、
+`05 * * * *` hourly cron、`00:00` daily cron、health、preflight、owner outbox smoke 均通过。
+首次 hourly 手动回放成功且未投递通知：118 场被发现、0 新对局、0 Telemetry fetch、0 unavailable、
+0 pending；SQLite 两张新账本表已创建。首个真实 00:00 D-mail 与真实 Telegram/WhatsApp PUBG 回复
+仍待用户入口/定时器自然运行验证。
+
 ## 2026-09-19 follow-up：PUBG 最近一局刷新与增量缓存
 
 当前实现状态：`DEPLOYED_LIVE_INTERACTIVE_INBOUND_PENDING`。`pubg_search_matches` 在请求“最近一局/最后一局/最新比赛”时强制刷新玩家比赛列表；只把不在 SQLite 缓存中的比赛 ID 请求到 Match API，新增详情写回缓存，列表没有新增时继续使用缓存详情。`last_n_matches` 统计也强制走同一刷新路径。

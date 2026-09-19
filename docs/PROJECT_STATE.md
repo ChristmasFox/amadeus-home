@@ -21,6 +21,20 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 - `pubg_telemetry_sync_report` 统计上一自然日 `00:00–24:00`（Asia/Shanghai），每天 00:00 由 `Amadeus • D-mail` owner 通知发送，正文保留计数、更新时间、重试状态并以 `El Psy Kongroo.` 结尾；交互 PUBG 业务日仍是 06:00。
 - 预取默认每轮最多 20 场、并发 2；玩家发现每小时 1 次。官方限制说明见 [PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html)，设计不依赖高频请求。
 
+### Live 状态（已部署，首轮回放通过）
+
+- 提交 `4cf3f40` 已通过 `--apply --build-auto` 部署；线上镜像为
+  `local/openclaw-amadeus:git-4cf3f4011d61-20260919045321`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919045321`。
+- live 已加载 8 个 PUBG native tools；`amadeus-pubg-telemetry-hourly` 为每小时第 5 分、
+  `amadeus-pubg-sync-daily` 为每天 00:00，均使用 `Asia/Shanghai`、isolated session 和
+  明确 allow-list。每日通知只允许 `pubg_telemetry_sync_report` → `amadeus_notify_owner`。
+- 首次手动回放 hourly cron 成功且 `deliveryStatus=not-requested`：
+  `dataUpdatedAt=2026-09-19T04:56:42.167Z`、`discoveredMatchCount=118`、
+  `newMatchCount=0`、`fetchedCount=0`、`unavailableCount=0`、`pendingCount=0`。
+  SQLite 已创建 `telemetry_prefetch_attempts`、`telemetry_prefetch_runs`，账本为 1 次成功运行，
+  当前 feature rows 仍为 75；首个真实 00:00 owner D-mail 和真实群聊回复验收待发生。
+
 ## PUBG 查询边界加固（2026-09-19，已部署，真实入口验收待完成）
 
 - PUBG 业务日已确定为 `Asia/Shanghai` 的 `06:00`–次日 `06:00`；Domain 默认、配置模板、插件 manifest、Skill、按日聚合和 compare 分段统一该口径。
