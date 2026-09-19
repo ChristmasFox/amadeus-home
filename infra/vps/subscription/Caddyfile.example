@@ -24,3 +24,38 @@ sub.example.com:8443 {
 emby.example.com {
     reverse_proxy 127.0.0.1:8096
 }
+
+# Immich public HTTPS route. The upstream is the VPS frps TCP mapping backed by
+# the HomeLab Immich server on port 2283.
+immich.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:2283
+}
+
+# The remaining declared HomeLab public services use their matching frps TCP
+# mappings. Keep each hostname explicit so unrelated management ports are not
+# exposed by a catch-all proxy.
+jellyfin.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:8097
+}
+
+aria.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:6880
+}
+
+qb.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:8080
+}
+
+monitor.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:61208
+}
+
+9router.nyannyan.top {
+    encode gzip
+    reverse_proxy 127.0.0.1:20128
+}

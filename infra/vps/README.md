@@ -18,6 +18,9 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - OpenClaw Control UI：HomeLab `frpc` 的 `openclaw-tcp` 映射把 `127.0.0.1:18789`
   送到 VPS 的 frps `18789`，Caddy 以 `claw.nyannyan.top` 终止 HTTPS 并反代到该本机端口；
   OpenClaw 的 `allowedOrigins` 同时允许该 HTTPS 来源。
+- HomeLab public services：Caddy 通过 frps 回源到 `immich.nyannyan.top`（2283）、
+  `jellyfin.nyannyan.top`（8097）、`aria.nyannyan.top`（6880）、`qb.nyannyan.top`（8080）、
+  `monitor.nyannyan.top`（Glances，61208）和 `9router.nyannyan.top`（20128）。
 - 本任务不启用 Docker、Nginx 或 Web 管理面板。
 - 运行时配置：`/etc/xray/config.json`，权限应为 `root:xray`、`0640`。
 - 工作目录：`/var/lib/xray`，权限应为 `xray:xray`、`0750`。
@@ -40,7 +43,14 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 | 2053 | TCP | 个人 VLESS + Reality | QX 节点端口；非标准端口 |
 | 2053 | UDP | 个人 Hysteria 2 | Clash Meta/Mihomo、Shadowrocket 节点端口；与 TCP 2053 不冲突 |
 | 7000 | TCP | frps 控制通道 | 仅供 HomeLab frpc 连接 |
-| 8096/2283/6880/6800/20128/8080/8097/7575/61208 | TCP | frps 映射的 HomeLab 服务 | 当前按现有 frpc 配置公开监听；管理类端口应按需收紧 |
+| 8096 | TCP | Emby frp 回源端口 | Caddy `emby.nyannyan.top` |
+| 2283 | TCP | Immich frp 回源端口 | Caddy `immich.nyannyan.top` |
+| 8097 | TCP | Jellyfin frp 回源端口 | Caddy `jellyfin.nyannyan.top` |
+| 6880 | TCP | AriaNG frp 回源端口 | Caddy `aria.nyannyan.top` |
+| 8080 | TCP | qBittorrent WebUI frp 回源端口 | Caddy `qb.nyannyan.top` |
+| 61208 | TCP | Glances frp 回源端口 | Caddy `monitor.nyannyan.top` |
+| 20128 | TCP | 9Router frp 回源端口 | Caddy `9router.nyannyan.top`；API 仍要求 key |
+| 6800/7575 | TCP | 其他现有 frp 映射 | 当前按 frpc 配置监听；未新增 Caddy 公网站点 |
 | 80 | TCP | Caddy ACME HTTP-01 / HTTPS 跳转 | 不承载代理流量 |
 | 8443 | TCP/UDP | Caddy HTTPS 订阅入口 | UDP 为 Caddy 默认 HTTP/3；只提供订阅文件 |
 | 18789 | TCP | OpenClaw frp 回源端口 | 由 Caddy 的 `claw.nyannyan.top` 使用；OpenClaw 仍要求 gateway token |

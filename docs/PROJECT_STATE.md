@@ -1,12 +1,23 @@
 # Project State
 
-更新时间：2026-09-19（Asia/Shanghai）
+更新时间：2026-09-20（Asia/Shanghai）
 
 ## 当前目标
 
 当前唯一产品目标是 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md：把仍有价值的旧
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
+
+## 2026-09-20：VPS Caddy 多服务公网入口已恢复
+
+- 根因：Cloudflare DNS 已指向 VPS，但 `/etc/caddy/Caddyfile` 缺少已有 frps 映射的
+  `jellyfin`、`aria`、`qb`、`monitor` 和 `9router` HTTPS site，Cloudflare 返回 `525`。
+- 已补齐 Caddy 路由：`jellyfin.nyannyan.top` → `127.0.0.1:8097`、`aria.nyannyan.top` →
+  `127.0.0.1:6880`、`qb.nyannyan.top` → `127.0.0.1:8080`、`monitor.nyannyan.top` →
+  `127.0.0.1:61208`、`9router.nyannyan.top` → `127.0.0.1:20128`；此前 Immich 路由为
+  `immich.nyannyan.top` → `127.0.0.1:2283`。
+- `caddy validate`、平滑 reload、Let’s Encrypt 证书签发和 Cloudflare 公网回源均通过；frps
+  `7000` 控制通道、HomeLab frpc 及各服务容器未重启。9Router API 未带 key 时保持 `401`。
 
 ## 2026-09-19：美股指数开收盘通知（本轮）
 

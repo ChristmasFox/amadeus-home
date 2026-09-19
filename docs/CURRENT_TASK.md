@@ -1,10 +1,24 @@
 # 当前任务
 
-更新时间：2026-09-19（Asia/Shanghai）
+更新时间：2026-09-20（Asia/Shanghai）
 
 执行唯一目标：完成 OpenClaw Amadeus 全能力迁移。旧 LangBot/n8n/旧插件/旧通知路径全部
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
+
+## 2026-09-20：修复 VPS Caddy 多服务 525（已完成）
+
+Cloudflare 解析和回源链路本身正常，但 VPS 生效的 Caddy 配置只包含 `sub`、`emby`、`claw`
+和 `immich` 四个 HTTPS site；缺少其他已有 frps 映射对应的站点时，Cloudflare 到 VPS 的 TLS
+握手返回 `525`。已在 Caddy 中补齐 `jellyfin.nyannyan.top` → `8097`、`aria.nyannyan.top` →
+`6880`、`qb.nyannyan.top` → `8080`、`monitor.nyannyan.top` → `61208` 和
+`9router.nyannyan.top` → `20128`，并保留 Immich → `2283`。
+
+Caddy 配置校验通过并平滑 reload，证书已签发；公网验证返回 Jellyfin `302`、AriaNG `200`、
+qBittorrent `200`、Glances `200`、9Router `/` `307`，9Router `/v1/models` 在未提供 key 时
+返回预期 `401`。Immich `/api/server/ping` 返回 `200 {"res":"pong"}`。未修改 frps/frpc、
+OpenClaw、Cloudflare DNS 或任何 SSH/防火墙配置；live 回滚副本为
+`/etc/caddy/backups/Caddyfile.pre-public-services-20260919T161251Z`。
 
 ## 2026-09-19 follow-up：NAS OpenClaw 美股指数通知（已部署）
 

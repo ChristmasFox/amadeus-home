@@ -1,6 +1,6 @@
 # Agent State
 
-更新时间：2026-09-19（Asia/Shanghai）
+更新时间：2026-09-20（Asia/Shanghai）
 
 当前 Goal：按 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md，将仍有价值的旧多领域能力迁移到
 OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n、旧 runtime、
@@ -17,6 +17,11 @@ provider-neutral external account；Identity reply metadata bridge、provider-na
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
 app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity preset 动态刷新已通过
 选择性镜像构建重新 apply 到线上；PUBG plugin 现会同步刷新缓存的 IdentityStore。
+
+VPS 公网入口 follow-up 已完成：Cloudflare 525 的根因是 Caddy 缺少已有 frps 映射的
+`jellyfin`、`aria`、`qb`、`monitor` 和 `9router` site；现已补齐并取得证书，Immich、Jellyfin、
+AriaNG、qBittorrent、Glances、9Router 的公网回源均通过。OpenClaw 配置未修改；Caddy 回滚副本
+保留在 VPS `/etc/caddy/backups/Caddyfile.pre-public-services-20260919T161251Z`。
 
 已落地：
 
