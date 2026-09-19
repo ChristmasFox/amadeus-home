@@ -23,7 +23,10 @@ function isManualCronContext(context: OpenClawPluginToolContext): boolean {
   return /(?:^|:)run:manual:/u.test(context.sessionKey?.trim() ?? '');
 }
 
-const scheduledVpsReportEventKey = /^vps-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u;
+const scheduledReportEventKeys = [
+  { prefix: 'vps-report', pattern: /^vps-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u },
+  { prefix: 'market-indices', pattern: /^market-indices:\d{4}-\d{2}-\d{2}:(open|close)$/u },
+] as const;
 
 function idFor(eventKey: string): string {
   return createHash('sha256').update(eventKey).digest('hex').slice(0, 40);
@@ -201,10 +204,10 @@ export function ownerEventForContext(
   context: OpenClawPluginToolContext,
 ): OwnerEvent {
   const event = ownerEvent(input);
-  const scheduledMatch = event.eventKey.match(scheduledVpsReportEventKey);
-  if (!isManualCronContext(context) || !scheduledMatch) return event;
-  return {
-    ...event,
-    eventKey: `vps-report:manual:${event.occurredAt}:${scheduledMatch[1]}`,
-  };
+  if (!isManualCronContext(context)) return event;
+  for (const scheduled of scheduledReportEventKeys) {
+    const match = event.eventKey.match(scheduled.pattern);
+    if (match) return { ...event, eventKey: `${scheduled.prefix}:manual:${event.occurredAt}:${match[1]}` };
+  }
+  return event;
 }

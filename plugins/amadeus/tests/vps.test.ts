@@ -21,6 +21,7 @@ function config(directory: string): AmadeusConfig {
     ownerWhatsappAccountId: 'secondary',
     notificationOutboxDir: join(directory, 'outbox'),
     identityDatabasePath: join(directory, 'identity.sqlite'),
+    marketDataBaseUrl: 'https://query2.finance.yahoo.com/v8/finance/chart',
     kiwiVmBaseUrl: 'https://api.64clouds.com/v1',
     kiwiVmCredentialsFile: join(directory, 'kiwivm.json'),
     vpsSshHost: 'amadeus-gateway',

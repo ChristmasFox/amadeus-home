@@ -19,6 +19,7 @@ export interface AmadeusConfig {
   notificationOutboxDir: string;
   identityDatabasePath: string;
   identityPresetsFile?: string;
+  marketDataBaseUrl: string;
   kiwiVmBaseUrl: string;
   kiwiVmCredentialsFile: string;
   vpsSshHost: string;
@@ -65,6 +66,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
     identityDatabasePath: file('identityDatabasePath', 'IDENTITY_DATABASE_PATH', '/data/identity.sqlite'),
     ...(identityPresetsFile ? { identityPresetsFile } : {}),
+    marketDataBaseUrl: file('marketDataBaseUrl', 'MARKET_DATA_BASE_URL', 'https://query2.finance.yahoo.com/v8/finance/chart').replace(/\/$/u, ''),
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
     kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
     vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),

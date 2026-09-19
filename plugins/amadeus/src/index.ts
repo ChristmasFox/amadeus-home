@@ -22,6 +22,7 @@ import {
   type IdentityResolveInput,
 } from './identity.js';
 import { kookGroupMembers } from './kook.js';
+import { marketIndices, type MarketPhase } from './market.js';
 import { organizeMedia } from './media.js';
 import { nas } from './nas.js';
 import { isTrustedOwnerContext, OwnerNotifier, ownerEventForContext } from './owner.js';
@@ -61,6 +62,10 @@ const HomeLabParameters = Type.Object({
 
 const KookParameters = Type.Object({
   maxMembers: Type.Optional(Type.Integer({ minimum: 1, maximum: 500 })),
+}, { additionalProperties: false });
+
+const MarketParameters = Type.Object({
+  phase: Type.Union([Type.Literal('open'), Type.Literal('close')]),
 }, { additionalProperties: false });
 
 const NotifyOwnerParameters = Type.Object({
@@ -212,6 +217,7 @@ const entry = definePluginEntry({
     registerTool(api, 'amadeus_nas', 'Read NAS status or disk usage, or put the Mac NAS to sleep. Sleep requires the trusted owner identity.', NasParameters, async (params, context, _notifier, signal) => nas(config, params.action, context, signal));
     registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status. It never restarts or modifies services; notifyOwner is an explicit owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(config, context, notifier, params.notifyOwner === true, signal));
     registerTool(api, 'amadeus_kook_group_members', 'Read members of the active KOOK group/channel only. This is an interactive lookup and never a proactive notification path.', KookParameters, async (params, context, _notifier, signal) => kookGroupMembers(config, context, params.maxMembers ?? 200, signal));
+    registerTool(api, 'amadeus_market_indices', 'Read deterministic NASDAQ-100 and S&P 500 open/close observations from the configured market data source. It returns no current observation on weekends or exchange holidays; scheduled callers must notify only when status=ok.', MarketParameters, async (params, _context, _notifier, signal) => marketIndices(config, params.phase as MarketPhase, signal));
     registerTool(api, 'identity_resolve', 'Resolve a canonical Person from trusted current sender/mention metadata, a preloaded or confirmed alias, or a person id. Alias resolution checks a group alias first and falls back to the global preset unless global-only scope is requested. For any person-specific PUBG request expressed with a nickname or alias, call this tool first and pass the resolved personId to the PUBG tool. This tool never treats a channel display name, phone number, or JID as a PUBG account.', IdentityResolveParameters, async (params, context) => identityResolve(config, params as IdentityResolveInput, context));
     registerTool(api, 'identity_get_person', 'Read one canonical Person, including confirmed aliases, channel bindings, and provider-neutral external accounts.', IdentityGetPersonParameters, async (params) => identityGetPerson(config, params as IdentityGetPersonInput));
     registerTool(api, 'identity_bind_channel', 'Owner-confirm a trusted current sender, mention, or replied sender as a canonical Person. Channel identity comes only from OpenClaw metadata, never from tool text.', IdentityBindChannelParameters, async (params, context) => identityBindChannel(config, params as IdentityBindChannelInput, context));

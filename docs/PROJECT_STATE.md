@@ -8,9 +8,21 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-19：美股指数开收盘通知（本轮）
+
+- 新增 `amadeus_market_indices` 原生工具，固定观测 NASDAQ-100 (`^NDX`) 与标普500
+  (`^GSPC`)；在工具边界确定当前交易日、前一交易日收盘、开盘/收盘涨跌和数据更新时间，
+  使用 Yahoo Finance Chart API，接口返回无当日 bar 时为 `market_closed`，不复用旧值。
+- 新增 `market` Skill、市场解析回归和手动 cron eventKey 隔离；通知沿用 WhatsApp owner
+  outbox，标题为 `Amadeus • 世界线观测 · 美股开盘/收盘`，正文以 `El Psy Kongroo.` 收束。
+- 部署脚本注册 `America/New_York` 工作日 `09:35`/`16:05` cron；对应北京时间夏令时约为
+  21:35/次日 04:05，冬令时约为 22:35/次日 05:05。休市日不通知。
+- 本地定向测试、类型检查、构建和 live CasaOS 验收待本轮完成后补充 checkpoint；在此之前
+  不宣称已送达真实通知。
+
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.1.7`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.2.0`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加一次 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不应自行重复写该句，部署边界会做去重保护。

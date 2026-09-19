@@ -379,9 +379,9 @@ amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=Fal
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
 for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts','pubg_prefetch_telemetry','pubg_telemetry_sync_report']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
-for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_indices','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus','vps']:
+for name in ['pubg','amadeus','market','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY
@@ -446,18 +446,18 @@ orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'ssh -i /run/secrets/mac_s
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
 
 ensure_cron() {
-  local name="$1" expression="$2" message="$3" tools="$4"
+  local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
   local existing_id
   existing_id="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
     | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print(next((x.get("id", "") for x in v.get("jobs",[]) if x.get("name")==n), ""))' "$name")"
   if [[ -z "$existing_id" ]]; then
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
-      --name "$name" --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
+      --name "$name" --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact \
       --declaration-key "amadeus-$name-v1" --json >/dev/null
   else
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
-      --cron "$expression" --tz Asia/Shanghai --session isolated --agent main \
+      --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
   fi
 }
@@ -475,6 +475,8 @@ ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、a
 ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner。正式定时执行使用 eventKey=vps-report:当天日期:evening；手动、调试或补跑必须使用 vps-report:manual:<当前 ISO 时间>:evening，严禁占用正式 key。插件边界也会自动隔离误传的手动正式 key。source=vps-report，title=🛰 VPS 晚间状态，message 为完整报告。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 ensure_cron amadeus-pubg-telemetry-hourly '5 * * * *' '只调用 pubg_prefetch_telemetry，参数 team=true、maxMatches=500、maxFetches=20、concurrency=2。该任务每小时刷新所有配置 PUBG 玩家最新对局，只获取本地不存在的新 Match API 详情，再为新对局或到期重试对局获取 Telemetry 并写入持久化缓存；严格保留工具返回的 status、cacheStatus、availability、dataUpdatedAt 和计数，不要把 status=FETCHED/cacheStatus=MISS/availability=AVAILABLE 说成数据缺失；不要调用其他工具、不要发送通知，定时任务使用 no-deliver。' 'pubg_prefetch_telemetry'
 ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_report，参数 team=true。报告默认统计上一自然日（Asia/Shanghai 的 00:00–24:00），不要改写 summary、dataUpdatedAt 或 notification.payload；然后把 data.notification 中的 eventKey、source、title、message 原样传给 amadeus_notify_owner。title 必须保持 Amadeus • D-mail，message 必须保留 PUBG 今日自动同步结果、数据更新时间、同步计数、未完成项和末尾 El Psy Kongroo.；不得自行编造数据、补发到 Telegram/KOOK/群聊或使用 cron fallback delivery。' 'pubg_telemetry_sync_report amadeus_notify_owner'
+ensure_cron amadeus-market-open '35 9 * * 1-5' '调用 amadeus_market_indices，参数 phase=open。若返回 status=market_closed 或 status=error，不要调用 amadeus_notify_owner，不要编造行情，直接结束；只有 status=ok 时，才把返回对象 notification 中的 eventKey、source、title、message 原样传给 amadeus_notify_owner，不得改写指数数字、交易日、数据更新时间或末尾 El Psy Kongroo.。这是 NASDAQ-100（^NDX）和标普500（^GSPC）的美股常规时段开盘观测，只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
+ensure_cron amadeus-market-close '5 16 * * 1-5' '调用 amadeus_market_indices，参数 phase=close。若返回 status=market_closed 或 status=error，不要调用 amadeus_notify_owner，不要编造行情，直接结束；只有 status=ok 时，才把返回对象 notification 中的 eventKey、source、title、message 原样传给 amadeus_notify_owner，不得改写指数数字、交易日、数据更新时间或末尾 El Psy Kongroo.。这是 NASDAQ-100（^NDX）和标普500（^GSPC）的美股常规时段收盘观测，只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
 HOOK_PATH="/Users/blacksidev/.codex/bin/codex-notify.sh"

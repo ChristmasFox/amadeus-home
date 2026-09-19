@@ -21,7 +21,7 @@ OpenClaw 工具面和已加载 native plugins；工具自身的 owner 检查与�
 - \`plugins/pubg/\`：唯一 PUBG 原生 OpenClaw plugin，六个受限工具和 Skill。
 - \`packages/pubg-domain/\`：官方 PUBG API、SQLite、查询/比较、Telemetry 事实和迁移器。
 - \`plugins/amadeus/\`：Product Radar、媒体安全流程、NAS、HomeLab、只读 VPS、KOOK lookup、
-  Identity 和 owner notification 的原生 OpenClaw plugin。
+  NASDAQ-100/标普500市场观测、Identity 和 owner notification 的原生 OpenClaw plugin。
 - \`apps/product-radar/\`：独立商品监控服务；业务事件只写 channel-free owner outbox。
 - \`integrations/openclaw/\`：脱敏配置、workspace、Skills 和部署说明。
 - \`infra/docker/casaos/\`：固定版本 OpenClaw/Product Radar 的 CasaOS 模板。
@@ -54,7 +54,7 @@ pnpm test:workflow
 
 ## Amadeus 版本管理
 
-产品版本唯一记录在根目录 `VERSION`，当前版本为 `1.1.7`。部署完成通知的正文来自
+产品版本唯一记录在根目录 `VERSION`，当前版本为 `1.2.0`。部署完成通知的正文来自
 `RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
 本次部署的新增或修复。部署前会校验版本标题、正文非空，并拒绝把运行时名称写进通知。
 

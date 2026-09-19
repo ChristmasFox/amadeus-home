@@ -96,6 +96,7 @@
           "notificationOutboxDir": "/var/lib/openclaw/notifications",
           "identityDatabasePath": "/data/identity.sqlite",
           "identityPresetsFile": "/data/identity-presets.json",
+          "marketDataBaseUrl": "https://query2.finance.yahoo.com/v8/finance/chart",
           "kiwiVmBaseUrl": "https://api.64clouds.com/v1",
           "kiwiVmCredentialsFile": "/run/secrets/kiwivm_credentials.json",
           "vpsSshKeyFile": "/run/secrets/vps_ssh_key",

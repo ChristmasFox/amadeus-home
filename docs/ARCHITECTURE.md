@@ -20,6 +20,7 @@ packages/pubg-domain             ├─ media-organizer-adapter
        ▼                         ├─ Glances / HomeLab probes
 official PUBG API + SQLite       ├─ KOOK API, current-session only
                                  ├─ KiwiVM + bounded read-only VPS SSH probes
+                                 ├─ deterministic NASDAQ-100/S&P 500 market observer
                                  └─ WhatsApp owner outbox/delivery
 \`\`\`
 
@@ -85,6 +86,10 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
   \`identity_bind_channel\`、\`identity_add_alias\`、\`identity_link_account\`、
   \`identity_list_candidates\`、\`identity_confirm_candidate\`。observed alias 只作为候选，
   必须经 Arthur 确认后才成为 authoritative binding。
+- `amadeus_market_indices`：通过配置的 Yahoo Finance Chart API 读取 `^NDX` 和 `^GSPC` 的
+  日线开盘/收盘及前一交易日收盘，确定性计算点数和百分比；没有当日交易 bar 时返回
+  `market_closed`，不发送旧值或假值。 OpenClaw cron 在 `America/New_York` 的 09:35 和 16:05
+  调用它，并只把工具返回的结构化通知交给 owner outbox。
 
 ### Owner notification contract
 
