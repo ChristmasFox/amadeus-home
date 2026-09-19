@@ -130,6 +130,7 @@ export class ReviewSubgraph {
       telemetry: {
         status: telemetry.status,
         cacheStatus: telemetry.cacheStatus,
+        cacheLookup: telemetry.cacheLookup,
         availability: telemetry.availability,
         parserVersion: telemetry.parserVersion,
         featureVersion: telemetry.featureVersion,

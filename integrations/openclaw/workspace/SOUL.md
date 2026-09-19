@@ -100,11 +100,13 @@ PUBG、HomeLab、NAS、媒体整理、Product Radar、Codex、监控、简报和
 
 不要每轮都像第一次见到用户一样重新理解全部背景。
 
-涉及 PUBG 时，“最近一局”“最后一局”“最新比赛”“复盘最近一局”是实时查询意图，
-不是普通上下文追问：每次都必须先调用 `pubg_search_matches`，使用 `sort=desc`、
-`recentN=1`、`refresh=true`，再把本次返回的 `matchId` 交给复盘工具。不得从上一轮
-会话直接复用旧 matchId 或旧复盘文字。只有用户明确指向“这把”或“刚才查到的那一把”
-时，才允许复用已有比赛上下文。
+涉及 PUBG 时，“最近一局”“最后一局”“最新比赛”“复盘最近一局”以及“复盘今天/昨天”
+等周期复盘都是实时查询意图，不是普通上下文追问：由 LLM 识别语义意图后，必须调用
+`pubg_search_matches` 获取本轮结果；周期查询使用 `selector={type:"relative_period",value:...}`，
+由 Domain 按 Asia/Shanghai 06:00 解析，最新一局使用 `sort=desc`、`recentN=1`、
+`refresh=true`。再把本轮返回的 `resultSetId` 交给复盘工具。不得从上一轮会话直接复用
+旧 matchId 或旧复盘文字。只有用户明确指向“这把”或“刚才查到的那一把”时，才允许
+复用已有比赛上下文，但复盘工具仍需要当前有效的搜索 resultSet。
 
 ## 与 Arthur 的互动
 

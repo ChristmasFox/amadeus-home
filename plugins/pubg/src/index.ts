@@ -74,6 +74,11 @@ const TimeRangeSelector = Type.Object({
   timezone: Type.Optional(Type.String({ maxLength: 128 })),
   businessDayStart: Type.Optional(Type.String({ pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$' })),
 }, { additionalProperties: false });
+const RelativePeriodSelector = Type.Object({
+  type: Type.Literal('relative_period'),
+  value: Type.String({ minLength: 1, maxLength: 128, description: 'Semantic period such as today, yesterday, day_before_yesterday, or a user-specified relative period; do not calculate timestamps here.' }),
+  label: Type.Optional(Type.String({ maxLength: 128 })),
+}, { additionalProperties: false });
 const LastMatchesSelector = Type.Object({
   type: Type.Literal('last_n_matches'),
   count: Type.Integer({ minimum: 1, maximum: 100 }),
@@ -83,7 +88,8 @@ const ResultSetSelector = Type.Object({
   type: Type.Literal('result_set'),
   resultSetId: Type.String({ minLength: 1, maxLength: 256 }),
 }, { additionalProperties: false });
-const Selector = Type.Union([TimeRangeSelector, LastMatchesSelector, ResultSetSelector]);
+const Selector = Type.Union([TimeRangeSelector, RelativePeriodSelector, LastMatchesSelector, ResultSetSelector]);
+const SearchSelector = Type.Union([TimeRangeSelector, RelativePeriodSelector]);
 
 const Metrics = Type.Union([
   Type.Literal('matches'), Type.Literal('kills'), Type.Literal('assists'), Type.Literal('damage'),
@@ -169,6 +175,7 @@ const ResolvePlayersParameters = Type.Object({
 
 const SearchMatchesParameters = Type.Object({
   ...SubjectProperties,
+  selector: Type.Optional(SearchSelector),
   from: Type.Optional(Type.String({ maxLength: 128 })),
   to: Type.Optional(Type.String({ maxLength: 128 })),
   timezone: Type.Optional(Type.String({ maxLength: 128 })),
@@ -190,6 +197,11 @@ const MatchParameters = Type.Object({
 const ReviewParameters = Type.Object({
   ...SubjectProperties,
   matchId: Type.String({ minLength: 1, maxLength: 256 }),
+  searchResultSetId: Type.String({
+    minLength: 1,
+    maxLength: 256,
+    description: 'resultSetId returned by a fresh pubg_search_matches call in the current turn; stale or omitted search context is rejected.',
+  }),
   categories: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: MAX_CATEGORIES })),
   refresh: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
@@ -481,7 +493,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛”, always call this tool with sort=desc, recentN=1, refresh=true on every user request before using any prior match context; the tool refreshes the match list and fetches only new match details, then reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛” and any “复盘/回顾/总结” over a period, use the structured selector (for example selector={type:"relative_period",value:"yesterday"}) rather than calculating timestamps, refresh=true, and pageSize up to 50; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. The tool always refreshes when selector or recentN is present, then fetches only new Match details and reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -495,7 +507,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
@@ -549,7 +561,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match selected by a current pubg_search_matches result. Never use this tool alone to answer “最近一局/最后一局”; search fresh first. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
@@ -563,7 +575,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_prefetch_telemetry',
-      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED with cacheStatus=MISS and availability=AVAILABLE; it is not missing data. Use team=true only.',
+      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED, cacheStatus=FETCHED, cacheLookup=MISS, and availability=AVAILABLE; it is usable data, not missing data. Use team=true only.',
       parameters: PrefetchTelemetryParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_prefetch_telemetry',

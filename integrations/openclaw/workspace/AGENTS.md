@@ -19,7 +19,10 @@
   coverage, freshness, query-resolution, and evidence fields; report
   `partial`, `no_matches`, and `error` as such.
 - Reuse the same OpenClaw session and returned result-set/context identifiers
-  for follow-up questions when the user is continuing the same request.
+  for ordinary follow-up questions when the user is continuing the same request.
+  PUBG latest-match and period-review requests are the exception: the LLM must
+  classify the semantic intent, request a fresh match search, and use only its
+  current resultSetId/facts; never answer a new review from an earlier turn.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.

@@ -79,6 +79,8 @@ const IDENTITY_DISPATCH_GUIDANCE = [
   'Use team=true only when the user explicitly asks for the configured team, the whole squad, or the full team; never use team=true for “我/我的/本人/自己”.',
   'If identity_resolve returns status=resolved, immediately pass result.person.personId as personIds to the relevant PUBG tool.',
   'Do not ask for a PUBG ID or claim that an account is unconfirmed before this lookup; a previous assistant reply is not current identity state.',
+  'For any PUBG review/replay/summary request over a period, let the LLM classify the semantic operation and period, then use pubg_search_matches with selector={type:"relative_period",value:"today" or "yesterday"}, refresh=true, and pageSize up to 50; do not calculate calendar-midnight timestamps or reuse prior review facts.',
+  'Pass the fresh pubg_search_matches resultSetId to every pubg_get_review_facts call. The review tool is structurally gated to a current-turn fresh result set; cache HIT/FETCHED is independent from fresh match discovery.',
 ].join('\n');
 
 const IdentityResolveParameters = Type.Object({

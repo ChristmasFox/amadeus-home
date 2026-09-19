@@ -495,7 +495,8 @@ export interface MatchReviewResult {
   analysis: ReviewAnalysis;
   telemetry: {
     status: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
-    cacheStatus: 'HIT' | 'MISS';
+    cacheStatus: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
+    cacheLookup: 'HIT' | 'MISS';
     availability: 'AVAILABLE' | 'UNAVAILABLE';
     parserVersion: string;
     featureVersion: string;

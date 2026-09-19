@@ -53,7 +53,11 @@ identity error，不静默使用默认队伍。
 
 PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷新玩家列表，增量获取 Match
 详情，再对新对局/到期重试对局获取 Telemetry。持久化账本区分 cache hit、成功 fetch 和不可用，
-因此 `MISS` 不再等价于“没有数据”；PUBG 工具输出同时提供 `dataUpdatedAt`。每日 00:00 的
+因此 `cacheStatus=FETCHED` 才表示一次成功的官方抓取，底层 `cacheLookup=MISS` 只是说明抓取前
+没有缓存，不等价于数据缺失；真正不可用才是 `UNAVAILABLE`。PUBG 工具输出同时提供
+`dataUpdatedAt`。LLM 负责把“今天/昨天/复盘”等自然语言识别为结构化意图，Domain 接收
+`relative_period` 后按 `Asia/Shanghai` 的 `06:00` 业务日确定性解析；Telemetry 复盘必须携带
+当前新鲜 `pubg_search_matches` 的 `resultSetId`，旧结果不会被复用。每日 00:00 的
 `pubg_telemetry_sync_report` 只汇总上一自然日并生成 owner outbox 的 D-mail payload；交互查询
 仍使用 `06:00` 业务日。官方限流和端点规则以
 [PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html) 为准。
