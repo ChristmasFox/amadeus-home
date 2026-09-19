@@ -38,3 +38,11 @@ OpenClaw 与 Product Radar、注册 VPS 报告 cron，并以真实 owner WhatsAp
 生产 secret、owner identity、队伍配置、API key 和数据库只存在 OrbStack `ubuntu` 的外部
 路径。CasaOS compose 位于 `/var/lib/casaos/apps`，服务使用 `docker compose up -d
 --no-build`；需要构建时先由 host BuildKit 生成固定 image，再显式 apply。
+
+## 美股指数通知
+
+NASDAQ-100 与标普500使用 `^NDX`、`^GSPC` 的 Yahoo Finance Chart API 日线数据；
+`amadeus_market_indices` 在工具边界确定交易日、前收、开盘/收盘涨跌和数据更新时间，LLM
+不参与数字计算。OpenClaw 以 `America/New_York` 的 09:35/16:05 工作日 cron 触发，周末和
+交易所休市日不通知；成功事件使用稳定 `market-indices:<date>:<open|close>` key，经既有
+WhatsApp owner outbox 投递，并以 `El Psy Kongroo.` 收束世界线正文。

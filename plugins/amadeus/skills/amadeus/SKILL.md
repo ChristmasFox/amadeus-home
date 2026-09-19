@@ -26,6 +26,8 @@ meaning; do not create a keyword router, `/command` parser, or second agent.
   `eventKey`, and a final `El Psy Kongroo.` when the notification is a world-line
   report. Preserve tool-returned counts and timestamps; do not claim delivery from
   a queued or mock result.
+- Market open/close observations are defined in the `market` Skill; use its
+  deterministic tool result and do not calculate index changes in the model.
 Identity is a shared native capability, not a keyword router:
 
 - Use `identity_resolve` for `self`, trusted mentions/replies, canonical

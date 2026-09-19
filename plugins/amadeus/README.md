@@ -21,5 +21,12 @@ loaded from the external `identityPresetsFile`; production channel IDs/JIDs and
 the database stay outside Git. Observed aliases remain candidates until an
 owner/Arthur confirmation.
 
+The market capability reads the NASDAQ-100 (`^NDX`) and S&P 500 (`^GSPC`)
+regular-session daily bars through the configured Yahoo Finance Chart API
+endpoint. It compares the current open or close with the previous trading
+close, skips sessions without a current trading bar, and sends only the
+structured notification returned by the deterministic tool. The scheduled
+open/close jobs use the same WhatsApp owner outbox as other Amadeus reports.
+
 All credentials, SSH keys, owner identity, and media paths are deployment
 configuration. They are not part of this package or the repository.

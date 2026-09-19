@@ -29,6 +29,18 @@ test('manual VPS cron runs cannot consume the scheduled report event key', () =>
   assert.equal(scheduled.eventKey, input.eventKey);
 });
 
+test('manual market cron runs cannot consume the scheduled observation event key', () => {
+  const input = {
+    eventKey: 'market-indices:2026-09-18:close',
+    source: 'market-indices',
+    title: 'Amadeus • 世界线观测 · 美股收盘',
+    message: 'ok',
+    occurredAt: '2026-09-18T20:26:17.000Z',
+  };
+  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
+  assert.equal(manual.eventKey, 'market-indices:manual:2026-09-18T20:26:17.000Z:close');
+});
+
 test('owner outbox is channel-free, atomic, and idempotent', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'amadeus-owner-'));
   try {
