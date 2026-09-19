@@ -14,7 +14,7 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
 
-## PUBG Telemetry 复盘新鲜度修复（2026-09-19，本轮待部署）
+## PUBG Telemetry 复盘新鲜度修复（2026-09-19，已部署）
 
 - LLM 负责识别 PUBG 操作和周期，工具接受结构化 `relative_period` selector；Domain 确定性解析
   `Asia/Shanghai` 的 `06:00`–次日 `06:00`，不让模型直接计算午夜时间戳。
@@ -22,8 +22,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   会话 5 分钟内、由刷新搜索产生且包含目标 Match 的 `resultSetId`，旧会话 facts 不再可直接复用。
 - Telemetry 语义为 `HIT`、`FETCHED`、`UNAVAILABLE`；成功抓取使用
   `cacheStatus=FETCHED/cacheLookup=MISS/availability=AVAILABLE`，`cacheLookup=MISS` 不等价于缺少数据。
-- 回归验证已通过：PUBG Domain 19/19、Plugin 9/9、受影响 typecheck；版本为 `1.1.1`，待本轮
-  release build/apply 和 live fresh-review 验证。
+- 回归验证已通过：PUBG Domain 19/19、Plugin 9/9、受影响 typecheck；版本为 `1.1.1`。
+- 提交 `5eaf652` 已通过 `--apply --build-auto` 部署；线上镜像为
+  `local/openclaw-amadeus:git-5eaf65238c58-20260919053516`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919053516`。容器为 `running/healthy`，
+  live bundle、插件注册、hourly `5 * * * *` 与 daily `0 0 * * *` cron 均已核实；部署 health、
+  preflight、媒体网络、NAS 只读和 owner outbox smoke 通过。真实 Telegram/WhatsApp 群聊复盘仍待
+  用户触发验收。
 
 ## PUBG Telemetry 小时预取与 D-mail 汇总（2026-09-19，基础能力已部署）
 

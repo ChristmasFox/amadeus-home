@@ -13,9 +13,9 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
 标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
 
-## 2026-09-19 follow-up：PUBG Telemetry 复盘新鲜度与缓存语义修复（本轮）
+## 2026-09-19 follow-up：PUBG Telemetry 复盘新鲜度与缓存语义修复（已部署）
 
-本轮已完成源码、回归验证和待部署的 release 变更：LLM 只负责识别 PUBG 操作与周期，工具接受
+本轮已完成源码、回归验证和 release 部署：LLM 只负责识别 PUBG 操作与周期，工具接受
 结构化 `relative_period` selector，Domain 统一按 `Asia/Shanghai` 的 `06:00` 业务日解析，避免
 模型直接计算日历午夜。`pubg_search_matches` 在存在 selector 或 `recentN` 时强制刷新；
 `pubg_get_review_facts` 必须接收当前会话、当前 5 分钟内、由刷新搜索产生且包含目标 Match 的
@@ -24,7 +24,16 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 Telemetry 用户可见语义改为 `HIT`、`FETCHED`、`UNAVAILABLE`；成功请求写入缓存返回
 `status=FETCHED/cacheStatus=FETCHED/cacheLookup=MISS/availability=AVAILABLE`，不再把成功抓取渲染为
 裸 `MISS`。新增 relative-period 与 result-set 新鲜度回归，PUBG Domain 19/19、Plugin 9/9 测试、
-受影响 typecheck 已通过。版本由 `1.1.0` 升至 `1.1.1`，下一步执行 `--apply --build-auto` 发布。
+受影响 typecheck 已通过。版本由 `1.1.0` 升至 `1.1.1`，已执行 `--apply --build-auto` 发布。
+
+当前 live 状态：`DEPLOYED_LIVE_FRESH_REVIEW_GUARD_ACTIVE`。提交 `5eaf652` 已部署到 CasaOS，线上
+镜像为 `local/openclaw-amadeus:git-5eaf65238c58-20260919053516`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919053516`。OpenClaw 容器为 `running/healthy`，
+启动日志确认 `amadeus`、`pubg`、Telegram、WhatsApp 正常注册；live bundle 已检出
+`relative_period`、`review_search_required`、`cacheLookup` 和新鲜度守卫。Hourly cron 为
+`5 * * * *`、daily cron 为 `0 0 * * *`，均为 `Asia/Shanghai` isolated job；小时任务最近一次状态为
+`ok`。部署脚本的 OpenClaw/Product Radar health、preflight、媒体网络、NAS 只读 smoke 和 owner
+WhatsApp outbox smoke 均通过。真实群聊仍需用户触发一次“复盘昨天/今天”完成入口验收。
 
 ## 2026-09-19 follow-up：PUBG Telemetry 小时预取、MISS 语义与 D-mail 汇总
 
