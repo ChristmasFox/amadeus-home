@@ -8,11 +8,19 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.1.3`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.1.4`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，且只保留
 本次版本的简短新增/修复，不是累计 changelog；标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加
 `El Psy Kongroo.`。
+
+## 2026-09-19 follow-up：PUBG 方向性结果与来源时间范围（待部署）
+
+已修复两类最终渲染问题：队友误伤/踢击/拳击等关系查询明确按 `行为者 → 受害者` 处理，
+“反过来”是交换方向后的独立查询，不得把前一方向的正确结果改写成错误；同时所有 PUBG
+native tool 输出增加必填 `dataSourceRange`，Telemetry 复盘继承本轮刷新搜索的精确业务日区间，
+最终回复必须同时展示 `dataUpdatedAt` 和来源时间范围（比较查询按分段展示）。本地 PUBG Domain
+20/20、Plugin 9/9、typecheck、secrets scan 和 diff check 已通过，待 CasaOS release apply。
 
 ## 2026-09-19 follow-up：PUBG 路由事实强制走工具（已部署）
 
