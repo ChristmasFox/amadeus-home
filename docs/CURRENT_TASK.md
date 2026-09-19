@@ -6,13 +6,19 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
-## 2026-09-19 follow-up：NAS OpenClaw 美股指数通知（进行中）
+## 2026-09-19 follow-up：NAS OpenClaw 美股指数通知（已部署）
 
 用户确认关注纳斯达克100和标普500，并沿用部署通知的命运石之门主题风格。实现边界是
 `plugins/amadeus` 的确定性 `amadeus_market_indices` 工具与 owner outbox，不恢复旧 briefing
 producer；美东 09:35/16:05 工作日 cron 自动适配北京时间夏令时/冬令时。必须先完成
 Amadeus 定向测试、secrets scan、版本发布、CasaOS apply，并验证两个 cron、工具 bundle、
 健康状态和可恢复 checkpoint；接口异常或休市不得发送编造/旧行情。
+
+本轮已完成：版本 `1.2.0`、提交 `5117aa5` 通过 `--apply --build-auto` 部署到 CasaOS；镜像为
+`local/openclaw-amadeus:git-5117aa593fbc-20260919102358`，checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919102358`。live health、插件/Skill
+preflight、NAS 只读、owner outbox 和 Gateway 行情工具 smoke 均通过；真实 smoke 因周六返回
+`market_closed`，没有发送市场通知。后续只需等待下一个美股交易日自然触发开盘/收盘消息。
 
 ## Amadeus 版本管理（2026-09-19）
 

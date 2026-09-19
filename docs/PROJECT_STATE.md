@@ -17,8 +17,14 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   outbox，标题为 `Amadeus • 世界线观测 · 美股开盘/收盘`，正文以 `El Psy Kongroo.` 收束。
 - 部署脚本注册 `America/New_York` 工作日 `09:35`/`16:05` cron；对应北京时间夏令时约为
   21:35/次日 04:05，冬令时约为 22:35/次日 05:05。休市日不通知。
-- 本地定向测试、类型检查、构建和 live CasaOS 验收待本轮完成后补充 checkpoint；在此之前
-  不宣称已送达真实通知。
+- 本地 Amadeus/Identity typecheck、16 条 Amadeus 回归、secrets scan、构建和 `git diff --check`
+  已通过。版本 `1.2.0`、提交 `5117aa5` 已通过 `--apply --build-auto` 部署；OpenClaw 镜像为
+  `local/openclaw-amadeus:git-5117aa593fbc-20260919102358`，恢复 checkpoint 为
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919102358`。
+- live 容器为 `running/healthy`；`amadeus_market_indices` 已在 runtime bundle 注册，`market`
+  Skill 已加载；`amadeus-market-open`/`amadeus-market-close` 均为 isolated、`America/New_York`
+  的 `35 9 * * 1-5`/`5 16 * * 1-5`，allow-list 仅含行情工具和 owner notifier。Gateway live smoke
+  实际调用行情工具并在周六返回 `market_closed`，未发送未经请求的市场通知。
 
 ## Amadeus 版本管理（2026-09-19）
 
