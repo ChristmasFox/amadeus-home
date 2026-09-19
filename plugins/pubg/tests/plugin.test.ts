@@ -31,6 +31,7 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.match(statsTool.description, /team=true only for an explicit whole-team request/);
   assert.match(statsTool.description, /Every new PUBG factual request must call this tool/);
   assert.match(statsTool.description, /persistent SQLite cache/);
+  assert.match(statsTool.description, /dataSourceRange/);
   const searchTool = metadata.tools.find((tool) => tool.name === 'pubg_search_matches');
   assert.ok(searchTool);
   assert.match(searchTool.description, /recentN/);
@@ -42,6 +43,8 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.match(reviewTool.description, /current turn/);
   assert.match(reviewTool.description, /stale/);
   assert.match(reviewTool.description, /instead of quoting prior conversation context/);
+  assert.match(reviewTool.description, /directional/);
+  assert.match(reviewTool.description, /dataSourceRange/);
   const prefetchTool = metadata.tools.find((tool) => tool.name === 'pubg_prefetch_telemetry');
   assert.ok(prefetchTool);
   assert.match(prefetchTool.description, /status=FETCHED/);
@@ -72,4 +75,6 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /persistent SQLite cache/);
   assert.match(skill, /refresh: true/);
   assert.match(skill, /数据更新时间/);
+  assert.match(skill, /数据来源时间范围/);
+  assert.match(skill, /反过来呢/);
 });

@@ -130,6 +130,16 @@ export interface GetReviewFactsInput extends GetMatchInput {
   categories?: string[];
 }
 
+function sourceRangeFromSelector(selector: Selector): Record<string, string> | null {
+  if (selector.type !== 'time_range') return null;
+  return {
+    from: selector.start,
+    to: selector.end,
+    timezone: selector.timezone,
+    businessDayStart: selector.businessDayStart,
+  };
+}
+
 export interface PrefetchTelemetryInput {
   maxMatches?: number;
   maxFetches?: number;
@@ -969,7 +979,18 @@ export class PubgDomainService {
       coverage,
       asOf: this.now().toISOString(),
       metricVersion: PUBGMETRIC_VERSION,
-      queryResolved: { tool: 'pubg_get_match', matchId: input.matchId },
+      queryResolved: {
+        tool: 'pubg_get_match',
+        matchId: input.matchId,
+        sourceRange: (() => {
+          const from = match.createdAt ?? (Number.isFinite(match.timestamp) ? new Date(match.timestamp).toISOString() : null);
+          const fromTimestamp = from ? Date.parse(from) : Number.NaN;
+          const to = Number.isFinite(fromTimestamp) && Number.isFinite(match.duration)
+            ? new Date(fromTimestamp + Math.max(0, match.duration) * 1000).toISOString()
+            : null;
+          return { from, to, timezone: this.timezone, businessDayStart: this.businessDayStart };
+        })(),
+      },
       evidenceRefs: { matchIds: [match.matchId], playerIds: match.players.map((player) => player.accountId), fields: ['matchId', 'createdAt', 'mapName', 'gameMode', 'players'], calculation: 'sqlite_match_store' },
     };
   }
@@ -1022,13 +1043,21 @@ export class PubgDomainService {
       },
     };
     const status: ToolStatus = telemetry.status === 'UNAVAILABLE' ? 'partial' : facts.fightIntegrity.pass ? 'ok' : 'partial';
+    const sourceRange = searchResultSet ? sourceRangeFromSelector(searchResultSet.resolvedSelector) : null;
     const result: ToolEnvelope = {
       status,
       data: { facts: sanitize(facts), telemetry: sanitize(review.telemetry), derivedAnalysis: sanitize(analysis) },
       coverage: coverageForLocal(this.repository.listMatches(), this.now(), this.repository.getSyncState('team:' + this.team.id)),
       asOf: this.now().toISOString(),
       metricVersion: PUBGMETRIC_VERSION,
-      queryResolved: { tool: 'pubg_get_review_facts', matchId: input.matchId, searchResultSetId: input.searchResultSetId, playerIds: input.playerIds ?? null, categories: input.categories ?? null },
+      queryResolved: {
+        tool: 'pubg_get_review_facts',
+        matchId: input.matchId,
+        searchResultSetId: input.searchResultSetId,
+        playerIds: input.playerIds ?? null,
+        categories: input.categories ?? null,
+        ...(sourceRange ? { sourceRange } : {}),
+      },
       evidenceRefs: { matchIds: [target.matchId], playerIds: facts.squad.playerIds, fields: ['match', 'players', 'combat', 'fights', 'weapons', 'vehicles', 'evidence'], calculation: 'telemetry_facts_v1' },
     };
     if (telemetry.status === 'UNAVAILABLE') result.error = { code: 'telemetry_unavailable', retryable: true, reason: telemetry.error ?? 'telemetry unavailable' };

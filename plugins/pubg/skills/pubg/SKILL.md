@@ -109,6 +109,14 @@ Tool rules:
 - Use `pubg_get_match` for the selected match's Match API facts, then
   `pubg_get_review_facts` for Telemetry-derived facts. Never present a missing
   Telemetry fact as zero.
+- Friendly-fire and teammate-action questions are directional facts. Always
+  normalize and state the direction as `actor → victim` (for example,
+  `kim_kkl → SG007`). “反过来呢” swaps the actor and victim and starts a new
+  independent query; it does not invalidate or correct the previous direction.
+  Never append a sentence saying that the previous number was wrong unless the
+  current native-tool result covers the exact same actor, victim, period, and
+  calculation and directly contradicts it. Do not mix the two directions into
+  one total.
 - Pass `categories` only when a bounded review is requested. The match and
   player summary remains available; detail groups such as `combat`, `fights`,
   `weapons`, `vehicles`, `heavy_weapons`, `special_events`, `team_damage`,
@@ -121,6 +129,11 @@ Tool rules:
 - Every user-facing PUBG answer must include `数据更新时间：<dataUpdatedAt>` from the
   latest relevant tool result. `dataUpdatedAt` is the tool's authoritative snapshot
   timestamp; do not replace it with the current chat time or an invented match time.
+- Every user-facing PUBG answer must also include the tool's
+  `dataSourceRange`: render `数据来源时间范围：<from> 至 <to>` and include its
+  timezone/business-day boundary. For a comparison, render each returned
+  segment's range separately. Do not substitute the current reply time for the
+  source range; if the tool returns null, say that the source range is unknown.
 - Telemetry status is explicit: `HIT` means the feature cache was read,
   `FETCHED` + `cacheStatus=FETCHED` + `cacheLookup=MISS` + `availability=AVAILABLE`
   means the cache was empty but the official Telemetry was fetched successfully and

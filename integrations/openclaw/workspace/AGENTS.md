@@ -30,6 +30,15 @@
   review from an earlier turn. Only an explicitly deictic request such as
   “这把/刚才查到的那一把” may reuse a match reference, and the relevant
   native tool must still be called for the facts.
+- PUBG friendly-fire and teammate-action facts are directional. Treat
+  `actor → victim` and `victim → actor` as separate queries; “反过来” is not a
+  correction of the previous answer. State the direction explicitly and never
+  call an earlier result wrong unless the same normalized direction, period,
+  and calculation is contradicted by the current tool result.
+- Every final response produced after PUBG routing must show both
+  `dataUpdatedAt` and `dataSourceRange`. Render the latter as the actual source
+  interval (and each segment separately for comparisons), including the
+  configured timezone and business-day boundary.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.

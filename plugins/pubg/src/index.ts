@@ -110,6 +110,20 @@ const OrderBy = Type.Object({
 const ToolOutputStatus = Type.Union([
   Type.Literal('ok'), Type.Literal('partial'), Type.Literal('no_matches'), Type.Literal('error'),
 ]);
+const DataSourceRangeSegment = Type.Object({
+  label: Type.String({ maxLength: 128 }),
+  from: Type.Union([Type.String(), Type.Null()]),
+  to: Type.Union([Type.String(), Type.Null()]),
+  timezone: Type.Union([Type.String(), Type.Null()]),
+  businessDayStart: Type.Union([Type.String(), Type.Null()]),
+}, { additionalProperties: false });
+const DataSourceRangeSchema = Type.Object({
+  from: Type.Union([Type.String(), Type.Null()]),
+  to: Type.Union([Type.String(), Type.Null()]),
+  timezone: Type.Union([Type.String(), Type.Null()]),
+  businessDayStart: Type.Union([Type.String(), Type.Null()]),
+  segments: Type.Array(DataSourceRangeSegment, { maxItems: 2 }),
+}, { additionalProperties: false });
 const ToolOutputSchema = Type.Object({
   status: ToolOutputStatus,
   data: Type.Unknown(),
@@ -125,6 +139,7 @@ const ToolOutputSchema = Type.Object({
   }, { additionalProperties: true }),
   asOf: Type.String(),
   dataUpdatedAt: Type.String(),
+  dataSourceRange: DataSourceRangeSchema,
   metricVersion: Type.String(),
   queryResolved: Type.Record(Type.String(), Type.Unknown()),
   evidenceRefs: Type.Object({
@@ -431,8 +446,89 @@ function runtimeError(error: unknown): ToolEnvelope {
   };
 }
 
+type DataSourceRange = {
+  from: string | null;
+  to: string | null;
+  timezone: string | null;
+  businessDayStart: string | null;
+  segments: Array<{
+    label: string;
+    from: string | null;
+    to: string | null;
+    timezone: string | null;
+    businessDayStart: string | null;
+  }>;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function rangeFromValue(value: unknown): Omit<DataSourceRange, 'segments'> | null {
+  if (!isRecord(value)) return null;
+  const from = stringOrNull(value.from) ?? stringOrNull(value.start);
+  const to = stringOrNull(value.to) ?? stringOrNull(value.end);
+  if (from === null && to === null) return null;
+  return {
+    from,
+    to,
+    timezone: stringOrNull(value.timezone),
+    businessDayStart: stringOrNull(value.businessDayStart),
+  };
+}
+
+function earliestRangeValue(ranges: Array<Omit<DataSourceRange, 'segments'>>, key: 'from' | 'to'): string | null {
+  const values = ranges.map((range) => range[key]).filter((value): value is string => value !== null);
+  if (!values.length) return null;
+  const ordered = values
+    .map((value) => ({ value, timestamp: Date.parse(value) }))
+    .filter((item) => Number.isFinite(item.timestamp))
+    .sort((left, right) => left.timestamp - right.timestamp);
+  if (!ordered.length) return values[0] ?? null;
+  return (key === 'from' ? ordered[0] : ordered[ordered.length - 1])?.value ?? null;
+}
+
+function dataSourceRangeFor(envelope: ToolEnvelope): DataSourceRange {
+  const query = isRecord(envelope.queryResolved) ? envelope.queryResolved : {};
+  const direct = rangeFromValue(query.sourceRange);
+  const selector = rangeFromValue(query.selector);
+  const selectorRanges = [direct, selector].filter((range): range is Omit<DataSourceRange, 'segments'> => range !== null);
+  const segments = Array.isArray(query.segments)
+    ? query.segments.flatMap((segment): DataSourceRange['segments'] => {
+      if (!isRecord(segment)) return [];
+      const range = rangeFromValue(segment.selector);
+      if (!range) return [];
+      return [{ label: stringOrNull(segment.label) ?? 'segment', ...range }];
+    })
+    : [];
+  const segmentRanges = segments.map(({ label: _label, ...range }) => range);
+  const ranges = [...selectorRanges, ...segmentRanges];
+  const fallback = {
+    from: stringOrNull(envelope.coverage.coverageStart),
+    to: stringOrNull(envelope.coverage.coverageEnd),
+    timezone: null,
+    businessDayStart: null,
+  };
+  const primary = direct ?? selector ?? (ranges.length ? ranges[0] : fallback);
+  return {
+    from: earliestRangeValue(ranges.length ? ranges : [fallback], 'from'),
+    to: earliestRangeValue(ranges.length ? ranges : [fallback], 'to'),
+    timezone: primary.timezone,
+    businessDayStart: primary.businessDayStart,
+    segments,
+  };
+}
+
 function jsonToolResult(envelope: ToolEnvelope): ReturnType<typeof jsonResult> {
-  return jsonResult({ ...envelope, dataUpdatedAt: envelope.asOf });
+  return jsonResult({
+    ...envelope,
+    dataUpdatedAt: envelope.asOf,
+    dataSourceRange: dataSourceRangeFor(envelope),
+  });
 }
 
 function makeTool<Schema extends TypeSchema>(
@@ -493,7 +589,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. Every new PUBG factual request must call a native PUBG tool; never answer from prior conversation facts. The Domain refreshes the upstream match list, reads the persistent SQLite cache, fetches only new Match details, and reuses cached details when no match is new. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. Every new PUBG factual request must call a native PUBG tool; never answer from prior conversation facts. The Domain refreshes the upstream match list, reads the persistent SQLite cache, fetches only new Match details, and reuses cached details when no match is new. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -507,7 +603,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Every new PUBG factual request must call this tool and use its returned facts; never answer from prior conversation text or stale result context. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Every new PUBG factual request must call this tool and use its returned facts; never answer from prior conversation text or stale result context. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
@@ -527,7 +623,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_compare_stats',
-      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. Always call this tool for a new comparison; never reuse prior conversation numbers. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. Always call this tool for a new comparison; never reuse prior conversation numbers. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Every final PUBG answer must show dataUpdatedAt and each dataSourceRange segment. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: CompareParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_compare_stats',
@@ -547,7 +643,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_match',
-      description: 'Get one concrete PUBG Match API record after a match ID has been selected. Always call this tool for the requested Match facts instead of quoting prior conversation context. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get one concrete PUBG Match API record after a match ID has been selected. Always call this tool for the requested Match facts instead of quoting prior conversation context. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: MatchParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_match',
@@ -561,7 +657,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Friendly-fire queries are directional: actorPlayerId → victimPlayerId; “反过来” is a separate query and must not be described as correcting the previous direction. Preserve both independent results unless the same normalized direction and period directly contradict. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
@@ -575,7 +671,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_prefetch_telemetry',
-      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED, cacheStatus=FETCHED, cacheLookup=MISS, and availability=AVAILABLE; it is usable data, not missing data. Use team=true only.',
+      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED, cacheStatus=FETCHED, cacheLookup=MISS, and availability=AVAILABLE; it is usable data, not missing data. The result includes dataUpdatedAt and dataSourceRange. Use team=true only.',
       parameters: PrefetchTelemetryParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_prefetch_telemetry',
@@ -592,7 +688,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_telemetry_sync_report',
-      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, dataUpdatedAt, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
+      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, dataUpdatedAt, dataSourceRange, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
       parameters: TelemetrySyncReportParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_telemetry_sync_report',

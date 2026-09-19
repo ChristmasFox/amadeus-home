@@ -492,6 +492,11 @@ test('relative-period match search uses the 06:00 business day and review requir
     assert.equal(reviewData.telemetry.cacheStatus, 'FETCHED');
     assert.equal(reviewData.telemetry.cacheLookup, 'MISS');
     assert.equal(reviewData.telemetry.availability, 'AVAILABLE');
+    const reviewResolved = review.queryResolved as { sourceRange: { from: string; to: string; timezone: string; businessDayStart: string } };
+    assert.equal(reviewResolved.sourceRange.from, '2026-09-17T22:00:00.000Z');
+    assert.equal(reviewResolved.sourceRange.to, '2026-09-18T22:00:00.000Z');
+    assert.equal(reviewResolved.sourceRange.timezone, 'Asia/Shanghai');
+    assert.equal(reviewResolved.sourceRange.businessDayStart, '06:00');
 
     currentNow = new Date('2026-09-19T00:36:00.000Z');
     const staleReview = await service.getReviewFacts({
