@@ -14,10 +14,16 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 本次版本的简短新增/修复，不是累计 changelog；标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加
 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不要自行重复写这句，部署脚本会统一追加一次。
 
-## 2026-09-19 follow-up：部署通知结尾去重（待部署）
+## 2026-09-19 follow-up：部署通知结尾去重（已部署）
 
 已定位重复原因：发布说明正文包含 `El Psy Kongroo.`，部署脚本又无条件追加一次。现在部署边界会
 先移除发布说明中独立的同名结尾，再统一追加一次；1.1.7 发布说明不再手写该句。
+
+版本 `1.1.7`、提交 `e85ff3c` 已通过 `--apply --build-auto` 部署；本次复用已验证镜像
+`local/openclaw-amadeus:git-fdf331cbca89-20260919071937`，恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919072713`。实际送达的 owner smoke 通知已
+核实 `El Psy Kongroo.` 全文只出现 1 次；OpenClaw `running/healthy`，health、preflight、媒体网络、
+NAS 只读和 owner outbox smoke 均通过。
 
 ## 2026-09-19 follow-up：PUBG 全部时间统一北京时间（已部署）
 
