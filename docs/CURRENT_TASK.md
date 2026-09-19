@@ -8,7 +8,7 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.1.5`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.1.7`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，且只保留
 本次版本的简短新增/修复，不是累计 changelog；标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加
@@ -17,7 +17,7 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 ## 2026-09-19 follow-up：部署通知结尾去重（待部署）
 
 已定位重复原因：发布说明正文包含 `El Psy Kongroo.`，部署脚本又无条件追加一次。现在部署边界会
-先移除发布说明中独立的同名结尾，再统一追加一次；1.1.6 发布说明已不再手写该句。
+先移除发布说明中独立的同名结尾，再统一追加一次；1.1.7 发布说明不再手写该句。
 
 ## 2026-09-19 follow-up：PUBG 全部时间统一北京时间（已部署）
 
