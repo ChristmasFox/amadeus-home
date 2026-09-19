@@ -52,6 +52,10 @@ app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity pr
 最新已部署 PUBG 版本：提交 `fdf331c`，镜像 `local/openclaw-amadeus:git-fdf331cbca89-20260919071937`，恢复点
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919071937`；未发送未经请求的真实群聊测试消息。
 
+美股指数通知子目标已完成部署：`amadeus_market_indices` 固定观测 `^NDX`/`^GSPC`，美东
+09:35/16:05 工作日 cron 经 WhatsApp owner outbox 通知，休市返回 `market_closed`；版本
+`1.2.0`、提交 `5117aa5`、checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919102358`。
+
 下一步：
 
 1. 在真实 Telegram/WhatsApp 私聊和群聊入口完成 sender binding、PUBG account/link、群 alias
