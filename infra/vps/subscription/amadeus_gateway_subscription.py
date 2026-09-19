@@ -197,6 +197,7 @@ class UsageProvider:
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/x-www-form-urlencoded",
+                "User-Agent": "AmadeusGatewaySubscription/1",
             },
             method="POST",
         )

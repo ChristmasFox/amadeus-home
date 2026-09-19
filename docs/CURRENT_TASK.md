@@ -195,7 +195,7 @@ report cron。受限 SSH key/user 和固定 probe 已在 `amadeus-gateway` provi
 和 `X-Amadeus-Gateway-Usage` 使用 KiwiVM 整台 VPS 的已用、总量、剩余和重置时间。当前不区分
 用户或 Xray/HY2，KiwiVM 失败沿用上一次成功样本并标记 `stale`，没有样本不回零。
 
-本地 Python 单元测试 4/4、编译、`git diff --check` 和 secrets scan 已通过。live
+本地 Python 单元测试 5/5、编译、`git diff --check` 和 secrets scan 已通过。live
 VPS 尚未切换：需要在仓库外准备 `/etc/amadeus-gateway/kiwivm-credentials.json`，安装
 `amadeus-gateway-subscription.service`，将 Caddy 原静态 `file_server` 改为本地反代，再用原
 订阅 URL 验证响应头和四种正文格式；未执行前不得宣称线上已生效。

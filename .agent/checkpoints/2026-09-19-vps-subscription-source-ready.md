@@ -21,7 +21,7 @@
 
 ## Verification
 
-- `python3 -m unittest discover -s infra/vps/subscription -p 'test_*.py' -v`: 4/4 passed.
+- `python3 -m unittest discover -s infra/vps/subscription -p 'test_*.py' -v`: 5/5 passed.
 - `python3 -m py_compile infra/vps/subscription/amadeus_gateway_subscription.py infra/vps/subscription/test_amadeus_gateway_subscription.py`: passed.
 - `git diff --check`: passed.
 - `pnpm check:secrets`: passed.
