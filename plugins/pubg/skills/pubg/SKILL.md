@@ -73,7 +73,8 @@ Tool rules:
   is also a fresh-data intent. Let the LLM emit a structured semantic selector rather than
   calculating timestamps: use `pubg_search_matches` with
   `selector: { type: "relative_period", value: "today" | "yesterday" }`, `refresh: true`,
-  and `pageSize: 50`. The Domain resolves this selector with the configured
+  `sort: "asc"`, and `pageSize: 50`; omit `recentN` for the full period so the returned
+  matches follow chronological play order. The Domain resolves this selector with the configured
   `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to every
   `pubg_get_review_facts` call for that review; do not reuse facts or a result set from an
   earlier turn. The review tool rejects an omitted, unrelated, or stale search result set.

@@ -233,6 +233,15 @@ function uniqueStrings(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
 }
 
+function searchOrder(input: SearchMatchesInput): 'asc' | 'desc' {
+  // A bounded period is presented as a play-by-play review, so its implicit
+  // order is chronological. Explicit recentN keeps the latest-match contract
+  // newest-first; callers can still override the order explicitly.
+  if (input.sort) return input.sort;
+  if (input.selector && input.recentN === undefined) return 'asc';
+  return 'desc';
+}
+
 async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (item: T) => Promise<R>): Promise<R[]> {
   if (!items.length) return [];
   const results: R[] = new Array(items.length);
@@ -660,7 +669,8 @@ export class PubgDomainService {
       && match.players.some((player) => subject.ids.includes(player.accountId))
       && (!input.gameMode || match.gameMode.toLowerCase() === input.gameMode.toLowerCase())
       && (!input.mapName || match.mapName.toLowerCase() === input.mapName.toLowerCase()));
-    const ordered = [...selected].sort((left, right) => (input.sort ?? 'desc') === 'desc'
+    const order = searchOrder(input);
+    const ordered = [...selected].sort((left, right) => order === 'desc'
       ? right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId)
       : left.timestamp - right.timestamp || left.matchId.localeCompare(right.matchId));
     const pageSize = Math.min(Math.max(Math.trunc(input.pageSize ?? 20), 1), 50);
@@ -693,7 +703,7 @@ export class PubgDomainService {
       },
       subject: subject.ids,
       filters: { gameMode: input.gameMode ?? null, mapName: input.mapName ?? null },
-      order: input.sort ?? 'desc',
+      order,
       page,
       pageSize,
       refresh: {
@@ -718,7 +728,7 @@ export class PubgDomainService {
       playerIds: subject.ids,
       matchIds: recent.map((match) => match.matchId),
       rows: [],
-      aggregates: { candidateCount: selected.length, returnedCount: rows.length, page, pageSize, order: input.sort ?? 'desc' },
+      aggregates: { candidateCount: selected.length, returnedCount: rows.length, page, pageSize, order },
       rankings: [],
       coverage: source.coverage,
       status: rows.length ? (source.coverage.status === 'OK' ? 'OK' : source.coverage.status) : source.coverage.complete ? 'NO_MATCHES' : source.coverage.status,

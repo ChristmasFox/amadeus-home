@@ -181,10 +181,10 @@ const SearchMatchesParameters = Type.Object({
   timezone: Type.Optional(Type.String({ maxLength: 128 })),
   gameMode: Type.Optional(Type.String({ maxLength: 64 })),
   mapName: Type.Optional(Type.String({ maxLength: 128 })),
-  sort: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')])),
+  sort: Type.Optional(Type.Union([Type.Literal('asc'), Type.Literal('desc')], { description: 'Period reviews should use asc for chronological play order; recentN/latest-match lookups use desc.' })),
   page: Type.Optional(Type.Integer({ minimum: 0, maximum: 100 })),
   pageSize: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
-  recentN: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+  recentN: Type.Optional(Type.Integer({ minimum: 1, maximum: 100, description: 'Use only for latest/recent-match lookups; omit for a full period review so the Domain defaults to chronological order.' })),
   refresh: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
@@ -493,7 +493,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛” and any “复盘/回顾/总结” over a period, use the structured selector (for example selector={type:"relative_period",value:"yesterday"}) rather than calculating timestamps, refresh=true, and pageSize up to 50; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. The tool always refreshes when selector or recentN is present, then fetches only new Match details and reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. The tool always refreshes when selector or recentN is present, then fetches only new Match details and reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
