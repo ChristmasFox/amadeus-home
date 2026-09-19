@@ -45,6 +45,14 @@ Tool rules:
 
 - Never invent match IDs, players, metrics, telemetry facts, coverage, or
   timestamps. Use the native tools as the only source of PUBG facts.
+- Every new PUBG factual request must call the relevant native tool, even when
+  the current OpenClaw session already contains a previous answer or tool
+  result. This includes short requests such as “昨天 SG007 踢 kim_kkl 多少脚”,
+  “昨天战绩”, “总伤害”, “今天几局”, or a follow-up that asks for a number.
+  Context may resolve identity, period, and scope only; it must never supply
+  the numeric/event facts. The native tool reads the persistent SQLite cache
+  and applies its default refresh policy, so do not answer directly from
+  conversation context.
 - Resolve a person before a person-specific PUBG query. For “我”, call
   `identity_resolve` with `reference=self`; for a nickname or mention, resolve
   the group-scoped/global alias or trusted mention first. Pass the returned
@@ -83,7 +91,10 @@ Tool rules:
   `Asia/Shanghai` unless the user specifies another timezone. PUBG's canonical
   business day runs from `06:00` through the next `06:00`; preserve that
   boundary when resolving date-based selectors. `last_n_matches` is bounded to
-  at most 100 matches per call.
+  at most 100 matches per call. Omit `refresh` or set `refresh: true` for a
+  new query; the default refreshes the upstream match list before reading the
+  persistent cache. Use `refresh: false` only when the user explicitly asks
+  for cache-only data.
 - For a clock split repeated across multiple calendar days, make each day's
   before/after windows explicit half-open intervals and keep them separate;
   never use `groupBy: day` over a widened range that contains both sides of the
@@ -120,8 +131,10 @@ Tool rules:
   missing Telemetry; its retry state is persistent. `pubg_telemetry_sync_report`
   summarizes the previous natural calendar day and returns the exact notification
   payload for `amadeus_notify_owner`; preserve its counts and timestamp.
-- Keep the same OpenClaw session context for follow-ups. Tool results are
-  session-scoped; do not reuse a `resultSetId` from another conversation.
+- Keep the same OpenClaw session for identity and query continuity, but do not
+  reuse prior PUBG facts or prose. Tool results are session-scoped; do not reuse
+  a `resultSetId` from another conversation, and use a new native tool result
+  for every new factual answer.
 
 The plugin returns structured JSON. OpenClaw owns interpretation, clarification,
 and the final natural-language response; the plugin does not contain an LLM,

@@ -152,7 +152,7 @@ const QueryStatsParameters = Type.Object({
   groupBy: Type.Optional(GroupBySchema),
   orderBy: Type.Optional(OrderBy),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-  refresh: Type.Optional(Type.Boolean()),
+  refresh: Type.Optional(Type.Boolean({ description: 'Default is true: refresh the upstream match list, then read cached Match/Telemetry facts. Set false only for an explicit cache-only request; never answer from conversation context.' })),
 }, { additionalProperties: false });
 
 const CompareParameters = Type.Object({
@@ -165,7 +165,7 @@ const CompareParameters = Type.Object({
   groupBy: Type.Optional(Type.Union([Type.Literal('player'), Type.Literal('day'), Type.Literal('map'), Type.Literal('mode'), Type.Literal('team')])),
   orderBy: Type.Optional(OrderBy),
   limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
-  refresh: Type.Optional(Type.Boolean()),
+  refresh: Type.Optional(Type.Boolean({ description: 'Default is true: refresh both compared segments before reading persistent cached facts; never use prior conversation text as data.' })),
 }, { additionalProperties: false });
 
 const ResolvePlayersParameters = Type.Object({
@@ -493,7 +493,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. The tool always refreshes when selector or recentN is present, then fetches only new Match details and reuses cached details when no match is new. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. Every new PUBG factual request must call a native PUBG tool; never answer from prior conversation facts. The Domain refreshes the upstream match list, reads the persistent SQLite cache, fetches only new Match details, and reuses cached details when no match is new. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -507,7 +507,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Every new PUBG factual request must call this tool and use its returned facts; never answer from prior conversation text or stale result context. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
@@ -527,7 +527,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_compare_stats',
-      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. Always call this tool for a new comparison; never reuse prior conversation numbers. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: CompareParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_compare_stats',
@@ -547,7 +547,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_match',
-      description: 'Get one concrete PUBG Match API record after a match ID has been selected. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get one concrete PUBG Match API record after a match ID has been selected. Always call this tool for the requested Match facts instead of quoting prior conversation context. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: MatchParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_match',
@@ -561,7 +561,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
