@@ -188,17 +188,19 @@ report cron。受限 SSH key/user 和固定 probe 已在 `amadeus-gateway` provi
 
 ## 2026-09-19 follow-up：VPS 订阅复用旧链接、统一文件名与套餐流量头
 
-当前实现状态：`SOURCE_READY_LIVE_APPLY_PENDING`。新增轻量的
+当前实现状态：`LIVE_APPLIED_SUBSCRIPTION_HEADERS_PASS`。新增轻量的
 `infra/vps/subscription/amadeus_gateway_subscription.py` 和 systemd/Caddy 模板：保留已有
 `/<token>/<format>` 订阅 URL，原样返回 QX/Clash/Shadowrocket 正文，并以
 `Content-Disposition: inline; filename="amadeus-gateway"` 统一文件名；`Subscription-Userinfo`
 和 `X-Amadeus-Gateway-Usage` 使用 KiwiVM 整台 VPS 的已用、总量、剩余和重置时间。当前不区分
 用户或 Xray/HY2，KiwiVM 失败沿用上一次成功样本并标记 `stale`，没有样本不回零。
 
-本地 Python 单元测试 5/5、编译、`git diff --check` 和 secrets scan 已通过。live
-VPS 尚未切换：需要在仓库外准备 `/etc/amadeus-gateway/kiwivm-credentials.json`，安装
-`amadeus-gateway-subscription.service`，将 Caddy 原静态 `file_server` 改为本地反代，再用原
-订阅 URL 验证响应头和四种正文格式；未执行前不得宣称线上已生效。
+本地 Python 单元测试 5/5、编译、`git diff --check` 和 secrets scan 已通过。live apply 已完成：
+VPS 外部凭据位于 `/etc/amadeus-gateway/kiwivm-credentials.json`，新 service 为
+`enabled/active`，Caddy 为 `enabled/active` 且旧静态 handler 已替换为两个本地反代。443/8443
+上的四种原订阅路径均为 HTTP 200，正文逐字节保持一致，响应文件名为 `amadeus-gateway`，
+`Subscription-Userinfo` 为 `fresh`。apply 前备份为
+`/var/lib/caddy/backups/amadeus-gateway-subscription-20260919084939`。
 
 ## 跨渠道 Identity 子目标（2026-09-18）
 
