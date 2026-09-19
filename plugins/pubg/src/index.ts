@@ -114,12 +114,16 @@ const DataSourceRangeSegment = Type.Object({
   label: Type.String({ maxLength: 128 }),
   from: Type.Union([Type.String(), Type.Null()]),
   to: Type.Union([Type.String(), Type.Null()]),
+  fromLocal: Type.Union([Type.String(), Type.Null()]),
+  toLocal: Type.Union([Type.String(), Type.Null()]),
   timezone: Type.Union([Type.String(), Type.Null()]),
   businessDayStart: Type.Union([Type.String(), Type.Null()]),
 }, { additionalProperties: false });
 const DataSourceRangeSchema = Type.Object({
   from: Type.Union([Type.String(), Type.Null()]),
   to: Type.Union([Type.String(), Type.Null()]),
+  fromLocal: Type.Union([Type.String(), Type.Null()]),
+  toLocal: Type.Union([Type.String(), Type.Null()]),
   timezone: Type.Union([Type.String(), Type.Null()]),
   businessDayStart: Type.Union([Type.String(), Type.Null()]),
   segments: Type.Array(DataSourceRangeSegment, { maxItems: 2 }),
@@ -138,7 +142,10 @@ const ToolOutputSchema = Type.Object({
     freshness: Type.Union([Type.Literal('fresh'), Type.Literal('stale'), Type.Literal('unknown')]),
   }, { additionalProperties: true }),
   asOf: Type.String(),
+  asOfLocal: Type.String(),
   dataUpdatedAt: Type.String(),
+  dataUpdatedAtLocal: Type.String(),
+  displayTimezone: Type.String(),
   dataSourceRange: DataSourceRangeSchema,
   metricVersion: Type.String(),
   queryResolved: Type.Record(Type.String(), Type.Unknown()),
@@ -449,16 +456,23 @@ function runtimeError(error: unknown): ToolEnvelope {
 type DataSourceRange = {
   from: string | null;
   to: string | null;
+  fromLocal: string | null;
+  toLocal: string | null;
   timezone: string | null;
   businessDayStart: string | null;
   segments: Array<{
     label: string;
     from: string | null;
     to: string | null;
+    fromLocal: string | null;
+    toLocal: string | null;
     timezone: string | null;
     businessDayStart: string | null;
   }>;
 };
+
+type DataSourceRangeCore = Pick<DataSourceRange, 'from' | 'to' | 'timezone' | 'businessDayStart'>;
+type DataSourceRangeSegmentValue = { label: string } & DataSourceRangeCore;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -468,7 +482,49 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function rangeFromValue(value: unknown): Omit<DataSourceRange, 'segments'> | null {
+function formatLocalTime(value: unknown, timezone: string): string | null {
+  const timestamp = typeof value === 'number'
+    ? value
+    : typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(timestamp)) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(timestamp));
+    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
+  } catch {
+    return null;
+  }
+}
+
+const DISPLAY_TIME_KEYS = new Set([
+  'asOf', 'checkedAt', 'coverageStart', 'coverageEnd', 'createdAt', 'startedAt',
+  'finishedAt', 'lastRunAt', 'occurredAt', 'updatedAt', 'expiresAt', 'from', 'to',
+]);
+
+function decorateDisplayTimes(value: unknown, timezone: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => decorateDisplayTimes(item, timezone));
+  if (!isRecord(value)) return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    result[key] = decorateDisplayTimes(item, timezone);
+    if (DISPLAY_TIME_KEYS.has(key) && typeof item === 'string') {
+      const local = formatLocalTime(item, timezone);
+      if (local) result[`${key}Local`] = local;
+    }
+  }
+  return result;
+}
+
+function rangeFromValue(value: unknown): DataSourceRangeCore | null {
   if (!isRecord(value)) return null;
   const from = stringOrNull(value.from) ?? stringOrNull(value.start);
   const to = stringOrNull(value.to) ?? stringOrNull(value.end);
@@ -481,7 +537,7 @@ function rangeFromValue(value: unknown): Omit<DataSourceRange, 'segments'> | nul
   };
 }
 
-function earliestRangeValue(ranges: Array<Omit<DataSourceRange, 'segments'>>, key: 'from' | 'to'): string | null {
+function earliestRangeValue(ranges: DataSourceRangeCore[], key: 'from' | 'to'): string | null {
   const values = ranges.map((range) => range[key]).filter((value): value is string => value !== null);
   if (!values.length) return null;
   const ordered = values
@@ -492,13 +548,13 @@ function earliestRangeValue(ranges: Array<Omit<DataSourceRange, 'segments'>>, ke
   return (key === 'from' ? ordered[0] : ordered[ordered.length - 1])?.value ?? null;
 }
 
-function dataSourceRangeFor(envelope: ToolEnvelope): DataSourceRange {
+function dataSourceRangeFor(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai'): DataSourceRange {
   const query = isRecord(envelope.queryResolved) ? envelope.queryResolved : {};
   const direct = rangeFromValue(query.sourceRange);
   const selector = rangeFromValue(query.selector);
-  const selectorRanges = [direct, selector].filter((range): range is Omit<DataSourceRange, 'segments'> => range !== null);
-  const segments = Array.isArray(query.segments)
-    ? query.segments.flatMap((segment): DataSourceRange['segments'] => {
+  const selectorRanges = [direct, selector].filter((range): range is DataSourceRangeCore => range !== null);
+  const segments: DataSourceRangeSegmentValue[] = Array.isArray(query.segments)
+    ? query.segments.flatMap((segment): DataSourceRangeSegmentValue[] => {
       if (!isRecord(segment)) return [];
       const range = rangeFromValue(segment.selector);
       if (!range) return [];
@@ -514,20 +570,40 @@ function dataSourceRangeFor(envelope: ToolEnvelope): DataSourceRange {
     businessDayStart: null,
   };
   const primary = direct ?? selector ?? (ranges.length ? ranges[0] : fallback);
-  return {
+  const timezone = primary.timezone ?? fallbackTimezone;
+  const localize = (range: DataSourceRangeCore) => ({
+    ...range,
+    fromLocal: formatLocalTime(range.from, range.timezone ?? timezone),
+    toLocal: formatLocalTime(range.to, range.timezone ?? timezone),
+  });
+  const localizedSegments = segments.map((segment) => ({
+    ...segment,
+    fromLocal: formatLocalTime(segment.from, segment.timezone ?? timezone),
+    toLocal: formatLocalTime(segment.to, segment.timezone ?? timezone),
+  }));
+  const localizedPrimary = localize({
     from: earliestRangeValue(ranges.length ? ranges : [fallback], 'from'),
     to: earliestRangeValue(ranges.length ? ranges : [fallback], 'to'),
-    timezone: primary.timezone,
+    timezone,
     businessDayStart: primary.businessDayStart,
-    segments,
+  });
+  return {
+    ...localizedPrimary,
+    segments: localizedSegments,
   };
 }
 
-function jsonToolResult(envelope: ToolEnvelope): ReturnType<typeof jsonResult> {
+function jsonToolResult(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai'): ReturnType<typeof jsonResult> {
+  const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
+  const displayTimezone = dataSourceRange.timezone ?? fallbackTimezone;
+  const displayEnvelope = decorateDisplayTimes(envelope, displayTimezone) as Record<string, unknown>;
   return jsonResult({
-    ...envelope,
+    ...displayEnvelope,
+    asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
     dataUpdatedAt: envelope.asOf,
-    dataSourceRange: dataSourceRangeFor(envelope),
+    dataUpdatedAtLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
+    displayTimezone,
+    dataSourceRange,
   });
 }
 
@@ -549,15 +625,16 @@ function makeTool<Schema extends TypeSchema>(
     async execute(_toolCallId, rawParams, signal) {
       try {
         const input = rawParams as Static<Schema>;
+        const displayTimezone = configString(config, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai';
         const service = serviceFor(config);
         const sessionId = contextSessionId(input as { sessionId?: string }, toolContext);
         const prepared = requiresIdentitySubject
           ? await prepareIdentitySubject(service, config, input as Static<Schema> & IdentitySubjectInput, toolContext, sessionId, signal)
           : stripIdentityFields(input as Static<Schema> & IdentitySubjectInput);
-        if ('status' in prepared && prepared.status === 'error') return jsonToolResult(prepared);
-        return jsonToolResult(await execute(service, prepared as Static<Schema>, sessionId, signal));
+        if ('status' in prepared && prepared.status === 'error') return jsonToolResult(prepared, displayTimezone);
+        return jsonToolResult(await execute(service, prepared as Static<Schema>, sessionId, signal), displayTimezone);
       } catch (error) {
-        return jsonToolResult(runtimeError(error));
+        return jsonToolResult(runtimeError(error), configString(config, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai');
       }
     },
   };
@@ -589,7 +666,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_search_matches',
-      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. Every new PUBG factual request must call a native PUBG tool; never answer from prior conversation facts. The Domain refreshes the upstream match list, reads the persistent SQLite cache, fetches only new Match details, and reuses cached details when no match is new. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Search bounded PUBG matches and return concrete match IDs for follow-up details or Telemetry review. Every new PUBG factual request must call a native PUBG tool; never answer from prior conversation facts. The Domain refreshes the upstream match list, reads the persistent SQLite cache, fetches only new Match details, and reuses cached details when no match is new. For “最近一局/最后一局/最新比赛”, use recentN=1, sort="desc", refresh=true, without a period selector. For “复盘/回顾/总结” over a period, use selector={type:"relative_period",value:"yesterday"}, sort="asc", refresh=true, pageSize up to 50, and omit recentN so matches are returned in chronological play order; the Domain resolves the configured Asia/Shanghai 06:00 business day and returns a resultSetId that must be passed to every pubg_get_review_facts call. All user-visible times must use dataUpdatedAtLocal, *Local fields, and dataSourceRange.fromLocal/toLocal in displayTimezone; raw ISO fields are machine evidence only. Every final PUBG answer must show both the Beijing-local update time and source range. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: SearchMatchesParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_search_matches',
@@ -603,7 +680,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_query_stats',
-      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Every new PUBG factual request must call this tool and use its returned facts; never answer from prior conversation text or stale result context. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
+      description: 'Query deterministic PUBG aggregates over an explicit bounded selector. Every new PUBG factual request must call this tool and use its returned facts; never answer from prior conversation text or stale result context. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Date-relative “今天/昨天/本业务日” requests must use the configured Asia/Shanghai 06:00 business-day boundary, not calendar midnight. All user-visible times must use dataUpdatedAtLocal, *Local fields, and dataSourceRange.fromLocal/toLocal in displayTimezone; raw ISO fields are machine evidence only. Every final PUBG answer must show the Beijing-local update time and source range. For nickname or first-person requests such as “胶昨天战绩”, “猴昨天战绩”, or “我昨天战绩”, call identity_resolve first (reference=alias or reference=self), then pass the resolved personId in personIds; do not ask for a PUBG ID before that lookup. Use team=true only for an explicit whole-team request, never for “我”.',
       parameters: QueryStatsParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_query_stats',
@@ -623,7 +700,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_compare_stats',
-      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. Always call this tool for a new comparison; never reuse prior conversation numbers. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Every final PUBG answer must show dataUpdatedAt and each dataSourceRange segment. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Compare two explicit PUBG time or match segments with deterministic deltas and null-safe ratios. Always call this tool for a new comparison; never reuse prior conversation numbers. Default refresh=true refreshes the upstream match list before reading the persistent SQLite cache. Every final PUBG answer must show the Beijing-local dataUpdatedAtLocal and each dataSourceRange segment using fromLocal/toLocal. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: CompareParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_compare_stats',
@@ -643,7 +720,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_match',
-      description: 'Get one concrete PUBG Match API record after a match ID has been selected. Always call this tool for the requested Match facts instead of quoting prior conversation context. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get one concrete PUBG Match API record after a match ID has been selected. Always call this tool for the requested Match facts instead of quoting prior conversation context. Use the *Local fields for every user-visible time, including startedAtLocal; raw ISO fields are machine evidence only. Every final PUBG answer must show the Beijing-local dataUpdatedAtLocal and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: MatchParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_match',
@@ -657,7 +734,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Friendly-fire queries are directional: actorPlayerId → victimPlayerId; “反过来” is a separate query and must not be described as correcting the previous direction. Preserve both independent results unless the same normalized direction and period directly contradict. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. Every final PUBG answer must show both dataUpdatedAt and dataSourceRange. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Friendly-fire queries are directional: actorPlayerId → victimPlayerId; “反过来” is a separate query and must not be described as correcting the previous direction. Preserve both independent results unless the same normalized direction and period directly contradict. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. Use startedAtLocal and all other *Local fields for the final answer; show Beijing-local dataUpdatedAtLocal and dataSourceRange.fromLocal/toLocal, never raw UTC clock components. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
@@ -671,7 +748,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_prefetch_telemetry',
-      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED, cacheStatus=FETCHED, cacheLookup=MISS, and availability=AVAILABLE; it is usable data, not missing data. The result includes dataUpdatedAt and dataSourceRange. Use team=true only.',
+      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED, cacheStatus=FETCHED, cacheLookup=MISS, and availability=AVAILABLE; it is usable data, not missing data. The result includes Beijing-local dataUpdatedAtLocal, *Local run timestamps, and dataSourceRange. Use team=true only.',
       parameters: PrefetchTelemetryParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_prefetch_telemetry',
@@ -688,7 +765,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_telemetry_sync_report',
-      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, dataUpdatedAt, dataSourceRange, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
+      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, Beijing-local dataUpdatedAtLocal, dataSourceRange, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
       parameters: TelemetrySyncReportParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_telemetry_sync_report',

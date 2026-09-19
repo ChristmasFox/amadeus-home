@@ -598,6 +598,7 @@ test('hourly telemetry prefetch only fetches new matches, persists retry state, 
     assert.equal(reportData.summary.fetchedCount, 2);
     assert.equal(reportData.notification.title, 'Amadeus • D-mail');
     assert.match(reportData.notification.message, /PUBG 今日自动同步结果/);
+    assert.match(reportData.notification.message, /数据更新时间：2026-09-18 23:30:00（Asia\/Shanghai）/u);
     assert.match(reportData.notification.message, /El Psy Kongroo\.$/u);
   } finally {
     rmSync(root, { recursive: true, force: true });

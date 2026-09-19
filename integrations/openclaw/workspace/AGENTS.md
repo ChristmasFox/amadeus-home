@@ -36,9 +36,11 @@
   call an earlier result wrong unless the same normalized direction, period,
   and calculation is contradicted by the current tool result.
 - Every final response produced after PUBG routing must show both
-  `dataUpdatedAt` and `dataSourceRange`. Render the latter as the actual source
-  interval (and each segment separately for comparisons), including the
-  configured timezone and business-day boundary.
+  `dataUpdatedAtLocal` and `dataSourceRange.fromLocal/toLocal`. All user-visible
+  PUBG times must use the returned `*Local` fields in `displayTimezone` (default
+  `Asia/Shanghai`, Beijing/UTC+8); raw ISO/UTC fields are machine evidence and
+  must never be printed with an Asia/Shanghai label. Render each comparison
+  segment separately, including the configured timezone and business-day boundary.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.
