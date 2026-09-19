@@ -2,7 +2,7 @@
   "id": "pubg",
   "name": "PUBG Stats",
   "description": "Deterministic PUBG match statistics and telemetry review tools.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -65,7 +65,9 @@
       "pubg_query_stats",
       "pubg_compare_stats",
       "pubg_get_match",
-      "pubg_get_review_facts"
+      "pubg_get_review_facts",
+      "pubg_prefetch_telemetry",
+      "pubg_telemetry_sync_report"
     ]
   }
 }

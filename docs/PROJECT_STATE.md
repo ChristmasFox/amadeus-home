@@ -10,9 +10,16 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 
 ## Amadeus 版本管理（2026-09-19）
 
-当前产品版本为 `1.0.1`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
+当前产品版本为 `1.1.0`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
 校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，部署完成 owner
 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，正文最后追加 `El Psy Kongroo.`。
+
+## PUBG Telemetry 小时预取与 D-mail 汇总（2026-09-19，源码已实现，部署待完成）
+
+- `pubg_prefetch_telemetry` 每小时刷新所有配置玩家的比赛列表；Match API 只获取 SQLite 中没有的比赛详情，Telemetry 只处理新对局或到期重试对局，持久化 `HIT/FETCHED/UNAVAILABLE`、重试状态和每轮账本。
+- `FETCHED + cacheStatus=MISS + availability=AVAILABLE` 明确表示缓存未命中但官方请求成功、数据已写入缓存；`UNAVAILABLE` 才表示当前不可用。所有 PUBG plugin 输出增加 `dataUpdatedAt`，Skill 要求最终回复携带数据更新时间。
+- `pubg_telemetry_sync_report` 统计上一自然日 `00:00–24:00`（Asia/Shanghai），每天 00:00 由 `Amadeus • D-mail` owner 通知发送，正文保留计数、更新时间、重试状态并以 `El Psy Kongroo.` 结尾；交互 PUBG 业务日仍是 06:00。
+- 预取默认每轮最多 20 场、并发 2；玩家发现每小时 1 次。官方限制说明见 [PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html)，设计不依赖高频请求。
 
 ## PUBG 查询边界加固（2026-09-19，已部署，真实入口验收待完成）
 

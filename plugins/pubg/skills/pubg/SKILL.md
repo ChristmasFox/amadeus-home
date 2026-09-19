@@ -98,6 +98,19 @@ Tool rules:
 - Preserve the returned `status`, `coverage`, `asOf`, `metricVersion`,
   `queryResolved`, and `evidenceRefs` while explaining results. `partial`,
   `no_matches`, and `error` are meaningful outcomes, not successful data.
+- Every user-facing PUBG answer must include `数据更新时间：<dataUpdatedAt>` from the
+  latest relevant tool result. `dataUpdatedAt` is the tool's authoritative snapshot
+  timestamp; do not replace it with the current chat time or an invented match time.
+- Telemetry status is explicit: `HIT` means the feature cache was read,
+  `FETCHED` + `cacheStatus=MISS` + `availability=AVAILABLE` means the cache was
+  missed but the official Telemetry was fetched successfully and written to cache,
+  and `UNAVAILABLE` means the data could not be obtained. Never describe a successful
+  `FETCHED` result as missing Telemetry.
+- `pubg_prefetch_telemetry` is a bounded team-wide scheduled operation. It refreshes
+  player match lists hourly, fetches only new Match API records, and prefetches only
+  missing Telemetry; its retry state is persistent. `pubg_telemetry_sync_report`
+  summarizes the previous natural calendar day and returns the exact notification
+  payload for `amadeus_notify_owner`; preserve its counts and timestamp.
 - Keep the same OpenClaw session context for follow-ups. Tool results are
   session-scoped; do not reuse a `resultSetId` from another conversation.
 

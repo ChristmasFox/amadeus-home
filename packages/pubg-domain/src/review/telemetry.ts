@@ -283,7 +283,10 @@ export interface TelemetryWorkerOptions {
 }
 
 export interface TelemetryEnsureResult {
-  status: 'HIT' | 'MISS' | 'UNAVAILABLE';
+  /** HIT is a cache read; FETCHED is a successful upstream fetch and cache write. */
+  status: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
+  cacheStatus: 'HIT' | 'MISS';
+  availability: 'AVAILABLE' | 'UNAVAILABLE';
   facts?: MatchReviewFacts;
   parserVersion: string;
   featureVersion: string;
@@ -301,6 +304,7 @@ export class TelemetryWorker {
   private readonly team: TeamConfig;
   private readonly store: TelemetryFeatureStore;
   private readonly downloader: TelemetryDownloader | undefined;
+  private readonly inFlight = new Map<string, Promise<TelemetryEnsureResult>>();
   readonly parserVersion: string;
   readonly featureVersion: string;
 
@@ -315,8 +319,47 @@ export class TelemetryWorker {
   async ensure(match: NormalizedMatch, ordinal = 1, signal?: AbortSignal): Promise<TelemetryEnsureResult> {
     const key = { matchId: match.matchId, parserVersion: this.parserVersion, featureVersion: this.featureVersion };
     const cached = await this.store.get(key);
-    if (cached) return { status: 'HIT', facts: factsForOrdinal(cached.facts, ordinal), parserVersion: this.parserVersion, featureVersion: this.featureVersion };
-    if (!this.downloader) return { status: 'UNAVAILABLE', parserVersion: this.parserVersion, featureVersion: this.featureVersion, error: 'telemetry_downloader_not_configured' };
+    if (cached) {
+      return {
+        status: 'HIT',
+        cacheStatus: 'HIT',
+        availability: 'AVAILABLE',
+        facts: factsForOrdinal(cached.facts, ordinal),
+        parserVersion: this.parserVersion,
+        featureVersion: this.featureVersion,
+      };
+    }
+    const keyValue = cacheKey(key);
+    const existing = this.inFlight.get(keyValue);
+    if (existing) {
+      const result = await existing;
+      return result.facts ? { ...result, facts: factsForOrdinal(result.facts, ordinal) } : result;
+    }
+    const pending = this.fetchAndPersist(match, ordinal, key, signal);
+    this.inFlight.set(keyValue, pending);
+    try {
+      return await pending;
+    } finally {
+      this.inFlight.delete(keyValue);
+    }
+  }
+
+  private async fetchAndPersist(
+    match: NormalizedMatch,
+    ordinal: number,
+    key: TelemetryFeatureKey,
+    signal?: AbortSignal,
+  ): Promise<TelemetryEnsureResult> {
+    if (!this.downloader) {
+      return {
+        status: 'UNAVAILABLE',
+        cacheStatus: 'MISS',
+        availability: 'UNAVAILABLE',
+        parserVersion: this.parserVersion,
+        featureVersion: this.featureVersion,
+        error: 'telemetry_downloader_not_configured',
+      };
+    }
     try {
       const raw = await this.downloader.download(match, signal);
       const facts = extractMatchReviewFacts(match, raw, this.team, ordinal);
@@ -324,10 +367,19 @@ export class TelemetryWorker {
       await this.store.set({ ...key, facts: persistedFacts, createdAt: new Date().toISOString() });
       // Keep the normalized event stream inside the Worker boundary. Review
       // analysis and presentation consume derived facts/evidence only.
-      return { status: 'MISS', facts: persistedFacts, parserVersion: this.parserVersion, featureVersion: this.featureVersion };
+      return {
+        status: 'FETCHED',
+        cacheStatus: 'MISS',
+        availability: 'AVAILABLE',
+        facts: persistedFacts,
+        parserVersion: this.parserVersion,
+        featureVersion: this.featureVersion,
+      };
     } catch (error) {
       return {
         status: 'UNAVAILABLE',
+        cacheStatus: 'MISS',
+        availability: 'UNAVAILABLE',
         parserVersion: this.parserVersion,
         featureVersion: this.featureVersion,
         error: error instanceof Error ? error.message : 'telemetry_unavailable',

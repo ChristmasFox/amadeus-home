@@ -6,12 +6,12 @@ import { CanonicalQuerySchema } from '../schema/query.js';
 import type { NormalizedMatch, QueryRow, ResultSetRecord, StructuredResult } from '../data/model.js';
 import { DeterministicQueryEngine, resultSetFromResult } from '../engine/query-engine.js';
 import { PubgApiClient, PubgApiError } from '../data/pubg-api-client.js';
-import { SqlitePubgRepository } from '../storage/sqlite-repository.js';
+import { SqlitePubgRepository, type TelemetryPrefetchRun } from '../storage/sqlite-repository.js';
 import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry.js';
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
 import type { MatchReviewResult } from '../review/types.js';
-import { BUSINESS_DAY_START } from '../time/selector-resolver.js';
+import { BUSINESS_DAY_START, localDateLabel } from '../time/selector-resolver.js';
 
 export const PUBGMETRIC_VERSION = 'pubg-metrics-v1';
 export const PUBG_QUERY_VERSION = 'pubg-query-v1';
@@ -119,6 +119,33 @@ export interface GetReviewFactsInput extends GetMatchInput {
   categories?: string[];
 }
 
+export interface PrefetchTelemetryInput {
+  maxMatches?: number;
+  maxFetches?: number;
+  concurrency?: number;
+  trigger?: 'hourly' | 'manual';
+  signal?: AbortSignal;
+}
+
+export interface TelemetrySyncReportInput {
+  reportDate?: string;
+}
+
+interface TelemetrySyncSummary {
+  reportDate: string;
+  timezone: string;
+  runCount: number;
+  discoveredMatchCount: number;
+  newMatchCount: number;
+  candidateMatchCount: number;
+  fetchedCount: number;
+  cacheHitCount: number;
+  unavailableCount: number;
+  pendingCount: number;
+  failedMatchIds: string[];
+  lastRunAt: string | null;
+}
+
 function asFiniteDate(value: string): number | null {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -193,6 +220,80 @@ function coverageWithRecords(coverage: Coverage, records: NormalizedMatch[], now
 
 function uniqueStrings(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (item: T) => Promise<R>): Promise<R[]> {
+  if (!items.length) return [];
+  const results: R[] = new Array(items.length);
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= items.length) return;
+      results[index] = await task(items[index]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
+function retryAt(now: Date, attemptCount: number): string {
+  const delayMs = Math.min(24 * 60 * 60 * 1000, 60 * 60 * 1000 * (2 ** Math.max(0, attemptCount - 1)));
+  return new Date(now.getTime() + delayMs).toISOString();
+}
+
+function previousLocalDate(now: Date, timezone: string): string {
+  return localDateLabel(now.getTime() - 24 * 60 * 60 * 1000, timezone);
+}
+
+function summarizePrefetchRuns(reportDate: string, timezone: string, runs: TelemetryPrefetchRun[]): TelemetrySyncSummary {
+  const sum = (selector: (run: TelemetryPrefetchRun) => number): number => runs.reduce((total, run) => total + selector(run), 0);
+  return {
+    reportDate,
+    timezone,
+    runCount: runs.length,
+    discoveredMatchCount: sum((run) => run.discoveredMatchCount),
+    newMatchCount: sum((run) => run.newMatchCount),
+    candidateMatchCount: sum((run) => run.candidateMatchCount),
+    fetchedCount: sum((run) => run.fetchedCount),
+    cacheHitCount: sum((run) => run.cacheHitCount),
+    unavailableCount: sum((run) => run.unavailableCount),
+    pendingCount: sum((run) => run.pendingCount),
+    failedMatchIds: [...new Set(runs.flatMap((run) => run.failedMatchIds))],
+    lastRunAt: runs.length ? runs[runs.length - 1]!.finishedAt : null,
+  };
+}
+
+function pubgSyncNotification(summary: TelemetrySyncSummary, asOf: string): { title: string; source: string; eventKey: string; message: string; occurredAt: string } {
+  const state = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? '部分同步，未完成项已保留并会继续重试' : '同步完成，当前世界线稳定';
+  const message = [
+    '收件人：Arthur',
+    '主题：PUBG 今日自动同步结果',
+    `日期：${summary.reportDate}（${summary.timezone}，自然日）`,
+    `数据更新时间：${asOf}`,
+    '',
+    '观测记录：',
+    `- 定时检查：${summary.runCount} 次`,
+    `- 发现新对局：${summary.newMatchCount} 场`,
+    `- Telemetry 新拉取并写入缓存：${summary.fetchedCount} 场`,
+    `- Telemetry 命中缓存：${summary.cacheHitCount} 场`,
+    `- 暂不可用：${summary.unavailableCount} 场`,
+    `- 等待后续重试：${summary.pendingCount} 场`,
+    `- Match API/Telemetry 异常对局：${summary.failedMatchIds.length} 场`,
+    '',
+    `世界线状态：${state}。`,
+    'D-mail 已写入观测记录；若有延迟，下一轮同步将沿当前世界线继续收束。',
+    '',
+    'El Psy Kongroo.',
+  ].join('\n');
+  return {
+    title: 'Amadeus • D-mail',
+    source: 'pubg-sync',
+    eventKey: `pubg-sync:${summary.reportDate}`,
+    message,
+    occurredAt: asOf,
+  };
 }
 
 function playerIdsFromSubject(input: SubjectInput, team: TeamConfig): { ids: string[]; names: string[] } {
@@ -352,6 +453,7 @@ export class PubgDomainService {
   private readonly now: () => Date;
   private readonly freshnessMs: number;
   private readonly queryEngine: DeterministicQueryEngine;
+  private prefetchInFlight: Promise<ToolEnvelope> | undefined;
 
   constructor(options: PubgDomainServiceOptions) {
     this.team = options.team;
@@ -376,15 +478,15 @@ export class PubgDomainService {
     });
   }
 
-  private async refresh(refresh = true, maxMatches = 500, signal?: AbortSignal): Promise<{ records: NormalizedMatch[]; coverage: Coverage; source: SourceInfo; diagnostics: Record<string, unknown> }> {
+  private async refresh(refresh = true, maxMatches = 500, signal?: AbortSignal): Promise<{ records: NormalizedMatch[]; coverage: Coverage; source: SourceInfo; diagnostics: Record<string, unknown>; newMatchIds: string[] }> {
     const now = this.now();
     const existing = this.repository.listMatches();
     const state = this.repository.getSyncState('team:' + this.team.id);
     const stateChecked = state ? Date.parse(state.checkedAt) : Number.NaN;
     if (!refresh && state && Number.isFinite(stateChecked) && now.getTime() - stateChecked < this.freshnessMs) {
-      return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'fresh_cache' } };
+      return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'fresh_cache' }, newMatchIds: [] };
     }
-    if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'api_not_configured' } };
+    if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'api_not_configured' }, newMatchIds: [] };
     const synced = await this.apiClient.syncTeam(this.team, {
       maxMatches,
       knownMatchIds: existing.map((record) => record.matchId),
@@ -407,7 +509,13 @@ export class PubgDomainService {
       ...(synced.source.error ? { error: synced.source.error } : {}),
     };
     this.repository.setSyncState(stateValue);
-    return { records: merged, coverage: stateValue.coverage, source: stateValue.source, diagnostics: synced.diagnostics ?? {} };
+    return {
+      records: merged,
+      coverage: stateValue.coverage,
+      source: stateValue.source,
+      diagnostics: synced.diagnostics ?? {},
+      newMatchIds: synced.records.map((record) => record.matchId),
+    };
   }
 
   private resolveSubject(input: SubjectInput): { ids: string[]; players: TeamPlayer[]; error?: ToolError } {
@@ -599,6 +707,177 @@ export class PubgDomainService {
     return envelope;
   }
 
+  async prefetchTelemetry(input: PrefetchTelemetryInput = {}): Promise<ToolEnvelope> {
+    if (this.prefetchInFlight) return this.prefetchInFlight;
+    const pending = this.runTelemetryPrefetch(input);
+    this.prefetchInFlight = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.prefetchInFlight === pending) this.prefetchInFlight = undefined;
+    }
+  }
+
+  private async runTelemetryPrefetch(input: PrefetchTelemetryInput): Promise<ToolEnvelope> {
+    const started = this.now();
+    const maxMatches = Math.min(Math.max(Math.trunc(input.maxMatches ?? this.maxMatches), 1), 1000);
+    const maxFetches = Math.min(Math.max(Math.trunc(input.maxFetches ?? 20), 1), 50);
+    const concurrency = Math.min(Math.max(Math.trunc(input.concurrency ?? 2), 1), 4);
+    const source = await this.refresh(true, maxMatches, input.signal);
+    const key = {
+      parserVersion: this.telemetryWorker.parserVersion,
+      featureVersion: this.telemetryWorker.featureVersion,
+    };
+    const retryCandidates = this.repository.listDueTelemetryPrefetchAttempts(key.parserVersion, key.featureVersion, started, 1000);
+    const candidateIds = [...new Set([
+      ...source.newMatchIds,
+      ...retryCandidates.map((attempt) => attempt.matchId),
+    ])];
+    const candidateMatches = candidateIds.flatMap((matchId) => {
+      const match = this.repository.getMatch(matchId);
+      return match ? [match] : [];
+    });
+    const selected = candidateMatches.slice(0, maxFetches);
+    const deferred = candidateMatches.slice(maxFetches);
+    for (const match of deferred) {
+      const previous = this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: match.matchId });
+      this.repository.setTelemetryPrefetchAttempt({
+        matchId: match.matchId,
+        ...key,
+        status: 'PENDING',
+        attemptCount: previous?.attemptCount ?? 0,
+        lastAttemptedAt: previous?.lastAttemptedAt ?? null,
+        nextRetryAt: started.toISOString(),
+        ...(previous?.error ? { error: previous.error } : {}),
+        updatedAt: started.toISOString(),
+      });
+    }
+    const outcomes = await mapWithConcurrency(selected, concurrency, async (match) => ({
+      matchId: match.matchId,
+      result: await this.telemetryWorker.ensure(match, 1, input.signal),
+    }));
+    let fetchedCount = 0;
+    let cacheHitCount = 0;
+    let unavailableCount = 0;
+    const unavailableIds: string[] = [];
+    for (const outcome of outcomes) {
+      const previous = this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: outcome.matchId });
+      const result = outcome.result;
+      if (result.status === 'FETCHED') fetchedCount += 1;
+      else if (result.status === 'HIT') cacheHitCount += 1;
+      else {
+        unavailableCount += 1;
+        unavailableIds.push(outcome.matchId);
+      }
+      const attemptCount = result.status === 'UNAVAILABLE'
+        ? (previous?.attemptCount ?? 0) + 1
+        : (previous?.attemptCount ?? 0);
+      this.repository.setTelemetryPrefetchAttempt({
+        matchId: outcome.matchId,
+        ...key,
+        status: result.status === 'FETCHED' ? 'FETCHED' : result.status,
+        attemptCount,
+        lastAttemptedAt: started.toISOString(),
+        nextRetryAt: result.status === 'UNAVAILABLE' ? retryAt(started, attemptCount) : null,
+        ...(result.error ? { error: result.error } : {}),
+        updatedAt: started.toISOString(),
+      });
+    }
+    const diagnosticFailedIds = Array.isArray(source.diagnostics.failedMatchIds)
+      ? source.diagnostics.failedMatchIds.map(String)
+      : [];
+    const failedMatchIds = [...new Set([...diagnosticFailedIds, ...unavailableIds])];
+    const finished = this.now();
+    const run: TelemetryPrefetchRun = {
+      runId: 'tp_' + randomUUID(),
+      reportDate: localDateLabel(started.getTime(), this.timezone),
+      startedAt: started.toISOString(),
+      finishedAt: finished.toISOString(),
+      trigger: input.trigger ?? 'hourly',
+      discoveredMatchCount: Number(source.diagnostics.discoveredMatchCount ?? source.newMatchIds.length),
+      newMatchCount: source.newMatchIds.length,
+      candidateMatchCount: candidateMatches.length,
+      fetchedCount,
+      cacheHitCount,
+      unavailableCount,
+      pendingCount: deferred.length + unavailableCount,
+      failedMatchIds,
+    };
+    this.repository.recordTelemetryPrefetchRun(run);
+    const status: ToolStatus = source.coverage.status === 'SOURCE_UNAVAILABLE' || run.unavailableCount > 0 || run.pendingCount > 0
+      ? 'partial'
+      : 'ok';
+    return {
+      status,
+      data: {
+        run,
+        matchSync: {
+          coverage: source.coverage,
+          source: source.source,
+          diagnostics: source.diagnostics,
+        },
+        parserVersion: key.parserVersion,
+        featureVersion: key.featureVersion,
+      },
+      coverage: source.coverage,
+      asOf: finished.toISOString(),
+      metricVersion: PUBGMETRIC_VERSION,
+      queryResolved: {
+        tool: 'pubg_prefetch_telemetry',
+        timezone: this.timezone,
+        maxMatches,
+        maxFetches,
+        concurrency,
+        trigger: run.trigger,
+      },
+      evidenceRefs: {
+        matchIds: [...new Set([...candidateIds, ...failedMatchIds])].slice(0, 1000),
+        playerIds: this.team.players.map((player) => player.id),
+        fields: ['matchSync', 'telemetryFeatures', 'prefetchAttempts', 'retrySchedule'],
+        calculation: 'pubg_hourly_telemetry_prefetch_v1',
+      },
+      ...(source.coverage.status === 'SOURCE_UNAVAILABLE'
+        ? { error: { code: 'source_unavailable', retryable: true, reason: source.source.error ?? 'PUBG API unavailable' } }
+        : {}),
+    };
+  }
+
+  async getTelemetrySyncReport(input: TelemetrySyncReportInput = {}): Promise<ToolEnvelope> {
+    const now = this.now();
+    const reportDate = input.reportDate?.trim() || previousLocalDate(now, this.timezone);
+    if (!/^\d{4}-\d{2}-\d{2}$/u.test(reportDate) || !Number.isFinite(Date.parse(`${reportDate}T00:00:00Z`))) {
+      return this.errorEnvelope('invalid_report_date', false, 'reportDate must be YYYY-MM-DD');
+    }
+    const runs = this.repository.listTelemetryPrefetchRuns(reportDate);
+    const summary = summarizePrefetchRuns(reportDate, this.timezone, runs);
+    const asOf = summary.lastRunAt ?? now.toISOString();
+    const notification = pubgSyncNotification(summary, asOf);
+    const status: ToolStatus = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? 'partial' : 'ok';
+    return {
+      status,
+      data: {
+        summary,
+        runs,
+        notification,
+      },
+      coverage: coverageForLocal(this.repository.listMatches(), now, this.repository.getSyncState('team:' + this.team.id)),
+      asOf,
+      metricVersion: PUBGMETRIC_VERSION,
+      queryResolved: {
+        tool: 'pubg_telemetry_sync_report',
+        reportDate,
+        timezone: this.timezone,
+        period: 'previous_calendar_day',
+      },
+      evidenceRefs: {
+        matchIds: summary.failedMatchIds.slice(0, 1000),
+        playerIds: this.team.players.map((player) => player.id),
+        fields: ['prefetchRuns', 'fetchedCount', 'cacheHitCount', 'unavailableCount', 'pendingCount', 'dataUpdatedAt'],
+        calculation: 'pubg_daily_telemetry_sync_report_v1',
+      },
+    };
+  }
+
   async getMatch(input: GetMatchInput): Promise<ToolEnvelope> {
     let match = this.repository.getMatch(input.matchId);
     let source: SourceInfo = { store: 'sqlite', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: this.repository.countMatches() };
@@ -673,6 +952,8 @@ export class PubgDomainService {
       analysis,
       telemetry: {
         status: telemetry.status,
+        cacheStatus: telemetry.cacheStatus,
+        availability: telemetry.availability,
         parserVersion: telemetry.parserVersion,
         featureVersion: telemetry.featureVersion,
         ...(telemetry.error ? { error: telemetry.error } : {}),

@@ -494,7 +494,9 @@ export interface MatchReviewResult {
   facts: MatchReviewFacts;
   analysis: ReviewAnalysis;
   telemetry: {
-    status: 'HIT' | 'MISS' | 'UNAVAILABLE';
+    status: 'HIT' | 'FETCHED' | 'UNAVAILABLE';
+    cacheStatus: 'HIT' | 'MISS';
+    availability: 'AVAILABLE' | 'UNAVAILABLE';
     parserVersion: string;
     featureVersion: string;
     error?: string;

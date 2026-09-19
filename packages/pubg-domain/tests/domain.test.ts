@@ -11,6 +11,7 @@ import {
   PubgApiError,
   PubgDomainService,
   SqlitePubgRepository,
+  TelemetryWorker,
   businessDayLabel,
   extractMatchReviewFacts,
   importLegacyPubgData,
@@ -381,6 +382,95 @@ test('recent PUBG searches force fresh discovery and reuse cached details when n
     assert.equal((third.data as { matches: Array<{ matchId: string }> }).matches[0]?.matchId, 'm2');
     assert.equal(requestedMatchIds.length, matchCallsAfterNewMatch);
     assert.deepEqual(requestedMatchIds, ['m1', 'm2']);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Telemetry distinguishes a successful cache miss from unavailable data', async () => {
+  const match = normalizeRecords([RAW_RECORDS[0]!])[0]!;
+  let downloads = 0;
+  const worker = new TelemetryWorker({
+    team: TEAM,
+    downloader: {
+      async download() {
+        downloads += 1;
+        return { events: [] };
+      },
+    },
+  });
+  const fetched = await worker.ensure(match);
+  assert.equal(fetched.status, 'FETCHED');
+  assert.equal(fetched.cacheStatus, 'MISS');
+  assert.equal(fetched.availability, 'AVAILABLE');
+  const hit = await worker.ensure(match);
+  assert.equal(hit.status, 'HIT');
+  assert.equal(hit.cacheStatus, 'HIT');
+  assert.equal(hit.availability, 'AVAILABLE');
+  assert.equal(downloads, 1);
+
+  const unavailable = await new TelemetryWorker({ team: TEAM }).ensure(match);
+  assert.equal(unavailable.status, 'UNAVAILABLE');
+  assert.equal(unavailable.cacheStatus, 'MISS');
+  assert.equal(unavailable.availability, 'UNAVAILABLE');
+});
+
+test('hourly telemetry prefetch only fetches new matches, persists retry state, and builds a D-mail report', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-prefetch-'));
+  let currentNow = new Date('2026-09-18T15:00:00.000Z');
+  let discoveredMatchIds = ['m1'];
+  try {
+    const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 0,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes('/players?')) return jsonResponse(playerDiscovery(discoveredMatchIds));
+        const matchId = url.split('/matches/')[1];
+        if (matchId === 'm1') return jsonResponse(matchPayload('m1', '2026-09-18T14:00:00.000Z'));
+        if (matchId === 'm2') return jsonResponse(matchPayload('m2', '2026-09-18T14:30:00.000Z'));
+        throw new Error('unexpected PUBG match: ' + matchId);
+      },
+    });
+    const worker = new TelemetryWorker({
+      team: TEAM,
+      store: repository,
+      downloader: { async download() { return { events: [] }; } },
+    });
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      telemetryWorker: worker,
+      now: () => currentNow,
+    });
+    const first = await service.prefetchTelemetry({ maxFetches: 20 });
+    assert.equal(first.status, 'ok');
+    const firstRun = (first.data as { run: { fetchedCount: number; newMatchCount: number; pendingCount: number } }).run;
+    assert.equal(firstRun.fetchedCount, 1);
+    assert.equal(firstRun.newMatchCount, 1);
+    assert.equal(firstRun.pendingCount, 0);
+    assert.equal(repository.snapshot().features, 1);
+    assert.equal(repository.getTelemetryPrefetchAttempt({ matchId: 'm1', parserVersion: worker.parserVersion, featureVersion: worker.featureVersion })?.status, 'FETCHED');
+
+    discoveredMatchIds = ['m1', 'm2'];
+    currentNow = new Date('2026-09-18T15:30:00.000Z');
+    const second = await service.prefetchTelemetry({ maxFetches: 1 });
+    assert.equal(second.status, 'ok');
+    assert.equal((second.data as { run: { newMatchCount: number; fetchedCount: number } }).run.newMatchCount, 1);
+    assert.equal((second.data as { run: { fetchedCount: number } }).run.fetchedCount, 1);
+    assert.equal(repository.snapshot().features, 2);
+
+    const report = await service.getTelemetrySyncReport({ reportDate: '2026-09-18' });
+    assert.equal(report.status, 'ok');
+    const reportData = report.data as { summary: { newMatchCount: number; fetchedCount: number }; notification: { title: string; message: string } };
+    assert.equal(reportData.summary.newMatchCount, 2);
+    assert.equal(reportData.summary.fetchedCount, 2);
+    assert.equal(reportData.notification.title, 'Amadeus • D-mail');
+    assert.match(reportData.notification.message, /PUBG 今日自动同步结果/);
+    assert.match(reportData.notification.message, /El Psy Kongroo\.$/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

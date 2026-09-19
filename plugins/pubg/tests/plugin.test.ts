@@ -12,9 +12,11 @@ const EXPECTED_TOOLS = [
   'pubg_compare_stats',
   'pubg_get_match',
   'pubg_get_review_facts',
+  'pubg_prefetch_telemetry',
+  'pubg_telemetry_sync_report',
 ];
 
-test('native OpenClaw plugin loads with the pinned SDK and declares only the six PUBG tools', () => {
+test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG tools', () => {
   const metadata = getToolPluginMetadata(entry);
   assert.ok(metadata);
   assert.equal(metadata.id, 'pubg');
@@ -34,6 +36,13 @@ test('native OpenClaw plugin loads with the pinned SDK and declares only the six
   const reviewTool = metadata.tools.find((tool) => tool.name === 'pubg_get_review_facts');
   assert.ok(reviewTool);
   assert.match(reviewTool.description, /Never use this tool alone/);
+  const prefetchTool = metadata.tools.find((tool) => tool.name === 'pubg_prefetch_telemetry');
+  assert.ok(prefetchTool);
+  assert.match(prefetchTool.description, /status=FETCHED/);
+  assert.match(prefetchTool.description, /availability=AVAILABLE/);
+  const reportTool = metadata.tools.find((tool) => tool.name === 'pubg_telemetry_sync_report');
+  assert.ok(reportTool);
+  assert.match(reportTool.description, /Amadeus • D-mail/);
 });
 
 test('manifest contracts match runtime metadata and do not carry secret values', () => {
@@ -53,4 +62,5 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /^description:\s*"[^"\n]+"\s*$/m);
   assert.match(skill, /最近一局/);
   assert.match(skill, /refresh: true/);
+  assert.match(skill, /数据更新时间/);
 });

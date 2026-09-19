@@ -19,6 +19,8 @@ import {
   type ResolvePlayersInput,
   type SearchMatchesInput,
   type StatsToolInput,
+  type PrefetchTelemetryInput,
+  type TelemetrySyncReportInput,
   type ToolEnvelope,
   type ToolSelectorInput,
 } from '@agent/pubg-domain';
@@ -116,6 +118,7 @@ const ToolOutputSchema = Type.Object({
     freshness: Type.Union([Type.Literal('fresh'), Type.Literal('stale'), Type.Literal('unknown')]),
   }, { additionalProperties: true }),
   asOf: Type.String(),
+  dataUpdatedAt: Type.String(),
   metricVersion: Type.String(),
   queryResolved: Type.Record(Type.String(), Type.Unknown()),
   evidenceRefs: Type.Object({
@@ -191,12 +194,26 @@ const ReviewParameters = Type.Object({
   refresh: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
+const PrefetchTelemetryParameters = Type.Object({
+  team: Type.Literal(true, { description: 'Scheduled/team-wide prefetch only; this is not a sender identity fallback.' }),
+  maxMatches: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
+  maxFetches: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+  concurrency: Type.Optional(Type.Integer({ minimum: 1, maximum: 4 })),
+}, { additionalProperties: false });
+
+const TelemetrySyncReportParameters = Type.Object({
+  team: Type.Literal(true, { description: 'Scheduled/team-wide report only.' }),
+  reportDate: Type.Optional(Type.String({ pattern: '^\\d{4}-\\d{2}-\\d{2}$' })),
+}, { additionalProperties: false });
+
 type QueryStatsParameters = Static<typeof QueryStatsParameters>;
 type CompareParameters = Static<typeof CompareParameters>;
 type ResolvePlayersParameters = Static<typeof ResolvePlayersParameters>;
 type SearchMatchesParameters = Static<typeof SearchMatchesParameters>;
 type MatchParameters = Static<typeof MatchParameters>;
 type ReviewParameters = Static<typeof ReviewParameters>;
+type PrefetchTelemetryParameters = Static<typeof PrefetchTelemetryParameters>;
+type TelemetrySyncReportParameters = Static<typeof TelemetrySyncReportParameters>;
 
 export type IdentitySubjectInput = {
   playerIds?: string[];
@@ -402,6 +419,10 @@ function runtimeError(error: unknown): ToolEnvelope {
   };
 }
 
+function jsonToolResult(envelope: ToolEnvelope): ReturnType<typeof jsonResult> {
+  return jsonResult({ ...envelope, dataUpdatedAt: envelope.asOf });
+}
+
 function makeTool<Schema extends TypeSchema>(
   name: string,
   description: string,
@@ -425,10 +446,10 @@ function makeTool<Schema extends TypeSchema>(
         const prepared = requiresIdentitySubject
           ? await prepareIdentitySubject(service, config, input as Static<Schema> & IdentitySubjectInput, toolContext, sessionId, signal)
           : stripIdentityFields(input as Static<Schema> & IdentitySubjectInput);
-        if ('status' in prepared && prepared.status === 'error') return jsonResult(prepared);
-        return jsonResult(await execute(service, prepared as Static<Schema>, sessionId, signal));
+        if ('status' in prepared && prepared.status === 'error') return jsonToolResult(prepared);
+        return jsonToolResult(await execute(service, prepared as Static<Schema>, sessionId, signal));
       } catch (error) {
-        return jsonResult(runtimeError(error));
+        return jsonToolResult(runtimeError(error));
       }
     },
   };
@@ -538,6 +559,37 @@ const entry = defineToolPlugin({
         toolContext,
         true,
         (service, input, sessionId, signal) => service.getReviewFacts({ ...(input as ReviewParameters), sessionId, ...(signal ? { signal } : {}) } as GetReviewFactsInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_prefetch_telemetry',
+      description: 'Scheduled/team-wide PUBG synchronization: refresh all configured players, fetch only newly discovered match details, then download and cache missing Telemetry with bounded concurrency and retry state. A successful upstream fetch is reported as status=FETCHED with cacheStatus=MISS and availability=AVAILABLE; it is not missing data. Use team=true only.',
+      parameters: PrefetchTelemetryParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_prefetch_telemetry',
+        'Refresh configured PUBG players and prefetch newly discovered Telemetry into the persistent feature cache.',
+        PrefetchTelemetryParameters,
+        config,
+        toolContext,
+        false,
+        (service, input) => service.prefetchTelemetry({
+          ...(input as PrefetchTelemetryParameters),
+          trigger: 'hourly',
+        } as PrefetchTelemetryInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_telemetry_sync_report',
+      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, dataUpdatedAt, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
+      parameters: TelemetrySyncReportParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_telemetry_sync_report',
+        'Build the previous-calendar-day PUBG Telemetry synchronization report and D-mail notification payload.',
+        TelemetrySyncReportParameters,
+        config,
+        toolContext,
+        false,
+        (service, input) => service.getTelemetrySyncReport(input as TelemetrySyncReportInput),
       ),
     }),
   ],

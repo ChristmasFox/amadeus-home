@@ -46,6 +46,36 @@ export interface SyncState {
   error?: string;
 }
 
+export type TelemetryPrefetchAttemptStatus = 'PENDING' | 'FETCHED' | 'HIT' | 'UNAVAILABLE';
+
+export interface TelemetryPrefetchAttempt {
+  matchId: string;
+  parserVersion: string;
+  featureVersion: string;
+  status: TelemetryPrefetchAttemptStatus;
+  attemptCount: number;
+  lastAttemptedAt: string | null;
+  nextRetryAt: string | null;
+  error?: string;
+  updatedAt: string;
+}
+
+export interface TelemetryPrefetchRun {
+  runId: string;
+  reportDate: string;
+  startedAt: string;
+  finishedAt: string;
+  trigger: 'hourly' | 'manual';
+  discoveredMatchCount: number;
+  newMatchCount: number;
+  candidateMatchCount: number;
+  fetchedCount: number;
+  cacheHitCount: number;
+  unavailableCount: number;
+  pendingCount: number;
+  failedMatchIds: string[];
+}
+
 function numeric(value: unknown, fallback = 0): number {
   const result = Number(value);
   return Number.isFinite(result) ? result : fallback;
@@ -179,6 +209,39 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
         created_at TEXT NOT NULL,
         PRIMARY KEY(match_id, parser_version, feature_version)
       );
+
+      CREATE TABLE IF NOT EXISTS telemetry_prefetch_attempts (
+        match_id TEXT NOT NULL,
+        parser_version TEXT NOT NULL,
+        feature_version TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        last_attempted_at TEXT,
+        next_retry_at TEXT,
+        error TEXT,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY(match_id, parser_version, feature_version)
+      );
+      CREATE INDEX IF NOT EXISTS idx_pubg_telemetry_prefetch_due
+        ON telemetry_prefetch_attempts(parser_version, feature_version, status, next_retry_at);
+
+      CREATE TABLE IF NOT EXISTS telemetry_prefetch_runs (
+        run_id TEXT PRIMARY KEY,
+        report_date TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT NOT NULL,
+        trigger TEXT NOT NULL,
+        discovered_match_count INTEGER NOT NULL,
+        new_match_count INTEGER NOT NULL,
+        candidate_match_count INTEGER NOT NULL,
+        fetched_count INTEGER NOT NULL,
+        cache_hit_count INTEGER NOT NULL,
+        unavailable_count INTEGER NOT NULL,
+        pending_count INTEGER NOT NULL,
+        failed_match_ids_json TEXT NOT NULL DEFAULT '[]'
+      );
+      CREATE INDEX IF NOT EXISTS idx_pubg_telemetry_prefetch_runs_date
+        ON telemetry_prefetch_runs(report_date, started_at);
 
       CREATE TABLE IF NOT EXISTS result_sets (
         session_id TEXT NOT NULL,
@@ -368,6 +431,127 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
     `).run(record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt);
   }
 
+  getTelemetryPrefetchAttempt(key: TelemetryFeatureKey): TelemetryPrefetchAttempt | null {
+    const row = this.db.prepare(`
+      SELECT match_id, parser_version, feature_version, status, attempt_count,
+        last_attempted_at, next_retry_at, error, updated_at
+      FROM telemetry_prefetch_attempts
+      WHERE match_id = ? AND parser_version = ? AND feature_version = ?
+    `).get(key.matchId, key.parserVersion, key.featureVersion);
+    if (!row) return null;
+    return {
+      matchId: String(row.match_id),
+      parserVersion: String(row.parser_version),
+      featureVersion: String(row.feature_version),
+      status: String(row.status) as TelemetryPrefetchAttemptStatus,
+      attemptCount: numeric(row.attempt_count),
+      lastAttemptedAt: row.last_attempted_at ? String(row.last_attempted_at) : null,
+      nextRetryAt: row.next_retry_at ? String(row.next_retry_at) : null,
+      ...(row.error ? { error: String(row.error) } : {}),
+      updatedAt: String(row.updated_at),
+    };
+  }
+
+  listDueTelemetryPrefetchAttempts(parserVersion: string, featureVersion: string, now: Date, limit = 100): TelemetryPrefetchAttempt[] {
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 1000);
+    const rows = this.db.prepare(`
+      SELECT match_id, parser_version, feature_version, status, attempt_count,
+        last_attempted_at, next_retry_at, error, updated_at
+      FROM telemetry_prefetch_attempts
+      WHERE parser_version = ? AND feature_version = ?
+        AND status IN ('PENDING', 'UNAVAILABLE')
+        AND (next_retry_at IS NULL OR next_retry_at <= ?)
+      ORDER BY COALESCE(next_retry_at, '') ASC, updated_at ASC, match_id ASC
+      LIMIT ?
+    `).all(parserVersion, featureVersion, now.toISOString(), boundedLimit);
+    return rows.map((row) => ({
+      matchId: String(row.match_id),
+      parserVersion: String(row.parser_version),
+      featureVersion: String(row.feature_version),
+      status: String(row.status) as TelemetryPrefetchAttemptStatus,
+      attemptCount: numeric(row.attempt_count),
+      lastAttemptedAt: row.last_attempted_at ? String(row.last_attempted_at) : null,
+      nextRetryAt: row.next_retry_at ? String(row.next_retry_at) : null,
+      ...(row.error ? { error: String(row.error) } : {}),
+      updatedAt: String(row.updated_at),
+    }));
+  }
+
+  setTelemetryPrefetchAttempt(attempt: TelemetryPrefetchAttempt): void {
+    this.db.prepare(`
+      INSERT INTO telemetry_prefetch_attempts(
+        match_id, parser_version, feature_version, status, attempt_count,
+        last_attempted_at, next_retry_at, error, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(match_id, parser_version, feature_version) DO UPDATE SET
+        status=excluded.status, attempt_count=excluded.attempt_count,
+        last_attempted_at=excluded.last_attempted_at, next_retry_at=excluded.next_retry_at,
+        error=excluded.error, updated_at=excluded.updated_at
+    `).run(
+      attempt.matchId,
+      attempt.parserVersion,
+      attempt.featureVersion,
+      attempt.status,
+      attempt.attemptCount,
+      attempt.lastAttemptedAt,
+      attempt.nextRetryAt,
+      attempt.error ?? null,
+      attempt.updatedAt,
+    );
+  }
+
+  recordTelemetryPrefetchRun(run: TelemetryPrefetchRun): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO telemetry_prefetch_runs(
+        run_id, report_date, started_at, finished_at, trigger,
+        discovered_match_count, new_match_count, candidate_match_count,
+        fetched_count, cache_hit_count, unavailable_count, pending_count,
+        failed_match_ids_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      run.runId,
+      run.reportDate,
+      run.startedAt,
+      run.finishedAt,
+      run.trigger,
+      run.discoveredMatchCount,
+      run.newMatchCount,
+      run.candidateMatchCount,
+      run.fetchedCount,
+      run.cacheHitCount,
+      run.unavailableCount,
+      run.pendingCount,
+      JSON.stringify([...new Set(run.failedMatchIds)]),
+    );
+  }
+
+  listTelemetryPrefetchRuns(reportDate: string): TelemetryPrefetchRun[] {
+    const rows = this.db.prepare(`
+      SELECT run_id, report_date, started_at, finished_at, trigger,
+        discovered_match_count, new_match_count, candidate_match_count,
+        fetched_count, cache_hit_count, unavailable_count, pending_count,
+        failed_match_ids_json
+      FROM telemetry_prefetch_runs
+      WHERE report_date = ?
+      ORDER BY started_at ASC, run_id ASC
+    `).all(reportDate);
+    return rows.map((row) => ({
+      runId: String(row.run_id),
+      reportDate: String(row.report_date),
+      startedAt: String(row.started_at),
+      finishedAt: String(row.finished_at),
+      trigger: String(row.trigger) as TelemetryPrefetchRun['trigger'],
+      discoveredMatchCount: numeric(row.discovered_match_count),
+      newMatchCount: numeric(row.new_match_count),
+      candidateMatchCount: numeric(row.candidate_match_count),
+      fetchedCount: numeric(row.fetched_count),
+      cacheHitCount: numeric(row.cache_hit_count),
+      unavailableCount: numeric(row.unavailable_count),
+      pendingCount: numeric(row.pending_count),
+      failedMatchIds: jsonValue<string[]>(row.failed_match_ids_json, []),
+    }));
+  }
+
   setResultSet(result: ResultSetRecord): void {
     this.db.prepare(`
       INSERT INTO result_sets(session_id, result_set_id, expires_at, result_json)
@@ -415,7 +599,7 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
     return row ?? null;
   }
 
-  snapshot(): { matches: number; players: number; features: number; resultSets: number; contexts: number } {
+  snapshot(): { matches: number; players: number; features: number; resultSets: number; contexts: number; prefetchAttempts: number; prefetchRuns: number } {
     const count = (table: string): number => numeric(this.db.prepare('SELECT COUNT(*) AS count FROM ' + table).get()?.count);
     return {
       matches: count('matches'),
@@ -423,6 +607,8 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
       features: count('telemetry_features'),
       resultSets: count('result_sets'),
       contexts: count('session_contexts'),
+      prefetchAttempts: count('telemetry_prefetch_attempts'),
+      prefetchRuns: count('telemetry_prefetch_runs'),
     };
   }
 }
