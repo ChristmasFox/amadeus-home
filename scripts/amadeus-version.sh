@@ -31,6 +31,9 @@ lines = text.splitlines()
 expected = f"# Amadeus {version}"
 if not lines or lines[0].strip() != expected:
     raise SystemExit(f"Release notes must start with: {expected}")
+headings = [line for line in lines if line.startswith("# Amadeus ")]
+if len(headings) != 1:
+    raise SystemExit("Release notes must describe one release only; do not append prior release entries")
 body = "\n".join(lines[1:]).strip()
 if not body:
     raise SystemExit("Release notes body must not be empty")
@@ -54,7 +57,8 @@ Version policy:
   minor: new user-visible capability, backward compatible
   major: breaking contract or architecture change
 
-After bumping, update the first line and body of RELEASE_NOTES.md before deploy.
+After bumping, replace the first line and body of RELEASE_NOTES.md before deploy. The body is a concise
+single-release summary only; do not append prior release notes or repeat unchanged capabilities.
 USAGE
 }
 
@@ -96,7 +100,7 @@ PY
     mv "$temporary" "$VERSION_FILE"
     trap - EXIT
     printf 'VERSION=%s\n' "$next_version"
-    printf '%s\n' 'NEXT=update RELEASE_NOTES.md first line and body, then run check.'
+    printf '%s\n' 'NEXT=replace RELEASE_NOTES.md with this release only, then run check.'
     ;;
   help|--help|-h|'')
     usage

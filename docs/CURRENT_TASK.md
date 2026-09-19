@@ -10,8 +10,9 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 版本源为根目录 `VERSION`，当前版本 `1.1.2`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
-能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
-标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
+能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，且只保留
+本次版本的简短新增/修复，不是累计 changelog；标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加
+`El Psy Kongroo.`。
 
 ## 2026-09-19 follow-up：PUBG 周期复盘顺序修复（已部署）
 

@@ -55,7 +55,8 @@ pnpm test:workflow
 ## Amadeus 版本管理
 
 产品版本唯一记录在根目录 `VERSION`，当前版本为 `1.1.2`。部署完成通知的正文来自
-`RELEASE_NOTES.md`，部署前会校验版本标题、正文非空，并拒绝把运行时名称写进通知。
+`RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
+本次部署的新增或修复。部署前会校验版本标题、正文非空，并拒绝把运行时名称写进通知。
 
 ```sh
 ./scripts/amadeus-version.sh show
@@ -65,7 +66,7 @@ pnpm test:workflow
 ./scripts/amadeus-version.sh check
 ```
 
-每次递增后先更新 `RELEASE_NOTES.md` 的首行版本和本次更新内容。部署通知标题固定为
+每次递增后先替换 `RELEASE_NOTES.md` 的首行版本和正文，只写本次更新内容，不重复上一版本说明。部署通知标题固定为
 `Amadeus <版本> · 世界线收束`，正文末尾自动追加 `El Psy Kongroo.`。
 
 ## CasaOS 部署
