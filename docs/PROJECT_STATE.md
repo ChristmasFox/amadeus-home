@@ -171,6 +171,16 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
   拒绝已由 `c1fe427` 修复，十格流量条硬格式由 `e15607c` 修复。受限 SSH probe/key 已在
   `amadeus-gateway` provision 并通过真实插件调用验证；仍待用户触发真实 WhatsApp 入站查询。
 
+## VPS 订阅流量响应 follow-up（2026-09-19，source ready，live apply pending）
+
+- 保留现有 token 和 `/<token>/<format>` URL，不因增加流量显示重新生成订阅链接；动态响应器原样
+  返回 `qx.conf`、`server.snippet`、`clash.yaml` 或 `shadowrocket.txt`，并统一设置下载名
+  `amadeus-gateway`。
+- `Subscription-Userinfo` 和 `X-Amadeus-Gateway-Usage` 使用 KiwiVM 整台 VPS 计数，展示已用、总量、
+  剩余、重置时间和 `fresh/stale/unavailable` 状态；当前明确不区分用户、协议或节点。
+- 实现与测试在 `infra/vps/subscription/`，Caddy/systemd 模板已同步；live apply 仍待外部
+  KiwiVM credentials、VPS 安装和原订阅 URL 验收，不能把本地测试当作线上完成。
+
 ## 跨渠道 Identity 实现（2026-09-18，已部署，真实入口验收待完成）
 
 - `packages/identity` 提供 SQLite `persons`、`channel_identities`、`aliases` 和
