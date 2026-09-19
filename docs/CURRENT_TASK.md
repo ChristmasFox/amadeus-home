@@ -8,10 +8,22 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
 ## Amadeus 版本管理（2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.0.1`。`scripts/amadeus-version.sh` 提供
+版本源为根目录 `VERSION`，当前版本 `1.1.0`。`scripts/amadeus-version.sh` 提供
 `show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
 能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，
 标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加 `El Psy Kongroo.`。
+
+## 2026-09-19 follow-up：PUBG Telemetry 小时预取、MISS 语义与 D-mail 汇总
+
+源码实现已完成，待本轮 release build/apply：每小时 `Asia/Shanghai` 的 `05` 分刷新所有配置玩家，
+只拉取新比赛详情，并以并发 2 预取新 Telemetry；失败写入 retry ledger，下一轮只重试到期项目，
+不会把 1 小时内的每场新对局重复请求。Telemetry 成功拉取返回 `FETCHED/cacheStatus=MISS/availability=AVAILABLE`，
+缓存读取返回 `HIT`，真正不可用返回 `UNAVAILABLE`。所有 PUBG 工具输出 `dataUpdatedAt`，最终回复必须展示该时间。
+
+每天 00:00 运行 `pubg_telemetry_sync_report`，汇总上一自然日 00:00–24:00，再把工具返回的
+`Amadeus • D-mail` notification 原样交给 `amadeus_notify_owner`；正文保留事实计数和重试状态，
+末尾为 `El Psy Kongroo.`。交互查询仍保持旧业务日 06:00。官方 API 限流以
+[PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html) 为准，定时器不做高频循环。
 
 ## 2026-09-19 follow-up：PUBG 最近一局刷新与增量缓存
 

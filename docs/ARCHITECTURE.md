@@ -51,6 +51,13 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 queryResolved 和 evidenceRefs。未绑定 sender 或缺少 PUBG account 时，plugin 返回明确
 identity error，不静默使用默认队伍。
 
+PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷新玩家列表，增量获取 Match
+详情，再对新对局/到期重试对局获取 Telemetry。持久化账本区分 cache hit、成功 fetch 和不可用，
+因此 `MISS` 不再等价于“没有数据”；PUBG 工具输出同时提供 `dataUpdatedAt`。每日 00:00 的
+`pubg_telemetry_sync_report` 只汇总上一自然日并生成 owner outbox 的 D-mail payload；交互查询
+仍使用 `06:00` 业务日。官方限流和端点规则以
+[PUBG API Rate Limits](https://documentation.pubg.com/en/rate-limits.html) 为准。
+
 ### Amadeus
 
 \`plugins/amadeus\` 是唯一多领域业务入口：
@@ -63,7 +70,8 @@ identity error，不静默使用默认队伍。
 - \`amadeus_homelab_status\`：Glances、uptime 和固定探针；读取为主，显式 owner/cron
   才能通知，不负责重启。
 - \`amadeus_kook_group_members\`：只能读取当前 KOOK channel/guild，不主动推送。
-- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只能写入或经 OpenClaw 投递
+- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只能写入或经 OpenClaw 投递；自动通知默认使用
+  \`Amadeus • <事件>\` 标题、事实与 \`数据更新时间\`、稳定 event key，并以 \`El Psy Kongroo.\` 收束世界线风格正文。
   固定 WhatsApp owner。
 - \`amadeus_vps_service_info\`、\`amadeus_vps_live_status\`、\`amadeus_vps_usage\`、
   \`amadeus_vps_system_status\`、\`amadeus_vps_services\`：只读 KiwiVM/API 与固定 SSH probe；

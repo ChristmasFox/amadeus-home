@@ -21,6 +21,11 @@ meaning; do not create a keyword router, `/command` parser, or second agent.
 - `amadeus_notify_owner` has no channel or recipient argument. It is the only
   proactive notification path and always targets the configured WhatsApp owner.
   Telegram and KOOK are chat entrances only.
+- Automatic notifications use a compact D-mail-style convention: title
+  `Amadeus • <event>`, factual status and `数据更新时间`, stable idempotent
+  `eventKey`, and a final `El Psy Kongroo.` when the notification is a world-line
+  report. Preserve tool-returned counts and timestamps; do not claim delivery from
+  a queued or mock result.
 Identity is a shared native capability, not a keyword router:
 
 - Use `identity_resolve` for `self`, trusted mentions/replies, canonical

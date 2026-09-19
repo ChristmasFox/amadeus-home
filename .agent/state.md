@@ -1,18 +1,19 @@
 # Agent State
 
-更新时间：2026-09-18（Asia/Shanghai）
+更新时间：2026-09-19（Asia/Shanghai）
 
 当前 Goal：按 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md，将仍有价值的旧多领域能力迁移到
 OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n、旧 runtime、
 旧通知 bridge 和旧 proactive producer。
 
-当前子目标：实现跨 Telegram/WhatsApp 的 canonical Person identity、昵称候选学习和
+当前子目标：完成 PUBG Telemetry 小时预取、缓存语义修正、D-mail 每日 owner 汇总，并继续
+实现跨 Telegram/WhatsApp 的 canonical Person identity、昵称候选学习和
 provider-neutral external account；Identity reply metadata bridge、provider-native channel metadata
 和 Telegram trusted username patch 已完成新的 CasaOS apply，线上真实 sender binding/账号 linking
 仍待真实用户入口验收；VPS 只读查询、真实 WhatsApp 早晚报告 smoke 和重启持久化已完成，仍待
 用户从真实 WhatsApp 入站发送一条自然语言 VPS 查询。
 
-当前状态：全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
+当前状态：PUBG Telemetry 预取与 D-mail 源码已完成，待 release apply；全局上下文拆分、旧 secret fallback 清理、Codex hook 修复、内部服务 proxy bypass、
 提交/push、CasaOS apply、外部 checkpoint、真实 WhatsApp owner smoke、自然语言工具选择和旧
 app/data 退休均 PASS；本轮 Telegram trusted username patch 与 Identity preset 动态刷新已通过
 选择性镜像构建重新 apply 到线上；PUBG plugin 现会同步刷新缓存的 IdentityStore。
