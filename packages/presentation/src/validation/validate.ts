@@ -1,5 +1,20 @@
 import type { OwnerNotificationPresentation } from '../contracts/owner.js';
-import type { PubgMatchReviewPresentation, PubgPeriodReviewPresentation, PresentationTextItem } from '../contracts/pubg.js';
+import type {
+  PubgComparisonPresentation,
+  PubgMatchDetailPresentation,
+  PubgMatchListPresentation,
+  PubgMatchReviewPresentation,
+  PubgMetricRow,
+  PubgPeriodReviewPresentation,
+  PubgPresentation,
+  PubgPresentationScalar,
+  PubgPresentationStatus,
+  PubgSourceRange,
+  PubgStatsPresentation,
+  PubgStatusPresentation,
+  PubgTeamDamagePresentation,
+  PresentationTextItem,
+} from '../contracts/pubg.js';
 
 export interface ValidationResult<T> {
   valid: boolean;
@@ -22,6 +37,12 @@ function finiteOrNull(value: unknown, path: string, errors: string[]): number | 
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   errors.push(`${path} must be a finite number or null`);
   return undefined;
+}
+
+function scalar(value: unknown, path: string, errors: string[]): PubgPresentationScalar {
+  if (value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) return value as PubgPresentationScalar;
+  errors.push(`${path} must be a string, finite number, or null`);
+  return null;
 }
 
 function iso(value: unknown, path: string, errors: string[], required = true): string | undefined {
@@ -57,17 +78,183 @@ function textItems(value: unknown, path: string, errors: string[], known?: Reado
   });
 }
 
+function sourceRange(value: unknown, path: string, errors: string[]): PubgSourceRange | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object') {
+    errors.push(`${path} must be an object`);
+    return undefined;
+  }
+  const row = value as Record<string, unknown>;
+  const from = row.from === null ? null : iso(row.from, `${path}.from`, errors, false) ?? null;
+  const to = row.to === null ? null : iso(row.to, `${path}.to`, errors, false) ?? null;
+  const segments: PubgSourceRange['segments'] = [];
+  if (row.segments !== undefined) {
+    if (!Array.isArray(row.segments)) errors.push(`${path}.segments must be an array`);
+    else row.segments.forEach((item, index) => {
+      if (!item || typeof item !== 'object') {
+        errors.push(`${path}.segments[${index}] must be an object`);
+        return;
+      }
+      const segment = item as Record<string, unknown>;
+      const label = stringValue(segment.label, `${path}.segments[${index}].label`, errors);
+      const segmentFrom = segment.from === null ? null : iso(segment.from, `${path}.segments[${index}].from`, errors, false) ?? null;
+      const segmentTo = segment.to === null ? null : iso(segment.to, `${path}.segments[${index}].to`, errors, false) ?? null;
+      if (label) segments.push({ label, from: segmentFrom, to: segmentTo });
+    });
+  }
+  return { from, to, ...(segments.length ? { segments } : {}) };
+}
+
+function base(value: Record<string, unknown>, expectedType: string, errors: string[], path = 'presentation'): { status: PubgPresentationStatus; dataUpdatedAt: string; sourceRange?: PubgSourceRange } {
+  if (value.type !== expectedType) errors.push(`${path}.type must be ${expectedType}`);
+  const statusValue = value.status;
+  if (!['ok', 'partial', 'no_matches', 'error'].includes(String(statusValue))) errors.push(`${path}.status is invalid`);
+  const dataUpdatedAt = iso(value.dataUpdatedAt, `${path}.dataUpdatedAt`, errors) ?? '';
+  const range = sourceRange(value.sourceRange, `${path}.sourceRange`, errors);
+  return { status: statusValue as PubgPresentationStatus, dataUpdatedAt, ...(range ? { sourceRange: range } : {}) };
+}
+
+function scalarRecord(value: unknown, path: string, errors: string[]): Record<string, PubgPresentationScalar> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    errors.push(`${path} must be an object`);
+    return {};
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scalar(item, `${path}.${key}`, errors)]));
+}
+
+function metricRows(value: unknown, path: string, errors: string[], known?: ReadonlySet<string>): PubgMetricRow[] {
+  if (!Array.isArray(value)) {
+    errors.push(`${path} must be an array`);
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') {
+      errors.push(`${path}[${index}] must be an object`);
+      return [];
+    }
+    const row = item as Record<string, unknown>;
+    const label = stringValue(row.label, `${path}[${index}].label`, errors);
+    const values = scalarRecord(row.values, `${path}[${index}].values`, errors);
+    const position = row.position === undefined ? undefined : row.position === null ? null : finiteOrNull(row.position, `${path}[${index}].position`, errors);
+    const evidenceRefs = refs(row.evidenceRefs, `${path}[${index}].evidenceRefs`, errors, known);
+    if (!label) return [];
+    return [{ label, values, ...(position === undefined ? {} : { position: position ?? null }), evidenceRefs }];
+  });
+}
+
+export function validatePubgStatusPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgStatusPresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgStatusPresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_status', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const message = stringValue(row.message, 'message', errors);
+  const errorCode = stringValue(row.errorCode, 'errorCode', errors, false);
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  if (!headline || !message) return result(value as PubgStatusPresentation, errors);
+  return result({ ...common, type: 'pubg_status', headline, message, ...(errorCode ? { errorCode } : {}), evidenceRefs }, errors);
+}
+
+export function validatePubgStatsPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgStatsPresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgStatsPresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_stats', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const operation = stringValue(row.operation, 'operation', errors);
+  const groupBy = stringValue(row.groupBy, 'groupBy', errors);
+  const summary = stringValue(row.summary, 'summary', errors);
+  const rows = metricRows(row.rows, 'rows', errors, knownEvidence);
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  if (!headline || !operation || !groupBy || !summary) return result(value as PubgStatsPresentation, errors);
+  return result({ ...common, type: 'pubg_stats', headline, operation, groupBy, summary, rows, evidenceRefs }, errors);
+}
+
+export function validatePubgMatchListPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgMatchListPresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgMatchListPresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_match_list', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const summary = stringValue(row.summary, 'summary', errors);
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  const matches: PubgMatchListPresentation['matches'] = [];
+  if (!Array.isArray(row.matches)) errors.push('matches must be an array');
+  else row.matches.forEach((item, index) => {
+    if (!item || typeof item !== 'object') { errors.push(`matches[${index}] must be an object`); return; }
+    const match = item as Record<string, unknown>;
+    const matchId = stringValue(match.matchId, `matches[${index}].matchId`, errors);
+    const startedAt = match.startedAt === null ? null : iso(match.startedAt, `matches[${index}].startedAt`, errors, false) ?? null;
+    const mapName = stringValue(match.mapName, `matches[${index}].mapName`, errors);
+    const gameMode = stringValue(match.gameMode, `matches[${index}].gameMode`, errors);
+    const placement = finiteOrNull(match.placement, `matches[${index}].placement`, errors);
+    const matchSummary = stringValue(match.summary, `matches[${index}].summary`, errors);
+    const matchRefs = refs(match.evidenceRefs, `matches[${index}].evidenceRefs`, errors, knownEvidence);
+    if (matchId && mapName && gameMode && matchSummary) matches.push({ matchId, startedAt, mapName, gameMode, placement: placement ?? null, summary: matchSummary, evidenceRefs: matchRefs });
+  });
+  if (!headline || !summary) return result(value as PubgMatchListPresentation, errors);
+  return result({ ...common, type: 'pubg_match_list', headline, summary, matches, evidenceRefs }, errors);
+}
+
+export function validatePubgComparisonPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgComparisonPresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgComparisonPresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_comparison', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const summary = stringValue(row.summary, 'summary', errors);
+  const rows = metricRows(row.rows, 'rows', errors, knownEvidence);
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  const segments: PubgComparisonPresentation['segments'] = [];
+  if (!Array.isArray(row.segments)) errors.push('segments must be an array');
+  else row.segments.forEach((item, index) => {
+    if (!item || typeof item !== 'object') { errors.push(`segments[${index}] must be an object`); return; }
+    const segment = item as Record<string, unknown>;
+    const label = stringValue(segment.label, `segments[${index}].label`, errors);
+    const range = sourceRange(segment.sourceRange, `segments[${index}].sourceRange`, errors);
+    const segmentRows = metricRows(segment.rows, `segments[${index}].rows`, errors, knownEvidence);
+    if (label) segments.push({ label, ...(range ? { sourceRange: range } : {}), rows: segmentRows });
+  });
+  if (!headline || !summary) return result(value as PubgComparisonPresentation, errors);
+  return result({ ...common, type: 'pubg_comparison', headline, summary, rows, segments, evidenceRefs }, errors);
+}
+
+export function validatePubgMatchDetailPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgMatchDetailPresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgMatchDetailPresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_match_detail', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const matchId = stringValue(row.matchId, 'matchId', errors);
+  const startedAt = row.startedAt === null ? null : iso(row.startedAt, 'startedAt', errors, false) ?? null;
+  const mapName = stringValue(row.mapName, 'mapName', errors);
+  const gameMode = stringValue(row.gameMode, 'gameMode', errors);
+  const duration = row.duration === null ? null : finiteOrNull(row.duration, 'duration', errors) ?? null;
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  const players: PubgMatchDetailPresentation['players'] = [];
+  if (!Array.isArray(row.players)) errors.push('players must be an array');
+  else row.players.forEach((item, index) => {
+    if (!item || typeof item !== 'object') { errors.push(`players[${index}] must be an object`); return; }
+    const player = item as Record<string, unknown>;
+    const label = stringValue(player.label, `players[${index}].label`, errors);
+    const playerValues = scalarRecord(player.values, `players[${index}].values`, errors);
+    const playerRefs = refs(player.evidenceRefs, `players[${index}].evidenceRefs`, errors, knownEvidence);
+    if (label) players.push({ label, values: playerValues, evidenceRefs: playerRefs });
+  });
+  if (!headline || !matchId || !mapName || !gameMode) return result(value as PubgMatchDetailPresentation, errors);
+  return result({ ...common, type: 'pubg_match_detail', headline, matchId, startedAt, mapName, gameMode, duration, players, evidenceRefs }, errors);
+}
+
 export function validatePubgMatchReviewPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgMatchReviewPresentation> {
   const errors: string[] = [];
   if (!value || typeof value !== 'object') return result(value as PubgMatchReviewPresentation, ['presentation must be an object']);
   const row = value as Record<string, unknown>;
-  if (row.type !== 'pubg_match_review') errors.push('type must be pubg_match_review');
+  const common = base(row, 'pubg_match_review', errors);
   const headline = stringValue(row.headline, 'headline', errors);
   const overviewValue = row.overview;
   const overview: Record<string, number | null | undefined> = {};
-  if (!overviewValue || typeof overviewValue !== 'object') {
-    errors.push('overview must be an object');
-  } else {
+  if (!overviewValue || typeof overviewValue !== 'object') errors.push('overview must be an object');
+  else {
     const source = overviewValue as Record<string, unknown>;
     for (const key of ['placement', 'kills', 'assists', 'damage', 'dbnos', 'revives']) overview[key] = finiteOrNull(source[key], `overview.${key}`, errors);
   }
@@ -75,11 +262,12 @@ export function validatePubgMatchReviewPresentation(value: unknown, knownEvidenc
   const highlights = textItems(row.highlights, 'highlights', errors, knownEvidence);
   const improvements = textItems(row.improvements, 'improvements', errors, knownEvidence);
   const analysis = stringValue(row.analysis, 'analysis', errors);
-  const dataUpdatedAt = iso(row.dataUpdatedAt, 'dataUpdatedAt', errors);
   const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
-  if (!headline || !analysis || !dataUpdatedAt) return result(value as PubgMatchReviewPresentation, errors);
+  if (!headline || !analysis) return result(value as PubgMatchReviewPresentation, errors);
   return result({
-    type: 'pubg_match_review', headline,
+    ...common,
+    type: 'pubg_match_review',
+    headline,
     overview: {
       placement: overview.placement ?? null,
       kills: overview.kills ?? null,
@@ -88,7 +276,7 @@ export function validatePubgMatchReviewPresentation(value: unknown, knownEvidenc
       dbnos: overview.dbnos ?? null,
       revives: overview.revives ?? null,
     },
-    keyMoments, highlights, improvements, analysis, dataUpdatedAt, evidenceRefs,
+    keyMoments, highlights, improvements, analysis, evidenceRefs,
   }, errors);
 }
 
@@ -96,7 +284,7 @@ export function validatePubgPeriodReviewPresentation(value: unknown, knownEviden
   const errors: string[] = [];
   if (!value || typeof value !== 'object') return result(value as PubgPeriodReviewPresentation, ['presentation must be an object']);
   const row = value as Record<string, unknown>;
-  if (row.type !== 'pubg_period_review') errors.push('type must be pubg_period_review');
+  const common = base(row, 'pubg_period_review', errors);
   const periodValue = row.period;
   let label: string | undefined;
   let displayDate: string | undefined;
@@ -108,7 +296,6 @@ export function validatePubgPeriodReviewPresentation(value: unknown, knownEviden
   }
   const summary = stringValue(row.summary, 'summary', errors);
   const analysis = stringValue(row.analysis, 'analysis', errors);
-  const dataUpdatedAt = iso(row.dataUpdatedAt, 'dataUpdatedAt', errors);
   const highlights = textItems(row.highlights, 'highlights', errors, knownEvidence);
   const patterns = textItems(row.patterns, 'patterns', errors, knownEvidence);
   const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
@@ -123,8 +310,54 @@ export function validatePubgPeriodReviewPresentation(value: unknown, knownEviden
     const placement = finiteOrNull(match.placement, `orderedMatches[${index}].placement`, errors);
     if (matchId && matchLabel) orderedMatches.push({ matchId, label: matchLabel, startedAt, placement: placement ?? null });
   });
-  if (!label || !summary || !analysis || !dataUpdatedAt) return result(value as PubgPeriodReviewPresentation, errors);
-  return result({ type: 'pubg_period_review', period: { label, ...(displayDate ? { displayDate } : {}) }, summary, orderedMatches, highlights, patterns, analysis, dataUpdatedAt, evidenceRefs }, errors);
+  if (!label || !summary || !analysis) return result(value as PubgPeriodReviewPresentation, errors);
+  return result({ ...common, type: 'pubg_period_review', period: { label, ...(displayDate ? { displayDate } : {}) }, summary, orderedMatches, highlights, patterns, analysis, evidenceRefs }, errors);
+}
+
+export function validatePubgTeamDamagePresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgTeamDamagePresentation> {
+  const errors: string[] = [];
+  if (!value || typeof value !== 'object') return result(value as PubgTeamDamagePresentation, ['presentation must be an object']);
+  const row = value as Record<string, unknown>;
+  const common = base(row, 'pubg_team_damage', errors);
+  const headline = stringValue(row.headline, 'headline', errors);
+  const direction = stringValue(row.direction, 'direction', errors);
+  const source = row.source === null ? null : stringValue(row.source, 'source', errors, false) ?? null;
+  const meleeKind = row.meleeKind === null ? null : stringValue(row.meleeKind, 'meleeKind', errors, false) ?? null;
+  const totalHitCount = finiteOrNull(row.totalHitCount, 'totalHitCount', errors);
+  const totalDamage = finiteOrNull(row.totalDamage, 'totalDamage', errors);
+  const summary = stringValue(row.summary, 'summary', errors);
+  const evidenceRefs = refs(row.evidenceRefs, 'evidenceRefs', errors, knownEvidence);
+  const directions: PubgTeamDamagePresentation['directions'] = [];
+  if (!Array.isArray(row.directions)) errors.push('directions must be an array');
+  else row.directions.forEach((item, index) => {
+    if (!item || typeof item !== 'object') { errors.push(`directions[${index}] must be an object`); return; }
+    const value = item as Record<string, unknown>;
+    const actor = stringValue(value.actor, `directions[${index}].actor`, errors);
+    const victim = stringValue(value.victim, `directions[${index}].victim`, errors);
+    const hitCount = finiteOrNull(value.hitCount, `directions[${index}].hitCount`, errors);
+    const damage = finiteOrNull(value.damage, `directions[${index}].damage`, errors);
+    const complete = value.complete === true || value.complete === false ? value.complete : (errors.push(`directions[${index}].complete must be boolean`), false);
+    const refsValue = refs(value.evidenceRefs, `directions[${index}].evidenceRefs`, errors, knownEvidence);
+    if (actor && victim) directions.push({ actor, victim, hitCount: hitCount ?? null, damage: damage ?? null, complete, evidenceRefs: refsValue });
+  });
+  if (!headline || !direction || !summary) return result(value as PubgTeamDamagePresentation, errors);
+  return result({ ...common, type: 'pubg_team_damage', headline, direction, source, meleeKind, totalHitCount: totalHitCount ?? null, totalDamage: totalDamage ?? null, directions, summary, evidenceRefs }, errors);
+}
+
+export function validatePubgPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgPresentation> {
+  if (!value || typeof value !== 'object') return result(value as PubgPresentation, ['presentation must be an object']);
+  const type = (value as Record<string, unknown>).type;
+  switch (type) {
+    case 'pubg_status': return validatePubgStatusPresentation(value, knownEvidence);
+    case 'pubg_stats': return validatePubgStatsPresentation(value, knownEvidence);
+    case 'pubg_match_list': return validatePubgMatchListPresentation(value, knownEvidence);
+    case 'pubg_comparison': return validatePubgComparisonPresentation(value, knownEvidence);
+    case 'pubg_match_detail': return validatePubgMatchDetailPresentation(value, knownEvidence);
+    case 'pubg_match_review': return validatePubgMatchReviewPresentation(value, knownEvidence);
+    case 'pubg_period_review': return validatePubgPeriodReviewPresentation(value, knownEvidence);
+    case 'pubg_team_damage': return validatePubgTeamDamagePresentation(value, knownEvidence);
+    default: return result(value as PubgPresentation, [`unsupported PUBG presentation type: ${String(type)}`]);
+  }
 }
 
 export function validateOwnerNotificationPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<OwnerNotificationPresentation> {

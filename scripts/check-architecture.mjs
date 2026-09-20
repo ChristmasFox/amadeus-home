@@ -44,6 +44,8 @@ export function checkArchitecture(root = REPO_ROOT) {
     'packages/presentation/src/index.ts',
     'plugins/amadeus/openclaw.plugin.json',
     'plugins/amadeus/src/index.ts',
+    'plugins/pubg/src/index.ts',
+    'packages/presentation/src/pubg-registry.ts',
     'integrations/openclaw/workspace/SOUL.md',
     'integrations/openclaw/workspace/AGENTS.md',
     'package.json',
@@ -71,9 +73,12 @@ export function checkArchitecture(root = REPO_ROOT) {
     const content = text(root, relative);
     for (const token of workspaceForbidden) if (content.includes(token)) errors.push(`${relative} contains capability-specific token: ${token}`);
   }
+  const personaForbidden = ['PUBG', 'HomeLab', 'NAS', 'Product Radar', 'media-organize', 'WhatsApp', 'Telegram', 'KOOK', 'Codex', 'amadeus_', 'resultSetId', 'recentN', 'businessDayStart', 'Asia/Shanghai'];
+  const soul = text(root, 'integrations/openclaw/workspace/SOUL.md');
+  for (const token of personaForbidden) if (soul.includes(token)) errors.push(`integrations/openclaw/workspace/SOUL.md contains capability-specific token: ${token}`);
 
   const amadeusSource = text(root, 'plugins/amadeus/src/index.ts');
-  if (amadeusSource.includes('before_prompt_build')) errors.push('plugins/amadeus/src/index.ts contains before_prompt_build');
+  checkForbiddenImports(root, 'plugins/amadeus/src', /before_prompt_build|appendSystemContext/iu, 'amadeus source contains global prompt injection', errors);
   for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
   }
@@ -81,6 +86,17 @@ export function checkArchitecture(root = REPO_ROOT) {
   if (amadeusSource.split('\n').length > 80) errors.push('amadeus bootstrap is not thin');
   for (const capability of CAPABILITIES) {
     if (!existsSync(join(root, `plugins/amadeus/src/capabilities/${capability}/register.ts`))) errors.push(`missing capability registration module: ${capability}`);
+  }
+
+  const pubgSource = text(root, 'plugins/pubg/src/index.ts');
+  const pubgToolNames = [...pubgSource.matchAll(/name:\s*['"](pubg_[a-z0-9_]+)['"]/gu)].map((match) => match[1]);
+  const registrySource = text(root, 'packages/presentation/src/pubg-registry.ts');
+  const registryToolNames = [...registrySource.matchAll(/^\s+(pubg_[a-z0-9_]+):\s*\{/gmu)].map((match) => match[1]);
+  for (const name of pubgToolNames) if (!registryToolNames.includes(name)) errors.push(`PUBG tool has no presentation registry entry: ${name}`);
+  for (const name of registryToolNames) if (!pubgToolNames.includes(name)) errors.push(`PUBG presentation registry has no native tool: ${name}`);
+  for (const name of registryToolNames) {
+    const entry = registrySource.match(new RegExp(`^\\s+${name}:\\s*\\{([^}]*)\\}`, 'mu'))?.[1] ?? '';
+    if (!/(?:classification):\s*['"](?:user-facing|intermediate|scheduled)['"]/u.test(entry)) errors.push(`PUBG presentation registry entry lacks classification: ${name}`);
   }
 
   try {

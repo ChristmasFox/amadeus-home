@@ -83,9 +83,9 @@ Tool rules:
   `selector: { type: "relative_period", value: "today" | "yesterday" }`, `refresh: true`,
   `sort: "asc"`, and `pageSize: 50`; omit `recentN` for the full period so the returned
   matches follow chronological play order. The Domain resolves this selector with the configured
-  `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to every
-  `pubg_get_review_facts` call for that review; do not reuse facts or a result set from an
-  earlier turn. The review tool rejects an omitted, unrelated, or stale search result set.
+  `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to
+  `pubg_get_period_review`; Domain order and partial coverage are authoritative. Do not
+  manually loop over stale facts or a result set from an earlier turn.
 - Any period teammate-action or friendly-fire request must use
   `pubg_query_team_damage` directly; this is the batch Telemetry owner and it refreshes
   Match discovery and ensures Telemetry for every selected match itself. For all-team
@@ -137,6 +137,10 @@ Tool rules:
 - Preserve the returned `status`, `coverage`, `asOf`, `metricVersion`,
   `queryResolved`, and `evidenceRefs` while explaining results. `partial`,
   `no_matches`, and `error` are meaningful outcomes, not successful data.
+- Every native PUBG result also contains a validated `presentation` contract
+  and canonical `displayText`. Use `displayText` as the factual response block
+  and preserve the raw envelope/evidence alongside it; do not reconstruct a
+  second user-facing summary from raw JSON.
 - For a review, use the tool's validated `presentation` contract as the factual
   response boundary. Render its `dataUpdatedAt` and `dataSourceRange` with the
   presentation formatter: same-local-day times use `HH:mm`, cross-day values use

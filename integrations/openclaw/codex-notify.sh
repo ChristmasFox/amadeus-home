@@ -73,7 +73,7 @@ body = f"项目：{project}\n状态：{status}\n时间：{timestamp}\n"
 if thread_id:
     body += f"线程：{thread_id}\n"
 body += f"\n{message}"
-subprocess.run([notify_script, "--event-key", f"codex:{identity}", "--source", "codex", "--title", title, "--message", body, "--outbox-dir", outbox, "--remote-machine", os.environ.get("OPENCLAW_REMOTE_MACHINE", "ubuntu")], timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+subprocess.run([notify_script, "--event-key", f"codex:{identity}", "--source", "codex", "--headline", title, "--summary", body, "--outbox-dir", outbox, "--remote-machine", os.environ.get("OPENCLAW_REMOTE_MACHINE", "ubuntu")], timeout=5, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
     with open(log_file, "a", encoding="utf-8") as handle:
         handle.write(f"{timestamp} event={event} project={project}\n")

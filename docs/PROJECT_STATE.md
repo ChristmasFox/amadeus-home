@@ -8,6 +8,16 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-20：Amadeus 1.4.1 源码阶段完成，release pending
+
+PUBG 的 10 个 native tools 现在由唯一 `PUBG_PRESENTATION_REGISTRY` 覆盖，工具 envelope 保留
+原始 facts/evidence 并额外返回 validated `presentation` 与 deterministic `displayText`；周期复盘
+由 Domain 消费新鲜 `resultSetId` 并按搜索顺序逐局获取，partial/no-match 不被补成确定事实。Owner
+outbox 新写入只接受结构化 contract，长消息分片保留 facts、更新时间、closing 和幂等 key；旧
+`title/message` 只在 pending drain 读取兼容。SOUL、架构递归扫描和版本算法 fixtures 已同步。
+当前 `VERSION=1.4.1`，release notes、全仓 build/test 和源码验证完成；implementation commit/push、
+release/deploy/live evidence 尚待下一阶段，live 运行时仍为 1.4.0。
+
 ## 2026-09-20：PUBG 队友动作/误伤批量 Telemetry contract（1.4.0 已部署）
 
 真实 WhatsApp trajectory 审计确认，“昨天队内误伤情况详情”和“昨天007踢了004几脚”均只
@@ -28,8 +38,9 @@ warning）；真实 Telegram/WhatsApp 自然语言入口仍按边界保持 pendi
 ## 2026-09-20：版本递进规则调整
 
 当前已部署版本保持 `1.4.0`；从下一版本起只使用 `scripts/amadeus-version.sh bump patch`，每次按
-`0.0.1` 递增。第三段到 9 时进位到第二段（`0.0.9 -> 0.1.0`），第二段也到 9 时进位到第一段
-（`0.9.9 -> 1.0.0`）；不再使用或支持 `bump minor`、`bump major`。本策略只影响后续 release，
+`0.0.1` 递增。patch 位为 `0..9`，到 9 时进位到 minor（`0.9.9 -> 0.10.0`）；minor 位为 `0..99`，
+到 99 且 patch=9 时进位到 major（`0.99.9 -> 1.0.0`）；不再使用或支持 `bump minor`、`bump major`。
+本策略只影响后续 release，
 不需要重新部署当前已经匹配 1.4.0 的 live image。
 
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）

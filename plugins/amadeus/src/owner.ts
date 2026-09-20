@@ -63,7 +63,7 @@ function legacyPresentation(item: Record<string, unknown>): OwnerNotificationPre
   }));
 }
 
-function normalize(value: unknown): OwnerEvent {
+function normalizeStructured(value: unknown): OwnerEvent {
   if (!value || typeof value !== 'object') throw new Error('invalid owner notification');
   const item = value as Record<string, unknown>;
   const candidate = item.type === 'owner_notification'
@@ -75,11 +75,20 @@ function normalize(value: unknown): OwnerEvent {
     const presentation = assertValid(validateOwnerNotificationPresentation(candidate));
     return { version: 1, ...presentation };
   }
-  return { version: 1, ...legacyPresentation(item) };
+  throw new Error('invalid owner notification: structured presentation required');
 }
 
-export async function enqueueOwnerEvent(event: OwnerEvent | LegacyOwnerEvent, outboxDir: string): Promise<'queued' | 'already-pending' | 'already-sent'> {
-  const normalized = normalize(event);
+function normalizePending(value: unknown): OwnerEvent {
+  try {
+    return normalizeStructured(value);
+  } catch (error) {
+    if (!value || typeof value !== 'object') throw error;
+    return { version: 1, ...legacyPresentation(value as Record<string, unknown>) };
+  }
+}
+
+export async function enqueueOwnerEvent(event: OwnerEvent, outboxDir: string): Promise<'queued' | 'already-pending' | 'already-sent'> {
+  const normalized = normalizeStructured(event);
   await mkdir(outboxDir, { recursive: true, mode: 0o700 });
   const id = idFor(normalized.eventKey);
   const pending = join(outboxDir, `${id}.pending.json`);
@@ -133,28 +142,53 @@ function splitMessage(message: string, limit = 2_800): string[] {
   return chunks;
 }
 
-function notificationParts(event: OwnerEvent): OwnerEvent[] {
+type NotificationUnit =
+  | { kind: 'summary'; value: string }
+  | { kind: 'fact'; value: OwnerNotificationPresentation['facts'][number] };
+
+function eventFromUnits(event: OwnerEvent, units: NotificationUnit[], index: number, total: number): OwnerEvent {
+  const summary = units.filter((unit): unit is Extract<NotificationUnit, { kind: 'summary' }> => unit.kind === 'summary').map((unit) => unit.value).join('\n');
+  const facts = units.filter((unit): unit is Extract<NotificationUnit, { kind: 'fact' }> => unit.kind === 'fact').map((unit) => unit.value);
+  const part: OwnerNotificationPresentation = {
+    type: 'owner_notification',
+    eventType: event.eventType,
+    severity: event.severity,
+    eventKey: `${event.eventKey}:part:${index + 1}/${total}`,
+    source: event.source,
+    headline: `${event.headline} (${index + 1}/${total})`,
+    facts,
+    ...(summary ? { summary } : {}),
+    ...(event.dataUpdatedAt ? { dataUpdatedAt: event.dataUpdatedAt } : {}),
+    occurredAt: event.occurredAt,
+    ...(index === total - 1 && event.worldLineClosing ? { worldLineClosing: true } : {}),
+  };
+  return { version: 1, ...assertValid(validateOwnerNotificationPresentation(part)) };
+}
+
+export function notificationParts(event: OwnerEvent): OwnerEvent[] {
   const rendered = renderOwnerNotification(event, { now: event.occurredAt });
   if (rendered.length <= 2_800) return [event];
-  const summary = event.summary ?? '';
-  if (!summary) return [event];
-  const chunks = splitMessage(summary);
-  if (chunks.length === 1) return [event];
-  return chunks.map((summaryPart, index) => {
-    const part: OwnerNotificationPresentation = {
-      type: 'owner_notification',
-      eventType: event.eventType,
-      severity: event.severity,
-      eventKey: `${event.eventKey}:part:${index + 1}/${chunks.length}`,
-      source: event.source,
-      headline: `${event.headline} (${index + 1}/${chunks.length})`,
-      facts: [],
-      summary: summaryPart,
-      occurredAt: event.occurredAt,
-      ...(index === chunks.length - 1 && event.worldLineClosing ? { worldLineClosing: true } : {}),
-    };
-    return { version: 1, ...assertValid(validateOwnerNotificationPresentation(part)) };
-  });
+  const units: NotificationUnit[] = [
+    ...(event.summary ? splitMessage(event.summary, 2_000).map((value) => ({ kind: 'summary' as const, value })) : []),
+    ...event.facts.map((value) => ({ kind: 'fact' as const, value })),
+  ];
+  if (!units.length) return [event];
+
+  const groups: NotificationUnit[][] = [];
+  let current: NotificationUnit[] = [];
+  for (const unit of units) {
+    const candidate = [...current, unit];
+    const renderedCandidate = eventFromUnits(event, candidate, groups.length, units.length);
+    if (current.length && renderOwnerNotification(renderedCandidate, { now: event.occurredAt }).length > 2_800) {
+      groups.push(current);
+      current = [unit];
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length) groups.push(current);
+
+  return groups.map((group, index) => eventFromUnits(event, group, index, groups.length));
 }
 
 interface GatewayRuntime {
@@ -188,7 +222,7 @@ export class OwnerNotifier {
   }
 
   async notify(event: OwnerEvent): Promise<{ status: 'sent' | 'queued'; detail?: string }> {
-    const parts = notificationParts(normalize(event));
+    const parts = notificationParts(normalizeStructured(event));
     let queued = 0;
     let sent = 0;
     for (const part of parts) {
@@ -221,7 +255,7 @@ export class OwnerNotifier {
     for (const name of names) {
       const pending = join(this.config.notificationOutboxDir, name);
       try {
-        const event = normalize(JSON.parse(await readFile(pending, 'utf8')) as unknown);
+        const event = normalizePending(JSON.parse(await readFile(pending, 'utf8')) as unknown);
         const sentPath = join(this.config.notificationOutboxDir, name.replace(/\.pending\.json$/u, '.sent.json'));
         if (await hasFile(sentPath)) {
           await rename(pending, sentPath);
@@ -238,12 +272,12 @@ export class OwnerNotifier {
   }
 }
 
-export function ownerEvent(input: OwnerNotificationPresentation | LegacyOwnerEvent): OwnerEvent {
-  return normalize('type' in input ? input : { version: 1, ...input, occurredAt: input.occurredAt ?? new Date().toISOString() });
+export function ownerEvent(input: OwnerNotificationPresentation): OwnerEvent {
+  return normalizeStructured(input);
 }
 
 export function ownerEventForContext(
-  input: OwnerNotificationPresentation | LegacyOwnerEvent,
+  input: OwnerNotificationPresentation,
   context: OpenClawPluginToolContext,
 ): OwnerEvent {
   const event = ownerEvent(input);

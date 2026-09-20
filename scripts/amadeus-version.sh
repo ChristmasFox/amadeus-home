@@ -52,8 +52,8 @@ Usage:
 
 Version policy:
   Every release uses bump patch and advances by 0.0.1.
-  When the patch component reaches 9, carry into minor: 0.0.9 -> 0.1.0.
-  When minor also reaches 9, carry into major: 0.9.9 -> 1.0.0.
+  Patch is 0..9; when it reaches 9, carry into minor: 0.0.9 -> 0.1.0.
+  Minor is 0..99; when it also reaches 99, carry into major: 0.99.9 -> 1.0.0.
   bump minor and bump major are not supported.
 
 After bumping, replace the first line and body of RELEASE_NOTES.md before deploy. The body is a concise
@@ -89,7 +89,7 @@ PY
     IFS=. read -r major minor patch <<< "$version"
     if (( patch < 9 )); then
       patch=$((patch + 1))
-    elif (( minor < 9 )); then
+    elif (( minor < 99 )); then
       minor=$((minor + 1))
       patch=0
     else

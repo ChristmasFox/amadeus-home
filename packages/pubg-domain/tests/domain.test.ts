@@ -536,6 +536,69 @@ test('relative-period match search uses the 06:00 business day and review requir
   }
 });
 
+test('period review consumes the fresh search result set in Domain order and preserves partial coverage', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-period-review-'));
+  try {
+    const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+    const client = new PubgApiClient({
+      apiKey: 'test-api-key',
+      baseUrl: 'https://api.example.test',
+      maxRetries: 0,
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url.includes('/players?')) return jsonResponse(playerDiscovery(['m1', 'm2']));
+        const matchId = url.split('/matches/')[1];
+        if (matchId === 'm1') return jsonResponse(matchPayload('m1', '2026-09-18T10:00:00.000Z'));
+        if (matchId === 'm2') return jsonResponse(matchPayload('m2', '2026-09-18T12:00:00.000Z'));
+        throw new Error('unexpected PUBG API request: ' + url);
+      },
+    });
+    const worker = new TelemetryWorker({
+      team: TEAM,
+      store: repository,
+      downloader: {
+        async download(match) {
+          if (match.matchId === 'm2') throw new Error('telemetry unavailable');
+          return { events: [] };
+        },
+      },
+    });
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      apiClient: client,
+      telemetryWorker: worker,
+      now: () => new Date('2026-09-19T00:30:00.000Z'),
+    });
+    const search = await service.searchMatches({
+      sessionId: 'session-period-review',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      refresh: false,
+      sort: 'asc',
+      pageSize: 50,
+    });
+    assert.equal(search.status, 'ok');
+    assert.ok(search.resultSetId);
+
+    const review = await service.getPeriodReview({
+      sessionId: 'session-period-review',
+      searchResultSetId: search.resultSetId!,
+    });
+    assert.equal(review.status, 'partial');
+    const data = review.data as {
+      period: { orderedMatchIds: string[] };
+      reviews: Array<{ matchId: string; status: string }>;
+    };
+    assert.deepEqual(data.period.orderedMatchIds, ['m1', 'm2']);
+    assert.deepEqual(data.reviews.map((item) => [item.matchId, item.status]), [['m1', 'ok'], ['m2', 'partial']]);
+    assert.deepEqual((review.queryResolved as { order: string[] }).order, ['m1', 'm2']);
+    assert.equal(review.error?.code, 'period_review_partial');
+    repository.close();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('period team-damage query resolves aliases, aggregates every Telemetry match, and preserves partial unknowns', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pubg-domain-team-damage-'));
   const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));

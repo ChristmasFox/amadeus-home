@@ -601,7 +601,11 @@ export class DeterministicQueryEngine {
       coverage,
       source,
       evidence: evidence(selectedForEvidence, query),
-      diagnostics: { selectedMatchCount: selectedForEvidence.length, calculation: 'deterministic_query_engine_v3' },
+      diagnostics: {
+        selectedMatchCount: selectedForEvidence.length,
+        resolvedSegments: query.segments,
+        calculation: 'deterministic_query_engine_v3',
+      },
     };
   }
 

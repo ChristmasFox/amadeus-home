@@ -1,3 +1,3 @@
-# Amadeus 1.4.0
+# Amadeus 1.4.1
 
-补齐 PUBG 周期队友动作/误伤查询：新增确定性的批量 Telemetry contract，支持全队方向汇总、actor → victim 定向查询、踢击/拳击筛选，并在 Telemetry 不完整时保留 partial/null 语义。
+补强 PUBG 全工具的结构化 Presentation 与确定性 displayText，新增基于新鲜搜索结果集的周期复盘，并保留来源范围、更新时间、facts/evidence 与 partial/unknown 语义。同步收紧 owner outbox 长消息分片、SOUL persona 边界、架构 fitness check 和版本进位规则。
