@@ -24,5 +24,10 @@ pnpm test:workflow
 明确需要完整两镜像 release 时才使用 `--apply --build`；`--full-verify` 可在选择性发布时
 显式追加全量本地验证。
 
+每次 `--apply` 都必须先通过 release version gate：当前根目录 `VERSION` 必须严格高于
+live OpenClaw image source commit 中的版本；发布完成后脚本会用
+`amadeus-release:<版本>` 写入 checkpoint 和生产 owner outbox，并等待 `.sent.json`。版本不递进
+或通知未送达时，部署返回失败。
+
 任何 Docker build、Compose 写入、停止服务、数据迁移都必须通过明确的 RELEASE/apply
 入口；默认 dry-run。生产目标是 OrbStack `ubuntu` 的 CasaOS，不是 macOS host Docker。
