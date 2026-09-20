@@ -24,6 +24,22 @@ structured owner outbox smoke、doctor 和 `OPERATION_SKULD=READY` 均通过。d
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-20：WhatsApp 全量私聊与非 owner 工具隔离（已完成）
+
+- WhatsApp 顶层及 `secondary` 账号当前为 `dmPolicy=open`、`allowFrom=["*"]`、
+  `configWrites=false`；Telegram DM 仍为 allowlist。`commands.ownerAllowFrom` 未改变。
+- `tools.toolsBySender["*"]` 只允许 `web_search`、`web_fetch`；owner 的 e164 sender policy 为
+  `allow=["*"]`，因此非 owner 私聊不会获得文件/exec/节点/自动化/媒体/插件等服务器写入面，
+  owner 仍保留完整工具 profile。
+- Product Radar 的 create/update/delete/pause/resume/run/context_set/context_clear 已增加
+  `senderIsOwner` 门禁。源码最终 commit 为 `4d11f3e`，live 镜像为
+  `local/openclaw-amadeus:git-4d11f3e02074-20260920153810` 与
+  `local/product-radar:git-4d11f3e02074-20260920153810`。
+- 配置前备份：`/DATA/AppData/openclaw/backups/whatsapp-dm-open-20260920T152658Z`；发布
+  checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920153810`。最终
+  config validate、health/preflight、media network、NAS read-only、owner outbox smoke、
+  全量 build/typecheck/test 和 `pnpm check:secrets` 均通过。
+
 ## 2026-09-20：Immich 与 9router 更新（已完成）
 
 - CasaOS live compose 已更新：`/var/lib/casaos/apps/immich/docker-compose.yml` 的 Immich
