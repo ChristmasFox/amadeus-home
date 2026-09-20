@@ -2,14 +2,15 @@
 
 更新时间：2026-09-20（Asia/Shanghai）
 
-当前执行 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md`。已从 `origin/main` 拉取目标并
-rebase 本地提交；Phase 1-2 已完成源码验证：Amadeus thin bootstrap/capability registrations、
-capability Skills、global prompt ownership cleanup 和收紧 persona meme trigger 均已落地。
-Phase 3-5 也已完成：Presentation contracts/renderers/time formatter、owner hard validation、PUBG
-structured presentation、period review、architecture fitness check 和 workflow integration 均已验证。
-当前 1.4.1 的源码和 release package 阶段已完成，下一步只做 implementation commit/push、CasaOS
-deploy、live health/preflight/smoke/doctor 和 deployment evidence commit/push；`VERSION=1.4.1`，
-live 运行时仍为 1.4.0。
+当前执行 `docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md`，已完成源码、release、部署和
+live evidence 阶段。Phase 1-7 的 Presentation contracts/renderers/time formatter、owner hard
+validation、PUBG structured presentation、period review、architecture fitness check、版本 fixtures
+和 workflow integration 均已验证；`VERSION=1.4.1` 的 implementation commit `032e314` 已 push。
+CasaOS live OpenClaw 使用 `local/openclaw-amadeus:git-032e31477b45-20260920065322`，Product Radar
+复用 `local/product-radar:git-7d85bc10f15d-20260920041059`，checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920065322`；health、preflight、外围 smoke
+和 doctor（0 failure / 0 warning）均通过。真实自然语言 inbound/final-reply 仍按验收边界保持
+pending，未发送未经请求的群聊测试消息。
 
 本轮真实 WhatsApp trajectory 审计发现周期队友动作查询只走基础 Match API，新增
 `pubg_query_team_damage` 作为 Domain-owned batch Telemetry contract，覆盖全队误伤详情和

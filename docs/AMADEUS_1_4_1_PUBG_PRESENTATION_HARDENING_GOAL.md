@@ -18,6 +18,14 @@
 用户已授权本 Goal 范围内的源码/文档修改、版本更新、测试、commit、push 和最终 CasaOS release 部署。
 仍必须遵守根 `AGENTS.md` 的 secret、SSH、数据、备份、rollback 和显式 deploy 安全边界。
 
+完成状态（2026-09-20）：源码实现已由 `032e314` 提交并 push，`VERSION=1.4.1` 已通过 release
+check；已通过 `--apply --build-auto` 部署到 canonical CasaOS。live OpenClaw 使用
+`local/openclaw-amadeus:git-032e31477b45-20260920065322`，Product Radar 复用
+`local/product-radar:git-7d85bc10f15d-20260920041059`，外部恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920065322`。health、preflight、owner/media/NAS
+smoke 和 `doctor.sh`（0 failure / 0 warning）均通过；真实 Telegram/WhatsApp 自然语言入口和最终
+用户回复未通过未经请求的群聊消息伪造，仍按边界记录为 pending。
+
 ---
 
 # 1. Objective
@@ -984,36 +992,36 @@ identity -> pubg_query_stats -> validated pubg_stats -> displayText
 
 只有以下全部满足才可宣布 1.4.1 完成：
 
-- [ ] 普通 `pubg_query_stats` 不再裸靠 LLM 格式化。
-- [ ] PUBG user-facing tools 均有明确 Presentation classification。
-- [ ] 所有 user-facing PUBG results 有 runtime-validated `presentation`。
-- [ ] 所有 user-facing PUBG results 有 deterministic `displayText`。
-- [ ] 所有适用 PUBG final output 都显示 `数据更新时间`。
-- [ ] 有 query range 的 final output 都显示用户友好的 `数据范围`。
-- [ ] 默认 PUBG 用户输出不出现 `Asia/Shanghai` / `UTC+08` / `自然日` / `业务日`。
-- [ ] single review 的真实 final path 使用 renderer，不再只返回 presentation JSON。
-- [ ] period review contract 真正接入 production bounded use case。
-- [ ] period review 不依赖 LLM 手工拼 N 个 raw review。
-- [ ] partial/no_matches/error 有统一格式。
-- [ ] raw machine facts/evidence 仍保留，没有为 UI 破坏 Domain contract。
-- [ ] Skill 是完整 PUBG workflow 的唯一 Prompt owner。
-- [ ] tool descriptions 已收敛，不再复制整份 Skill。
-- [ ] Owner notification 分片不会丢 facts/dataUpdatedAt。
-- [ ] legacy `title/message` 只剩 read compatibility，不再是新 producer write API。
-- [ ] SOUL 保留 Kurisu/Steins;Gate persona 和彩蛋，但无 PUBG/WhatsApp 等 capability workflow/destination rule。
-- [ ] architecture check 扫描 nested Amadeus source 的 global prompt injection。
-- [ ] 新增 PUBG user-facing tool 不带 Presentation 时自动检查失败。
-- [ ] 新版本算法实现 patch 10 进 1、minor 100 进 1。
-- [ ] `0.9.9 -> 0.10.0` 测试通过。
-- [ ] `0.99.9 -> 1.0.0` 测试通过。
-- [ ] 版本脚本仍只支持 `bump patch`。
-- [ ] release 前 `1.4.0 -> 1.4.1`。
-- [ ] build / typecheck / full tests / architecture / secrets / workflow / diff check 全通过。
-- [ ] 1.4.1 implementation commit 已 push。
-- [ ] CasaOS release 已实际 deploy。
-- [ ] live health / preflight / smoke / doctor 通过。
-- [ ] deployment evidence 已单独 commit + push。
-- [ ] 最终 Git clean。
+- [x] 普通 `pubg_query_stats` 不再裸靠 LLM 格式化。
+- [x] PUBG user-facing tools 均有明确 Presentation classification。
+- [x] 所有 user-facing PUBG results 有 runtime-validated `presentation`。
+- [x] 所有 user-facing PUBG results 有 deterministic `displayText`。
+- [x] 所有适用 PUBG final output 都显示 `数据更新时间`。
+- [x] 有 query range 的 final output 都显示用户友好的 `数据范围`。
+- [x] 默认 PUBG 用户输出不出现 `Asia/Shanghai` / `UTC+08` / `自然日` / `业务日`。
+- [x] single review 的真实 final path 使用 renderer，不再只返回 presentation JSON。
+- [x] period review contract 真正接入 production bounded use case。
+- [x] period review 不依赖 LLM 手工拼 N 个 raw review。
+- [x] partial/no_matches/error 有统一格式。
+- [x] raw machine facts/evidence 仍保留，没有为 UI 破坏 Domain contract。
+- [x] Skill 是完整 PUBG workflow 的唯一 Prompt owner。
+- [x] tool descriptions 已收敛，不再复制整份 Skill。
+- [x] Owner notification 分片不会丢 facts/dataUpdatedAt。
+- [x] legacy `title/message` 只剩 read compatibility，不再是新 producer write API。
+- [x] SOUL 保留 Kurisu/Steins;Gate persona 和彩蛋，但无 PUBG/WhatsApp 等 capability workflow/destination rule。
+- [x] architecture check 扫描 nested Amadeus source 的 global prompt injection。
+- [x] 新增 PUBG user-facing tool 不带 Presentation 时自动检查失败。
+- [x] 新版本算法实现 patch 10 进 1、minor 100 进 1。
+- [x] `0.9.9 -> 0.10.0` 测试通过。
+- [x] `0.99.9 -> 1.0.0` 测试通过。
+- [x] 版本脚本仍只支持 `bump patch`。
+- [x] release 前 `1.4.0 -> 1.4.1`。
+- [x] build / typecheck / full tests / architecture / secrets / workflow / diff check 全通过。
+- [x] 1.4.1 implementation commit 已 push。
+- [x] CasaOS release 已实际 deploy。
+- [x] live health / preflight / smoke / doctor 通过。
+- [x] deployment evidence 已单独 commit + push。
+- [x] 最终 Git clean。
 
 ---
 
