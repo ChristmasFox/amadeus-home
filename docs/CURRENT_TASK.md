@@ -1,6 +1,27 @@
 # 当前任务
 
-更新时间：2026-09-20（Asia/Shanghai）
+更新时间：2026-09-21（Asia/Shanghai）
+
+## 2026-09-21：Amadeus 1.4.3 WhatsApp 私聊会话隔离（已部署）
+
+本轮确认 WhatsApp 私聊数据串流的根因是 OpenClaw 未配置 `session.dmScope`，默认值为
+`main`：不同发送者的 DM 都进入 `agent:main:main`，而 `toolsBySender` 只限制工具，不隔离
+历史上下文、记忆或模型 prompt。现已把声明式配置固定为
+`dmScope=per-account-channel-peer`、`groupScope=per-group`，并在部署预检中硬性拒绝共享 DM
+会话；非 owner 仍只允许 `web_search`/`web_fetch`。
+
+`VERSION=1.4.3`、release notes、session-isolation/deploy contract tests、脚本语法、OpenClaw
+定向 build/typecheck/test 和 secrets scan 均通过。implementation commit `4c61b1e` 已提交；
+已 apply 到 CasaOS `ubuntu`：OpenClaw image 为
+`local/openclaw-amadeus:git-4c61b1ef2b02-20260920155823`，Product Radar 复用
+`local/product-radar:git-4d11f3e02074-20260920153810`，checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920155823`。live OpenClaw healthy，运行时
+配置已核实为上述 session scope，并已出现按 WhatsApp 对端隔离的新 direct session key。
+
+部署脚本现在要求当前版本严格高于 live image source commit 中的 `VERSION`，并用稳定的
+`amadeus-release:<版本>` 幂等 key 写入 checkpoint 与生产 owner outbox，等待对应 `.sent.json`；
+本次 `OWNER_NOTIFICATION=sent`，版本事实为 `1.4.3`。旧 `agent:main:main` 共享会话暂不删除，
+仅保留作取证/恢复，不再作为 WhatsApp DM 路由目标。
 
 ## 2026-09-20：Amadeus 1.4.2 Worldline 与 Operation Skuld（已部署）
 

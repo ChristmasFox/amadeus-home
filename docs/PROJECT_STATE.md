@@ -1,6 +1,20 @@
 # Project State
 
-更新时间：2026-09-20（Asia/Shanghai）
+更新时间：2026-09-21（Asia/Shanghai）
+
+## 当前执行：Amadeus 1.4.3 WhatsApp 私聊隔离（已部署）
+
+根因已确认：WhatsApp DM 未配置 `session.dmScope`，OpenClaw 默认把不同对端复用到
+`agent:main:main`；sender tool policy 并不隔离上下文。源码现固定
+`dmScope=per-account-channel-peer`、`groupScope=per-group`，部署预检会拒绝共享 DM scope，
+并保留非 owner 只读工具 allowlist（`web_search`、`web_fetch`）。
+
+`VERSION=1.4.3`、implementation commit `4c61b1e` 已部署到 CasaOS `ubuntu`。live image 为
+`local/openclaw-amadeus:git-4c61b1ef2b02-20260920155823`，Product Radar 复用
+`local/product-radar:git-4d11f3e02074-20260920153810`，checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920155823`；OpenClaw/Product Radar
+healthy，运行时 session scope 已独立核验。部署通知稳定 key 为 `amadeus-release:1.4.3`，对应
+生产 outbox `.sent.json` 已确认。旧共享 `agent:main:main` 不再承接 WhatsApp DM，暂保留未删除。
 
 ## 当前执行：Amadeus 1.4.2 Worldline 与 Operation Skuld（已部署）
 
