@@ -47,7 +47,7 @@ for proxy_name in HTTP_PROXY HTTPS_PROXY; do
   if [[ -n "$proxy_value" ]]; then
     # Docker build containers cannot reach a macOS loopback proxy through
     # 127.0.0.1; expose the host endpoint through Docker's stable DNS name.
-    proxy_value="$(printf '%s' "$proxy_value" | sed -E 's#(https?://)(127\.0\.0\.1|localhost)(:|/|$)#\\1host.docker.internal\\3#')"
+    proxy_value="$(printf '%s' "$proxy_value" | sed -E 's#(https?://)(127\.0\.0\.1|localhost)(:|/|$)#\1host.docker.internal\3#')"
     DOCKER_BUILD_PROXY_ARGS+=(--build-arg "$proxy_name=$proxy_value")
   fi
 done
