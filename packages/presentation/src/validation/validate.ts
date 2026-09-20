@@ -1,4 +1,5 @@
 import type { OwnerNotificationPresentation } from '../contracts/owner.js';
+import { WORLDLINE_SIGNIFICANCES, WORLDLINE_THEMES } from '../worldline/contracts.js';
 import type {
   PubgComparisonPresentation,
   PubgMatchDetailPresentation,
@@ -368,6 +369,10 @@ export function validateOwnerNotificationPresentation(value: unknown, knownEvide
   const eventType = stringValue(row.eventType, 'eventType', errors);
   const severity = row.severity;
   if (!['info', 'success', 'warning', 'error'].includes(String(severity))) errors.push('severity is invalid');
+  const significance = row.significance;
+  if (!WORLDLINE_SIGNIFICANCES.includes(significance as typeof WORLDLINE_SIGNIFICANCES[number])) errors.push('significance is invalid');
+  const theme = row.theme;
+  if (!WORLDLINE_THEMES.includes(theme as typeof WORLDLINE_THEMES[number])) errors.push('theme is invalid');
   const eventKey = stringValue(row.eventKey, 'eventKey', errors);
   const source = stringValue(row.source, 'source', errors);
   const headline = stringValue(row.headline, 'headline', errors);
@@ -385,8 +390,20 @@ export function validateOwnerNotificationPresentation(value: unknown, knownEvide
     const evidenceRefs = refs(fact.evidenceRefs, `facts[${index}].evidenceRefs`, errors, knownEvidence);
     if (label) facts.push({ label, value: raw as string | number | boolean | null, evidenceRefs });
   });
-  if (!eventType || !eventKey || !source || !headline || !occurredAt || !severity || typeof severity !== 'string') return result(value as OwnerNotificationPresentation, errors);
-  return result({ type: 'owner_notification', eventType, severity: severity as OwnerNotificationPresentation['severity'], eventKey, source, headline, facts, ...(summary ? { summary } : {}), ...(dataUpdatedAt ? { dataUpdatedAt } : {}), occurredAt, ...(row.worldLineClosing === true ? { worldLineClosing: true } : {}) }, errors);
+  const links: OwnerNotificationPresentation['links'] = [];
+  if (row.links !== undefined) {
+    if (!Array.isArray(row.links)) errors.push('links must be an array');
+    else row.links.forEach((item, index) => {
+      if (!item || typeof item !== 'object') { errors.push(`links[${index}] must be an object`); return; }
+      const link = item as Record<string, unknown>;
+      const label = stringValue(link.label, `links[${index}].label`, errors);
+      const url = stringValue(link.url, `links[${index}].url`, errors);
+      const evidenceRefs = link.evidenceRefs === undefined ? undefined : refs(link.evidenceRefs, `links[${index}].evidenceRefs`, errors, knownEvidence);
+      if (label && url) links.push({ label, url, ...(evidenceRefs === undefined ? {} : { evidenceRefs }) });
+    });
+  }
+  if (!eventType || !eventKey || !source || !headline || !occurredAt || !severity || typeof severity !== 'string' || !significance || !theme) return result(value as OwnerNotificationPresentation, errors);
+  return result({ type: 'owner_notification', eventType, severity: severity as OwnerNotificationPresentation['severity'], significance: significance as OwnerNotificationPresentation['significance'], theme: theme as OwnerNotificationPresentation['theme'], eventKey, source, headline, facts, ...(links.length ? { links } : {}), ...(summary ? { summary } : {}), ...(dataUpdatedAt ? { dataUpdatedAt } : {}), occurredAt, ...(row.worldLineClosing === true ? { worldLineClosing: true } : {}) }, errors);
 }
 
 export function assertValid<T>(validation: ValidationResult<T>): T {

@@ -8,7 +8,8 @@ const root = resolve(new URL('..', import.meta.url).pathname);
 const fixture = mkdtempSync(join(tmpdir(), 'amadeus-architecture-'));
 const copies = [
   'AGENTS.md', 'package.json',
-  'scripts/developer-workflow.sh',
+  'docs/INFRASTRUCTURE_CLASSIFICATION.md', 'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json', 'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md',
+  'scripts/developer-workflow.sh', 'scripts/host-profile.sh', 'scripts/migration-readiness.sh',
   'plugins/amadeus/src', 'plugins/amadeus/openclaw.plugin.json', 'plugins/amadeus/skills',
   'integrations/openclaw/workspace/SOUL.md', 'integrations/openclaw/workspace/AGENTS.md',
   'packages/presentation/src', 'packages/presentation/package.json',
@@ -34,6 +35,11 @@ try {
   writeFileSync(pubgIndexPath, `${readFileSync(pubgIndexPath, 'utf8')}\nconst unmapped = { name: 'pubg_unmapped_tool' };\n`);
   const registryErrors = checkArchitecture(fixture);
   assert.ok(registryErrors.some((error) => error.includes('PUBG tool has no presentation registry entry: pubg_unmapped_tool')));
+
+  const domainPath = join(fixture, 'packages/pubg-domain/src/worldline-leak.ts');
+  writeFileSync(domainPath, 'export const leaked = "SERN";\n');
+  const vocabularyErrors = checkArchitecture(fixture);
+  assert.ok(vocabularyErrors.some((error) => error.includes('contains worldline presentation vocabulary')));
   console.log('ARCHITECTURE_FIXTURE_CHECK=passed');
 } finally {
   rmSync(fixture, { recursive: true, force: true });

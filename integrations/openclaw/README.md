@@ -73,7 +73,7 @@ observations fail closed and are not persisted.
 ## Local verification
 
 ```sh
-source /Users/blacksidev/.nvm/nvm.sh
+if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then source "${NVM_DIR:-$HOME/.nvm}/nvm.sh"; fi
 nvm use 24.16.0
 pnpm build:pubg
 pnpm typecheck:pubg

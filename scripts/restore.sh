@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-MACHINE="${ORBSTACK_MACHINE:-ubuntu}"
+REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/host-profile.sh"
+amadeus_host_profile_load "$REPO_ROOT"
+MACHINE="$ORBSTACK_MACHINE"
 ARCHIVE=""
 CONFIRM=0
 DRY_RUN=0
@@ -19,7 +23,7 @@ usage() {
   --confirm                确认写入 /DATA/AppData
   --include-secrets        标记这是单独的 secrets 归档
   --allow-running          允许在服务运行时恢复（不推荐）
-  --machine NAME           覆盖 OrbStack machine，默认 ubuntu
+  --machine NAME           覆盖 OrbStack machine，默认取 host profile（ubuntu）
   --dry-run                只校验归档，不执行远端操作
 EOF
 }

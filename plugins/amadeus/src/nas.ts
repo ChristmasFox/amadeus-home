@@ -73,6 +73,7 @@ async function remote(config: AmadeusConfig, command: string, signal?: AbortSign
 }
 
 export async function nas(config: AmadeusConfig, action: NasAction, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
+  if (!config.macSshUser.trim()) throw new Error('Mac control user is not configured; set MAC_CONTROL_USER outside Git');
   if (action === 'sleep' && context.senderIsOwner !== true) throw new Error('NAS sleep requires owner identity');
   const raw = await remote(config, `nas.${action}`, signal);
   return { action, text: action === 'status' ? formatStatus(raw) : clean(raw, 4000) };

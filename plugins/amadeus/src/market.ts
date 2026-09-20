@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { OwnerNotificationPresentation } from '@agent/presentation';
+import { adaptWorldlineNotification, type OwnerNotificationPresentation } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 
 const execFileAsync = promisify(execFile);
@@ -98,15 +98,6 @@ function dateInTimeZone(timestampMs: number, timezone: string): string {
     day: '2-digit',
   }).formatToParts(new Date(timestampMs));
   return `${datePart(parts, 'year')}-${datePart(parts, 'month')}-${datePart(parts, 'day')}`;
-}
-
-function signed(value: number, digits = 2): string {
-  const prefix = value > 0 ? '+' : '';
-  return `${prefix}${value.toFixed(digits)}`;
-}
-
-function valueText(value: number): string {
-  return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function parseChartRows(result: Record<string, unknown>, timezone: string): MarketRow[] {
@@ -221,25 +212,29 @@ export function buildMarketNotification(
 ): MarketNotification {
   const phaseLabel = phase === 'open' ? '开盘' : '收盘';
   const eventKey = `market-indices:${marketDate}:${phase}`;
-  return {
-    type: 'owner_notification',
+  return adaptWorldlineNotification({
+    type: 'worldline_notification_intent',
     eventType: `market_indices_${phase}`,
+    kind: 'market_report',
     severity: 'success',
+    significance: 'major',
     eventKey,
     source: 'market-indices',
-    headline: `Amadeus • 世界线观测 · 美股${phaseLabel}`,
+    headline: `美股${phaseLabel}`,
     facts: observations.flatMap((item) => [
-      { label: `${item.name}（${item.symbol}）· ${phaseLabel}`, value: valueText(item.value), evidenceRefs: [] },
-      { label: '较前一交易日收盘', value: `${signed(item.change)}（${signed(item.changePercent)}%）`, evidenceRefs: [] },
+      { label: `${item.name}（${item.symbol}）· ${phaseLabel}`, value: item.value, evidenceRefs: [] },
+      { label: '较前一交易日收盘变动', value: item.change, evidenceRefs: [] },
+      { label: '较前一交易日收盘变动百分比', value: item.changePercent, evidenceRefs: [] },
+      { label: '交易日', value: item.tradingDate, evidenceRefs: [] },
       ...(phase === 'close' && item.intradayChange !== null
-        ? [{ label: '日内变动', value: `${signed(item.intradayChange)}（开盘 ${valueText(item.open)}）`, evidenceRefs: [] }]
+        ? [{ label: '日内变动', value: item.intradayChange, evidenceRefs: [] }, { label: '开盘值', value: item.open, evidenceRefs: [] }]
         : []),
     ]),
-    summary: `世界线观测记录：美股${phaseLabel}。交易日：${marketDate}（美东）。数据源：${DATA_SOURCE}（指数数据可能存在延迟）`,
+    summary: `美股${phaseLabel}结构化观测。数据源：${DATA_SOURCE}（指数数据可能存在延迟）`,
     dataUpdatedAt,
     occurredAt: dataUpdatedAt,
-    worldLineClosing: true,
-  };
+    ...(phase === 'close' ? { worldLineClosing: true } : {}),
+  });
 }
 
 export async function marketIndices(config: AmadeusConfig, phase: MarketPhase, signal?: AbortSignal): Promise<MarketResult> {

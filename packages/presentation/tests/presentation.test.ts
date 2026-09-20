@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   containsInternalTimeTerms,
+  adaptWorldlineNotification,
   buildPubgToolPresentation,
   formatDisplayRange,
   formatDisplayTime,
   renderOwnerNotification,
   renderPubgMatchReview,
   renderPubgPeriodReview,
+  renderWorldlineNotification,
+  selectWorldlineTheme,
+  WORLDLINE_THEME_LABELS,
+  WORLDLINE_THEMES,
   validateOwnerNotificationPresentation,
   validatePubgMatchReviewPresentation,
   validatePubgPeriodReviewPresentation,
@@ -38,7 +43,7 @@ test('review contract rejects missing structure and unknown evidence', () => {
 test('owner notification contract is hard validated and rendered deterministically', () => {
   const presentation = {
     type: 'owner_notification' as const,
-    eventType: 'test', severity: 'success' as const, eventKey: 'test:1', source: 'test', headline: '测试通知',
+    eventType: 'test', severity: 'success' as const, significance: 'notable' as const, theme: 'worldline_observation' as const, eventKey: 'test:1', source: 'test', headline: '测试通知',
     facts: [{ label: '计数', value: 2, evidenceRefs: [] }], summary: '事实摘要',
     dataUpdatedAt: '2026-09-20T15:05:00.000Z', occurredAt: '2026-09-20T15:10:00.000Z', worldLineClosing: true,
   };
@@ -48,6 +53,70 @@ test('owner notification contract is hard validated and rendered deterministical
   assert.match(output, /El Psy Kongroo\.$/u);
   assert.equal(containsInternalTimeTerms(output), false);
   assert.equal(validateOwnerNotificationPresentation({ ...presentation, facts: [{ label: 'bad', value: { x: 1 }, evidenceRefs: [] }] }).valid, false);
+});
+
+test('worldline policy keeps theme separate from severity and preserves structured facts', () => {
+  const intent = {
+    type: 'worldline_notification_intent' as const,
+    eventType: 'price_changed', kind: 'price_changed', severity: 'warning' as const, significance: 'major' as const,
+    eventKey: 'radar:1', source: 'product-radar', headline: '价格变化', facts: [
+      { label: '标题', value: '相机', evidenceRefs: ['listing:1'] },
+    ], links: [{ label: '查看', url: 'https://example.test/item/1', evidenceRefs: ['listing:1'] }],
+    occurredAt: '2026-09-20T15:10:00.000Z',
+  };
+  const presentation = adaptWorldlineNotification(intent);
+  assert.equal(presentation.theme, 'worldline_divergence');
+  assert.equal(presentation.significance, 'major');
+  assert.match(presentation.headline, /世界线偏移/u);
+  assert.equal(presentation.facts[0]?.value, '相机');
+  assert.equal(renderWorldlineNotification(intent, { now: intent.occurredAt }).includes('https://example.test/item/1'), true);
+  assert.equal(selectWorldlineTheme({ ...intent, kind: 'price_changed' }), 'worldline_divergence');
+  assert.equal(selectWorldlineTheme({ ...intent, kind: 'scheduled_report' }), 'dmail');
+});
+
+test('worldline policy covers every formal theme and rejects misleading upgrades', () => {
+  const base = {
+    type: 'worldline_notification_intent' as const,
+    eventType: 'test',
+    kind: 'ordinary_event',
+    severity: 'info' as const,
+    significance: 'notable' as const,
+    eventKey: 'worldline:test',
+    source: 'test',
+    headline: '测试',
+    facts: [{ label: '未知事实', value: null, evidenceRefs: [] }],
+    occurredAt: '2026-09-20T15:10:00.000Z',
+  };
+  const cases = [
+    ['ordinary_event', 'worldline_observation', '世界线观测'],
+    ['price_changed', 'worldline_divergence', '世界线偏移'],
+    ['operation_completed', 'worldline_convergence', '世界线收束', { severity: 'success' as const }],
+    ['scheduled_report', 'dmail', 'D-Mail'],
+    ['state_drift', 'reading_steiner', 'Reading Steiner'],
+    ['incident', 'attractor_field', '吸引子场', { correlation: { occurrenceCount: 3 } }],
+    ['security_scan', 'rounder_activity', 'Rounder 活动'],
+    ['confirmed_compromise', 'sern_alert', 'SERN 警报', { severity: 'error' as const, significance: 'critical' as const }],
+    ['critical_dependency', 'ibn_5100', 'IBN 5100'],
+    ['rollback', 'time_leap', '时间跳跃'],
+    ['migration_readiness', 'operation_skuld', 'Operation Skuld · 斯库尔德行动'],
+  ] as const;
+  for (const [kind, expected, label, overrides] of cases) {
+    const intent = { ...base, kind, ...(overrides ?? {}) };
+    assert.equal(selectWorldlineTheme(intent), expected);
+    const presentation = adaptWorldlineNotification(intent);
+    assert.equal(presentation.theme, expected);
+    assert.match(presentation.headline, new RegExp(label, 'u'));
+    assert.equal(presentation.facts[0]?.value, null);
+  }
+  assert.deepEqual(Object.keys(WORLDLINE_THEME_LABELS).sort(), [...WORLDLINE_THEMES].sort());
+  assert.equal(selectWorldlineTheme({ ...base, kind: 'confirmed_compromise' }), 'worldline_observation');
+  assert.equal(selectWorldlineTheme({ ...base, kind: 'incident', correlation: { occurrenceCount: 2 } }), 'worldline_observation');
+  assert.equal(selectWorldlineTheme({ ...base, kind: 'restart' }), 'worldline_observation');
+  assert.equal(selectWorldlineTheme({ ...base, kind: 'ordinary_event', severity: 'success' }), 'worldline_observation');
+  const output = renderWorldlineNotification({ ...base, kind: 'ordinary_event' }, { now: base.occurredAt });
+  assert.match(output, /未知/u);
+  assert.doesNotMatch(output, /Asia\/Shanghai|UTC\+08/u);
+  assert.doesNotMatch(output, /SREN/u);
 });
 
 test('PUBG renderer preserves null as unknown instead of inventing zero', () => {

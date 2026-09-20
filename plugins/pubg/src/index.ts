@@ -6,6 +6,7 @@ import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
+  adaptWorldlineNotification,
   buildPubgStatusPresentation,
   buildPubgToolPresentation,
   formatDisplayTime,
@@ -305,6 +306,48 @@ export type IdentitySubjectInput = {
 
 const serviceCache = new Map<string, PubgDomainService>();
 const identityStoreCache = new Map<string, IdentityStore>();
+
+async function telemetrySyncReportWithNotification(service: PubgDomainService, input: TelemetrySyncReportInput): Promise<ToolEnvelope> {
+  const envelope = await service.getTelemetrySyncReport(input);
+  const data = envelope.data && typeof envelope.data === 'object' ? envelope.data as Record<string, unknown> : undefined;
+  const summary = data?.summary && typeof data.summary === 'object' ? data.summary as Record<string, unknown> : undefined;
+  if (!summary) return envelope;
+  const unavailableCount = Number(summary.unavailableCount ?? 0);
+  const pendingCount = Number(summary.pendingCount ?? 0);
+  const failedMatchIds = Array.isArray(summary.failedMatchIds) ? summary.failedMatchIds : [];
+  const partial = unavailableCount > 0 || pendingCount > 0 || failedMatchIds.length > 0 || envelope.status === 'partial';
+  const asOf = envelope.asOf;
+  return {
+    ...envelope,
+    data: {
+      ...data,
+      notification: adaptWorldlineNotification({
+        type: 'worldline_notification_intent',
+        eventType: 'pubg_telemetry_sync',
+        kind: 'telemetry_sync',
+        severity: partial ? 'warning' : 'success',
+        significance: partial ? 'major' : 'notable',
+        eventKey: `pubg-sync:${String(summary.reportDate ?? 'unknown')}`,
+        source: 'pubg-sync',
+        headline: 'PUBG Telemetry 同步',
+        facts: [
+          { label: '日期', value: typeof summary.reportDate === 'string' ? summary.reportDate : null, evidenceRefs: [] },
+          { label: '定时检查', value: Number.isFinite(Number(summary.runCount)) ? Number(summary.runCount) : null, evidenceRefs: [] },
+          { label: '发现新对局', value: Number.isFinite(Number(summary.newMatchCount)) ? Number(summary.newMatchCount) : null, evidenceRefs: [] },
+          { label: 'Telemetry 新拉取并写入缓存', value: Number.isFinite(Number(summary.fetchedCount)) ? Number(summary.fetchedCount) : null, evidenceRefs: [] },
+          { label: 'Telemetry 命中缓存', value: Number.isFinite(Number(summary.cacheHitCount)) ? Number(summary.cacheHitCount) : null, evidenceRefs: [] },
+          { label: '暂不可用', value: Number.isFinite(unavailableCount) ? unavailableCount : null, evidenceRefs: [] },
+          { label: '等待后续重试', value: Number.isFinite(pendingCount) ? pendingCount : null, evidenceRefs: [] },
+          { label: '异常对局', value: failedMatchIds.length, evidenceRefs: [] },
+        ],
+        summary: partial ? 'PUBG Telemetry 同步部分完成，未完成项将继续重试。' : 'PUBG Telemetry 同步完成。',
+        dataUpdatedAt: asOf,
+        occurredAt: asOf,
+        worldLineClosing: true,
+      }),
+    },
+  };
+}
 
 function configString(config: PluginConfig, key: keyof PluginConfig, envKey: string): string | undefined {
   const configured = config[key];
@@ -865,7 +908,7 @@ const entry = defineToolPlugin({
         config,
         toolContext,
         false,
-        (service, input) => service.getTelemetrySyncReport(input as TelemetrySyncReportInput),
+        (service, input) => telemetrySyncReportWithNotification(service, input as TelemetrySyncReportInput),
       ),
     }),
   ],

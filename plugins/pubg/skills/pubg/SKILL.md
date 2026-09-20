@@ -142,17 +142,15 @@ Tool rules:
   and preserve the raw envelope/evidence alongside it; do not reconstruct a
   second user-facing summary from raw JSON.
 - For a review, use the tool's validated `presentation` contract as the factual
-  response boundary. Render its `dataUpdatedAt` and `dataSourceRange` with the
-  presentation formatter: same-local-day times use `HH:mm`, cross-day values use
-  `YYYY-MM-DD HH:mm`, and unknown values stay unknown. Never print raw UTC clock
-  components as if they were local time.
-- For stats, comparisons, and Match facts that do not carry a full presentation
-  contract, preserve `dataUpdatedAtLocal`, `dataSourceRange`, and `fromLocal` /
-  `toLocal` as machine evidence. Render `数据更新时间` and
-  `数据来源时间范围` from those fields when useful, but do not expose
-  implementation labels such as `Asia/Shanghai`, `UTC+08`, `自然日`, or `业务日`
-  by default; explain a requested boundary naturally as Beijing time or the
-  configured PUBG day boundary.
+  response boundary. Render its `dataUpdatedAt`/`dataUpdatedAtLocal` and
+  `dataSourceRange`/`fromLocal` with the presentation formatter: same-local-day
+  times use `HH:mm`, cross-day values use `YYYY-MM-DD HH:mm`, and unknown values
+  stay unknown. Never print raw UTC clock components as if they were local time.
+- Every native PUBG result carries a validated presentation and canonical
+  `displayText`. For final factual replies, use `displayText` instead of
+  reconstructing facts from raw fields; preserve evidence and any returned
+  local source range as 数据来源时间范围, and render `dataUpdatedAt` as 数据更新时间
+  through the presentation formatter.
 - For a comparison, render each returned segment's local range separately. Use
   `*Local` fields such as `startedAtLocal` for every other user-visible time. Do
   not substitute the current reply time for the source range; if the tool

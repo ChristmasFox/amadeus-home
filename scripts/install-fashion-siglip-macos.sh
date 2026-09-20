@@ -4,8 +4,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE_FILE="$ROOT_DIR/apps/fashion-siglip/server.py"
 REQUIREMENTS_FILE="$ROOT_DIR/apps/fashion-siglip/requirements-macos.txt"
-INSTALL_DIR="${FASHION_SIGLIP_INSTALL_DIR:-$HOME/Library/Application Support/ProductRadar/FashionSigLIP}"
-LABEL="com.productradar.fashion-siglip"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/host-profile.sh"
+amadeus_host_profile_load "$ROOT_DIR"
+INSTALL_DIR="$FASHION_SIGLIP_INSTALL_DIR"
+LABEL="$FASHION_SIGLIP_LABEL"
+PORT="$FASHION_SIGLIP_PORT"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 APPLY=0
 
@@ -17,7 +21,7 @@ Usage:
 
 Default is a dry-run. --apply creates a macOS venv, installs MPS-capable
 PyTorch/OpenCLIP dependencies, installs a LaunchAgent, starts the native worker
-on 0.0.0.0:18400, and waits for health reporting device=mps.
+on the host-profile port, and waits for health reporting device=mps.
 USAGE
 }
 
@@ -44,7 +48,7 @@ done
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'INSTALL_DIR=%s\n' "$INSTALL_DIR"
 printf 'PLIST=%s\n' "$PLIST"
-printf 'ENDPOINT=http://127.0.0.1:18400/health\n'
+printf 'ENDPOINT=http://127.0.0.1:%s/health\n' "$PORT"
 printf 'DEVICE=mps\n'
 
 if ((APPLY == 0)); then
@@ -73,7 +77,7 @@ if [[ -f "$PLIST" ]]; then
   printf 'ROLLBACK_PLIST=%s\n' "$backup"
 fi
 
-python3 - "$PLIST" "$INSTALL_DIR" "$venv_python" "$LABEL" <<'PY'
+python3 - "$PLIST" "$INSTALL_DIR" "$venv_python" "$LABEL" "$PORT" <<'PY'
 import os
 import plistlib
 import sys
@@ -83,6 +87,7 @@ plist_path = Path(sys.argv[1])
 install_dir = Path(sys.argv[2])
 python_path = sys.argv[3]
 label = sys.argv[4]
+port = sys.argv[5]
 model_dir = install_dir / "models"
 plist = {
     "Label": label,
@@ -97,7 +102,7 @@ plist = {
         "FASHION_SIGLIP_MODEL_VERSION": "Marqo/marqo-fashionSigLIP-v1",
         "FASHION_SIGLIP_DEVICE": "mps",
         "FASHION_SIGLIP_BIND": "0.0.0.0",
-        "FASHION_SIGLIP_PORT": "18400",
+        "FASHION_SIGLIP_PORT": port,
         "FASHION_SIGLIP_THREADS": "4",
         "HF_HOME": str(model_dir / "huggingface"),
         "TRANSFORMERS_CACHE": str(model_dir / "huggingface"),
@@ -144,7 +149,7 @@ launchctl kickstart -k "$launch_service"
 
 health=""
 for attempt in $(seq 1 360); do
-  if health="$(curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18400/health 2>/dev/null)"; then
+  if health="$(curl --fail --silent --show-error --max-time 3 "http://127.0.0.1:${PORT}/health" 2>/dev/null)"; then
     break
   fi
   if ((attempt % 12 == 0)); then

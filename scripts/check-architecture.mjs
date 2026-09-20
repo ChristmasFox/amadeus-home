@@ -26,6 +26,21 @@ function files(root) {
   return result;
 }
 
+function sourceFiles(root, extensions = /\.(?:ts|tsx|mjs|sh|py|yml|yaml|json)$/u) {
+  const result = [];
+  const visit = (directory) => {
+    if (!existsSync(directory)) return;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name === '.git') continue;
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) visit(path);
+      else if (extensions.test(entry.name)) result.push(path);
+    }
+  };
+  visit(root);
+  return result;
+}
+
 function checkForbiddenImports(root, relativeDirectory, pattern, label, errors) {
   const directory = join(root, relativeDirectory);
   for (const path of files(directory)) {
@@ -46,6 +61,15 @@ export function checkArchitecture(root = REPO_ROOT) {
     'plugins/amadeus/src/index.ts',
     'plugins/pubg/src/index.ts',
     'packages/presentation/src/pubg-registry.ts',
+    'packages/presentation/src/worldline/contracts.ts',
+    'packages/presentation/src/worldline/policy.ts',
+    'packages/presentation/src/worldline/adapter.ts',
+    'packages/presentation/src/worldline/vocabulary.ts',
+    'docs/INFRASTRUCTURE_CLASSIFICATION.md',
+    'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json',
+    'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md',
+    'scripts/host-profile.sh',
+    'scripts/migration-readiness.sh',
     'integrations/openclaw/workspace/SOUL.md',
     'integrations/openclaw/workspace/AGENTS.md',
     'package.json',
@@ -97,6 +121,35 @@ export function checkArchitecture(root = REPO_ROOT) {
   for (const name of registryToolNames) {
     const entry = registrySource.match(new RegExp(`^\\s+${name}:\\s*\\{([^}]*)\\}`, 'mu'))?.[1] ?? '';
     if (!/(?:classification):\s*['"](?:user-facing|intermediate|scheduled)['"]/u.test(entry)) errors.push(`PUBG presentation registry entry lacks classification: ${name}`);
+  }
+
+  const worldlineSource = text(root, 'packages/presentation/src/worldline/contracts.ts');
+  for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'homelab', 'nas', 'media']) {
+    if (!worldlineSource.includes(`'${producer}'`)) errors.push(`worldline producer registry lacks coverage: ${producer}`);
+  }
+
+  const forbiddenWorldlineVocabulary = ['SERN', 'Reading Steiner', 'Operation Skuld', '世界线收束', '世界线偏移'];
+  for (const relativeDirectory of ['packages/pubg-domain/src', 'apps/product-radar/src/core']) {
+    for (const path of files(join(root, relativeDirectory))) {
+      const content = readFileSync(path, 'utf8');
+      for (const token of forbiddenWorldlineVocabulary) if (content.includes(token)) errors.push(`${relativeDirectory} contains worldline presentation vocabulary: ${token}`);
+    }
+  }
+  for (const path of files(join(root, 'apps/product-radar/src/core'))) {
+    const content = readFileSync(path, 'utf8');
+    if (/owner-whatsapp|whatsapp.{0,40}recipient|telegram.{0,40}recipient/iu.test(content)) errors.push(`Product Radar core contains transport-specific owner destination: ${path.slice(root.length + 1)}`);
+  }
+
+  const migrationOnly = (relative) => relative.includes('/migration/') || relative.endsWith('/migration-cli.ts') || relative.endsWith('/migrate-pubg-data.ts');
+  for (const relativeDirectory of ['scripts', 'infra', 'integrations', 'apps/product-radar', 'plugins', 'packages']) {
+    for (const path of sourceFiles(join(root, relativeDirectory))) {
+      const relative = path.slice(root.length + 1);
+      if (relative === 'scripts/check-architecture.mjs' || relative === 'scripts/test-check-architecture.mjs' || relative === 'scripts/migration-readiness.sh') continue;
+      if (migrationOnly(relative)) continue;
+      const content = readFileSync(path, 'utf8');
+      if (/langbot|n8n-sandbox|legacy n8n runtime/iu.test(content)) errors.push(`active deployment source contains retired runtime reference: ${relative}`);
+      if (content.includes('/Users/blacksidev')) errors.push(`active deployment source contains old host path: ${relative}`);
+    }
   }
 
   try {

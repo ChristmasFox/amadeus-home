@@ -2,8 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MACHINE="ubuntu"
-COMPOSE_DIR="/var/lib/casaos/apps/product-radar"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/host-profile.sh"
+amadeus_host_profile_load "$ROOT_DIR"
+MACHINE="$ORBSTACK_MACHINE"
+COMPOSE_DIR="$RADAR_APP_DIR"
 COMPOSE_TEMPLATE="$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml"
 APPLY=0
 BUILD=0
@@ -28,6 +31,21 @@ fail() {
   printf '%s\n' "$*" >&2
   exit 2
 }
+
+DOCKER_BUILD_PROXY_ARGS=()
+for proxy_name in HTTP_PROXY HTTPS_PROXY; do
+  case "$proxy_name" in
+    HTTP_PROXY) proxy_value="${HTTP_PROXY:-}" ;;
+    HTTPS_PROXY) proxy_value="${HTTPS_PROXY:-}" ;;
+  esac
+  if [[ -n "$proxy_value" ]]; then
+    proxy_value="$(printf '%s' "$proxy_value" | sed -E 's#(https?://)(127\\.0\\.0\\.1|localhost)(:|/|$)#\\1host.docker.internal\\3#')"
+    DOCKER_BUILD_PROXY_ARGS+=(--build-arg "$proxy_name=$proxy_value")
+  fi
+done
+if [[ -n "${NO_PROXY:-}" ]]; then
+  DOCKER_BUILD_PROXY_ARGS+=(--build-arg "NO_PROXY=$NO_PROXY")
+fi
 
 while (($#)); do
   case "$1" in
@@ -58,9 +76,10 @@ fi
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'BUILD=%s\n' "$([[ $BUILD -eq 1 ]] && printf explicit || printf disabled)"
 printf 'PRODUCT_IMAGE=%s\n' "${PRODUCT_IMAGE:-unchanged-compose-image}"
-printf '%s\n' 'FASHION_SIGLIP_RUNTIME=macOS native LaunchAgent + Apple MPS on 0.0.0.0:18400'
+printf 'FASHION_SIGLIP_RUNTIME=macOS native LaunchAgent + Apple MPS on 0.0.0.0:%s\n' "$FASHION_SIGLIP_PORT"
 printf 'MACHINE=%s\n' "$MACHINE"
 printf 'COMPOSE_DIR=%s\n' "$COMPOSE_DIR"
+printf 'AMADEUS_NETWORK=%s\n' "$AMADEUS_NETWORK_NAME"
 printf '%s\n' 'COMPOSE_COMMAND=docker compose up -d --no-build'
 
 if ((APPLY == 0)); then
@@ -89,11 +108,14 @@ git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing RELEASE build with st
 "$ROOT_DIR/scripts/install-fashion-siglip-macos.sh" --apply
 
 docker buildx build --load --progress=plain \
+  "${DOCKER_BUILD_PROXY_ARGS[@]}" \
   --file "$ROOT_DIR/apps/product-radar/Dockerfile" \
   --tag "$PRODUCT_IMAGE" \
-  "$ROOT_DIR/apps/product-radar"
+  "$ROOT_DIR"
 
 docker save "$PRODUCT_IMAGE" | orb -m "$MACHINE" -u root docker load
+
+orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create "$AMADEUS_NETWORK_NAME" >/dev/null
 
 template_content="$(<"$COMPOSE_TEMPLATE")"
 remote_compose_file="$COMPOSE_DIR/docker-compose.yml"
@@ -101,7 +123,7 @@ remote_product_image="$PRODUCT_IMAGE"
 
 # The template is sent over stdin/argv; no credential or .env value is copied
 # from the Mac. The remote script keeps timestamped backups before activation.
-orb -m "$MACHINE" -u root python3 - "$remote_compose_file" "$remote_product_image" "$template_content" <<'PY'
+orb -m "$MACHINE" -u root python3 - "$remote_compose_file" "$remote_product_image" "$template_content" "$FASHION_SIGLIP_PORT" <<'PY'
 import re
 import shutil
 import sys
@@ -111,6 +133,7 @@ from pathlib import Path
 compose_file = Path(sys.argv[1])
 product_image = sys.argv[2]
 template = sys.argv[3]
+fashion_port = sys.argv[4]
 if not compose_file.exists():
     raise SystemExit(f"compose file not found: {compose_file}")
 old = compose_file.read_text()
@@ -136,7 +159,7 @@ def set_env(text: str, name: str, value: str) -> str:
 
 env_text = set_env(env_text, "PRODUCT_RADAR_IMAGE", product_image)
 env_text = set_env(env_text, "PRODUCT_RADAR_IMAGE_MATCHER_PROVIDER", "hybrid")
-env_text = set_env(env_text, "FASHION_SIGLIP_BASE_URL", "http://host.docker.internal:18400")
+env_text = set_env(env_text, "FASHION_SIGLIP_BASE_URL", "http://host.docker.internal:" + fashion_port)
 env_file.write_text(env_text)
 print(f"ROLLBACK_COMPOSE={compose_backup}")
 print(f"ROLLBACK_ENV={env_backup}")
@@ -155,14 +178,14 @@ orb -m "$MACHINE" -u root bash -lc "
   curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health
   worker_ready=0
   for _ in \$(seq 1 180); do
-    if docker exec product-radar node -e 'fetch(\"http://host.docker.internal:18400/health\").then(async r=>{if(!r.ok)process.exit(1); const p=await r.json(); if(p.device!==\"mps\")process.exit(1)}).catch(()=>process.exit(1))' >/dev/null 2>&1; then
+    if docker exec product-radar node -e 'fetch(\"http://host.docker.internal:'"$FASHION_SIGLIP_PORT"'/health\").then(async r=>{if(!r.ok)process.exit(1); const p=await r.json(); if(p.device!==\"mps\")process.exit(1)}).catch(()=>process.exit(1))' >/dev/null 2>&1; then
       worker_ready=1
       break
     fi
     sleep 5
   done
   test "\$worker_ready" = 1
-  docker exec product-radar node -e 'fetch(\"http://host.docker.internal:18400/health\").then(async r=>{if(!r.ok)process.exit(1); console.log(await r.text())}).catch(()=>process.exit(1))'
+  docker exec product-radar node -e 'fetch(\"http://host.docker.internal:'"$FASHION_SIGLIP_PORT"'/health\").then(async r=>{if(!r.ok)process.exit(1); console.log(await r.text())}).catch(()=>process.exit(1))'
   docker ps --filter name=product-radar --format '{{.Names}} {{.Image}} {{.Status}}'
 "
 

@@ -87,7 +87,6 @@
           "homeLabGlancesUrl": "http://192.168.5.3:61208/api/4/quicklook",
           "homeLabUptimeUrl": "http://192.168.5.3:61208/api/4/uptime",
           "macSshHost": "host.docker.internal",
-          "macSshUser": "blacksidev",
           "macSshKeyFile": "/run/secrets/mac_ssh_key",
           "kookApiBaseUrl": "https://www.kookapp.cn/api/v3",
           "kookTokenFile": "/run/secrets/kook_bot_token",

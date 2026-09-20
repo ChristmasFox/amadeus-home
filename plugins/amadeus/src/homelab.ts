@@ -1,4 +1,5 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import { adaptWorldlineNotification } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 import { requestJson } from './http.js';
 import { isTrustedOwnerContext, ownerEvent, type OwnerNotifier } from './owner.js';
@@ -7,6 +8,10 @@ function healthy(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const item = value as Record<string, unknown>;
   return item.statusCode === undefined ? true : Number(item.statusCode) >= 200 && Number(item.statusCode) < 300;
+}
+
+function metric(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
 async function probe(url: string): Promise<{ ok: boolean; data?: unknown }> {
@@ -37,11 +42,11 @@ export async function homelabStatus(config: AmadeusConfig, context: OpenClawPlug
     '🖥 HomeLab Status',
     '',
     '⚙️ CPU',
-    `使用率：${Number(quick.cpu ?? 0).toFixed(1)}%`,
+    `使用率：${metric(quick.cpu) === null ? '未知' : `${metric(quick.cpu)!.toFixed(1)}%`}`,
     `核心：${String(quick.cpu_log_core ?? quick.cpu_cores ?? 'N/A')}`,
     '',
     '🧠 Memory',
-    `RAM：${Number(quick.mem ?? 0).toFixed(1)}%`,
+    `RAM：${metric(quick.mem) === null ? '未知' : `${metric(quick.mem)!.toFixed(1)}%`}`,
     '',
     '🐳 Services',
     ...Object.entries(services).map(([name, ok]) => `${ok ? '✅' : '❌'} ${name}`),
@@ -54,17 +59,25 @@ export async function homelabStatus(config: AmadeusConfig, context: OpenClawPlug
   if (notifyOwner) {
     if (!isTrustedOwnerContext(context)) throw new Error('owner notification requires owner identity');
     const occurredAt = new Date().toISOString();
-    notification = await notifier.notify(ownerEvent({
-      type: 'owner_notification',
+    notification = await notifier.notify(ownerEvent(adaptWorldlineNotification({
+      type: 'worldline_notification_intent',
       eventType: 'homelab_status',
+      kind: Object.values(services).every(Boolean) ? 'homelab_status' : 'network_degraded',
       severity: Object.values(services).every(Boolean) ? 'success' : 'warning',
+      significance: Object.values(services).every(Boolean) ? 'notable' : 'major',
       eventKey: `homelab-status:${occurredAt.slice(0, 16)}`,
       source: 'homelab-status',
       headline: 'HomeLab 状态',
-      facts: Object.entries(services).map(([name, ok]) => ({ label: name, value: ok, evidenceRefs: [] })),
-      summary: text,
+      facts: [
+        { label: 'CPU 使用率', value: metric(quick.cpu), evidenceRefs: [] },
+        { label: 'CPU 核心', value: metric(quick.cpu_log_core ?? quick.cpu_cores), evidenceRefs: [] },
+        { label: '内存使用率', value: metric(quick.mem), evidenceRefs: [] },
+        ...Object.entries(services).map(([name, ok]) => ({ label: name, value: ok, evidenceRefs: [] })),
+        { label: '运行时间', value: uptime.slice(0, 300), evidenceRefs: [] },
+      ],
+      summary: 'HomeLab 服务与资源状态检查完成。',
       occurredAt,
-    }));
+    })));
   }
   return { text, services, ...(notification === undefined ? {} : { notification }) };
 }

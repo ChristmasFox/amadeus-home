@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Write one channel-free owner event to the OpenClaw notification outbox.
-# The OpenClaw Amadeus plugin is the only component that knows the WhatsApp
-# owner target and performs delivery.
+# The OpenClaw Amadeus plugin is the only component that performs owner delivery.
 set -u
 
 OUTBOX_DIR="${OWNER_NOTIFICATION_OUTBOX_DIR:-${CODEX_NOTIFICATION_OUTBOX_DIR:-/tmp/openclaw-owner-notifications}}"
@@ -65,6 +64,8 @@ event = {
     "type": "owner_notification",
     "eventType": clean(source, 128),
     "severity": "info",
+    "significance": "notable",
+    "theme": "worldline_observation",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
     "headline": clean(headline, 200) or clean(source, 128),
@@ -124,6 +125,8 @@ event = {
     "type": "owner_notification",
     "eventType": clean(source, 128),
     "severity": "info",
+    "significance": "notable",
+    "theme": "worldline_observation",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
     "headline": clean(headline, 200) or clean(source, 128),

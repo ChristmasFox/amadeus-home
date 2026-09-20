@@ -2,6 +2,9 @@
 set -Eeuo pipefail
 
 REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/host-profile.sh"
+amadeus_host_profile_load "$REPO_ROOT"
 CHECK_ONLY=0
 INIT_ENV="${INIT_ENV:-0}"
 
@@ -119,7 +122,7 @@ else
 fi
 
 if command -v orb >/dev/null 2>&1; then
-  printf '%s\n' 'OK: OrbStack CLI detected; canonical deployment target is machine ubuntu.'
+  printf 'OK: OrbStack CLI detected; canonical deployment target is machine %s.\n' "$ORBSTACK_MACHINE"
 else
   printf '%s\n' 'WARN: orb is unavailable; install/start OrbStack before running CasaOS services.'
 fi
