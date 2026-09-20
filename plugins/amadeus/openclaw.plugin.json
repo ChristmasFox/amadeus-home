@@ -36,7 +36,18 @@
     },
     "additionalProperties": false
   },
-  "skills": ["skills/amadeus", "skills/identity", "skills/market", "skills/vps"],
+  "skills": [
+    "skills/amadeus",
+    "skills/identity",
+    "skills/product-radar",
+    "skills/media-organizer",
+    "skills/nas",
+    "skills/homelab",
+    "skills/kook",
+    "skills/market",
+    "skills/owner-notification",
+    "skills/vps"
+  ],
   "contracts": {
     "tools": [
       "amadeus_product_radar",

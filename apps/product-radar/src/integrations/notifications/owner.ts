@@ -5,12 +5,21 @@ import type { NotificationChannel, NotificationMessage } from '../../core/notifi
 
 export interface OwnerNotificationEvent {
   version: 1;
+  type: 'owner_notification';
+  eventType: string;
+  severity: 'info' | 'success' | 'warning' | 'error';
   eventKey: string;
   source: string;
-  title: string;
-  message: string;
+  headline: string;
+  facts: [];
+  summary: string;
   occurredAt: string;
 }
+
+type OwnerNotificationInput = Pick<OwnerNotificationEvent, 'eventKey' | 'source' | 'headline' | 'summary' | 'occurredAt'> & {
+  eventType?: string;
+  severity?: OwnerNotificationEvent['severity'];
+};
 
 function fileId(eventKey: string): string {
   return createHash('sha256').update(eventKey).digest('hex').slice(0, 40);
@@ -21,18 +30,22 @@ function bounded(value: string, max: number): string {
 }
 
 export async function enqueueOwnerNotification(
-  event: Omit<OwnerNotificationEvent, 'version'>,
+  event: OwnerNotificationInput,
   outboxDir: string,
 ): Promise<string> {
   const normalized: OwnerNotificationEvent = {
     version: 1,
+    type: 'owner_notification',
+    eventType: bounded(event.eventType ?? `product_radar_${event.source}`, 128),
+    severity: event.severity ?? 'info',
     eventKey: bounded(event.eventKey, 256),
     source: bounded(event.source, 128),
-    title: bounded(event.title, 200),
-    message: bounded(event.message, 16_000),
+    headline: bounded(event.headline, 200),
+    facts: [],
+    summary: bounded(event.summary, 16_000),
     occurredAt: bounded(event.occurredAt, 64),
   };
-  if (!normalized.eventKey || !normalized.source || !normalized.message) throw new Error('owner notification requires eventKey, source, and message');
+  if (!normalized.eventKey || !normalized.source || !normalized.summary) throw new Error('owner notification requires eventKey, source, and summary');
   await mkdir(outboxDir, { recursive: true, mode: 0o700 });
   const id = fileId(normalized.eventKey);
   const pending = join(outboxDir, `${id}.pending.json`);
@@ -63,10 +76,11 @@ export class OwnerNotificationChannel implements NotificationChannel {
 
   async send(message: NotificationMessage): Promise<void> {
     await enqueueOwnerNotification({
+      eventType: `product_radar_${message.event.type}`,
       eventKey: message.event.eventKey,
       source: `product-radar:${message.event.type}`,
-      title: 'Product Radar',
-      message: message.text,
+      headline: 'Product Radar',
+      summary: message.text,
       occurredAt: message.event.occurredAt,
     }, this.outboxDir);
   }

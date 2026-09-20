@@ -157,9 +157,13 @@ test('owner notification channel writes a channel-free idempotent outbox event',
     const file = files[0]!;
     const body = JSON.parse(await readFile(join(directory, file), 'utf8')) as Record<string, unknown>;
     assert.equal(body.version, 1);
+    assert.equal(body.type, 'owner_notification');
     assert.equal(body.eventKey, 'event');
     assert.equal(body.source, 'product-radar:ListingMatchedEvent');
-    assert.equal(body.message, 'hello');
+    assert.equal(body.eventType, 'product_radar_ListingMatchedEvent');
+    assert.equal(body.headline, 'Product Radar');
+    assert.equal(body.summary, 'hello');
+    assert.equal('message' in body, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

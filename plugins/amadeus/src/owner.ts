@@ -1,17 +1,21 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import type { OwnerNotificationPresentation } from '@agent/presentation';
+import { assertValid, renderOwnerNotification, validateOwnerNotificationPresentation } from '@agent/presentation';
 import { readRequiredFile, type AmadeusConfig } from './config.js';
 
-export interface OwnerEvent {
+export interface OwnerEvent extends OwnerNotificationPresentation {
   version: 1;
+}
+
+interface LegacyOwnerEvent {
   eventKey: string;
   source: string;
-  title: string;
+  title?: string;
   message: string;
-  occurredAt: string;
+  occurredAt?: string;
 }
 
 export function isTrustedOwnerContext(context: OpenClawPluginToolContext): boolean {
@@ -36,19 +40,45 @@ function clean(value: string, max: number): string {
   return value.replace(/[\u0000\r]/gu, '').trim().slice(0, max);
 }
 
-function normalize(value: unknown): OwnerEvent {
-  if (!value || typeof value !== 'object') throw new Error('invalid owner notification');
-  const item = value as Record<string, unknown>;
+function legacyPresentation(item: Record<string, unknown>): OwnerNotificationPresentation {
   const eventKey = clean(String(item.eventKey ?? ''), 256);
   const source = clean(String(item.source ?? ''), 128);
   const title = clean(String(item.title ?? ''), 200);
   const message = clean(String(item.message ?? ''), 16_000);
   const occurredAt = clean(String(item.occurredAt ?? new Date().toISOString()), 64);
   if (!eventKey || !source || !message) throw new Error('owner notification requires eventKey, source, and message');
-  return { version: 1, eventKey, source, title, message, occurredAt };
+  const hasClosing = /El Psy Kongroo\.\s*$/u.test(message);
+  const summary = message.replace(/\s*El Psy Kongroo\.\s*$/u, '').trim();
+  return assertValid(validateOwnerNotificationPresentation({
+    type: 'owner_notification',
+    eventType: source,
+    severity: 'info',
+    eventKey,
+    source,
+    headline: title || source,
+    facts: [],
+    ...(summary ? { summary } : {}),
+    occurredAt,
+    ...(hasClosing ? { worldLineClosing: true } : {}),
+  }));
 }
 
-export async function enqueueOwnerEvent(event: OwnerEvent, outboxDir: string): Promise<'queued' | 'already-pending' | 'already-sent'> {
+function normalize(value: unknown): OwnerEvent {
+  if (!value || typeof value !== 'object') throw new Error('invalid owner notification');
+  const item = value as Record<string, unknown>;
+  const candidate = item.type === 'owner_notification'
+    ? value
+    : item.presentation && typeof item.presentation === 'object'
+      ? item.presentation
+      : undefined;
+  if (candidate) {
+    const presentation = assertValid(validateOwnerNotificationPresentation(candidate));
+    return { version: 1, ...presentation };
+  }
+  return { version: 1, ...legacyPresentation(item) };
+}
+
+export async function enqueueOwnerEvent(event: OwnerEvent | LegacyOwnerEvent, outboxDir: string): Promise<'queued' | 'already-pending' | 'already-sent'> {
   const normalized = normalize(event);
   await mkdir(outboxDir, { recursive: true, mode: 0o700 });
   const id = idFor(normalized.eventKey);
@@ -104,14 +134,27 @@ function splitMessage(message: string, limit = 2_800): string[] {
 }
 
 function notificationParts(event: OwnerEvent): OwnerEvent[] {
-  const chunks = splitMessage(event.message);
+  const rendered = renderOwnerNotification(event, { now: event.occurredAt });
+  if (rendered.length <= 2_800) return [event];
+  const summary = event.summary ?? '';
+  if (!summary) return [event];
+  const chunks = splitMessage(summary);
   if (chunks.length === 1) return [event];
-  return chunks.map((message, index) => ({
-    ...event,
-    eventKey: `${event.eventKey}:part:${index + 1}/${chunks.length}`,
-    title: `${event.title || event.source} (${index + 1}/${chunks.length})`,
-    message,
-  }));
+  return chunks.map((summaryPart, index) => {
+    const part: OwnerNotificationPresentation = {
+      type: 'owner_notification',
+      eventType: event.eventType,
+      severity: event.severity,
+      eventKey: `${event.eventKey}:part:${index + 1}/${chunks.length}`,
+      source: event.source,
+      headline: `${event.headline} (${index + 1}/${chunks.length})`,
+      facts: [],
+      summary: summaryPart,
+      occurredAt: event.occurredAt,
+      ...(index === chunks.length - 1 && event.worldLineClosing ? { worldLineClosing: true } : {}),
+    };
+    return { version: 1, ...assertValid(validateOwnerNotificationPresentation(part)) };
+  });
 }
 
 interface GatewayRuntime {
@@ -139,7 +182,7 @@ export class OwnerNotifier {
       channel: 'whatsapp',
       to: target,
       accountId: this.config.ownerWhatsappAccountId,
-      message: event.title ? `${event.title}\n\n${event.message}` : event.message,
+      message: renderOwnerNotification(event, { now: event.occurredAt }),
       idempotencyKey: event.eventKey,
     }, { timeoutMs: 20_000 });
   }
@@ -195,12 +238,12 @@ export class OwnerNotifier {
   }
 }
 
-export function ownerEvent(input: { eventKey: string; source: string; title: string; message: string; occurredAt?: string }): OwnerEvent {
-  return normalize({ version: 1, ...input, occurredAt: input.occurredAt ?? new Date().toISOString() });
+export function ownerEvent(input: OwnerNotificationPresentation | LegacyOwnerEvent): OwnerEvent {
+  return normalize('type' in input ? input : { version: 1, ...input, occurredAt: input.occurredAt ?? new Date().toISOString() });
 }
 
 export function ownerEventForContext(
-  input: { eventKey: string; source: string; title: string; message: string; occurredAt?: string },
+  input: OwnerNotificationPresentation | LegacyOwnerEvent,
   context: OpenClawPluginToolContext,
 ): OwnerEvent {
   const event = ownerEvent(input);

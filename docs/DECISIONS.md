@@ -25,6 +25,18 @@ Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 群成员和 Codex 通
 投递；Telegram/KOOK 可以保留聊天入口，但不再作为 proactive notification channel。发送
 失败保留 pending 文件并重试，不能把入队当作已送达。
 
+## Presentation 与时间 ownership
+
+跨能力用户输出统一经过 `packages/presentation` 的 runtime-validated contract 和
+deterministic renderer。PUBG 单局/周期复盘和 owner notification 的结构由 contract 约束；
+PUBG 复盘工具返回结构化 presentation，OwnerNotifier 在固定发送边界再次校验并渲染，未通过
+校验的事件不会作为成功通知发送。
+
+Instant 以 ISO 保存，PUBG relative query 的 06:00 日界线只由 Domain resolver 拥有，Telemetry
+daily report 由独立 use case 按 calendar day 汇总；display time 只由 presentation formatter
+负责。默认同日只显示 `HH:mm`，跨日显示 `YYYY-MM-DD HH:mm`，不把实现时区或 resolver metadata
+写进默认用户正文。
+
 ## 一次性切换
 
 迁移脚本默认 dry-run；`--apply --build-auto` 按 live immutable image 的 Git commit 只

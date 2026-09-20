@@ -47,6 +47,29 @@ git log -5 --oneline --decorate
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
 
+## Architecture ownership matrix
+
+| Concern | Sole owner | Boundary rule |
+| --- | --- | --- |
+| Persona, tone, and general conversation behavior | `integrations/openclaw/workspace/SOUL.md` | Never place capability workflow, identity policy, or time semantics here. |
+| Cross-capability invariants and safety | `integrations/openclaw/workspace/AGENTS.md` | Keep this file global and platform-neutral; capability details belong to Skills. |
+| Capability intent, tool ordering, and factual limits | The capability's `plugins/*/skills/*/SKILL.md` | Scope instructions to the named capability; do not create keyword routing or a second planner. |
+| Deterministic domain facts and state transitions | `packages/*-domain` | No channel, OpenClaw, sender, or transport imports. |
+| User-facing structured contracts and rendering | `packages/presentation` | Validate before rendering; preserve null/unknown and evidence references. |
+| Native tool registration and platform adapters | `plugins/*/src` | Keep bootstrap thin; platform-specific behavior stays at the plugin boundary. |
+| Owner notification delivery and retry | `plugins/amadeus/src/owner.ts` plus owner outbox | Callers provide a structured event; only the fixed owner WhatsApp path may deliver it. |
+
+## New capability planning checklist
+
+Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
+
+- What user intents and explicit confirmation/identity boundaries does it own?
+- Which deterministic domain package, native tools, external services, and Skill own each step?
+- What structured result/presentation contract, evidence references, unknown states, and time semantics are required?
+- Which side effects, outbox/idempotency keys, secrets, backups, and rollback checkpoints are in scope?
+- Which focused tests, architecture checks, `pnpm check:secrets`, release build, and real acceptance evidence prove completion?
+- Confirm that no SOUL/AGENTS workflow text, keyword router, transport-specific business logic, second runtime, or notification fallback is being introduced.
+
 ## Amadeus Gateway VPS
 
 - 本项目的个人公网 VPS 逻辑名称为 `amadeus-gateway`，运行 Ubuntu 24.04，定位为轻量公网 Gateway，而不是 Codex 执行主机。

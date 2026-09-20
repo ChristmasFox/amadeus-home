@@ -29,6 +29,10 @@ assert_line "$identity" 'CHANGE_SCOPE_WORKFLOW=AMADEUS_IDENTITY'
 amadeus="$(scope plugins/amadeus/src/identity.ts)"
 assert_line "$amadeus" 'CHANGE_SCOPE_WORKFLOW=AMADEUS_IDENTITY'
 
+presentation="$(scope packages/presentation/src/index.ts)"
+assert_line "$presentation" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_line "$presentation" 'CHANGE_SCOPE_WORKFLOW=PRESENTATION'
+
 product="$(scope apps/product-radar/src/core/application.ts)"
 assert_line "$product" 'CHANGE_SCOPE_LEVEL=RUNTIME'
 assert_line "$product" 'CHANGE_SCOPE_WORKFLOW=PRODUCT_RADAR'

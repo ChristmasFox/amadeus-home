@@ -46,15 +46,9 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   } as unknown as OpenClawPluginApi;
 
   entry.register(api);
-  assert.equal(hooks.has('before_prompt_build'), true);
+  assert.equal(hooks.has('before_prompt_build'), false);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
-
-  const promptResult = hooks.get('before_prompt_build')?.({ prompt: '胶昨天战绩', messages: [] }, {}) as { appendSystemContext?: string } | undefined;
-  assert.match(promptResult?.appendSystemContext ?? '', /identity_resolve/);
-  assert.match(promptResult?.appendSystemContext ?? '', /personIds/);
-  assert.match(promptResult?.appendSystemContext ?? '', /reference=self/);
-  assert.match(promptResult?.appendSystemContext ?? '', /team=true/);
 
   hooks.get('before_dispatch')?.(
     { sessionKey: 'agent:main:hook-test', channel: 'whatsapp', replyToSender: 'reply-1' },

@@ -126,16 +126,21 @@ Tool rules:
 - Preserve the returned `status`, `coverage`, `asOf`, `metricVersion`,
   `queryResolved`, and `evidenceRefs` while explaining results. `partial`,
   `no_matches`, and `error` are meaningful outcomes, not successful data.
-- Every user-facing PUBG answer must include `数据更新时间：<dataUpdatedAtLocal>` from the
-  latest relevant tool result. `dataUpdatedAt` is the raw machine timestamp and
-  `dataUpdatedAtLocal` is its authoritative Beijing-local display form; never print
-  the raw UTC clock components as if they were Asia/Shanghai time.
-- Every user-facing PUBG answer must also include the tool's
-  `dataSourceRange`: render `数据来源时间范围：<fromLocal> 至 <toLocal>` and
-  include `displayTimezone`, the configured timezone, and business-day boundary.
-  For a comparison, render each returned segment's local range separately. Use
-  `*Local` fields such as `startedAtLocal` for every other user-visible time.
-  Do not substitute the current reply time for the source range; if the tool
+- For a review, use the tool's validated `presentation` contract as the factual
+  response boundary. Render its `dataUpdatedAt` and `dataSourceRange` with the
+  presentation formatter: same-local-day times use `HH:mm`, cross-day values use
+  `YYYY-MM-DD HH:mm`, and unknown values stay unknown. Never print raw UTC clock
+  components as if they were local time.
+- For stats, comparisons, and Match facts that do not carry a full presentation
+  contract, preserve `dataUpdatedAtLocal`, `dataSourceRange`, and `fromLocal` /
+  `toLocal` as machine evidence. Render `数据更新时间` and
+  `数据来源时间范围` from those fields when useful, but do not expose
+  implementation labels such as `Asia/Shanghai`, `UTC+08`, `自然日`, or `业务日`
+  by default; explain a requested boundary naturally as Beijing time or the
+  configured PUBG day boundary.
+- For a comparison, render each returned segment's local range separately. Use
+  `*Local` fields such as `startedAtLocal` for every other user-visible time. Do
+  not substitute the current reply time for the source range; if the tool
   returns null, say that the source range is unknown.
 - Telemetry status is explicit: `HIT` means the feature cache was read,
   `FETCHED` + `cacheStatus=FETCHED` + `cacheLookup=MISS` + `availability=AVAILABLE`

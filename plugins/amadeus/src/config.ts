@@ -1,6 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 
+export const pluginConfigSchema = {
+  jsonSchema: { type: 'object', additionalProperties: true },
+} as const;
+
 export interface AmadeusConfig {
   productRadarBaseUrl: string;
   productRadarApiKeyFile?: string;

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { OwnerNotificationPresentation } from '@agent/presentation';
 import type { TeamConfig, TeamPlayer } from '../config/team.js';
 import type { Coverage, DataStatus, Evidence, SourceInfo } from '../schema/status.js';
 import type { CanonicalQuery, GroupBy, Metric, Selector } from '../schema/query.js';
@@ -277,27 +278,6 @@ function previousLocalDate(now: Date, timezone: string): string {
   return localDateLabel(now.getTime() - 24 * 60 * 60 * 1000, timezone);
 }
 
-function formatDisplayTime(value: string, timezone: string): string {
-  const timestamp = Date.parse(value);
-  if (!Number.isFinite(timestamp)) return value;
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date(timestamp));
-    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
-  } catch {
-    return value;
-  }
-}
-
 function summarizePrefetchRuns(reportDate: string, timezone: string, runs: TelemetryPrefetchRun[]): TelemetrySyncSummary {
   const sum = (selector: (run: TelemetryPrefetchRun) => number): number => runs.reduce((total, run) => total + selector(run), 0);
   return {
@@ -316,35 +296,29 @@ function summarizePrefetchRuns(reportDate: string, timezone: string, runs: Telem
   };
 }
 
-function pubgSyncNotification(summary: TelemetrySyncSummary, asOf: string): { title: string; source: string; eventKey: string; message: string; occurredAt: string } {
+function pubgSyncNotification(summary: TelemetrySyncSummary, asOf: string): OwnerNotificationPresentation {
   const state = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? '部分同步，未完成项已保留并会继续重试' : '同步完成，当前世界线稳定';
-  const displayAsOf = formatDisplayTime(asOf, summary.timezone);
-  const message = [
-    '收件人：Arthur',
-    '主题：PUBG 今日自动同步结果',
-    `日期：${summary.reportDate}（${summary.timezone}，自然日）`,
-    `数据更新时间：${displayAsOf}（${summary.timezone}）`,
-    '',
-    '观测记录：',
-    `- 定时检查：${summary.runCount} 次`,
-    `- 发现新对局：${summary.newMatchCount} 场`,
-    `- Telemetry 新拉取并写入缓存：${summary.fetchedCount} 场`,
-    `- Telemetry 命中缓存：${summary.cacheHitCount} 场`,
-    `- 暂不可用：${summary.unavailableCount} 场`,
-    `- 等待后续重试：${summary.pendingCount} 场`,
-    `- Match API/Telemetry 异常对局：${summary.failedMatchIds.length} 场`,
-    '',
-    `世界线状态：${state}。`,
-    'D-mail 已写入观测记录；若有延迟，下一轮同步将沿当前世界线继续收束。',
-    '',
-    'El Psy Kongroo.',
-  ].join('\n');
   return {
-    title: 'Amadeus • D-mail',
+    type: 'owner_notification',
+    eventType: 'pubg_telemetry_sync',
+    severity: summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? 'warning' : 'success',
+    headline: 'Amadeus • D-mail',
     source: 'pubg-sync',
     eventKey: `pubg-sync:${summary.reportDate}`,
-    message,
+    facts: [
+      { label: '日期', value: summary.reportDate, evidenceRefs: [] },
+      { label: '定时检查', value: summary.runCount, evidenceRefs: [] },
+      { label: '发现新对局', value: summary.newMatchCount, evidenceRefs: [] },
+      { label: 'Telemetry 新拉取并写入缓存', value: summary.fetchedCount, evidenceRefs: [] },
+      { label: 'Telemetry 命中缓存', value: summary.cacheHitCount, evidenceRefs: [] },
+      { label: '暂不可用', value: summary.unavailableCount, evidenceRefs: [] },
+      { label: '等待后续重试', value: summary.pendingCount, evidenceRefs: [] },
+      { label: 'Match API/Telemetry 异常对局', value: summary.failedMatchIds.length, evidenceRefs: [] },
+    ],
+    summary: `PUBG 今日自动同步结果。世界线状态：${state}。D-mail 已写入观测记录；若有延迟，下一轮同步将沿当前世界线继续收束。`,
+    dataUpdatedAt: asOf,
     occurredAt: asOf,
+    worldLineClosing: true,
   };
 }
 
