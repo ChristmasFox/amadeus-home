@@ -1,3 +1,3 @@
-# Amadeus 1.4.2
+# Amadeus 1.4.3
 
-统一主动通知为结构化、确定性的 Worldline Presentation，Product Radar 与市场、PUBG Sync、媒体、HomeLab、VPS、Codex/release 统一进入 owner outbox；清理已退休运行时与 stale host 假设，新增 host profile、FashionSigLIP inventory、Operation Skuld migration manifest、readiness 检查、备份/校验和恢复演练及 Mac mini runbook。
+隔离 WhatsApp 私聊会话，避免不同发送者共享历史上下文；部署预检强制检查按账号、渠道和对端隔离，并在发布完成后确认 owner 通知已送达。

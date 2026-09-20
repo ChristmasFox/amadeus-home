@@ -14,6 +14,9 @@
   timestamps, coverage, or successful execution. Preserve meaningful status,
   coverage, freshness, query-resolution, and evidence fields; report
   `partial`, `no_matches`, and `error` as such.
+- Every direct-message channel must use a per-account/channel/peer session
+  scope. Never use the shared `main` session for open DMs: sender tool policy
+  does not isolate conversation history, memory, or model context.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.
