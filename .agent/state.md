@@ -13,9 +13,11 @@ live evidence、doctor 和 `OPERATION_SKULD=READY` 均通过，详见 deployment
 
 2026-09-20 服务更新已完成：Immich `v2.5.3` → `v3.2.2`，并从旧 pgvecto.rs 数据库迁移到
 VectorChord；server、machine-learning、Postgres、Redis 均 healthy，公网 ping 通过。9router
-已从 mutable `latest` 更新并固定为 `0.5.75`，dashboard 公网 200、未带 key 的 API 保持 401。
+已从 mutable `latest` 更新到 npm `0.5.81`，当前 live image 为 `local/9router:0.5.81`，dashboard
+公网 200、未带 key 的 API 保持 401，容器重启次数为 0。
 恢复点位于 `/DATA/AppData/immich/backups/pre-update-20260920T132238Z` 和
-`/DATA/AppData/9router/backups/pre-update-20260920T132238Z`；Claw/OpenClaw 未修改。
+`/DATA/AppData/9router/backups/pre-update-20260920T132238Z`，npm 切换恢复点为
+`/DATA/AppData/9router/backups/pre-npm-0.5.81-20260920T142239Z`；Claw/OpenClaw 未修改。
 
 1.4.2 通知 follow-up：初次 deploy 的 owner smoke 只写入 checkpoint 的 `owner-smoke`，未写入生产
 owner outbox，故没有触发 WhatsApp worker；用户要求后已用 `amadeus-release:1.4.2:manual-resend`

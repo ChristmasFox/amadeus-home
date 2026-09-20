@@ -32,12 +32,17 @@ Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 checksum healthcheck，加入 `shm_size: 128mb`。Immich 数据库原地启动迁移后四个容器均 healthy，
 扩展检查包含 `vchord 0.4.3`、`vector 0.8.1` 和 `vectors 0.2.0`。
 
-9router 从 `decolua/9router:latest` 更新并固定为 `decolua/9router:0.5.75`，持久化 data、端口
+9router 先从 `decolua/9router:latest` 固定到 `0.5.75`，随后因 npm `latest` 已为 `0.5.81`，基于
+固定的 `decolua/9router:0.5.75` 构建并切换到仓库内 Dockerfile 生成的 `local/9router:0.5.81`。
+容器使用 npm 包自带的直接 server 入口，避免桌面 CLI 在 headless 容器中退出；持久化 data、端口
 `20128` 和 secret 保持不变。更新前备份分别为
 `/DATA/AppData/immich/backups/pre-update-20260920T132238Z` 与
 `/DATA/AppData/9router/backups/pre-update-20260920T132238Z`；旧 9router 镜像回滚标签为
-`decolua/9router:rollback-20260920T132238Z`。本地 compose 校验、公网 Immich `/api/server/ping`
-（200）、Immich 首页（200）、9router dashboard（200）和无 key API（401）均已验证。
+`decolua/9router:rollback-20260920T132238Z`；npm 版本切换前的恢复点为
+`/DATA/AppData/9router/backups/pre-npm-0.5.81-20260920T142239Z`，并保留
+`local/9router:rollback-0.5.75-20260920T142239Z`。本地 compose 校验、0.5.81 包版本、容器
+零重启、公网 Immich `/api/server/ping`（200）、Immich 首页（200）、9router dashboard（200）和
+无 key API（401）均已验证。
 
 ## 2026-09-20：Amadeus 1.4.1 已部署，deployment evidence 收尾
 
