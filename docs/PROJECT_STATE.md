@@ -25,6 +25,13 @@ PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路�
 旧 runtime retirement、`pubg_query_team_damage` tool/Skill 加载和 `doctor.sh`（0 failure/0
 warning）；真实 Telegram/WhatsApp 自然语言入口仍按边界保持 pending。
 
+## 2026-09-20：版本递进规则调整
+
+当前已部署版本保持 `1.4.0`；从下一版本起只使用 `scripts/amadeus-version.sh bump patch`，每次按
+`0.0.1` 递增。第三段到 9 时进位到第二段（`0.0.9 -> 0.1.0`），第二段也到 9 时进位到第一段
+（`0.9.9 -> 1.0.0`）；不再使用或支持 `bump minor`、`bump major`。本策略只影响后续 release，
+不需要重新部署当前已经匹配 1.4.0 的 live image。
+
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
 远端新增的 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md` 已 rebase 到当前 `main`。
@@ -90,10 +97,11 @@ typecheck 通过；后续 Phase 3-5 已在下方完成，release/deploy 尚未�
   的 `35 9 * * 1-5`/`5 16 * * 1-5`，allow-list 仅含行情工具和 owner notifier。Gateway live smoke
   实际调用行情工具并在周六返回 `market_closed`，未发送未经请求的市场通知。
 
-## Amadeus 版本管理（2026-09-19）
+## Amadeus 版本管理（历史记录，2026-09-19）
 
-当前产品版本为 `1.2.0`，唯一版本源是根目录 `VERSION`。`scripts/amadeus-version.sh` 负责
-校验和按 patch/minor/major 递增；`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
+当时产品版本为 `1.2.0`，唯一版本源是根目录 `VERSION`；`scripts/amadeus-version.sh` 曾负责
+校验和按 patch/minor/major 递增，该历史策略已被上方统一 `bump patch` 进位规则取代。
+`RELEASE_NOTES.md` 必须与版本标题一致，并且只写本次版本的简短
 新增/修复，不累计历史内容。部署完成 owner 通知自动读取其正文，标题为 `Amadeus <版本> · 世界线收束`，
 正文最后追加一次 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不应自行重复写该句，部署边界会做去重保护。
 

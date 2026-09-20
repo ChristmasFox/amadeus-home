@@ -30,6 +30,13 @@ OpenClaw/Product Radar health、媒体网络、NAS 只读、owner outbox、legac
 `pubg_query_team_damage` live tool/Skill 和 `doctor.sh`（0 failure/0 warning）通过；未发送
 未经请求的真实群聊测试消息。
 
+## 2026-09-20：版本递进规则调整
+
+用户要求从下一版本起取消 `0.1` 的 minor 递增，所有版本统一通过 `bump patch` 按 `0.0.1` 递增：
+当前已发布的 `1.4.0` 保持不变，下一版本为 `1.4.1`；`0.0.9 -> 0.1.0`，`0.9.9 -> 1.0.0`。
+`bump minor` 和 `bump major` 不再支持。版本脚本、README、根工作规则和本 Goal 已同步，验证与策略
+记录见本次 checkpoint；本变更不需要重新部署已匹配 1.4.0 的运行时镜像。
+
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
 已从远端拉取并 rebase 最新 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md`。Phase 1 将
@@ -108,11 +115,11 @@ Amadeus 定向测试、secrets scan、版本发布、CasaOS apply，并验证两
 preflight、NAS 只读、owner outbox 和 Gateway 行情工具 smoke 均通过；真实 smoke 因周六返回
 `market_closed`，没有发送市场通知。后续只需等待下一个美股交易日自然触发开盘/收盘消息。
 
-## Amadeus 版本管理（2026-09-19）
+## Amadeus 版本管理（历史记录，2026-09-19）
 
-版本源为根目录 `VERSION`，当前版本 `1.2.0`。`scripts/amadeus-version.sh` 提供
-`show/check/bump patch|minor|major`；补丁版本用于修复和兼容性调整，次版本用于向后兼容的新
-能力，主版本用于破坏性契约或架构变更。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，且只保留
+当时版本源为根目录 `VERSION`，版本为 `1.2.0`，曾使用
+`show/check/bump patch|minor|major`；该历史策略已被上方 2026-09-20 的统一 `bump patch`
+进位规则取代。`RELEASE_NOTES.md` 是部署完成通知的唯一正文来源，且只保留
 本次版本的简短新增/修复，不是累计 changelog；标题固定为 `Amadeus <版本> · 世界线收束`，末尾自动追加
 `El Psy Kongroo.`；`RELEASE_NOTES.md` 不要自行重复写这句，部署脚本会统一追加一次。
 
