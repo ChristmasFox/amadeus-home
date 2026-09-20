@@ -2,7 +2,7 @@
 
 更新时间：2026-09-20（Asia/Shanghai）
 
-## 2026-09-20：Amadeus 1.4.2 Worldline 与 Operation Skuld（源码发布候选）
+## 2026-09-20：Amadeus 1.4.2 Worldline 与 Operation Skuld（已部署）
 
 当前执行目标为 docs/AMADEUS_1_4_2_WORLDLINE_UNIFICATION_AND_SKULD_READINESS_GOAL.md。已完成
 Worldline structured notification contract、正式主题词汇与确定性 policy/adapter/renderer；
@@ -13,10 +13,10 @@ backup metadata 与 read-only readiness/temporary restore rehearsal。
 
 `VERSION=1.4.2` 与 release notes 已通过检查；`pnpm test`、`pnpm typecheck`、`pnpm build`、
 secret scan、architecture fitness、migration-readiness test、脚本语法和 OpenClaw/Product Radar
-生产镜像构建均已通过。Product Radar 镜像已验证根 workspace context、presentation 依赖和
-pnpm legacy deploy；当前只剩 implementation commit/push、当前 CasaOS apply、health/smoke、
-live readiness evidence 和 deployment evidence commit/push。Operation Skuld 不执行 Mac mini
-cutover；真实自然语言 inbound/final-reply 仍按验收边界保持 pending，不发送未经请求的真实群聊消息。
+生产镜像构建均已通过。implementation commit `af54e7d` 已 push，并已部署到当前 CasaOS `ubuntu`；
+新镜像、checkpoint、health/preflight/smoke、doctor 和 `OPERATION_SKULD=READY` 证据见
+`docs/reports/AMADEUS_1_4_2_DEPLOYMENT.md`。Operation Skuld 不执行 Mac mini cutover；真实自然语言
+inbound/final-reply 仍按验收边界保持 pending，不发送未经请求的真实群聊消息。
 
 执行唯一目标：完成 OpenClaw Amadeus 全能力迁移。旧 LangBot/n8n/旧插件/旧通知路径全部
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product

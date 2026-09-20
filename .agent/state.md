@@ -6,9 +6,10 @@
 intent/policy/adapter/renderer、统一 owner outbox producer、host profile、可配置 network、
 FashionSigLIP inventory、Operation Skuld manifest/runbook 和只读 readiness rehearsal 已进入源码；
 `VERSION=1.4.2`、全量 test/typecheck/build、secret scan、architecture fitness、脚本语法和两套
-生产镜像构建均已通过。尚未提交/push 1.4.2，也尚未执行当前 CasaOS apply 和 live evidence；
-Operation Skuld 不执行 Mac mini cutover。真实自然语言 inbound/final-reply 仍按边界保持 pending，
-不发送未经请求的群聊测试消息。
+生产镜像构建均已通过。implementation commit `af54e7d` 已 push；当前 CasaOS `ubuntu` apply、
+live evidence、doctor 和 `OPERATION_SKULD=READY` 均通过，详见 deployment report。Operation Skuld
+不执行 Mac mini cutover。真实自然语言 inbound/final-reply 仍按边界保持 pending，不发送未经请求的
+群聊测试消息。
 
 以下历史记录保留 1.4.1 及更早 release 的 live evidence，不覆盖当前目标状态。
 历史记录：`docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 已完成源码、release、部署和

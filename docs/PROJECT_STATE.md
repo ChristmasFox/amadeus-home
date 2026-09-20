@@ -2,7 +2,7 @@
 
 更新时间：2026-09-20（Asia/Shanghai）
 
-## 当前执行：Amadeus 1.4.2 Worldline 与 Operation Skuld（源码发布候选）
+## 当前执行：Amadeus 1.4.2 Worldline 与 Operation Skuld（已部署）
 
 目标文件：AMADEUS_1_4_2_WORLDLINE_UNIFICATION_AND_SKULD_READINESS_GOAL.md。
 当前源码已加入统一的 WorldlineNotificationIntent、正式主题词汇、确定性主题 policy、
@@ -12,10 +12,11 @@ validated owner presentation 和 owner outbox producer inventory；Product Radar
 迁移 runbook、backup/checksum metadata 和只读 readiness rehearsal 已加入。
 
 `VERSION=1.4.2`、release notes、全量 `pnpm test`/`typecheck`/`build`、secret scan、architecture
-fitness、migration-readiness test、脚本语法和 OpenClaw/Product Radar 生产镜像构建均已通过。待
-完成 implementation commit/push、当前 CasaOS apply、live health/smoke、readiness/deployment
-evidence commit/push。Operation Skuld 仅准备执行清单，不执行 Mac mini 切换；真实自然语言入口
-与最终用户回复不伪造验收。
+fitness、migration-readiness test、脚本语法和 OpenClaw/Product Radar 生产镜像构建均已通过。
+implementation commit `af54e7d` 已 push，并已完成当前 CasaOS `ubuntu` apply；live health、preflight、
+structured owner outbox smoke、doctor 和 `OPERATION_SKULD=READY` 均通过。deployment evidence 位于
+`docs/reports/AMADEUS_1_4_2_DEPLOYMENT.md`。Operation Skuld 仅准备执行清单，不执行 Mac mini
+切换；真实自然语言入口与最终用户回复不伪造验收。
 
 ## 当前目标
 
