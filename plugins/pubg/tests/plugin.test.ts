@@ -12,6 +12,7 @@ const EXPECTED_TOOLS = [
   'pubg_compare_stats',
   'pubg_get_match',
   'pubg_get_review_facts',
+  'pubg_query_team_damage',
   'pubg_prefetch_telemetry',
   'pubg_telemetry_sync_report',
 ];
@@ -48,6 +49,12 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.match(reviewTool.description, /directional/);
   assert.match(reviewTool.description, /dataSourceRange/);
   assert.match(reviewTool.description, /startedAtLocal/);
+  const teamDamageTool = metadata.tools.find((tool) => tool.name === 'pubg_query_team_damage');
+  assert.ok(teamDamageTool);
+  assert.match(teamDamageTool.description, /all directions/);
+  assert.match(teamDamageTool.description, /meleeKind="KICK"/);
+  assert.match(teamDamageTool.description, /do not pass recentN, resultSetId/);
+  assert.match(teamDamageTool.description, /partial result/);
   const prefetchTool = metadata.tools.find((tool) => tool.name === 'pubg_prefetch_telemetry');
   assert.ok(prefetchTool);
   assert.match(prefetchTool.description, /status=FETCHED/);
@@ -82,4 +89,6 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /反过来呢/);
   assert.match(skill, /dataUpdatedAtLocal/);
   assert.match(skill, /fromLocal/);
+  assert.match(skill, /pubg_query_team_damage/);
+  assert.match(skill, /meleeKind/);
 });

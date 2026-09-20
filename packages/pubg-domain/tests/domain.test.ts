@@ -536,6 +536,140 @@ test('relative-period match search uses the 06:00 business day and review requir
   }
 });
 
+test('period team-damage query resolves aliases, aggregates every Telemetry match, and preserves partial unknowns', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-domain-team-damage-'));
+  const repository = new SqlitePubgRepository(join(root, 'pubg.sqlite'));
+  const matches = normalizeRecords([
+    rawMatch('td1', '2026-09-18T10:00:00.000Z', [
+      { accountId: 'p1', playerName: 'Alice', kills: 1, deaths: 0, damage: 100, rank: 3 },
+      { accountId: 'p2', playerName: 'Bob', kills: 1, deaths: 0, damage: 90, rank: 3 },
+    ]),
+    rawMatch('td2', '2026-09-18T20:00:00.000Z', [
+      { accountId: 'p1', playerName: 'Alice', kills: 2, deaths: 0, damage: 140, rank: 1 },
+      { accountId: 'p2', playerName: 'Bob', kills: 0, deaths: 1, damage: 50, rank: 1 },
+    ]),
+  ]);
+  repository.upsertMatches(matches);
+  const event = (actor: string, victim: string, damage: number, category: string, timeSeconds: number): Record<string, unknown> => ({
+    _T: 'LogPlayerTakeDamage',
+    attacker: { accountId: actor },
+    victim: { accountId: victim },
+    damage,
+    damageTypeCategory: category,
+    timeSeconds,
+    common: { isGame: true },
+  });
+  const worker = new TelemetryWorker({
+    team: TEAM,
+    store: repository,
+    downloader: {
+      async download(match) {
+        return {
+          events: match.matchId === 'td1'
+            ? [
+              event('p1', 'p2', 1, 'Damage_Kick', 10),
+              event('p1', 'p2', 2, 'Damage_Kick', 11),
+              event('p1', 'p2', 3, 'Damage_Punch', 12),
+              { ...event('p2', 'p1', 4, 'Damage_Bullet', 20), damageCauserName: 'WeapAK47_C' },
+            ]
+            : [
+              event('p1', 'p2', 2, 'Damage_Kick', 15),
+              { ...event('p2', 'p1', 5, 'Damage_Bullet', 20), damageCauserName: 'FragGrenade' },
+            ],
+        };
+      },
+    },
+  });
+  try {
+    const service = new PubgDomainService({
+      team: TEAM,
+      repository,
+      telemetryWorker: worker,
+      now: () => new Date('2026-09-19T00:30:00.000Z'),
+    });
+    const all = await service.queryTeamDamage({
+      sessionId: 'session-team-damage',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      refresh: false,
+    });
+    assert.equal(all.status, 'ok');
+    const allData = all.data as {
+      totalHitCount: number | null;
+      totalDamage: number | null;
+      directions: Array<{ actor: { playerId: string }; victim: { playerId: string }; hitCount: number | null; damage: number | null }>;
+      matches: Array<{ matchId: string; hitCount: number | null; damage: number | null }>;
+      bySource: Array<{ source: string; hitCount: number | null; damage: number | null }>;
+    };
+    assert.equal(allData.totalHitCount, 6);
+    assert.equal(allData.totalDamage, 17);
+    assert.deepEqual(allData.matches.map((match) => match.matchId), ['td1', 'td2']);
+    assert.deepEqual(allData.matches.map((match) => match.hitCount), [4, 2]);
+    assert.deepEqual(allData.directions.map((direction) => [direction.actor.playerId, direction.victim.playerId, direction.hitCount, direction.damage]), [
+      ['p1', 'p2', 4, 8],
+      ['p2', 'p1', 2, 9],
+    ]);
+    assert.deepEqual(allData.bySource, [
+      { source: 'MELEE', hitCount: 4, damage: 8, knownHitCount: 4, knownDamage: 8 },
+      { source: 'GUN', hitCount: 1, damage: 4, knownHitCount: 1, knownDamage: 4 },
+      { source: 'EXPLOSIVE', hitCount: 1, damage: 5, knownHitCount: 1, knownDamage: 5 },
+    ]);
+    const allResolved = all.queryResolved as { sourceRange: { from: string; to: string }; selector: { from: string; to: string } };
+    assert.equal(allResolved.sourceRange.from, '2026-09-17T22:00:00.000Z');
+    assert.equal(allResolved.sourceRange.to, '2026-09-18T22:00:00.000Z');
+    assert.equal(allResolved.selector.from, allResolved.sourceRange.from);
+    assert.equal(allResolved.selector.to, allResolved.sourceRange.to);
+
+    const kicks = await service.queryTeamDamage({
+      sessionId: 'session-team-damage',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      actorPlayer: 'a',
+      victimPlayer: 'b',
+      source: 'MELEE',
+      meleeKind: 'KICK',
+      refresh: false,
+    });
+    assert.equal(kicks.status, 'ok');
+    const kickData = kicks.data as {
+      direction: string;
+      totalHitCount: number | null;
+      totalDamage: number | null;
+      directions: Array<{ actor: { playerId: string }; victim: { playerId: string }; hitCount: number | null; damage: number | null }>;
+      matches: Array<{ matchId: string; hitCount: number | null; damage: number | null }>;
+    };
+    assert.equal(kickData.direction, 'Alice → Bob');
+    assert.equal(kickData.totalHitCount, 3);
+    assert.equal(kickData.totalDamage, 5);
+    assert.deepEqual(kickData.directions.map((direction) => [direction.actor.playerId, direction.victim.playerId, direction.hitCount, direction.damage]), [['p1', 'p2', 3, 5]]);
+    assert.deepEqual(kickData.matches.map((match) => [match.matchId, match.hitCount, match.damage]), [['td1', 2, 3], ['td2', 1, 2]]);
+
+    const unavailableWorker = new TelemetryWorker({ team: TEAM, store: repository, featureVersion: 'unavailable-team-damage-test' });
+    const unavailableService = new PubgDomainService({
+      team: TEAM,
+      repository,
+      telemetryWorker: unavailableWorker,
+      now: () => new Date('2026-09-19T00:30:00.000Z'),
+    });
+    const partial = await unavailableService.queryTeamDamage({
+      sessionId: 'session-team-damage',
+      selector: { type: 'relative_period', value: 'yesterday' },
+      actorPlayer: 'a',
+      victimPlayer: 'b',
+      source: 'MELEE',
+      meleeKind: 'KICK',
+      refresh: false,
+    });
+    assert.equal(partial.status, 'partial');
+    const partialData = partial.data as { totalHitCount: number | null; totalDamage: number | null; matches: Array<{ hitCount: number | null; damage: number | null }> };
+    assert.equal(partialData.totalHitCount, null);
+    assert.equal(partialData.totalDamage, null);
+    assert.deepEqual(partialData.matches.map((match) => [match.hitCount, match.damage]), [[null, null], [null, null]]);
+    assert.equal(partial.coverage.complete, false);
+  } finally {
+    repository.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('Telemetry distinguishes a successful cache miss from unavailable data', async () => {
   const match = normalizeRecords([RAW_RECORDS[0]!])[0]!;
   let downloads = 0;

@@ -11,6 +11,11 @@ Phase 6 release validation、minor version bump、implementation commit/push、C
 deployment evidence commit/push；其中 implementation commit/push、1.3.0 release build/apply、live
 health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment evidence commit/push。
 
+本轮真实 WhatsApp trajectory 审计发现周期队友动作查询只走基础 Match API，新增
+`pubg_query_team_damage` 作为 Domain-owned batch Telemetry contract，覆盖全队误伤详情和
+007 → 004 KICK 计数；Domain 22/22、Plugin 9/9、受影响 typecheck 已通过。版本已 bump 到
+1.4.0，当前待 implementation commit/push、CasaOS apply 和 live evidence。
+
 本次 1.3.0 live release：implementation commit `7d85bc1`；OpenClaw image
 `local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image
 `local/product-radar:git-7d85bc10f15d-20260920041059`；checkpoint

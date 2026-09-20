@@ -11,7 +11,7 @@ import { SqlitePubgRepository, type TelemetryPrefetchRun } from '../storage/sqli
 import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry.js';
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
-import type { MatchReviewResult } from '../review/types.js';
+import type { MatchReviewResult, TeamDamageFact, TeamDamageSource } from '../review/types.js';
 import { BUSINESS_DAY_START, localDateLabel, resolveSelector } from '../time/selector-resolver.js';
 
 export const PUBGMETRIC_VERSION = 'pubg-metrics-v1';
@@ -129,6 +129,19 @@ export interface GetReviewFactsInput extends GetMatchInput {
   searchResultSetId: string;
   playerIds?: string[];
   categories?: string[];
+}
+
+export interface TeamDamageQueryInput {
+  sessionId: string;
+  selector: SearchSelectorInput;
+  /** Explicit configured PUBG name, alias, or account ID; omit both for all directions. */
+  actorPlayer?: string;
+  /** Explicit configured PUBG name, alias, or account ID; omit both for all directions. */
+  victimPlayer?: string;
+  source?: TeamDamageSource;
+  meleeKind?: NonNullable<TeamDamageFact['meleeKind']>;
+  refresh?: boolean;
+  signal?: AbortSignal;
 }
 
 function sourceRangeFromSelector(selector: Selector): Record<string, string> | null {
@@ -267,6 +280,25 @@ async function mapWithConcurrency<T, R>(items: T[], concurrency: number, task: (
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
   return results;
+}
+
+const TEAM_DAMAGE_SOURCES: TeamDamageSource[] = ['MELEE', 'GUN', 'EXPLOSIVE', 'VEHICLE'];
+
+function roundDamage(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function teamDamageFactMatches(
+  fact: TeamDamageFact,
+  actorPlayerId: string | undefined,
+  victimPlayerId: string | undefined,
+  source: TeamDamageSource | undefined,
+  meleeKind: NonNullable<TeamDamageFact['meleeKind']> | undefined,
+): boolean {
+  return (!actorPlayerId || fact.actorPlayerId === actorPlayerId)
+    && (!victimPlayerId || fact.victimPlayerId === victimPlayerId)
+    && (!source || fact.source === source)
+    && (!meleeKind || fact.meleeKind === meleeKind);
 }
 
 function retryAt(now: Date, attemptCount: number): string {
@@ -1057,6 +1089,233 @@ export class PubgDomainService {
       evidenceRefs: { matchIds: [target.matchId], playerIds: facts.squad.playerIds, fields: ['match', 'players', 'combat', 'fights', 'weapons', 'vehicles', 'evidence'], calculation: 'telemetry_facts_v1' },
     };
     if (telemetry.status === 'UNAVAILABLE') result.error = { code: 'telemetry_unavailable', retryable: true, reason: telemetry.error ?? 'telemetry unavailable' };
+    return result;
+  }
+
+  async queryTeamDamage(input: TeamDamageQueryInput): Promise<ToolEnvelope> {
+    const actorReference = input.actorPlayer?.trim() || null;
+    const victimReference = input.victimPlayer?.trim() || null;
+    if (Boolean(actorReference) !== Boolean(victimReference)) {
+      return this.errorEnvelope('team_damage_direction_incomplete', false, 'actorPlayer and victimPlayer must be provided together, or both omitted for all directions');
+    }
+    if (input.meleeKind && input.source && input.source !== 'MELEE') {
+      return this.errorEnvelope('team_damage_source_conflict', false, 'meleeKind requires source=MELEE');
+    }
+
+    let actor: TeamPlayer | undefined;
+    let victim: TeamPlayer | undefined;
+    if (actorReference && victimReference) {
+      const actorResult = this.resolveSubject({ playerNames: [actorReference] });
+      if (actorResult.error) return this.errorEnvelope(actorResult.error.code, actorResult.error.retryable, actorResult.error.reason);
+      actor = actorResult.players[0];
+      const victimResult = this.resolveSubject({ playerNames: [victimReference] });
+      if (victimResult.error) return this.errorEnvelope(victimResult.error.code, victimResult.error.retryable, victimResult.error.reason);
+      victim = victimResult.players[0];
+      if (!actor || !victim) return this.errorEnvelope('unknown_player', false, `${actorReference},${victimReference}`);
+      if (actor.id === victim.id) return this.errorEnvelope('team_damage_same_player', false, 'actorPlayer and victimPlayer must be different team players');
+    }
+
+    const now = this.now();
+    const canonicalSelector = selectorToCanonical(input.selector, this.timezone, this.businessDayStart);
+    let resolvedSelector;
+    try {
+      resolvedSelector = resolveSelector(canonicalSelector, {
+        timezone: this.timezone,
+        businessDayStart: this.businessDayStart,
+        now,
+      });
+    } catch {
+      return this.errorEnvelope('invalid_time_range', false, 'selector must resolve to a valid time range');
+    }
+    const from = Date.parse(resolvedSelector.start);
+    const to = Date.parse(resolvedSelector.end);
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+      return this.errorEnvelope('invalid_time_range', false, 'selector must resolve to a non-empty time range');
+    }
+
+    const matchSource = await this.refresh(input.refresh !== false, this.maxMatches, input.signal);
+    const teamIds = new Set(this.team.players.map((player) => player.id));
+    const directionIds = actor && victim ? new Set([actor.id, victim.id]) : null;
+    const selected = matchSource.records
+      .filter((match) => match.timestamp >= from && match.timestamp < to && match.isCompetitive !== false)
+      .filter((match) => match.players.some((player) => teamIds.has(player.accountId)))
+      .filter((match) => !directionIds || match.players.some((player) => directionIds.has(player.accountId)))
+      .sort((left, right) => left.timestamp - right.timestamp || left.matchId.localeCompare(right.matchId));
+    const effectiveSource = input.meleeKind ? 'MELEE' : input.source;
+    const matchInputs = selected.map((match, index) => ({ match, ordinal: index + 1 }));
+    const outcomes = await mapWithConcurrency(matchInputs, 2, async ({ match, ordinal }) => {
+      const telemetry = await this.telemetryWorker.ensure(match, ordinal, input.signal);
+      const facts = telemetry.facts?.teamDamage;
+      const matchingFacts = facts
+        ? facts
+          .filter((fact) => teamDamageFactMatches(fact, actor?.id, victim?.id, effectiveSource, input.meleeKind))
+          .sort((left, right) => (left.timestamp ?? Number.POSITIVE_INFINITY) - (right.timestamp ?? Number.POSITIVE_INFINITY) || left.id.localeCompare(right.id))
+        : null;
+      return { match, telemetry, matchingFacts };
+    });
+
+    const unavailableMatchIds = outcomes.filter((outcome) => outcome.matchingFacts === null).map((outcome) => outcome.match.matchId);
+    const telemetryComplete = unavailableMatchIds.length === 0;
+    const telemetryStatusCounts = outcomes.reduce<Record<string, number>>((counts, outcome) => {
+      counts[outcome.telemetry.status] = (counts[outcome.telemetry.status] ?? 0) + 1;
+      return counts;
+    }, {});
+    const playerRef = (player: TeamPlayer): { playerId: string; name: string } => ({ playerId: player.id, name: player.name });
+    const nameForPlayerId = (playerId: string): { playerId: string; name: string } => {
+      const player = this.team.players.find((candidate) => candidate.id === playerId);
+      return { playerId, name: player?.name ?? playerId };
+    };
+    const directionAggregates = new Map<string, {
+      actorPlayerId: string;
+      victimPlayerId: string;
+      hitCount: number;
+      damage: number;
+      matchIds: string[];
+    }>();
+    for (const outcome of outcomes) {
+      for (const fact of outcome.matchingFacts ?? []) {
+        const key = `${fact.actorPlayerId}:${fact.victimPlayerId}`;
+        const aggregate = directionAggregates.get(key) ?? {
+          actorPlayerId: fact.actorPlayerId,
+          victimPlayerId: fact.victimPlayerId,
+          hitCount: 0,
+          damage: 0,
+          matchIds: [],
+        };
+        aggregate.hitCount += fact.hitCount;
+        aggregate.damage += fact.damage;
+        if (!aggregate.matchIds.includes(outcome.match.matchId)) aggregate.matchIds.push(outcome.match.matchId);
+        directionAggregates.set(key, aggregate);
+      }
+    }
+    if (actor && victim) {
+      const key = `${actor.id}:${victim.id}`;
+      if (!directionAggregates.has(key)) {
+        directionAggregates.set(key, { actorPlayerId: actor.id, victimPlayerId: victim.id, hitCount: 0, damage: 0, matchIds: [] });
+      }
+    }
+    const knownHitCount = outcomes.reduce((sum, outcome) => sum + (outcome.matchingFacts?.reduce((inner, fact) => inner + fact.hitCount, 0) ?? 0), 0);
+    const knownDamage = roundDamage(outcomes.reduce((sum, outcome) => sum + (outcome.matchingFacts?.reduce((inner, fact) => inner + fact.damage, 0) ?? 0), 0));
+    const matchRows = outcomes.map((outcome) => {
+      const players = outcome.match.players.filter((player) => teamIds.has(player.accountId));
+      const ranks = players.map((player) => player.rank).filter((rank): rank is number => rank !== null);
+      const hitCount = outcome.matchingFacts?.reduce((sum, fact) => sum + fact.hitCount, 0) ?? null;
+      const damage = outcome.matchingFacts === null
+        ? null
+        : roundDamage(outcome.matchingFacts.reduce((sum, fact) => sum + fact.damage, 0));
+      return {
+        matchId: outcome.match.matchId,
+        startedAt: outcome.match.createdAt,
+        mapName: outcome.match.mapName,
+        gameMode: outcome.match.gameMode,
+        placement: ranks.length ? Math.min(...ranks) : null,
+        hitCount,
+        damage,
+        teamDamage: sanitize(outcome.matchingFacts),
+        telemetry: {
+          status: outcome.telemetry.status,
+          cacheStatus: outcome.telemetry.cacheStatus,
+          cacheLookup: outcome.telemetry.cacheLookup,
+          availability: outcome.telemetry.availability,
+          ...(outcome.telemetry.error ? { error: outcome.telemetry.error } : {}),
+        },
+      };
+    });
+    const directionRows = [...directionAggregates.values()]
+      .sort((left, right) => right.hitCount - left.hitCount || right.damage - left.damage || left.actorPlayerId.localeCompare(right.actorPlayerId) || left.victimPlayerId.localeCompare(right.victimPlayerId))
+      .map((aggregate) => ({
+        actor: nameForPlayerId(aggregate.actorPlayerId),
+        victim: nameForPlayerId(aggregate.victimPlayerId),
+        hitCount: telemetryComplete ? aggregate.hitCount : null,
+        damage: telemetryComplete ? roundDamage(aggregate.damage) : null,
+        knownHitCount: aggregate.hitCount,
+        knownDamage: roundDamage(aggregate.damage),
+        complete: telemetryComplete,
+        matchIds: aggregate.matchIds,
+      }));
+    const sourceRows = TEAM_DAMAGE_SOURCES.flatMap((source) => {
+      const facts = outcomes.flatMap((outcome) => outcome.matchingFacts ?? []).filter((fact) => fact.source === source);
+      if (!facts.length) return [];
+      const hitCount = facts.reduce((sum, fact) => sum + fact.hitCount, 0);
+      const damage = roundDamage(facts.reduce((sum, fact) => sum + fact.damage, 0));
+      return [{ source, hitCount: telemetryComplete ? hitCount : null, damage: telemetryComplete ? damage : null, knownHitCount: hitCount, knownDamage: damage }];
+    });
+    const coverage: Coverage = unavailableMatchIds.length
+      ? {
+        ...matchSource.coverage,
+        status: matchSource.coverage.status === 'OK' ? 'PARTIAL' : matchSource.coverage.status,
+        complete: false,
+        failedMatchIds: [...new Set([...matchSource.coverage.failedMatchIds, ...unavailableMatchIds])],
+        requiredMatchCount: Math.max(matchSource.coverage.requiredMatchCount ?? 0, selected.length),
+      }
+      : matchSource.coverage;
+    const status: ToolStatus = selected.length === 0
+      ? (matchSource.coverage.complete ? 'no_matches' : 'partial')
+      : telemetryComplete && matchSource.coverage.status === 'OK' ? 'ok' : 'partial';
+    const sourceRange = {
+      from: resolvedSelector.start,
+      to: resolvedSelector.end,
+      timezone: resolvedSelector.timezone,
+      businessDayStart: resolvedSelector.businessDayStart,
+    };
+    const result: ToolEnvelope = {
+      status,
+      data: sanitize({
+        actor: actor ? playerRef(actor) : null,
+        victim: victim ? playerRef(victim) : null,
+        direction: actor && victim ? `${actor.name} → ${victim.name}` : 'all directions',
+        source: effectiveSource ?? null,
+        meleeKind: input.meleeKind ?? null,
+        totalHitCount: telemetryComplete ? knownHitCount : null,
+        totalDamage: telemetryComplete ? knownDamage : null,
+        knownHitCount,
+        knownDamage,
+        complete: telemetryComplete,
+        directions: directionRows,
+        bySource: sourceRows,
+        matches: matchRows,
+        telemetry: {
+          requestedMatchCount: selected.length,
+          availableMatchCount: selected.length - unavailableMatchIds.length,
+          unavailableMatchIds,
+          statusCounts: telemetryStatusCounts,
+        },
+      }),
+      coverage,
+      asOf: this.now().toISOString(),
+      metricVersion: PUBGMETRIC_VERSION,
+      queryResolved: {
+        tool: 'pubg_query_team_damage',
+        sessionId: input.sessionId,
+        selector: { ...input.selector, from: resolvedSelector.start, to: resolvedSelector.end, timezone: resolvedSelector.timezone, businessDayStart: resolvedSelector.businessDayStart },
+        sourceRange,
+        direction: actor && victim ? { actorPlayerId: actor.id, victimPlayerId: victim.id } : null,
+        source: effectiveSource ?? null,
+        meleeKind: input.meleeKind ?? null,
+        matchCount: selected.length,
+        refresh: {
+          requested: input.refresh !== false,
+          syncInvoked: matchSource.source.syncInvoked,
+          playerApiCalls: matchSource.source.playerApiCalls,
+          matchApiCalls: matchSource.source.matchApiCalls,
+          newMatchCount: matchSource.diagnostics.newMatchCount ?? 0,
+          cachedMatchCount: matchSource.diagnostics.cachedMatchCount ?? 0,
+          cacheReason: matchSource.diagnostics.reason ?? null,
+        },
+        telemetry: {
+          complete: telemetryComplete,
+          unavailableMatchIds,
+          statusCounts: telemetryStatusCounts,
+        },
+      },
+      evidenceRefs: {
+        matchIds: selected.map((match) => match.matchId),
+        playerIds: actor && victim ? [actor.id, victim.id] : this.team.players.map((player) => player.id),
+        fields: ['matchId', 'startedAt', 'mapName', 'placement', 'actorPlayerId', 'victimPlayerId', 'source', 'meleeKind', 'hitCount', 'damage', 'phase', 'evidenceIds'],
+        calculation: 'pubg_team_damage_query_v1',
+      },
+    };
+    if (unavailableMatchIds.length) result.error = { code: 'telemetry_unavailable', retryable: true, reason: `${unavailableMatchIds.length} selected match(es) have unavailable Telemetry` };
     return result;
   }
 }
