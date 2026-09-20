@@ -13,8 +13,9 @@ health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment 
 
 本轮真实 WhatsApp trajectory 审计发现周期队友动作查询只走基础 Match API，新增
 `pubg_query_team_damage` 作为 Domain-owned batch Telemetry contract，覆盖全队误伤详情和
-007 → 004 KICK 计数；Domain 22/22、Plugin 9/9、受影响 typecheck 已通过。版本已 bump 到
-1.4.0，当前待 implementation commit/push、CasaOS apply 和 live evidence。
+007 → 004 KICK 计数；Domain 22/22、Plugin 9/9、全仓验证已通过。版本 `1.4.0` 的提交
+`6ee03d0` 已 push 并完成 CasaOS apply；live image、tool/Skill preflight、health、外围 smoke
+和 doctor 均通过。当前只剩本次部署证据与后续版本策略单独提交。
 
 本次 1.3.0 live release：implementation commit `7d85bc1`；OpenClaw image
 `local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image

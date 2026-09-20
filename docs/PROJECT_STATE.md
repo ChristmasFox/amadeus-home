@@ -8,15 +8,22 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
-## 2026-09-20：PUBG 队友动作/误伤批量 Telemetry contract（实现完成，待 release）
+## 2026-09-20：PUBG 队友动作/误伤批量 Telemetry contract（1.4.0 已部署）
 
 真实 WhatsApp trajectory 审计确认，“昨天队内误伤情况详情”和“昨天007踢了004几脚”均只
 触发 `pubg_search_matches`，没有进入 Telemetry；基础 Match API 的 `coverage=OK` 被误读为
 细节完整，现有单局 `pubg_get_review_facts` 也没有周期批量能力。新增的
 `pubg_query_team_damage` 在 Domain 内完成语义周期解析、Match refresh、逐局 Telemetry ensure、
 全方向/定向聚合、KICK/PUNCH 筛选及 partial/null 语义，Skill/plugin manifest/preflight 已同步。
-本地 Domain 22/22、Plugin 9/9、受影响 typecheck 已通过；版本 `1.4.0`，CasaOS release 尚待
-提交和 apply。
+本地 Domain 22/22、Plugin 9/9、全仓 build/typecheck/test、architecture、secrets 和 workflow verify
+均通过。版本 `1.4.0` 的实现提交 `6ee03d0` 已 push 并完成 CasaOS apply；live OpenClaw image
+为 `local/openclaw-amadeus:git-6ee03d0617fd-20260920044911`，Product Radar 复用
+`local/product-radar:git-7d85bc10f15d-20260920041059`，外部 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920044911`。
+
+部署和独立 live 核验均通过 OpenClaw/Product Radar health、媒体网络、NAS 只读、owner outbox、
+旧 runtime retirement、`pubg_query_team_damage` tool/Skill 加载和 `doctor.sh`（0 failure/0
+warning）；真实 Telegram/WhatsApp 自然语言入口仍按边界保持 pending。
 
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
