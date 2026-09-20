@@ -71,7 +71,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -101,6 +101,27 @@ assert_image_fresh() {
   if image_needs_rebuild "$image" "$target"; then
     fail "$target image is stale for the current Git tree; use --build-auto, --build-$target, or --build."
   fi
+}
+version_is_greater() {
+  local candidate="$1" previous="$2"
+  local candidate_major candidate_minor candidate_patch previous_major previous_minor previous_patch
+  IFS=. read -r candidate_major candidate_minor candidate_patch <<< "$candidate"
+  IFS=. read -r previous_major previous_minor previous_patch <<< "$previous"
+  ((
+    candidate_major > previous_major ||
+    candidate_major == previous_major && candidate_minor > previous_minor ||
+    candidate_major == previous_major && candidate_minor == previous_minor && candidate_patch > previous_patch
+  ))
+}
+assert_release_version_advanced() {
+  local live_image live_commit live_version
+  live_image="$(resolve_live_image openclaw)" || fail 'Could not resolve the live OpenClaw image to verify release version.'
+  live_commit="$(image_source_commit "$live_image")" || fail "Live OpenClaw image tag has no source commit: $live_image"
+  git -C "$ROOT_DIR" cat-file -e "$live_commit^{commit}" 2>/dev/null || fail "Live OpenClaw source commit is not available locally: $live_commit"
+  live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$live_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Live OpenClaw source commit has no valid VERSION: $live_commit"
+  version_is_greater "$AMADEUS_VERSION" "$live_version" || fail "Refusing apply: VERSION=$AMADEUS_VERSION must advance beyond live Amadeus version $live_version; run scripts/amadeus-version.sh bump patch."
+  printf 'LIVE_AMADEUS_VERSION=%s\n' "$live_version"
 }
 
 while (($#)); do
@@ -195,6 +216,7 @@ fi
 git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
+assert_release_version_advanced
 
 if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
 if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
@@ -442,6 +464,11 @@ orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/config/openclaw.json" <<
 import json, sys
 from pathlib import Path
 config = json.loads(Path(sys.argv[1]).read_text())
+session = config.get('session', {})
+if session.get('dmScope') != 'per-account-channel-peer':
+    raise SystemExit('direct-message sessions must use dmScope=per-account-channel-peer')
+if session.get('groupScope') != 'per-group':
+    raise SystemExit('group sessions must use groupScope=per-group')
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
 if 'allow' in config.get('tools', {}):
@@ -467,6 +494,7 @@ wildcard_group = whatsapp.get('groups', {}).get('*', {})
 if 'tools' in wildcard_group or 'toolsBySender' in wildcard_group:
     raise SystemExit('WhatsApp group tool policy must inherit the full agent profile')
 print('OWNER_TOOL_POLICY=full')
+print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
@@ -523,7 +551,7 @@ mkdir -p "$(dirname -- "$HOOK_PATH")"
 if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
-ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION:$CHECKPOINT_ID"
+ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"
 DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
 已部署到当前 CasaOS 主机 ${MACHINE}。"
 for owner_outbox in "$CHECKPOINT_DIR/owner-smoke" "$OPENCLAW_DATA_DIR/notifications"; do

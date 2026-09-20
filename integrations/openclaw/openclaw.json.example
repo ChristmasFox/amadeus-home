@@ -18,6 +18,10 @@
       ]
     }
   },
+  "session": {
+    "dmScope": "per-account-channel-peer",
+    "groupScope": "per-group"
+  },
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
