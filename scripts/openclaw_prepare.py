@@ -12,6 +12,9 @@ import sys
 from pathlib import Path
 
 
+NON_OWNER_TOOL_ALLOWLIST = ["web_search", "web_fetch"]
+
+
 def ensure_owner(path: Path, mode: int = 0o600) -> None:
     os.chmod(path, mode)
     os.chown(path, 1000, 1000)
@@ -89,6 +92,20 @@ def owner_phone(owner_target: str) -> str:
     if not re.fullmatch(r"\+[1-9][0-9]{6,14}", phone):
         raise SystemExit("WhatsApp owner target is not a valid E.164 number")
     return phone
+
+
+def owner_tool_policy_keys(phone: str) -> list[str]:
+    digits = phone.removeprefix("+")
+    return [
+        f"e164:{phone}",
+        f"e164:{digits}",
+        f"id:{phone}",
+        f"id:{digits}",
+        f"id:{digits}@s.whatsapp.net",
+        f"channel:whatsapp:{phone}",
+        f"channel:whatsapp:{digits}",
+        f"channel:whatsapp:{digits}@s.whatsapp.net",
+    ]
 
 
 def main() -> None:
@@ -178,10 +195,23 @@ def main() -> None:
     owner_target_value = owner_candidates[0] if owner_candidates else owner_target.read_text().strip()
     config.setdefault("commands", {})["ownerAllowFrom"] = [owner_target_value]
 
+    tools = config.setdefault("tools", {})
+    tools["toolsBySender"] = {"*": {"allow": NON_OWNER_TOOL_ALLOWLIST}}
+    for key in owner_tool_policy_keys(owner_phone(owner_target_value)):
+        tools["toolsBySender"][key] = {"allow": ["*"]}
+
     whatsapp = config.setdefault("channels", {}).setdefault("whatsapp", {})
     phone = owner_phone(owner_target_value)
-    whatsapp["dmPolicy"] = "allowlist"
-    whatsapp["allowFrom"] = [phone]
+    whatsapp["dmPolicy"] = "open"
+    whatsapp["allowFrom"] = ["*"]
+    whatsapp["configWrites"] = False
+    accounts = whatsapp.get("accounts")
+    if isinstance(accounts, dict):
+        for account in accounts.values():
+            if isinstance(account, dict):
+                account["dmPolicy"] = "open"
+                account["allowFrom"] = ["*"]
+                account["configWrites"] = False
     groups = whatsapp.setdefault("groups", {})
     for group in groups.values():
         if isinstance(group, dict):

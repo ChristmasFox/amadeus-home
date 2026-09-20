@@ -15,6 +15,15 @@ const ProductRadarParameters = Type.Object({
   body: Type.Optional(Type.Record(Type.String({ maxLength: 64 }), Type.Unknown(), { maxProperties: 64 })),
 }, { additionalProperties: false });
 
+const MUTATING_ACTIONS = new Set([
+  'create', 'update', 'delete', 'pause', 'resume', 'run', 'context_set', 'context_clear',
+]);
+
 export function registerProductRadar(api: OpenClawPluginApi): void {
-  registerTool(api, 'amadeus_product_radar', 'Manage Product Radar watches through explicit structured operations. Natural-language interpretation stays in OpenClaw; this tool does not parse commands.', ProductRadarParameters, async (params, _context, _notifier, signal) => productRadar(configFor(api), params as Static<typeof ProductRadarParameters>, signal));
+  registerTool(api, 'amadeus_product_radar', 'Manage Product Radar watches through explicit structured operations. Natural-language interpretation stays in OpenClaw; this tool does not parse commands.', ProductRadarParameters, async (params, context, _notifier, signal) => {
+    if (MUTATING_ACTIONS.has(params.action) && context.senderIsOwner !== true) {
+      throw new Error('Product Radar mutation requires owner identity');
+    }
+    return productRadar(configFor(api), params as Static<typeof ProductRadarParameters>, signal);
+  });
 }

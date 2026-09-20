@@ -448,13 +448,21 @@ if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):
     raise SystemExit('Amadeus plugin is not in the OpenClaw plugin allowlist')
+sender_policies = config.get('tools', {}).get('toolsBySender', {})
+if sender_policies.get('*', {}).get('allow') != ['web_search', 'web_fetch']:
+    raise SystemExit('non-owner sender tool policy is not read-only web access')
 owner_targets = config.get('commands', {}).get('ownerAllowFrom', [])
 if len(owner_targets) != 1 or not str(owner_targets[0]).startswith('whatsapp:+'):
     raise SystemExit('exactly one WhatsApp owner identity is required')
 owner_phone = str(owner_targets[0]).split(':', 1)[1]
+if sender_policies.get('e164:' + owner_phone, {}).get('allow') != ['*']:
+    raise SystemExit('WhatsApp owner sender policy does not retain the full tool profile')
 whatsapp = config.get('channels', {}).get('whatsapp', {})
-if whatsapp.get('dmPolicy') != 'allowlist' or owner_phone not in whatsapp.get('allowFrom', []):
-    raise SystemExit('WhatsApp DM allowlist is not restricted to the owner identity')
+if whatsapp.get('dmPolicy') != 'open' or whatsapp.get('allowFrom') != ['*']:
+    raise SystemExit('WhatsApp DM policy is not open for all senders')
+for account in whatsapp.get('accounts', {}).values():
+    if isinstance(account, dict) and (account.get('dmPolicy') != 'open' or account.get('allowFrom') != ['*']):
+        raise SystemExit('WhatsApp account DM policy is not open for all senders')
 wildcard_group = whatsapp.get('groups', {}).get('*', {})
 if 'tools' in wildcard_group or 'toolsBySender' in wildcard_group:
     raise SystemExit('WhatsApp group tool policy must inherit the full agent profile')
