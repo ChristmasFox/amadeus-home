@@ -24,6 +24,25 @@ structured owner outbox smoke、doctor 和 `OPERATION_SKULD=READY` 均通过。d
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-20：Immich 与 9router 更新（已完成）
+
+- CasaOS live compose 已更新：`/var/lib/casaos/apps/immich/docker-compose.yml` 的 Immich
+  server 与 machine-learning 从 `v2.5.3` 升至 `v3.2.2`；数据库按官方 VectorChord 迁移路径改为
+  `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0`，保留原有
+  `/DATA/AppData/immich/pgdata`、`/DATA/AppData/immich/model-cache`、Redis 和
+  `/DATA/Gallery/immich` 媒体挂载。
+- `/var/lib/casaos/apps/9router/docker-compose.yml` 已从 mutable `decolua/9router:latest`
+  固定为 `decolua/9router:0.5.75`；端口 `20128`、`/DATA/AppData/9router/data` 和运行时 secret
+  均未改变。
+- 更新前恢复点：Immich 数据库 dump/compose 位于
+  `/DATA/AppData/immich/backups/pre-update-20260920T132238Z`；9router data/compose 位于
+  `/DATA/AppData/9router/backups/pre-update-20260920T132238Z`，旧 9router 镜像保留为
+  `decolua/9router:rollback-20260920T132238Z`。
+- `docker compose config --quiet`、Immich 四个容器 healthy、VectorChord/pgvector/旧 vectors
+  扩展可用、Immich `/api/server/ping` 返回 `pong` 均通过；公网 Immich 返回 200，9router
+  dashboard 返回 200，未带 API key 的 `/v1/models` 保持预期 401。未修改媒体文件、Caddy、frps、
+  OpenClaw 或 Cloudflare 配置。
+
 ## 2026-09-20：Amadeus 1.4.1 live release 已完成
 
 PUBG 的 10 个 native tools 由唯一 `PUBG_PRESENTATION_REGISTRY` 覆盖，工具 envelope 保留原始

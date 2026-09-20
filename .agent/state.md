@@ -11,6 +11,12 @@ live evidence、doctor 和 `OPERATION_SKULD=READY` 均通过，详见 deployment
 不执行 Mac mini cutover。真实自然语言 inbound/final-reply 仍按边界保持 pending，不发送未经请求的
 群聊测试消息。
 
+2026-09-20 服务更新已完成：Immich `v2.5.3` → `v3.2.2`，并从旧 pgvecto.rs 数据库迁移到
+VectorChord；server、machine-learning、Postgres、Redis 均 healthy，公网 ping 通过。9router
+已从 mutable `latest` 更新并固定为 `0.5.75`，dashboard 公网 200、未带 key 的 API 保持 401。
+恢复点位于 `/DATA/AppData/immich/backups/pre-update-20260920T132238Z` 和
+`/DATA/AppData/9router/backups/pre-update-20260920T132238Z`；Claw/OpenClaw 未修改。
+
 1.4.2 通知 follow-up：初次 deploy 的 owner smoke 只写入 checkpoint 的 `owner-smoke`，未写入生产
 owner outbox，故没有触发 WhatsApp worker；用户要求后已用 `amadeus-release:1.4.2:manual-resend`
 补发并确认 `.sent.json`。当前 deploy source 已修复为成功 health/preflight 后进入生产 outbox，并等待

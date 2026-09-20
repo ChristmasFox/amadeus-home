@@ -24,6 +24,21 @@ inbound/final-reply 仍按验收边界保持 pending，不发送未经请求的�
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-20：Immich 与 9router 更新（已完成）
+
+本轮在 OrbStack `ubuntu` 的 CasaOS 中完成两项服务更新。Immich server 与 machine-learning
+更新到 `v3.2.2`，数据库从旧 `tensorchord/pgvecto-rs:pg14-v0.2.0` 按官方迁移路径切换到
+`ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0`，并移除旧数据库启动参数/旧
+checksum healthcheck，加入 `shm_size: 128mb`。Immich 数据库原地启动迁移后四个容器均 healthy，
+扩展检查包含 `vchord 0.4.3`、`vector 0.8.1` 和 `vectors 0.2.0`。
+
+9router 从 `decolua/9router:latest` 更新并固定为 `decolua/9router:0.5.75`，持久化 data、端口
+`20128` 和 secret 保持不变。更新前备份分别为
+`/DATA/AppData/immich/backups/pre-update-20260920T132238Z` 与
+`/DATA/AppData/9router/backups/pre-update-20260920T132238Z`；旧 9router 镜像回滚标签为
+`decolua/9router:rollback-20260920T132238Z`。本地 compose 校验、公网 Immich `/api/server/ping`
+（200）、Immich 首页（200）、9router dashboard（200）和无 key API（401）均已验证。
+
 ## 2026-09-20：Amadeus 1.4.1 已部署，deployment evidence 收尾
 
 `docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 已完成：PUBG 全 native tool presentation
