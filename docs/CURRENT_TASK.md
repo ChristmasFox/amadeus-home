@@ -18,6 +18,8 @@ secret scan、architecture fitness、migration-readiness test、脚本语法和 
 `docs/reports/AMADEUS_1_4_2_DEPLOYMENT.md`。Operation Skuld 不执行 Mac mini cutover；真实自然语言
 inbound/final-reply 仍按验收边界保持 pending，不发送未经请求的真实群聊消息。
 
+部署通知 follow-up：初次 1.4.2 deploy 的 owner smoke 只写入 checkpoint，没有进入生产 outbox；这是本次未发通知的根因。已补发 `amadeus-release:1.4.2:manual-resend` 并确认 `.sent.json`，同时修复 deploy source 为成功部署后写入生产 outbox 并等待发送完成。
+
 执行唯一目标：完成 OpenClaw Amadeus 全能力迁移。旧 LangBot/n8n/旧插件/旧通知路径全部
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。

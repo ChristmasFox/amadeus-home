@@ -11,6 +11,11 @@ live evidence、doctor 和 `OPERATION_SKULD=READY` 均通过，详见 deployment
 不执行 Mac mini cutover。真实自然语言 inbound/final-reply 仍按边界保持 pending，不发送未经请求的
 群聊测试消息。
 
+1.4.2 通知 follow-up：初次 deploy 的 owner smoke 只写入 checkpoint 的 `owner-smoke`，未写入生产
+owner outbox，故没有触发 WhatsApp worker；用户要求后已用 `amadeus-release:1.4.2:manual-resend`
+补发并确认 `.sent.json`。当前 deploy source 已修复为成功 health/preflight 后进入生产 outbox，并等待
+真实 sent 状态；发送失败会让 deploy 明确失败，不再把 checkpoint-only smoke 视为已通知。
+
 以下历史记录保留 1.4.1 及更早 release 的 live evidence，不覆盖当前目标状态。
 历史记录：`docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 已完成源码、release、部署和
 live evidence 阶段。Phase 1-7 的 Presentation contracts/renderers/time formatter、owner hard
