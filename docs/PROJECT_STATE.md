@@ -8,6 +8,30 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
+
+远端新增的 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md` 已 rebase 到当前 `main`。
+Amadeus 仍是单一 OpenClaw plugin，但 `src/index.ts` 已变为 thin bootstrap，Identity、Product
+Radar、Media、NAS、HomeLab、KOOK、Market、Notification、VPS 各自拥有 registration module，
+shared wrapper/lifecycle 负责公共边界。global `before_prompt_build` Identity/PUBG guidance 已删除；
+capability workflow 已归还各自 Skill，SOUL 只保留 Kurisu persona，workspace AGENTS 只保留通用
+runtime invariant，宽泛 meme trigger 已收紧。Phase 1-2 的 Amadeus/Identity/PUBG 定向测试和
+typecheck 通过；后续 Phase 3-5 已在下方完成，release/deploy 尚未执行。
+
+## 2026-09-20：架构收敛 Phase 3-5 已完成，等待 release
+
+- `packages/presentation` 提供 PUBG 单局/周期复盘与 owner notification 三类 contract，包含 runtime
+  validation、evidenceRefs、null/unknown 语义、北京时间友好 formatter 和 deterministic renderer。
+- Owner outbox producer 已统一为结构化 `owner_notification`；OwnerNotifier 发送/重试前 hard validation，
+  旧 `title/message` pending 文件只在读取时兼容迁移。PUBG review tool 返回 validated presentation，
+  market/media/HomeLab/PUBG sync/Product Radar/Codex hook 均已迁移。
+- PUBG 03:00/09:00 relative-period、explicit range 与 calendar report 分离回归通过；PUBG plugin local
+  display fields 使用统一 formatter，默认正文不输出实现时区/日界线 metadata。
+- 已加入根 `AGENTS.md` ownership matrix/checklist、`docs/CAPABILITY_TEMPLATE.md`、
+  `scripts/check-architecture.mjs` + fixture，并在 `workflow:verify` 中运行。
+- 当前本地 `pnpm build`、`pnpm typecheck`、`pnpm test`、`pnpm check:secrets`、architecture/workflow
+  tests 和 `git diff --check` 全部通过；版本/提交/push/CasaOS apply/live evidence 尚未开始。
+
 ## 2026-09-20：VPS Caddy 多服务公网入口已恢复
 
 - 根因：Cloudflare DNS 已指向 VPS，但 `/etc/caddy/Caddyfile` 缺少已有 frps 映射的

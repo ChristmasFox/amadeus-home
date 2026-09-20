@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@agent/identity": "workspace:*",
+    "@agent/presentation": "workspace:*",
     "@types/node": "22.18.6",
     "esbuild": "0.28.2",
     "openclaw": "2026.9.4",

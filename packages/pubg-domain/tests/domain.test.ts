@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
+import { renderOwnerNotification } from '@agent/presentation';
 import {
   DeterministicQueryEngine,
   BUSINESS_DAY_START,
@@ -214,12 +215,35 @@ test('business-day labels handle cross-midnight boundaries in Asia/Shanghai', ()
 
 test('PUBG relative selectors use the canonical 06:00 business day', () => {
   assert.equal(BUSINESS_DAY_START, '06:00');
-  const resolved = resolveSelector(
-    { type: 'relative_period', value: 'yesterday' },
-    { now: new Date('2026-09-19T00:30:00.000Z'), timezone: 'Asia/Shanghai' },
-  );
-  assert.equal(resolved.start, '2026-09-17T22:00:00.000Z');
-  assert.equal(resolved.end, '2026-09-18T22:00:00.000Z');
+  for (const now of ['2026-09-19T19:00:00.000Z', '2026-09-20T01:00:00.000Z']) {
+    const today = resolveSelector(
+      { type: 'relative_period', value: 'today' },
+      { now: new Date(now), timezone: 'Asia/Shanghai' },
+    );
+    const yesterday = resolveSelector(
+      { type: 'relative_period', value: 'yesterday' },
+      { now: new Date(now), timezone: 'Asia/Shanghai' },
+    );
+    const expectedTodayStart = now === '2026-09-19T19:00:00.000Z' ? '2026-09-18T22:00:00.000Z' : '2026-09-19T22:00:00.000Z';
+    const expectedYesterdayStart = now === '2026-09-19T19:00:00.000Z' ? '2026-09-17T22:00:00.000Z' : '2026-09-18T22:00:00.000Z';
+    assert.equal(today.start, expectedTodayStart);
+    assert.equal(today.end, now);
+    assert.equal(yesterday.start, expectedYesterdayStart);
+    assert.equal(yesterday.end, expectedTodayStart);
+  }
+});
+
+test('PUBG explicit ranges preserve caller instants instead of applying the 06:00 boundary', () => {
+  const resolved = resolveSelector({
+    type: 'time_range',
+    start: '2026-09-19T00:00:00+08:00',
+    end: '2026-09-20T00:00:00+08:00',
+    timezone: 'Asia/Shanghai',
+    businessDayStart: '06:00',
+  });
+  assert.equal(resolved.start, '2026-09-18T16:00:00.000Z');
+  assert.equal(resolved.end, '2026-09-19T16:00:00.000Z');
+  assert.equal(resolved.businessDayStart, '06:00');
 });
 
 test('day grouping honors the selector business-day boundary', () => {
@@ -593,13 +617,15 @@ test('hourly telemetry prefetch only fetches new matches, persists retry state, 
 
     const report = await service.getTelemetrySyncReport({ reportDate: '2026-09-18' });
     assert.equal(report.status, 'ok');
-    const reportData = report.data as { summary: { newMatchCount: number; fetchedCount: number }; notification: { title: string; message: string } };
+    const reportData = report.data as { summary: { newMatchCount: number; fetchedCount: number }; notification: Parameters<typeof renderOwnerNotification>[0] };
     assert.equal(reportData.summary.newMatchCount, 2);
     assert.equal(reportData.summary.fetchedCount, 2);
-    assert.equal(reportData.notification.title, 'Amadeus • D-mail');
-    assert.match(reportData.notification.message, /PUBG 今日自动同步结果/);
-    assert.match(reportData.notification.message, /数据更新时间：2026-09-18 23:30:00（Asia\/Shanghai）/u);
-    assert.match(reportData.notification.message, /El Psy Kongroo\.$/u);
+    assert.equal(reportData.notification.headline, 'Amadeus • D-mail');
+    const rendered = renderOwnerNotification(reportData.notification, { now: '2026-09-18T15:30:00.000Z' });
+    assert.match(rendered, /PUBG 今日自动同步结果/);
+    assert.match(rendered, /数据更新时间：23:30/u);
+    assert.match(rendered, /El Psy Kongroo\.$/u);
+    assert.doesNotMatch(rendered, /Asia\/Shanghai|UTC\+08|自然日|业务日/u);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

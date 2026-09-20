@@ -52,8 +52,11 @@ test('owner outbox is channel-free, atomic, and idempotent', async () => {
     assert.match(files[0]!, /\.pending\.json$/u);
     const stored = JSON.parse(await readFile(join(directory, files[0]!), 'utf8')) as Record<string, unknown>;
     assert.equal(stored.version, 1);
+    assert.equal(stored.type, 'owner_notification');
     assert.equal(stored.eventKey, event.eventKey);
-    assert.equal(stored.message, event.message);
+    assert.equal(stored.headline, event.title);
+    assert.equal(stored.summary, event.message);
+    assert.equal('message' in stored, false);
     assert.equal('channel' in stored, false);
     assert.equal('recipient' in stored, false);
   } finally {

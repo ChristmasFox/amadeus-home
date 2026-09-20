@@ -6,6 +6,40 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
+
+已从远端拉取并 rebase 最新 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md`。Phase 1 将
+`plugins/amadeus/src/index.ts` 收敛为 36 行 bootstrap，按 capability 拆出 registration module，
+共享 tool wrapper、Identity lifecycle 和 owner worker 保持既有契约；Phase 2 移除了 global
+`before_prompt_build` 业务 routing guidance，拆分 Product Radar、Media、NAS、HomeLab、KOOK、
+Owner Notification 等 Skill，并把 PUBG/时间/Identity workflow 留在对应 capability owner。
+
+定向验证：`pnpm test:amadeus`、PUBG plugin 9/9、`pnpm typecheck:amadeus` 和
+`git diff --check` 通过；SOUL/workspace prompt ownership 与 global business injection 扫描通过。
+随后 Phase 3-5 已在下方完成，Phase 6 release 仍待执行。
+
+## 2026-09-20：Amadeus 架构收敛 Phase 3-5（已完成，等待 release）
+
+已新增纯 `packages/presentation`：实现 `PubgMatchReviewPresentation`、
+`PubgPeriodReviewPresentation`、`OwnerNotificationPresentation`，runtime validation、证据引用校验、
+未知值保留、同日 `HH:mm`/跨日 `YYYY-MM-DD HH:mm` formatter 和 deterministic renderers。PUBG
+复盘工具通过结构化 `presentation` 返回，OwnerNotifier 在发送和重试边界 hard-validate 后统一渲染；
+旧 outbox `title/message` 只做读取时兼容，新写入统一为结构化合同。
+
+PUBG Domain 的 06:00 relative-period 与 explicit range 回归已补齐，Telemetry calendar-day report 与
+互动查询仍由不同 use case 保持分离；PUBG tool local display fields 已接入 Presentation formatter，默认
+正文不暴露内部 resolver metadata。市场、媒体、HomeLab、PUBG sync、Product Radar、Codex hook 和
+release smoke 均已迁移到 owner contract。
+
+治理已完成：根 `AGENTS.md` ownership matrix/checklist、`docs/CAPABILITY_TEMPLATE.md`、
+`scripts/check-architecture.mjs` 及 fixture test 已加入，`pnpm check:architecture` 和
+`workflow:verify` 路径已接入。`pnpm build`、`pnpm typecheck`、`pnpm test`、`pnpm check:secrets`、
+architecture fixture、workflow scope tests 与 `git diff --check` 当前通过。
+
+仍待 Phase 6：minor 版本与单次 release notes、实现提交/push、`deploy-openclaw.sh --dry-run`、
+`--apply --build-auto`、`doctor.sh`、live checkpoint/health/preflight/smoke，以及仅包含部署证据的
+第二次 docs/state/checkpoint 提交和 push。
+
 ## 2026-09-20：修复 VPS Caddy 多服务 525（已完成）
 
 Cloudflare 解析和回源链路本身正常，但 VPS 生效的 Caddy 配置只包含 `sub`、`emby`、`claw`

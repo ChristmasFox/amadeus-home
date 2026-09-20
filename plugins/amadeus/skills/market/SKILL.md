@@ -15,8 +15,10 @@ For a scheduled observation:
 - Notify only when the tool returns `status=ok`.
 - When it returns `status=market_closed` or `status=error`, do not invent
   values and do not call `amadeus_notify_owner`.
-- For `status=ok`, pass the returned `notification.eventKey`, `source`,
-  `title`, and `message` unchanged to `amadeus_notify_owner`.
+- For `status=ok`, pass the returned `notification` object unchanged to
+  `amadeus_notify_owner`. It is a validated `owner_notification` contract;
+  preserve its eventType, severity, eventKey, source, headline, facts, summary,
+  dataUpdatedAt, occurredAt, and worldLineClosing fields.
 - Keep the stable `market-indices:<trading-date>:<open|close>` event key and
   the final `El Psy Kongroo.` world-line closing. The owner outbox remains the
   only proactive delivery path; do not send to Telegram, KOOK, or a group.

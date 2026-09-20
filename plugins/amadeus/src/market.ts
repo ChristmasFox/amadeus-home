@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import type { OwnerNotificationPresentation } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 
 const execFileAsync = promisify(execFile);
@@ -34,12 +35,7 @@ export type ParsedMarketChart =
   | { status: 'market_closed'; tradingDate: string; timezone: string; message: string }
   | { status: 'unavailable'; message: string };
 
-export interface MarketNotification {
-  eventKey: string;
-  source: 'market-indices';
-  title: string;
-  message: string;
-}
+export type MarketNotification = OwnerNotificationPresentation;
 
 export type MarketResult =
   | {
@@ -102,20 +98,6 @@ function dateInTimeZone(timestampMs: number, timezone: string): string {
     day: '2-digit',
   }).formatToParts(new Date(timestampMs));
   return `${datePart(parts, 'year')}-${datePart(parts, 'month')}-${datePart(parts, 'day')}`;
-}
-
-function dateTimeInTimeZone(timestampMs: number, timezone: string): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date(timestampMs));
-  return `${datePart(parts, 'year')}-${datePart(parts, 'month')}-${datePart(parts, 'day')} ${datePart(parts, 'hour')}:${datePart(parts, 'minute')}:${datePart(parts, 'second')}`;
 }
 
 function signed(value: number, digits = 2): string {
@@ -238,32 +220,25 @@ export function buildMarketNotification(
   dataUpdatedAt: string,
 ): MarketNotification {
   const phaseLabel = phase === 'open' ? '开盘' : '收盘';
-  const lines = observations.flatMap((item) => {
-    const daily = phase === 'close' && item.intradayChange !== null
-      ? `\n日内：${signed(item.intradayChange)}（开盘 ${valueText(item.open)}）`
-      : '';
-    return [
-      `${item.name}（${item.symbol}）`,
-      `${phaseLabel}：${valueText(item.value)}`,
-      `较前一交易日收盘：${signed(item.change)}（${signed(item.changePercent)}%）${daily}`,
-      '',
-    ];
-  });
   const eventKey = `market-indices:${marketDate}:${phase}`;
   return {
+    type: 'owner_notification',
+    eventType: `market_indices_${phase}`,
+    severity: 'success',
     eventKey,
     source: 'market-indices',
-    title: `Amadeus • 世界线观测 · 美股${phaseLabel}`,
-    message: [
-      `世界线观测记录：美股${phaseLabel}`,
-      `交易日：${marketDate}（美东）`,
-      '',
-      ...lines,
-      `数据源：${DATA_SOURCE}（指数数据可能存在延迟）`,
-      `数据更新时间：${dateTimeInTimeZone(Date.parse(dataUpdatedAt), MARKET_TIMEZONE)}（${MARKET_TIMEZONE}）`,
-      '',
-      'El Psy Kongroo.',
-    ].join('\n').trim(),
+    headline: `Amadeus • 世界线观测 · 美股${phaseLabel}`,
+    facts: observations.flatMap((item) => [
+      { label: `${item.name}（${item.symbol}）· ${phaseLabel}`, value: valueText(item.value), evidenceRefs: [] },
+      { label: '较前一交易日收盘', value: `${signed(item.change)}（${signed(item.changePercent)}%）`, evidenceRefs: [] },
+      ...(phase === 'close' && item.intradayChange !== null
+        ? [{ label: '日内变动', value: `${signed(item.intradayChange)}（开盘 ${valueText(item.open)}）`, evidenceRefs: [] }]
+        : []),
+    ]),
+    summary: `世界线观测记录：美股${phaseLabel}。交易日：${marketDate}（美东）。数据源：${DATA_SOURCE}（指数数据可能存在延迟）`,
+    dataUpdatedAt,
+    occurredAt: dataUpdatedAt,
+    worldLineClosing: true,
   };
 }
 

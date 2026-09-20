@@ -34,6 +34,23 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界；统计、权限、预览确认、
 状态转换和排序保持 deterministic。
 
+## Presentation contract 与时间语义
+
+`packages/presentation` 是跨能力的结构化用户输出边界，当前提供
+`PubgMatchReview`、`PubgPeriodReview` 和 `OwnerNotification` 三类合同。合同先做运行时校验，
+再交给 deterministic renderer；数字的 `null` 仍表示未知，事实段通过 `evidenceRefs` 追溯，
+不得由 renderer 补成零或猜测成功。
+
+时间分三层处理：输入瞬间保留 ISO instant，PUBG Domain 负责查询周期（默认北京时间 06:00 起始），
+renderer 负责用户显示时间。默认同一显示日只显示 `HH:mm`，跨显示日显示
+`YYYY-MM-DD HH:mm`；默认正文不泄漏实现时区名、`UTC+08`、`自然日` 或 `业务日` 等内部标签。
+市场和 Telemetry 的统计周期可以保持各自的机器证据，但必须在 capability contract 中明确，不能
+由全局人格或 workspace 规则解释。
+
+`plugins/amadeus/src/index.ts` 只负责单一 plugin 的 bootstrap；每个 capability 在
+`src/capabilities/<name>/register.ts` 注册，公共 lifecycle/工具包装在 `src/shared/`，业务实现
+仍留在同一个 plugin 内，不拆成第二个 runtime 或 sender。
+
 ## 原生插件边界
 
 ### PUBG
@@ -75,8 +92,9 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
 - \`amadeus_homelab_status\`：Glances、uptime 和固定探针；读取为主，显式 owner/cron
   才能通知，不负责重启。
 - \`amadeus_kook_group_members\`：只能读取当前 KOOK channel/guild，不主动推送。
-- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只能写入或经 OpenClaw 投递；自动通知默认使用
-  \`Amadeus • <事件>\` 标题、事实与 \`数据更新时间\`、稳定 event key，并以 \`El Psy Kongroo.\` 收束世界线风格正文。
+- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只接受校验后的
+  \`owner_notification\` 合同（eventType、severity、eventKey、source、headline、facts、summary、
+  时间字段和可选 worldLineClosing），只能写入或经 OpenClaw 投递；固定 WhatsApp owner。
   固定 WhatsApp owner。
 - \`amadeus_vps_service_info\`、\`amadeus_vps_live_status\`、\`amadeus_vps_usage\`、
   \`amadeus_vps_system_status\`、\`amadeus_vps_services\`：只读 KiwiVM/API 与固定 SSH probe；
@@ -93,22 +111,30 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
 
 ### Owner notification contract
 
-Product Radar、Codex hook、媒体完成和 HomeLab 都使用同一 v1 event：
+Product Radar、Codex hook、媒体完成、HomeLab、市场和 PUBG 同步都使用同一 v1 event：
 
 \`\`\`json
 {
   "version": 1,
+  "type": "owner_notification",
+  "eventType": "business_event",
+  "severity": "info",
   "eventKey": "stable-idempotency-key",
   "source": "business-source",
-  "title": "human title",
-  "message": "body",
-  "occurredAt": "ISO-8601"
+  "headline": "human headline",
+  "facts": [
+    { "label": "fact", "value": "value", "evidenceRefs": [] }
+  ],
+  "summary": "body",
+  "occurredAt": "ISO-8601",
+  "worldLineClosing": true
 }
 \`\`\`
 
-事件不含 channel、recipient、bot token 或平台 ID。业务可以写
+事件不含 channel、recipient、bot token 或平台 ID。旧 outbox 中的 `title/message` 仅在读取重试时
+做一次性内存兼容转换，新写入统一为上述合同。业务可以写
 \`/DATA/AppData/openclaw/notifications/*.pending.json\`；OpenClaw worker 负责
-WhatsApp owner 投递、长消息分段、sent marker 和幂等 retry。Telegram/KOOK 只作为聊天入口，
+WhatsApp owner 投递、合同渲染、长消息分段、sent marker 和幂等 retry。Telegram/KOOK 只作为聊天入口，
 不作为 proactive target。
 
 ## 独立外部服务

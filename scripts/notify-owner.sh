@@ -57,15 +57,23 @@ outbox, event_key, source, title, message = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
+clean_message = clean(message, 16000)
+world_line_closing = clean_message.endswith("El Psy Kongroo.")
+summary = clean_message[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_message
 event = {
     "version": 1,
+    "type": "owner_notification",
+    "eventType": clean(source, 128),
+    "severity": "info",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
-    "title": clean(title, 200),
-    "message": clean(message, 16000),
+    "headline": clean(title, 200) or clean(source, 128),
+    "facts": [],
+    "summary": summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    **({"worldLineClosing": True} if world_line_closing else {}),
 }
-if not event["eventKey"] or not event["source"] or not event["message"]:
+if not event["eventKey"] or not event["source"] or not event["summary"]:
     raise SystemExit(2)
 directory = Path(outbox)
 directory.mkdir(parents=True, exist_ok=True)
@@ -108,15 +116,23 @@ outbox, event_key, source, title, message = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
+clean_message = clean(message, 16000)
+world_line_closing = clean_message.endswith("El Psy Kongroo.")
+summary = clean_message[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_message
 event = {
     "version": 1,
+    "type": "owner_notification",
+    "eventType": clean(source, 128),
+    "severity": "info",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
-    "title": clean(title, 200),
-    "message": clean(message, 16000),
+    "headline": clean(title, 200) or clean(source, 128),
+    "facts": [],
+    "summary": summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    **({"worldLineClosing": True} if world_line_closing else {}),
 }
-if not event["eventKey"] or not event["source"] or not event["message"]:
+if not event["eventKey"] or not event["source"] or not event["summary"]:
     raise SystemExit(2)
 
 directory = Path(outbox)

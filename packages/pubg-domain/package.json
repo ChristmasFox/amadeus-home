@@ -16,6 +16,7 @@
     }
   },
   "dependencies": {
+    "@agent/presentation": "workspace:*",
     "zod": "4.5.4"
   },
   "devDependencies": {

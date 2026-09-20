@@ -5,6 +5,7 @@ import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
+import { buildPubgMatchReviewPresentation, formatDisplayTime, type PubgMatchReviewPresentation } from '@agent/presentation';
 import {
   PubgApiClient,
   PubgApiError,
@@ -147,6 +148,7 @@ const ToolOutputSchema = Type.Object({
   dataUpdatedAtLocal: Type.String(),
   displayTimezone: Type.String(),
   dataSourceRange: DataSourceRangeSchema,
+  presentation: Type.Optional(Type.Unknown()),
   metricVersion: Type.String(),
   queryResolved: Type.Record(Type.String(), Type.Unknown()),
   evidenceRefs: Type.Object({
@@ -482,27 +484,9 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-function formatLocalTime(value: unknown, timezone: string): string | null {
-  const timestamp = typeof value === 'number'
-    ? value
-    : typeof value === 'string' ? Date.parse(value) : Number.NaN;
-  if (!Number.isFinite(timestamp)) return null;
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hourCycle: 'h23',
-    }).formatToParts(new Date(timestamp));
-    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
-    return `${values.year}-${values.month}-${values.day} ${values.hour}:${values.minute}:${values.second}`;
-  } catch {
-    return null;
-  }
+function formatLocalTime(value: unknown, timezone: string, now?: string, forceDate = false): string | null {
+  const instant = typeof value === 'number' ? new Date(value) : typeof value === 'string' ? value : null;
+  return formatDisplayTime(instant, { timezone, ...(now ? { now } : {}), forceDate });
 }
 
 const DISPLAY_TIME_KEYS = new Set([
@@ -510,14 +494,14 @@ const DISPLAY_TIME_KEYS = new Set([
   'finishedAt', 'lastRunAt', 'occurredAt', 'updatedAt', 'expiresAt', 'from', 'to',
 ]);
 
-function decorateDisplayTimes(value: unknown, timezone: string): unknown {
-  if (Array.isArray(value)) return value.map((item) => decorateDisplayTimes(item, timezone));
+function decorateDisplayTimes(value: unknown, timezone: string, now: string): unknown {
+  if (Array.isArray(value)) return value.map((item) => decorateDisplayTimes(item, timezone, now));
   if (!isRecord(value)) return value;
   const result: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
-    result[key] = decorateDisplayTimes(item, timezone);
+    result[key] = decorateDisplayTimes(item, timezone, now);
     if (DISPLAY_TIME_KEYS.has(key) && typeof item === 'string') {
-      const local = formatLocalTime(item, timezone);
+      const local = formatLocalTime(item, timezone, now, key === 'from' || key === 'to');
       if (local) result[`${key}Local`] = local;
     }
   }
@@ -573,13 +557,13 @@ function dataSourceRangeFor(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Sha
   const timezone = primary.timezone ?? fallbackTimezone;
   const localize = (range: DataSourceRangeCore) => ({
     ...range,
-    fromLocal: formatLocalTime(range.from, range.timezone ?? timezone),
-    toLocal: formatLocalTime(range.to, range.timezone ?? timezone),
+    fromLocal: formatLocalTime(range.from, range.timezone ?? timezone, undefined, true),
+    toLocal: formatLocalTime(range.to, range.timezone ?? timezone, undefined, true),
   });
   const localizedSegments = segments.map((segment) => ({
     ...segment,
-    fromLocal: formatLocalTime(segment.from, segment.timezone ?? timezone),
-    toLocal: formatLocalTime(segment.to, segment.timezone ?? timezone),
+    fromLocal: formatLocalTime(segment.from, segment.timezone ?? timezone, undefined, true),
+    toLocal: formatLocalTime(segment.to, segment.timezone ?? timezone, undefined, true),
   }));
   const localizedPrimary = localize({
     from: earliestRangeValue(ranges.length ? ranges : [fallback], 'from'),
@@ -593,10 +577,10 @@ function dataSourceRangeFor(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Sha
   };
 }
 
-function jsonToolResult(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai'): ReturnType<typeof jsonResult> {
+function jsonToolResult(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shanghai', presentation?: PubgMatchReviewPresentation): ReturnType<typeof jsonResult> {
   const dataSourceRange = dataSourceRangeFor(envelope, fallbackTimezone);
   const displayTimezone = dataSourceRange.timezone ?? fallbackTimezone;
-  const displayEnvelope = decorateDisplayTimes(envelope, displayTimezone) as Record<string, unknown>;
+  const displayEnvelope = decorateDisplayTimes(envelope, displayTimezone, envelope.asOf) as Record<string, unknown>;
   return jsonResult({
     ...displayEnvelope,
     asOfLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
@@ -604,7 +588,31 @@ function jsonToolResult(envelope: ToolEnvelope, fallbackTimezone = 'Asia/Shangha
     dataUpdatedAtLocal: formatLocalTime(envelope.asOf, displayTimezone) ?? envelope.asOf,
     displayTimezone,
     dataSourceRange,
+    ...(presentation ? { presentation } : {}),
   });
+}
+
+function jsonToolResultWithPresentation(
+  name: string,
+  envelope: ToolEnvelope,
+  fallbackTimezone: string,
+): ReturnType<typeof jsonResult> {
+  if (name !== 'pubg_get_review_facts' || envelope.status === 'error' || envelope.status === 'no_matches') {
+    return jsonToolResult(envelope, fallbackTimezone);
+  }
+  try {
+    return jsonToolResult(envelope, fallbackTimezone, buildPubgMatchReviewPresentation({ data: envelope.data, dataUpdatedAt: envelope.asOf }));
+  } catch (error) {
+    return jsonToolResult({
+      ...envelope,
+      status: 'error',
+      error: {
+        code: 'presentation_invalid',
+        retryable: false,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+    }, fallbackTimezone);
+  }
 }
 
 function makeTool<Schema extends TypeSchema>(
@@ -632,7 +640,7 @@ function makeTool<Schema extends TypeSchema>(
           ? await prepareIdentitySubject(service, config, input as Static<Schema> & IdentitySubjectInput, toolContext, sessionId, signal)
           : stripIdentityFields(input as Static<Schema> & IdentitySubjectInput);
         if ('status' in prepared && prepared.status === 'error') return jsonToolResult(prepared, displayTimezone);
-        return jsonToolResult(await execute(service, prepared as Static<Schema>, sessionId, signal), displayTimezone);
+        return jsonToolResultWithPresentation(name, await execute(service, prepared as Static<Schema>, sessionId, signal), displayTimezone);
       } catch (error) {
         return jsonToolResult(runtimeError(error), configString(config, 'timezone', 'PUBG_TIMEZONE') ?? 'Asia/Shanghai');
       }
@@ -734,7 +742,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_get_review_facts',
-      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Friendly-fire queries are directional: actorPlayerId → victimPlayerId; “反过来” is a separate query and must not be described as correcting the previous direction. Preserve both independent results unless the same normalized direction and period directly contradict. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. Use startedAtLocal and all other *Local fields for the final answer; show Beijing-local dataUpdatedAtLocal and dataSourceRange.fromLocal/toLocal, never raw UTC clock components. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
+      description: 'Get evidence-traceable deterministic Telemetry review facts for one concrete PUBG match. Always call this tool for Telemetry facts instead of quoting prior conversation context. Friendly-fire queries are directional: actorPlayerId → victimPlayerId; “反过来” is a separate query and must not be described as correcting the previous direction. Preserve both independent results unless the same normalized direction and period directly contradict. Always call pubg_search_matches with refresh=true in the current turn first and pass its fresh resultSetId; the tool rejects omitted, stale, or unrelated search context. This is mandatory for “最近一局/最后一局/最新比赛” and every “复盘/回顾/总结” request. The result includes a validated presentation contract, dataSourceRange, startedAtLocal, and Beijing-local display fields for the final answer; use them instead of raw UTC clock components. For a human nickname, call identity_resolve first and pass the resolved personId in personIds.',
       parameters: ReviewParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_get_review_facts',
@@ -765,7 +773,7 @@ const entry = defineToolPlugin({
     }),
     tool({
       name: 'pubg_telemetry_sync_report',
-      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send Amadeus • D-mail owner notification payload. Preserve its counts, Beijing-local dataUpdatedAtLocal, dataSourceRange, eventKey, title, and message exactly when calling amadeus_notify_owner. Use team=true only.',
+      description: 'Return the deterministic previous-calendar-day PUBG Telemetry synchronization report and a ready-to-send structured Amadeus • D-mail owner notification payload. Preserve its counts and the complete notification contract exactly when calling amadeus_notify_owner; do not rewrite it into a free-form title/message event. Use team=true only.',
       parameters: TelemetrySyncReportParameters,
       factory: ({ config, toolContext }) => makeTool(
         'pubg_telemetry_sync_report',

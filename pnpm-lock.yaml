@@ -36,8 +36,23 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  packages/presentation:
+    devDependencies:
+      '@types/node':
+        specifier: 22.18.6
+        version: 22.18.6
+      tsx:
+        specifier: 4.23.13
+        version: 4.23.13
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
   packages/pubg-domain:
     dependencies:
+      '@agent/presentation':
+        specifier: workspace:*
+        version: link:../presentation
       zod:
         specifier: 4.5.4
         version: 4.5.4
@@ -57,6 +72,9 @@ importers:
       '@agent/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@agent/presentation':
+        specifier: workspace:*
+        version: link:../../packages/presentation
       '@types/node':
         specifier: 22.18.6
         version: 22.18.6
@@ -81,6 +99,9 @@ importers:
       '@agent/identity':
         specifier: workspace:*
         version: link:../../packages/identity
+      '@agent/presentation':
+        specifier: workspace:*
+        version: link:../../packages/presentation
       '@agent/pubg-domain':
         specifier: workspace:*
         version: link:../../packages/pubg-domain

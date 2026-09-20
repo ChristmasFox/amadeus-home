@@ -2,6 +2,14 @@
 
 更新时间：2026-09-20（Asia/Shanghai）
 
+当前执行 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md`。已从 `origin/main` 拉取目标并
+rebase 本地提交；Phase 1-2 已完成源码验证：Amadeus thin bootstrap/capability registrations、
+capability Skills、global prompt ownership cleanup 和收紧 persona meme trigger 均已落地。
+Phase 3-5 也已完成：Presentation contracts/renderers/time formatter、owner hard validation、PUBG
+structured presentation、architecture fitness check 和 workflow integration 均已验证。下一步只做
+Phase 6 release validation、minor version bump、implementation commit/push、CasaOS deploy 和
+deployment evidence commit/push。
+
 当前 Goal：按 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md，将仍有价值的旧多领域能力迁移到
 OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n、旧 runtime、
 旧通知 bridge 和旧 proactive producer。

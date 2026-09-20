@@ -53,7 +53,18 @@ export async function homelabStatus(config: AmadeusConfig, context: OpenClawPlug
   let notification: unknown;
   if (notifyOwner) {
     if (!isTrustedOwnerContext(context)) throw new Error('owner notification requires owner identity');
-    notification = await notifier.notify(ownerEvent({ eventKey: `homelab-status:${new Date().toISOString().slice(0, 16)}`, source: 'homelab-status', title: 'HomeLab 状态', message: text }));
+    const occurredAt = new Date().toISOString();
+    notification = await notifier.notify(ownerEvent({
+      type: 'owner_notification',
+      eventType: 'homelab_status',
+      severity: Object.values(services).every(Boolean) ? 'success' : 'warning',
+      eventKey: `homelab-status:${occurredAt.slice(0, 16)}`,
+      source: 'homelab-status',
+      headline: 'HomeLab 状态',
+      facts: Object.entries(services).map(([name, ok]) => ({ label: name, value: ok, evidenceRefs: [] })),
+      summary: text,
+      occurredAt,
+    }));
   }
   return { text, services, ...(notification === undefined ? {} : { notification }) };
 }

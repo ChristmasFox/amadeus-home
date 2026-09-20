@@ -78,11 +78,17 @@ export async function organizeMedia(
   const value = result && typeof result === 'object' ? result as Record<string, unknown> : {};
   if (value.success === true) {
     pending.delete(key);
+    const occurredAt = new Date().toISOString();
     const notification = await notifier.notify(ownerEvent({
+      type: 'owner_notification',
+      eventType: 'media_organize_completed',
+      severity: 'success',
       eventKey: `media-organize:${current.previewId}:completed`,
       source: 'media-organize',
-      title: 'Emby 媒体整理完成',
-      message: responseMessage(result),
+      headline: 'Emby 媒体整理完成',
+      facts: [],
+      summary: responseMessage(result),
+      occurredAt,
     }));
     return { action: 'execute', result, message: responseMessage(result), notification };
   }
