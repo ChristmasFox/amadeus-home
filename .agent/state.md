@@ -15,7 +15,10 @@ health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment 
 `pubg_query_team_damage` 作为 Domain-owned batch Telemetry contract，覆盖全队误伤详情和
 007 → 004 KICK 计数；Domain 22/22、Plugin 9/9、全仓验证已通过。版本 `1.4.0` 的提交
 `6ee03d0` 已 push 并完成 CasaOS apply；live image、tool/Skill preflight、health、外围 smoke
-和 doctor 均通过。当前只剩本次部署证据与后续版本策略单独提交。
+和 doctor 均通过。部署证据已提交并 push，当前只剩本次版本策略单独提交。
+
+版本策略已按用户要求调整：当前 live release 保持 `1.4.0`，以后只使用 `bump patch` 按 `0.0.1`
+递增，`0.0.9 -> 0.1.0`、`0.9.9 -> 1.0.0`，不再使用 `bump minor`/`bump major`。
 
 本次 1.3.0 live release：implementation commit `7d85bc1`；OpenClaw image
 `local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image

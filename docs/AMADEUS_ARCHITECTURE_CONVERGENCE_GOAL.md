@@ -891,12 +891,10 @@ git diff --check
 
 ## 13.1 Release version
 
-遵守现有根 `VERSION` / `RELEASE_NOTES.md` 规则。
-
-本轮属于向后兼容的架构与 Presentation 能力升级时，优先按现有政策 bump **minor**；如果实现过程中真的
-需要 breaking external contract，先避免 breaking，确实无法避免才按现有 major policy 处理并在实施前重新审视范围。
-
-`RELEASE_NOTES.md` 只写本次 release 新增/修复，不累计历史正文。
+遵守现有根 `VERSION` / `RELEASE_NOTES.md` 规则。当前已部署的 release 保持 `1.4.0` 不变；从下一版本
+起所有 release 只调用 `scripts/amadeus-version.sh bump patch`，每次按 `0.0.1` 递增。第三段到 9 时
+进位到第二段（`0.0.9 -> 0.1.0`），第二段也到 9 时进位到第一段（`0.9.9 -> 1.0.0`）；不再手工
+使用或支持 `bump minor`、`bump major`。`RELEASE_NOTES.md` 只写本次 release 的新增/修复，不累计历史正文。
 
 ## 13.2 Implementation commit + push
 

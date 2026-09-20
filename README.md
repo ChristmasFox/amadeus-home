@@ -54,17 +54,18 @@ pnpm test:workflow
 
 ## Amadeus 版本管理
 
-产品版本唯一记录在根目录 `VERSION`，当前版本为 `1.4.0`。部署完成通知的正文来自
+产品版本唯一记录在根目录 `VERSION`，当前版本为 `1.4.0`。从下一版本起，每次只递增 `0.0.1`；当第三段到 9
+时进位到第二段（`0.0.9 -> 0.1.0`），第二段也到 9 时再进位到第一段（`0.9.9 -> 1.0.0`）。部署完成通知的正文来自
 `RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
 本次部署的新增或修复。部署前会校验版本标题、正文非空，并拒绝把运行时名称写进通知。
 
 ```sh
 ./scripts/amadeus-version.sh show
-./scripts/amadeus-version.sh bump patch  # 修复、兼容性或运维调整：1.0.0 -> 1.0.1
-./scripts/amadeus-version.sh bump minor  # 新增向后兼容能力：1.0.0 -> 1.1.0
-./scripts/amadeus-version.sh bump major  # 破坏性契约或架构变更：1.0.0 -> 2.0.0
+./scripts/amadeus-version.sh bump patch  # 唯一递增入口：1.4.0 -> 1.4.1；到 9 自动进位
 ./scripts/amadeus-version.sh check
 ```
+
+不再使用或手工指定 `bump minor`、`bump major`。
 
 每次递增后先替换 `RELEASE_NOTES.md` 的首行版本和正文，只写本次更新内容，不重复上一版本说明。部署通知标题固定为
 `Amadeus <版本> · 世界线收束`，部署脚本会统一在正文末尾追加一次 `El Psy Kongroo.`；
