@@ -54,7 +54,12 @@
     }
   },
   "tools": {
-    "profile": "full"
+    "profile": "full",
+    "toolsBySender": {
+      "*": {
+        "allow": ["web_search", "web_fetch"]
+      }
+    }
   },
   "plugins": {
     "enabled": true,
@@ -134,8 +139,8 @@
           "enabled": true
         }
       },
-      "dmPolicy": "allowlist",
-      "allowFrom": [],
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
       "groupPolicy": "open",
       "groups": {
         "*": {
