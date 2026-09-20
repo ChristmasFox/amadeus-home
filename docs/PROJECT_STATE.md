@@ -2,6 +2,21 @@
 
 更新时间：2026-09-20（Asia/Shanghai）
 
+## 当前执行：Amadeus 1.4.2 Worldline 与 Operation Skuld（源码发布候选）
+
+目标文件：AMADEUS_1_4_2_WORLDLINE_UNIFICATION_AND_SKULD_READINESS_GOAL.md。
+当前源码已加入统一的 WorldlineNotificationIntent、正式主题词汇、确定性主题 policy、
+validated owner presentation 和 owner outbox producer inventory；Product Radar generic core
+保持平台/主题中立，Product Radar、市场、媒体、HomeLab、PUBG sync、VPS、Codex/release 均在
+边界适配结构化事实。Host profile、Amadeus network、FashionSigLIP inventory、Skuld manifest、
+迁移 runbook、backup/checksum metadata 和只读 readiness rehearsal 已加入。
+
+`VERSION=1.4.2`、release notes、全量 `pnpm test`/`typecheck`/`build`、secret scan、architecture
+fitness、migration-readiness test、脚本语法和 OpenClaw/Product Radar 生产镜像构建均已通过。待
+完成 implementation commit/push、当前 CasaOS apply、live health/smoke、readiness/deployment
+evidence commit/push。Operation Skuld 仅准备执行清单，不执行 Mac mini 切换；真实自然语言入口
+与最终用户回复不伪造验收。
+
 ## 当前目标
 
 当前唯一产品目标是 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md：把仍有价值的旧

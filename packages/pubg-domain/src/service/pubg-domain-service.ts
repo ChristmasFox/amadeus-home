@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import type { OwnerNotificationPresentation } from '@agent/presentation';
 import type { TeamConfig, TeamPlayer } from '../config/team.js';
 import type { Coverage, DataStatus, Evidence, SourceInfo } from '../schema/status.js';
 import type { CanonicalQuery, GroupBy, Metric, Selector } from '../schema/query.js';
@@ -339,32 +338,6 @@ function summarizePrefetchRuns(reportDate: string, timezone: string, runs: Telem
     pendingCount: sum((run) => run.pendingCount),
     failedMatchIds: [...new Set(runs.flatMap((run) => run.failedMatchIds))],
     lastRunAt: runs.length ? runs[runs.length - 1]!.finishedAt : null,
-  };
-}
-
-function pubgSyncNotification(summary: TelemetrySyncSummary, asOf: string): OwnerNotificationPresentation {
-  const state = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? '部分同步，未完成项已保留并会继续重试' : '同步完成，当前世界线稳定';
-  return {
-    type: 'owner_notification',
-    eventType: 'pubg_telemetry_sync',
-    severity: summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? 'warning' : 'success',
-    headline: 'Amadeus • D-mail',
-    source: 'pubg-sync',
-    eventKey: `pubg-sync:${summary.reportDate}`,
-    facts: [
-      { label: '日期', value: summary.reportDate, evidenceRefs: [] },
-      { label: '定时检查', value: summary.runCount, evidenceRefs: [] },
-      { label: '发现新对局', value: summary.newMatchCount, evidenceRefs: [] },
-      { label: 'Telemetry 新拉取并写入缓存', value: summary.fetchedCount, evidenceRefs: [] },
-      { label: 'Telemetry 命中缓存', value: summary.cacheHitCount, evidenceRefs: [] },
-      { label: '暂不可用', value: summary.unavailableCount, evidenceRefs: [] },
-      { label: '等待后续重试', value: summary.pendingCount, evidenceRefs: [] },
-      { label: 'Match API/Telemetry 异常对局', value: summary.failedMatchIds.length, evidenceRefs: [] },
-    ],
-    summary: `PUBG 今日自动同步结果。世界线状态：${state}。D-mail 已写入观测记录；若有延迟，下一轮同步将沿当前世界线继续收束。`,
-    dataUpdatedAt: asOf,
-    occurredAt: asOf,
-    worldLineClosing: true,
   };
 }
 
@@ -961,14 +934,12 @@ export class PubgDomainService {
     const runs = this.repository.listTelemetryPrefetchRuns(reportDate);
     const summary = summarizePrefetchRuns(reportDate, this.timezone, runs);
     const asOf = summary.lastRunAt ?? now.toISOString();
-    const notification = pubgSyncNotification(summary, asOf);
     const status: ToolStatus = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? 'partial' : 'ok';
     return {
       status,
       data: {
         summary,
         runs,
-        notification,
       },
       coverage: coverageForLocal(this.repository.listMatches(), now, this.repository.getSyncState('team:' + this.team.id)),
       asOf,

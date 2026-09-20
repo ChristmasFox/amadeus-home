@@ -4,7 +4,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
-import { renderOwnerNotification } from '@agent/presentation';
 import {
   DeterministicQueryEngine,
   BUSINESS_DAY_START,
@@ -764,7 +763,7 @@ test('Telemetry distinguishes a successful cache miss from unavailable data', as
   assert.equal(unavailable.availability, 'UNAVAILABLE');
 });
 
-test('hourly telemetry prefetch only fetches new matches, persists retry state, and builds a D-mail report', async () => {
+test('hourly telemetry prefetch only fetches new matches, persists retry state, and builds a structured report', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pubg-domain-prefetch-'));
   let currentNow = new Date('2026-09-18T15:00:00.000Z');
   let discoveredMatchIds = ['m1'];
@@ -814,15 +813,10 @@ test('hourly telemetry prefetch only fetches new matches, persists retry state, 
 
     const report = await service.getTelemetrySyncReport({ reportDate: '2026-09-18' });
     assert.equal(report.status, 'ok');
-    const reportData = report.data as { summary: { newMatchCount: number; fetchedCount: number }; notification: Parameters<typeof renderOwnerNotification>[0] };
+    const reportData = report.data as { summary: { newMatchCount: number; fetchedCount: number }; notification?: unknown };
     assert.equal(reportData.summary.newMatchCount, 2);
     assert.equal(reportData.summary.fetchedCount, 2);
-    assert.equal(reportData.notification.headline, 'Amadeus • D-mail');
-    const rendered = renderOwnerNotification(reportData.notification, { now: '2026-09-18T15:30:00.000Z' });
-    assert.match(rendered, /PUBG 今日自动同步结果/);
-    assert.match(rendered, /数据更新时间：23:30/u);
-    assert.match(rendered, /El Psy Kongroo\.$/u);
-    assert.doesNotMatch(rendered, /Asia\/Shanghai|UTC\+08|自然日|业务日/u);
+    assert.equal(reportData.notification, undefined);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

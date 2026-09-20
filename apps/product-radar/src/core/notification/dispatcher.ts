@@ -1,5 +1,4 @@
 import type { RadarEvent } from '../events/events.js';
-import { formatNotification } from './formatter.js';
 import type { NotificationChannel, NotificationMessage, NotificationSourceLabelResolver } from './ports.js';
 import type { SqliteRadarStore } from '../../storage/sqlite.js';
 import type { Watch } from '../watch/model.js';
@@ -23,9 +22,7 @@ export class NotificationDispatcher {
   enqueue(event: RadarEvent): void {
     for (const channel of this.channelsById.values()) {
       const message: NotificationMessage = {
-        event,
-        text: formatNotification(event, this.sourceLabels.displayName(event.source)),
-        recipient: channel.recipient,
+        ...(channel.prepare?.(event, this.sourceLabels.displayName(event.source)) ?? { event, recipient: channel.recipient }),
       };
       this.store.enqueueNotification(event, channel, message, this.now());
     }
@@ -36,7 +33,7 @@ export class NotificationDispatcher {
     await this.deliverPending();
   }
 
-  enqueueHeartbeat(watch: Watch, periodKey: string, text: string): number {
+  enqueueHeartbeat(watch: Watch, periodKey: string, payload: unknown): number {
     const event: RadarEvent = {
       id: `heartbeat:${watch.id}:${periodKey}`,
       eventKey: `heartbeat:${watch.id}:${periodKey}`,
@@ -50,7 +47,7 @@ export class NotificationDispatcher {
     };
     let inserted = 0;
     for (const channel of this.channelsById.values()) {
-      const message: NotificationMessage = { event, text, recipient: channel.recipient };
+      const message: NotificationMessage = channel.prepareHeartbeat?.(event, payload, this.sourceLabels.displayName(event.source)) ?? { event, payload, recipient: channel.recipient };
       if (this.store.enqueueHeartbeat(watch.id, periodKey, channel, message, this.now())) inserted += 1;
     }
     return inserted;

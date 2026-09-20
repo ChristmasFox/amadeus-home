@@ -12,6 +12,8 @@ function notification(overrides: Partial<OwnerNotificationPresentation> = {}): O
     type: 'owner_notification',
     eventType: 'test',
     severity: 'info',
+    significance: 'notable',
+    theme: 'worldline_observation',
     eventKey: 'test:event',
     source: 'test',
     headline: 'Test',

@@ -103,11 +103,7 @@ function statusOrNull(value: ProductStatus | undefined): ProductStatus | null {
   return value ?? null;
 }
 
-function scoreLabel(value: number | null | undefined): string {
-  return value === null || value === undefined ? '暂无' : `${(value * 100).toFixed(1)}%`;
-}
-
-export function formatHeartbeatDigest(observability: WatchObservability, runs: Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; imageModelCalls?: number; imageModelImagesProcessed?: number; imageModelCacheHits?: number; bestScore: number | null }>): string {
+export function buildHeartbeatPayload(observability: WatchObservability, runs: Array<{ status: string; startedAt: string; newListings: number; candidatesProcessed: number; imageComparisons: number; aboveThreshold: number; imageModelCalls?: number; imageModelImagesProcessed?: number; imageModelCacheHits?: number; bestScore: number | null }>): Record<string, unknown> {
   const totals = runs.reduce((result, run) => ({
     checks: result.checks + 1,
     successful: result.successful + (run.status === 'succeeded' ? 1 : 0),
@@ -121,26 +117,29 @@ export function formatHeartbeatDigest(observability: WatchObservability, runs: A
     imageModelCacheHits: result.imageModelCacheHits + (run.imageModelCacheHits ?? 0),
     bestScore: run.bestScore !== null && (result.bestScore === null || run.bestScore > result.bestScore) ? run.bestScore : result.bestScore,
   }), { checks: 0, successful: 0, failed: 0, newListings: 0, candidates: 0, comparisons: 0, aboveThreshold: 0, imageModelCalls: 0, imageModelImagesProcessed: 0, imageModelCacheHits: 0, bestScore: null as number | null });
-  const icon = observability.status === 'HEALTHY' ? '🟢' : observability.status === 'DEGRADED' ? '🟡' : observability.status === 'PAUSED' ? '⏸️' : '🔴';
   const threshold = isSimilarityRules(observability.watch.rules) ? observability.watch.rules.similarityThreshold : undefined;
   const feedErrors = observability.feeds.filter((feed) => feed.state !== 'ACTIVE' || feed.lastError).map((feed) => feed.lastError || feed.degradedReason || feed.state);
-  return [
-    '📡 Product Radar 日报',
-    '',
-    `🎯 ${observability.watch.source} / ${observability.watch.type}`,
-    `${icon} 状态：${observability.status}`,
-    '',
-    '过去 24 小时：',
-    `• 检查 ${totals.checks} 次（成功 ${totals.successful}，失败 ${totals.failed}）`,
-    `• 新商品 ${totals.newListings} 件，候选 ${totals.candidates} 个`,
-    `• 图片比较 ${totals.comparisons} 次`,
-    `• FashionSigLIP：调用 ${totals.imageModelCalls} 次，处理图片 ${totals.imageModelImagesProcessed} 张，缓存命中 ${totals.imageModelCacheHits} 张`,
-    `• 最高相似度 ${scoreLabel(totals.bestScore ?? observability.runtime.bestScore)}`,
-    `• 达到阈值 ${totals.aboveThreshold} 个${threshold === undefined ? '' : `（阈值 ${(threshold * 100).toFixed(0)}%）`}`,
-    `• 已发送通知 ${observability.runtime.notificationsSent} 条，Token ${observability.usage.totalTokens}`,
-    totals.aboveThreshold === 0 ? '暂无匹配，继续监控中。' : '发现过达到阈值的候选，已按通知规则处理。',
-    ...(feedErrors.length === 0 ? [] : [`• Feed 状况：${[...new Set(feedErrors)].join('、')}`]),
-  ].join('\n');
+  return {
+    kind: 'heartbeat',
+    watchSource: observability.watch.source,
+    watchType: observability.watch.type,
+    status: observability.status,
+    checks: totals.checks,
+    successfulChecks: totals.successful,
+    failedChecks: totals.failed,
+    newListings: totals.newListings,
+    candidates: totals.candidates,
+    imageComparisons: totals.comparisons,
+    imageModelCalls: totals.imageModelCalls,
+    imageModelImagesProcessed: totals.imageModelImagesProcessed,
+    imageModelCacheHits: totals.imageModelCacheHits,
+    bestScore: totals.bestScore ?? observability.runtime.bestScore,
+    aboveThreshold: totals.aboveThreshold,
+    threshold: threshold ?? null,
+    notificationsSent: observability.runtime.notificationsSent,
+    tokenCount: observability.usage.totalTokens,
+    feedErrors: [...new Set(feedErrors)],
+  };
 }
 
 function referenceInput(target: WatchTarget): ImageSource {
@@ -260,8 +259,8 @@ export class ProductRadarService {
       const period = Math.floor((nowMs - createdMs) / (watch.heartbeatIntervalSeconds * 1000));
       const periodKey = `${watch.id}:${period}`;
       const since = new Date(nowMs - 86_400_000).toISOString();
-      const digest = formatHeartbeatDigest(this.getWatchObservability(watch.id), this.store.listWatchRuntimeRunsSince(watch.id, since));
-      enqueued += this.notifications.enqueueHeartbeat(watch, periodKey, digest) as number;
+      const payload = buildHeartbeatPayload(this.getWatchObservability(watch.id), this.store.listWatchRuntimeRunsSince(watch.id, since));
+      enqueued += this.notifications.enqueueHeartbeat(watch, periodKey, payload) as number;
     }
     await this.notifications.deliverPending();
     return enqueued;

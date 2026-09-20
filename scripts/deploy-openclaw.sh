@@ -3,16 +3,10 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 VERSION_TOOL="$ROOT_DIR/scripts/amadeus-version.sh"
-MACHINE="ubuntu"
-OPENCLAW_APP_DIR="/var/lib/casaos/apps/openclaw"
-OPENCLAW_DATA_DIR="/DATA/AppData/openclaw"
-RADAR_APP_DIR="/var/lib/casaos/apps/product-radar"
-LANGBOT_APP_DIR="/var/lib/casaos/apps/langbot"
-N8N_APP_DIR="/var/lib/casaos/apps/n8n"
-N8N_SANDBOX_APP_DIR="/var/lib/casaos/apps/n8n-sandbox"
-LANGBOT_DATA_DIR="/DATA/AppData/langbot"
-N8N_DATA_DIR="/DATA/AppData/n8n"
-N8N_SANDBOX_DATA_DIR="/DATA/AppData/n8n-sandbox"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/host-profile.sh"
+amadeus_host_profile_load "$ROOT_DIR"
+MACHINE="$ORBSTACK_MACHINE"
 IMAGE=""
 RADAR_IMAGE=""
 APPLY=0
@@ -44,6 +38,22 @@ USAGE
 
 fail() { printf '%s\n' "$*" >&2; exit 2; }
 base64_file() { base64 < "$1" | tr -d '\n'; }
+DOCKER_BUILD_PROXY_ARGS=()
+for proxy_name in HTTP_PROXY HTTPS_PROXY; do
+  case "$proxy_name" in
+    HTTP_PROXY) proxy_value="${HTTP_PROXY:-}" ;;
+    HTTPS_PROXY) proxy_value="${HTTPS_PROXY:-}" ;;
+  esac
+  if [[ -n "$proxy_value" ]]; then
+    # Docker build containers cannot reach a macOS loopback proxy through
+    # 127.0.0.1; expose the host endpoint through Docker's stable DNS name.
+    proxy_value="$(printf '%s' "$proxy_value" | sed -E 's#(https?://)(127\\.0\\.0\\.1|localhost)(:|/|$)#\\1host.docker.internal\\3#')"
+    DOCKER_BUILD_PROXY_ARGS+=(--build-arg "$proxy_name=$proxy_value")
+  fi
+done
+if [[ -n "${NO_PROXY:-}" ]]; then
+  DOCKER_BUILD_PROXY_ARGS+=(--build-arg "NO_PROXY=$NO_PROXY")
+fi
 resolve_live_image() {
   local container="$1" value
   value="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Config.Image}}' "$container" 2>/dev/null || true)"
@@ -67,7 +77,7 @@ is_openclaw_image_path() {
 }
 is_radar_image_path() {
   case "$1" in
-    apps/product-radar/*) return 0 ;;
+    apps/product-radar/*|packages/presentation/*|apps/product-radar/Dockerfile|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -105,7 +115,7 @@ while (($#)); do
     --full-verify) FULL_VERIFY=1 ;;
     --image) (($# >= 2)) || fail '--image requires a value.'; IMAGE="$2"; shift ;;
     --radar-image) (($# >= 2)) || fail '--radar-image requires a value.'; RADAR_IMAGE="$2"; shift ;;
-    --machine) (($# >= 2)) || fail '--machine requires a value.'; MACHINE="$2"; shift ;;
+    --machine) (($# >= 2)) || fail '--machine requires a value.'; MACHINE="$2"; ORBSTACK_MACHINE="$2"; shift ;;
     --help|-h) usage; exit 0 ;;
     *) fail "Unknown option: $1" ;;
   esac
@@ -192,8 +202,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 
 (
   cd "$ROOT_DIR"
-  if [[ -f /Users/blacksidev/.nvm/nvm.sh ]]; then
-    source /Users/blacksidev/.nvm/nvm.sh
+  if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+    source "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
     nvm use 24.16.0 >/dev/null
   fi
   if ((FULL_VERIFY || (BUILD_OPENCLAW && BUILD_RADAR))); then
@@ -215,7 +225,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
       pnpm test:product-radar
     fi
     if ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0)); then
-      bash -n scripts/deploy-openclaw.sh scripts/amadeus-version.sh scripts/test-amadeus-version.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh scripts/provision-vps-readonly.sh
+      bash -n scripts/deploy-openclaw.sh scripts/host-profile.sh scripts/amadeus-version.sh scripts/test-amadeus-version.sh integrations/openclaw/codex-notify.sh scripts/notify-owner.sh scripts/provision-vps-readonly.sh
       sh -n infra/vps/amadeus-vps-readonly-probe.sh
       python3 -m py_compile scripts/openclaw_prepare.py
     fi
@@ -225,13 +235,13 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 )
 
 if ((BUILD_OPENCLAW)); then
-  docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
+  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
 fi
 if ((BUILD_RADAR)); then
-  docker buildx build --platform linux/arm64 --load --progress=plain --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR/apps/product-radar"
+  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
@@ -242,6 +252,7 @@ CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/backups/$CHECKPOINT_ID"
 OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
 RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
+MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
 PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 for source in \
@@ -270,17 +281,17 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml \
   "$RADAR_COMPOSE_FILE" product-radar-compose.before.yml \
   "$RADAR_ENV_FILE" product-radar.env.before \
-  "$LANGBOT_APP_DIR" langbot-app.before \
-  "$N8N_APP_DIR" n8n-app.before \
-  "$N8N_SANDBOX_APP_DIR" n8n-sandbox-app.before \
-  /var/lib/casaos/apps/media-organizer-adapter/docker-compose.yml media-organizer-compose.before.yml \
+  "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml \
   "$OPENCLAW_DATA_DIR/config/openclaw.json" openclaw-config.before.json \
   "$OPENCLAW_DATA_DIR/openclaw.env" openclaw.env.before \
   "$OPENCLAW_DATA_DIR/secrets" openclaw-secrets.before \
   "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
+  "$OPENCLAW_DATA_DIR/data/identity.sqlite" identity.sqlite.before \
   "$OPENCLAW_DATA_DIR/data/vps-usage-state.json" vps-usage-state.json.before \
+  "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
+  "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
-import json, shutil, subprocess, sys
+import hashlib, json, os, shutil, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 checkpoint = Path(sys.argv[1])
@@ -295,20 +306,59 @@ for i in range(0, len(args), 2):
     if source.is_dir(): shutil.copytree(source, destination, symlinks=True)
     else: shutil.copy2(source, destination)
 containers = {}
-for name in ['openclaw','product-radar','media-organizer-adapter','langbot','langbot_plugin_runtime','n8n','n8n-sandbox-api','n8n-sandbox-runner-1']:
+for name in ['openclaw','product-radar','media-organizer-adapter','changedetection','9router']:
     try: containers[name] = subprocess.check_output(['docker','inspect','--format','{{.State.Status}}',name], text=True).strip()
     except subprocess.CalledProcessError: containers[name] = 'absent'
+manifest = []
+for i in range(0, len(args), 2):
+    source = Path(args[i])
+    item = {'source': str(source), 'exists': source.exists()}
+    if source.exists():
+        item['kind'] = 'directory' if source.is_dir() else 'file'
+        item['mode'] = oct(source.stat().st_mode & 0o777)
+        item['size'] = sum(path.stat().st_size for path in source.rglob('*') if path.is_file()) if source.is_dir() else source.stat().st_size
+        sensitive = source.name in {'openclaw.env', '.env'} or 'secrets' in source.parts
+        if not sensitive and source.is_file():
+            digest = hashlib.sha256()
+            with source.open('rb') as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''): digest.update(chunk)
+            item['sha256'] = digest.hexdigest()
+        elif sensitive:
+            item['sensitiveMetadataOnly'] = True
+    manifest.append(item)
+(checkpoint / 'backup-manifest.json').write_text(json.dumps({'createdAt': datetime.now(timezone.utc).isoformat(), 'items': manifest}, ensure_ascii=False, indent=2) + '\n')
 (checkpoint / 'checkpoint.json').write_text(json.dumps({
     'createdAt': datetime.now(timezone.utc).isoformat(),
     'checkpointId': checkpoint.name,
     'containersBeforeSwitch': containers,
-    'note': 'External checkpoint; contains runtime secrets/data needed for recovery.'
+    'note': 'External checkpoint; contains runtime data and protected secret copies needed for recovery. Secret contents are never printed or checksummed.'
 }, ensure_ascii=False, indent=2) + '\n')
 print('CHECKPOINT=' + str(checkpoint))
 PY
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
+
+orb -m "$MACHINE" -u root python3 - \
+  "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" <<'PY'
+import os, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+host, user = sys.argv[2:]
+lines = path.read_text().splitlines() if path.is_file() else []
+def set_env(key, value):
+    prefix = key + '='
+    for index, line in enumerate(lines):
+        if line.strip().startswith(prefix):
+            lines[index] = prefix + value
+            return
+    lines.append(prefix + value)
+set_env('MAC_CONTROL_HOST', host)
+set_env('MAC_CONTROL_USER', user)
+path.write_text('\n'.join(lines) + '\n')
+os.chmod(path, 0o600)
+print('MAC_CONTROL_PROFILE=installed')
+PY
 
 orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
@@ -365,8 +415,11 @@ print('PRODUCT_RADAR_COMPOSE=installed')
 print('PRODUCT_RADAR_ENV=legacy_notification_keys_removed')
 PY
 
-orb -m "$MACHINE" -u root docker network inspect langbot_langbot_network >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create langbot_langbot_network >/dev/null
-orb -m "$MACHINE" -u root docker network inspect 9router_default >/dev/null 2>&1 || fail '9router_default network is unavailable.'
+orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create "$AMADEUS_NETWORK_NAME" >/dev/null
+orb -m "$MACHINE" -u root docker network inspect "$NINE_ROUTER_NETWORK_NAME" >/dev/null 2>&1 || fail "$NINE_ROUTER_NETWORK_NAME network is unavailable."
+if ! orb -m "$MACHINE" -u root docker inspect --format '{{json .NetworkSettings.Networks}}' "$MEDIA_ADAPTER_CONTAINER" 2>/dev/null | grep -q "$AMADEUS_NETWORK_NAME"; then
+  orb -m "$MACHINE" -u root docker network connect --alias media-organizer-adapter "$AMADEUS_NETWORK_NAME" "$MEDIA_ADAPTER_CONTAINER"
+fi
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
 orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect amadeus --runtime --json > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
 
@@ -409,29 +462,6 @@ if 'tools' in wildcard_group or 'toolsBySender' in wildcard_group:
 print('OWNER_TOOL_POLICY=full')
 PY
 
-for old_compose in "$N8N_SANDBOX_APP_DIR/docker-compose.yml" "$N8N_APP_DIR/docker-compose.yml" "$LANGBOT_APP_DIR/docker-compose.yml"; do
-  if orb -m "$MACHINE" -u root test -f "$old_compose" >/dev/null 2>&1; then
-    orb -m "$MACHINE" -u root docker compose -f "$old_compose" down --remove-orphans >/dev/null
-  fi
-done
-
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/retired-apps" "$CHECKPOINT_DIR/retired-data" \
-  "$LANGBOT_APP_DIR" "$N8N_APP_DIR" "$N8N_SANDBOX_APP_DIR" \
-  "$LANGBOT_DATA_DIR" "$N8N_DATA_DIR" "$N8N_SANDBOX_DATA_DIR" <<'PY'
-import shutil, sys
-from pathlib import Path
-apps, data = Path(sys.argv[1]), Path(sys.argv[2])
-apps.mkdir(parents=True, exist_ok=True); data.mkdir(parents=True, exist_ok=True)
-for raw in sys.argv[3:6]:
-    source = Path(raw)
-    if source.exists(): shutil.move(str(source), str(apps / source.name))
-for raw in sys.argv[6:]:
-    source = Path(raw)
-    if source.exists(): shutil.move(str(source), str(data / source.name))
-print('LEGACY_APP_PATHS=retired')
-print('LEGACY_APPDATA=retired')
-PY
-
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
 orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null"
 
@@ -442,7 +472,7 @@ done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null
 orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null
-orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null blacksidev@host.docker.internal nas.status' >/dev/null
+orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
 
 ensure_cron() {
@@ -471,28 +501,29 @@ remove_cron() {
 }
 remove_cron amadeus-briefing-morning
 remove_cron amadeus-briefing-evening
-ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner。通知必须是完整结构化对象：type=owner_notification，eventType=vps_report_morning，severity 按事实取 success/warning/error，eventKey=当天日期对应的 vps-report:当天日期:morning，source=vps-report，headline=🛰 VPS 晨间状态，facts 为 label/value/evidenceRefs 数组，summary 为完整报告，occurredAt 为当前 ISO 时间；手动、调试或补跑必须使用 vps-report:manual:<当前 ISO 时间>:morning，严禁占用正式 key。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
-ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间状态报告，流量段必须单独输出一行恰好十个 █/░ 字符加 usedPercent（按 floor(usedPercent/10) 计算，低于 1% 也不能省略，例如 ░░░░░░░░░░ 0.9%），突出 offline/API error/SSH unreachable/critical service inactive/disk high/traffic low/CPU throttling 和 unknown，不得把 unknown 当健康；然后调用 amadeus_notify_owner。通知必须是完整结构化对象：type=owner_notification，eventType=vps_report_evening，severity 按事实取 success/warning/error，eventKey=当天日期对应的 vps-report:当天日期:evening，source=vps-report，headline=🛰 VPS 晚间状态，facts 为 label/value/evidenceRefs 数组，summary 为完整报告，occurredAt 为当前 ISO 时间；手动、调试或补跑必须使用 vps-report:manual:<当前 ISO 时间>:evening，严禁占用正式 key。只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_morning、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:morning、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:morning，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_evening、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:evening、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:evening，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 ensure_cron amadeus-pubg-telemetry-hourly '5 * * * *' '只调用 pubg_prefetch_telemetry，参数 team=true、maxMatches=500、maxFetches=20、concurrency=2。该任务每小时刷新所有配置 PUBG 玩家最新对局，只获取本地不存在的新 Match API 详情，再为新对局或到期重试对局获取 Telemetry 并写入持久化缓存；严格保留工具返回的 status、cacheStatus、availability、dataUpdatedAt 和计数，不要把 status=FETCHED/cacheStatus=MISS/availability=AVAILABLE 说成数据缺失；不要调用其他工具、不要发送通知，定时任务使用 no-deliver。' 'pubg_prefetch_telemetry'
-ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_report，参数 team=true。报告默认统计上一自然日（使用 PUBG 同步报告返回的统计周期），不要改写 summary、dataUpdatedAt 或 notification；然后把 data.notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 type、eventType、severity、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing。不得自行编造数据、补发到 Telegram/KOOK/群聊或使用 cron fallback delivery。' 'pubg_telemetry_sync_report amadeus_notify_owner'
-ensure_cron amadeus-market-open '35 9 * * 1-5' '调用 amadeus_market_indices，参数 phase=open。若返回 status=market_closed 或 status=error，不要调用 amadeus_notify_owner，不要编造行情，直接结束；只有 status=ok 时，才把返回对象 notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 eventType、severity、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写指数数字、交易日、数据更新时间或末尾 El Psy Kongroo.。这是 NASDAQ-100（^NDX）和标普500（^GSPC）的美股常规时段开盘观测，只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
-ensure_cron amadeus-market-close '5 16 * * 1-5' '调用 amadeus_market_indices，参数 phase=close。若返回 status=market_closed 或 status=error，不要调用 amadeus_notify_owner，不要编造行情，直接结束；只有 status=ok 时，才把返回对象 notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 eventType、severity、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写指数数字、交易日、数据更新时间或末尾 El Psy Kongroo.。这是 NASDAQ-100（^NDX）和标普500（^GSPC）的美股常规时段收盘观测，只发送 WhatsApp owner DM，不要 cron fallback delivery。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
+ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_report，参数 team=true。报告统计上一自然日；仅当 status/data 有效时把 data.notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写事实。' 'pubg_telemetry_sync_report amadeus_notify_owner'
+ensure_cron amadeus-market-open '35 9 * * 1-5' '调用 amadeus_market_indices，参数 phase=open。status=market_closed 或 status=error 时直接结束；status=ok 时把返回对象 notification 原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写行情或数据时间。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
+ensure_cron amadeus-market-close '5 16 * * 1-5' '调用 amadeus_market_indices，参数 phase=close。status=market_closed 或 status=error 时直接结束；status=ok 时把返回对象 notification 原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写行情或数据时间。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
-HOOK_PATH="/Users/blacksidev/.codex/bin/codex-notify.sh"
-HOOK_BACKUP_DIR="/Users/blacksidev/.codex/backups/$CHECKPOINT_ID"
+HOOK_PATH="$CODEX_NOTIFY_HOOK_PATH"
+HOOK_BACKUP_DIR="$CODEX_NOTIFY_BACKUP_ROOT/$CHECKPOINT_ID"
 mkdir -p "$HOOK_BACKUP_DIR"
+mkdir -p "$(dirname -- "$HOOK_PATH")"
 if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
 ACCEPTANCE_KEY="amadeus-owner-smoke:$CHECKPOINT_ID"
-orb -m "$MACHINE" -u root python3 - "$OPENCLAW_DATA_DIR/notifications" "$ACCEPTANCE_KEY" "$AMADEUS_VERSION" "$RELEASE_NOTES_B64" <<'PY'
+orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/owner-smoke" "$ACCEPTANCE_KEY" "$AMADEUS_VERSION" "$RELEASE_NOTES_B64" <<'PY'
 import base64, hashlib, json, os, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 directory = Path(sys.argv[1])
 release_notes = base64.b64decode(sys.argv[4]).decode('utf-8').strip()
-event = {'version':1,'type':'owner_notification','eventType':'amadeus_release','severity':'success','eventKey':sys.argv[2],'source':'amadeus-release','headline':f'Amadeus {sys.argv[3]} · 世界线收束','facts':[],'summary':release_notes,'occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),'worldLineClosing':True}
+event = {'version':1,'type':'owner_notification','eventType':'amadeus_release','severity':'success','significance':'major','theme':'worldline_convergence','eventKey':sys.argv[2],'source':'amadeus-release','headline':f'Amadeus {sys.argv[3]} · 世界线收束','facts':[{'label':'版本','value':sys.argv[3],'evidenceRefs':[]}],'summary':release_notes,'occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),'worldLineClosing':True}
 directory.mkdir(parents=True, exist_ok=True); os.chmod(directory, 0o700); os.chown(directory, 1000, 1000)
 event_id = hashlib.sha256(event['eventKey'].encode()).hexdigest()[:40]
 pending, sent = directory / (event_id + '.pending.json'), directory / (event_id + '.sent.json')
@@ -505,18 +536,7 @@ print('OWNER_SMOKE=queued')
 PY
 
 owner_smoke_id="$(printf '%s' "$ACCEPTANCE_KEY" | shasum -a 256 | cut -c1-40)"
-for attempt in $(seq 1 12); do
-  if orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json" >/dev/null 2>&1; then break; fi
-  sleep 5
-done
-orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json" || fail 'WhatsApp owner outbox smoke did not reach sent state.'
-
-if orb -m "$MACHINE" -u root docker ps -a --format '{{.Names}}' | grep -E '^(langbot|langbot_plugin_runtime|n8n|n8n-sandbox-api|n8n-sandbox-runner-1|n8n-sandbox-tls-init)$' >/dev/null 2>&1; then
-  fail 'A retired LangBot/n8n container still exists.'
-fi
-for retired_path in "$LANGBOT_APP_DIR" "$N8N_APP_DIR" "$N8N_SANDBOX_APP_DIR" "$LANGBOT_DATA_DIR" "$N8N_DATA_DIR" "$N8N_SANDBOX_DATA_DIR"; do
-  orb -m "$MACHINE" -u root test ! -e "$retired_path" || fail "Retired path still exists: $retired_path"
-done
+orb -m "$MACHINE" -u root test -f "$CHECKPOINT_DIR/owner-smoke/$owner_smoke_id.pending.json" || fail 'Owner outbox contract smoke did not queue.'
 
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
@@ -525,6 +545,6 @@ printf '%s\n' 'OPENCLAW_HEALTH=passed'
 printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
 printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
-printf '%s\n' 'OWNER_WHATSAPP_OUTBOX_SMOKE=passed'
-printf '%s\n' 'LEGACY_RUNTIME=retired'
+printf '%s\n' 'OWNER_OUTBOX_SMOKE=passed'
+printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
 printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."

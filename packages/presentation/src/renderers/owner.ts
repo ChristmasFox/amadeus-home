@@ -23,6 +23,9 @@ export function renderOwnerNotification(
   if (validated.facts.length) {
     lines.push('', ...validated.facts.map((item) => `- ${item.label}：${fact(item.value)}`));
   }
+  if (validated.links?.length) {
+    lines.push('', ...validated.links.map((item) => `- ${item.label}：${item.url}`));
+  }
   if (validated.dataUpdatedAt) {
     const timeOptions = {
       ...(options.timezone ? { timezone: options.timezone } : {}),

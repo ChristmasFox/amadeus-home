@@ -6,10 +6,11 @@
   "scripts": {
     "build": "pnpm --filter @agent/identity build && pnpm --filter @agent/presentation build && pnpm --filter @agent/pubg-domain build && pnpm --filter @agent/pubg-plugin build && pnpm --filter @agent/amadeus-plugin build && pnpm --filter @agent/product-radar build",
     "typecheck": "pnpm --filter @agent/identity typecheck && pnpm --filter @agent/presentation typecheck && pnpm --filter @agent/pubg-domain typecheck && pnpm --filter @agent/pubg-plugin typecheck && pnpm --filter @agent/amadeus-plugin typecheck && pnpm --filter @agent/product-radar typecheck",
-    "test": "pnpm test:architecture && pnpm --filter @agent/identity test && pnpm --filter @agent/presentation test && pnpm --filter @agent/pubg-domain test && pnpm --filter @agent/pubg-plugin test && pnpm --filter @agent/amadeus-plugin test && pnpm --filter @agent/product-radar test",
+    "test": "pnpm test:architecture && pnpm test:migration-readiness && pnpm --filter @agent/identity test && pnpm --filter @agent/presentation test && pnpm --filter @agent/pubg-domain test && pnpm --filter @agent/pubg-plugin test && pnpm --filter @agent/amadeus-plugin test && pnpm --filter @agent/product-radar test",
     "check:secrets": "./scripts/check-secrets.sh",
     "check:architecture": "node scripts/check-architecture.mjs",
     "test:architecture": "node scripts/test-check-architecture.mjs",
+    "test:migration-readiness": "bash scripts/test-migration-readiness.sh",
     "doctor": "./scripts/doctor.sh",
     "workflow:plan": "./scripts/developer-workflow.sh --plan",
     "workflow:verify": "./scripts/developer-workflow.sh --run",

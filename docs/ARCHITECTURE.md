@@ -1,6 +1,22 @@
 # Architecture
 
-更新时间：2026-09-18（Asia/Shanghai）
+更新时间：2026-09-20（Amadeus 1.4.2 implementation in progress）
+
+## Worldline notification boundary
+
+主动通知统一经过：业务事实 → capability adapter →
+`WorldlineNotificationIntent` → deterministic theme policy → validated
+`OwnerNotificationPresentation` → owner outbox / delivery policy。Domain 和
+Product Radar generic core 不持有 Steins;Gate 词汇、transport destination 或
+WhatsApp 语义；severity 与 significance 是两个独立字段。生产者清单见
+`docs/PROACTIVE_NOTIFICATION_PRODUCERS.md`，正式词汇与映射见
+`packages/presentation/src/worldline/`。
+
+当前持久化运行目标仍是 OrbStack `ubuntu` 内的 CasaOS。OpenClaw 与 Product
+Radar 使用可配置的 `amadeus_network`，主机、Mac control user、FashionSigLIP
+端口和 Codex hook 路径由 `scripts/host-profile.sh` 统一解析；真实值在本机
+`infra/host-profile.env`，不进入 Git。Operation Skuld 只做 readiness 和临时
+恢复演练，本目标不执行 Mac mini cutover。
 
 ## 单一 Agent 主链
 
@@ -101,10 +117,10 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
 - \`amadeus_homelab_status\`：Glances、uptime 和固定探针；读取为主，显式 owner/cron
   才能通知，不负责重启。
 - \`amadeus_kook_group_members\`：只能读取当前 KOOK channel/guild，不主动推送。
-- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，只接受校验后的
-  \`owner_notification\` 合同（eventType、severity、eventKey、source、headline、facts、summary、
-  时间字段和可选 worldLineClosing），只能写入或经 OpenClaw 投递；固定 WhatsApp owner。
-  固定 WhatsApp owner。
+- \`amadeus_notify_owner\`：不接受 channel/recipient 参数，接受已校验的
+  \`owner_notification\` presentation 或 \`WorldlineNotificationIntent\`。Intent 的 theme 由
+  deterministic policy 选择，severity 与 significance 分离；两者都只能写入 owner outbox，
+  当前 delivery policy 才固定 WhatsApp owner。
 - \`amadeus_vps_service_info\`、\`amadeus_vps_live_status\`、\`amadeus_vps_usage\`、
   \`amadeus_vps_system_status\`、\`amadeus_vps_services\`：只读 KiwiVM/API 与固定 SSH probe；
   不接受 endpoint、unit、shell、VPS 控制动作或通知目标。traffic state 保存在 \`/data\` 外部
@@ -120,7 +136,8 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
 
 ### Owner notification contract
 
-Product Radar、Codex hook、媒体完成、HomeLab、市场和 PUBG 同步都使用同一 v1 event：
+Product Radar、Codex hook、媒体完成、HomeLab、市场和 PUBG 同步都使用同一 v1 event；新生产者
+先提交 \`WorldlineNotificationIntent\`，再由确定性 policy 生成 presentation：
 
 \`\`\`json
 {
@@ -128,6 +145,8 @@ Product Radar、Codex hook、媒体完成、HomeLab、市场和 PUBG 同步都�
   "type": "owner_notification",
   "eventType": "business_event",
   "severity": "info",
+  "significance": "notable",
+  "theme": "worldline_observation",
   "eventKey": "stable-idempotency-key",
   "source": "business-source",
   "headline": "human headline",

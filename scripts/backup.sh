@@ -2,7 +2,10 @@
 set -Eeuo pipefail
 
 REPO_ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-MACHINE="${ORBSTACK_MACHINE:-ubuntu}"
+# shellcheck disable=SC1091
+source "$REPO_ROOT/scripts/host-profile.sh"
+amadeus_host_profile_load "$REPO_ROOT"
+MACHINE="$ORBSTACK_MACHINE"
 if [ -d /Volumes/Avalon ]; then
   DEFAULT_BACKUP_ROOT="/Volumes/Avalon/backups/agent-monorepo"
 else
@@ -17,7 +20,7 @@ usage() {
   cat <<'EOF'
 用法: scripts/backup.sh [选项]
 
-默认从 OrbStack ubuntu 的 /DATA/AppData 读取项目数据，并在仓库外
+默认从 host profile 指定的 OrbStack machine 的 /DATA/AppData 读取项目数据，并在仓库外
 /Volumes/Avalon/backups/agent-monorepo 创建归档；没有共享卷时使用
 仓库内被忽略的 .backups/。
 
@@ -25,7 +28,7 @@ usage() {
   --include-secrets       额外生成单独的 secrets-*.tar.gz（权限 0600）
   --backup-root PATH      覆盖归档目录
   --apps "a b c"          覆盖要备份的 AppData 目录
-  --machine NAME          覆盖 OrbStack machine，默认 ubuntu
+  --machine NAME          覆盖 OrbStack machine，默认取 host profile（ubuntu）
   --dry-run               只显示计划，不读取或写入数据
 EOF
 }

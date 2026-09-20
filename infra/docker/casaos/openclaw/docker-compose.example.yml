@@ -59,4 +59,4 @@ networks:
     name: 9router_default
   amadeus_network:
     external: true
-    name: langbot_langbot_network
+    name: ${AMADEUS_NETWORK_NAME:-amadeus_network}

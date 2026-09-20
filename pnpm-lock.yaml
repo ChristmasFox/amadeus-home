@@ -10,6 +10,9 @@ importers:
 
   apps/product-radar:
     dependencies:
+      '@agent/presentation':
+        specifier: workspace:*
+        version: link:../../packages/presentation
       sharp:
         specifier: 0.35.4
         version: 0.35.4(@types/node@22.18.6)

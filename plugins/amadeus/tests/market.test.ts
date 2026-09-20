@@ -69,7 +69,7 @@ test('market chart reports market closed when no current trading bar exists', ()
   assert.equal(result.tradingDate, '2026-09-19');
 });
 
-test('market notification preserves stable event identity and world-line closing', () => {
+test('market notification preserves stable event identity and uses D-Mail policy', () => {
   const open = parseYahooChart(
     chartPayload('^NDX'),
     '^NDX',
@@ -81,9 +81,9 @@ test('market notification preserves stable event identity and world-line closing
   if (open.status !== 'ok') return;
   const notification = buildMarketNotification('open', open.observation.tradingDate, [open.observation], '2026-09-18T13:35:00.000Z');
   assert.equal(notification.eventKey, 'market-indices:2026-09-18:open');
-  assert.equal(notification.headline, 'Amadeus • 世界线观测 · 美股开盘');
+  assert.equal(notification.headline, 'Amadeus • D-Mail · 美股开盘');
   const rendered = renderOwnerNotification(notification, { now: '2026-09-18T13:35:00.000Z' });
   assert.match(rendered, /数据更新时间：21:35/u);
-  assert.match(rendered, /El Psy Kongroo\.$/u);
+  assert.doesNotMatch(rendered, /El Psy Kongroo\.$/u);
   assert.doesNotMatch(rendered, /Asia\/Shanghai|UTC\+08|自然日|业务日/u);
 });

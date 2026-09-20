@@ -60,7 +60,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     homeLabGlancesUrl: file('homeLabGlancesUrl', 'HOME_LAB_GLANCES_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/quicklook`),
     homeLabUptimeUrl: file('homeLabUptimeUrl', 'HOME_LAB_UPTIME_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/uptime`),
     macSshHost: file('macSshHost', 'MAC_CONTROL_HOST', 'host.docker.internal'),
-    macSshUser: file('macSshUser', 'MAC_CONTROL_USER', 'blacksidev'),
+    macSshUser: file('macSshUser', 'MAC_CONTROL_USER', ''),
     macSshKeyFile: file('macSshKeyFile', 'MAC_CONTROL_KEY', '/run/secrets/mac_ssh_key'),
     ...(macSshKnownHostsFile ? { macSshKnownHostsFile } : {}),
     kookApiBaseUrl: file('kookApiBaseUrl', 'KOOK_API_BASE_URL', 'https://www.kookapp.cn/api/v3').replace(/\/$/u, ''),

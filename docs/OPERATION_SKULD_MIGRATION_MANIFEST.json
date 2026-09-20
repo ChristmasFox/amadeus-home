@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "operation": "operation-skuld",
+  "status": "readiness-only",
+  "executed": false,
+  "sourceOfTruth": "git-and-current-casaos-runtime",
+  "currentHost": {
+   "machine": "${ORBSTACK_MACHINE:-ubuntu}",
+    "machine": "from-host-profile",
+    "defaultMachine": "ubuntu",
+    "profile": "infra/host-profile.env",
+    "canonicalRuntime": "CasaOS inside OrbStack Linux"
+  },
+  "destination": {
+    "kind": "mac-mini",
+    "cutover": "not-authorized-by-this-goal",
+    "runbook": "docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md"
+  },
+  "criticalPersistentData": [
+    { "id": "pubg-sqlite", "path": "/DATA/AppData/openclaw/data/pubg.sqlite", "owner": "pubg-domain", "restoreOrder": 30, "integrity": "sqlite-integrity-check" },
+    { "id": "identity-sqlite", "path": "/DATA/AppData/openclaw/data/identity.sqlite", "owner": "identity", "restoreOrder": 20, "integrity": "sqlite-integrity-check" },
+    { "id": "product-radar-sqlite", "path": "/DATA/AppData/product-radar/product-radar.sqlite", "owner": "product-radar", "restoreOrder": 40, "integrity": "sqlite-integrity-check" },
+    { "id": "owner-outbox", "path": "/DATA/AppData/openclaw/notifications", "owner": "owner-notification", "restoreOrder": 50, "integrity": "json-contract-and-idempotency-check" },
+    { "id": "vps-usage-state", "path": "/DATA/AppData/openclaw/data/vps-usage-state.json", "owner": "amadeus-vps", "restoreOrder": 60, "integrity": "json-parse" },
+    { "id": "openclaw-workspace", "path": "/DATA/AppData/openclaw/workspace", "owner": "openclaw", "restoreOrder": 10, "integrity": "tracked-file-diff" }
+  ],
+  "secrets": [
+    { "id": "openclaw-env", "path": "/DATA/AppData/openclaw/openclaw.env", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "pubg-api-key", "path": "/DATA/AppData/openclaw/secrets/pubg-api-key", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "pubg-team", "path": "/DATA/AppData/openclaw/secrets/pubg-team.json", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "telegram-bot-token", "path": "/DATA/AppData/openclaw/secrets/telegram-bot-token", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "owner-target", "path": "/DATA/AppData/openclaw/secrets/owner-whatsapp-target", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "mac-ssh-key", "path": "/DATA/AppData/openclaw/secrets/mac-ssh-key", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "vps-readonly-key", "path": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "vps-known-hosts", "path": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "kiwivm-credentials", "path": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json", "required": true, "mode": "0600", "contentsInGit": false },
+    { "id": "kook-token", "path": "/DATA/AppData/openclaw/secrets/kook-bot-token", "required": true, "mode": "0600", "contentsInGit": false }
+  ],
+  "runtimeInfrastructure": [
+    { "id": "openclaw", "container": "openclaw", "health": "http://127.0.0.1:18789/healthz", "classification": "ACTIVE" },
+    { "id": "product-radar", "container": "product-radar", "health": "http://127.0.0.1:5315/health", "classification": "ACTIVE" },
+    { "id": "media-adapter", "container": "media-organizer-adapter", "health": "http://media-organizer-adapter:8765/healthz", "classification": "ACTIVE" },
+    { "id": "changedetection", "container": "changedetection", "health": "http://changedetection:5000/", "classification": "COMPATIBILITY" },
+    {
+      "id": "fashion-siglip",
+      "launchAgent": "com.productradar.fashion-siglip",
+      "source": "apps/fashion-siglip/server.py",
+      "installer": "scripts/install-fashion-siglip-macos.sh",
+      "runtime": "macOS Python venv",
+      "modelId": "Marqo/marqo-fashionSigLIP",
+      "modelCache": "host-profile:FASHION_SIGLIP_MODEL_CACHE_DIR",
+      "healthPort": "host-profile:FASHION_SIGLIP_PORT",
+      "defaultHealthPort": 18400,
+      "connection": "host.docker.internal:<FASHION_SIGLIP_PORT>",
+      "device": "Apple Silicon MPS",
+      "classification": "ACTIVE"
+    },
+    { "id": "9router", "container": "9router", "classification": "ACTIVE" },
+    { "id": "openclaw-crons", "source": "scripts/deploy-openclaw.sh", "classification": "ACTIVE" }
+  ],
+  "rebuildableState": [
+    { "id": "fashion-siglip-model-cache", "path": "host-profile:FASHION_SIGLIP_MODEL_CACHE_DIR", "policy": "redownload", "source": "tracked installer and requirements" },
+    { "id": "docker-images", "policy": "rebuild-from-immutable-git-tag" },
+    { "id": "changedetection-runtime-cache", "policy": "restore AppData only when sensor migration requires it" }
+  ],
+  "hostProfile": {
+    "trackedTemplate": "infra/host-profile.env.example",
+    "localOverride": "infra/host-profile.env",
+    "requiredValues": ["ORBSTACK_MACHINE", "AMADEUS_NETWORK_NAME", "MAC_CONTROL_HOST", "MAC_CONTROL_USER", "FASHION_SIGLIP_PORT"],
+    "secretValuesAllowed": false
+  },
+  "readinessChecks": [
+    "clean-git-and-version",
+    "tracked-compose-and-profile",
+    "runtime-health-and-image-tags",
+    "sqlite-integrity",
+    "secret-presence-and-permissions-without-content",
+    "owner-outbox-contract",
+    "expected-cron-registry",
+    "fashion-siglip-worker-health",
+    "backup-checksum-manifest",
+    "temporary-restore-rehearsal",
+    "no-active-legacy-runtime"
+  ]
+}

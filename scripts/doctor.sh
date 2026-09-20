@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-MACHINE="${ORBSTACK_MACHINE:-ubuntu}"
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/host-profile.sh"
+amadeus_host_profile_load "$ROOT_DIR"
+MACHINE="$ORBSTACK_MACHINE"
 STRICT="${DOCTOR_STRICT:-1}"
 failures=0
 warnings=0
@@ -64,6 +68,17 @@ if command -v curl >/dev/null 2>&1; then
   fi
 else
   warn 'curl is unavailable; HTTP health checks skipped'
+fi
+
+if command -v curl >/dev/null 2>&1; then
+  fashion_health="$(curl -fsS --max-time 5 "http://127.0.0.1:${FASHION_SIGLIP_PORT}/health" 2>/dev/null || true)"
+  if [ -n "$fashion_health" ] && printf '%s' "$fashion_health" | python3 -c 'import json,sys; value=json.load(sys.stdin); raise SystemExit(0 if value.get("status") == "ok" and value.get("device") == "mps" else 1)' >/dev/null 2>&1; then
+    pass "FashionSigLIP worker :${FASHION_SIGLIP_PORT}/health (MPS)"
+  elif [ "${DOCTOR_REQUIRE_FASHION_SIGLIP:-0}" = "1" ]; then
+    fail "FashionSigLIP worker :${FASHION_SIGLIP_PORT}/health is unavailable or not using MPS"
+  else
+    warn "FashionSigLIP worker :${FASHION_SIGLIP_PORT}/health is unavailable or not using MPS"
+  fi
 fi
 
 printf 'Doctor result: %s failure(s), %s warning(s).\n' "$failures" "$warnings"

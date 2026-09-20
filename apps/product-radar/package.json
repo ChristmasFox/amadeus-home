@@ -21,6 +21,7 @@
     "typescript": "5.9.2"
   },
   "dependencies": {
+    "@agent/presentation": "workspace:*",
     "sharp": "0.35.4"
   }
 }

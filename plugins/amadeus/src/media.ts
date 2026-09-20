@@ -1,4 +1,5 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import { adaptWorldlineNotification } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 import { requestJson } from './http.js';
 import { ownerEvent, type OwnerNotifier } from './owner.js';
@@ -79,17 +80,22 @@ export async function organizeMedia(
   if (value.success === true) {
     pending.delete(key);
     const occurredAt = new Date().toISOString();
-    const notification = await notifier.notify(ownerEvent({
-      type: 'owner_notification',
+    const notification = await notifier.notify(ownerEvent(adaptWorldlineNotification({
+      type: 'worldline_notification_intent',
       eventType: 'media_organize_completed',
+      kind: 'operation_completed',
       severity: 'success',
+      significance: 'notable',
       eventKey: `media-organize:${current.previewId}:completed`,
       source: 'media-organize',
       headline: 'Emby 媒体整理完成',
-      facts: [],
+      facts: Object.entries(value)
+        .filter(([, item]) => item === null || typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
+        .slice(0, 12)
+        .map(([label, item]) => ({ label, value: item as string | number | boolean | null, evidenceRefs: [] })),
       summary: responseMessage(result),
       occurredAt,
-    }));
+    })));
     return { action: 'execute', result, message: responseMessage(result), notification };
   }
   return { action: 'execute', result, message: responseMessage(result) };
