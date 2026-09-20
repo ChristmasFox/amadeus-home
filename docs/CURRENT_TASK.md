@@ -6,6 +6,16 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-20：Amadeus 1.4.1 源码阶段完成，release pending
+
+已完成 `docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 的源码阶段：PUBG 全 native
+tool presentation registry、stats/search/compare/match/review/period/team-damage/status renderer、
+Domain-owned fresh-result-set period review、owner outbox 结构化分片、SOUL persona-only 和递归
+architecture fitness check 均已落地。定向 Presentation 6/6、Domain 23/23、PUBG plugin 9/9、
+Amadeus 18/18、typecheck、architecture、version fixtures、workflow 和 secrets scan 均通过。
+根 `VERSION=1.4.1`、release notes check 和全仓 build/test 已通过；implementation commit/push、
+CasaOS apply 和 live 验收尚未执行。
+
 ## 2026-09-20：PUBG 队友动作/误伤调用链补强（1.4.0 已部署）
 
 针对真实 WhatsApp 回合“昨天队内误伤情况详情”和“昨天007踢了004几脚”的调用轨迹完成
@@ -32,8 +42,9 @@ OpenClaw/Product Radar health、媒体网络、NAS 只读、owner outbox、legac
 
 ## 2026-09-20：版本递进规则调整
 
-用户要求从下一版本起取消 `0.1` 的 minor 递增，所有版本统一通过 `bump patch` 按 `0.0.1` 递增：
-当前已发布的 `1.4.0` 保持不变，下一版本为 `1.4.1`；`0.0.9 -> 0.1.0`，`0.9.9 -> 1.0.0`。
+用户要求从下一版本起所有版本统一通过 `bump patch` 按 `0.0.1` 递增：patch 位为 `0..9`，到 9 后
+minor 进 1；minor 位为 `0..99`，到 99 且 patch=9 后 major 进 1。当前已发布的 `1.4.0` 保持不变，
+下一版本为 `1.4.1`；`0.9.9 -> 0.10.0`，`0.99.9 -> 1.0.0`。
 `bump minor` 和 `bump major` 不再支持。版本脚本、README、根工作规则和本 Goal 已同步，验证与策略
 记录见本次 checkpoint；本变更不需要重新部署已匹配 1.4.0 的运行时镜像。
 

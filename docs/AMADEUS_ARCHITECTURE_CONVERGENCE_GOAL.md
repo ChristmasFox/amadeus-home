@@ -892,8 +892,9 @@ git diff --check
 ## 13.1 Release version
 
 遵守现有根 `VERSION` / `RELEASE_NOTES.md` 规则。当前已部署的 release 保持 `1.4.0` 不变；从下一版本
-起所有 release 只调用 `scripts/amadeus-version.sh bump patch`，每次按 `0.0.1` 递增。第三段到 9 时
-进位到第二段（`0.0.9 -> 0.1.0`），第二段也到 9 时进位到第一段（`0.9.9 -> 1.0.0`）；不再手工
+起所有 release 只调用 `scripts/amadeus-version.sh bump patch`，每次按 `0.0.1` 递增。patch 位为 `0..9`，
+到 9 时进位到 minor（`0.9.9 -> 0.10.0`）；minor 位为 `0..99`，到 99 且 patch=9 时进位到 major
+（`0.99.9 -> 1.0.0`）；不再手工
 使用或支持 `bump minor`、`bump major`。`RELEASE_NOTES.md` 只写本次 release 的新增/修复，不累计历史正文。
 
 ## 13.2 Implementation commit + push

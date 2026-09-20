@@ -46,6 +46,9 @@ git log -5 --oneline --decorate
 - Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 OpenClaw API 细节写入 PUBG/domain package；平台差异放在 plugin、adapter 或 integration 层。
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
+- 版本唯一来源是根目录 `VERSION`；release 只允许执行 `scripts/amadeus-version.sh bump patch`。
+  patch 位范围为 `0..9`，minor 位范围为 `0..99`；`0.9.9 -> 0.10.0`，`0.99.9 -> 1.0.0`。
+  `bump minor` 和 `bump major` 不支持，`RELEASE_NOTES.md` 只写当前单次 release。
 
 ## Architecture ownership matrix
 

@@ -28,9 +28,37 @@ write_fixture '0.0.9'
 (cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
 [[ "$(<"$test_root/VERSION")" == '0.1.0' ]]
 
+write_fixture '0.1.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '0.2.0' ]]
+
 write_fixture '0.9.9'
 (cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '0.10.0' ]]
+
+write_fixture '0.10.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '0.11.0' ]]
+
+write_fixture '0.98.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '0.99.0' ]]
+
+write_fixture '0.99.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
 [[ "$(<"$test_root/VERSION")" == '1.0.0' ]]
+
+write_fixture '1.4.0'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '1.4.1' ]]
+
+write_fixture '1.4.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '1.5.0' ]]
+
+write_fixture '1.99.9'
+(cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
+[[ "$(<"$test_root/VERSION")" == '2.0.0' ]]
 
 write_fixture '1.4.0'
 if (cd "$test_root" && bash scripts/amadeus-version.sh bump minor >"$test_root/minor.out" 2>"$test_root/minor.err"); then

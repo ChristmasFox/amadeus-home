@@ -6,10 +6,10 @@
 rebase 本地提交；Phase 1-2 已完成源码验证：Amadeus thin bootstrap/capability registrations、
 capability Skills、global prompt ownership cleanup 和收紧 persona meme trigger 均已落地。
 Phase 3-5 也已完成：Presentation contracts/renderers/time formatter、owner hard validation、PUBG
-structured presentation、architecture fitness check 和 workflow integration 均已验证。下一步只做
-Phase 6 release validation、minor version bump、implementation commit/push、CasaOS deploy 和
-deployment evidence commit/push；其中 implementation commit/push、1.3.0 release build/apply、live
-health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment evidence commit/push。
+structured presentation、period review、architecture fitness check 和 workflow integration 均已验证。
+当前 1.4.1 的源码和 release package 阶段已完成，下一步只做 implementation commit/push、CasaOS
+deploy、live health/preflight/smoke/doctor 和 deployment evidence commit/push；`VERSION=1.4.1`，
+live 运行时仍为 1.4.0。
 
 本轮真实 WhatsApp trajectory 审计发现周期队友动作查询只走基础 Match API，新增
 `pubg_query_team_damage` 作为 Domain-owned batch Telemetry contract，覆盖全队误伤详情和
@@ -18,7 +18,8 @@ health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment 
 和 doctor 均通过。部署证据已提交并 push，当前只剩本次版本策略单独提交。
 
 版本策略已按用户要求调整：当前 live release 保持 `1.4.0`，以后只使用 `bump patch` 按 `0.0.1`
-递增，`0.0.9 -> 0.1.0`、`0.9.9 -> 1.0.0`，不再使用 `bump minor`/`bump major`。
+递增；patch `0..9` 向 minor 进位，minor `0..99` 且 patch=9 时向 major 进位，示例为
+`0.9.9 -> 0.10.0`、`0.99.9 -> 1.0.0`，不再使用 `bump minor`/`bump major`。
 
 本次 1.3.0 live release：implementation commit `7d85bc1`；OpenClaw image
 `local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image

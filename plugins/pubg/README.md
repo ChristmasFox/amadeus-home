@@ -1,7 +1,7 @@
 # PUBG Stats OpenClaw Plugin
 
 This is the only PUBG business entry in the migrated OpenClaw runtime. It
-registers six deterministic tools and delegates all data, query, SQLite, and
+registers ten deterministic tools and delegates all data, query, SQLite, and
 Telemetry work to `@agent/pubg-domain`.
 
 OpenClaw owns Telegram, WhatsApp, and future channel transport. The plugin

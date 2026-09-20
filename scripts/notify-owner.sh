@@ -8,12 +8,12 @@ OUTBOX_DIR="${OWNER_NOTIFICATION_OUTBOX_DIR:-${CODEX_NOTIFICATION_OUTBOX_DIR:-/t
 REMOTE_MACHINE=""
 EVENT_KEY=""
 SOURCE=""
-TITLE=""
-MESSAGE=""
+HEADLINE=""
+SUMMARY=""
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --title TITLE --message MESSAGE [--outbox-dir DIR] [--remote-machine NAME]
+Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --headline HEADLINE --summary SUMMARY [--outbox-dir DIR] [--remote-machine NAME]
 
 The command only creates an idempotent local event. It has no channel,
 recipient, bot token, or network option.
@@ -24,8 +24,8 @@ while (($#)); do
   case "$1" in
     --event-key) (($# >= 2)) || { usage >&2; exit 2; }; EVENT_KEY="$2"; shift 2 ;;
     --source) (($# >= 2)) || { usage >&2; exit 2; }; SOURCE="$2"; shift 2 ;;
-    --title) (($# >= 2)) || { usage >&2; exit 2; }; TITLE="$2"; shift 2 ;;
-    --message) (($# >= 2)) || { usage >&2; exit 2; }; MESSAGE="$2"; shift 2 ;;
+    --headline) (($# >= 2)) || { usage >&2; exit 2; }; HEADLINE="$2"; shift 2 ;;
+    --summary) (($# >= 2)) || { usage >&2; exit 2; }; SUMMARY="$2"; shift 2 ;;
     --outbox-dir) (($# >= 2)) || { usage >&2; exit 2; }; OUTBOX_DIR="$2"; shift 2 ;;
     --remote-machine) (($# >= 2)) || { usage >&2; exit 2; }; REMOTE_MACHINE="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -33,7 +33,7 @@ while (($#)); do
   esac
 done
 
-if [[ -z "$EVENT_KEY" || -z "$SOURCE" || -z "$MESSAGE" ]]; then
+if [[ -z "$EVENT_KEY" || -z "$SOURCE" || -z "$SUMMARY" ]]; then
   usage >&2
   exit 2
 fi
@@ -44,7 +44,7 @@ fi
 
 if [[ -n "$REMOTE_MACHINE" ]]; then
   if ! command -v orb >/dev/null 2>&1; then exit 0; fi
-  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$TITLE" "$MESSAGE" <<'PY' >/dev/null 2>&1 || true
+  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" <<'PY' >/dev/null 2>&1 || true
 import hashlib
 import json
 import os
@@ -53,13 +53,13 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, title, message = sys.argv[1:]
+outbox, event_key, source, headline, summary = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
-clean_message = clean(message, 16000)
-world_line_closing = clean_message.endswith("El Psy Kongroo.")
-summary = clean_message[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_message
+clean_summary = clean(summary, 16000)
+world_line_closing = clean_summary.endswith("El Psy Kongroo.")
+clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_summary
 event = {
     "version": 1,
     "type": "owner_notification",
@@ -67,9 +67,9 @@ event = {
     "severity": "info",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
-    "headline": clean(title, 200) or clean(source, 128),
+    "headline": clean(headline, 200) or clean(source, 128),
     "facts": [],
-    "summary": summary,
+    "summary": clean_summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     **({"worldLineClosing": True} if world_line_closing else {}),
 }
@@ -103,7 +103,7 @@ PY
   exit 0
 fi
 
-python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$TITLE" "$MESSAGE" <<'PY'
+python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" <<'PY'
 import hashlib
 import json
 import os
@@ -112,13 +112,13 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, title, message = sys.argv[1:]
+outbox, event_key, source, headline, summary = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
-clean_message = clean(message, 16000)
-world_line_closing = clean_message.endswith("El Psy Kongroo.")
-summary = clean_message[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_message
+clean_summary = clean(summary, 16000)
+world_line_closing = clean_summary.endswith("El Psy Kongroo.")
+clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_summary
 event = {
     "version": 1,
     "type": "owner_notification",
@@ -126,9 +126,9 @@ event = {
     "severity": "info",
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
-    "headline": clean(title, 200) or clean(source, 128),
+    "headline": clean(headline, 200) or clean(source, 128),
     "facts": [],
-    "summary": summary,
+    "summary": clean_summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     **({"worldLineClosing": True} if world_line_closing else {}),
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   containsInternalTimeTerms,
+  buildPubgToolPresentation,
   formatDisplayRange,
   formatDisplayTime,
   renderOwnerNotification,
@@ -10,6 +11,8 @@ import {
   validateOwnerNotificationPresentation,
   validatePubgMatchReviewPresentation,
   validatePubgPeriodReviewPresentation,
+  validatePubgPresentation,
+  PUBG_PRESENTATION_REGISTRY,
 } from '../src/index.js';
 
 test('display time uses Beijing-friendly same-day and cross-day forms', () => {
@@ -49,7 +52,7 @@ test('owner notification contract is hard validated and rendered deterministical
 
 test('PUBG renderer preserves null as unknown instead of inventing zero', () => {
   const presentation = {
-    type: 'pubg_match_review' as const, headline: '第1局 · Erangel',
+    type: 'pubg_match_review' as const, status: 'partial' as const, headline: '第1局 · Erangel',
     overview: { placement: null, kills: null, assists: 1, damage: 20, dbnos: null, revives: 0 },
     keyMoments: [], highlights: [], improvements: [], analysis: '证据有限',
     dataUpdatedAt: '2026-09-20T15:00:00.000Z', evidenceRefs: [],
@@ -63,6 +66,7 @@ test('PUBG renderer preserves null as unknown instead of inventing zero', () => 
 test('PUBG period review keeps Domain order and renders cross-day match times', () => {
   const presentation = {
     type: 'pubg_period_review' as const,
+    status: 'ok' as const,
     period: { label: '昨天对局' },
     summary: '共 2 场',
     orderedMatches: [
@@ -80,4 +84,18 @@ test('PUBG period review keeps Domain order and renders cross-day match times', 
   assert.match(output, /第一局 （2026-09-19 23:00）：第2名/u);
   assert.match(output, /第二局 ：第未知名/u);
   assert.match(output, /数据更新时间：23:05/u);
+});
+
+test('every registered PUBG native tool has a validated presentation and displayText', () => {
+  for (const toolName of Object.keys(PUBG_PRESENTATION_REGISTRY)) {
+    const result = buildPubgToolPresentation(toolName, {
+      status: 'ok',
+      data: {},
+      dataUpdatedAt: '2026-09-20T15:05:00.000Z',
+      evidenceRefs: { matchIds: [], playerIds: [], fields: [] },
+      queryResolved: {},
+    }, { now: '2026-09-20T15:10:00.000Z' });
+    assert.equal(validatePubgPresentation(result.presentation).valid, true, toolName);
+    assert.match(result.displayText, /数据更新时间/u, toolName);
+  }
 });

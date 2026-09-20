@@ -131,6 +131,14 @@ export interface GetReviewFactsInput extends GetMatchInput {
   categories?: string[];
 }
 
+export interface GetPeriodReviewInput {
+  sessionId: string;
+  searchResultSetId: string;
+  playerIds?: string[];
+  categories?: string[];
+  signal?: AbortSignal;
+}
+
 export interface TeamDamageQueryInput {
   sessionId: string;
   selector: SearchSelectorInput;
@@ -144,14 +152,20 @@ export interface TeamDamageQueryInput {
   signal?: AbortSignal;
 }
 
-function sourceRangeFromSelector(selector: Selector): Record<string, string> | null {
-  if (selector.type !== 'time_range') return null;
+function sourceRangeFromUnknown(selector: unknown): Record<string, string> | null {
+  if (!selector || typeof selector !== 'object' || (selector as { type?: unknown }).type !== 'time_range') return null;
+  const value = selector as { start?: unknown; end?: unknown; timezone?: unknown; businessDayStart?: unknown };
+  if (typeof value.start !== 'string' || typeof value.end !== 'string' || typeof value.timezone !== 'string' || typeof value.businessDayStart !== 'string') return null;
   return {
-    from: selector.start,
-    to: selector.end,
-    timezone: selector.timezone,
-    businessDayStart: selector.businessDayStart,
+    from: value.start,
+    to: value.end,
+    timezone: value.timezone,
+    businessDayStart: value.businessDayStart,
   };
+}
+
+function sourceRangeFromSelector(selector: Selector): Record<string, string> | null {
+  return sourceRangeFromUnknown(selector);
 }
 
 export interface PrefetchTelemetryInput {
@@ -476,13 +490,23 @@ function queryForCompare(input: CompareToolInput, subjectIds: string[], timezone
 }
 
 function resultEnvelope(result: StructuredResult, query: CanonicalQuery, resultSetId?: string): ToolEnvelope {
+  const diagnostics = result.diagnostics ?? {};
+  const resolvedSelector = diagnostics.resolvedSelector;
+  const resolvedSegments = Array.isArray(diagnostics.resolvedSegments) ? diagnostics.resolvedSegments : [];
+  const resolvedRange = sourceRangeFromUnknown(resolvedSelector);
+  const resolvedQuery = {
+    ...sanitize(query) as Record<string, unknown>,
+    ...(resolvedSelector && typeof resolvedSelector === 'object' ? { resolvedSelector: sanitize(resolvedSelector) } : {}),
+    ...(resolvedSegments.length ? { resolvedSegments: sanitize(resolvedSegments) } : {}),
+    ...(resolvedRange ? { sourceRange: resolvedRange } : {}),
+  };
   const envelope: ToolEnvelope = {
     status: lowerStatus(result.status),
     data: sanitize(result.data),
     coverage: sanitize(result.coverage) as Coverage,
     asOf: result.coverage.checkedAt ?? new Date().toISOString(),
     metricVersion: PUBGMETRIC_VERSION,
-    queryResolved: sanitize(query) as Record<string, unknown>,
+    queryResolved: resolvedQuery,
     evidenceRefs: sanitize(evidenceFor(result)) as Evidence,
     ...(resultSetId ? { resultSetId } : {}),
   };
@@ -1090,6 +1114,93 @@ export class PubgDomainService {
     };
     if (telemetry.status === 'UNAVAILABLE') result.error = { code: 'telemetry_unavailable', retryable: true, reason: telemetry.error ?? 'telemetry unavailable' };
     return result;
+  }
+
+  async getPeriodReview(input: GetPeriodReviewInput): Promise<ToolEnvelope> {
+    const now = this.now();
+    const searchResultSet = this.repository.getResultSet(input.sessionId, input.searchResultSetId, now);
+    const searchCreatedAt = searchResultSet ? Date.parse(searchResultSet.createdAt) : Number.NaN;
+    const searchAge = Number.isFinite(searchCreatedAt) ? now.getTime() - searchCreatedAt : Number.POSITIVE_INFINITY;
+    if (!searchResultSet || !searchResultSet.source.syncInvoked || searchAge < 0 || searchAge > PUBG_REVIEW_SEARCH_MAX_AGE_MS) {
+      return this.errorEnvelope(
+        'review_search_required',
+        true,
+        'call pubg_search_matches with refresh=true in the current turn, then pass its resultSetId to pubg_get_period_review',
+      );
+    }
+
+    const sourceRange = sourceRangeFromSelector(searchResultSet.resolvedSelector);
+    const orderedMatchIds = [...searchResultSet.matchIds];
+    const reviews: Array<Record<string, unknown>> = [];
+    for (const matchId of orderedMatchIds) {
+      const review = await this.getReviewFacts({
+        sessionId: input.sessionId,
+        matchId,
+        searchResultSetId: input.searchResultSetId,
+        ...(input.playerIds?.length ? { playerIds: input.playerIds } : {}),
+        ...(input.categories?.length ? { categories: input.categories } : {}),
+        ...(input.signal ? { signal: input.signal } : {}),
+      });
+      const match = this.repository.getMatch(matchId);
+      reviews.push({
+        matchId,
+        status: review.status,
+        data: sanitize(review.data),
+        ...(review.error ? { error: review.error } : {}),
+        ...(match ? {
+          match: {
+            matchId: match.matchId,
+            createdAt: match.createdAt,
+            mapName: match.mapName,
+            gameMode: match.gameMode,
+            duration: match.duration,
+          },
+        } : {}),
+      });
+    }
+    const partial = reviews.some((review) => review.status !== 'ok') || searchResultSet.status !== 'OK';
+    const status: ToolStatus = orderedMatchIds.length === 0
+      ? 'no_matches'
+      : partial ? 'partial' : 'ok';
+    return {
+      status,
+      data: {
+        period: {
+          label: typeof searchResultSet.resolvedSelector.label === 'string' ? searchResultSet.resolvedSelector.label : 'PUBG 周期复盘',
+          orderedMatchIds,
+        },
+        reviews,
+        matches: orderedMatchIds.map((matchId) => {
+          const match = this.repository.getMatch(matchId);
+          return match ? {
+            matchId,
+            startedAt: match.createdAt,
+            mapName: match.mapName,
+            gameMode: match.gameMode,
+          } : { matchId, startedAt: null, mapName: '未知地图', gameMode: '未知模式' };
+        }),
+      },
+      coverage: searchResultSet.coverage,
+      asOf: now.toISOString(),
+      metricVersion: PUBGMETRIC_VERSION,
+      queryResolved: {
+        tool: 'pubg_get_period_review',
+        sessionId: input.sessionId,
+        searchResultSetId: input.searchResultSetId,
+        selector: searchResultSet.resolvedSelector,
+        order: orderedMatchIds,
+        ...(sourceRange ? { sourceRange } : {}),
+        categories: input.categories ?? null,
+      },
+      evidenceRefs: {
+        matchIds: orderedMatchIds,
+        playerIds: input.playerIds ?? searchResultSet.playerIds,
+        fields: ['orderedMatchIds', 'reviews', 'telemetry', 'dataUpdatedAt'],
+        calculation: 'pubg_period_review_v1',
+      },
+      ...(partial ? { error: { code: 'period_review_partial', retryable: true, reason: 'one or more selected matches did not have complete review facts' } } : {}),
+      resultSetId: input.searchResultSetId,
+    };
   }
 
   async queryTeamDamage(input: TeamDamageQueryInput): Promise<ToolEnvelope> {

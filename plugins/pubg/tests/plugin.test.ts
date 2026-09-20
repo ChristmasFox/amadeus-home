@@ -12,6 +12,7 @@ const EXPECTED_TOOLS = [
   'pubg_compare_stats',
   'pubg_get_match',
   'pubg_get_review_facts',
+  'pubg_get_period_review',
   'pubg_query_team_damage',
   'pubg_prefetch_telemetry',
   'pubg_telemetry_sync_report',
@@ -26,43 +27,27 @@ test('native OpenClaw plugin loads with the pinned SDK and declares the PUBG too
   assert.equal(metadata.activation.onStartup, true);
   const statsTool = metadata.tools.find((tool) => tool.name === 'pubg_query_stats');
   assert.ok(statsTool);
-  assert.match(statsTool.description, /identity_resolve/);
-  assert.match(statsTool.description, /personIds/);
-  assert.match(statsTool.description, /reference=self/);
-  assert.match(statsTool.description, /team=true only for an explicit whole-team request/);
-  assert.match(statsTool.description, /Every new PUBG factual request must call this tool/);
-  assert.match(statsTool.description, /persistent SQLite cache/);
-  assert.match(statsTool.description, /dataSourceRange/);
-  assert.match(statsTool.description, /dataUpdatedAtLocal/);
-  assert.match(statsTool.description, /raw ISO fields are machine evidence only/);
+  assert.match(statsTool.description, /validated presentation\/displayText/);
   const searchTool = metadata.tools.find((tool) => tool.name === 'pubg_search_matches');
   assert.ok(searchTool);
-  assert.match(searchTool.description, /recentN/);
-  assert.match(searchTool.description, /refresh=true/);
-  assert.match(searchTool.description, /relative_period/);
   assert.match(searchTool.description, /resultSetId/);
   const reviewTool = metadata.tools.find((tool) => tool.name === 'pubg_get_review_facts');
   assert.ok(reviewTool);
-  assert.match(reviewTool.description, /current turn/);
-  assert.match(reviewTool.description, /stale/);
-  assert.match(reviewTool.description, /instead of quoting prior conversation context/);
-  assert.match(reviewTool.description, /directional/);
-  assert.match(reviewTool.description, /dataSourceRange/);
-  assert.match(reviewTool.description, /startedAtLocal/);
+  assert.match(reviewTool.description, /fresh search resultSetId/);
+  assert.match(reviewTool.description, /validated presentation\/displayText/);
+  const periodReviewTool = metadata.tools.find((tool) => tool.name === 'pubg_get_period_review');
+  assert.ok(periodReviewTool);
+  assert.match(periodReviewTool.description, /fresh search resultSetId/);
+  assert.match(periodReviewTool.description, /partial coverage/);
   const teamDamageTool = metadata.tools.find((tool) => tool.name === 'pubg_query_team_damage');
   assert.ok(teamDamageTool);
-  assert.match(teamDamageTool.description, /all directions/);
-  assert.match(teamDamageTool.description, /meleeKind="KICK"/);
-  assert.match(teamDamageTool.description, /do not pass recentN, resultSetId/);
-  assert.match(teamDamageTool.description, /partial result/);
+  assert.match(teamDamageTool.description, /actor\/victim together/);
   const prefetchTool = metadata.tools.find((tool) => tool.name === 'pubg_prefetch_telemetry');
   assert.ok(prefetchTool);
-  assert.match(prefetchTool.description, /status=FETCHED/);
-  assert.match(prefetchTool.description, /cacheStatus=FETCHED/);
-  assert.match(prefetchTool.description, /availability=AVAILABLE/);
+  assert.match(prefetchTool.description, /team=true/);
   const reportTool = metadata.tools.find((tool) => tool.name === 'pubg_telemetry_sync_report');
   assert.ok(reportTool);
-  assert.match(reportTool.description, /Amadeus • D-mail/);
+  assert.match(reportTool.description, /owner-notification/);
 });
 
 test('manifest contracts match runtime metadata and do not carry secret values', () => {
@@ -91,4 +76,6 @@ test('bundled PUBG skill has the OpenClaw-required frontmatter', () => {
   assert.match(skill, /fromLocal/);
   assert.match(skill, /pubg_query_team_damage/);
   assert.match(skill, /meleeKind/);
+  assert.match(skill, /pubg_get_period_review/);
+  assert.match(skill, /validated `presentation`/);
 });
