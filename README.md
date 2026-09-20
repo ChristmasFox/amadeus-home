@@ -54,7 +54,7 @@ pnpm test:workflow
 
 ## Amadeus 版本管理
 
-产品版本唯一记录在根目录 `VERSION`，当前 release candidate 为 `1.4.1`（部署前 live 版本仍为 `1.4.0`）。从下一版本起，每次只执行 `bump patch` 并递增
+产品版本唯一记录在根目录 `VERSION`，当前 live 版本为 `1.4.2`。每次只执行 `bump patch` 并递增
 `0.0.1`；patch 位为 `0..9`，到 9 时进位到 minor（`0.9.9 -> 0.10.0`），minor 位为 `0..99`，到 99 且
 patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文来自
 `RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
@@ -62,7 +62,7 @@ patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文�
 
 ```sh
 ./scripts/amadeus-version.sh show
-./scripts/amadeus-version.sh bump patch  # 唯一递增入口：1.4.0 -> 1.4.1；patch/minor 按上面的边界进位
+./scripts/amadeus-version.sh bump patch  # 唯一递增入口：1.4.1 -> 1.4.2；patch/minor 按上面的边界进位
 ./scripts/amadeus-version.sh check
 ```
 
