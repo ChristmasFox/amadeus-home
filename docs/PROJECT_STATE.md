@@ -18,7 +18,7 @@ capability workflow 已归还各自 Skill，SOUL 只保留 Kurisu persona，work
 runtime invariant，宽泛 meme trigger 已收紧。Phase 1-2 的 Amadeus/Identity/PUBG 定向测试和
 typecheck 通过；后续 Phase 3-5 已在下方完成，release/deploy 尚未执行。
 
-## 2026-09-20：架构收敛 Phase 3-5 已完成，等待 release
+## 2026-09-20：架构收敛 Phase 3-5 已完成并已部署
 
 - `packages/presentation` 提供 PUBG 单局/周期复盘与 owner notification 三类 contract，包含 runtime
   validation、evidenceRefs、null/unknown 语义、北京时间友好 formatter 和 deterministic renderer。
@@ -29,8 +29,20 @@ typecheck 通过；后续 Phase 3-5 已在下方完成，release/deploy 尚未�
   display fields 使用统一 formatter，默认正文不输出实现时区/日界线 metadata。
 - 已加入根 `AGENTS.md` ownership matrix/checklist、`docs/CAPABILITY_TEMPLATE.md`、
   `scripts/check-architecture.mjs` + fixture，并在 `workflow:verify` 中运行。
-- 当前本地 `pnpm build`、`pnpm typecheck`、`pnpm test`、`pnpm check:secrets`、architecture/workflow
-  tests 和 `git diff --check` 全部通过；版本/提交/push/CasaOS apply/live evidence 尚未开始。
+- 本地 `pnpm build`、`pnpm typecheck`、`pnpm test`、`pnpm check:secrets`、architecture/workflow tests
+  和 `git diff --check` 全部通过；版本 `1.3.0` 的实现提交 `7d85bc1` 已 push 并已完成 CasaOS apply。
+
+## 2026-09-20：架构收敛 1.3.0 live release evidence
+
+- live OpenClaw image：`local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image：
+  `local/product-radar:git-7d85bc10f15d-20260920041059`。
+- external checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920041059`。
+- deploy 输出：OpenClaw/Product Radar health、media adapter network、NAS read-only、owner WhatsApp
+  outbox smoke 和 retired runtime 检查全部 PASS；`doctor.sh` 0 failure / 0 warning。
+- live runtime：Amadeus loaded with 19 native tools and owner notification worker；PUBG loaded with 8
+  tools；全部新增 capability Skills、PUBG/owner presentation bundle 和六个预期 cron 已核实。
+- 未发送未经请求的真实群聊测试消息；真实用户入口自然语言验收继续保持 pending，未把工具/preflight
+  证据伪装成 inbound/final-reply 验收。
 
 ## 2026-09-20：VPS Caddy 多服务公网入口已恢复
 

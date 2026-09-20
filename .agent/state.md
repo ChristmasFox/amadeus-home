@@ -8,7 +8,15 @@ capability Skills、global prompt ownership cleanup 和收紧 persona meme trigg
 Phase 3-5 也已完成：Presentation contracts/renderers/time formatter、owner hard validation、PUBG
 structured presentation、architecture fitness check 和 workflow integration 均已验证。下一步只做
 Phase 6 release validation、minor version bump、implementation commit/push、CasaOS deploy 和
-deployment evidence commit/push。
+deployment evidence commit/push；其中 implementation commit/push、1.3.0 release build/apply、live
+health/preflight/smoke 与 doctor 已完成，当前只剩 docs-only deployment evidence commit/push。
+
+本次 1.3.0 live release：implementation commit `7d85bc1`；OpenClaw image
+`local/openclaw-amadeus:git-7d85bc10f15d-20260920041059`；Product Radar image
+`local/product-radar:git-7d85bc10f15d-20260920041059`；checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920041059`。health、plugin/Skill preflight、
+owner worker/outbox、NAS read-only、media connectivity、legacy runtime retirement 和 doctor 均 PASS。
+没有发送未经请求的真实群聊消息，真实自然语言 inbound/final-reply 仍明确标记为 pending。
 
 当前 Goal：按 docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md，将仍有价值的旧多领域能力迁移到
 OpenClaw/Kurisu native Amadeus plugin 与独立服务，并退休 LangBot、n8n、旧 runtime、
