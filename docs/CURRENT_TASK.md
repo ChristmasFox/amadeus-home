@@ -24,6 +24,21 @@ inbound/final-reply 仍按验收边界保持 pending，不发送未经请求的�
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-20：WhatsApp 全量私聊与非 owner 工具隔离（已完成）
+
+按用户授权，WhatsApp 顶层及 `secondary` 账号 DM 已改为 `dmPolicy=open`、`allowFrom=["*"]`，
+`configWrites=false`；Telegram 仍为 allowlist，未扩大 Telegram DM 范围。发送者工具策略保持
+owner `tools.profile=full`，非 owner 只允许 `web_search`/`web_fetch`，不加载服务器、文件、执行、
+节点、自动化、媒体、插件等写入面；`commands.ownerAllowFrom` 与 owner outbox 仍只指向原 owner。
+
+同时为 Product Radar 的 `create/update/delete/pause/resume/run/context_*` 增加运行时 owner 门禁，
+避免仅靠发送者工具过滤形成绕过路径。源码与部署模板已提交（最终 commit `4d11f3e`），镜像已
+apply 到 CasaOS `ubuntu`：OpenClaw/Product Radar 均 healthy，WhatsApp linked/running，配置 reload
+active，编译后的 Amadeus bundle 已包含 Product Radar owner guard。配置变更前恢复点为
+`/DATA/AppData/openclaw/backups/whatsapp-dm-open-20260920T152658Z`，本次发布 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920153810`；health、preflight、媒体网络、
+NAS 只读、owner outbox smoke 和 secrets scan 均通过。
+
 ## 2026-09-20：Immich 与 9router 更新（已完成）
 
 本轮在 OrbStack `ubuntu` 的 CasaOS 中完成两项服务更新。Immich server 与 machine-learning
