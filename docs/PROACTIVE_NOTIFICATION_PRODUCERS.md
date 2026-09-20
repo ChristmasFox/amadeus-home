@@ -9,7 +9,7 @@ outbox and delivery policy own that boundary.
 | Product Radar | `apps/product-radar/src/integrations/notifications/owner.ts` | Radar event adapter preserves listing facts, prices, statuses, keywords, similarity, threshold and links | matched/similar → 世界线观测; price/status → 世界线偏移; heartbeat → D-Mail | ACTIVE |
 | Market open/close | `plugins/amadeus/src/market.ts` | Market observation adapter keeps numeric index facts and data time | D-Mail; close may carry one closing line | ACTIVE |
 | PUBG telemetry sync | `plugins/pubg/src/index.ts` | Plugin boundary adapts the Domain summary; Domain remains platform/theme neutral | D-Mail | ACTIVE |
-| Amadeus release/deploy | `scripts/deploy-openclaw.sh` | Structured release outbox contract | 世界线收束 | ACTIVE |
+| Amadeus release/deploy | `scripts/deploy-openclaw.sh` → `scripts/notify-owner.sh` | After health/preflight, queues the structured release event into both checkpoint evidence and the production owner outbox, then waits for `.sent.json` | 世界线收束 | ACTIVE |
 | Codex completion hook | `integrations/openclaw/codex-notify.sh` → `scripts/notify-owner.sh` | Generic event with redacted summary and stable idempotency key | 世界线观测 | ACTIVE |
 | VPS scheduled report | CasaOS cron declaration in `scripts/deploy-openclaw.sh` | Cron emits `worldline_notification_intent`, with facts supplied by bounded VPS tools | D-Mail; severity/significance remain factual | ACTIVE |
 | HomeLab status | `plugins/amadeus/src/homelab.ts` | Service and resource facts; unknown metrics remain null/unknown | observation or divergence | ACTIVE |

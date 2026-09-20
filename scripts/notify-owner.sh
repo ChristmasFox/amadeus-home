@@ -9,10 +9,16 @@ EVENT_KEY=""
 SOURCE=""
 HEADLINE=""
 SUMMARY=""
+SEVERITY="info"
+SIGNIFICANCE="notable"
+THEME="worldline_observation"
+FACT_LABEL=""
+FACT_VALUE=""
+WORLD_LINE_CLOSING=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --headline HEADLINE --summary SUMMARY [--outbox-dir DIR] [--remote-machine NAME]
+Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --headline HEADLINE --summary SUMMARY [--severity LEVEL] [--significance LEVEL] [--theme THEME] [--fact-label LABEL --fact-value VALUE] [--worldline-closing] [--outbox-dir DIR] [--remote-machine NAME]
 
 The command only creates an idempotent local event. It has no channel,
 recipient, bot token, or network option.
@@ -25,6 +31,12 @@ while (($#)); do
     --source) (($# >= 2)) || { usage >&2; exit 2; }; SOURCE="$2"; shift 2 ;;
     --headline) (($# >= 2)) || { usage >&2; exit 2; }; HEADLINE="$2"; shift 2 ;;
     --summary) (($# >= 2)) || { usage >&2; exit 2; }; SUMMARY="$2"; shift 2 ;;
+    --severity) (($# >= 2)) || { usage >&2; exit 2; }; SEVERITY="$2"; shift 2 ;;
+    --significance) (($# >= 2)) || { usage >&2; exit 2; }; SIGNIFICANCE="$2"; shift 2 ;;
+    --theme) (($# >= 2)) || { usage >&2; exit 2; }; THEME="$2"; shift 2 ;;
+    --fact-label) (($# >= 2)) || { usage >&2; exit 2; }; FACT_LABEL="$2"; shift 2 ;;
+    --fact-value) (($# >= 2)) || { usage >&2; exit 2; }; FACT_VALUE="$2"; shift 2 ;;
+    --worldline-closing) WORLD_LINE_CLOSING=1; shift ;;
     --outbox-dir) (($# >= 2)) || { usage >&2; exit 2; }; OUTBOX_DIR="$2"; shift 2 ;;
     --remote-machine) (($# >= 2)) || { usage >&2; exit 2; }; REMOTE_MACHINE="$2"; shift 2 ;;
     --help|-h) usage; exit 0 ;;
@@ -43,7 +55,7 @@ fi
 
 if [[ -n "$REMOTE_MACHINE" ]]; then
   if ! command -v orb >/dev/null 2>&1; then exit 0; fi
-  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" <<'PY' >/dev/null 2>&1 || true
+  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" <<'PY' >/dev/null 2>&1 || true
 import hashlib
 import json
 import os
@@ -52,24 +64,27 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, headline, summary = sys.argv[1:]
+outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
 clean_summary = clean(summary, 16000)
-world_line_closing = clean_summary.endswith("El Psy Kongroo.")
-clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_summary
+world_line_closing = closing_flag == "1" or clean_summary.endswith("El Psy Kongroo.")
+clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if clean_summary.endswith("El Psy Kongroo.") else clean_summary
+facts = []
+if clean(fact_label, 200) and clean(fact_value, 1000):
+    facts.append({"label": clean(fact_label, 200), "value": clean(fact_value, 1000), "evidenceRefs": []})
 event = {
     "version": 1,
     "type": "owner_notification",
     "eventType": clean(source, 128),
-    "severity": "info",
-    "significance": "notable",
-    "theme": "worldline_observation",
+    "severity": clean(severity, 32),
+    "significance": clean(significance, 32),
+    "theme": clean(theme, 64),
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
     "headline": clean(headline, 200) or clean(source, 128),
-    "facts": [],
+    "facts": facts,
     "summary": clean_summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     **({"worldLineClosing": True} if world_line_closing else {}),
@@ -104,7 +119,7 @@ PY
   exit 0
 fi
 
-python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" <<'PY'
+python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" <<'PY'
 import hashlib
 import json
 import os
@@ -113,24 +128,27 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, headline, summary = sys.argv[1:]
+outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
 clean_summary = clean(summary, 16000)
-world_line_closing = clean_summary.endswith("El Psy Kongroo.")
-clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if world_line_closing else clean_summary
+world_line_closing = closing_flag == "1" or clean_summary.endswith("El Psy Kongroo.")
+clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if clean_summary.endswith("El Psy Kongroo.") else clean_summary
+facts = []
+if clean(fact_label, 200) and clean(fact_value, 1000):
+    facts.append({"label": clean(fact_label, 200), "value": clean(fact_value, 1000), "evidenceRefs": []})
 event = {
     "version": 1,
     "type": "owner_notification",
     "eventType": clean(source, 128),
-    "severity": "info",
-    "significance": "notable",
-    "theme": "worldline_observation",
+    "severity": clean(severity, 32),
+    "significance": clean(significance, 32),
+    "theme": clean(theme, 64),
     "eventKey": clean(event_key, 256),
     "source": clean(source, 128),
     "headline": clean(headline, 200) or clean(source, 128),
-    "facts": [],
+    "facts": facts,
     "summary": clean_summary,
     "occurredAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     **({"worldLineClosing": True} if world_line_closing else {}),

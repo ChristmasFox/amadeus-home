@@ -38,3 +38,9 @@
 - 本次只部署当前 canonical CasaOS host；没有迁移到 Mac mini、没有 DNS cutover、没有执行 Operation Skuld cutover/restore。
 - 没有恢复 LangBot、n8n、旧 Runtime 或第二套 sender/planner。
 - 真实 Telegram/WhatsApp 自然语言 inbound/final-reply 仍未用未经请求的真实群聊消息伪造验收；仅验证了工具、outbox、health、preflight 和无 spam smoke。
+
+## Post-release notification follow-up
+
+初次部署时，`OWNER_SMOKE=queued` 只写入了 checkpoint 的 `owner-smoke` 目录；它验证了 owner contract，却没有写入生产 `/DATA/AppData/openclaw/notifications`，因此没有触发 WhatsApp worker。这是“部署完成但没有发布通知”的根因。
+
+用户明确要求后，已用幂等 key `amadeus-release:1.4.2:manual-resend` 补发到固定 owner WhatsApp DM，并确认对应 `.sent.json`、WhatsApp `connected/healthy`。部署脚本后续修复为：成功 health/preflight 后同时写入生产 outbox，并等待真实 `.sent.json`；delivery 未完成时 deploy 返回失败，不再把 checkpoint-only smoke 当作通知已发送。

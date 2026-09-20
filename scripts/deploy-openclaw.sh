@@ -139,7 +139,6 @@ RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
 # The deployment envelope owns the world-line closing. Strip an accidentally
 # repeated standalone closing from release notes before appending it once.
 RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | sed '/^[[:space:]]*El Psy Kongroo\.[[:space:]]*$/d')"
-RELEASE_NOTES_B64="$(printf '%s' "$RELEASE_NOTES" | base64 | tr -d '\n')"
 if ((APPLY)); then
   if ((AUTO_BUILD)); then
     [[ -z "$IMAGE" && -z "$RADAR_IMAGE" ]] || fail '--build-auto resolves both images from the live CasaOS containers; omit --image/--radar-image.'
@@ -516,27 +515,40 @@ mkdir -p "$(dirname -- "$HOOK_PATH")"
 if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
-ACCEPTANCE_KEY="amadeus-owner-smoke:$CHECKPOINT_ID"
-orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/owner-smoke" "$ACCEPTANCE_KEY" "$AMADEUS_VERSION" "$RELEASE_NOTES_B64" <<'PY'
-import base64, hashlib, json, os, sys, tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-directory = Path(sys.argv[1])
-release_notes = base64.b64decode(sys.argv[4]).decode('utf-8').strip()
-event = {'version':1,'type':'owner_notification','eventType':'amadeus_release','severity':'success','significance':'major','theme':'worldline_convergence','eventKey':sys.argv[2],'source':'amadeus-release','headline':f'Amadeus {sys.argv[3]} · 世界线收束','facts':[{'label':'版本','value':sys.argv[3],'evidenceRefs':[]}],'summary':release_notes,'occurredAt':datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),'worldLineClosing':True}
-directory.mkdir(parents=True, exist_ok=True); os.chmod(directory, 0o700); os.chown(directory, 1000, 1000)
-event_id = hashlib.sha256(event['eventKey'].encode()).hexdigest()[:40]
-pending, sent = directory / (event_id + '.pending.json'), directory / (event_id + '.sent.json')
-if not pending.exists() and not sent.exists():
-    fd, temporary = tempfile.mkstemp(prefix='.' + event_id + '.', suffix='.tmp', dir=directory)
-    os.fchmod(fd, 0o600); os.chown(temporary, 1000, 1000)
-    with os.fdopen(fd, 'w', encoding='utf-8') as handle: json.dump(event, handle, ensure_ascii=False); handle.write('\n')
-    os.replace(temporary, pending)
-print('OWNER_SMOKE=queued')
-PY
+ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION:$CHECKPOINT_ID"
+DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
+已部署到当前 CasaOS 主机 ${MACHINE}。"
+for owner_outbox in "$CHECKPOINT_DIR/owner-smoke" "$OPENCLAW_DATA_DIR/notifications"; do
+  "$ROOT_DIR/scripts/notify-owner.sh" \
+    --remote-machine "$MACHINE" \
+    --outbox-dir "$owner_outbox" \
+    --event-key "$ACCEPTANCE_KEY" \
+    --source amadeus-release \
+    --headline "Amadeus $AMADEUS_VERSION · 世界线收束" \
+    --summary "$DEPLOYMENT_SUMMARY" \
+    --severity success \
+    --significance major \
+    --theme worldline_convergence \
+    --fact-label 版本 \
+    --fact-value "$AMADEUS_VERSION" \
+    --worldline-closing
+done
 
 owner_smoke_id="$(printf '%s' "$ACCEPTANCE_KEY" | shasum -a 256 | cut -c1-40)"
 orb -m "$MACHINE" -u root test -f "$CHECKPOINT_DIR/owner-smoke/$owner_smoke_id.pending.json" || fail 'Owner outbox contract smoke did not queue.'
+if ! orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.pending.json" \
+  && ! orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json"; then
+  fail 'Owner release notification did not enter the production outbox.'
+fi
+owner_notification_status='pending'
+for attempt in $(seq 1 30); do
+  if orb -m "$MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$owner_smoke_id.sent.json"; then
+    owner_notification_status='sent'
+    break
+  fi
+  sleep 1
+done
+[[ "$owner_notification_status" == sent ]] || fail 'Owner release notification remained pending after 30 seconds.'
 
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
@@ -545,6 +557,7 @@ printf '%s\n' 'OPENCLAW_HEALTH=passed'
 printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
 printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
+printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
 printf '%s\n' 'OWNER_OUTBOX_SMOKE=passed'
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
 printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."
