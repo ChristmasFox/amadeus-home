@@ -18,7 +18,7 @@ Owner Notification 等 Skill，并把 PUBG/时间/Identity workflow 留在对应
 `git diff --check` 通过；SOUL/workspace prompt ownership 与 global business injection 扫描通过。
 随后 Phase 3-5 已在下方完成，Phase 6 release 仍待执行。
 
-## 2026-09-20：Amadeus 架构收敛 Phase 3-5（已完成，等待 release）
+## 2026-09-20：Amadeus 架构收敛 Phase 3-5（已完成并已部署）
 
 已新增纯 `packages/presentation`：实现 `PubgMatchReviewPresentation`、
 `PubgPeriodReviewPresentation`、`OwnerNotificationPresentation`，runtime validation、证据引用校验、
@@ -36,9 +36,25 @@ release smoke 均已迁移到 owner contract。
 `workflow:verify` 路径已接入。`pnpm build`、`pnpm typecheck`、`pnpm test`、`pnpm check:secrets`、
 architecture fixture、workflow scope tests 与 `git diff --check` 当前通过。
 
-仍待 Phase 6：minor 版本与单次 release notes、实现提交/push、`deploy-openclaw.sh --dry-run`、
-`--apply --build-auto`、`doctor.sh`、live checkpoint/health/preflight/smoke，以及仅包含部署证据的
-第二次 docs/state/checkpoint 提交和 push。
+Phase 6 已完成：版本 `1.3.0`、实现提交 `7d85bc1` 已 push；`deploy-openclaw.sh --dry-run` 和
+`--apply --build-auto`、`doctor.sh`、live checkpoint/health/preflight/smoke 全部通过。部署证据见下方
+条目，尚需提交并 push 本次 docs-only evidence。
+
+## 2026-09-20：Amadeus 架构收敛 release 已部署
+
+实现提交：`7d85bc10f15d`（`feat: converge Amadeus architecture and presentation`）；版本：`1.3.0`。
+部署命令为 `./scripts/deploy-openclaw.sh --dry-run`、`./scripts/deploy-openclaw.sh --apply --build-auto`，
+策略按 live immutable image 判定后实际重建 OpenClaw 与 Product Radar。live images 为
+`local/openclaw-amadeus:git-7d85bc10f15d-20260920041059` 与
+`local/product-radar:git-7d85bc10f15d-20260920041059`；外部恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920041059`。
+
+部署输出确认 `OPENCLAW_HEALTH=passed`、`PRODUCT_RADAR_HEALTH=passed`、
+`MEDIA_ADAPTER_NETWORK=passed`、`NAS_SSH_READONLY_SMOKE=passed`、
+`OWNER_WHATSAPP_OUTBOX_SMOKE=passed`、`LEGACY_RUNTIME=retired`；`./scripts/doctor.sh` 为 0 failure、0
+warning。live preflight 确认 Amadeus 19 tools、PUBG 8 tools、owner notification worker、全部新 Skills
+和六个预期 cron；live bundle 还确认 owner contract、renderer、time formatter 和 PUBG integration。
+未发送未经请求的真实群聊测试消息；真实用户自然语言入站验收仍按既有约束记录为 pending，不冒充为已完成。
 
 ## 2026-09-20：修复 VPS Caddy 多服务 525（已完成）
 
