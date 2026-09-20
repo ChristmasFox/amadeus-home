@@ -6,7 +6,7 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
-## 2026-09-20：PUBG 队友动作/误伤调用链补强（实现完成，release 待部署）
+## 2026-09-20：PUBG 队友动作/误伤调用链补强（1.4.0 已部署）
 
 针对真实 WhatsApp 回合“昨天队内误伤情况详情”和“昨天007踢了004几脚”的调用轨迹完成
 read-only 审计：两次都只调用了 `pubg_search_matches`，得到 7 场基础 Match API 记录后就结束；
@@ -19,8 +19,16 @@ read-only 审计：两次都只调用了 `pubg_search_matches`，得到 7 场基
 周期、刷新 Match、逐局确保 Telemetry，并返回全方向/定向 `actor → victim` 聚合、每局证据、
 `source`/`meleeKind` 筛选和 `partial/null` 未知语义。Skill 明确要求周期队友动作直接调用该
 工具，不得先查基础比赛后停止。新增 Domain 回归覆盖 06:00、007/004 alias、跨局 KICK 聚合
-及 Telemetry 不完整语义；本地定向测试和 typecheck 已通过。版本已提升为 `1.4.0`，下一步按
-release protocol 提交、push、CasaOS apply 和 live preflight。
+及 Telemetry 不完整语义；本地 Domain 22/22、Plugin 9/9、全仓 build/typecheck/test、
+architecture、secrets 和 workflow verify 均通过。实现提交 `6ee03d0` 已 push，并通过
+`./scripts/deploy-openclaw.sh --dry-run` 与 `--apply --build-auto` 部署到 CasaOS。
+
+live OpenClaw image 为 `local/openclaw-amadeus:git-6ee03d0617fd-20260920044911`，
+Product Radar 复用 `local/product-radar:git-7d85bc10f15d-20260920041059`，外部恢复 checkpoint
+为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920044911`。部署输出和独立核验均确认
+OpenClaw/Product Radar health、媒体网络、NAS 只读、owner outbox、legacy runtime retirement、
+`pubg_query_team_damage` live tool/Skill 和 `doctor.sh`（0 failure/0 warning）通过；未发送
+未经请求的真实群聊测试消息。
 
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
