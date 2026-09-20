@@ -6,15 +6,22 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
-## 2026-09-20：Amadeus 1.4.1 源码阶段完成，release pending
+## 2026-09-20：Amadeus 1.4.1 已部署，deployment evidence 收尾
 
-已完成 `docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 的源码阶段：PUBG 全 native
-tool presentation registry、stats/search/compare/match/review/period/team-damage/status renderer、
-Domain-owned fresh-result-set period review、owner outbox 结构化分片、SOUL persona-only 和递归
-architecture fitness check 均已落地。定向 Presentation 6/6、Domain 23/23、PUBG plugin 9/9、
-Amadeus 18/18、typecheck、architecture、version fixtures、workflow 和 secrets scan 均通过。
-根 `VERSION=1.4.1`、release notes check 和全仓 build/test 已通过；implementation commit/push、
-CasaOS apply 和 live 验收尚未执行。
+`docs/AMADEUS_1_4_1_PUBG_PRESENTATION_HARDENING_GOAL.md` 已完成：PUBG 全 native tool presentation
+registry、stats/search/compare/match/review/period/team-damage/status renderer、Domain-owned
+fresh-result-set period review、owner outbox 结构化分片、SOUL persona-only 和递归 architecture
+fitness check 均已落地。定向 Presentation 6/6、Domain 23/23、PUBG plugin 9/9、Amadeus 18/18、
+typecheck、architecture、version fixtures、workflow、secrets scan、全仓 build/test 和 release
+check 均通过。`VERSION=1.4.1` 的 implementation commit `032e314` 已 push，并已通过
+`./scripts/deploy-openclaw.sh --apply --build-auto` 部署到 CasaOS。
+
+live OpenClaw image 为 `local/openclaw-amadeus:git-032e31477b45-20260920065322`，Product Radar
+复用 `local/product-radar:git-7d85bc10f15d-20260920041059`，外部恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920065322`。OpenClaw/Product Radar health、
+PUBG/Amadeus Skill/tool preflight、media network、NAS read-only、owner WhatsApp outbox smoke 和
+legacy runtime retirement 均通过；独立 `doctor.sh` 为 0 failure / 0 warning。未发送未经请求的
+真实群聊测试消息，真实自然语言 inbound/final-reply 仍按边界记录为 pending。
 
 ## 2026-09-20：PUBG 队友动作/误伤调用链补强（1.4.0 已部署）
 

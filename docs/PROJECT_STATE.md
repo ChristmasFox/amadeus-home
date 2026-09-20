@@ -8,15 +8,19 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
-## 2026-09-20：Amadeus 1.4.1 源码阶段完成，release pending
+## 2026-09-20：Amadeus 1.4.1 live release 已完成
 
-PUBG 的 10 个 native tools 现在由唯一 `PUBG_PRESENTATION_REGISTRY` 覆盖，工具 envelope 保留
-原始 facts/evidence 并额外返回 validated `presentation` 与 deterministic `displayText`；周期复盘
-由 Domain 消费新鲜 `resultSetId` 并按搜索顺序逐局获取，partial/no-match 不被补成确定事实。Owner
+PUBG 的 10 个 native tools 由唯一 `PUBG_PRESENTATION_REGISTRY` 覆盖，工具 envelope 保留原始
+facts/evidence 并额外返回 validated `presentation` 与 deterministic `displayText`；周期复盘由
+Domain 消费新鲜 `resultSetId` 并按搜索顺序逐局获取，partial/no-match 不被补成确定事实。Owner
 outbox 新写入只接受结构化 contract，长消息分片保留 facts、更新时间、closing 和幂等 key；旧
 `title/message` 只在 pending drain 读取兼容。SOUL、架构递归扫描和版本算法 fixtures 已同步。
-当前 `VERSION=1.4.1`，release notes、全仓 build/test 和源码验证完成；implementation commit/push、
-release/deploy/live evidence 尚待下一阶段，live 运行时仍为 1.4.0。
+当前 `VERSION=1.4.1`，implementation commit `032e314` 已 push；live OpenClaw image 为
+`local/openclaw-amadeus:git-032e31477b45-20260920065322`，Product Radar 复用
+`local/product-radar:git-7d85bc10f15d-20260920041059`，外部恢复 checkpoint 为
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260920065322`。health、preflight、外围 smoke、
+legacy runtime retirement 和 `doctor.sh`（0 failure / 0 warning）均通过。真实 Telegram/WhatsApp
+自然语言入口和最终用户回复未通过未经请求的群聊消息伪造，仍记录为 pending。
 
 ## 2026-09-20：PUBG 队友动作/误伤批量 Telemetry contract（1.4.0 已部署）
 
