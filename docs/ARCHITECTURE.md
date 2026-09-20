@@ -63,6 +63,15 @@ renderer 负责用户显示时间。默认同一显示日只显示 `HH:mm`，跨
 - \`pubg_compare_stats\`
 - \`pubg_get_match\`
 - \`pubg_get_review_facts\`
+- \`pubg_query_team_damage\`
+- \`pubg_prefetch_telemetry\`
+- \`pubg_telemetry_sync_report\`
+
+`pubg_query_team_damage` 是周期队友动作/误伤的唯一批量 Telemetry use case：省略方向时返回
+所有 `actor → victim`，指定 actor/victim 时返回单一方向；`source=MELEE` 和
+`meleeKind=KICK|PUNCH` 由 Domain 确定性筛选。它自己刷新比赛并逐局确保 Telemetry，不能把
+`pubg_search_matches` 的 Match API coverage 当作 Telemetry coverage；不可用对局返回
+`partial` 和 `null`，不静默归零。
 
 \`packages/pubg-domain\` 不导入 OpenClaw、Telegram、WhatsApp、LangBot 或旧 app。它接收
 校验后的 platform-neutral selector，返回 status、coverage、asOf、metricVersion、

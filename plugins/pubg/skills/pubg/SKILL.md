@@ -86,6 +86,17 @@ Tool rules:
   `Asia/Shanghai` `06:00` business-day boundary. Pass the returned `resultSetId` to every
   `pubg_get_review_facts` call for that review; do not reuse facts or a result set from an
   earlier turn. The review tool rejects an omitted, unrelated, or stale search result set.
+- Any period teammate-action or friendly-fire request must use
+  `pubg_query_team_damage` directly; this is the batch Telemetry owner and it refreshes
+  Match discovery and ensures Telemetry for every selected match itself. For all-team
+  requests such as “昨天队内误伤详情”, omit `actorPlayer` and `victimPlayer` so every
+  `actor → victim` direction is returned. For a directional request, pass both configured
+  PUBG names/aliases, such as `actorPlayer: "007"` and `victimPlayer: "004"`. For “踢/脚”
+  pass `source: "MELEE", meleeKind: "KICK"`; for “拳” use `meleeKind: "PUNCH"`.
+  Use a semantic `relative_period` or explicit `time_range` selector and omit `recentN`
+  and `resultSetId`; do not call `pubg_search_matches` and then stop, and never infer
+  zero from a `partial` Telemetry result. `pubg_get_review_facts` remains the tool for
+  a selected single-match deep review, not the period batch aggregation.
 - Use `pubg_query_stats` for bounded aggregates. Prefer an explicit selector:
   `time_range` uses the half-open interval `[from,to)` and IANA timezone
   `Asia/Shanghai` unless the user specifies another timezone. PUBG's canonical

@@ -377,7 +377,7 @@ from pathlib import Path
 pubg = json.dumps(json.loads(Path(sys.argv[1]).read_text()), ensure_ascii=False)
 amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=False)
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
-for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts','pubg_prefetch_telemetry','pubg_telemetry_sync_report']:
+for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts','pubg_query_team_damage','pubg_prefetch_telemetry','pubg_telemetry_sync_report']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
 for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_indices','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)

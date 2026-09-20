@@ -1,3 +1,3 @@
-# Amadeus 1.3.0
+# Amadeus 1.4.0
 
-完成 Amadeus 架构收敛：能力注册物理模块化、Prompt ownership 回归 Skill、PUBG 与 owner 通知接入结构化 Presentation Contract，并统一北京时间友好展示与架构 fitness checks。
+补齐 PUBG 周期队友动作/误伤查询：新增确定性的批量 Telemetry contract，支持全队方向汇总、actor → victim 定向查询、踢击/拳击筛选，并在 Telemetry 不完整时保留 partial/null 语义。

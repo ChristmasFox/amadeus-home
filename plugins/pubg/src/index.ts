@@ -20,6 +20,7 @@ import {
   type ResolvePlayersInput,
   type SearchMatchesInput,
   type StatsToolInput,
+  type TeamDamageQueryInput,
   type PrefetchTelemetryInput,
   type TelemetrySyncReportInput,
   type ToolEnvelope,
@@ -91,6 +92,12 @@ const ResultSetSelector = Type.Object({
 }, { additionalProperties: false });
 const Selector = Type.Union([TimeRangeSelector, RelativePeriodSelector, LastMatchesSelector, ResultSetSelector]);
 const SearchSelector = Type.Union([TimeRangeSelector, RelativePeriodSelector]);
+const TeamDamageSource = Type.Union([
+  Type.Literal('MELEE'), Type.Literal('GUN'), Type.Literal('EXPLOSIVE'), Type.Literal('VEHICLE'),
+]);
+const TeamDamageMeleeKind = Type.Union([
+  Type.Literal('KICK'), Type.Literal('PUNCH'), Type.Literal('OTHER'),
+]);
 
 const Metrics = Type.Union([
   Type.Literal('matches'), Type.Literal('kills'), Type.Literal('assists'), Type.Literal('damage'),
@@ -230,6 +237,24 @@ const ReviewParameters = Type.Object({
   refresh: Type.Optional(Type.Boolean()),
 }, { additionalProperties: false });
 
+const TeamDamageParameters = Type.Object({
+  sessionId: SessionId,
+  selector: SearchSelector,
+  actorPlayer: Type.Optional(Type.String({
+    minLength: 1,
+    maxLength: 128,
+    description: 'Configured PUBG player name, alias, or account ID. Provide together with victimPlayer for one direction; omit both for all directions.',
+  })),
+  victimPlayer: Type.Optional(Type.String({
+    minLength: 1,
+    maxLength: 128,
+    description: 'Configured PUBG player name, alias, or account ID. Provide together with actorPlayer for one direction; omit both for all directions.',
+  })),
+  source: Type.Optional(TeamDamageSource),
+  meleeKind: Type.Optional(TeamDamageMeleeKind),
+  refresh: Type.Optional(Type.Boolean({ description: 'Default is true: refresh match discovery and ensure Telemetry for every match in the resolved period.' })),
+}, { additionalProperties: false });
+
 const PrefetchTelemetryParameters = Type.Object({
   team: Type.Literal(true, { description: 'Scheduled/team-wide prefetch only; this is not a sender identity fallback.' }),
   maxMatches: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000 })),
@@ -248,6 +273,7 @@ type ResolvePlayersParameters = Static<typeof ResolvePlayersParameters>;
 type SearchMatchesParameters = Static<typeof SearchMatchesParameters>;
 type MatchParameters = Static<typeof MatchParameters>;
 type ReviewParameters = Static<typeof ReviewParameters>;
+type TeamDamageParameters = Static<typeof TeamDamageParameters>;
 type PrefetchTelemetryParameters = Static<typeof PrefetchTelemetryParameters>;
 type TelemetrySyncReportParameters = Static<typeof TelemetrySyncReportParameters>;
 
@@ -752,6 +778,20 @@ const entry = defineToolPlugin({
         toolContext,
         true,
         (service, input, sessionId, signal) => service.getReviewFacts({ ...(input as ReviewParameters), sessionId, ...(signal ? { signal } : {}) } as GetReviewFactsInput),
+      ),
+    }),
+    tool({
+      name: 'pubg_query_team_damage',
+      description: 'Query deterministic Telemetry team-damage and teammate-action facts over a bounded period. Use this native batch tool for every period-friendly-fire or teammate-action request: omit actorPlayer and victimPlayer for all directions (for example “昨天队内误伤详情”), or provide both configured PUBG names/aliases for actor → victim (for example 007 → 004). For “踢/脚” use source="MELEE" and meleeKind="KICK"; for “拳” use meleeKind="PUNCH". The Domain refreshes Match discovery, ensures Telemetry for every selected match, and returns per-match evidence, aggregate directions, source/phase facts, status, and nulls for incomplete Telemetry. Use a semantic relative_period/time_range selector; do not pass recentN, resultSetId, or stop after pubg_search_matches. Never infer zero from a partial result or mix the reverse direction into the requested direction. For a human chat nickname, call identity_resolve first; actorPlayer/victimPlayer are PUBG names or configured aliases only. User-visible times use dataUpdatedAtLocal and dataSourceRange.fromLocal/toLocal.',
+      parameters: TeamDamageParameters,
+      factory: ({ config, toolContext }) => makeTool(
+        'pubg_query_team_damage',
+        'Query deterministic Telemetry team-damage and teammate-action facts over a bounded period.',
+        TeamDamageParameters,
+        config,
+        toolContext,
+        false,
+        (service, input, sessionId, signal) => service.queryTeamDamage({ ...(input as TeamDamageParameters), sessionId, ...(signal ? { signal } : {}) } as TeamDamageQueryInput),
       ),
     }),
     tool({

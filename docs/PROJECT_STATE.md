@@ -8,6 +8,16 @@
 LangBot/n8n/通知能力迁移到 OpenClaw/Kurisu 原生 Amadeus plugin 与独立服务，保留
 PUBG plugin/domain、当前 9Router 和必要聊天渠道，删除旧执行路径。
 
+## 2026-09-20：PUBG 队友动作/误伤批量 Telemetry contract（实现完成，待 release）
+
+真实 WhatsApp trajectory 审计确认，“昨天队内误伤情况详情”和“昨天007踢了004几脚”均只
+触发 `pubg_search_matches`，没有进入 Telemetry；基础 Match API 的 `coverage=OK` 被误读为
+细节完整，现有单局 `pubg_get_review_facts` 也没有周期批量能力。新增的
+`pubg_query_team_damage` 在 Domain 内完成语义周期解析、Match refresh、逐局 Telemetry ensure、
+全方向/定向聚合、KICK/PUNCH 筛选及 partial/null 语义，Skill/plugin manifest/preflight 已同步。
+本地 Domain 22/22、Plugin 9/9、受影响 typecheck 已通过；版本 `1.4.0`，CasaOS release 尚待
+提交和 apply。
+
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
 远端新增的 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md` 已 rebase 到当前 `main`。

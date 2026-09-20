@@ -6,6 +6,22 @@
 退出；OpenClaw/Kurisu 是唯一 Agent runtime。PUBG plugin/domain、当前 9Router、Product
 Radar、changedetection、media adapter 和必要聊天入口按边界保留。
 
+## 2026-09-20：PUBG 队友动作/误伤调用链补强（实现完成，release 待部署）
+
+针对真实 WhatsApp 回合“昨天队内误伤情况详情”和“昨天007踢了004几脚”的调用轨迹完成
+read-only 审计：两次都只调用了 `pubg_search_matches`，得到 7 场基础 Match API 记录后就结束；
+没有调用 `pubg_get_review_facts`，而现有单局 review contract 也无法一次性覆盖整个周期。
+根因是模型把基础 Match API 的 `coverage=OK/complete=true` 误当作 Telemetry 完整，且缺少
+周期批量队友伤害 Domain use case；不是 PUBG plugin 加载、API 健康或 Telemetry downloader
+故障。
+
+已新增 `pubg_query_team_damage` native contract：Domain 内按语义 selector 确定性解析 06:00
+周期、刷新 Match、逐局确保 Telemetry，并返回全方向/定向 `actor → victim` 聚合、每局证据、
+`source`/`meleeKind` 筛选和 `partial/null` 未知语义。Skill 明确要求周期队友动作直接调用该
+工具，不得先查基础比赛后停止。新增 Domain 回归覆盖 06:00、007/004 alias、跨局 KICK 聚合
+及 Telemetry 不完整语义；本地定向测试和 typecheck 已通过。版本已提升为 `1.4.0`，下一步按
+release protocol 提交、push、CasaOS apply 和 live preflight。
+
 ## 2026-09-20：Amadeus 架构收敛 Phase 1-2（已完成）
 
 已从远端拉取并 rebase 最新 `docs/AMADEUS_ARCHITECTURE_CONVERGENCE_GOAL.md`。Phase 1 将
