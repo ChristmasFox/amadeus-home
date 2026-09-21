@@ -111,26 +111,27 @@ if ((APPLY)); then
 
   # Expire only project release tags beyond the configured count and never protected/current images.
   retention="${DEPLOYMENT_IMAGE_RETENTION_COUNT:-2}"
-  python3 - "$report_dir/project-images.txt" "$report_dir/keep-images.txt" "$retention" <<'PY'
+  python3 - "$report_dir/project-images.txt" "$report_dir/keep-images.txt" "$report_dir/keep-tags.txt" "$retention" <<'PY'
 import sys
 from collections import defaultdict
 from pathlib import Path
-path, keep_path, count = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3])
+path, keep_path, keep_tags_path, count = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3]), int(sys.argv[4])
 rows=[line.strip().split('|',2) for line in path.read_text().splitlines() if line.strip()]
-keep=[]
-by_repo=defaultdict(list)
+keep_ids=[]; keep_tags=[]; by_repo=defaultdict(list)
 for repo_tag, image_id, created in rows:
     repo, tag = repo_tag.split(':',1)
     by_repo[repo].append((repo_tag,image_id,created))
 for repo, items in by_repo.items():
-    for row in items[:count]: keep.append(row[1])
-keep_path.write_text('\n'.join(sorted(set(keep)))+'\n')
+    for repo_tag, image_id, created in items[:count]:
+        keep_ids.append(image_id); keep_tags.append(repo_tag)
+keep_path.write_text('\n'.join(sorted(set(keep_ids)))+'\n')
+keep_tags_path.write_text('\n'.join(sorted(set(keep_tags)))+'\n')
 PY
   while IFS='|' read -r repo_tag image_id created; do
     [[ -n "$repo_tag" ]] || continue
-    grep -Fxq "$image_id" "$report_dir/keep-images.txt" && continue
+    grep -Fxq "$repo_tag" "$report_dir/keep-tags.txt" && continue
     case "$repo_tag" in
-      *:git-*) printf 'REMOVE_CANDIDATE|%s|%s\n' "$repo_tag" "$image_id" >>"$report_dir/image-actions.txt"; if ! orb -m "$MACHINE" -u root docker rmi "$image_id" >>"$report_dir/image-actions.txt" 2>&1; then maintenance_status=failed; fi ;;
+      *:git-*) printf 'REMOVE_CANDIDATE|%s|%s\n' "$repo_tag" "$image_id" >>"$report_dir/image-actions.txt"; if ! orb -m "$MACHINE" -u root docker rmi "$repo_tag" >>"$report_dir/image-actions.txt" 2>&1; then maintenance_status=failed; fi ;;
     esac
   done <"$report_dir/project-images.txt"
   if ! orb -m "$MACHINE" -u root docker builder prune --filter "until=${DOCKER_BUILD_CACHE_RETENTION_HOURS}h" -f >"$report_dir/build-cache-prune.txt" 2>&1; then maintenance_status=failed; fi
