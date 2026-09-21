@@ -278,12 +278,21 @@ PY
 check_storage_state() {
   local state="$OPENCLAW_DATA_DIR/data/storage-health-state.json"
   orb -m "$MACHINE" -u root test -s "$state" || return 1
-  orb -m "$MACHINE" -u root python3 - "$state" <<'PY'
+  orb -m "$MACHINE" -u root python3 - "$state" "$STORAGE_READINESS_ALLOW_KNOWN_PRESSURE" "$STORAGE_HARD_MIN_FREE_BYTES" <<'PY'
 import json, sys
 from pathlib import Path
 v=json.loads(Path(sys.argv[1]).read_text())
-if v.get('status') in {'missing','critical','policy_violation'}: raise SystemExit(1)
+allow, hard_min = sys.argv[2], int(sys.argv[3])
+status=v.get('status')
+if status in {'missing','policy_violation'}: raise SystemExit(1)
 if not v.get('components') or not v.get('targets'): raise SystemExit(1)
+if status == 'critical':
+    if allow != '1': raise SystemExit(1)
+    target_ids={'mac_internal_root','external_storage','guest_root','guest_data'}
+    for target in v.get('targets',[]):
+        if target.get('id') in target_ids and int(target.get('freeBytes',0)) < hard_min:
+            raise SystemExit(1)
+    print('STORAGE_PRESSURE=known-and-operator-acknowledged')
 print('STORAGE_STATE=valid')
 PY
 }

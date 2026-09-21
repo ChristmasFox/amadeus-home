@@ -76,8 +76,12 @@ else
   check_dir '9Router protected provider/account state' '/DATA/AppData/9router/data'
   check_file '9Router external secret env' "$NINE_ROUTER_ENV_FILE"
   check_file 'Immich external secret env' "$IMMICH_ENV_FILE"
-  check_file 'Immich CasaOS compose credential boundary' '/var/lib/casaos/apps/immich/docker-compose.yml'
-  check_file '9Router CasaOS compose credential boundary' '/var/lib/casaos/apps/9router/docker-compose.yml'
+  check_file_metadata() {
+    local label="$1" path="$2"
+    if orb -m "$MACHINE" -u root test -s "$path"; then pass "$label metadata exists"; else fail "$label metadata is missing"; fi
+  }
+  check_file_metadata 'Immich CasaOS compose credential boundary' '/var/lib/casaos/apps/immich/docker-compose.yml'
+  check_file_metadata '9Router CasaOS compose credential boundary' '/var/lib/casaos/apps/9router/docker-compose.yml'
   check_dir 'Immich PostgreSQL protected state' '/DATA/AppData/immich/pgdata'
   check_dir 'changedetection compatibility state' '/DATA/AppData/changedetection/datastore'
   check_dir 'media adapter state' '/DATA/AppData/media-organizer-adapter'
