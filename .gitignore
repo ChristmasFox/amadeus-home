@@ -20,6 +20,8 @@
 .backups/
 backups/
 **/data/
+!packages/pubg-domain/src/data/
+!packages/pubg-domain/src/data/**
 **/*.sqlite
 **/*.sqlite3
 **/*.db
