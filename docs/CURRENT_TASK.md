@@ -2,19 +2,25 @@
 
 更新时间：2026-09-21（Asia/Shanghai）
 
-## 2026-09-21：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（源码阶段完成）
+## 2026-09-21：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（已完成）
 
 当前执行目标为 `docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md`。
-已完成 host profile、外置盘 fail-closed preflight、Immich copy-first/checksum 迁移工具、
-旧源保留与独立 reclaim gate、Immich/9Router/changedetection migration coverage、加密
-secret export/import rehearsal、service inventory、Docker 日志 rotation、受保护 GC、storage
-health/scheduler 和动态版本 readiness。`pnpm test`、`pnpm typecheck`、`pnpm build`、
-`pnpm check:secrets`、architecture/storage/migration/notification tests 与脚本语法均通过。
+源码、测试、1.4.4 release commit/push、canonical CasaOS live apply、Immich 外置媒体迁移、
+数据库备份、日志/GC/storage health 收口、secret/service inventory 和 live evidence 均已完成。
+本轮 scheduler/runtime 实现 commit 为 `fc2047c`（已 push）；live OpenClaw/Product Radar
+继续使用已构建的 `VERSION=1.4.4` 镜像 `git-16a8c15d727f-20260921082428`，本次后续修复只涉及
+macOS scheduler 的 launchd PATH，不需要重建业务镜像。
 
-下一阶段为 1.4.4 release commit/push 后的 canonical CasaOS live apply：先外置 9Router/Immich
-runtime secrets、备份并验证 8TB 外置盘，再迁移 Immich 媒体并保留旧源，随后应用日志 policy、
-受保护 GC、scheduler 和 live doctor/readiness。Mac mini cutover 不在本轮；旧源 reclaim 保持
-`SOURCE_RECLAIM_PENDING`，除非另有显式 gate。
+Immich 当前媒体根为 `/Volumes/Avalon/immich/data`，切换 checkpoint 为
+`/Volumes/Avalon/backups/operation-skuld/immich-migration/cutover-20260921T070112Z`；源/目标均为
+77,726 个文件、130,486,455,925 bytes，checksum/equivalence、fresh PostgreSQL dump、健康检查
+和样本可读均通过。旧 `/DATA/Gallery/immich` 保留约 130.49 GB，状态为
+`SOURCE_RECLAIM_PENDING`，本轮没有 reclaim。live evidence 位于外置盘的
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`。
+
+最终 `doctor.sh` 为 0 failure / 0 warning，`migration-readiness.sh` 输出
+`OPERATION_SKULD=READY` 与 `IMMICH_SOURCE_RECLAIM=READY_BUT_PENDING`；owner release 和
+Immich cutover 的生产 `.sent.json` 均已确认。Mac mini cutover 不在本轮。
 
 ## 2026-09-21：Amadeus 1.4.3 WhatsApp 私聊会话隔离（已部署）
 

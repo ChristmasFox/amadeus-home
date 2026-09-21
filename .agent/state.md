@@ -2,13 +2,14 @@
 
 更新时间：2026-09-21（Asia/Shanghai）
 
-当前执行 docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md。源码阶段已完成：
-外置 8TB storage sentinel/UUID/device/free-space fail-closed 检查、Immich checksum copy-first
-迁移、fresh DB backup/cutover/旧源保留与独立 reclaim gate、9Router/Immich/changedetection
-secret/service coverage、加密 bundle rehearsal、Docker log rotation、受保护 GC、storage
-health scheduler 与动态 readiness。`pnpm test`、`pnpm typecheck`、`pnpm build`、secrets scan、
-architecture/storage/migration/notification tests 均通过。下一步是 1.4.4 commit/push、canonical
-CasaOS live apply 和证据收口；不执行 Mac mini cutover，不回收旧 Immich 源。
+当前执行 docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md，已完成。外置 8TB
+sentinel/UUID/device/free-space fail-closed 检查、Immich checksum copy-first migration、fresh DB
+backup/cutover/旧源保留与独立 reclaim gate、9Router/Immich/changedetection secret/service coverage、
+加密 bundle rehearsal、Docker log rotation、受保护 GC、storage health scheduler 与动态 readiness
+均已完成；`VERSION=1.4.4` 已 commit/push 并 apply 到 canonical CasaOS。最终 live evidence 位于
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`，doctor 0/0，
+`OPERATION_SKULD=READY`，旧 Immich 源保留为 `SOURCE_RECLAIM_PENDING`。本轮不执行 Mac mini cutover，
+不回收旧源。
 
 当前执行 docs/AMADEUS_1_4_2_WORLDLINE_UNIFICATION_AND_SKULD_READINESS_GOAL.md。Worldline
 intent/policy/adapter/renderer、统一 owner outbox producer、host profile、可配置 network、

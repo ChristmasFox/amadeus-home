@@ -2,14 +2,21 @@
 
 更新时间：2026-09-21（Asia/Shanghai）
 
-## 当前执行：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（源码阶段完成）
+## 当前执行：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（已完成）
 
 目标文件：`docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md`。
 源码已加入外置 8TB 存储身份与容量 preflight、Immich copy-first/checksum/cutover/reclaim
 边界、9Router/Immich/changedetection 迁移清单、metadata-only secret inventory、加密 bundle
 导出与恢复演练、service inventory、Docker logging policy、受保护 GC、storage health scheduler
-及动态版本 readiness。所有本地 release gates 已通过；live CasaOS apply、媒体迁移和证据记录
-仍待执行。旧 Immich 源默认保留，Mac mini cutover 不在本轮。
+及动态版本 readiness。`VERSION=1.4.4` 已提交并 push；live CasaOS、Immich 外置媒体迁移、
+DB backup、日志/GC、scheduler、doctor/readiness 与 owner evidence 均已完成。旧 Immich 源仍
+保留，Mac mini cutover 不在本轮。
+
+live evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`。
+Immich 源/目标均为 77,726 个文件、130,486,455,925 bytes，切换后的外置盘可用空间约 473 GB；
+数据库 dump 可由 live PostgreSQL image 的 `pg_restore --list` 校验。旧源约 130.49 GB，状态为
+`SOURCE_RECLAIM_PENDING`，没有执行删除或 reclaim。最终 `doctor` 0/0，`OPERATION_SKULD=READY`，
+两个 release/cutover owner `.sent.json` 已确认。
 
 ## 当前执行：Amadeus 1.4.3 WhatsApp 私聊隔离（已部署）
 

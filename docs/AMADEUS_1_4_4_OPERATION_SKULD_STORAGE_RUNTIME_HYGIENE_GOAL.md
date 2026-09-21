@@ -6,7 +6,7 @@
 
 这是 Amadeus 1.4.3 之后、Mac mini Operation Skuld 正式执行之前的最后一轮“存储 / 日志 / GC / Secrets / 迁移准备”收口 Goal。
 
-当前 `main` 根 `VERSION` 为 **1.4.3**；本 Goal 完成全部源码、测试、当前 canonical host live 变更、Immich 媒体迁移和部署验证后发布 **Amadeus 1.4.4**。
+本 Goal 开始时 `main` 根 `VERSION` 为 **1.4.3**；完成全部源码、测试、当前 canonical host live 变更、Immich 媒体迁移和部署验证后发布 **Amadeus 1.4.4**。
 
 本轮与 1.4.2 不同：
 
