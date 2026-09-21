@@ -88,7 +88,13 @@ apply_policy() {
   [[ "$backup_root" == "$EXTERNAL_STORAGE_ROOT/"* ]] || { printf '%s\n' 'log-policy backup must be on the verified external volume' >&2; return 1; }
   mkdir -p "$backup_root"
   chmod 700 "$backup_root"
-  while IFS='|' read -r name path; do
+  local -a compose_specs
+  compose_specs=()
+  while IFS= read -r entry; do
+    compose_specs[${#compose_specs[@]}]="$entry"
+  done < <(compose_entries)
+  for entry in "${compose_specs[@]}"; do
+    IFS='|' read -r name path <<<"$entry"
     if ! orb -m "$MACHINE" -u root test -f "$path"; then
       printf 'WARN  compose file absent; skipping %s: %s\n' "$name" "$path"
       continue
@@ -106,15 +112,22 @@ path, driver, max_size, max_file = sys.argv[1:]
 lines = Path(path).read_text(encoding='utf-8').splitlines(keepends=True)
 service_starts = []
 in_services = False
+service_indent = None
 for index, line in enumerate(lines):
     stripped = line.strip()
     if stripped == 'services:':
         in_services = True
         continue
-    if in_services and line and not line.startswith(' '):
+    if in_services and line.strip() and not line.startswith(' '):
         break
-    if in_services and re.fullmatch(r'  [A-Za-z0-9_.-]+:\s*', line.rstrip('\n')):
-        service_starts.append(index)
+    if in_services:
+        match = re.fullmatch(r'(\s+)[A-Za-z0-9_.-]+:\s*', line.rstrip('\n'))
+        if match:
+            indent = len(match.group(1).replace('\t', '    '))
+            if service_indent is None:
+                service_indent = indent
+            if indent == service_indent:
+                service_starts.append(index)
 if not service_starts:
     raise SystemExit(f'no services found in {path}')
 changed = 0
@@ -122,17 +135,24 @@ for position in reversed(range(len(service_starts))):
     start = service_starts[position]
     end = service_starts[position + 1] if position + 1 < len(service_starts) else len(lines)
     block = lines[start:end]
-    if not any(re.match(r'^    (?:image|container_name):', line) for line in block):
+    property_indent = next(
+        (match.group(1) for line in block
+         for match in [re.match(r'^(\s+)(?:image|container_name):', line)]
+         if match),
+        None,
+    )
+    if property_indent is None:
         continue
     if any(line.strip() == 'logging:' for line in block):
         continue
-    insertion = next((index for index in range(start + 1, end) if lines[index].startswith('    restart:')), start)
+    list_indent = ' ' * (len(property_indent.replace('\t', '    ')) + 2)
+    insertion = next((index for index in range(start + 1, end) if lines[index].startswith(property_indent + 'restart:')), start)
     payload = [
-        '    logging:\n',
-        f'      driver: {driver}\n',
-        '      options:\n',
-        f'        max-size: "{max_size}"\n',
-        f'        max-file: "{max_file}"\n',
+        f'{property_indent}logging:\n',
+        f'{list_indent}driver: {driver}\n',
+        f'{list_indent}options:\n',
+        f'{list_indent}  max-size: "{max_size}"\n',
+        f'{list_indent}  max-file: "{max_file}"\n',
     ]
     lines[insertion:insertion] = payload
     changed += 1
@@ -144,7 +164,7 @@ print(f'LOG_POLICY_SERVICES_UPDATED={changed}')
 PY
     orb -m "$MACHINE" -u root docker compose --project-directory "$(dirname "$path")" -f "$path" config --quiet
     orb -m "$MACHINE" -u root docker compose --project-directory "$(dirname "$path")" -f "$path" up -d --no-build >/dev/null
-  done < <(compose_entries)
+  done
   printf 'LOG_POLICY_BACKUP=%s\n' "$backup_root"
   audit
 }
