@@ -71,13 +71,13 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|.dockerignore|package.json|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
 is_radar_image_path() {
   case "$1" in
-    apps/product-radar/*|packages/presentation/*|apps/product-radar/Dockerfile|package.json|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
+    apps/product-radar/*|packages/presentation/*|apps/product-radar/Dockerfile|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -85,6 +85,11 @@ image_needs_rebuild() {
   local image="$1" target="$2" source_commit path
   source_commit="$(image_source_commit "$image")" || fail "$target image tag must contain a git commit and timestamp: $image"
   git -C "$ROOT_DIR" cat-file -e "$source_commit^{commit}" 2>/dev/null || fail "Image source commit is not available locally: $source_commit"
+  # Root package.json changes only require an image rebuild when dependency/runtime metadata changed;
+  # script-only changes must not rebuild either image. This keeps --build-auto affected-only.
+  if git -C "$ROOT_DIR" diff --unified=0 "$source_commit..HEAD" -- package.json | grep -E '^\+[^+].*"(dependencies|devDependencies|peerDependencies|optionalDependencies|engines|packageManager)"' >/dev/null; then
+    return 0
+  fi
   while IFS= read -r path; do
     [[ -n "$path" ]] || continue
     if [[ "$target" == openclaw ]] && is_openclaw_image_path "$path"; then
@@ -209,6 +214,14 @@ printf 'MACHINE=%s\n' "$MACHINE"
 
 if ((APPLY == 0)); then
   printf '%s\n' 'PLAN=on apply, reuse live images by default; --build-auto rebuilds only affected images; --build remains the explicit full two-image migration path.'
+  live_openclaw="$(resolve_live_image openclaw 2>/dev/null || true)"
+  live_radar="$(resolve_live_image product-radar 2>/dev/null || true)"
+  if [[ -n "$live_openclaw" ]]; then
+    if image_needs_rebuild "$live_openclaw" openclaw; then printf '%s\n' 'AUTO_SCOPE_OPENCLAW=build'; else printf '%s\n' 'AUTO_SCOPE_OPENCLAW=reuse'; fi
+  fi
+  if [[ -n "$live_radar" ]]; then
+    if image_needs_rebuild "$live_radar" radar; then printf '%s\n' 'AUTO_SCOPE_PRODUCT_RADAR=build'; else printf '%s\n' 'AUTO_SCOPE_PRODUCT_RADAR=reuse'; fi
+  fi
   exit 0
 fi
 
