@@ -22,7 +22,7 @@ done
 required='OpenClaw Product-Radar 9Router Immich changedetection media-organizer-adapter'
 if [[ "$MODE" == check ]]; then
   [[ -f "$OUTPUT" ]] || { printf '%s\n' 'service inventory document is missing' >&2; exit 1; }
-  for name in $required; do grep -Fq "$name" "$OUTPUT" || { printf 'service inventory lacks %s\n' "$name" >&2; exit 1; }; done
+  for name in $required; do grep -Fiq "$name" "$OUTPUT" || { printf 'service inventory lacks %s\n' "$name" >&2; exit 1; }; done
   printf '%s\n' 'SERVICE_INVENTORY=passed'
   exit 0
 fi
