@@ -46,7 +46,7 @@ except (FileNotFoundError, json.JSONDecodeError):
 PY
 )"
 
-if ! bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT"; then
+if ! bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT"; then
   write_state missing || true
   bash "$ROOT_DIR/scripts/notify-owner.sh" --remote-machine "$ORBSTACK_MACHINE" --outbox-dir "$OPENCLAW_DATA_DIR/notifications" \
     --event-key "external-storage-missing:$(date -u +%F)" --source external-storage --headline 'IBN 5100 · 关键存储节点失联' \
