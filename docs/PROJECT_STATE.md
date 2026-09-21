@@ -1,3 +1,22 @@
+## 2026-09-21：Amadeus 1.4.5 Operation Skuld final release completed
+
+Amadeus 1.4.5 is released and pushed. Current `main` is clean at `41acb87`; release version is
+`1.4.5`. The canonical CasaOS host in OrbStack `ubuntu` is running
+`local/openclaw-amadeus:git-47ce26ae82a3-20260921153903`; Product Radar reused its live
+`git-16a8c15d727f-20260921082428` image under the affected-only build policy.
+
+Live acceptance passed: doctor has 0 failures/0 warnings; migration readiness reports
+`OPERATION_SKULD=READY`; exact 9Router artifact restore rehearsal, scheduler loaded checks, service-aware
+SQLite snapshots, fresh Immich PostgreSQL logical dump, encrypted secret restore rehearsal, manifest/
+runbook consistency, and safe scheduled GC passed. Storage truth is recorded as `critical` for the
+OrbStack guest/internal targets and `warning` for external Avalon, with free bytes above the explicitly
+acknowledged 10 GiB hard minimum; no fake healthy state was emitted.
+
+Immich live media remains `/Volumes/Avalon/immich/data`, legacy `/DATA/Gallery/immich` remains
+retained, and source reclaim is `PENDING`. Mac mini cutover is `NOT EXECUTED`. Full sanitized evidence
+is in `docs/reports/AMADEUS_1_4_5_DEPLOYMENT.md`; external runtime artifacts remain under the
+Operation Skuld backup root.
+
 ## 2026-09-21：1.4.5 hardening execution state（Phase 0-4 source implementation）
 
 Current target is Amadeus 1.4.5 Operation Skuld final hardening. Phase 0 re-audit is complete

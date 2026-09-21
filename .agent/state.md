@@ -153,3 +153,13 @@ OrbStack ubuntu CasaOS。
 - Added service-aware registry, SQLite backup API snapshots, Immich `pg_dump -Fc`/`pg_restore --list` path, service backup manifest, 9Router isolated fixture rehearsal, explicit HomeLab classifications and manifest/runbook contract test.
 - Hardened future Immich reclaim with fresh no-delete checksum equivalence, fresh logical dump, live mount/health checks, approval token `RECLAIM_IMMICH_SOURCE_1_4_5`, and reclaim-aware readiness. Source remains retained.
 - Targeted gates passed; no Docker build, live mutation, Mac mini cutover or source reclaim performed.
+
+## 2026-09-21 — Amadeus 1.4.5 final release/live acceptance
+
+- `VERSION=1.4.5` released and pushed; current clean `main` is `41acb87`.
+- Canonical CasaOS apply completed once with affected-only OpenClaw build. Live OpenClaw is `local/openclaw-amadeus:git-47ce26ae82a3-20260921153903`; Product Radar reused `git-16a8c15d727f-20260921082428`.
+- Live checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260921153903`; deploy evidence `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260921153903`.
+- Post-deploy service-aware backup contains three SQLite consistent snapshots, a valid `pg_dump -Fc`/`pg_restore --list`, and the exact 9Router artifact at `/Volumes/Avalon/backups/operation-skuld/live-post-1.4.5-20260921T155832Z/service-aware`.
+- Encrypted secret bundle export/import passed at `/Volumes/Avalon/backups/operation-skuld/live-1.4.5-20260921T155352Z/secrets/secrets-20260921T155354Z`; values were not logged or committed.
+- Doctor: 0 failures/0 warnings. Migration readiness: `OPERATION_SKULD=READY`. Storage state truthfully remains `critical` (external `warning`) but every required target exceeds the acknowledged 10 GiB hard minimum; scheduler health exit is 0 and weekly GC final evidence is `20260921T154412Z` with `GC=passed`.
+- Immich source remains retained/pending; Mac mini cutover remains unexecuted.
