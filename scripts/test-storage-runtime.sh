@@ -182,6 +182,10 @@ if printf '%s\n' "$inventory_output" | grep -F 'FIXTURE_SECRET_VALUE' >/dev/null
   exit 1
 fi
 
+grep -Fq '"log-driver": "local"' "$ROOT_DIR/infra/docker/daemon.json.example"
+grep -Fq '"max-size": "20m"' "$ROOT_DIR/infra/docker/daemon.json.example"
+grep -Fq '"max-file": "5"' "$ROOT_DIR/infra/docker/daemon.json.example"
+
 for template in \
   infra/docker/casaos/openclaw/docker-compose.example.yml \
   infra/docker/casaos/product-radar/docker-compose.example.yml \
