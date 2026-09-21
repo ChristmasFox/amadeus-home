@@ -114,7 +114,9 @@ fi
 python3 - "$OUTPUT_DIR" "$manifest_tmp" "$stamp" <<'PY'
 import hashlib, json, sys
 from pathlib import Path
-root, target, stamp = map(Path, sys.argv[1:])
+root = Path(sys.argv[1])
+target = Path(sys.argv[2])
+stamp = sys.argv[3]
 entries=[]
 for item in sorted(root.rglob('*')):
     if item.is_file() and item.name != 'service-aware-manifest.json':
