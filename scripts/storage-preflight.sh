@@ -187,7 +187,14 @@ storage_preflight() {
   if [[ -e "$destination" && ! -d "$destination" ]]; then
     storage_fail 'Immich destination exists but is not a directory'
   fi
-  [[ -d "$source" ]] || storage_fail "Immich source is not a readable directory: $source"
+  if ((STORAGE_TEST_MODE)); then
+    [[ -d "$source" ]] || storage_fail "Immich source is not a readable directory: $source"
+  else
+    command -v orb >/dev/null 2>&1 || storage_fail 'OrbStack CLI is unavailable for source filesystem verification'
+    if command -v orb >/dev/null 2>&1; then
+      orb -m "${ORBSTACK_MACHINE:-ubuntu}" -u root test -d "$source" || storage_fail "Immich source is not a readable guest directory: $source"
+    fi
+  fi
   if [[ -d "$destination" ]] && [[ -n "$(find "$destination" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]] && ((allow_existing == 0)) && [[ "${STORAGE_ALLOW_RESUMABLE_DEST:-0}" != 1 ]]; then
     storage_fail 'Immich destination is non-empty and is not an approved resumable checkpoint'
   fi

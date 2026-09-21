@@ -4,6 +4,8 @@ set -Eeuo pipefail
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 fixture="$(mktemp -d "${TMPDIR:-/tmp}/amadeus-storage-runtime.XXXXXX")"
 trap 'rm -rf "$fixture"' EXIT
+# Keep the fixture independent from a developer's ignored real host profile.
+export AMADEUS_HOST_PROFILE="$fixture/no-host-profile"
 
 external="$fixture/external"
 source="$fixture/source"
