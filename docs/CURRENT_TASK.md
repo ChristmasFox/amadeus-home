@@ -1,6 +1,6 @@
 # 当前任务
 
-## 2026-09-21：Amadeus 1.4.5 Operation Skuld Final Hardening（Phase 0-4 源码收口完成，Phase 5-7 待验收）
+## 2026-09-21：Amadeus 1.4.5 Operation Skuld Final Hardening（已完成）
 
 本轮以 `docs/AMADEUS_1_4_5_OPERATION_SKULD_FINAL_HARDENING_GOAL.md` 与
 `docs/AMADEUS_1_4_5_DEVELOPMENT_EFFICIENCY_ADDENDUM.md` 为唯一范围。已先完成 main 与
