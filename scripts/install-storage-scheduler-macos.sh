@@ -25,12 +25,18 @@ uid="$(id -u)"
 
 write_plist() {
   local path="$1" label="$2" script="$3" interval="$4" extra_arg="${5:-}"
-  python3 - "$path" "$label" "$script" "$interval" "$extra_arg" <<'PY'
+  local scheduler_path="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+  local orb_path
+  orb_path="$(command -v orb 2>/dev/null || true)"
+  if [[ -n "$orb_path" ]]; then
+    scheduler_path="$(dirname -- "$orb_path"):$scheduler_path"
+  fi
+  python3 - "$path" "$label" "$script" "$interval" "$extra_arg" "$scheduler_path" "${HOME:-/Users/$(id -un)}" <<'PY'
 import plistlib
 import sys
 from pathlib import Path
 
-path, label, script, interval, extra_arg = sys.argv[1:]
+path, label, script, interval, extra_arg, scheduler_path, home = sys.argv[1:]
 arguments = ['/bin/bash', script]
 if extra_arg:
     arguments.append(extra_arg)
@@ -40,6 +46,13 @@ value = {
     'StartInterval': int(interval),
     'RunAtLoad': True,
     'ProcessType': 'Utility',
+    # launchd does not inherit the interactive shell PATH.  The jobs call
+    # OrbStack's `orb` CLI, so make the executable environment explicit and
+    # keep HOME available for the host profile and external evidence paths.
+    'EnvironmentVariables': {
+        'HOME': home,
+        'PATH': scheduler_path,
+    },
     # Scheduler output is intentionally not persisted: the scripts emit
     # structured evidence to the external checkpoint/outbox paths, while this
     # avoids an unbounded second log stream outside Docker's rotation policy.
