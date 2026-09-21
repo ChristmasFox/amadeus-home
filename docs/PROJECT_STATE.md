@@ -12,11 +12,12 @@
 DB backup、日志/GC、scheduler、doctor/readiness 与 owner evidence 均已完成。旧 Immich 源仍
 保留，Mac mini cutover 不在本轮。
 
-live evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`。
+live evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T111052Z`。
 Immich 源/目标均为 77,726 个文件、130,486,455,925 bytes，切换后的外置盘可用空间约 473 GB；
 数据库 dump 可由 live PostgreSQL image 的 `pg_restore --list` 校验。旧源约 130.49 GB，状态为
 `SOURCE_RECLAIM_PENDING`，没有执行删除或 reclaim。最终 `doctor` 0/0，`OPERATION_SKULD=READY`，
-两个 release/cutover owner `.sent.json` 已确认。
+两个 release/cutover owner `.sent.json` 已确认。Docker daemon 默认日志策略为 `local/20m/5`，
+原 `/etc/docker/daemon.json` 已外置备份并保留原有键。
 
 ## 当前执行：Amadeus 1.4.3 WhatsApp 私聊隔离（已部署）
 

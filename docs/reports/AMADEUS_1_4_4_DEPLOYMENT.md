@@ -3,12 +3,11 @@
 日期：2026-09-21（Asia/Shanghai）  
 canonical host：OrbStack `ubuntu` / CasaOS  
 版本：`1.4.4`  
-live evidence capture 时的仓库 commit：`fc2047c21ff6106e5bcf403bde7126e394baa7aa`（已 push）；
-随后只提交本报告、状态文档和 checkpoint，不改变运行时内容
+live evidence capture 时的仓库 commit：`e235c54d2e9d08f330e70e6197e6dc06ad33c878`（已 push）。
 
 完整的无 secret live evidence 保存在外置盘：
 
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T111052Z`
 
 该目录的 `checks.tsv` 中所有检查均为 `0`，并有 `manifest.json` 记录证据文件 hash。
 
@@ -45,6 +44,10 @@ live evidence capture 时的仓库 commit：`fc2047c21ff6106e5bcf403bde7126e394b
 
 - managed containers 使用 `local` logging，`max-size=20m`、`max-file=5`；未知归属容器只报告，
   没有通用删除。
+- Docker daemon 默认日志策略已合并为 `local`、`max-size=20m`、`max-file=5`；原有
+  `/etc/docker/daemon.json` 其他键保留，变更前备份为
+  `/Volumes/Avalon/backups/operation-skuld/log-policy/daemon-20260921T110814Z`。OrbStack 重启后
+  `docker info` 报告 `LoggingDriver=local`，28 个容器恢复运行且受管容器 audit 通过。
 - post-deploy safe maintenance 已执行：只处理 dangling images/build cache，未清理 volumes、
   数据库、媒体或 rollback image；证据显示 Docker guest free space 增加 `6,943,088,640` bytes。
 - storage health 与 weekly maintenance LaunchAgent 已重载并实际运行，最近一次均为 `runs=1`、

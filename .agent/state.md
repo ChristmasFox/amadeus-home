@@ -7,8 +7,9 @@ sentinel/UUID/device/free-space fail-closed 检查、Immich checksum copy-first 
 backup/cutover/旧源保留与独立 reclaim gate、9Router/Immich/changedetection secret/service coverage、
 加密 bundle rehearsal、Docker log rotation、受保护 GC、storage health scheduler 与动态 readiness
 均已完成；`VERSION=1.4.4` 已 commit/push 并 apply 到 canonical CasaOS。最终 live evidence 位于
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`，doctor 0/0，
-`OPERATION_SKULD=READY`，旧 Immich 源保留为 `SOURCE_RECLAIM_PENDING`。本轮不执行 Mac mini cutover，
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T111052Z`，doctor 0/0，
+`OPERATION_SKULD=READY`，旧 Immich 源保留为 `SOURCE_RECLAIM_PENDING`。Docker daemon 默认日志策略
+已收口为 `local/20m/5`，备份和重启后容器恢复证据已保留。本轮不执行 Mac mini cutover，
 不回收旧源。
 
 当前执行 docs/AMADEUS_1_4_2_WORLDLINE_UNIFICATION_AND_SKULD_READINESS_GOAL.md。Worldline

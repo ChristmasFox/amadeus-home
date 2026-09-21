@@ -7,7 +7,8 @@
 当前执行目标为 `docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md`。
 源码、测试、1.4.4 release commit/push、canonical CasaOS live apply、Immich 外置媒体迁移、
 数据库备份、日志/GC/storage health 收口、secret/service inventory 和 live evidence 均已完成。
-本轮 scheduler/runtime 实现 commit 为 `fc2047c`（已 push）；live OpenClaw/Product Radar
+本轮 scheduler/runtime 实现 commit 为 `fc2047c`，全局 Docker daemon 日志策略实现 commit 为
+`e235c54`（均已 push）；live OpenClaw/Product Radar
 继续使用已构建的 `VERSION=1.4.4` 镜像 `git-16a8c15d727f-20260921082428`，本次后续修复只涉及
 macOS scheduler 的 launchd PATH，不需要重建业务镜像。
 
@@ -16,7 +17,11 @@ Immich 当前媒体根为 `/Volumes/Avalon/immich/data`，切换 checkpoint 为
 77,726 个文件、130,486,455,925 bytes，checksum/equivalence、fresh PostgreSQL dump、健康检查
 和样本可读均通过。旧 `/DATA/Gallery/immich` 保留约 130.49 GB，状态为
 `SOURCE_RECLAIM_PENDING`，本轮没有 reclaim。live evidence 位于外置盘的
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T105442Z`。
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-1.4.4-live-20260921T111052Z`。
+
+Docker daemon 已保留原有 registry/debug/experimental 配置并合并 `local`、`20m`、`5` 默认日志
+策略；备份位于 `/Volumes/Avalon/backups/operation-skuld/log-policy/daemon-20260921T110814Z`，
+重启后的 28 个容器恢复，daemon 与 managed compose audit 均通过。
 
 最终 `doctor.sh` 为 0 failure / 0 warning，`migration-readiness.sh` 输出
 `OPERATION_SKULD=READY` 与 `IMMICH_SOURCE_RECLAIM=READY_BUT_PENDING`；owner release 和
