@@ -57,7 +57,7 @@ else
   guest_data_raw="$(printf '%s\n' "$guest_lines" | awk '$6=="/DATA" {print $2 " " $3 " " $4; exit}')"
   guest_external_raw="$(printf '%s\n' "$guest_lines" | awk '$6=="/Volumes/Avalon" {print $2 " " $3 " " $4; exit}')"
   guest_root="$(parse_df guest_root "$guest_root_raw")"
-  guest_data="$(parse_df guest_data "$guest_data_raw")"
+  guest_data="$(parse_df guest_data "${guest_data_raw:-$guest_root_raw}")"
   guest_external="$(parse_df guest_external_storage "$guest_external_raw")"
   targets_json="$(python3 - "$local_root" "$external_root" "$guest_root" "$guest_data" "$guest_external" <<'PY'
 import json, sys
