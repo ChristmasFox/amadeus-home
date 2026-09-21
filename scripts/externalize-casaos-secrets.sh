@@ -36,15 +36,20 @@ specs = [
 def service_bounds(lines, names):
     starts = {}
     for index, line in enumerate(lines):
-        match = re.fullmatch(r'  ([A-Za-z0-9_.-]+):\s*', line.rstrip('\n'))
-        if match and match.group(1) in names:
-            starts[match.group(1)] = index
+        match = re.fullmatch(r'(\s+)([A-Za-z0-9_.-]+):\s*', line.rstrip('\n'))
+        if match and match.group(2) in names:
+            indent = len(match.group(1).replace('\t', '    '))
+            if starts and indent != next(iter(starts.values()))[2]:
+                continue
+            starts[match.group(2)] = (index, match.group(2), indent)
     bounds = {}
-    ordered = sorted(starts.items(), key=lambda item: item[1])
-    for position, (name, start) in enumerate(ordered):
-        end = ordered[position + 1][1] if position + 1 < len(ordered) else len(lines)
+    ordered = sorted(starts.items(), key=lambda item: item[1][0])
+    service_indent = next(iter(starts.values()))[2] if starts else 2
+    for position, (name, details) in enumerate(ordered):
+        start = details[0]
+        end = ordered[position + 1][1][0] if position + 1 < len(ordered) else len(lines)
         bounds[name] = (start, end)
-    return bounds
+    return bounds, service_indent
 
 def value_from_line(line, key):
     match = re.match(rf'^\s+{re.escape(key)}:\s*(.*)$', line.rstrip('\n'))
@@ -89,14 +94,14 @@ for compose_path, env_path, keys, service_names in specs:
     temporary_env.write_text(''.join(f'{key}={values[key]}\n' for key in keys), encoding='utf-8')
     os.chmod(temporary_env, 0o600)
     temporary_env.replace(env_path)
-    bounds = service_bounds(lines, service_names)
+    _, service_indent = service_bounds(lines, service_names)
     removals = []
     for line_index, line in enumerate(lines):
         if any(value_from_line(line, key) is not None for key in keys):
             removals.append(line_index)
     for line_index in reversed(removals):
         del lines[line_index]
-    bounds = service_bounds(lines, service_names)
+    bounds, service_indent = service_bounds(lines, service_names)
     for name in reversed(service_names):
         if name not in bounds:
             raise SystemExit(f'service is missing from compose: {name}')
@@ -104,10 +109,12 @@ for compose_path, env_path, keys, service_names in specs:
         block = lines[start:end]
         if any(line.strip() == 'env_file:' for line in block):
             continue
-        insertion = next((index for index in range(start + 1, end) if lines[index].startswith('    restart:')), start)
+        property_indent = ' ' * (service_indent + 4)
+        list_indent = ' ' * (service_indent + 8)
+        insertion = next((index for index in range(start + 1, end) if lines[index].startswith(property_indent + 'restart:')), start)
         lines[insertion:insertion] = [
-            '    env_file:\n',
-            f'      - {env_path}\n',
+            f'{property_indent}env_file:\n',
+            f'{list_indent}- {env_path}\n',
         ]
     temporary_compose = Path(str(compose_path) + '.skuld-tmp')
     temporary_compose.write_text(''.join(lines), encoding='utf-8')

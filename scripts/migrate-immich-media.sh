@@ -146,14 +146,19 @@ verify_equivalence() {
 }
 
 create_db_backup() {
-  local checkpoint="$1" dump
+  local checkpoint="$1" dump dump_image dump_name
   dump="$checkpoint/immich-postgres.dump"
   mkdir -p "$checkpoint"
   if ((MIGRATION_TEST_MODE)); then
     printf '%s\n' 'fixture-db-backup' >"$dump"
   else
     orb -m "$MACHINE" -u root docker exec immich-postgres sh -lc 'pg_dump -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-immich}" -Fc' >"$dump"
-    orb -m "$MACHINE" -u root pg_restore --list "$dump" >/dev/null
+    dump_image="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Config.Image}}' immich-postgres)"
+    [[ -n "$dump_image" ]] || fail 'could not resolve the live Immich PostgreSQL image for dump validation'
+    dump_name="$(basename "$dump")"
+    orb -m "$MACHINE" -u root docker run --rm --entrypoint pg_restore \
+      -v "$(dirname "$dump"):/tmp/immich-cutover:ro" \
+      "$dump_image" --list "/tmp/immich-cutover/$dump_name" >/dev/null
   fi
   [[ -s "$dump" ]] || fail 'fresh Immich PostgreSQL backup is empty'
   chmod 600 "$dump"
