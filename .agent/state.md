@@ -1,3 +1,12 @@
+
+## 2026-09-21 — Amadeus 1.4.5 Phase 0 audit
+
+- Goal: `docs/AMADEUS_1_4_5_OPERATION_SKULD_FINAL_HARDENING_GOAL.md` plus the development-efficiency addendum.
+- Main is clean at `0f9521c`; canonical CasaOS host is OrbStack `ubuntu`.
+- Live baseline: OpenClaw/Product Radar image tag `git-16a8c15d727f-20260921082428`; Immich media mount is `/Volumes/Avalon/immich/data`; legacy `/DATA/Gallery/immich` remains retained.
+- Audit findings confirmed: three secret migration scripts are ignored, storage state can be falsely healthy, scheduled maintenance is read-only, retention is not enforced, backup is raw-tar-centric, inventory/runbook classification is incomplete, and reclaim uses historical rather than fresh equivalence.
+- Current external storage is near threshold (about 11% free); future evidence must report the real warning state. No live mutation was performed in Phase 0.
+- Execution state is persisted in `.agent/EXECUTION_PLAN.md`, `.agent/run-state.example.json`, and external evidence under `SKULD_BACKUP_ROOT`.
 # Agent State
 
 更新时间：2026-09-21（Asia/Shanghai）
@@ -135,3 +144,12 @@ AriaNG、qBittorrent、Glances、9Router 的公网回源均通过。OpenClaw 配
 约束：不恢复 LangBot/Mastra/n8n 业务链；不做灰度、shadow、双跑、兼容 fallback 或回滚
 演练；不提交 secret/业务数据；不修改现有 Avalon media library；长期服务只部署在
 OrbStack ubuntu CasaOS。
+
+## 2026-09-21 — Amadeus 1.4.5 Phases 1-4 source implementation
+
+- Tracked the three secret migration source scripts with explicit `.gitignore` negations; strengthened metadata-only inventory and encrypted bundle logical-id/mode restore rehearsal.
+- Added non-recursive fresh-clone runner, bounded `run-check.sh` with optional scope cache, validation matrix, and workflow/image-scope tests.
+- Replaced unconditional storage healthy output with target metrics, threshold state machine, component aggregation, transition notification hooks and 90-day growth history; scheduled maintenance now uses safe apply semantics with project-only image and known evidence retention guards.
+- Added service-aware registry, SQLite backup API snapshots, Immich `pg_dump -Fc`/`pg_restore --list` path, service backup manifest, 9Router isolated fixture rehearsal, explicit HomeLab classifications and manifest/runbook contract test.
+- Hardened future Immich reclaim with fresh no-delete checksum equivalence, fresh logical dump, live mount/health checks, approval token `RECLAIM_IMMICH_SOURCE_1_4_5`, and reclaim-aware readiness. Source remains retained.
+- Targeted gates passed; no Docker build, live mutation, Mac mini cutover or source reclaim performed.

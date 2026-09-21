@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "goal": "amadeus-1.4.5-operation-skuld",
+  "phase": "1",
+  "status": "in_progress",
+  "attempts": 0,
+  "lastBlocker": null,
+  "validation": {
+    "targetedRuns": 0,
+    "reusedChecks": 0,
+    "fullTestRuns": 0,
+    "fullTypecheckRuns": 0,
+    "fullBuildRuns": 0,
+    "dockerBuilds": 0,
+    "liveDeployAttempts": 0
+  },
+  "updatedAt": "",
+  "evidencePath": "external:SKULD_BACKUP_ROOT/deploy/"
+}

@@ -95,3 +95,78 @@ Stop and perform a data-divergence review instead of guessing.
 - No DNS, tunnel, WhatsApp pairing, Telegram allowlist, or VPS firewall change.
 - No deletion of the old CasaOS app data or old compatibility network.
 - No reintroduction of LangBot, n8n, n8n-sandbox, or a second runtime.
+## Phase 2A — Service-aware restore contract (Amadeus 1.4.5)
+
+This phase is a restore rehearsal contract only. It does not execute the Mac mini cutover in the 1.4.5 hardening goal. Restore only from Git-tracked source, the verified Avalon external artifacts, and the encrypted secret bundle.
+
+### Critical persistent data
+- `pubg-sqlite` — restore `/DATA/AppData/openclaw/data/pubg.sqlite` using `sqlite-integrity-check` before service start; restore order `30`.
+- `identity-sqlite` — restore `/DATA/AppData/openclaw/data/identity.sqlite` using `sqlite-integrity-check` before service start; restore order `20`.
+- `product-radar-sqlite` — restore `/DATA/AppData/product-radar/product-radar.sqlite` using `sqlite-integrity-check` before service start; restore order `40`.
+- `owner-outbox` — restore `/DATA/AppData/openclaw/notifications` using `json-contract-and-idempotency-check` before service start; restore order `50`.
+- `vps-usage-state` — restore `/DATA/AppData/openclaw/data/vps-usage-state.json` using `json-parse` before service start; restore order `60`.
+- `openclaw-workspace` — restore `/DATA/AppData/openclaw/workspace` using `tracked-file-diff` before service start; restore order `10`.
+- `9router-provider-state` — restore `/DATA/AppData/9router/data` using `protected-directory-and-exact-image` before service start; restore order `15`.
+- `immich-postgres` — restore `/DATA/AppData/immich/pgdata` using `fresh-pg-dump-and-vector-extension-check` before service start; restore order `25`.
+- `immich-external-media` — restore `host-profile:IMMICH_MEDIA_ROOT` using `external-identity-and-file-equivalence;not-tar-archived` before service start; restore order `26`.
+- `changedetection-datastore` — restore `/DATA/AppData/changedetection/datastore` using `protected-datastore` before service start; restore order `35`.
+- `media-adapter-state` — restore `/DATA/AppData/media-organizer-adapter` using `registered-service-state` before service start; restore order `45`.
+
+### Secret restore targets (metadata only)
+Decrypt the bundle into a private `0700` staging directory, validate file modes and logical IDs, then place values out-of-band into the target. Never print values.
+- `openclaw-env` — target `/DATA/AppData/openclaw/openclaw.env`, required `true`, mode `0600`.
+- `pubg-api-key` — target `/DATA/AppData/openclaw/secrets/pubg-api-key`, required `true`, mode `0600`.
+- `pubg-team` — target `/DATA/AppData/openclaw/secrets/pubg-team.json`, required `true`, mode `0600`.
+- `telegram-bot-token` — target `/DATA/AppData/openclaw/secrets/telegram-bot-token`, required `true`, mode `0600`.
+- `owner-target` — target `/DATA/AppData/openclaw/secrets/owner-whatsapp-target`, required `true`, mode `0600`.
+- `mac-ssh-key` — target `/DATA/AppData/openclaw/secrets/mac-ssh-key`, required `true`, mode `0600`.
+- `vps-readonly-key` — target `/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key`, required `true`, mode `0600`.
+- `vps-known-hosts` — target `/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts`, required `true`, mode `0600`.
+- `kiwivm-credentials` — target `/DATA/AppData/openclaw/secrets/kiwivm-credentials.json`, required `true`, mode `0600`.
+- `kook-token` — target `/DATA/AppData/openclaw/secrets/kook-bot-token`, required `true`, mode `0600`.
+
+### Runtime service restore steps
+- `openclaw` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+- `product-radar` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+- `media-adapter` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+- `changedetection` — classify as `COMPATIBILITY` and restore/verify its declared health boundary before reopening traffic.
+- `fashion-siglip` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+- `9router` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+- `immich-server` — classify as `ACTIVE / external media` and restore/verify its declared health boundary before reopening traffic.
+- `immich-machine-learning` — classify as `ACTIVE / rebuildable cache` and restore/verify its declared health boundary before reopening traffic.
+- `immich-postgres` — classify as `ACTIVE / protected internal DB` and restore/verify its declared health boundary before reopening traffic.
+- `immich-redis` — classify as `ACTIVE / rebuildable state` and restore/verify its declared health boundary before reopening traffic.
+- `openclaw-crons` — classify as `ACTIVE` and restore/verify its declared health boundary before reopening traffic.
+
+### HomeLab classified services
+Use the classification table in `docs/OPERATION_SKULD_SERVICE_INVENTORY.md`; no active service may remain a vague manual restore path.
+- `openclaw` — `MIGRATE`; backup `service-aware-backup plus encrypted secret bundle`; restore `restore workspace/config, SQLite snapshots, outbox, then start CasaOS compose`; verify `healthz, SQLite integrity, outbox contract, cron list`.
+- `product-radar` — `MIGRATE`; backup `SQLite consistent snapshot plus encrypted runtime env`; restore `restore snapshot/env then start compose`; verify `health endpoint, SQLite integrity, owner outbox contract`.
+- `9router` — `MIGRATE`; backup `protected data archive plus exact docker save artifact`; restore `docker load exact image, restore env/data, isolated dashboard/auth test`; verify `dashboard 200, unauthenticated models 401, fixture-auth boundary`.
+- `immich` — `MIGRATE`; backup `fresh pg_dump -Fc plus external media identity/equivalence`; restore `logical pg_restore, attach Avalon media, verify UUID/sentinel/health`; verify `pg_restore --list, Immich health, media equivalence; source retained`.
+- `changedetection` — `MIGRATE`; backup `protected datastore archive`; restore `restore datastore before container start`; verify `HTTP health and datastore presence`.
+- `media-organizer-adapter` — `MIGRATE`; backup `registered service-state archive`; restore `restore state and reconnect Avalon/download/media mounts`; verify `healthz and dry-run organize contract`.
+- `frpc` — `MIGRATE`; backup `sanitized config backup plus encrypted credential bundle`; restore `restore config/secret and start CasaOS compose`; verify `systemd/container running and tunnel status`.
+- `xiaoya` — `MIGRATE`; backup `explicit host-directory archive`; restore `restore exact host directories before container start`; verify `HTTP health and mounted data read`.
+- `homarr` — `REBUILD`; backup `compose/config declaration; data is disposable dashboard state`; restore `recreate pinned compose and restore optional dashboard data`; verify `HTTP health`.
+- `emby` — `MIGRATE`; backup `config directory archive plus external media reference`; restore `restore config, attach media, recreate compose`; verify `health endpoint and library scan boundary`.
+- `qbittorrent` — `MIGRATE`; backup `config directory archive plus external downloads reference`; restore `restore config, attach downloads, recreate compose`; verify `web health and download path read/write`.
+- `nginxproxymanager` — `MIGRATE`; backup `database/certificate state archive`; restore `restore data and certificates before proxy start`; verify `proxy health and TLS certificate inventory`.
+- `filebrowser` — `MIGRATE`; backup `explicit named-volume export plus /DATA/AppData/db archive`; restore `restore named volumes/data before start`; verify `health endpoint and authenticated boundary`.
+- `ariang` — `REBUILD`; backup `pinned compose declaration`; restore `recreate image; no persistent state`; verify `HTTP health`.
+- `aria2` — `MIGRATE`; backup `config archive plus external downloads reference`; restore `restore config/secret and attach downloads`; verify `RPC auth boundary and path read`.
+- `jellyfin` — `MIGRATE`; backup `config archive plus external media reference`; restore `restore config/cache policy and attach media`; verify `health endpoint and library path read`.
+- `alist` — `MIGRATE`; backup `data directory archive plus external storage reference`; restore `restore data and attach Avalon`; verify `health and storage mount read`.
+- `v2raya` — `MIGRATE`; backup `state directory archive`; restore `restore state before container start`; verify `HTTP health and config parse`.
+- `xiaoyakeeper` — `REBUILD`; backup `pinned compose declaration`; restore `recreate with Docker socket boundary review`; verify `container running; no persistent data`.
+- `dashdot` — `REBUILD`; backup `pinned compose declaration`; restore `recreate read-only host metrics service`; verify `HTTP health`.
+- `fashion-siglip` — `REBUILD`; backup `installer/source tracked; model cache redownload policy`; restore `run macOS installer and redownload model`; verify `LaunchAgent and MPS health`.
+
+### 9Router isolated restore rehearsal
+Load the exact image artifact, restore env/data into an isolated project/network, start without production provider credentials, check `/dashboard` returns 200, check unauthenticated `/v1/models` returns 401, and use only fixture authentication for the authenticated boundary.
+
+### Immich restore and reclaim boundary
+Restore the latest `immich-postgres` logical dump with `pg_restore`; attach Avalon, verify UUID and sentinel, verify live media root and health, and keep `/DATA/Gallery/immich` retained. Source reclaim remains pending until the separate fresh one-way checksum gate and explicit approval token pass.
+
+### Completion boundary
+This runbook describes the future destination procedure. `Mac mini cutover: NOT EXECUTED` and `Immich source reclaim: PENDING` remain mandatory 1.4.5 evidence.

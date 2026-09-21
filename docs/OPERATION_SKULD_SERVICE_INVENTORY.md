@@ -1,40 +1,39 @@
 # Operation Skuld service inventory
 
-Generated from the current running CasaOS containers. This document is sanitized: it records paths, image references, and restore classification, never environment values or credential contents.
+Generated/verified against the canonical CasaOS runtime on 2026-09-21. This is a sanitized migration contract: it contains no credential values, only logical secret IDs, persistent paths, restore methods and runtime verification. Classifications are explicit and must be one of `MIGRATE`, `REBUILD`, `EXTERNAL_DATA`, `DROP`, or `MANUAL_BLOCKER`.
 
-| Service | Image | Compose directory | Persistent mounts observed | Classification |
-| --- | --- | --- | --- | --- |
-| changedetection | `ghcr.io/dgtlmoon/changedetection.io:0.60.3` | `/var/lib/casaos/apps/product-radar` | `/DATA/AppData/changedetection/datastore -> /datastore;` | COMPATIBILITY / protected datastore |
-| immich-server | `altran1502/immich-server:v3.2.2` | `/var/lib/casaos/apps/immich` | `/var/lib/docker/volumes/aaeab3749bb9a90400f62098c5ee45226ad258db11915a1890b8822bbded0ba0/_data -> /data;/Volumes/Avalon/immich/data -> /usr/src/app/upload;/etc/localtime -> /etc/localtime;` | ACTIVE / protected database or media boundary |
-| immich-redis | `docker.io/redis:6.2-alpine@sha256:148bb5411c184abd288d9aaed139c98123eeb8824c5d3fce03cf721db58066d8` | `/var/lib/casaos/apps/immich` | `/DATA/AppData/immich/redis -> /data;` | ACTIVE / protected database or media boundary |
-| immich-machine-learning | `altran1502/immich-machine-learning:v3.2.2` | `/var/lib/casaos/apps/immich` | `/DATA/AppData/immich/model-cache -> /cache;` | ACTIVE / protected database or media boundary |
-| immich-postgres | `ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0` | `/var/lib/casaos/apps/immich` | `/DATA/AppData/immich/pgdata -> /var/lib/postgresql/data;` | ACTIVE / protected database or media boundary |
-| 9router | `local/9router:0.5.81` | `/var/lib/casaos/apps/9router` | `/DATA/AppData/9router/data -> /app/data;` | ACTIVE / exact image + protected data |
-| product-radar | `local/product-radar:git-4d11f3e02074-20260920153810` | `/var/lib/casaos/apps/product-radar` | `/DATA/AppData/product-radar -> /data;/DATA/AppData/openclaw/notifications -> /notifications;` | ACTIVE / protected SQLite + outbox |
-| openclaw | `local/openclaw-amadeus:git-4c61b1ef2b02-20260920155823` | `/var/lib/casaos/apps/openclaw` | `/DATA/AppData/openclaw/config -> /home/node/.openclaw;/DATA/AppData/openclaw/workspace -> /home/node/.openclaw/workspace;/DATA/AppData/openclaw/secrets/owner-whatsapp-target -> /run/secrets/owner_whatsapp_target;/DATA/AppData/openclaw/data -> /data;/DATA/AppData/openclaw/secrets/telegram-bot-token -> /run/secrets/telegram_bot_token;/DATA/AppData/openclaw/secrets/mac-ssh-key -> /run/secrets/mac_ssh_key;/DATA/AppData/openclaw/secrets/kook-bot-token -> /run/secrets/kook_bot_token;/DATA/AppData/openclaw/secrets/kiwivm-credentials.json -> /run/secrets/kiwivm_credentials.json;/DATA/AppData/openclaw/notifications -> /var/lib/openclaw/notifications;/DATA/AppData/openclaw/secrets/pubg-team.json -> /run/secrets/pubg_team.json;/DATA/AppData/openclaw/secrets/pubg-api-key -> /run/secrets/pubg_api_key;/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key -> /run/secrets/vps_ssh_key;/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts -> /run/secrets/vps_ssh_known_hosts;` | ACTIVE / protected runtime |
-| frpc | `snowdreamtech/frpc:latest` | `/var/lib/casaos/apps/frpc` | `/DATA/AppData/frpc/frpc.toml -> /etc/frp/frpc.toml;` | ACTIVE external service / manual restore path |
-| xiaoya | `xiaoyaliu/alist:latest` | `not labeled` | `/home/blacksidev/xiaoya -> /data;/var/lib/docker/volumes/8a979910e1aaeb5c9696679a25137d085a1a145abd46780172d7477c789786eb/_data -> /opt/alist/data;/home/blacksidev/xiaoya/data -> /www/data;` | ACTIVE external service / manual restore path |
-| media-organizer-adapter | `local/media-organizer-adapter:0.1.0` | `/var/lib/casaos/apps/media-organizer-adapter` | `/DATA/AppData/media-organizer-adapter -> /state;/Volumes/Avalon/backups/media-organizer -> /Volumes/Avalon/backups/media-organizer;/Volumes/Avalon/downloads -> /Volumes/Avalon/downloads;/Volumes/Avalon/media -> /Volumes/Avalon/media;/Users/blacksidev/.codex/skills/organize-emby-media -> /skill;` | ACTIVE / registered state |
-| homarr | `ghcr.io/homarr-labs/homarr:latest` | `/var/lib/casaos/apps/big-bear-homarr` | `/DATA/AppData/big-bear-homarr/data -> /app/data;/var/lib/docker/volumes/7d4cae5b25c91a94a20736fc21a54133e2795df39194f6ed14325b755ac4378f/_data -> /appdata;/var/run/docker.sock -> /var/run/docker.sock;` | ACTIVE external service / manual restore path |
-| dashdot | `mauricenino/dashdot:latest` | `/var/lib/casaos/apps/dashdot` | `/ -> /mnt/host;` | ACTIVE external service / manual restore path |
-| emby | `linuxserver/emby:4.9.1` | `/var/lib/casaos/apps/emby` | `/Volumes/Avalon/media/movies -> /data/movies;/Volumes/Avalon/media/music -> /data/music;/Volumes/Avalon/media/tv -> /data/tvshows;/DATA/AppData/emby/config -> /config;` | ACTIVE external service / manual restore path |
-| qbittorrent | `lscr.io/linuxserver/qbittorrent:latest` | `/var/lib/casaos/apps/qbittorrent` | `/DATA/AppData/qbittorrent/config -> /config;/Volumes/Avalon/downloads -> /downloads;` | ACTIVE external service / manual restore path |
-| nginxproxymanager | `jc21/nginx-proxy-manager:2.13.5` | `/var/lib/casaos/apps/nginxproxymanager` | `/DATA/AppData/nginxproxymanager/data -> /data;/DATA/AppData/nginxproxymanager/etc/letsencrypt -> /etc/letsencrypt;` | ACTIVE external service / manual restore path |
-| filebrowser | `filebrowser/filebrowser:v2.49.0` | `/var/lib/casaos/apps/filebrowser` | `/DATA -> /srv;/var/lib/docker/volumes/d5163a1ed76c55adb0da90f9e8dcb32c1af3ff99554d58950ab36a61e76dab23/_data -> /config;/var/lib/docker/volumes/2ef500be8b10cf00c471119d52f45ae9262436a8ab9cd99cfc6224ba773a29e0/_data -> /database;/DATA/AppData/filebrowser/db -> /db;` | ACTIVE external service / manual restore path |
-| ariang | `p3terx/ariang:latest` | `/var/lib/casaos/apps/ariang` | `none reported` | ACTIVE external service / manual restore path |
-| aria2 | `p3terx/aria2-pro:latest` | `/var/lib/casaos/apps/aria2` | `/DATA/AppData/aria2/config -> /config;/Volumes/Avalon/downloads/complete -> /downloads;/Volumes/Avalon/downloads/incomplete -> /downloads/incomplete;/DATA/AppData/alist/data/temp -> /opt/alist/data/temp;` | ACTIVE external service / manual restore path |
-| jellyfin | `lscr.io/linuxserver/jellyfin:latest` | `/var/lib/casaos/apps/jellyfin` | `/DATA/AppData/jellyfin/cache -> /cache;/DATA/AppData/jellyfin/config -> /config;/Volumes/Avalon/media/movies -> /data/movies;/Volumes/Avalon/media/music -> /data/music;/Volumes/Avalon/media/photos -> /data/photos;/Volumes/Avalon/media/tv -> /data/tvshows;` | ACTIVE external service / manual restore path |
-| alist | `xhofe/alist:v3.40.0` | `/var/lib/casaos/apps/alist` | `/DATA/AppData/alist/data -> /opt/alist/data;/Volumes/Avalon -> /storage/avalon;` | ACTIVE external service / manual restore path |
-| v2raya | `mzz2017/v2raya:v2.2.6.7` | `/var/lib/casaos/apps/v2raya` | `/etc/resolv.conf -> /etc/resolv.conf;/DATA/AppData/v2raya -> /etc/v2raya;/lib/modules -> /lib/modules;` | ACTIVE external service / manual restore path |
-| xiaoyakeeper | `ddsderek/xiaoyakeeper:latest` | `not labeled` | `/var/run/docker.sock -> /var/run/docker.sock;` | ACTIVE external service / manual restore path |
+| Service | Live image/runtime | Persistent data and external data | Secret refs (logical IDs only) | Classification | Backup method | Restore method | Verification | Cutover dependency |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| openclaw | CasaOS `openclaw` | workspace, SQLite, outbox, VPS state | openclaw-env; openclaw-gateway-token; pubg-api-key; telegram-token; kook-token; mac-ssh-key; vps-readonly-key; vps-known-hosts; kiwivm-credentials | MIGRATE | service-aware SQLite/JSON + workspace metadata + encrypted bundle | restore before compose start | healthz, SQLite integrity, outbox, cron | owner channels |
+| product-radar | CasaOS `product-radar` | product-radar.sqlite, runtime env | product-radar-runtime-env | MIGRATE | SQLite consistent snapshot + encrypted env | restore before compose start | health + SQLite + outbox | product monitoring |
+| 9router | CasaOS exact image `local/9router:0.5.81` | `/DATA/AppData/9router/data`, exact image | 9router-api-key-secret; 9router-jwt-secret; 9router-initial-password; 9router-machine-id-salt | MIGRATE | protected data archive + exact `docker save` artifact | `docker load`, restore env/data, isolated start | dashboard 200; no-auth models 401; fixture auth boundary | provider routes |
+| immich | CasaOS Immich stack | PostgreSQL logical dump; `/Volumes/Avalon/immich/data`; Redis/model rebuildable | immich-db-password | MIGRATE + EXTERNAL_DATA | `pg_dump -Fc`; UUID/sentinel/equivalence reference | logical restore; attach Avalon; health check | `pg_restore --list`, health, media equivalence | media UI |
+| changedetection | CasaOS compatibility service | `/DATA/AppData/changedetection/datastore` | changedetection-runtime-env | MIGRATE | protected datastore archive | restore before start | HTTP health + datastore | optional |
+| media-organizer-adapter | registered CasaOS service | `/DATA/AppData/media-organizer-adapter`, Avalon media/download mounts | media-adapter-runtime-env | MIGRATE | registered state archive | restore and reconnect mounts | healthz + dry-run organizer contract | media workflow |
+| frpc | CasaOS external tunnel | `/DATA/AppData/frpc/frpc.toml` | frpc-token-auth | MIGRATE | sanitized config + encrypted credential bundle | restore config/credential, start compose | tunnel status | public ingress |
+| xiaoya | CasaOS external media catalog | `/home/blacksidev/xiaoya`, `/home/blacksidev/xiaoya/data` | xiaoya-credential-config | MIGRATE | explicit host-directory archive | restore exact directories | health + mounted data read | media catalog |
+| homarr | CasaOS dashboard | `/DATA/AppData/big-bear-homarr/data` | none observed | REBUILD | compose/config; dashboard data disposable | recreate, optionally restore data | HTTP health | none |
+| emby | CasaOS media server | `/DATA/AppData/emby/config`, Avalon media roots | emby-config-credential-state | MIGRATE | config archive + external media reference | restore config and attach media | health + library boundary | media playback |
+| qbittorrent | CasaOS downloader | `/DATA/AppData/qbittorrent/config`, Avalon downloads | qbittorrent-credential-state | MIGRATE | config archive + external downloads reference | restore config and attach downloads | web health + download paths | download pipeline |
+| nginxproxymanager | CasaOS reverse proxy | `/DATA/AppData/nginxproxymanager/data`, letsencrypt | npm-db-and-certificate-state | MIGRATE | DB/certificate state archive | restore before proxy start | proxy health + TLS inventory | public TLS |
+| filebrowser | CasaOS file UI | `/DATA/AppData/filebrowser/db` plus named config/database volumes | filebrowser-credential-db | MIGRATE | explicit named-volume export + AppData archive | restore volumes/data before start | health + authenticated boundary | optional |
+| ariang | CasaOS UI | no persistent state observed | none observed | REBUILD | pinned compose | recreate image | HTTP health | none |
+| aria2 | CasaOS downloader | `/DATA/AppData/aria2/config`, Avalon downloads | aria2-rpc-secret | MIGRATE | config archive + external downloads | restore config/secret and paths | RPC auth + path read | download pipeline |
+| jellyfin | CasaOS media server | config/cache, Avalon media roots | jellyfin-config-credential-state | MIGRATE | config archive + external media reference | restore config and attach media | health + library path | media playback |
+| alist | CasaOS storage gateway | `/DATA/AppData/alist/data`, Avalon | alist-credential-config | MIGRATE | data archive + external storage reference | restore data and attach Avalon | health + storage read | storage gateway |
+| v2raya | CasaOS network service | `/DATA/AppData/v2raya` | v2raya-state | MIGRATE | state directory archive | restore before start | health + config parse | network compatibility |
+| xiaoyakeeper | CasaOS maintenance helper | no persistent state observed; Docker socket only | none observed | REBUILD | pinned compose | recreate after socket review | running + no persistent state | none |
+| dashdot | CasaOS host metrics | read-only host mount; no persistent state | none observed | REBUILD | pinned compose | recreate read-only metrics service | HTTP health | none |
+| fashion-siglip | macOS LaunchAgent | model cache is redownloadable | none observed | REBUILD | tracked installer/source + cache policy | install LaunchAgent and redownload model | MPS health + launchctl | Product Radar similarity |
 
-## Protected credential/state coverage
+## Secret coverage rules
 
-- OpenClaw: external env, channel tokens, owner target, PUBG/VPS/NAS/KOOK credentials and SQLite/outbox.
-- Product Radar: runtime env, SQLite and shared owner outbox.
-- 9Router: runtime credential names are external; `/DATA/AppData/9router/data` is encrypted protected state; exact image export is retained.
-- Immich: database credential source and PostgreSQL AppData are protected; media is a verified external volume; Redis/model cache are classified separately.
-- changedetection and media adapter state remain in the migration boundary while active.
-- Other running CasaOS services are discovered above and require their own manual or service-specific restore path; generic GC never deletes them.
+- The table and manifest contain logical IDs only. Secret values are allowed only in the encrypted Skuld bundle and target secret store.
+- A `required=false` logical ID means the service is active but live presence must be verified from compose/mount metadata before a future cutover; it is not permission to invent a value or log one.
+- Named volumes used by Filebrowser are explicitly classified as service-owned migration data; generic Docker GC must never delete them.
+- External media/download/storage paths are references, not portable tar archives. They require volume identity, sentinel and read/health checks.
+- Unknown owner paths are `MANUAL_BLOCKER` and report-only; no generic deletion is allowed.
 
-Secret values are intentionally absent from this inventory.
+## Runtime discovery
+
+`bash scripts/service-inventory.sh --write docs/OPERATION_SKULD_SERVICE_INVENTORY.md` refreshes sanitized live mount/image observations. It must not overwrite the explicit classification, backup, restore or secret contract without review.

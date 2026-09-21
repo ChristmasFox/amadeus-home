@@ -37,3 +37,21 @@ live OpenClaw image source commit 中的版本；发布完成后脚本会用
 
 任何 Docker build、Compose 写入、停止服务、数据迁移都必须通过明确的 RELEASE/apply
 入口；默认 dry-run。生产目标是 OrbStack `ubuntu` 的 CasaOS，不是 macOS host Docker。
+
+## Amadeus 1.4.5 validation policy
+
+`pnpm workflow:plan` is authoritative at the start of each implementation phase. It emits the
+scope workflow and `DOCKER_IMAGE_SET`; storage/backup/migration shell changes use only the
+storage-runtime, migration-readiness, service-aware-backup and manifest contract fixtures. A
+configuration-only OpenClaw change is a no-build apply; runtime source changes rebuild only the
+affected image.
+
+Use `scripts/run-check.sh` for bounded command evidence. Successful checks emit one summary line,
+failed checks retain only a bounded diagnostic tail, and an unchanged cache key may reuse a passed
+check. `docs/VALIDATION_MATRIX.md` is the source for the tier selection.
+
+The release boundary has one final full local gate (`pnpm test`, `pnpm typecheck`, `pnpm build`,
+`pnpm check:secrets`, architecture, and fresh-clone rehearsal). Live acceptance then checks runtime
+truth only: health, storage state/history, safe scheduled maintenance, service-aware backups,
+secrets metadata, migration readiness and owner notification. Fresh-clone rehearsal sets
+`AMADEUS_FRESH_CLONE_REHEARSAL=1` and never recursively invokes itself.

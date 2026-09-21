@@ -6,6 +6,17 @@ fixture="$(mktemp -d "${TMPDIR:-/tmp}/amadeus-storage-runtime.XXXXXX")"
 trap 'rm -rf "$fixture"' EXIT
 # Keep the fixture independent from a developer's ignored real host profile.
 export AMADEUS_HOST_PROFILE="$fixture/no-host-profile"
+fake_bin="$fixture/bin"
+mkdir -p "$fake_bin"
+cat >"$fake_bin/pg_restore" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$1" == --list ]]
+[[ -s "$2" ]]
+printf '%s\n' '; fixture logical dump list'
+SH
+chmod 755 "$fake_bin/pg_restore"
+export PATH="$fake_bin:$PATH"
 
 external="$fixture/external"
 source="$fixture/source"
@@ -125,6 +136,7 @@ value.update({
     'equivalenceStatus': 'passed',
     'sourceRetained': True,
     'sourceReclaimPending': True,
+    'sourceReclaimState': 'SOURCE_RETAINED',
     'dbBackupPath': str(db),
     'source': str(source),
     'destination': str(destination),
@@ -137,6 +149,8 @@ if env ORBSTACK_MACHINE=fixture IMMICH_MIGRATION_STATE_DIR="$state_dir" SKULD_BA
 fi
 env ORBSTACK_MACHINE=fixture IMMICH_MIGRATION_STATE_DIR="$state_dir" SKULD_BACKUP_ROOT="$backup" bash "$ROOT_DIR/scripts/reclaim-immich-old-source.sh" --plan >/dev/null
 [[ -d "$source" ]]
+grep -Fq 'SOURCE_RECLAIM_READY' "$state_dir/state.json"
+grep -Fq 'freshReclaimEvidencePath' "$state_dir/state.json"
 
 image_inventory="$fixture/images.txt"
 printf '%s\n' \
