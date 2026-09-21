@@ -82,6 +82,7 @@ export const WORLDLINE_PRODUCER_REGISTRY = [
   'homelab',
   'nas',
   'media',
+  'storage',
 ] as const;
 
 export type WorldlineProducer = typeof WORLDLINE_PRODUCER_REGISTRY[number];

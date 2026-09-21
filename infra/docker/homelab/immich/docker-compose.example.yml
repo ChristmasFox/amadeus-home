@@ -1,0 +1,76 @@
+name: immich
+
+# Sanitized source template derived from the live CasaOS Immich stack.
+# PostgreSQL and Redis remain on internal AppData; only the managed media
+# root is portable external storage. All credential values stay outside Git.
+services:
+  database:
+    container_name: immich-postgres
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0
+    restart: unless-stopped
+    env_file:
+      - ${IMMICH_ENV_FILE:-/DATA/AppData/immich/immich.env}
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: ${IMMICH_DB_NAME:-immich}
+      POSTGRES_USER: ${IMMICH_DB_USER:-postgres}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - ${IMMICH_POSTGRES_DATA_DIR:-/DATA/AppData/immich/pgdata}:/var/lib/postgresql/data
+    logging: &immich_logging
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+    networks: [immich]
+
+  immich-machine-learning:
+    container_name: immich-machine-learning
+    image: altran1502/immich-machine-learning:v3.2.2
+    restart: unless-stopped
+    env_file:
+      - ${IMMICH_ENV_FILE:-/DATA/AppData/immich/immich.env}
+    environment:
+      DB_DATABASE_NAME: ${IMMICH_DB_NAME:-immich}
+      DB_USERNAME: ${IMMICH_DB_USER:-postgres}
+    volumes:
+      - ${IMMICH_MODEL_CACHE_DIR:-/DATA/AppData/immich/model-cache}:/cache
+    logging: *immich_logging
+    networks: [immich]
+
+  immich-server:
+    container_name: immich-server
+    image: altran1502/immich-server:v3.2.2
+    restart: unless-stopped
+    env_file:
+      - ${IMMICH_ENV_FILE:-/DATA/AppData/immich/immich.env}
+    depends_on:
+      database:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      DB_DATABASE_NAME: ${IMMICH_DB_NAME:-immich}
+      DB_USERNAME: ${IMMICH_DB_USER:-postgres}
+    ports:
+      - "${IMMICH_PORT:-2283}:2283"
+    volumes:
+      - ${IMMICH_MEDIA_ROOT:-/Volumes/Avalon/immich/data}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    logging: *immich_logging
+    networks: [immich]
+
+  redis:
+    container_name: immich-redis
+    image: docker.io/redis:6.2-alpine@sha256:148bb5411c184abd288d9aaed139c98123eeb8824c5d3fce03cf721db58066d8
+    restart: unless-stopped
+    volumes:
+      - ${IMMICH_REDIS_DATA_DIR:-/DATA/AppData/immich/redis}:/data
+    healthcheck:
+      test: [CMD-SHELL, redis-cli ping || exit 1]
+    logging: *immich_logging
+    networks: [immich]
+
+networks:
+  immich:
+    name: immich

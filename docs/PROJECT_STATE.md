@@ -2,6 +2,15 @@
 
 更新时间：2026-09-21（Asia/Shanghai）
 
+## 当前执行：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（源码阶段完成）
+
+目标文件：`docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md`。
+源码已加入外置 8TB 存储身份与容量 preflight、Immich copy-first/checksum/cutover/reclaim
+边界、9Router/Immich/changedetection 迁移清单、metadata-only secret inventory、加密 bundle
+导出与恢复演练、service inventory、Docker logging policy、受保护 GC、storage health scheduler
+及动态版本 readiness。所有本地 release gates 已通过；live CasaOS apply、媒体迁移和证据记录
+仍待执行。旧 Immich 源默认保留，Mac mini cutover 不在本轮。
+
 ## 当前执行：Amadeus 1.4.3 WhatsApp 私聊隔离（已部署）
 
 根因已确认：WhatsApp DM 未配置 `session.dmScope`，OpenClaw 默认把不同对端复用到

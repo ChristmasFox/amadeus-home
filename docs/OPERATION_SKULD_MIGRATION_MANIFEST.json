@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "operation": "operation-skuld",
   "status": "readiness-only",
   "executed": false,
   "sourceOfTruth": "git-and-current-casaos-runtime",
   "currentHost": {
-   "machine": "${ORBSTACK_MACHINE:-ubuntu}",
     "machine": "from-host-profile",
     "defaultMachine": "ubuntu",
+    "profileResolvedMachine": "from-host-profile",
     "profile": "infra/host-profile.env",
     "canonicalRuntime": "CasaOS inside OrbStack Linux"
   },
@@ -22,7 +22,12 @@
     { "id": "product-radar-sqlite", "path": "/DATA/AppData/product-radar/product-radar.sqlite", "owner": "product-radar", "restoreOrder": 40, "integrity": "sqlite-integrity-check" },
     { "id": "owner-outbox", "path": "/DATA/AppData/openclaw/notifications", "owner": "owner-notification", "restoreOrder": 50, "integrity": "json-contract-and-idempotency-check" },
     { "id": "vps-usage-state", "path": "/DATA/AppData/openclaw/data/vps-usage-state.json", "owner": "amadeus-vps", "restoreOrder": 60, "integrity": "json-parse" },
-    { "id": "openclaw-workspace", "path": "/DATA/AppData/openclaw/workspace", "owner": "openclaw", "restoreOrder": 10, "integrity": "tracked-file-diff" }
+    { "id": "openclaw-workspace", "path": "/DATA/AppData/openclaw/workspace", "owner": "openclaw", "restoreOrder": 10, "integrity": "tracked-file-diff" },
+    { "id": "9router-provider-state", "path": "/DATA/AppData/9router/data", "owner": "9router", "restoreOrder": 15, "integrity": "protected-directory-and-exact-image" },
+    { "id": "immich-postgres", "path": "/DATA/AppData/immich/pgdata", "owner": "immich", "restoreOrder": 25, "integrity": "fresh-pg-dump-and-vector-extension-check" },
+    { "id": "immich-external-media", "path": "host-profile:IMMICH_MEDIA_ROOT", "owner": "immich", "restoreOrder": 26, "integrity": "external-identity-and-file-equivalence;not-tar-archived" },
+    { "id": "changedetection-datastore", "path": "/DATA/AppData/changedetection/datastore", "owner": "changedetection", "restoreOrder": 35, "integrity": "protected-datastore" },
+    { "id": "media-adapter-state", "path": "/DATA/AppData/media-organizer-adapter", "owner": "media-organizer-adapter", "restoreOrder": 45, "integrity": "registered-service-state" }
   ],
   "secrets": [
     { "id": "openclaw-env", "path": "/DATA/AppData/openclaw/openclaw.env", "required": true, "mode": "0600", "contentsInGit": false },
@@ -56,6 +61,10 @@
       "classification": "ACTIVE"
     },
     { "id": "9router", "container": "9router", "classification": "ACTIVE" },
+    { "id": "immich-server", "container": "immich-server", "classification": "ACTIVE / external media" },
+    { "id": "immich-machine-learning", "container": "immich-machine-learning", "classification": "ACTIVE / rebuildable cache" },
+    { "id": "immich-postgres", "container": "immich-postgres", "classification": "ACTIVE / protected internal DB" },
+    { "id": "immich-redis", "container": "immich-redis", "classification": "ACTIVE / rebuildable state" },
     { "id": "openclaw-crons", "source": "scripts/deploy-openclaw.sh", "classification": "ACTIVE" }
   ],
   "rebuildableState": [
@@ -66,9 +75,49 @@
   "hostProfile": {
     "trackedTemplate": "infra/host-profile.env.example",
     "localOverride": "infra/host-profile.env",
-    "requiredValues": ["ORBSTACK_MACHINE", "AMADEUS_NETWORK_NAME", "MAC_CONTROL_HOST", "MAC_CONTROL_USER", "FASHION_SIGLIP_PORT"],
+    "requiredValues": ["ORBSTACK_MACHINE", "AMADEUS_NETWORK_NAME", "MAC_CONTROL_HOST", "MAC_CONTROL_USER", "FASHION_SIGLIP_PORT", "EXTERNAL_STORAGE_ROOT", "EXTERNAL_STORAGE_VOLUME_UUID", "IMMICH_MEDIA_ROOT", "SKULD_BACKUP_ROOT"],
     "secretValuesAllowed": false
   },
+  "storage": {
+    "externalRoot": "host-profile:EXTERNAL_STORAGE_ROOT",
+    "volumeUuid": "host-profile:EXTERNAL_STORAGE_VOLUME_UUID",
+    "sentinel": "host-profile:EXTERNAL_STORAGE_SENTINEL_ID",
+    "immichMediaRoot": "host-profile:IMMICH_MEDIA_ROOT",
+    "backupRoot": "host-profile:SKULD_BACKUP_ROOT",
+    "sourcePolicy": "copy-first-verify-first-cutover-source-retained",
+    "sourceReclaim": "separate-explicit-gate"
+  },
+  "serviceInventory": {
+    "trackedDocument": "docs/OPERATION_SKULD_SERVICE_INVENTORY.md",
+    "required": ["openclaw", "product-radar", "9router", "immich", "changedetection", "media-organizer-adapter"],
+    "discovery": "scripts/service-inventory.sh --write"
+  },
+  "secretInventory": [
+    { "id": "9router-api-key-secret", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "9router-jwt-secret", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "9router-initial-password", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "9router-machine-id-salt", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "9router-provider-state", "service": "9router", "sourceType": "protected-data-directory", "required": true, "restoreTarget": "/DATA/AppData/9router/data", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "immich-db-password", "service": "immich", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "Immich PostgreSQL runtime", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "openclaw-gateway-token", "service": "openclaw", "sourceType": "runtime-env-or-secret-file", "required": true, "restoreTarget": "OpenClaw runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "openclaw-9router-api-key", "service": "openclaw", "sourceType": "runtime-env-or-secret-file", "required": true, "restoreTarget": "OpenClaw runtime env", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "pubg-api-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/pubg-api-key", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "telegram-token", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/telegram-bot-token", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "kook-token", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/kook-bot-token", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "whatsapp-runtime-state", "service": "openclaw", "sourceType": "protected-runtime-state", "required": true, "restoreTarget": "/DATA/AppData/openclaw", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "mac-ssh-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/mac-ssh-key", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "vps-readonly-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "vps-known-hosts", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts", "contentsInGit": false, "encryptedBundle": true },
+    { "id": "kiwivm-credentials", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json", "contentsInGit": false, "encryptedBundle": true }
+  ],
+  "protectedArtifacts": [
+    { "id": "current-release", "policy": "keep" },
+    { "id": "previous-known-good-release", "policy": "keep" },
+    { "id": "explicit-rollback-tags", "policy": "keep" },
+    { "id": "immich-postgres-and-sqlite", "policy": "never-generic-gc" },
+    { "id": "external-immich-media", "policy": "never-generic-gc" },
+    { "id": "encrypted-secret-bundles", "policy": "retention-policy-only" }
+  ],
   "readinessChecks": [
     "clean-git-and-version",
     "tracked-compose-and-profile",
@@ -80,6 +129,12 @@
     "fashion-siglip-worker-health",
     "backup-checksum-manifest",
     "temporary-restore-rehearsal",
-    "no-active-legacy-runtime"
+    "no-active-legacy-runtime",
+    "external-storage-identity",
+    "immich-media-equivalence-and-db-backup",
+    "9router-protected-data-and-exact-artifact",
+    "complete-service-and-secret-inventory",
+    "encrypted-secret-bundle-and-restore-rehearsal",
+    "docker-log-policy-and-storage-pressure"
   ]
 }

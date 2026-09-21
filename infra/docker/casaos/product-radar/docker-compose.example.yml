@@ -7,6 +7,11 @@ services:
     image: ${PRODUCT_RADAR_IMAGE:-local/product-radar:0.1.0}
     container_name: product-radar
     restart: unless-stopped
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     networks:
       - radar_network
       - amadeus_network
@@ -42,6 +47,11 @@ services:
     image: ghcr.io/dgtlmoon/changedetection.io:0.60.3
     container_name: changedetection
     restart: unless-stopped
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     networks:
       - radar_network
     environment:

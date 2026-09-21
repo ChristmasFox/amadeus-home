@@ -2,6 +2,12 @@
 
 默认根据 Git 改动选择最低足够验证，不隐式重启或部署：
 
+Operation Skuld storage work also uses the dedicated storage-runtime checks.
+`storage-preflight.sh` and `migrate-immich-media.sh` are plan/verify first;
+`--cutover`, maintenance `--apply`, scheduler installation, and source reclaim
+are separate explicit operations. The external volume is identified by UUID
+and sentinel, and migration never uses `rsync --delete`.
+
 - FAST：文档、状态、脚本和纯逻辑；执行定向测试、typecheck、`git diff --check`。
 - PUBG_DOMAIN_PLUGIN：`pnpm typecheck:pubg`、`pnpm test:pubg` 和 diff check。
 - PRODUCT_RADAR：Product Radar 自己的 typecheck/tests；它不是 PUBG 依赖。

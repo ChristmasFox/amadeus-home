@@ -13,6 +13,7 @@ outbox and delivery policy own that boundary.
 | Codex completion hook | `integrations/openclaw/codex-notify.sh` → `scripts/notify-owner.sh` | Generic event with redacted summary and stable idempotency key | 世界线观测 | ACTIVE |
 | VPS scheduled report | CasaOS cron declaration in `scripts/deploy-openclaw.sh` | Cron emits `worldline_notification_intent`, with facts supplied by bounded VPS tools | D-Mail; severity/significance remain factual | ACTIVE |
 | HomeLab status | `plugins/amadeus/src/homelab.ts` | Service and resource facts; unknown metrics remain null/unknown | observation or divergence | ACTIVE |
+| Storage health and maintenance | `scripts/storage-health.sh` / `scripts/storage-maintenance.sh` | External-volume identity, capacity, migration and bounded Docker-maintenance facts; missing storage remains an explicit failure | observation or divergence | ACTIVE |
 | Media organizer | `plugins/amadeus/src/media.ts` | Completed operation facts from the adapter | 世界线收束 | ACTIVE |
 | NAS | `plugins/amadeus/src/nas.ts` | Interactive read-only capability; no proactive notification side effect | none | ACTIVE / no proactive event |
 | Owner native tool | `plugins/amadeus/src/capabilities/notification/register.ts` | Accepts either validated presentation or intent; intent is adapted deterministically | policy-selected | ACTIVE |

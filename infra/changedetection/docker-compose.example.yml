@@ -5,6 +5,11 @@ services:
     image: ghcr.io/dgtlmoon/changedetection.io:0.60.3
     container_name: changedetection
     restart: unless-stopped
+    logging:
+      driver: ${DOCKER_LOG_DRIVER:-local}
+      options:
+        max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
+        max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     environment:
       PORT: 5000
     volumes:

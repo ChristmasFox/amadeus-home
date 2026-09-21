@@ -361,11 +361,12 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
 
 orb -m "$MACHINE" -u root python3 - \
-  "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" <<'PY'
+  "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" \
+  "$HOME_LAB_HOST" "$HOME_LAB_BASE_URL" "$HOME_LAB_GLANCES_URL" "$HOME_LAB_UPTIME_URL" "$CONTROL_UI_LAN_ORIGIN" <<'PY'
 import os, sys
 from pathlib import Path
 path = Path(sys.argv[1])
-host, user = sys.argv[2:]
+host, user, home_lab_host, home_lab_base_url, home_lab_glances_url, home_lab_uptime_url, control_ui_lan_origin = sys.argv[2:]
 lines = path.read_text().splitlines() if path.is_file() else []
 def set_env(key, value):
     prefix = key + '='
@@ -376,6 +377,11 @@ def set_env(key, value):
     lines.append(prefix + value)
 set_env('MAC_CONTROL_HOST', host)
 set_env('MAC_CONTROL_USER', user)
+set_env('HOME_LAB_HOST', home_lab_host)
+set_env('HOME_LAB_BASE_URL', home_lab_base_url)
+set_env('HOME_LAB_GLANCES_URL', home_lab_glances_url)
+set_env('HOME_LAB_UPTIME_URL', home_lab_uptime_url)
+set_env('CONTROL_UI_LAN_ORIGIN', control_ui_lan_origin)
 path.write_text('\n'.join(lines) + '\n')
 os.chmod(path, 0o600)
 print('MAC_CONTROL_PROFILE=installed')
@@ -586,6 +592,35 @@ for attempt in $(seq 1 30); do
 done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner release notification remained pending after 30 seconds.'
 
+post_deploy_maintenance='passed'
+log_policy_status='passed'
+if ! bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --apply >"$CHECKPOINT_DIR/log-policy.log" 2>&1; then
+  log_policy_status='warning'
+  "$ROOT_DIR/scripts/notify-owner.sh" \
+    --remote-machine "$MACHINE" \
+    --outbox-dir "$OPENCLAW_DATA_DIR/notifications" \
+    --event-key "log-policy:post-deploy:$AMADEUS_VERSION" \
+    --source storage-runtime \
+    --headline '世界线偏移 · 受管日志策略未完全收束' \
+    --summary "健康 release 保持运行；日志策略应用失败，证据保留在 $CHECKPOINT_DIR/log-policy.log。未知服务仍为 report-only。" \
+    --severity warning \
+    --significance major \
+    --theme worldline_divergence || true
+fi
+if ! bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy --apply >"$CHECKPOINT_DIR/storage-maintenance.log" 2>&1; then
+  post_deploy_maintenance='warning'
+  "$ROOT_DIR/scripts/notify-owner.sh" \
+    --remote-machine "$MACHINE" \
+    --outbox-dir "$OPENCLAW_DATA_DIR/notifications" \
+    --event-key "storage-maintenance:post-deploy:$AMADEUS_VERSION" \
+    --source storage-maintenance \
+    --headline '世界线偏移 · 发布后存储维护未完全收束' \
+    --summary "健康 release 保持运行；受保护对象未通用清理，维护证据保留在 $CHECKPOINT_DIR/storage-maintenance.log。" \
+    --severity warning \
+    --significance major \
+    --theme worldline_divergence || true
+fi
+
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$RADAR_IMAGE"
@@ -595,5 +630,7 @@ printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
 printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
 printf '%s\n' 'OWNER_OUTBOX_SMOKE=passed'
+printf '%s\n' "LOG_POLICY=$log_policy_status"
+printf '%s\n' "POST_DEPLOY_MAINTENANCE=$post_deploy_maintenance"
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
 printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."

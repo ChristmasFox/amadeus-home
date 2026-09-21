@@ -68,8 +68,23 @@ export function checkArchitecture(root = REPO_ROOT) {
     'docs/INFRASTRUCTURE_CLASSIFICATION.md',
     'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json',
     'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md',
+    'docs/OPERATION_SKULD_SERVICE_INVENTORY.md',
+    'docs/STORAGE_RETENTION_POLICY.md',
+    'infra/docker/homelab/immich/docker-compose.example.yml',
     'scripts/host-profile.sh',
     'scripts/migration-readiness.sh',
+    'scripts/storage-preflight.sh',
+    'scripts/migrate-immich-media.sh',
+    'scripts/reclaim-immich-old-source.sh',
+    'scripts/storage-maintenance.sh',
+    'scripts/apply-docker-log-policy.sh',
+    'scripts/externalize-casaos-secrets.sh',
+    'scripts/storage-health.sh',
+    'scripts/install-storage-scheduler-macos.sh',
+    'scripts/export-9router-runtime.sh',
+    'scripts/secrets-inventory.sh',
+    'scripts/export-skuld-secrets.sh',
+    'scripts/import-skuld-secrets.sh',
     'integrations/openclaw/workspace/SOUL.md',
     'integrations/openclaw/workspace/AGENTS.md',
     'package.json',
@@ -124,7 +139,7 @@ export function checkArchitecture(root = REPO_ROOT) {
   }
 
   const worldlineSource = text(root, 'packages/presentation/src/worldline/contracts.ts');
-  for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'homelab', 'nas', 'media']) {
+  for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'homelab', 'nas', 'media', 'storage']) {
     if (!worldlineSource.includes(`'${producer}'`)) errors.push(`worldline producer registry lacks coverage: ${producer}`);
   }
 
@@ -149,6 +164,11 @@ export function checkArchitecture(root = REPO_ROOT) {
       const content = readFileSync(path, 'utf8');
       if (/langbot|n8n-sandbox|legacy n8n runtime/iu.test(content)) errors.push(`active deployment source contains retired runtime reference: ${relative}`);
       if (content.includes('/Users/blacksidev')) errors.push(`active deployment source contains old host path: ${relative}`);
+      if (/rsync\s+[^\n]*--delete/iu.test(content)) errors.push(`Immich migration source contains forbidden destructive rsync flag: ${relative}`);
+      if (/docker\s+(?:volume\s+prune|system\s+prune\s+--volumes)/iu.test(content)) errors.push(`forbidden Docker volume cleanup: ${relative}`);
+      if (/rm\s+-rf\s+\/DATA\/AppData(?:\/|\s|$)/u.test(content)) errors.push(`generic AppData deletion: ${relative}`);
+      if (/rm\s+-rf\s+.*(?:Volumes\/Avalon\/immich|IMMICH_MEDIA_ROOT)/iu.test(content)) errors.push(`generic Immich media deletion: ${relative}`);
+      if (relative.endsWith('openclaw.json.example') && /192\.168\.5\.3/u.test(content)) errors.push(`runtime template contains old LAN IP: ${relative}`);
     }
   }
 
