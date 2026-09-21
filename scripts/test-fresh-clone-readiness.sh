@@ -61,9 +61,10 @@ printf '%s\n' 'FRESH_CLONE_NON_RECURSIVE=passed'
 
 if ((FULL)); then
   "$clone/scripts/run-check.sh" 'fresh-clone pnpm install' pnpm --dir "$clone" install --frozen-lockfile
+  # Workspace package exports point at dist; build the fresh source tree before running tests.
+  "$clone/scripts/run-check.sh" 'fresh-clone build' pnpm --dir "$clone" build
   "$clone/scripts/run-check.sh" 'fresh-clone test' pnpm --dir "$clone" test
   "$clone/scripts/run-check.sh" 'fresh-clone typecheck' pnpm --dir "$clone" typecheck
-  "$clone/scripts/run-check.sh" 'fresh-clone build' pnpm --dir "$clone" build
   "$clone/scripts/run-check.sh" 'fresh-clone secret scan' pnpm --dir "$clone" check:secrets
 fi
 printf '%s\n' "FRESH_CLONE_REHEARSAL=$([[ $FULL -eq 1 ]] && echo full-passed || echo fixture-passed)"
