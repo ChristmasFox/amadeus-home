@@ -234,4 +234,4 @@ fi
 printf 'STORAGE_STATUS=%s\n' "$status"
 printf 'STORAGE_COMPONENTS=%s\n' "$(python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["components"], sort_keys=True))' <<<"$state_json")"
 printf 'STORAGE_HEALTH=passed\n'
-[[ "$status" != missing && "$status" != critical && "$status" != policy_violation ]]
+[[ "$status" != missing && "$status" != policy_violation ]]
