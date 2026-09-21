@@ -11,8 +11,8 @@ FAILURES=0
 
 while (($#)); do
   case "$1" in
-    --audit|--apply) MODE="${1#--}" ;;
-    --help|-h) printf '%s\n' 'Usage: scripts/apply-docker-log-policy.sh [--audit|--apply]'; exit 0 ;;
+    --audit|--apply|--daemon-audit|--daemon-apply) MODE="${1#--}" ;;
+    --help|-h) printf '%s\n' 'Usage: scripts/apply-docker-log-policy.sh [--audit|--apply|--daemon-audit|--daemon-apply]'; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
   esac
   shift
@@ -46,6 +46,36 @@ audit_container() {
   fi
 }
 
+audit_daemon() {
+  local record driver max_size max_file
+  record="$(orb -m "$MACHINE" -u root python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path('/etc/docker/daemon.json')
+if not path.is_file():
+    raise SystemExit('missing /etc/docker/daemon.json')
+value = json.loads(path.read_text(encoding='utf-8'))
+if not isinstance(value, dict):
+    raise SystemExit('daemon.json must contain an object')
+options = value.get('log-opts', {})
+print('|'.join([
+    str(value.get('log-driver', '')),
+    str(options.get('max-size', '')),
+    str(options.get('max-file', '')),
+]))
+PY
+  2>/dev/null || true)"
+  IFS='|' read -r driver max_size max_file <<<"$record"
+  printf 'DAEMON_LOG_AUDIT|driver=%s|max-size=%s|max-file=%s\n' "$driver" "$max_size" "$max_file"
+  if [[ "$driver" != "$DOCKER_LOG_DRIVER" || "$max_size" != "$DOCKER_LOG_MAX_SIZE" || "$max_file" != "$DOCKER_LOG_MAX_FILE" ]]; then
+    printf '%s\n' 'FAIL  daemon default log policy is not bounded'
+    FAILURES=$((FAILURES + 1))
+  else
+    printf '%s\n' 'PASS  daemon default log policy is bounded'
+  fi
+}
+
 audit_unknown() {
   local name
   printf '%s\n' 'UNKNOWN_LOG_OWNERS=report-only'
@@ -61,10 +91,66 @@ audit_unknown() {
 }
 
 audit() {
+  audit_daemon
   for name in openclaw product-radar 9router immich-server immich-machine-learning immich-postgres immich-redis changedetection; do
     audit_container "$name"
   done
   audit_unknown
+  ((FAILURES == 0))
+}
+
+apply_daemon_policy() {
+  command -v orbctl >/dev/null 2>&1 || { printf '%s\n' 'OrbStack control CLI not found' >&2; return 1; }
+  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
+    printf '%s\n' 'DAEMON_LOG_POLICY=blocked; verified external storage is unavailable' >&2
+    return 1
+  }
+  local stamp backup_root config_path
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_root="$SKULD_BACKUP_ROOT/log-policy/daemon-$stamp"
+  [[ "$backup_root" == "$EXTERNAL_STORAGE_ROOT/"* ]] || { printf '%s\n' 'daemon policy backup must be on the verified external volume' >&2; return 1; }
+  mkdir -p "$backup_root"
+  chmod 700 "$backup_root"
+  config_path='/etc/docker/daemon.json'
+  orb -m "$MACHINE" -u root docker ps --format '{{.Names}}|{{.Status}}|{{.Image}}' >"$backup_root/containers.before.txt"
+  orb -m "$MACHINE" -u root cat "$config_path" >"$backup_root/daemon.json.before"
+  chmod 600 "$backup_root/daemon.json.before"
+  orb -m "$MACHINE" -u root python3 - "$config_path" "$DOCKER_LOG_DRIVER" "$DOCKER_LOG_MAX_SIZE" "$DOCKER_LOG_MAX_FILE" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path, driver, max_size, max_file = sys.argv[1:]
+target = Path(path)
+value = json.loads(target.read_text(encoding='utf-8')) if target.exists() else {}
+if not isinstance(value, dict):
+    raise SystemExit('daemon.json must contain an object')
+value['log-driver'] = driver
+value['log-opts'] = {'max-size': max_size, 'max-file': max_file}
+temporary = Path(str(target) + '.skuld-tmp')
+temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+os.chmod(temporary, 0o644)
+temporary.replace(target)
+PY
+  orb -m "$MACHINE" -u root python3 -m json.tool "$config_path" >/dev/null
+  if ! orbctl restart "$MACHINE"; then
+    orb -m "$MACHINE" -u root cp "$backup_root/daemon.json.before" "$config_path" || true
+    orbctl restart "$MACHINE" || true
+    printf '%s\n' 'DAEMON_LOG_POLICY=failed; original daemon.json restore attempted' >&2
+    return 1
+  fi
+  local ready=0 attempt
+  for attempt in $(seq 1 60); do
+    if orb -m "$MACHINE" -u root docker info >/dev/null 2>&1; then ready=1; break; fi
+    sleep 2
+  done
+  ((ready)) || { printf '%s\n' 'DAEMON_LOG_POLICY=failed; Docker did not return after restart' >&2; return 1; }
+  orb -m "$MACHINE" -u root cat "$config_path" >"$backup_root/daemon.json.after"
+  orb -m "$MACHINE" -u root docker info --format 'LoggingDriver={{.LoggingDriver}} ServerVersion={{.ServerVersion}}' >"$backup_root/docker-info.after"
+  orb -m "$MACHINE" -u root docker ps --format '{{.Names}}|{{.Status}}|{{.Image}}' >"$backup_root/containers.after.txt"
+  printf 'DAEMON_LOG_POLICY_BACKUP=%s\n' "$backup_root"
+  audit_daemon
   ((FAILURES == 0))
 }
 
@@ -169,7 +255,12 @@ PY
   audit
 }
 
-if [[ "$MODE" == apply ]]; then
+if [[ "$MODE" == daemon-apply ]]; then
+  apply_daemon_policy
+elif [[ "$MODE" == daemon-audit ]]; then
+  audit_daemon
+  ((FAILURES == 0))
+elif [[ "$MODE" == apply ]]; then
   apply_policy
 else
   audit

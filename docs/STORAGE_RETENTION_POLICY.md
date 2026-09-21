@@ -21,6 +21,13 @@ logging:
     max-file: "5"
 ```
 
+The CasaOS Docker daemon is also configured for new containers with the same
+bounded default. The declaration is tracked in
+`infra/docker/daemon.json.example`; applying it must preserve unrelated daemon
+keys, keep a timestamped external backup, validate JSON, and verify all active
+containers after the OrbStack machine restart. Existing unknown containers are
+not recreated automatically and remain report-only until their owner is known.
+
 `scripts/storage-maintenance.sh` never runs volume pruning, a blind
 `docker system prune -a`, generic AppData deletion, or deletion under the
 Immich media root. Existing containers with an unknown owner are inventoried
