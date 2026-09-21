@@ -1,16 +1,11 @@
-# Amadeus 1.4.4
+# Amadeus 1.4.5
 
-收口 Operation Skuld 的存储与运行时边界：
+Operation Skuld 的最终可靠性收口：
 
-- 为 Immich 外置媒体迁移增加 8TB volume identity、sentinel、device/free-space fail-closed
-  preflight；copy-first、checksum equivalence、fresh PostgreSQL backup、cutover 后健康检查，
-  旧源保留并由独立 reclaim gate 控制。
-- 将 Immich、9Router、changedetection 和 media adapter 纳入迁移 manifest、service inventory、
-  metadata-only secret inventory 与加密 secret bundle export/import rehearsal。
-- 为主运行时、Product Radar、9Router、Immich 和 changedetection 固定 Docker stdout/stderr
-  rotation；清理仅覆盖受保护规则允许的 dangling image/build cache，未知日志和数据保持报告。
-- 增加 storage health、外置盘失联/恢复和实际释放空间的 Worldline owner notification producer，
-  并修复 readiness 的动态版本校验。
+- 修复 fresh-clone 可重建边界，跟踪全部迁移脚本与此前被忽略的 PUBG domain source，并加入非递归 fresh-clone rehearsal。
+- 让 storage health 真实消费容量阈值，记录 90 天增长历史；weekly maintenance 使用 safe apply，落实 image/checkpoint retention，禁止 generic destructive prune。
+- 将 SQLite consistent snapshot、Immich `pg_dump -Fc`/restore-list、9Router isolated restore 与 service-aware backup registry 纳入迁移证据。
+- 完成 HomeLab service classification、metadata-only encrypted secret coverage、Manifest/Runbook contract check，并强化未来 Immich source reclaim 的 fresh one-way verification；旧源仍保留，Mac mini cutover 未执行。
+- 开发验证改为 scope-aware targeted checks、bounded command evidence、affected-only image scope 与单次 final full release gate。
 
-验证：`pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm check:secrets`、architecture、
-storage-runtime、migration-readiness、notification tests 和脚本语法检查通过。
+验证：最终 release gate 将运行 `pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm check:secrets`、architecture、fresh-clone rehearsal 与 canonical CasaOS live acceptance。
