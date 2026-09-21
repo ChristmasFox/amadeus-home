@@ -52,19 +52,31 @@ else
   command -v orb >/dev/null 2>&1 || { printf '%s\n' 'OrbStack CLI is required for live rehearsal' >&2; exit 1; }
   MACHINE="${ORBSTACK_MACHINE:-ubuntu}"
   name="skuld-9router-rehearsal-$$"
-  port="${NINE_ROUTER_REHEARSAL_PORT:-23128}"
-  cleanup() { orb -m "$MACHINE" -u root docker rm -f "$name" >/dev/null 2>&1 || true; }
+  rehearsal_data=""
+  cleanup() {
+    orb -m "$MACHINE" -u root docker rm -f "$name" >/dev/null 2>&1 || true
+    if [[ -n "$rehearsal_data" ]]; then orb -m "$MACHINE" -u root rm -rf -- "$rehearsal_data" >/dev/null 2>&1 || true; fi
+  }
   trap cleanup EXIT
   orb -m "$MACHINE" -u root docker load <"$ARTIFACT" >/dev/null
+  rehearsal_data="$(orb -m "$MACHINE" -u root mktemp -d /tmp/skuld-9router-data.XXXXXX)"
+  orb -m "$MACHINE" -u root bash -lc 'cp -a /DATA/AppData/9router/data/. "$1"/' -- "$rehearsal_data"
   # The isolated container has no provider network and receives fixture-only auth; it cannot create paid requests.
-  orb -m "$MACHINE" -u root docker run -d --name "$name" --network none -p "127.0.0.1:$port:20128" \
+  orb -m "$MACHINE" -u root docker run -d --name "$name" --network none \
+    -v "$rehearsal_data:/app/data" \
     -e AUTH=fixture-auth -e REQUIRE_API_KEY=true -e NODE_ENV=production "$IMAGE" >/dev/null
   for _ in $(seq 1 60); do
-    if orb -m "$MACHINE" -u root curl --silent --fail "http://127.0.0.1:$port/dashboard" >/dev/null 2>&1; then break; fi
+    if orb -m "$MACHINE" -u root docker exec "$name" node -e 'fetch("http://127.0.0.1:20128/dashboard").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' >/dev/null 2>&1; then break; fi
     sleep 1
   done
-  orb -m "$MACHINE" -u root curl --fail --silent "http://127.0.0.1:$port/dashboard" >/dev/null
-  [[ "$(orb -m "$MACHINE" -u root curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:$port/v1/models")" == 401 ]]
-  orb -m "$MACHINE" -u root curl --fail --silent -H 'Authorization: Bearer fixture-auth' "http://127.0.0.1:$port/v1/models" >/dev/null
+  orb -m "$MACHINE" -u root docker exec "$name" node - <<'NODE'
+const unauth = await fetch('http://127.0.0.1:20128/v1/models');
+if (unauth.status !== 401) process.exit(1);
+const auth = await fetch('http://127.0.0.1:20128/v1/models', {headers: {Authorization: 'Bearer fixture-auth'}});
+if (!auth.ok) process.exit(1);
+console.log('isolated-dashboard=200');
+console.log('unauthenticated-models=401');
+console.log('fixture-authenticated-models=' + auth.status);
+NODE
   printf 'NINE_ROUTER_RESTORE_REHEARSAL=passed\nNINE_ROUTER_ARTIFACT_SHA256=%s\n' "$checksum"
 fi
