@@ -592,9 +592,13 @@ for attempt in $(seq 1 30); do
 done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner release notification remained pending after 30 seconds.'
 
+POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
+[[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
+mkdir -p "$POST_DEPLOY_EVIDENCE_DIR"
+chmod 700 "$POST_DEPLOY_EVIDENCE_DIR"
 post_deploy_maintenance='passed'
 log_policy_status='passed'
-if ! bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --apply >"$CHECKPOINT_DIR/log-policy.log" 2>&1; then
+if ! bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --apply >"$POST_DEPLOY_EVIDENCE_DIR/log-policy.log" 2>&1; then
   log_policy_status='warning'
   "$ROOT_DIR/scripts/notify-owner.sh" \
     --remote-machine "$MACHINE" \
@@ -602,12 +606,12 @@ if ! bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --apply >"$CHECKPOINT_D
     --event-key "log-policy:post-deploy:$AMADEUS_VERSION" \
     --source storage-runtime \
     --headline '世界线偏移 · 受管日志策略未完全收束' \
-    --summary "健康 release 保持运行；日志策略应用失败，证据保留在 $CHECKPOINT_DIR/log-policy.log。未知服务仍为 report-only。" \
+    --summary "健康 release 保持运行；日志策略应用失败，证据保留在 $POST_DEPLOY_EVIDENCE_DIR/log-policy.log。未知服务仍为 report-only。" \
     --severity warning \
     --significance major \
     --theme worldline_divergence || true
 fi
-if ! bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy --apply >"$CHECKPOINT_DIR/storage-maintenance.log" 2>&1; then
+if ! bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy --apply >"$POST_DEPLOY_EVIDENCE_DIR/storage-maintenance.log" 2>&1; then
   post_deploy_maintenance='warning'
   "$ROOT_DIR/scripts/notify-owner.sh" \
     --remote-machine "$MACHINE" \
@@ -615,13 +619,14 @@ if ! bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy --apply >"$CH
     --event-key "storage-maintenance:post-deploy:$AMADEUS_VERSION" \
     --source storage-maintenance \
     --headline '世界线偏移 · 发布后存储维护未完全收束' \
-    --summary "健康 release 保持运行；受保护对象未通用清理，维护证据保留在 $CHECKPOINT_DIR/storage-maintenance.log。" \
+    --summary "健康 release 保持运行；受保护对象未通用清理，维护证据保留在 $POST_DEPLOY_EVIDENCE_DIR/storage-maintenance.log。" \
     --severity warning \
     --significance major \
     --theme worldline_divergence || true
 fi
 
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
+printf 'POST_DEPLOY_EVIDENCE=%s\n' "$POST_DEPLOY_EVIDENCE_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$RADAR_IMAGE"
 printf '%s\n' 'OPENCLAW_HEALTH=passed'
