@@ -53,10 +53,20 @@ check_required_sources() {
     "$ROOT_DIR/scripts/export-9router-runtime.sh" \
     "$ROOT_DIR/scripts/secrets-inventory.sh" \
     "$ROOT_DIR/scripts/export-skuld-secrets.sh" \
-    "$ROOT_DIR/scripts/import-skuld-secrets.sh"; do
+    "$ROOT_DIR/scripts/import-skuld-secrets.sh" \
+    "$ROOT_DIR/scripts/run-check.sh" \
+    "$ROOT_DIR/scripts/test-fresh-clone-readiness.sh" \
+    "$ROOT_DIR/scripts/service-aware-backup.sh" \
+    "$ROOT_DIR/scripts/sqlite-consistent-snapshot.py" \
+    "$ROOT_DIR/scripts/test-service-aware-backup.sh" \
+    "$ROOT_DIR/scripts/test-skuld-manifest-runbook-consistency.sh" \
+    "$ROOT_DIR/docs/SERVICE_AWARE_BACKUP_REGISTRY.json"; do
     [[ -f "$path" ]] || return 1
   done
   python3 -m json.tool "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" >/dev/null
+  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh; do
+    git -C "$ROOT_DIR" ls-files --error-unmatch "$path" >/dev/null || return 1
+  done
 }
 check_active_sources() {
   ! rg -n -i 'langbot|n8n-sandbox|legacy n8n runtime|/Users/blacksidev' \
@@ -179,7 +189,18 @@ check_backup_manifest() {
   orb -m "$MACHINE" -u root test -f "$newest/backup-manifest.json"
 }
 check_storage_identity() {
-  bash "$ROOT_DIR/scripts/storage-preflight.sh" --check --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null
+  local state="$SKULD_BACKUP_ROOT/immich-migration/state.json"
+  if [[ -f "$state" ]] && python3 - "$state" <<'PY'
+import json, sys
+from pathlib import Path
+value=json.loads(Path(sys.argv[1]).read_text())
+raise SystemExit(0 if value.get('sourceReclaimState') == 'SOURCE_RECLAIMED' else 1)
+PY
+  then
+    STORAGE_PREFLIGHT_SKIP_SOURCE=1 bash "$ROOT_DIR/scripts/storage-preflight.sh" --check --allow-existing --source "$IMMICH_MEDIA_ROOT" --destination "$IMMICH_MEDIA_ROOT" >/dev/null
+  else
+    bash "$ROOT_DIR/scripts/storage-preflight.sh" --check --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null
+  fi
 }
 check_immich_migration_checkpoint() {
   local state="$SKULD_BACKUP_ROOT/immich-migration/state.json"
@@ -189,8 +210,11 @@ import json
 import sys
 from pathlib import Path
 value = json.loads(Path(sys.argv[1]).read_text())
-required = value.get('phase') == 'cutover-complete' and value.get('copyStatus') == 'passed' and value.get('equivalenceStatus') == 'passed' and value.get('sourceReclaimPending') is True
-backup = value.get('dbBackupPath')
+backup = value.get('dbBackupPath') or value.get('freshDbBackupPath')
+if value.get('sourceReclaimState') == 'SOURCE_RECLAIMED':
+    required = value.get('phase') == 'source-reclaimed' and value.get('sourceReclaimPending') is False and value.get('sourceRetained') is False and value.get('freshEquivalenceStatus') == 'passed' and value.get('freshReclaimEvidencePath')
+else:
+    required = value.get('phase') == 'cutover-complete' and value.get('copyStatus') == 'passed' and value.get('equivalenceStatus') == 'passed' and value.get('sourceReclaimPending') is True and value.get('sourceRetained') is True
 raise SystemExit(0 if required and isinstance(backup, str) and Path(backup).is_file() else 1)
 PY
 }
@@ -235,6 +259,41 @@ print('TEMP_RESTORE_REHEARSAL=passed')
 PY
 }
 
+check_manifest_runbook() { bash "$ROOT_DIR/scripts/test-skuld-manifest-runbook-consistency.sh" >/dev/null; }
+check_service_aware_backup() {
+  local newest manifest
+  newest="$(find "$SKULD_BACKUP_ROOT" -type f -name 'service-aware-manifest.json' -print 2>/dev/null | sort | tail -n 1)"
+  [[ -n "$newest" && -s "$newest" ]] || return 1
+  manifest="$newest"
+  python3 - "$manifest" <<'PY'
+import json, sys
+from pathlib import Path
+v=json.loads(Path(sys.argv[1]).read_text())
+if v.get('backupMode') != 'service-aware': raise SystemExit(1)
+if not v.get('sqlite'): raise SystemExit(1)
+pg=v.get('postgresql',{})
+if pg.get('status') == 'passed' and not pg.get('restoreList'): raise SystemExit(1)
+PY
+}
+check_storage_state() {
+  local state="$OPENCLAW_DATA_DIR/data/storage-health-state.json"
+  orb -m "$MACHINE" -u root test -s "$state" || return 1
+  orb -m "$MACHINE" -u root python3 - "$state" <<'PY'
+import json, sys
+from pathlib import Path
+v=json.loads(Path(sys.argv[1]).read_text())
+if v.get('status') in {'missing','critical','policy_violation'}: raise SystemExit(1)
+if not v.get('components') or not v.get('targets'): raise SystemExit(1)
+print('STORAGE_STATE=valid')
+PY
+}
+check_retention_policy() {
+  [[ "${DEPLOYMENT_IMAGE_RETENTION_COUNT:-0}" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "${DEPLOYMENT_CHECKPOINT_RETENTION_COUNT:-0}" =~ ^[1-9][0-9]*$ ]] || return 1
+  ! rg -n --fixed-strings -- 'docker volume prune' "$ROOT_DIR/scripts/storage-maintenance.sh" >/dev/null
+  ! rg -n --fixed-strings -- 'docker system prune' "$ROOT_DIR/scripts/storage-maintenance.sh" >/dev/null
+}
+
 run_readiness() {
   check 'clean Git worktree' check_git_clean
   check 'dynamic release version and release notes' check_version
@@ -258,6 +317,10 @@ run_readiness() {
   check 'service inventory coverage' check_service_inventory
   check 'secret inventory metadata' check_secret_inventory
   check 'encrypted secret bundle metadata' check_encrypted_secret_bundle
+  check 'service-aware backup manifest' check_service_aware_backup
+  check 'manifest/runbook consistency' check_manifest_runbook
+  check 'storage state and capacity evaluation' check_storage_state
+  check 'retention policy and safe-GC guards' check_retention_policy
   check 'exact 9Router runtime artifact' check_9router_artifact
   check 'managed Docker log policy' check_log_policy
 

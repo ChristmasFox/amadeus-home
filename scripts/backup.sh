@@ -80,6 +80,7 @@ done
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 archive_dir="$BACKUP_ROOT/$stamp"
 data_archive="$archive_dir/data-$stamp.tar.gz"
+service_backup_dir="$archive_dir/service-aware"
 secret_bundle_ref='not-created'
 manifest="$archive_dir/manifest.txt"
 
@@ -103,9 +104,13 @@ for app in "$@"; do
   if [ -e "/DATA/AppData/$app" ]; then
     printf "%s\n" "$app"
   fi
-done | tar --exclude="*/secrets/*" --exclude="*/.env" --exclude="*.env" --exclude="*/secret*" -C /DATA/AppData -czf - -T -
+done | tar --exclude="*/secrets/*" --exclude="*/.env" --exclude="*.env" --exclude="*/secret*" --exclude="*/pgdata" --exclude="*.sqlite" --exclude="*.sqlite3" --exclude="*.db" -C /DATA/AppData -czf - -T -
 ' _ "${app_names[@]}" > "$data_archive"
 chmod 600 "$data_archive"
+
+# Portable state is produced by service-aware methods; the tar above is only an emergency
+# metadata/config archive and intentionally excludes live SQLite/PostgreSQL data.
+bash "$REPO_ROOT/scripts/service-aware-backup.sh" --output-dir "$service_backup_dir" --machine "$MACHINE"
 
 if [ "$INCLUDE_SECRETS" -eq 1 ]; then
   [[ -n "$SKULD_SECRET_PASSPHRASE_FILE" ]] || { printf '%s\n' 'SKULD_SECRET_PASSPHRASE_FILE is required for --include-secrets.' >&2; exit 2; }
@@ -126,7 +131,7 @@ repo_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf '%s' 'un
   printf 'immich_media_root=%s\n' "$IMMICH_MEDIA_ROOT"
   printf 'external_storage_root=%s\n' "$EXTERNAL_STORAGE_ROOT"
   printf 'external_storage_volume_uuid=%s\n' "${EXTERNAL_STORAGE_VOLUME_UUID:-unconfigured}"
-  printf 'note=Redis/model cache are rebuildable; Immich PostgreSQL, 9Router data, changedetection state, and media-adapter state are included when present.\n'
+  printf 'note=service-aware snapshots are canonical for SQLite/PostgreSQL; raw archive excludes live DB files; Redis/model cache are rebuildable; external Immich media is referenced, never tarred.\n'
 } > "$manifest"
 chmod 600 "$manifest"
 
@@ -144,20 +149,23 @@ def guest_value(command):
     except Exception:
         return None
 machine = os.environ.get('ORBSTACK_MACHINE', 'ubuntu')
-media_bytes = guest_value(['orb', '-m', machine, '-u', 'root', 'du', '-sx', '--apparent-size', '--block-size=1', '/DATA/Gallery/immich'])
-media_files = guest_value(['orb', '-m', machine, '-u', 'root', 'bash', '-lc', "find /DATA/Gallery/immich -type f -printf '\\n' | wc -l"])
+media_bytes = guest_value(['orb', '-m', machine, '-u', 'root', 'du', '-sx', '--apparent-size', '--block-size=1', media_root])
+media_files = guest_value(['orb', '-m', machine, '-u', 'root', 'bash', '-lc', 'find -- "$1" -type f -printf \"\\n\" | wc -l', '--', media_root])
 try:
     media_file_count = int(media_files or '0')
 except ValueError:
     media_file_count = 0
 Path(target).write_text(json.dumps({
-    'schemaVersion': 1,
+    'schemaVersion': 2,
     'createdAtUtc': stamp,
     'repoCommit': commit,
     'apps': apps.split(),
+    'serviceAwareManifest': str(Path(target).parent / 'service-aware' / 'service-aware-manifest.json'),
     'immichMedia': {
         'root': media_root,
+        'liveRoot': media_root,
         'volumeUuid': volume_uuid or None,
+        'sourceReclaimState': 'pending',
         'sourceBytes': int((media_bytes or '0').split()[0]),
         'fileCount': media_file_count,
         'portableArchive': False,

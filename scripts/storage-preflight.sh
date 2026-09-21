@@ -187,7 +187,9 @@ storage_preflight() {
   if [[ -e "$destination" && ! -d "$destination" ]]; then
     storage_fail 'Immich destination exists but is not a directory'
   fi
-  if ((STORAGE_TEST_MODE)); then
+  if [[ "${STORAGE_PREFLIGHT_SKIP_SOURCE:-0}" == 1 ]]; then
+    storage_pass 'legacy Immich source check skipped because source reclaim is complete'
+  elif ((STORAGE_TEST_MODE)); then
     [[ -d "$source" ]] || storage_fail "Immich source is not a readable directory: $source"
   else
     command -v orb >/dev/null 2>&1 || storage_fail 'OrbStack CLI is unavailable for source filesystem verification'
@@ -205,11 +207,15 @@ storage_preflight() {
   destination_free="$(printf '%s\n' "$stats" | awk -F= '$1 == "DESTINATION_FREE_BYTES" {print $2}')"
   source_device="$(printf '%s\n' "$stats" | awk -F= '$1 == "SOURCE_DEVICE" {print $2}')"
   destination_device="$(printf '%s\n' "$stats" | awk -F= '$1 == "DESTINATION_DEVICE" {print $2}')"
-  [[ "$source_device" != "$destination_device" ]] || storage_fail 'Immich source and destination resolve to the same filesystem'
-  if [[ "$destination_free" =~ ^[0-9]+$ && "$source_bytes" =~ ^[0-9]+$ ]]; then
-    (( destination_free >= source_bytes + STORAGE_SAFETY_MARGIN_BYTES )) && storage_pass 'external free space covers source bytes plus safety margin' || storage_fail 'external free space is insufficient for a copy-first migration'
+  if [[ "${STORAGE_PREFLIGHT_SKIP_SOURCE:-0}" == 1 ]]; then
+    storage_pass 'source reclaim state uses live destination identity only'
   else
-    storage_fail 'filesystem free-space statistics are unknown'
+    [[ "$source_device" != "$destination_device" ]] || storage_fail 'Immich source and destination resolve to the same filesystem'
+    if [[ "$destination_free" =~ ^[0-9]+$ && "$source_bytes" =~ ^[0-9]+$ ]]; then
+      (( destination_free >= source_bytes + STORAGE_SAFETY_MARGIN_BYTES )) && storage_pass 'external free space covers source bytes plus safety margin' || storage_fail 'external free space is insufficient for a copy-first migration'
+    else
+      storage_fail 'filesystem free-space statistics are unknown'
+    fi
   fi
   if [[ "${STORAGE_PREFLIGHT_NO_WRITE_TEST:-0}" != 1 ]]; then
     local probe

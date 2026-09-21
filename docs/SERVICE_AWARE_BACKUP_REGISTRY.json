@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "operation": "operation-skuld",
+  "policy": "service-aware-portable-restore",
+  "entries": [
+    {
+      "id": "pubg-sqlite",
+      "service": "openclaw",
+      "source": "/DATA/AppData/openclaw/data/pubg.sqlite",
+      "backupMethod": "sqlite-backup-api",
+      "restoreMethod": "replace-after-integrity-check",
+      "integrityCheck": "sqlite-integrity-check-sha256-schema-inventory",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "identity-sqlite",
+      "service": "openclaw",
+      "source": "/DATA/AppData/openclaw/data/identity.sqlite",
+      "backupMethod": "sqlite-backup-api",
+      "restoreMethod": "replace-after-integrity-check",
+      "integrityCheck": "sqlite-integrity-check-sha256-schema-inventory",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "vps-usage-state",
+      "service": "openclaw",
+      "source": "/DATA/AppData/openclaw/data/vps-usage-state.json",
+      "backupMethod": "validated-json-copy",
+      "restoreMethod": "copy-after-json-parse",
+      "integrityCheck": "json-parse-sha256",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "owner-outbox",
+      "service": "openclaw",
+      "source": "/DATA/AppData/openclaw/notifications",
+      "backupMethod": "contract-preserving-directory-copy",
+      "restoreMethod": "copy-before-runtime-start",
+      "integrityCheck": "json-contract-and-idempotency-check",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "openclaw-workspace",
+      "service": "openclaw",
+      "source": "/DATA/AppData/openclaw/workspace",
+      "backupMethod": "metadata-tar-excluding-secrets",
+      "restoreMethod": "tracked-workspace-restore",
+      "integrityCheck": "tracked-file-diff",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "product-radar-sqlite",
+      "service": "product-radar",
+      "source": "/DATA/AppData/product-radar/product-radar.sqlite",
+      "backupMethod": "sqlite-backup-api",
+      "restoreMethod": "replace-after-integrity-check",
+      "integrityCheck": "sqlite-integrity-check-sha256-schema-inventory",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "immich-postgres",
+      "service": "immich",
+      "source": "immich-postgres container",
+      "backupMethod": "pg_dump-custom-format",
+      "restoreMethod": "pg_restore-logical-restore",
+      "integrityCheck": "pg_restore-list-and-sha256",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "immich-external-media",
+      "service": "immich",
+      "source": "host-profile:IMMICH_MEDIA_ROOT",
+      "backupMethod": "external-reference-plus-one-way-equivalence",
+      "restoreMethod": "attach-volume-and-verify-identity",
+      "integrityCheck": "volume-uuid-sentinel-file-equivalence",
+      "classification": "EXTERNAL_DATA"
+    },
+    {
+      "id": "9router-provider-state",
+      "service": "9router",
+      "source": "/DATA/AppData/9router/data",
+      "backupMethod": "protected-directory-archive-plus-exact-image",
+      "restoreMethod": "docker-load-and-isolated-start",
+      "integrityCheck": "artifact-sha256-dashboard-and-auth-boundary",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "changedetection-datastore",
+      "service": "changedetection",
+      "source": "/DATA/AppData/changedetection/datastore",
+      "backupMethod": "protected-directory-archive",
+      "restoreMethod": "restore-before-container-start",
+      "integrityCheck": "directory-presence-and-service-health",
+      "classification": "MIGRATE"
+    },
+    {
+      "id": "media-adapter-state",
+      "service": "media-organizer-adapter",
+      "source": "/DATA/AppData/media-organizer-adapter",
+      "backupMethod": "registered-service-state-archive",
+      "restoreMethod": "restore-before-service-start",
+      "integrityCheck": "registered-state-contract",
+      "classification": "MIGRATE"
+    }
+  ]
+}

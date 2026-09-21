@@ -1,3 +1,18 @@
+## 2026-09-21：1.4.5 hardening execution state（Phase 0-4 source implementation）
+
+Current target is Amadeus 1.4.5 Operation Skuld final hardening. Phase 0 re-audit is complete
+against clean `main` (`0f9521c`) and the canonical CasaOS host in OrbStack `ubuntu`. The live
+external volume is near the configured warning threshold (approximately 11% free), so the 1.4.4
+`healthy` storage state is not authoritative and must be corrected in source/runtime evidence.
+The retained Immich source remains untouched and Mac mini cutover remains explicitly unexecuted.
+Phase 0-4 source implementation is now complete: tracked secret migration scripts and non-recursive
+fresh-clone runner, real storage severity/history and safe retention GC, service-aware SQLite/
+PostgreSQL backup registry, HomeLab explicit classifications and encrypted secret coverage,
+manifest/runbook contract checks, and fresh Immich reclaim verification are in Git worktree.
+Targeted fixtures pass; fresh clone, full release gate and live acceptance remain. Phase progress is
+compactly tracked in `.agent/EXECUTION_PLAN.md`; validation scope is governed by
+`docs/VALIDATION_MATRIX.md`.
+
 # Project State
 
 更新时间：2026-09-21（Asia/Shanghai）

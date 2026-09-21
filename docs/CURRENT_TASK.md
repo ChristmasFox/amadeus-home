@@ -1,5 +1,22 @@
 # 当前任务
 
+## 2026-09-21：Amadeus 1.4.5 Operation Skuld Final Hardening（Phase 0-4 源码收口完成，Phase 5-7 待验收）
+
+本轮以 `docs/AMADEUS_1_4_5_OPERATION_SKULD_FINAL_HARDENING_GOAL.md` 与
+`docs/AMADEUS_1_4_5_DEVELOPMENT_EFFICIENCY_ADDENDUM.md` 为唯一范围。已先完成 main 与
+canonical CasaOS `ubuntu` 的只读复审：Git clean、live OpenClaw/Product Radar 为
+`local/*:git-16a8c15d727f-20260921082428`，Immich live media 为 `/Volumes/Avalon/immich/data`，
+旧 `/DATA/Gallery/immich` 仍保留；外置盘实测约 11% free，属于 warning，不能再写成 healthy。
+未执行任何 host mutation、Mac mini cutover 或 Immich source reclaim。
+
+当前阶段状态与验证预算见 `.agent/EXECUTION_PLAN.md`、`.agent/run-state.example.json`、
+`docs/VALIDATION_MATRIX.md`。已完成源码收口：三个 secret migration tool 已允许 tracked，
+fresh-clone/non-recursive runner、scope-aware compact validation、storage severity/history、
+scheduled safe GC/image-checkpoint retention、service-aware SQLite/Immich PostgreSQL backup、
+9Router fixture restore、HomeLab explicit classification、encrypted logical secret coverage、
+Manifest/Runbook contract 与 fresh Immich reclaim gate 均已加入；targeted phase gates 通过。
+
+
 更新时间：2026-09-21（Asia/Shanghai）
 
 ## 2026-09-21：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（已完成）

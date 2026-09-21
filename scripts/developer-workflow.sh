@@ -60,6 +60,9 @@ has_presentation=0
 has_product=0
 has_package_meta=0
 has_openclaw_deploy=0
+has_storage=0
+has_skuld_docs=0
+has_backup=0
 has_fast=0
 env_count=0
 unknown=()
@@ -76,6 +79,13 @@ for path in "${FILES[@]-}"; do
     infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh)
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
+      ;;
+    scripts/storage-*|scripts/backup.sh|scripts/service-aware-backup.sh|scripts/sqlite-consistent-snapshot.py|scripts/reclaim-immich-old-source.sh|scripts/migrate-immich-media.sh|scripts/secrets-inventory.sh|scripts/export-skuld-secrets.sh|scripts/import-skuld-secrets.sh|scripts/test-*skuld*|scripts/test-storage-*)
+      has_storage=1
+      [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
+      ;;
+    docs/OPERATION_SKULD_*|docs/SERVICE_AWARE_BACKUP_REGISTRY.json|docs/VALIDATION_MATRIX.md)
+      has_skuld_docs=1
       ;;
     package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.dockerignore|*/Dockerfile|Dockerfile|Dockerfile.*|*/Dockerfile.*) has_package_meta=1 ;;
     docs/*|.agent/*|README.md|AGENTS.md|VERSION|RELEASE_NOTES.md|scripts/check-architecture.mjs|scripts/test-check-architecture.mjs|scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/notify-owner.sh|*.md|*/tests/*|*/test/*|*.test.ts|*.spec.ts) has_fast=1 ;;
@@ -100,6 +110,12 @@ elif ((has_package_meta)); then
 elif ((has_openclaw_deploy)); then
   LEVEL=RELEASE; WORKFLOW=OPENCLAW_RELEASE_CONFIG
   COMPOSE_MODE='explicit --apply: scripts/deploy-openclaw.sh --apply --build-auto|--no-build'
+elif ((has_storage || has_backup)); then
+  LEVEL=FAST; WORKFLOW=STORAGE_RUNTIME
+  COMPOSE_MODE='none'
+elif ((has_skuld_docs)); then
+  LEVEL=FAST; WORKFLOW=SKULD_CONSISTENCY
+  COMPOSE_MODE='none'
 elif ((has_pubg || has_identity || has_amadeus)); then
   LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
   if ((has_identity || has_amadeus)) && ((has_pubg == 0)); then WORKFLOW=AMADEUS_IDENTITY; fi
@@ -113,6 +129,12 @@ printf 'CHANGE_SCOPE_LEVEL=%s\n' "$LEVEL"
 printf 'CHANGE_SCOPE_WORKFLOW=%s\n' "$WORKFLOW"
 printf 'DOCKER_BUILD=%s\n' "$DOCKER_BUILD"
 printf 'COMPOSE_MODE=%s\n' "$COMPOSE_MODE"
+DOCKER_IMAGE_SET=none
+if ((has_package_meta)); then DOCKER_IMAGE_SET=both; fi
+if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy)); then DOCKER_IMAGE_SET=openclaw; fi
+if ((has_product)); then if [[ "$DOCKER_IMAGE_SET" == openclaw ]]; then DOCKER_IMAGE_SET=both; else DOCKER_IMAGE_SET=product-radar; fi; fi
+if ((has_presentation)); then DOCKER_IMAGE_SET=both; fi
+printf 'DOCKER_IMAGE_SET=%s\n' "$DOCKER_IMAGE_SET"
 printf 'CHANGED_PATHS=%s\n' "${#FILES[@]}"
 for path in "${FILES[@]-}"; do printf 'PATH=%s\n' "$path"; done
 if ((${#unknown[@]})); then printf 'UNKNOWN_PATHS=%s\n' "${unknown[*]}"; fi
@@ -123,6 +145,8 @@ case "$WORKFLOW" in
   AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
+  STORAGE_RUNTIME) printf '%s\n' 'VERIFY=bash -n changed shell, pnpm test:storage-runtime, migration/readiness fixtures; no package-wide tests.' ;;
+  SKULD_CONSISTENCY) printf '%s\n' 'VERIFY=JSON parse, pnpm test:skuld-consistency, git diff --check; no Docker/Compose/deploy.' ;;
   RELEASE_BUILD_REQUIRED) printf '%s\n' 'VERIFY=tests -> secrets -> immutable image build -> CasaOS compose --no-build -> health/smoke.' ;;
   OPENCLAW_RELEASE_CONFIG) printf '%s\n' 'VERIFY=explicit OpenClaw apply with migration/checkpoint and docker compose up -d --no-build.' ;;
   ENV_RECREATE_NO_BUILD) printf '%s\n' 'VERIFY=explicit environment/config apply with docker compose up -d --no-build.' ;;
@@ -133,6 +157,14 @@ printf '+ git diff --check\n'
 git diff --check
 printf '+ pnpm check:architecture\n'
 pnpm check:architecture
+if ((has_storage || has_backup)); then
+  printf '+ pnpm test:storage-runtime\n'; pnpm test:storage-runtime
+  printf '+ pnpm test:migration-readiness\n'; pnpm test:migration-readiness
+  printf '+ pnpm test:service-aware-backup\n'; pnpm test:service-aware-backup
+fi
+if ((has_skuld_docs)); then
+  printf '+ pnpm test:skuld-consistency\n'; pnpm test:skuld-consistency
+fi
 if ((has_pubg)); then
   printf '+ pnpm typecheck:pubg\n'; pnpm typecheck:pubg
   printf '+ pnpm test:pubg\n'; pnpm test:pubg

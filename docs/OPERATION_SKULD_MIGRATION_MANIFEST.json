@@ -17,35 +17,181 @@
     "runbook": "docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md"
   },
   "criticalPersistentData": [
-    { "id": "pubg-sqlite", "path": "/DATA/AppData/openclaw/data/pubg.sqlite", "owner": "pubg-domain", "restoreOrder": 30, "integrity": "sqlite-integrity-check" },
-    { "id": "identity-sqlite", "path": "/DATA/AppData/openclaw/data/identity.sqlite", "owner": "identity", "restoreOrder": 20, "integrity": "sqlite-integrity-check" },
-    { "id": "product-radar-sqlite", "path": "/DATA/AppData/product-radar/product-radar.sqlite", "owner": "product-radar", "restoreOrder": 40, "integrity": "sqlite-integrity-check" },
-    { "id": "owner-outbox", "path": "/DATA/AppData/openclaw/notifications", "owner": "owner-notification", "restoreOrder": 50, "integrity": "json-contract-and-idempotency-check" },
-    { "id": "vps-usage-state", "path": "/DATA/AppData/openclaw/data/vps-usage-state.json", "owner": "amadeus-vps", "restoreOrder": 60, "integrity": "json-parse" },
-    { "id": "openclaw-workspace", "path": "/DATA/AppData/openclaw/workspace", "owner": "openclaw", "restoreOrder": 10, "integrity": "tracked-file-diff" },
-    { "id": "9router-provider-state", "path": "/DATA/AppData/9router/data", "owner": "9router", "restoreOrder": 15, "integrity": "protected-directory-and-exact-image" },
-    { "id": "immich-postgres", "path": "/DATA/AppData/immich/pgdata", "owner": "immich", "restoreOrder": 25, "integrity": "fresh-pg-dump-and-vector-extension-check" },
-    { "id": "immich-external-media", "path": "host-profile:IMMICH_MEDIA_ROOT", "owner": "immich", "restoreOrder": 26, "integrity": "external-identity-and-file-equivalence;not-tar-archived" },
-    { "id": "changedetection-datastore", "path": "/DATA/AppData/changedetection/datastore", "owner": "changedetection", "restoreOrder": 35, "integrity": "protected-datastore" },
-    { "id": "media-adapter-state", "path": "/DATA/AppData/media-organizer-adapter", "owner": "media-organizer-adapter", "restoreOrder": 45, "integrity": "registered-service-state" }
+    {
+      "id": "pubg-sqlite",
+      "path": "/DATA/AppData/openclaw/data/pubg.sqlite",
+      "owner": "pubg-domain",
+      "restoreOrder": 30,
+      "integrity": "sqlite-integrity-check"
+    },
+    {
+      "id": "identity-sqlite",
+      "path": "/DATA/AppData/openclaw/data/identity.sqlite",
+      "owner": "identity",
+      "restoreOrder": 20,
+      "integrity": "sqlite-integrity-check"
+    },
+    {
+      "id": "product-radar-sqlite",
+      "path": "/DATA/AppData/product-radar/product-radar.sqlite",
+      "owner": "product-radar",
+      "restoreOrder": 40,
+      "integrity": "sqlite-integrity-check"
+    },
+    {
+      "id": "owner-outbox",
+      "path": "/DATA/AppData/openclaw/notifications",
+      "owner": "owner-notification",
+      "restoreOrder": 50,
+      "integrity": "json-contract-and-idempotency-check"
+    },
+    {
+      "id": "vps-usage-state",
+      "path": "/DATA/AppData/openclaw/data/vps-usage-state.json",
+      "owner": "amadeus-vps",
+      "restoreOrder": 60,
+      "integrity": "json-parse"
+    },
+    {
+      "id": "openclaw-workspace",
+      "path": "/DATA/AppData/openclaw/workspace",
+      "owner": "openclaw",
+      "restoreOrder": 10,
+      "integrity": "tracked-file-diff"
+    },
+    {
+      "id": "9router-provider-state",
+      "path": "/DATA/AppData/9router/data",
+      "owner": "9router",
+      "restoreOrder": 15,
+      "integrity": "protected-directory-and-exact-image"
+    },
+    {
+      "id": "immich-postgres",
+      "path": "/DATA/AppData/immich/pgdata",
+      "owner": "immich",
+      "restoreOrder": 25,
+      "integrity": "fresh-pg-dump-and-vector-extension-check"
+    },
+    {
+      "id": "immich-external-media",
+      "path": "host-profile:IMMICH_MEDIA_ROOT",
+      "owner": "immich",
+      "restoreOrder": 26,
+      "integrity": "external-identity-and-file-equivalence;not-tar-archived"
+    },
+    {
+      "id": "changedetection-datastore",
+      "path": "/DATA/AppData/changedetection/datastore",
+      "owner": "changedetection",
+      "restoreOrder": 35,
+      "integrity": "protected-datastore"
+    },
+    {
+      "id": "media-adapter-state",
+      "path": "/DATA/AppData/media-organizer-adapter",
+      "owner": "media-organizer-adapter",
+      "restoreOrder": 45,
+      "integrity": "registered-service-state"
+    }
   ],
   "secrets": [
-    { "id": "openclaw-env", "path": "/DATA/AppData/openclaw/openclaw.env", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "pubg-api-key", "path": "/DATA/AppData/openclaw/secrets/pubg-api-key", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "pubg-team", "path": "/DATA/AppData/openclaw/secrets/pubg-team.json", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "telegram-bot-token", "path": "/DATA/AppData/openclaw/secrets/telegram-bot-token", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "owner-target", "path": "/DATA/AppData/openclaw/secrets/owner-whatsapp-target", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "mac-ssh-key", "path": "/DATA/AppData/openclaw/secrets/mac-ssh-key", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "vps-readonly-key", "path": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "vps-known-hosts", "path": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "kiwivm-credentials", "path": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json", "required": true, "mode": "0600", "contentsInGit": false },
-    { "id": "kook-token", "path": "/DATA/AppData/openclaw/secrets/kook-bot-token", "required": true, "mode": "0600", "contentsInGit": false }
+    {
+      "id": "openclaw-env",
+      "path": "/DATA/AppData/openclaw/openclaw.env",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "pubg-api-key",
+      "path": "/DATA/AppData/openclaw/secrets/pubg-api-key",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "pubg-team",
+      "path": "/DATA/AppData/openclaw/secrets/pubg-team.json",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "telegram-bot-token",
+      "path": "/DATA/AppData/openclaw/secrets/telegram-bot-token",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "owner-target",
+      "path": "/DATA/AppData/openclaw/secrets/owner-whatsapp-target",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "mac-ssh-key",
+      "path": "/DATA/AppData/openclaw/secrets/mac-ssh-key",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "vps-readonly-key",
+      "path": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "vps-known-hosts",
+      "path": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "kiwivm-credentials",
+      "path": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    },
+    {
+      "id": "kook-token",
+      "path": "/DATA/AppData/openclaw/secrets/kook-bot-token",
+      "required": true,
+      "mode": "0600",
+      "contentsInGit": false
+    }
   ],
   "runtimeInfrastructure": [
-    { "id": "openclaw", "container": "openclaw", "health": "http://127.0.0.1:18789/healthz", "classification": "ACTIVE" },
-    { "id": "product-radar", "container": "product-radar", "health": "http://127.0.0.1:5315/health", "classification": "ACTIVE" },
-    { "id": "media-adapter", "container": "media-organizer-adapter", "health": "http://media-organizer-adapter:8765/healthz", "classification": "ACTIVE" },
-    { "id": "changedetection", "container": "changedetection", "health": "http://changedetection:5000/", "classification": "COMPATIBILITY" },
+    {
+      "id": "openclaw",
+      "container": "openclaw",
+      "health": "http://127.0.0.1:18789/healthz",
+      "classification": "ACTIVE"
+    },
+    {
+      "id": "product-radar",
+      "container": "product-radar",
+      "health": "http://127.0.0.1:5315/health",
+      "classification": "ACTIVE"
+    },
+    {
+      "id": "media-adapter",
+      "container": "media-organizer-adapter",
+      "health": "http://media-organizer-adapter:8765/healthz",
+      "classification": "ACTIVE"
+    },
+    {
+      "id": "changedetection",
+      "container": "changedetection",
+      "health": "http://changedetection:5000/",
+      "classification": "COMPATIBILITY"
+    },
     {
       "id": "fashion-siglip",
       "launchAgent": "com.productradar.fashion-siglip",
@@ -60,22 +206,67 @@
       "device": "Apple Silicon MPS",
       "classification": "ACTIVE"
     },
-    { "id": "9router", "container": "9router", "classification": "ACTIVE" },
-    { "id": "immich-server", "container": "immich-server", "classification": "ACTIVE / external media" },
-    { "id": "immich-machine-learning", "container": "immich-machine-learning", "classification": "ACTIVE / rebuildable cache" },
-    { "id": "immich-postgres", "container": "immich-postgres", "classification": "ACTIVE / protected internal DB" },
-    { "id": "immich-redis", "container": "immich-redis", "classification": "ACTIVE / rebuildable state" },
-    { "id": "openclaw-crons", "source": "scripts/deploy-openclaw.sh", "classification": "ACTIVE" }
+    {
+      "id": "9router",
+      "container": "9router",
+      "classification": "ACTIVE"
+    },
+    {
+      "id": "immich-server",
+      "container": "immich-server",
+      "classification": "ACTIVE / external media"
+    },
+    {
+      "id": "immich-machine-learning",
+      "container": "immich-machine-learning",
+      "classification": "ACTIVE / rebuildable cache"
+    },
+    {
+      "id": "immich-postgres",
+      "container": "immich-postgres",
+      "classification": "ACTIVE / protected internal DB"
+    },
+    {
+      "id": "immich-redis",
+      "container": "immich-redis",
+      "classification": "ACTIVE / rebuildable state"
+    },
+    {
+      "id": "openclaw-crons",
+      "source": "scripts/deploy-openclaw.sh",
+      "classification": "ACTIVE"
+    }
   ],
   "rebuildableState": [
-    { "id": "fashion-siglip-model-cache", "path": "host-profile:FASHION_SIGLIP_MODEL_CACHE_DIR", "policy": "redownload", "source": "tracked installer and requirements" },
-    { "id": "docker-images", "policy": "rebuild-from-immutable-git-tag" },
-    { "id": "changedetection-runtime-cache", "policy": "restore AppData only when sensor migration requires it" }
+    {
+      "id": "fashion-siglip-model-cache",
+      "path": "host-profile:FASHION_SIGLIP_MODEL_CACHE_DIR",
+      "policy": "redownload",
+      "source": "tracked installer and requirements"
+    },
+    {
+      "id": "docker-images",
+      "policy": "rebuild-from-immutable-git-tag"
+    },
+    {
+      "id": "changedetection-runtime-cache",
+      "policy": "restore AppData only when sensor migration requires it"
+    }
   ],
   "hostProfile": {
     "trackedTemplate": "infra/host-profile.env.example",
     "localOverride": "infra/host-profile.env",
-    "requiredValues": ["ORBSTACK_MACHINE", "AMADEUS_NETWORK_NAME", "MAC_CONTROL_HOST", "MAC_CONTROL_USER", "FASHION_SIGLIP_PORT", "EXTERNAL_STORAGE_ROOT", "EXTERNAL_STORAGE_VOLUME_UUID", "IMMICH_MEDIA_ROOT", "SKULD_BACKUP_ROOT"],
+    "requiredValues": [
+      "ORBSTACK_MACHINE",
+      "AMADEUS_NETWORK_NAME",
+      "MAC_CONTROL_HOST",
+      "MAC_CONTROL_USER",
+      "FASHION_SIGLIP_PORT",
+      "EXTERNAL_STORAGE_ROOT",
+      "EXTERNAL_STORAGE_VOLUME_UUID",
+      "IMMICH_MEDIA_ROOT",
+      "SKULD_BACKUP_ROOT"
+    ],
     "secretValuesAllowed": false
   },
   "storage": {
@@ -89,34 +280,645 @@
   },
   "serviceInventory": {
     "trackedDocument": "docs/OPERATION_SKULD_SERVICE_INVENTORY.md",
-    "required": ["openclaw", "product-radar", "9router", "immich", "changedetection", "media-organizer-adapter"],
-    "discovery": "scripts/service-inventory.sh --write"
+    "required": [
+      "openclaw",
+      "product-radar",
+      "9router",
+      "immich",
+      "changedetection",
+      "media-organizer-adapter"
+    ],
+    "discovery": "scripts/service-inventory.sh --write",
+    "services": [
+      {
+        "id": "openclaw",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/openclaw/workspace",
+          "/DATA/AppData/openclaw/data",
+          "/DATA/AppData/openclaw/notifications"
+        ],
+        "secretRefs": [
+          "openclaw-env",
+          "openclaw-gateway-token",
+          "pubg-api-key",
+          "telegram-token",
+          "kook-token",
+          "mac-ssh-key",
+          "vps-readonly-key",
+          "vps-known-hosts",
+          "kiwivm-credentials"
+        ],
+        "backupMethod": "service-aware-backup plus encrypted secret bundle",
+        "restoreMethod": "restore workspace/config, SQLite snapshots, outbox, then start CasaOS compose",
+        "verification": "healthz, SQLite integrity, outbox contract, cron list",
+        "cutoverDependency": "required before owner channels reopen"
+      },
+      {
+        "id": "product-radar",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/product-radar/product-radar.sqlite",
+          "/var/lib/casaos/apps/product-radar/.env"
+        ],
+        "secretRefs": [
+          "product-radar-runtime-env"
+        ],
+        "backupMethod": "SQLite consistent snapshot plus encrypted runtime env",
+        "restoreMethod": "restore snapshot/env then start compose",
+        "verification": "health endpoint, SQLite integrity, owner outbox contract",
+        "cutoverDependency": "required for product monitoring"
+      },
+      {
+        "id": "9router",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/9router/data",
+          "/DATA/AppData/9router/9router.env",
+          "exact image artifact"
+        ],
+        "secretRefs": [
+          "9router-api-key-secret",
+          "9router-jwt-secret",
+          "9router-initial-password",
+          "9router-machine-id-salt"
+        ],
+        "backupMethod": "protected data archive plus exact docker save artifact",
+        "restoreMethod": "docker load exact image, restore env/data, isolated dashboard/auth test",
+        "verification": "dashboard 200, unauthenticated models 401, fixture-auth boundary",
+        "cutoverDependency": "restore before OpenClaw provider routes"
+      },
+      {
+        "id": "immich",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/immich/pgdata",
+          "/DATA/AppData/immich/immich.env",
+          "host-profile:IMMICH_MEDIA_ROOT"
+        ],
+        "secretRefs": [
+          "immich-db-password"
+        ],
+        "backupMethod": "fresh pg_dump -Fc plus external media identity/equivalence",
+        "restoreMethod": "logical pg_restore, attach Avalon media, verify UUID/sentinel/health",
+        "verification": "pg_restore --list, Immich health, media equivalence; source retained",
+        "cutoverDependency": "required before media UI reopen"
+      },
+      {
+        "id": "changedetection",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/changedetection/datastore"
+        ],
+        "secretRefs": [
+          "changedetection-runtime-env"
+        ],
+        "backupMethod": "protected datastore archive",
+        "restoreMethod": "restore datastore before container start",
+        "verification": "HTTP health and datastore presence",
+        "cutoverDependency": "optional compatibility service"
+      },
+      {
+        "id": "media-organizer-adapter",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/media-organizer-adapter"
+        ],
+        "secretRefs": [
+          "media-adapter-runtime-env"
+        ],
+        "backupMethod": "registered service-state archive",
+        "restoreMethod": "restore state and reconnect Avalon/download/media mounts",
+        "verification": "healthz and dry-run organize contract",
+        "cutoverDependency": "required for media organization"
+      },
+      {
+        "id": "frpc",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/frpc/frpc.toml"
+        ],
+        "secretRefs": [
+          "frpc-token-auth"
+        ],
+        "backupMethod": "sanitized config backup plus encrypted credential bundle",
+        "restoreMethod": "restore config/secret and start CasaOS compose",
+        "verification": "systemd/container running and tunnel status",
+        "cutoverDependency": "public ingress prerequisite"
+      },
+      {
+        "id": "xiaoya",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/home/blacksidev/xiaoya",
+          "/home/blacksidev/xiaoya/data"
+        ],
+        "secretRefs": [
+          "xiaoya-credential-config"
+        ],
+        "backupMethod": "explicit host-directory archive",
+        "restoreMethod": "restore exact host directories before container start",
+        "verification": "HTTP health and mounted data read",
+        "cutoverDependency": "media catalog compatibility"
+      },
+      {
+        "id": "homarr",
+        "classification": "REBUILD",
+        "persistentData": [
+          "/DATA/AppData/big-bear-homarr/data"
+        ],
+        "secretRefs": [],
+        "backupMethod": "compose/config declaration; data is disposable dashboard state",
+        "restoreMethod": "recreate pinned compose and restore optional dashboard data",
+        "verification": "HTTP health",
+        "cutoverDependency": "not required for agent or media cutover"
+      },
+      {
+        "id": "emby",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/emby/config",
+          "host-profile:Avalon media roots"
+        ],
+        "secretRefs": [
+          "emby-config-credential-state"
+        ],
+        "backupMethod": "config directory archive plus external media reference",
+        "restoreMethod": "restore config, attach media, recreate compose",
+        "verification": "health endpoint and library scan boundary",
+        "cutoverDependency": "media playback service"
+      },
+      {
+        "id": "qbittorrent",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/qbittorrent/config",
+          "host-profile:Avalon/downloads"
+        ],
+        "secretRefs": [
+          "qbittorrent-credential-state"
+        ],
+        "backupMethod": "config directory archive plus external downloads reference",
+        "restoreMethod": "restore config, attach downloads, recreate compose",
+        "verification": "web health and download path read/write",
+        "cutoverDependency": "download pipeline prerequisite"
+      },
+      {
+        "id": "nginxproxymanager",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/nginxproxymanager/data",
+          "/DATA/AppData/nginxproxymanager/etc/letsencrypt"
+        ],
+        "secretRefs": [
+          "npm-db-and-certificate-state"
+        ],
+        "backupMethod": "database/certificate state archive",
+        "restoreMethod": "restore data and certificates before proxy start",
+        "verification": "proxy health and TLS certificate inventory",
+        "cutoverDependency": "public HTTP/TLS ingress"
+      },
+      {
+        "id": "filebrowser",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/filebrowser/db",
+          "CasaOS named config/database volumes"
+        ],
+        "secretRefs": [
+          "filebrowser-credential-db"
+        ],
+        "backupMethod": "explicit named-volume export plus /DATA/AppData/db archive",
+        "restoreMethod": "restore named volumes/data before start",
+        "verification": "health endpoint and authenticated boundary",
+        "cutoverDependency": "optional file UI"
+      },
+      {
+        "id": "ariang",
+        "classification": "REBUILD",
+        "persistentData": [],
+        "secretRefs": [],
+        "backupMethod": "pinned compose declaration",
+        "restoreMethod": "recreate image; no persistent state",
+        "verification": "HTTP health",
+        "cutoverDependency": "not required"
+      },
+      {
+        "id": "aria2",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/aria2/config",
+          "host-profile:Avalon/downloads"
+        ],
+        "secretRefs": [
+          "aria2-rpc-secret"
+        ],
+        "backupMethod": "config archive plus external downloads reference",
+        "restoreMethod": "restore config/secret and attach downloads",
+        "verification": "RPC auth boundary and path read",
+        "cutoverDependency": "download pipeline"
+      },
+      {
+        "id": "jellyfin",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/jellyfin/config",
+          "/DATA/AppData/jellyfin/cache",
+          "host-profile:Avalon media roots"
+        ],
+        "secretRefs": [
+          "jellyfin-config-credential-state"
+        ],
+        "backupMethod": "config archive plus external media reference",
+        "restoreMethod": "restore config/cache policy and attach media",
+        "verification": "health endpoint and library path read",
+        "cutoverDependency": "media playback service"
+      },
+      {
+        "id": "alist",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/alist/data",
+          "host-profile:Avalon"
+        ],
+        "secretRefs": [
+          "alist-credential-config"
+        ],
+        "backupMethod": "data directory archive plus external storage reference",
+        "restoreMethod": "restore data and attach Avalon",
+        "verification": "health and storage mount read",
+        "cutoverDependency": "media/storage gateway"
+      },
+      {
+        "id": "v2raya",
+        "classification": "MIGRATE",
+        "persistentData": [
+          "/DATA/AppData/v2raya"
+        ],
+        "secretRefs": [
+          "v2raya-state"
+        ],
+        "backupMethod": "state directory archive",
+        "restoreMethod": "restore state before container start",
+        "verification": "HTTP health and config parse",
+        "cutoverDependency": "network compatibility"
+      },
+      {
+        "id": "xiaoyakeeper",
+        "classification": "REBUILD",
+        "persistentData": [],
+        "secretRefs": [],
+        "backupMethod": "pinned compose declaration",
+        "restoreMethod": "recreate with Docker socket boundary review",
+        "verification": "container running; no persistent data",
+        "cutoverDependency": "not required"
+      },
+      {
+        "id": "dashdot",
+        "classification": "REBUILD",
+        "persistentData": [],
+        "secretRefs": [],
+        "backupMethod": "pinned compose declaration",
+        "restoreMethod": "recreate read-only host metrics service",
+        "verification": "HTTP health",
+        "cutoverDependency": "not required"
+      },
+      {
+        "id": "fashion-siglip",
+        "classification": "REBUILD",
+        "persistentData": [
+          "host-profile:FASHION_SIGLIP_MODEL_CACHE_DIR"
+        ],
+        "secretRefs": [],
+        "backupMethod": "installer/source tracked; model cache redownload policy",
+        "restoreMethod": "run macOS installer and redownload model",
+        "verification": "LaunchAgent and MPS health",
+        "cutoverDependency": "Product Radar image search prerequisite"
+      }
+    ],
+    "classificationPolicy": {
+      "allowed": [
+        "MIGRATE",
+        "REBUILD",
+        "EXTERNAL_DATA",
+        "DROP",
+        "MANUAL_BLOCKER"
+      ],
+      "unknownOwner": "MANUAL_BLOCKER",
+      "secretValues": "never-inventory-or-log"
+    }
   },
   "secretInventory": [
-    { "id": "9router-api-key-secret", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "9router-jwt-secret", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "9router-initial-password", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "9router-machine-id-salt", "service": "9router", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "9router runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "9router-provider-state", "service": "9router", "sourceType": "protected-data-directory", "required": true, "restoreTarget": "/DATA/AppData/9router/data", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "immich-db-password", "service": "immich", "sourceType": "compose-environment-or-env-file", "required": true, "restoreTarget": "Immich PostgreSQL runtime", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "openclaw-gateway-token", "service": "openclaw", "sourceType": "runtime-env-or-secret-file", "required": true, "restoreTarget": "OpenClaw runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "openclaw-9router-api-key", "service": "openclaw", "sourceType": "runtime-env-or-secret-file", "required": true, "restoreTarget": "OpenClaw runtime env", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "pubg-api-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/pubg-api-key", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "telegram-token", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/telegram-bot-token", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "kook-token", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/kook-bot-token", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "whatsapp-runtime-state", "service": "openclaw", "sourceType": "protected-runtime-state", "required": true, "restoreTarget": "/DATA/AppData/openclaw", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "mac-ssh-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/mac-ssh-key", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "vps-readonly-key", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "vps-known-hosts", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts", "contentsInGit": false, "encryptedBundle": true },
-    { "id": "kiwivm-credentials", "service": "openclaw", "sourceType": "secret-file", "required": true, "restoreTarget": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json", "contentsInGit": false, "encryptedBundle": true }
+    {
+      "id": "9router-api-key-secret",
+      "service": "9router",
+      "sourceType": "compose-environment-or-env-file",
+      "required": true,
+      "restoreTarget": "9router runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "9router-jwt-secret",
+      "service": "9router",
+      "sourceType": "compose-environment-or-env-file",
+      "required": true,
+      "restoreTarget": "9router runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "9router-initial-password",
+      "service": "9router",
+      "sourceType": "compose-environment-or-env-file",
+      "required": true,
+      "restoreTarget": "9router runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "9router-machine-id-salt",
+      "service": "9router",
+      "sourceType": "compose-environment-or-env-file",
+      "required": true,
+      "restoreTarget": "9router runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "9router-provider-state",
+      "service": "9router",
+      "sourceType": "protected-data-directory",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/9router/data",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "immich-db-password",
+      "service": "immich",
+      "sourceType": "compose-environment-or-env-file",
+      "required": true,
+      "restoreTarget": "Immich PostgreSQL runtime",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "openclaw-gateway-token",
+      "service": "openclaw",
+      "sourceType": "runtime-env-or-secret-file",
+      "required": true,
+      "restoreTarget": "OpenClaw runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "openclaw-9router-api-key",
+      "service": "openclaw",
+      "sourceType": "runtime-env-or-secret-file",
+      "required": true,
+      "restoreTarget": "OpenClaw runtime env",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "pubg-api-key",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/pubg-api-key",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "telegram-token",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/telegram-bot-token",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "kook-token",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/kook-bot-token",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "whatsapp-runtime-state",
+      "service": "openclaw",
+      "sourceType": "protected-runtime-state",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "mac-ssh-key",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/mac-ssh-key",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "vps-readonly-key",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "vps-known-hosts",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "kiwivm-credentials",
+      "service": "openclaw",
+      "sourceType": "secret-file",
+      "required": true,
+      "restoreTarget": "/DATA/AppData/openclaw/secrets/kiwivm-credentials.json",
+      "contentsInGit": false,
+      "encryptedBundle": true
+    },
+    {
+      "id": "openclaw-env",
+      "service": "openclaw",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "openclaw classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "product-radar-runtime-env",
+      "service": "product-radar",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "product-radar classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "changedetection-runtime-env",
+      "service": "changedetection",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "changedetection classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "media-adapter-runtime-env",
+      "service": "media-organizer-adapter",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "media-organizer-adapter classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "frpc-token-auth",
+      "service": "frpc",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "frpc classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "xiaoya-credential-config",
+      "service": "xiaoya",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "xiaoya classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "emby-config-credential-state",
+      "service": "emby",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "emby classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "qbittorrent-credential-state",
+      "service": "qbittorrent",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "qbittorrent classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "npm-db-and-certificate-state",
+      "service": "nginxproxymanager",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "nginxproxymanager classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "filebrowser-credential-db",
+      "service": "filebrowser",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "filebrowser classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "aria2-rpc-secret",
+      "service": "aria2",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "aria2 classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "jellyfin-config-credential-state",
+      "service": "jellyfin",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "jellyfin classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "alist-credential-config",
+      "service": "alist",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "alist classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    },
+    {
+      "id": "v2raya-state",
+      "service": "v2raya",
+      "sourceType": "runtime-credential-or-protected-state",
+      "required": false,
+      "restoreTarget": "v2raya classified restore target",
+      "contentsInGit": false,
+      "encryptedBundle": true,
+      "coverage": "metadata-only; verify live presence before cutover"
+    }
   ],
   "protectedArtifacts": [
-    { "id": "current-release", "policy": "keep" },
-    { "id": "previous-known-good-release", "policy": "keep" },
-    { "id": "explicit-rollback-tags", "policy": "keep" },
-    { "id": "immich-postgres-and-sqlite", "policy": "never-generic-gc" },
-    { "id": "external-immich-media", "policy": "never-generic-gc" },
-    { "id": "encrypted-secret-bundles", "policy": "retention-policy-only" }
+    {
+      "id": "current-release",
+      "policy": "keep"
+    },
+    {
+      "id": "previous-known-good-release",
+      "policy": "keep"
+    },
+    {
+      "id": "explicit-rollback-tags",
+      "policy": "keep"
+    },
+    {
+      "id": "immich-postgres-and-sqlite",
+      "policy": "never-generic-gc"
+    },
+    {
+      "id": "external-immich-media",
+      "policy": "never-generic-gc"
+    },
+    {
+      "id": "encrypted-secret-bundles",
+      "policy": "retention-policy-only"
+    }
   ],
   "readinessChecks": [
     "clean-git-and-version",
@@ -135,6 +937,14 @@
     "9router-protected-data-and-exact-artifact",
     "complete-service-and-secret-inventory",
     "encrypted-secret-bundle-and-restore-rehearsal",
-    "docker-log-policy-and-storage-pressure"
+    "docker-log-policy-and-storage-pressure",
+    "service-aware-backup-registry",
+    "sqlite-consistent-snapshots",
+    "latest-immich-postgresql-logical-dump",
+    "9router-isolated-restore-rehearsal",
+    "manifest-runbook-contract",
+    "storage-capacity-state-and-growth-history",
+    "safe-scheduled-gc-and-retention",
+    "fresh-clone-nonrecursive-rehearsal"
   ]
 }

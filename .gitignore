@@ -7,6 +7,9 @@
 **/*secret*
 **/*token*
 !scripts/check-secrets.sh
+!scripts/secrets-inventory.sh
+!scripts/export-skuld-secrets.sh
+!scripts/import-skuld-secrets.sh
 *.pem
 *.key
 *.crt
