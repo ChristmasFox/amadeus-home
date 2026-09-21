@@ -9,6 +9,7 @@ export interface AmadeusConfig {
   productRadarBaseUrl: string;
   productRadarApiKeyFile?: string;
   mediaAdapterBaseUrl: string;
+  homeLabHost: string;
   homeLabBaseUrl: string;
   homeLabGlancesUrl: string;
   homeLabUptimeUrl: string;
@@ -56,9 +57,10 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     productRadarBaseUrl: file('productRadarBaseUrl', 'PRODUCT_RADAR_BASE_URL', 'http://product-radar:5315').replace(/\/$/u, ''),
     ...(productRadarApiKeyFile ? { productRadarApiKeyFile } : {}),
     mediaAdapterBaseUrl: file('mediaAdapterBaseUrl', 'MEDIA_ADAPTER_BASE_URL', 'http://media-organizer-adapter:8765').replace(/\/$/u, ''),
-    homeLabBaseUrl: file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, ''),
-    homeLabGlancesUrl: file('homeLabGlancesUrl', 'HOME_LAB_GLANCES_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/quicklook`),
-    homeLabUptimeUrl: file('homeLabUptimeUrl', 'HOME_LAB_UPTIME_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', 'http://192.168.5.3').replace(/\/$/u, '')}:61208/api/4/uptime`),
+    homeLabHost: file('homeLabHost', 'HOME_LAB_HOST', 'http://host.docker.internal').replace(/\/$/u, ''),
+    homeLabBaseUrl: file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', file('homeLabHost', 'HOME_LAB_HOST', 'http://host.docker.internal')).replace(/\/$/u, ''),
+    homeLabGlancesUrl: file('homeLabGlancesUrl', 'HOME_LAB_GLANCES_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', file('homeLabHost', 'HOME_LAB_HOST', 'http://host.docker.internal')).replace(/\/$/u, '')}:61208/api/4/quicklook`),
+    homeLabUptimeUrl: file('homeLabUptimeUrl', 'HOME_LAB_UPTIME_URL', `${file('homeLabBaseUrl', 'HOME_LAB_BASE_URL', file('homeLabHost', 'HOME_LAB_HOST', 'http://host.docker.internal')).replace(/\/$/u, '')}:61208/api/4/uptime`),
     macSshHost: file('macSshHost', 'MAC_CONTROL_HOST', 'host.docker.internal'),
     macSshUser: file('macSshUser', 'MAC_CONTROL_USER', ''),
     macSshKeyFile: file('macSshKeyFile', 'MAC_CONTROL_KEY', '/run/secrets/mac_ssh_key'),

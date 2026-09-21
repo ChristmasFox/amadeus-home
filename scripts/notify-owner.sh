@@ -14,11 +14,12 @@ SIGNIFICANCE="notable"
 THEME="worldline_observation"
 FACT_LABEL=""
 FACT_VALUE=""
+FACTS_JSON='[]'
 WORLD_LINE_CLOSING=0
 
 usage() {
   cat <<'USAGE'
-Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --headline HEADLINE --summary SUMMARY [--severity LEVEL] [--significance LEVEL] [--theme THEME] [--fact-label LABEL --fact-value VALUE] [--worldline-closing] [--outbox-dir DIR] [--remote-machine NAME]
+Usage: scripts/notify-owner.sh --event-key KEY --source SOURCE --headline HEADLINE --summary SUMMARY [--severity LEVEL] [--significance LEVEL] [--theme THEME] [--fact-label LABEL --fact-value VALUE] [--facts-json JSON] [--worldline-closing] [--outbox-dir DIR] [--remote-machine NAME]
 
 The command only creates an idempotent local event. It has no channel,
 recipient, bot token, or network option.
@@ -36,6 +37,7 @@ while (($#)); do
     --theme) (($# >= 2)) || { usage >&2; exit 2; }; THEME="$2"; shift 2 ;;
     --fact-label) (($# >= 2)) || { usage >&2; exit 2; }; FACT_LABEL="$2"; shift 2 ;;
     --fact-value) (($# >= 2)) || { usage >&2; exit 2; }; FACT_VALUE="$2"; shift 2 ;;
+    --facts-json) (($# >= 2)) || { usage >&2; exit 2; }; FACTS_JSON="$2"; shift 2 ;;
     --worldline-closing) WORLD_LINE_CLOSING=1; shift ;;
     --outbox-dir) (($# >= 2)) || { usage >&2; exit 2; }; OUTBOX_DIR="$2"; shift 2 ;;
     --remote-machine) (($# >= 2)) || { usage >&2; exit 2; }; REMOTE_MACHINE="$2"; shift 2 ;;
@@ -55,7 +57,7 @@ fi
 
 if [[ -n "$REMOTE_MACHINE" ]]; then
   if ! command -v orb >/dev/null 2>&1; then exit 0; fi
-  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" <<'PY' >/dev/null 2>&1 || true
+  orb -m "$REMOTE_MACHINE" -u root python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" "$FACTS_JSON" <<'PY' >/dev/null 2>&1 || true
 import hashlib
 import json
 import os
@@ -64,7 +66,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag = sys.argv[1:]
+outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag, facts_json = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
@@ -72,7 +74,15 @@ clean_summary = clean(summary, 16000)
 world_line_closing = closing_flag == "1" or clean_summary.endswith("El Psy Kongroo.")
 clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if clean_summary.endswith("El Psy Kongroo.") else clean_summary
 facts = []
-if clean(fact_label, 200) and clean(fact_value, 1000):
+try:
+    candidate_facts = json.loads(facts_json)
+except json.JSONDecodeError:
+    candidate_facts = []
+if isinstance(candidate_facts, list):
+    for candidate in candidate_facts[:32]:
+        if isinstance(candidate, dict) and clean(str(candidate.get("label", "")), 200) and "value" in candidate:
+            facts.append({"label": clean(str(candidate["label"]), 200), "value": candidate.get("value") if isinstance(candidate.get("value"), (str, int, float, bool)) or candidate.get("value") is None else clean(str(candidate.get("value")), 1000), "evidenceRefs": candidate.get("evidenceRefs", []) if isinstance(candidate.get("evidenceRefs", []), list) else []})
+if not facts and clean(fact_label, 200) and clean(fact_value, 1000):
     facts.append({"label": clean(fact_label, 200), "value": clean(fact_value, 1000), "evidenceRefs": []})
 event = {
     "version": 1,
@@ -119,7 +129,7 @@ PY
   exit 0
 fi
 
-python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" <<'PY'
+python3 - "$OUTBOX_DIR" "$EVENT_KEY" "$SOURCE" "$HEADLINE" "$SUMMARY" "$SEVERITY" "$SIGNIFICANCE" "$THEME" "$FACT_LABEL" "$FACT_VALUE" "$WORLD_LINE_CLOSING" "$FACTS_JSON" <<'PY'
 import hashlib
 import json
 import os
@@ -128,7 +138,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag = sys.argv[1:]
+outbox, event_key, source, headline, summary, severity, significance, theme, fact_label, fact_value, closing_flag, facts_json = sys.argv[1:]
 def clean(value: str, limit: int) -> str:
     return value.replace("\x00", "").replace("\r", "").strip()[:limit]
 
@@ -136,7 +146,15 @@ clean_summary = clean(summary, 16000)
 world_line_closing = closing_flag == "1" or clean_summary.endswith("El Psy Kongroo.")
 clean_summary = clean_summary[:-len("El Psy Kongroo.")].rstrip() if clean_summary.endswith("El Psy Kongroo.") else clean_summary
 facts = []
-if clean(fact_label, 200) and clean(fact_value, 1000):
+try:
+    candidate_facts = json.loads(facts_json)
+except json.JSONDecodeError:
+    candidate_facts = []
+if isinstance(candidate_facts, list):
+    for candidate in candidate_facts[:32]:
+        if isinstance(candidate, dict) and clean(str(candidate.get("label", "")), 200) and "value" in candidate:
+            facts.append({"label": clean(str(candidate["label"]), 200), "value": candidate.get("value") if isinstance(candidate.get("value"), (str, int, float, bool)) or candidate.get("value") is None else clean(str(candidate.get("value")), 1000), "evidenceRefs": candidate.get("evidenceRefs", []) if isinstance(candidate.get("evidenceRefs", []), list) else []})
+if not facts and clean(fact_label, 200) and clean(fact_value, 1000):
     facts.append({"label": clean(fact_label, 200), "value": clean(fact_value, 1000), "evidenceRefs": []})
 event = {
     "version": 1,

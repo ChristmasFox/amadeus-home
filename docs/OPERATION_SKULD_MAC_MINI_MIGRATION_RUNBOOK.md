@@ -1,7 +1,7 @@
 # Operation Skuld — Mac mini migration runbook
 
 Status: readiness and rehearsal only. This document is tracked so a future
-cutover is an execution task with an explicit checkpoint. Amadeus 1.4.2 does
+cutover is an execution task with an explicit checkpoint. Amadeus 1.4.4 does
 not perform this cutover, change DNS, rotate channels, or stop the current
 CasaOS runtime.
 
@@ -10,9 +10,10 @@ CasaOS runtime.
 1. Confirm the implementation and deployment-evidence commits are pushed.
 2. Run `scripts/migration-readiness.sh` on the current control Mac and save its
    output with the release evidence.
-3. Create an external backup with `scripts/backup.sh --include-secrets` using
-   an encrypted destination. Verify the backup manifest and keep the secret
-   archive separate from Git.
+3. Create the service-aware data backup with `scripts/backup.sh`. Export
+   credentials separately with `scripts/export-skuld-secrets.sh --apply
+   --passphrase-file PATH`; the encrypted artifact, not a plaintext tar, is the
+   boundary. Verify both manifests and keep the secret bundle separate from Git.
 4. Record the current OpenClaw and Product Radar image tags, CasaOS compose
    files, FashionSigLIP health, cron list, and the owner outbox count.
 
@@ -53,7 +54,7 @@ pending and sent owner events without sending them.
 ## Phase 4 — Shadow-free cutover window
 
 This is the only phase that would change routing, and it is deliberately not
-executed by the 1.4.2 Goal. At the approved window, pause inbound traffic at
+executed by the 1.4.4 Goal. At the approved window, pause inbound traffic at
 the chosen edge, drain or explicitly account for the owner outbox, stop the
 old CasaOS app only after the destination preflight is green, and start the
 destination with `docker compose up -d --no-build`. Do not run two agent
@@ -88,7 +89,7 @@ by both hosts, after secrets have been rotated without a reverse copy, or
 after external routing has been changed without a recorded reverse route.
 Stop and perform a data-divergence review instead of guessing.
 
-## Explicit non-actions for 1.4.2
+## Explicit non-actions for 1.4.4
 
 - No Mac mini provisioning or cutover.
 - No DNS, tunnel, WhatsApp pairing, Telegram allowlist, or VPS firewall change.

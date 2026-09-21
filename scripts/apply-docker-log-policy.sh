@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck disable=SC1091
+source "$ROOT_DIR/scripts/host-profile.sh"
+amadeus_host_profile_load "$ROOT_DIR"
+MACHINE="$ORBSTACK_MACHINE"
+MODE='audit'
+FAILURES=0
+
+while (($#)); do
+  case "$1" in
+    --audit|--apply) MODE="${1#--}" ;;
+    --help|-h) printf '%s\n' 'Usage: scripts/apply-docker-log-policy.sh [--audit|--apply]'; exit 0 ;;
+    *) printf 'Unknown option: %s\n' "$1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+[[ "$DOCKER_LOG_DRIVER" =~ ^[A-Za-z0-9_-]+$ ]] || { printf '%s\n' 'invalid DOCKER_LOG_DRIVER' >&2; exit 2; }
+[[ "$DOCKER_LOG_MAX_SIZE" =~ ^[0-9]+[kKmMgG]?$ ]] || { printf '%s\n' 'invalid DOCKER_LOG_MAX_SIZE' >&2; exit 2; }
+[[ "$DOCKER_LOG_MAX_FILE" =~ ^[0-9]+$ ]] || { printf '%s\n' 'invalid DOCKER_LOG_MAX_FILE' >&2; exit 2; }
+command -v orb >/dev/null 2>&1 || { printf '%s\n' 'OrbStack CLI not found' >&2; exit 1; }
+
+audit_container() {
+  local name="$1" record driver max_size max_file log_path compose_dir size
+  record="$(orb -m "$MACHINE" -u root docker inspect --format '{{.HostConfig.LogConfig.Type}}|{{index .HostConfig.LogConfig.Config "max-size"}}|{{index .HostConfig.LogConfig.Config "max-file"}}|{{.LogPath}}|{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$name" 2>/dev/null || true)"
+  if [[ -z "$record" ]]; then
+    printf 'FAIL  managed container is absent: %s\n' "$name"
+    FAILURES=$((FAILURES + 1))
+    return
+  fi
+  IFS='|' read -r driver max_size max_file log_path compose_dir <<<"$record"
+  if [[ -n "$log_path" ]]; then
+    size="$(orb -m "$MACHINE" -u root stat -c '%s' "$log_path" 2>/dev/null || printf '%s' unknown)"
+  else
+    size='unknown'
+  fi
+  printf 'LOG_AUDIT|%s|driver=%s|max-size=%s|max-file=%s|bytes=%s|compose=%s\n' "$name" "$driver" "$max_size" "$max_file" "$size" "${compose_dir:-unknown}"
+  if [[ "$driver" != "$DOCKER_LOG_DRIVER" || "$max_size" != "$DOCKER_LOG_MAX_SIZE" || "$max_file" != "$DOCKER_LOG_MAX_FILE" ]]; then
+    printf 'FAIL  unbounded or noncompliant managed log policy: %s\n' "$name"
+    FAILURES=$((FAILURES + 1))
+  else
+    printf 'PASS  bounded managed log policy: %s\n' "$name"
+  fi
+}
+
+audit_unknown() {
+  local name
+  printf '%s\n' 'UNKNOWN_LOG_OWNERS=report-only'
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    case " openclaw product-radar 9router immich-server immich-machine-learning immich-postgres immich-redis changedetection " in
+      *" $name "*) ;;
+      *) printf 'UNKNOWN_LOG_OWNER|%s\n' "$name" ;;
+    esac
+  done < <(orb -m "$MACHINE" -u root docker ps -a --format '{{.Names}}' 2>/dev/null)
+  orb -m "$MACHINE" -u root bash -lc 'find /DATA/AppData -type f \( -name "*.log" -o -name "*.log.[0-9]*" \) -size +100M -print 2>/dev/null | head -50' \
+    | sed 's#^#LARGE_APP_LOG_REPORT_ONLY|#' || true
+}
+
+audit() {
+  for name in openclaw product-radar 9router immich-server immich-machine-learning immich-postgres immich-redis changedetection; do
+    audit_container "$name"
+  done
+  audit_unknown
+  ((FAILURES == 0))
+}
+
+compose_entries() {
+  printf '%s\n' \
+    "openclaw|$OPENCLAW_APP_DIR/docker-compose.yml" \
+    "product-radar|$RADAR_APP_DIR/docker-compose.yml" \
+    "9router|/var/lib/casaos/apps/9router/docker-compose.yml" \
+    "immich|/var/lib/casaos/apps/immich/docker-compose.yml" \
+    "changedetection|/var/lib/casaos/apps/changedetection/docker-compose.yml"
+}
+
+apply_policy() {
+  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
+    printf '%s\n' 'LOG_POLICY=blocked; verified external storage is unavailable' >&2
+    return 1
+  }
+  local stamp backup_root name path backup
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  backup_root="$SKULD_BACKUP_ROOT/log-policy/$stamp"
+  [[ "$backup_root" == "$EXTERNAL_STORAGE_ROOT/"* ]] || { printf '%s\n' 'log-policy backup must be on the verified external volume' >&2; return 1; }
+  mkdir -p "$backup_root"
+  chmod 700 "$backup_root"
+  while IFS='|' read -r name path; do
+    if ! orb -m "$MACHINE" -u root test -f "$path"; then
+      printf 'WARN  compose file absent; skipping %s: %s\n' "$name" "$path"
+      continue
+    fi
+    backup="$backup_root/$name.before.yml"
+    orb -m "$MACHINE" -u root cat "$path" >"$backup"
+    chmod 600 "$backup"
+    orb -m "$MACHINE" -u root python3 - "$path" "$DOCKER_LOG_DRIVER" "$DOCKER_LOG_MAX_SIZE" "$DOCKER_LOG_MAX_FILE" <<'PY'
+import os
+import re
+import sys
+from pathlib import Path
+
+path, driver, max_size, max_file = sys.argv[1:]
+lines = Path(path).read_text(encoding='utf-8').splitlines(keepends=True)
+service_starts = []
+in_services = False
+for index, line in enumerate(lines):
+    stripped = line.strip()
+    if stripped == 'services:':
+        in_services = True
+        continue
+    if in_services and line and not line.startswith(' '):
+        break
+    if in_services and re.fullmatch(r'  [A-Za-z0-9_.-]+:\s*', line.rstrip('\n')):
+        service_starts.append(index)
+if not service_starts:
+    raise SystemExit(f'no services found in {path}')
+changed = 0
+for position in reversed(range(len(service_starts))):
+    start = service_starts[position]
+    end = service_starts[position + 1] if position + 1 < len(service_starts) else len(lines)
+    block = lines[start:end]
+    if not any(re.match(r'^    (?:image|container_name):', line) for line in block):
+        continue
+    if any(line.strip() == 'logging:' for line in block):
+        continue
+    insertion = next((index for index in range(start + 1, end) if lines[index].startswith('    restart:')), start)
+    payload = [
+        '    logging:\n',
+        f'      driver: {driver}\n',
+        '      options:\n',
+        f'        max-size: "{max_size}"\n',
+        f'        max-file: "{max_file}"\n',
+    ]
+    lines[insertion:insertion] = payload
+    changed += 1
+temporary = Path(str(path) + '.skuld-tmp')
+temporary.write_text(''.join(lines), encoding='utf-8')
+os.chmod(temporary, 0o644)
+temporary.replace(path)
+print(f'LOG_POLICY_SERVICES_UPDATED={changed}')
+PY
+    orb -m "$MACHINE" -u root docker compose --project-directory "$(dirname "$path")" -f "$path" config --quiet
+    orb -m "$MACHINE" -u root docker compose --project-directory "$(dirname "$path")" -f "$path" up -d --no-build >/dev/null
+  done < <(compose_entries)
+  printf 'LOG_POLICY_BACKUP=%s\n' "$backup_root"
+  audit
+}
+
+if [[ "$MODE" == apply ]]; then
+  apply_policy
+else
+  audit
+fi

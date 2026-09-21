@@ -52,6 +52,23 @@ check_secrets_metadata
 check_sqlite_integrity
 check_restore_rehearsal
 
+original_root="$ROOT_DIR"
+check_version
+version_fixture="$fixture/version-check"
+mkdir -p "$version_fixture/scripts"
+printf '%s\n' '1.4.4' > "$version_fixture/VERSION"
+printf '%s\n' '# Amadeus 1.4.4' '' 'Storage runtime fixture.' > "$version_fixture/RELEASE_NOTES.md"
+cp "$original_root/scripts/amadeus-version.sh" "$version_fixture/scripts/amadeus-version.sh"
+chmod 755 "$version_fixture/scripts/amadeus-version.sh"
+ROOT_DIR="$version_fixture"
+check_version
+printf '%s\n' '# Amadeus 1.4.2' '' 'Stale release fixture.' > "$version_fixture/RELEASE_NOTES.md"
+if check_version >/dev/null 2>&1; then
+  printf '%s\n' 'stale release notes unexpectedly passed dynamic version check' >&2
+  exit 1
+fi
+ROOT_DIR="$original_root"
+
 rm "$OPENCLAW_DATA_DIR/secrets/telegram-bot-token"
 if check_secrets_metadata >/dev/null 2>&1; then
   printf '%s\n' 'missing required secret unexpectedly passed' >&2
@@ -96,16 +113,39 @@ printf '%s\n' "$profile_output" | grep -Fqx '18401'
 python3 - "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" <<'PY'
 import json
 import sys
-manifest = json.load(open(sys.argv[1], encoding='utf-8'))
+
+def reject_duplicates(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f'duplicate key: {key}')
+        value[key] = item
+    return value
+
+manifest = json.load(open(sys.argv[1], encoding='utf-8'), object_pairs_hook=reject_duplicates)
+assert manifest['schemaVersion'] == 2
+assert {'storage', 'serviceInventory', 'secretInventory', 'protectedArtifacts'} <= manifest.keys()
 ids = {item['id'] for item in manifest['criticalPersistentData']}
 assert {'pubg-sqlite', 'identity-sqlite', 'product-radar-sqlite', 'owner-outbox'} <= ids
 assert manifest['rebuildableState'][0]['policy'] == 'redownload'
 for item in manifest['secrets']:
     assert 'value' not in item
+duplicate = {'a': 1}
+try:
+    reject_duplicates([('a', 1), ('a', 2)])
+except ValueError:
+    pass
+else:
+    raise AssertionError('duplicate-key fixture was accepted')
+assert duplicate == {'a': 1}
 PY
 
 if rg -n 'docker (stop|rm|kill)|docker network disconnect|git reset --hard' "$ROOT_DIR/scripts/migration-readiness.sh" >/dev/null; then
   printf '%s\n' 'readiness script contains a production mutation' >&2
+  exit 1
+fi
+if rg -n '1\.4\.2|rsync[^\n]*--delete' "$ROOT_DIR/scripts/migration-readiness.sh" >/dev/null; then
+  printf '%s\n' 'readiness script retains a stale release or destructive sync pattern' >&2
   exit 1
 fi
 

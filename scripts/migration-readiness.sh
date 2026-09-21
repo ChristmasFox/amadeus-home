@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="${SKULD_ROOT_DIR:-$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 # shellcheck disable=SC1091
 source "$ROOT_DIR/scripts/host-profile.sh"
 amadeus_host_profile_load "$ROOT_DIR"
@@ -20,7 +20,14 @@ check() {
 }
 
 check_git_clean() { [[ -z "$(git -C "$ROOT_DIR" status --short --untracked-files=all)" ]]; }
-check_version() { [[ "$(bash "$ROOT_DIR/scripts/amadeus-version.sh" show)" == '1.4.2' ]]; }
+check_version() {
+  local version headline
+  version="$(tr -d '[:space:]' < "$ROOT_DIR/VERSION")"
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  bash "$ROOT_DIR/scripts/amadeus-version.sh" check >/dev/null
+  headline="$(sed -n '1p' "$ROOT_DIR/RELEASE_NOTES.md")"
+  [[ "$headline" == "# Amadeus $version" ]]
+}
 check_required_sources() {
   local path
   for path in \
@@ -31,7 +38,22 @@ check_required_sources() {
     "$ROOT_DIR/docs/INFRASTRUCTURE_CLASSIFICATION.md" \
     "$ROOT_DIR/docs/PROACTIVE_NOTIFICATION_PRODUCERS.md" \
     "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" \
-    "$ROOT_DIR/docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md"; do
+    "$ROOT_DIR/docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md" \
+    "$ROOT_DIR/docs/OPERATION_SKULD_SERVICE_INVENTORY.md" \
+    "$ROOT_DIR/docs/STORAGE_RETENTION_POLICY.md" \
+    "$ROOT_DIR/infra/docker/homelab/immich/docker-compose.example.yml" \
+    "$ROOT_DIR/scripts/storage-preflight.sh" \
+    "$ROOT_DIR/scripts/migrate-immich-media.sh" \
+    "$ROOT_DIR/scripts/reclaim-immich-old-source.sh" \
+    "$ROOT_DIR/scripts/storage-maintenance.sh" \
+    "$ROOT_DIR/scripts/apply-docker-log-policy.sh" \
+    "$ROOT_DIR/scripts/externalize-casaos-secrets.sh" \
+    "$ROOT_DIR/scripts/storage-health.sh" \
+    "$ROOT_DIR/scripts/install-storage-scheduler-macos.sh" \
+    "$ROOT_DIR/scripts/export-9router-runtime.sh" \
+    "$ROOT_DIR/scripts/secrets-inventory.sh" \
+    "$ROOT_DIR/scripts/export-skuld-secrets.sh" \
+    "$ROOT_DIR/scripts/import-skuld-secrets.sh"; do
     [[ -f "$path" ]] || return 1
   done
   python3 -m json.tool "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" >/dev/null
@@ -55,7 +77,7 @@ check_remote_machine() {
 check_remote_containers() {
   local names
   names="$(orb -m "$MACHINE" -u root docker ps --format '{{.Names}}' 2>/dev/null)"
-  for name in openclaw product-radar media-organizer-adapter changedetection 9router; do
+  for name in openclaw product-radar media-organizer-adapter changedetection 9router immich-server immich-machine-learning immich-postgres immich-redis; do
     printf '%s\n' "$names" | grep -Fx "$name" >/dev/null || return 1
   done
   ! printf '%s\n' "$names" | grep -E '^(langbot|langbot_plugin_runtime|n8n|n8n-sandbox)' >/dev/null
@@ -64,6 +86,8 @@ check_health() {
   orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 8 http://127.0.0.1:18789/healthz >/dev/null
   orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 8 http://127.0.0.1:5315/health >/dev/null
   orb -m "$MACHINE" -u root docker exec "$MEDIA_ADAPTER_CONTAINER" python3 -c 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8765/healthz", timeout=8).read()' >/dev/null
+  orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 8 http://127.0.0.1:2283/api/server/ping >/dev/null
+  orb -m "$MACHINE" -u root curl --silent --show-error --max-time 8 -o /dev/null -w '%{http_code}' http://127.0.0.1:20128/v1/models | grep -Fx '401' >/dev/null
 }
 check_network() {
   orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null
@@ -78,7 +102,10 @@ check_remote_files() {
     "$RADAR_DATA_DIR/product-radar.sqlite" \
     "$OPENCLAW_DATA_DIR/notifications" \
     "$OPENCLAW_DATA_DIR/secrets" \
-    "$OPENCLAW_DATA_DIR/backups"; do
+    "$OPENCLAW_DATA_DIR/backups" \
+    "/DATA/AppData/9router/data" \
+    "/DATA/AppData/immich/pgdata" \
+    "/DATA/AppData/changedetection/datastore"; do
     orb -m "$MACHINE" -u root test -e "$path" || return 1
   done
 }
@@ -151,6 +178,37 @@ check_backup_manifest() {
   [[ -n "$newest" ]] || return 1
   orb -m "$MACHINE" -u root test -f "$newest/backup-manifest.json"
 }
+check_storage_identity() {
+  bash "$ROOT_DIR/scripts/storage-preflight.sh" --check --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null
+}
+check_immich_migration_checkpoint() {
+  local state="$SKULD_BACKUP_ROOT/immich-migration/state.json"
+  [[ -f "$state" ]] || return 1
+  python3 - "$state" <<'PY'
+import json
+import sys
+from pathlib import Path
+value = json.loads(Path(sys.argv[1]).read_text())
+required = value.get('phase') == 'cutover-complete' and value.get('copyStatus') == 'passed' and value.get('equivalenceStatus') == 'passed' and value.get('sourceReclaimPending') is True
+backup = value.get('dbBackupPath')
+raise SystemExit(0 if required and isinstance(backup, str) and Path(backup).is_file() else 1)
+PY
+}
+check_secret_inventory() { bash "$ROOT_DIR/scripts/secrets-inventory.sh" >/dev/null; }
+check_service_inventory() { bash "$ROOT_DIR/scripts/service-inventory.sh" --check >/dev/null; }
+check_encrypted_secret_bundle() {
+  local bundle
+  bundle="$(find "$SKULD_BACKUP_ROOT" -type f -name 'secrets.tar.enc' -print -quit 2>/dev/null || true)"
+  [[ -n "$bundle" && -s "$bundle" && -s "$bundle.sha256" ]]
+}
+check_9router_artifact() {
+  local artifact
+  artifact="$(find "$SKULD_BACKUP_ROOT" -type f -name '9router-*.tar*' -print -quit 2>/dev/null || true)"
+  [[ -n "$artifact" && -s "$artifact" ]]
+}
+check_log_policy() {
+  bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --audit >/dev/null
+}
 check_restore_rehearsal() {
   orb -m "$MACHINE" -u root python3 - \
     "$OPENCLAW_DATA_DIR/data/pubg.sqlite" \
@@ -179,7 +237,7 @@ PY
 
 run_readiness() {
   check 'clean Git worktree' check_git_clean
-  check 'version 1.4.2' check_version
+  check 'dynamic release version and release notes' check_version
   check 'tracked migration sources and valid manifest' check_required_sources
   check 'active source has no retired runtime or old host path' check_active_sources
   check 'OrbStack machine is running' check_remote_machine
@@ -195,9 +253,17 @@ run_readiness() {
   check_fashion_cache_inventory
   check 'external checkpoint has backup manifest' check_backup_manifest
   check 'temporary restore rehearsal is clean' check_restore_rehearsal
+  check 'external storage identity and Immich source/destination preflight' check_storage_identity
+  check 'Immich cutover and retained-source checkpoint' check_immich_migration_checkpoint
+  check 'service inventory coverage' check_service_inventory
+  check 'secret inventory metadata' check_secret_inventory
+  check 'encrypted secret bundle metadata' check_encrypted_secret_bundle
+  check 'exact 9Router runtime artifact' check_9router_artifact
+  check 'managed Docker log policy' check_log_policy
 
   printf 'Operation Skuld readiness: %s failure(s), %s warning(s).\n' "$failures" "$warnings"
   if ((failures == 0)); then
+    printf '%s\n' 'IMMICH_SOURCE_RECLAIM=READY_BUT_PENDING'
     printf '%s\n' 'OPERATION_SKULD=READY'
   else
     printf '%s\n' 'OPERATION_SKULD=BLOCKED'

@@ -8,8 +8,9 @@ const root = resolve(new URL('..', import.meta.url).pathname);
 const fixture = mkdtempSync(join(tmpdir(), 'amadeus-architecture-'));
 const copies = [
   'AGENTS.md', 'package.json',
-  'docs/INFRASTRUCTURE_CLASSIFICATION.md', 'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json', 'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md',
-  'scripts/developer-workflow.sh', 'scripts/host-profile.sh', 'scripts/migration-readiness.sh',
+  'docs/INFRASTRUCTURE_CLASSIFICATION.md', 'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json', 'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md', 'docs/OPERATION_SKULD_SERVICE_INVENTORY.md', 'docs/STORAGE_RETENTION_POLICY.md',
+  'scripts/developer-workflow.sh', 'scripts/host-profile.sh', 'scripts/migration-readiness.sh', 'scripts/storage-preflight.sh', 'scripts/migrate-immich-media.sh', 'scripts/reclaim-immich-old-source.sh', 'scripts/storage-maintenance.sh', 'scripts/apply-docker-log-policy.sh', 'scripts/externalize-casaos-secrets.sh', 'scripts/storage-health.sh', 'scripts/install-storage-scheduler-macos.sh', 'scripts/export-9router-runtime.sh', 'scripts/secrets-inventory.sh', 'scripts/export-skuld-secrets.sh', 'scripts/import-skuld-secrets.sh',
+  'infra/docker/homelab/immich/docker-compose.example.yml',
   'plugins/amadeus/src', 'plugins/amadeus/openclaw.plugin.json', 'plugins/amadeus/skills',
   'integrations/openclaw/workspace/SOUL.md', 'integrations/openclaw/workspace/AGENTS.md',
   'packages/presentation/src', 'packages/presentation/package.json',
@@ -40,6 +41,12 @@ try {
   writeFileSync(domainPath, 'export const leaked = "SERN";\n');
   const vocabularyErrors = checkArchitecture(fixture);
   assert.ok(vocabularyErrors.some((error) => error.includes('contains worldline presentation vocabulary')));
+
+  const storageSource = join(fixture, 'scripts/storage-maintenance.sh');
+  writeFileSync(storageSource, 'docker volume prune\n');
+  const storageErrors = checkArchitecture(fixture);
+  assert.ok(storageErrors.some((error) => error.includes('forbidden Docker volume cleanup')));
+  rmSync(storageSource, { force: true });
   console.log('ARCHITECTURE_FIXTURE_CHECK=passed');
 } finally {
   rmSync(fixture, { recursive: true, force: true });

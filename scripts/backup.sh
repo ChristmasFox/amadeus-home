@@ -12,7 +12,7 @@ else
   DEFAULT_BACKUP_ROOT="$REPO_ROOT/.backups"
 fi
 BACKUP_ROOT="${BACKUP_ROOT:-$DEFAULT_BACKUP_ROOT}"
-BACKUP_APP_DIRS="${BACKUP_APP_DIRS:-openclaw product-radar media-organizer-adapter}"
+BACKUP_APP_DIRS="${BACKUP_APP_DIRS:-openclaw product-radar 9router immich changedetection media-organizer-adapter}"
 INCLUDE_SECRETS=0
 DRY_RUN=0
 
@@ -20,12 +20,12 @@ usage() {
   cat <<'EOF'
 用法: scripts/backup.sh [选项]
 
-默认从 host profile 指定的 OrbStack machine 的 /DATA/AppData 读取项目数据，并在仓库外
+默认从 host profile 指定的 OrbStack machine 的 /DATA/AppData 读取项目和兼容性数据，并在仓库外
 /Volumes/Avalon/backups/agent-monorepo 创建归档；没有共享卷时使用
 仓库内被忽略的 .backups/。
 
 选项:
-  --include-secrets       额外生成单独的 secrets-*.tar.gz（权限 0600）
+  --include-secrets       调用加密 secrets export（需要 Git 外的 passphrase file）
   --backup-root PATH      覆盖归档目录
   --apps "a b c"          覆盖要备份的 AppData 目录
   --machine NAME          覆盖 OrbStack machine，默认取 host profile（ubuntu）
@@ -80,7 +80,7 @@ done
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 archive_dir="$BACKUP_ROOT/$stamp"
 data_archive="$archive_dir/data-$stamp.tar.gz"
-secret_archive="$archive_dir/secrets-$stamp.tar.gz"
+secret_bundle_ref='not-created'
 manifest="$archive_dir/manifest.txt"
 
 printf 'Backup plan\n'
@@ -108,21 +108,10 @@ done | tar --exclude="*/secrets/*" --exclude="*/.env" --exclude="*.env" --exclud
 chmod 600 "$data_archive"
 
 if [ "$INCLUDE_SECRETS" -eq 1 ]; then
-  printf '%s\n' 'Writing a separate secrets archive; keep it offline and encrypted at rest.'
-  orb -m "$MACHINE" -u root bash -lc '
-set -Eeuo pipefail
-for app in "$@"; do
-  root="/DATA/AppData/$app"
-  [ -e "$root/.env" ] && printf "%s\n" "$app/.env"
-  for candidate in "$root"/*.env; do
-    [ -e "$candidate" ] || continue
-    relative="${candidate#/DATA/AppData/}"
-    printf "%s\n" "$relative"
-  done
-  [ -d "$root/secrets" ] && printf "%s\n" "$app/secrets"
-done | tar --ignore-failed-read -C /DATA/AppData -czf - -T -
-' _ "${app_names[@]}" > "$secret_archive"
-  chmod 600 "$secret_archive"
+  [[ -n "$SKULD_SECRET_PASSPHRASE_FILE" ]] || { printf '%s\n' 'SKULD_SECRET_PASSPHRASE_FILE is required for --include-secrets.' >&2; exit 2; }
+  secret_output="$(SKULD_BACKUP_ROOT="$BACKUP_ROOT" bash "$REPO_ROOT/scripts/export-skuld-secrets.sh" --apply --passphrase-file "$SKULD_SECRET_PASSPHRASE_FILE" --output-dir "$BACKUP_ROOT")"
+  secret_bundle_ref="$(printf '%s\n' "$secret_output" | sed -n 's/^SECRET_BUNDLE=//p')"
+  [[ -n "$secret_bundle_ref" ]] || { printf '%s\n' 'encrypted secret bundle path was not returned' >&2; exit 1; }
 fi
 
 repo_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf '%s' 'uncommitted')"
@@ -132,13 +121,54 @@ repo_commit="$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || printf '%s' 'un
   printf 'machine=%s\n' "$MACHINE"
   printf 'app_data=%s\n' "$BACKUP_APP_DIRS"
   printf 'data_archive=%s\n' "$(basename "$data_archive")"
-  printf 'secrets_archive=%s\n' "$([ "$INCLUDE_SECRETS" -eq 1 ] && basename "$secret_archive" || printf '%s' 'not-created')"
-  printf 'note=Redis is rebuildable cache; add its AppData explicitly with --apps if a full local snapshot is required.\n'
+  printf 'encrypted_secret_bundle=%s\n' "$secret_bundle_ref"
+  printf 'immich_media_policy=external-protected-media-is-not-tarred\n'
+  printf 'immich_media_root=%s\n' "$IMMICH_MEDIA_ROOT"
+  printf 'external_storage_root=%s\n' "$EXTERNAL_STORAGE_ROOT"
+  printf 'external_storage_volume_uuid=%s\n' "${EXTERNAL_STORAGE_VOLUME_UUID:-unconfigured}"
+  printf 'note=Redis/model cache are rebuildable; Immich PostgreSQL, 9Router data, changedetection state, and media-adapter state are included when present.\n'
 } > "$manifest"
 chmod 600 "$manifest"
+
+python3 - "$archive_dir/backup-manifest.json" "$stamp" "$repo_commit" "$BACKUP_APP_DIRS" "$IMMICH_MEDIA_ROOT" "$EXTERNAL_STORAGE_VOLUME_UUID" "$secret_bundle_ref" <<'PY'
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+target, stamp, commit, apps, media_root, volume_uuid, secret_bundle = sys.argv[1:]
+def guest_value(command):
+    try:
+        return subprocess.check_output(command, text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return None
+machine = os.environ.get('ORBSTACK_MACHINE', 'ubuntu')
+media_bytes = guest_value(['orb', '-m', machine, '-u', 'root', 'du', '-sx', '--apparent-size', '--block-size=1', '/DATA/Gallery/immich'])
+media_files = guest_value(['orb', '-m', machine, '-u', 'root', 'bash', '-lc', "find /DATA/Gallery/immich -type f -printf '\\n' | wc -l"])
+try:
+    media_file_count = int(media_files or '0')
+except ValueError:
+    media_file_count = 0
+Path(target).write_text(json.dumps({
+    'schemaVersion': 1,
+    'createdAtUtc': stamp,
+    'repoCommit': commit,
+    'apps': apps.split(),
+    'immichMedia': {
+        'root': media_root,
+        'volumeUuid': volume_uuid or None,
+        'sourceBytes': int((media_bytes or '0').split()[0]),
+        'fileCount': media_file_count,
+        'portableArchive': False,
+    },
+    'encryptedSecretBundle': secret_bundle,
+}, ensure_ascii=False, indent=2) + '\n')
+PY
+chmod 600 "$archive_dir/backup-manifest.json"
 
 printf 'Data archive: %s\n' "$data_archive"
 printf 'Manifest: %s\n' "$manifest"
 if [ "$INCLUDE_SECRETS" -eq 1 ]; then
-  printf 'Secrets archive: %s\n' "$secret_archive"
+  printf 'Encrypted secret bundle: %s\n' "$secret_bundle_ref"
 fi

@@ -32,7 +32,7 @@ export async function homelabStatus(config: AmadeusConfig, context: OpenClawPlug
     Immich: `${config.homeLabBaseUrl}:2283/api/server/ping`,
     Emby: `${config.homeLabBaseUrl}:8096/emby/system/info/public`,
     qBittorrent: `${config.homeLabBaseUrl}:8080/`,
-    OpenWrt: 'http://192.168.5.1/',
+    OpenWrt: `${config.homeLabHost}/`,
   };
   const services: Record<string, boolean> = {};
   await Promise.all(Object.entries(serviceUrls).map(async ([name, url]) => { services[name] = (await probe(url)).ok; }));

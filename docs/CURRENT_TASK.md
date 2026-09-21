@@ -2,6 +2,20 @@
 
 更新时间：2026-09-21（Asia/Shanghai）
 
+## 2026-09-21：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（源码阶段完成）
+
+当前执行目标为 `docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md`。
+已完成 host profile、外置盘 fail-closed preflight、Immich copy-first/checksum 迁移工具、
+旧源保留与独立 reclaim gate、Immich/9Router/changedetection migration coverage、加密
+secret export/import rehearsal、service inventory、Docker 日志 rotation、受保护 GC、storage
+health/scheduler 和动态版本 readiness。`pnpm test`、`pnpm typecheck`、`pnpm build`、
+`pnpm check:secrets`、architecture/storage/migration/notification tests 与脚本语法均通过。
+
+下一阶段为 1.4.4 release commit/push 后的 canonical CasaOS live apply：先外置 9Router/Immich
+runtime secrets、备份并验证 8TB 外置盘，再迁移 Immich 媒体并保留旧源，随后应用日志 policy、
+受保护 GC、scheduler 和 live doctor/readiness。Mac mini cutover 不在本轮；旧源 reclaim 保持
+`SOURCE_RECLAIM_PENDING`，除非另有显式 gate。
+
 ## 2026-09-21：Amadeus 1.4.3 WhatsApp 私聊会话隔离（已部署）
 
 本轮确认 WhatsApp 私聊数据串流的根因是 OpenClaw 未配置 `session.dmScope`，默认值为
