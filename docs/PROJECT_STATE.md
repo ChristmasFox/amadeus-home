@@ -10,10 +10,12 @@ macOS 27.0 / arm64 / Apple M6 / 24 GiB RAM，根卷约 386 GiB 可用。目标�
 更正，实际 CLI 为 `/usr/local/bin/orb`。当前 `orb list` 只显示运行中的 canonical `nyannyan`
 noble/arm64 guest；普通 user（UID 501、用户名/hostname `nyannyan`）和 `-u root`（UID 0）的
 read-only probes 都通过，`/home/nyannyan` 存在且来宾为 Ubuntu 24.04.5 LTS。因此 destination guest
-identity contract 已满足。Homebrew、Node、pnpm、clean monorepo 及 `/Volumes/Avalon` 仍未就绪
-（系统 Python 为 3.9.6）。source-side capacity plan 复测为 `DESTINATION_CAPACITY_JUDGMENT=FIT`。
-这是用户授权后的有限 host bootstrap 写入与只读 Orb 验证，不是 secret/data restore、CasaOS deployment
-或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
+identity contract 已满足。Homebrew 与 clean monorepo 已就绪；Node、pnpm 仍缺失，Python 仍为
+系统 3.9.6，`/Volumes/Avalon` 未挂载。guest 内 Docker、Docker Compose 与 `/DATA/AppData` 均不存在，
+所以 CasaOS 尚未安装。source-side capacity plan 复测为 `DESTINATION_CAPACITY_JUDGMENT=FIT`。
+source `migration-readiness.sh` 当前 0 failure / 0 warning、`OPERATION_SKULD=READY`，因此可开始
+**destination bootstrap**，但不能恢复 secret/data、启动 CasaOS runtime 或 cutover；旧 Mac 的 CasaOS
+runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
 
 目标 Git SSH clone 已验收：用户明确授权目标专用 ED25519 key 作为 GitHub 账号级 Authentication key
 使用。初始标准 `git@github.com` clone 失败是因为 target config 仅定义了 alias，且配置文件随后被外部
