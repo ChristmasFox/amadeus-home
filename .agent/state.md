@@ -4,8 +4,8 @@
 - Read-only target facts: `Amadeus-M204` / `nyannyan`, macOS 27.0, arm64 Apple M6, 24 GiB RAM, root volume about 4% used with about 386 GiB available.
 - `127.0.0.1:7897` is reachable and verified for both HTTP CONNECT and SOCKS5. `/Users/nyannyan/.zshrc` now contains the reversible managed terminal proxy block; `zsh -ic` HTTPS proxy smoke returned HTTP 200.
 - OrbStack correction and guest acceptance: noninteractive SSH omits `/usr/local/bin` from `PATH`, but `/usr/local/bin/orb` exists. Current `orb list` contains only a running canonical `nyannyan` noble/arm64 guest. Normal-user UID 501/user/hostname `nyannyan`, `/home/nyannyan`, Ubuntu 24.04.5, and `-u root` UID 0 all pass read-only validation.
-- Git SSH clone preparation: target-only ED25519 deploy key and `github-amadeus` alias were created. GitHub authorization is pending for its read-only use against `ChristmasFox/amadeus-home`; no repository clone, control-side key copy, token transfer, or runtime mutation occurred.
-- Remaining bootstrap gaps: Homebrew, Node, pnpm, clean monorepo and `/Volumes/Avalon` are absent; system Python is 3.9.6. Git is installed. Source capacity recheck remains `DESTINATION_CAPACITY_JUDGMENT=FIT`; no data/secret restore, CasaOS service startup, Avalon movement, source freeze, or cutover occurred.
+- Git SSH clone acceptance: user authorized the target-only ED25519 identity as a GitHub account Authentication key. `github-amadeus` `git ls-remote` succeeded and a clean clone exists at `/Users/nyannyan/agent-monorepo`, with an alias-scoped origin and clean `main` at clone acceptance. No control-side key copy or token transfer occurred.
+- Remaining bootstrap gaps: Homebrew, Node, pnpm and `/Volumes/Avalon` are absent; system Python is 3.9.6. The clean monorepo is present. Source capacity recheck remains `DESTINATION_CAPACITY_JUDGMENT=FIT`; no data/secret restore, CasaOS service startup, Avalon movement, source freeze, or cutover occurred.
 - Historical `DESTINATION_MUTATED=NO` release statements remain accurate at their timestamp. Current limited host writes are user-authorized SSH authorization plus terminal proxy only.
 
 

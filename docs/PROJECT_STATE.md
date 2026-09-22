@@ -15,13 +15,13 @@ identity contract 已满足。Homebrew、Node、pnpm、clean monorepo 及 `/Volu
 这是用户授权后的有限 host bootstrap 写入与只读 Orb 验证，不是 secret/data restore、CasaOS deployment
 或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
 
-目标 Git SSH clone 已准备：目标本地生成独立 ED25519 deploy key，并用 `github-amadeus` SSH alias
-绑定到 GitHub；fingerprint 为 `SHA256:BtBgNalGaD3A1gTQQHRpkU6ma/eyzYTbh9Y9H1mKJVQ`。GitHub read access
-仍等待用户将公钥添加到 `ChristmasFox/amadeus-home` 的只读 Deploy key，尚未 clone 仓库，也没有复制
-控制端的任意 Git key 或 token。
+目标 Git SSH clone 已验收：用户明确授权目标专用 ED25519 key 作为 GitHub 账号级 Authentication key
+使用。`github-amadeus` SSH alias 的 `git ls-remote` 成功，随后 clean monorepo 已 clone 到
+`/Users/nyannyan/agent-monorepo`；origin 为 `git@github-amadeus:ChristmasFox/amadeus-home.git`，clone
+验收时 `main` clean at `74eced4`。没有复制控制端的任意 Git key 或 token。
 
 历史 release/checkpoint 中的 `DESTINATION_MUTATED=NO` 表示当时的 release acceptance 事实；当前应以本记录为准：
-`TARGET_HOST_BOOTSTRAP_WRITES=ssh-authorized-key,terminal-proxy,github-deploy-key,github-ssh-alias`，无运行时迁移写入。
+`TARGET_HOST_BOOTSTRAP_WRITES=ssh-authorized-key,terminal-proxy,github-account-key,github-ssh-alias,clean-monorepo-clone`，无运行时迁移写入。
 
 ## 2026-09-21：Amadeus 1.4.5 Operation Skuld final release completed
 

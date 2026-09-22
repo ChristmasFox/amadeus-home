@@ -12,11 +12,11 @@
 4. **OrbStack 访问与 canonical guest 验收**：非交互 SSH 的默认 `PATH` 未含 `/usr/local/bin`，此前 `command -v orb` 的 missing 结论已被更正。目标实际存在 `/usr/local/bin/orb`；当前 `orb list` 只显示运行中的 `nyannyan` guest（Ubuntu noble/arm64）。`orb -m nyannyan` 普通 user probe（UID 501、用户/hostname 均为 `nyannyan`）和 `orb -m nyannyan -u root` root probe（UID 0）均通过；`/home/nyannyan` 存在，来宾系统为 Ubuntu 24.04.5 LTS。该 guest 已符合 clean destination identity contract。
 5. **目标 bootstrap 基线**：此前 Homebrew、Node、pnpm 和仓库均未安装/克隆；Python 为系统 3.9.6，`/Volumes/Avalon` 未挂载，Git 已存在。canonical `nyannyan` guest 已创建，但尚未恢复 secret/data、安装 CasaOS 或启动任何迁移运行时。
 6. **容量复核**：现有 source-side `plan-destination-capacity.sh` 重新测量仍返回 `DESTINATION_CAPACITY_JUDGMENT=FIT`（规划总需求 190.0 GiB、512 GB 目标盘剩余规划余量 290.0 GiB）。
-7. **Git SSH clone 准备（等待 GitHub 授权）**：目标机已生成专用、目标本地保存的 ED25519 deploy key，并以 SSH alias `github-amadeus` 指向 `github.com`；该 key 的 fingerprint 为 `SHA256:BtBgNalGaD3A1gTQQHRpkU6ma/eyzYTbh9Y9H1mKJVQ`。尚未获得仓库读取授权，未 clone，且未复制控制端已有 Git key 或 token。
+7. **Git SSH clone 验收**：用户明确授权将目标专用 ED25519 key 作为 GitHub **账号级 Authentication key** 使用；`github-amadeus` alias 的 `git ls-remote` 已返回 `HEAD`。clean monorepo 已 clone 到 `/Users/nyannyan/agent-monorepo`，origin 为 `git@github-amadeus:ChristmasFox/amadeus-home.git`，当前 `main` clean at `74eced4`。没有复制控制端已有 Git key 或 token。
 
-边界：本阶段只有用户安装的 SSH 公钥、受管 zsh 终端代理 block，以及目标本地 GitHub deploy key/SSH alias 写入了目标 Mac；本轮 OrbStack 检查全为只读。没有复制仓库、恢复 secret/data、启动第二套运行时、移动 Avalon，或执行 cutover。旧 Mac/CasaOS 仍是唯一权威运行时。
+边界：本阶段只有用户安装的 SSH 公钥、受管 zsh 终端代理 block、目标本地 GitHub key/SSH alias，以及 clean monorepo clone 写入了目标 Mac；本轮 OrbStack 检查全为只读。没有恢复 secret/data、启动第二套运行时、移动 Avalon，或执行 cutover。旧 Mac/CasaOS 仍是唯一权威运行时。
 
-下一步：将目标 GitHub 公钥作为 `ChristmasFox/amadeus-home` 的**只读 Deploy key**添加后，先运行 `git ls-remote` 验证，再 clone clean monorepo 到 `/Users/nyannyan/agent-monorepo`。然后完成 Homebrew → Node 24/pnpm/Python 3.11+ host bootstrap 并将非敏感 host profile 指向已验收的 `nyannyan` guest；此后才执行独立的 secret/data restore preflight。详见 `.agent/tasks/2026-09-22-amadeus-m204-host-bootstrap.md`。
+下一步：在目标 clean monorepo 中完成 Homebrew → Node 24/pnpm/Python 3.11+ host bootstrap 并将非敏感 host profile 指向已验收的 `nyannyan` guest；此后才执行独立的 secret/data restore preflight。详见 `.agent/tasks/2026-09-22-amadeus-m204-host-bootstrap.md`。
 
 ## 2026-09-22：Amadeus 1.4.7 Operation Skuld Final Migration Blocker Fixes（已完成）
 
