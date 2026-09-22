@@ -79,22 +79,30 @@ python3 - \
 import json
 import sys
 
-dest_ssd, macos_overhead, guest_budget = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+dest_ssd, macos_overhead, configured_guest_floor = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 src_docker, src_appdata, src_pnpm, src_macos_apps = int(sys.argv[4]), int(sys.argv[5]), int(sys.argv[6]), int(sys.argv[7])
 avalon_note = sys.argv[8]
 
 def gb(b): return round(b / 1024**3, 2)
 
-# Estimate destination requirements
-req_macos = macos_overhead                       # macOS + system
-req_orbstack = guest_budget                      # OrbStack dynamic disk (Docker+AppData are inside)
-req_docker = src_docker                          # Docker images/layers (same or smaller on clean install)
-req_appdata = src_appdata                        # AppData (same)
-req_pnpm = src_pnpm                              # pnpm store
-req_macos_apps = src_macos_apps                  # monorepo + node
-req_buffer = 32 * 1024**3                        # 30 GB free buffer
+# Destination capacity model (1.4.7 fix):
+# guest_required = max(configured_guest_floor, measured_guest_requirement + growth/safety margin)
+# This avoids both double-counting Docker/AppData AND using a fixed floor that ignores measurements.
+# Docker and AppData BOTH live inside the OrbStack guest disk image.
+# A clean destination install may reuse Docker layer cache so we add a 20% growth margin.
+GROWTH_MARGIN = 1.20  # 20% safety margin on measured guest usage
+SAFETY_BUFFER_GB = 10 * 1024**3  # additional 10 GB safety padding on guest estimate
 
-total_required = req_macos + req_orbstack + req_pnpm + req_macos_apps + req_buffer
+measured_guest = (src_docker + src_appdata) * GROWTH_MARGIN + SAFETY_BUFFER_GB
+req_guest = max(configured_guest_floor, measured_guest)
+
+req_macos = macos_overhead           # macOS system overhead (~40 GB)
+req_pnpm = src_pnpm                  # pnpm store
+req_macos_apps = src_macos_apps      # monorepo + node modules
+req_buffer = 30 * 1024**3            # 30 GB free buffer target
+
+# Avalon external disk is NOT counted against internal SSD
+total_required = req_macos + req_guest + req_pnpm + req_macos_apps + req_buffer
 remaining = dest_ssd - total_required
 
 WARN_THRESHOLD = 30 * 1024**3   # 30 GB
@@ -107,37 +115,42 @@ elif remaining < WARN_THRESHOLD:
 else:
     judgment = 'FIT'
 
-print(f'# Destination Capacity Plan — Amadeus 1.4.6')
+print(f'# Destination Capacity Plan — Amadeus 1.4.7')
 print(f'')
-print(f'Destination SSD:           {gb(dest_ssd):.1f} GB (512 GB nominal)')
+print(f'Destination SSD (512 GB nominal):   {gb(dest_ssd):.1f} GB')
 print(f'')
-print(f'## Estimated requirements')
-print(f'  macOS + system:          {gb(req_macos):.1f} GB')
-print(f'  OrbStack dynamic disk:   {gb(req_orbstack):.1f} GB (Docker images + AppData inside)')
-print(f'    └─ Docker images:      {gb(req_docker):.1f} GB (from source measurement)')
-print(f'    └─ AppData:            {gb(req_appdata):.1f} GB (from source measurement)')
-print(f'  pnpm store:              {gb(req_pnpm):.1f} GB')
-print(f'  monorepo + node:         {gb(req_macos_apps):.1f} GB')
-print(f'  free buffer (target):    {gb(req_buffer):.1f} GB')
+print(f'## Source measurements (from OrbStack guest)')
+print(f'  Docker images+layers:  {gb(src_docker):.1f} GB')
+print(f'  AppData:               {gb(src_appdata):.1f} GB')
+print(f'  Combined guest usage:  {gb(src_docker + src_appdata):.1f} GB (Docker+AppData inside OrbStack disk)')
+print(f'')
+print(f'## Destination requirements')
+print(f'  macOS + system:                {gb(req_macos):.1f} GB')
+print(f'  OrbStack guest disk:           {gb(req_guest):.1f} GB')
+print(f'    configured floor:            {gb(configured_guest_floor):.1f} GB')
+print(f'    measured+20% margin+10G:     {gb(measured_guest):.1f} GB')
+print(f'    → max(floor, measured) used  (no double-counting Docker+AppData)')
+print(f'  pnpm store:                    {gb(req_pnpm):.1f} GB')
+print(f'  monorepo + node:               {gb(req_macos_apps):.1f} GB')
+print(f'  free buffer (target):          {gb(req_buffer):.1f} GB')
 print(f'  ─────────────────────────────────────────')
-print(f'  TOTAL REQUIRED:          {gb(total_required):.1f} GB')
-print(f'  REMAINING:               {gb(remaining):.1f} GB')
+print(f'  TOTAL REQUIRED:                {gb(total_required):.1f} GB')
+print(f'  REMAINING:                     {gb(remaining):.1f} GB')
 print(f'')
 print(f'## Avalon (8TB external disk)')
 print(f'  {avalon_note}')
-print(f'  Immich media ({gb(src_docker):.1f} GB measured as docker): Avalon is physically moved.')
-print(f'  Avalon does NOT count against destination SSD.')
+print(f'  Avalon does NOT count against destination SSD. Physical disk is moved separately.')
 print(f'')
 print(f'## Judgment')
 print(f'DESTINATION_CAPACITY_JUDGMENT={judgment}')
 if judgment == 'BLOCKER':
-    print(f'  ❌ BLOCKER: Remaining space ({gb(remaining):.1f} GB) is below hard minimum ({gb(BLOCKER_THRESHOLD):.1f} GB).')
+    print(f'  BLOCKER: Remaining space ({gb(remaining):.1f} GB) is below hard minimum ({gb(BLOCKER_THRESHOLD):.1f} GB).')
     print(f'  Operation Skuld cutover cannot proceed until capacity is resolved.')
 elif judgment == 'WARNING':
-    print(f'  ⚠️  WARNING: Remaining space ({gb(remaining):.1f} GB) is below warning threshold ({gb(WARN_THRESHOLD):.1f} GB).')
+    print(f'  WARNING: Remaining space ({gb(remaining):.1f} GB) is below warning threshold ({gb(WARN_THRESHOLD):.1f} GB).')
     print(f'  Cutover can proceed with operator acknowledgement of reduced headroom.')
 else:
-    print(f'  ✅ FIT: Remaining space ({gb(remaining):.1f} GB) exceeds warning threshold ({gb(WARN_THRESHOLD):.1f} GB).')
+    print(f'  FIT: Remaining space ({gb(remaining):.1f} GB) exceeds warning threshold ({gb(WARN_THRESHOLD):.1f} GB).')
     print(f'  Destination SSD has sufficient headroom for Operation Skuld.')
 print(f'')
 print(f'DESTINATION_CAPACITY_PLAN=ready')
