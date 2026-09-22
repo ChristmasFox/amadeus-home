@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "20260922T132143Z",
+  "entries": [
+    {
+      "service": "openclaw",
+      "classification": "MIGRATE",
+      "artifact": "fixture://openclaw-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "sqlite-backup-api-restore + workspace-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "product-radar",
+      "classification": "MIGRATE",
+      "artifact": "fixture://product-radar-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "sqlite-backup-api-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "9router",
+      "classification": "MIGRATE",
+      "artifact": "fixture://9router-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "docker-load exact image + restore data archive + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "immich",
+      "classification": "MIGRATE",
+      "artifact": "fixture://immich-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "pg_restore logical dump + attach Avalon external disk",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "immich-media",
+      "classification": "MIGRATE",
+      "artifact": "fixture://immich-media-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "external-reference: physical Avalon disk move + UUID/sentinel verify",
+      "verify": "passed",
+      "sensitiveState": "none-required"
+    },
+    {
+      "service": "changedetection",
+      "classification": "MIGRATE",
+      "artifact": "fixture://changedetection-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "datastore-directory-archive-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "media-organizer-adapter",
+      "classification": "MIGRATE",
+      "artifact": "fixture://media-organizer-adapter-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "state-directory-archive-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "frpc",
+      "classification": "MIGRATE",
+      "artifact": "fixture://frpc-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "config-archive-restore + encrypted-bundle-decrypt for credentials",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "xiaoya",
+      "classification": "MIGRATE",
+      "artifact": "fixture://xiaoya-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "appdata-directory-archive-restore to /DATA/AppData/xiaoya + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "emby",
+      "classification": "MIGRATE",
+      "artifact": "fixture://emby-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "config-archive-restore + external-media-reference (Avalon)",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "qbittorrent",
+      "classification": "MIGRATE",
+      "artifact": "fixture://qbittorrent-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "config-archive-restore + external-downloads-reference (Avalon)",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "nginxproxymanager",
+      "classification": "MIGRATE",
+      "artifact": "fixture://nginxproxymanager-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "db-certificate-archive-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "filebrowser",
+      "classification": "MIGRATE",
+      "artifact": "fixture://filebrowser-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "appdata-archive-restore + named-volume-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "aria2",
+      "classification": "MIGRATE",
+      "artifact": "fixture://aria2-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "config-archive-restore + external-downloads-reference (Avalon)",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "jellyfin",
+      "classification": "MIGRATE",
+      "artifact": "fixture://jellyfin-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "config-archive-restore + external-media-reference (Avalon)",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "alist",
+      "classification": "MIGRATE",
+      "artifact": "fixture://alist-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "data-archive-restore + external-storage-reference (Avalon)",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    },
+    {
+      "service": "v2raya",
+      "classification": "MIGRATE",
+      "artifact": "fixture://v2raya-artifact",
+      "sha256": "fixture-sha256",
+      "restoreMethod": "state-directory-archive-restore + encrypted-bundle-decrypt",
+      "verify": "passed",
+      "sensitiveState": "encrypted-bundle"
+    }
+  ],
+  "allVerified": true,
+  "totalMigrateServices": 17,
+  "avalonPolicy": "external-reference-only; not archived"
+}
