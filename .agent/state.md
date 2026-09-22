@@ -1,4 +1,18 @@
 
+## 2026-09-22 — Amadeus 1.4.6 Cutover Readiness deployed
+
+- Released VERSION=1.4.6; commit `5baad95`.
+- Fixed Immich remote checksum equivalence bug (rsync zero-changes verification).
+- Fixed storage growth telemetry bug (MACHINE variable not expanding in heredoc).
+- Added 7 preparation tooling scripts (bootstrap planner, clean guest planner, HomeLab restore plan, state machine, rollback plan, pre-migration GC, capacity planner).
+- Added 2 new test scripts (preparation tooling + checksum equivalence).
+- Updated migration manifest (schemaVersion 3) and runbook with Amadeus-M204/nyannyan destination identity.
+- Fixed xiaoya path: /home/blacksidev/xiaoya → /DATA/AppData/xiaoya.
+- Live CasaOS deploy: OpenClaw image git-5baad9571dfc-20260922120543; doctor 0/0; migration-readiness 28/28 PASS.
+- OPERATION_SKULD=READY; DESTINATION_HOST_IDENTITY=Amadeus-M204; SOURCE_FROZEN=NO; DESTINATION_MUTATED=NO.
+- Deployment evidence: docs/reports/AMADEUS_1_4_6_DEPLOYMENT.md.
+
+
 ## 2026-09-21 — Amadeus 1.4.5 Phase 0 audit
 
 - Goal: `docs/AMADEUS_1_4_5_OPERATION_SKULD_FINAL_HARDENING_GOAL.md` plus the development-efficiency addendum.

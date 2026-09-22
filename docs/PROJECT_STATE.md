@@ -17,6 +17,16 @@ retained, and source reclaim is `PENDING`. Mac mini cutover is `NOT EXECUTED`. F
 is in `docs/reports/AMADEUS_1_4_5_DEPLOYMENT.md`; external runtime artifacts remain under the
 Operation Skuld backup root.
 
+## 2026-09-22：Amadeus 1.4.6 Operation Skuld Cutover Readiness（已完成）
+
+目标文件：`docs/AMADEUS_1_4_6_OPERATION_SKULD_CUTOVER_READINESS_GOAL.md`。
+
+修复 Immich remote checksum equivalence bug（rsync zero-changes 验证）和 storage growth telemetry bug（heredoc MACHINE 变量展开）。新增 7 个切换准备工具链脚本和 2 个测试脚本。Migration manifest 更新为 schemaVersion 3，记录目标身份 Amadeus-M204 / nyannyan（OrbStack: nyannyan，Ubuntu 24.04，strategy: clean-orbstack-ubuntu-guest）。migration-readiness.sh 新增 4 个 1.4.6 gate（destination identity、preparation tooling、checksum fix、telemetry fix），28 个 gate 全部通过。
+
+`VERSION=1.4.6` 已提交并 push；live CasaOS apply 完成，OpenClaw image `local/openclaw-amadeus:git-5baad9571dfc-20260922120543`，Product Radar 复用。Doctor 0/0，`OPERATION_SKULD=READY`，所有 1.4.6 required fields 已输出。Mac mini cutover 未执行，Immich source reclaim 仍 PENDING，destination 未被修改。
+
+部署 evidence：`docs/reports/AMADEUS_1_4_6_DEPLOYMENT.md`；checkpoint：`.agent/checkpoints/2026-09-22-amadeus-1.4.6-cutover-readiness-deployed.md`。
+
 ## 2026-09-21：1.4.5 hardening execution state（Phase 0-4 source implementation）
 
 Current target is Amadeus 1.4.5 Operation Skuld final hardening. Phase 0 re-audit is complete

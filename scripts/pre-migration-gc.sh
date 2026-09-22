@@ -68,11 +68,11 @@ fi
 command -v orb >/dev/null 2>&1 || { printf 'OrbStack CLI not found\n' >&2; exit 1; }
 
 # Step 1: Identify running images (protected)
-printf '--- Running containers and their images ---\n' | tee "$report_dir/running.txt"
+printf '%s\n' '--- Running containers and their images ---' | tee "$report_dir/running.txt"
 orb -m "$MACHINE" -u root docker ps -a --format '{{.Image}}' | sort -u | tee -a "$report_dir/running.txt"
 
 # Step 2: Identify dangling images (safe to remove)
-printf '--- Dangling images (no name, no tag, no dependent container) ---\n' | tee "$report_dir/dangling.txt"
+printf '%s\n' '--- Dangling images (no name, no tag, no dependent container) ---' | tee "$report_dir/dangling.txt"
 dangling_list="$(orb -m "$MACHINE" -u root docker images -f dangling=true -q 2>/dev/null || true)"
 if [[ -n "$dangling_list" ]]; then
   orb -m "$MACHINE" -u root docker images -f dangling=true --format '{{.ID}} {{.CreatedAt}} {{.Size}}' | tee -a "$report_dir/dangling.txt"
@@ -84,7 +84,7 @@ fi
 printf 'GC_DANGLING_COUNT=%s\n' "$dangling_count"
 
 # Step 3: Identify project images beyond retention (safe to remove with protection)
-printf '--- Project images (retention=%s) ---\n' "${DEPLOYMENT_IMAGE_RETENTION_COUNT:-2}" | tee "$report_dir/project-images.txt"
+printf '%s\n' '--- Project images (retention=%s) ---' "${DEPLOYMENT_IMAGE_RETENTION_COUNT:-2}" | tee "$report_dir/project-images.txt"
 orb -m "$MACHINE" -u root docker images --format '{{.Repository}}:{{.Tag}}|{{.ID}}|{{.CreatedAt}}' \
   | grep -E '^(local/openclaw-amadeus|local/product-radar):git-' | sort -t'|' -k3,3r \
   > "$report_dir/project-images.txt" 2>/dev/null || true
@@ -117,7 +117,7 @@ printf 'GC_EXCESS_PROJECT_IMAGES=%s\n' "$excess_count"
 printf '%s\n' "$excess_images" >> "$report_dir/project-images.txt"
 
 # Step 4: Build cache age
-printf '--- Docker build cache ---\n' | tee "$report_dir/build-cache.txt"
+printf '%s\n' '--- Docker build cache ---' | tee "$report_dir/build-cache.txt"
 cache_size="$(orb -m "$MACHINE" -u root docker system df --format '{{json .}}' 2>/dev/null \
   | python3 -c 'import json,sys; rows=[json.loads(l) for l in sys.stdin if l.strip()]; print(next((r.get("Size","0") for r in rows if r.get("Type")=="Build Cache"),"0B"))' 2>/dev/null || printf '0B')"
 printf 'GC_BUILD_CACHE_SIZE=%s\n' "$cache_size" | tee -a "$report_dir/build-cache.txt"

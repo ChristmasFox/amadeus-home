@@ -1,5 +1,25 @@
 # 当前任务
 
+## 2026-09-22：Amadeus 1.4.6 Operation Skuld Cutover Readiness（已完成）
+
+本轮以 `docs/AMADEUS_1_4_6_OPERATION_SKULD_CUTOVER_READINESS_GOAL.md` 为唯一范围。
+
+已完成：
+- 修复 P0 bug：Immich 远端 checksum equivalence（rsync zero-changes 验证）。
+- 修复 P0 bug：storage growth telemetry（shell heredoc 变量展开错误）。
+- 新增切换准备工具链：destination bootstrap planner、clean OrbStack guest creation planner、HomeLab clean-restore plan、Operation Skuld state machine、rollback plan、safe pre-migration GC、destination capacity planner。
+- 目标身份：Amadeus-M204 / nyannyan（OrbStack machine: nyannyan，Ubuntu 24.04 LTS）。
+- 更新 migration manifest（schemaVersion: 3）、runbook 和 service inventory 中的 destination identity。
+- 修复 xiaoya legacy path：`/home/blacksidev/xiaoya` → `/DATA/AppData/xiaoya`。
+- 新增测试：test-skuld-preparation-tooling.sh、test-immich-checksum-equivalence.sh。
+- 更新 migration-readiness.sh（28 个 gate 全部通过）。
+- 完整 release gate：pnpm test/typecheck/build/check:secrets 全通过。
+- deploy 到 canonical old Mac CasaOS host；doctor 0/0；OPERATION_SKULD=READY。
+
+更新时间：2026-09-22（Asia/Shanghai）
+
+# 当前任务
+
 ## 2026-09-21：Amadeus 1.4.5 Operation Skuld Final Hardening（已完成）
 
 本轮以 `docs/AMADEUS_1_4_5_OPERATION_SKULD_FINAL_HARDENING_GOAL.md` 与
