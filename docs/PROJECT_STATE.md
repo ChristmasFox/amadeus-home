@@ -1,3 +1,19 @@
+## 2026-09-22：Amadeus-M204 SSH 访问与终端代理基线（进行中）
+
+用户已显式开始新 Mac 的迁移准备。专用 ED25519 SSH key 已在控制端创建，目标用户
+`nyannyan` 已安装其公钥；`ssh amadeus-m204` 实测登录到 `Amadeus-M204` 成功。目标基线为
+macOS 27.0 / arm64 / Apple M6 / 24 GiB RAM，根卷约 386 GiB 可用。目标本地 `127.0.0.1:7897`
+已验证为同时支持 HTTP CONNECT 和 SOCKS5 的 mixed proxy；`/Users/nyannyan/.zshrc` 已写入可逆
+受管终端 proxy block，交互 zsh HTTPS smoke 经代理返回 HTTP 200。
+
+目标当前仍是 clean-host bootstrap 状态：Homebrew、OrbStack/Docker、Node、pnpm、clean monorepo
+及 `/Volumes/Avalon` 都尚未就绪；系统 Python 为 3.9.6。source-side capacity plan 复测为
+`DESTINATION_CAPACITY_JUDGMENT=FIT`。这是用户授权后的有限 host bootstrap 写入，不是 Linux guest、
+CasaOS、secret/data restore 或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
+
+历史 release/checkpoint 中的 `DESTINATION_MUTATED=NO` 表示当时的 release acceptance 事实；当前应以本记录为准：
+`TARGET_HOST_BOOTSTRAP_WRITES=ssh-authorized-key,terminal-proxy`，无运行时迁移写入。
+
 ## 2026-09-21：Amadeus 1.4.5 Operation Skuld final release completed
 
 Amadeus 1.4.5 is released and pushed. Current `main` is clean at `41acb87`; release version is
