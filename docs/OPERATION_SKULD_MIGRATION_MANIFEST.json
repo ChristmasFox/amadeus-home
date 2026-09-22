@@ -13,7 +13,7 @@
   },
   "destination": {
     "kind": "mac-mini",
-    "cutover": "not-authorized-by-1.4.6-goal",
+    "cutover": "not-authorized-by-1.4.7-goal",
     "runbook": "docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md",
     "identity": "see-destinationIdentity"
   },

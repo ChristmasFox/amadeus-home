@@ -70,11 +70,17 @@ check_required_sources() {
     "$ROOT_DIR/scripts/pre-migration-gc.sh" \
     "$ROOT_DIR/scripts/plan-destination-capacity.sh" \
     "$ROOT_DIR/scripts/test-skuld-preparation-tooling.sh" \
-    "$ROOT_DIR/scripts/test-immich-checksum-equivalence.sh"; do
+    "$ROOT_DIR/scripts/test-immich-checksum-equivalence.sh" \
+    "$ROOT_DIR/scripts/full-homelab-backup.sh" \
+    "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
+    "$ROOT_DIR/scripts/test-full-homelab-backup.sh" \
+    "$ROOT_DIR/scripts/test-restore-skuld-secrets.sh" \
+    "$ROOT_DIR/scripts/test-migration-blockers.sh" \
+    "$ROOT_DIR/scripts/generate-skuld-artifact-report.sh"; do
     [[ -f "$path" ]] || return 1
   done
   python3 -m json.tool "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" >/dev/null
-  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh scripts/plan-destination-bootstrap.sh scripts/skuld-state-machine.sh scripts/pre-migration-gc.sh scripts/plan-destination-capacity.sh; do
+  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh scripts/plan-destination-bootstrap.sh scripts/skuld-state-machine.sh scripts/pre-migration-gc.sh scripts/plan-destination-capacity.sh scripts/full-homelab-backup.sh scripts/restore-skuld-secrets.sh scripts/service-inventory.sh scripts/generate-skuld-artifact-report.sh; do
     git -C "$ROOT_DIR" ls-files --error-unmatch "$path" >/dev/null || return 1
   done
 }
@@ -365,6 +371,56 @@ check_storage_telemetry_fix() {
   ! grep -q "'\${MACHINE}'" "$ROOT_DIR/scripts/storage-health.sh" || return 1
   grep -q 'machine, immich_root, ext_root = sys.argv' "$ROOT_DIR/scripts/storage-health.sh" || return 1
 }
+check_full_homelab_backup_tooling() {
+  # Verify 1.4.7 full HomeLab backup script is present and passes syntax check
+  [[ -f "$ROOT_DIR/scripts/full-homelab-backup.sh" ]] || return 1
+  bash -n "$ROOT_DIR/scripts/full-homelab-backup.sh" || return 1
+  [[ -f "$ROOT_DIR/scripts/test-full-homelab-backup.sh" ]] || return 1
+}
+check_secret_restore_tooling() {
+  # Verify 1.4.7 secret restore script is present and passes syntax check
+  [[ -f "$ROOT_DIR/scripts/restore-skuld-secrets.sh" ]] || return 1
+  bash -n "$ROOT_DIR/scripts/restore-skuld-secrets.sh" || return 1
+  [[ -f "$ROOT_DIR/scripts/test-restore-skuld-secrets.sh" ]] || return 1
+}
+check_service_inventory_contract_mode() {
+  # Verify 1.4.7 service-inventory supports --observe and --compare (not just --write)
+  grep -q 'observe' "$ROOT_DIR/scripts/service-inventory.sh" || return 1
+  grep -q 'compare' "$ROOT_DIR/scripts/service-inventory.sh" || return 1
+  grep -q 'MANUAL_BLOCKER' "$ROOT_DIR/scripts/service-inventory.sh" || return 1
+  # Verify it refuses to write protected docs
+  grep -q 'PROTECTED_INVENTORY\|protected.*inventory' "$ROOT_DIR/scripts/service-inventory.sh" || return 1
+}
+check_skuld_state_machine_gates() {
+  # Verify 1.4.7 state machine has real gate verifiers
+  grep -q 'GATE_VERIFIERS' "$ROOT_DIR/scripts/skuld-state-machine.sh" || return 1
+  grep -q 'verifier_fn' "$ROOT_DIR/scripts/skuld-state-machine.sh" || return 1
+  grep -q 'gateEvidence' "$ROOT_DIR/scripts/skuld-state-machine.sh" || return 1
+}
+check_protected_image_set_in_gc() {
+  # Verify 1.4.7 GC script uses real protected image set logic
+  grep -q 'protected_images_json\|Building real protected image set' "$ROOT_DIR/scripts/pre-migration-gc.sh" || return 1
+  grep -q 'GC_PROTECTED_SET_COUNT' "$ROOT_DIR/scripts/pre-migration-gc.sh" || return 1
+  grep -q 'GC_PROTECTED_PROJECT_IMAGES' "$ROOT_DIR/scripts/pre-migration-gc.sh" || return 1
+}
+check_capacity_model_fix() {
+  # Verify 1.4.7 capacity model uses max(floor, measured) not fixed guest budget
+  grep -q 'max(configured_guest_floor, measured_guest)\|measured_guest\|GROWTH_MARGIN' "$ROOT_DIR/scripts/plan-destination-capacity.sh" || return 1
+  grep -q 'Avalon does NOT count against' "$ROOT_DIR/scripts/plan-destination-capacity.sh" || return 1
+}
+check_migration_tests_in_gate() {
+  # Verify 1.4.7 migration blocker tests are wired into pnpm test
+  grep -q 'test:migration-blockers\|migration-blockers' "$ROOT_DIR/package.json" || return 1
+}
+check_artifact_report_tooling() {
+  # Verify 1.4.7 artifact report generator is present
+  [[ -f "$ROOT_DIR/scripts/generate-skuld-artifact-report.sh" ]] || return 1
+  bash -n "$ROOT_DIR/scripts/generate-skuld-artifact-report.sh" || return 1
+}
+check_doc_path_consistency() {
+  # Verify /home/nyannyan is not labeled as a macOS path in tracked docs
+  ! grep -E '/home/nyannyan.*\(macOS\)' "$ROOT_DIR/docs/OPERATION_SKULD_SERVICE_INVENTORY.md" 2>/dev/null || return 1
+}
 run_readiness() {
   check 'clean Git worktree' check_git_clean
   check 'dynamic release version and release notes' check_version
@@ -398,6 +454,15 @@ run_readiness() {
   check 'retention policy and safe-GC guards' check_retention_policy
   check 'exact 9Router runtime artifact' check_9router_artifact
   check 'managed Docker log policy' check_log_policy
+  check '1.4.7 full HomeLab backup tooling present' check_full_homelab_backup_tooling
+  check '1.4.7 secret restore path tooling present' check_secret_restore_tooling
+  check '1.4.7 service inventory observe/compare mode' check_service_inventory_contract_mode
+  check '1.4.7 state machine real gate verifiers' check_skuld_state_machine_gates
+  check '1.4.7 GC uses real protected image set' check_protected_image_set_in_gc
+  check '1.4.7 capacity model uses max(floor,measured)' check_capacity_model_fix
+  check '1.4.7 migration blocker tests in pnpm test gate' check_migration_tests_in_gate
+  check '1.4.7 artifact report tooling present' check_artifact_report_tooling
+  check '1.4.7 /home/nyannyan not mislabeled as macOS' check_doc_path_consistency
 
   printf 'Operation Skuld readiness: %s failure(s), %s warning(s).\n' "$failures" "$warnings"
   if ((failures == 0)); then

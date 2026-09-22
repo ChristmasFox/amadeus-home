@@ -10,6 +10,8 @@
 !scripts/secrets-inventory.sh
 !scripts/export-skuld-secrets.sh
 !scripts/import-skuld-secrets.sh
+!scripts/restore-skuld-secrets.sh
+!scripts/test-restore-skuld-secrets.sh
 *.pem
 *.key
 *.crt

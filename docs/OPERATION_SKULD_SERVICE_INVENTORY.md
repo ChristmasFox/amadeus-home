@@ -1,8 +1,8 @@
 # Operation Skuld service inventory
 
 
-> **Amadeus 1.4.6**: Destination identity is Amadeus-M204 / nyannyan. All restore paths use
-> `/home/nyannyan` (macOS) or CasaOS standard `/DATA/AppData/<service>` (Linux guest).
+> **Amadeus 1.4.7**: Destination identity is Amadeus-M204 / nyannyan. All restore paths use
+> `/Users/nyannyan` (macOS) or `/home/nyannyan` (Linux guest) or CasaOS standard `/DATA/AppData/<service>` (Linux guest).
 > No `/Users/blacksidev` or `/home/blacksidev` paths are active destination production dependencies.
 > Source machine (ubuntu, old Mac) remains `SOURCE_FROZEN=NO` throughout.
 
@@ -42,4 +42,4 @@ Generated/verified against the canonical CasaOS runtime on 2026-09-21. This is a
 
 ## Runtime discovery
 
-`bash scripts/service-inventory.sh --write docs/OPERATION_SKULD_SERVICE_INVENTORY.md` refreshes sanitized live mount/image observations. It must not overwrite the explicit classification, backup, restore or secret contract without review.
+`bash scripts/service-inventory.sh --observe /tmp/live-observation.json` writes a sanitized live observation to an external path. **Never** use `--write` to overwrite this tracked contract file. Use `--compare /tmp/obs.json` to compare live runtime against this contract: running services missing from the contract become `MANUAL_BLOCKER`; contract entries missing from live runtime become `WARNING`.

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "pnpm --filter @agent/identity build && pnpm --filter @agent/presentation build && pnpm --filter @agent/pubg-domain build && pnpm --filter @agent/pubg-plugin build && pnpm --filter @agent/amadeus-plugin build && pnpm --filter @agent/product-radar build",
     "typecheck": "pnpm --filter @agent/identity typecheck && pnpm --filter @agent/presentation typecheck && pnpm --filter @agent/pubg-domain typecheck && pnpm --filter @agent/pubg-plugin typecheck && pnpm --filter @agent/amadeus-plugin typecheck && pnpm --filter @agent/product-radar typecheck",
-    "test": "pnpm test:architecture && pnpm test:migration-readiness && pnpm test:storage-runtime && pnpm test:service-aware-backup && pnpm test:skuld-consistency && pnpm test:notify-owner && pnpm --filter @agent/identity test && pnpm --filter @agent/presentation test && pnpm --filter @agent/pubg-domain test && pnpm --filter @agent/pubg-plugin test && pnpm --filter @agent/amadeus-plugin test && pnpm --filter @agent/product-radar test",
+    "test": "pnpm test:architecture && pnpm test:migration-readiness && pnpm test:storage-runtime && pnpm test:service-aware-backup && pnpm test:skuld-consistency && pnpm test:migration-blockers && pnpm test:notify-owner && pnpm --filter @agent/identity test && pnpm --filter @agent/presentation test && pnpm --filter @agent/pubg-domain test && pnpm --filter @agent/pubg-plugin test && pnpm --filter @agent/amadeus-plugin test && pnpm --filter @agent/product-radar test",
     "check:secrets": "./scripts/check-secrets.sh",
     "check:architecture": "node scripts/check-architecture.mjs",
     "test:architecture": "node scripts/test-check-architecture.mjs",
@@ -30,6 +30,11 @@
     "smoke:product-radar": "pnpm --filter @agent/product-radar smoke:bunjang",
     "test:fresh-clone-readiness": "bash scripts/test-fresh-clone-readiness.sh",
     "test:skuld-consistency": "bash scripts/test-skuld-manifest-runbook-consistency.sh",
-    "test:service-aware-backup": "bash scripts/test-service-aware-backup.sh"
+    "test:service-aware-backup": "bash scripts/test-service-aware-backup.sh",
+    "test:full-homelab-backup": "bash scripts/test-full-homelab-backup.sh",
+    "test:restore-skuld-secrets": "bash scripts/test-restore-skuld-secrets.sh",
+    "test:migration-blockers": "bash scripts/test-migration-blockers.sh",
+    "test:skuld-preparation-tooling": "bash scripts/test-skuld-preparation-tooling.sh",
+    "test:immich-checksum-equivalence": "bash scripts/test-immich-checksum-equivalence.sh"
   }
 }

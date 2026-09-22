@@ -48,6 +48,18 @@ if 'nyannyan' not in runbook:
     errors.append('runbook does not reference nyannyan destination identity')
 if 'Amadeus-M204' not in runbook:
     errors.append('runbook does not reference Amadeus-M204 hostname')
+# 1.4.7: doc path consistency — /home/nyannyan must not be labeled as macOS
+import re as _re
+# Check service inventory doc if accessible
+import subprocess as _sub
+try:
+    inv_path = Path(sys.argv[1]).parent.parent / 'docs/OPERATION_SKULD_SERVICE_INVENTORY.md'
+    if inv_path.exists():
+        inv_text = inv_path.read_text()
+        if _re.search(r'/home/nyannyan.*\(macOS\)', inv_text):
+            errors.append('docs/OPERATION_SKULD_SERVICE_INVENTORY.md: /home/nyannyan mislabeled as macOS')
+except Exception:
+    pass
 if errors:
     for error in errors: print(f'SKULD_CONSISTENCY_FAIL={error}', file=sys.stderr)
     raise SystemExit(1)
