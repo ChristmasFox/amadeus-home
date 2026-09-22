@@ -3,8 +3,8 @@
 - User explicitly authorized target-host migration preparation. Dedicated ED25519 key is local-only; user-installed public key authentication and `ssh amadeus-m204` were verified.
 - Read-only target facts: `Amadeus-M204` / `nyannyan`, macOS 27.0, arm64 Apple M6, 24 GiB RAM, root volume about 4% used with about 386 GiB available.
 - `127.0.0.1:7897` is reachable and verified for both HTTP CONNECT and SOCKS5. `/Users/nyannyan/.zshrc` now contains the reversible managed terminal proxy block; `zsh -ic` HTTPS proxy smoke returned HTTP 200.
-- Bootstrap gaps: Homebrew, OrbStack/Docker, Node, pnpm, clean monorepo and `/Volumes/Avalon` are absent; system Python is 3.9.6. Git is installed.
-- Source capacity recheck remains `DESTINATION_CAPACITY_JUDGMENT=FIT`; no guest, data/secret restore, service startup, Avalon movement, source freeze, or cutover occurred.
+- OrbStack correction: noninteractive SSH omits `/usr/local/bin` from `PATH`; `/usr/local/bin/orb` exists. `orb list` reports a running `ubuntu` noble/arm64 guest; its normal-user and `-u root` read-only probes pass, and `ubuntu.orb.local` resolves. It is not the contract-required clean guest name `nyannyan`, so it is not a deployment target or fallback.
+- Remaining bootstrap gaps: Homebrew, Node, pnpm, clean monorepo and `/Volumes/Avalon` are absent; system Python is 3.9.6. Git is installed. Source capacity recheck remains `DESTINATION_CAPACITY_JUDGMENT=FIT`; no canonical `nyannyan` guest, data/secret restore, service startup, Avalon movement, source freeze, or cutover occurred.
 - Historical `DESTINATION_MUTATED=NO` release statements remain accurate at their timestamp. Current limited host writes are user-authorized SSH authorization plus terminal proxy only.
 
 

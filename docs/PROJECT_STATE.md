@@ -6,10 +6,14 @@ macOS 27.0 / arm64 / Apple M6 / 24 GiB RAM，根卷约 386 GiB 可用。目标�
 已验证为同时支持 HTTP CONNECT 和 SOCKS5 的 mixed proxy；`/Users/nyannyan/.zshrc` 已写入可逆
 受管终端 proxy block，交互 zsh HTTPS smoke 经代理返回 HTTP 200。
 
-目标当前仍是 clean-host bootstrap 状态：Homebrew、OrbStack/Docker、Node、pnpm、clean monorepo
-及 `/Volumes/Avalon` 都尚未就绪；系统 Python 为 3.9.6。source-side capacity plan 复测为
-`DESTINATION_CAPACITY_JUDGMENT=FIT`。这是用户授权后的有限 host bootstrap 写入，不是 Linux guest、
-CasaOS、secret/data restore 或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
+目标当前仍是 clean-host bootstrap 状态：先前由非交互 SSH `PATH` 造成的 `orb` missing 观察已被
+更正，实际 CLI 为 `/usr/local/bin/orb`，并存在正在运行的 `ubuntu` noble/arm64 guest；普通 user 与
+`-u root` 的 Orb read-only probe 都通过，`ubuntu.orb.local` 可解析。该 guest 名称不符合迁移 contract
+规定的 clean `nyannyan` guest，不能用于目标运行时。Homebrew、Node、pnpm、clean monorepo 及
+`/Volumes/Avalon` 仍未就绪（系统 Python 为 3.9.6）。source-side capacity plan 复测为
+`DESTINATION_CAPACITY_JUDGMENT=FIT`。这是用户授权后的有限 host bootstrap 写入与只读 Orb 验证，
+不是 Linux guest 创建/restore、CasaOS、secret/data restore 或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，
+`MAC_MINI_CUTOVER=NOT_EXECUTED`。
 
 历史 release/checkpoint 中的 `DESTINATION_MUTATED=NO` 表示当时的 release acceptance 事实；当前应以本记录为准：
 `TARGET_HOST_BOOTSTRAP_WRITES=ssh-authorized-key,terminal-proxy`，无运行时迁移写入。
