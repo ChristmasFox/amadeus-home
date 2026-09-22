@@ -6,21 +6,39 @@
 
 这是 Mac mini 实际到货前的最后一个迁移准备版本。
 
-Amadeus 1.4.6 的目标不是继续扩展业务能力，而是把当前旧 Mac 上的 Amadeus / CasaOS / OrbStack / Immich / 9Router / HomeLab 收敛成一个**可验证、可恢复、可暂停、可回滚、今晚即可执行的 Operation Skuld 迁移系统**。
+Amadeus 1.4.6 不扩展业务能力；本轮只把当前旧 Mac 上的 Amadeus / CasaOS / OrbStack / Immich / 9Router / HomeLab 收敛成一个**可验证、可恢复、可暂停、可回滚、今晚即可执行的 Operation Skuld 迁移系统**。
 
-最终目标：
+最终角色：
 
 ```text
-旧 Mac = 当前权威运行节点 + 临时迁移控制端
-新 Mac mini = 目标节点
-Avalon 8TB = 外部数据与迁移工件载体
-Git = tracked source / migration contract
-Encrypted Bundle = secret / sensitive state
-OrbStack Export = 整机 Linux/CasaOS 快速迁移工件
-Service-aware Backup = 独立恢复与一致性兜底
+旧 Mac
+  = 当前 authoritative runtime
+  = 临时 Operation Skuld Controller
+
+新 Mac mini
+  hostname = Amadeus-M204
+  macOS short user = nyannyan
+  home = /Users/nyannyan
+  = destination runtime
+
+Avalon 8TB
+  = external media/data
+  = migration artifacts
+
+Git
+  = tracked source + migration contract
+
+Encrypted Bundle
+  = secrets + sensitive state
+
+OrbStack Export
+  = whole-machine fast path
+
+Service-aware Backup
+  = independent clean-restore fallback
 ```
 
-1.4.6 实施完成后应达到：
+1.4.6 实施完成后必须达到：
 
 ```text
 VERSION=1.4.6
@@ -30,23 +48,25 @@ OPERATION_SKULD_FULL_HOMELAB_BACKUP_READY=yes
 OPERATION_SKULD_ORBSTACK_EXPORT_READY=yes
 OPERATION_SKULD_SSH_CONTROLLER_READY=yes
 OPERATION_SKULD_CUTOVER_RUNBOOK_READY=yes
+DESTINATION_HOST_IDENTITY=Amadeus-M204
+DESTINATION_MACOS_USER=nyannyan
 IMMICH_SOURCE_RECLAIM=still-pending
 MAC_MINI_CUTOVER=NOT_EXECUTED
 ```
 
-本 Goal **允许**：
+本 Goal 允许：
 
-- 修复 1.4.5 审计出的所有迁移 blocker；
-- 修改源码、脚本、测试、文档、版本；
+- 修复 1.4.5 审计出的全部 migration blocker；
+- 修改源码、脚本、测试、manifest、runbook、host profile、版本；
 - commit / push；
-- 在当前 canonical old-Mac/CasaOS host 上部署 1.4.6；
-- 执行安全的 runtime cleanup / GC；
+- 在当前 canonical old-Mac/CasaOS host 部署 1.4.6；
+- 执行安全 runtime cleanup / GC；
 - 生成完整 migration artifacts、encrypted bundles、service-aware backups；
-- 生成/测试 OrbStack export 流程，但不要求在新 Mac 尚未到货时完成最终 cutover；
-- 创建 SSH destination bootstrap / controller；
-- 清理当前工作树中已经失去 active value 的 agent context / stale migration-only clutter，Git history 继续保存历史。
+- 生成和 rehearsal OrbStack export/import；
+- 实现 SSH destination bootstrap/controller；
+- 清理 current-tree 中已经失去 active value 的 agent context / stale migration-only clutter，Git history 保留历史。
 
-本 Goal **禁止**：
+本 Goal 禁止：
 
 - 实际执行 Mac mini cutover；
 - 删除 `/DATA/Gallery/immich` retained source；
@@ -54,14 +74,132 @@ MAC_MINI_CUTOVER=NOT_EXECUTED
 - generic `docker volume prune`；
 - generic `docker system prune -a --volumes`；
 - 在 Git、日志、通知中写 secret value；
-- 在旧 Mac 和新 Mac 同时启动 OpenClaw owner-channel runtime；
-- 在迁移验证完成前停止旧 Mac 的长期可回滚能力。
+- 旧 Mac 与新 Mac 同时启动 OpenClaw owner-channel runtime；
+- 迁移验证完成前破坏旧 Mac rollback 能力；
+- 为了用户名统一而修改 OrbStack Ubuntu 内现有 Linux 用户或 `/home/blacksidev` 路径；
+- 在新 Mac active host-side 配置中继续依赖 `/Users/blacksidev`。
 
 ---
 
-# 1. 当前 1.4.5 基线
+# 1. Destination Identity Contract（本轮新增硬约束）
 
-1.4.5 已经完成：
+新 Mac mini 身份已经确定，不再作为运行时猜测：
+
+```text
+ComputerName = Amadeus-M204
+LocalHostName = Amadeus-M204
+HostName = Amadeus-M204
+macOS short user = nyannyan
+macOS home = /Users/nyannyan
+```
+
+Destination bootstrap 必须验证或设置：
+
+```bash
+sudo scutil --set ComputerName "Amadeus-M204"
+sudo scutil --set LocalHostName "Amadeus-M204"
+sudo scutil --set HostName "Amadeus-M204"
+```
+
+并验证：
+
+```text
+whoami == nyannyan
+$HOME == /Users/nyannyan
+hostname/scutil identity == Amadeus-M204
+```
+
+SSH destination canonical identity：
+
+```text
+nyannyan@Amadeus-M204.local
+```
+
+在 mDNS 尚未稳定或 cutover 前允许：
+
+```text
+nyannyan@<temporary-lan-ip>
+```
+
+## 1.1 新旧 macOS 用户不同是设计事实
+
+```text
+old macOS host user = blacksidev
+new macOS host user = nyannyan
+```
+
+因此所有 destination host-side 路径必须：
+
+- 使用 `$HOME`；或
+- 使用 Host Profile；或
+- 明确以 `/Users/nyannyan` 为目标。
+
+以下在 **destination host active config/script/LaunchAgent** 中出现时属于 blocker：
+
+```text
+/Users/blacksidev
+~blacksidev
+hard-coded old macOS user
+```
+
+必须至少扫描：
+
+```text
+scripts/
+infra/
+integrations/
+LaunchAgent templates
+FashionSigLIP install paths
+Cloudflare/remote-access host config
+local repo/bootstrap paths
+host-profile generated values
+```
+
+## 1.2 OrbStack guest 不跟随 macOS username 重命名
+
+如果采用整个 OrbStack Ubuntu export/import：
+
+```text
+/home/blacksidev/...
+```
+
+属于 Linux guest 内部路径，可以原样保留。
+
+Hard rule：
+
+```text
+macOS /Users/blacksidev -> destination blocker
+Linux guest /home/blacksidev -> allowed legacy guest identity
+```
+
+不要为了视觉统一执行 Linux user rename、UID/GID rewrite 或大规模 guest path move。
+
+## 1.3 Destination file ownership
+
+所有新 Mac host-side 工件必须最终属于：
+
+```text
+nyannyan
+```
+
+尤其：
+
+```text
+/Users/nyannyan/.ssh
+~/Library/LaunchAgents
+FashionSigLIP install/state
+repo checkout
+host-profile local override
+migration controller local state
+```
+
+不得继承旧 macOS 用户 ownership。
+
+---
+
+# 2. 当前 1.4.5 基线与必须修复的问题
+
+1.4.5 已完成：
 
 - Immich live media -> `/Volumes/Avalon/immich/data`；
 - retained source `/DATA/Gallery/immich` 仍存在；
@@ -74,97 +212,84 @@ MAC_MINI_CUTOVER=NOT_EXECUTED
 - scope-aware validation / affected-only Docker build；
 - HomeLab migration classification；
 - Operation Skuld manifest/runbook；
-- `OPERATION_SKULD=READY` source-side evidence。
+- source-side readiness evidence。
 
-但 1.4.5 最终审计仍发现：
+1.4.6 必须收口以下问题。
 
-## P0
+### P0
 
-1. Immich production reclaim gate 的 remote `rsync --checksum --dry-run` 只检查 exit code；有差异时 rsync 可 exit 0，当前实现仍可能错误写入 `FRESH_ONE_WAY_EQUIVALENCE=passed`。
+Immich production reclaim gate 的 remote `rsync --checksum --dry-run` 不能只看 exit code；有内容差异时 rsync 可 exit 0，因此必须显式要求 **zero change lines**。
 
-## P1
+### P1
 
-2. `storage-health.sh` 的 storage growth Python heredoc 使用 literal `${MACHINE}`，导致 media/docker growth facts 可被吞成 `null`。
-3. `service-inventory.sh --write` 是旧版 generator，会覆盖当前人工/合同化的 MIGRATE/REBUILD、secret refs、backup/restore/verification contract。
-4. HomeLab 已完成分类，但默认 migration backup 仍没有自动收集全部 MIGRATE 服务的 config/state/named volumes。
-5. HomeLab 非核心 secrets/sensitive state 很多仍只是 metadata coverage。
-6. image retention 的注释/合同声称保护 running/current/previous/rollback/checkpoint，但实际删除逻辑主要依赖 last-N release tags。
+- `storage-health.sh` growth subprocess 使用 literal `${MACHINE}`，导致 growth facts 可变成 null；
+- `service-inventory.sh --write` 不能覆盖 tracked migration contract；
+- HomeLab 已分类但完整 MIGRATE service state/named-volume backup 尚未完全自动化；
+- 非核心 secret/sensitive state 仍有 metadata-only 覆盖；
+- image retention 必须真正消费 running/checkpoint/rollback protected set，而不是只按 last-N。
 
-## P2
+### P2
 
-7. secret bundle manifest 对 plaintext staging 的描述不准确。
-8. validation cache 需要 source fingerprint 才能安全复用。
-9. 当前 `.agent/checkpoints` 仍含大量 retired LangBot/HomeHub/历史阶段 checkpoint，会增加 Agent 搜索与上下文噪声。
-10. 缺少一条真正可执行的“旧 Mac SSH 控制新 Mac -> bootstrap -> import -> cutover -> rollback”状态机。
-
-1.4.6 必须将上述问题全部收口。
+- secret bundle plaintext staging metadata 必须描述真实；
+- validation cache 必须 source-fingerprint invalidation；
+- retired agent checkpoints/context 应降低默认搜索噪声；
+- 缺少完整 SSH old-Mac -> new-Mac deterministic cutover controller；
+- destination identity 现在固定为 `Amadeus-M204` / `nyannyan`，必须纳入所有迁移合同和测试。
 
 ---
 
-# 2. Operation Skuld 最终迁移策略
+# 3. Operation Skuld 双恢复策略
 
-1.4.6 必须支持两条恢复路径，但只维护一个 source-of-truth contract。
+1.4.6 必须支持两条恢复路径，但只有一个 source-of-truth manifest/runbook。
 
-## Strategy A — OrbStack 整机 export/import（今晚首选快速路径）
+## Strategy A — OrbStack whole-machine export/import（今晚首选 fast path）
 
-官方 OrbStack 支持：
+目标：保留当前 Ubuntu/CasaOS/Docker/AppData/runtime state，避免今晚逐服务手工重建。
 
-```text
-orb export ubuntu ubuntu.tar.zst
-orb import -n ubuntu ubuntu.tar.zst
-```
-
-该路径的目的：保留当前 Ubuntu/CasaOS/Docker/AppData/compose/runtime state，避免今晚手工重建几十个 HomeLab 服务。
-
-设计：
+流程：
 
 ```text
-old Mac
-  OrbStack ubuntu
-      ↓ final freeze
-      ↓ safe cleanup
-      ↓ service-aware backup
-      ↓ encrypted sensitive state backup
-      ↓ stop containers / stop machine
-      ↓ orb export
-Avalon/operation-skuld/orbstack/ubuntu-<stamp>.tar.zst
-      ↓ physical disk move
-new Mac mini
-      ↓ verify Avalon UUID/sentinel
-      ↓ orb import -n ubuntu
-      ↓ ingress disabled validation
-      ↓ host LaunchAgents restore
-      ↓ doctor/readiness
-      ↓ cutover
+old Mac authoritative runtime
+  ↓ source preflight
+  ↓ final service-aware backup
+  ↓ encrypted sensitive-state bundle
+  ↓ safe cleanup
+  ↓ freeze writers / ingress
+  ↓ stop OrbStack ubuntu
+  ↓ orb export
+Avalon/skuld/orbstack/ubuntu-<stamp>.tar.zst
+  ↓ checksum
+  ↓ safe unmount
+  ↓ physical disk move
+Amadeus-M204
+  ↓ verify Avalon identity
+  ↓ orb import -n ubuntu
+  ↓ ingress disabled validation
+  ↓ host-side restore under /Users/nyannyan
+  ↓ doctor/readiness
+  ↓ cutover
 ```
 
 ## Strategy B — Clean rebuild + service-aware restore（独立兜底）
 
-若以下任一条件阻止 Strategy A：
-
-- OrbStack export artifact 太大，无法安全放入 512GB 新 Mac 的目标容量；
-- export/import rehearsal 失败；
-- imported machine health 不一致；
-- Operator 明确选择 clean rebuild；
-
-则必须能够使用：
+若 fast path 因容量、artifact、import health 等原因 blocked：
 
 ```text
 Git tracked source
-+ Avalon external media
++ Avalon external data
 + full HomeLab state backup
 + encrypted sensitive-state bundle
-+ exact 9Router artifact
++ exact 9Router image
 + service-aware DB backups
 ```
 
-重建目标 HomeLab。
+必须可重建目标 HomeLab。
 
-**Strategy A 是速度优化，不得成为唯一恢复能力。**
+Strategy A 只是加速，绝不能成为唯一恢复能力。
 
 ---
 
-# 3. 修复 Immich reclaim P0
+# 4. 修复 Immich Reclaim P0
 
 文件：
 
@@ -172,38 +297,42 @@ Git tracked source
 scripts/reclaim-immich-old-source.sh
 ```
 
-production remote equivalence 必须满足：
+production remote equivalence：
 
 ```text
 rsync -a --checksum --dry-run --itemize-changes source/ destination/
 ```
 
-不仅要求 exit code 0，还必须要求**零 source->destination 差异**。
-
-允许：
+必须同时满足：
 
 ```text
-destination-only files
+exit code == 0
+actual source->destination change lines == 0
 ```
 
-禁止通过：
+允许 destination-only files。
+
+以下任一存在都必须 BLOCK：
 
 ```text
 source file missing on destination
 same-size different-content
 source newer/different file
-type/mode/path mismatch that would require rsync mutation
+source-only new file
+type/path mismatch
+anything requiring rsync mutation
 ```
 
-任何实际 change line：
+不得写：
 
 ```text
-FRESH_ONE_WAY_EQUIVALENCE=blocked
+FRESH_ONE_WAY_EQUIVALENCE=passed
+SOURCE_RECLAIM_READY
 ```
 
-不得写 `SOURCE_RECLAIM_READY`。
+除非 zero-difference gate 通过。
 
-新增 production-style rsync fixture，至少覆盖：
+新增 production-style rsync fixture：
 
 ```text
 identical                         PASS
@@ -213,23 +342,21 @@ same-size changed content        FAIL
 source has new file              FAIL
 ```
 
-1.4.6 本 Goal 修复并验证 gate，但仍：
+1.4.6 **修 gate 但不执行 reclaim**：
 
 ```text
-DO NOT reclaim /DATA/Gallery/immich
+DO NOT delete /DATA/Gallery/immich
 ```
-
-保留它作为实际 cutover 前的额外 rollback copy。
 
 ---
 
-# 4. 修复 Storage Growth
+# 5. 修复 Storage Growth
 
-`storage-health.sh` 中所有 Python subprocess 不能依赖 quoted heredoc 中的 shell interpolation。
+`storage-health.sh` 所有 Python subprocess 的 machine name 必须通过 argv/env 显式传入。
 
-将 `ORBSTACK_MACHINE` 显式通过 argv/env 传入 Python。
+不得在 quoted heredoc 中依赖 shell interpolation。
 
-必须实际产生非 null 的：
+必须产生可区分状态：
 
 ```text
 immichMediaBytes
@@ -238,70 +365,69 @@ downloadsBytes
 dockerBytes
 ```
 
-如果某目录不存在，应记录：
+目录不存在时记录：
 
 ```text
 status=not-present
 ```
 
-而不是静默吞成无法区分的 `null`。
+不能静默 null。
 
-新增 fixture / live sanity：
+验证：
 
-- machine name 正确传递；
-- history JSONL 正常 append/retention；
-- 7d/30d growth 可以在至少有足够 history 时计算；
-- storage health 状态仍独立于 growth 统计，不因 du failure 伪造 healthy。
+- machine name 正确；
+- history JSONL append/retention；
+- 7d/30d growth 在 history 足够时可计算；
+- growth 失败不改变 capacity truth，不伪造 healthy。
 
 ---
 
-# 5. Service Inventory：Observation 与 Contract 分离
+# 6. Service Inventory：Observation 与 Contract 分离
 
-禁止 `service-inventory.sh --write` 直接覆盖：
+禁止任何 live scan 直接覆盖：
 
 ```text
 docs/OPERATION_SKULD_SERVICE_INVENTORY.md
+docs/OPERATION_SKULD_MIGRATION_MANIFEST.json
 ```
 
-重新设计为：
+目标结构：
 
 ```text
 Live Observation
-  scripts/service-inventory.sh --scan
+  scripts/service-inventory.sh --scan --output PATH
         ↓
-  external/sanitized JSON or temp artifact
+  sanitized runtime observation
 
 Tracked Contract
-  docs/OPERATION_SKULD_SERVICE_INVENTORY.md
-  docs/OPERATION_SKULD_MIGRATION_MANIFEST.json
+  OPERATION_SKULD_SERVICE_INVENTORY.md
+  OPERATION_SKULD_MIGRATION_MANIFEST.json
         ↓
-  compare/validate
+  diff/check
 ```
 
-建议接口：
+建议支持：
 
 ```text
-scripts/service-inventory.sh --scan --output PATH
-scripts/service-inventory.sh --check
-scripts/service-inventory.sh --diff-contract
+--scan --output PATH
+--check
+--diff-contract
 ```
 
-`--scan` 只能生成 live observation，不能修改 tracked contract。
+必须验证：
 
-`--check` 必须验证：
-
-- 所有当前 running CasaOS service 都在 contract 中；
-- 所有 contract `MIGRATE/REBUILD/EXTERNAL_DATA` service 有 restore policy；
-- 新出现的未知 service -> `MANUAL_BLOCKER`；
+- 所有 running CasaOS service 在 contract 中；
+- MIGRATE/REBUILD/EXTERNAL_DATA 都有 restore policy；
+- 新未知 service -> `MANUAL_BLOCKER`；
 - 已消失 service -> warning/review，不自动删除 contract。
 
 ---
 
-# 6. Full HomeLab Migration Backup
+# 7. Full HomeLab Migration Backup
 
-1.4.6 必须从“分类完成”升级为“真正生成可恢复工件”。
+重新 live scan，以实际存在服务为准。
 
-当前 HomeLab 至少包含：
+当前已知范围至少包括：
 
 ```text
 openclaw
@@ -327,9 +453,7 @@ dashdot
 fashion-siglip
 ```
 
-重新 live scan 后以实际存在服务为准。
-
-为每个 `MIGRATE` service 实现：
+每个 `MIGRATE` service 必须具备：
 
 ```text
 backup artifact
@@ -358,55 +482,45 @@ $SKULD_BACKUP_ROOT/final-prep-<stamp>/
   host-inventory/
 ```
 
-## 6.1 不得重复打包 external data
+## 7.1 External bulk data 不重复打包
 
-以下只记录 identity/reference/check：
+只记录 identity/reference/check：
 
 ```text
-Avalon / media
-Avalon / downloads
+Avalon media
+Avalon downloads
 Immich media
-其他大型 external data
+other multi-TB external data
 ```
 
-不得 tar 数 TB 数据。
+不得 tar 大型 external media。
 
-## 6.2 普通迁移 state
-
-示例：
+## 7.2 DB 一致性
 
 ```text
-Emby config
-qBittorrent config
-Aria2 config
-changedetection datastore
-media adapter state
+SQLite -> SQLite backup API + integrity + checksum
+Immich PostgreSQL -> pg_dump -Fc + pg_restore --list + checksum
+other DB -> service-specific consistent backup
 ```
 
-使用 service-specific archive/restore。
+禁止仅 raw-copy live DB。
 
-## 6.3 named volumes
+## 7.3 Named volumes
 
-Filebrowser/NPM/其他真实 named volumes 必须显式：
+Filebrowser/NPM/其他真实 named volumes：
 
 ```text
 docker volume inspect
-volume export
+explicit export
 checksum
-restore target
+explicit restore target
 ```
 
-禁止 generic volume prune。
-
-## 6.4 数据库
-
-- SQLite -> backup API + integrity check；
-- Immich PostgreSQL -> `pg_dump -Fc` + `pg_restore --list`；
-- 其他 service DB 若为 SQLite/PostgreSQL/MySQL，使用对应一致性方法，不得仅 raw-copy live DB。
+禁止 generic volume cleanup。
 
 ---
 
-# 7. Secret / Sensitive State 全覆盖
+# 8. Secret / Sensitive State 全覆盖
 
 区分：
 
@@ -417,13 +531,13 @@ credential-bearing service state
 non-sensitive service state
 ```
 
-不要为了“API key 列表完整”而从数据库中提取/打印凭据。
+不要从 service DB 中提取/打印凭据，只为了凑 API key 列表。
 
-允许两种恢复方式：
+允许：
 
 ```text
-A. 独立 secret file/env -> encrypted bundle
-B. credential embedded in service DB/config -> encrypted sensitive-state artifact
+independent secret/env -> encrypted bundle
+credential-bearing DB/config -> encrypted sensitive-state artifact
 ```
 
 至少重新审计：
@@ -441,46 +555,40 @@ Aria2
 Alist
 v2rayA
 Xiaoya
-Emby/Jellyfin credential-bearing config
-changedetection/media adapter env if present
+Emby/Jellyfin auth-bearing config
+changedetection/media adapter env when present
 ```
 
-最终 `required=false` 只能用于 live scan 已证明不存在真实 sensitive material 的 optional service。
-
-如果 service 运行且有认证状态，但没有 migration artifact：
+运行中的认证 service 如果没有 migration artifact：
 
 ```text
 OPERATION_SKULD=BLOCKED
 ```
 
-## 7.1 encrypted bundle metadata 修正
+`required=false` 只能用于 live scan 已证明不存在实际 sensitive material 的 optional service。
 
-当前：
+## 8.1 Plaintext staging metadata
 
-```text
-plaintextTemporaryFiles=false
-```
-
-若实现仍使用 `0700 mktemp` staging，改为真实描述：
+若仍使用 `0700 mktemp`：
 
 ```text
 plaintextStaging=ephemeral-0700-cleanup-on-exit
 ```
 
-或实现真正 streaming encryption。
+而不是 `plaintextTemporaryFiles=false`。
 
-任何情况：
+必须保证：
 
-- no plaintext path in Git；
-- no values in logs；
-- trap cleanup；
-- failure path cleanup；
-- bundle checksum；
-- import rehearsal。
+- no plaintext path/value in Git；
+- no value in logs；
+- cleanup trap covers success/failure；
+- encrypted bundle checksum；
+- import rehearsal；
+- restored host-side file owner/mode 正确（destination owner=`nyannyan`）。
 
 ---
 
-# 8. OrbStack Full Snapshot
+# 9. OrbStack Full Snapshot
 
 新增：
 
@@ -499,17 +607,17 @@ scripts/skuld-orbstack-snapshot.sh
 Final export 前 hard gates：
 
 ```text
-source machine = expected ORBSTACK_MACHINE
-machine architecture recorded
+source machine == expected ORBSTACK_MACHINE
+architecture recorded
 source distro recorded
 service-aware final backup passed
 encrypted sensitive-state bundle passed
 Avalon identity passed
 sufficient Avalon free space
-no active migration blocker
+no migration blocker
 ```
 
-Final export 应在**source freeze**之后执行。
+Final export 必须在 source freeze 后执行。
 
 输出：
 
@@ -520,7 +628,7 @@ $SKULD_BACKUP_ROOT/orbstack/
   ubuntu-<stamp>.manifest.json
 ```
 
-manifest 至少：
+manifest 至少记录：
 
 ```text
 source Mac hostname
@@ -541,9 +649,9 @@ createdAt
 
 ---
 
-# 9. Destination Capacity Planner
+# 10. Destination Capacity Planner
 
-新 Mac mini 是 512GB 内置 SSD，因此 final fast-path 不能盲目 import 一个过大的旧 VM。
+新 Mac mini 内置 SSD = 512GB。
 
 新增：
 
@@ -551,17 +659,17 @@ createdAt
 scripts/skuld-capacity-plan.sh
 ```
 
-Source 端采集：
+Source：
 
 ```text
 OrbStack guest used bytes
 /DATA used bytes
 Docker used/reclaimable
 retained Immich source bytes
-export artifact bytes if available
+export artifact bytes when available
 ```
 
-Destination 端（SSH）采集：
+Destination over SSH：
 
 ```text
 internal total/free
@@ -569,22 +677,32 @@ repo/bootstrap footprint
 OrbStack existing footprint
 ```
 
-只有达到可配置 safety margin 才允许 `FAST_PATH=eligible`。
+必须使用 destination identity：
 
-不要仅以 `.tar.zst` 压缩后体积判断 destination 是否够用。
+```text
+user=nyannyan
+home=/Users/nyannyan
+host=Amadeus-M204 or temporary IP
+```
 
-若不满足：
+只有达到 configurable safety margin：
+
+```text
+FAST_PATH=eligible
+```
+
+否则：
 
 ```text
 FAST_PATH=blocked
 CLEAN_RESTORE_PATH=required
 ```
 
+不能仅用 compressed export size 判断导入后空间。
+
 ---
 
-# 10. Pre-export Garbage Cleanup
-
-目的：减少旧 Mac 压力和 OrbStack export 体积，但**绝不牺牲 rollback/data**。
+# 11. Pre-export Garbage Cleanup
 
 新增或扩展：
 
@@ -592,29 +710,32 @@ CLEAN_RESTORE_PATH=required
 scripts/skuld-pre-export-cleanup.sh
 ```
 
-必须先 `--plan`，再显式 `--apply`。
+必须：
+
+```text
+--plan first
+--apply only explicitly
+```
 
 允许清理：
 
 ```text
-expired project release image tags
+expired project release tags
 unprotected dangling project images
 expired BuildKit cache
 stale test/rehearsal containers
 known /tmp/skuld-* leftovers
 apt package cache
-bounded system journal beyond configured retention
+bounded old journal
 expired disposable deployment evidence
 known generated build temp
 ```
-
-允许设置 journald 上限，但必须记录 before/after。
 
 禁止：
 
 ```text
 Docker volumes
-any database
+DBs
 Avalon media/downloads
 Immich retained source
 secret bundles
@@ -623,7 +744,7 @@ latest OrbStack export
 current image
 previous known-good
 rollback/checkpoint referenced image
-unknown owner paths
+unknown owner path
 ```
 
 输出：
@@ -636,64 +757,60 @@ REMOVED_OBJECTS
 PROTECTED_OBJECTS
 ```
 
-若释放 >= meaningful threshold，走 owner notification。
+释放 >= meaningful threshold 时走 owner notification。
 
 ---
 
-# 11. Image Retention 必须真正保护 rollback set
+# 12. Image Retention 必须消费真实 Protected Set
 
-`storage-maintenance.sh` 必须构造实际 protected set：
+`storage-maintenance.sh` 必须保护：
 
 ```text
 running image IDs/tags
 current release image
-previous known-good image
+previous known-good
 rollback tags
-checkpoint/evidence referenced image tags
+checkpoint/evidence referenced tags
 last N project releases
 9Router exact image
 ```
 
-删除候选必须与 protected set 比较。
+必须把 protected set 真正用于删除决策。
 
-不能只生成 `running-images.txt` 而不消费它。
-
-测试至少：
+测试：
 
 ```text
-old but running image            KEEP
-old but checkpoint referenced    KEEP
-old rollback tag                 KEEP
-last N                           KEEP
-unreferenced older project tag   REMOVE
-unknown image                    REPORT_ONLY
+old but running              KEEP
+checkpoint referenced        KEEP
+rollback tag                 KEEP
+last N                       KEEP
+unreferenced old project tag REMOVE
+unknown image                REPORT_ONLY
 ```
 
 ---
 
-# 12. Agent Context / Repo Hygiene
+# 13. Agent Context / Repo Hygiene
 
-`.agent/checkpoints` 中大量 pre-OpenClaw / LangBot / old HomeHub checkpoint 已不属于 active execution context。
+`.agent/checkpoints` 中 pre-OpenClaw/LangBot/old HomeHub checkpoint 不应继续污染默认 Agent context。
 
-本轮进行一次**只针对 current-tree context noise 的清理**：
+本轮：
 
-- Git history 保留所有旧 checkpoint；
-- active `.agent/` 只保留当前架构、最新稳定 release、Operation Skuld、当前开发 workflow 必要文件；
-- 老历史如果仍需要 discoverability，可留下一个 `docs/history/README.md` 索引说明 Git history/ref；
-- 不复制几十个历史文件到新的 history 目录造成同样上下文噪声。
+- Git history 保留历史；
+- active `.agent/` 只保留当前架构、最新稳定 release、Operation Skuld、当前开发 workflow 必需文件；
+- 可留 `docs/history/README.md` 指向 Git history；
+- 不把旧文件复制到另一个目录制造同样噪声。
 
 目标：
 
 ```text
-Codex 默认 scan .agent
-=> 只看到当前现实
+Codex default scan .agent
+=> current reality only
 ```
-
-不得删除真正仍参与 runtime/migration contract 的文档。
 
 ---
 
-# 13. SSH Destination Bootstrap
+# 14. SSH Destination Bootstrap
 
 新增：
 
@@ -701,74 +818,117 @@ Codex 默认 scan .agent
 scripts/skuld-destination-bootstrap.sh
 ```
 
-支持：
+接口：
 
 ```text
---target USER@HOST --check
---target USER@HOST --apply
+--target nyannyan@HOST --check
+--target nyannyan@HOST --apply
 ```
 
-旧 Mac 作为一次性迁移控制端，通过 SSH 执行。
+旧 Mac 是一次性迁移 controller。
 
-## 13.1 新 Mac 人工第一步
+## 14.1 新 Mac 人工初始化步骤（已定，不再建议）
 
-新 Mac 到手后，Operator 先人工完成：
+Operator 在新 Mac 本地：
 
-1. 首次 macOS Setup；
-2. **建议创建与旧 Mac 相同 short username：`blacksidev`**，减少 host path / imported Linux user / existing automation 差异；
-3. 接入有线 Ethernet；
-4. 在路由器先给新 Mac 一个**临时 LAN IP**，不得和旧 Mac 冲突；
-5. System Settings -> General -> Sharing -> 开启 **Remote Login**，仅允许 operator account；
-6. 不运行 Migration Assistant 去整体复制旧 macOS HomeLab；HomeLab 使用 Operation Skuld；
-7. 旧 Mac 将自己的 public SSH key 加入新 Mac `authorized_keys`；
-8. 验证无密码 SSH。
+1. 完成 macOS 首次 Setup；
+2. 创建 short username **`nyannyan`**；
+3. Home 必须为 `/Users/nyannyan`；
+4. 将电脑命名为 **`Amadeus-M204`**；
+5. 接入有线 Ethernet；
+6. 先使用与旧 Mac 不冲突的临时 DHCP/LAN IP；
+7. System Settings -> General -> Sharing -> 开启 **Remote Login**，仅允许 `nyannyan`；
+8. 不使用 Migration Assistant 整体复制旧 HomeLab；
+9. 旧 Mac public SSH key 加入 `/Users/nyannyan/.ssh/authorized_keys`；
+10. 验证 old Mac -> `nyannyan@Amadeus-M204.local` 或临时 IP 无密码 SSH。
 
-旧 Mac private key 不需要复制到新 Mac。
+旧 Mac private key 不复制到新 Mac。
 
-## 13.2 bootstrap 检查
+## 14.2 Bootstrap hard checks
 
 远端检查：
 
 ```text
-Darwin
-arm64
-expected user
-hostname
-internal free bytes
-network reachability
+uname == Darwin
+arch == arm64
+whoami == nyannyan
+HOME == /Users/nyannyan
+ComputerName == Amadeus-M204
+LocalHostName == Amadeus-M204
+HostName == Amadeus-M204
+internal free bytes sufficient
 SSH host fingerprint recorded
+network reachability
 ```
 
-`--apply` 安装/准备：
+如果 hostname 尚未设置，`--apply` 可以显式设置三种 scutil identity。
+
+如果 remote user 不是 `nyannyan`：
+
+```text
+DESTINATION_BOOTSTRAP=BLOCKED
+```
+
+不得静默换用户继续。
+
+## 14.3 Bootstrap apply
+
+安装/准备：
 
 ```text
 Homebrew
 git
 node/pnpm
 tmux
-cloudflared (if contract requires)
+cloudflared when contract requires
 OrbStack
-repo clone
-host-profile template
+repo clone under /Users/nyannyan
+host-profile local override
 ```
 
-OrbStack GUI 需要完成 first-run 时，脚本必须明确 BLOCKED 并告诉 Operator 在新 Mac 本地打开一次 OrbStack，而不是无限等待。
+Host Profile destination 至少应生成/验证：
 
-## 13.3 不提前启动第二 runtime
+```text
+MAC_CONTROL_USER=nyannyan
+```
 
-Destination bootstrap 阶段禁止：
+不要因为 guest 内存在 `/home/blacksidev` 就把 MAC_CONTROL_USER 写回 blacksidev。
+
+OrbStack GUI 需要 first-run 时：
+
+```text
+BLOCKED: open OrbStack once locally on Amadeus-M204
+```
+
+而不是无限等待。
+
+## 14.4 Active host path audit
+
+Destination preflight 必须执行 active path audit：
+
+```text
+FORBIDDEN_HOST_PATH=/Users/blacksidev
+```
+
+允许 explicit historical docs/evidence，禁止 active script/config/template/LaunchAgent/runtime target 依赖该路径。
+
+Guest path `/home/blacksidev` 不属于此检查。
+
+## 14.5 不提前启动第二 runtime
+
+Bootstrap 阶段禁止：
 
 ```text
 OpenClaw owner channels active
 frpc/public ingress active
-changedetection/Product Radar active producer sending to owner
+Product Radar/changedetection owner delivery active
 ```
 
-可以构建/检查，但不允许形成双活。
+可以 build/check，不得双活。
 
 ---
 
-# 14. SSH Migration Controller / State Machine
+# 15. SSH Migration Controller / State Machine
 
 新增：
 
@@ -776,33 +936,31 @@ changedetection/Product Radar active producer sending to owner
 scripts/operation-skuld.sh
 ```
 
-它不是第二 Agent，只是 deterministic migration controller。
+它是 deterministic migration controller，不是第二 Agent。
 
-建议命令：
+建议接口：
 
 ```text
 operation-skuld.sh status
 operation-skuld.sh source-preflight
-operation-skuld.sh destination-preflight --target USER@HOST
+operation-skuld.sh destination-preflight --target nyannyan@HOST
 operation-skuld.sh prepare-artifacts --apply
 operation-skuld.sh freeze-source --apply --approval-token ...
 operation-skuld.sh export-orbstack --apply
 operation-skuld.sh mark-disk-moved --approval-token ...
-operation-skuld.sh import-destination --apply
-operation-skuld.sh validate-destination
+operation-skuld.sh import-destination --target nyannyan@HOST --apply
+operation-skuld.sh validate-destination --target nyannyan@HOST
 operation-skuld.sh cutover --apply --approval-token ...
 operation-skuld.sh rollback --apply --approval-token ...
 ```
 
-State 写在：
+State：
 
 ```text
 $SKULD_BACKUP_ROOT/cutover/state.json
 ```
 
-因为 Avalon 会随迁移物理移动，state 能从旧 Mac 延续到新 Mac。
-
-状态机至少：
+状态至少：
 
 ```text
 SOURCE_READY
@@ -823,58 +981,51 @@ ROLLBACK_REQUIRED
 
 每一 phase：
 
-- 幂等；
-- 可 resume；
-- phase 前验证 previous state；
-- destructive/traffic mutation 必须 approval token；
-- 不允许跳过 physical disk move gate。
+- idempotent；
+- resumable；
+- previous-state validation；
+- destructive/traffic mutation requires approval；
+- no physical-disk-move gate skipping；
+- state records destination identity `Amadeus-M204/nyannyan`。
 
 ---
 
-# 15. Source Freeze
+# 16. Source Freeze
 
-Final freeze 之前旧 Mac 一直是 authoritative runtime。
+Freeze 前旧 Mac 一直 authoritative。
 
 `freeze-source` 必须：
 
-1. 再跑 source readiness；
-2. 记录 outbox pending/sent count；
-3. 生成**最后一次** service-aware backup；
-4. 生成 fresh Immich `pg_dump -Fc`；
-5. 生成 fresh encrypted sensitive-state bundle；
-6. 生成/校验 exact 9Router artifact；
-7. 停止会产生新 writes / external delivery 的 runtime；
-8. 停止 public ingress；
-9. 记录 Docker restart policies；
-10. 确保 imported VM 第一次启动不会自动形成双活；
-11. stop OrbStack machine；
-12. 之后不得在旧 runtime 接受新 owner/channel/media writes。
+1. source readiness；
+2. 记录 outbox pending/sent；
+3. final service-aware backup；
+4. fresh Immich `pg_dump -Fc`；
+5. fresh encrypted sensitive-state bundle；
+6. exact 9Router artifact verify；
+7. stop write-producing/external-delivery runtime；
+8. stop public ingress；
+9. record restart policies；
+10. 确保 imported VM first boot 不会双活；
+11. stop OrbStack ubuntu；
+12. freeze 后旧 runtime 不再接受 owner/channel/media writes。
 
-优先停止顺序：
+优先停止：
 
 ```text
-public ingress / frpc / tunnel
+public ingress/tunnel
 OpenClaw owner channels
-Product Radar / changedetection producers
+Product Radar/changedetection producers
 media workflow writers
 Immich writers
 remaining containers
 OrbStack ubuntu
 ```
 
-实际服务列表以 live contract 生成，不可仅写死名称。
-
-Freeze 完成：
-
-```text
-SOURCE_FROZEN=yes
-```
-
-旧 Mac 保持通电、不要抹盘。
+服务列表来自 live contract，不仅靠硬编码。
 
 ---
 
-# 16. OrbStack Export & Avalon Move
+# 17. OrbStack Export & Avalon Physical Move
 
 Source frozen 后：
 
@@ -882,24 +1033,20 @@ Source frozen 后：
 orb export ubuntu $SKULD_BACKUP_ROOT/orbstack/ubuntu-<stamp>.tar.zst
 ```
 
-完成：
-
-- sha256；
-- manifest；
-- readback；
-- capacity check；
-- artifact size；
-- export command exit 0。
-
-随后执行：
+要求：
 
 ```text
-diskutil unmount /Volumes/Avalon
+exit=0
+sha256
+manifest
+readback
+capacity check
+artifact size recorded
 ```
 
-必须成功后才允许拔出 8TB。
+完成后安全 unmount Avalon。
 
-**不要在文件系统 mounted 时直接拔盘。**
+必须 unmount 成功后才允许拔盘。
 
 State：
 
@@ -907,25 +1054,26 @@ State：
 DISK_MOVE_REQUIRED
 ```
 
-此时物理把 Avalon 从旧 Mac 接到新 Mac。
+然后物理把 Avalon 从旧 Mac 接到 Amadeus-M204。
 
 ---
 
-# 17. Destination Restore — Fast Path
+# 18. Destination Restore — Fast Path
 
-新 Mac 上：
+在 **Amadeus-M204 / nyannyan**：
 
 1. Avalon mount；
-2. 验证 Volume UUID；
-3. 验证 sentinel；
-4. 验证 latest cutover state；
-5. 验证 OrbStack export SHA256；
-6. 确认目标无冲突 machine name；
-7. `orb import -n ubuntu ...`；
-8. imported machine 第一次启动保持 external ingress disabled；
-9. 验证 `/DATA/AppData`、Docker containers/images/networks、CasaOS；
-10. 验证 host bind path `/Volumes/Avalon`；
-11. 安装 macOS host LaunchAgents。
+2. Volume UUID；
+3. sentinel；
+4. latest cutover state；
+5. export SHA256；
+6. destination identity re-check；
+7. no machine-name conflict；
+8. `orb import -n ubuntu ...`；
+9. imported machine first boot external ingress disabled；
+10. `/DATA/AppData` / Docker / CasaOS verify；
+11. host bind `/Volumes/Avalon` verify；
+12. host LaunchAgents restored under `nyannyan`。
 
 Host-level restore：
 
@@ -933,46 +1081,47 @@ Host-level restore：
 FashionSigLIP LaunchAgent
 storage-health LaunchAgent
 storage-maintenance LaunchAgent
-required host-side tunnel/remote-access agent if live inventory says active
+required host-side tunnel/remote-access agents from classified inventory
 ```
 
-不要默认复制未知 LaunchAgent；先分类。
+禁止复制未知 `~/Library/LaunchAgents`。
 
 ---
 
-# 18. Destination Restore — Clean Path
+# 19. Destination Restore — Clean Path
 
-如果 Fast Path blocked，controller 切换到 clean path：
+Fast Path blocked 时：
 
 ```text
-create/import fresh OrbStack Ubuntu
-install CasaOS
+prepare fresh OrbStack Ubuntu
+install CasaOS using verified source
 restore tracked compose/contracts
-restore full HomeLab migration state
+restore full HomeLab state
 restore encrypted sensitive state
 restore SQLite snapshots
 pg_restore Immich
 load exact 9Router image
 attach Avalon
 rebuild REBUILD services
-install host LaunchAgents
+install host LaunchAgents under /Users/nyannyan
 ```
 
-CasaOS 安装命令只能来自实现时验证的 official source；不要把第三方镜像脚本写成默认路径。
-
-Clean path 也必须使用相同 manifest/runbook contract。
+使用同一 manifest/runbook contract。
 
 ---
 
-# 19. Destination Validation（仍不开放入口）
+# 20. Destination Validation（入口仍关闭）
 
 至少验证：
 
 ```text
+host identity Amadeus-M204
+macOS user/home nyannyan / /Users/nyannyan
+no active host-side /Users/blacksidev dependency
 Avalon identity
 Immich media root
 Immich PostgreSQL + VectorChord
-Immich historical photo/video read
+historical photo/video read
 9Router dashboard/auth boundary
 OpenClaw config/plugins
 Product Radar DB/health
@@ -982,7 +1131,7 @@ Emby/Jellyfin media roots
 qBittorrent/Aria2 download roots
 NPM certificate state
 Alist storage mount
-frpc config present but ingress still stopped
+frpc config present but ingress stopped
 FashionSigLIP MPS
 storage schedulers
 Docker bounded logs
@@ -1002,91 +1151,71 @@ scripts/verify-skuld-homelab-state.sh
 DESTINATION_VALIDATED=yes
 ```
 
-在这之前：
-
-```text
-OpenClaw owner channels = off
-public ingress = off
-```
+此前 owner channel/public ingress 仍 off。
 
 ---
 
-# 20. LAN / IP Cutover Strategy
+# 21. LAN / IP Cutover
 
-推荐：
+Staging：
 
 ```text
-staging:
-old Mac = 原 LAN IP（例如现有 192.168.5.3）
-new Mac = 临时新 IP
-
-cutover:
-old Mac runtime stopped + network conflict removed
-new Mac optionally inherits old Mac LAN IP
+old Mac = existing production LAN IP
+Amadeus-M204 = temporary non-conflicting IP
 ```
 
-是否继承旧 IP 由 local host profile 决定，不写死地址。
+Cutover：
 
-如果家庭设备/书签/服务大量仍指向旧 IP，继承原 IP 可以减少配置改动。
+```text
+old runtime stopped
+old host releases production IP
+Amadeus-M204 optionally inherits old LAN IP
+```
+
+具体 IP 不写死在 repo，由 Host Profile / operator 决定。
 
 Hard rule：
 
 ```text
-两个设备绝不能同时持有同一 LAN IP
+old/new never share same LAN IP simultaneously
 ```
-
-如果选择保留 new IP：
-
-- 更新 DHCP/DNS；
-- 更新真实仍使用 IP 的客户端；
-- host-neutral `host.docker.internal` runtime 不应受影响。
 
 ---
 
-# 21. Cutover 顺序
+# 22. Cutover 顺序
 
-只有：
+仅在：
 
 ```text
 DESTINATION_VALIDATED=yes
 ```
 
-才能进入 cutover。
-
-推荐启动顺序：
+后允许：
 
 ```text
-1. internal DB / Redis dependencies
+1. DB/Redis dependencies
 2. 9Router
-3. Immich / media dependencies
+3. Immich/media dependencies
 4. Emby/Jellyfin/Alist/download services
 5. media adapter
-6. Product Radar（owner delivery 仍 gated）
+6. Product Radar owner delivery still gated
 7. OpenClaw
-8. owner delivery / channel ingress
-9. frpc / public ingress / external tunnel LAST
+8. owner delivery/channel ingress
+9. frpc/public ingress LAST
 ```
 
-实际 dependency graph 必须由 contract 生成。
+Dependency graph 应来自 contract。
 
-避免：
-
-```text
-old OpenClaw still online
-+
-new OpenClaw starts WhatsApp/Telegram
-```
-
-这会造成 duplicate consumers / duplicate owner delivery。
+必须避免 old/new OpenClaw 同时消费 Telegram/WhatsApp。
 
 ---
 
-# 22. First Real User Test
+# 23. First Real User Test
 
-Health 全绿后才执行一个明确的 real test：
+所有 health green 后，Operator 明确执行一次：
 
 ```text
-Operator -> Telegram/WhatsApp -> Amadeus
+Operator -> Telegram/WhatsApp -> Amadeus-M204 Amadeus
 ```
 
 验证：
@@ -1095,13 +1224,13 @@ Operator -> Telegram/WhatsApp -> Amadeus
 only destination receives
 session isolation correct
 9Router responds
-owner notification path works
+owner notification works
 no duplicate reply
 ```
 
-记录 event key / pass-fail，不记录私聊正文。
+只记录 event key / pass-fail，不记录私聊正文。
 
-然后：
+之后：
 
 ```text
 CUTOVER_COMMITTED=yes
@@ -1109,88 +1238,83 @@ CUTOVER_COMMITTED=yes
 
 ---
 
-# 23. Rollback
+# 24. Rollback
 
-## 23.1 在 destination 未接受真实 writes 前
-
-rollback 很简单：
+## 24.1 Destination 未接受真实 writes
 
 ```text
 stop destination
 unmount Avalon
-move Avalon back to old Mac
-mount/verify UUID
-start old OrbStack machine
+move Avalon back
+verify UUID
+start old OrbStack
 restore restart policies/ingress
 health
 reopen channels
 ```
 
-## 23.2 destination 已接受真实 writes 后
+## 24.2 Destination 已接受真实 writes
 
-禁止盲目直接启动旧 snapshot。
+禁止盲目启动旧 snapshot。
 
-必须进入：
+进入：
 
 ```text
-ROLLBACK_REQUIRED + DATA_DIVERGENCE_REVIEW
+ROLLBACK_REQUIRED
+DATA_DIVERGENCE_REVIEW
 ```
 
-先确定：
+检查：
 
-- new SQLite writes；
-- Immich DB writes；
-- outbox/channel events；
-- media/download changes；
+```text
+SQLite writes
+Immich DB writes
+outbox/channel events
+media/download changes
+```
 
-如何 reverse/replay。
-
-不要制造双写世界线。
+决定 reverse/replay，避免双写。
 
 ---
 
-# 24. Old Mac 保留策略
+# 25. Old Mac 保留策略
 
-成功 cutover 后：
-
-```text
-old Mac remains powered-off/stopped as rollback host
-```
-
-建议至少保留 48-72 小时，不立刻抹盘。
-
-在稳定观察期内：
-
-- 不启动旧 OpenClaw；
-- 不启动旧 frpc；
-- 不让旧机抢回原 IP；
-- 保留原 OrbStack machine；
-- 保留 migration artifacts。
-
-稳定后才能单独决定：
+Cutover 成功后旧 Mac：
 
 ```text
-reclaim imported /DATA/Gallery/immich duplicate
-repurpose old Mac
-remove old host artifacts
+powered/stopped as rollback host
 ```
 
-Immich source reclaim 必须使用修复后的 checksum gate 和单独 approval token。
+至少建议保留 48-72h：
+
+- old OrbStack 不启动；
+- old ingress 不启动；
+- old host 不抢 production IP；
+- old data 不删除；
+- migration artifacts 保留。
+
+稳定后才单独讨论：
+
+```text
+Immich retained source reclaim
+old Mac repurpose
+old host artifact cleanup
+```
 
 ---
 
-# 25. Host-level Remote Access Inventory
+# 26. Host-level Remote Access Inventory
 
-1.4.6 migration contract 必须扫描并分类 macOS host 上与 HomeLab 相关的：
+扫描并分类 macOS host：
 
 ```text
-Remote Login / sshd
-Cloudflare Tunnel if installed/active
-Tailscale if installed/active
-Cumora agent if installed/active
+Remote Login/sshd
+Cloudflare Tunnel
+Tailscale
+Cumora
 FashionSigLIP LaunchAgent
 storage LaunchAgents
-other com.amadeus/com.productradar tracked jobs
+other tracked com.amadeus/com.productradar jobs
 ```
 
 分类：
@@ -1203,31 +1327,41 @@ DROP
 MANUAL_BLOCKER
 ```
 
-不要自动复制所有 `~/Library/LaunchAgents`。
+所有 destination path 必须针对 `/Users/nyannyan` 或 host-neutral path。
+
+不要复制整个旧 `~/Library/LaunchAgents`。
 
 ---
 
-# 26. SSH Key Policy
+# 27. SSH Key Policy
 
-迁移控制：
+迁移 controller：
 
 ```text
 old Mac private key stays on old Mac
-old Mac public key -> new Mac authorized_keys
+old Mac public key -> /Users/nyannyan/.ssh/authorized_keys
 ```
 
-新 Mac 长期使用：
+权限必须：
 
-- 可继续允许现有 trusted client public keys；
-- 新 Mac 自己生成新的 outbound personal SSH key；
-- Amadeus service-specific VPS/NAS keys从 encrypted bundle 恢复到明确 target；
-- 不把 personal private key 塞进 Git / HomeLab service bundle，除非它本来就是 manifest 中明确的 service credential。
+```text
+~/.ssh 0700
+authorized_keys 0600
+owner nyannyan
+```
+
+新 Mac 长期：
+
+- 可添加现有 trusted client public keys；
+- Amadeus-M204 自己生成新的 outbound personal SSH key（如果需要）；
+- Amadeus service-specific VPS/NAS keys 从 encrypted bundle 恢复到明确 target；
+- personal private key 不进入 Git/HomeLab service bundle，除非它本来就是 manifest-declared service credential。
 
 ---
 
-# 27. 1.4.6 Development Efficiency
+# 28. Development Efficiency
 
-继续执行 1.4.5 validation matrix。
+继续执行 1.4.5 Validation Matrix。
 
 开发阶段：
 
@@ -1237,6 +1371,7 @@ docs/manifest -> contract test
 storage -> storage fixture
 backup -> backup fixture
 SSH controller -> fake target fixture
+host identity -> fake Darwin/user/home/scutil fixture
 ```
 
 只在 final release：
@@ -1251,26 +1386,22 @@ fresh-clone full rehearsal
 
 Docker build：
 
-- 只有 runtime source 变化才 build affected image；
-- 单纯 migration scripts/docs 不 build OpenClaw/Product Radar。
+- runtime source 变化 -> affected image only；
+- migration scripts/docs only -> no OpenClaw/Product Radar build。
 
-## 27.1 Safe validation cache
+## 28.1 Safe validation cache
 
-`run-check.sh` cache key 必须由：
+Cache fingerprint 必须包含：
 
 ```text
 command
-+
 input file hashes
-+
 relevant dependency lock hash
 ```
 
-生成。
+不能由 Agent 随意复用人工 cache key。
 
-不得接受 Agent 随意复用一个人工字符串 cache key。
-
-Release evidence 记录：
+Release evidence：
 
 ```text
 targetedRuns
@@ -1285,9 +1416,9 @@ validationDurationMs
 
 ---
 
-# 28. 1.4.6 Final Source Preparation
+# 29. 1.4.6 Final Source Preparation
 
-发布 1.4.6 后，在旧 Mac 上执行一次 final preparation（但不 freeze/cutover）：
+发布 1.4.6 后在旧 Mac 执行一次 final prep，但**不 freeze/cutover**：
 
 ```text
 source readiness
@@ -1299,33 +1430,32 @@ safe runtime cleanup
 storage health
 capacity report
 OrbStack export plan
-SSH destination bootstrap plan
+SSH destination bootstrap plan for nyannyan@Amadeus-M204
 ```
 
-如果新 Mac 尚未到：
+如果硬件尚未到：
 
 ```text
 DESTINATION_SSH=WAITING_FOR_HARDWARE
 ```
 
-不应影响 1.4.6 source-side release。
-
-最终旧 Mac 状态：
+最终 source state：
 
 ```text
 Amadeus 1.4.6
-Source runtime healthy
-Migration artifacts current
-Garbage safely reduced
+source runtime healthy
+migration artifacts current
+garbage safely reduced
 Avalon verified
 Immich source retained
-Cutover controller ready
-Waiting for Mac mini
+controller ready
+destination identity frozen: Amadeus-M204 / nyannyan
+waiting for Mac mini
 ```
 
 ---
 
-# 29. Acceptance Tests
+# 30. Acceptance Tests
 
 至少增加：
 
@@ -1338,21 +1468,31 @@ test:sensitive-state-bundle
 test:image-protected-set
 test:skuld-controller-state-machine
 test:skuld-destination-ssh-fixture
+test:skuld-destination-identity
+test:destination-old-host-path-blocker
 test:orbstack-snapshot-manifest
 test:skuld-capacity-plan
 ```
 
-关键 destructive tests 全部使用 fixture/temp dir/fake SSH target，不允许碰真实数据。
+Destructive tests 只使用 fixture/temp/fake target，不碰真实数据。
+
+特别验证：
+
+```text
+nyannyan@Amadeus-M204 -> PASS
+blacksidev@Amadeus-M204 -> BLOCK as destination operator identity
+/Users/blacksidev in destination active config -> BLOCK
+/home/blacksidev inside imported Linux guest -> ALLOW
+```
 
 ---
 
-# 30. Release Evidence
+# 31. Release Evidence
 
-最终 tracked report 至少记录：
+最终 tracked report 至少：
 
 ```text
 VERSION=1.4.6
-
 AUDIT_BLOCKERS=0
 IMMICH_RECLAIM_REMOTE_GATE=fixed
 STORAGE_GROWTH=valid
@@ -1365,17 +1505,20 @@ SOURCE_CAPACITY_PLAN=recorded
 ORBSTACK_EXPORT_PATH=ready
 SSH_CONTROLLER=ready
 DESTINATION_BOOTSTRAP=ready
-
+DESTINATION_HOST_IDENTITY=Amadeus-M204
+DESTINATION_MACOS_USER=nyannyan
+DESTINATION_HOME=/Users/nyannyan
+DESTINATION_OLD_HOST_PATH_DEPENDENCIES=0
 IMMICH_SOURCE_RECLAIM=PENDING
 MAC_MINI_CUTOVER=NOT_EXECUTED
 OPERATION_SKULD_SOURCE_READY=yes
 ```
 
-如果今晚新 Mac 已经到货，可在独立 cutover evidence 中继续记录 destination phases；不要把硬件到货作为源码 release 的强依赖。
+新 Mac 已到货后的 destination/cutover evidence 单独记录，不把硬件存在作为 source release blocker。
 
 ---
 
-# 31. Non-goals
+# 32. Non-goals
 
 1.4.6 不做：
 
@@ -1386,21 +1529,48 @@ OPERATION_SKULD_SOURCE_READY=yes
 - 自动抹除旧 Mac；
 - 自动修改家庭路由器 DHCP；
 - 自动发送真实 Telegram/WhatsApp test message；
-- 未经 approval 自动开启 destination public ingress。
+- 未经 approval 自动开启 destination public ingress；
+- macOS Migration Assistant 整机复制 HomeLab；
+- 把新 Mac 用户改回 blacksidev；
+- 重命名 imported Linux guest 的 blacksidev 用户/目录。
 
 ---
 
-# 32. 今晚 Mac mini 到货后的 Operator Checklist
+# 33. 今晚 Amadeus-M204 到货后的 Operator Checklist
 
 ## A. 新 Mac 本地初始化
 
 ```text
 [ ] macOS 首次设置
-[ ] short username 建议 blacksidev
+[ ] Account Name / short username = nyannyan
+[ ] Home = /Users/nyannyan
+[ ] ComputerName = Amadeus-M204
+[ ] LocalHostName = Amadeus-M204
+[ ] HostName = Amadeus-M204
 [ ] Ethernet 接入
 [ ] 临时 DHCP/LAN IP，与旧 Mac 不冲突
-[ ] 开启 Remote Login，仅 operator user
-[ ] 不使用 Migration Assistant 整体搬 HomeLab
+[ ] Remote Login ON，仅允许 nyannyan
+[ ] 不使用 Migration Assistant 搬 HomeLab
+```
+
+可验证：
+
+```bash
+whoami
+printf '%s\n' "$HOME"
+scutil --get ComputerName
+scutil --get LocalHostName
+scutil --get HostName
+```
+
+期望：
+
+```text
+nyannyan
+/Users/nyannyan
+Amadeus-M204
+Amadeus-M204
+Amadeus-M204
 ```
 
 ## B. 旧 Mac 建立 SSH 控制
@@ -1408,34 +1578,46 @@ OPERATION_SKULD_SOURCE_READY=yes
 旧 Mac：
 
 ```bash
-ssh <new-user>@<new-mac-temp-ip>
+ssh nyannyan@<new-mac-temp-ip>
 ```
 
-首次确认 host fingerprint 后，将旧 Mac 的 **public key** 加入新 Mac `~/.ssh/authorized_keys`，再次验证无密码登录。
+或 mDNS 可用时：
+
+```bash
+ssh nyannyan@Amadeus-M204.local
+```
+
+确认 host fingerprint 后，只把旧 Mac **public key** 加到：
+
+```text
+/Users/nyannyan/.ssh/authorized_keys
+```
+
+再次验证无密码 SSH。
 
 然后：
 
 ```bash
-./scripts/operation-skuld.sh destination-preflight --target <user>@<host>
-./scripts/skuld-destination-bootstrap.sh --target <user>@<host> --apply
+./scripts/operation-skuld.sh destination-preflight --target nyannyan@<host>
+./scripts/skuld-destination-bootstrap.sh --target nyannyan@<host> --apply
 ```
 
-如果 OrbStack first-run 需要 GUI：在新 Mac 本地打开 OrbStack 一次，再重新运行 preflight。
+如果 OrbStack first-run 需要 GUI，在 Amadeus-M204 本地打开一次 OrbStack，再 rerun preflight。
 
-## C. 不移动 8TB，先把新机 bootstrap 完
+## C. 不移动 Avalon，先 bootstrap 新机
 
-在旧 Mac/Avalon 仍维持现状时完成：
+旧 HomeLab 继续工作时完成：
 
 ```text
-Git clone
+SSH
+Git clone under /Users/nyannyan
 Homebrew/dependencies
-OrbStack installed/first-run
-repo tests/bootstrap checks
-SSH state ready
-capacity ready
+OrbStack install/first-run
+host identity checks
+active old-host-path audit
+repo/bootstrap checks
+capacity plan
 ```
-
-此阶段旧 HomeLab 继续正常工作。
 
 ## D. 正式迁移窗口
 
@@ -1447,58 +1629,62 @@ capacity ready
 ./scripts/operation-skuld.sh export-orbstack --apply
 ```
 
-确认 export + checksum 后安全 unmount Avalon。
+确认 export + checksum，安全 unmount Avalon。
 
 ## E. 物理移动 Avalon
 
-拔出旧 Mac -> 接入新 Mac。
-
-新 Mac：
-
 ```text
-verify UUID
-verify sentinel
-verify migration state
-verify export checksum
+old Mac -> safe unmount -> unplug Avalon
+Amadeus-M204 -> attach Avalon
 ```
 
-然后 fast path import：
+验证：
+
+```text
+UUID
+sentinel
+migration state
+export checksum
+destination identity
+```
+
+然后：
 
 ```bash
-./scripts/operation-skuld.sh import-destination --apply
-./scripts/operation-skuld.sh validate-destination
+./scripts/operation-skuld.sh import-destination --target nyannyan@<host> --apply
+./scripts/operation-skuld.sh validate-destination --target nyannyan@<host>
 ```
 
 ## F. LAN/IP 与正式 Cutover
 
 验证通过后：
 
-1. 确保旧 Mac 不再占用计划中的 production IP；
-2. 如有需要让新 Mac 继承旧 LAN IP；
+1. 确保旧 Mac 不再占计划中的 production IP；
+2. 如需要让 Amadeus-M204 继承旧 LAN IP；
 3. 内部依赖先启动；
-4. OpenClaw / owner channels 后启动；
-5. frpc/public ingress 最后启动；
+4. OpenClaw/owner channels 后启动；
+5. frpc/public ingress 最后；
 6. doctor/readiness green；
-7. Operator 手工发一条真实消息做最终验证；
+7. Operator 手工发一条真实消息；
 8. commit cutover state。
 
-## G. 旧 Mac 不要立刻清空
+## G. 旧 Mac 不立刻清空
 
-至少 48-72 小时：
+至少 48-72h：
 
 ```text
 old OrbStack stopped
 old ingress stopped
-old Mac 不占 production IP
-old data 不删除
+old Mac does not own production IP
+old data retained
 ```
 
-稳定后再讨论 source reclaim / old Mac repurpose。
+之后再单独讨论 Immich source reclaim / old Mac repurpose。
 
 ---
 
-# 33. 建议 Codex /goal
+# 34. 建议 Codex /goal
 
 ```text
-/goal Implement docs/AMADEUS_1_4_6_OPERATION_SKULD_CUTOVER_READINESS_GOAL.md completely. This is the final migration-preparation release before the new Mac mini arrives. Re-audit current main and the canonical old-Mac CasaOS/OrbStack runtime first. Fix every 1.4.5 audit issue, especially the production Immich remote checksum gate. Complete full HomeLab state/sensitive-state backup coverage, protect the tracked migration contract from live-inventory overwrite, make image/checkpoint retention consume the actual protected set, fix storage growth telemetry, add safe pre-export cleanup, implement an OrbStack whole-machine export/import fast path plus independent clean-restore fallback, and implement a deterministic SSH-based Operation Skuld controller/state machine so the old Mac can bootstrap and control the new Mac until cutover. Keep all traffic-changing/destructive phases behind explicit approval gates. Do NOT reclaim /DATA/Gallery/immich, do NOT perform the actual Mac mini cutover in this goal, do NOT enable a second OpenClaw owner-channel runtime, and do NOT delete unknown data/volumes. Preserve the 1.4.5 scope-aware validation workflow, use targeted tests during implementation and one final full release gate, release as 1.4.6, commit/push, deploy to the current canonical host, run source-side final preparation/cleanup/readiness, and commit/push sanitized deployment evidence. The final source state should be ready to begin Operation Skuld immediately when the Mac mini is physically available.
+/goal Implement docs/AMADEUS_1_4_6_OPERATION_SKULD_CUTOVER_READINESS_GOAL.md completely. This is the final migration-preparation release before the new Mac mini cutover. Re-audit current main and the canonical old-Mac CasaOS/OrbStack runtime first. The destination identity is fixed and must not be changed or inferred: ComputerName/LocalHostName/HostName=Amadeus-M204, macOS short user=nyannyan, destination home=/Users/nyannyan. The old macOS user may remain blacksidev on the source host, and imported OrbStack Linux guest paths such as /home/blacksidev must remain untouched; however any active destination host-side dependency on /Users/blacksidev is a migration blocker. Fix every 1.4.5 audit issue, especially the production Immich remote checksum gate. Complete full HomeLab state/sensitive-state backup coverage, protect the tracked migration contract from live-inventory overwrite, make image/checkpoint retention consume the actual protected set, fix storage growth telemetry, add safe pre-export cleanup, implement the OrbStack whole-machine export/import fast path plus independent clean-restore fallback, and implement a deterministic SSH-based Operation Skuld controller so the old Mac can bootstrap nyannyan@Amadeus-M204 until cutover. Keep all destructive and traffic-changing phases behind explicit approval gates. Do NOT reclaim /DATA/Gallery/immich, do NOT perform the actual Mac mini cutover in this goal, do NOT enable a second OpenClaw owner-channel runtime, do NOT delete unknown data/volumes, and do NOT rename the guest Linux user just to match the new macOS username. Preserve the scope-aware validation workflow, use targeted tests during implementation and one final full release gate, release as 1.4.6, commit/push, deploy to the current canonical old Mac, run source-side final preparation/cleanup/readiness, and commit/push sanitized evidence. Final source state must be ready to begin Operation Skuld immediately when Amadeus-M204 is physically available.
 ```
