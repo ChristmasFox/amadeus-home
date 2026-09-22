@@ -10,12 +10,14 @@ macOS 27.0 / arm64 / Apple M6 / 24 GiB RAM，根卷约 386 GiB 可用。目标�
 更正，实际 CLI 为 `/usr/local/bin/orb`。当前 `orb list` 只显示运行中的 canonical `nyannyan`
 noble/arm64 guest；普通 user（UID 501、用户名/hostname `nyannyan`）和 `-u root`（UID 0）的
 read-only probes 都通过，`/home/nyannyan` 存在且来宾为 Ubuntu 24.04.5 LTS。因此 destination guest
-identity contract 已满足。Homebrew 与 clean monorepo 已就绪；Node、pnpm 仍缺失，Python 仍为
-系统 3.9.6，`/Volumes/Avalon` 未挂载。guest 内 Docker、Docker Compose 与 `/DATA/AppData` 均不存在，
-所以 CasaOS 尚未安装。source-side capacity plan 复测为 `DESTINATION_CAPACITY_JUDGMENT=FIT`。
-source `migration-readiness.sh` 当前 0 failure / 0 warning、`OPERATION_SKULD=READY`，因此可开始
-**destination bootstrap**，但不能恢复 secret/data、启动 CasaOS runtime 或 cutover；旧 Mac 的 CasaOS
-runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
+identity contract 已满足。目标 host 已安装 Homebrew、Node `24.21.0`、pnpm `11.19.0`、Python
+`3.11.16`、tmux 和 cloudflared；clean monorepo 已 frozen-lockfile install，非敏感 host profile 已
+指向 `nyannyan` / `/Volumes/Avalon`，`bootstrap.sh --check` 通过。guest 内 Docker `29.8.1`、Compose
+`v5.5.1`、CasaOS `v0.4.15`、`/DATA/AppData`、`/var/lib/casaos/apps` 和 `amadeus_network` 已就绪，
+CasaOS 核心服务 active 且 gateway HTTP 200；OrbStack LXC 的静态 `polkit.service` 失败已记录，未阻断
+核心 CasaOS 服务。source-side `migration-readiness.sh` 当前 0 failure / 0 warning、`OPERATION_SKULD=READY`。
+`/Volumes/Avalon` 尚未挂载，所以当前只可进入 storage attachment/preflight，不可恢复 secret/data、启动业务
+runtime 或 cutover；旧 Mac 的 CasaOS runtime 仍唯一权威，`MAC_MINI_CUTOVER=NOT_EXECUTED`。
 
 目标 Git SSH clone 已验收：用户明确授权目标专用 ED25519 key 作为 GitHub 账号级 Authentication key
 使用。初始标准 `git@github.com` clone 失败是因为 target config 仅定义了 alias，且配置文件随后被外部
