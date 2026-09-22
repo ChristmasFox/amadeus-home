@@ -38,6 +38,16 @@ for item in manifest.get('serviceInventory', {}).get('services', []):
         errors.append(f'invalid service classification: {item.get("id")}')
 if 'Mac mini cutover' not in runbook and 'cutover' not in runbook.lower():
     errors.append('runbook has no cutover boundary')
+# 1.4.6: destination identity consistency
+dest = manifest.get('destinationIdentity', {})
+if dest.get('hostname') != 'Amadeus-M204':
+    errors.append('manifest destinationIdentity.hostname != Amadeus-M204')
+if dest.get('orbstackMachine') != 'nyannyan':
+    errors.append('manifest destinationIdentity.orbstackMachine != nyannyan')
+if 'nyannyan' not in runbook:
+    errors.append('runbook does not reference nyannyan destination identity')
+if 'Amadeus-M204' not in runbook:
+    errors.append('runbook does not reference Amadeus-M204 hostname')
 if errors:
     for error in errors: print(f'SKULD_CONSISTENCY_FAIL={error}', file=sys.stderr)
     raise SystemExit(1)

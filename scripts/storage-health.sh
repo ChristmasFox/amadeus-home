@@ -70,13 +70,15 @@ PY
   else
     external_identity=missing
   fi
-  history_stats="$(python3 - "$IMMICH_MEDIA_ROOT" "$EXTERNAL_STORAGE_ROOT" <<'PY'
+  history_stats="$(python3 - "$MACHINE" "$IMMICH_MEDIA_ROOT" "$EXTERNAL_STORAGE_ROOT" <<'PY'
+# BUG FIX (1.4.6): pass MACHINE as sys.argv[1] so it is not subject to heredoc single-quote suppression.
 import json, subprocess, sys
-paths = {'immichMediaBytes': sys.argv[1], 'mediaBytes': sys.argv[2] + '/media', 'downloadsBytes': sys.argv[2] + '/downloads', 'dockerBytes': '/var/lib/docker'}
+machine, immich_root, ext_root = sys.argv[1], sys.argv[2], sys.argv[3]
+paths = {'immichMediaBytes': immich_root, 'mediaBytes': ext_root + '/media', 'downloadsBytes': ext_root + '/downloads', 'dockerBytes': '/var/lib/docker'}
 result={}
 for key, path in paths.items():
     try:
-        raw=subprocess.check_output(['orb','-m', '${MACHINE}', '-u', 'root', 'du', '-sx', '--apparent-size', '--block-size=1', path], text=True, stderr=subprocess.DEVNULL).split()[0]
+        raw=subprocess.check_output(['orb', '-m', machine, '-u', 'root', 'du', '-sx', '--apparent-size', '--block-size=1', path], text=True, stderr=subprocess.DEVNULL).split()[0]
         result[key]=int(raw)
     except Exception:
         result[key]=None

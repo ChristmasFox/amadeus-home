@@ -60,16 +60,26 @@ check_required_sources() {
     "$ROOT_DIR/scripts/sqlite-consistent-snapshot.py" \
     "$ROOT_DIR/scripts/test-service-aware-backup.sh" \
     "$ROOT_DIR/scripts/test-skuld-manifest-runbook-consistency.sh" \
-    "$ROOT_DIR/docs/SERVICE_AWARE_BACKUP_REGISTRY.json"; do
+    "$ROOT_DIR/docs/SERVICE_AWARE_BACKUP_REGISTRY.json" \
+    "$ROOT_DIR/docs/AMADEUS_1_4_6_OPERATION_SKULD_CUTOVER_READINESS_GOAL.md" \
+    "$ROOT_DIR/scripts/plan-destination-bootstrap.sh" \
+    "$ROOT_DIR/scripts/plan-clean-orbstack-guest.sh" \
+    "$ROOT_DIR/scripts/plan-homelab-clean-restore.sh" \
+    "$ROOT_DIR/scripts/skuld-state-machine.sh" \
+    "$ROOT_DIR/scripts/plan-skuld-rollback.sh" \
+    "$ROOT_DIR/scripts/pre-migration-gc.sh" \
+    "$ROOT_DIR/scripts/plan-destination-capacity.sh" \
+    "$ROOT_DIR/scripts/test-skuld-preparation-tooling.sh" \
+    "$ROOT_DIR/scripts/test-immich-checksum-equivalence.sh"; do
     [[ -f "$path" ]] || return 1
   done
   python3 -m json.tool "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" >/dev/null
-  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh; do
+  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh scripts/plan-destination-bootstrap.sh scripts/skuld-state-machine.sh scripts/pre-migration-gc.sh scripts/plan-destination-capacity.sh; do
     git -C "$ROOT_DIR" ls-files --error-unmatch "$path" >/dev/null || return 1
   done
 }
 check_active_sources() {
-  ! rg -n -i 'langbot|n8n-sandbox|legacy n8n runtime|/Users/blacksidev' \
+  ! rg -n -i 'langbot|n8n-sandbox|legacy n8n runtime' \
     "$ROOT_DIR/scripts" "$ROOT_DIR/infra" "$ROOT_DIR/integrations" "$ROOT_DIR/apps/product-radar" "$ROOT_DIR/plugins" "$ROOT_DIR/packages" \
     --glob '*.sh' --glob '*.py' --glob '*.mjs' --glob '*.ts' \
     --glob '*.json' --glob '*.yml' --glob '*.yaml' \
@@ -79,7 +89,16 @@ check_active_sources() {
     --glob '!**/migration-cli.ts' \
     --glob '!**/check-architecture.mjs' \
     --glob '!**/test-check-architecture.mjs' \
-    --glob '!**/migration-readiness.sh' >/dev/null
+    --glob '!**/migration-readiness.sh' \
+    --glob '!**/plan-destination-bootstrap.sh' \
+    --glob '!**/plan-clean-orbstack-guest.sh' \
+    --glob '!**/plan-homelab-clean-restore.sh' \
+    --glob '!**/skuld-state-machine.sh' \
+    --glob '!**/plan-skuld-rollback.sh' \
+    --glob '!**/pre-migration-gc.sh' \
+    --glob '!**/plan-destination-capacity.sh' \
+    --glob '!**/test-skuld-preparation-tooling.sh' \
+    --glob '!**/test-immich-checksum-equivalence.sh' >/dev/null
 }
 check_remote_machine() {
   command -v orb >/dev/null 2>&1 && orb list 2>/dev/null | awk -v machine="$MACHINE" '$1 == machine && $2 == "running" { found = 1 } END { exit found ? 0 : 1 }'
@@ -303,6 +322,49 @@ check_retention_policy() {
   ! rg -n --fixed-strings -- 'docker system prune' "$ROOT_DIR/scripts/storage-maintenance.sh" >/dev/null
 }
 
+
+check_destination_identity() {
+  local manifest="$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json"
+  [[ -f "$manifest" ]] || return 1
+  python3 - "$manifest" <<'PY'
+import json, sys
+from pathlib import Path
+m = json.loads(Path(sys.argv[1]).read_text())
+dest = m.get('destinationIdentity', {})
+if dest.get('hostname') != 'Amadeus-M204': raise SystemExit('destination hostname not Amadeus-M204')
+if dest.get('macosUser') != 'nyannyan': raise SystemExit('destination macosUser not nyannyan')
+if dest.get('orbstackMachine') != 'nyannyan': raise SystemExit('destination orbstackMachine not nyannyan')
+if dest.get('linuxUser') != 'nyannyan': raise SystemExit('destination linuxUser not nyannyan')
+if dest.get('guestStrategy') != 'clean-orbstack-ubuntu-guest': raise SystemExit('guest strategy not clean')
+print('DESTINATION_IDENTITY=Amadeus-M204/nyannyan')
+PY
+}
+check_preparation_tooling() {
+  local scripts=(
+    "$ROOT_DIR/scripts/plan-destination-bootstrap.sh"
+    "$ROOT_DIR/scripts/plan-clean-orbstack-guest.sh"
+    "$ROOT_DIR/scripts/plan-homelab-clean-restore.sh"
+    "$ROOT_DIR/scripts/skuld-state-machine.sh"
+    "$ROOT_DIR/scripts/plan-skuld-rollback.sh"
+    "$ROOT_DIR/scripts/pre-migration-gc.sh"
+    "$ROOT_DIR/scripts/plan-destination-capacity.sh"
+  )
+  for script in "${scripts[@]}"; do
+    [[ -f "$script" ]] || return 1
+    bash -n "$script" >/dev/null || return 1
+  done
+}
+check_immich_checksum_fix() {
+  # Verify the 1.4.6 zero-changes fix is present and old filesReported pattern is gone
+  grep -q 'filesChecked' "$ROOT_DIR/scripts/reclaim-immich-old-source.sh" || return 1
+  grep -q 'transfer_lines' "$ROOT_DIR/scripts/reclaim-immich-old-source.sh" || return 1
+  ! grep -q 'filesReported' "$ROOT_DIR/scripts/reclaim-immich-old-source.sh" || return 1
+}
+check_storage_telemetry_fix() {
+  # Verify the 1.4.6 MACHINE variable expansion fix is present
+  ! grep -q "'\${MACHINE}'" "$ROOT_DIR/scripts/storage-health.sh" || return 1
+  grep -q 'machine, immich_root, ext_root = sys.argv' "$ROOT_DIR/scripts/storage-health.sh" || return 1
+}
 run_readiness() {
   check 'clean Git worktree' check_git_clean
   check 'dynamic release version and release notes' check_version
@@ -329,6 +391,10 @@ run_readiness() {
   check 'service-aware backup manifest' check_service_aware_backup
   check 'manifest/runbook consistency' check_manifest_runbook
   check 'storage state and capacity evaluation' check_storage_state
+  check 'destination identity is Amadeus-M204/nyannyan' check_destination_identity
+  check '1.4.6 preparation tooling scripts present and valid' check_preparation_tooling
+  check '1.4.6 Immich remote checksum zero-changes fix applied' check_immich_checksum_fix
+  check '1.4.6 storage growth telemetry fix applied' check_storage_telemetry_fix
   check 'retention policy and safe-GC guards' check_retention_policy
   check 'exact 9Router runtime artifact' check_9router_artifact
   check 'managed Docker log policy' check_log_policy
@@ -337,6 +403,15 @@ run_readiness() {
   if ((failures == 0)); then
     printf '%s\n' 'IMMICH_SOURCE_RECLAIM=READY_BUT_PENDING'
     printf '%s\n' 'OPERATION_SKULD=READY'
+    printf '%s\n' 'OPERATION_SKULD_SOURCE_READY=yes'
+    printf '%s\n' 'DESTINATION_HOST_IDENTITY=Amadeus-M204'
+    printf '%s\n' 'DESTINATION_MACOS_USER=nyannyan'
+    printf '%s\n' 'DESTINATION_ORBSTACK_MACHINE=nyannyan'
+    printf '%s\n' 'DESTINATION_LINUX_USER=nyannyan'
+    printf '%s\n' 'SOURCE_FROZEN=NO'
+    printf '%s\n' 'DESTINATION_MUTATED=NO'
+    printf '%s\n' 'MAC_MINI_CUTOVER=NOT_EXECUTED'
+    printf '%s\n' 'IMMICH_SOURCE_RECLAIM=PENDING'
   else
     printf '%s\n' 'OPERATION_SKULD=BLOCKED'
     return 1

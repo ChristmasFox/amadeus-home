@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "operation": "operation-skuld",
   "status": "readiness-only",
   "executed": false,
@@ -13,8 +13,9 @@
   },
   "destination": {
     "kind": "mac-mini",
-    "cutover": "not-authorized-by-this-goal",
-    "runbook": "docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md"
+    "cutover": "not-authorized-by-1.4.6-goal",
+    "runbook": "docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md",
+    "identity": "see-destinationIdentity"
   },
   "criticalPersistentData": [
     {
@@ -945,6 +946,28 @@
     "manifest-runbook-contract",
     "storage-capacity-state-and-growth-history",
     "safe-scheduled-gc-and-retention",
-    "fresh-clone-nonrecursive-rehearsal"
-  ]
+    "fresh-clone-nonrecursive-rehearsal",
+    "immich-remote-checksum-zero-changes-verification",
+    "storage-growth-telemetry-functional",
+    "destination-capacity-plan-fit-or-acknowledged",
+    "destination-bootstrap-plan-ready",
+    "clean-orbstack-guest-plan-ready",
+    "homelab-clean-restore-plan-ready",
+    "operation-skuld-state-machine-functional",
+    "rollback-plan-ready",
+    "safe-pre-migration-gc-plan-ready",
+    "destination-identity-nyannyan-no-blacksidev-active-dependency"
+  ],
+  "destinationIdentity": {
+    "hostname": "Amadeus-M204",
+    "macosUser": "nyannyan",
+    "macosHome": "/Users/nyannyan",
+    "orbstackMachine": "nyannyan",
+    "ubuntuRelease": "Ubuntu 24.04 LTS / noble",
+    "linuxUser": "nyannyan",
+    "linuxHome": "/home/nyannyan",
+    "destinationSsdGb": 512,
+    "guestStrategy": "clean-orbstack-ubuntu-guest",
+    "note": "Destination uses a clean OrbStack Ubuntu guest named nyannyan. No import/export of source machine (ubuntu). No /Users/blacksidev or /home/blacksidev active dependency."
+  }
 }

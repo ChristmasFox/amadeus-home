@@ -73,14 +73,23 @@ def local_equivalence(src: Path, dst: Path) -> dict:
 
 def remote_equivalence(src: str, dst: str) -> dict:
     # No --delete: destination-only files are explicitly allowed. rsync is only a dry-run verifier.
+    # BUG FIX (1.4.6): The equivalence gate must fail if ANY file-level change is reported.
+    # rsync --itemize-changes lines starting with '>', '<', 'c', 'h', or '*' indicate
+    # a file that differs or is missing at destination. A clean run has only space-prefixed
+    # unchanged lines and rsync summary lines (sending/sent/total).
     command = ['orb', '-m', machine, '-u', 'root', 'rsync', '-a', '--checksum', '--dry-run', '--itemize-changes', src.rstrip('/') + '/', dst.rstrip('/') + '/']
     result = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
     if result.returncode != 0:
-        raise SystemExit('fresh one-way rsync equivalence failed')
-    files = 0
-    for line in result.stdout.splitlines():
-        if line and not line.startswith('sending ') and not line.startswith('sent ') and not line.startswith('total '): files += 1
-    return {'filesReported': files, 'mode': 'rsync-checksum-dry-run-no-delete'}
+        raise SystemExit('fresh one-way rsync equivalence failed: rsync returned non-zero')
+    transfer_lines = [l for l in result.stdout.splitlines() if l and l[0] in ('>', '<', 'c', 'h', '*')]
+    if transfer_lines:
+        sample = transfer_lines[:5]
+        raise SystemExit(
+            f'fresh one-way checksum equivalence FAILED: {len(transfer_lines)} file(s) differ or '
+            f'are missing at destination; first discrepancy: {sample[0]!r}'
+        )
+    checked = sum(1 for l in result.stdout.splitlines() if l and l[0] == ' ')
+    return {'filesChecked': checked, 'transferLines': 0, 'mode': 'rsync-checksum-dry-run-no-delete', 'equivalenceResult': 'passed'}
 
 if machine == 'fixture':
     if not source.is_dir() or source.is_symlink() or not destination.is_dir():

@@ -1,5 +1,11 @@
 # Operation Skuld service inventory
 
+
+> **Amadeus 1.4.6**: Destination identity is Amadeus-M204 / nyannyan. All restore paths use
+> `/home/nyannyan` (macOS) or CasaOS standard `/DATA/AppData/<service>` (Linux guest).
+> No `/Users/blacksidev` or `/home/blacksidev` paths are active destination production dependencies.
+> Source machine (ubuntu, old Mac) remains `SOURCE_FROZEN=NO` throughout.
+
 Generated/verified against the canonical CasaOS runtime on 2026-09-21. This is a sanitized migration contract: it contains no credential values, only logical secret IDs, persistent paths, restore methods and runtime verification. Classifications are explicit and must be one of `MIGRATE`, `REBUILD`, `EXTERNAL_DATA`, `DROP`, or `MANUAL_BLOCKER`.
 
 | Service | Live image/runtime | Persistent data and external data | Secret refs (logical IDs only) | Classification | Backup method | Restore method | Verification | Cutover dependency |
@@ -11,7 +17,7 @@ Generated/verified against the canonical CasaOS runtime on 2026-09-21. This is a
 | changedetection | CasaOS compatibility service | `/DATA/AppData/changedetection/datastore` | changedetection-runtime-env | MIGRATE | protected datastore archive | restore before start | HTTP health + datastore | optional |
 | media-organizer-adapter | registered CasaOS service | `/DATA/AppData/media-organizer-adapter`, Avalon media/download mounts | media-adapter-runtime-env | MIGRATE | registered state archive | restore and reconnect mounts | healthz + dry-run organizer contract | media workflow |
 | frpc | CasaOS external tunnel | `/DATA/AppData/frpc/frpc.toml` | frpc-token-auth | MIGRATE | sanitized config + encrypted credential bundle | restore config/credential, start compose | tunnel status | public ingress |
-| xiaoya | CasaOS external media catalog | `/home/blacksidev/xiaoya`, `/home/blacksidev/xiaoya/data` | xiaoya-credential-config | MIGRATE | explicit host-directory archive | restore exact directories | health + mounted data read | media catalog |
+| xiaoya | CasaOS external media catalog | `/DATA/AppData/xiaoya` (legacy source: `/home/blacksidev/xiaoya` — destination uses CasaOS AppData path) | xiaoya-credential-config | MIGRATE | explicit host-directory archive | restore to `/DATA/AppData/xiaoya` | health + mounted data read | media catalog |
 | homarr | CasaOS dashboard | `/DATA/AppData/big-bear-homarr/data` | none observed | REBUILD | compose/config; dashboard data disposable | recreate, optionally restore data | HTTP health | none |
 | emby | CasaOS media server | `/DATA/AppData/emby/config`, Avalon media roots | emby-config-credential-state | MIGRATE | config archive + external media reference | restore config and attach media | health + library boundary | media playback |
 | qbittorrent | CasaOS downloader | `/DATA/AppData/qbittorrent/config`, Avalon downloads | qbittorrent-credential-state | MIGRATE | config archive + external downloads reference | restore config and attach downloads | web health + download paths | download pipeline |

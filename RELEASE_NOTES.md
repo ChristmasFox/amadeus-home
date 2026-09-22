@@ -1,11 +1,31 @@
-# Amadeus 1.4.5
+# Amadeus 1.4.6
 
-Operation Skuld 的最终可靠性收口：
+Operation Skuld Cutover Readiness — all preparation-only tooling and audit fixes for the upcoming Mac mini migration.
 
-- 修复 fresh-clone 可重建边界，跟踪全部迁移脚本与此前被忽略的 PUBG domain source，并加入非递归 fresh-clone rehearsal。
-- 让 storage health 真实消费容量阈值，记录 90 天增长历史；weekly maintenance 使用 safe apply，落实 image/checkpoint retention，禁止 generic destructive prune。
-- 将 SQLite consistent snapshot、Immich `pg_dump -Fc`/restore-list、9Router isolated restore 与 service-aware backup registry 纳入迁移证据。
-- 完成 HomeLab service classification、metadata-only encrypted secret coverage、Manifest/Runbook contract check，并强化未来 Immich source reclaim 的 fresh one-way verification；旧源仍保留，Mac mini cutover 未执行。
-- 开发验证改为 scope-aware targeted checks、bounded command evidence、affected-only image scope 与单次 final full release gate。
+## Bug fixes
 
-验证：最终 release gate 将运行 `pnpm test`、`pnpm typecheck`、`pnpm build`、`pnpm check:secrets`、architecture、fresh-clone rehearsal 与 canonical CasaOS live acceptance。
+- **Immich remote checksum equivalence** (P0): Fixed `remote_equivalence` in `reclaim-immich-old-source.sh`; now fails immediately if rsync `--checksum --dry-run` reports any file-level transfer lines (`>f`, `<f`, `*c`, etc.), instead of silently counting lines. A passing run must have zero transfer lines.
+- **Storage growth telemetry** (P0): Fixed shell-quoting bug in `storage-health.sh` where `'${MACHINE}'` was not expanded inside a single-quoted heredoc. Now passes `MACHINE` as `sys.argv[1]` so `du` is sent to the correct OrbStack machine.
+
+## New: Operation Skuld Cutover Preparation Tooling
+
+- `scripts/plan-destination-bootstrap.sh`: Destination bootstrap plan for Amadeus-M204 / nyannyan; outputs `DESTINATION_BOOTSTRAP_PLAN=ready`.
+- `scripts/plan-clean-orbstack-guest.sh`: Clean OrbStack Ubuntu 24.04 guest creation plan (nyannyan machine, not import/export of source ubuntu machine).
+- `scripts/plan-homelab-clean-restore.sh`: Service-by-service HomeLab restore plan; independent from old OrbStack guest snapshots.
+- `scripts/skuld-state-machine.sh`: Operation Skuld phase state machine (phases 0-10 source-side; phases 11+ require separate authorization).
+- `scripts/plan-skuld-rollback.sh`: Rollback plan describing how to reactivate source if destination fails.
+- `scripts/pre-migration-gc.sh`: Safe pre-migration garbage cleanup (dangling images, excess project images, build cache age); never uses `docker volume prune` or `docker system prune -a --volumes`.
+- `scripts/plan-destination-capacity.sh`: Destination 512 GB Mac mini SSD capacity plan with fit/warning/blocker judgment.
+
+## Tests
+
+- `scripts/test-skuld-preparation-tooling.sh`: Full fixture test of all preparation tooling.
+- `scripts/test-immich-checksum-equivalence.sh`: Tests zero-changes enforcement for the Immich checksum bug fix.
+
+## Destination identity
+
+Destination: Amadeus-M204 / nyannyan (OrbStack machine: nyannyan, Ubuntu 24.04, no /Users/blacksidev active dependency). Migration manifest and runbook updated. Source remains unfrozen; no cutover executed.
+
+## Readiness
+
+`OPERATION_SKULD_SOURCE_READY=yes` · `MAC_MINI_CUTOVER=NOT_EXECUTED` · `IMMICH_SOURCE_RECLAIM=PENDING`

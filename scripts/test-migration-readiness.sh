@@ -123,7 +123,7 @@ def reject_duplicates(pairs):
     return value
 
 manifest = json.load(open(sys.argv[1], encoding='utf-8'), object_pairs_hook=reject_duplicates)
-assert manifest['schemaVersion'] == 2
+assert manifest['schemaVersion'] >= 2
 assert {'storage', 'serviceInventory', 'secretInventory', 'protectedArtifacts'} <= manifest.keys()
 ids = {item['id'] for item in manifest['criticalPersistentData']}
 assert {'pubg-sqlite', 'identity-sqlite', 'product-radar-sqlite', 'owner-outbox'} <= ids

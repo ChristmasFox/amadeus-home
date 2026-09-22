@@ -23,14 +23,29 @@ to the destination or cause the cutover to stop.
 
 ## Phase 1 — Prepare the destination Mac
 
-1. Install the tracked dependencies with `scripts/bootstrap.sh --check`.
-2. Copy the local, non-secret `infra/host-profile.env` override and set the
-   destination machine, network, Mac control user, and FashionSigLIP port.
-3. Restore secret files out-of-band with mode `0600`; never copy their values
+**Destination identity (Amadeus-M204 / nyannyan)**:
+
+- Mac hostname: `Amadeus-M204`; macOS user: `nyannyan`; macOS home: `/Users/nyannyan`
+- OrbStack machine: `nyannyan` (NOT `ubuntu` — that is the source machine)
+- Linux user: `nyannyan`; Linux home: `/home/nyannyan`
+- Ubuntu release: `Ubuntu 24.04 LTS / noble`
+- Strategy: clean OrbStack Ubuntu guest (`scripts/plan-clean-orbstack-guest.sh`)
+- No `/Users/blacksidev` or `/home/blacksidev` paths are active destination dependencies
+
+**Preparation steps**:
+
+1. Run the destination bootstrap plan: `scripts/plan-destination-bootstrap.sh`
+2. Install the tracked dependencies with `scripts/bootstrap.sh --check`.
+3. Copy the local, non-secret `infra/host-profile.env` override and set
+   `ORBSTACK_MACHINE=nyannyan`, `MAC_CONTROL_USER=nyannyan`, and other profile keys.
+4. Restore secret files out-of-band with mode `0600`; never copy their values
    into this repository or a terminal transcript.
-4. Run `scripts/install-fashion-siglip-macos.sh --apply` and wait for health
+5. Run `scripts/install-fashion-siglip-macos.sh --apply` and wait for health
    to report `status=ok` and `device=mps`. The model cache may be downloaded
    again; it is not a migration blocker.
+
+**Clean guest creation**: see `scripts/plan-clean-orbstack-guest.sh` for the full plan.
+Do NOT import or export the source OrbStack machine (`ubuntu`) as the destination strategy.
 
 ## Phase 2 — Restore and validate data
 
@@ -90,6 +105,14 @@ after external routing has been changed without a recorded reverse route.
 Stop and perform a data-divergence review instead of guessing.
 
 ## Explicit non-actions for 1.4.4
+
+## Explicit non-actions for 1.4.6
+
+- No SSH to or mutation of Amadeus-M204 destination.
+- No freeze of source (old Mac) runtime.
+- No enabling of second OpenClaw owner-channel runtime.
+- No Avalon unmounting or cutover.
+- Same constraints as 1.4.4 above.
 
 - No Mac mini provisioning or cutover.
 - No DNS, tunnel, WhatsApp pairing, Telegram allowlist, or VPS firewall change.
