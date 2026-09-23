@@ -169,6 +169,68 @@ def private_credential_fingerprints(entries: list[dict]) -> list[dict]:
     return sorted(records, key=lambda item: (item["pathSha256"], item["kind"]))
 
 
+def private_state_fingerprints(entries: list[dict]) -> list[dict]:
+    """Return path-obfuscated state metadata for short-lived, mode-0600 verification input."""
+    records = []
+    for item in entries:
+        relative = str(item["path"])
+        root = relative.split("/", 1)[0]
+        if root not in {"config", "data", "notifications"}:
+            raise ContinuityError("private state fingerprint has an unexpected root")
+        record = {
+            "root": root,
+            "pathSha256": _path_id(relative),
+            "kind": str(item["kind"]),
+            "mode": int(item["mode"]),
+            "uid": int(item["uid"]),
+            "gid": int(item["gid"]),
+        }
+        if item["kind"] == "file":
+            record.update({"size": int(item["size"]), "sha256": str(item["sha256"])})
+        elif item["kind"] == "symlink":
+            record["targetSha256"] = hashlib.sha256(
+                str(item["target"]).encode("utf-8", errors="surrogateescape")
+            ).hexdigest()
+        elif item["kind"] != "directory":
+            raise ContinuityError("private state fingerprint has an unsupported entry")
+        records.append(record)
+    return sorted(records, key=lambda item: (item["root"], item["pathSha256"]))
+
+
+def _state_fingerprint_mismatch_summary(expected: list[dict], actual: list[dict]) -> str:
+    def keyed(records: list[dict]) -> dict[tuple[str, str], dict]:
+        result = {}
+        for item in records:
+            root, path_hash = item.get("root"), item.get("pathSha256")
+            if root not in {"config", "data", "notifications"} or not isinstance(path_hash, str):
+                raise ContinuityError("private state fingerprints are malformed")
+            key = (root, path_hash)
+            if key in result:
+                raise ContinuityError("private state fingerprints contain duplicate paths")
+            result[key] = item
+        return result
+
+    expected_by_path, actual_by_path = keyed(expected), keyed(actual)
+    fields = ("kind", "mode", "uid", "gid", "size", "sha256", "targetSha256")
+    summaries = []
+    roots = sorted({root for root, _path_hash in expected_by_path | actual_by_path})
+    for root in roots:
+        expected_keys = {key for key in expected_by_path if key[0] == root}
+        actual_keys = {key for key in actual_by_path if key[0] == root}
+        common = expected_keys & actual_keys
+        counts = {field: 0 for field in fields}
+        for key in common:
+            before, after = expected_by_path[key], actual_by_path[key]
+            for field in fields:
+                if before.get(field) != after.get(field):
+                    counts[field] += 1
+        missing = len(expected_keys - actual_keys)
+        extra = len(actual_keys - expected_keys)
+        changed = ",".join(f"{field}:{count}" for field, count in counts.items() if count)
+        summaries.append(f"{root}[missing:{missing},extra:{extra},changed:{changed or 'none'}]")
+    return ";".join(summaries) or "no-entry-differences"
+
+
 def _source_credential_fingerprints(inventory: dict) -> list[dict]:
     internal = inventory.get("_internal")
     if isinstance(internal, dict) and isinstance(internal.get("credentialEntries"), list):
@@ -781,6 +843,7 @@ def _validate_snapshot_plaintext(
     secret_manifest: Path,
     passphrase_file: Path,
     expected_owner: tuple[int, int] | None,
+    expected_state_fingerprints: list[dict] | None = None,
 ) -> None:
     extracted = archive_path.parent / "state"
     members = validate_archive(archive_path)
@@ -793,6 +856,13 @@ def _validate_snapshot_plaintext(
     # the verifier may not be root, so the temporary extraction cannot chown files;
     # use the authenticated tar headers when rebuilding the source tree digest.
     actual = collect_inventory(extracted, require_credentials=False, owner_overrides=owner_overrides)
+    if expected_state_fingerprints is not None:
+        actual_state_fingerprints = private_state_fingerprints(actual["_internal"]["stateEntries"])
+        if actual_state_fingerprints != expected_state_fingerprints:
+            summary = _state_fingerprint_mismatch_summary(
+                expected_state_fingerprints, actual_state_fingerprints
+            )
+            raise ContinuityError("cold snapshot state entries differ from stopped source; roots=" + summary)
     expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
     actual_projection = continuity_projection(actual)
     mismatches = _metric_mismatch_paths(expected_projection, actual_projection)
@@ -885,6 +955,7 @@ def create_snapshot_from_stream(
         verify_snapshot(
             artifact, manifest_path, passphrase_file, secret_artifact, secret_manifest,
             expected_owner=expected_owner,
+            expected_state_fingerprints=inventory.get("_privateStateFingerprints"),
         )
         return artifact, manifest_path, body
     except BaseException:
@@ -904,6 +975,7 @@ def verify_snapshot(
     secret_manifest: Path,
     *,
     expected_owner: tuple[int, int] | None = (OPENCLAW_RUNTIME_UID, OPENCLAW_RUNTIME_GID),
+    expected_state_fingerprints: list[dict] | None = None,
 ) -> dict:
     """Authenticate before decrypting, then compare all restored state metrics to the manifest."""
     try:
@@ -926,7 +998,8 @@ def verify_snapshot(
         if result.returncode != 0:
             raise ContinuityError("snapshot decryption failed")
         _validate_snapshot_plaintext(
-            archive_path, manifest, secret_artifact, secret_manifest, passphrase_file, expected_owner
+            archive_path, manifest, secret_artifact, secret_manifest, passphrase_file, expected_owner,
+            expected_state_fingerprints,
         )
     return manifest
 
@@ -1201,6 +1274,7 @@ def main() -> int:
     inventory_parser.add_argument("data_root")
     inventory_parser.add_argument("--allow-missing-credentials", action="store_true")
     inventory_parser.add_argument("--private-credential-fingerprints", action="store_true")
+    inventory_parser.add_argument("--private-state-fingerprints", action="store_true")
     stream_parser = subparsers.add_parser("snapshot-stream")
     stream_parser.add_argument("--inventory-file", required=True, type=Path)
     stream_parser.add_argument("--metadata-file", required=True, type=Path)
@@ -1232,6 +1306,8 @@ def main() -> int:
         output = public_inventory(result)
         if args.private_credential_fingerprints:
             output["_privateCredentialFingerprints"] = private_credential_fingerprints(result["_internal"]["credentialEntries"])
+        if args.private_state_fingerprints:
+            output["_privateStateFingerprints"] = private_state_fingerprints(result["_internal"]["stateEntries"])
         print(json.dumps(output, sort_keys=True, separators=(",", ":")))
         return 0
     if args.command == "snapshot-stream":
