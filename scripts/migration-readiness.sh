@@ -54,6 +54,8 @@ check_required_sources() {
     "$ROOT_DIR/scripts/secrets-inventory.sh" \
     "$ROOT_DIR/scripts/export-skuld-secrets.sh" \
     "$ROOT_DIR/scripts/import-skuld-secrets.sh" \
+    "$ROOT_DIR/scripts/verify-skuld-secret-bundle.sh" \
+    "$ROOT_DIR/scripts/rewrap-skuld-secrets.py" \
     "$ROOT_DIR/scripts/run-check.sh" \
     "$ROOT_DIR/scripts/test-fresh-clone-readiness.sh" \
     "$ROOT_DIR/scripts/service-aware-backup.sh" \
@@ -80,7 +82,7 @@ check_required_sources() {
     [[ -f "$path" ]] || return 1
   done
   python3 -m json.tool "$ROOT_DIR/docs/OPERATION_SKULD_MIGRATION_MANIFEST.json" >/dev/null
-  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh scripts/plan-destination-bootstrap.sh scripts/skuld-state-machine.sh scripts/pre-migration-gc.sh scripts/plan-destination-capacity.sh scripts/full-homelab-backup.sh scripts/restore-skuld-secrets.sh scripts/service-inventory.sh scripts/generate-skuld-artifact-report.sh; do
+  for path in scripts/secrets-inventory.sh scripts/export-skuld-secrets.sh scripts/import-skuld-secrets.sh scripts/skuld_secret_bundle_auth.py scripts/verify-skuld-secret-bundle.sh scripts/rewrap-skuld-secrets.py scripts/plan-destination-bootstrap.sh scripts/skuld-state-machine.sh scripts/pre-migration-gc.sh scripts/plan-destination-capacity.sh scripts/full-homelab-backup.sh scripts/restore-skuld-secrets.sh scripts/service-inventory.sh scripts/generate-skuld-artifact-report.sh; do
     git -C "$ROOT_DIR" ls-files --error-unmatch "$path" >/dev/null || return 1
   done
 }
@@ -246,9 +248,22 @@ PY
 check_secret_inventory() { bash "$ROOT_DIR/scripts/secrets-inventory.sh" >/dev/null; }
 check_service_inventory() { bash "$ROOT_DIR/scripts/service-inventory.sh" --check >/dev/null; }
 check_encrypted_secret_bundle() {
-  local bundle
-  bundle="$(find "$SKULD_BACKUP_ROOT" -type f -name 'secrets.tar.enc' -print -quit 2>/dev/null || true)"
-  [[ -n "$bundle" && -s "$bundle" && -s "$bundle.sha256" ]]
+  local bundle manifest
+  [[ -n "$SKULD_SECRET_PASSPHRASE_FILE" && -s "$SKULD_SECRET_PASSPHRASE_FILE" ]] || return 1
+  bundle="$(python3 - "$SKULD_BACKUP_ROOT" <<'PY'
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+candidates = [path for path in root.rglob('secrets.tar.enc') if path.is_file() and not path.is_symlink()]
+if candidates:
+    print(max(candidates, key=lambda path: (path.stat().st_mtime_ns, str(path))))
+PY
+)"
+  [[ -n "$bundle" && -s "$bundle" ]] || return 1
+  manifest="${bundle%/*}/secrets.manifest.json"
+  bash "$ROOT_DIR/scripts/verify-skuld-secret-bundle.sh" \
+    --bundle "$bundle" --manifest "$manifest" \
+    --passphrase-file "$SKULD_SECRET_PASSPHRASE_FILE" >/dev/null
 }
 check_9router_artifact() {
   local artifact
@@ -443,7 +458,7 @@ run_readiness() {
   check 'Immich cutover and retained-source checkpoint' check_immich_migration_checkpoint
   check 'service inventory coverage' check_service_inventory
   check 'secret inventory metadata' check_secret_inventory
-  check 'encrypted secret bundle metadata' check_encrypted_secret_bundle
+  check 'encrypted secret bundle authentication/import/restore' check_encrypted_secret_bundle
   check 'service-aware backup manifest' check_service_aware_backup
   check 'manifest/runbook consistency' check_manifest_runbook
   check 'storage state and capacity evaluation' check_storage_state

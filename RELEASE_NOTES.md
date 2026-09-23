@@ -6,4 +6,5 @@ Operation Skuld final migration hardening and runtime-state continuity.
 - Add encrypted cold-state snapshot, authenticated continuity evidence, complete SQLite checks, and approval-gated restore with rollback copies.
 - Verify provider credential paths, content, permissions, and runtime ownership without exposing per-file identifiers in the manifest.
 - Track the secret-bundle HMAC helper and end-to-end fixture; align import and restore with the exporter's ephemeral 0700 staging policy and verify restore dry-run.
+- Rewrap legacy encrypted bundles beside immutable originals and make migration readiness authenticate, import, and restore-dry-run the newest secret artifact.
 - Add isolated local validation mode with channel ingress, public ingress, and owner delivery disabled; fail closed on multiple active production runtimes.

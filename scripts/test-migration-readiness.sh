@@ -144,6 +144,8 @@ if rg -n 'docker (stop|rm|kill)|docker network disconnect|git reset --hard' "$RO
   printf '%s\n' 'readiness script contains a production mutation' >&2
   exit 1
 fi
+rg -Fq 'verify-skuld-secret-bundle.sh' "$ROOT_DIR/scripts/migration-readiness.sh"
+rg -Fq 'SECRET_BUNDLE_VERIFICATION=passed' "$ROOT_DIR/scripts/verify-skuld-secret-bundle.sh"
 if rg -n '1\.4\.2|rsync[^\n]*--delete' "$ROOT_DIR/scripts/migration-readiness.sh" >/dev/null; then
   printf '%s\n' 'readiness script retains a stale release or destructive sync pattern' >&2
   exit 1

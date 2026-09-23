@@ -14,6 +14,9 @@
 !scripts/test-restore-skuld-secrets.sh
 !scripts/skuld_secret_bundle_auth.py
 !scripts/test-openclaw-secret-bundle.sh
+!scripts/verify-skuld-secret-bundle.sh
+!scripts/rewrap-skuld-secrets.py
+!scripts/test-skuld-secret-rewrap.sh
 *.pem
 *.key
 *.crt
