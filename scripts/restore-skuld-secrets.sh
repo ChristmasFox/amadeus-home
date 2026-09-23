@@ -32,6 +32,7 @@ MODE='dry-run'
 TEST_MODE="${SKULD_SECRET_RESTORE_TEST_MODE:-0}"
 APPROVED_REPLACEMENTS=()
 FIXTURE_DIR="${SKULD_SECRET_FIXTURE_DIR:-}"
+AVALON_APPROVAL=''
 
 # Destination identity (clean destination contract)
 DEST_HOST='Amadeus-M204'
@@ -45,7 +46,7 @@ usage() {
     'Usage:' \
     '  scripts/restore-skuld-secrets.sh --bundle FILE --passphrase-file FILE --dry-run' \
     '  scripts/restore-skuld-secrets.sh --bundle FILE --passphrase-file FILE --apply \\' \
-    '      --dest-base DIR [--approve-replace TARGET ...]' \
+    '      --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 --dest-base DIR [--approve-replace TARGET ...]' \
     '  scripts/restore-skuld-secrets.sh --fixture --dry-run'
 }
 
@@ -58,6 +59,7 @@ while (($#)); do
     --dry-run)         MODE=dry-run ;;
     --apply)           MODE=apply ;;
     --approve-replace) shift; APPROVED_REPLACEMENTS+=("${1:?--approve-replace requires a target}") ;;
+    --approve-avalon-move) shift; AVALON_APPROVAL="${1:?--approve-avalon-move requires a token}" ;;
     --fixture)         TEST_MODE=1 ;;
     --fixture-dir)     shift; FIXTURE_DIR="${1:?--fixture-dir requires a path}" ;;
     --help|-h)         usage; exit 0 ;;
@@ -76,6 +78,17 @@ fi
 
 if [[ "$MODE" == apply && -z "$DEST_BASE" ]]; then
   printf '--dest-base is required in apply mode.\n' >&2; exit 2
+fi
+if [[ "$MODE" == apply && "$AVALON_APPROVAL" != 'APPROVE_AVALON_MOVE_1_4_8' ]]; then
+  printf '%s\n' 'Apply requires the exact APPROVE_AVALON_MOVE_1_4_8 token.' >&2; exit 2
+fi
+if [[ "$MODE" == apply ]]; then
+  [[ -d "$DEST_BASE" && ! -L "$DEST_BASE" ]] || { printf '%s\n' 'Destination base must be an existing real directory.' >&2; exit 2; }
+  if ((TEST_MODE)); then
+    destination_real="$(cd -- "$DEST_BASE" && pwd -P)"
+    temporary_real="$(cd -- "${TMPDIR:-/tmp}" && pwd -P)"
+    [[ "$destination_real" == "$temporary_real"/* ]] || { printf '%s\n' 'Fixture restore destination must be below TMPDIR.' >&2; exit 2; }
+  fi
 fi
 
 printf 'SECRET_RESTORE_MODE=%s\n' "$MODE"
@@ -100,6 +113,7 @@ if ((TEST_MODE)); then
     mkdir -p \
       "$staging/DATA/AppData/openclaw/secrets" \
       "$staging/DATA/AppData/openclaw" \
+      "$staging/DATA/AppData/openclaw/config/credentials/whatsapp/secondary" \
       "$staging/var/lib/casaos/apps/product-radar" \
       "$staging/DATA/AppData/9router" \
       "$staging/var/lib/casaos/apps/9router" \
@@ -111,6 +125,8 @@ if ((TEST_MODE)); then
     chmod 600 "$staging/DATA/AppData/openclaw/openclaw.env"
     printf 'fixture-token\n'  > "$staging/DATA/AppData/openclaw/secrets/telegram-bot-token"
     chmod 600 "$staging/DATA/AppData/openclaw/secrets/telegram-bot-token"
+    printf 'fixture-whatsapp-state\n' > "$staging/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
+    chmod 600 "$staging/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
     printf 'FIXTURE_RADAR_ENV=1\n' > "$staging/var/lib/casaos/apps/product-radar/.env"
     chmod 600 "$staging/var/lib/casaos/apps/product-radar/.env"
     printf 'FIXTURE_9R_ENV=1\n' > "$staging/DATA/AppData/9router/9router.env"
@@ -120,6 +136,8 @@ if ((TEST_MODE)); then
   fi
 else
   [[ -n "$MANIFEST" ]] || MANIFEST="${BUNDLE%/*}/secrets.manifest.json"
+  python3 "$ROOT_DIR/scripts/skuld_secret_bundle_auth.py" verify \
+    --artifact "$BUNDLE" --manifest "$MANIFEST" --passphrase-file "$PASSPHRASE_FILE"
   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
     -pass "file:$PASSPHRASE_FILE" -in "$BUNDLE" | tar -xzf - -C "$staging"
 fi
@@ -127,7 +145,7 @@ fi
 # Validate manifest integrity before doing anything
 if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
   python3 - "$MANIFEST" "$staging" << 'PY'
-import json, sys
+import hashlib, json, stat, sys
 from pathlib import Path
 manifest_path, root = Path(sys.argv[1]), Path(sys.argv[2])
 data = json.loads(manifest_path.read_text())
@@ -140,8 +158,26 @@ if not files:
     raise SystemExit('manifest has no files listed')
 for item in files:
     rel = item.get('path', '')
-    if not rel or rel.startswith('/') or '..' in Path(rel).parts:
-        raise SystemExit(f'unsafe path in manifest: {rel!r}')
+    path_hash = item.get('pathSha256')
+    if isinstance(path_hash, str):
+        if item.get('pathScope') != 'openclaw-runtime-credentials' or len(path_hash) != 64:
+            raise SystemExit('invalid opaque OpenClaw credential path metadata')
+        matches = [p for p in root.rglob('*') if stat.S_ISREG(p.lstat().st_mode) and hashlib.sha256(p.relative_to(root).as_posix().encode()).hexdigest() == path_hash]
+        if len(matches) != 1:
+            raise SystemExit('opaque credential path is missing or ambiguous')
+        path = matches[0]
+    else:
+        if not rel or rel.startswith('/') or '..' in Path(rel).parts:
+            raise SystemExit(f'unsafe path in manifest: {rel!r}')
+        path = root / rel
+        try:
+            if not stat.S_ISREG(path.lstat().st_mode):
+                raise SystemExit('manifest entry is not a regular file')
+        except FileNotFoundError as exc:
+            raise SystemExit('manifest file is missing') from exc
+    info = path.lstat()
+    if stat.S_IMODE(info.st_mode) != int(str(item.get('mode', '0')), 8) or info.st_size != int(item.get('size', -1)):
+        raise SystemExit('manifest file metadata mismatch')
 print('MANIFEST_VALIDATION=passed')
 PY
 fi
@@ -151,18 +187,22 @@ fi
 # NOTE: destination paths are guest-side (Linux) paths where applicable.
 # macOS-side paths use DEST_MACOS_HOME prefix.
 python3 - "$staging" "$DEST_BASE" "$MODE" \
-  "$(printf '%s\n' "${APPROVED_REPLACEMENTS[@]+"${APPROVED_REPLACEMENTS[@]}"}")" << 'PY'
+  "$(printf '%s\n' "${APPROVED_REPLACEMENTS[@]+"${APPROVED_REPLACEMENTS[@]}"}")" "$TEST_MODE" "$ROOT_DIR" << 'PY'
 import json
 import os
 import shutil
 import stat
 import sys
+import uuid
 from pathlib import Path
 
 staging_dir = Path(sys.argv[1])
 dest_base = Path(sys.argv[2]) if sys.argv[2] else Path('/dev/null')
 mode = sys.argv[3]
-approved_replacements = set(sys.argv[4].splitlines()) if sys.argv[4] else set()
+approved_replacements = {os.path.normpath(value) for value in sys.argv[4].splitlines()} if sys.argv[4] else set()
+fixture_mode = sys.argv[5] == '1'
+sys.path.insert(0, str(Path(sys.argv[6]) / 'scripts'))
+from openclaw_credentials_owner import normalize_runtime_tree
 
 # Logical restore map:
 # (logical_id, staging_relative_path, dest_relative_path, permissions, description)
@@ -177,6 +217,10 @@ RESTORE_MAP = [
      'DATA/AppData/openclaw/secrets',
      'DATA/AppData/openclaw/secrets',
      0o700, 'OpenClaw secret files directory'),
+    ('whatsapp-runtime-state',
+     'DATA/AppData/openclaw/config/credentials',
+     'DATA/AppData/openclaw/config/credentials',
+     0o700, 'OpenClaw channel credential state'),
     # Product Radar
     ('product-radar-runtime-env',
      'var/lib/casaos/apps/product-radar/.env',
@@ -211,7 +255,7 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
     src_path = staging_dir / src_rel
     dst_path = dest_base / dst_rel if mode == 'apply' else Path(f'<dest_base>/{dst_rel}')
     exists_at_source = src_path.exists()
-    exists_at_dest = (dest_base / dst_rel).exists() if mode == 'apply' else False
+    exists_at_dest = ((dest_base / dst_rel).exists() or (dest_base / dst_rel).is_symlink()) if mode == 'apply' else False
 
     action_entry = {
         'logicalId': logical_id,
@@ -233,21 +277,64 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
         action_entry['result'] = 'dry-run'
     elif mode == 'apply':
         real_dst = dest_base / dst_rel
-        if real_dst.exists() and str(real_dst) not in approved_replacements:
+        path_parts = Path(dst_rel).parts
+        parent = dest_base
+        parent_is_symlink = dest_base.is_symlink()
+        for component in path_parts[:-1]:
+            parent = parent / component
+            parent_is_symlink = parent_is_symlink or parent.is_symlink()
+        if parent_is_symlink or real_dst.is_symlink():
+            print(f'BLOCK {logical_id}: symlinked destination path refused')
+            failures += 1
+            action_entry['result'] = 'blocked-symlink'
+            actions.append(action_entry)
+            continue
+        if exists_at_dest and str(real_dst) not in approved_replacements:
             print(f'SKIP  {logical_id}: {dst_rel} already exists — add to --approve-replace to overwrite')
             action_entry['result'] = 'skipped-exists-not-approved'
             actions.append(action_entry)
             continue
-        # Perform restore
         real_dst.parent.mkdir(parents=True, exist_ok=True)
-        if src_path.is_dir():
-            if real_dst.exists():
-                shutil.rmtree(real_dst)
-            shutil.copytree(str(src_path), str(real_dst))
-            real_dst.chmod(perm)
-        else:
-            shutil.copy2(str(src_path), str(real_dst))
-            real_dst.chmod(perm)
+        backup_path = None
+        if exists_at_dest:
+            backup_base = dest_base / '.operation-skuld-secret-restore-backups'
+            if backup_base.is_symlink():
+                print(f'BLOCK {logical_id}: symlinked rollback root refused')
+                failures += 1
+                action_entry['result'] = 'blocked-symlink'
+                actions.append(action_entry)
+                continue
+            backup_root = backup_base / uuid.uuid4().hex
+            backup_target = backup_root / dst_rel
+            backup_base.mkdir(mode=0o700, exist_ok=True)
+            backup_base.chmod(0o700)
+            backup_root.mkdir(mode=0o700)
+            backup_target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.rename(real_dst, backup_target)
+            backup_path = backup_target
+            print(f'SECRET_RESTORE_BACKUP={backup_target}')
+        prepared_path = real_dst.with_name(f'.{real_dst.name}.restore-{uuid.uuid4().hex}')
+        try:
+            if src_path.is_dir():
+                shutil.copytree(str(src_path), str(prepared_path), symlinks=True)
+                prepared_path.chmod(perm)
+                if logical_id == 'whatsapp-runtime-state' and not fixture_mode:
+                    if os.geteuid() != 0:
+                        raise PermissionError('OpenClaw credential restore must run as guest root')
+                    entries = normalize_runtime_tree(prepared_path)
+                    print(f'OPENCLAW_CREDENTIAL_OWNER_NORMALIZED=1000:1000 entries={entries}')
+            else:
+                shutil.copy2(str(src_path), str(prepared_path), follow_symlinks=False)
+                prepared_path.chmod(perm, follow_symlinks=False)
+            os.rename(prepared_path, real_dst)
+        except BaseException:
+            if prepared_path.is_dir() and not prepared_path.is_symlink():
+                shutil.rmtree(prepared_path)
+            elif prepared_path.exists() or prepared_path.is_symlink():
+                prepared_path.unlink()
+            if backup_path is not None and backup_path.exists() and not (real_dst.exists() or real_dst.is_symlink()):
+                os.rename(backup_path, real_dst)
+            raise
         print(f'APPLY {logical_id} → {real_dst} (perm={oct(perm)})')
         action_entry['result'] = 'applied'
     actions.append(action_entry)

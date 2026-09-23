@@ -112,6 +112,34 @@ test('legacy title/message payloads are readable only from pending files, not ac
   }
 });
 
+test('migration-safe owner notifier blocks direct delivery and pending-outbox retries', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-owner-migration-safe-'));
+  try {
+    await writeFile(join(directory, 'pending.pending.json'), JSON.stringify(notification({ eventKey: 'migration:pending' })));
+    let sendCount = 0;
+    const api = {
+      runtime: { gateway: { request: async () => { sendCount += 1; return {}; } } },
+      logger: { warn() {} },
+    } as unknown as OpenClawPluginApi;
+    const notifier = new OwnerNotifier(api, {
+      ownerTargetFile: join(directory, 'missing-owner-target'),
+      ownerWhatsappAccountId: 'secondary',
+      notificationOutboxDir: directory,
+      ownerNotificationDeliveryEnabled: false,
+    } as never);
+
+    await assert.rejects(
+      () => notifier.notify(ownerEvent(notification({ eventKey: 'migration:direct' }))),
+      /disabled by migration-safe runtime policy/u,
+    );
+    assert.equal(await notifier.drain(), 0);
+    assert.equal(sendCount, 0);
+    assert.equal((await readdir(directory)).includes('pending.pending.json'), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('long owner notifications split without losing facts, update time, closing, or idempotency keys', () => {
   const event = ownerEvent(notification({
     eventKey: 'long:event',

@@ -26,6 +26,10 @@ export function registerOwnerNotificationWorker(api: OpenClawPluginApi, config =
   api.registerService({
     id: 'amadeus-owner-notification-worker',
     async start() {
+      if (!config.ownerNotificationDeliveryEnabled) {
+        api.logger.info('amadeus owner notification worker disabled by migration-safe runtime policy');
+        return;
+      }
       const notifier = new OwnerNotifier(api, config);
       await notifier.drain();
       workerTimer = setInterval(() => { void notifier.drain(); }, 5_000);

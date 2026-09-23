@@ -294,10 +294,10 @@ for source in \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
   "$ROOT_DIR/integrations/openclaw/openclaw.json.example" \
   "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
-  "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace/USER.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace/MEMORY.md" "$PREPARE" "$PATCH_RUNTIME"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -305,10 +305,10 @@ OPENCLAW_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/openclaw/dock
 RADAR_COMPOSE_B64="$(base64_file "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml")"
 CONFIG_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/openclaw.json.example")"
 TEAM_B64="$(base64_file "$ROOT_DIR/packages/pubg-domain/config/default-team.json")"
-AGENTS_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/AGENTS.md")"
-SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/SOUL.md")"
-USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/USER.md")"
-MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace/MEMORY.md")"
+AGENTS_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md")"
+SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md")"
+USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md")"
+MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md")"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR" \

@@ -1,0 +1,12 @@
+# Temporary validation-only overlay. Do not use this for owner-channel authority.
+# Merge with docker-compose.yml using -f base -f migration-safe.
+services:
+  openclaw:
+    restart: "no"
+    environment:
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /run/openclaw-migration/openclaw.json
+      OWNER_NOTIFICATION_DELIVERY_ENABLED: "false"
+    volumes:
+      - /run/openclaw-migration-safe:/run/openclaw-migration:ro
+    ports: !reset []

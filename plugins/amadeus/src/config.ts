@@ -21,6 +21,7 @@ export interface AmadeusConfig {
   kookTokenFile?: string;
   ownerTargetFile: string;
   ownerWhatsappAccountId: string;
+  ownerNotificationDeliveryEnabled: boolean;
   notificationOutboxDir: string;
   identityDatabasePath: string;
   identityPresetsFile?: string;
@@ -53,6 +54,12 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const macSshKnownHostsFile = optionalFile('macSshKnownHostsFile', 'MAC_CONTROL_KNOWN_HOSTS_FILE');
   const kookTokenFile = optionalFile('kookTokenFile', 'KOOK_BOT_TOKEN_FILE');
   const identityPresetsFile = optionalFile('identityPresetsFile', 'IDENTITY_PRESETS_FILE');
+  const ownerDeliverySetting = value.ownerNotificationDeliveryEnabled ?? env('OWNER_NOTIFICATION_DELIVERY_ENABLED');
+  let ownerNotificationDeliveryEnabled: boolean;
+  if (ownerDeliverySetting === undefined) ownerNotificationDeliveryEnabled = true;
+  else if (ownerDeliverySetting === true || ownerDeliverySetting === 'true') ownerNotificationDeliveryEnabled = true;
+  else if (ownerDeliverySetting === false || ownerDeliverySetting === 'false') ownerNotificationDeliveryEnabled = false;
+  else throw new Error('ownerNotificationDeliveryEnabled must be a boolean');
   return {
     productRadarBaseUrl: file('productRadarBaseUrl', 'PRODUCT_RADAR_BASE_URL', 'http://product-radar:5315').replace(/\/$/u, ''),
     ...(productRadarApiKeyFile ? { productRadarApiKeyFile } : {}),
@@ -69,6 +76,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     ...(kookTokenFile ? { kookTokenFile } : {}),
     ownerTargetFile: file('ownerTargetFile', 'OWNER_WHATSAPP_TARGET_FILE', '/run/secrets/owner_whatsapp_target'),
     ownerWhatsappAccountId: file('ownerWhatsappAccountId', 'OWNER_WHATSAPP_ACCOUNT_ID', 'secondary'),
+    ownerNotificationDeliveryEnabled,
     notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
     identityDatabasePath: file('identityDatabasePath', 'IDENTITY_DATABASE_PATH', '/data/identity.sqlite'),
     ...(identityPresetsFile ? { identityPresetsFile } : {}),

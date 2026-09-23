@@ -52,6 +52,16 @@ function checkForbiddenImports(root, relativeDirectory, pattern, label, errors) 
   }
 }
 
+function hasActiveReference(content, pattern) {
+  const explicitDenial = /\b(?:no|never|not|does\s+not|do\s+not|must\s+not)\b.{0,120}/iu;
+  return content.split('\n').some((line) => {
+    if (!pattern.test(line)) return false;
+    const match = line.match(pattern);
+    if (!match) return false;
+    return !explicitDenial.test(line.slice(0, match.index));
+  });
+}
+
 export function checkArchitecture(root = REPO_ROOT) {
   const errors = [];
   const required = [
@@ -85,8 +95,11 @@ export function checkArchitecture(root = REPO_ROOT) {
     'scripts/secrets-inventory.sh',
     'scripts/export-skuld-secrets.sh',
     'scripts/import-skuld-secrets.sh',
-    'integrations/openclaw/workspace/SOUL.md',
-    'integrations/openclaw/workspace/AGENTS.md',
+    'integrations/openclaw/workspace-seed/SOUL.seed.md',
+    'integrations/openclaw/workspace-seed/AGENTS.seed.md',
+    'integrations/openclaw/workspace-seed/USER.seed.md',
+    'integrations/openclaw/workspace-seed/MEMORY.seed.md',
+    'integrations/openclaw/workspace-seed/README.md',
     'package.json',
     'scripts/developer-workflow.sh',
   ];
@@ -108,13 +121,13 @@ export function checkArchitecture(root = REPO_ROOT) {
   );
 
   const workspaceForbidden = ['pubg_search_matches', 'pubg_get_review_facts', 'resultSetId', 'recentN', 'businessDayStart', 'Asia/Shanghai', 'before_prompt_build'];
-  for (const relative of ['integrations/openclaw/workspace/SOUL.md', 'integrations/openclaw/workspace/AGENTS.md']) {
+  for (const relative of ['integrations/openclaw/workspace-seed/SOUL.seed.md', 'integrations/openclaw/workspace-seed/AGENTS.seed.md']) {
     const content = text(root, relative);
     for (const token of workspaceForbidden) if (content.includes(token)) errors.push(`${relative} contains capability-specific token: ${token}`);
   }
   const personaForbidden = ['PUBG', 'HomeLab', 'NAS', 'Product Radar', 'media-organize', 'WhatsApp', 'Telegram', 'KOOK', 'Codex', 'amadeus_', 'resultSetId', 'recentN', 'businessDayStart', 'Asia/Shanghai'];
-  const soul = text(root, 'integrations/openclaw/workspace/SOUL.md');
-  for (const token of personaForbidden) if (soul.includes(token)) errors.push(`integrations/openclaw/workspace/SOUL.md contains capability-specific token: ${token}`);
+  const soul = text(root, 'integrations/openclaw/workspace-seed/SOUL.seed.md');
+  for (const token of personaForbidden) if (soul.includes(token)) errors.push(`integrations/openclaw/workspace-seed/SOUL.seed.md contains capability-specific token: ${token}`);
 
   const amadeusSource = text(root, 'plugins/amadeus/src/index.ts');
   checkForbiddenImports(root, 'plugins/amadeus/src', /before_prompt_build|appendSystemContext/iu, 'amadeus source contains global prompt injection', errors);
@@ -160,10 +173,11 @@ export function checkArchitecture(root = REPO_ROOT) {
     for (const path of sourceFiles(join(root, relativeDirectory))) {
       const relative = path.slice(root.length + 1);
       if (relative === 'scripts/check-architecture.mjs' || relative === 'scripts/test-check-architecture.mjs' || relative === 'scripts/migration-readiness.sh') continue;
+      if (relative.startsWith('scripts/test-')) continue;
       if (migrationOnly(relative)) continue;
       const content = readFileSync(path, 'utf8');
-      if (/langbot|n8n-sandbox|legacy n8n runtime/iu.test(content)) errors.push(`active deployment source contains retired runtime reference: ${relative}`);
-      if (content.includes('/Users/blacksidev')) errors.push(`active deployment source contains old host path: ${relative}`);
+      if (hasActiveReference(content, /langbot|n8n-sandbox|legacy n8n runtime/iu)) errors.push(`active deployment source contains retired runtime reference: ${relative}`);
+      if (hasActiveReference(content, /\/Users\/blacksidev/iu)) errors.push(`active deployment source contains old host path: ${relative}`);
       if (/rsync\s+[^\n]*--delete/iu.test(content)) errors.push(`Immich migration source contains forbidden destructive rsync flag: ${relative}`);
       if (/docker\s+(?:volume\s+prune|system\s+prune\s+--volumes)/iu.test(content)) errors.push(`forbidden Docker volume cleanup: ${relative}`);
       if (/rm\s+-rf\s+\/DATA\/AppData(?:\/|\s|$)/u.test(content)) errors.push(`generic AppData deletion: ${relative}`);

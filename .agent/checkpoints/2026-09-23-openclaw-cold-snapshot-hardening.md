@@ -1,0 +1,9 @@
+# Amadeus 1.4.8 — cold snapshot and credential continuity hardening
+
+- Status: Phase 3 tooling and Phase 4 evidence emitters are implemented; production evidence remains gated behind the exact source-freeze and Avalon-restore approvals.
+- Cold snapshot format is schema v2. The encrypted state stream excludes `config/credentials/**`; its sanitized HMAC-authenticated manifest binds the separate authenticated secret bundle and a credential continuity HMAC.
+- Credential continuity compares every opaque path hash, file SHA-256, size, mode, directory mode, and owner. No raw path, provider identifier, content hash, or credential value enters the public snapshot manifest. Remote inventory fingerprints are held only in a `0700` temporary directory and `0600` files, removed on exit.
+- Read-only source ownership probe: credential tree entries are `1000:1000`; four directories have mode distribution `0700` × 1 and `0755` × 3; 856 files have mode distribution `0600` × 2 and `0644` × 854. Destination secret restore normalizes the tree to the OpenClaw image's `node` owner (`1000:1000`); state restore verifies it before/after replacement.
+- Fixtures reject same-count/same-byte credential content changes, path changes, restored content changes, archive tampering, and unsafe paths. They also verify migration tokens, rollback-copy retention, SQLite integrity, memory/workspace hashes, and private manifest redaction.
+- Passed focused checks: `test-openclaw-continuity.py`, migration-safe config, unique-runtime gate, workspace seed, secret restore, architecture, Skuld manifest/runbook consistency, shell/Python syntax, `git diff --check`, and `pnpm check:secrets`.
+- No production snapshot, secret export/restore, service stop/start, Avalon move, source freeze, owner ingress switch, or cutover was performed. `VERSION` remains 1.4.7; complete release validation and commit/push remain outstanding.

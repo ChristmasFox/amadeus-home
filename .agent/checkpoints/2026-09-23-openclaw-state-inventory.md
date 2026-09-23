@@ -1,0 +1,9 @@
+# Amadeus 1.4.8 — Phase 2 state inventory checkpoint
+
+- Status: state classes and secret separation defined; source discovery was read-only. Source OpenClaw was running, so these are volatile inventory facts, not freeze/restore acceptance evidence.
+- Persisted roots: `config`, `workspace`, `data`, and `notifications` under `/DATA/AppData/openclaw`; `openclaw.env`, `/secrets/**`, and `config/credentials/**` belong to the separate encrypted Skuld bundle.
+- Read-only source inventory: config 5,613 files / 225,301,307 bytes / 15 symlinks; workspace 141 files / 19,677,604 bytes; data 10 files / 14,788,737 bytes; notifications 112 files / 87,515 bytes. No special files were observed. No file contents or message text were emitted.
+- Config contains session/transcript/history candidates and four valid SQLite databases; `data/identity.sqlite` and `data/pubg.sqlite` were both readable with `PRAGMA integrity_check=ok`. Five zero-byte suffix-matching files were not misclassified as databases. These live checks are not the final cold gate.
+- `config/credentials/whatsapp` contains 856 files / 317,708 bytes. The previous secret exporter omitted it; exporter/importer/restore coverage now includes the protected credential subtree, with opaque manifest path hashes, fail-closed missing-state checks, exact Avalon approval for apply, and retained rollback copies for approved replacement.
+- Source image observed: `local/openclaw-amadeus:git-5baad9571dfc-20260922120543`; repository VERSION is 1.4.7, so live image/repo commit must be reconciled in the final freeze gate. Source container remains active and unchanged; no Avalon access, state copy, secret restore, or destination OpenClaw start occurred.
+- Next: implement authenticated encrypted cold snapshot, sanitized manifest, verifier/SQLite checks, and approval-gated restore using test fixtures only.

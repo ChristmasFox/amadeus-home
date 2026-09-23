@@ -10,9 +10,12 @@ const copies = [
   'AGENTS.md', 'package.json',
   'docs/INFRASTRUCTURE_CLASSIFICATION.md', 'docs/OPERATION_SKULD_MIGRATION_MANIFEST.json', 'docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md', 'docs/OPERATION_SKULD_SERVICE_INVENTORY.md', 'docs/STORAGE_RETENTION_POLICY.md',
   'scripts/developer-workflow.sh', 'scripts/host-profile.sh', 'scripts/migration-readiness.sh', 'scripts/storage-preflight.sh', 'scripts/migrate-immich-media.sh', 'scripts/reclaim-immich-old-source.sh', 'scripts/storage-maintenance.sh', 'scripts/apply-docker-log-policy.sh', 'scripts/externalize-casaos-secrets.sh', 'scripts/storage-health.sh', 'scripts/install-storage-scheduler-macos.sh', 'scripts/export-9router-runtime.sh', 'scripts/secrets-inventory.sh', 'scripts/export-skuld-secrets.sh', 'scripts/import-skuld-secrets.sh',
+  'scripts/plan-destination-bootstrap.sh', 'scripts/plan-skuld-rollback.sh',
   'infra/docker/homelab/immich/docker-compose.example.yml',
   'plugins/amadeus/src', 'plugins/amadeus/openclaw.plugin.json', 'plugins/amadeus/skills',
-  'integrations/openclaw/workspace/SOUL.md', 'integrations/openclaw/workspace/AGENTS.md',
+  'integrations/openclaw/workspace-seed/SOUL.seed.md', 'integrations/openclaw/workspace-seed/AGENTS.seed.md',
+  'integrations/openclaw/workspace-seed/USER.seed.md', 'integrations/openclaw/workspace-seed/MEMORY.seed.md',
+  'integrations/openclaw/workspace-seed/README.md',
   'packages/presentation/src', 'packages/presentation/package.json',
   'plugins/pubg/src',
   'packages/pubg-domain/src',
@@ -21,10 +24,19 @@ try {
   for (const relative of copies) cpSync(join(root, relative), join(fixture, relative), { recursive: true });
   assert.deepEqual(checkArchitecture(fixture), []);
 
-  const soulPath = join(fixture, 'integrations/openclaw/workspace/SOUL.md');
+  const bootstrapPlan = join(fixture, 'scripts/plan-destination-bootstrap.sh');
+  writeFileSync(bootstrapPlan, `${readFileSync(bootstrapPlan, 'utf8')}\nACTIVE_HOME=/Users/blacksidev/runtime\n`);
+  assert.ok(checkArchitecture(fixture).some((error) => error.includes('active deployment source contains old host path: scripts/plan-destination-bootstrap.sh')));
+  writeFileSync(bootstrapPlan, readFileSync(bootstrapPlan, 'utf8').replace('\nACTIVE_HOME=/Users/blacksidev/runtime\n', '\n'));
+
+  const rollbackPlan = join(fixture, 'scripts/plan-skuld-rollback.sh');
+  writeFileSync(rollbackPlan, `${readFileSync(rollbackPlan, 'utf8')}\nCOMMAND=n8n-sandbox\n`);
+  assert.ok(checkArchitecture(fixture).some((error) => error.includes('active deployment source contains retired runtime reference: scripts/plan-skuld-rollback.sh')));
+
+  const soulPath = join(fixture, 'integrations/openclaw/workspace-seed/SOUL.seed.md');
   writeFileSync(soulPath, `${readFileSync(soulPath, 'utf8')}\nDo not skip pubg_search_matches.\n`);
   const errors = checkArchitecture(fixture);
-  assert.ok(errors.some((error) => error.includes('SOUL.md contains capability-specific token')));
+  assert.ok(errors.some((error) => error.includes('SOUL.seed.md contains capability-specific token')));
 
   const nestedPromptPath = join(fixture, 'plugins/amadeus/src/capabilities/identity/nested-prompt.ts');
   writeFileSync(nestedPromptPath, 'export const hook = "before_prompt_build";\n');

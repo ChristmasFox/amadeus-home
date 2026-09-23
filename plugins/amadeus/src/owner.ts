@@ -227,6 +227,9 @@ export class OwnerNotifier {
   }
 
   async notify(event: OwnerEvent): Promise<{ status: 'sent' | 'queued'; detail?: string }> {
+    if (this.config.ownerNotificationDeliveryEnabled === false) {
+      throw new Error('owner notification delivery is disabled by migration-safe runtime policy');
+    }
     const parts = notificationParts(normalizeStructured(event));
     let queued = 0;
     let sent = 0;
@@ -254,6 +257,7 @@ export class OwnerNotifier {
   }
 
   async drain(limit = 20): Promise<number> {
+    if (this.config.ownerNotificationDeliveryEnabled === false) return 0;
     await mkdir(this.config.notificationOutboxDir, { recursive: true, mode: 0o700 });
     const names = (await readdir(this.config.notificationOutboxDir)).filter((name) => name.endsWith('.pending.json')).sort().slice(0, limit);
     let sent = 0;
