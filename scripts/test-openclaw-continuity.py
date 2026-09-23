@@ -34,6 +34,7 @@ from openclaw_continuity import (  # noqa: E402
     verify_artifact_authentication,
     verify_restored_credentials,
     verify_snapshot,
+    _copy_tree_preserving_metadata,
     _verify_bundle_matches_inventory,
 )
 from openclaw_credentials_owner import (  # noqa: E402
@@ -82,6 +83,23 @@ class pytest_raises:
 
 with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporary:
     base = Path(temporary)
+    if os.geteuid() == 0:
+        owner_source = base / "owner-source"
+        (owner_source / "nested").mkdir(parents=True)
+        (owner_source / "nested/state.json").write_text("owner fixture\n")
+        (owner_source / "nested/state.json").chmod(0o640)
+        (owner_source / "nested").chmod(0o750)
+        remote_owner = (4242, 31337)
+        for path in (owner_source / "nested/state.json", owner_source / "nested", owner_source):
+            os.chown(path, *remote_owner, follow_symlinks=False)
+        owner_destination = base / "owner-destination"
+        _copy_tree_preserving_metadata(owner_source, owner_destination)
+        assert (owner_destination.stat().st_uid, owner_destination.stat().st_gid) == remote_owner
+        assert ((owner_destination / "nested").stat().st_uid, (owner_destination / "nested").stat().st_gid) == remote_owner
+        copied_file = owner_destination / "nested/state.json"
+        assert (copied_file.stat().st_uid, copied_file.stat().st_gid) == remote_owner
+        assert (copied_file.stat().st_mode & 0o7777) == 0o640
+
     source = base / "source"
     for area in ("config", "workspace", "data", "notifications"):
         (source / area).mkdir(parents=True)
