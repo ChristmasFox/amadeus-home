@@ -1,0 +1,26 @@
+name: xiaoya
+
+services:
+  xiaoya:
+    image: xiaoyaliu/alist:latest
+    pull_policy: never
+    container_name: xiaoya
+    network_mode: bridge
+    restart: always
+    command: ["/opt/alist/alist", "server", "--no-prefix"]
+    ports:
+      - "${XIAOYA_WEB_PORT:-127.0.0.1:5678}:80"
+      - "${XIAOYA_PORT_2345:-127.0.0.1:2345}:2345"
+      - "${XIAOYA_PORT_2346:-127.0.0.1:2346}:2346"
+      - "${XIAOYA_PORT_2347:-127.0.0.1:2347}:2347"
+    volumes:
+      - /DATA/AppData/xiaoya:/data
+      - /DATA/AppData/xiaoya/alist-data:/opt/alist/data
+      - /DATA/AppData/xiaoya/data:/www/data
+    x-casaos:
+      author: self
+      category: Utilities
+      port_map: "5678"
+      scheme: http
+      title:
+        custom: xiaoya

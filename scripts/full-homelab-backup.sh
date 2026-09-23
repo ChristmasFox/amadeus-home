@@ -147,6 +147,25 @@ archive_container_dir() {
   chmod 600 "$local_archive"
 }
 
+archive_docker_volume() {
+  local label="$1" volume="$2" local_archive="$3"
+  if ((TEST_MODE)); then
+    local stub_dir
+    if [[ "${FULL_HOMELAB_BACKUP_TEST_CONSUME_STDIN:-0}" == 1 ]]; then
+      IFS= read -r _ || true
+    fi
+    stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/stub-$label.XXXXXX")"
+    printf '%s fixture content\n' "$label" > "$stub_dir/fixture.txt"
+    tar -C "$stub_dir" -czf "$local_archive" .
+    rm -rf "$stub_dir"
+  else
+    orb -m "$MACHINE" -u root docker run --rm -v "$volume:/data:ro" alpine \
+      tar -cf - -C /data . </dev/null | gzip -c > "$local_archive"
+  fi
+  [[ -s "$local_archive" ]] || { printf 'BACKUP_EMPTY_ARCHIVE=%s\n' "$label" >&2; return 1; }
+  chmod 600 "$local_archive"
+}
+
 # Helper: record an external reference (Avalon media, downloads — never archived)
 record_external_ref() {
   local service="$1" path="$2" note="$3"
@@ -357,7 +376,30 @@ xiaoya_archive="$OUTPUT_DIR/xiaoya/xiaoya-appdata.tar.gz"
 if ((TEST_MODE)); then
   archive_guest_dir 'xiaoya' '/home/blacksidev/xiaoya' "$xiaoya_archive"
   xiaoya_volume='fixture-xiaoya-alist-data'
+  xiaoya_image='xiaoyaliu/alist:latest'
+  xiaoya_image_id='fixture-image-id'
+  xiaoya_image_archive="$OUTPUT_DIR/xiaoya/xiaoya-image-fixture.tar.gz"
+  stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/stub-xiaoya-image.XXXXXX")"
+  printf 'fixture-xiaoya-image\n' > "$stub_dir/image.tar"
+  tar -C "$stub_dir" -czf "$xiaoya_image_archive" .
+  rm -rf "$stub_dir"
 else
+  xiaoya_image="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Config.Image}}' xiaoya)"
+  xiaoya_image_id="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Image}}' xiaoya)"
+  tagged_image_id="$(orb -m "$MACHINE" -u root docker image inspect --format '{{.Id}}' "$xiaoya_image")"
+  [[ -n "$xiaoya_image" && "$xiaoya_image_id" == "$tagged_image_id" ]] || {
+    printf 'XIAOYA_IMAGE_ID_MISMATCH tag=%s container=%s tagId=%s\n' \
+      "$xiaoya_image" "$xiaoya_image_id" "$tagged_image_id" >&2
+    exit 1
+  }
+  xiaoya_image_archive="$OUTPUT_DIR/xiaoya/xiaoya-image-$(printf '%s' "$xiaoya_image" | tr '/:.' '-').tar"
+  orb -m "$MACHINE" -u root docker save "$xiaoya_image" > "$xiaoya_image_archive"
+  [[ -s "$xiaoya_image_archive" ]] || { printf 'XIAOYA_IMAGE_ARCHIVE_EMPTY\n' >&2; exit 1; }
+  chmod 600 "$xiaoya_image_archive"
+  gzip -f "$xiaoya_image_archive"
+  xiaoya_image_archive="${xiaoya_image_archive}.gz"
+  hash=$(sha256_file "$xiaoya_image_archive")
+  printf '%s  %s\n' "$hash" "$xiaoya_image_archive" >> "$checksums_file"
   xiaoya_mounts="$(orb -m "$MACHINE" -u root docker inspect --format '{{json .Mounts}}' xiaoya)"
   xiaoya_bind_source="$(python3 -c 'import json,sys; mounts=json.loads(sys.argv[1]); matches=[m["Source"] for m in mounts if m.get("Type")=="bind" and m.get("Destination")=="/data"]; print(matches[0] if len(matches)==1 else "")' "$xiaoya_mounts")"
   xiaoya_volume="$(python3 -c 'import json,sys; mounts=json.loads(sys.argv[1]); matches=[m["Name"] for m in mounts if m.get("Type")=="volume" and m.get("Destination")=="/opt/alist/data"]; print(matches[0] if len(matches)==1 else "")' "$xiaoya_mounts")"
@@ -370,12 +412,19 @@ else
 fi
 hash=$(sha256_file "$xiaoya_archive")
 printf '%s  %s\n' "$hash" "$xiaoya_archive" >> "$checksums_file"
+chmod 600 "$xiaoya_image_archive"
+hash=$(sha256_file "$xiaoya_image_archive")
+if ((TEST_MODE)); then printf '%s  %s\n' "$hash" "$xiaoya_image_archive" >> "$checksums_file"; fi
+printf '{"image":"%s","imageId":"%s","savedAs":"%s","sha256":"%s"}\n' \
+  "$xiaoya_image" "$xiaoya_image_id" "$(basename "$xiaoya_image_archive")" "$hash" \
+  > "$OUTPUT_DIR/xiaoya/image-manifest.json"
+chmod 600 "$OUTPUT_DIR/xiaoya/image-manifest.json"
 xiaoya_alist_archive="$OUTPUT_DIR/xiaoya/xiaoya-alist-data.tar.gz"
 archive_container_dir 'xiaoya-alist-data' 'xiaoya' '/opt/alist/data' "$xiaoya_alist_archive"
 hash=$(sha256_file "$xiaoya_alist_archive")
 printf '%s  %s\n' "$hash" "$xiaoya_alist_archive" >> "$checksums_file"
-printf '{"container":"xiaoya","bindSource":"/home/blacksidev/xiaoya","destination":"/DATA/AppData/xiaoya","alistDataVolume":"%s","alistDataArchive":"%s"}\n' \
-  "$xiaoya_volume" "$(basename "$xiaoya_alist_archive")" > "$OUTPUT_DIR/xiaoya/restore-map.json"
+printf '{"container":"xiaoya","image":"%s","bindSource":"/home/blacksidev/xiaoya","destination":"/DATA/AppData/xiaoya","alistDataVolume":"%s","alistDataArchive":"%s"}\n' \
+  "$xiaoya_image" "$xiaoya_volume" "$(basename "$xiaoya_alist_archive")" > "$OUTPUT_DIR/xiaoya/restore-map.json"
 chmod 600 "$OUTPUT_DIR/xiaoya/restore-map.json"
 record_result 'xiaoya' "$OUTPUT_DIR/xiaoya" 'bind-directory+container-volume-archive' 'passed' 'encrypted-bundle'
 
@@ -413,35 +462,46 @@ fb_archive="$OUTPUT_DIR/filebrowser/filebrowser-appdata.tar.gz"
 archive_guest_dir 'filebrowser' '/DATA/AppData/filebrowser' "$fb_archive"
 hash=$(sha256_file "$fb_archive")
 printf '%s  %s\n' "$hash" "$fb_archive" >> "$checksums_file"
-# Named volume export (if present and not in fixture mode)
+# Export the exact anonymous/named volumes mounted by filebrowser. Docker's
+# generated volume names are opaque IDs, so filtering `docker volume ls` by the
+# service name silently missed both live volumes.
 if ((TEST_MODE)); then
-  printf '{"volumes":["filebrowser_data"],"status":"fixture"}\n' \
-    > "$OUTPUT_DIR/filebrowser/named-volumes.json"
+  fb_volume_specs=$'fixture-filebrowser-database|/database\nfixture-filebrowser-config|/config'
 else
-  fb_vols="$(orb -m "$MACHINE" -u root docker volume ls --format '{{.Name}}' 2>/dev/null \
-    | grep -E 'filebrowser' || true)"
-  vol_status='none'
-  if [[ -n "$fb_vols" ]]; then
-    vol_list_file="$OUTPUT_DIR/filebrowser/named-volumes.txt"
-    printf '%s\n' "$fb_vols" > "$vol_list_file"
-    # Export each volume as a tar
-    while IFS= read -r vol; do
-      [[ -n "$vol" ]] || continue
-      vol_archive="$OUTPUT_DIR/filebrowser/vol-$(printf '%s' "$vol" | tr '/' '-').tar.gz"
-      orb -m "$MACHINE" -u root bash -lc \
-        "docker run --rm -v '$vol':/data:ro alpine tar -czf - -C /data ." \
-        > "$vol_archive" 2>/dev/null || true
-      if [[ -s "$vol_archive" ]]; then
-        chmod 600 "$vol_archive"
-        hash=$(sha256_file "$vol_archive")
-        printf '%s  %s\n' "$hash" "$vol_archive" >> "$checksums_file"
-        vol_status='exported'
-      fi
-    done < <(printf '%s\n' "$fb_vols")
-  fi
-  printf '{"volumes":"%s","status":"%s"}\n' "$fb_vols" "$vol_status" \
-    > "$OUTPUT_DIR/filebrowser/named-volumes.json"
+  fb_mounts="$(orb -m "$MACHINE" -u root docker inspect --format '{{json .Mounts}}' filebrowser)"
+  fb_volume_specs="$(python3 -c 'import json,sys; mounts=json.loads(sys.argv[1]); wanted={"/database","/config"}; found=[(m.get("Name",""),m.get("Destination","")) for m in mounts if m.get("Type")=="volume" and m.get("Destination") in wanted]; print("\n".join("|".join(x) for x in sorted(found)))' "$fb_mounts")"
+  [[ -n "$fb_volume_specs" ]] || { printf 'FILEBROWSER_VOLUMES_MISSING\n' >&2; exit 1; }
 fi
+python3 - "$fb_volume_specs" <<'PY'
+import sys
+items = [line.split('|', 1) for line in sys.argv[1].splitlines()]
+if (len(items) != 2 or any(len(item) != 2 or not item[0] for item in items)
+        or {item[1] for item in items} != {'/database', '/config'}):
+    raise SystemExit('filebrowser volume mappings must uniquely include /database and /config')
+PY
+while IFS='|' read -r fb_volume fb_destination <&3; do
+  [[ -n "$fb_volume" && ( "$fb_destination" == /database || "$fb_destination" == /config ) ]] || {
+    printf 'FILEBROWSER_VOLUME_MAPPING_INVALID destination=%s\n' "$fb_destination" >&2
+    exit 1
+  }
+  fb_volume_archive="$OUTPUT_DIR/filebrowser/volume-${fb_destination##*/}.tar.gz"
+  archive_docker_volume "filebrowser-${fb_destination##*/}" "$fb_volume" "$fb_volume_archive"
+  hash=$(sha256_file "$fb_volume_archive")
+  printf '%s  %s\n' "$hash" "$fb_volume_archive" >> "$checksums_file"
+done 3<<< "$fb_volume_specs"
+python3 - "$OUTPUT_DIR/filebrowser/named-volumes.json" "$fb_volume_specs" <<'PY'
+import json, sys
+target, raw = sys.argv[1:]
+items=[]
+for line in raw.splitlines():
+    name, destination = line.split('|', 1)
+    items.append({'name': name, 'destination': destination,
+                  'archive': 'volume-' + destination.rsplit('/', 1)[-1] + '.tar.gz'})
+if {item['destination'] for item in items} != {'/database', '/config'}:
+    raise SystemExit('filebrowser volume set must include /database and /config')
+open(target, 'w').write(json.dumps({'volumes': items, 'status': 'exported'}, indent=2) + '\n')
+PY
+chmod 600 "$OUTPUT_DIR/filebrowser/named-volumes.json"
 record_result 'filebrowser' "$fb_archive" 'appdata-archive+named-volume-export' 'passed' 'encrypted-bundle'
 
 # ── 13. aria2 ────────────────────────────────────────────────────────────────
