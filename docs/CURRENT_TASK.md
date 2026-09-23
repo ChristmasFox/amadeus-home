@@ -2,7 +2,7 @@
 
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
-当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。仓库侧 hardening、测试、release validation、commit/push 已完成；用户已明确批准 source freeze，Phase 7 执行中。完成后必须停在 Avalon move 边界，不能自行卸载或移动磁盘。
+当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。仓库侧 hardening、测试、release validation、commit/push 已完成；Phase 7 source freeze 已完成。当前停在 Phase 8 Avalon move 审批边界，不能自行卸载或移动磁盘。
 
 Phase 1 已完成源码与聚焦验证：仓库 workspace 文件已改名为 `workspace-seed/*.seed.md`，`openclaw_prepare.py` 仅向缺失路径写入 seed，并保留已有运行态文件、权限、符号链接、目录及 `memory/**`；新增默认只读 plan 的单文件同步工具。证据见 `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`。
 
@@ -10,17 +10,19 @@ Phase 2 已完成 state root/secret boundary 定义和旧源只读发现：`conf
 
 Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流、HMAC-authenticated manifest、SQLite/session/workspace 校验；独立 verifier 在认证后解密检查，restore 要求 Avalon token 和四个 state-root 替换批准，并先保留目标 rollback copy。凭据 continuity 改为逐项绑定 opaque path、内容、mode 和 `1000:1000` runtime owner；恢复后逐项复验。相同文件数/总字节但内容或路径变化的负向 fixture 均被拒绝。Phase 4 的 source/destination evidence 输出已接线；实际 source evidence 只能在获批 freeze 后采集，destination evidence 只能在获批 restore 后采集。证据见 `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`。
 
-1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，原始采集时间仍为 unknown；原件未修改。clean `7c93b7e` readiness 为 0 failure/0 warning，doctor 也为 0/0；rollback plan ready。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。Phase 6 已到 source-freeze 审批边界；精确 token 尚未提供，源端仍 active，尚未移动 Avalon 或切换 owner ingress。详见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
+1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，原始采集时间仍为 unknown；原件未修改。clean `7c93b7e` readiness 为 0 failure/0 warning，doctor 也为 0/0；rollback plan ready。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。Phase 6 pre-freeze audit（历史截面）：当时 source-freeze token 尚未提供，源端仍 active；证据见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
 
-2026-09-23 更新：用户已给出精确 source-freeze 批准，Phase 7 已开始；上述 pre-freeze 审批状态已过时。最终 secret bundle 必须先于冷快照生成，因为快照 manifest 会认证绑定其身份与 WhatsApp credential continuity。最终 HomeLab 备份须在停止 Immich/PostgreSQL 等 Avalon 服务前完成。Phase 8 仍需单独批准，当前不得卸载 Avalon。
+2026-09-23 Phase 7 完成：源 OpenClaw/Gateway 与 owner ingress 关闭；Product Radar、9Router、Changedetection、所有 Avalon 直接/间接消费者和 RW Docker socket 控制器已停止；Mac host 与 ubuntu guest 均已 sync。生产 authority 未切到 M204；公网入口未改。
 
-冷快照已四次因内容/manifest 指标不匹配而失败，工具均自动清理 partial artifact/manifest。按认证 tar header UID/GID 重建摘要后跨 owner fixture 通过；路径哈希指纹定位到 `config` 下 15 个条目的 mode 差异，`data` 与 `notifications` 匹配。校验端现同时按认证 header 重建 owner/mode，并与 stopped-source 指纹逐项比较，只报告 root 与差异类别计数，不输出路径/内容/状态值。失败未修改源数据；OpenClaw/Product Radar 仍停止。
+最终 Secret bundle：`/Volumes/Avalon/backups/operation-skuld/secrets-20260923T112416Z`，认证、import 和 restore dry-run 均通过。最终 OpenClaw 冷快照：`/Volumes/Avalon/backups/operation-skuld/openclaw-cold/openclaw-cold-20260923T112531Z.tar.gz.enc`，独立 verifier 通过，SHA-256 `367ffc43f53ec9dfda96b1f14caacf944c7994b1f356aa8e5f4f93d12f3d6e36`；155 个 workspace 文件、4,888 个 state 文件、84 个 session/JSONL 文件、6 个 transcript，必需 SQLite 均 `ok`。完整记录见 `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`。
+
+最终 HomeLab 备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`；16/16 MIGRATE 服务、38 artifacts、22/22 checksums 通过。Avalon 仍挂载在旧 Mac，M204 host/guest 均未挂载；目标 OpenClaw/Product Radar 不存在，`DESTINATION_AUTHORITY=NO`。Phase 8 需要单独批准 `APPROVE_AVALON_MOVE_1_4_8`。
 
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
-用户已授权先恢复不依赖 Avalon 的服务，并确认其他服务沿用固定挂载名 `/Volumes/Avalon`；源端仍是唯一权威运行时，不切换公网入口。
+用户已授权先恢复不依赖 Avalon 的服务，并确认其他服务沿用固定挂载名 `/Volumes/Avalon`。它们仍只是 M204 loopback 暂存；source OpenClaw 已冻结，生产 authority 与公网入口尚未切换。
 
-最新 16 服务备份位于 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`，manifest 16/16 `passed`、checksums 全部通过；包含 Xiaoya 精确镜像 ID、bind/Alist 数据和 Filebrowser `/database`、`/config` 两个匿名卷。较早的 `20260923T044715Z` 备份尝试漏归档 Filebrowser `/config`，不要作为恢复源。回归测试现覆盖子进程消耗 stdin 时仍完整归档两个卷。3 份 service-aware SQLite snapshot、Immich `pg_dump -Fc` 和 secret bundle rehearsal 证据见既有外部 checkpoint。
+最新 16 服务备份位于 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`，manifest 16/16 `passed`、22/22 checksums 通过；包含 Xiaoya 精确镜像 ID、bind/Alist 数据、Immich `pg_dump -Fc` 和 Filebrowser `/database`、`/config` 两个匿名卷。冷快照和密钥 bundle 另见本节 Phase 7 完成记录。
 
 M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标现有 Changedetection、9Router、Filebrowser、Xiaoya、AriaNG、Dashdot 六项服务，均处于 loopback-only/无宿主端口的暂存状态。Changedetection healthy、无宿主端口；它与源端并行轮询仅作迁移暂存，源端仍是唯一权威身份。9Router 仅绑定 `127.0.0.1:20128`，源端与目标对无凭据 `/v1/models` 都返回 401，与预期一致。
 

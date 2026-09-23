@@ -1,10 +1,14 @@
 ## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
 
-2026-09-23 update: The source-freeze approval was received and Phase 7 execution has started. This supersedes any later-in-this-file pre-freeze notes saying the approval is still pending. Final snapshot/export/backup artifacts are not yet verified; Phase 8 Avalon movement, destination runtime restore, owner-ingress switch, and final cutover remain unauthorized.
+2026-09-23 completion update: Phase 7 source freeze is complete. `SOURCE_FROZEN=YES`, source OpenClaw and owner ingress are off, active Avalon-bound consumers are stopped, and the source filesystem has been synced. Final encrypted secret bundle, independently verified cold snapshot, and 16-service HomeLab backup are recorded in `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`. Avalon remains mounted on the source; no destination production runtime or authority switch occurred.
 
-Four cold-snapshot attempts safely removed their failed partial artifacts. Tar-header ownership reconciliation and a cross-UID/GID regression fixture pass; path-obfuscated state fingerprints isolate 15 `config` entries whose mode differs after macOS extraction, while `data` and `notifications` match. Verification now also reconstructs mode from authenticated tar headers and checks it against source fingerprints. No source data changed. Final secret bundle verification passed; cold snapshot and final HomeLab backup remain pending.
+Phase 8 is the next hard boundary. Do not unmount Avalon until the user supplies `APPROVE_AVALON_MOVE_1_4_8`.
 
-- Authoritative scope: `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side hardening/release work is complete; the exact source-freeze approval was received and Phase 7 is in progress. Stop after source freeze and require separate approval before unmounting Avalon.
+### Phase history and pre-freeze audit notes
+
+以下各阶段记录中的运行时状态截面于 source freeze 前采集；与当前状态冲突之处以上方完成记录及最终 checkpoint 为准。
+
+- Authoritative scope: `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side hardening/release work and Phase 7 source freeze are complete. Stop before Phase 8 until separate Avalon-move approval is received.
 - Phase 1 is implemented: Git context lives under `integrations/openclaw/workspace-seed/`; runtime `/DATA/AppData/openclaw/workspace` is authoritative and prepare seeds only absent paths. Existing files, permissions, symlinks, directories, and `memory/**` are preserved. Explicit sync is plan-only by default and allows one approved file per apply.
 - Focused workspace/architecture/session-isolation tests, `pnpm check:architecture`, Python/shell syntax checks, `git diff --check`, and secrets scan pass. Architecture fixtures confirm active old-host and retired-runtime references remain rejected while explicit negative policy text is allowed. Phase evidence: `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`.
 - The 1.4.8 release base (`3d9985c`) is committed and pushed. This follow-up fixes the secret-bundle import/restore policy contract and tracks the HMAC helper plus its end-to-end fixture.
@@ -15,8 +19,8 @@ Four cold-snapshot attempts safely removed their failed partial artifacts. Tar-h
 
 ## 当前状态 — 2026-09-23 M204 非 Avalon 服务恢复（进行中）
 
-- M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载，旧源 CasaOS 继续作为唯一权威运行时。
-- 最新完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`。16 个 MIGRATE 服务均 `passed`，全部 checksums 通过；Xiaoya image ID 精确记录，Filebrowser `/database` 与 `/config` 卷都已归档。`044715Z` 备份尝试缺 Filebrowser `/config`，仅保留审计，不作为恢复源。
+- M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载；目标 OpenClaw/Product Radar 不存在。源端 OpenClaw 已冻结，目前未切换生产 authority。
+- 最终完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`。16 个 MIGRATE 服务、38 个 artifacts 均通过，22/22 checksums 通过；包含 Immich `pg_dump -Fc` 和 Filebrowser `/database`、`/config` 卷。此前 `20260923T045305Z` 备份仍保留；更早 `044715Z` 备份缺 Filebrowser `/config`，不作为恢复源。
 - 目标现有六项服务：Changedetection（healthy、无宿主端口）、9Router（`127.0.0.1:20128`）、Filebrowser（healthy，`127.0.0.1:10180`）、Xiaoya、AriaNG（`127.0.0.1:6880`）和 Dashdot（`127.0.0.1:3001`）。9Router 源/目标未授权 `/v1/models` 都返回 401。Filebrowser 可写 `/DATA` 全视图，继续保持 loopback；Xiaoya 主 UI 与 public-settings API 200，两个 SQLite 文件 integrity pass，169 条 Alist storage 记录没有字面 `/Volumes/Avalon` 路径。AriaNG/Dashdot UI 200，Dashdot guest-root bind 为只读；aria2 后端尚未恢复。六项容器当前均为 running、重启次数 0，全部仅 loopback 或无宿主端口，目标仍只用于暂存，未切换入口。
 - Xiaoya/Filebrowser/AriaNG/Dashdot image 和 data 经受控 staging 传输。Docker 28.2.2 → 29.8.1 导入后 image ID 被归一化，但 source/target 的 platform、创建时间、全部 RootFS layer digests 和完整 image Config 一致。M204 guest 直连 Docker Hub 超时，因此镜像由源端保存并离线导入；传输 SHA-256 匹配。Xiaoya 私有 AppData 目录为 `700 root:root`。
 - Homarr 与 xiaoyakeeper 暂缓，二者都需要 RW Docker socket；Homarr 还发现受保护 secret bundle 尚未覆盖的 `AUTH_SECRET`、`SECRET_ENCRYPTION_KEY`。运行态、决策和验收证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase2.md`。
