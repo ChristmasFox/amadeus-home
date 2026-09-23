@@ -14,7 +14,7 @@ Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流
 
 2026-09-23 更新：用户已给出精确 source-freeze 批准，Phase 7 已开始；上述 pre-freeze 审批状态已过时。最终 secret bundle 必须先于冷快照生成，因为快照 manifest 会认证绑定其身份与 WhatsApp credential continuity。最终 HomeLab 备份须在停止 Immich/PostgreSQL 等 Avalon 服务前完成。Phase 8 仍需单独批准，当前不得卸载 Avalon。
 
-冷快照已三次因内容/manifest 指标不匹配而失败，工具均自动清理 partial artifact/manifest。按认证 tar header UID/GID 重建摘要后跨 owner fixture 通过；live 诊断进一步定位到 `config` subtree，workspace、SQLite 与计数项匹配。现加入仅哈希的 `config/data/notifications` 子树摘要，以及仅在权限 `600` 临时 inventory 中保存的路径哈希/元数据指纹，以 root 与不匹配类别计数定位，不输出实际路径、内容或状态值。失败未修改源数据；OpenClaw/Product Radar 仍停止。
+冷快照已四次因内容/manifest 指标不匹配而失败，工具均自动清理 partial artifact/manifest。按认证 tar header UID/GID 重建摘要后跨 owner fixture 通过；路径哈希指纹定位到 `config` 下 15 个条目的 mode 差异，`data` 与 `notifications` 匹配。校验端现同时按认证 header 重建 owner/mode，并与 stopped-source 指纹逐项比较，只报告 root 与差异类别计数，不输出路径/内容/状态值。失败未修改源数据；OpenClaw/Product Radar 仍停止。
 
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
