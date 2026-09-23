@@ -2,7 +2,7 @@
 
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
-当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。按要求先完成仓库侧 hardening、测试、release validation、commit/push；在 Phase 6 的 source freeze operator gate 前停止，不代用户批准。
+当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。仓库侧 hardening、测试、release validation、commit/push 已完成；用户已明确批准 source freeze，Phase 7 执行中。完成后必须停在 Avalon move 边界，不能自行卸载或移动磁盘。
 
 Phase 1 已完成源码与聚焦验证：仓库 workspace 文件已改名为 `workspace-seed/*.seed.md`，`openclaw_prepare.py` 仅向缺失路径写入 seed，并保留已有运行态文件、权限、符号链接、目录及 `memory/**`；新增默认只读 plan 的单文件同步工具。证据见 `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`。
 
@@ -11,6 +11,8 @@ Phase 2 已完成 state root/secret boundary 定义和旧源只读发现：`conf
 Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流、HMAC-authenticated manifest、SQLite/session/workspace 校验；独立 verifier 在认证后解密检查，restore 要求 Avalon token 和四个 state-root 替换批准，并先保留目标 rollback copy。凭据 continuity 改为逐项绑定 opaque path、内容、mode 和 `1000:1000` runtime owner；恢复后逐项复验。相同文件数/总字节但内容或路径变化的负向 fixture 均被拒绝。Phase 4 的 source/destination evidence 输出已接线；实际 source evidence 只能在获批 freeze 后采集，destination evidence 只能在获批 restore 后采集。证据见 `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`。
 
 1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，原始采集时间仍为 unknown；原件未修改。clean `7c93b7e` readiness 为 0 failure/0 warning，doctor 也为 0/0；rollback plan ready。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。Phase 6 已到 source-freeze 审批边界；精确 token 尚未提供，源端仍 active，尚未移动 Avalon 或切换 owner ingress。详见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
+
+2026-09-23 更新：用户已给出精确 source-freeze 批准，Phase 7 已开始；上述 pre-freeze 审批状态已过时。最终 secret bundle 必须先于冷快照生成，因为快照 manifest 会认证绑定其身份与 WhatsApp credential continuity。最终 HomeLab 备份须在停止 Immich/PostgreSQL 等 Avalon 服务前完成。Phase 8 仍需单独批准，当前不得卸载 Avalon。
 
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
