@@ -1,4 +1,4 @@
-# Amadeus 1.4.8 — Phase 8 Avalon destination preflight (in progress)
+# Amadeus 1.4.8 — Phase 8 Avalon destination preflight (recovered and passed)
 
 Date: 2026-09-23
 Approval: `APPROVE_AVALON_MOVE_1_4_8` received.
@@ -27,7 +27,7 @@ The previously empty ignored target `EXTERNAL_STORAGE_VOLUME_UUID` was set to th
 
 After attachment, the encrypted secret bundle and cold snapshot SHA-256 values match the source checkpoint. All 22 checksums in the final HomeLab backup passed again on M204. The manifests and required backup files are present.
 
-## Guest-side blocker
+## Initial guest-side blocker (resolved)
 
 OrbStack reports `/Volumes` as a `virtiofs` mount in the `nyannyan` guest. The guest's `test -e /Volumes/Avalon` returned true, but `ls -ld /Volumes/Avalon` did not return for over ten minutes; the guest process remained alive despite SIGINT/SIGTERM/SIGKILL. A guest-side read/write/content check therefore has **not** passed.
 
@@ -43,3 +43,30 @@ DESTINATION_AUTHORITY=NO
 ```
 
 Do not start any Avalon consumer or destination OpenClaw until the guest can read the actual mounted volume and the remaining Phase 8 checks pass. The host-local iMessage-only OpenClaw LaunchAgent remains separately unclassified; recheck the unique-runtime gate before any destination OpenClaw startup.
+
+## Recovery update — Phase 8 destination gate passed
+
+After the guest restart completed, `orbctl info nyannyan` reported `State: running`. The guest's `/Volumes` VirtioFS view now reads the attached Avalon volume successfully:
+
+```text
+AVALON_GUEST_MOUNT=/Volumes (virtiofs, rw)
+AVALON_GUEST_CAPACITY=7.3T total, 985G available (87% used; warning below 20% free)
+AVALON_GUEST_SENTINEL=readable; storageId=avalon-primary-8tb
+AVALON_GUEST_IMMICH_MEDIA_ROOT=present
+AVALON_GUEST_COLD_SNAPSHOT_SHA256=verified
+AVALON_GUEST_SECRET_BUNDLE_SHA256=verified
+AVALON_GUEST_BACKUP_MANIFEST=present
+AVALON_GUEST_WRITE_PROBE=passed and removed
+AVALON_GUEST_READ=verified
+AVALON_CONTENT=verified
+```
+
+The secret bundle and cold snapshot hashes matched the source-freeze checkpoint values. The M204 guest write probe used a unique temporary file, read it back, and removed it. The six loopback staging containers (Dashdot, AriaNG, Xiaoya, Filebrowser, 9Router, Changedetection) returned after restart. A guest-side Docker mount inspection found no `/Volumes/Avalon` bind among them; no Avalon-dependent service, destination OpenClaw, Product Radar, or owner ingress was started.
+
+```text
+PHASE_8=PASSED
+CUTOVER=NOT_EXECUTED
+DESTINATION_AUTHORITY=NO
+```
+
+Phase 9 restore has not started. The host-local iMessage-only OpenClaw LaunchAgent remains separately unclassified; before any destination OpenClaw startup, recheck the unique-runtime gate and classify that LaunchAgent.
