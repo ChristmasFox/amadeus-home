@@ -1,3 +1,11 @@
+## 2026-09-23 — M204 服务恢复准备
+
+- 已备份源端 16 个 MIGRATE 服务；备份根目录为 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T025614Z`。校验和、3 份 service-aware SQLite 快照、Immich `pg_dump -Fc` restore-list、加密 secret bundle rehearsal 均通过。备份工具修复覆盖精确 9Router live image、Xiaoya bind 数据与 Alist named volume、缺失路径 fail-closed。
+- 9Router 数据归档内的 `data.sqlite` + WAL 在临时副本上 `integrity_check=ok`；泛化 AppData tar 曾报告读取期间文件变化，只作为应急配置归档，不用作数据库权威副本。
+- 已从源端 live Docker mount 清点出 7 个直接绑定 Avalon 的服务：Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist。配置继续固定 `/Volumes/Avalon`；实际挂盘并验证身份/sentinel 前不启动这组服务。
+- 用户允许先恢复非 Avalon 服务，但源端仍是唯一权威运行时。OpenClaw/Product Radar 等有双跑/重复通知风险的服务以及 frpc/NPM 入口服务遵循各自切换门禁；不会因“无直接 Avalon mount”就提前并行开放。
+- M204 的 OrbStack app 进程存在，但 canonical guest 的 Orb CLI 无响应且 Avalon 未挂载；目标尚未恢复业务容器、数据或 secret。等待用户从 M204 OrbStack UI 启动 `nyannyan` guest 后继续。
+
 ## 2026-09-22：Amadeus-M204 SSH 访问与终端代理基线（进行中）
 
 用户已显式开始新 Mac 的迁移准备。专用 ED25519 SSH key 已在控制端创建，目标用户

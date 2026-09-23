@@ -1,5 +1,17 @@
 # 当前任务
 
+## 2026-09-23：M204 非 Avalon 服务恢复准备（进行中）
+
+用户已授权先恢复不依赖 Avalon 的服务，并确认其余服务可按固定挂载名 `/Volumes/Avalon` 准备；不改 Avalon 路径名。源端仍是唯一权威运行时。
+
+已完成：源端 16 个 MIGRATE 服务的 Full HomeLab 备份已写入 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T025614Z`，checksums 全部通过；修复了备份脚本对缺失目录静默成功、9Router 错选回滚镜像、Xiaoya bind/named volume 漏备份的问题。修复后定向测试通过。新鲜加密 secret bundle 的导入 rehearsal 和目标路径 dry-run 通过；不含 secret 明文。
+
+一致性证据：3 份 service-aware SQLite snapshot 的 SHA-256 与 manifest 匹配且 `integrity_check=ok`；Immich PostgreSQL dump 的 `pg_restore --list` 通过；9Router 实际镜像标签为 `local/9router:0.5.81`，备份数据中 `data.sqlite` 与 WAL 已在临时副本上通过 SQLite integrity check。普通 AppData tar 仅作应急配置归档，不能替代 service-aware 数据快照；它曾报告 9Router sqlite 文件读取期间变化。
+
+依赖分类基于源端运行容器真实 mount：直接绑定 Avalon 的是 Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist；可先按稳定路径准备配置，但盘挂载并通过身份/sentinel 检查前不启动这些消费者。OpenClaw 与 Product Radar 没有直接 Avalon bind，但必须等单一运行时/切换门禁，避免双跑和重复通知。frpc/Nginx Proxy Manager 等入口类服务需等入口切换检查，不提前开放流量。
+
+目标 M204 主机 SSH 可达，但 OrbStack guest 当前未运行/CLI 无响应；`/Volumes/Avalon` 也尚未挂载。因此目标尚未恢复任何业务容器、数据或 secret。下一步需要在 M204 的 OrbStack UI 启动 canonical `nyannyan` guest；恢复 guest 后先恢复可独立、无入口副作用的服务并逐项验收，再处理需 Avalon 的服务。详细证据与阻塞见 `.agent/checkpoints/2026-09-23-m204-independent-service-backup.md` 和 `.agent/tasks/2026-09-23-m204-service-restore.md`。
+
 ## 2026-09-22：Amadeus-M204 主机访问与终端代理准备（进行中）
 
 用户已明确启动新 Mac 的迁移准备，并授权目标主机的受限 SSH 管理。

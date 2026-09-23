@@ -1,3 +1,12 @@
+## 2026-09-23 — M204 service restore preparation
+
+- User authorized restoring services independent of Avalon and confirmed `/Volumes/Avalon` remains the stable mount name. Source CasaOS remains the sole authoritative runtime.
+- Full source backup is at `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T025614Z`; archive checksums passed. Service-aware SQLite snapshots passed hash/integrity checks; Immich PostgreSQL dump passed `pg_restore --list`; secret bundle import rehearsal and target dry-run passed without exposing values.
+- Backup code now fails closed on missing/empty paths, saves the exact live 9Router image, and captures Xiaoya's actual bind directory plus its `/opt/alist/data` named volume. Focused fixture test passed.
+- Source live mounts show Avalon binds for Immich, media-organizer-adapter, Emby, qBittorrent, aria2, Jellyfin, and Alist. Keep their config paths fixed at `/Volumes/Avalon`; start only after physical mount identity/sentinel verification.
+- OpenClaw/Product Radar remain behind single-runtime/cutover and duplicate-notification gates even though they have no direct Avalon bind. frpc/Nginx Proxy Manager remain behind ingress cutover gates.
+- M204 SSH works, but OrbStack guest is stopped/unresponsive and Avalon is absent. No target service, data, or secret has been restored. Continue after `nyannyan` guest is started from OrbStack UI; see `.agent/tasks/2026-09-23-m204-service-restore.md`.
+
 ## 2026-09-22 — Amadeus-M204 SSH access and terminal proxy baseline (in progress)
 
 - User explicitly authorized target-host migration preparation. Dedicated ED25519 key is local-only; user-installed public key authentication and `ssh amadeus-m204` were verified.

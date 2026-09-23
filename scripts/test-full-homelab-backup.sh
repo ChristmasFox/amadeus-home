@@ -68,6 +68,23 @@ test_fixture_mode() {
   # Verify checksums file exists
   [[ -f "$out_dir/checksums.sha256" ]] || fail 'fixture mode: checksums.sha256 missing'
 
+  # Xiaoya's live bind source is remapped from /home/blacksidev/xiaoya into
+  # /DATA/AppData/xiaoya, and its Alist named volume is a separate artifact.
+  [[ -s "$out_dir/xiaoya/xiaoya-appdata.tar.gz" ]] || fail 'fixture mode: Xiaoya bind archive missing'
+  [[ -s "$out_dir/xiaoya/xiaoya-alist-data.tar.gz" ]] || fail 'fixture mode: Xiaoya Alist volume archive missing'
+  [[ -s "$out_dir/xiaoya/restore-map.json" ]] || fail 'fixture mode: Xiaoya restore map missing'
+  tar -tzf "$out_dir/xiaoya/xiaoya-appdata.tar.gz" | grep -Fq 'fixture.txt' \
+    || fail 'fixture mode: Xiaoya bind archive is empty'
+  tar -tzf "$out_dir/xiaoya/xiaoya-alist-data.tar.gz" | grep -Fq 'fixture.txt' \
+    || fail 'fixture mode: Xiaoya Alist volume archive is empty'
+
+  python3 - "$out_dir/9router/image-manifest.json" <<'PY'
+import json, sys
+value = json.loads(open(sys.argv[1]).read())
+assert value.get('image') == 'local/9router:0.5.81', value
+PY
+  pass 'fixture mode: exact 9Router tag and Xiaoya bind/volume artifacts'
+
   pass 'full-homelab-backup.sh --fixture produces all MIGRATE service artifacts'
 }
 

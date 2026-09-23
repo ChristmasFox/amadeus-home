@@ -124,9 +124,26 @@ archive_guest_dir() {
     rm -rf "$stub_dir"
   else
     orb -m "$MACHINE" -u root bash -lc \
-      "set -Eeuo pipefail; tar --ignore-failed-read -czf - -C \"\$(dirname '$remote_path')\" \"\$(basename '$remote_path')\" 2>/dev/null" \
+      "set -Eeuo pipefail; test -e '$remote_path'; tar -czf - -C \"\$(dirname '$remote_path')\" \"\$(basename '$remote_path')\"" \
       > "$local_archive"
   fi
+  [[ -s "$local_archive" ]] || { printf 'BACKUP_EMPTY_ARCHIVE=%s\n' "$label" >&2; return 1; }
+  chmod 600 "$local_archive"
+}
+
+archive_container_dir() {
+  local label="$1" container="$2" remote_path="$3" local_archive="$4"
+  if ((TEST_MODE)); then
+    local stub_dir
+    stub_dir="$(mktemp -d "${TMPDIR:-/tmp}/stub-$label.XXXXXX")"
+    printf '%s fixture content\n' "$label" > "$stub_dir/fixture.txt"
+    tar -C "$stub_dir" -czf "$local_archive" .
+    rm -rf "$stub_dir"
+  else
+    orb -m "$MACHINE" -u root docker exec "$container" \
+      tar -cf - -C "$remote_path" . | gzip -c > "$local_archive"
+  fi
+  [[ -s "$local_archive" ]] || { printf 'BACKUP_EMPTY_ARCHIVE=%s\n' "$label" >&2; return 1; }
   chmod 600 "$local_archive"
 }
 
@@ -255,23 +272,26 @@ if ((TEST_MODE)); then
   printf '{"image":"local/9router:0.5.81","savedAs":"9router-fixture-image.tar.gz","sha256":"fixture"}\n' \
     > "$OUTPUT_DIR/9router/image-manifest.json"
 else
-  # Export exact image
-  nine_img="$(orb -m "$MACHINE" -u root docker images local/9router --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -v '<none>' | sort | tail -n 1 || true)"
-  if [[ -n "$nine_img" ]]; then
-    img_archive="$OUTPUT_DIR/9router/9router-image-$(printf '%s' "$nine_img" | tr '/:.' '-').tar"
-    orb -m "$MACHINE" -u root bash -lc "docker save '$nine_img'" > "$img_archive"
-    chmod 600 "$img_archive"
-    gzip -f "$img_archive"
-    img_archive="${img_archive}.gz"
-    hash=$(sha256_file "$img_archive")
-    printf '%s  %s\n' "$hash" "$img_archive" >> "$checksums_file"
-    printf '{"image":"%s","savedAs":"%s","sha256":"%s"}\n' "$nine_img" "$(basename "$img_archive")" "$hash" \
-      > "$OUTPUT_DIR/9router/image-manifest.json"
-    chmod 600 "$OUTPUT_DIR/9router/image-manifest.json"
-  else
-    printf '{"image":"not-found","note":"9router image not found on host"}\n' \
-      > "$OUTPUT_DIR/9router/image-manifest.json"
-  fi
+  # Save the image actually used by the running container. Sorting tags can select
+  # a rollback image (for example rollback-0.5.75 instead of the live 0.5.81).
+  nine_img="$(orb -m "$MACHINE" -u root docker inspect --format '{{.Config.Image}}' 9router)"
+  [[ -n "$nine_img" && "$nine_img" == "$NINE_ROUTER_IMAGE" ]] || {
+    printf 'NINE_ROUTER_IMAGE_MISMATCH expected=%s observed=%s\n' "$NINE_ROUTER_IMAGE" "$nine_img" >&2
+    exit 1
+  }
+  img_archive="$OUTPUT_DIR/9router/9router-image-$(printf '%s' "$nine_img" | tr '/:.' '-').tar"
+  orb -m "$MACHINE" -u root bash -lc "docker save '$nine_img'" > "$img_archive"
+  [[ -s "$img_archive" ]] || { printf 'NINE_ROUTER_IMAGE_ARCHIVE_EMPTY\n' >&2; exit 1; }
+  chmod 600 "$img_archive"
+  gzip -f "$img_archive"
+  img_archive="${img_archive}.gz"
+  hash=$(sha256_file "$img_archive")
+  printf '%s  %s\n' "$hash" "$img_archive" >> "$checksums_file"
+  image_id="$(orb -m "$MACHINE" -u root docker image inspect --format '{{.Id}}' "$nine_img")"
+  printf '{"image":"%s","imageId":"%s","savedAs":"%s","sha256":"%s"}\n' \
+    "$nine_img" "$image_id" "$(basename "$img_archive")" "$hash" \
+    > "$OUTPUT_DIR/9router/image-manifest.json"
+  chmod 600 "$OUTPUT_DIR/9router/image-manifest.json"
   # Protected data archive (no credential values)
   nine_data="$OUTPUT_DIR/9router/9router-data.tar.gz"
   orb -m "$MACHINE" -u root bash -lc \
@@ -334,10 +354,30 @@ record_result 'frpc' "$frpc_archive" 'config-directory-archive' 'passed' 'encryp
 # ── 8. xiaoya ────────────────────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR/xiaoya"
 xiaoya_archive="$OUTPUT_DIR/xiaoya/xiaoya-appdata.tar.gz"
-archive_guest_dir 'xiaoya' '/DATA/AppData/xiaoya' "$xiaoya_archive"
+if ((TEST_MODE)); then
+  archive_guest_dir 'xiaoya' '/home/blacksidev/xiaoya' "$xiaoya_archive"
+  xiaoya_volume='fixture-xiaoya-alist-data'
+else
+  xiaoya_mounts="$(orb -m "$MACHINE" -u root docker inspect --format '{{json .Mounts}}' xiaoya)"
+  xiaoya_bind_source="$(python3 -c 'import json,sys; mounts=json.loads(sys.argv[1]); matches=[m["Source"] for m in mounts if m.get("Type")=="bind" and m.get("Destination")=="/data"]; print(matches[0] if len(matches)==1 else "")' "$xiaoya_mounts")"
+  xiaoya_volume="$(python3 -c 'import json,sys; mounts=json.loads(sys.argv[1]); matches=[m["Name"] for m in mounts if m.get("Type")=="volume" and m.get("Destination")=="/opt/alist/data"]; print(matches[0] if len(matches)==1 else "")' "$xiaoya_mounts")"
+  [[ "$xiaoya_bind_source" == /home/blacksidev/xiaoya ]] || {
+    printf 'XIAOYA_BIND_SOURCE_UNEXPECTED=%s\n' "$xiaoya_bind_source" >&2
+    exit 1
+  }
+  [[ -n "$xiaoya_volume" ]] || { printf 'XIAOYA_ALIST_VOLUME_MISSING\n' >&2; exit 1; }
+  archive_guest_dir 'xiaoya' "$xiaoya_bind_source" "$xiaoya_archive"
+fi
 hash=$(sha256_file "$xiaoya_archive")
 printf '%s  %s\n' "$hash" "$xiaoya_archive" >> "$checksums_file"
-record_result 'xiaoya' "$xiaoya_archive" 'appdata-directory-archive' 'passed' 'encrypted-bundle'
+xiaoya_alist_archive="$OUTPUT_DIR/xiaoya/xiaoya-alist-data.tar.gz"
+archive_container_dir 'xiaoya-alist-data' 'xiaoya' '/opt/alist/data' "$xiaoya_alist_archive"
+hash=$(sha256_file "$xiaoya_alist_archive")
+printf '%s  %s\n' "$hash" "$xiaoya_alist_archive" >> "$checksums_file"
+printf '{"container":"xiaoya","bindSource":"/home/blacksidev/xiaoya","destination":"/DATA/AppData/xiaoya","alistDataVolume":"%s","alistDataArchive":"%s"}\n' \
+  "$xiaoya_volume" "$(basename "$xiaoya_alist_archive")" > "$OUTPUT_DIR/xiaoya/restore-map.json"
+chmod 600 "$OUTPUT_DIR/xiaoya/restore-map.json"
+record_result 'xiaoya' "$OUTPUT_DIR/xiaoya" 'bind-directory+container-volume-archive' 'passed' 'encrypted-bundle'
 
 # ── 9. emby ──────────────────────────────────────────────────────────────────
 mkdir -p "$OUTPUT_DIR/emby"
