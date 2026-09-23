@@ -50,15 +50,16 @@ ingress="$("$ORB_BIN" -m "$MACHINE" -u root docker ps --format '{{.Names}} {{.Im
 [[ "$ingress" == 0 ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED a destination ingress container is running.'; exit 1; }
 "$ORB_BIN" -m "$MACHINE" -u root test -f "$DATA_ROOT/config/openclaw.json" && "$ORB_BIN" -m "$MACHINE" -u root test ! -L "$DATA_ROOT/config/openclaw.json" || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical restored config is missing or symlinked.'; exit 1; }
 
+helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_config.py" | tr -d '\r\n')"
+remote_code="import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_migration_safe_config.py', 'exec'), ns)"
+overlay_config="/run/openclaw-migration-safe/openclaw.json"
 if [[ "$MODE" == plan ]]; then
+  "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$remote_code" --source "$DATA_ROOT/config/openclaw.json" --output "$overlay_config"
   printf 'MIGRATION_SAFE_OPENCLAW=PLAN destination=%s sourceConfigPreserved=yes ownerIngress=disabled publicIngress=disabled ownerDelivery=disabled\n' "$MACHINE"
   exit 0
 fi
 [[ "$APPROVAL" == APPROVE_AVALON_MOVE_1_4_8 ]] || { printf '%s\n' 'Apply requires exact APPROVE_AVALON_MOVE_1_4_8.' >&2; exit 2; }
 
-helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_config.py" | tr -d '\r\n')"
-remote_code="import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_migration_safe_config.py', 'exec'), ns)"
-overlay_config="/run/openclaw-migration-safe/openclaw.json"
 "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$remote_code" --source "$DATA_ROOT/config/openclaw.json" --output "$overlay_config" --apply --approve-avalon-move "$APPROVAL"
 
 compose_overlay_source="$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.migration-safe.example.yml"
