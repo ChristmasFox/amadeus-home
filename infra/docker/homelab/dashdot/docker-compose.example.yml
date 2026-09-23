@@ -1,0 +1,19 @@
+name: dashdot
+
+services:
+  dashdot:
+    image: mauricenino/dashdot:latest
+    pull_policy: never
+    container_name: dashdot
+    restart: always
+    ports:
+      - "${DASHDOT_PORT:-127.0.0.1:3001}:3001"
+    volumes:
+      - /:/mnt/host:ro
+    x-casaos:
+      author: self
+      category: Utilities
+      port_map: "3001"
+      scheme: http
+      title:
+        custom: dashdot
