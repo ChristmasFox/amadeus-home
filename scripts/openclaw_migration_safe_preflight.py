@@ -4,18 +4,69 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Callable
 
 
 IMMUTABLE_IMAGE_RE = re.compile(r"^local/openclaw-amadeus:git-[0-9a-fA-F]{7,40}-[0-9]{14}$")
+TEMPLATE_IMAGE_RE = re.compile(
+    r"(?m)^([ \t]*)image:[ \t]*\$\{OPENCLAW_IMAGE:-local/openclaw-amadeus:unbuilt\}[ \t]*$"
+)
 
 
 class MigrationPreflightError(RuntimeError):
     pass
+
+
+def render_canonical_compose(template: str, image: str) -> bytes:
+    if not IMMUTABLE_IMAGE_RE.fullmatch(image):
+        raise MigrationPreflightError("OpenClaw image must use an immutable local Git-and-timestamp tag")
+    rendered, replacements = TEMPLATE_IMAGE_RE.subn(lambda match: match.group(1) + "image: " + image, template)
+    if replacements != 1:
+        raise MigrationPreflightError("OpenClaw Compose template must contain exactly one default image line")
+    return rendered.encode("utf-8")
+
+
+def install_canonical_compose(template: str, target: Path, image: str) -> str:
+    """Create the CasaOS Compose file without replacing any existing app data."""
+    target = Path(target)
+    payload = render_canonical_compose(template, image)
+    if target.parent.is_symlink() or target.is_symlink():
+        raise MigrationPreflightError("CasaOS Compose target is symlinked")
+    if target.exists():
+        if target.is_file() and target.read_bytes() == payload:
+            return "already-identical"
+        raise MigrationPreflightError("existing CasaOS Compose differs; refusing to overwrite")
+    if target.parent.exists():
+        if not target.parent.is_dir() or any(target.parent.iterdir()):
+            raise MigrationPreflightError("existing OpenClaw app directory is not empty")
+    else:
+        target.parent.mkdir(mode=0o755, parents=True)
+
+    descriptor, temporary_name = tempfile.mkstemp(prefix=".docker-compose.yml.", dir=target.parent)
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(temporary, 0o644)
+        os.link(temporary, target)
+        directory_fd = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except FileExistsError:
+        raise MigrationPreflightError("CasaOS Compose appeared concurrently; refusing to replace it") from None
+    finally:
+        temporary.unlink(missing_ok=True)
+    return "installed"
 
 
 def validate_compose_project(

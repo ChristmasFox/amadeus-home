@@ -10,7 +10,12 @@ import tempfile
 from pathlib import Path
 
 from openclaw_migration_safe_config import MigrationConfigError, build_overlay, write_overlay
-from openclaw_migration_safe_preflight import MigrationPreflightError, validate_compose_project
+from openclaw_migration_safe_preflight import (
+    MigrationPreflightError,
+    install_canonical_compose,
+    render_canonical_compose,
+    validate_compose_project,
+)
 
 
 ingress_fixture = """openclaw local/openclaw-amadeus:test
@@ -176,5 +181,40 @@ with tempfile.TemporaryDirectory(prefix="openclaw-compose-preflight-test-") as t
     expect_preflight_failure(
         rendered_compose(), inspect_status=1, expected="not loaded locally",
     )
+
+    template = "services:\n  openclaw:\n    image: ${OPENCLAW_IMAGE:-local/openclaw-amadeus:unbuilt}\n"
+    tag = "local/openclaw-amadeus:git-123456789abc-20260923123456"
+    rendered = render_canonical_compose(template, tag)
+    assert rendered == f"services:\n  openclaw:\n    image: {tag}\n".encode()
+    installed_dir = root / "new-app"
+    installed_file = installed_dir / "docker-compose.yml"
+    assert install_canonical_compose(template, installed_file, tag) == "installed"
+    assert installed_file.read_bytes() == rendered
+    assert install_canonical_compose(template, installed_file, tag) == "already-identical"
+
+    installed_file.write_text("operator-owned definition\n")
+    try:
+        install_canonical_compose(template, installed_file, tag)
+    except MigrationPreflightError as error:
+        assert "refusing to overwrite" in str(error)
+    else:
+        raise AssertionError("conflicting Compose was overwritten")
+
+    occupied_dir = root / "occupied-app"
+    occupied_dir.mkdir()
+    (occupied_dir / "operator-data").write_text("preserve\n")
+    try:
+        install_canonical_compose(template, occupied_dir / "docker-compose.yml", tag)
+    except MigrationPreflightError as error:
+        assert "not empty" in str(error)
+    else:
+        raise AssertionError("non-empty app directory was modified")
+
+    try:
+        render_canonical_compose(template, "local/openclaw-amadeus:unbuilt")
+    except MigrationPreflightError as error:
+        assert "immutable" in str(error)
+    else:
+        raise AssertionError("mutable image tag was accepted")
 
 print("OPENCLAW_MIGRATION_SAFE_CONFIG_TEST=passed")

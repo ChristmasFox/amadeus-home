@@ -48,4 +48,4 @@ Local focused validation passed: `pnpm test:openclaw-continuity`, `bash scripts/
 
 ## Remaining gate
 
-The old Mac host-local `ai.openclaw.gateway` launchd job is still active on port `18789`. Its production-authority relationship is not yet classified. Do not start destination OpenClaw until the launchd runtime is classified and the unique-runtime gate is freshly verified. Phase 9 restore is complete; Phase 10 startup and later ingress/cutover phases remain incomplete.
+The old Mac host-local `ai.openclaw.gateway` launchd job is still active on port `18789`. Its production-authority relationship is not yet classified. Phase 10 may run only as an isolated loopback migration-safe candidate with all owner/public ingress and owner delivery disabled. Classify the launchd runtime and freshly verify the unique-runtime gate before Phase 12 owner-ingress activation. Phase 9 restore is complete; Phase 10 startup and later ingress/cutover phases remain incomplete.

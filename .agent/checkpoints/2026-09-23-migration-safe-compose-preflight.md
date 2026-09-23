@@ -24,10 +24,22 @@ OPENCLAW_STARTED=no
 DOCKER_PRUNE=not-run
 ```
 
-The control/source Mac has 22 GiB available and is not the selected build target. No build or cleanup was attempted. The target image inventory contains only the six running staging-service images. The M204 repository clone is clean at `c9d4f80`, matching local `main` before this hardening change.
+The control/source Mac has 22 GiB available and is not the selected build target. No build or cleanup was attempted. The target image inventory contains only the six running staging-service images. The M204 repository clone was clean at `c9d4f80` before this hardening change.
+
+After push, M204 fast-forwarded to `0314504`; a live `scripts/openclaw-migration-safe-start.sh --plan` passed Avalon UUID/sentinel checks and then returned the expected hard failure:
+
+```text
+MIGRATION_SAFE_OPENCLAW=BLOCKED canonical OpenClaw Compose definition is missing or symlinked.
+```
+
+The check made no app-directory writes and started no service. Phase 10 remains authorized for isolated loopback testing; the host-local LaunchAgent classification is required before Phase 12 owner-ingress activation, not before this isolated test mode.
 
 ## Verification
 
 Passed: `pnpm test:openclaw-migration-safe`, `pnpm test:openclaw-runtime-gate`, `pnpm workflow:verify` (FAST), `bash -n scripts/openclaw-migration-safe-start.sh`, Python compilation, `pnpm check:secrets`, and `git diff --check`.
 
-This checkpoint records preflight hardening only; Phase 10 startup and Phase 11 acceptance remain incomplete. The next step is to build/load a release-tagged image on M204 and provision the CasaOS Compose definition safely. The host-local `ai.openclaw.gateway` authority must still be classified before starting destination OpenClaw. Owner ingress and public ingress remain off.
+## Follow-up hardening
+
+The apply path now supports the observed missing-Compose case without a manual out-of-band write. It requires the already-approved Avalon-move token, an explicit immutable local Git/timestamp image tag, and confirmation that the image is loaded on M204. It renders the canonical Git template, atomically creates the Compose file only in an absent/empty app directory, and refuses symlinks, conflicting files, or any non-empty directory. It then runs the merged migration-safe preflight; only a passing preflight can reach `docker compose up`. `--plan` remains non-persistent and still reports the missing Compose as blocked. It never replaces a differing operator-owned Compose file.
+
+Follow-up checks passed locally: `python3 scripts/test-openclaw-migration-safe.py`, `pnpm test:openclaw-runtime-gate`, `pnpm workflow:verify` (FAST), `pnpm check:secrets`, `bash -n scripts/openclaw-migration-safe-start.sh`, Python compilation, `bash scripts/amadeus-version.sh check`, and `git diff --check`. No image was built, no Compose was installed on M204, and no service was started by this follow-up. Phase 10 startup and Phase 11 acceptance remain incomplete. The host-local `ai.openclaw.gateway` authority must be classified before Phase 12 owner-ingress activation. Owner ingress and public ingress remain off.

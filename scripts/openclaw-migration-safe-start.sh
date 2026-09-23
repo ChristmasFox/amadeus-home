@@ -12,15 +12,17 @@ ORB_BIN="${ORB_BIN:-$(command -v orb || true)}"
 if [[ -z "$ORB_BIN" && -x /usr/local/bin/orb ]]; then ORB_BIN=/usr/local/bin/orb; fi
 MODE=plan
 APPROVAL=''
+IMAGE=''
 
 usage() {
-  printf '%s\n' 'Usage: scripts/openclaw-migration-safe-start.sh [--plan|--apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8]'
+  printf '%s\n' 'Usage: scripts/openclaw-migration-safe-start.sh [--plan|--apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 [--image local/openclaw-amadeus:git-<sha>-<utc timestamp>]]'
 }
 while (($#)); do
   case "$1" in
     --plan) MODE=plan ;;
     --apply) MODE=apply ;;
     --approve-avalon-move) shift; APPROVAL="${1:?--approve-avalon-move requires a token}" ;;
+    --image) shift; IMAGE="${1:?--image requires an immutable local OpenClaw image tag}" ;;
     --help|-h) usage; exit 0 ;;
     *) printf 'Unknown option: %s\n' "$1" >&2; usage >&2; exit 2 ;;
   esac
@@ -48,10 +50,35 @@ radar_state="$("$ORB_BIN" -m "$MACHINE" -u root docker inspect --format '{{.Stat
 [[ "$radar_state" != running ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED Product Radar must remain stopped.'; exit 1; }
 ingress="$("$ORB_BIN" -m "$MACHINE" -u root docker ps --format '{{.Names}} {{.Image}}' | awk -f "$ROOT_DIR/scripts/openclaw-ingress-count.awk")"
 [[ "$ingress" == 0 ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED a destination ingress container is running.'; exit 1; }
-"$ORB_BIN" -m "$MACHINE" -u root test -f "$APP_DIR/docker-compose.yml" && "$ORB_BIN" -m "$MACHINE" -u root test ! -L "$APP_DIR/docker-compose.yml" || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical OpenClaw Compose definition is missing or symlinked.'; exit 1; }
+compose_file="$APP_DIR/docker-compose.yml"
+if "$ORB_BIN" -m "$MACHINE" -u root test -L "$compose_file"; then
+  printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical OpenClaw Compose definition is symlinked.'
+  exit 1
+elif "$ORB_BIN" -m "$MACHINE" -u root test -f "$compose_file"; then
+  compose_exists=1
+else
+  compose_exists=0
+fi
 "$ORB_BIN" -m "$MACHINE" -u root test -f "$DATA_ROOT/config/openclaw.json" && "$ORB_BIN" -m "$MACHINE" -u root test ! -L "$DATA_ROOT/config/openclaw.json" || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical restored config is missing or symlinked.'; exit 1; }
 
 [[ "$MODE" != apply || "$APPROVAL" == APPROVE_AVALON_MOVE_1_4_8 ]] || { printf '%s\n' 'Apply requires exact APPROVE_AVALON_MOVE_1_4_8.' >&2; exit 2; }
+if ((compose_exists == 0)); then
+  if [[ "$MODE" == plan ]]; then
+    printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical OpenClaw Compose definition is missing; --plan made no changes.'
+    exit 1
+  fi
+  [[ -n "$IMAGE" ]] || { printf '%s\n' 'Apply requires --image with an immutable local Git-and-timestamp tag when Compose is missing.' >&2; exit 2; }
+  "$ORB_BIN" -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED requested immutable image is not loaded on M204.'; exit 1; }
+  template_file="$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml"
+  [[ -f "$template_file" && ! -L "$template_file" ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical Compose source template is missing or symlinked.'; exit 1; }
+  template_payload="$(base64 < "$template_file" | tr -d '\r\n')"
+  compose_helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_preflight.py" | tr -d '\r\n')"
+  install_code="import base64, pathlib, sys; ns={'__name__':'openclaw_migration_safe_preflight'}; exec(compile(base64.b64decode('${compose_helper_payload}'), 'openclaw_migration_safe_preflight.py', 'exec'), ns); result=ns['install_canonical_compose'](base64.b64decode(sys.argv[1]).decode('utf-8'), pathlib.Path(sys.argv[2]), sys.argv[3]); print('MIGRATION_SAFE_CANONICAL_COMPOSE=' + result)"
+  "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$install_code" "$template_payload" "$compose_file" "$IMAGE"
+elif [[ -n "$IMAGE" ]]; then
+  printf '%s\n' '--image is only accepted when the canonical Compose definition is missing.' >&2
+  exit 2
+fi
 
 helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_config.py" | tr -d '\r\n')"
 remote_code="import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_migration_safe_config.py', 'exec'), ns)"
@@ -95,7 +122,7 @@ preflight_code="import base64; ns={'__name__':'openclaw_migration_safe_preflight
 "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$preflight_code" "$APP_DIR" "$temporary_compose_overlay"
 
 if [[ "$MODE" == plan ]]; then
-  printf 'MIGRATION_SAFE_OPENCLAW=PLAN destination=%s sourceConfigPreserved=yes ownerIngress=disabled publicIngress=disabled ownerDelivery=disabled\n' "$MACHINE"
+  printf 'MIGRATION_SAFE_OPENCLAW=PLAN destination=%s persistentChanges=none sourceConfigPreserved=yes ownerIngress=disabled publicIngress=disabled ownerDelivery=disabled\n' "$MACHINE"
   exit 0
 fi
 
