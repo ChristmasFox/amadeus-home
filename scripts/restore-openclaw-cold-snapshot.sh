@@ -67,8 +67,9 @@ state="$(orb -m "$MACHINE" -u root docker inspect --format '{{.State.Status}}' o
 running="$(orb -m "$MACHINE" -u root docker ps --format '{{.Names}} {{.Image}}' 2>/dev/null | awk 'tolower($0) ~ /openclaw/ {n++} END {print n+0}')" || { printf '%s\n' 'RESTORE=BLOCKED destination container inventory failed.'; exit 1; }
 [[ "$running" == 0 ]] || { printf '%s\n' 'RESTORE=BLOCKED an OpenClaw container is running on destination.'; exit 1; }
 
+orb -m "$MACHINE" -u root test -f "$ROOT_DIR/scripts/skuld_secret_bundle_auth.py" || { printf '%s\n' 'RESTORE=BLOCKED guest cannot access the repository authentication helper.'; exit 1; }
 helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_continuity.py" | tr -d '\r\n')"
-remote_code="import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_continuity.py', 'exec'), ns)"
+remote_code="import sys; sys.path.insert(0, '${ROOT_DIR}/scripts'); import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_continuity.py', 'exec'), ns)"
 process_probe="$(orb -m "$MACHINE" -u root python3 -c "$remote_code" process-probe 2>/dev/null || true)"
 [[ "$process_probe" == OPENCLAW_PROCESS_COUNT=0 ]] || { printf '%s\n' 'RESTORE=BLOCKED destination OpenClaw/Gateway process probe failed.'; exit 1; }
 for file in "$ARTIFACT" "$MANIFEST" "$SECRET_ARTIFACT" "$SECRET_MANIFEST"; do
