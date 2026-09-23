@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from openclaw_continuity import (  # noqa: E402
     ContinuityError,
     authenticate_artifact,
+    authenticate_manifest,
     check_source_stopped,
     collect_inventory,
     create_snapshot,
@@ -34,6 +35,7 @@ from openclaw_continuity import (  # noqa: E402
     verify_artifact_authentication,
     verify_restored_credentials,
     verify_snapshot,
+    _snapshot_projection,
     _copy_tree_preserving_metadata,
     _verify_bundle_matches_inventory,
 )
@@ -50,6 +52,21 @@ def make_sqlite(path: Path) -> None:
     with sqlite3.connect(path) as database:
         database.execute("CREATE TABLE state (value TEXT)")
         database.execute("INSERT INTO state VALUES ('fixture')")
+
+
+def make_openclaw_session_store(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as database:
+        database.execute("CREATE TABLE session_nodes (id TEXT)")
+        database.executemany("INSERT INTO session_nodes VALUES (?)", [("s1",), ("s2",)])
+        database.execute("CREATE TABLE transcript_events (id TEXT)")
+        database.executemany("INSERT INTO transcript_events VALUES (?)", [("e1",), ("e2",), ("e3",)])
+        database.execute("CREATE TABLE session_transcript_active_events (id TEXT)")
+        database.executemany("INSERT INTO session_transcript_active_events VALUES (?)", [("e1",), ("e2",)])
+        database.execute("CREATE TABLE session_transcript_archives (id TEXT)")
+        database.execute("INSERT INTO session_transcript_archives VALUES ('a1')")
+        database.execute("CREATE TABLE session_transcript_fts (text TEXT)")
+        database.executemany("INSERT INTO session_transcript_fts VALUES (?)", [("c1",), ("c2",), ("c3",)])
 
 
 def rewrite_tar_owners(source_stream: io.BytesIO, uid: int, gid: int) -> io.BytesIO:
@@ -107,7 +124,15 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
     (source / "config/agents/main/sessions").mkdir(parents=True)
     (source / "config/agents/main/transcripts").mkdir(parents=True)
     (source / "config/agents/main/sessions/session-index.jsonl").write_text('{"fixture":true}\n')
+    (source / "config/agents/main/sessions/session-old.jsonl.deleted.fixture.zst").write_bytes(b"archive")
     (source / "config/agents/main/transcripts/transcript-private-id.jsonl").write_text("fixture transcript payload\n")
+    (source / "config/cache/control-ui-assets").mkdir(parents=True)
+    (source / "config/cache/control-ui-assets/session-sidebar.js").write_text("asset fixture\n")
+    (source / "config/cache/control-ui-assets/transcript-search.js").write_text("asset fixture\n")
+    npm_fixture = source / "config/npm/projects/wa/node_modules/session-helper.js"
+    npm_fixture.parent.mkdir(parents=True)
+    npm_fixture.write_text("asset fixture\n")
+    make_openclaw_session_store(source / "config/agents/main/agent/openclaw-agent.sqlite")
     make_sqlite(source / "config/state.sqlite")
     os.symlink("/opt/openclaw/plugins", source / "config/plugin-link")
 
@@ -153,9 +178,20 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
     )
     assert original["workspace"]["memoryMdSha256"]
     assert original["workspace"]["memoryTreeSha256"]
-    assert original["sessionState"]["sessionAndJsonlFileCount"] >= 2
+    assert original["sessionState"]["status"] == "verified"
+    assert original["sessionState"]["sessionStoreCount"] == 1
+    assert original["sessionState"]["sessionCount"] == 2
+    assert original["sessionState"]["transcriptEventCount"] == 3
+    assert original["sessionState"]["activeTranscriptEventCount"] == 2
+    assert original["sessionState"]["transcriptArchiveCount"] == 1
+    assert original["sessionState"]["transcriptSearchChunkCount"] == 3
+    assert original["sessionState"]["sessionJsonlFileCount"] == 1
+    assert original["sessionState"]["sessionArchiveFileCount"] == 1
     assert original["sessionState"]["transcriptFileCount"] == 1
-    assert original["sqlite"]["databaseCount"] == 3
+    legacy_projection = _snapshot_projection({"schemaVersion": 2}, original)["sessionState"]
+    assert legacy_projection == original["_internal"]["legacySessionState"]
+    assert legacy_projection["sessionAndJsonlFileCount"] > original["sessionState"]["sessionJsonlFileCount"]
+    assert original["sqlite"]["databaseCount"] == 4
     assert original["sqlite"]["identityDbIntegrity"] == "ok"
     assert original["sqlite"]["pubgDbIntegrity"] == "ok"
     assert set(original["state"]["treeSha256ByRoot"]) == {"config", "data", "notifications"}
@@ -368,10 +404,19 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
         assert private_text not in safe_manifest
     assert manifest["workspace"]["memoryMdSha256"] == original["workspace"]["memoryMdSha256"]
     assert manifest["workspace"]["memoryTreeSha256"] == original["workspace"]["memoryTreeSha256"]
-    assert manifest["schemaVersion"] == 2
+    assert manifest["schemaVersion"] == 3
     assert manifest["secretBundle"]["credentialContinuity"]["recordCount"] == len(original["_internal"]["credentialEntries"])
     assert verify_snapshot(
         artifact_path, manifest_path, passphrase, secret_artifact, secret_manifest_path,
+        expected_owner=fixture_owner,
+    )["artifactSha256"] == manifest["artifactSha256"]
+    legacy_manifest = dict(manifest)
+    legacy_manifest["schemaVersion"] = 2
+    legacy_manifest["sessionState"] = _snapshot_projection({"schemaVersion": 2}, original)["sessionState"]
+    legacy_manifest_path = base / "legacy-v2.manifest.json"
+    legacy_manifest_path.write_text(json.dumps(authenticate_manifest(legacy_manifest, passphrase)))
+    assert verify_snapshot(
+        artifact_path, legacy_manifest_path, passphrase, secret_artifact, secret_manifest_path,
         expected_owner=fixture_owner,
     )["artifactSha256"] == manifest["artifactSha256"]
 

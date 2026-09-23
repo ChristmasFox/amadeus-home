@@ -32,6 +32,10 @@ Post-freeze host audit: the Amadeus CasaOS `openclaw` container remains stopped.
 - Captured OpenClaw state: 4,888 files / 235,858,460 bytes; 84 session/JSONL files and 6 transcript files. Required identity and PUBG SQLite databases report `integrity=ok`; the snapshot's discovered SQLite set passed.
 - Credential continuity: 855 files / 322,588 bytes. The stopped source guest's `find` count, two bundle exports made after OpenClaw was stopped, and the final cold manifest all agree on the same 855 path/size/mode fingerprints. An earlier live inventory recorded 856 files; the reason for that earlier one-file count difference is unknown, but no mismatch exists among the two exports and the final source snapshot. Earlier artifacts remain available as recovery references; nothing was deleted.
 
+### 2026-09-23 session metric audit correction
+
+The 84 session/JSONL and 6 transcript values above were derived using arbitrary path-substring matching and are invalid. The encrypted archive and authenticated workspace/state/credential evidence remain intact; only these derived counters are superseded. The OpenClaw primary session/transcript data is SQLite-backed and was not measured by those numbers. See `.agent/checkpoints/2026-09-23-kurisu-recall-audit.md` for corrected destination SQLite counts and operator recall evidence.
+
 ## Final HomeLab backup
 
 - Backup directory: `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`

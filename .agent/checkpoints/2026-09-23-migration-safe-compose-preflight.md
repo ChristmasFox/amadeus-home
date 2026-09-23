@@ -80,8 +80,8 @@ MEMORY_TREE_SHA256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b
 WORKSPACE_TREE_SHA256=ee6e69b546163de58b32e41365c4944bd684c939314acd90261cd6547ea4ca94
 WORKSPACE_FILES=155
 WORKSPACE_BYTES=20172403
-SESSION_JSONL_FILES=84
-TRANSCRIPTS=6
+LEGACY_SESSION_AND_JSONL_FILE_COUNT=84 (INVALID: path-substring heuristic)
+LEGACY_TRANSCRIPT_FILE_COUNT=6 (INVALID: path-substring heuristic)
 SQLITE_DATABASES=6/6 integrity=ok
 IDENTITY_DB=ok
 PUBG_DB=ok
@@ -89,4 +89,16 @@ PUBG_DB=ok
 
 Therefore `OPENCLAW_MEMORY_CONTINUITY=verified` for the machine checks. Runtime startup increased state inventory from the cold-restore 4,888 files to 4,891; all six discovered DBs remain valid. Read-only `doctor --json` is config-valid but returns three warnings: loopback-only onboarding, disabled device-pair, and missing `skill_workshop` sender policy. These are outside the Goal's listed Phase 11 machine criteria. The 9Router fetch in the safe-start smoke accepts expected HTTP 200 or the previously acknowledged unauthenticated HTTP 401.
 
-Phase 10 and Phase 11 machine acceptance are complete. Phase 11 operator memory/persona acceptance remains pending. No Telegram, WhatsApp, public ingress, or owner notification delivery is active. No source closure or public switch occurred. Old Mac LaunchAgent classification, Phase 12 unique-runtime recheck, exact `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`, real Telegram/WhatsApp acceptance, exact `COMMIT_SKULD_CUTOVER_1_4_8`, source closure, and the full 72-hour rollback window remain ahead.
+Phase 10 and Phase 11 machine checks are complete, but natural-prompt operator memory/persona acceptance is failed pending the corrected candidate retest. No Telegram, WhatsApp, public ingress, or owner notification delivery is active. No source closure or public switch occurred. Old Mac LaunchAgent classification, Phase 12 unique-runtime recheck, exact `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`, real Telegram/WhatsApp acceptance, exact `COMMIT_SKULD_CUTOVER_1_4_8`, source closure, and the full 72-hour rollback window remain ahead.
+
+### Fresh source-runtime audit (read-only, 2026-09-23)
+
+On control/source host `xu-mac` (macOS 26.0.1), launchd reports `ai.openclaw.gateway` running with `RunAtLoad=true` and `KeepAlive=true`. The host-local `~/.openclaw/openclaw.json` reports `gateway.bind=loopback`, port `18789`, and only the `imessage` channel/plugin enabled; `lsof` confirms IPv4/IPv6 loopback listeners only. The retained gateway log is 27,829,535 bytes, spans 2026-03-08 through 2026-09-23, and contains 18 lines matching coarse inbound keywords; no message contents or sender identifiers were read. This proves the gateway is active and not a stale stopped artifact, but does not prove whether it is part of this migration's production authority. No stop/disable mutation was performed; operator classification remains required.
+
+Fresh M204 read-only check: the migration-safe `openclaw` container is `healthy`, uses `local/openclaw-amadeus:git-9cb5474-20260923145233`, has restart policy `no`, and publishes no ports. Exact ingress-disabled/hash/database evidence above remains the prior successful machine-gate record. The old session/transcript counts are invalidated by the 2026-09-23 recall audit; actual SQLite-backed counts and operator acceptance failure are recorded in `.agent/checkpoints/2026-09-23-kurisu-recall-audit.md`.
+
+### Operator memory/persona probe (2026-09-23, no delivery)
+
+The operator supplied three questions. They were sent in one new safe-mode session through the loopback Gateway; the command omitted both channel selection and `--deliver`. The candidate answered with an owner identity and returned `unknown` for the two alias questions. Exact personal names and alias prompt text are intentionally omitted from this tracked checkpoint. The run reported two failed tool calls. Subsequent read-only inspection found corresponding records in Identity DB and historical transcript, confirming that recall failed even though records are stored. Operator acceptance is therefore failed, not pending.
+
+Read-only `memory status --json` reports 2 indexed files / 35 chunks, `dirty=true`, FTS enabled/available, vector index `empty`, and index identity mismatch (`fts-only` vs configured `text-embedding-3-small`). Provider state is pending. No reindex, reset, or canonical memory/workspace mutation was performed. Reindexing is not authorized implicitly because the configured provider may receive private memory text; instead fix the deterministic Identity tool call path and verify retrieval without exposing content. `KURISU_ACCEPTANCE=failed` pending a corrected safe-mode retest.

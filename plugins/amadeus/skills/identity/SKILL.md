@@ -10,6 +10,31 @@ Identity is the canonical Person capability shared by Telegram, WhatsApp, and
 future OpenClaw channels. OpenClaw owns natural-language interpretation; these
 tools accept only structured references and metadata-backed targets.
 
+## Resolve names before answering identity questions
+
+When a user asks who a named person is, whether an alias is known (for example
+“你认识 X 吗？” or “X 是谁？”), call
+`identity_resolve({reference: "alias", alias: "X"})` before answering, even if
+there is no PUBG/domain request. A `resolved` result is authoritative for the
+canonical `displayName`; use `identity_get_person` only when more identity
+details are needed. If the resolver returns `not_found`, do not guess. If the
+tool fails, say the lookup failed rather than claiming the person is absent.
+
+If the identity store has no match and the question is about a past conversation,
+use `sessions_search` with the distinctive name or phrase, then use
+`sessions_history` with the returned session/message identifiers when more
+context is needed. `sessions_search` searches visible user/assistant transcript
+text locally; do not substitute `memory_search` or filesystem listing for this
+exact transcript lookup. Use `memory_search` for durable notes in `MEMORY.md`,
+`USER.md`, and `memory/**`. If either search tool fails or reports unavailable,
+that is a retrieval failure, not evidence that the fact was never recorded;
+state that recall is unavailable instead of inventing or denying it.
+
+For first-person questions such as “我是谁”“我的账号是什么” or “本人”, call
+`identity_resolve({reference: "self"})` first. If it returns `unbound`, say that
+the current session has no trusted sender identity. Never substitute Arthur,
+the owner, or a default team for an unbound sender.
+
 ## Required use before person-specific domain work
 
 When a user asks for facts about a person using a nickname or alias, invoke
@@ -19,7 +44,8 @@ When a user asks for facts about a person using a nickname or alias, invoke
 alias, followed by the PUBG tool with the returned canonical `personId`.
 For first-person references such as “我”“我的”“本人” or “自己”, invoke
 `identity_resolve({reference: "self"})` first; the current trusted channel
-sender is the subject, including in a group and when the sender is Arthur.
+sender is the subject, including in a group. An unbound result never resolves
+to the owner by default.
 Never ask for the external account first when the resolver can answer it, and
 never treat a previous assistant claim that an account is missing as current
 state. A domain tool may report an account problem only after a current
