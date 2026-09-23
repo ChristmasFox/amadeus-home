@@ -1,6 +1,6 @@
 ## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
 
-2026-09-23 completion update: Phase 7 source freeze is complete. `SOURCE_FROZEN=YES`, source OpenClaw and owner ingress are off, active Avalon-bound consumers are stopped, and the source filesystem has been synced. Final encrypted secret bundle, independently verified cold snapshot, and 16-service HomeLab backup are recorded in `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`. Avalon remains mounted on the source; no destination production runtime or authority switch occurred.
+2026-09-23 completion update: Phase 7 source freeze is complete for the Amadeus CasaOS runtime. `SOURCE_FROZEN=YES`, the source CasaOS OpenClaw container and Amadeus owner ingress are off, active Avalon-bound consumers are stopped, and the source filesystem has been synced. A post-freeze audit found a separate macOS `ai.openclaw.gateway` LaunchAgent still running local-only with iMessage enabled; it uses host-local `~/.openclaw` config, not the CasaOS state, and its production-authority relationship remains unclassified. Recheck the unique-runtime gate before any destination OpenClaw startup. Final encrypted secret bundle, independently verified cold snapshot, and 16-service HomeLab backup are recorded in `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`. Avalon remains mounted on the source; no destination production runtime or authority switch occurred.
 
 Phase 8 is the next hard boundary. Do not unmount Avalon until the user supplies `APPROVE_AVALON_MOVE_1_4_8`.
 
