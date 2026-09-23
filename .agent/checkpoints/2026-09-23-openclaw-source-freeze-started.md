@@ -18,7 +18,7 @@ The user supplied the exact source-freeze approval. Phase 7 is now authorized; t
 
 The final secret bundle must precede the cold snapshot: the snapshot tooling authenticates and embeds the secret-bundle identity plus exact WhatsApp credential continuity into its manifest. OpenClaw will first be stopped; then the final bundle and cold snapshot will be created and verified. The final full HomeLab backup will run while Immich PostgreSQL and other source data services are still available; only after all final artifacts verify will remaining Avalon writers/consumers be stopped and the filesystem synced.
 
-The first cold-snapshot attempt failed its content/manifest comparison and removed its partial artifact and manifest. Diagnosis showed the source Linux guest's numeric file owners differ from the non-root macOS verifier. The verifier now rebuilds tree digests using owner IDs in the authenticated tar headers; the focused continuity fixture includes a source UID/GID different from the local verifier and passes. No source data was changed by the failed attempt; a fresh snapshot must still be created and independently verified.
+The first cold-snapshot attempt failed its content/manifest comparison and removed its partial artifact and manifest. The verifier was updated to use numeric owners in authenticated tar headers, and the cross-owner fixture passes, but a real guest retry still fails the same aggregate comparison. Ownership mismatch is therefore not the only cause. The verifier now reports only mismatching metric field names (never state values); another fresh attempt must identify and resolve the remaining mismatch before backup/freeze proceeds. The failed attempts changed no source data.
 
 ## Boundary
 
