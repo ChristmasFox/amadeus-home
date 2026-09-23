@@ -190,7 +190,43 @@ test_destination_identity() {
 }
 
 # ------------------------------------------------------------------
-# Test 7: Script syntax
+# Test 7: Reject stale secret-manifest plaintext staging claims
+# ------------------------------------------------------------------
+test_manifest_policy_fail_closed() {
+  local source_root="$fixture/manifest-source"
+  local source_file="$source_root/DATA/AppData/openclaw/openclaw.env"
+  local manifest="$fixture/legacy-secret-manifest.json"
+  local output="$fixture/legacy-restore-output.txt"
+  mkdir -p "$(dirname -- "$source_file")"
+  printf 'POLICY_FIXTURE=1\n' > "$source_file"
+  chmod 600 "$source_file"
+  python3 - "$manifest" "$source_file" <<'PY'
+import json, sys
+from pathlib import Path
+manifest_path, source_path = map(Path, sys.argv[1:])
+manifest_path.write_text(json.dumps({
+    'contentsInGit': False,
+    'plaintextTemporaryFiles': False,
+    'files': [{
+        'path': 'DATA/AppData/openclaw/openclaw.env',
+        'mode': format(source_path.stat().st_mode & 0o777, '04o'),
+        'size': source_path.stat().st_size,
+    }],
+}))
+PY
+  if SKULD_SECRET_RESTORE_TEST_MODE=1 \
+    bash "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
+      --fixture --fixture-dir "$source_root" --manifest "$manifest" --dry-run \
+      > "$output" 2>&1; then
+    fail 'manifest-policy: legacy plaintextTemporaryFiles=false was accepted'
+  fi
+  grep -Fq 'plaintextTemporaryFiles must be true' "$output" \
+    || fail 'manifest-policy: rejection reason did not identify stale plaintext policy'
+  pass 'restore-skuld-secrets.sh rejects stale secret manifest staging policy'
+}
+
+# ------------------------------------------------------------------
+# Test 8: Script syntax
 # ------------------------------------------------------------------
 test_syntax() {
   bash -n "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
@@ -206,5 +242,6 @@ test_approved_replacement
 test_avalon_boundary
 test_path_safety
 test_destination_identity
+test_manifest_policy_fail_closed
 
 printf '\nAll restore-skuld-secrets tests passed.\n'

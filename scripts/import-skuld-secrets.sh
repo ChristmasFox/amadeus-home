@@ -49,6 +49,7 @@ if (
     or data.get('plaintextTemporaryFiles') is not True
     or data.get('plaintextTemporaryFilesRemovedOnExit') is not True
     or data.get('temporaryStagingPermissions') != '0700'
+    or data.get('restorePolicy') != 'decrypt-to-private-staging-validate-metadata-and-normalize-openclaw-credentials-to-1000:1000'
 ):
     raise SystemExit('secret manifest policy invalid')
 files = data.get('files')

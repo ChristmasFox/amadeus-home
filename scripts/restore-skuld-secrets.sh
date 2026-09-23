@@ -151,8 +151,14 @@ manifest_path, root = Path(sys.argv[1]), Path(sys.argv[2])
 data = json.loads(manifest_path.read_text())
 if data.get('contentsInGit') is not False:
     raise SystemExit('manifest policy error: contentsInGit must be false')
-if data.get('plaintextTemporaryFiles') is not False:
-    raise SystemExit('manifest policy error: plaintextTemporaryFiles must be false')
+if data.get('plaintextTemporaryFiles') is not True:
+    raise SystemExit('manifest policy error: plaintextTemporaryFiles must be true')
+if data.get('plaintextTemporaryFilesRemovedOnExit') is not True:
+    raise SystemExit('manifest policy error: temporary plaintext cleanup must be guaranteed')
+if data.get('temporaryStagingPermissions') != '0700':
+    raise SystemExit('manifest policy error: temporary staging must use mode 0700')
+if data.get('restorePolicy') != 'decrypt-to-private-staging-validate-metadata-and-normalize-openclaw-credentials-to-1000:1000':
+    raise SystemExit('manifest policy error: restore policy is not the current verified policy')
 files = data.get('files', [])
 if not files:
     raise SystemExit('manifest has no files listed')
