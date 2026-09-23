@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-migration-safe-test-") as temp
     }
     assert all(item["enabled"] is False for item in overlay["channels"].values())
     assert overlay["plugins"]["entries"]["amadeus"]["enabled"] is True
-    assert overlay["plugins"]["entries"]["amadeus"]["config"]["ownerNotificationDeliveryEnabled"] is False
+    assert "ownerNotificationDeliveryEnabled" not in overlay["plugins"]["entries"]["amadeus"]["config"]
     assert overlay["plugins"]["entries"]["telegram"]["enabled"] is False
     assert overlay["plugins"]["entries"]["whatsapp"]["enabled"] is False
     assert overlay["agents"]["defaults"]["workspace"] == original["agents"]["defaults"]["workspace"]

@@ -45,7 +45,6 @@ def destination_snapshot() -> dict:
                 and bool(channels)
                 and all(isinstance(section, dict) and section.get("enabled") is False for section in channels.values())
                 and amadeus.get("enabled") is True
-                and amadeus.get("config", {}).get("ownerNotificationDeliveryEnabled") is False
             )
             config_mount = any(
                 item.get("Destination") == "/run/openclaw-migration"

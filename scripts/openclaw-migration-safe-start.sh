@@ -136,7 +136,7 @@ for _ in {1..30}; do
   sleep 2
 done
 ((healthy == 1)) || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED health did not pass; container left in migration-safe mode for inspection.'; exit 1; }
-"$ORB_BIN" -m "$MACHINE" -u root docker exec openclaw node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync(process.env.OPENCLAW_CONFIG_PATH,"utf8")); if(c.gateway?.bind!=="loopback" || Object.values(c.channels||{}).some(x=>x.enabled!==false) || c.plugins?.entries?.amadeus?.config?.ownerNotificationDeliveryEnabled!==false) process.exit(1);'
+"$ORB_BIN" -m "$MACHINE" -u root docker exec openclaw node -e 'const fs=require("fs"); const c=JSON.parse(fs.readFileSync(process.env.OPENCLAW_CONFIG_PATH,"utf8")); if(c.gateway?.bind!=="loopback" || Object.values(c.channels||{}).some(x=>x.enabled!==false) || process.env.OWNER_NOTIFICATION_DELIVERY_ENABLED?.toLowerCase()!=="false") process.exit(1);'
 "$ORB_BIN" -m "$MACHINE" -u root docker exec openclaw node -e 'fetch("http://9router:20128/v1/models").then(r=>process.exit((r.status===200||r.status===401)?0:1)).catch(()=>process.exit(1))'
 "$ORB_BIN" -m "$MACHINE" -u root docker exec openclaw node dist/index.js plugins inspect amadeus --runtime --json >/dev/null
 printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=running' 'TELEGRAM_INGRESS=disabled' 'WHATSAPP_INGRESS=disabled' 'PUBLIC_INGRESS=disabled' 'OWNER_NOTIFICATION_DELIVERY=disabled' 'OPENCLAW_STATE=restored-canonical'
