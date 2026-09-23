@@ -1,4 +1,13 @@
-## 2026-09-23 — M204 服务恢复准备
+## 当前状态 — 2026-09-23 M204 非 Avalon 服务恢复（进行中）
+
+- M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载，旧源 CasaOS 继续作为唯一权威运行时。
+- 最新完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`。16 个 MIGRATE 服务均 `passed`，全部 checksums 通过；Xiaoya image ID 精确记录，Filebrowser `/database` 与 `/config` 卷都已归档。`044715Z` 备份尝试缺 Filebrowser `/config`，仅保留审计，不作为恢复源。
+- 目标已恢复 Changedetection（healthy、无宿主端口）和 9Router（`127.0.0.1:20128`）。9Router 未授权 `/v1/models` 在源/目标都返回 200，旧 401 契约仍待澄清；当前 loopback-only，不开放 LAN/公网。Changedetection 与源端并行轮询是暂存状态，不代表 cutover。
+- Filebrowser 与 Xiaoya 的 Git Compose 模板已添加，默认 loopback-only。Filebrowser 可写挂载整个 `/DATA`，因此必须保持 loopback；Xiaoya 归档未发现字面 `/Volumes/Avalon` 路径，但 Alist-backed storage 功能尚待验收。
+- 直接 Avalon consumers（Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist）保持停止，直至实际磁盘挂载并通过 UUID/sentinel/storage preflight。OpenClaw/Product Radar 受单一 runtime/切换门禁；frpc/Nginx Proxy Manager 受 ingress 门禁；v2raya 另需 host-network 评估。
+- 备份脚本现将卷映射读取放在独立 FD，避免 OrbStack 子进程消费 stdin 导致漏归档；fixture 回归模拟 stdin 消耗并校验两个 Filebrowser volume artifacts。阶段证据：`.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md`。
+
+## 历史记录 — 2026-09-23 M204 服务恢复准备（已过时）
 
 - 已备份源端 16 个 MIGRATE 服务；备份根目录为 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T025614Z`。校验和、3 份 service-aware SQLite 快照、Immich `pg_dump -Fc` restore-list、加密 secret bundle rehearsal 均通过。备份工具修复覆盖精确 9Router live image、Xiaoya bind 数据与 Alist named volume、缺失路径 fail-closed。
 - 9Router 数据归档内的 `data.sqlite` + WAL 在临时副本上 `integrity_check=ok`；泛化 AppData tar 曾报告读取期间文件变化，只作为应急配置归档，不用作数据库权威副本。

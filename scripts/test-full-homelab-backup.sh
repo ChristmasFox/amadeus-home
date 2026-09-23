@@ -34,8 +34,9 @@ test_plan_mode() {
 test_fixture_mode() {
   local out out_dir="$fixture/fixture-out"
   out="$(FULL_HOMELAB_BACKUP_TEST_MODE=1 \
+    FULL_HOMELAB_BACKUP_TEST_CONSUME_STDIN=1 \
     bash "$ROOT_DIR/scripts/full-homelab-backup.sh" --fixture \
-      --output-dir "$out_dir" 2>/dev/null)"
+      --output-dir "$out_dir" <<< 'simulated child stdin' 2>/dev/null)"
   printf '%s\n' "$out" | grep -Fq 'FULL_HOMELAB_BACKUP=passed' \
     || fail 'fixture mode: did not produce FULL_HOMELAB_BACKUP=passed'
   printf '%s\n' "$out" | grep -Fq 'FULL_HOMELAB_BACKUP_MANIFEST=' \
@@ -72,18 +73,43 @@ test_fixture_mode() {
   # /DATA/AppData/xiaoya, and its Alist named volume is a separate artifact.
   [[ -s "$out_dir/xiaoya/xiaoya-appdata.tar.gz" ]] || fail 'fixture mode: Xiaoya bind archive missing'
   [[ -s "$out_dir/xiaoya/xiaoya-alist-data.tar.gz" ]] || fail 'fixture mode: Xiaoya Alist volume archive missing'
+  [[ -s "$out_dir/xiaoya/xiaoya-image-fixture.tar.gz" ]] || fail 'fixture mode: Xiaoya exact image artifact missing'
+  [[ -s "$out_dir/xiaoya/image-manifest.json" ]] || fail 'fixture mode: Xiaoya image manifest missing'
   [[ -s "$out_dir/xiaoya/restore-map.json" ]] || fail 'fixture mode: Xiaoya restore map missing'
   tar -tzf "$out_dir/xiaoya/xiaoya-appdata.tar.gz" | grep -Fq 'fixture.txt' \
     || fail 'fixture mode: Xiaoya bind archive is empty'
   tar -tzf "$out_dir/xiaoya/xiaoya-alist-data.tar.gz" | grep -Fq 'fixture.txt' \
     || fail 'fixture mode: Xiaoya Alist volume archive is empty'
+  tar -tzf "$out_dir/xiaoya/xiaoya-image-fixture.tar.gz" | grep -Fq 'image.tar' \
+    || fail 'fixture mode: Xiaoya image archive is empty'
 
   python3 - "$out_dir/9router/image-manifest.json" <<'PY'
 import json, sys
 value = json.loads(open(sys.argv[1]).read())
 assert value.get('image') == 'local/9router:0.5.81', value
 PY
-  pass 'fixture mode: exact 9Router tag and Xiaoya bind/volume artifacts'
+  python3 - "$out_dir/xiaoya/image-manifest.json" "$out_dir/xiaoya/restore-map.json" <<'PY'
+import json, sys
+image = json.load(open(sys.argv[1]))
+restore = json.load(open(sys.argv[2]))
+assert image.get('image') == 'xiaoyaliu/alist:latest', image
+assert restore.get('image') == image.get('image'), restore
+PY
+  [[ -s "$out_dir/filebrowser/volume-database.tar.gz" ]] || fail 'fixture mode: Filebrowser database volume archive missing'
+  [[ -s "$out_dir/filebrowser/volume-config.tar.gz" ]] || fail 'fixture mode: Filebrowser config volume archive missing'
+  [[ -s "$out_dir/filebrowser/named-volumes.json" ]] || fail 'fixture mode: Filebrowser named-volume map missing'
+  python3 - "$out_dir/filebrowser/named-volumes.json" <<'PY'
+import json, sys
+value = json.load(open(sys.argv[1]))
+destinations = {item['destination'] for item in value['volumes']}
+assert destinations == {'/database', '/config'}, value
+assert len(value['volumes']) == 2, value
+PY
+  tar -tzf "$out_dir/filebrowser/volume-database.tar.gz" | grep -Fq 'fixture.txt' \
+    || fail 'fixture mode: Filebrowser database volume archive is empty'
+  tar -tzf "$out_dir/filebrowser/volume-config.tar.gz" | grep -Fq 'fixture.txt' \
+    || fail 'fixture mode: Filebrowser config volume archive is empty'
+  pass 'fixture mode: exact service image and all Xiaoya/Filebrowser data artifacts'
 
   pass 'full-homelab-backup.sh --fixture produces all MIGRATE service artifacts'
 }

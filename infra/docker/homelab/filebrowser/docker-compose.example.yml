@@ -1,0 +1,26 @@
+name: filebrowser
+
+services:
+  filebrowser:
+    image: filebrowser/filebrowser:v2.49.0
+    container_name: filebrowser
+    network_mode: bridge
+    restart: unless-stopped
+    environment:
+      PUID: ${FILEBROWSER_PUID:-1000}
+      PGID: ${FILEBROWSER_PGID:-1000}
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${FILEBROWSER_PORT:-127.0.0.1:10180}:80"
+    volumes:
+      - /DATA/AppData/filebrowser/db:/db
+      - /DATA:/srv
+      - /DATA/AppData/filebrowser/volumes/config:/config
+      - /DATA/AppData/filebrowser/volumes/database:/database
+    x-casaos:
+      author: self
+      category: Utilities
+      port_map: "10180"
+      scheme: http
+      title:
+        custom: filebrowser

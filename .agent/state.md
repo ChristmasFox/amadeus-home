@@ -43,6 +43,24 @@
 - Execution state is persisted in `.agent/EXECUTION_PLAN.md`, `.agent/run-state.example.json`, and external evidence under `SKULD_BACKUP_ROOT`.
 # Agent State
 
+更新时间：2026-09-23（Asia/Shanghai）
+
+当前继续 M204 服务分阶段迁移。用户允许先恢复不依赖 Avalon 的服务，并确认磁盘挂载名保持
+`/Volumes/Avalon`。旧源 CasaOS 仍是唯一权威运行时，不做 OpenClaw/Product Radar 双跑、入口
+切换或旧源回收。系统自动更新后，M204 canonical OrbStack `nyannyan` guest 已恢复运行；CasaOS/
+Docker 可用，但 Avalon 尚未挂载。
+
+最新完整源备份 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`
+含 16/16 MIGRATE artifacts，所有 checksums 验证通过；已捕获 Xiaoya exact image + 数据和
+Filebrowser `/database`、`/config` 两个卷。M204 当前仅有 Changedetection（healthy、无宿主端口）
+和 9Router（loopback `127.0.0.1:20128`）。9Router source/target unauthenticated `/v1/models`
+都返回 200，故保持 loopback；Changedetection 暂存会与旧源并行轮询。
+
+正在 source-control Filebrowser/Xiaoya Compose 并恢复其本机验收状态；它们默认仅 guest loopback，
+Filebrowser 全 `/DATA` 可写挂载不得提前开放。直接 Avalon mounts 等真实盘身份/sentinel preflight；
+frpc/NPM 等 ingress 等切换门禁，OpenClaw/Product Radar 等单 runtime 门禁，v2raya 需单独评估
+host-network 副作用。当前详细任务见 `.agent/tasks/2026-09-23-m204-service-restore.md`。
+
 更新时间：2026-09-21（Asia/Shanghai）
 
 当前执行 docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md，已完成。外置 8TB
