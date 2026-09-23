@@ -127,7 +127,6 @@ if [[ "$MODE" == plan ]]; then
 fi
 
 write_compose_overlay "$APP_DIR/docker-compose.migration-safe.yml"
-cd "$APP_DIR"
 "$ORB_BIN" -m "$MACHINE" -u root bash -lc "cd '$APP_DIR' && docker compose -f docker-compose.yml -f docker-compose.migration-safe.yml up -d --no-build"
 
 healthy=0
