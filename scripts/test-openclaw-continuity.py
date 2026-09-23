@@ -50,6 +50,20 @@ def make_sqlite(path: Path) -> None:
         database.execute("INSERT INTO state VALUES ('fixture')")
 
 
+def rewrite_tar_owners(source_stream: io.BytesIO, uid: int, gid: int) -> io.BytesIO:
+    source_stream.seek(0)
+    rewritten = io.BytesIO()
+    with tarfile.open(fileobj=source_stream, mode="r:gz") as source_tar:
+        with tarfile.open(fileobj=rewritten, mode="w:gz") as target_tar:
+            for member in source_tar.getmembers():
+                member.uid = uid
+                member.gid = gid
+                payload = source_tar.extractfile(member) if member.isfile() else None
+                target_tar.addfile(member, payload)
+    rewritten.seek(0)
+    return rewritten
+
+
 class pytest_raises:
     def __init__(self, exception):
         self.exception = exception
@@ -319,6 +333,37 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
         artifact_path, manifest_path, passphrase, secret_artifact, secret_manifest_path,
         expected_owner=fixture_owner,
     )["artifactSha256"] == manifest["artifactSha256"]
+
+    # A Mac verifier cannot chown its temporary extraction to the Linux guest UID.
+    # Recreate the same source tree with distinct archive ownership and ensure the
+    # authenticated tar headers, not the local extraction user, drive the digest.
+    remote_owner = (4242, 31337)
+    owner_overrides = {
+        path.relative_to(source).as_posix(): remote_owner
+        for area in ("config", "workspace", "data", "notifications")
+        for path in (source / area, *(source / area).rglob("*"))
+    }
+    remote_inventory = collect_inventory(source, owner_overrides=owner_overrides)
+    remote_private_fingerprints = private_credential_fingerprints(
+        remote_inventory["_internal"]["credentialEntries"]
+    )
+    remote_stream_snapshot_dir = base / "remote-owner-encrypted-output"
+    remote_artifact_path, remote_manifest_path, remote_manifest = create_snapshot_from_stream(
+        rewrite_tar_owners(tar_stream, *remote_owner),
+        public_inventory(remote_inventory) | {
+            "_privateCredentialFingerprints": remote_private_fingerprints,
+        },
+        remote_stream_snapshot_dir,
+        passphrase,
+        secret_artifact,
+        secret_manifest_path,
+        metadata,
+        expected_owner=remote_owner,
+    )
+    assert verify_snapshot(
+        remote_artifact_path, remote_manifest_path, passphrase, secret_artifact, secret_manifest_path,
+        expected_owner=remote_owner,
+    )["artifactSha256"] == remote_manifest["artifactSha256"]
 
     tree_artifact, tree_manifest, tree_value = create_snapshot(
         source,
