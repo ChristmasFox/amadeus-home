@@ -55,3 +55,38 @@ invalid config: must not have additional properties: "ownerNotificationDeliveryE
 The migration helper had added that property to the temporary JSON overlay. Owner delivery is controlled by the supported Compose environment variable `OWNER_NOTIFICATION_DELIVERY_ENABLED=false`; Amadeus reads this environment variable when its plugin config omits the property. The source fix now leaves the JSON unchanged, validates the container environment in the startup assertion, and updates the unique-runtime probe to use inspected environment. The canonical restored config was never edited. The OpenClaw container currently exists but is exited; there is no healthy runtime or exposed ingress.
 
 M204 package build/typecheck and package tests passed for Identity, Presentation, PUBG Domain/plugin, and Amadeus plugin: 70 tests total. Migration-safe config and unique-runtime regression tests passed after the schema fix. The local control-side secrets scan, FAST workflow, shell/Python syntax, version validation, and diff check passed. M204 has no `rg`; the target-side secrets script emits missing-command warnings and is not accepted as a pass. Before retry, move the generated invalid file `/run/openclaw-migration-safe/openclaw.json` to a distinct preserved filename and let the helper generate the corrected overlay; retain the original under the root-protected `/run` directory. No image pruning was performed. Phase 10 startup and Phase 11 acceptance remain incomplete; the host-local `ai.openclaw.gateway` authority must be classified before Phase 12 owner-ingress activation. Owner ingress and public ingress remain off.
+
+## Current live acceptance (2026-09-23)
+
+The generated invalid overlay was preserved as `/run/openclaw-migration-safe/openclaw.json.schema-invalid-20260923` (SHA-256 `795c0b1b5662590ae4c2348c35717d2da336ea2ba5f74c1676ae6e324d4352eb`), then the corrected overlay was regenerated without changing canonical restored config. The approved safe apply now reports:
+
+```text
+MIGRATION_SAFE_PREFLIGHT=passed image=local/openclaw-amadeus:git-9cb5474-20260923145233
+MIGRATION_SAFE_OPENCLAW=running
+TELEGRAM_INGRESS=disabled
+WHATSAPP_INGRESS=disabled
+PUBLIC_INGRESS=disabled
+OWNER_NOTIFICATION_DELIVERY=disabled
+OPENCLAW_STATE=restored-canonical
+```
+
+The container is `healthy`; the unique-runtime probe reports `M204_PRODUCTION_CANDIDATE_COUNT=1`, `OPENCLAW_ACTIVE_RUNTIME_COUNT=1`, and `MIGRATION_SAFE_CANDIDATE=passed`. The source CasaOS runtime/process count is 0 and owner ingress is disabled. This is not yet the Phase 12 gate: the separate old Mac host-local `ai.openclaw.gateway` LaunchAgent remains unclassified and must be inspected before owner ingress.
+
+Current guest inventory was compared to the authenticated cold-snapshot manifest using sanitized fields only:
+
+```text
+MEMORY_MD_SHA256=9a31ea1e0762065463066600aec74ea56502a95101e488338b29cfc8085bfbd8
+MEMORY_TREE_SHA256=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+WORKSPACE_TREE_SHA256=ee6e69b546163de58b32e41365c4944bd684c939314acd90261cd6547ea4ca94
+WORKSPACE_FILES=155
+WORKSPACE_BYTES=20172403
+SESSION_JSONL_FILES=84
+TRANSCRIPTS=6
+SQLITE_DATABASES=6/6 integrity=ok
+IDENTITY_DB=ok
+PUBG_DB=ok
+```
+
+Therefore `OPENCLAW_MEMORY_CONTINUITY=verified` for the machine checks. Runtime startup increased state inventory from the cold-restore 4,888 files to 4,891; all six discovered DBs remain valid. Read-only `doctor --json` is config-valid but returns three warnings: loopback-only onboarding, disabled device-pair, and missing `skill_workshop` sender policy. These are outside the Goal's listed Phase 11 machine criteria. The 9Router fetch in the safe-start smoke accepts expected HTTP 200 or the previously acknowledged unauthenticated HTTP 401.
+
+Phase 10 and Phase 11 machine acceptance are complete. Phase 11 operator memory/persona acceptance remains pending. No Telegram, WhatsApp, public ingress, or owner notification delivery is active. No source closure or public switch occurred. Old Mac LaunchAgent classification, Phase 12 unique-runtime recheck, exact `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`, real Telegram/WhatsApp acceptance, exact `COMMIT_SKULD_CUTOVER_1_4_8`, source closure, and the full 72-hour rollback window remain ahead.
