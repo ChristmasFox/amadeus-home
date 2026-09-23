@@ -48,28 +48,31 @@ radar_state="$("$ORB_BIN" -m "$MACHINE" -u root docker inspect --format '{{.Stat
 [[ "$radar_state" != running ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED Product Radar must remain stopped.'; exit 1; }
 ingress="$("$ORB_BIN" -m "$MACHINE" -u root docker ps --format '{{.Names}} {{.Image}}' | awk -f "$ROOT_DIR/scripts/openclaw-ingress-count.awk")"
 [[ "$ingress" == 0 ]] || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED a destination ingress container is running.'; exit 1; }
+"$ORB_BIN" -m "$MACHINE" -u root test -f "$APP_DIR/docker-compose.yml" && "$ORB_BIN" -m "$MACHINE" -u root test ! -L "$APP_DIR/docker-compose.yml" || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical OpenClaw Compose definition is missing or symlinked.'; exit 1; }
 "$ORB_BIN" -m "$MACHINE" -u root test -f "$DATA_ROOT/config/openclaw.json" && "$ORB_BIN" -m "$MACHINE" -u root test ! -L "$DATA_ROOT/config/openclaw.json" || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED canonical restored config is missing or symlinked.'; exit 1; }
+
+[[ "$MODE" != apply || "$APPROVAL" == APPROVE_AVALON_MOVE_1_4_8 ]] || { printf '%s\n' 'Apply requires exact APPROVE_AVALON_MOVE_1_4_8.' >&2; exit 2; }
 
 helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_config.py" | tr -d '\r\n')"
 remote_code="import base64; ns={'__name__':'__main__'}; exec(compile(base64.b64decode('${helper_payload}'), 'openclaw_migration_safe_config.py', 'exec'), ns)"
 overlay_config="/run/openclaw-migration-safe/openclaw.json"
-if [[ "$MODE" == plan ]]; then
+if [[ "$MODE" == apply ]]; then
+  "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$remote_code" --source "$DATA_ROOT/config/openclaw.json" --output "$overlay_config" --apply --approve-avalon-move "$APPROVAL"
+else
   "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$remote_code" --source "$DATA_ROOT/config/openclaw.json" --output "$overlay_config"
-  printf 'MIGRATION_SAFE_OPENCLAW=PLAN destination=%s sourceConfigPreserved=yes ownerIngress=disabled publicIngress=disabled ownerDelivery=disabled\n' "$MACHINE"
-  exit 0
 fi
-[[ "$APPROVAL" == APPROVE_AVALON_MOVE_1_4_8 ]] || { printf '%s\n' 'Apply requires exact APPROVE_AVALON_MOVE_1_4_8.' >&2; exit 2; }
-
-"$ORB_BIN" -m "$MACHINE" -u root python3 -c "$remote_code" --source "$DATA_ROOT/config/openclaw.json" --output "$overlay_config" --apply --approve-avalon-move "$APPROVAL"
 
 compose_overlay_source="$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.migration-safe.example.yml"
 compose_payload="$(base64 < "$compose_overlay_source" | tr -d '\r\n')"
-"$ORB_BIN" -m "$MACHINE" -u root python3 - "$APP_DIR/docker-compose.migration-safe.yml" "$compose_payload" <<'PY'
+temporary_compose_overlay="/run/openclaw-migration-safe/docker-compose.migration-safe.yml"
+write_compose_overlay() {
+  local destination="$1"
+  "$ORB_BIN" -m "$MACHINE" -u root python3 - "$destination" "$compose_payload" <<'PY'
 import base64, os, sys
 from pathlib import Path
 target = Path(sys.argv[1])
 payload = base64.b64decode(sys.argv[2])
-if target.is_symlink(): raise SystemExit('migration Compose overlay is symlinked')
+if target.is_symlink() or target.parent.is_symlink(): raise SystemExit('migration Compose overlay path is symlinked')
 target.parent.mkdir(parents=True, exist_ok=True)
 if target.exists():
     if not target.is_file() or target.read_bytes() != payload:
@@ -84,28 +87,19 @@ else:
 os.chmod(target, 0o644)
 print('MIGRATION_SAFE_COMPOSE_OVERLAY=ready')
 PY
+}
+write_compose_overlay "$temporary_compose_overlay"
 
-"$ORB_BIN" -m "$MACHINE" -u root python3 - "$APP_DIR" <<'PY'
-import json, subprocess, sys
-from pathlib import Path
-app = Path(sys.argv[1])
-result = subprocess.run(
-    ['docker', 'compose', '-f', str(app / 'docker-compose.yml'), '-f', str(app / 'docker-compose.migration-safe.yml'), 'config', '--format', 'json'],
-    check=True, capture_output=True, text=True,
-)
-service = json.loads(result.stdout)['services']['openclaw']
-env = service.get('environment') or {}
-volumes = service.get('volumes') or []
-if service.get('ports') not in (None, []): raise SystemExit('migration-safe Compose still publishes ports')
-if env.get('OPENCLAW_CONFIG_PATH') != '/run/openclaw-migration/openclaw.json': raise SystemExit('migration-safe config path mismatch')
-if str(env.get('OWNER_NOTIFICATION_DELIVERY_ENABLED')).lower() != 'false': raise SystemExit('owner delivery is not disabled')
-if service.get('restart') not in ('no', None): raise SystemExit('migration-safe restart policy is not disabled')
-if not any(v.get('target') == '/run/openclaw-migration' and v.get('read_only') for v in volumes if isinstance(v, dict)):
-    raise SystemExit('migration overlay mount must be read-only')
-print('MIGRATION_SAFE_COMPOSE_PREFLIGHT=passed')
-PY
+preflight_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_preflight.py" | tr -d '\r\n')"
+preflight_code="import base64; ns={'__name__':'openclaw_migration_safe_preflight'}; exec(compile(base64.b64decode('${preflight_payload}'), 'openclaw_migration_safe_preflight.py', 'exec'), ns); raise SystemExit(ns['main']())"
+"$ORB_BIN" -m "$MACHINE" -u root python3 -c "$preflight_code" "$APP_DIR" "$temporary_compose_overlay"
 
-if [[ "$MODE" == plan ]]; then exit 0; fi
+if [[ "$MODE" == plan ]]; then
+  printf 'MIGRATION_SAFE_OPENCLAW=PLAN destination=%s sourceConfigPreserved=yes ownerIngress=disabled publicIngress=disabled ownerDelivery=disabled\n' "$MACHINE"
+  exit 0
+fi
+
+write_compose_overlay "$APP_DIR/docker-compose.migration-safe.yml"
 cd "$APP_DIR"
 "$ORB_BIN" -m "$MACHINE" -u root bash -lc "cd '$APP_DIR' && docker compose -f docker-compose.yml -f docker-compose.migration-safe.yml up -d --no-build"
 
