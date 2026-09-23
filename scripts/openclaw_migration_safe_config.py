@@ -63,10 +63,8 @@ def build_overlay(source: Path) -> tuple[dict, bytes]:
     amadeus = entries.get("amadeus")
     if not isinstance(amadeus, dict) or amadeus.get("enabled") is not True:
         raise MigrationConfigError("Amadeus plugin must remain enabled for local validation")
-    amadeus_config = amadeus.get("config")
-    if not isinstance(amadeus_config, dict):
+    if not isinstance(amadeus.get("config"), dict):
         raise MigrationConfigError("Amadeus plugin config is unavailable")
-    amadeus_config["ownerNotificationDeliveryEnabled"] = False
     for plugin_name in ("telegram", "whatsapp", "kook"):
         plugin = entries.get(plugin_name)
         if isinstance(plugin, dict):
