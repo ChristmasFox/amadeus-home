@@ -72,7 +72,7 @@ done
 if ((TEST_MODE == 0)); then
   [[ -s "$BUNDLE" ]] || { printf 'Bundle file required and must be non-empty.\n' >&2; exit 2; }
   [[ -s "$PASSPHRASE_FILE" ]] || { printf 'Passphrase file required and must be non-empty.\n' >&2; exit 2; }
-  mode_val="$(stat -f '%Lp' "$PASSPHRASE_FILE" 2>/dev/null || stat -c '%a' "$PASSPHRASE_FILE")"
+  mode_val="$(stat -c '%a' "$PASSPHRASE_FILE" 2>/dev/null || stat -f '%Lp' "$PASSPHRASE_FILE")"
   case "$mode_val" in 400|440|600|640) ;; *) printf 'Passphrase file has unsafe mode %s.\n' "$mode_val" >&2; exit 2 ;; esac
 fi
 
