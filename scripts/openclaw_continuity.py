@@ -777,8 +777,23 @@ def _validate_snapshot_plaintext(
     # use the authenticated tar headers when rebuilding the source tree digest.
     actual = collect_inventory(extracted, require_credentials=False, owner_overrides=owner_overrides)
     expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
-    if continuity_projection(actual) != expected_projection:
-        raise ContinuityError("cold snapshot contents do not match authenticated manifest metrics")
+    actual_projection = continuity_projection(actual)
+    mismatches = []
+    for section, expected_values in expected_projection.items():
+        actual_values = actual_projection.get(section)
+        if isinstance(expected_values, dict) and isinstance(actual_values, dict):
+            mismatches.extend(
+                f"{section}.{field}"
+                for field in sorted(set(expected_values) | set(actual_values))
+                if expected_values.get(field) != actual_values.get(field)
+            )
+        elif expected_values != actual_values:
+            mismatches.append(section)
+    if mismatches:
+        raise ContinuityError(
+            "cold snapshot contents do not match authenticated manifest metrics; fields="
+            + ",".join(mismatches)
+        )
     if extracted.joinpath("config/credentials").exists():
         raise ContinuityError("cold snapshot unexpectedly contains provider credentials")
     secret_info = _verify_bundle_matches_manifest(
