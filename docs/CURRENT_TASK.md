@@ -10,7 +10,7 @@ Phase 2 已完成 state root/secret boundary 定义和旧源只读发现：`conf
 
 Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流、HMAC-authenticated manifest、SQLite/session/workspace 校验；独立 verifier 在认证后解密检查，restore 要求 Avalon token 和四个 state-root 替换批准，并先保留目标 rollback copy。凭据 continuity 改为逐项绑定 opaque path、内容、mode 和 `1000:1000` runtime owner；恢复后逐项复验。相同文件数/总字节但内容或路径变化的负向 fixture 均被拒绝。Phase 4 的 source/destination evidence 输出已接线；实际 source evidence 只能在获批 freeze 后采集，destination evidence 只能在获批 restore 后采集。证据见 `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`。
 
-1.4.8 仓库侧 hardening、完整 `pnpm build/typecheck/test`、doctor/readiness、secrets scan、版本校验及 `git diff --check` 均已通过。`VERSION=1.4.8` 已提交并推送：`3d9985c`；本地 `main` 与 `origin/main` 一致且工作区干净。Phase 6 预冻结门尚未通过：最新实际密钥包的归档可由当前 HMAC 工具认证，但官方导入演练拒绝其旧清单策略（`plaintextTemporaryFiles=false`，且缺少临时明文清理/权限字段）。详细脱敏证据见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。因此不请求 source-freeze token，也没有冻结源端、移动 Avalon 或切换 owner ingress。
+1.4.8 仓库侧 hardening、完整 `pnpm build/typecheck/test`、doctor/readiness、secrets scan、版本校验及 `git diff --check` 均已通过。`VERSION=1.4.8` 已提交并推送：`3d9985c`；本地 `main` 与 `origin/main` 一致且工作区干净。Phase 6 预冻结门尚未通过：最新实际密钥包的归档可由当前 HMAC 工具认证，但官方导入演练拒绝其旧清单策略（`plaintextTemporaryFiles=false`，且缺少临时明文清理/权限字段）。`migration-readiness.sh` 的密钥包项只查归档与 sidecar 存在，不能替代 HMAC/解密/导入验证。详细脱敏证据见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。因此不请求 source-freeze token，也没有冻结源端、移动 Avalon 或切换 owner ingress。
 
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
