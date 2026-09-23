@@ -1,0 +1,17 @@
+name: ariang
+
+services:
+  ariang:
+    image: p3terx/ariang:latest
+    pull_policy: never
+    container_name: ariang
+    restart: always
+    ports:
+      - "${ARIANG_PORT:-127.0.0.1:6880}:6880"
+    x-casaos:
+      author: self
+      category: Utilities
+      port_map: "6880"
+      scheme: http
+      title:
+        custom: ariang
