@@ -5,10 +5,27 @@ from __future__ import annotations
 
 import json
 import stat
+import subprocess
 import tempfile
 from pathlib import Path
 
 from openclaw_migration_safe_config import MigrationConfigError, build_overlay, write_overlay
+
+
+ingress_fixture = """openclaw local/openclaw-amadeus:test
+frpc snowdreamtech/frpc:latest
+nginx-proxy-manager jc21/nginx-proxy-manager:latest
+npm example/unrelated:latest
+changedetection dgtlmoon/changedetection.io:latest
+"""
+ingress_count = subprocess.run(
+    ["awk", "-f", str(Path(__file__).with_name("openclaw-ingress-count.awk"))],
+    input=ingress_fixture,
+    check=True,
+    capture_output=True,
+    text=True,
+).stdout.strip()
+assert ingress_count == "3"
 
 
 with tempfile.TemporaryDirectory(prefix="openclaw-migration-safe-test-") as temporary:
