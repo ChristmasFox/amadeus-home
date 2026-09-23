@@ -25,6 +25,10 @@ OPENCLAW_PROCESS_COUNT=0
 
 The restore-time inventory matched the authenticated manifest. A fresh destination inventory reported the same workspace/state/session counts and both SQLite databases as `ok`. All 859 credential tree entries have numeric owner `1000:1000`; bundle verification checked the opaque path set, content, modes, and expected runtime owner. No secret values or credential paths are recorded here.
 
+### 2026-09-23 audit correction
+
+The legacy `DEST_SESSION_AND_JSONL_FILE_COUNT=84` and `DEST_TRANSCRIPT_FILE_COUNT=6` values above came from substring-matching arbitrary state paths; they are not valid session/transcript counts. The archived bytes and authenticated artifact verification remain valid, but these derived counters must not be used as continuity evidence. The actual OpenClaw primary session/transcript store is `config/agents/main/agent/openclaw-agent.sqlite`; current SQLite-backed metrics and the failed operator recall test are recorded in `.agent/checkpoints/2026-09-23-kurisu-recall-audit.md`. The continuity tool now distinguishes actual SQLite tables and exact legacy file paths.
+
 Before cold-state apply, the separate encrypted secret restore installed six absent targets and skipped two existing targets: the 9Router env and the active Changedetection datastore. Neither existing target was overwritten.
 
 ## Recovery and service boundaries

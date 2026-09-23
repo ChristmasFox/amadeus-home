@@ -6,9 +6,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
+import stat
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -16,6 +19,9 @@ from typing import Callable
 IMMUTABLE_IMAGE_RE = re.compile(r"^local/openclaw-amadeus:git-[0-9a-fA-F]{7,40}-[0-9]{14}$")
 TEMPLATE_IMAGE_RE = re.compile(
     r"(?m)^([ \t]*)image:[ \t]*\$\{OPENCLAW_IMAGE:-local/openclaw-amadeus:unbuilt\}[ \t]*$"
+)
+CANONICAL_IMAGE_RE = re.compile(
+    r"(?m)^([ \t]*image:[ \t]*)(local/openclaw-amadeus:git-[0-9a-fA-F]{7,40}-[0-9]{14})([ \t]*)(\r?)$"
 )
 
 
@@ -67,6 +73,91 @@ def install_canonical_compose(template: str, target: Path, image: str) -> str:
     finally:
         temporary.unlink(missing_ok=True)
     return "installed"
+
+
+def update_canonical_compose_image(target: Path, image: str) -> dict[str, str]:
+    """Atomically switch one existing immutable OpenClaw image, retaining a protected copy."""
+    target = Path(target)
+    if not IMMUTABLE_IMAGE_RE.fullmatch(image):
+        raise MigrationPreflightError("OpenClaw image must use an immutable local Git-and-timestamp tag")
+    if target.parent.is_symlink() or target.is_symlink() or not target.is_file():
+        raise MigrationPreflightError("canonical Compose file is missing or symlinked")
+    try:
+        original = target.read_bytes()
+        source = original.decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        raise MigrationPreflightError("canonical Compose file is unreadable UTF-8") from None
+    matches = list(CANONICAL_IMAGE_RE.finditer(source))
+    if len(matches) != 1:
+        raise MigrationPreflightError("canonical Compose must contain exactly one immutable OpenClaw image line")
+    match = matches[0]
+    previous_image = match.group(2)
+    if previous_image == image:
+        return {"status": "already-current", "previousImage": previous_image, "image": image, "backup": ""}
+
+    metadata = target.stat(follow_symlinks=False)
+    backup_root = target.parent / ".operation-skuld-compose-backups"
+    if backup_root.is_symlink():
+        raise MigrationPreflightError("protected Compose backup directory is symlinked")
+    backup_root.mkdir(mode=0o700, exist_ok=True)
+    if not backup_root.is_dir():
+        raise MigrationPreflightError("protected Compose backup path is not a directory")
+    os.chmod(backup_root, 0o700)
+    if os.geteuid() == 0:
+        os.chown(backup_root, 0, 0)
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup = backup_root / f"docker-compose.yml.before-image-update-{stamp}-{secrets.token_hex(4)}.bak"
+    try:
+        descriptor = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise MigrationPreflightError("protected Compose backup unexpectedly already exists") from None
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(original)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.geteuid() == 0:
+            os.chown(backup, 0, 0)
+        os.chmod(backup, 0o600)
+        directory_fd = os.open(backup_root, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        backup.unlink(missing_ok=True)
+        raise MigrationPreflightError("protected Compose backup could not be completed") from error
+
+    updated, replacements = CANONICAL_IMAGE_RE.subn(
+        lambda item: item.group(1) + image + item.group(3) + item.group(4), source
+    )
+    if replacements != 1:
+        raise MigrationPreflightError("canonical Compose image changed during update")
+    temporary = target.with_name(f".{target.name}.{secrets.token_hex(8)}.tmp")
+    try:
+        if target.read_bytes() != original:
+            raise MigrationPreflightError("canonical Compose changed concurrently; protected previous copy retained")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IMODE(metadata.st_mode))
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(updated.encode("utf-8"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.geteuid() == 0:
+            os.chown(temporary, metadata.st_uid, metadata.st_gid)
+        os.chmod(temporary, stat.S_IMODE(metadata.st_mode))
+        os.replace(temporary, target)
+        directory_fd = os.open(target.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except OSError as error:
+        temporary.unlink(missing_ok=True)
+        raise MigrationPreflightError(
+            f"canonical Compose image update failed; protected previous copy retained at {backup.name}"
+        ) from error
+    return {"status": "updated", "previousImage": previous_image, "image": image, "backup": str(backup)}
 
 
 def validate_compose_project(

@@ -288,6 +288,76 @@ def _sqlite_integrity(path: Path) -> str:
         return "failed"
 
 
+SESSION_STORE_TABLES = {
+    "session_nodes": "sessionCount",
+    "transcript_events": "transcriptEventCount",
+    "session_transcript_active_events": "activeTranscriptEventCount",
+    "session_transcript_archives": "transcriptArchiveCount",
+    "session_transcript_fts": "transcriptSearchChunkCount",
+}
+
+
+def _openclaw_session_store(path: Path) -> tuple[dict[str, int], bool]:
+    """Read aggregate session/transcript counters from OpenClaw's agent SQLite store."""
+    uri = path.resolve().as_uri() + "?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=10) as database:
+            tables = {
+                row[0]
+                for row in database.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            required = {"session_nodes", "transcript_events"}
+            counts = {}
+            for table, key in SESSION_STORE_TABLES.items():
+                if table not in tables:
+                    counts[key] = 0
+                    continue
+                # Table names come only from this fixed allow-list.
+                counts[key] = int(database.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
+        return counts, required.issubset(tables)
+    except (sqlite3.Error, OSError, ValueError) as exc:
+        raise ContinuityError("OpenClaw session/transcript SQLite store is unreadable") from exc
+
+
+def _legacy_session_state(state_entries: list[dict]) -> dict[str, int]:
+    """Reproduce schema-v2 path-substring metrics solely to verify old authenticated manifests."""
+    paths = [str(entry["path"]).lower() for entry in state_entries if entry["kind"] == "file"]
+    return {
+        "sessionAndJsonlFileCount": sum("session" in path or path.endswith(".jsonl") for path in paths),
+        "transcriptFileCount": sum("transcript" in path for path in paths),
+    }
+
+
+def _session_jsonl_file(path: str) -> bool:
+    parts = PurePosixPath(path).parts
+    return (
+        len(parts) >= 5
+        and parts[0] == "config"
+        and parts[1] == "agents"
+        and "sessions" in parts[3:-1]
+        and parts[-1].lower().endswith(".jsonl")
+        and ".deleted." not in parts[-1].lower()
+    )
+
+
+def _session_archive_file(path: str) -> bool:
+    parts = PurePosixPath(path).parts
+    return (
+        len(parts) >= 5
+        and parts[0] == "config"
+        and parts[1] == "agents"
+        and "sessions" in parts[3:-1]
+        and ".jsonl.deleted." in parts[-1].lower()
+    )
+
+
+def _standalone_transcript_file(path: str) -> bool:
+    parts = PurePosixPath(path).parts
+    return len(parts) >= 5 and parts[0] == "config" and parts[1] == "agents" and "transcripts" in parts[3:-1]
+
+
 def collect_inventory(
     data_root: Path,
     *,
@@ -363,9 +433,29 @@ def collect_inventory(
 
     identity = database_by_path["data/identity.sqlite"]
     pubg = database_by_path["data/pubg.sqlite"]
-    state_file_paths = [entry["path"].lower() for entry in regular_state]
-    session_files = sum("session" in path or path.endswith(".jsonl") for path in state_file_paths)
-    transcript_files = sum("transcript" in path for path in state_file_paths)
+    session_store_entries = [
+        entry for entry in regular_state
+        if (parts := PurePosixPath(entry["path"]).parts)[:2] == ("config", "agents")
+        and len(parts) >= 5 and parts[-2:] == ("agent", "openclaw-agent.sqlite")
+    ]
+    session_stores = []
+    for entry in session_store_entries:
+        counts, readable = _openclaw_session_store(root / entry["path"])
+        session_stores.append({"pathId": _path_id(entry["path"]), "readable": readable, **counts})
+    session_state_readable = bool(session_stores) and all(store["readable"] for store in session_stores)
+    session_state = {
+        "status": "verified" if session_state_readable else "missing_or_incomplete",
+        "sessionStoreCount": len(session_stores),
+        "sessionCount": sum(store.get("sessionCount", 0) for store in session_stores),
+        "transcriptEventCount": sum(store.get("transcriptEventCount", 0) for store in session_stores),
+        "activeTranscriptEventCount": sum(store.get("activeTranscriptEventCount", 0) for store in session_stores),
+        "transcriptArchiveCount": sum(store.get("transcriptArchiveCount", 0) for store in session_stores),
+        "transcriptSearchChunkCount": sum(store.get("transcriptSearchChunkCount", 0) for store in session_stores),
+        "sessionJsonlFileCount": sum(_session_jsonl_file(entry["path"]) for entry in regular_state),
+        "sessionArchiveFileCount": sum(_session_archive_file(entry["path"]) for entry in regular_state),
+        "transcriptFileCount": sum(_standalone_transcript_file(entry["path"]) for entry in regular_state),
+        "stores": sorted(session_stores, key=lambda store: store["pathId"]),
+    }
 
     return {
         "workspace": {
@@ -392,8 +482,7 @@ def collect_inventory(
             "symlinkCount": sum(entry["kind"] == "symlink" for entry in credential_entries),
         },
         "sessionState": {
-            "sessionAndJsonlFileCount": session_files,
-            "transcriptFileCount": transcript_files,
+            **session_state,
         },
         "sqlite": {
             "integrity": "passed",
@@ -409,6 +498,7 @@ def collect_inventory(
             "stateEntries": state_entries,
             "workspaceEntries": workspace_entries,
             "credentialEntries": credential_entries,
+            "legacySessionState": _legacy_session_state(state_entries),
         },
     }
 
@@ -422,6 +512,21 @@ def continuity_projection(inventory: dict) -> dict:
         key: inventory[key]
         for key in ("workspace", "state", "sessionState", "sqlite")
     }
+
+
+def _snapshot_projection(manifest: dict, inventory: dict) -> dict:
+    """Keep authenticated schema-v2 snapshots verifiable while using accurate schema-v3 metrics."""
+    if manifest.get("schemaVersion") == 2:
+        legacy = inventory.get("_internal", {}).get("legacySessionState")
+        if not isinstance(legacy, dict):
+            raise ContinuityError("legacy session inventory is unavailable")
+        return {
+            "workspace": inventory["workspace"],
+            "state": inventory["state"],
+            "sessionState": legacy,
+            "sqlite": inventory["sqlite"],
+        }
+    return continuity_projection(inventory)
 
 
 def _metric_mismatch_paths(expected: object, actual: object, prefix: str = "") -> list[str]:
@@ -797,6 +902,8 @@ def create_snapshot(
     output_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(output_root, 0o700)
     before = collect_inventory(source)
+    if before["sessionState"]["status"] != "verified":
+        raise ContinuityError("COLD_SNAPSHOT=BLOCKED: OpenClaw session/transcript state is unreadable")
     secret_info = _verify_bundle_matches_inventory(
         before, secret_artifact, secret_manifest, passphrase_file, expected_owner=expected_owner
     )
@@ -820,7 +927,7 @@ def create_snapshot(
         if secret_info != secret_after:
             raise ContinuityError("secret bundle changed while the cold snapshot was being created")
         body = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "sourceHost": metadata["sourceHost"],
             "sourceMachine": metadata["sourceMachine"],
             "createdAtUtc": stamp,
@@ -885,7 +992,7 @@ def _validate_snapshot_plaintext(
             )
             raise ContinuityError("cold snapshot state entries differ from stopped source; roots=" + summary)
     expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
-    actual_projection = continuity_projection(actual)
+    actual_projection = _snapshot_projection(manifest, actual)
     mismatches = _metric_mismatch_paths(expected_projection, actual_projection)
     if mismatches:
         raise ContinuityError(
@@ -939,6 +1046,8 @@ def create_snapshot_from_stream(
         raise ContinuityError("snapshot requires repository version 1.4.8")
     if "_internal" in inventory or any(key not in inventory for key in ("workspace", "state", "credentials", "sessionState", "sqlite")):
         raise ContinuityError("remote source inventory is incomplete or not sanitized")
+    if inventory["sessionState"].get("status") != "verified":
+        raise ContinuityError("COLD_SNAPSHOT=BLOCKED: OpenClaw session/transcript state is unreadable")
     secret_info = _verify_bundle_matches_inventory(
         inventory, secret_artifact, secret_manifest, passphrase_file, expected_owner=expected_owner
     )
@@ -957,7 +1066,7 @@ def create_snapshot_from_stream(
     try:
         _write_encrypted_stream(stream, partial, passphrase_file)
         body = {
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "sourceHost": metadata["sourceHost"],
             "sourceMachine": metadata["sourceMachine"],
             "createdAtUtc": stamp,
@@ -1005,7 +1114,7 @@ def verify_snapshot(
         raise ContinuityError("snapshot manifest is unavailable or invalid") from exc
     verify_manifest_authentication(manifest, passphrase_file)
     verify_artifact_authentication(artifact, passphrase_file, manifest)
-    if manifest.get("schemaVersion") != 2 or manifest.get("amadeusVersion") != "1.4.8":
+    if manifest.get("schemaVersion") not in {2, 3} or manifest.get("amadeusVersion") != "1.4.8":
         raise ContinuityError("snapshot manifest version is unsupported")
     with tempfile.TemporaryDirectory(prefix="openclaw-cold-verify-") as temporary:
         private_root = Path(temporary)
@@ -1154,7 +1263,7 @@ def restore_snapshot(
 
         restored = collect_inventory(destination)
         expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
-        if continuity_projection(restored) != expected_projection:
+        if restored["sessionState"]["status"] != "verified" or _snapshot_projection(manifest, restored) != expected_projection:
             raise ContinuityError("restored OpenClaw state does not match the cold snapshot")
         verify_restored_credentials(
             destination, secret_artifact, secret_manifest, passphrase_file, expected_owner=expected_owner
@@ -1375,8 +1484,14 @@ def main() -> int:
         print(f"DEST_PUBG_DB_INTEGRITY={sqlite['pubgDbIntegrity']}")
         print(f"DEST_OPENCLAW_STATE_FILE_COUNT={state['fileCount']}")
         print(f"DEST_OPENCLAW_STATE_BYTES={state['totalBytes']}")
-        print(f"DEST_SESSION_AND_JSONL_FILE_COUNT={sessions['sessionAndJsonlFileCount']}")
-        print(f"DEST_TRANSCRIPT_FILE_COUNT={sessions['transcriptFileCount']}")
+        print(f"DEST_SESSION_STATE={sessions['status']}")
+        print(f"DEST_SESSION_STORE_COUNT={sessions['sessionStoreCount']}")
+        print(f"DEST_SESSION_COUNT={sessions['sessionCount']}")
+        print(f"DEST_TRANSCRIPT_EVENT_COUNT={sessions['transcriptEventCount']}")
+        print(f"DEST_TRANSCRIPT_ARCHIVE_COUNT={sessions['transcriptArchiveCount']}")
+        print(f"DEST_SESSION_JSONL_FILE_COUNT={sessions['sessionJsonlFileCount']}")
+        print(f"DEST_SESSION_ARCHIVE_FILE_COUNT={sessions['sessionArchiveFileCount']}")
+        print(f"DEST_STANDALONE_TRANSCRIPT_FILE_COUNT={sessions['transcriptFileCount']}")
         print(f"OPENCLAW_STATE_RESTORE=verified ROLLBACK_CHECKPOINT={backup.name}")
         return 0
     if args.command == "process-probe":

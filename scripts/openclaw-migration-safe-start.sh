@@ -15,7 +15,7 @@ APPROVAL=''
 IMAGE=''
 
 usage() {
-  printf '%s\n' 'Usage: scripts/openclaw-migration-safe-start.sh [--plan|--apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 [--image local/openclaw-amadeus:git-<sha>-<utc timestamp>]]'
+  printf '%s\n' 'Usage: scripts/openclaw-migration-safe-start.sh [--plan | --apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 [--image local/openclaw-amadeus:git-<sha>-<utc timestamp>]]'
 }
 while (($#)); do
   case "$1" in
@@ -76,8 +76,11 @@ if ((compose_exists == 0)); then
   install_code="import base64, pathlib, sys; ns={'__name__':'openclaw_migration_safe_preflight'}; exec(compile(base64.b64decode('${compose_helper_payload}'), 'openclaw_migration_safe_preflight.py', 'exec'), ns); result=ns['install_canonical_compose'](base64.b64decode(sys.argv[1]).decode('utf-8'), pathlib.Path(sys.argv[2]), sys.argv[3]); print('MIGRATION_SAFE_CANONICAL_COMPOSE=' + result)"
   "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$install_code" "$template_payload" "$compose_file" "$IMAGE"
 elif [[ -n "$IMAGE" ]]; then
-  printf '%s\n' '--image is only accepted when the canonical Compose definition is missing.' >&2
-  exit 2
+  [[ "$MODE" == apply ]] || { printf '%s\n' '--image for an existing Compose requires --apply; no files changed.' >&2; exit 2; }
+  "$ORB_BIN" -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null || { printf '%s\n' 'MIGRATION_SAFE_OPENCLAW=BLOCKED requested immutable image is not loaded on M204.'; exit 1; }
+  compose_helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_preflight.py" | tr -d '\r\n')"
+  update_code="import base64, pathlib, sys; ns={'__name__':'openclaw_migration_safe_preflight'}; exec(compile(base64.b64decode('${compose_helper_payload}'), 'openclaw_migration_safe_preflight.py', 'exec'), ns); result=ns['update_canonical_compose_image'](pathlib.Path(sys.argv[1]), sys.argv[2]); print('MIGRATION_SAFE_IMAGE_UPDATE=' + result['status'] + ' image=' + result['image'] + ' backup=' + (result['backup'] or 'none'))"
+  "$ORB_BIN" -m "$MACHINE" -u root python3 -c "$update_code" "$compose_file" "$IMAGE"
 fi
 
 helper_payload="$(base64 < "$ROOT_DIR/scripts/openclaw_migration_safe_config.py" | tr -d '\r\n')"

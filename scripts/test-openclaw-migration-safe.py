@@ -14,6 +14,7 @@ from openclaw_migration_safe_preflight import (
     MigrationPreflightError,
     install_canonical_compose,
     render_canonical_compose,
+    update_canonical_compose_image,
     validate_compose_project,
 )
 
@@ -191,6 +192,25 @@ with tempfile.TemporaryDirectory(prefix="openclaw-compose-preflight-test-") as t
     assert install_canonical_compose(template, installed_file, tag) == "installed"
     assert installed_file.read_bytes() == rendered
     assert install_canonical_compose(template, installed_file, tag) == "already-identical"
+
+    next_tag = "local/openclaw-amadeus:git-abcdef123456-20260924123456"
+    update_result = update_canonical_compose_image(installed_file, next_tag)
+    assert update_result["status"] == "updated"
+    assert update_result["previousImage"] == tag
+    assert update_result["image"] == next_tag
+    protected_copy = Path(update_result["backup"])
+    assert protected_copy.read_bytes() == rendered
+    assert stat.S_IMODE(protected_copy.stat().st_mode) == 0o600
+    assert stat.S_IMODE(protected_copy.parent.stat().st_mode) == 0o700
+    assert installed_file.read_text() == f"services:\n  openclaw:\n    image: {next_tag}\n"
+    assert update_canonical_compose_image(installed_file, next_tag)["status"] == "already-current"
+
+    try:
+        update_canonical_compose_image(installed_file, "local/openclaw-amadeus:mutable")
+    except MigrationPreflightError as error:
+        assert "immutable" in str(error)
+    else:
+        raise AssertionError("mutable candidate image update was accepted")
 
     installed_file.write_text("operator-owned definition\n")
     try:

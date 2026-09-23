@@ -144,8 +144,14 @@ print(f"SOURCE_IDENTITY_DB_INTEGRITY={db['identityDbIntegrity']}")
 print(f"SOURCE_PUBG_DB_INTEGRITY={db['pubgDbIntegrity']}")
 print(f"SOURCE_OPENCLAW_STATE_FILE_COUNT={s['fileCount']}")
 print(f"SOURCE_OPENCLAW_STATE_BYTES={s['totalBytes']}")
-print(f"SOURCE_SESSION_AND_JSONL_FILE_COUNT={sessions['sessionAndJsonlFileCount']}")
-print(f"SOURCE_TRANSCRIPT_FILE_COUNT={sessions['transcriptFileCount']}")
+print(f"SOURCE_SESSION_STATE={sessions['status']}")
+print(f"SOURCE_SESSION_STORE_COUNT={sessions['sessionStoreCount']}")
+print(f"SOURCE_SESSION_COUNT={sessions['sessionCount']}")
+print(f"SOURCE_TRANSCRIPT_EVENT_COUNT={sessions['transcriptEventCount']}")
+print(f"SOURCE_TRANSCRIPT_ARCHIVE_COUNT={sessions['transcriptArchiveCount']}")
+print(f"SOURCE_SESSION_JSONL_FILE_COUNT={sessions['sessionJsonlFileCount']}")
+print(f"SOURCE_SESSION_ARCHIVE_FILE_COUNT={sessions['sessionArchiveFileCount']}")
+print(f"SOURCE_STANDALONE_TRANSCRIPT_FILE_COUNT={sessions['transcriptFileCount']}")
 PY
 
 remote_helper inventory "$DATA_ROOT" --private-credential-fingerprints --private-state-fingerprints > "$after"

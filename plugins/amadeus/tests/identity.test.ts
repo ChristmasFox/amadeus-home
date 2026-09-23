@@ -48,6 +48,10 @@ test('OpenClaw identity tools use trusted metadata and persist owner-confirmed l
     const unbound = await identityResolve(runtimeConfig, { reference: 'self' }, context()) as { status: string };
     assert.equal(unbound.status, 'unbound');
 
+    const presetAlias = await identityResolve(runtimeConfig, { reference: 'alias', alias: '王哥' }, context(false)) as { status: string; person?: { personId: string } };
+    assert.equal(presetAlias.status, 'resolved');
+    assert.equal(presetAlias.person?.personId, 'wang');
+
     const binding = await identityBindChannel(runtimeConfig, { personId: 'wang', target: 'mention', mentionIndex: 0 }, context()) as { status: string };
     assert.equal(binding.status, 'bound');
     const resolvedMention = await identityResolve(runtimeConfig, { reference: 'mention', mentionIndex: 0 }, context()) as { status: string; person?: { personId: string } };
