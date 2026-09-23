@@ -19,6 +19,13 @@ Date: 2026-09-23
 - Existing secret bundle candidates use legacy manifests without current artifact/manifest HMAC fields. The newest candidate is under `full-homelab-backup-20260923T025614Z/runtime-preparation/secrets-20260923T030829Z`.
 - On a disposable mode-0700 temporary copy of that manifest, the current auth helper successfully sealed the encrypted artifact. The official `scripts/import-skuld-secrets.sh` rehearsal then rejected the manifest policy: it declares `plaintextTemporaryFiles=false` and lacks the current cleanup/permission fields required by the importer.
 - Temporary staging was automatically removed. The original encrypted bundle and manifest were not modified. A temporary HMAC does not make the legacy artifact an import-verified current-format bundle.
+- Readiness reports 0/0, but `check_encrypted_secret_bundle()` only checks that an archive and `.sha256` sidecar exist; it does not verify authentication or restore compatibility.
+
+## Repository follow-up
+
+- A source audit found the secret-bundle HMAC helper and its end-to-end fixture were hidden by the blanket `**/*secret*` ignore rule and absent from Git. Scoped exceptions now make both reproducible from a clean clone.
+- The exporter/importer correctly describe temporary plaintext staging as ephemeral, private (`0700`), and removed on exit; the destination restore verifier incorrectly required `plaintextTemporaryFiles=false`. Restore/import now enforce the same current manifest contract, and the generated encrypted fixture passes both import and restore dry-run. A negative fixture confirms the legacy false policy remains rejected.
+- Targeted `test:openclaw-secret-bundle`, `test:restore-skuld-secrets`, `test:storage-runtime`, and `test:migration-readiness` pass. The actual saved legacy bundle remains NOT VERIFIED by the current importer; no external artifact was changed.
 
 ## Boundary state
 
