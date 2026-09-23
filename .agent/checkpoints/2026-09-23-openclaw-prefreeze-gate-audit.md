@@ -11,7 +11,8 @@ Date: 2026-09-23
 
 - Latest full HomeLab backup: `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`; 16/16 MIGRATE services verified and 22/22 checksums passed.
 - M204 `nyannyan` guest, Docker, and CasaOS are active. Six staged containers remain local-only; unauthenticated 9Router `/v1/models` returns 401. Destination OpenClaw and Product Radar containers are absent.
-- Source Avalon is mounted with recorded UUID `0C2CC618-D273-470C-8036-9AD6A0D967D7`; storage sentinel is valid. Rollback plan is ready.
+- Source Avalon is mounted with recorded UUID `0C2CC618-D273-470C-8036-9AD6A0D967D7`; storage sentinel is valid. M204 host and guest report no Avalon mount. Rollback plan is ready.
+- `scripts/migration-readiness.sh` reports 0 failures/0 warnings, but its encrypted bundle item only checks for a non-empty archive and `.sha256` sidecar. It does not authenticate or run the import rehearsal, so it does not override the failed secret bundle gate.
 
 ## Secret bundle gate — NOT PASSED
 
