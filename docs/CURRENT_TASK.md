@@ -2,6 +2,8 @@
 
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
+2026-09-24 Phase 12 fresh gate：用户已提供精确 `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`，但门禁未通过，未执行 ingress 写入。旧 Mac `ai.openclaw.gateway` 仍为 active LaunchAgent（loopback `18789`、`RunAtLoad=true`、`KeepAlive=true`，仅 iMessage）；M204 候选为 1 个，旧 Mac OpenClaw/Gateway 进程为 1 个，因此 `OPENCLAW_ACTIVE_RUNTIME_COUNT=2`、`UNIQUE_RUNTIME_GATE=BLOCKED`。M204 实际有效配置仍为 `/run/openclaw-migration/openclaw.json`：loopback、Telegram/WhatsApp disabled、`sessions.visibility=self`、owner delivery disabled。需要 operator 明确分类/处理旧 Mac Gateway 后，才能重新跑唯一运行时门禁；本次批准不等同于 `COMMIT_SKULD_CUTOVER_1_4_8`。
+
 当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。Phase 7 source freeze、Phase 8 Avalon destination preflight 和 Phase 9 OpenClaw cold-state restore 已完成。迁移安全候选在 M204 运行，所有 owner/public ingress 与 owner delivery 仍关闭，`DESTINATION_AUTHORITY=NO`。此前报告的 84 session/JSONL 与 6 transcript 是路径子串误计，不能作为会话迁移验收；真实主会话库为 SQLite。最新运行库记录 57 sessions、5,791 transcript events、5,605 active events、1 archive row、2,843 search chunks，且 SQLite integrity 通过。修正证据见 `.agent/checkpoints/2026-09-24-kurisu-recall-acceptance-passed.md`。
 
 Phase 10 已在 M204 完成：当前 ARM64 安全候选镜像为 `local/openclaw-amadeus:git-238bb65-20260923171901`，目标 digest `4c726c0a7d5992b53d55591c45455e1a45000e45e8d53c829cdb8a3b2ce8ffb9`；安全 Compose preflight 通过，候选容器 healthy，loopback-only、全部渠道关闭、无 published ports、owner delivery=false，9Router 探测通过（接受 200/401）。候选 restart policy 为 `no`，上一版 Compose 已保留受保护备份；`tools.sessions.visibility=self` 已生效，阻止跨会话历史回忆。
