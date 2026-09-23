@@ -2,7 +2,7 @@
 
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
-当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。仓库侧 hardening、测试、release validation、commit/push 已完成；Phase 7 source freeze 已完成。当前停在 Phase 8 Avalon move 审批边界，不能自行卸载或移动磁盘。
+当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。仓库侧 hardening、测试、release validation、commit/push 已完成；Phase 7 source freeze 已完成，Phase 8 的 `APPROVE_AVALON_MOVE_1_4_8` 已收到。M204 host 已识别实际 Avalon 卷，但 guest VirtioFS 只读访问挂起；当前不启动任何 Avalon consumer。证据见 `.agent/checkpoints/2026-09-23-avalon-destination-preflight.md`。
 
 Phase 1 已完成源码与聚焦验证：仓库 workspace 文件已改名为 `workspace-seed/*.seed.md`，`openclaw_prepare.py` 仅向缺失路径写入 seed，并保留已有运行态文件、权限、符号链接、目录及 `memory/**`；新增默认只读 plan 的单文件同步工具。证据见 `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`。
 
@@ -24,7 +24,7 @@ Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流
 
 最新 16 服务备份位于 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`，manifest 16/16 `passed`、22/22 checksums 通过；包含 Xiaoya 精确镜像 ID、bind/Alist 数据、Immich `pg_dump -Fc` 和 Filebrowser `/database`、`/config` 两个匿名卷。冷快照和密钥 bundle 另见本节 Phase 7 完成记录。
 
-M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标现有 Changedetection、9Router、Filebrowser、Xiaoya、AriaNG、Dashdot 六项服务，均处于 loopback-only/无宿主端口的暂存状态。Changedetection healthy、无宿主端口；它与源端并行轮询仅作迁移暂存，源端仍是唯一权威身份。9Router 仅绑定 `127.0.0.1:20128`，源端与目标对无凭据 `/v1/models` 都返回 401，与预期一致。
+M204 canonical `nyannyan` guest 正在通过 OrbStack restart 恢复；最后观测状态为 `stopping`。Avalon 已连接并挂载在 M204 host，host UUID/sentinel/容量和写探针通过；Linux guest 访问 `/Volumes/Avalon` 卡住，故 Phase 8 尚未通过。批准后只做了 M204 `EXTERNAL_STORAGE_VOLUME_UUID` 本地配置更新，未启动 Avalon consumer、OpenClaw 或 Product Radar。
 
 Filebrowser、Xiaoya 的 Compose 模板已提交到 `4bdc605` 并部署到目标，默认 loopback-only。Filebrowser healthy，`127.0.0.1:10180` HTTP 200；它可写挂载整个 `/DATA`，不得提前开放。Xiaoya 主 UI 与 public-settings API HTTP 200；`data.db` 的 169 条 Alist storage 记录和 `strm_internal.db` 均通过 SQLite integrity check，未发现字面 `/Volumes/Avalon` 路径；具体远端 storage 可用性仍需按实际挂盘/网络分别验收。目测的 `2345/` 根路径返回 HTTP 500，不据此宣称该辅助端口可用。目标恢复的 Xiaoya 私有 AppData 已设为 root-only。
 
@@ -48,7 +48,7 @@ AriaNG 与 Dashdot Compose 模板已在 `32be0ec` 提交并部署。二者 UI �
 
 边界：本阶段只有用户安装的 SSH 公钥、受管 zsh 终端代理 block、目标本地 GitHub key/standard SSH config，以及 clean monorepo clone 写入了目标 Mac；本轮 OrbStack 检查全为只读。没有恢复 secret/data、启动第二套运行时、移动 Avalon，或执行 cutover。旧 Mac/CasaOS 仍是唯一权威运行时。
 
-下一步：目标 bootstrap 已基本完成，当前只剩连接新 Mac 上的 Avalon 外置盘。挂载后先只读运行 `diskutil info /Volumes/Avalon`，用真实 UUID 更新 host profile 并运行 storage identity/capacity preflight；在该 preflight 和后续独立批准前，不恢复 secret/data、不启动业务 runtime、不切换入口、不执行 cutover。详见 `.agent/tasks/2026-09-22-amadeus-m204-host-bootstrap.md`。
+下一步：等待当前 `orbctl restart nyannyan` 返回并确认 guest 恢复；随后只读验证 guest 能访问真实 Avalon、sentinel 和 Immich media root，再完成 guest 可读/写与容量检查。若 VirtioFS 仍挂起，继续保持 `CUTOVER=BLOCKED`，不强制停止 OrbStack、不启动 Avalon 服务、不恢复 secrets/state、不切换入口。后续需在目的端 OpenClaw 启动前重新核验 host-local iMessage Gateway 的唯一 runtime 归属。
 
 ## 2026-09-22：Amadeus 1.4.7 Operation Skuld Final Migration Blocker Fixes（已完成）
 

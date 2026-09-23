@@ -2,7 +2,7 @@
 
 2026-09-23 completion update: Phase 7 source freeze is complete for the Amadeus CasaOS runtime. `SOURCE_FROZEN=YES`, the source CasaOS OpenClaw container and Amadeus owner ingress are off, active Avalon-bound consumers are stopped, and the source filesystem has been synced. A post-freeze audit found a separate macOS `ai.openclaw.gateway` LaunchAgent still running local-only with iMessage enabled; it uses host-local `~/.openclaw` config, not the CasaOS state, and its production-authority relationship remains unclassified. Recheck the unique-runtime gate before any destination OpenClaw startup. Final encrypted secret bundle, independently verified cold snapshot, and 16-service HomeLab backup are recorded in `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`. Avalon remains mounted on the source; no destination production runtime or authority switch occurred.
 
-Phase 8 is the next hard boundary. Do not unmount Avalon until the user supplies `APPROVE_AVALON_MOVE_1_4_8`.
+Phase 8 approval has been received. The disk is observed on M204 with the expected UUID/filesystem/sentinel, host capacity, artifacts, and host write probe passing. Guest `/Volumes/Avalon` access hangs through OrbStack VirtioFS; an approved guest restart is still in `stopping`. Keep all Avalon consumers and production authority off. Evidence: `.agent/checkpoints/2026-09-23-avalon-destination-preflight.md`.
 
 ### Phase history and pre-freeze audit notes
 
@@ -19,9 +19,9 @@ Phase 8 is the next hard boundary. Do not unmount Avalon until the user supplies
 
 ## 当前状态 — 2026-09-23 M204 非 Avalon 服务恢复（进行中）
 
-- M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载；目标 OpenClaw/Product Radar 不存在。源端 OpenClaw 已冻结，目前未切换生产 authority。
+- M204 host 已在 `en0` 使用 `192.168.5.3`。Avalon 已连接并由 M204 host 挂载，UUID/sentinel 匹配；M204 guest 的 `/Volumes` 是 VirtioFS，但对 `/Volumes/Avalon` 的只读 `ls` 长时间无响应。为恢复 guest 共享挂载而发起的已批准重启仍处于 `stopping`。目标 OpenClaw/Product Radar 不存在，源 CasaOS OpenClaw 已冻结，生产 authority 未切换。Phase 8 未通过 guest read/content gate，禁止启动 Avalon consumers。
 - 最终完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z`。16 个 MIGRATE 服务、38 个 artifacts 均通过，22/22 checksums 通过；包含 Immich `pg_dump -Fc` 和 Filebrowser `/database`、`/config` 卷。此前 `20260923T045305Z` 备份仍保留；更早 `044715Z` 备份缺 Filebrowser `/config`，不作为恢复源。
-- 目标现有六项服务：Changedetection（healthy、无宿主端口）、9Router（`127.0.0.1:20128`）、Filebrowser（healthy，`127.0.0.1:10180`）、Xiaoya、AriaNG（`127.0.0.1:6880`）和 Dashdot（`127.0.0.1:3001`）。9Router 源/目标未授权 `/v1/models` 都返回 401。Filebrowser 可写 `/DATA` 全视图，继续保持 loopback；Xiaoya 主 UI 与 public-settings API 200，两个 SQLite 文件 integrity pass，169 条 Alist storage 记录没有字面 `/Volumes/Avalon` 路径。AriaNG/Dashdot UI 200，Dashdot guest-root bind 为只读；aria2 后端尚未恢复。六项容器当前均为 running、重启次数 0，全部仅 loopback 或无宿主端口，目标仍只用于暂存，未切换入口。
+- 重启前目标六项服务为 Changedetection、9Router、Filebrowser、Xiaoya、AriaNG、Dashdot，均 loopback-only/无宿主端口且没有 Avalon bind；9Router 未授权 `/v1/models` 的 401 是预期鉴权。Filebrowser 可写 `/DATA` 全视图；Xiaoya 的 SQLite 检查通过；AriaNG/Dashdot UI 200，Dashdot guest-root bind 为只读；aria2 后端尚未恢复。当前 guest 正在 restart，不把重启前的 running 状态当作当前健康证据，恢复后需重新核验六项服务。
 - Xiaoya/Filebrowser/AriaNG/Dashdot image 和 data 经受控 staging 传输。Docker 28.2.2 → 29.8.1 导入后 image ID 被归一化，但 source/target 的 platform、创建时间、全部 RootFS layer digests 和完整 image Config 一致。M204 guest 直连 Docker Hub 超时，因此镜像由源端保存并离线导入；传输 SHA-256 匹配。Xiaoya 私有 AppData 目录为 `700 root:root`。
 - Homarr 与 xiaoyakeeper 暂缓，二者都需要 RW Docker socket；Homarr 还发现受保护 secret bundle 尚未覆盖的 `AUTH_SECRET`、`SECRET_ENCRYPTION_KEY`。运行态、决策和验收证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase2.md`。
 - 直接 Avalon consumers（Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist）保持停止，直至实际磁盘挂载并通过 UUID/sentinel/storage preflight。OpenClaw/Product Radar 受单一 runtime/切换门禁；frpc/Nginx Proxy Manager 受 ingress 门禁；v2raya 另需 host-network 评估。
