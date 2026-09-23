@@ -28,6 +28,14 @@ def build_overlay(source: Path) -> tuple[dict, bytes]:
         raise MigrationConfigError("canonical OpenClaw config root must be an object")
     overlay = json.loads(json.dumps(original))
 
+    tools = overlay.get("tools")
+    if not isinstance(tools, dict):
+        raise MigrationConfigError("canonical config has no tools object")
+    sessions = tools.setdefault("sessions", {})
+    if not isinstance(sessions, dict):
+        raise MigrationConfigError("tools.sessions must be an object")
+    sessions["visibility"] = "self"
+
     gateway = overlay.get("gateway")
     if not isinstance(gateway, dict):
         raise MigrationConfigError("canonical config has no gateway object")
@@ -122,12 +130,12 @@ def main() -> int:
     summary, payload = build_overlay(args.source)
     digest = hashlib.sha256(payload).hexdigest()
     if not args.apply:
-        print(f"MIGRATION_SAFE_CONFIG=PLAN channelsDisabled={summary['disabledChannels']} ownerDelivery=disabled bind=loopback canonicalUnchanged=yes SHA256={digest}")
+        print(f"MIGRATION_SAFE_CONFIG=PLAN channelsDisabled={summary['disabledChannels']} sessionVisibility=self ownerDelivery=disabled bind=loopback canonicalUnchanged=yes SHA256={digest}")
         return 0
     if args.approve_avalon_move != "APPROVE_AVALON_MOVE_1_4_8":
         raise MigrationConfigError("overlay apply requires exact APPROVE_AVALON_MOVE_1_4_8")
     actual_digest, count = write_overlay(args.source, args.output)
-    print(f"MIGRATION_SAFE_CONFIG=written channelsDisabled={count} ownerDelivery=disabled bind=loopback SHA256={actual_digest}")
+    print(f"MIGRATION_SAFE_CONFIG=written channelsDisabled={count} sessionVisibility=self ownerDelivery=disabled bind=loopback SHA256={actual_digest}")
     return 0
 
 

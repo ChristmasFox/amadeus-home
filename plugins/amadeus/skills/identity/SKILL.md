@@ -1,6 +1,6 @@
 ---
 name: identity
-description: "MANDATORY identity routing: for any prompt containing a named person/alias or a first-person identity question, call identity_resolve for every named alias (reference=alias, alias=X) and for 我/我的/本人 (reference=self) before any memory_search or memory_get. Never use memory retrieval first, never use USER.md to answer 我是谁, and never substitute Arthur/owner for an unbound sender. Only after identity_resolve returns not_found for a past-conversation question may you use sessions_search then sessions_history; retrieval failures are unknown, not absence."
+description: "MANDATORY identity routing: for any prompt containing a named person/alias or a first-person identity question, call identity_resolve for every named alias (reference=alias, alias=X) and for 我/我的/本人 (reference=self) before any memory_search or memory_get. Never use memory retrieval first, never use USER.md to answer 我是谁, and never substitute Arthur/owner for an unbound sender. Scoped facts stay in the current direct or group session; never widen recall across conversations, and missing scope means unavailable. Only after identity_resolve returns not_found for a past-conversation question may you use same-session sessions_search then sessions_history; retrieval failures are unknown, not absence."
 user-invocable: false
 ---
 
@@ -36,6 +36,14 @@ the current session has no trusted sender identity. Never substitute Arthur,
 the owner, or a default team for an unbound sender.
 
 ## Required use before person-specific domain work
+
+## Scope-limited conversational facts
+
+- A fact learned in a direct message is private to that direct session.
+- A fact learned in a group is available only in that same group session.
+- Do not use cross-session transcript or memory search to recover a scoped fact.
+- If the current session does not provide trusted direct/group scope, report the
+  fact as unavailable instead of exposing another conversation's memory.
 
 When a user asks for facts about a person using a nickname or alias, invoke
 `identity_resolve` before answering or calling the domain tool. For example,
