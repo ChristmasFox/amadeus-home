@@ -139,6 +139,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
     assert original["sqlite"]["databaseCount"] == 3
     assert original["sqlite"]["identityDbIntegrity"] == "ok"
     assert original["sqlite"]["pubgDbIntegrity"] == "ok"
+    assert set(original["state"]["treeSha256ByRoot"]) == {"config", "data", "notifications"}
     public_cli = subprocess.run(
         [sys.executable, str(Path(__file__).with_name("openclaw_continuity.py")), "inventory", str(source)],
         check=True, capture_output=True, text=True,

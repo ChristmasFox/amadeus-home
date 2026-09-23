@@ -305,6 +305,10 @@ def collect_inventory(
             "totalBytes": total_bytes(regular_state),
             "symlinkCount": sum(entry["kind"] == "symlink" for entry in state_entries),
             "treeSha256": _tree_digest(state_entries),
+            "treeSha256ByRoot": {
+                area: _tree_digest([entry for entry in state_entries if entry["path"].split("/", 1)[0] == area])
+                for area in ("config", "data", "notifications")
+            },
         },
         "credentials": {
             "fileCount": len(regular_credentials),
@@ -342,6 +346,19 @@ def continuity_projection(inventory: dict) -> dict:
         key: inventory[key]
         for key in ("workspace", "state", "sessionState", "sqlite")
     }
+
+
+def _metric_mismatch_paths(expected: object, actual: object, prefix: str = "") -> list[str]:
+    if isinstance(expected, dict) and isinstance(actual, dict):
+        paths = []
+        for key in sorted(set(expected) | set(actual)):
+            child_prefix = f"{prefix}.{key}" if prefix else str(key)
+            if key not in expected or key not in actual:
+                paths.append(child_prefix)
+            else:
+                paths.extend(_metric_mismatch_paths(expected[key], actual[key], child_prefix))
+        return paths
+    return [] if expected == actual else [prefix]
 
 
 def check_source_stopped(container_state: str) -> None:
@@ -778,17 +795,7 @@ def _validate_snapshot_plaintext(
     actual = collect_inventory(extracted, require_credentials=False, owner_overrides=owner_overrides)
     expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
     actual_projection = continuity_projection(actual)
-    mismatches = []
-    for section, expected_values in expected_projection.items():
-        actual_values = actual_projection.get(section)
-        if isinstance(expected_values, dict) and isinstance(actual_values, dict):
-            mismatches.extend(
-                f"{section}.{field}"
-                for field in sorted(set(expected_values) | set(actual_values))
-                if expected_values.get(field) != actual_values.get(field)
-            )
-        elif expected_values != actual_values:
-            mismatches.append(section)
+    mismatches = _metric_mismatch_paths(expected_projection, actual_projection)
     if mismatches:
         raise ContinuityError(
             "cold snapshot contents do not match authenticated manifest metrics; fields="
