@@ -1,11 +1,12 @@
-## 2026-09-23 — M204 service restore preparation
+## 2026-09-23 — M204 service restore phase 1 (current)
 
-- User authorized restoring services independent of Avalon and confirmed `/Volumes/Avalon` remains the stable mount name. Source CasaOS remains the sole authoritative runtime.
-- Full source backup is at `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T025614Z`; archive checksums passed. Service-aware SQLite snapshots passed hash/integrity checks; Immich PostgreSQL dump passed `pg_restore --list`; secret bundle import rehearsal and target dry-run passed without exposing values.
-- Backup code now fails closed on missing/empty paths, saves the exact live 9Router image, and captures Xiaoya's actual bind directory plus its `/opt/alist/data` named volume. Focused fixture test passed.
-- Source live mounts show Avalon binds for Immich, media-organizer-adapter, Emby, qBittorrent, aria2, Jellyfin, and Alist. Keep their config paths fixed at `/Volumes/Avalon`; start only after physical mount identity/sentinel verification.
-- OpenClaw/Product Radar remain behind single-runtime/cutover and duplicate-notification gates even though they have no direct Avalon bind. frpc/Nginx Proxy Manager remain behind ingress cutover gates.
-- M204 SSH works, but OrbStack guest is stopped/unresponsive and Avalon is absent. No target service, data, or secret has been restored. Continue after `nyannyan` guest is started from OrbStack UI; see `.agent/tasks/2026-09-23-m204-service-restore.md`.
+- User authorized restoring services independent of Avalon and confirmed `/Volumes/Avalon` remains the stable mount name. The old source CasaOS remains authoritative; no cutover or public ingress change has occurred.
+- M204 OrbStack `nyannyan` guest is running after the OS auto-update. `/Volumes/Avalon` is not mounted there.
+- Latest full backup is `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`: 16/16 MIGRATE services and all checksums pass. It contains Xiaoya image/data plus Filebrowser `/database` and `/config` volumes; do not use the incomplete `044715Z` attempt.
+- Four services are running in local-only staging: Changedetection (healthy, no host port), 9Router (`127.0.0.1:20128`, unauthenticated `/v1/models` returns 401 on source and target), Filebrowser (healthy, `127.0.0.1:10180`), and Xiaoya (UI/API 200, `127.0.0.1:5678` and `2345-2347`). Changedetection still polls alongside its source instance.
+- Filebrowser retains writable `/DATA`, so keep it loopback-only. Xiaoya's `data.db` and `strm_internal.db` pass SQLite integrity; its 169 Alist storage rows contain no direct `/Volumes/Avalon` reference. Xiaoya's private AppData is `700 root:root`.
+- Source commit `4bdc605` is pushed and the target clone is clean at the same commit. Docker 28.2.2→29.8.1 normalizes imported image IDs, but both images' platform, creation time, complete Config and every RootFS layer match source.
+- Direct Avalon consumers wait for actual disk UUID/sentinel/storage preflight. OpenClaw/Product Radar, frpc/Nginx Proxy Manager, and v2raya remain behind single-runtime, ingress, and host-network gates respectively. See `.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`.
 
 ## 2026-09-22 — Amadeus-M204 SSH access and terminal proxy baseline (in progress)
 
@@ -42,24 +43,6 @@
 - Current external storage is near threshold (about 11% free); future evidence must report the real warning state. No live mutation was performed in Phase 0.
 - Execution state is persisted in `.agent/EXECUTION_PLAN.md`, `.agent/run-state.example.json`, and external evidence under `SKULD_BACKUP_ROOT`.
 # Agent State
-
-更新时间：2026-09-23（Asia/Shanghai）
-
-当前继续 M204 服务分阶段迁移。用户允许先恢复不依赖 Avalon 的服务，并确认磁盘挂载名保持
-`/Volumes/Avalon`。旧源 CasaOS 仍是唯一权威运行时，不做 OpenClaw/Product Radar 双跑、入口
-切换或旧源回收。系统自动更新后，M204 canonical OrbStack `nyannyan` guest 已恢复运行；CasaOS/
-Docker 可用，但 Avalon 尚未挂载。
-
-最新完整源备份 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`
-含 16/16 MIGRATE artifacts，所有 checksums 验证通过；已捕获 Xiaoya exact image + 数据和
-Filebrowser `/database`、`/config` 两个卷。M204 当前仅有 Changedetection（healthy、无宿主端口）
-和 9Router（loopback `127.0.0.1:20128`）。9Router source/target unauthenticated `/v1/models`
-都返回 200，故保持 loopback；Changedetection 暂存会与旧源并行轮询。
-
-正在 source-control Filebrowser/Xiaoya Compose 并恢复其本机验收状态；它们默认仅 guest loopback，
-Filebrowser 全 `/DATA` 可写挂载不得提前开放。直接 Avalon mounts 等真实盘身份/sentinel preflight；
-frpc/NPM 等 ingress 等切换门禁，OpenClaw/Product Radar 等单 runtime 门禁，v2raya 需单独评估
-host-network 副作用。当前详细任务见 `.agent/tasks/2026-09-23-m204-service-restore.md`。
 
 更新时间：2026-09-21（Asia/Shanghai）
 

@@ -2,10 +2,10 @@
 
 - M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载，旧源 CasaOS 继续作为唯一权威运行时。
 - 最新完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`。16 个 MIGRATE 服务均 `passed`，全部 checksums 通过；Xiaoya image ID 精确记录，Filebrowser `/database` 与 `/config` 卷都已归档。`044715Z` 备份尝试缺 Filebrowser `/config`，仅保留审计，不作为恢复源。
-- 目标已恢复 Changedetection（healthy、无宿主端口）和 9Router（`127.0.0.1:20128`）。9Router 未授权 `/v1/models` 在源/目标都返回 200，旧 401 契约仍待澄清；当前 loopback-only，不开放 LAN/公网。Changedetection 与源端并行轮询是暂存状态，不代表 cutover。
-- Filebrowser 与 Xiaoya 的 Git Compose 模板已添加，默认 loopback-only。Filebrowser 可写挂载整个 `/DATA`，因此必须保持 loopback；Xiaoya 归档未发现字面 `/Volumes/Avalon` 路径，但 Alist-backed storage 功能尚待验收。
+- 目标已恢复 Changedetection（healthy、无宿主端口）、9Router、Filebrowser、Xiaoya。9Router 只绑定 `127.0.0.1:20128`，源/目标未授权 `/v1/models` 都返回 401。Filebrowser `127.0.0.1:10180` healthy/HTTP 200，可写 `/DATA` 全视图因此保持 loopback；Xiaoya UI/API 200，两个 SQLite 文件 integrity pass，169 条 Alist storage 记录没有字面 `/Volumes/Avalon` 路径。目标仍只用于暂存，未切换入口。
+- Xiaoya/Filebrowser image 和 data 经受控 staging 传输。Docker 28.2.2 → 29.8.1 导入后 image ID 被归一化，但 source/target 的 platform、创建时间、全部 RootFS layer digests 和完整 image Config 一致。M204 guest 直连 Docker Hub 超时，因此 Filebrowser 镜像由源端保存并离线导入；传输 SHA-256 匹配。Xiaoya 私有 AppData 目录为 `700 root:root`。
 - 直接 Avalon consumers（Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist）保持停止，直至实际磁盘挂载并通过 UUID/sentinel/storage preflight。OpenClaw/Product Radar 受单一 runtime/切换门禁；frpc/Nginx Proxy Manager 受 ingress 门禁；v2raya 另需 host-network 评估。
-- 备份脚本现将卷映射读取放在独立 FD，避免 OrbStack 子进程消费 stdin 导致漏归档；fixture 回归模拟 stdin 消耗并校验两个 Filebrowser volume artifacts。阶段证据：`.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md`。
+- 备份脚本现将卷映射读取放在独立 FD，避免 OrbStack 子进程消费 stdin 导致漏归档；fixture 回归模拟 stdin 消耗并校验两个 Filebrowser volume artifacts。阶段证据：`.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`。
 
 ## 历史记录 — 2026-09-23 M204 服务恢复准备（已过时）
 

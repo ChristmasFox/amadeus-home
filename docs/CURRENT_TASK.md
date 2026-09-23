@@ -6,11 +6,11 @@
 
 最新 16 服务备份位于 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`，manifest 16/16 `passed`、checksums 全部通过；包含 Xiaoya 精确镜像 ID、bind/Alist 数据和 Filebrowser `/database`、`/config` 两个匿名卷。较早的 `20260923T044715Z` 备份尝试漏归档 Filebrowser `/config`，不要作为恢复源。回归测试现覆盖子进程消耗 stdin 时仍完整归档两个卷。3 份 service-aware SQLite snapshot、Immich `pg_dump -Fc` 和 secret bundle rehearsal 证据见既有外部 checkpoint。
 
-M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标目前只有 Changedetection（healthy、未发布宿主端口）和 9Router（仅 `127.0.0.1:20128`）两个业务容器。Changedetection 与源端并行轮询仅作迁移暂存；源端保留唯一权威身份。9Router 源/目标对无凭据 `/v1/models` 都返回 200，与旧 401 契约不一致，因此暂不开放 LAN/公网。
+M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标现有 Changedetection、9Router、Filebrowser、Xiaoya 四项业务容器。Changedetection healthy、无宿主端口；它与源端并行轮询仅作迁移暂存，源端仍是唯一权威身份。9Router 仅绑定 `127.0.0.1:20128`，源端与目标对无凭据 `/v1/models` 都返回 401，与预期一致。
 
-Filebrowser 与 Xiaoya 的 source-controlled Compose 模板已补齐，默认 loopback-only；Filebrowser 保留 `/DATA` 可写视图，因此限制为本机访问。Xiaoya 数据未发现字面 `/Volumes/Avalon` 路径，但 Alist-backed storage 仍需单独功能验收。模板进入 Git 后再恢复这两项。
+Filebrowser、Xiaoya 的 Compose 模板已提交到 `4bdc605` 并部署到目标，默认 loopback-only。Filebrowser healthy，`127.0.0.1:10180` HTTP 200；它可写挂载整个 `/DATA`，不得提前开放。Xiaoya UI/API HTTP 200；`data.db` 的 169 条 Alist storage 记录和 `strm_internal.db` 均通过 SQLite integrity check，未发现字面 `/Volumes/Avalon` 路径；具体远端 storage 可用性仍需按实际挂盘/网络分别验收。目标恢复的 Xiaoya 私有 AppData 已设为 root-only。
 
-直接绑定 Avalon 的 Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist 暂不启动：配置保持 `/Volumes/Avalon` 不变，但需目标端实际挂盘并通过 UUID/sentinel/storage preflight，避免 guest 内生成同名空目录。OpenClaw/Product Radar 受唯一 runtime/切换门禁限制；frpc/Nginx Proxy Manager 受 ingress 门禁限制；v2raya 的 host-network 副作用另行评估。证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md` 与 `.agent/tasks/2026-09-23-m204-service-restore.md`。
+直接绑定 Avalon 的 Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist 暂不启动：配置保持 `/Volumes/Avalon` 不变，但需目标端实际挂盘并通过 UUID/sentinel/storage preflight，避免 guest 内生成同名空目录。OpenClaw/Product Radar 受唯一 runtime/切换门禁限制；frpc/Nginx Proxy Manager 受 ingress 门禁限制；v2raya 的 host-network 副作用另行评估。最新运行态证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`；备份准备历史见 `.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md`。
 
 ## 2026-09-22：Amadeus-M204 主机访问与终端代理准备（进行中）
 
