@@ -13,6 +13,7 @@ export AMADEUS_HOST_PROFILE="$fixture/no-host-profile"
 
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1" >&2; exit 1; }
+file_mode() { stat -c '%a' "$1" 2>/dev/null || stat -f '%Lp' "$1"; }
 
 # ------------------------------------------------------------------
 # Test 1: Dry-run mode works without real bundle
@@ -57,17 +58,21 @@ test_apply_mode() {
   local env_file="$dest_base/DATA/AppData/openclaw/openclaw.env"
   [[ -f "$env_file" ]] || fail "apply: openclaw.env not written at $env_file"
   local mode
-  mode="$(stat -f '%Lp' "$env_file" 2>/dev/null || stat -c '%a' "$env_file")"
+  mode="$(file_mode "$env_file")"
   [[ "$mode" == '600' ]] || fail "apply: openclaw.env has mode $mode (expected 600)"
 
   # Verify telegram-bot-token was written
   local tok_file="$dest_base/DATA/AppData/openclaw/secrets/telegram-bot-token"
   [[ -f "$tok_file" ]] || fail "apply: telegram-bot-token not written at $tok_file"
-  mode="$(stat -f '%Lp' "$tok_file" 2>/dev/null || stat -c '%a' "$tok_file")"
+  mode="$(file_mode "$tok_file")"
   [[ "$mode" == '600' ]] || fail "apply: telegram-bot-token has mode $mode (expected 600)"
 
   local whatsapp_creds="$dest_base/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
   [[ -s "$whatsapp_creds" ]] || fail 'apply: WhatsApp credential state was not restored'
+  mode="$(file_mode "$dest_base/DATA/AppData/openclaw/config/credentials")"
+  [[ "$mode" == '751' ]] || fail "apply: credential root mode was not preserved (got $mode)"
+  mode="$(file_mode "$dest_base/DATA/AppData/openclaw/config/credentials/whatsapp")"
+  [[ "$mode" == '710' ]] || fail "apply: nested WhatsApp mode was not preserved (got $mode)"
 
   pass 'restore-skuld-secrets.sh --apply writes files with correct permissions'
 }

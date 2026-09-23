@@ -121,6 +121,8 @@ if ((TEST_MODE)); then
       "$staging/DATA/AppData/immich" \
       "$staging/DATA/AppData/changedetection" \
       "$staging/DATA/AppData/media-organizer-adapter"
+    chmod 0751 "$staging/DATA/AppData/openclaw/config/credentials"
+    chmod 0710 "$staging/DATA/AppData/openclaw/config/credentials/whatsapp"
     printf 'FIXTURE_ENV=1\n' > "$staging/DATA/AppData/openclaw/openclaw.env"
     chmod 600 "$staging/DATA/AppData/openclaw/openclaw.env"
     printf 'fixture-token\n'  > "$staging/DATA/AppData/openclaw/secrets/telegram-bot-token"
@@ -226,7 +228,7 @@ RESTORE_MAP = [
     ('whatsapp-runtime-state',
      'DATA/AppData/openclaw/config/credentials',
      'DATA/AppData/openclaw/config/credentials',
-     0o700, 'OpenClaw channel credential state'),
+     None, 'OpenClaw channel credential state (preserve source modes)'),
     # Product Radar
     ('product-radar-runtime-env',
      'var/lib/casaos/apps/product-radar/.env',
@@ -269,7 +271,7 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
         'source': str(src_rel),
         'destination': str(dst_rel),
         'sourcePresent': exists_at_source,
-        'mode': oct(perm),
+        'mode': oct(perm) if perm is not None else 'preserve-source',
     }
 
     if not exists_at_source:
@@ -279,7 +281,8 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
         continue
 
     if mode == 'dry-run':
-        print(f'DRY   {logical_id} → {dst_rel} (perm={oct(perm)}) [{desc}]')
+        permission = oct(perm) if perm is not None else 'preserve-source'
+        print(f'DRY   {logical_id} → {dst_rel} (perm={permission}) [{desc}]')
         action_entry['result'] = 'dry-run'
     elif mode == 'apply':
         real_dst = dest_base / dst_rel
@@ -323,7 +326,8 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
         try:
             if src_path.is_dir():
                 shutil.copytree(str(src_path), str(prepared_path), symlinks=True)
-                prepared_path.chmod(perm)
+                if perm is not None:
+                    prepared_path.chmod(perm)
                 if logical_id == 'whatsapp-runtime-state' and not fixture_mode:
                     if os.geteuid() != 0:
                         raise PermissionError('OpenClaw credential restore must run as guest root')
@@ -341,7 +345,8 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
             if backup_path is not None and backup_path.exists() and not (real_dst.exists() or real_dst.is_symlink()):
                 os.rename(backup_path, real_dst)
             raise
-        print(f'APPLY {logical_id} → {real_dst} (perm={oct(perm)})')
+        permission = oct(perm) if perm is not None else 'preserve-source'
+        print(f'APPLY {logical_id} → {real_dst} (perm={permission})')
         action_entry['result'] = 'applied'
     actions.append(action_entry)
 
