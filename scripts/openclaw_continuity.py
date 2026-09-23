@@ -1054,7 +1054,8 @@ def _copy_tree_preserving_metadata(source: Path, destination: Path) -> None:
     entries = _walk_tree(source.parent, source.name, reject_symlinks=False)
     shutil.copytree(source, destination, symlinks=True, copy_function=shutil.copy2)
     for item in entries:
-        path = destination.parent / item["path"]
+        relative_path = Path(item["path"]).relative_to(source.name)
+        path = destination / relative_path
         if os.geteuid() == 0:
             os.chown(path, item["uid"], item["gid"], follow_symlinks=False)
         if item["kind"] != "symlink":
