@@ -12,7 +12,7 @@ Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流
 
 1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，原始采集时间仍为 unknown；原件未修改。clean `7c93b7e` readiness 为 0 failure/0 warning，doctor 也为 0/0；rollback plan ready。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。Phase 6 pre-freeze audit（历史截面）：当时 source-freeze token 尚未提供，源端仍 active；证据见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
 
-2026-09-23 Phase 7 完成：源 OpenClaw/Gateway 与 owner ingress 关闭；Product Radar、9Router、Changedetection、所有 Avalon 直接/间接消费者和 RW Docker socket 控制器已停止；Mac host 与 ubuntu guest 均已 sync。生产 authority 未切到 M204；公网入口未改。
+2026-09-23 Phase 7 完成（Amadeus CasaOS runtime）：源 CasaOS OpenClaw/Gateway 容器与 owner ingress 关闭；Product Radar、9Router、Changedetection、所有 Avalon 直接/间接消费者和 RW Docker socket 控制器已停止；Mac host 与 ubuntu guest 均已 sync。事后复核发现 macOS 上另有独立 `ai.openclaw.gateway` LaunchAgent 运行于 loopback，仅配置 iMessage，使用 host-local `~/.openclaw` 状态；其是否属于生产 authority 尚未判定，未停止。目的端生产 authority 未启动、公网入口未改；在目的端启动 OpenClaw 前必须重验唯一 runtime gate。
 
 最终 Secret bundle：`/Volumes/Avalon/backups/operation-skuld/secrets-20260923T112416Z`，认证、import 和 restore dry-run 均通过。最终 OpenClaw 冷快照：`/Volumes/Avalon/backups/operation-skuld/openclaw-cold/openclaw-cold-20260923T112531Z.tar.gz.enc`，独立 verifier 通过，SHA-256 `367ffc43f53ec9dfda96b1f14caacf944c7994b1f356aa8e5f4f93d12f3d6e36`；155 个 workspace 文件、4,888 个 state 文件、84 个 session/JSONL 文件、6 个 transcript，必需 SQLite 均 `ok`。完整记录见 `.agent/checkpoints/2026-09-23-openclaw-source-frozen.md`。
 

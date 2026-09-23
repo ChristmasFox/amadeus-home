@@ -16,6 +16,8 @@ SAFE_TO_MOVE_AVALON=yes
 
 Phase 7 is complete. Phase 8 is not authorized yet: do not unmount Avalon or start destination consumers until the separate `APPROVE_AVALON_MOVE_1_4_8` approval is supplied.
 
+Post-freeze host audit: the Amadeus CasaOS `openclaw` container remains stopped. A separate macOS LaunchAgent named `ai.openclaw.gateway` is running in local mode with loopback binding (`127.0.0.1:18789`); its config has only the iMessage channel enabled. It uses the host-local `~/.openclaw` config, not the CasaOS `/DATA/AppData/openclaw` state, and was not stopped because its relationship to this migration's production authority is unestablished. The exact production-runtime scope must be rechecked before destination OpenClaw startup; this finding does not authorize unmounting Avalon.
+
 ## Final OpenClaw continuity artifacts
 
 - Final encrypted secret bundle: `/Volumes/Avalon/backups/operation-skuld/secrets-20260923T112416Z/secrets.tar.enc`
