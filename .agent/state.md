@@ -64,9 +64,11 @@
 更新时间：2026-09-24（Asia/Shanghai）
 
 Amadeus 1.4.8 当前在 M204 `nyannyan` 运行 migration-safe OpenClaw 候选，镜像为
-`local/openclaw-amadeus:git-e7c3de0-20260923170152`，容器 healthy、loopback-only、无 published
-ports、Telegram/WhatsApp/公网入口关闭、owner delivery=false。Phase 11 自然语言身份/历史会话验收已通过：
-三次 `identity_resolve` 先于 `sessions_search`/`sessions_history`，无 `memory_search`、无 `ls`、无工具失败。
+`local/openclaw-amadeus:git-238bb65-20260923171901`，容器 healthy、loopback-only、无 published
+ports、Telegram/WhatsApp/公网入口关闭、owner delivery=false，`tools.sessions.visibility=self` 已生效。
+Phase 11 自然语言身份路由和无范围反向验收已通过：`identity_resolve` 先于同会话 `sessions_search`，
+不会从其他会话取回范围事实。用户指定的 direct-only/group-only 事实没有写入全局 `MEMORY.md`，
+需真实渠道 metadata 才能定向验收。
 当前仍未取得 `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`，旧 Mac 的 host-local `ai.openclaw.gateway`
 LaunchAgent 仍需 operator 分类；因此 destination authority 仍为 NO，不能开放 owner ingress 或宣称最终 cutover 完成。
 
