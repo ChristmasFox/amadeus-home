@@ -117,7 +117,7 @@ Path(target).write_text(json.dumps({
     'openclawImage': image,
 }, separators=(',', ':')))
 PY
-remote_helper inventory "$DATA_ROOT" --private-credential-fingerprints > "$before"
+remote_helper inventory "$DATA_ROOT" --private-credential-fingerprints --private-state-fingerprints > "$before"
 chmod 600 "$before" "$metadata"
 
 # Tar streams directly from the stopped guest into AES-256-CBC. No plaintext archive is staged.
@@ -148,12 +148,12 @@ print(f"SOURCE_SESSION_AND_JSONL_FILE_COUNT={sessions['sessionAndJsonlFileCount'
 print(f"SOURCE_TRANSCRIPT_FILE_COUNT={sessions['transcriptFileCount']}")
 PY
 
-remote_helper inventory "$DATA_ROOT" --private-credential-fingerprints > "$after"
+remote_helper inventory "$DATA_ROOT" --private-credential-fingerprints --private-state-fingerprints > "$after"
 python3 - "$before" "$after" <<'PY'
 import json, sys
 from pathlib import Path
 left, right = (json.loads(Path(p).read_text()) for p in sys.argv[1:])
-keys = ('workspace', 'state', 'credentials', 'sessionState', 'sqlite', '_privateCredentialFingerprints')
+keys = ('workspace', 'state', 'credentials', 'sessionState', 'sqlite', '_privateCredentialFingerprints', '_privateStateFingerprints')
 if any(left[k] != right[k] for k in keys):
     raise SystemExit('source stopped-state inventory changed during snapshot')
 PY

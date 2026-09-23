@@ -26,6 +26,7 @@ from openclaw_continuity import (  # noqa: E402
     continuity_projection,
     extract_archive_safely,
     private_credential_fingerprints,
+    private_state_fingerprints,
     process_probe,
     public_inventory,
     restore_snapshot,
@@ -154,6 +155,14 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
     private_cli_inventory = json.loads(private_cli.stdout)
     assert len(private_cli_inventory["_privateCredentialFingerprints"]) == len(original["_internal"]["credentialEntries"])
     assert "session-private-peer" not in private_cli.stdout
+
+    state_cli = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name("openclaw_continuity.py")), "inventory", str(source), "--private-state-fingerprints"],
+        check=True, capture_output=True, text=True,
+    )
+    private_state_cli = json.loads(state_cli.stdout)
+    assert len(private_state_cli["_privateStateFingerprints"]) == len(original["_internal"]["stateEntries"])
+    assert "session-index.jsonl" not in state_cli.stdout
 
     with pytest_raises(ContinuityError):
         check_source_stopped("running")
@@ -306,6 +315,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
         tar_stream,
         public_inventory(original) | {
             "_privateCredentialFingerprints": private_credential_fingerprints(original["_internal"]["credentialEntries"]),
+            "_privateStateFingerprints": private_state_fingerprints(original["_internal"]["stateEntries"]),
         },
         stream_snapshot_dir,
         passphrase,
@@ -324,6 +334,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
         "fixture credential payload",
         "session-private-peer",
         hashlib.sha256(credential_rel.encode()).hexdigest(),
+        hashlib.sha256("config/agents/main/sessions/session-index.jsonl".encode()).hexdigest(),
     ):
         assert private_text not in safe_manifest
     assert manifest["workspace"]["memoryMdSha256"] == original["workspace"]["memoryMdSha256"]
@@ -353,6 +364,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
         rewrite_tar_owners(tar_stream, *remote_owner),
         public_inventory(remote_inventory) | {
             "_privateCredentialFingerprints": remote_private_fingerprints,
+            "_privateStateFingerprints": private_state_fingerprints(remote_inventory["_internal"]["stateEntries"]),
         },
         remote_stream_snapshot_dir,
         passphrase,
