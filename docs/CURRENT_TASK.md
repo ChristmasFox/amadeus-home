@@ -6,11 +6,13 @@
 
 最新 16 服务备份位于 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`，manifest 16/16 `passed`、checksums 全部通过；包含 Xiaoya 精确镜像 ID、bind/Alist 数据和 Filebrowser `/database`、`/config` 两个匿名卷。较早的 `20260923T044715Z` 备份尝试漏归档 Filebrowser `/config`，不要作为恢复源。回归测试现覆盖子进程消耗 stdin 时仍完整归档两个卷。3 份 service-aware SQLite snapshot、Immich `pg_dump -Fc` 和 secret bundle rehearsal 证据见既有外部 checkpoint。
 
-M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标现有 Changedetection、9Router、Filebrowser、Xiaoya 四项业务容器。Changedetection healthy、无宿主端口；它与源端并行轮询仅作迁移暂存，源端仍是唯一权威身份。9Router 仅绑定 `127.0.0.1:20128`，源端与目标对无凭据 `/v1/models` 都返回 401，与预期一致。
+M204 canonical `nyannyan` guest 已在系统自动更新后恢复运行；CasaOS/Docker 可用，Avalon 目前仍未挂载。目标现有 Changedetection、9Router、Filebrowser、Xiaoya、AriaNG、Dashdot 六项服务，均处于 loopback-only/无宿主端口的暂存状态。Changedetection healthy、无宿主端口；它与源端并行轮询仅作迁移暂存，源端仍是唯一权威身份。9Router 仅绑定 `127.0.0.1:20128`，源端与目标对无凭据 `/v1/models` 都返回 401，与预期一致。
 
-Filebrowser、Xiaoya 的 Compose 模板已提交到 `4bdc605` 并部署到目标，默认 loopback-only。Filebrowser healthy，`127.0.0.1:10180` HTTP 200；它可写挂载整个 `/DATA`，不得提前开放。Xiaoya UI/API HTTP 200；`data.db` 的 169 条 Alist storage 记录和 `strm_internal.db` 均通过 SQLite integrity check，未发现字面 `/Volumes/Avalon` 路径；具体远端 storage 可用性仍需按实际挂盘/网络分别验收。目标恢复的 Xiaoya 私有 AppData 已设为 root-only。
+Filebrowser、Xiaoya 的 Compose 模板已提交到 `4bdc605` 并部署到目标，默认 loopback-only。Filebrowser healthy，`127.0.0.1:10180` HTTP 200；它可写挂载整个 `/DATA`，不得提前开放。Xiaoya 主 UI 与 public-settings API HTTP 200；`data.db` 的 169 条 Alist storage 记录和 `strm_internal.db` 均通过 SQLite integrity check，未发现字面 `/Volumes/Avalon` 路径；具体远端 storage 可用性仍需按实际挂盘/网络分别验收。目测的 `2345/` 根路径返回 HTTP 500，不据此宣称该辅助端口可用。目标恢复的 Xiaoya 私有 AppData 已设为 root-only。
 
-直接绑定 Avalon 的 Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist 暂不启动：配置保持 `/Volumes/Avalon` 不变，但需目标端实际挂盘并通过 UUID/sentinel/storage preflight，避免 guest 内生成同名空目录。OpenClaw/Product Radar 受唯一 runtime/切换门禁限制；frpc/Nginx Proxy Manager 受 ingress 门禁限制；v2raya 的 host-network 副作用另行评估。最新运行态证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`；备份准备历史见 `.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md`。
+AriaNG 与 Dashdot Compose 模板已在 `32be0ec` 提交并部署。二者 UI 分别在 `127.0.0.1:6880`、`127.0.0.1:3001` 返回 HTTP 200；Dashdot 对 guest `/` 的挂载为只读。镜像归档 SHA-256 已与源端核验，导入后 platform、created time、完整 Config 和所有 RootFS layer digests 一致。AriaNG 目前仅证明 UI 可访问；aria2 后端仍因下载目录依赖 Avalon 而未恢复。
+
+直接绑定 Avalon 的 Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist 暂不启动：配置保持 `/Volumes/Avalon` 不变，但需目标端实际挂盘并通过 UUID/sentinel/storage preflight，避免 guest 内生成同名空目录。Homarr 与 xiaoyakeeper 因 RW Docker socket 暂缓；Homarr 另有尚未纳入受保护 secret bundle 的 `AUTH_SECRET`、`SECRET_ENCRYPTION_KEY`。OpenClaw/Product Radar 受唯一 runtime/切换门禁限制；frpc/Nginx Proxy Manager 受 ingress 门禁限制；v2raya 的 host-network 副作用另行评估。最新运行态证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase2.md`；阶段一和备份准备历史分别见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`、`.agent/checkpoints/2026-09-23-m204-service-restore-stage1-prep.md`。
 
 ## 2026-09-22：Amadeus-M204 主机访问与终端代理准备（进行中）
 

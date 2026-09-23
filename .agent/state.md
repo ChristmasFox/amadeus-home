@@ -1,12 +1,13 @@
-## 2026-09-23 — M204 service restore phase 1 (current)
+## 2026-09-23 — M204 service restore phase 2 (current)
 
 - User authorized restoring services independent of Avalon and confirmed `/Volumes/Avalon` remains the stable mount name. The old source CasaOS remains authoritative; no cutover or public ingress change has occurred.
 - M204 OrbStack `nyannyan` guest is running after the OS auto-update. `/Volumes/Avalon` is not mounted there.
 - Latest full backup is `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`: 16/16 MIGRATE services and all checksums pass. It contains Xiaoya image/data plus Filebrowser `/database` and `/config` volumes; do not use the incomplete `044715Z` attempt.
-- Four services are running in local-only staging: Changedetection (healthy, no host port), 9Router (`127.0.0.1:20128`, unauthenticated `/v1/models` returns 401 on source and target), Filebrowser (healthy, `127.0.0.1:10180`), and Xiaoya (UI/API 200, `127.0.0.1:5678` and `2345-2347`). Changedetection still polls alongside its source instance.
+- Six services are running in local-only staging: Changedetection (healthy, no host port), 9Router (`127.0.0.1:20128`, unauthenticated `/v1/models` returns 401 on source and target), Filebrowser (healthy, `127.0.0.1:10180`), Xiaoya (`127.0.0.1:5678` UI/public-settings 200), AriaNG (`127.0.0.1:6880` HTTP 200), and Dashdot (`127.0.0.1:3001` HTTP 200; guest-root bind is read-only). All six are running with restart count 0; Changedetection still polls alongside its source instance. AriaNG has no restored aria2 backend yet.
 - Filebrowser retains writable `/DATA`, so keep it loopback-only. Xiaoya's `data.db` and `strm_internal.db` pass SQLite integrity; its 169 Alist storage rows contain no direct `/Volumes/Avalon` reference. Xiaoya's private AppData is `700 root:root`.
-- Source commit `4bdc605` is pushed and the target clone is clean at the same commit. Docker 28.2.2→29.8.1 normalizes imported image IDs, but both images' platform, creation time, complete Config and every RootFS layer match source.
-- Direct Avalon consumers wait for actual disk UUID/sentinel/storage preflight. OpenClaw/Product Radar, frpc/Nginx Proxy Manager, and v2raya remain behind single-runtime, ingress, and host-network gates respectively. See `.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`.
+- Source commit `32be0ec` is pushed and M204 clone fast-forwarded cleanly. Docker 28.2.2→29.8.1 normalizes imported image IDs, but all transferred images' platform, creation time, complete Config and every RootFS layer match source.
+- Homarr and xiaoyakeeper remain deferred because each requests RW Docker socket; Homarr's `AUTH_SECRET` and `SECRET_ENCRYPTION_KEY` also lack protected bundle coverage. Do not restore either socket grant by default.
+- Direct Avalon consumers wait for actual disk UUID/sentinel/storage preflight. OpenClaw/Product Radar, frpc/Nginx Proxy Manager, and v2raya remain behind single-runtime, ingress, and host-network gates respectively. See `.agent/checkpoints/2026-09-23-m204-service-restore-phase2.md` and phase 1 evidence.
 
 ## 2026-09-22 — Amadeus-M204 SSH access and terminal proxy baseline (in progress)
 

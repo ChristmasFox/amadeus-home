@@ -2,8 +2,9 @@
 
 - M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载，旧源 CasaOS 继续作为唯一权威运行时。
 - 最新完整备份：`/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-20260923T045305Z`。16 个 MIGRATE 服务均 `passed`，全部 checksums 通过；Xiaoya image ID 精确记录，Filebrowser `/database` 与 `/config` 卷都已归档。`044715Z` 备份尝试缺 Filebrowser `/config`，仅保留审计，不作为恢复源。
-- 目标已恢复 Changedetection（healthy、无宿主端口）、9Router、Filebrowser、Xiaoya。9Router 只绑定 `127.0.0.1:20128`，源/目标未授权 `/v1/models` 都返回 401。Filebrowser `127.0.0.1:10180` healthy/HTTP 200，可写 `/DATA` 全视图因此保持 loopback；Xiaoya UI/API 200，两个 SQLite 文件 integrity pass，169 条 Alist storage 记录没有字面 `/Volumes/Avalon` 路径。目标仍只用于暂存，未切换入口。
-- Xiaoya/Filebrowser image 和 data 经受控 staging 传输。Docker 28.2.2 → 29.8.1 导入后 image ID 被归一化，但 source/target 的 platform、创建时间、全部 RootFS layer digests 和完整 image Config 一致。M204 guest 直连 Docker Hub 超时，因此 Filebrowser 镜像由源端保存并离线导入；传输 SHA-256 匹配。Xiaoya 私有 AppData 目录为 `700 root:root`。
+- 目标现有六项服务：Changedetection（healthy、无宿主端口）、9Router（`127.0.0.1:20128`）、Filebrowser（healthy，`127.0.0.1:10180`）、Xiaoya、AriaNG（`127.0.0.1:6880`）和 Dashdot（`127.0.0.1:3001`）。9Router 源/目标未授权 `/v1/models` 都返回 401。Filebrowser 可写 `/DATA` 全视图，继续保持 loopback；Xiaoya 主 UI 与 public-settings API 200，两个 SQLite 文件 integrity pass，169 条 Alist storage 记录没有字面 `/Volumes/Avalon` 路径。AriaNG/Dashdot UI 200，Dashdot guest-root bind 为只读；aria2 后端尚未恢复。六项容器当前均为 running、重启次数 0，全部仅 loopback 或无宿主端口，目标仍只用于暂存，未切换入口。
+- Xiaoya/Filebrowser/AriaNG/Dashdot image 和 data 经受控 staging 传输。Docker 28.2.2 → 29.8.1 导入后 image ID 被归一化，但 source/target 的 platform、创建时间、全部 RootFS layer digests 和完整 image Config 一致。M204 guest 直连 Docker Hub 超时，因此镜像由源端保存并离线导入；传输 SHA-256 匹配。Xiaoya 私有 AppData 目录为 `700 root:root`。
+- Homarr 与 xiaoyakeeper 暂缓，二者都需要 RW Docker socket；Homarr 还发现受保护 secret bundle 尚未覆盖的 `AUTH_SECRET`、`SECRET_ENCRYPTION_KEY`。运行态、决策和验收证据见 `.agent/checkpoints/2026-09-23-m204-service-restore-phase2.md`。
 - 直接 Avalon consumers（Immich、media-organizer-adapter、Emby、qBittorrent、aria2、Jellyfin、Alist）保持停止，直至实际磁盘挂载并通过 UUID/sentinel/storage preflight。OpenClaw/Product Radar 受单一 runtime/切换门禁；frpc/Nginx Proxy Manager 受 ingress 门禁；v2raya 另需 host-network 评估。
 - 备份脚本现将卷映射读取放在独立 FD，避免 OrbStack 子进程消费 stdin 导致漏归档；fixture 回归模拟 stdin 消耗并校验两个 Filebrowser volume artifacts。阶段证据：`.agent/checkpoints/2026-09-23-m204-service-restore-phase1.md`。
 
