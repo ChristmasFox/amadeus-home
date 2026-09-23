@@ -61,6 +61,15 @@
 - Execution state is persisted in `.agent/EXECUTION_PLAN.md`, `.agent/run-state.example.json`, and external evidence under `SKULD_BACKUP_ROOT`.
 # Agent State
 
+更新时间：2026-09-24（Asia/Shanghai）
+
+Amadeus 1.4.8 当前在 M204 `nyannyan` 运行 migration-safe OpenClaw 候选，镜像为
+`local/openclaw-amadeus:git-e7c3de0-20260923170152`，容器 healthy、loopback-only、无 published
+ports、Telegram/WhatsApp/公网入口关闭、owner delivery=false。Phase 11 自然语言身份/历史会话验收已通过：
+三次 `identity_resolve` 先于 `sessions_search`/`sessions_history`，无 `memory_search`、无 `ls`、无工具失败。
+当前仍未取得 `APPROVE_OWNER_INGRESS_SWITCH_1_4_8`，旧 Mac 的 host-local `ai.openclaw.gateway`
+LaunchAgent 仍需 operator 分类；因此 destination authority 仍为 NO，不能开放 owner ingress 或宣称最终 cutover 完成。
+
 更新时间：2026-09-21（Asia/Shanghai）
 
 当前执行 docs/AMADEUS_1_4_4_OPERATION_SKULD_STORAGE_RUNTIME_HYGIENE_GOAL.md，已完成。外置 8TB
