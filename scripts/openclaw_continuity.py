@@ -76,6 +76,7 @@ def _walk_tree(
     skip_credentials: bool = False,
     reject_symlinks: bool = False,
     owner_overrides: dict[str, tuple[int, int]] | None = None,
+    mode_overrides: dict[str, int] | None = None,
 ) -> list[dict]:
     base = root / area
     try:
@@ -94,10 +95,13 @@ def _walk_tree(
         directory_owner = (owner_overrides or {}).get(
             relative_directory, (directory_info.st_uid, directory_info.st_gid)
         )
+        directory_mode = (mode_overrides or {}).get(
+            relative_directory, stat.S_IMODE(directory_info.st_mode)
+        )
         entries.append({
             "path": relative_directory,
             "kind": "directory",
-            "mode": stat.S_IMODE(directory_info.st_mode),
+            "mode": directory_mode,
             "uid": directory_owner[0],
             "gid": directory_owner[1],
         })
@@ -113,7 +117,7 @@ def _walk_tree(
                 info = child.lstat()
             except OSError as exc:
                 raise ContinuityError(f"cannot stat state entry: {area}") from exc
-            mode = stat.S_IMODE(info.st_mode)
+            mode = (mode_overrides or {}).get(relative, stat.S_IMODE(info.st_mode))
             entry_owner = (owner_overrides or {}).get(relative, (info.st_uid, info.st_gid))
             owner = {"uid": entry_owner[0], "gid": entry_owner[1]}
             if stat.S_ISLNK(info.st_mode):
@@ -131,7 +135,9 @@ def _walk_tree(
 
 
 def _require_whatsapp_credentials(
-    root: Path, owner_overrides: dict[str, tuple[int, int]] | None = None
+    root: Path,
+    owner_overrides: dict[str, tuple[int, int]] | None = None,
+    mode_overrides: dict[str, int] | None = None,
 ) -> list[dict]:
     credential_root = root / "config/credentials"
     whatsapp = credential_root / "whatsapp"
@@ -142,7 +148,10 @@ def _require_whatsapp_credentials(
             raise ContinuityError("required provider credential state is missing") from exc
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
             raise ContinuityError("provider credential state is not a real directory")
-    entries = _walk_tree(root, "config/credentials", reject_symlinks=True, owner_overrides=owner_overrides)
+    entries = _walk_tree(
+        root, "config/credentials", reject_symlinks=True,
+        owner_overrides=owner_overrides, mode_overrides=mode_overrides,
+    )
     files = [item for item in entries if item["kind"] == "file"]
     if not files:
         raise ContinuityError("required provider credential state is empty")
@@ -284,6 +293,7 @@ def collect_inventory(
     *,
     require_credentials: bool = True,
     owner_overrides: dict[str, tuple[int, int]] | None = None,
+    mode_overrides: dict[str, int] | None = None,
 ) -> dict:
     root = Path(data_root)
     if root.is_symlink() or not root.is_dir():
@@ -292,16 +302,20 @@ def collect_inventory(
     area_entries: dict[str, list[dict]] = {}
     for area in AREAS:
         area_entries[area] = _walk_tree(
-            root, area, skip_credentials=(area == "config"), owner_overrides=owner_overrides
+            root, area, skip_credentials=(area == "config"),
+            owner_overrides=owner_overrides, mode_overrides=mode_overrides,
         )
 
     credential_entries: list[dict] = []
     credential_root = root / "config/credentials"
     if require_credentials:
-        credential_entries = _require_whatsapp_credentials(root, owner_overrides=owner_overrides)
+        credential_entries = _require_whatsapp_credentials(
+            root, owner_overrides=owner_overrides, mode_overrides=mode_overrides
+        )
     elif credential_root.is_dir() and not credential_root.is_symlink():
         credential_entries = _walk_tree(
-            root, "config/credentials", reject_symlinks=True, owner_overrides=owner_overrides
+            root, "config/credentials", reject_symlinks=True,
+            owner_overrides=owner_overrides, mode_overrides=mode_overrides,
         )
 
     workspace_entries = area_entries["workspace"]
@@ -851,11 +865,18 @@ def _validate_snapshot_plaintext(
         _safe_member_name(member.name).as_posix().rstrip("/"): (member.uid, member.gid)
         for member in members
     }
+    mode_overrides = {
+        _safe_member_name(member.name).as_posix().rstrip("/"): member.mode & 0o7777
+        for member in members
+    }
     extract_archive_safely(archive_path, extracted)
     # The encrypted archive retains the Linux guest's numeric ownership. On macOS,
     # the verifier may not be root, so the temporary extraction cannot chown files;
     # use the authenticated tar headers when rebuilding the source tree digest.
-    actual = collect_inventory(extracted, require_credentials=False, owner_overrides=owner_overrides)
+    actual = collect_inventory(
+        extracted, require_credentials=False,
+        owner_overrides=owner_overrides, mode_overrides=mode_overrides,
+    )
     if expected_state_fingerprints is not None:
         actual_state_fingerprints = private_state_fingerprints(actual["_internal"]["stateEntries"])
         if actual_state_fingerprints != expected_state_fingerprints:

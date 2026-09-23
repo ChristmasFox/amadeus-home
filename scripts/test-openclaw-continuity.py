@@ -201,6 +201,17 @@ with tempfile.TemporaryDirectory(prefix="openclaw-continuity-test-") as temporar
     extract_archive_safely(archive, restored)
     after = collect_inventory(restored, require_credentials=False)
     assert continuity_projection(after) == continuity_projection(original)
+    source_file_mode = (source / "config/state.sqlite").stat().st_mode & 0o7777
+    mode_probe = restored / "config/state.sqlite"
+    mode_probe.chmod(source_file_mode ^ 0o100)
+    archive_mode_overrides = {
+        member.name.rstrip("/"): member.mode & 0o7777
+        for member in validate_archive(archive)
+    }
+    normalized_after = collect_inventory(
+        restored, require_credentials=False, mode_overrides=archive_mode_overrides
+    )
+    assert continuity_projection(normalized_after) == continuity_projection(original)
     assert not (restored / "config/credentials").exists()
     assert os.readlink(restored / "config/plugin-link") == "/opt/openclaw/plugins"
 
