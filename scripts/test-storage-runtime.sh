@@ -167,9 +167,11 @@ printf '%s\n' "$gc_output" | grep -Fqx 'REMOVE|fixture-old:old'
 printf '%s\n' "$gc_output" | grep -Fqx 'REPORT_ONLY|fixture-unknown:user'
 
 secret_source="$fixture/secret-source"
-mkdir -p "$secret_source"
+mkdir -p "$secret_source/DATA/AppData/openclaw/config/credentials/whatsapp/secondary"
 printf '%s\n' 'FIXTURE_SECRET_VALUE' >"$secret_source/credential.txt"
 chmod 600 "$secret_source/credential.txt"
+printf '%s\n' 'FIXTURE_WHATSAPP_CREDENTIAL' >"$secret_source/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
+chmod 600 "$secret_source/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
 passphrase="$fixture/passphrase"
 printf '%s\n' 'fixture-passphrase' >"$passphrase"
 chmod 600 "$passphrase"

@@ -21,7 +21,7 @@ assert "groupScope=per-group" in script
 assert "assert_release_version_advanced" in script
 assert 'ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"' in script
 assert "Owner release notification remained pending after 30 seconds." in script
-workspace_rules = (root / "integrations/openclaw/workspace/AGENTS.md").read_text()
+workspace_rules = (root / "integrations/openclaw/workspace-seed/AGENTS.seed.md").read_text()
 assert "Never use the shared `main` session for open DMs" in workspace_rules
 print("OPENCLAW_SESSION_ISOLATION_TEST=passed")
 PY

@@ -20,6 +20,7 @@ function config(directory: string): AmadeusConfig {
     kookApiBaseUrl: 'https://kook.invalid',
     ownerTargetFile: join(directory, 'owner-target'),
     ownerWhatsappAccountId: 'secondary',
+    ownerNotificationDeliveryEnabled: true,
     notificationOutboxDir: join(directory, 'outbox'),
     identityDatabasePath: join(directory, 'identity.sqlite'),
     marketDataBaseUrl: 'https://query2.finance.yahoo.com/v8/finance/chart',

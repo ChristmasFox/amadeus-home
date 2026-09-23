@@ -1,5 +1,17 @@
 # 当前任务
 
+## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
+
+当前优先目标为 `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`。按要求先完成仓库侧 hardening、测试、release validation、commit/push；在 Phase 6 的 source freeze operator gate 前停止，不代用户批准。
+
+Phase 1 已完成源码与聚焦验证：仓库 workspace 文件已改名为 `workspace-seed/*.seed.md`，`openclaw_prepare.py` 仅向缺失路径写入 seed，并保留已有运行态文件、权限、符号链接、目录及 `memory/**`；新增默认只读 plan 的单文件同步工具。证据见 `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`。
+
+Phase 2 已完成 state root/secret boundary 定义和旧源只读发现：`config`、`workspace`、`data`、`notifications` 全量进入 cold-state；`openclaw.env`、`secrets/**`、`config/credentials/**` 独立进加密 secret bundle。发现 WhatsApp credentials 原有 exporter 漏项，已补导出、导入、目标恢复、opaque path metadata 和批准替换前保留 rollback copy；apply 需要精确 Avalon token。源仍 active，因此活态计数/SQLite 检查不是 freeze acceptance。脱敏证据见 `.agent/checkpoints/2026-09-23-openclaw-state-inventory.md`。
+
+Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流、HMAC-authenticated manifest、SQLite/session/workspace 校验；独立 verifier 在认证后解密检查，restore 要求 Avalon token 和四个 state-root 替换批准，并先保留目标 rollback copy。凭据 continuity 改为逐项绑定 opaque path、内容、mode 和 `1000:1000` runtime owner；恢复后逐项复验。相同文件数/总字节但内容或路径变化的负向 fixture 均被拒绝。Phase 4 的 source/destination evidence 输出已接线；实际 source evidence 只能在获批 freeze 后采集，destination evidence 只能在获批 restore 后采集。证据见 `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`。
+
+本轮定向 continuity、migration-safe、unique-runtime、workspace、secret-restore、architecture、manifest-consistency、secrets scan、syntax 和 diff 检查通过；完整 `pnpm build/typecheck/test`、doctor/readiness、1.4.8 version bump 与 commit/push 尚未完成。当前 `VERSION=1.4.7`，源码工作区仍有未提交变更。Phase 6 前不得冻结旧源、迁移 Avalon、切换 owner ingress 或提交 cutover。
+
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
 用户已授权先恢复不依赖 Avalon 的服务，并确认其他服务沿用固定挂载名 `/Volumes/Avalon`；源端仍是唯一权威运行时，不切换公网入口。

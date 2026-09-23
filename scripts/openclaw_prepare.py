@@ -9,6 +9,7 @@ import os
 import re
 import secrets
 import sys
+import errno
 from pathlib import Path
 
 
@@ -38,6 +39,59 @@ def write_if_missing(target: Path, content: bytes, label: str, mode: int = 0o600
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(content)
     ensure_owner(target, mode)
+
+
+def ensure_workspace_directory(workspace_dir: Path) -> bool:
+    """Create a new runtime workspace without changing an existing one."""
+    try:
+        workspace_dir.mkdir(mode=0o700)
+    except FileExistsError:
+        if workspace_dir.is_symlink() or not workspace_dir.is_dir():
+            raise SystemExit("runtime workspace path is not a real directory")
+        return False
+    ensure_owner(workspace_dir, 0o700)
+    return True
+
+
+def seed_workspace_missing_only(workspace_dir: Path, seeds: dict[str, bytes]) -> tuple[int, int]:
+    """Install repository seeds only at absent paths; preserve every existing path."""
+    ensure_workspace_directory(workspace_dir)
+    created = 0
+    preserved = 0
+    for name, content in seeds.items():
+        target = workspace_dir / name
+        try:
+            descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o644,
+            )
+        except FileExistsError:
+            preserved += 1
+            continue
+        except OSError as exc:
+            if exc.errno == errno.ELOOP:
+                preserved += 1
+                continue
+            raise
+        created_stat = os.fstat(descriptor)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            ensure_owner(target, 0o644)
+        except BaseException:
+            # Remove only the inode this invocation created; never follow a link.
+            try:
+                current = target.lstat()
+                if current.st_dev == created_stat.st_dev and current.st_ino == created_stat.st_ino:
+                    target.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+        created += 1
+    return created, preserved
 
 
 def read_env(path: Path) -> dict[str, str]:
@@ -110,7 +164,7 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
 
 def main() -> None:
     if len(sys.argv) != 8:
-        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_B64 SOUL_B64 USER_B64 MEMORY_B64")
+        raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_SEED_B64 SOUL_SEED_B64 USER_SEED_B64 MEMORY_SEED_B64")
     data_dir = Path(sys.argv[1])
     config_template = json.loads(base64.b64decode(sys.argv[2]).decode())
     team_bytes = base64.b64decode(sys.argv[3])
@@ -125,10 +179,11 @@ def main() -> None:
     pubg_data_dir = data_dir / "data"
     secrets_dir = data_dir / "secrets"
     outbox_dir = data_dir / "notifications"
-    for directory in (data_dir, config_dir, workspace_dir, pubg_data_dir, secrets_dir, outbox_dir):
+    for directory in (data_dir, config_dir, pubg_data_dir, secrets_dir, outbox_dir):
         directory.mkdir(parents=True, exist_ok=True)
         os.chown(directory, 1000, 1000)
         os.chmod(directory, 0o700)
+    ensure_workspace_directory(workspace_dir)
 
     existing_config_path = config_dir / "openclaw.json"
     existing_config: dict = {}
@@ -223,15 +278,16 @@ def main() -> None:
     ensure_owner(temporary)
     os.replace(temporary, config_dir / "openclaw.json")
 
-    for name, content in workspace.items():
-        target = workspace_dir / name
-        target.write_bytes(content)
-        ensure_owner(target, 0o644)
+    seeded, preserved = seed_workspace_missing_only(workspace_dir, workspace)
 
     print("EXTERNAL_CONFIG=prepared")
     print("OWNER_TARGET=validated")
     print("TELEGRAM_ALLOWLIST=preserved")
     print("SECRET_FILES=prepared")
+    print("SEED_MISSING_ONLY=yes")
+    print("RUNTIME_WORKSPACE_PRESERVED=yes")
+    print(f"WORKSPACE_SEEDS_CREATED={seeded}")
+    print(f"WORKSPACE_PATHS_PRESERVED={preserved}")
 
 
 if __name__ == "__main__":

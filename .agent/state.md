@@ -1,3 +1,14 @@
+## 2026-09-23 — Amadeus 1.4.8 Operation Skuld final cutover (active)
+
+- The authoritative objective is `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Complete repository-side implementation and release validation first; stop at the Phase 6 source-freeze boundary until the exact operator token is provided.
+- Phase 1 is implemented and focused checks pass. Git-managed workspace context is seed-only, deployment seeds absent files only, and explicit sync is plan-only/default with exactly one approved file per apply. Existing runtime workspace state and metadata are preserved.
+- Sanitized evidence: `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`. No runtime, external storage, secrets, or service state changed.
+- `pnpm check:architecture`, focused workspace/architecture tests, syntax checks, `git diff --check`, and secrets scan pass. Final release validation is not yet run.
+- Phase 2 state-root discovery is recorded in `.agent/checkpoints/2026-09-23-openclaw-state-inventory.md`. `config/credentials/**` contains 856 WhatsApp runtime credential files and was absent from the old secret-export path; export/import/restore now cover it using opaque path hashes, token-gated apply, and preserved replacement checkpoints. Read-only source counts and DB checks were taken while OpenClaw was live and are not final acceptance evidence.
+- Phase 3 cold snapshot/verify/restore tooling is implemented and fixture-tested. Credential bundle matching now rejects same-count/same-byte content or path changes, binds opaque paths/content/mode/owner into an authenticated continuity HMAC, and verifies restored credentials. Target restore normalizes to the source/image runtime owner `1000:1000`.
+- Phase 4 evidence emitters are wired; live source evidence remains behind exact source-freeze approval, and destination comparison remains behind approved restore. Phase checkpoint: `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`.
+- Targeted continuity, migration-safe, runtime-gate, workspace, secret restore, architecture, consistency, syntax, diff, and secrets checks pass. Full `pnpm build/typecheck/test`, doctor/readiness, version bump, and commit/push remain. No live snapshot, restore, source freeze, Avalon move, or ingress switch occurred.
+
 ## 2026-09-23 — M204 service restore phase 2 (current)
 
 - User authorized restoring services independent of Avalon and confirmed `/Volumes/Avalon` remains the stable mount name. The old source CasaOS remains authoritative; no cutover or public ingress change has occurred.

@@ -138,6 +138,7 @@ This phase is a restore rehearsal contract only. It does not execute the Mac min
 ### Secret restore targets (metadata only)
 Decrypt the bundle into a private `0700` staging directory, validate file modes and logical IDs, then place values out-of-band into the target. Never print values.
 - `openclaw-env` — target `/DATA/AppData/openclaw/openclaw.env`, required `true`, mode `0600`.
+- `whatsapp-runtime-state` — restore the protected `/DATA/AppData/openclaw/config/credentials` subtree from the encrypted bundle before OpenClaw starts; manifest filenames are opaque hashes.
 - `pubg-api-key` — target `/DATA/AppData/openclaw/secrets/pubg-api-key`, required `true`, mode `0600`.
 - `pubg-team` — target `/DATA/AppData/openclaw/secrets/pubg-team.json`, required `true`, mode `0600`.
 - `telegram-bot-token` — target `/DATA/AppData/openclaw/secrets/telegram-bot-token`, required `true`, mode `0600`.

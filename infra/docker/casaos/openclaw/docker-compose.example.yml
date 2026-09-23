@@ -24,6 +24,7 @@ services:
       IDENTITY_DATABASE_PATH: /data/identity.sqlite
       IDENTITY_PRESETS_FILE: /data/identity-presets.json
       OWNER_NOTIFICATION_OUTBOX_DIR: /var/lib/openclaw/notifications
+      OWNER_NOTIFICATION_DELIVERY_ENABLED: ${OWNER_NOTIFICATION_DELIVERY_ENABLED:-true}
       OWNER_WHATSAPP_ACCOUNT_ID: ${OWNER_WHATSAPP_ACCOUNT_ID:-secondary}
       TZ: Asia/Shanghai
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}

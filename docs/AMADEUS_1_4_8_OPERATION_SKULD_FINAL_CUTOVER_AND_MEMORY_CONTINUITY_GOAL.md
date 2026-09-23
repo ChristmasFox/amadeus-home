@@ -137,6 +137,11 @@ From 1.4.8 onward, Kurisu/OpenClaw continuity MUST include all of the following 
 /DATA/AppData/openclaw/workspace
 /DATA/AppData/openclaw/data
 /DATA/AppData/openclaw/notifications
+
+Separate encrypted Skuld secret bundle:
+  /DATA/AppData/openclaw/openclaw.env
+  /DATA/AppData/openclaw/secrets/**
+  /DATA/AppData/openclaw/config/credentials/**
 ```
 
 Conceptually:
@@ -159,7 +164,7 @@ Kurisu State
 └── Secrets via encrypted Skuld bundle
 ```
 
-The implementation MUST discover and preserve OpenClaw session/transcript/state databases that exist under the persisted state directories. Do not assume only the custom Amadeus SQLite files matter.
+The implementation MUST discover and preserve OpenClaw session/transcript/state databases that exist under the persisted state directories. Do not assume only the custom Amadeus SQLite files matter. Provider credentials under `config/credentials/**` are kept out of the cold state archive and handled only by the encrypted secret bundle.
 
 ---
 

@@ -714,7 +714,8 @@
       "service": "openclaw",
       "sourceType": "protected-runtime-state",
       "required": true,
-      "restoreTarget": "/DATA/AppData/openclaw",
+      "sourcePath": "/DATA/AppData/openclaw/config/credentials",
+      "restoreTarget": "/DATA/AppData/openclaw/config/credentials",
       "contentsInGit": false,
       "encryptedBundle": true
     },

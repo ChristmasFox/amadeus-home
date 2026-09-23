@@ -1,3 +1,13 @@
+## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
+
+- Authoritative scope: `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side hardening/release work must precede any operator boundary; stop before Phase 6 source freeze until its exact approval token is supplied.
+- Phase 1 is implemented: Git context lives under `integrations/openclaw/workspace-seed/`; runtime `/DATA/AppData/openclaw/workspace` is authoritative and prepare seeds only absent paths. Existing files, permissions, symlinks, directories, and `memory/**` are preserved. Explicit sync is plan-only by default and allows one approved file per apply.
+- Focused workspace/architecture/session-isolation tests, `pnpm check:architecture`, Python/shell syntax checks, `git diff --check`, and secrets scan pass. Architecture fixtures confirm active old-host and retired-runtime references remain rejected while explicit negative policy text is allowed. Phase evidence: `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`.
+- Full 1.4.8 release validation remains outstanding.
+- Phase 2 defines the complete state boundary and records read-only source discovery. WhatsApp credentials are included in the encrypted secret bundle, with approved replacements checkpointed rather than deleted.
+- Phase 3 cold snapshot/verify/restore tooling is implemented and fixture-tested. Secret-bundle continuity now matches every opaque credential path, content hash, mode, and source owner; an authenticated HMAC binds that private record set into the snapshot manifest without exposing per-file hashes. Restore normalizes and verifies the OpenClaw runtime owner `1000:1000`.
+- Phase 4 evidence emitters are implemented. Live source hashes are deferred until exact source-freeze approval; destination equality is deferred until approved restore. Focused continuity/migration-safe/unique-runtime/workspace/secret-restore/architecture/secrets checks pass. Full release validation and `VERSION=1.4.8` remain outstanding; no live snapshot, secret restore, OpenClaw start, source freeze, Avalon move, or ingress switch has occurred.
+
 ## 当前状态 — 2026-09-23 M204 非 Avalon 服务恢复（进行中）
 
 - M204 的系统自动更新后，canonical OrbStack `nyannyan` guest 已重新运行；CasaOS/Docker 正常。目标 Avalon 尚未挂载，旧源 CasaOS 继续作为唯一权威运行时。

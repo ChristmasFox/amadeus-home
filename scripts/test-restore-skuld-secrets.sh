@@ -47,7 +47,7 @@ test_apply_mode() {
   local out
   out="$(SKULD_SECRET_RESTORE_TEST_MODE=1 \
     bash "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
-      --fixture --apply --dest-base "$dest_base" 2>/dev/null)"
+      --fixture --apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 --dest-base "$dest_base" 2>/dev/null)"
   printf '%s\n' "$out" | grep -Fq 'SECRET_RESTORE_MODE=apply' \
     || fail 'apply: mode not reported'
   printf '%s\n' "$out" | grep -Fq 'SECRET_RESTORE_PATH=verified' \
@@ -66,6 +66,9 @@ test_apply_mode() {
   mode="$(stat -f '%Lp' "$tok_file" 2>/dev/null || stat -c '%a' "$tok_file")"
   [[ "$mode" == '600' ]] || fail "apply: telegram-bot-token has mode $mode (expected 600)"
 
+  local whatsapp_creds="$dest_base/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
+  [[ -s "$whatsapp_creds" ]] || fail 'apply: WhatsApp credential state was not restored'
+
   pass 'restore-skuld-secrets.sh --apply writes files with correct permissions'
 }
 
@@ -81,7 +84,7 @@ test_no_silent_overwrite() {
   local out
   out="$(SKULD_SECRET_RESTORE_TEST_MODE=1 \
     bash "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
-      --fixture --apply --dest-base "$dest_base" 2>/dev/null)"
+      --fixture --apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 --dest-base "$dest_base" 2>/dev/null)"
 
   # openclaw.env should be skipped (not approved for replacement)
   printf '%s\n' "$out" | grep -q 'skipped-exists-not-approved\|SKIP.*openclaw-runtime-env' \
@@ -108,14 +111,34 @@ test_approved_replacement() {
   local out
   out="$(SKULD_SECRET_RESTORE_TEST_MODE=1 \
     bash "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
-      --fixture --apply --dest-base "$dest_base" \
+      --fixture --apply --approve-avalon-move APPROVE_AVALON_MOVE_1_4_8 --dest-base "$dest_base" \
       --approve-replace "$dest_base/DATA/AppData/openclaw/openclaw.env" 2>/dev/null)"
 
   # Should have APPLY entry for openclaw.env
   printf '%s\n' "$out" | grep -q 'APPLY.*openclaw' \
     || fail 'approved-replace: openclaw.env not applied despite approval'
 
+  local backup_file
+  backup_file="$(find "$dest_base/.operation-skuld-secret-restore-backups" -type f -name openclaw.env -print -quit 2>/dev/null || true)"
+  [[ -n "$backup_file" ]] || fail 'approved-replace: existing file was not checkpointed'
+  [[ "$(cat "$backup_file")" == 'OLD_CONTENT' ]] || fail 'approved-replace: checkpoint content changed'
+
   pass 'restore-skuld-secrets.sh --apply respects --approve-replace'
+}
+
+# ------------------------------------------------------------------
+# Test 5: Production-style apply is behind the Avalon operator boundary
+# ------------------------------------------------------------------
+test_avalon_boundary() {
+  local dest_base="$fixture/dest-boundary"
+  mkdir -p "$dest_base"
+  if SKULD_SECRET_RESTORE_TEST_MODE=1 \
+    bash "$ROOT_DIR/scripts/restore-skuld-secrets.sh" \
+      --fixture --apply --dest-base "$dest_base" >/dev/null 2>&1; then
+    fail 'avalon-boundary: apply succeeded without the exact approval token'
+  fi
+  [[ ! -e "$dest_base/DATA" ]] || fail 'avalon-boundary: destination changed without approval'
+  pass 'restore-skuld-secrets.sh requires exact Avalon approval before apply'
 }
 
 # ------------------------------------------------------------------
@@ -180,6 +203,7 @@ test_dry_run
 test_apply_mode
 test_no_silent_overwrite
 test_approved_replacement
+test_avalon_boundary
 test_path_safety
 test_destination_identity
 
