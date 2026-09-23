@@ -61,6 +61,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-migration-safe-test-") as temp
                 "whatsapp": {"enabled": True},
             },
         },
+        "tools": {"profile": "full"},
         "agents": {"defaults": {"workspace": "/home/node/.openclaw/workspace"}},
     }
     canonical.write_text(json.dumps(original, indent=2) + "\n")
@@ -78,6 +79,7 @@ with tempfile.TemporaryDirectory(prefix="openclaw-migration-safe-test-") as temp
     assert overlay["gateway"]["bind"] == "loopback"
     assert "publicOrigin" not in overlay["gateway"]
     assert overlay["gateway"]["tailscale"]["mode"] == "off"
+    assert overlay["tools"]["sessions"]["visibility"] == "self"
     assert set(overlay["gateway"]["controlUi"]["allowedOrigins"]) == {
         "http://127.0.0.1:18789", "http://localhost:18789",
     }

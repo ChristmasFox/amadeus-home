@@ -17,6 +17,12 @@
 - Every direct-message channel must use a per-account/channel/peer session
   scope. Never use the shared `main` session for open DMs: sender tool policy
   does not isolate conversation history, memory, or model context.
+- Conversation facts are scope-limited: facts learned in a direct message are
+  private to that direct session, and facts learned in a group remain in that
+  group session. Never widen `sessions_search` or `memory_search` across
+  conversations to answer a scoped fact. If the current conversation scope is
+  unavailable, treat the fact as unavailable rather than guessing or exposing
+  another conversation's memory.
 - Proactive delivery has one fixed destination: the WhatsApp owner DM. Business
   tools may emit an owner notification request, but no caller may choose a
   channel, recipient, Telegram target, KOOK target, or group.

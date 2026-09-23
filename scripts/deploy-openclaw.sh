@@ -488,6 +488,8 @@ if session.get('dmScope') != 'per-account-channel-peer':
     raise SystemExit('direct-message sessions must use dmScope=per-account-channel-peer')
 if session.get('groupScope') != 'per-group':
     raise SystemExit('group sessions must use groupScope=per-group')
+if config.get('tools', {}).get('sessions', {}).get('visibility') != 'self':
+    raise SystemExit('session history visibility must be self to prevent cross-conversation memory leaks')
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
 if 'allow' in config.get('tools', {}):

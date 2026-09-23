@@ -59,6 +59,9 @@
   },
   "tools": {
     "profile": "full",
+    "sessions": {
+      "visibility": "self"
+    },
     "toolsBySender": {
       "*": {
         "allow": ["web_search", "web_fetch"]

@@ -15,6 +15,7 @@ assert session == {
     "dmScope": "per-account-channel-peer",
     "groupScope": "per-group",
 }
+assert config.get("tools", {}).get("sessions", {}).get("visibility") == "self"
 script = (root / "scripts/deploy-openclaw.sh").read_text()
 assert "dmScope=per-account-channel-peer" in script
 assert "groupScope=per-group" in script
