@@ -1,6 +1,8 @@
 ## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
 
-- Authoritative scope: `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side hardening/release work must precede any operator boundary; stop before Phase 6 source freeze until its exact approval token is supplied.
+2026-09-23 update: The source-freeze approval was received and Phase 7 execution has started. This supersedes any later-in-this-file pre-freeze notes saying the approval is still pending. Final snapshot/export/backup artifacts are not yet verified; Phase 8 Avalon movement, destination runtime restore, owner-ingress switch, and final cutover remain unauthorized.
+
+- Authoritative scope: `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side hardening/release work is complete; the exact source-freeze approval was received and Phase 7 is in progress. Stop after source freeze and require separate approval before unmounting Avalon.
 - Phase 1 is implemented: Git context lives under `integrations/openclaw/workspace-seed/`; runtime `/DATA/AppData/openclaw/workspace` is authoritative and prepare seeds only absent paths. Existing files, permissions, symlinks, directories, and `memory/**` are preserved. Explicit sync is plan-only by default and allows one approved file per apply.
 - Focused workspace/architecture/session-isolation tests, `pnpm check:architecture`, Python/shell syntax checks, `git diff --check`, and secrets scan pass. Architecture fixtures confirm active old-host and retired-runtime references remain rejected while explicit negative policy text is allowed. Phase evidence: `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`.
 - The 1.4.8 release base (`3d9985c`) is committed and pushed. This follow-up fixes the secret-bundle import/restore policy contract and tracks the HMAC helper plus its end-to-end fixture.

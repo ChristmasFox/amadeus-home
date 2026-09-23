@@ -1,6 +1,6 @@
 ## 2026-09-23 — Amadeus 1.4.8 Operation Skuld final cutover (active)
 
-- The authoritative objective is `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Complete repository-side implementation and release validation first; stop at the Phase 6 source-freeze boundary until the exact operator token is provided.
+- The authoritative objective is `docs/AMADEUS_1_4_8_OPERATION_SKULD_FINAL_CUTOVER_AND_MEMORY_CONTINUITY_GOAL.md`. Repository-side implementation and release validation are complete. The exact source-freeze approval has been received; Phase 7 is in progress. Stop after freezing the source and require separate Avalon-move approval before unmounting.
 - Phase 1 is implemented and focused checks pass. Git-managed workspace context is seed-only, deployment seeds absent files only, and explicit sync is plan-only/default with exactly one approved file per apply. Existing runtime workspace state and metadata are preserved.
 - Sanitized evidence: `.agent/checkpoints/2026-09-23-openclaw-workspace-seed-only.md`. No runtime, external storage, secrets, or service state changed.
 - `VERSION=1.4.8` release validation passed and commit `3d9985c` is pushed; local `main` matches `origin/main`, clean. Full `pnpm build/typecheck/test`, doctor/readiness, architecture, version, syntax, diff, and secrets checks passed.
