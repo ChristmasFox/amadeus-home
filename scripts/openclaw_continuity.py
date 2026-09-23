@@ -69,7 +69,14 @@ def _tree_digest(entries: list[dict]) -> str:
     return digest.hexdigest()
 
 
-def _walk_tree(root: Path, area: str, *, skip_credentials: bool = False, reject_symlinks: bool = False) -> list[dict]:
+def _walk_tree(
+    root: Path,
+    area: str,
+    *,
+    skip_credentials: bool = False,
+    reject_symlinks: bool = False,
+    owner_overrides: dict[str, tuple[int, int]] | None = None,
+) -> list[dict]:
     base = root / area
     try:
         base_info = base.lstat()
@@ -84,12 +91,15 @@ def _walk_tree(root: Path, area: str, *, skip_credentials: bool = False, reject_
         directory = stack.pop()
         relative_directory = directory.relative_to(root).as_posix()
         directory_info = directory.lstat()
+        directory_owner = (owner_overrides or {}).get(
+            relative_directory, (directory_info.st_uid, directory_info.st_gid)
+        )
         entries.append({
             "path": relative_directory,
             "kind": "directory",
             "mode": stat.S_IMODE(directory_info.st_mode),
-            "uid": directory_info.st_uid,
-            "gid": directory_info.st_gid,
+            "uid": directory_owner[0],
+            "gid": directory_owner[1],
         })
         try:
             children = sorted(directory.iterdir(), key=lambda child: child.name, reverse=True)
@@ -104,7 +114,8 @@ def _walk_tree(root: Path, area: str, *, skip_credentials: bool = False, reject_
             except OSError as exc:
                 raise ContinuityError(f"cannot stat state entry: {area}") from exc
             mode = stat.S_IMODE(info.st_mode)
-            owner = {"uid": info.st_uid, "gid": info.st_gid}
+            entry_owner = (owner_overrides or {}).get(relative, (info.st_uid, info.st_gid))
+            owner = {"uid": entry_owner[0], "gid": entry_owner[1]}
             if stat.S_ISLNK(info.st_mode):
                 if reject_symlinks:
                     raise ContinuityError("credential state contains a symlink")
@@ -119,7 +130,9 @@ def _walk_tree(root: Path, area: str, *, skip_credentials: bool = False, reject_
     return entries
 
 
-def _require_whatsapp_credentials(root: Path) -> list[dict]:
+def _require_whatsapp_credentials(
+    root: Path, owner_overrides: dict[str, tuple[int, int]] | None = None
+) -> list[dict]:
     credential_root = root / "config/credentials"
     whatsapp = credential_root / "whatsapp"
     for path in (credential_root, whatsapp):
@@ -129,7 +142,7 @@ def _require_whatsapp_credentials(root: Path) -> list[dict]:
             raise ContinuityError("required provider credential state is missing") from exc
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
             raise ContinuityError("provider credential state is not a real directory")
-    entries = _walk_tree(root, "config/credentials", reject_symlinks=True)
+    entries = _walk_tree(root, "config/credentials", reject_symlinks=True, owner_overrides=owner_overrides)
     files = [item for item in entries if item["kind"] == "file"]
     if not files:
         raise ContinuityError("required provider credential state is empty")
@@ -204,21 +217,30 @@ def _sqlite_integrity(path: Path) -> str:
         return "failed"
 
 
-def collect_inventory(data_root: Path, *, require_credentials: bool = True) -> dict:
+def collect_inventory(
+    data_root: Path,
+    *,
+    require_credentials: bool = True,
+    owner_overrides: dict[str, tuple[int, int]] | None = None,
+) -> dict:
     root = Path(data_root)
     if root.is_symlink() or not root.is_dir():
         raise ContinuityError("OpenClaw data root is not a real directory")
 
     area_entries: dict[str, list[dict]] = {}
     for area in AREAS:
-        area_entries[area] = _walk_tree(root, area, skip_credentials=(area == "config"))
+        area_entries[area] = _walk_tree(
+            root, area, skip_credentials=(area == "config"), owner_overrides=owner_overrides
+        )
 
     credential_entries: list[dict] = []
     credential_root = root / "config/credentials"
     if require_credentials:
-        credential_entries = _require_whatsapp_credentials(root)
+        credential_entries = _require_whatsapp_credentials(root, owner_overrides=owner_overrides)
     elif credential_root.is_dir() and not credential_root.is_symlink():
-        credential_entries = _walk_tree(root, "config/credentials", reject_symlinks=True)
+        credential_entries = _walk_tree(
+            root, "config/credentials", reject_symlinks=True, owner_overrides=owner_overrides
+        )
 
     workspace_entries = area_entries["workspace"]
     memory_file = root / "workspace/MEMORY.md"
@@ -744,8 +766,16 @@ def _validate_snapshot_plaintext(
     expected_owner: tuple[int, int] | None,
 ) -> None:
     extracted = archive_path.parent / "state"
+    members = validate_archive(archive_path)
+    owner_overrides = {
+        _safe_member_name(member.name).as_posix().rstrip("/"): (member.uid, member.gid)
+        for member in members
+    }
     extract_archive_safely(archive_path, extracted)
-    actual = collect_inventory(extracted, require_credentials=False)
+    # The encrypted archive retains the Linux guest's numeric ownership. On macOS,
+    # the verifier may not be root, so the temporary extraction cannot chown files;
+    # use the authenticated tar headers when rebuilding the source tree digest.
+    actual = collect_inventory(extracted, require_credentials=False, owner_overrides=owner_overrides)
     expected_projection = {key: manifest[key] for key in ("workspace", "state", "sessionState", "sqlite")}
     if continuity_projection(actual) != expected_projection:
         raise ContinuityError("cold snapshot contents do not match authenticated manifest metrics")
