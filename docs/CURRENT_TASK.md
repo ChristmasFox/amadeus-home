@@ -10,7 +10,7 @@ Phase 2 已完成 state root/secret boundary 定义和旧源只读发现：`conf
 
 Phase 3 工具实现与临时 fixture 验证已完成：冷快照使用加密流、HMAC-authenticated manifest、SQLite/session/workspace 校验；独立 verifier 在认证后解密检查，restore 要求 Avalon token 和四个 state-root 替换批准，并先保留目标 rollback copy。凭据 continuity 改为逐项绑定 opaque path、内容、mode 和 `1000:1000` runtime owner；恢复后逐项复验。相同文件数/总字节但内容或路径变化的负向 fixture 均被拒绝。Phase 4 的 source/destination evidence 输出已接线；实际 source evidence 只能在获批 freeze 后采集，destination evidence 只能在获批 restore 后采集。证据见 `.agent/checkpoints/2026-09-23-openclaw-cold-snapshot-hardening.md`。
 
-1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，采集时间仍按旧清单保留为 unknown；原件未修改。clean-SHA live readiness 将在本轮 follow-up push 后复跑。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。未提供精确 source-freeze token；源端仍 active，尚未移动 Avalon 或切换 owner ingress。详见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
+1.4.8 仓库侧 hardening、完整 `pnpm test/build/typecheck`、secrets scan、版本校验、语法和 `git diff --check` 均通过。新增 legacy secret-bundle rewrap 工具：保留原件，在旁路生成当前策略/HMAC 清单，并真实执行导入、解密、logical-ID/文件元数据及目标 restore dry-run；readiness 现已调用该真实验证。当前重包通过，原始采集时间仍为 unknown；原件未修改。clean `7c93b7e` readiness 为 0 failure/0 warning，doctor 也为 0/0；rollback plan ready。9Router 未认证 `/v1/models` 的 401 是预期鉴权，不阻塞。Phase 6 已到 source-freeze 审批边界；精确 token 尚未提供，源端仍 active，尚未移动 Avalon 或切换 owner ingress。详见 `.agent/checkpoints/2026-09-23-openclaw-prefreeze-gate-audit.md`。
 
 ## 2026-09-23：M204 非 Avalon 服务分阶段恢复（进行中）
 
