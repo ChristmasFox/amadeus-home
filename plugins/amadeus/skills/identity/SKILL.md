@@ -1,6 +1,6 @@
 ---
 name: identity
-description: "Resolve and learn cross-channel Person identities, aliases, and external accounts without guessing from channel names."
+description: "MANDATORY identity routing: for any prompt containing a named person/alias or a first-person identity question, call identity_resolve for every named alias (reference=alias, alias=X) and for 我/我的/本人 (reference=self) before any memory_search or memory_get. Never use memory retrieval first, never use USER.md to answer 我是谁, and never substitute Arthur/owner for an unbound sender. Only after identity_resolve returns not_found for a past-conversation question may you use sessions_search then sessions_history; retrieval failures are unknown, not absence."
 user-invocable: false
 ---
 
