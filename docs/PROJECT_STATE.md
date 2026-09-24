@@ -839,3 +839,11 @@ launchd persistence artifact、owner-only OpenClaw status/process tools 和 `pow
 状态。定向 tests、Amadeus typecheck/test、architecture check 已通过。真实 OAuth 授权、重启持久化、
 live Longbridge quote/session、M204 本机 telemetry 对照与 release deploy 仍 pending；本节不宣称
 `LONGBRIDGE_AUTH=verified` 或 `MAC_HOST_AGENT=healthy`，直到外部运行时证据写入后续 checkpoint。
+
+## 2026-09-24：1.5.3 Voice I/O source candidate
+
+Goal document is now in the worktree from the remote planning branch. Pinned OpenClaw `2026.9.4` supports native inbound audio transcription and `tts.auto=inbound`; the current live 9Router STT route rejects the existing Chat Combo `amadeus-asr` with HTTP 400. A native macOS Qwen3-TTS service and user LaunchAgent source, example OpenClaw config, and focused mock-backed tests have been added, but no real model/profile was installed. `kurisu-v1` reference pair and speech token are absent. Live OpenClaw/9Router, WhatsApp text path and `VERSION=1.5.2` remain unchanged. Direct ASR/TTS, failure semantics, WhatsApp and reboot acceptance, release and push are pending; see dated checkpoint/task.
+
+The pinned Qwen3-TTS Base model and user venv are now staged outside Git on M204 after an external pre-prep metadata checkpoint. A temporary, non-production system-generated reference produced a real MPS warmup (~71 s), Chinese 24 kHz WAV (~3.5 s after warmup) and authenticated loopback MP3 endpoint response; the temporary audio/key/process were removed. Production profile and token remain absent and no LaunchAgent or CasaOS/9Router/OpenClaw live change was made. An idempotent 9Router speech-provisioning source script is dry-run only until upstream ASR route/credentials are verified. The 1.5.3 acceptance matrix remains open.
+
+The host speech token is now generated externally with mode 0600; only the operator-owned production reference pair and ASR/dashboard credentials still block live speech provisioning. No secret value is in Git or checkpoints.

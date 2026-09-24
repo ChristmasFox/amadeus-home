@@ -285,3 +285,13 @@ AriaNG 与 Dashdot Compose 模板已在 `32be0ec` 提交并部署。二者 UI �
 
 `VERSION=1.4.7` 已 commit 并 push 到 `main` (`901a9ca`)。
 Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD=READY`。
+
+## 2026-09-24：Amadeus 1.5.3 WhatsApp Voice I/O（源码候选，未部署）
+
+从目标分支取得 `docs/AMADEUS_1_5_3_VOICE_IO_GOAL.md`，重新检查 M204 live 9Router/OpenClaw 和 pinned schema。当前 STT `amadeus-asr` 仅是 Chat Combo，真实 STT 端点对合成音频返回 400；尚无正确 STT alias、DashScope 凭据验证、`kurisu-v1` 音频/文字资产或本机 TTS token。
+
+已实现原生 macOS Qwen3-TTS 服务候选、受保护 Bearer 边界、voice profile 单次加载/热身、音频编码、launchd 安装脚本及 OpenClaw 原生 `media.audio`/`tts.auto=inbound` 配置候选。mock 单测、schema、工作流 fixture、secrets 检查通过；没有改 live runtime、发布版本或发送 WhatsApp 消息。下一步为 ASR API/9Router 确认、真实模型/资产、集成及验收；详情见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-voice-source-discovery.md` 与 `.agent/tasks/2026-09-24-amadeus-1.5.3-voice-acceptance.md`。不能把该候选称为 1.5.3 release。
+
+1.5.3 工程烟测补充：在仓库外安装了 pinned Qwen3-TTS Base 模型和 Python venv；使用临时系统合成参考音频验证 MPS 单次模型加载/热身与中文 WAV 生成，并在临时 loopback 端口验证 503→200 readiness、鉴权和 MP3 输出。临时参考/密钥和测试进程已移除；正式 `kurisu-v1` 仍缺失，18792/launchd 与 9Router/OpenClaw live 均未切换。新增 9Router 默认 dry-run 的 provider/alias 受保护配置脚本，等待真实 DashScope STT 兼容接口和凭据确认。工程烟测不等于生产声音或 WhatsApp 验收。
+
+1.5.3 后续准备：M204 speech token 已由显式 `--prepare-apply` 在仓库外生成并验证 mode 0600；前述“缺少 TTS token”只描述 discovery 时点。仍缺正式参考音频/转录文字及 DashScope/dashboard 的可用受保护凭据；未执行生产 launchd、9Router 或 WhatsApp 切换。

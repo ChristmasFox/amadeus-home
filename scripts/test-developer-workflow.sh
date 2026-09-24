@@ -37,6 +37,13 @@ product="$(scope apps/product-radar/src/core/application.ts)"
 assert_line "$product" 'CHANGE_SCOPE_LEVEL=RUNTIME'
 assert_line "$product" 'CHANGE_SCOPE_WORKFLOW=PRODUCT_RADAR'
 
+speech="$(scope apps/qwen3-tts-service/service.py)"
+assert_line "$speech" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_line "$speech" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
+assert_line "$speech" 'DOCKER_IMAGE_SET=none'
+speech_route="$(scope scripts/provision-9router-speech.py)"
+assert_line "$speech_route" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
+
 docs="$(scope docs/ARCHITECTURE.md)"
 assert_line "$docs" 'CHANGE_SCOPE_LEVEL=FAST'
 assert_line "$docs" 'CHANGE_SCOPE_WORKFLOW=FAST'

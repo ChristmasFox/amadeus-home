@@ -54,6 +54,12 @@
             "maxTokens": 32768
           }
         ]
+      },
+      "openai": {
+        "baseUrl": "http://9router:20128/v1",
+        "apiKey": { "source": "env", "provider": "default", "id": "OPENCLAW_9ROUTER_API_KEY" },
+        "api": "openai-completions",
+        "models": []
       }
     }
   },
@@ -66,6 +72,19 @@
       "*": {
         "allow": ["web_search", "web_fetch"]
       }
+    },
+    "media": {
+      "models": [
+        {
+          "provider": "openai",
+          "model": "amadeus-asr",
+          "baseUrl": "http://9router:20128/v1",
+          "capabilities": ["audio"],
+          "maxBytes": 10485760,
+          "timeoutSeconds": 90
+        }
+      ],
+      "audio": { "enabled": true, "maxBytes": 10485760, "timeoutSeconds": 90 }
     }
   },
   "plugins": {
@@ -157,6 +176,22 @@
         }
       },
       "configWrites": false
+    }
+  },
+  "tts": {
+    "auto": "inbound",
+    "mode": "final",
+    "provider": "openai",
+    "maxTextLength": 1200,
+    "timeoutMs": 120000,
+    "providers": {
+      "openai": {
+        "baseUrl": "http://9router:20128/v1",
+        "apiKey": { "source": "env", "provider": "default", "id": "OPENCLAW_9ROUTER_API_KEY" },
+        "model": "amadeus-tts",
+        "speakerVoice": "kurisu-v1",
+        "responseFormat": "mp3"
+      }
     }
   }
 }

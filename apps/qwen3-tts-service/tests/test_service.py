@@ -1,0 +1,103 @@
+import http.client
+import io
+import json
+import importlib.util
+import sys
+import threading
+import unittest
+import wave
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import service
+
+
+class FakeEngine:
+    def __init__(self):
+        self.calls = 0
+
+    def synthesize(self, text):
+        self.calls += 1
+        out = io.BytesIO()
+        with wave.open(out, "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(24000)
+            wav.writeframes(b"\0\0" * 2400)
+        return out.getvalue(), 24000
+
+
+class SpeechTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
+        cls.server.engine = FakeEngine()
+        cls.server.state = "ready"
+        cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
+        cls.thread.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def request(self, method, path, data=None, token=True):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
+        headers = {"Content-Type": "application/json"}
+        if token:
+            headers["Authorization"] = "Bearer " + "x" * 32
+        conn.request(method, path, json.dumps(data).encode() if data is not None else None, headers)
+        response = conn.getresponse()
+        result = response.status, response.getheader("Content-Type"), response.read()
+        conn.close()
+        return result
+
+    def test_health_readiness(self):
+        self.assertEqual(self.request("GET", "/healthz")[0], 200)
+        self.server.state = "warming_up"
+        self.assertEqual(self.request("GET", "/healthz")[0], 503)
+        self.server.state = "ready"
+
+    def test_auth_and_voice(self):
+        self.assertEqual(self.request("GET", "/v1/voices", token=False)[0], 401)
+        self.assertEqual(json.loads(self.request("GET", "/v1/voices")[2])["data"][0]["id"], "kurisu-v1")
+
+    def test_validation(self):
+        base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界"}
+        for key, value, expected in (("voice", "other", "unknown_voice"), ("model", "other", "unknown_model"), ("input", "", "invalid_input"), ("input", "x"*1201, "invalid_input")):
+            case = base | {key: value}
+            code, _, payload = self.request("POST", "/v1/audio/speech", case)
+            self.assertEqual(code, 400)
+            self.assertEqual(json.loads(payload)["error"]["type"], expected)
+
+    def test_unavailable_and_format(self):
+        base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界"}
+        before = self.server.engine.calls
+        code, _, body = self.request("POST", "/v1/audio/speech", base | {"response_format": "raw"})
+        self.assertEqual(code, 400)
+        self.assertEqual(json.loads(body)["error"]["type"], "unsupported_format")
+        self.server.state = "failed"
+        code, _, body = self.request("POST", "/v1/audio/speech", base)
+        self.assertEqual(code, 503)
+        self.assertEqual(json.loads(body)["error"]["type"], "provider_unavailable")
+        self.server.state = "ready"
+        self.assertEqual(self.server.engine.calls, before)
+
+    @unittest.skipUnless(importlib.util.find_spec("imageio_ffmpeg"), "encoder dependency not installed")
+    def test_encoded_audio(self):
+        base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界"}
+        for fmt, mime, magic in (("mp3", "audio/mpeg", None), ("opus", "audio/ogg", b"OggS")):
+            code, actual_mime, data = self.request("POST", "/v1/audio/speech", base | {"response_format": fmt})
+            self.assertEqual((code, actual_mime), (200, mime))
+            self.assertGreater(len(data), 100)
+            if magic:
+                self.assertTrue(data.startswith(magic))
+
+    def test_audio(self):
+        code, mime, body = self.request("POST", "/v1/audio/speech", {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界", "response_format": "wav"})
+        self.assertEqual((code, mime), (200, "audio/wav"))
+        self.assertTrue(body.startswith(b"RIFF"))
+
+
+if __name__ == "__main__":
+    unittest.main()
