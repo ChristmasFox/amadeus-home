@@ -139,3 +139,30 @@ test('typed inbound reply metadata is session-scoped and never inferred from tex
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('typed inbound sender metadata bridges current-sender mutations when tool context omits requesterSenderId', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-identity-sender-'));
+  const databasePath = join(directory, 'identity.sqlite');
+  const presetsFile = join(directory, 'presets.json');
+  await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
+  const runtimeConfig = config(databasePath, presetsFile);
+  const senderContext = { ...context(), sessionKey: 'agent:main:sender-session' } as OpenClawPluginToolContext;
+  delete (senderContext as unknown as { requesterSenderId?: unknown }).requesterSenderId;
+  try {
+    rememberTrustedInboundReply({
+      sessionKey: senderContext.sessionKey,
+      channel: 'whatsapp',
+      accountId: 'secondary',
+      conversationId: 'direct-1',
+      senderId: 'owner-1',
+    });
+    const bound = await identityBindChannel(runtimeConfig, { personId: 'wang', target: 'current_sender' }, senderContext) as { status: string };
+    assert.equal(bound.status, 'bound');
+    const resolved = await identityResolve(runtimeConfig, { reference: 'self' }, senderContext) as { status: string; person?: { personId: string } };
+    assert.equal(resolved.status, 'resolved');
+    assert.equal(resolved.person?.personId, 'wang');
+  } finally {
+    forgetTrustedInboundReply(senderContext.sessionKey);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
