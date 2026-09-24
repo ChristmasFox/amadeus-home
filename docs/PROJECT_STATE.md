@@ -151,6 +151,18 @@ compactly tracked in `.agent/EXECUTION_PLAN.md`; validation scope is governed by
 
 # Project State
 
+## 2026-09-24：Amadeus 1.4.9 Longbridge OAuth 已就绪，运行时镜像待部署
+
+M204 已完成 Longbridge OAuth client 注册、浏览器 PKCE 授权和 code exchange。canonical state
+与官方 SDK token cache 已写入 `/DATA/AppData/openclaw/data` 外部边界并保持 `0600`；HostAgent
+用户级 LaunchAgent 已安装，带 bearer token 的 `/health` 返回 HTTP 200。OAuth operator 脚本已修复
+Node 24 的 stdin 读取兼容性，并在 `NODE_USE_ENV_PROXY=1` 下完成 token exchange。
+
+官方 `longbridge@5.1.0` ARM64 binding 需要 glibc 2.39；pinned OpenClaw Debian 12 镜像为 2.36。
+Dockerfile 已加入 SHA-256 固定的 Ubuntu 24.04 `libc6 2.39` 私有 loader，构建出的 Node wrapper
+可在不替换系统 libc 的情况下成功 import 官方 SDK。验证镜像尚未切换 live CasaOS；当前 live
+容器仍为旧镜像，市场工具的 live quote/session、重启持久化与 owner notification smoke 待部署后完成。
+
 ## 2026-09-24：WhatsApp 身份桥接修复已部署，修复后验收待重发
 
 修复前的 WhatsApp 控制标记只观察到一条回复，但 `identity_bind_channel` 因缺少可信 sender

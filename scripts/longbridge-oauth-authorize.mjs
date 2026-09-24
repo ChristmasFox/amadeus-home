@@ -48,7 +48,9 @@ try { request = JSON.parse(await readFile(requestFile, 'utf8')); } catch { throw
 if (!request || typeof request !== 'object' || typeof request.state !== 'string' || typeof request.codeVerifier !== 'string' || typeof request.redirectUri !== 'string') {
   throw new Error('Longbridge OAuth start state is invalid');
 }
-const callback = (await readFile(0, 'utf8')).trim();
+// Node 24 no longer accepts a numeric file descriptor in fs.promises.readFile;
+// use the portable stdin device path for the operator-only pipe.
+const callback = (await readFile('/dev/stdin', 'utf8')).trim();
 if (!callback) throw new Error('callback URL was empty');
 let code;
 let returnedState;
