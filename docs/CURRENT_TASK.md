@@ -319,3 +319,5 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-24：已有千问 API 已找到，ASR 协议差异待正式确认
 
 用户提示后只读检查发现 9Router 中存在启用的 `Qwen` 自定义 API 节点及 Key，端点属于 `qianwenaiapi.com/compatible-mode/v1`，不是原 Goal 的阿里云 Model Studio 工作空间。短合成音频对该平台 Qwen-Audio-3.0-ASR-Flash 多模态接口的真实请求返回 HTTP 200、非空转录；返回是 top-level `text`/`output.text`，现已在 adapter 源码和测试兼容。受保护的 key/URL 已从 live 9Router DB 复制到 guest secret/env 并留 SQLite/env checkpoint，线上容器未切换。使用该平台取代 Goal 指定的 Alibaba/DashScope 是明确的供应商差异，部署脚本需额外 `--allow-qwenai-upstream`，尚未执行。详情见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-existing-qwen-api.md`。
+
+1.5.3 千问 API 后续工程验收：基于 `8a47b85` 构建并加载新的 9Router ARM64 immutable 候选镜像，network-none fixture 验证授权、ffmpeg、TTS alias 和重启后的 ASR alias 均通过；线上仍是旧镜像。`--apply` 在未提供 `--allow-qwenai-upstream` 时已验证 fail closed。需由 operator 明确决定能否以现有 qianwenaiapi.com 平台替代 Goal 指定的 Alibaba Model Studio/DashScope，之后才能正式切换并完成真实 9Router/WhatsApp 验收。证据见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-qwen-api-image-smoke.md`。
