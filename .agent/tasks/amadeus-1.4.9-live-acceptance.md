@@ -12,8 +12,8 @@ rollback checkpoints and live acceptance evidence:
 1. Rebuild and deploy the 1.5.2 glibc-compatible image with a protected rollback checkpoint.
 2. Re-run the 0600 OAuth state, official SDK quote/session, host tool, and launchd acceptance without
    browser interaction.
-3. Install the privileged power sampler with explicit local authorization and record sanitized watts,
-   market/session, and notification evidence; never record tokens or private account material.
+3. SoC power sampler is installed and verified. Exact whole-device wall-input power remains pending
+   until a watt-meter/smart-plug data source is identified and integrated.
 
 The 1.5.0 live market session smoke still exposed Longbridge `301600 too many query days`; SDK probing
 confirmed +/-14 days succeeds while +/-21 days fails. 1.5.1 bounds the default trading-day window to
