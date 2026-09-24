@@ -322,6 +322,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
   "$OPENCLAW_DATA_DIR/data/identity.sqlite" identity.sqlite.before \
   "$OPENCLAW_DATA_DIR/data/vps-usage-state.json" vps-usage-state.json.before \
+  "$OPENCLAW_DATA_DIR/data/longbridge-oauth.json" longbridge-oauth.json.before \
   "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
@@ -351,7 +352,7 @@ for i in range(0, len(args), 2):
         item['kind'] = 'directory' if source.is_dir() else 'file'
         item['mode'] = oct(source.stat().st_mode & 0o777)
         item['size'] = sum(path.stat().st_size for path in source.rglob('*') if path.is_file()) if source.is_dir() else source.stat().st_size
-        sensitive = source.name in {'openclaw.env', '.env'} or 'secrets' in source.parts
+        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json'} or 'secrets' in source.parts
         if not sensitive and source.is_file():
             digest = hashlib.sha256()
             with source.open('rb') as stream:
@@ -472,9 +473,9 @@ amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=Fal
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
 for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts','pubg_query_team_damage','pubg_prefetch_telemetry','pubg_telemetry_sync_report']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
-for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_indices','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus','market','vps']:
+for name in ['pubg','amadeus','market','macos-host','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY
@@ -561,8 +562,8 @@ ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、a
 ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_evening、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:evening、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:evening，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 ensure_cron amadeus-pubg-telemetry-hourly '5 * * * *' '只调用 pubg_prefetch_telemetry，参数 team=true、maxMatches=500、maxFetches=20、concurrency=2。该任务每小时刷新所有配置 PUBG 玩家最新对局，只获取本地不存在的新 Match API 详情，再为新对局或到期重试对局获取 Telemetry 并写入持久化缓存；严格保留工具返回的 status、cacheStatus、availability、dataUpdatedAt 和计数，不要把 status=FETCHED/cacheStatus=MISS/availability=AVAILABLE 说成数据缺失；不要调用其他工具、不要发送通知，定时任务使用 no-deliver。' 'pubg_prefetch_telemetry'
 ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_report，参数 team=true。报告统计上一自然日；仅当 status/data 有效时把 data.notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写事实。' 'pubg_telemetry_sync_report amadeus_notify_owner'
-ensure_cron amadeus-market-open '35 9 * * 1-5' '调用 amadeus_market_indices，参数 phase=open。status=market_closed 或 status=error 时直接结束；status=ok 时把返回对象 notification 原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写行情或数据时间。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
-ensure_cron amadeus-market-close '5 16 * * 1-5' '调用 amadeus_market_indices，参数 phase=close。status=market_closed 或 status=error 时直接结束；status=ok 时把返回对象 notification 原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写行情或数据时间。' 'amadeus_market_indices amadeus_notify_owner' 'America/New_York'
+ensure_cron amadeus-market-open '30 9 * * 1-5' '调用 amadeus_market_overview（phase=open）与 amadeus_market_session；由 Longbridge trading day/session 事实判断是否为有效开盘检查，不能把固定时钟当作市场真相。有效时把 overview.notification 的完整结构化对象原样传给 amadeus_notify_owner；非交易日、休市、OAuth reauth 或 provider unavailable 时直接结束，不得改写行情或数据时间。' 'amadeus_market_overview amadeus_market_session amadeus_notify_owner' 'America/New_York'
+ensure_cron amadeus-market-close '0 16 * * 1-5' '调用 amadeus_market_overview（phase=close）与 amadeus_market_session；由 Longbridge trading day/session 事实判断是否为有效收盘检查，不能把固定时钟当作市场真相。有效时把 overview.notification 的完整结构化对象原样传给 amadeus_notify_owner；非交易日、休市、OAuth reauth 或 provider unavailable 时直接结束，不得改写行情或数据时间。' 'amadeus_market_overview amadeus_market_session amadeus_notify_owner' 'America/New_York'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
 
 HOOK_PATH="$CODEX_NOTIFY_HOOK_PATH"

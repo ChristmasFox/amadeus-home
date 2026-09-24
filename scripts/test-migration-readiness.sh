@@ -32,7 +32,7 @@ printf 'external-placeholder\n' > "$OPENCLAW_DATA_DIR/openclaw.env"
 chmod 600 "$OPENCLAW_DATA_DIR/openclaw.env"
 for secret in \
   pubg-api-key pubg-team.json telegram-bot-token owner-whatsapp-target \
-  mac-ssh-key vps-readonly-ssh-key vps-ssh-known-hosts kiwivm-credentials.json kook-bot-token; do
+  mac-ssh-key mac-host-agent-token longbridge-client-id vps-readonly-ssh-key vps-ssh-known-hosts kiwivm-credentials.json kook-bot-token; do
   printf 'external-placeholder\n' > "$OPENCLAW_DATA_DIR/secrets/$secret"
   chmod 600 "$OPENCLAW_DATA_DIR/secrets/$secret"
 done

@@ -1,6 +1,6 @@
 # Decisions
 
-更新时间：2026-09-18（Asia/Shanghai）
+更新时间：2026-09-24（Asia/Shanghai）
 
 ## OpenClaw 是唯一 Agent 宿主
 
@@ -51,10 +51,15 @@ OpenClaw 与 Product Radar、注册 VPS 报告 cron，并以真实 owner WhatsAp
 路径。CasaOS compose 位于 `/var/lib/casaos/apps`，服务使用 `docker compose up -d
 --no-build`；需要构建时先由 host BuildKit 生成固定 image，再显式 apply。
 
-## 美股指数通知
+## 1.4.9 Longbridge 市场与 M204 HostAgent
 
-NASDAQ-100 与标普500使用 `^NDX`、`^GSPC` 的 Yahoo Finance Chart API 日线数据；
-`amadeus_market_indices` 在工具边界确定交易日、前收、开盘/收盘涨跌和数据更新时间，LLM
-不参与数字计算。OpenClaw 以 `America/New_York` 的 09:35/16:05 工作日 cron 触发，周末和
-交易所休市日不通知；成功事件使用稳定 `market-indices:<date>:<open|close>` key，经既有
-WhatsApp owner outbox 投递，并以 `El Psy Kongroo.` 收束世界线正文。
+Longbridge OpenAPI OAuth 2 是唯一公共市场数值来源；没有 provider fallback、账户/余额/持仓、
+订单或交易工具。`amadeus_market_overview`、`amadeus_market_quote`、`amadeus_market_intraday`、
+`amadeus_market_session`、`amadeus_market_movers` 只暴露 bounded public read surface，symbol
+normalization、前收/百分比、session/calendar、数值精度和方向 glyph 由确定性代码拥有。OpenClaw
+cron 仍使用 `America/New_York` 触发检查，但 Longbridge trading-day/session 决定事件是否有效；
+成功通知沿用 `market-indices:<date>:<open|close>` 幂等 key 和既有 owner outbox。
+
+M204 host telemetry 由 launchd-managed MacHostAgent 提供固定 bearer-authenticated read-only
+routes；OpenClaw 只注册 status/process 两个 owner/private tools，不提供 arbitrary exec 或 broad sudo。
+`powermetrics` 权限不足只把 power telemetry 标为 degraded，不影响其他 host facts。

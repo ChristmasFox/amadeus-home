@@ -53,6 +53,8 @@ if ((TEST_MODE)); then
   check_file 'OpenClaw environment' "$BASE/openclaw.env"
   check_file 'Telegram bot token' "$BASE/secrets/telegram-bot-token"
   check_file 'WhatsApp owner target' "$BASE/secrets/owner-whatsapp-target"
+  check_file 'MacHostAgent token' "$BASE/secrets/mac-host-agent-token"
+  check_file 'Longbridge OAuth client id' "$BASE/secrets/longbridge-client-id"
   check_file 'VPS read-only SSH key' "$BASE/secrets/vps-readonly-ssh-key"
   check_file 'VPS known hosts' "$BASE/secrets/vps-ssh-known-hosts"
   check_file 'KiwiVM credentials' "$BASE/secrets/kiwivm-credentials.json"
@@ -65,6 +67,8 @@ else
     'Telegram bot token|telegram-bot-token' \
     'WhatsApp owner target|owner-whatsapp-target' \
     'Mac control SSH key|mac-ssh-key' \
+    'MacHostAgent token|mac-host-agent-token' \
+    'Longbridge OAuth client id|longbridge-client-id' \
     'VPS read-only SSH key|vps-readonly-ssh-key' \
     'VPS known hosts|vps-ssh-known-hosts' \
     'KiwiVM credentials|kiwivm-credentials.json' \

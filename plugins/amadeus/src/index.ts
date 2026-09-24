@@ -4,6 +4,7 @@ import { registerHomeLab } from './capabilities/homelab/register.js';
 import { registerIdentity } from './capabilities/identity/register.js';
 import { registerKook } from './capabilities/kook/register.js';
 import { registerMarket } from './capabilities/market/register.js';
+import { registerMacosHost } from './capabilities/macos-host/register.js';
 import { registerMedia } from './capabilities/media/register.js';
 import { registerNas } from './capabilities/nas/register.js';
 import { registerNotification } from './capabilities/notification/register.js';
@@ -27,6 +28,7 @@ const entry = definePluginEntry({
     registerHomeLab(api);
     registerKook(api);
     registerMarket(api);
+    registerMacosHost(api);
     registerNotification(api);
     registerVps(api);
     api.logger.info('amadeus native capability plugin registered');
