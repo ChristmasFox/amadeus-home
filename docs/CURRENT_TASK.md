@@ -1,5 +1,14 @@
 # 当前任务
 
+## 2026-09-24：HostAgent 能耗报告边界收紧（待部署）
+
+针对 16.5% CPU 使用率同时报告 SoC 33.3 mW 的不一致观测，确认 `powermetrics`
+短窗口值只代表估算的 SoC 子系统功率，不能作为整机功耗或以 load/CPU 占比反算 W。
+本次修正采样解析：缺失的 CPU/GPU/ANE 字段保留 null，不伪装为 0；负的 combined
+功率降级。macos-host Skill 明确禁止据此推断时钟门控或把瞬时 W 积分为未经测量的 kWh。
+已做本地单测；没有执行 M204 安装、CasaOS 重启或真实外部电表验收。要获得整机 W/kWh，
+仍需由用户确认外部电表/智能插座的型号或 Home Assistant 实体，并做连续采样验收。
+
 ## 2026-09-24：9router OpenAI/Codex 500 已修复
 
 9router 日志中的根因是 OpenAI/Codex 上游 TLS 建连失败：`ECONNRESET`，随后被网关表现为

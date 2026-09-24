@@ -66,7 +66,7 @@ def power_snapshot(raw: bytes, observed_at: str | None = None) -> dict[str, Any]
     if not isinstance(processor, dict):
         return {"status": "unavailable", "telemetry": "degraded", "error": "powermetrics_processor_unavailable", "updatedAt": observed_at or now_text()}
     values = {key: finite_number(processor.get(key)) for key in ("cpu_power", "gpu_power", "ane_power", "combined_power")}
-    if values["combined_power"] is None:
+    if values["combined_power"] is None or values["combined_power"] < 0:
         return {"status": "unavailable", "telemetry": "degraded", "error": "powermetrics_combined_power_unavailable", "updatedAt": observed_at or now_text()}
     elapsed_ns = finite_number(document.get("elapsed_ns"))
     return {
@@ -75,9 +75,9 @@ def power_snapshot(raw: bytes, observed_at: str | None = None) -> dict[str, Any]
         "source": "powermetrics",
         "scope": "soc",
         "accuracy": "estimated_soc_not_wall_input",
-        "cpuPowerMw": round(values["cpu_power"] or 0.0, 1),
-        "gpuPowerMw": round(values["gpu_power"] or 0.0, 1),
-        "anePowerMw": round(values["ane_power"] or 0.0, 1),
+        "cpuPowerMw": round(values["cpu_power"], 1) if values["cpu_power"] is not None and values["cpu_power"] >= 0 else None,
+        "gpuPowerMw": round(values["gpu_power"], 1) if values["gpu_power"] is not None and values["gpu_power"] >= 0 else None,
+        "anePowerMw": round(values["ane_power"], 1) if values["ane_power"] is not None and values["ane_power"] >= 0 else None,
         "socPowerMw": round(values["combined_power"], 1),
         "powerWatts": round(values["combined_power"] / 1000.0, 3),
         "sampleWindowMs": round(elapsed_ns / 1_000_000.0, 1) if elapsed_ns is not None else None,
