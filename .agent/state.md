@@ -77,6 +77,11 @@ diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-202609240
 
 更新时间：2026-09-24（Asia/Shanghai）
 
+2026-09-24 M204 LAN binding fix：用户服务此前发布在 `127.0.0.1`，局域网无法访问；已将 Git
+Compose 默认值和 live CasaOS 端口切换到 `0.0.0.0`，重建用户服务且未重建镜像。两个 M204 LAN
+地址 `192.168.5.3`/`192.168.5.50` 的逐端口探测均建立连接；内部 DB/Redis/model 仍未发布。回滚
+备份和证据：`.agent/checkpoints/2026-09-24-m204-lan-bindings.md`。
+
 2026-09-24 scope revision and final commit：用户明确跳过 Telegram 验收，Telegram 保持运行且
 声明式配置不变。WhatsApp 是唯一 owner-channel acceptance。`COMMIT_SKULD_CUTOVER_1_4_8` 已执行，
 当前 `DESTINATION_AUTHORITY=Amadeus-M204`、`SOURCE_AUTHORITY=retired`、

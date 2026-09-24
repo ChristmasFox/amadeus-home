@@ -9,10 +9,10 @@ services:
     restart: always
     command: ["/opt/alist/alist", "server", "--no-prefix"]
     ports:
-      - "${XIAOYA_WEB_PORT:-127.0.0.1:5678}:80"
-      - "${XIAOYA_PORT_2345:-127.0.0.1:2345}:2345"
-      - "${XIAOYA_PORT_2346:-127.0.0.1:2346}:2346"
-      - "${XIAOYA_PORT_2347:-127.0.0.1:2347}:2347"
+      - "${XIAOYA_WEB_PORT:-0.0.0.0:5678}:80"
+      - "${XIAOYA_PORT_2345:-0.0.0.0:2345}:2345"
+      - "${XIAOYA_PORT_2346:-0.0.0.0:2346}:2346"
+      - "${XIAOYA_PORT_2347:-0.0.0.0:2347}:2347"
     volumes:
       - /DATA/AppData/xiaoya:/data
       - /DATA/AppData/xiaoya/alist-data:/opt/alist/data

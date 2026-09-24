@@ -53,7 +53,7 @@ services:
       DB_DATABASE_NAME: ${IMMICH_DB_NAME:-immich}
       DB_USERNAME: ${IMMICH_DB_USER:-postgres}
     ports:
-      - "${IMMICH_PORT:-2283}:2283"
+      - "${IMMICH_PORT:-0.0.0.0:2283}:2283"
     volumes:
       - ${IMMICH_MEDIA_ROOT:-/Volumes/Avalon/immich/data}:/usr/src/app/upload
       - /etc/localtime:/etc/localtime:ro

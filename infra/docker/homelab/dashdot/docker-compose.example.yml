@@ -7,7 +7,7 @@ services:
     container_name: dashdot
     restart: always
     ports:
-      - "${DASHDOT_PORT:-127.0.0.1:3001}:3001"
+      - "${DASHDOT_PORT:-0.0.0.0:3001}:3001"
     volumes:
       - /:/mnt/host:ro
     x-casaos:

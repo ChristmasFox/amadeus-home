@@ -1,5 +1,13 @@
 # 当前任务
 
+## 2026-09-24：M204 LAN bindings restored
+
+用户反馈 M204 部署服务无法从局域网访问。现场确认除 OpenClaw 外，CasaOS Compose 的用户服务
+均发布在 `127.0.0.1`。已将 Git 默认配置和 live CasaOS 端口发布切回 `0.0.0.0`，覆盖
+Product Radar、Changedetection、Immich、9Router、Filebrowser、Xiaoya、AriaNG、Dashdot；
+PostgreSQL、Redis 和模型容器继续不发布。`192.168.5.3`、`192.168.5.50` 两个 LAN 地址的逐端口
+探测均已建立连接。回滚备份和证据见 `.agent/checkpoints/2026-09-24-m204-lan-bindings.md`。
+
 ## 2026-09-24：Operation Skuld WhatsApp-only cutover committed
 
 用户已明确跳过 Telegram 验收，Telegram 运行时保持不变；声明式 OpenClaw 配置未停用 Telegram。
