@@ -37,6 +37,7 @@ services:
       - ${OPENCLAW_CONFIG_DIR:-/DATA/AppData/openclaw/config}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR:-/DATA/AppData/openclaw/workspace}:/home/node/.openclaw/workspace
       - ${OPENCLAW_PUBG_DATA_DIR:-/DATA/AppData/openclaw/data}:/data
+      - ${OPENCLAW_LONGBRIDGE_SDK_HOME_HOST_DIR:-/DATA/AppData/openclaw/data/longbridge-sdk-home}/.longbridge:/home/node/.longbridge
       - ${OPENCLAW_TEAM_CONFIG_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-team.json}:/run/secrets/pubg_team.json:ro
       - ${PUBG_API_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/pubg-api-key}:/run/secrets/pubg_api_key:ro
       - ${OPENCLAW_TELEGRAM_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/telegram-bot-token}:/run/secrets/telegram_bot_token:ro

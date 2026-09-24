@@ -71,6 +71,10 @@ importers:
         version: 5.9.2
 
   plugins/amadeus:
+    dependencies:
+      longbridge:
+        specifier: 5.1.0
+        version: 5.1.0
     devDependencies:
       '@agent/identity':
         specifier: workspace:*
@@ -1436,6 +1440,42 @@ packages:
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
+
+  longbridge-darwin-arm64@5.1.0:
+    resolution: {integrity: sha512-AjNyvIGPpKs0Cl/zPm5gSFC8GGJXH6OlvYsslKEOu/8QTsNNK9Y67sfnhMAowZ/Mo7s2Lv6ZmwKYEQYnQ3AbWA==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+
+  longbridge-darwin-x64@5.1.0:
+    resolution: {integrity: sha512-/KL7GFmP4rPEIvQOl1BvtVLQb4FXlscn8FdKSLOTN4+rYw4b7A7guX32qYh1JoTdqopX/6megBmC9TfDABSKQQ==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+
+  longbridge-linux-arm64-gnu@5.1.0:
+    resolution: {integrity: sha512-hwLg21Cgeh7WS8XZy8Utb9Um85fQhLzadTr59c5NyWzG3zy4eJwCuuRoLLPguf2vM1xFqvav//ipggsOJFVLjQ==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  longbridge-linux-x64-gnu@5.1.0:
+    resolution: {integrity: sha512-hzpCxTn9PFxQvv3gLyqYvGSQ0kE3rK4iN/R1+S+E8s7EjcovIAOZ+Yt15BPDWr8hnOmoMuKRCFRZLyZ5cA9Bkw==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  longbridge-win32-x64-msvc@5.1.0:
+    resolution: {integrity: sha512-A159b/2HmPMCNjD+7X/yq6jczPQIiVx+AbsPuu90ZeIt0gefN7IiIynlzEXSNz4bIixc6DWSW8ynRZT+aaL02Q==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [win32]
+
+  longbridge@5.1.0:
+    resolution: {integrity: sha512-o6onpFIP3YTJ2txYdHbiKkQLzzDcXN9yNvhxg9T39M5FUFU2LnQT2CqpGCY1mHY4cElyp/GjiSdRLxN9UiPOTA==}
+    engines: {node: '>= 10'}
 
   lru-cache@11.5.2:
     resolution: {integrity: sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g==}
@@ -3185,6 +3225,29 @@ snapshots:
       p-locate: 4.1.0
 
   long@5.3.2: {}
+
+  longbridge-darwin-arm64@5.1.0:
+    optional: true
+
+  longbridge-darwin-x64@5.1.0:
+    optional: true
+
+  longbridge-linux-arm64-gnu@5.1.0:
+    optional: true
+
+  longbridge-linux-x64-gnu@5.1.0:
+    optional: true
+
+  longbridge-win32-x64-msvc@5.1.0:
+    optional: true
+
+  longbridge@5.1.0:
+    optionalDependencies:
+      longbridge-darwin-arm64: 5.1.0
+      longbridge-darwin-x64: 5.1.0
+      longbridge-linux-arm64-gnu: 5.1.0
+      longbridge-linux-x64-gnu: 5.1.0
+      longbridge-win32-x64-msvc: 5.1.0
 
   lru-cache@11.5.2: {}
 

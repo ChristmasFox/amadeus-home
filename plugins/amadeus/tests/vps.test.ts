@@ -27,6 +27,7 @@ function config(directory: string): AmadeusConfig {
     longbridgeAuthBaseUrl: 'https://openapi.longbridge.com',
     longbridgeClientIdFile: '/run/secrets/longbridge_client_id',
     longbridgeOAuthStateFile: '/data/longbridge-oauth.json',
+    longbridgeSdkTokenDir: join(directory, 'longbridge-sdk-tokens'),
     macHostAgentBaseUrl: 'http://host.docker.internal:18791',
     macHostAgentTokenFile: join(directory, 'machostagent-token'),
     kiwiVmBaseUrl: 'https://api.64clouds.com/v1',

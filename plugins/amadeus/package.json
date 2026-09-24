@@ -5,12 +5,15 @@
   "type": "module",
   "files": ["dist", "skills", "openclaw.plugin.json", "package.json", "README.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --external:openclaw --external:openclaw/* --outfile=dist/index.js --sourcemap",
+    "build": "tsc -p tsconfig.json && esbuild src/index.ts --bundle --platform=node --format=esm --external:openclaw --external:openclaw/* --external:longbridge --outfile=dist/index.js --sourcemap",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test tests/**/*.test.ts"
   },
   "peerDependencies": {
     "openclaw": ">=2026.9.4"
+  },
+  "dependencies": {
+    "longbridge": "5.1.0"
   },
   "devDependencies": {
     "@agent/identity": "workspace:*",

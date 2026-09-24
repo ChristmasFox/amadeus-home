@@ -747,6 +747,11 @@ OAuth state 使用 `/data/longbridge-oauth.json` 外部持久化并提供 `ready
 overview/quote/intraday/session/movers，symbol、前收/涨跌、session/calendar、数值格式、方向 glyph
 和 owner event key 由确定性代码处理；旧市场 provider config/transport/parser/fixtures 已删除。
 
+市场运行时现通过官方 `longbridge@5.1.0` Node SDK 的只读 QuoteContext/MarketContext，SDK native
+binary 随目标架构镜像安装；`/home/node/.longbridge` 由外部 `longbridge-sdk-home` 持久化挂载，operator
+OAuth exchange 与 SDK refresh 均保持 canonical state 与 SDK token cache 同步。deployment checkpoint
+会保存该 cache 的受保护副本，不打印或提交 token。
+
 M204 `MacHostAgent` 已进入 source：macOS 原生 bounded collectors、固定 read-only HTTP routes、
 launchd persistence artifact、owner-only OpenClaw status/process tools 和 `powermetrics` 独立 degraded
 状态。定向 tests、Amadeus typecheck/test、architecture check 已通过。真实 OAuth 授权、重启持久化、

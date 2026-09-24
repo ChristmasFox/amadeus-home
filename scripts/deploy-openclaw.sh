@@ -323,6 +323,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/data/identity.sqlite" identity.sqlite.before \
   "$OPENCLAW_DATA_DIR/data/vps-usage-state.json" vps-usage-state.json.before \
   "$OPENCLAW_DATA_DIR/data/longbridge-oauth.json" longbridge-oauth.json.before \
+  "$OPENCLAW_DATA_DIR/data/longbridge-sdk-home" longbridge-sdk-home.before \
   "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
@@ -352,7 +353,7 @@ for i in range(0, len(args), 2):
         item['kind'] = 'directory' if source.is_dir() else 'file'
         item['mode'] = oct(source.stat().st_mode & 0o777)
         item['size'] = sum(path.stat().st_size for path in source.rglob('*') if path.is_file()) if source.is_dir() else source.stat().st_size
-        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json'} or 'secrets' in source.parts
+        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json', 'longbridge-sdk-home'} or 'secrets' in source.parts
         if not sensitive and source.is_file():
             digest = hashlib.sha256()
             with source.open('rb') as stream:

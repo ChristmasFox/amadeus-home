@@ -36,4 +36,9 @@ COPY plugins/amadeus/package.json /app/dist/extensions/amadeus/package.json
 COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
 COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
 
+# The official Longbridge SDK ships a platform-native quote transport. Keep it
+# external to esbuild and install the linux/arm64 optional binary in the
+# extension's dependency boundary.
+RUN cd /app/dist/extensions/amadeus && npm install --omit=dev --legacy-peer-deps --ignore-scripts=false
+
 USER node

@@ -23,11 +23,13 @@ const clientIdFile = process.env.LONGBRIDGE_CLIENT_ID_FILE ?? '/DATA/AppData/ope
 const authBaseUrl = process.env.LONGBRIDGE_AUTH_BASE_URL ?? 'https://openapi.longbridge.com';
 const stateFile = process.env.LONGBRIDGE_OAUTH_STATE_FILE ?? '/DATA/AppData/openclaw/data/longbridge-oauth.json';
 const requestFile = process.env.LONGBRIDGE_OAUTH_REQUEST_FILE ?? '/DATA/AppData/openclaw/data/longbridge-oauth-request.json';
+const sdkTokenDir = process.env.LONGBRIDGE_SDK_TOKEN_DIR ?? '/DATA/AppData/openclaw/data/longbridge-sdk-home/.longbridge/openapi/tokens';
 const config = {
   longbridgeApiBaseUrl: process.env.LONGBRIDGE_API_BASE_URL ?? 'https://openapi.longbridge.com',
   longbridgeAuthBaseUrl: authBaseUrl,
   longbridgeClientIdFile: clientIdFile,
   longbridgeOAuthStateFile: stateFile,
+  longbridgeSdkTokenDir: sdkTokenDir,
   macHostAgentBaseUrl: 'http://127.0.0.1:18791',
 };
 const oauth = new LongbridgeOAuth(config);

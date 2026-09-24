@@ -30,6 +30,7 @@ export interface AmadeusConfig {
   longbridgeClientIdFile: string;
   longbridgeClientSecretFile?: string;
   longbridgeOAuthStateFile: string;
+  longbridgeSdkTokenDir: string;
   macHostAgentBaseUrl: string;
   macHostAgentTokenFile: string;
   kiwiVmBaseUrl: string;
@@ -93,6 +94,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     longbridgeClientIdFile: file('longbridgeClientIdFile', 'LONGBRIDGE_CLIENT_ID_FILE', '/run/secrets/longbridge_client_id'),
     ...(longbridgeClientSecretFile ? { longbridgeClientSecretFile } : {}),
     longbridgeOAuthStateFile: file('longbridgeOAuthStateFile', 'LONGBRIDGE_OAUTH_STATE_FILE', '/data/longbridge-oauth.json'),
+    longbridgeSdkTokenDir: file('longbridgeSdkTokenDir', 'LONGBRIDGE_SDK_TOKEN_DIR', '/home/node/.longbridge/openapi/tokens'),
     macHostAgentBaseUrl: file('macHostAgentBaseUrl', 'MAC_HOST_AGENT_BASE_URL', 'http://host.docker.internal:18791').replace(/\/$/u, ''),
     macHostAgentTokenFile: macHostAgentTokenFile ?? '/run/secrets/mac_host_agent_token',
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
