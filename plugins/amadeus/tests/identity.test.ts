@@ -166,3 +166,27 @@ test('typed inbound sender metadata bridges current-sender mutations when tool c
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('WhatsApp direct session identity bridges runtimes that omit sender metadata', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'amadeus-identity-whatsapp-direct-'));
+  const databasePath = join(directory, 'identity.sqlite');
+  const presetsFile = join(directory, 'presets.json');
+  await writeFile(presetsFile, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王' }] }));
+  const runtimeConfig = config(databasePath, presetsFile);
+  const senderContext = {
+    ...context(),
+    sessionKey: 'agent:main:whatsapp:secondary:direct:+8613279112887',
+  } as OpenClawPluginToolContext;
+  delete (senderContext as unknown as { requesterSenderId?: unknown }).requesterSenderId;
+  delete (senderContext as unknown as { requesterSenderE164?: unknown }).requesterSenderE164;
+  try {
+    const bound = await identityBindChannel(runtimeConfig, { personId: 'wang', target: 'current_sender' }, senderContext) as { status: string };
+    assert.equal(bound.status, 'bound');
+    const resolved = await identityResolve(runtimeConfig, { reference: 'self' }, senderContext) as { status: string; person?: { personId: string } };
+    assert.equal(resolved.status, 'resolved');
+    assert.equal(resolved.person?.personId, 'wang');
+  } finally {
+    forgetTrustedInboundReply(senderContext.sessionKey);
+    await rm(directory, { recursive: true, force: true });
+  }
+});
