@@ -299,3 +299,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-24：1.5.3 ASR 适配与失败语义（源码阶段）
 
 阿里云官方文档确认 `qwen-audio-3.0-asr-flash` 同步接口是 DashScope multimodal-generation，非 9Router 的标准 STT multipart 路径。已在仓库管理的 9Router 镜像源码加入受保护、容器 loopback 的确定性协议适配层（Ogg/Opus→16 kHz WAV、Data URI、结构化错误和五分钟有界文字缓存）。OpenClaw pinned WhatsApp 入站 ASR 失败时会把 null 交给 Agent；新增 source-controlled 受限补丁候选，只对已准入私聊语音用原 WhatsApp 发送路径返回简短文字错误。两者均未部署，尚无真实 DashScope 凭据或 WhatsApp 验收。证据见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-asr-bridge-and-failure-boundary.md`。
+
+## 2026-09-24：1.5.3 9Router deploy source（未执行 apply）
+
+新增默认 dry-run、显式 `--apply` 的 9Router speech 部署脚本；内含 M204 protected secrets preflight、旧镜像外部归档、SQLite/Compose/env/secret checkpoint、ARM64 immutable image、`--no-build` 切换、双服务 health 和失败时 Compose 回退。真实密钥/地域 URL 不存在，故未构建镜像或切换 live。`kurisu-v1` 目录已以 0700 创建但仍无参考音频/文字。详见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-deploy-source.md`。
