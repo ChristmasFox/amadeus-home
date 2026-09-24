@@ -1,5 +1,17 @@
 # 当前任务
 
+## 2026-09-24：Longbridge 官方 SDK M204 运行时边界与 OAuth 验收进行中
+
+M204 已完成 Longbridge OAuth client 注册、PKCE 授权和 code exchange；canonical OAuth state 与
+官方 SDK token cache 已以 `0600` 权限同步到 `/DATA/AppData/openclaw/data`，MacHostAgent 已安装并以
+bearer 鉴权返回 HTTP 200。operator exchange 脚本已兼容 Node 24 stdin，并在本机代理下完成 exchange。
+
+镜像侧确认官方 `longbridge@5.1.0` arm64 native binding 要求 glibc 2.39，而 pinned OpenClaw
+Debian 12 基础镜像为 glibc 2.36。Dockerfile 现以 SHA-256 固定的 Ubuntu 24.04 `libc6 2.39`
+私有 loader 包装 Node，保留基础镜像系统 libc；ARM64 构建与 SDK import smoke 已通过。尚未把该镜像
+部署到 CasaOS，也未执行 live quote 或 owner notification smoke；部署前需完成 release build、
+secrets scan、可回滚 checkpoint 和健康/工具验收。
+
 ## 2026-09-24：Longbridge 官方 SDK 运行时边界修正
 
 已将市场客户端切换为官方 `longbridge@5.1.0` Node SDK：行情、日内、交易时段、交易日、温度、movers

@@ -5,14 +5,11 @@ official Longbridge SDK cache under
 `/DATA/AppData/openclaw/data/longbridge-sdk-home/.longbridge/openapi/tokens`;
 the operator exchange helper writes it alongside canonical OAuth state.
 
-Blocked only on external operator state, not source implementation:
+OAuth and host prerequisites are now provisioned on M204. The release image still needs deployment and
+live acceptance:
 
-1. Provision the Longbridge OAuth client id at the protected CasaOS secret path.
-2. Run the M204 operator OAuth authorization and exchange flow; verify the
-   0600 state file survives an OpenClaw restart without browser interaction.
-3. Install `infra/macos/machostagent.py` through the explicit installer after
-   placing a protected bearer token, then verify launchd recovery and the two
-   OpenClaw host tools.
-4. Record sanitized live quote/session, public group scope, opening/closing
-   preview and event-idempotency evidence; never record tokens or private
-   account material.
+1. Deploy the glibc-compatible release image with a protected rollback checkpoint.
+2. Verify the 0600 OAuth state survives an OpenClaw restart without browser interaction.
+3. Verify the two OpenClaw host tools and launchd recovery.
+4. Record sanitized live quote/session, public group scope, opening/closing preview and event-idempotency
+   evidence; never record tokens or private account material.
