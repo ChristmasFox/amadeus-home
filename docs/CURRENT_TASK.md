@@ -1,5 +1,18 @@
 # 当前任务
 
+## 2026-09-24：Amadeus 1.5.0 Longbridge 日历范围热修复待部署
+
+1.4.9 已在 M204 CasaOS 运行并通过 OAuth、官方 SDK quote、HostAgent、Telegram/WhatsApp
+通道和 owner release notification 验收。`amadeus_market_session` 的 live smoke 暴露
+Longbridge 错误 `301600 too many query days`：默认交易日窗口原为当前日期前后 370 天，超过
+服务接受范围。1.5.0 将默认窗口收窄为前后 180 天，同时保留显式日期范围。
+
+定向 Amadeus tests、typecheck、build、secrets scan 和 diff check 已通过。下一步是提交推送
+1.5.0、重建 ARM64 镜像、执行带 rollback checkpoint 的 apply，并复测 market session/quote、
+MacHostAgent 工具和 `amadeus-release:1.5.0` 通知。外部 `media-organizer-adapter` 仍无可重建
+image/compose；部署会记录跳过，不伪造替代服务。Avalon 外部存储 gate 仍会使日志策略和 GC
+维护保守失败，并追加 warning notification。
+
 ## 2026-09-24：Longbridge 官方 SDK M204 运行时边界与 OAuth 验收进行中
 
 M204 已完成 Longbridge OAuth client 注册、PKCE 授权和 code exchange；canonical OAuth state 与

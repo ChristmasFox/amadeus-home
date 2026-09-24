@@ -1,8 +1,7 @@
-# Amadeus 1.4.9
+# Amadeus 1.5.0
 
-Host and market awareness on Amadeus-M204.
+Bound the Longbridge trading-day calendar request used by the market session tool.
 
-- Move public market truth to the Longbridge OpenAPI OAuth 2 read-only adapter.
-- Add deterministic public overview, quote, intraday, session, mover, symbol, numeric, and notification contracts.
-- Restore bounded owner-only MacHostAgent telemetry with launchd persistence and degraded power reporting.
-- Remove the retired market provider configuration and scheduled workflow.
+- Keep the default calendar window within Longbridge's accepted range.
+- Preserve explicit caller-provided start and end dates.
+- Retain the OAuth-backed read-only market path and deterministic session contract.
