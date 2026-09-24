@@ -1,5 +1,15 @@
 # 当前任务
 
+## 2026-09-24：9router 局域网访问与密码恢复已完成
+
+9router 之前的 CasaOS 发布仅绑定 `127.0.0.1:20128`，因此 `192.168.5.3:20128` 无法访问。
+已将仓库模板和 M204 live compose 的默认发布改为 `0.0.0.0:20128`，frpc 仍不映射 9router。
+验证通过：LAN `/api/health` 与 `/login` 返回 200，未带 API key 的 `/v1/models` 返回预期 401。
+
+已在外部路径 `/DATA/AppData/9router/backups/access-recovery-20260924T141346Z` 保存 compose、env
+和 data 回滚副本。通过 9router CLI 边界清除未知旧密码并设置临时新密码；密码只在本次用户回复中
+提供，未写入 Git、checkpoint 或日志。带该密码的 LAN 登录返回 200，认证 dashboard 返回 200。
+
 ## 2026-09-24：Amadeus 1.5.2 SoC 功耗采集已启用，整机交流功率待外部电表
 
 1.5.2 已部署，root `powermetrics` LaunchDaemon 已在 M204 启动。OpenClaw owner host-status

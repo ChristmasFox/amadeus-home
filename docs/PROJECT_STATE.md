@@ -1,3 +1,16 @@
+## 2026-09-24：9router LAN 访问和密码恢复已完成
+
+M204 CasaOS 的 9router 已从 guest loopback 发布切回 LAN：仓库模板
+`infra/docker/homelab/9router/docker-compose.example.yml` 与 live
+`/var/lib/casaos/apps/9router/docker-compose.yml` 使用 `0.0.0.0:20128`，保留
+`NINE_ROUTER_PORT` 覆盖能力；frpc 公网配置不包含 9router 映射。`192.168.5.3:20128` 的
+`/api/health`、`/login` 返回 200，未认证 `/v1/models` 返回 401。
+
+因用户未知旧 dashboard 密码，先在外部恢复点
+`/DATA/AppData/9router/backups/access-recovery-20260924T141346Z` 保存 compose、env 和 data，
+再通过 CLI token 边界重置并设置临时密码。登录和认证 dashboard smoke 已通过；临时密码不进入
+仓库或 checkpoint。
+
 ## 2026-09-24：Amadeus 1.5.2 SoC 功耗采集已启用，整机交流功率待外部电表
 
 1.5.2 已部署。root-only `powermetrics` LaunchDaemon 已在 M204 运行并原子更新固定快照，
