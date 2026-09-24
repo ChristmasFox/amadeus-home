@@ -1,9 +1,15 @@
 import ast
+import importlib.util
 import pathlib
 import unittest
 
 
 SOURCE = pathlib.Path(__file__).with_name("machostagent.py")
+POWER_SOURCE = pathlib.Path(__file__).with_name("machostagent_power.py")
+SPEC = importlib.util.spec_from_file_location("machostagent_power", POWER_SOURCE)
+assert SPEC and SPEC.loader
+machostagent_power = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(machostagent_power)
 
 
 class MacHostAgentContractTest(unittest.TestCase):
@@ -20,7 +26,24 @@ class MacHostAgentContractTest(unittest.TestCase):
         self.assertIn("MACHOSTAGENT_HOST_NAME", text)
 
     def test_power_degrades_independently(self):
-        self.assertIn('"telemetry": "supported" if temperature else "degraded"', SOURCE.read_text())
+        self.assertIn("privileged power sampler is not installed", SOURCE.read_text())
+
+    def test_power_parser_reports_watts_and_scope(self):
+        raw = b'''<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict>
+        <key>elapsed_ns</key><integer>1000000000</integer><key>processor</key><dict>
+        <key>cpu_power</key><real>993.156</real><key>gpu_power</key><real>476.674</real>
+        <key>ane_power</key><real>0.0</real><key>combined_power</key><real>1469.83</real>
+        </dict></dict></plist>'''
+        parsed = machostagent_power.power_snapshot(raw, "2026-09-24T13:00:00Z")
+        self.assertEqual(parsed["status"], "ok")
+        self.assertEqual(parsed["scope"], "soc")
+        self.assertEqual(parsed["powerWatts"], 1.47)
+        self.assertEqual(parsed["sampleWindowMs"], 1000.0)
+
+    def test_power_parser_rejects_missing_combined_power(self):
+        raw = b'<plist version="1.0"><dict><key>processor</key><dict/></dict></plist>'
+        parsed = machostagent_power.power_snapshot(raw)
+        self.assertEqual(parsed["status"], "unavailable")
 
 
 if __name__ == "__main__":

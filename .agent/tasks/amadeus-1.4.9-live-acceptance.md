@@ -1,7 +1,7 @@
-# Amadeus 1.4.9 live acceptance
+# Amadeus live acceptance and M204 host telemetry
 
-Source implementation is pushed at `32653e5`; the live 1.4.9 runtime is deployed and
-the 1.5.1 market calendar hotfix is queued. Market runtime now requires the
+Source implementation is pushed and the live 1.5.1 runtime is deployed; the 1.5.2 accurate-power
+change is queued. Market runtime now requires the
 official Longbridge SDK cache under
 `/DATA/AppData/openclaw/data/longbridge-sdk-home/.longbridge/openapi/tokens`;
 the operator exchange helper writes it alongside canonical OAuth state.
@@ -9,17 +9,17 @@ the operator exchange helper writes it alongside canonical OAuth state.
 OAuth and host prerequisites are provisioned on M204. The 1.4.9 release image was deployed with
 rollback checkpoints and live acceptance evidence:
 
-1. Rebuild and deploy the 1.5.1 glibc-compatible image with a protected rollback checkpoint.
+1. Rebuild and deploy the 1.5.2 glibc-compatible image with a protected rollback checkpoint.
 2. Re-run the 0600 OAuth state, official SDK quote/session, host tool, and launchd acceptance without
    browser interaction.
-3. Record sanitized market/session and notification evidence; never record tokens or private account
-   material.
+3. Install the privileged power sampler with explicit local authorization and record sanitized watts,
+   market/session, and notification evidence; never record tokens or private account material.
 
 The 1.5.0 live market session smoke still exposed Longbridge `301600 too many query days`; SDK probing
 confirmed +/-14 days succeeds while +/-21 days fails. 1.5.1 bounds the default trading-day window to
  +/-14 days while preserving explicit dates. The deployed 1.5.0 image,
 OAuth state, SDK cache, channel status, NAS read-only smoke, release notification, and maintenance
-warning notifications are retained in the M204 checkpoint `amadeus-openclaw-20260924131115`.
+warning notifications are retained in the M204 checkpoint `amadeus-openclaw-20260924132459`.
 
 Known external-service gap: M204 currently has no `media-organizer-adapter` container or rebuildable
 source/image (only its protected state archive exists). The deployment script reports this as

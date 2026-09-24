@@ -6,6 +6,7 @@ name, argv, shell, sudo, or file path supplied by callers.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import plistlib
@@ -23,6 +24,8 @@ PORT = int(os.environ.get("MACHOSTAGENT_PORT", "18791"))
 TOKEN_FILE = os.environ.get("MACHOSTAGENT_TOKEN_FILE", "")
 AVALON_PATH = os.environ.get("MACHOSTAGENT_AVALON_PATH", "/Volumes/Avalon")
 HOST_NAME = os.environ.get("MACHOSTAGENT_HOST_NAME", "Amadeus-M204")
+POWER_FILE = Path(os.environ.get("MACHOSTAGENT_POWER_FILE", "/var/run/amadeus-machostagent-power.json"))
+POWER_MAX_AGE_SECONDS = 30.0
 
 
 def run(argv: list[str], timeout: float = 2.0) -> str:
@@ -70,8 +73,20 @@ def disk(path: str) -> dict[str, Any]:
 
 def power() -> dict[str, Any]:
     battery = run(["/usr/bin/pmset", "-g", "batt"])
-    temperature = run(["/usr/bin/powermetrics", "-n", "1", "-i", "1", "--show-process-energy", "--show-cpu-power", "--show-gpu-power"], 4.0)
-    return {"battery": battery[:500] if battery else "unknown", "telemetry": "supported" if temperature else "degraded", "powerSummary": temperature[:1200] if temperature else None}
+    base = {"battery": battery[:500] if battery else "unknown"}
+    try:
+        snapshot = json.loads(POWER_FILE.read_text(encoding="utf8"))
+    except (OSError, json.JSONDecodeError):
+        return {**base, "telemetry": "degraded", "source": "powermetrics", "powerWatts": None, "powerSummary": None, "message": "privileged power sampler is not installed"}
+    updated = snapshot.get("updatedAt") if isinstance(snapshot, dict) else None
+    try:
+        timestamp = dt.datetime.fromisoformat(str(updated).replace("Z", "+00:00"))
+        age = dt.datetime.now(dt.timezone.utc).timestamp() - timestamp.timestamp()
+    except (TypeError, ValueError, OverflowError):
+        age = float("inf")
+    if not isinstance(snapshot, dict) or snapshot.get("status") != "ok" or age > POWER_MAX_AGE_SECONDS:
+        return {**base, "telemetry": "degraded", "source": "powermetrics", "powerWatts": None, "powerSummary": None, "updatedAt": updated, "message": "privileged power sample is unavailable or stale"}
+    return {**base, **snapshot, "ageSeconds": round(max(age, 0.0), 1), "powerSummary": "powermetrics SoC estimate"}
 
 
 def process_rows() -> list[dict[str, Any]]:

@@ -1,3 +1,14 @@
+## 2026-09-24：Amadeus 1.5.2 M204 准确功耗采集待授权安装
+
+源码已加入 root-only `powermetrics` sampler 和用户 agent 的新鲜度校验。采集器只写固定的
+`/var/run/amadeus-machostagent-power.json`，HTTP surface 没有新增命令、路径或 sudo；status
+会区分 `powerWatts`（SoC 估计）与 wall-input，缺失/过期样本返回 degraded。`VERSION` 已从
+1.5.1 推进到 1.5.2，尚未部署。
+
+M204 上还需一次用户可见的系统授权来安装 `/Library/LaunchDaemons/com.amadeus.machostagent.power.plist`。
+授权后才可把功耗验收记为 supported；目前不能把图片中 8–15W 的估算当作实测结果。精确墙上
+输入功率仍需外部电表，API 会保留这一测量范围标记。
+
 ## 2026-09-24：Amadeus 1.5.1 Longbridge 日历范围热修复待部署
 
 M204 当前 live OpenClaw/Product Radar 为 1.5.0 镜像；OAuth state、官方 SDK token cache、
