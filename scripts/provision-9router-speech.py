@@ -18,7 +18,7 @@ import urllib.request
 
 ASR_PROVIDER = "selfhosted-stt"
 TTS_PROVIDER = "selfhosted-tts"
-ASR_CONNECTION = "Amadeus ASR (DashScope)"
+ASR_CONNECTION = "Amadeus ASR (Qwen upstream)"
 TTS_CONNECTION = "Amadeus TTS (M204)"
 ASR_URL = "http://127.0.0.1:20129/v1/audio/transcriptions"
 TTS_URL = "http://host.docker.internal:18792"

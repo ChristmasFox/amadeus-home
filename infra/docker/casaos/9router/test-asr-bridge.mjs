@@ -11,7 +11,7 @@ let upstreamStatus = 200;
 let empty = false;
 let timeout = false;
 const server = createAsrServer({
-  bridgeKey: KEY, dashscopeKey: CLOUD, upstreamUrl: URL,
+  bridgeKey: KEY, upstreamKey: CLOUD, upstreamUrl: URL,
   convert: async (input) => { assert.equal(input.length, original.length); return wav; },
   fetchFn: async (url, options) => {
     calls++;
@@ -57,6 +57,18 @@ try {
   result = await post(undefined, KEY, Buffer.alloc(2048, 11));
   assert.equal(result[1].error.type, 'timeout');
   assert.equal(result[0], 504);
+  const qwen = createAsrServer({ bridgeKey: KEY, upstreamKey: CLOUD,
+    upstreamUrl: 'https://maas.qianwenaiapi.com/api/v1/services/aigc/multimodal-generation/generation',
+    convert: async () => wav,
+    fetchFn: async () => new Response(JSON.stringify({text:'你好，世界。',output:{text:'你好，世界。'},usage:{duration:1000}}), {status:200}),
+  });
+  await new Promise((resolve) => qwen.listen(0, '127.0.0.1', resolve));
+  try {
+    const form = new FormData();form.append('model','qwen-audio-3.0-asr-flash');form.append('file',new Blob([original],{type:'audio/wav'}),'fixture.wav');
+    const reply = await fetch(`http://127.0.0.1:${qwen.address().port}/v1/audio/transcriptions`,{method:'POST',headers:{Authorization:'Bearer '+KEY},body:form});
+    assert.deepEqual([reply.status,await reply.json()],[200,{text:'你好，世界。'}]);
+  } finally {qwen.close();}
+  assert.throws(() => createAsrServer({bridgeKey:KEY,upstreamKey:CLOUD,upstreamUrl:'https://maas.qianwenaiapi.com.evil.test/api/v1/services/aigc/multimodal-generation/generation'}),/invalid_asr_endpoint/);
   console.log('ASR_BRIDGE_FIXTURE=passed');
 } finally {
   server.close();
