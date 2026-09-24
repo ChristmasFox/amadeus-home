@@ -1,4 +1,19 @@
-## 2026-09-24：Amadeus 1.4.9 OAuth PKCE operator flow（源码已推送，实机验收待授权）
+## 2026-09-24：Amadeus 1.4.9 OAuth、HostAgent 与镜像验收进行中
+
+M204 已完成 Longbridge OAuth client 注册、浏览器 PKCE 授权和 code exchange；canonical state 与官方
+SDK token cache 已同步到外部 `/DATA/AppData/openclaw/data`，HostAgent bearer health 返回 200。官方
+SDK ARM64 binding 的 glibc 2.39 约束已由 Dockerfile 私有 loader 处理，构建镜像的 Node 与 SDK import
+smoke 已通过。第一次 apply 在切换前发现 M204 没有 `media-organizer-adapter` 容器，部署脚本现会显式
+跳过该外部服务并保留 pending 记录，不伪造替代服务。
+
+Longbridge OAuth operator flow 已按当前官方 OAuth 2 流程补齐 S256 PKCE、scope=3 和 callback
+state 校验；短期 verifier 只写入外部 0600 请求状态，成功交换后删除。OpenClaw 仍不参与浏览器
+授权，token/refresh state 仍在 `/DATA/AppData/openclaw/data` 外部路径。新增回归测试通过；部署脚本的
+`--dry-run` 不发通知，`--apply` 会在健康检查后写入并尝试发送一次 `amadeus-release:1.4.9` owner
+smoke notification；发布后日志/存储维护失败时还会追加 warning notification。证据见
+`.agent/checkpoints/2026-09-24-amadeus-1.4.9-oauth-and-glibc-runtime.md`。
+
+## 2026-09-24：Amadeus 1.4.9 OAuth PKCE operator flow（历史记录）
 
 Longbridge OAuth operator flow 已按当前官方 OAuth 2 流程补齐 S256 PKCE、scope=3 和 callback
 state 校验；短期 verifier 只写入外部 0600 请求状态，成功交换后删除。OpenClaw 仍不参与浏览器

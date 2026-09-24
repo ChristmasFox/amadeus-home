@@ -12,6 +12,10 @@ Debian 12 基础镜像为 glibc 2.36。Dockerfile 现以 SHA-256 固定的 Ubunt
 部署到 CasaOS，也未执行 live quote 或 owner notification smoke；部署前需完成 release build、
 secrets scan、可回滚 checkpoint 和健康/工具验收。
 
+M204 当前没有可重建的 `media-organizer-adapter` image/compose，只有受保护 state archive；部署脚本
+会显式记录 `MEDIA_ADAPTER_NETWORK=skipped_missing_service`，不臆造替代服务，因此媒体整理 live
+验收保留在 `.agent/tasks/amadeus-1.4.9-live-acceptance.md`。
+
 ## 2026-09-24：Longbridge 官方 SDK 运行时边界修正
 
 已将市场客户端切换为官方 `longbridge@5.1.0` Node SDK：行情、日内、交易时段、交易日、温度、movers

@@ -13,3 +13,8 @@ live acceptance:
 3. Verify the two OpenClaw host tools and launchd recovery.
 4. Record sanitized live quote/session, public group scope, opening/closing preview and event-idempotency
    evidence; never record tokens or private account material.
+
+Known external-service gap: M204 currently has no `media-organizer-adapter` container or rebuildable
+source/image (only its protected state archive exists). The deployment script reports this as
+`MEDIA_ADAPTER_NETWORK=skipped_missing_service` and does not invent a replacement. Media-organize live
+acceptance remains pending until the external adapter source/image is restored through its own task.

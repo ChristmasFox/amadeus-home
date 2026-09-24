@@ -459,8 +459,14 @@ PY
 
 orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create "$AMADEUS_NETWORK_NAME" >/dev/null
 orb -m "$MACHINE" -u root docker network inspect "$NINE_ROUTER_NETWORK_NAME" >/dev/null 2>&1 || fail "$NINE_ROUTER_NETWORK_NAME network is unavailable."
-if ! orb -m "$MACHINE" -u root docker inspect --format '{{json .NetworkSettings.Networks}}' "$MEDIA_ADAPTER_CONTAINER" 2>/dev/null | grep -q "$AMADEUS_NETWORK_NAME"; then
-  orb -m "$MACHINE" -u root docker network connect --alias media-organizer-adapter "$AMADEUS_NETWORK_NAME" "$MEDIA_ADAPTER_CONTAINER"
+MEDIA_ADAPTER_PRESENT=0
+if orb -m "$MACHINE" -u root docker inspect "$MEDIA_ADAPTER_CONTAINER" >/dev/null 2>&1; then
+  MEDIA_ADAPTER_PRESENT=1
+  if ! orb -m "$MACHINE" -u root docker inspect --format '{{json .NetworkSettings.Networks}}' "$MEDIA_ADAPTER_CONTAINER" 2>/dev/null | grep -q "$AMADEUS_NETWORK_NAME"; then
+    orb -m "$MACHINE" -u root docker network connect --alias media-organizer-adapter "$AMADEUS_NETWORK_NAME" "$MEDIA_ADAPTER_CONTAINER"
+  fi
+else
+  printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
 orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect amadeus --runtime --json > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
@@ -529,7 +535,11 @@ for attempt in $(seq 1 40); do
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null
-orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null
+if ((MEDIA_ADAPTER_PRESENT)); then
+  orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null
+else
+  printf '%s\n' 'MEDIA_ADAPTER_NETWORK=skipped_missing_service'
+fi
 orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
 
@@ -648,7 +658,7 @@ printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$RADAR_IMAGE"
 printf '%s\n' 'OPENCLAW_HEALTH=passed'
 printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
-printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'
+if ((MEDIA_ADAPTER_PRESENT)); then printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'; fi
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
 printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
 printf '%s\n' 'OWNER_OUTBOX_SMOKE=passed'
