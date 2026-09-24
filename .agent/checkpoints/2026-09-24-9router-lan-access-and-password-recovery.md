@@ -29,3 +29,15 @@ absent from this checkpoint, Git, and command output.
 - Unauthenticated `/v1/models`: HTTP 401 (API key gate preserved).
 - Temporary-password `/api/auth/login`: HTTP 200 and success true.
 - Authenticated `/dashboard`: HTTP 200.
+
+## OpenAI/Codex connectivity repair
+
+The 9router log showed `ECONNRESET` while establishing TLS to the OpenAI/Codex upstream;
+the client surfaced this as a 500 while the gateway recorded 502. The guest proxy
+`http://host.orb.internal:7897` passed the built-in proxy test, so 9router Settings were
+persistently updated to enable outbound HTTP proxying. Local Docker and LAN ranges remain
+excluded through the no-proxy list.
+
+- Codex provider test: `valid=true`.
+- Live `gpt-6-astra` chat completion: HTTP 200 with choices.
+- Kiro `invalid_grant` refresh errors remain a separate stale credential condition.
