@@ -59,6 +59,7 @@ has_amadeus=0
 has_presentation=0
 has_product=0
 has_speech=0
+has_router=0
 has_package_meta=0
 has_openclaw_deploy=0
 has_storage=0
@@ -77,7 +78,9 @@ for path in "${FILES[@]-}"; do
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
-    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py) has_speech=1 ;;
+    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
+    infra/docker/casaos/9router/*) has_router=1; has_package_meta=1 ;;
+    infra/docker/homelab/9router/*) has_router=1 ;;
     infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh)
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
@@ -112,6 +115,9 @@ elif ((has_package_meta)); then
 elif ((has_openclaw_deploy)); then
   LEVEL=RELEASE; WORKFLOW=OPENCLAW_RELEASE_CONFIG
   COMPOSE_MODE='explicit --apply: scripts/deploy-openclaw.sh --apply --build-auto|--no-build'
+elif ((has_router)); then
+  LEVEL=RELEASE; WORKFLOW=ROUTER_RELEASE_CONFIG
+  COMPOSE_MODE='explicit --apply: 9Router compose up -d --no-build after checkpoint'
 elif ((has_storage || has_backup)); then
   LEVEL=FAST; WORKFLOW=STORAGE_RUNTIME
   COMPOSE_MODE='none'
@@ -138,6 +144,13 @@ if ((has_package_meta)); then DOCKER_IMAGE_SET=both; fi
 if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy)); then DOCKER_IMAGE_SET=openclaw; fi
 if ((has_product)); then if [[ "$DOCKER_IMAGE_SET" == openclaw ]]; then DOCKER_IMAGE_SET=both; else DOCKER_IMAGE_SET=product-radar; fi; fi
 if ((has_presentation)); then DOCKER_IMAGE_SET=both; fi
+if ((has_router)); then
+  if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy || has_product || has_presentation)); then
+    DOCKER_IMAGE_SET="${DOCKER_IMAGE_SET}+9router"
+  else
+    DOCKER_IMAGE_SET=9router
+  fi
+fi
 printf 'DOCKER_IMAGE_SET=%s\n' "$DOCKER_IMAGE_SET"
 printf 'CHANGED_PATHS=%s\n' "${#FILES[@]}"
 for path in "${FILES[@]-}"; do printf 'PATH=%s\n' "$path"; done
@@ -149,7 +162,8 @@ case "$WORKFLOW" in
   AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
-  QWEN3_TTS) printf '%s\n' 'VERIFY=Python unittest, compileall, launchd plist lint, shell syntax, git diff --check; deployment remains explicit.' ;;
+  QWEN3_TTS) printf '%s\n' 'VERIFY=Python speech tests, host plist/shell lint, git diff --check; deployment remains explicit.' ;;
+  ROUTER_RELEASE_CONFIG) printf '%s\n' 'VERIFY=9Router adapter tests and compose lint; deployment remains explicit.' ;;
   STORAGE_RUNTIME) printf '%s\n' 'VERIFY=bash -n changed shell, pnpm test:storage-runtime, migration/readiness fixtures; no package-wide tests.' ;;
   SKULD_CONSISTENCY) printf '%s\n' 'VERIFY=JSON parse, pnpm test:skuld-consistency, git diff --check; no Docker/Compose/deploy.' ;;
   RELEASE_BUILD_REQUIRED) printf '%s\n' 'VERIFY=tests -> secrets -> immutable image build -> CasaOS compose --no-build -> health/smoke.' ;;
@@ -186,11 +200,19 @@ if ((has_product)); then
   printf '+ pnpm typecheck:product-radar\n'; pnpm typecheck:product-radar
   printf '+ pnpm test:product-radar\n'; pnpm test:product-radar
 fi
+if ((has_router)); then
+  printf '+ node infra/docker/casaos/9router/test-asr-bridge.mjs\n'
+  node infra/docker/casaos/9router/test-asr-bridge.mjs
+  printf '+ node --check infra/docker/casaos/9router/start-9router.mjs\n'
+  node --check infra/docker/casaos/9router/start-9router.mjs
+fi
 if ((has_speech)); then
   printf '+ python3 -m unittest discover -s apps/qwen3-tts-service/tests\n'
   python3 -m unittest discover -s apps/qwen3-tts-service/tests
   printf '+ python3 -m unittest scripts/test-provision-9router-speech.py\n'
   python3 -m unittest scripts/test-provision-9router-speech.py
+  printf '+ node scripts/test-patch-openclaw-voice-failure.mjs\n'
+  node scripts/test-patch-openclaw-voice-failure.mjs
   printf '+ python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py\n'
   python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py
   printf '+ bash -n infra/macos/manage-qwen3-tts.sh\n'

@@ -44,6 +44,15 @@ assert_line "$speech" 'DOCKER_IMAGE_SET=none'
 speech_route="$(scope scripts/provision-9router-speech.py)"
 assert_line "$speech_route" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
 
+router="$(scope infra/docker/casaos/9router/asr-bridge.mjs)"
+assert_line "$router" 'CHANGE_SCOPE_LEVEL=RELEASE'
+assert_line "$router" 'CHANGE_SCOPE_WORKFLOW=RELEASE_BUILD_REQUIRED'
+assert_line "$router" 'DOCKER_IMAGE_SET=9router'
+router_compose="$(scope infra/docker/homelab/9router/docker-compose.example.yml)"
+assert_line "$router_compose" 'CHANGE_SCOPE_WORKFLOW=ROUTER_RELEASE_CONFIG'
+router_and_openclaw="$(scope infra/docker/casaos/9router/Dockerfile integrations/openclaw/openclaw.json.example)"
+assert_line "$router_and_openclaw" 'DOCKER_IMAGE_SET=openclaw+9router'
+
 docs="$(scope docs/ARCHITECTURE.md)"
 assert_line "$docs" 'CHANGE_SCOPE_LEVEL=FAST'
 assert_line "$docs" 'CHANGE_SCOPE_WORKFLOW=FAST'

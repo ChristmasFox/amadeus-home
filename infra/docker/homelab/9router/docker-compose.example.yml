@@ -26,10 +26,14 @@ services:
       AUTH_COOKIE_SECURE: "false"
       OBSERVABILITY_ENABLED: "true"
       ENABLE_REQUEST_LOGS: "false"
+      AMADEUS_DASHSCOPE_KEY_FILE: /run/secrets/dashscope_asr_key
+      AMADEUS_ASR_BRIDGE_KEY_FILE: /run/secrets/asr_bridge_key
     ports:
       - "${NINE_ROUTER_PORT:-0.0.0.0:20128}:20128"
     volumes:
       - ${NINE_ROUTER_DATA_DIR:-/DATA/AppData/9router/data}:/app/data
+      - ${NINE_ROUTER_DASHSCOPE_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/dashscope-asr-api-key}:/run/secrets/dashscope_asr_key:ro
+      - ${NINE_ROUTER_ASR_BRIDGE_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/asr-bridge-key}:/run/secrets/asr_bridge_key:ro
     x-casaos:
       author: self
       category: Developer
