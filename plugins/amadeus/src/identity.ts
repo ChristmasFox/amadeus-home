@@ -60,7 +60,13 @@ interface TrustedInboundReply {
   expiresAt: number;
 }
 
+interface TrustedInboundSender {
+  senderId: string;
+  expiresAt: number;
+}
+
 const trustedInboundReplies = new Map<string, TrustedInboundReply>();
+const trustedInboundSenders = new Map<string, TrustedInboundSender>();
 const TRUSTED_INBOUND_REPLY_TTL_MS = 5 * 60 * 1000;
 
 function text(value: unknown): string | undefined {
@@ -99,11 +105,22 @@ export function rememberTrustedInboundReply(input: {
   channel?: unknown;
   accountId?: unknown;
   conversationId?: unknown;
+  senderId?: unknown;
+  senderE164?: unknown;
   replyToSender?: unknown;
 }): void {
   const sessionKey = text(input.sessionKey);
   if (!sessionKey) return;
   const channel = text(input.channel);
+  const senderId = text(input.senderId) ?? (channel === 'whatsapp' ? text(input.senderE164) : undefined);
+  if (channel && senderId) {
+    trustedInboundSenders.set(sessionKey, {
+      senderId,
+      expiresAt: Date.now() + TRUSTED_INBOUND_REPLY_TTL_MS,
+    });
+  } else {
+    trustedInboundSenders.delete(sessionKey);
+  }
   const replyToSender = text(input.replyToSender);
   if (!channel || !replyToSender) {
     trustedInboundReplies.delete(sessionKey);
@@ -125,6 +142,19 @@ export function rememberTrustedInboundReply(input: {
 export function forgetTrustedInboundReply(sessionKey: unknown): void {
   const normalized = text(sessionKey);
   if (normalized) trustedInboundReplies.delete(normalized);
+  if (normalized) trustedInboundSenders.delete(normalized);
+}
+
+function trustedInboundSenderFor(sessionKey: unknown): string | undefined {
+  const normalized = text(sessionKey);
+  if (!normalized) return undefined;
+  const current = trustedInboundSenders.get(normalized);
+  if (!current) return undefined;
+  if (current.expiresAt <= Date.now()) {
+    trustedInboundSenders.delete(normalized);
+    return undefined;
+  }
+  return current.senderId;
 }
 
 function trustedInboundReplyFor(sessionKey: unknown): TrustedChannelIdentity | undefined {
@@ -144,7 +174,9 @@ function baseContext(context: OpenClawPluginToolContext): IdentityContext {
   const channel = text(context.messageChannel ?? delivery?.channel);
   const accountId = text(delivery?.accountId ?? context.agentAccountId);
   const conversationId = text(context.nativeChannelId ?? delivery?.to ?? delivery?.threadId);
-  const senderId = text(context.requesterSenderId);
+  const senderId = text(context.requesterSenderId)
+    ?? (channel === 'whatsapp' ? text((context as unknown as { requesterSenderE164?: unknown }).requesterSenderE164) : undefined)
+    ?? trustedInboundSenderFor(context.sessionKey);
   const result: IdentityContext = {
     ...(channel ? { channel } : {}),
     ...(accountId ? { accountId } : {}),

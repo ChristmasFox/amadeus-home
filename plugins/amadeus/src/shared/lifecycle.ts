@@ -8,11 +8,21 @@ import { OwnerNotifier } from '../owner.js';
 
 export function registerIdentityLifecycle(api: OpenClawPluginApi): void {
   api.on('before_dispatch', (event, hookContext) => {
+    const eventMetadata = event as typeof event & {
+      senderId?: unknown;
+      senderE164?: unknown;
+    };
+    const hookMetadata = hookContext as typeof hookContext & {
+      senderId?: unknown;
+      senderE164?: unknown;
+    };
     rememberTrustedInboundReply({
       sessionKey: hookContext.sessionKey ?? event.sessionKey,
       channel: hookContext.channelId ?? event.channel,
       accountId: hookContext.accountId,
       conversationId: hookContext.conversationId,
+      senderId: hookMetadata.senderId ?? eventMetadata.senderId,
+      senderE164: hookMetadata.senderE164 ?? eventMetadata.senderE164,
       replyToSender: hookContext.replyToSender ?? event.replyToSender,
     });
   });
