@@ -58,6 +58,7 @@ has_identity=0
 has_amadeus=0
 has_presentation=0
 has_product=0
+has_speech=0
 has_package_meta=0
 has_openclaw_deploy=0
 has_storage=0
@@ -76,6 +77,7 @@ for path in "${FILES[@]-}"; do
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
+    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py) has_speech=1 ;;
     infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh)
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
@@ -123,6 +125,8 @@ elif ((has_presentation)); then
   LEVEL=RUNTIME; WORKFLOW=PRESENTATION
 elif ((has_product)); then
   LEVEL=RUNTIME; WORKFLOW=PRODUCT_RADAR
+elif ((has_speech)); then
+  LEVEL=RUNTIME; WORKFLOW=QWEN3_TTS
 fi
 
 printf 'CHANGE_SCOPE_LEVEL=%s\n' "$LEVEL"
@@ -145,6 +149,7 @@ case "$WORKFLOW" in
   AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
+  QWEN3_TTS) printf '%s\n' 'VERIFY=Python unittest, compileall, launchd plist lint, shell syntax, git diff --check; deployment remains explicit.' ;;
   STORAGE_RUNTIME) printf '%s\n' 'VERIFY=bash -n changed shell, pnpm test:storage-runtime, migration/readiness fixtures; no package-wide tests.' ;;
   SKULD_CONSISTENCY) printf '%s\n' 'VERIFY=JSON parse, pnpm test:skuld-consistency, git diff --check; no Docker/Compose/deploy.' ;;
   RELEASE_BUILD_REQUIRED) printf '%s\n' 'VERIFY=tests -> secrets -> immutable image build -> CasaOS compose --no-build -> health/smoke.' ;;
@@ -180,6 +185,18 @@ fi
 if ((has_product)); then
   printf '+ pnpm typecheck:product-radar\n'; pnpm typecheck:product-radar
   printf '+ pnpm test:product-radar\n'; pnpm test:product-radar
+fi
+if ((has_speech)); then
+  printf '+ python3 -m unittest discover -s apps/qwen3-tts-service/tests\n'
+  python3 -m unittest discover -s apps/qwen3-tts-service/tests
+  printf '+ python3 -m unittest scripts/test-provision-9router-speech.py\n'
+  python3 -m unittest scripts/test-provision-9router-speech.py
+  printf '+ python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py\n'
+  python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py
+  printf '+ bash -n infra/macos/manage-qwen3-tts.sh\n'
+  bash -n infra/macos/manage-qwen3-tts.sh
+  printf '+ plutil -lint infra/macos/com.amadeus.qwen3-tts.plist.example\n'
+  plutil -lint infra/macos/com.amadeus.qwen3-tts.plist.example
 fi
 if ((CHECK_SECRETS)); then
   printf '+ pnpm check:secrets\n'; pnpm check:secrets

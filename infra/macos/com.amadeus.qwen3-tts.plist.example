@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.amadeus.qwen3-tts</string>
+  <key>ProgramArguments</key><array><string>__VENV_PYTHON__</string><string>__SERVICE_SCRIPT__</string></array>
+  <key>EnvironmentVariables</key><dict>
+    <key>AMADEUS_TTS_BIND</key><string>0.0.0.0</string>
+    <key>AMADEUS_TTS_PORT</key><string>18792</string>
+    <key>AMADEUS_TTS_TOKEN_FILE</key><string>__TOKEN_FILE__</string>
+    <key>AMADEUS_TTS_VOICE_DIR</key><string>__VOICE_DIR__</string>
+    <key>AMADEUS_TTS_LOG_DIR</key><string>__LOG_DIR__</string>
+    <key>AMADEUS_TTS_MODEL_PATH</key><string>__MODEL_PATH__</string>
+    <key>HF_HOME</key><string>__MODEL_CACHE__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>60</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/dev/null</string>
+  <key>StandardErrorPath</key><string>/dev/null</string>
+</dict></plist>

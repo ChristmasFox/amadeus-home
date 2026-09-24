@@ -218,3 +218,7 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 8. 检查 health、media adapter、NAS read-only SSH、channel status 和真实 WhatsApp owner outbox。
 
 旧数据仅用于备份/审计/恢复，不作为运行时 fallback；未执行旧架构回滚演练。
+
+## Voice I/O boundary (1.5.3 candidate; not yet live)
+
+WhatsApp stays transport-only. Pinned OpenClaw/Kurisu owns the existing session, transcription lifecycle, tools and `tts.auto=inbound` response modality. 9Router remains the sole speech route/control plane via logical `amadeus-asr` and `amadeus-tts` aliases; the existing Chat Combo does **not** satisfy STT. A native M204 user-session Qwen3-TTS service at port 18792 only synthesizes authenticated bounded text with the operator-owned `kurisu-v1` profile; it has no conversation, planner, channel or notification logic. The example config is not deployed until direct STT/TTS and WhatsApp acceptance prove this chain and text fallback. No Telegram-specific speech path is part of this release.
