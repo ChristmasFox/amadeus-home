@@ -129,10 +129,12 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
   \`identity_bind_channel\`、\`identity_add_alias\`、\`identity_link_account\`、
   \`identity_list_candidates\`、\`identity_confirm_candidate\`。observed alias 只作为候选，
   必须经 Arthur 确认后才成为 authoritative binding。
-- `amadeus_market_indices`：通过配置的 Yahoo Finance Chart API 读取 `^NDX` 和 `^GSPC` 的
-  日线开盘/收盘及前一交易日收盘，确定性计算点数和百分比；没有当日交易 bar 时返回
-  `market_closed`，不发送旧值或假值。 OpenClaw cron 在 `America/New_York` 的 09:35 和 16:05
-  调用它，并只把工具返回的结构化通知交给 owner outbox。
+- `amadeus_market_overview`、`amadeus_market_quote`、`amadeus_market_intraday`、
+  `amadeus_market_session`、`amadeus_market_movers`：通过 Longbridge OpenAPI OAuth 2
+  读取 `.IXIC.US`、`.NDX.US`、`.SPX.US`、`.DJI.US` 和显式 US equity 的公共行情；前收、涨跌、
+  百分比、区间、方向和显示格式由确定性 domain/presentation 计算。 Longbridge trading-day/session
+  是开收盘有效性的唯一依据；不可用时返回结构化失败，不发送旧值或假值。 OpenClaw cron 只触发
+  检查，固定时钟不取代交易日事实，并只把有效结构化通知交给 owner outbox。
 
 ### Owner notification contract
 

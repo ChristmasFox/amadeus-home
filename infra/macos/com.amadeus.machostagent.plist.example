@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.amadeus.machostagent</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/env</string><string>python3</string><string>/usr/local/libexec/amadeus/machostagent.py</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>MACHOSTAGENT_BIND</key><string>0.0.0.0</string>
+    <key>MACHOSTAGENT_PORT</key><string>18791</string>
+    <key>MACHOSTAGENT_HOST_NAME</key><string>Amadeus-M204</string>
+    <key>MACHOSTAGENT_AVALON_PATH</key><string>/Volumes/Avalon</string>
+    <key>MACHOSTAGENT_TOKEN_FILE</key><string>/Library/Application Support/Amadeus/machostagent.token</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/var/log/amadeus-mac-host-agent.log</string>
+  <key>StandardErrorPath</key><string>/var/log/amadeus-mac-host-agent.err.log</string>
+</dict></plist>

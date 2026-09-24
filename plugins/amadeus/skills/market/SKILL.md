@@ -1,28 +1,32 @@
 ---
 name: market
-description: Observe the NASDAQ-100 and S&P 500 at the US regular-session open and close, and deliver factual owner notifications.
+description: Answer public market questions with bounded Longbridge read-only tools and deterministic formatting.
 ---
 
-# Market observations
+# Public market capability
 
-Use `amadeus_market_indices` with the explicit structured `phase` value
-`open` or `close`. The tool is deterministic and owns the symbols (`^NDX` for
-NASDAQ-100 and `^GSPC` for S&P 500), previous-close comparison, trading-date
-check, and data timestamp.
+OpenClaw decides when a market capability is needed through normal reasoning.
+Use the structured market tools below; never route messages by keywords.
 
-For a scheduled observation:
+- `amadeus_market_overview` for the four public US index families and a concise
+  session-aware overview.
+- `amadeus_market_quote` with explicit aliases or symbols such as `AMD.US`.
+- `amadeus_market_intraday` for a range and intraday position.
+- `amadeus_market_session` for the Longbridge exchange session/trading-day
+  authority.
+- `amadeus_market_movers` for public US movers.
+- `amadeus_market_constituents` when an index constituent list is explicitly requested.
 
-- Notify only when the tool returns `status=ok`.
-- When it returns `status=market_closed` or `status=error`, do not invent
-  values and do not call `amadeus_notify_owner`.
-- For `status=ok`, pass the returned `notification` object unchanged to
-  `amadeus_notify_owner`. It is a validated `owner_notification` contract;
-  preserve its eventType, severity, eventKey, source, headline, facts, summary,
-  dataUpdatedAt, occurredAt, and worldLineClosing fields.
-- Keep the stable `market-indices:<trading-date>:<open|close>` event key and
-  the final `El Psy Kongroo.` world-line closing. The owner outbox remains the
-  only proactive delivery path; do not send to Telegram, KOOK, or a group.
+Longbridge OAuth 2 is the sole numeric market authority. A result with
+`longbridge_oauth_reauthorization_required` or `longbridge_unavailable` must be
+reported truthfully; do not invent values or query another provider. These
+tools expose no account, portfolio, balance, position, order, or trading data.
 
-The schedule is in `America/New_York` at 09:35 and 16:05 on weekdays. The
-check still verifies the current trading bar, so US exchange holidays and
-other closed sessions produce no notification.
+When the scheduler checks an opening or closing push, the market domain must
+first verify the Longbridge trading day/session. Pass the returned structured
+notification unchanged to `amadeus_notify_owner` only when the status is `ok`.
+The stable event key remains `market-indices:<trading-date>:<open|close>`.
+
+Use direction glyphs `▲`, `▼`, and `—`; the application severity stays `info`
+regardless of whether the market rises or falls. Numeric values are already
+formatted by the deterministic presentation layer.

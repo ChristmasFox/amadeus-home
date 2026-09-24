@@ -154,7 +154,7 @@ root = Path(sys.argv[1])
 paths = [
     root / 'openclaw.env', root / 'secrets/pubg-api-key', root / 'secrets/pubg-team.json',
     root / 'secrets/telegram-bot-token', root / 'secrets/owner-whatsapp-target',
-    root / 'secrets/mac-ssh-key', root / 'secrets/vps-readonly-ssh-key',
+    root / 'secrets/mac-ssh-key', root / 'secrets/mac-host-agent-token', root / 'secrets/longbridge-client-id', root / 'secrets/vps-readonly-ssh-key',
     root / 'secrets/vps-ssh-known-hosts', root / 'secrets/kiwivm-credentials.json',
     root / 'secrets/kook-bot-token',
 ]

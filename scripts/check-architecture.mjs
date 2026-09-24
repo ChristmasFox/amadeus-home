@@ -3,8 +3,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const CAPABILITIES = ['identity', 'product-radar', 'media', 'nas', 'homelab', 'kook', 'market', 'notification', 'vps'];
-const SKILLS = ['amadeus', 'identity', 'product-radar', 'media-organizer', 'nas', 'homelab', 'kook', 'market', 'owner-notification', 'vps'];
+const CAPABILITIES = ['identity', 'product-radar', 'media', 'nas', 'homelab', 'kook', 'market', 'macos-host', 'notification', 'vps'];
+const SKILLS = ['amadeus', 'identity', 'product-radar', 'media-organizer', 'nas', 'homelab', 'kook', 'market', 'macos-host', 'owner-notification', 'vps'];
 
 function text(root, relative) {
   const path = join(root, relative);
@@ -131,7 +131,7 @@ export function checkArchitecture(root = REPO_ROOT) {
 
   const amadeusSource = text(root, 'plugins/amadeus/src/index.ts');
   checkForbiddenImports(root, 'plugins/amadeus/src', /before_prompt_build|appendSystemContext/iu, 'amadeus source contains global prompt injection', errors);
-  for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerNotification', 'registerVps']) {
+  for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerMacosHost', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
   }
   if (/Type\.(?:Object|Union|Array|Literal)\s*\(/u.test(amadeusSource) || /\bregisterTool\s*\(/u.test(amadeusSource)) errors.push('amadeus bootstrap owns schema or tool registration');

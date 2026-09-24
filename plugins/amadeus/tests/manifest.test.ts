@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { identityContextFromOpenClaw } from '../src/identity.js';
 import entry from '../src/index.js';
+import { macHostStatus } from '../src/machost.js';
 
 test('Amadeus manifest exposes the native Identity contract', async () => {
   const manifest = JSON.parse(await readFile(new URL('../openclaw.plugin.json', import.meta.url), 'utf8')) as {
@@ -27,7 +28,7 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
     'amadeus_vps_system_status',
     'amadeus_vps_services',
   ]) assert.equal(tools.has(name), true, `missing VPS manifest tool: ${name}`);
-  assert.equal(tools.has('amadeus_market_indices'), true, 'missing market manifest tool');
+  for (const name of ['amadeus_market_overview', 'amadeus_market_quote', 'amadeus_market_intraday', 'amadeus_market_session', 'amadeus_market_movers', 'amadeus_market_constituents', 'amadeus_macos_host_status', 'amadeus_macos_host_processes']) assert.equal(tools.has(name), true, `missing market/host manifest tool: ${name}`);
   assert.equal(tools.has('amadeus_briefing'), false, 'retired technology briefing tool is still exposed');
   assert.equal(manifest.skills?.includes('skills/identity'), true);
   assert.equal(manifest.skills?.includes('skills/market'), true);
@@ -36,16 +37,20 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
 
 test('Amadeus registers typed inbound identity context hooks', () => {
   const hooks = new Map<string, (...args: unknown[]) => unknown>();
+  const registered: string[] = [];
   const api = {
     pluginConfig: {},
     rootDir: '/tmp/amadeus-test',
     logger: { info() {}, warn() {} },
     on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, handler); },
     registerService() {},
-    registerTool() {},
+    registerTool(_factory: unknown, options: { name: string }) { registered.push(options.name); },
   } as unknown as OpenClawPluginApi;
 
   entry.register(api);
+  assert.equal(registered.some((name) => /trade|order|balance|position|portfolio/iu.test(name)), false);
+  assert.equal(registered.includes('amadeus_market_quote'), true);
+  assert.equal(registered.includes('amadeus_macos_host_status'), true);
   assert.equal(hooks.has('before_prompt_build'), false);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
@@ -63,4 +68,8 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(identityContextFromOpenClaw(context).replySender?.platformUserId, 'reply-1');
   hooks.get('agent_end')?.({}, { sessionKey: 'agent:main:hook-test' });
   assert.equal(identityContextFromOpenClaw(context).replySender, undefined);
+});
+
+test('host telemetry rejects owner messages in group conversations', async () => {
+  await assert.rejects(() => macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: true, sessionKey: 'agent:main:group:1', nativeChannelId: 'group-1@g.us' } as never), /private/u);
 });

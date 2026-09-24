@@ -1,5 +1,19 @@
 # 当前任务
 
+## 2026-09-24：Amadeus 1.4.9 Host & Market Awareness（源码实现与验证进行中）
+
+远端 `1c2162b` 已拉取，权威目标为 `docs/AMADEUS_1_4_9_HOST_AND_MARKET_AWARENESS_GOAL.md`。
+当前工作树已将市场能力迁移到 Longbridge OAuth 2 唯一只读来源：新增公开市场 overview/quote/
+intraday/session/movers 工具、确定性 symbol/数值/方向/通知格式、OAuth 状态持久化和无浏览器重启
+路径；移除旧市场配置、传输、解析器、provider-specific fixture 与固定时钟市场真相。新增 M204 原生
+MacHostAgent 固定 `/health`、`/v1/status`、`/v1/processes` 只读面、launchd plist、owner-only
+OpenClaw host tools 和 powermetrics degraded 语义。定向 Amadeus/host tests、typecheck、architecture
+checks 已通过；尚未执行需要真实 Longbridge operator OAuth 和 live M204 host agent 的部署验收。
+
+版本已通过唯一入口更新为 `1.4.9`，release notes 已替换为单次发布内容。下一步是完成全仓 build/
+typecheck/test/secrets/diff 验证，生成 sanitized checkpoint，并在具备外部 client id/OAuth state 与
+MacHostAgent token 后执行 M204 runtime acceptance；OAuth/token/private account 数据不写入仓库。
+
 ## 2026-09-24：frpc 与公网服务已恢复（跳过 9router）
 
 已从外置 source-freeze 归档恢复 M204 的 frpc 配置，删除 `9router-tcp` 与未恢复的 Homarr

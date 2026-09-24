@@ -205,6 +205,8 @@ def main() -> None:
     require_existing(secrets_dir / "telegram-bot-token", "Telegram token")
     require_existing(secrets_dir / "kook-bot-token", "KOOK token")
     require_existing(secrets_dir / "mac-ssh-key", "Mac SSH key")
+    require_existing(secrets_dir / "mac-host-agent-token", "MacHostAgent token")
+    require_existing(secrets_dir / "longbridge-client-id", "Longbridge OAuth client id")
     kiwivm_credentials = secrets_dir / "kiwivm-credentials.json"
     require_existing(kiwivm_credentials, "KiwiVM credentials")
     try:

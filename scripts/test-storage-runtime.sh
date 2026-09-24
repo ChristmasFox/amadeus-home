@@ -187,7 +187,7 @@ bash "$ROOT_DIR/scripts/import-skuld-secrets.sh" --bundle "$bundle" --passphrase
 inventory="$fixture/secret-inventory"
 mkdir -p "$inventory/secrets"
 printf '%s\n' 'FIXTURE_SECRET_VALUE' >"$inventory/openclaw.env"
-for name in telegram-bot-token owner-whatsapp-target vps-readonly-ssh-key vps-ssh-known-hosts kiwivm-credentials.json; do
+for name in telegram-bot-token owner-whatsapp-target mac-host-agent-token longbridge-client-id vps-readonly-ssh-key vps-ssh-known-hosts kiwivm-credentials.json; do
   printf '%s\n' 'FIXTURE_SECRET_VALUE' >"$inventory/secrets/$name"
 done
 for path in "$inventory/openclaw.env" "$inventory/secrets/"*; do chmod 600 "$path"; done

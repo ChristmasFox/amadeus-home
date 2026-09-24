@@ -340,23 +340,10 @@ typecheck 通过；后续 Phase 3-5 已在下方完成，release/deploy 尚未�
 - `caddy validate`、平滑 reload、Let’s Encrypt 证书签发和 Cloudflare 公网回源均通过；frps
   `7000` 控制通道、HomeLab frpc 及各服务容器未重启。9Router API 未带 key 时保持 `401`。
 
-## 2026-09-19：美股指数开收盘通知（本轮）
+## 2026-09-19：美股指数开收盘通知（历史，已由 1.4.9 替换）
 
-- 新增 `amadeus_market_indices` 原生工具，固定观测 NASDAQ-100 (`^NDX`) 与标普500
-  (`^GSPC`)；在工具边界确定当前交易日、前一交易日收盘、开盘/收盘涨跌和数据更新时间，
-  使用 Yahoo Finance Chart API，接口返回无当日 bar 时为 `market_closed`，不复用旧值。
-- 新增 `market` Skill、市场解析回归和手动 cron eventKey 隔离；通知沿用 WhatsApp owner
-  outbox，标题为 `Amadeus • 世界线观测 · 美股开盘/收盘`，正文以 `El Psy Kongroo.` 收束。
-- 部署脚本注册 `America/New_York` 工作日 `09:35`/`16:05` cron；对应北京时间夏令时约为
-  21:35/次日 04:05，冬令时约为 22:35/次日 05:05。休市日不通知。
-- 本地 Amadeus/Identity typecheck、16 条 Amadeus 回归、secrets scan、构建和 `git diff --check`
-  已通过。版本 `1.2.0`、提交 `5117aa5` 已通过 `--apply --build-auto` 部署；OpenClaw 镜像为
-  `local/openclaw-amadeus:git-5117aa593fbc-20260919102358`，恢复 checkpoint 为
-  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260919102358`。
-- live 容器为 `running/healthy`；`amadeus_market_indices` 已在 runtime bundle 注册，`market`
-  Skill 已加载；`amadeus-market-open`/`amadeus-market-close` 均为 isolated、`America/New_York`
-  的 `35 9 * * 1-5`/`5 16 * * 1-5`，allow-list 仅含行情工具和 owner notifier。Gateway live smoke
-  实际调用行情工具并在周六返回 `market_closed`，未发送未经请求的市场通知。
+- 这一历史实现已在 1.4.9 source phase 中移除；原有通知幂等 key 和 owner outbox 语义保留，
+  由 Longbridge-only overview/session workflow 接管。
 
 ## Amadeus 版本管理（历史记录，2026-09-19）
 
@@ -741,3 +728,17 @@ local 9Router dependency is retained only on `127.0.0.1:20128` for OpenClaw comp
 remains stopped. The pre-restore runtime copy is external at
 `/Volumes/Avalon/backups/operation-skuld/public-backends-before-20260924T090150Z`.
 See `.agent/checkpoints/2026-09-24-frpc-public-restore.md`.
+## 2026-09-24：Amadeus 1.4.9 Host & Market Awareness（实现中）
+
+远端 `origin/main` 已从 `744379e` 快进到包含权威目标文档的 `1c2162b`。当前 release source
+为 `VERSION=1.4.9`：Amadeus market 已迁移到 Longbridge OpenAPI OAuth 2 唯一市场真相源，
+OAuth state 使用 `/data/longbridge-oauth.json` 外部持久化并提供 `ready`、`reauth_required`、
+`unavailable` 结构化状态；没有账户、余额、持仓、订单或交易工具。公开 market tool surface 为
+overview/quote/intraday/session/movers，symbol、前收/涨跌、session/calendar、数值格式、方向 glyph
+和 owner event key 由确定性代码处理；旧市场 provider config/transport/parser/fixtures 已删除。
+
+M204 `MacHostAgent` 已进入 source：macOS 原生 bounded collectors、固定 read-only HTTP routes、
+launchd persistence artifact、owner-only OpenClaw status/process tools 和 `powermetrics` 独立 degraded
+状态。定向 tests、Amadeus typecheck/test、architecture check 已通过。真实 OAuth 授权、重启持久化、
+live Longbridge quote/session、M204 本机 telemetry 对照与 release deploy 仍 pending；本节不宣称
+`LONGBRIDGE_AUTH=verified` 或 `MAC_HOST_AGENT=healthy`，直到外部运行时证据写入后续 checkpoint。

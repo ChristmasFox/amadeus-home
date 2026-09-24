@@ -42,6 +42,8 @@ services:
       - ${OPENCLAW_TELEGRAM_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/telegram-bot-token}:/run/secrets/telegram_bot_token:ro
       - ${OPENCLAW_OWNER_TARGET_HOST_FILE:-/DATA/AppData/openclaw/secrets/owner-whatsapp-target}:/run/secrets/owner_whatsapp_target:ro
       - ${OPENCLAW_MAC_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-ssh-key}:/run/secrets/mac_ssh_key:ro
+      - ${OPENCLAW_MAC_HOST_AGENT_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
+      - ${OPENCLAW_LONGBRIDGE_CLIENT_ID_HOST_FILE:-/DATA/AppData/openclaw/secrets/longbridge-client-id}:/run/secrets/longbridge_client_id:ro
       - ${OPENCLAW_KOOK_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/kook-bot-token}:/run/secrets/kook_bot_token:ro
       - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro
       - ${OPENCLAW_VPS_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key}:/run/secrets/vps_ssh_key:ro

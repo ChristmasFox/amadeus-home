@@ -25,7 +25,13 @@ export interface AmadeusConfig {
   notificationOutboxDir: string;
   identityDatabasePath: string;
   identityPresetsFile?: string;
-  marketDataBaseUrl: string;
+  longbridgeApiBaseUrl: string;
+  longbridgeAuthBaseUrl: string;
+  longbridgeClientIdFile: string;
+  longbridgeClientSecretFile?: string;
+  longbridgeOAuthStateFile: string;
+  macHostAgentBaseUrl: string;
+  macHostAgentTokenFile: string;
   kiwiVmBaseUrl: string;
   kiwiVmCredentialsFile: string;
   vpsSshHost: string;
@@ -54,6 +60,8 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const macSshKnownHostsFile = optionalFile('macSshKnownHostsFile', 'MAC_CONTROL_KNOWN_HOSTS_FILE');
   const kookTokenFile = optionalFile('kookTokenFile', 'KOOK_BOT_TOKEN_FILE');
   const identityPresetsFile = optionalFile('identityPresetsFile', 'IDENTITY_PRESETS_FILE');
+  const longbridgeClientSecretFile = optionalFile('longbridgeClientSecretFile', 'LONGBRIDGE_CLIENT_SECRET_FILE');
+  const macHostAgentTokenFile = optionalFile('macHostAgentTokenFile', 'MAC_HOST_AGENT_TOKEN_FILE');
   const ownerDeliverySetting = value.ownerNotificationDeliveryEnabled ?? env('OWNER_NOTIFICATION_DELIVERY_ENABLED');
   let ownerNotificationDeliveryEnabled: boolean;
   if (ownerDeliverySetting === undefined) ownerNotificationDeliveryEnabled = true;
@@ -80,7 +88,13 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     notificationOutboxDir: file('notificationOutboxDir', 'OWNER_NOTIFICATION_OUTBOX_DIR', '/var/lib/openclaw/notifications'),
     identityDatabasePath: file('identityDatabasePath', 'IDENTITY_DATABASE_PATH', '/data/identity.sqlite'),
     ...(identityPresetsFile ? { identityPresetsFile } : {}),
-    marketDataBaseUrl: file('marketDataBaseUrl', 'MARKET_DATA_BASE_URL', 'https://query2.finance.yahoo.com/v8/finance/chart').replace(/\/$/u, ''),
+    longbridgeApiBaseUrl: file('longbridgeApiBaseUrl', 'LONGBRIDGE_API_BASE_URL', 'https://openapi.longbridge.com').replace(/\/$/u, ''),
+    longbridgeAuthBaseUrl: file('longbridgeAuthBaseUrl', 'LONGBRIDGE_AUTH_BASE_URL', 'https://openapi.longbridge.com').replace(/\/$/u, ''),
+    longbridgeClientIdFile: file('longbridgeClientIdFile', 'LONGBRIDGE_CLIENT_ID_FILE', '/run/secrets/longbridge_client_id'),
+    ...(longbridgeClientSecretFile ? { longbridgeClientSecretFile } : {}),
+    longbridgeOAuthStateFile: file('longbridgeOAuthStateFile', 'LONGBRIDGE_OAUTH_STATE_FILE', '/data/longbridge-oauth.json'),
+    macHostAgentBaseUrl: file('macHostAgentBaseUrl', 'MAC_HOST_AGENT_BASE_URL', 'http://host.docker.internal:18791').replace(/\/$/u, ''),
+    macHostAgentTokenFile: macHostAgentTokenFile ?? '/run/secrets/mac_host_agent_token',
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
     kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
     vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),
