@@ -106,7 +106,7 @@ export function createLongbridgeClient(config: AmadeusConfig, oauth = new Longbr
         if (error) throw error;
         throw new Error('longbridge_oauth_reauthorization_required');
       });
-      const sdkConfig = sdk.Config.fromOAuth(sdkOAuth);
+      const sdkConfig = sdk.Config.fromOAuth(sdkOAuth, { httpUrl: config.longbridgeApiBaseUrl, enablePrintQuotePackages: false });
       return { sdk, quote: sdk.QuoteContext.new(sdkConfig), market: sdk.MarketContext.new(sdkConfig) };
     })();
     try { return await contextsPromise; } catch (error) { contextsPromise = undefined; throw error; }
