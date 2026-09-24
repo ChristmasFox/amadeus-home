@@ -66,6 +66,8 @@ test_apply_mode() {
   [[ -f "$tok_file" ]] || fail "apply: telegram-bot-token not written at $tok_file"
   mode="$(file_mode "$tok_file")"
   [[ "$mode" == '600' ]] || fail "apply: telegram-bot-token has mode $mode (expected 600)"
+  printf '%s\n' "$out" | grep -Fq 'OPENCLAW_SECRET_OWNER_NORMALIZED=1000:1000' \
+    || fail 'apply: OpenClaw secret runtime owner was not normalized'
 
   local whatsapp_creds="$dest_base/DATA/AppData/openclaw/config/credentials/whatsapp/secondary/creds.json"
   [[ -s "$whatsapp_creds" ]] || fail 'apply: WhatsApp credential state was not restored'
