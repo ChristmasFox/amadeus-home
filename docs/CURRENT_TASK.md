@@ -303,3 +303,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-24：1.5.3 9Router deploy source（未执行 apply）
 
 新增默认 dry-run、显式 `--apply` 的 9Router speech 部署脚本；内含 M204 protected secrets preflight、旧镜像外部归档、SQLite/Compose/env/secret checkpoint、ARM64 immutable image、`--no-build` 切换、双服务 health 和失败时 Compose 回退。真实密钥/地域 URL 不存在，故未构建镜像或切换 live。`kurisu-v1` 目录已以 0700 创建但仍无参考音频/文字。详见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-deploy-source.md`。
+
+## 2026-09-24：1.5.3 9Router immutable image 工程验收（未切换）
+
+旧镜像已归档至 Avalon。基于 Git commit 的 ARM64 候选镜像已构建并加载到 M204 guest，但生产容器/Compose 仍运行旧 `0.5.81`。isolated `--network none` fixture 发现并修复 9Router entrypoint 降权至 uid 1000 后无法读取 root-owned 0600 secret 的问题；重测通过 bridge 鉴权、ffmpeg 转码、双 health 和断网结构化失败。bridge token 已在仓库外生成并以 uid 1000/mode 0600 安置；DashScope key/地域 URL、dashboard 密码文件及正式音色仍缺。见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-image-fixture.md`。不把 fixture 成功当作真实 ASR 或 WhatsApp 验收。

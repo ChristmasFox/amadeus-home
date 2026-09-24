@@ -39,8 +39,8 @@ import os,sys
 base=Path(sys.argv[1]); env=base/'9router.env'
 for name in ('dashscope-asr-api-key','asr-bridge-key'):
     p=base/'secrets'/name
-    if not p.is_file() or not p.stat().st_size or p.stat().st_mode & 0o077:
-        raise SystemExit('protected 9Router speech secret missing: '+name)
+    if not p.is_file() or not p.stat().st_size or p.stat().st_mode & 0o077 or p.stat().st_uid != 1000:
+        raise SystemExit('protected 9Router speech secret missing/unreadable by container uid 1000: '+name)
 if not env.is_file() or not any(line.startswith('AMADEUS_DASHSCOPE_ASR_URL=') and line.split('=',1)[1].strip() for line in env.read_text().splitlines()):
     raise SystemExit('DashScope regional/workspace URL missing from protected 9router.env')
 print('SPEECH_SECRET_PREFLIGHT=passed (values suppressed)')
