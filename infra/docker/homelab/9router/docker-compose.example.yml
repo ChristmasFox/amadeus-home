@@ -27,7 +27,7 @@ services:
       OBSERVABILITY_ENABLED: "true"
       ENABLE_REQUEST_LOGS: "false"
     ports:
-      - "${NINE_ROUTER_PORT:-127.0.0.1:20128}:20128"
+      - "${NINE_ROUTER_PORT:-0.0.0.0:20128}:20128"
     volumes:
       - ${NINE_ROUTER_DATA_DIR:-/DATA/AppData/9router/data}:/app/data
     x-casaos:
