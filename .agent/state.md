@@ -69,6 +69,16 @@
 
 更新时间：2026-09-24（Asia/Shanghai）
 
+2026-09-24 WhatsApp identity bridge fix：修复前精确 marker 只产生一条回复，但
+`identity_bind_channel` 返回 `trusted_sender_metadata_unavailable`，故未计入 acceptance。commit
+`a62b2bd` 已通过定向 test/typecheck/build、secrets scan 和 diff check，并部署为 M204
+`local/openclaw-amadeus:git-a62b2bd-20260924131000`；容器 healthy、Telegram/WhatsApp 重新连接，
+受保护运行时 checkpoint 保留。`before_dispatch` 现在把当前入站 sender 以 5 分钟 TTL 桥接到
+identity context，WhatsApp E164 fallback 仅限 WhatsApp。等待用户在当前 WhatsApp 私聊重新发送
+`SKULD-WHATSAPP-20260924` 做修复后单轮验收；当前 `WHATSAPP_ACCEPTANCE=pending_post_fix_resend`、
+`TELEGRAM_ACCEPTANCE=pending`、`DESTINATION_AUTHORITY=NO`，未执行
+`COMMIT_SKULD_CUTOVER_1_4_8`。media-organizer-adapter 仍缺可重建 image/compose。
+
 2026-09-24 M204 workstation/runtime progress：`Amadeus-M204` 的 canonical repo `/Users/nyannyan/agent-monorepo`
 在 `main`/`origin/main` `3a41867` clean；GitHub SSH、Node 24.21.0、pnpm 11.19.0、Python 3.11.16、tmux、
 cloudflared、OrbStack `nyannyan` guest、Docker/Compose/CasaOS 和 host profile 均已现场核验。Avalon UUID、
