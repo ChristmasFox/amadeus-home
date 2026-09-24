@@ -77,6 +77,13 @@ diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-202609240
 
 更新时间：2026-09-24（Asia/Shanghai）
 
+2026-09-24 WhatsApp direct identity acceptance 已通过：修复镜像重启后 15:19:17 收到精确
+`SKULD-WHATSAPP-20260924`，15:19:44 仅出站一次；实时 SQLite/WAL 确认
+`identity_bind_channel` 为 `bound`，无 `trusted_sender_metadata_unavailable`。当前
+`WHATSAPP_ACCEPTANCE=passed`、`TELEGRAM_ACCEPTANCE=pending`、`DESTINATION_AUTHORITY=NO`，
+未执行 `COMMIT_SKULD_CUTOVER_1_4_8`。证据见
+`.agent/checkpoints/2026-09-24-whatsapp-direct-session-identity-fix.md`。
+
 2026-09-24 WhatsApp identity bridge fix：修复前精确 marker 只产生一条回复，但
 `identity_bind_channel` 返回 `trusted_sender_metadata_unavailable`，故未计入 acceptance。commit
 `a62b2bd` 已通过定向 test/typecheck/build、secrets scan 和 diff check，并部署为 M204

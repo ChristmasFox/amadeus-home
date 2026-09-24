@@ -696,3 +696,11 @@ canonical CasaOS target 是 OrbStack ubuntu，Compose 为
 /DATA/AppData/openclaw。真实切换前必须生成
 /DATA/AppData/openclaw/backups/amadeus-openclaw-<UTC>，并在本机为 Codex hook 生成外部
 备份。旧数据库/credentials 只放 checkpoint，不构成 fallback。
+## 2026-09-24：WhatsApp direct identity acceptance 已通过
+
+修复镜像重启后的 WhatsApp 控制验收已完成：15:19:17 收到精确 marker，15:19:44 单次出站；
+实时 SQLite/WAL 显示 `identity_bind_channel` 返回 `bound`，无
+`trusted_sender_metadata_unavailable`。当前 `WHATSAPP_ACCEPTANCE=passed`，但
+`TELEGRAM_ACCEPTANCE=pending`、`DESTINATION_AUTHORITY=NO`，最终
+`COMMIT_SKULD_CUTOVER_1_4_8` 未执行。证据见
+`.agent/checkpoints/2026-09-24-whatsapp-direct-session-identity-fix.md`。

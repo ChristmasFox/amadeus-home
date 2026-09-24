@@ -27,12 +27,17 @@ Verification passed: `pnpm test:amadeus` (22 tests), `pnpm typecheck:amadeus`,
 ## Current gates
 
 ```text
-WHATSAPP_ACCEPTANCE=pending_post_fix_resend
+WHATSAPP_ACCEPTANCE=passed
 TELEGRAM_ACCEPTANCE=pending
 DUPLICATE_RUNTIME=not-finalized
 DESTINATION_AUTHORITY=NO
 OPERATION_SKULD_CUTOVER=NOT_COMMITTED
 ```
 
-The marker must be sent again after this restart. Rollback assets and Immich source remain preserved;
-the final cutover token has not been supplied or executed.
+## Post-restart acceptance
+
+The exact marker arrived at 15:19:17 +08:00 and produced one outbound WhatsApp send at 15:19:44.
+The live SQLite/WAL transcript for the direct session records `identity_bind_channel` with
+`status=bound` for the current sender, followed by the assistant confirmation. No
+`trusted_sender_metadata_unavailable` occurred in the post-fix window. Rollback assets and Immich
+source remain preserved; Telegram acceptance and the final cutover token are still pending.

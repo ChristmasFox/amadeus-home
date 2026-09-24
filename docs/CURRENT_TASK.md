@@ -1,5 +1,14 @@
 # 当前任务
 
+## 2026-09-24：WhatsApp direct identity acceptance 已通过
+
+修复镜像重启后，15:19:17 收到精确控制 marker `SKULD-WHATSAPP-20260924`，15:19:44 仅产生
+1 条 WhatsApp 出站回复。实时 SQLite/WAL 记录确认 `identity_bind_channel` 返回 `status=bound`，
+绑定到当前 WhatsApp direct sender；本轮没有 `trusted_sender_metadata_unavailable`。因此
+`WHATSAPP_ACCEPTANCE=passed`。Telegram 尚未完成正式单轮验收，`DESTINATION_AUTHORITY=NO`，
+最终 token `COMMIT_SKULD_CUTOVER_1_4_8` 未执行。证据见
+`.agent/checkpoints/2026-09-24-whatsapp-direct-session-identity-fix.md`。
+
 ## 2026-09-24：WhatsApp direct session identity fallback 已部署
 
 修复后 14:17:47 控制 marker 到达并只产生 1 条出站回复，但 OpenClaw WhatsApp adapter 未传
