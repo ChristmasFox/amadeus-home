@@ -29,9 +29,11 @@ Verification passed: `pnpm test:amadeus` (22 tests), `pnpm typecheck:amadeus`,
 ```text
 WHATSAPP_ACCEPTANCE=passed
 TELEGRAM_ACCEPTANCE=skipped
-DUPLICATE_RUNTIME=not-finalized
-DESTINATION_AUTHORITY=NO
-OPERATION_SKULD_CUTOVER=NOT_COMMITTED
+DUPLICATE_RUNTIME=none
+DESTINATION_AUTHORITY=Amadeus-M204
+SOURCE_AUTHORITY=retired
+OPERATION_SKULD_CUTOVER=COMMITTED
+ROLLBACK_WINDOW=72h
 ```
 
 ## Post-restart acceptance
@@ -41,5 +43,6 @@ The live SQLite/WAL transcript for the direct session records `identity_bind_cha
 `status=bound` for the current sender, followed by the assistant confirmation. No
 `trusted_sender_metadata_unavailable` occurred in the post-fix window. Rollback assets and Immich
 source remain preserved; Telegram remains unchanged and its acceptance is skipped for this
-cutover. The operator subsequently authorized `COMMIT_SKULD_CUTOVER_1_4_8` for the WhatsApp-only
-scope.
+cutover. The operator subsequently authorized and executed `COMMIT_SKULD_CUTOVER_1_4_8` for the
+WhatsApp-only scope. Final sanitized evidence is stored at
+`/Volumes/Avalon/backups/operation-skuld/final-cutover-20260924T074756Z`.

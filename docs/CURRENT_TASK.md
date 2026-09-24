@@ -1,11 +1,13 @@
 # 当前任务
 
-## 2026-09-24：Operation Skuld scope revised to WhatsApp-only; final token authorized
+## 2026-09-24：Operation Skuld WhatsApp-only cutover committed
 
 用户已明确跳过 Telegram 验收，Telegram 运行时保持不变；声明式 OpenClaw 配置未停用 Telegram。
-WhatsApp 单轮 owner 验收和唯一运行时门禁已通过，用户现已明确
-授权执行 `COMMIT_SKULD_CUTOVER_1_4_8`。执行中仍保留外部 rollback checkpoint、旧源和 Immich
-source，不把 Telegram secret 删除当作割接步骤。
+WhatsApp 单轮 owner 验收和唯一运行时门禁已通过，用户随后明确授权并已执行
+`COMMIT_SKULD_CUTOVER_1_4_8`。当前 `DESTINATION_AUTHORITY=Amadeus-M204`、
+`SOURCE_AUTHORITY=retired`、`OPERATION_SKULD_CUTOVER=COMMITTED`；旧源、外部 rollback
+checkpoint 和 Immich source 保留至少 72 小时，不删除 Telegram secret。最终证据：
+`/Volumes/Avalon/backups/operation-skuld/final-cutover-20260924T074756Z`。
 
 ## 2026-09-24：WhatsApp direct identity acceptance 已通过
 

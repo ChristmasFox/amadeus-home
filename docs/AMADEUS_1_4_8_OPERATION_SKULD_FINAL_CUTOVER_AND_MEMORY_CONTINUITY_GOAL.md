@@ -9,6 +9,13 @@ WhatsApp acceptance and unique-runtime checks. This revision supersedes the hist
 acceptance requirement below while retaining source preservation, rollback, secret protection,
 and single-runtime safety requirements.
 
+## Current execution record — 2026-09-24
+
+`COMMIT_SKULD_CUTOVER_1_4_8` has been executed with Telegram acceptance skipped and Telegram
+runtime unchanged. WhatsApp acceptance passed, M204 is the sole active OpenClaw runtime, and the
+72-hour rollback window is active. Final sanitized evidence is stored at
+`/Volumes/Avalon/backups/operation-skuld/final-cutover-20260924T074756Z`.
+
 ## Mission
 
 本轮是 Operation Skuld 的最后收口版本。目标不是继续扩功能，而是完成旧 Mac 权威运行时冻结、Kurisu/OpenClaw 完整状态封存、Avalon 安全迁移、Amadeus-M204 恢复、离线验收、唯一 OpenClaw 权威切换、owner ingress 切换，以及旧 Mac rollback-only 收口。

@@ -77,9 +77,11 @@ diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-202609240
 
 更新时间：2026-09-24（Asia/Shanghai）
 
-2026-09-24 scope revision：用户明确跳过 Telegram 验收，Telegram 保持运行且声明式配置不变。
-WhatsApp 是唯一 owner-channel acceptance。用户已明确
-授权执行 `COMMIT_SKULD_CUTOVER_1_4_8`；执行必须保留 rollback checkpoint、旧源和 Immich source。
+2026-09-24 scope revision and final commit：用户明确跳过 Telegram 验收，Telegram 保持运行且
+声明式配置不变。WhatsApp 是唯一 owner-channel acceptance。`COMMIT_SKULD_CUTOVER_1_4_8` 已执行，
+当前 `DESTINATION_AUTHORITY=Amadeus-M204`、`SOURCE_AUTHORITY=retired`、
+`OPERATION_SKULD_CUTOVER=COMMITTED`；rollback checkpoint、旧源和 Immich source 保留 72 小时。
+最终证据：`/Volumes/Avalon/backups/operation-skuld/final-cutover-20260924T074756Z`。
 
 2026-09-24 WhatsApp direct identity acceptance 已通过：修复镜像重启后 15:19:17 收到精确
 `SKULD-WHATSAPP-20260924`，15:19:44 仅出站一次；实时 SQLite/WAL 确认
