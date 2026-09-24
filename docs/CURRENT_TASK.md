@@ -1,5 +1,12 @@
 # 当前任务
 
+## 2026-09-24：Operation Skuld scope revised to WhatsApp-only; final token authorized
+
+用户已明确跳过 Telegram 验收，Telegram 运行时保持不变；声明式 OpenClaw 配置未停用 Telegram。
+WhatsApp 单轮 owner 验收和唯一运行时门禁已通过，用户现已明确
+授权执行 `COMMIT_SKULD_CUTOVER_1_4_8`。执行中仍保留外部 rollback checkpoint、旧源和 Immich
+source，不把 Telegram secret 删除当作割接步骤。
+
 ## 2026-09-24：WhatsApp direct identity acceptance 已通过
 
 修复镜像重启后，15:19:17 收到精确控制 marker `SKULD-WHATSAPP-20260924`，15:19:44 仅产生
