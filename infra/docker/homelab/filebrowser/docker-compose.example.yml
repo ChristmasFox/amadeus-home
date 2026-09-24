@@ -11,7 +11,7 @@ services:
       PGID: ${FILEBROWSER_PGID:-1000}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
-      - "${FILEBROWSER_PORT:-127.0.0.1:10180}:80"
+      - "${FILEBROWSER_PORT:-0.0.0.0:10180}:80"
     volumes:
       - /DATA/AppData/filebrowser/db:/db
       - /DATA:/srv

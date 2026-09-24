@@ -19,7 +19,7 @@ services:
       CHANGEDETECTION_API_KEY: ${CHANGEDETECTION_API_KEY:-}
       OWNER_NOTIFICATION_OUTBOX_DIR: /notifications
     ports:
-      - "${PRODUCT_RADAR_PORT:-5315}:5315"
+      - "${PRODUCT_RADAR_PORT:-0.0.0.0:5315}:5315"
     volumes:
       - product-radar-data:/data
       - ./.local/owner-notifications:/notifications

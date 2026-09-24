@@ -712,3 +712,10 @@ and runtime configuration. WhatsApp is the only owner-channel acceptance require
 `SOURCE_AUTHORITY=retired`, and `OPERATION_SKULD_CUTOVER=COMMITTED`. Rollback assets, the old
 source, and the Immich source remain preserved for the 72-hour rollback window. Final evidence:
 `/Volumes/Avalon/backups/operation-skuld/final-cutover-20260924T074756Z`.
+## 2026-09-24：M204 LAN bindings restored
+
+The M204 CasaOS user-facing services are now published on `0.0.0.0` instead of loopback-only
+bindings. Product Radar, Changedetection, Immich, 9Router, Filebrowser, Xiaoya, AriaNG, Dashdot,
+and OpenClaw respond through both `192.168.5.3` and `192.168.5.50`. Internal database, Redis, and
+model services remain unpublished. The pre-change runtime backup is external and recorded in
+`.agent/checkpoints/2026-09-24-m204-lan-bindings.md`.

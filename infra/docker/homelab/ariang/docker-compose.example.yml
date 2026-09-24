@@ -7,7 +7,7 @@ services:
     container_name: ariang
     restart: always
     ports:
-      - "${ARIANG_PORT:-127.0.0.1:6880}:6880"
+      - "${ARIANG_PORT:-0.0.0.0:6880}:6880"
     x-casaos:
       author: self
       category: Utilities
