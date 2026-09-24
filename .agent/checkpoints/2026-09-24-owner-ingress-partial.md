@@ -24,7 +24,7 @@ MIGRATION_SAFE_CANDIDATE=passed
 - Canonical effective config uses `/home/node/.openclaw/openclaw.json`, `gateway.bind=lan`, `tools.sessions.visibility=self`, `session.dmScope=per-account-channel-peer`, and `session.groupScope=per-group`.
 - Telegram and WhatsApp are enabled in canonical config; owner delivery is enabled.
 - Telegram account `default` is `ready/connected` with polling active.
-- WhatsApp account `secondary` is configured but `not-linked`/`logged-out` after the restored session received a server-side connection failure. A persistent `channels login --channel whatsapp --account secondary` process is waiting for a QR scan.
+- WhatsApp account `secondary` is configured but `not-linked`/`logged-out` after the restored session received a server-side connection failure. A detached M204-host `screen` session named `amadeus-whatsapp-relink` is running `channels login --channel whatsapp --account secondary`, waiting for a QR scan and retrying after expiry.
 - Restored OpenClaw secret files were found as `root:root 0600`, unreadable by the `node` runtime user. They were changed to `1000:1000 0600` on M204; no secret contents were printed. The restore script now normalizes this owner during future restores; source fix is commit `2ba9541`.
 
 ## Not complete
