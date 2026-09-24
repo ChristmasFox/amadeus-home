@@ -21,6 +21,12 @@ test('normalizes Longbridge quote values and calculates deterministic changes', 
   assert.equal(quotes[0]?.direction, 'positive');
 });
 
+test('normalizes official SDK timestamps represented as RFC 3339 strings', () => {
+  const quotes = normalizeQuote({ data: { secu_quote: [{ symbol: 'SPY.US', last_done: 10, prev_close: 9, timestamp: '2026-09-24T14:30:00.000Z' }] } });
+  assert.equal(quotes[0]?.timestamp, '2026-09-24T14:30:00.000Z');
+  assert.equal(intradayResult({ data: { lines: [{ price: 10, timestamp: '2026-09-24T14:30:00.000Z' }] } }, 'SPY.US', 'SPY').points[0]?.timestamp, '2026-09-24T14:30:00.000Z');
+});
+
 test('market presentation has controlled decimals, signs, compact volume and direction glyphs', () => {
   assert.equal(formatPrice(26936.03728), '26,936.04');
   assert.equal(formatSigned(308.2382), '+308.24');

@@ -23,11 +23,13 @@ owner/Arthur confirmation.
 
 The market capability reads public `.IXIC.US`, `.NDX.US`, `.SPX.US`, and
 `.DJI.US` quote, session, intraday, mover, and market-temperature facts through
-the configured Longbridge OpenAPI OAuth 2 adapter. It compares the current
-quote with the previous trading close, uses Longbridge trading-day/session
-facts for validity, and sends only the structured notification returned by the
-deterministic tool. The scheduled open/close jobs use the same WhatsApp owner
-outbox as other Amadeus reports.
+the official `longbridge` Node SDK in OAuth 2 mode. The SDK's native quote
+transport and token cache are installed in the OpenClaw image; the persisted
+cache is mounted at `/home/node/.longbridge` and never enters the LLM-visible
+surface. It compares the current quote with the previous trading close, uses
+Longbridge trading-day/session facts for validity, and sends only the structured
+notification returned by the deterministic tool. The scheduled open/close jobs
+use the same WhatsApp owner outbox as other Amadeus reports.
 
 All credentials, SSH keys, owner identity, and media paths are deployment
 configuration. They are not part of this package or the repository.

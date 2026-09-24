@@ -1,5 +1,14 @@
 # 当前任务
 
+## 2026-09-24：Longbridge 官方 SDK 运行时边界修正
+
+已将市场客户端切换为官方 `longbridge@5.1.0` Node SDK：行情、日内、交易时段、交易日、温度、movers
+和 constituents 均通过 SDK 的只读 Quote/Market context，运行时不再调用自写的行情 HTTP 路径。OAuth
+operator exchange 会把同一授权状态以 SDK 的 `~/.longbridge/openapi/tokens/<client_id>` 格式写入外部
+`longbridge-sdk-home`；Compose 持久化挂载该目录，SDK 刷新后的状态会同步回 canonical OAuth state。
+镜像构建会安装与目标架构匹配的 native SDK 包；deployment checkpoint 也会保护该外部 token cache。
+新增 SDK cache、RFC3339 时间戳和 prepare 权限回归覆盖，尚未执行实际 Docker release build 或 live OAuth。
+
 ## 2026-09-24：补齐 Longbridge 公有 OAuth PKCE operator flow
 
 按 Longbridge 当前 OAuth 2 文档补齐 `S256` PKCE：operator `start` 在外部状态文件保存

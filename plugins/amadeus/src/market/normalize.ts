@@ -23,6 +23,16 @@ function scalarText(value: unknown): string | null {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : text(value);
 }
 
+function timestampValue(value: unknown): number | null {
+  const numeric = number(value);
+  if (numeric !== null) return numeric;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed / 1000 : null;
+  }
+  return null;
+}
+
 function sessionName(value: unknown): string {
   const raw = scalarText(value);
   if (raw === '1') return 'pre';
@@ -53,7 +63,7 @@ export function normalizeQuote(payload: unknown, labels = new Map<string, string
     if (!symbol || last === null || previousClose === null) return [];
     const change = last - previousClose;
     const changePercent = previousClose === 0 ? 0 : (change / previousClose) * 100;
-    const timestamp = number(row.timestamp);
+    const timestamp = timestampValue(row.timestamp);
     return [{
       symbol,
       label: labels.get(symbol) ?? symbol,
@@ -79,7 +89,7 @@ export function normalizeIntraday(payload: unknown, symbol: string, label: strin
     const row = record(raw);
     if (!row) return [];
     const price = number(row.price ?? row.last_done);
-    const timestamp = number(row.timestamp);
+    const timestamp = timestampValue(row.timestamp);
     if (price === null || timestamp === null) return [];
     return [{ timestamp: new Date(timestamp * 1000).toISOString(), price, volume: number(row.volume), turnover: number(row.turnover) }];
   }).map((point) => point);

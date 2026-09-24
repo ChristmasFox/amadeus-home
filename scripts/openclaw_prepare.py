@@ -177,12 +177,20 @@ def main() -> None:
     config_dir = data_dir / "config"
     workspace_dir = data_dir / "workspace"
     pubg_data_dir = data_dir / "data"
+    longbridge_sdk_tokens = pubg_data_dir / "longbridge-sdk-home" / ".longbridge" / "openapi" / "tokens"
     secrets_dir = data_dir / "secrets"
     outbox_dir = data_dir / "notifications"
     for directory in (data_dir, config_dir, pubg_data_dir, secrets_dir, outbox_dir):
         directory.mkdir(parents=True, exist_ok=True)
         os.chown(directory, 1000, 1000)
         os.chmod(directory, 0o700)
+    longbridge_sdk_tokens.mkdir(parents=True, exist_ok=True)
+    for directory in (pubg_data_dir / "longbridge-sdk-home", pubg_data_dir / "longbridge-sdk-home" / ".longbridge", pubg_data_dir / "longbridge-sdk-home" / ".longbridge" / "openapi", longbridge_sdk_tokens):
+        os.chown(directory, 1000, 1000)
+        os.chmod(directory, 0o700)
+    for token_file in longbridge_sdk_tokens.iterdir():
+        if token_file.is_file() and not token_file.is_symlink():
+            ensure_owner(token_file, 0o600)
     ensure_workspace_directory(workspace_dir)
 
     existing_config_path = config_dir / "openclaw.json"

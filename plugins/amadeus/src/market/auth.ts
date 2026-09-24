@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { readRequiredFile, type AmadeusConfig } from '../config.js';
 import { requestFormJson } from '../http.js';
 import type { LongbridgeAuthStatus } from './types.js';
@@ -17,6 +17,13 @@ export interface OAuthStateStore {
   save(state: PersistedOAuthState): Promise<void>;
 }
 
+interface SdkOAuthToken {
+  client_id: string;
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+}
+
 /** Generate the PKCE verifier/challenge pair required by public OAuth clients. */
 export function pkceChallenge(verifier: string): string {
   return createHash('sha256').update(verifier, 'ascii').digest('base64url');
@@ -28,6 +35,15 @@ function isState(value: unknown): value is PersistedOAuthState {
   return typeof item.accessToken === 'string' && Boolean(item.accessToken)
     && typeof item.refreshToken === 'string' && Boolean(item.refreshToken)
     && typeof item.expiresAt === 'string' && !Number.isNaN(Date.parse(item.expiresAt));
+}
+
+function isSdkToken(value: unknown): value is SdkOAuthToken {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.client_id === 'string' && Boolean(item.client_id)
+    && typeof item.access_token === 'string' && Boolean(item.access_token)
+    && typeof item.refresh_token === 'string' && Boolean(item.refresh_token)
+    && typeof item.expires_at === 'number' && Number.isFinite(item.expires_at);
 }
 
 export function fileOAuthStateStore(path: string): OAuthStateStore {
@@ -65,6 +81,7 @@ export class LongbridgeOAuth {
   constructor(private readonly config: AmadeusConfig, private readonly store: OAuthStateStore = fileOAuthStateStore(config.longbridgeOAuthStateFile)) {}
 
   async status(): Promise<LongbridgeAuthStatus> {
+    await this.syncSdkCache();
     return authStatus(await this.state(), new Date());
   }
 
@@ -94,11 +111,13 @@ export class LongbridgeOAuth {
     const payload = await requestFormJson(`${this.config.longbridgeAuthBaseUrl}/oauth2/token`, fields, { includeErrorDetail: false });
     const state = tokenState(payload);
     await this.store.save(state);
+    await this.writeSdkCache(state);
     this.statePromise = Promise.resolve(state);
     return authStatus(state);
   }
 
   async accessToken(): Promise<string> {
+    await this.syncSdkCache();
     let state = await this.state();
     const expiry = state ? Date.parse(state.expiresAt) : 0;
     if (!state || !Number.isFinite(expiry)) throw new Error('longbridge_oauth_reauthorization_required');
@@ -133,11 +152,68 @@ export class LongbridgeOAuth {
         if (this.config.longbridgeClientSecretFile) fields.client_secret = await readRequiredFile(this.config.longbridgeClientSecretFile, 'Longbridge OAuth client secret');
         const state = tokenState(await requestFormJson(`${this.config.longbridgeAuthBaseUrl}/oauth2/token`, fields, { includeErrorDetail: false }), current);
         await this.store.save(state);
+        await this.writeSdkCache(state);
         this.statePromise = Promise.resolve(state);
         return state;
       } catch { return undefined; }
     })();
     try { return await this.refreshPromise; } finally { this.refreshPromise = undefined; }
+  }
+
+  /**
+   * Import a token refreshed by the official Longbridge SDK into the
+   * canonical OAuth state shape. The SDK owns refresh timing and its
+   * cache is the only runtime token cache; this keeps status and operator
+   * tooling truthful after an SDK refresh.
+   */
+  async syncSdkCache(): Promise<PersistedOAuthState | undefined> {
+    const tokenPath = await this.sdkTokenPath();
+    if (!tokenPath) return this.state();
+    let token: SdkOAuthToken;
+    try {
+      token = JSON.parse(await readFile(tokenPath, 'utf8')) as SdkOAuthToken;
+    } catch {
+      return this.state();
+    }
+    if (!isSdkToken(token)) return this.state();
+    const sdkState: PersistedOAuthState = { accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: new Date(token.expires_at * 1000).toISOString() };
+    const current = await this.state();
+    const currentExpiry = current ? Date.parse(current.expiresAt) : 0;
+    const sdkExpiry = Date.parse(sdkState.expiresAt);
+    if (!current || (Number.isFinite(sdkExpiry) && sdkExpiry > currentExpiry)) {
+      await this.store.save(sdkState);
+      this.statePromise = Promise.resolve(sdkState);
+      return sdkState;
+    }
+    return current;
+  }
+
+  private async sdkTokenPath(): Promise<string | undefined> {
+    if (!this.config.longbridgeSdkTokenDir) return undefined;
+    try {
+      const clientId = await readRequiredFile(this.config.longbridgeClientIdFile, 'Longbridge OAuth client id');
+      return join(this.config.longbridgeSdkTokenDir, clientId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async writeSdkCache(state: PersistedOAuthState): Promise<void> {
+    const tokenPath = await this.sdkTokenPath();
+    if (!tokenPath) return;
+    try {
+      await mkdir(dirname(tokenPath), { recursive: true, mode: 0o700 });
+      const clientId = await readRequiredFile(this.config.longbridgeClientIdFile, 'Longbridge OAuth client id');
+      const temporary = `${tokenPath}.${process.pid}.${Date.now()}.tmp`;
+      const token: SdkOAuthToken = { client_id: clientId, access_token: state.accessToken, refresh_token: state.refreshToken, expires_at: Math.floor(Date.parse(state.expiresAt) / 1000) };
+      await writeFile(temporary, `${JSON.stringify(token)}\n`, { encoding: 'utf8', mode: 0o600 });
+      await chmod(temporary, 0o600);
+      await rename(temporary, tokenPath);
+      await chmod(tokenPath, 0o600);
+    } catch {
+      // The canonical state remains usable if the SDK cache directory is not
+      // writable during an operator-only bootstrap.
+    }
   }
 }
 

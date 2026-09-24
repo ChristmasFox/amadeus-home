@@ -29,6 +29,7 @@
       "longbridgeClientIdFile": { "type": "string", "maxLength": 1024 },
       "longbridgeClientSecretFile": { "type": "string", "maxLength": 1024 },
       "longbridgeOAuthStateFile": { "type": "string", "maxLength": 1024 },
+      "longbridgeSdkTokenDir": { "type": "string", "maxLength": 1024 },
       "macHostAgentBaseUrl": { "type": "string", "maxLength": 512 },
       "macHostAgentTokenFile": { "type": "string", "maxLength": 1024 },
       "kiwiVmBaseUrl": { "type": "string", "maxLength": 512 },
