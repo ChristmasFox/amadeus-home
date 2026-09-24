@@ -17,6 +17,15 @@ checkpoint 保存在仓库外受保护备份中；修复后 WhatsApp 单轮控�
 `DUPLICATE_RUNTIME=not-finalized`、`DESTINATION_AUTHORITY=NO`，未执行
 `COMMIT_SKULD_CUTOVER_1_4_8`。`media-organizer-adapter` 仍只有外部 state archive，未恢复或臆造替代。
 
+同日 workstation handoff pre-cutover 现场复核已通过：当前主机 `Amadeus-M204`、用户 `nyannyan`、
+canonical repo `/Users/nyannyan/agent-monorepo`，`main` clean 且本地 HEAD、`origin/main` 与远端
+`git ls-remote` 一致，origin 为 `git@github.com:ChristmasFox/amadeus-home.git`。Node 24.21.0、
+pnpm 11.19.0、Python 3.11.16、Git、tmux、cloudflared、OrbStack `nyannyan` guest、Docker
+29.8.1、Compose 5.5.1、CasaOS active 均已核验，`./scripts/bootstrap.sh --check` 通过；本机
+profile 为 `ORBSTACK_MACHINE=nyannyan`、`MAC_CONTROL_USER=nyannyan`、`EXTERNAL_STORAGE_ROOT=/Volumes/Avalon`。
+旧路径扫描仅命中 Xiaoya 源迁移映射、测试 fixture 和禁止性说明，未发现 active destination workflow
+依赖旧 Mac 路径。证据见 `.agent/checkpoints/2026-09-24-m204-workstation-handoff-precutover.md`。
+
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
 2026-09-24 M204 runtime readiness progress：主机/仓库/GitHub/工具链验收通过；M204 canonical

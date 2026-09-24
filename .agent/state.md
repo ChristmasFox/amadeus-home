@@ -79,6 +79,14 @@ identity context，WhatsApp E164 fallback 仅限 WhatsApp。等待用户在当�
 `TELEGRAM_ACCEPTANCE=pending`、`DESTINATION_AUTHORITY=NO`，未执行
 `COMMIT_SKULD_CUTOVER_1_4_8`。media-organizer-adapter 仍缺可重建 image/compose。
 
+2026-09-24 workstation handoff pre-cutover evidence：当前执行环境已现场确认是
+`Amadeus-M204`/`nyannyan`，repo `/Users/nyannyan/agent-monorepo` clean，`main` 与 `origin/main`
+及 GitHub `ls-remote` 一致；Node 24.21.0、pnpm 11.19.0、Python 3.11.16、Git、tmux、cloudflared、
+OrbStack `nyannyan`、Docker 29.8.1、Compose 5.5.1、CasaOS active 和 `bootstrap.sh --check` 均通过。
+host profile 已加载 `ORBSTACK_MACHINE=nyannyan`、`MAC_CONTROL_USER=nyannyan`、
+`EXTERNAL_STORAGE_ROOT=/Volumes/Avalon`。旧路径命中仅为 Xiaoya 源迁移映射、tests 和禁止性说明，
+未发现 active destination workflow 依赖；owner acceptance 仍等待修复后 WhatsApp marker。
+
 2026-09-24 M204 workstation/runtime progress：`Amadeus-M204` 的 canonical repo `/Users/nyannyan/agent-monorepo`
 在 `main`/`origin/main` `3a41867` clean；GitHub SSH、Node 24.21.0、pnpm 11.19.0、Python 3.11.16、tmux、
 cloudflared、OrbStack `nyannyan` guest、Docker/Compose/CasaOS 和 host profile 均已现场核验。Avalon UUID、

@@ -148,6 +148,12 @@ secrets scan 和 diff check 均通过。M204 已加载并运行
 `COMMIT_SKULD_CUTOVER_1_4_8` 未提供且未执行。运行时回滚 checkpoint、Immich source 和旧 Mac
 rollback-only 资产保留；`media-organizer-adapter` 仍未恢复。
 
+M204 workstation handoff 的 pre-cutover 复核也已通过：主机/用户为 `Amadeus-M204`/`nyannyan`，
+canonical repo clean，origin 与远端 `main` 一致且 GitHub SSH `git ls-remote` 成功；Node/pnpm/
+Python/Git/tmux/cloudflared、OrbStack `nyannyan`、Docker/Compose/CasaOS 和 bootstrap check 均通过。
+本机非敏感 profile 指向 `nyannyan`、`nyannyan` 用户和 `/Volumes/Avalon`。旧路径只出现在源迁移映射、
+测试 fixture 或禁止性文档中；owner acceptance 和最终 cutover 仍按上方门禁等待。
+
 更新时间：2026-09-21（Asia/Shanghai）
 
 ## 当前执行：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（已完成）
