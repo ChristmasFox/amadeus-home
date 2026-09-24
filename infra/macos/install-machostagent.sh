@@ -5,8 +5,9 @@ ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 APPLY=0
 LABEL='com.amadeus.machostagent'
 PLIST_TARGET="$HOME/Library/LaunchAgents/$LABEL.plist"
-INSTALL_DIR='/usr/local/libexec/amadeus'
-TOKEN_TARGET='/Library/Application Support/Amadeus/machostagent.token'
+INSTALL_DIR="$HOME/Library/Application Support/Amadeus"
+TOKEN_TARGET="$INSTALL_DIR/machostagent.token"
+LOG_DIR="$HOME/Library/Logs/Amadeus"
 
 usage() { printf '%s\n' "Usage: $0 [--dry-run] [--apply]"; }
 while (($#)); do
@@ -27,15 +28,14 @@ printf 'TOKEN=%s\n' "$TOKEN_TARGET"
 if ((APPLY == 0)); then exit 0; fi
 
 [[ -s "$ROOT_DIR/infra/macos/machostagent.py" ]] || { printf '%s\n' 'collector source missing' >&2; exit 1; }
-sudo /bin/mkdir -p "$INSTALL_DIR" "$(/usr/bin/dirname "$PLIST_TARGET")" '/Library/Application Support/Amadeus'
-sudo /usr/bin/install -m 755 "$ROOT_DIR/infra/macos/machostagent.py" "$INSTALL_DIR/machostagent.py"
+/bin/mkdir -p "$INSTALL_DIR" "$(/usr/bin/dirname "$PLIST_TARGET")" "$LOG_DIR"
+/usr/bin/install -m 755 "$ROOT_DIR/infra/macos/machostagent.py" "$INSTALL_DIR/machostagent.py"
 if [[ ! -s "$TOKEN_TARGET" ]]; then
-  printf '%s\n' 'create a protected token at /Library/Application Support/Amadeus/machostagent.token before apply' >&2
+  printf '%s\n' "create a protected token at $TOKEN_TARGET before apply" >&2
   exit 1
 fi
-sudo /usr/sbin/chown root:wheel "$TOKEN_TARGET"
-sudo /bin/chmod 600 "$TOKEN_TARGET"
-/usr/bin/sed "s#/usr/local/libexec/amadeus/machostagent.py#$INSTALL_DIR/machostagent.py#; s#/Library/Application Support/Amadeus/machostagent.token#$TOKEN_TARGET#" "$ROOT_DIR/infra/macos/com.amadeus.machostagent.plist.example" | sudo /usr/bin/tee "$PLIST_TARGET" >/dev/null
+/bin/chmod 600 "$TOKEN_TARGET"
+/usr/bin/sed "s#/usr/local/libexec/amadeus/machostagent.py#$INSTALL_DIR/machostagent.py#; s#/Library/Application Support/Amadeus/machostagent.token#$TOKEN_TARGET#; s#/var/log/amadeus-mac-host-agent.log#$LOG_DIR/host-agent.log#; s#/var/log/amadeus-mac-host-agent.err.log#$LOG_DIR/host-agent.err.log#" "$ROOT_DIR/infra/macos/com.amadeus.machostagent.plist.example" > "$PLIST_TARGET"
 /usr/bin/plutil -lint "$PLIST_TARGET"
 /bin/launchctl bootout "gui/$(/usr/bin/id -u)/$LABEL" 2>/dev/null || true
 /bin/launchctl bootstrap "gui/$(/usr/bin/id -u)" "$PLIST_TARGET"

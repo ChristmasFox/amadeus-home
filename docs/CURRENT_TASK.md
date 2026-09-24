@@ -6,8 +6,9 @@
 短期 verifier，授权 URL 带 `scope=3`、`code_challenge` 和 `state`；`exchange` 只接受完整
 callback URL，校验回传 state 后交换 code，并在成功后删除短期请求状态。OAuth token/refresh
 数据仍只写入 0600 的外部 state 文件。新增 RFC 7636 challenge 回归测试，Amadeus typecheck、
-30 个聚焦测试、build、secrets scan 和 diff check 已通过。M204 sudo 授权尚未执行，HostAgent、
-Longbridge client id/OAuth 和 live acceptance 仍待外部状态。
+30 个聚焦测试、build、secrets scan 和 diff check 已通过。HostAgent 安装器已修正为用户级
+LaunchAgent，不再要求 sudo，当前尚未执行 `--apply`；Longbridge client id/OAuth 和 live acceptance
+仍待外部状态。
 
 ## 2026-09-24：Amadeus 1.4.9 Host & Market Awareness（源码实现与验证进行中）
 
