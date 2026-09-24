@@ -37,3 +37,9 @@ PKCE verifier and validates the returned OAuth `state` before exchanging the
 code. The resulting OAuth state is written with mode 0600 to the external
 `/DATA/AppData/openclaw/data` path; normal OpenClaw restarts only reuse that
 state.
+
+## M204 native Qwen3-TTS (1.5.3 candidate)
+
+`infra/macos/manage-qwen3-tts.sh` defaults to dry-run. `--prepare-apply` installs the pinned venv/model outside Git; `--apply` requires the protected external voice pair and token, installs the user LaunchAgent `com.amadeus.qwen3-tts` and binds authenticated speech on port 18792. User-session launchd keeps MPS available. `--status` reports launchd and `/healthz`; `--uninstall` removes the agent without erasing voice/model/token. Before any apply with new user-supplied audio, `infra/macos/backup-qwen3-tts-profile.sh --apply` copies the reference pair and TTS token to a mode-0700 Avalon checkpoint and stores integrity hashes only in its protected manifest. Never upload reference media, transcript, embeddings or token to Git or a public route.
+
+M204 currently has a personally approved interim reference and the service was launched only after protected backup. Local Mandarin/Japanese synthesis, auth/format checks, guest-to-host health and launchd restart recovery are engineering acceptance, **not** 9Router or real WhatsApp voice acceptance. The original-voice requirement in the Goal remains a separate product-quality decision.

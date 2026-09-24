@@ -4,6 +4,8 @@ import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from subprocess import CompletedProcess
 
 spec = importlib.util.spec_from_file_location("speech_routes", Path(__file__).with_name("provision-9router-speech.py"))
 routes = importlib.util.module_from_spec(spec)
@@ -50,6 +52,19 @@ class ProvisionTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "alias_drift"):
             routes.ensure_alias(api, "amadeus-asr", "selfhosted-stt/model")
         self.assertFalse(api.writes)
+
+    def test_runtime_gate_and_post_alias_restart(self):
+        with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0)) as run:
+            self.assertTrue(routes.runtime_speech_ready("nyannyan"))
+            self.assertIn("healthz", run.call_args.args[0][-1])
+        with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 1)):
+            self.assertFalse(routes.runtime_speech_ready("nyannyan"))
+        with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0), CompletedProcess([], 1), CompletedProcess([], 0)]) as run, patch.object(routes.time, "sleep"):
+            routes.restart_and_verify("nyannyan")
+            self.assertEqual(run.call_count, 3)
+        with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0)] + [CompletedProcess([], 1)] * 45), patch.object(routes.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "post_alias_restart"):
+                routes.restart_and_verify("nyannyan")
 
     def test_secret_file_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:

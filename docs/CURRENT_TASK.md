@@ -307,3 +307,11 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-24：1.5.3 9Router immutable image 工程验收（未切换）
 
 旧镜像已归档至 Avalon。基于 Git commit 的 ARM64 候选镜像已构建并加载到 M204 guest，但生产容器/Compose 仍运行旧 `0.5.81`。isolated `--network none` fixture 发现并修复 9Router entrypoint 降权至 uid 1000 后无法读取 root-owned 0600 secret 的问题；重测通过 bridge 鉴权、ffmpeg 转码、双 health 和断网结构化失败。bridge token 已在仓库外生成并以 uid 1000/mode 0600 安置；DashScope key/地域 URL、dashboard 密码文件及正式音色仍缺。见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-image-fixture.md`。不把 fixture 成功当作真实 ASR 或 WhatsApp 验收。
+
+## 2026-09-24：M204 Qwen3-TTS 原生服务已安装（全链路仍待验收）
+
+用户放入私人自用的动漫来源参考素材；目录 0700、两文件 0600。WAV 为 PCM16/24 kHz/单声道/46 秒，文字 290 字符。源文件与 TTS token 已在仓库外 mode 0700 的 Avalon checkpoint 备份并核对完整性。正式 LaunchAgent 已通过显式 `--apply` 安装：MPS 热身、中文 MP3、日文 Ogg/Opus、鉴权、guest 到 host health 和进程重启后的再次合成都通过。**这只是私人临时音色与原生 TTS 工程验收**；不宣称原创音色已实现，也不宣称 9Router/WhatsApp 全链路、M204 重启或 1.5.3 release 已完成。见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-native-tts-live.md`。
+
+## 2026-09-24：9Router STT alias 重启门禁已查明（仅隔离 fixture）
+
+在 network-none 镜像 fixture 中，`0.5.81` 和测试用 `0.5.86` 均表现为：新建 `amadeus-asr` alias 后直接 STT 请求仍被解析为 openai 并返回 400；重启同一容器后才正确路由到 Self-hosted STT，返回预期的断网 `provider_unavailable`。TTS alias 可立即解析。已将一次受保护重启、双 health/401 验证纳入 9Router provisioning 源码和测试；生产未执行 dashboard 变更或重启。见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-alias-cache.md`。
