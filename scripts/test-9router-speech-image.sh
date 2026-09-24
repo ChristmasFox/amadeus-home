@@ -38,17 +38,17 @@ orb -m "$ORBSTACK_MACHINE" -u root python3 - "$fixture" <<'PY'
 from pathlib import Path
 import os,sys
 p=Path(sys.argv[1]); (p/'data').mkdir(mode=0o700)
-for name,value in [('asr-bridge-key','fixture-bridge-'+'x'*48),('dashscope-asr-key','fixture-cloud-'+'y'*48)]:
+for name,value in [('asr-bridge-key','fixture-bridge-'+'x'*48),('asr-upstream-key','fixture-cloud-'+'y'*48)]:
     f=p/name; f.write_text(value); f.chmod(0o600); os.chown(f,1000,1000)
 PY
 orb -m "$ORBSTACK_MACHINE" -u root docker run -d --name "$name" --network none \
   -v "$fixture/data:/app/data" \
   -v "$fixture/asr-bridge-key:/run/secrets/asr_bridge_key:ro" \
-  -v "$fixture/dashscope-asr-key:/run/secrets/dashscope_asr_key:ro" \
+  -v "$fixture/asr-upstream-key:/run/secrets/asr_upstream_key:ro" \
   -e DATA_DIR=/app/data -e REQUIRE_API_KEY=true -e INITIAL_PASSWORD=test-only -e HOSTNAME=127.0.0.1 -e PORT=20128 \
   -e AMADEUS_ASR_BRIDGE_KEY_FILE=/run/secrets/asr_bridge_key \
-  -e AMADEUS_DASHSCOPE_KEY_FILE=/run/secrets/dashscope_asr_key \
-  -e AMADEUS_DASHSCOPE_ASR_URL=https://fixture.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation \
+  -e AMADEUS_ASR_UPSTREAM_KEY_FILE=/run/secrets/asr_upstream_key \
+  -e AMADEUS_ASR_UPSTREAM_URL=https://fixture.cn-beijing.maas.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation \
   "$IMAGE" >/dev/null
 for _ in $(seq 1 60); do
   if orb -m "$ORBSTACK_MACHINE" -u root docker exec "$name" node -e 'Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz")]).then(([a,b])=>process.exit(a.ok&&b.ok?0:1)).catch(()=>process.exit(1))' >/dev/null 2>&1; then break; fi

@@ -315,3 +315,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-24：9Router STT alias 重启门禁已查明（仅隔离 fixture）
 
 在 network-none 镜像 fixture 中，`0.5.81` 和测试用 `0.5.86` 均表现为：新建 `amadeus-asr` alias 后直接 STT 请求仍被解析为 openai 并返回 400；重启同一容器后才正确路由到 Self-hosted STT，返回预期的断网 `provider_unavailable`。TTS alias 可立即解析。已将一次受保护重启、双 health/401 验证纳入 9Router provisioning 源码和测试；生产未执行 dashboard 变更或重启。见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-9router-alias-cache.md`。
+
+## 2026-09-24：已有千问 API 已找到，ASR 协议差异待正式确认
+
+用户提示后只读检查发现 9Router 中存在启用的 `Qwen` 自定义 API 节点及 Key，端点属于 `qianwenaiapi.com/compatible-mode/v1`，不是原 Goal 的阿里云 Model Studio 工作空间。短合成音频对该平台 Qwen-Audio-3.0-ASR-Flash 多模态接口的真实请求返回 HTTP 200、非空转录；返回是 top-level `text`/`output.text`，现已在 adapter 源码和测试兼容。受保护的 key/URL 已从 live 9Router DB 复制到 guest secret/env 并留 SQLite/env checkpoint，线上容器未切换。使用该平台取代 Goal 指定的 Alibaba/DashScope 是明确的供应商差异，部署脚本需额外 `--allow-qwenai-upstream`，尚未执行。详情见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-existing-qwen-api.md`。

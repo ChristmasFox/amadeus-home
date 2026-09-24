@@ -60,7 +60,7 @@ export function convertToWav(audio) {
 }
 
 function normalizeUpstream(payload) {
-  const output = payload?.output?.output;
+  const output = payload?.output?.output ?? payload?.output ?? payload;
   const text = output?.text ?? output?.sentence?.text;
   return typeof text === 'string' && text.trim() ? text.trim() : null;
 }
@@ -77,11 +77,12 @@ function secretEquals(actual, expected) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-export function createAsrServer({ bridgeKey, dashscopeKey, upstreamUrl, model = MODEL, fetchFn = fetch, convert = convertToWav }) {
-  if (bridgeKey.length < 32 || dashscopeKey.length < 20) throw new Error('protected_asr_keys_required');
+export function createAsrServer({ bridgeKey, upstreamKey, upstreamUrl, model = MODEL, fetchFn = fetch, convert = convertToWav }) {
+  if (bridgeKey.length < 32 || upstreamKey.length < 20) throw new Error('protected_asr_keys_required');
   const endpoint = new URL(upstreamUrl);
-  if (endpoint.protocol !== 'https:' || !endpoint.hostname.endsWith('.maas.aliyuncs.com') ||
-      endpoint.pathname !== '/api/v1/services/aigc/multimodal-generation/generation') throw new Error('invalid_dashscope_endpoint');
+  if (endpoint.protocol !== 'https:' ||
+      !(endpoint.hostname.endsWith('.maas.aliyuncs.com') || endpoint.hostname === 'maas.qianwenaiapi.com') ||
+      endpoint.pathname !== '/api/v1/services/aigc/multimodal-generation/generation') throw new Error('invalid_asr_endpoint');
   const cache = new Map();
   return createServer(async (req, res) => {
     const started = Date.now();
@@ -125,7 +126,7 @@ export function createAsrServer({ bridgeKey, dashscopeKey, upstreamUrl, model = 
     try {
       const upstream = await fetchFn(endpoint, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
-        headers: { Authorization: `Bearer ${dashscopeKey}`, 'Content-Type': 'application/json', 'X-DashScope-SSE': 'disable' },
+        headers: { Authorization: `Bearer ${upstreamKey}`, 'Content-Type': 'application/json', 'X-DashScope-SSE': 'disable' },
         body: JSON.stringify(requestBody),
       });
       if (!upstream.ok) {
@@ -149,8 +150,8 @@ export function createAsrServer({ bridgeKey, dashscopeKey, upstreamUrl, model = 
 if (process.argv[1]?.endsWith('/asr-bridge.mjs')) {
   const server = createAsrServer({
     bridgeKey: readFileSync(process.env.AMADEUS_ASR_BRIDGE_KEY_FILE, 'utf8').trim(),
-    dashscopeKey: readFileSync(process.env.AMADEUS_DASHSCOPE_KEY_FILE, 'utf8').trim(),
-    upstreamUrl: process.env.AMADEUS_DASHSCOPE_ASR_URL,
+    upstreamKey: readFileSync(process.env.AMADEUS_ASR_UPSTREAM_KEY_FILE, 'utf8').trim(),
+    upstreamUrl: process.env.AMADEUS_ASR_UPSTREAM_URL,
   });
   server.listen(20129, '127.0.0.1', () => console.info('asr bridge listening on container loopback'));
 }
