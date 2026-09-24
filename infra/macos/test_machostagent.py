@@ -40,6 +40,17 @@ class MacHostAgentContractTest(unittest.TestCase):
         self.assertEqual(parsed["powerWatts"], 1.47)
         self.assertEqual(parsed["sampleWindowMs"], 1000.0)
 
+    def test_power_parser_preserves_unavailable_subsystems(self):
+        raw = b'<?xml version="1.0"?><plist version="1.0"><dict><key>processor</key><dict><key>combined_power</key><real>33.3</real><key>gpu_power</key><real>33.3</real><key>ane_power</key><real>0</real></dict></dict></plist>'
+        parsed = machostagent_power.power_snapshot(raw)
+        self.assertEqual(parsed["socPowerMw"], 33.3)
+        self.assertIsNone(parsed["cpuPowerMw"])
+        self.assertEqual(parsed["anePowerMw"], 0.0)
+
+    def test_power_parser_rejects_negative_combined_power(self):
+        raw = b'<?xml version="1.0"?><plist version="1.0"><dict><key>processor</key><dict><key>combined_power</key><real>-2</real></dict></dict></plist>'
+        self.assertEqual(machostagent_power.power_snapshot(raw)["error"], "powermetrics_combined_power_unavailable")
+
     def test_power_parser_rejects_missing_combined_power(self):
         raw = b'<plist version="1.0"><dict><key>processor</key><dict/></dict></plist>'
         parsed = machostagent_power.power_snapshot(raw)
