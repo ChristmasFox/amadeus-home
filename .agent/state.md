@@ -1,3 +1,11 @@
+## 2026-09-24 — WhatsApp direct session identity fallback deployed
+
+修复后 14:17:47 收到 marker、14:18:34 单次出站，但 adapter 未提供 sender metadata，identity
+bind 三次失败。commit `805e6b4` 仅从 host 生成的 `agent:*:whatsapp:*:direct:<peer>` session key
+恢复可信 WhatsApp peer，group/channel key 不接受；定向测试 22、typecheck、build、secrets、
+diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-20260924064816`，healthy，
+等待重启后重新发送 marker；当前仍未执行 `COMMIT_SKULD_CUTOVER_1_4_8`。
+
 ## 2026-09-23 — Amadeus 1.4.8 Operation Skuld final cutover (active)
 
 - 2026-09-24 WhatsApp relink completed: M204 reports Telegram `ready/connected` and WhatsApp `linked/healthy/connected`. The detached relink worker and its child login processes were stopped after successful linking. A bounded recent log window now shows six direct WhatsApp inbound markers and six sent-message markers with no extra send marker, but this is multi-message activity rather than the required single controlled acceptance and does not prove reply content, owner identity, or tool policy. Telegram still has no inbound/outbound activity timestamps; do not claim owner acceptance or final cutover. Evidence: `.agent/checkpoints/2026-09-24-whatsapp-activity-awaiting-telegram.md`.
