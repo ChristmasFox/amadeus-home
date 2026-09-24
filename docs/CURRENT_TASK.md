@@ -2,6 +2,19 @@
 
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
+2026-09-24 M204 runtime readiness progress：主机/仓库/GitHub/工具链验收通过；M204 canonical
+guest 为 OrbStack `nyannyan` Ubuntu 24.04 arm64，Avalon UUID 与 sentinel 经过 `diskutil
+verifyVolume` 和 guest 读校验；Product Radar SQLite/image/health、Immich 四容器与 PostgreSQL
+dump/vector extension/API、FashionSigLIP MPS worker 均已恢复并通过现场检查。目标工作区仍 clean，
+`origin/main` 与本地 `3a41867` 一致。证据见
+`.agent/checkpoints/2026-09-24-m204-runtime-readiness-progress.md`。
+
+当前仍未完成 owner-channel acceptance：最近 WhatsApp group 活动不计入控制验收，Telegram/WhatsApp
+唯一标识测试消息尚未观察到；`TELEGRAM_ACCEPTANCE=pending`、`WHATSAPP_ACCEPTANCE=pending`。
+`media-organizer-adapter` 仍缺可重建 image/compose，仅有 state archive，未臆造替代运行时；
+因此 doctor 仍有 2 个失败，`DESTINATION_AUTHORITY=NO`，且没有执行
+`COMMIT_SKULD_CUTOVER_1_4_8`。
+
 2026-09-24 WhatsApp relink 已完成：M204 `channels status` 显示 Telegram `ready/connected`，WhatsApp `linked/healthy/connected`；二维码登录残留子进程已精准停止，避免重复登录。随后观察到 WhatsApp 最近窗口 6 次 direct 入站与 6 次发送，未见额外重复发送，但这是多条消息而非单次控制验收，且尚未证明回复内容、owner identity 和 tool policy；Telegram 仍无入站/出站时间戳，正式 owner-channel acceptance 尚未通过，不能执行最终 cutover。证据见 `.agent/checkpoints/2026-09-24-whatsapp-activity-awaiting-telegram.md`。
 
 2026-09-24 Phase 12/13 进展：用户授权停止旧 Mac Gateway 后，已执行 `launchctl disable` + `bootout`；`ai.openclaw.gateway` plist 保留，rollback-only，`18789` 已无监听。fresh unique-runtime gate 通过：旧 Mac OpenClaw/Gateway 进程 0、M204 候选 1、`OPENCLAW_ACTIVE_RUNTIME_COUNT=1`。M204 已从 migration-safe overlay 切换到 canonical Compose，容器 healthy、restart=unless-stopped、LAN `18789` 已发布；canonical 配置持久化 `tools.sessions.visibility=self`、`dmScope=per-account-channel-peer`、`groupScope=per-group`，Telegram/WhatsApp enabled，owner delivery=true。Telegram 已 `ready/connected`；WhatsApp 旧会话服务端返回 401/logged-out，M204 主机 detached `screen` 会话 `amadeus-whatsapp-relink` 正在等待新 QR 扫码并在过期后自动重试，真实 WhatsApp 入站/出站和去重验收尚未通过。最终 cutover token 尚未执行。

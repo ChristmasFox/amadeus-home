@@ -69,6 +69,14 @@
 
 更新时间：2026-09-24（Asia/Shanghai）
 
+2026-09-24 M204 workstation/runtime progress：`Amadeus-M204` 的 canonical repo `/Users/nyannyan/agent-monorepo`
+在 `main`/`origin/main` `3a41867` clean；GitHub SSH、Node 24.21.0、pnpm 11.19.0、Python 3.11.16、tmux、
+cloudflared、OrbStack `nyannyan` guest、Docker/Compose/CasaOS 和 host profile 均已现场核验。Avalon UUID、
+`diskutil verifyVolume`、guest sentinel/content 通过；Product Radar SQLite/image/health、Immich dump/四容器/
+API/vector extension、FashionSigLIP MPS worker 已恢复。Owner-channel controlled acceptance 仍 pending；
+最近 WhatsApp group 事件不计入验收，两个 SKULD marker 均未观察到。media-organizer-adapter 缺可重建 image/
+compose，未臆造替代。`DESTINATION_AUTHORITY=NO`，未执行 `COMMIT_SKULD_CUTOVER_1_4_8`。
+
 Amadeus 1.4.8 当前在 M204 `nyannyan` 运行 migration-safe OpenClaw 候选，镜像为
 `local/openclaw-amadeus:git-238bb65-20260923171901`，容器 healthy、loopback-only、无 published
 ports、Telegram/WhatsApp/公网入口关闭、owner delivery=false，`tools.sessions.visibility=self` 已生效。

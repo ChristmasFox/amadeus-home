@@ -1,5 +1,15 @@
 ## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
 
+2026-09-24 M204 runtime readiness progress：现场确认 `Amadeus-M204`、`nyannyan`、canonical
+`/Users/nyannyan/agent-monorepo`、GitHub `origin/main`（本地 `3a41867`）和 Node/pnpm/Python/
+tmux/cloudflared 均符合 workstation addendum，工作区 clean。OrbStack `nyannyan` guest 的
+Docker/Compose/CasaOS、Avalon UUID/sentinel（含只读 fsck 通过）、Product Radar、Immich
+PostgreSQL restore/API/vector extension/四容器、FashionSigLIP MPS 均已现场验证。Product Radar
+绑定 loopback `127.0.0.1:5315`，Immich 绑定 loopback `127.0.0.1:2283`。Owner-channel acceptance
+仍 pending；media-organizer-adapter 因只有 state archive 而无可重建 image/compose 仍未恢复，
+`DESTINATION_AUTHORITY=NO`，没有执行最终 cutover token。详见
+`.agent/checkpoints/2026-09-24-m204-runtime-readiness-progress.md`。
+
 2026-09-24 WhatsApp relink completed on M204: channel status is `linked/healthy/connected`; Telegram remains `ready/connected`. The detached relink worker and its child login processes were stopped after successful linking, so no duplicate login session remains. A bounded recent log window shows six direct WhatsApp inbound markers and six sent-message markers with no extra send marker, but this is not the required single controlled acceptance and does not prove reply content, owner identity, or tool policy. Telegram still has no inbound/outbound activity timestamp. Owner-message acceptance and final-reply correctness remain pending; final cutover is not committed. Evidence: `.agent/checkpoints/2026-09-24-whatsapp-activity-awaiting-telegram.md`.
 
 2026-09-24 Phase 12 passed and Phase 13 is partial. The old Mac `ai.openclaw.gateway` LaunchAgent was disabled and booted out; its plist remains for rollback-only and port `18789` is closed. A fresh unique-runtime probe reports source OpenClaw/Gateway process count 0, one M204 candidate, and `OPENCLAW_ACTIVE_RUNTIME_COUNT=1`. M204 now runs the canonical Compose (healthy, `unless-stopped`, LAN port `18789`) with persisted session isolation (`visibility=self`, `dmScope=per-account-channel-peer`, `groupScope=per-group`) and both owner channels enabled. Telegram is ready and connected. WhatsApp's restored session is server-side logged out; a relink session is waiting for QR scan, so WhatsApp real inbound/outbound and duplicate-response acceptance are not yet passed. Final source retirement/cutover remains uncommitted.
