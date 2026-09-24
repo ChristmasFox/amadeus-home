@@ -1,3 +1,13 @@
+## 2026-09-24：Amadeus 1.4.9 OAuth PKCE operator flow（源码已推送，实机验收待授权）
+
+Longbridge OAuth operator flow 已按当前官方 OAuth 2 流程补齐 S256 PKCE、scope=3 和 callback
+state 校验；短期 verifier 只写入外部 0600 请求状态，成功交换后删除。OpenClaw 仍不参与浏览器
+授权，token/refresh state 仍在 `/DATA/AppData/openclaw/data` 外部路径。新增回归测试通过；当前
+M204 尚未提供 sudo 授权、Longbridge client id 或 MacHostAgent token，因此未安装 HostAgent、
+未执行 OpenClaw 1.4.9 apply。部署脚本的 `--dry-run` 不发通知，`--apply` 会在健康检查后写入并尝试
+发送一次 `amadeus-release:1.4.9` owner smoke notification；发布后日志/存储维护失败时还会追加
+warning notification。证据见 `.agent/checkpoints/2026-09-24-amadeus-1.4.9-pkce-operator-flow.md`。
+
 ## 2026-09-24：WhatsApp direct session identity fallback 已部署
 
 修复后 14:17:47 控制轮确认消息到达并只出站一次，但 adapter 未传 `senderId`/`senderE164`，

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { readRequiredFile, type AmadeusConfig } from '../config.js';
@@ -14,6 +15,11 @@ export interface PersistedOAuthState {
 export interface OAuthStateStore {
   load(): Promise<PersistedOAuthState | undefined>;
   save(state: PersistedOAuthState): Promise<void>;
+}
+
+/** Generate the PKCE verifier/challenge pair required by public OAuth clients. */
+export function pkceChallenge(verifier: string): string {
+  return createHash('sha256').update(verifier, 'ascii').digest('base64url');
 }
 
 function isState(value: unknown): value is PersistedOAuthState {
@@ -62,20 +68,28 @@ export class LongbridgeOAuth {
     return authStatus(await this.state(), new Date());
   }
 
-  async authorizationUrl(redirectUri: string, state: string): Promise<string> {
+  async authorizationUrl(redirectUri: string, state: string, codeChallenge?: string): Promise<string> {
     const clientId = await readRequiredFile(this.config.longbridgeClientIdFile, 'Longbridge OAuth client id');
     const url = new URL('/oauth2/authorize', this.config.longbridgeAuthBaseUrl);
     url.searchParams.set('response_type', 'code');
     url.searchParams.set('client_id', clientId);
     url.searchParams.set('redirect_uri', redirectUri);
     url.searchParams.set('state', state);
+    // Longbridge's public-client flow uses PKCE. Confidential clients may omit
+    // it, but the operator script always supplies it when starting a flow.
+    url.searchParams.set('scope', '3');
+    if (codeChallenge) {
+      url.searchParams.set('code_challenge', codeChallenge);
+      url.searchParams.set('code_challenge_method', 'S256');
+    }
     return url.toString();
   }
 
-  async exchangeCode(code: string, redirectUri: string): Promise<LongbridgeAuthStatus> {
+  async exchangeCode(code: string, redirectUri: string, codeVerifier?: string): Promise<LongbridgeAuthStatus> {
     if (!code.trim()) throw new Error('Longbridge OAuth authorization code is required');
     const clientId = await readRequiredFile(this.config.longbridgeClientIdFile, 'Longbridge OAuth client id');
     const fields: Record<string, string> = { grant_type: 'authorization_code', client_id: clientId, code: code.trim(), redirect_uri: redirectUri };
+    if (codeVerifier) fields.code_verifier = codeVerifier;
     if (this.config.longbridgeClientSecretFile) fields.client_secret = await readRequiredFile(this.config.longbridgeClientSecretFile, 'Longbridge OAuth client secret');
     const payload = await requestFormJson(`${this.config.longbridgeAuthBaseUrl}/oauth2/token`, fields, { includeErrorDetail: false });
     const state = tokenState(payload);
