@@ -1,0 +1,27 @@
+name: emby
+
+services:
+  emby:
+    image: ${EMBY_IMAGE:-linuxserver/emby:4.9.1}
+    container_name: emby
+    hostname: emby
+    restart: unless-stopped
+    environment:
+      PUID: ${EMBY_PUID:-1000}
+      PGID: ${EMBY_PGID:-1000}
+      TZ: Asia/Shanghai
+    ports:
+      - "${EMBY_PORT:-8096}:8096/tcp"
+    volumes:
+      - ${EMBY_CONFIG_DIR:-/DATA/AppData/emby/config}:/config
+      - ${MEDIA_MOVIES_DIR:-/Volumes/Avalon/media/movies}:/data/movies:ro
+      - ${MEDIA_TV_DIR:-/Volumes/Avalon/media/tv}:/data/tvshows:ro
+      - ${MEDIA_MUSIC_DIR:-/Volumes/Avalon/media/music}:/data/music:ro
+      - ${MEDIA_PHOTOS_DIR:-/Volumes/Avalon/media/photos}:/data/photos:ro
+    x-casaos:
+      author: self
+      category: Media
+      port_map: "8096"
+      scheme: http
+      title:
+        custom: emby
