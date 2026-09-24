@@ -1,5 +1,15 @@
 # 当前任务
 
+## 2026-09-24：9router OpenAI/Codex 500 已修复
+
+9router 日志中的根因是 OpenAI/Codex 上游 TLS 建连失败：`ECONNRESET`，随后被网关表现为
+502/客户端 500。M204 guest 的 HTTP 代理 `host.orb.internal:7897` 可用，但 9router 的
+出站代理开关原来是关闭的。已在 9router Settings 持久化启用 HTTP 出站代理，并保留本地、
+Docker 内网和 LAN 网段为 no-proxy。
+
+验收：Codex provider test 返回 `valid=true`；实际 `gpt-6-astra` chat completion 返回 HTTP 200，
+日志显示完成。日志中 Kiro 的 `invalid_grant` 是独立的失效 refresh token，不是 OpenAI 请求根因。
+
 ## 2026-09-24：9router 局域网访问与密码恢复已完成
 
 9router 之前的 CasaOS 发布仅绑定 `127.0.0.1:20128`，因此 `192.168.5.3:20128` 无法访问。

@@ -1,3 +1,13 @@
+## 2026-09-24：9router OpenAI/Codex 上游连接已恢复
+
+9router 曾将 OpenAI/Codex 的上游 TLS 请求直接出站，M204 guest 对该路径返回
+`ECONNRESET`，客户端看到 500，9router 日志记录 502。代理连通性测试确认
+`http://host.orb.internal:7897` 可用；已在 9router 持久化 Settings 中开启该 HTTP 出站代理，
+并配置 localhost、Docker 服务名和 LAN 网段为 no-proxy。
+
+Codex provider test 返回 `valid=true`，实际 `gpt-6-astra` chat completion 返回 HTTP 200。
+Kiro refresh token 的 `invalid_grant` 仍是独立凭据问题，未修改 Kiro 配置。
+
 ## 2026-09-24：9router LAN 访问和密码恢复已完成
 
 M204 CasaOS 的 9router 已从 guest loopback 发布切回 LAN：仓库模板
