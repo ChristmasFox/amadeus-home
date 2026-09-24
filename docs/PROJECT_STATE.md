@@ -1,13 +1,13 @@
-## 2026-09-24：Amadeus 1.5.0 Longbridge 日历范围热修复待部署
+## 2026-09-24：Amadeus 1.5.1 Longbridge 日历范围热修复待部署
 
-M204 当前 live OpenClaw/Product Radar 为 1.4.9 镜像；OAuth state、官方 SDK token cache、
+M204 当前 live OpenClaw/Product Radar 为 1.5.0 镜像；OAuth state、官方 SDK token cache、
 MacHostAgent 和 owner channels 已验证。live `amadeus_market_session` 发现 Longbridge
-`301600 too many query days`，原因是默认交易日查询前后 370 天。源码已收窄为前后 180 天，
-显式 start/end 不变，版本已按唯一入口从 1.4.9 推进到 1.5.0。
+`301600 too many query days`；真实 SDK 探测显示 ±14 天成功而 ±21 天失败。源码已收窄为前后
+14 天，显式 start/end 不变，版本已按唯一入口从 1.5.0 推进到 1.5.1。
 
-1.5.0 尚未重新部署。提交推送后需重建 ARM64 镜像、保留 rollback checkpoint、执行 apply 和
+1.5.1 尚未部署。提交推送后需重建 ARM64 镜像、保留 rollback checkpoint、执行 apply 和
 真实 market/host/notification smoke。部署脚本的 dry-run 不发通知；apply 健康检查后发送一次
-`amadeus-release:1.5.0`，外部存储维护 gate 失败时还会追加 warning。media adapter 缺失和
+`amadeus-release:1.5.1`，外部存储维护 gate 失败时还会追加 warning。media adapter 缺失和
 Avalon 外部存储 gate 仍按 pending/blocked 记录，不创建替代服务。
 
 ## 2026-09-24：Amadeus 1.4.9 OAuth、HostAgent 与镜像验收进行中
