@@ -1,5 +1,10 @@
 # Amadeus 1.4.9 live acceptance
 
+Source implementation is pushed at `32653e5`. Market runtime now requires the
+official Longbridge SDK cache under
+`/DATA/AppData/openclaw/data/longbridge-sdk-home/.longbridge/openapi/tokens`;
+the operator exchange helper writes it alongside canonical OAuth state.
+
 Blocked only on external operator state, not source implementation:
 
 1. Provision the Longbridge OAuth client id at the protected CasaOS secret path.
