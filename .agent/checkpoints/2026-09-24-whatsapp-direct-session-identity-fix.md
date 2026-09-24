@@ -28,7 +28,7 @@ Verification passed: `pnpm test:amadeus` (22 tests), `pnpm typecheck:amadeus`,
 
 ```text
 WHATSAPP_ACCEPTANCE=passed
-TELEGRAM_ACCEPTANCE=pending
+TELEGRAM_ACCEPTANCE=skipped
 DUPLICATE_RUNTIME=not-finalized
 DESTINATION_AUTHORITY=NO
 OPERATION_SKULD_CUTOVER=NOT_COMMITTED
@@ -40,4 +40,6 @@ The exact marker arrived at 15:19:17 +08:00 and produced one outbound WhatsApp s
 The live SQLite/WAL transcript for the direct session records `identity_bind_channel` with
 `status=bound` for the current sender, followed by the assistant confirmation. No
 `trusted_sender_metadata_unavailable` occurred in the post-fix window. Rollback assets and Immich
-source remain preserved; Telegram acceptance and the final cutover token are still pending.
+source remain preserved; Telegram remains unchanged and its acceptance is skipped for this
+cutover. The operator subsequently authorized `COMMIT_SKULD_CUTOVER_1_4_8` for the WhatsApp-only
+scope.

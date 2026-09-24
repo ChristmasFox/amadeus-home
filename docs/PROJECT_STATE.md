@@ -704,3 +704,9 @@ canonical CasaOS target 是 OrbStack ubuntu，Compose 为
 `TELEGRAM_ACCEPTANCE=pending`、`DESTINATION_AUTHORITY=NO`，最终
 `COMMIT_SKULD_CUTOVER_1_4_8` 未执行。证据见
 `.agent/checkpoints/2026-09-24-whatsapp-direct-session-identity-fix.md`。
+## 2026-09-24：Operation Skuld scope revised to WhatsApp-only
+
+Telegram acceptance is skipped for this cutover and Telegram remains unchanged in the declaration
+and runtime configuration. WhatsApp is the only owner-channel acceptance requirement. The operator
+has supplied the exact `COMMIT_SKULD_CUTOVER_1_4_8` token; execution will preserve rollback assets,
+the old source, and the Immich source.

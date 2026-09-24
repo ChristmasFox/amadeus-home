@@ -1,5 +1,14 @@
 # Amadeus 1.4.8 — Operation Skuld Final Cutover & OpenClaw Memory Continuity Goal
 
+## Current operator scope revision — 2026-09-24
+
+The operator has explicitly skipped Telegram acceptance for this cutover. Telegram remains
+unchanged and running; WhatsApp is the only owner-channel acceptance requirement for this run.
+The exact `COMMIT_SKULD_CUTOVER_1_4_8` token is authorized for execution after the verified
+WhatsApp acceptance and unique-runtime checks. This revision supersedes the historical Telegram
+acceptance requirement below while retaining source preservation, rollback, secret protection,
+and single-runtime safety requirements.
+
 ## Mission
 
 本轮是 Operation Skuld 的最后收口版本。目标不是继续扩功能，而是完成旧 Mac 权威运行时冻结、Kurisu/OpenClaw 完整状态封存、Avalon 安全迁移、Amadeus-M204 恢复、离线验收、唯一 OpenClaw 权威切换、owner ingress 切换，以及旧 Mac rollback-only 收口。
