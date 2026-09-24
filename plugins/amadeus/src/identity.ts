@@ -157,6 +157,20 @@ function trustedInboundSenderFor(sessionKey: unknown): string | undefined {
   return current.senderId;
 }
 
+/**
+ * WhatsApp Web's direct-message adapter can omit SenderId/SenderE164 from the
+ * tool context even though OpenClaw has already admitted a host-generated
+ * direct session. Recover only that route identity; never infer a sender from
+ * message text or from a group/channel session key.
+ */
+function trustedWhatsAppDirectSenderFromSession(sessionKey: unknown, channel: string | undefined): string | undefined {
+  if (channel !== 'whatsapp') return undefined;
+  const normalized = text(sessionKey);
+  if (!normalized) return undefined;
+  const match = /^agent:[^:]+:whatsapp:[^:]+:direct:(.+)$/u.exec(normalized);
+  return match?.[1] ? text(match[1]) : undefined;
+}
+
 function trustedInboundReplyFor(sessionKey: unknown): TrustedChannelIdentity | undefined {
   const normalized = text(sessionKey);
   if (!normalized) return undefined;
@@ -176,7 +190,8 @@ function baseContext(context: OpenClawPluginToolContext): IdentityContext {
   const conversationId = text(context.nativeChannelId ?? delivery?.to ?? delivery?.threadId);
   const senderId = text(context.requesterSenderId)
     ?? (channel === 'whatsapp' ? text((context as unknown as { requesterSenderE164?: unknown }).requesterSenderE164) : undefined)
-    ?? trustedInboundSenderFor(context.sessionKey);
+    ?? trustedInboundSenderFor(context.sessionKey)
+    ?? trustedWhatsAppDirectSenderFromSession(context.sessionKey, channel);
   const result: IdentityContext = {
     ...(channel ? { channel } : {}),
     ...(accountId ? { accountId } : {}),
