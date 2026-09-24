@@ -1,3 +1,11 @@
+## 2026-09-24：WhatsApp direct session identity fallback 已部署
+
+修复后 14:17:47 控制轮确认消息到达并只出站一次，但 adapter 未传 `senderId`/`senderE164`，
+identity tool 连续失败。commit `805e6b4` 现从可信 host 生成的 WhatsApp direct session key
+恢复 peer identity，仅允许 direct key；22 个 Amadeus tests、typecheck、build、secrets 与 diff
+check 通过。M204 当前 healthy 镜像为 `local/openclaw-amadeus:git-805e6b4-20260924064816`，
+等待重启后的下一轮 marker；最终 cutover 仍未提交。
+
 ## Current Goal — Amadeus 1.4.8 Operation Skuld final cutover and memory continuity
 
 2026-09-24 M204 runtime readiness progress：现场确认 `Amadeus-M204`、`nyannyan`、canonical

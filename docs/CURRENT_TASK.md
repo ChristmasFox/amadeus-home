@@ -1,5 +1,16 @@
 # 当前任务
 
+## 2026-09-24：WhatsApp direct session identity fallback 已部署
+
+修复后 14:17:47 控制 marker 到达并只产生 1 条出站回复，但 OpenClaw WhatsApp adapter 未传
+`senderId`/`senderE164`，identity bind 连续 3 次失败。commit `805e6b4` 仅从 host 生成的
+`whatsapp + direct` session key 恢复 peer identity，拒绝 group/channel key 与消息文本推断。
+22 个 Amadeus tests、typecheck、build、secrets scan、diff check 通过。M204 已运行
+`local/openclaw-amadeus:git-805e6b4-20260924064816`（arm64 digest
+`sha256:adb9532041682bda8a5b399398b6ee825a86e3e06d5da1a79c33c050813db9bd`），容器 healthy；
+受保护回滚副本已保存，等待重启后的下一次 WhatsApp marker。`DESTINATION_AUTHORITY=NO`，最终
+token 未执行。证据见 `.agent/checkpoints/2026-09-24-whatsapp-direct-session-identity-fix.md`。
+
 ## 2026-09-24：WhatsApp 身份桥接修复已部署，等待修复后控制验收
 
 此前 WhatsApp 控制标记 `SKULD-WHATSAPP-20260924` 在修复前运行时收到并只产生一条回复，但
