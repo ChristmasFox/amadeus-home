@@ -328,6 +328,13 @@ for logical_id, src_rel, dst_rel, perm, desc in RESTORE_MAP:
                 shutil.copytree(str(src_path), str(prepared_path), symlinks=True)
                 if perm is not None:
                     prepared_path.chmod(perm)
+                if logical_id == 'openclaw-secret-files':
+                    # The OpenClaw image runs as node (1000:1000). Secret files
+                    # are still private (0600 where supplied by the bundle),
+                    # but must be readable by that runtime user after restore.
+                    owner_chown = (lambda *_args, **_kwargs: None) if fixture_mode else os.chown
+                    entries = normalize_runtime_tree(prepared_path, chown_fn=owner_chown)
+                    print(f'OPENCLAW_SECRET_OWNER_NORMALIZED=1000:1000 entries={entries}')
                 if logical_id == 'whatsapp-runtime-state' and not fixture_mode:
                     if os.geteuid() != 0:
                         raise PermissionError('OpenClaw credential restore must run as guest root')
