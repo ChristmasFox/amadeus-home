@@ -16,7 +16,10 @@ only an explicit `--apply` installs the collector and launchd job; the token
 must already exist at the protected path outside Git.
 
 Longbridge authorization is a separate operator action on M204. Use
-`scripts/longbridge-oauth-authorize.mjs start`, complete the browser approval,
-then pipe the returned code to the `exchange` mode. The resulting OAuth state
-is written with mode 0600 to the external `/DATA/AppData/openclaw/data` path;
-normal OpenClaw restarts only reuse that state.
+`scripts/longbridge-oauth-authorize.mjs start`, open the printed URL, complete
+the browser approval, and save the complete callback URL outside Git. Pipe that
+callback URL to the `exchange` mode; the operator flow stores the short-lived
+PKCE verifier and validates the returned OAuth `state` before exchanging the
+code. The resulting OAuth state is written with mode 0600 to the external
+`/DATA/AppData/openclaw/data` path; normal OpenClaw restarts only reuse that
+state.
