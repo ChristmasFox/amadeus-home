@@ -1,18 +1,24 @@
 # Amadeus 1.4.9 live acceptance
 
-Source implementation is pushed at `32653e5`. Market runtime now requires the
+Source implementation is pushed at `32653e5`; the live 1.4.9 runtime is deployed and
+the 1.5.0 market calendar hotfix is queued. Market runtime now requires the
 official Longbridge SDK cache under
 `/DATA/AppData/openclaw/data/longbridge-sdk-home/.longbridge/openapi/tokens`;
 the operator exchange helper writes it alongside canonical OAuth state.
 
-OAuth and host prerequisites are now provisioned on M204. The release image still needs deployment and
-live acceptance:
+OAuth and host prerequisites are provisioned on M204. The 1.4.9 release image was deployed with
+rollback checkpoints and live acceptance evidence:
 
-1. Deploy the glibc-compatible release image with a protected rollback checkpoint.
-2. Verify the 0600 OAuth state survives an OpenClaw restart without browser interaction.
-3. Verify the two OpenClaw host tools and launchd recovery.
-4. Record sanitized live quote/session, public group scope, opening/closing preview and event-idempotency
-   evidence; never record tokens or private account material.
+1. Rebuild and deploy the 1.5.0 glibc-compatible image with a protected rollback checkpoint.
+2. Re-run the 0600 OAuth state, official SDK quote/session, host tool, and launchd acceptance without
+   browser interaction.
+3. Record sanitized market/session and notification evidence; never record tokens or private account
+   material.
+
+The 1.4.9 live market session smoke exposed Longbridge `301600 too many query days`; 1.5.0 bounds the
+default trading-day window to +/-180 days while preserving explicit dates. The deployed 1.4.9 image,
+OAuth state, SDK cache, channel status, NAS read-only smoke, release notification, and maintenance
+warning notifications are retained in the M204 checkpoint `amadeus-openclaw-20260924131115`.
 
 Known external-service gap: M204 currently has no `media-organizer-adapter` container or rebuildable
 source/image (only its protected state archive exists). The deployment script reports this as

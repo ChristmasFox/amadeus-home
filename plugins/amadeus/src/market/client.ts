@@ -71,9 +71,11 @@ function calendarRange(start?: string, end?: string): { start: string; end: stri
   if (start && end) return { start, end };
   const now = new Date();
   const begin = new Date(now);
-  begin.setUTCDate(begin.getUTCDate() - 370);
+  // Longbridge rejects oversized trading-day ranges (301600). Keep the
+  // default bounded while still covering the current year's US calendar.
+  begin.setUTCDate(begin.getUTCDate() - 180);
   const finish = new Date(now);
-  finish.setUTCDate(finish.getUTCDate() + 370);
+  finish.setUTCDate(finish.getUTCDate() + 180);
   return { start: start ?? dateText(begin), end: end ?? dateText(finish) };
 }
 
