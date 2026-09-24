@@ -1,5 +1,18 @@
 # 当前任务
 
+## 2026-09-24：Amadeus 1.5.2 M204 准确功耗采集待授权安装
+
+当前 1.5.1 已完成 Longbridge session/quote 和 HostAgent 基础验收，但 M204 host status 的
+power 仍为 degraded，因为 macOS `powermetrics` 要求 root 且旧参数在当前 macOS 上已失效。
+1.5.2 已加入独立、固定参数的 root LaunchDaemon，仅采集 `powermetrics` plist 并原子写入
+`/var/run/amadeus-machostagent-power.json`；用户级 HTTP agent 只读取 30 秒内的快照。
+
+API 将返回 `powerWatts`、CPU/GPU/ANE/SoC mW、采样窗口、`scope=soc` 和
+`accuracy=estimated_soc_not_wall_input`；无授权或过期时明确返回 degraded/null，不把 CPU 负载
+冒充功耗。代码、Python 合约测试、plist lint、shell syntax、版本检查和 diff check 已通过。
+下一步是推送 1.5.2、重建部署 OpenClaw，然后在 M204 执行
+`infra/macos/install-machostagent.sh --apply --accurate-power` 的一次系统授权并真实复测。
+
 ## 2026-09-24：Amadeus 1.5.1 Longbridge 日历范围热修复待部署
 
 1.5.0 已在 M204 CasaOS 运行并通过 OAuth、官方 SDK quote、HostAgent、Telegram/WhatsApp

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.amadeus.machostagent.power</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/env</string><string>python3</string><string>/Library/Application Support/Amadeus/machostagent_power.py</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>MACHOSTAGENT_POWER_FILE</key><string>/var/run/amadeus-machostagent-power.json</string>
+    <key>MACHOSTAGENT_POWER_INTERVAL</key><string>5</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>5</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>/var/log/amadeus-mac-host-power.log</string>
+  <key>StandardErrorPath</key><string>/var/log/amadeus-mac-host-power.err.log</string>
+</dict></plist>

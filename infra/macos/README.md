@@ -7,16 +7,25 @@ random token outside Git and install the example launchd plist as a LaunchAgent
 or LaunchDaemon according to the existing M204 trust boundary. The OpenClaw
 container only receives the two bounded telemetry tools.
 
-`powermetrics` is optional. If the helper lacks the required privilege, the
-agent remains healthy and reports `power.telemetry=degraded` while CPU, memory,
-disk, network, process, and service facts continue to be collected.
+The base user agent reports `power.telemetry=degraded` until the optional
+privileged sampler is installed. For measured Apple Silicon SoC power, run
+`install-machostagent.sh --apply --accurate-power`; this installs a fixed,
+root-owned LaunchDaemon that invokes `/usr/bin/powermetrics` with the current
+macOS plist format and atomically publishes a fresh snapshot at
+`/var/run/amadeus-machostagent-power.json`. The user agent reads only that
+bounded snapshot and rejects samples older than 30 seconds. The API reports
+`powerWatts`, CPU/GPU/ANE milliwatts, sample duration, `scope=soc`, and
+`accuracy=estimated_soc_not_wall_input`. This is the macOS SoC estimate; exact
+wall-input watts still require an external power meter.
 
 `install-machostagent.sh` is dry-run by default. It checks the M204 hostname and
 only an explicit `--apply` installs the collector and user-level launchd job;
 the token must already exist at
 `~/Library/Application Support/Amadeus/machostagent.token` with mode 0600.
-The service and token stay within the logged-in user's least-privilege boundary;
-no sudo or arbitrary privileged helper is used.
+Add `--accurate-power` to the same apply only when the logged-in user can
+authorize the one-time root LaunchDaemon installation. The HTTP service and
+token remain in the user boundary; the root helper has no HTTP surface,
+request handling, shell, or caller-controlled path.
 
 Longbridge authorization is a separate operator action on M204. Use
 `scripts/longbridge-oauth-authorize.mjs start`, open the printed URL, complete
