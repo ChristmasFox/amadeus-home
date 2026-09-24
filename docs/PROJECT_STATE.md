@@ -1,13 +1,13 @@
-## 2026-09-24：Amadeus 1.5.2 M204 准确功耗采集待授权安装
+## 2026-09-24：Amadeus 1.5.2 SoC 功耗采集已启用，整机交流功率待外部电表
 
-源码已加入 root-only `powermetrics` sampler 和用户 agent 的新鲜度校验。采集器只写固定的
-`/var/run/amadeus-machostagent-power.json`，HTTP surface 没有新增命令、路径或 sudo；status
-会区分 `powerWatts`（SoC 估计）与 wall-input，缺失/过期样本返回 degraded。`VERSION` 已从
-1.5.1 推进到 1.5.2，尚未部署。
+1.5.2 已部署。root-only `powermetrics` LaunchDaemon 已在 M204 运行并原子更新固定快照，
+用户级 HostAgent 校验 30 秒新鲜度。OpenClaw owner host-status 返回 supported；实测样本约
+0.016–0.471 W，字段标明 `scope=soc` / `accuracy=estimated_soc_not_wall_input`。该值只覆盖
+CPU/GPU/ANE 的 SoC 估算，不能视为 Mac mini 整机交流输入功率。
 
-M204 上还需一次用户可见的系统授权来安装 `/Library/LaunchDaemons/com.amadeus.machostagent.power.plist`。
-授权后才可把功耗验收记为 supported；目前不能把图片中 8–15W 的估算当作实测结果。精确墙上
-输入功率仍需外部电表，API 会保留这一测量范围标记。
+Apple 官方将 Mac mini 整机功耗定义为从墙上电源测量并包含电源与系统损耗；准确整机 W 仍需
+外部电表或智能插座。当前仓库未发现已配置的仪表集成，等待用户提供设备型号或 Home
+Assistant 实体后接入。此前基于 CPU、内存等负载估算的 8–15 W 不是 M204 实测值。
 
 ## 2026-09-24：Amadeus 1.5.1 Longbridge 日历范围热修复待部署
 

@@ -1,17 +1,17 @@
 # 当前任务
 
-## 2026-09-24：Amadeus 1.5.2 M204 准确功耗采集待授权安装
+## 2026-09-24：Amadeus 1.5.2 SoC 功耗采集已启用，整机交流功率待外部电表
 
-当前 1.5.1 已完成 Longbridge session/quote 和 HostAgent 基础验收，但 M204 host status 的
-power 仍为 degraded，因为 macOS `powermetrics` 要求 root 且旧参数在当前 macOS 上已失效。
-1.5.2 已加入独立、固定参数的 root LaunchDaemon，仅采集 `powermetrics` plist 并原子写入
-`/var/run/amadeus-machostagent-power.json`；用户级 HTTP agent 只读取 30 秒内的快照。
+1.5.2 已部署，root `powermetrics` LaunchDaemon 已在 M204 启动。OpenClaw owner host-status
+真实调用返回 `telemetry=supported`、新鲜样本和 `scope=soc`；一次观察为 SoC 约 0.03 W，
+CPU 0 mW、GPU 30.4 mW、ANE 0 mW，采样窗口约 1.18 秒。后续样本也在约 0.016–0.044 W
+之间变化。这些是芯片子系统估算值，不是 Mac mini 整机输入功率；不应继续用它计算整机耗电。
 
-API 将返回 `powerWatts`、CPU/GPU/ANE/SoC mW、采样窗口、`scope=soc` 和
-`accuracy=estimated_soc_not_wall_input`；无授权或过期时明确返回 degraded/null，不把 CPU 负载
-冒充功耗。代码、Python 合约测试、plist lint、shell syntax、版本检查和 diff check 已通过。
-下一步是推送 1.5.2、重建部署 OpenClaw，然后在 M204 执行
-`infra/macos/install-machostagent.sh --apply --accurate-power` 的一次系统授权并真实复测。
+Apple 的 Mac mini 整机功耗定义为从墙上电源测量并包含电源转换及系统损耗；macOS
+`powermetrics` 提供的是可能不准确的 SoC 子系统估算。因此“整机功耗能准确计算”仍需接入
+带实时 W 读数的外部电表/智能插座。当前仓库没有发现已配置的功率计。待提供设备型号或
+Home Assistant 实体后，可接入其读数；在此之前 status 必须标明 SoC 范围，不能冒充整机 W。
+安装证据见 `.agent/checkpoints/2026-09-24-amadeus-1.5.2-power-sampler-installed.md`。
 
 ## 2026-09-24：Amadeus 1.5.1 Longbridge 日历范围热修复待部署
 
