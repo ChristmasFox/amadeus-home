@@ -1,0 +1,11 @@
+name: frpc
+
+services:
+  frpc:
+    image: ${FRPC_IMAGE:-snowdreamtech/frpc:0.69.0}
+    container_name: frpc
+    restart: unless-stopped
+    network_mode: host
+    command: ["-c", "/etc/frp/frpc.toml"]
+    volumes:
+      - ${FRPC_CONFIG_FILE:-/DATA/AppData/frpc/frpc.toml}:/etc/frp/frpc.toml:ro

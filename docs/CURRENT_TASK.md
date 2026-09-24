@@ -1,5 +1,24 @@
 # 当前任务
 
+## 2026-09-24：frpc 与公网服务已恢复（跳过 9router）
+
+已从外置 source-freeze 归档恢复 M204 的 frpc 配置，删除 `9router-tcp` 与未恢复的 Homarr
+映射，并将 frpc 管理面与 Glances 回源固定到 guest loopback。frpc `0.69.0` 由 systemd 管理，
+配置校验通过，8 个安全映射登录并启动成功。Emby、Jellyfin、qBittorrent、aria2、Glances 的
+配置归档和镜像已恢复到 CasaOS；Avalon UUID、哨兵和 guest 外置设备检查通过。
+
+公网验收：`immich` 200、`emby` 302、`jellyfin` 302、`qb` 200、`aria` 200、`monitor` 200，
+`claw` 403（token 保护正常）。`9router.nyannyan.top` 无 DNS 且没有 frpc 映射；9router 仅为
+OpenClaw 本机依赖并收紧到 `127.0.0.1:20128`。Homarr 保持停用。证据见
+`.agent/checkpoints/2026-09-24-frpc-public-restore.md`。
+
+## 2026-09-24：公网服务诊断完成，待恢复 frpc 隧道
+
+公网 Caddy/Cloudflare 前端可达，但 `claw`、`immich`、`emby`、`jellyfin`、`qb`、`aria`、`monitor`
+均返回 502，根因是 M204 当前没有运行 frpc；`9router.nyannyan.top` 没有 DNS，`sub` 根路径 404
+符合订阅站点行为。旧 frpc 映射可从外置归档恢复，未在本轮自动恢复公网入口。证据见
+`.agent/checkpoints/2026-09-24-public-services-diagnosis.md`。
+
 ## 2026-09-24：M204 LAN bindings restored
 
 用户反馈 M204 部署服务无法从局域网访问。现场确认除 OpenClaw 外，CasaOS Compose 的用户服务

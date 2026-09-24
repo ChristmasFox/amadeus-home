@@ -719,3 +719,25 @@ bindings. Product Radar, Changedetection, Immich, 9Router, Filebrowser, Xiaoya, 
 and OpenClaw respond through both `192.168.5.3` and `192.168.5.50`. Internal database, Redis, and
 model services remain unpublished. The pre-change runtime backup is external and recorded in
 `.agent/checkpoints/2026-09-24-m204-lan-bindings.md`.
+## 2026-09-24：Public services diagnosis
+
+The public Caddy/Cloudflare front ends respond, while the declared service hosts return `502`
+because M204 has no running frpc tunnel. The old frpc mapping archive remains available outside
+Git; no public ingress restore was performed in this diagnostic pass. See
+`.agent/checkpoints/2026-09-24-public-services-diagnosis.md`.
+
+## 2026-09-24：frpc and public backends restored
+
+The M204 guest now runs the restored official frp `0.69.0` binary under `frpc.service`. The
+source-freeze config was filtered to remove `9router-tcp` and the unavailable Homarr proxy; the
+admin UI and Glances source are loopback-only. The Avalon volume passed the host UUID
+`0C2CC618-D273-470C-8036-9AD6A0D967D7`, sentinel, and guest external-device checks before the
+Emby, Jellyfin, qBittorrent, and aria2 consumers were started. Glances was rebuilt with a read-only
+Docker socket and host PID view.
+
+Public probes now return 200/302 for Immich, Emby, Jellyfin, qBittorrent, aria, and monitor; Claw
+returns the expected 403 token gate. `9router.nyannyan.top` has no DNS and no frpc mapping. The
+local 9Router dependency is retained only on `127.0.0.1:20128` for OpenClaw compatibility; Homarr
+remains stopped. The pre-restore runtime copy is external at
+`/Volumes/Avalon/backups/operation-skuld/public-backends-before-20260924T090150Z`.
+See `.agent/checkpoints/2026-09-24-frpc-public-restore.md`.

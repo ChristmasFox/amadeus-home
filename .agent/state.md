@@ -77,6 +77,18 @@ diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-202609240
 
 更新时间：2026-09-24（Asia/Shanghai）
 
+2026-09-24 frpc/public restore：已从 source-freeze 外置归档恢复官方 frp 0.69.0，systemd
+服务 active，配置校验通过。删除了 9router 与 Homarr 的隧道映射，frpc 管理面和 Glances
+回源固定 loopback；9router 仍仅作为 OpenClaw 本机依赖并绑定 `127.0.0.1:20128`。Avalon
+UUID、哨兵和 guest 外置设备检查通过后，Emby、Jellyfin、qBittorrent、aria2、Glances 已恢复。
+公网 Immich/Emby/Jellyfin/qBittorrent/aria/monitor 分别返回 200/302/302/200/200/200，Claw
+返回预期 403；`9router.nyannyan.top` 无 DNS。证据见
+`.agent/checkpoints/2026-09-24-frpc-public-restore.md`，回滚副本在外置备份目录。
+
+2026-09-24 公网诊断：公网前端可达，但多个服务返回 502；M204 没有 frpc 进程/容器。旧 frpc
+映射和受保护凭据仍在 `/Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z/frpc/frpc-config.tar.gz`，本轮未恢复公网入口。证据见
+`.agent/checkpoints/2026-09-24-public-services-diagnosis.md`。
+
 2026-09-24 M204 LAN binding fix：用户服务此前发布在 `127.0.0.1`，局域网无法访问；已将 Git
 Compose 默认值和 live CasaOS 端口切换到 `0.0.0.0`，重建用户服务且未重建镜像。两个 M204 LAN
 地址 `192.168.5.3`/`192.168.5.50` 的逐端口探测均建立连接；内部 DB/Redis/model 仍未发布。回滚
