@@ -295,3 +295,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 1.5.3 工程烟测补充：在仓库外安装了 pinned Qwen3-TTS Base 模型和 Python venv；使用临时系统合成参考音频验证 MPS 单次模型加载/热身与中文 WAV 生成，并在临时 loopback 端口验证 503→200 readiness、鉴权和 MP3 输出。临时参考/密钥和测试进程已移除；正式 `kurisu-v1` 仍缺失，18792/launchd 与 9Router/OpenClaw live 均未切换。新增 9Router 默认 dry-run 的 provider/alias 受保护配置脚本，等待真实 DashScope STT 兼容接口和凭据确认。工程烟测不等于生产声音或 WhatsApp 验收。
 
 1.5.3 后续准备：M204 speech token 已由显式 `--prepare-apply` 在仓库外生成并验证 mode 0600；前述“缺少 TTS token”只描述 discovery 时点。仍缺正式参考音频/转录文字及 DashScope/dashboard 的可用受保护凭据；未执行生产 launchd、9Router 或 WhatsApp 切换。
+
+## 2026-09-24：1.5.3 ASR 适配与失败语义（源码阶段）
+
+阿里云官方文档确认 `qwen-audio-3.0-asr-flash` 同步接口是 DashScope multimodal-generation，非 9Router 的标准 STT multipart 路径。已在仓库管理的 9Router 镜像源码加入受保护、容器 loopback 的确定性协议适配层（Ogg/Opus→16 kHz WAV、Data URI、结构化错误和五分钟有界文字缓存）。OpenClaw pinned WhatsApp 入站 ASR 失败时会把 null 交给 Agent；新增 source-controlled 受限补丁候选，只对已准入私聊语音用原 WhatsApp 发送路径返回简短文字错误。两者均未部署，尚无真实 DashScope 凭据或 WhatsApp 验收。证据见 `.agent/checkpoints/2026-09-24-amadeus-1.5.3-asr-bridge-and-failure-boundary.md`。

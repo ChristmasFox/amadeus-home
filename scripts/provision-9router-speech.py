@@ -19,6 +19,7 @@ ASR_PROVIDER = "selfhosted-stt"
 TTS_PROVIDER = "selfhosted-tts"
 ASR_CONNECTION = "Amadeus ASR (DashScope)"
 TTS_CONNECTION = "Amadeus TTS (M204)"
+ASR_URL = "http://127.0.0.1:20129/v1/audio/transcriptions"
 TTS_URL = "http://host.docker.internal:18792"
 TTS_MODEL = "selfhosted-tts/qwen3-tts-1.7b/kurisu-v1"
 
@@ -128,26 +129,23 @@ def main() -> None:
     parser.add_argument("--dashboard-password-file")
     parser.add_argument("--asr-key-file")
     parser.add_argument("--tts-key-file")
-    parser.add_argument("--asr-url", help="Verified full OpenAI-compatible /v1/audio/transcriptions URL")
     parser.add_argument("--asr-model", default="qwen-audio-3.0-asr-flash")
     parser.add_argument("--machine", default="nyannyan", help="M204 OrbStack guest")
     args = parser.parse_args()
     if not args.apply:
         print("MODE=dry-run; no dashboard login, provider or alias write")
-        print("ASR=requires verified compatible URL/key; old Chat Combo retired after guest checkpoint")
+        print("ASR=selfhosted-stt via local bounded DashScope multimodal protocol adapter; old Chat Combo retired after guest checkpoint")
         print("TTS=selfhosted-tts via M204 native port 18792")
         return
-    if not all((args.dashboard_password_file, args.asr_key_file, args.tts_key_file, args.asr_url)):
-        parser.error("--apply requires dashboard password, ASR/TTS key files and verified ASR URL")
-    if not args.asr_url.startswith("https://") or not args.asr_url.rstrip("/").endswith("/audio/transcriptions"):
-        parser.error("ASR URL must be a verified HTTPS transcriptions endpoint")
+    if not all((args.dashboard_password_file, args.asr_key_file, args.tts_key_file)):
+        parser.error("--apply requires dashboard password and ASR bridge/TTS key files")
     if "/" in args.asr_model or not args.asr_model.strip():
         parser.error("ASR model id must be a single segment")
     api = Dashboard("http://127.0.0.1:20128")
     api.login(protected(args.dashboard_password_file))
     checkpoint = backup_live(args.machine)
     print("ROLLBACK_CHECKPOINT=" + checkpoint)
-    asr = ensure_connection(api, ASR_PROVIDER, ASR_CONNECTION, protected(args.asr_key_file), args.asr_url)
+    asr = ensure_connection(api, ASR_PROVIDER, ASR_CONNECTION, protected(args.asr_key_file), ASR_URL)
     tts = ensure_connection(api, TTS_PROVIDER, TTS_CONNECTION, protected(args.tts_key_file), TTS_URL)
     print("ASR_CONNECTION=" + asr)
     print("TTS_CONNECTION=" + tts)

@@ -6,7 +6,14 @@ RUN npm install --global 9router@0.5.81 --prefer-online \
     && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.81" \
     && npm cache clean --force
 
+# Qwen-Audio-3.0-ASR-Flash exposes DashScope multimodal-generation rather than
+# standard multipart STT. Keep only a bounded protocol adapter next to 9Router;
+# the model alias, provider selection and credentials remain 9Router-owned.
+RUN apk add --no-cache ffmpeg
+COPY infra/docker/casaos/9router/asr-bridge.mjs /opt/amadeus/asr-bridge.mjs
+COPY infra/docker/casaos/9router/start-9router.mjs /opt/amadeus/start-9router.mjs
+
 # The upstream Docker image runs the packaged server directly. The npm CLI is
 # desktop-oriented and can exit after launching its tray/server child in a
 # headless container.
-CMD ["node", "/usr/local/lib/node_modules/9router/app/custom-server.js"]
+CMD ["node", "/opt/amadeus/start-9router.mjs"]
