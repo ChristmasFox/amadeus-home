@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import subprocess
+import time
 import http.cookiejar
 import json
 from pathlib import Path
@@ -123,6 +124,33 @@ def retire_old_combo(api: Dashboard) -> str:
     return "retired"
 
 
+def runtime_speech_ready(machine: str) -> bool:
+    """Refuse alias writes until both actual speech endpoints are healthy."""
+    probe = r'''Promise.all([
+      fetch("http://127.0.0.1:20129/healthz"),
+      fetch("http://host.docker.internal:18792/healthz")
+    ]).then(([asr,tts])=>process.exit(asr.ok&&tts.ok?0:1)).catch(()=>process.exit(1))'''
+    return subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "exec", "9router", "node", "-e", probe],
+                          capture_output=True, timeout=12).returncode == 0
+
+
+def restart_and_verify(machine: str) -> None:
+    subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "restart", "9router"],
+                   capture_output=True, timeout=90, check=True)
+    probe = r'''Promise.all([
+      fetch("http://127.0.0.1:20128/api/health"),
+      fetch("http://127.0.0.1:20129/healthz"),
+      fetch("http://127.0.0.1:20128/v1/models")
+    ]).then(([router,bridge,auth])=>process.exit(router.ok&&bridge.ok&&auth.status===401?0:1)).catch(()=>process.exit(1))'''
+    for _ in range(45):
+        result = subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "exec", "9router", "node", "-e", probe],
+                                capture_output=True, timeout=12)
+        if result.returncode == 0:
+            return
+        time.sleep(2)
+    raise RuntimeError("post_alias_restart_health_or_auth_failed; restore protected checkpoint")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
@@ -141,6 +169,8 @@ def main() -> None:
         parser.error("--apply requires dashboard password and ASR bridge/TTS key files")
     if "/" in args.asr_model or not args.asr_model.strip():
         parser.error("ASR model id must be a single segment")
+    if not runtime_speech_ready(args.machine):
+        raise RuntimeError("speech_runtime_not_ready; no dashboard write")
     api = Dashboard("http://127.0.0.1:20128")
     api.login(protected(args.dashboard_password_file))
     checkpoint = backup_live(args.machine)
@@ -152,6 +182,10 @@ def main() -> None:
     print("OLD_ASR_COMBO=" + retire_old_combo(api))
     print("ASR_ALIAS=" + ensure_alias(api, "amadeus-asr", f"selfhosted-stt/{args.asr_model}"))
     print("TTS_ALIAS=" + ensure_alias(api, "amadeus-tts", TTS_MODEL))
+    # Pinned 0.5.81 and evaluated 0.5.86 each cache STT aliases inside a
+    # route bundle. The alias only resolves after a 9Router process restart.
+    restart_and_verify(args.machine)
+    print("SPEECH_ALIASES=active_after_restart (direct media smoke still required)")
 
 
 if __name__ == "__main__":

@@ -218,8 +218,8 @@ if ((has_speech)); then
   node scripts/test-patch-openclaw-voice-failure.mjs
   printf '+ python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py\n'
   python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py
-  printf '+ bash -n infra/macos/manage-qwen3-tts.sh\n'
-  bash -n infra/macos/manage-qwen3-tts.sh
+  printf '+ bash -n macOS speech scripts\n'
+  bash -n infra/macos/manage-qwen3-tts.sh infra/macos/backup-qwen3-tts-profile.sh
   printf '+ plutil -lint infra/macos/com.amadeus.qwen3-tts.plist.example\n'
   plutil -lint infra/macos/com.amadeus.qwen3-tts.plist.example
 fi
