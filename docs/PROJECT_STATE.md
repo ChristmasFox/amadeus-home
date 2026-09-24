@@ -133,6 +133,21 @@ compactly tracked in `.agent/EXECUTION_PLAN.md`; validation scope is governed by
 
 # Project State
 
+## 2026-09-24：WhatsApp 身份桥接修复已部署，修复后验收待重发
+
+修复前的 WhatsApp 控制标记只观察到一条回复，但 `identity_bind_channel` 因缺少可信 sender
+metadata 返回 `trusted_sender_metadata_unavailable`，未计入 acceptance。commit `a62b2bd` 已让
+`before_dispatch` 记录当前入站 sender（5 分钟 TTL），并由 identity context 在工具上下文缺少
+`requesterSenderId` 时使用该桥接；E164 fallback 仅限 WhatsApp。定向 test/typecheck/build、
+secrets scan 和 diff check 均通过。M204 已加载并运行
+`local/openclaw-amadeus:git-a62b2bd-20260924131000`，容器 healthy，owner channels 已重新连接，
+修复后 WhatsApp 控制验收等待同一精确 marker 的新一轮私聊消息。
+
+当前门禁：`WHATSAPP_ACCEPTANCE=pending_post_fix_resend`、`TELEGRAM_ACCEPTANCE=pending`、
+`DUPLICATE_RUNTIME=not-finalized`、`DESTINATION_AUTHORITY=NO`，最终 token
+`COMMIT_SKULD_CUTOVER_1_4_8` 未提供且未执行。运行时回滚 checkpoint、Immich source 和旧 Mac
+rollback-only 资产保留；`media-organizer-adapter` 仍未恢复。
+
 更新时间：2026-09-21（Asia/Shanghai）
 
 ## 当前执行：Amadeus 1.4.4 Operation Skuld 存储与运行时收口（已完成）

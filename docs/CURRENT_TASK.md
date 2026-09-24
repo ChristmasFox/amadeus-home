@@ -1,5 +1,22 @@
 # 当前任务
 
+## 2026-09-24：WhatsApp 身份桥接修复已部署，等待修复后控制验收
+
+此前 WhatsApp 控制标记 `SKULD-WHATSAPP-20260924` 在修复前运行时收到并只产生一条回复，但
+`identity_bind_channel` 返回 `trusted_sender_metadata_unavailable`，因此没有把该轮计为 owner
+acceptance。已在 commit `a62b2bd` 修复：`before_dispatch` 将当前入站 sender metadata 以 5 分钟
+TTL 桥接到会话，identity context 在缺少 `requesterSenderId` 时安全使用该桥接；WhatsApp E164
+仅作为 WhatsApp fallback。`pnpm test:amadeus`、`pnpm typecheck:amadeus`、`pnpm build:amadeus`、
+`pnpm check:secrets` 与 `git diff --check` 均通过。
+
+M204 已构建并加载 `local/openclaw-amadeus:git-a62b2bd-20260924131000`（arm64 digest
+`sha256:1ba126e6e740bf572f7c80ab1b1e34bdf9e95e8c138023f7c8a64a990b984875`），更新 canonical
+CasaOS Compose 后重启，容器 healthy，Telegram/WhatsApp 均重新连接。运行时 Compose/container
+checkpoint 保存在仓库外受保护备份中；修复后 WhatsApp 单轮控制验收等待用户在当前私聊重新发送
+同一精确标记。`WHATSAPP_ACCEPTANCE=pending_post_fix_resend`、`TELEGRAM_ACCEPTANCE=pending`、
+`DUPLICATE_RUNTIME=not-finalized`、`DESTINATION_AUTHORITY=NO`，未执行
+`COMMIT_SKULD_CUTOVER_1_4_8`。`media-organizer-adapter` 仍只有外部 state archive，未恢复或臆造替代。
+
 ## 2026-09-23：Amadeus 1.4.8 Operation Skuld 最终迁移与记忆连续性（进行中）
 
 2026-09-24 M204 runtime readiness progress：主机/仓库/GitHub/工具链验收通过；M204 canonical
