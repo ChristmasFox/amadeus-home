@@ -12,8 +12,11 @@ agent remains healthy and reports `power.telemetry=degraded` while CPU, memory,
 disk, network, process, and service facts continue to be collected.
 
 `install-machostagent.sh` is dry-run by default. It checks the M204 hostname and
-only an explicit `--apply` installs the collector and launchd job; the token
-must already exist at the protected path outside Git.
+only an explicit `--apply` installs the collector and user-level launchd job;
+the token must already exist at
+`~/Library/Application Support/Amadeus/machostagent.token` with mode 0600.
+The service and token stay within the logged-in user's least-privilege boundary;
+no sudo or arbitrary privileged helper is used.
 
 Longbridge authorization is a separate operator action on M204. Use
 `scripts/longbridge-oauth-authorize.mjs start`, open the printed URL, complete
