@@ -655,3 +655,9 @@ host health running；单测覆盖字段及敏感输入不入日志；Python 6 �
 不可用而跳过，secrets scan 通过。**源码待 commit，live LaunchAgent 尚未更新**；下步需
 外部备份当前 service.py/plist 和进程状态，再显式 `manage-qwen3-tts.sh --apply`，重启并
 跑一组固定短日文 warm/cold 统计，之后再决定 TTS 生成参数是否值得调整。
+
+TTS 侧已发现本次 Agent 实际输出的音频专用日文约 68 字符、总推理段约 35.162s，
+而同次编码仅 0.205–0.375s。针对用户要求的“一句日文语音”，源码将 voice Skill
+更新为默认一句自然短句、目标不超过 50 codepoint，保留结论/关键 caveat，绝不截掉
+安全警示，中文摘要承载必要事实。这个目标预计降低语音生成时间但不是已测结果；本次测试
+message/skill/parser fixture passed，**尚未构建/部署/用户试听**。

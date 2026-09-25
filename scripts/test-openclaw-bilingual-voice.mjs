@@ -10,6 +10,8 @@ const file = (await readdir(dist)).find((name) => /^directives-.*\.mjs$/u.test(n
 assert.ok(file, 'pinned OpenClaw directive parser missing');
 const skill = await readFile(join(process.cwd(), 'plugins/amadeus/skills/voice-reply/SKILL.md'), 'utf8');
 assert.match(skill, /^description: REQUIRED for every inbound voice note: answer with one Japanese voice reply plus one visible Chinese text summary\.$/mu);
+assert.match(skill, /targeting at most 50 Unicode codepoints/u);
+assert.match(skill, /Never omit a safety-critical warning/u);
 const module = await import(pathToFileURL(join(dist, file)));
 const parse = module.n ?? module.parseTtsDirectives;
 assert.equal(typeof parse, 'function');
