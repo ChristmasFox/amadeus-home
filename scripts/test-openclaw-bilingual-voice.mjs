@@ -9,7 +9,7 @@ const dist = join(process.cwd(), 'node_modules/.pnpm/openclaw@2026.9.4/node_modu
 const file = (await readdir(dist)).find((name) => /^directives-.*\.mjs$/u.test(name));
 assert.ok(file, 'pinned OpenClaw directive parser missing');
 const skill = await readFile(join(process.cwd(), 'plugins/amadeus/skills/voice-reply/SKILL.md'), 'utf8');
-assert.match(skill, /^description: REQUIRED for every inbound voice note:/mu);
+assert.match(skill, /^description: REQUIRED for every inbound voice note: answer with one Japanese voice reply plus one visible Chinese text summary\.$/mu);
 const module = await import(pathToFileURL(join(dist, file)));
 const parse = module.n ?? module.parseTtsDirectives;
 assert.equal(typeof parse, 'function');
@@ -22,7 +22,7 @@ const parsed = parse(`${chinese}\n[[tts:text]]${japanese}[[/tts:text]]`, config,
 assert.equal(parsed.cleanedText.trim(), chinese);
 assert.equal(parsed.ttsText, japanese);
 assert.equal(parsed.hasDirective, true);
-const chineseOnly = parse('好的，我用中文回答。', config, { cfg: {} });
-assert.equal(chineseOnly.cleanedText, '好的，我用中文回答。');
-assert.equal(chineseOnly.ttsText, undefined);
+const ordinaryTyped = parse('好的，我用中文回答。', config, { cfg: {} });
+assert.equal(ordinaryTyped.cleanedText, '好的，我用中文回答。');
+assert.equal(ordinaryTyped.ttsText, undefined);
 console.log('OPENCLAW_BILINGUAL_TTS_DIRECTIVE=passed');

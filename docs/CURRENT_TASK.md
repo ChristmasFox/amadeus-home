@@ -586,3 +586,12 @@ transcript/audio。architecture check 被收窄为只允许这个测试覆盖的
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925073459`。OpenClaw、Product
 Radar 健康与预检通过；plugin 注册成功，voice-reply skill eligible，WhatsApp
 linked/connected。尚未有 post-restart 真实语音：双语 summary/语音分离依然不算手机实收。
+
+## 2026-09-25：澄清最终语言规则（普通文字中文，语音固定双语）
+
+用户澄清：文字输入沿用之前默认中文；若用户发送语音，则回复**日文 PTT 语音 + 一句
+中文文字摘要**。这覆盖了先前“全局默认日文”设计；不得再让 typed message 默认日文，
+也不按用户这条语音的语言改变语音回复合同。已恢复 SOUL/USER 的普通文字中文偏好，
+voice-reply Skill 改为每次语音都日文音频+中文摘要，不再以中文请求作为跳过条件。
+定向 SOUL/USER、Skill parser、voice hook、Amadeus tests 已通过；**源码未部署**，
+live USER/SOUL 仍需备份后定点同步，plugin Skill 需要新镜像 candidate build。
