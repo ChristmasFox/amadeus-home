@@ -635,3 +635,16 @@ MPS TTS 延迟和冷/暖生成基线。日志仅有该 group 的一条媒体发�
 切入唯一 Gateway，恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925081444`；
 WhatsApp healthy/connected。**还没有下一条真实语音对比数据**；预计可去掉旧样本中第一个
 15.5s model/read 回合，但需实测验证；MPS TTS ~34.1s 未优化。
+
+## 2026-09-25：无 read 优化后的第一条真实私聊语音
+
+用户在 candidate restart 后新发 direct DM audio：16:19:16.518 入站；ASR 约 0.702s；
+OpenClaw 只有一轮模型请求 16:19:17.417–20.889（3.471s），会话 trace 无任何 Agent
+`read`/其他工具调用；`assistantTexts` 元数据含一条中文摘要和一对日文
+`[[tts:text]]` block；9Router 一条 TTS。M204 synthesis/MP3 16:19:24.514–56.643
+（35.162s），WhatsApp 16:19:58.980 记录一条 PTT，入站到 PTT 共 42.462s。
+本次 direct run 的 9Router `IN` 字段 95,780；此前 group run 475,996，且 group 模型首轮
+15.522s/全 Agent 26.207s。无 read 源码优化在结构上验证成功；不同 session 类型使耗时
+差不应直接归因于单一改动，但输入规模/组会话上下文很可能也相关。最大剩余瓶颈是
+Qwen3-TTS（本次35.162s）；其中 host 日志把生成+编码合并，需要进一步拆分计时。
+Transport 日志确认 PTT 已送，用户尚未确认**本条 DM**手机是否同时收到中文文字。
