@@ -1,15 +1,24 @@
-## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音回复生命周期（源码候选，待部署）
+## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音回复生命周期（候选已部署，实机验收待用户）
 
-已增加针对 OpenClaw 2026.9.4 的 source-controlled patch：WhatsApp 语音回复在完整 inbound-turn Promise settle 前每 3 秒刷新 composing，最长 120 秒；回复结算、WhatsApp 断连或
-presence 错误会释放 lease。lease 仅在有音频 inbound 的 WhatsApp session 创建；核心队列只对
-同一 WhatsApp session 的并发消息关闭 steering、改走 followup，普通文字运行和其他渠道不变。
-部署脚本会在 patch 外置 WhatsApp npm project 前，把整个项目树纳入仓库外 checkpoint，便于精确恢复。
+候选 commit `7198206` 已构建并 apply 到 OrbStack `nyannyan`，OpenClaw image 为
+`local/openclaw-amadeus:git-7198206b9ca5-20260925114919`，恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925114919`，部署证据位于
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925114919`。
+OpenClaw health 通过、重启次数 0，core 与外置 WhatsApp monitor patch marker 各为 1。
 
-定向 fixture/lease 测试通过；对固定 OpenClaw 2026.9.4 core dist 与 live 同版 WhatsApp monitor
-副本执行了 patch、语法和幂等性验证。完整 `pnpm test`、`pnpm typecheck`、architecture 与 secrets
-scan 均通过。源码尚未提交、构建或部署；真实 WhatsApp 手机端 typing、PTT+中文文字全程及群并发
-顺序仍未验收，`VERSION` 保持 1.5.2。下一步提交/push 后，用新的外部 checkpoint 构建并 apply
-单一候选，再收集 direct voice 与 group concurrency 实测。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-typing-lifecycle-source.md`。
+apply 后检查发现，初次 deploy script 把 WhatsApp npm backup 路径写成
+`/DATA/AppData/openclaw/npm/projects`，而真实 bind mount 是
+`/DATA/AppData/openclaw/config -> /home/node/.openclaw`，因此 checkpoint manifest 没有包含
+`config/npm/projects`。原始 monitor 文件在 patch/apply 前已读入 Mac 临时快照，并已补存为外置恢复文件：
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925114919/rollback-whatsapp-monitor/monitor-DaIAK4fT.before-lifecycle.js`
+（SHA-256 `66ec565a6806e23616202caa96d6b7a3c295b2bb2b22abdbf9fea90a144e95e9`）。
+部署源码已修正为备份 `$OPENCLAW_DATA_DIR/config/npm/projects`，并新增路径回归测试；待修正提交
+push 后，供下次 apply 完整备份 npm subtree。此候选恢复点的外置 monitor 单文件恢复源已补齐。
+
+`doctor` 报告 2 个非本次变更问题：`media-organizer-adapter` 缺失、外置存储身份/Immich media
+boundary 检查失败；OpenClaw/Product Radar/9Router 与 Immich health 项目通过。真实 WhatsApp
+手机端 typing 持续性、单条日文 PTT + 中文 summary、群并发消息排队顺序还未验收；`VERSION=1.5.2`，
+未做正式 release。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-typing-lifecycle-live.md`。
 
 ## 2026-09-25：M204 9Router 应用层代理已关闭，旧机代理权威一致
 

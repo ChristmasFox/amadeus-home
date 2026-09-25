@@ -352,7 +352,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before \
-  "$OPENCLAW_DATA_DIR/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
+  "$OPENCLAW_DATA_DIR/config/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
 import hashlib, json, os, shutil, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
