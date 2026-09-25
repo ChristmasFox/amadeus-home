@@ -413,3 +413,10 @@ Undici dispatcher（无 `addRequest`），已隔离复现 `ERR_INVALID_ARG_TYPE`
 源码补丁只在该媒体代理边界使用已有的 Node-compatible proxy agent，部署脚本增加
 锚点/语法/幂等预检与明确重启，未改变 WebSocket 代理；真实再次验收仍待 apply 和用户重发。
 见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-media-upload-fix-source.md`。
+
+已用显式 `--apply --candidate --no-build --machine nyannyan` 切入该修复，外部恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925055122`。唯一 Gateway 重启后健康，
+WhatsApp secondary linked/connected，9Router 未授权 models 401；live pinned 模块存在补丁标记
+并通过语法检查。13:51 重启之后尚无新的 WhatsApp voice ingress，不能宣称 PTT 送达。
+此前 13:38 一次入站对应五条 9Router TTS 请求、五次媒体失败，说明不能把多次合成
+误判为多次入站；具体分段/重试原因待后续检验。
