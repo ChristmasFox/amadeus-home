@@ -438,3 +438,9 @@ ASR→Agent→TTS→PTT 链路与播放验收成立；但一次语音产生三�
 `tts.auto=inbound`，恰好解释三条媒体；不是 WhatsApp 重投递或 ASR 三次收费。
 当前源码候选在全局 tool policy `deny:["tts"]`，保留 `tools.profile=full`、owner
 其他原生工具和 OpenClaw 边界原生自动 TTS；尚未 candidate apply/重发验收。
+
+14:07 已将 `tools.deny=["tts"]` 以**单实例 candidate config-only apply** 部署，
+外部恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925060705`。
+预检、健康、WhatsApp linked/connected 均通过；live 配置仍为
+`tts.auto=inbound`、`mode=final`。尚需新的语音实测确认 Agent 不再调用 `tts`
+tool、只发一条原生自动 PTT；之前三条实收是修复前有效证据，不能当作该变更验收。
