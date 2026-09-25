@@ -16,6 +16,7 @@ BUILD_RADAR=0
 AUTO_BUILD=0
 NO_BUILD=0
 FULL_VERIFY=0
+CANDIDATE=0
 
 usage() {
   cat <<'USAGE'
@@ -23,6 +24,7 @@ Usage:
   ./scripts/deploy-openclaw.sh --dry-run
   ./scripts/deploy-openclaw.sh --apply --build
   ./scripts/deploy-openclaw.sh --apply --build-auto
+  ./scripts/deploy-openclaw.sh --apply --candidate --build-auto  # pre-release real acceptance; no release notification
   ./scripts/deploy-openclaw.sh --apply --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-radar
   ./scripts/deploy-openclaw.sh --apply --no-build
@@ -32,7 +34,9 @@ Default is a dry-run. --build performs a full two-image release. --build-auto
 compares the current Git tree with the live image commit and builds only affected
 images. --build-openclaw and --build-radar build one image. --no-build reuses
 the live images for workspace/compose/config-only updates and rejects stale
-images when plugin or service source changed.
+images when plugin or service source changed. --candidate replaces the one
+runtime for real acceptance before a version bump, preserves checkpoints and
+skips release notification/maintenance; it is not a second runtime or release.
 USAGE
 }
 
@@ -129,10 +133,20 @@ assert_release_version_advanced() {
   printf 'LIVE_AMADEUS_VERSION=%s\n' "$live_version"
 }
 
+assert_candidate_version_unchanged() {
+  local live_image live_commit live_version
+  live_image="$(resolve_live_image openclaw)" || fail 'Could not resolve live OpenClaw image for candidate.'
+  live_commit="$(image_source_commit "$live_image")" || fail 'Live OpenClaw image has no Git source tag.'
+  live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  [[ "$AMADEUS_VERSION" == "$live_version" ]] || fail "Candidate apply must keep live VERSION=$live_version; found $AMADEUS_VERSION."
+  printf 'LIVE_AMADEUS_VERSION=%s\n' "$live_version"
+}
+
 while (($#)); do
   case "$1" in
     --dry-run) APPLY=0 ;;
     --apply) APPLY=1 ;;
+    --candidate) CANDIDATE=1 ;;
     --build) BUILD=1; BUILD_OPENCLAW=1; BUILD_RADAR=1 ;;
     --build-auto) AUTO_BUILD=1 ;;
     --build-openclaw) BUILD_OPENCLAW=1 ;;
@@ -208,6 +222,7 @@ shown_radar_image="$RADAR_IMAGE"
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
+printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
 printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
@@ -229,7 +244,7 @@ fi
 git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
-assert_release_version_advanced
+if ((CANDIDATE)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
 
 if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
 if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
@@ -588,6 +603,9 @@ mkdir -p "$(dirname -- "$HOOK_PATH")"
 if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
+if ((CANDIDATE)); then
+  owner_notification_status='skipped-candidate'
+else
 ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"
 DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
 已部署到当前 CasaOS 主机 ${MACHINE}。"
@@ -623,10 +641,16 @@ for attempt in $(seq 1 30); do
 done
 [[ "$owner_notification_status" == sent ]] || fail 'Owner release notification remained pending after 30 seconds.'
 
+fi
+
 POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
 [[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
 mkdir -p "$POST_DEPLOY_EVIDENCE_DIR"
 chmod 700 "$POST_DEPLOY_EVIDENCE_DIR"
+if ((CANDIDATE)); then
+  post_deploy_maintenance='skipped-candidate'
+  log_policy_status='skipped-candidate'
+else
 post_deploy_maintenance='passed'
 log_policy_status='passed'
 if ! bash "$ROOT_DIR/scripts/apply-docker-log-policy.sh" --apply >"$POST_DEPLOY_EVIDENCE_DIR/log-policy.log" 2>&1; then
@@ -656,6 +680,8 @@ if ! bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy --apply >"$PO
     --theme worldline_divergence || true
 fi
 
+fi
+
 printf 'CHECKPOINT=%s\n' "$CHECKPOINT_DIR"
 printf 'POST_DEPLOY_EVIDENCE=%s\n' "$POST_DEPLOY_EVIDENCE_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
@@ -665,8 +691,12 @@ printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
 if ((MEDIA_ADAPTER_PRESENT)); then printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'; fi
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
 printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
-printf '%s\n' 'OWNER_OUTBOX_SMOKE=passed'
+printf 'OWNER_OUTBOX_SMOKE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf skipped-candidate || printf passed)"
 printf '%s\n' "LOG_POLICY=$log_policy_status"
 printf '%s\n' "POST_DEPLOY_MAINTENANCE=$post_deploy_maintenance"
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"
-printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."
+if ((CANDIDATE)); then
+  printf '%s\n' 'Single OpenClaw candidate runtime ready for real acceptance; not a release.'
+else
+  printf '%s\n' "Amadeus $AMADEUS_VERSION migration completed."
+fi
