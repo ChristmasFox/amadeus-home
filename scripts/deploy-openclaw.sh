@@ -75,7 +75,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -280,6 +280,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
     fi
   fi
   node --check scripts/patch-openclaw-channel-identity.mjs
+  node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
+  node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
   node scripts/test-patch-openclaw-whatsapp-media-agent.mjs
@@ -310,11 +312,13 @@ PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
 MEDIA_AGENT_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-media-agent.mjs"
+VOICE_LIFECYCLE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
   "$ROOT_DIR/integrations/openclaw/openclaw.json.example" \
   "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
+  "$VOICE_LIFECYCLE_PATCH_RUNTIME" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
@@ -347,7 +351,8 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/data/longbridge-sdk-home" longbridge-sdk-home.before \
   "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
-  "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before <<'PY'
+  "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before \
+  "$OPENCLAW_DATA_DIR/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
 import hashlib, json, os, shutil, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -429,6 +434,8 @@ orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$VOICE_PATCH_RUNTIME"
 orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  --whatsapp-root /home/node/.openclaw/npm/projects < "$VOICE_LIFECYCLE_PATCH_RUNTIME"
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'

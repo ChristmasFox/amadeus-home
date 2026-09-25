@@ -41,7 +41,7 @@ try {
   const nestedPromptPath = join(fixture, 'plugins/amadeus/src/capabilities/identity/nested-prompt.ts');
   writeFileSync(nestedPromptPath, 'export const hook = "before_prompt_build";\n');
   const nestedErrors = checkArchitecture(fixture);
-  assert.ok(nestedErrors.some((error) => error.includes('amadeus source contains global prompt injection')));
+  assert.ok(nestedErrors.some((error) => error.includes('amadeus source contains unscoped prompt enrichment:')));
 
   rmSync(nestedPromptPath, { force: true });
   const pubgIndexPath = join(fixture, 'plugins/pubg/src/index.ts');
