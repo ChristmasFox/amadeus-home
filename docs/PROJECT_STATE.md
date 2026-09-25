@@ -1,3 +1,16 @@
+## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音回复生命周期（源码候选，待部署）
+
+已增加针对 OpenClaw 2026.9.4 的 source-controlled patch：WhatsApp 语音回复在完整 inbound-turn Promise settle 前每 3 秒刷新 composing，最长 120 秒；回复结算、WhatsApp 断连或
+presence 错误会释放 lease。lease 仅在有音频 inbound 的 WhatsApp session 创建；核心队列只对
+同一 WhatsApp session 的并发消息关闭 steering、改走 followup，普通文字运行和其他渠道不变。
+部署脚本会在 patch 外置 WhatsApp npm project 前，把整个项目树纳入仓库外 checkpoint，便于精确恢复。
+
+定向 fixture/lease 测试通过；对固定 OpenClaw 2026.9.4 core dist 与 live 同版 WhatsApp monitor
+副本执行了 patch、语法和幂等性验证。完整 `pnpm test`、`pnpm typecheck`、architecture 与 secrets
+scan 均通过。源码尚未提交、构建或部署；真实 WhatsApp 手机端 typing、PTT+中文文字全程及群并发
+顺序仍未验收，`VERSION` 保持 1.5.2。下一步提交/push 后，用新的外部 checkpoint 构建并 apply
+单一候选，再收集 direct voice 与 group concurrency 实测。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-typing-lifecycle-source.md`。
+
 ## 2026-09-25：9Router 应用层重复代理已关闭
 
 旧机 source-freeze SQLite 确认应用层代理 disabled。M204 保留旧机容器启动代理环境，
