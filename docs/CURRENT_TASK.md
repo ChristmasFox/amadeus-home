@@ -392,3 +392,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：首次真实 WhatsApp 语音入站成功，PTT 出站失败
 
 用户按要求发送真实私聊语音。OpenClaw 收到 direct audio，9Router ASR 成功，Agent 继续，TTS 本机合成成功；但 WhatsApp 发媒体时 ffmpeg 多次 exit 127，最终日志是 warning/仅文字，**B 案例未通过**。根因是 OpenClaw 为 Longbridge 私有 glibc 导出的 `LD_LIBRARY_PATH` 被 ffmpeg 子进程继承，造成 `GLIBC_PRIVATE` 符号错误。隔离命令验证私有 loader 的 `--library-path` 只作用于 Node 时 Longbridge 与 ffmpeg 均可运行；Dockerfile 已修正并有旧镜像预期失败的 fixture。两次 TTS 调用/实际手机收到几条消息尚需查明。尚未构建/部署修复镜像，不 bump 1.5.3。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-whatsapp-first-real-failure.md`。
+
+## 2026-09-25：私有 glibc loader 候选被 SQLite worker 门禁拒绝，修复转向 ffmpeg 子进程
+
+为修复首条真实语音的 WhatsApp PTT ffmpeg exit 127，先前“仅给 Node 显式 loader path”的 immutable 镜像虽通过 Longbridge/ffmpeg 小范围 fixture，但正式 candidate apply 在 Compose 更新前的 SQLite read-only worker 预检失败：`process.execPath` 变成 loader，JS worker 被当作 ELF。旧 OpenClaw 保持 healthy，checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925052705` 已保留。进一步确认 `/bin/sh`/`env`/`bash` 也会在继承 LD_LIBRARY_PATH 时于启动前失败，不能靠 shell wrapper。源码已恢复原 Node 启动器，并在 immutable 镜像中仅对 ffmpeg/ffprobe 使用 Node 子进程清理 LD_LIBRARY_PATH 的包装器；新的 fixture 同时检查 Longbridge、Node worker 自启动和真实 Opus 转码，尚待构建/部署/用户重发。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-loader-worker-boundary.md`。

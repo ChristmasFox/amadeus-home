@@ -54,8 +54,9 @@ RUN cd /app/dist/extensions/amadeus \
 # pinned OpenClaw image is Debian 12 (glibc 2.36). Keep the base image intact
 # and run Node through a private glibc 2.39 loader so the native SDK binding
 # can load without replacing the container's system libc.
-# Scope the private glibc search path to the Node loader. Exporting
-# LD_LIBRARY_PATH to child binaries breaks ffmpeg (exit 127) in WhatsApp PTT.
+# Node's private glibc path must remain in its process environment because
+# OpenClaw spawns SQLite workers via process.execPath. Debian media binaries
+# get a narrow clean-env wrapper below instead of changing Node's execPath.
 ARG TARGETARCH
 RUN set -eux; \
     case "$TARGETARCH" in \
@@ -79,8 +80,18 @@ RUN set -eux; \
     cp "$loader_path" /lib/ld-amadeus.so; \
     cp /usr/local/bin/node /usr/local/bin/node.glibc; \
     node -e 'const fs=require("node:fs"); const path="/usr/local/bin/node.glibc"; const data=fs.readFileSync(path); const oldPath=Buffer.from("/lib/ld-linux-aarch64.so.1\0"); const oldX64Path=Buffer.from("/lib64/ld-linux-x86-64.so.2\0"); const newPath=Buffer.from("/lib/ld-amadeus.so\0"); const offset=data.indexOf(oldPath); const x64Offset=data.indexOf(oldX64Path); const start=offset>=0?offset:x64Offset; const old=offset>=0?oldPath:oldX64Path; if(start<0) throw new Error("could not locate Node ELF interpreter"); if(newPath.length>old.length) throw new Error("replacement ELF interpreter path is too long"); newPath.copy(data,start); data.fill(0,start+newPath.length,start+old.length); fs.writeFileSync(path,data);'; \
-    printf '%s\n' '#!/bin/sh' 'set -eu' 'case "$(uname -m)" in' '  aarch64) libc_dir=aarch64-linux-gnu ;;' '  x86_64) libc_dir=x86_64-linux-gnu ;;' '  *) echo "unsupported runtime architecture" >&2; exit 1 ;;' 'esac' 'lib_path="/opt/amadeus-glibc/usr/lib/$libc_dir:/lib/$libc_dir:/usr/lib/$libc_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' 'unset LD_LIBRARY_PATH' 'exec /lib/ld-amadeus.so --library-path "$lib_path" /usr/local/bin/node.glibc "$@"' > /usr/local/bin/node; \
+    printf '%s\n' '#!/bin/sh' 'set -eu' 'case "$(uname -m)" in' '  aarch64) libc_dir=aarch64-linux-gnu ;;' '  x86_64) libc_dir=x86_64-linux-gnu ;;' '  *) echo "unsupported runtime architecture" >&2; exit 1 ;;' 'esac' 'export LD_LIBRARY_PATH="/opt/amadeus-glibc/usr/lib/$libc_dir:/lib/$libc_dir:/usr/lib/$libc_dir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"' 'exec /usr/local/bin/node.glibc "$@"' > /usr/local/bin/node; \
     chmod 755 /usr/local/bin/node /usr/local/bin/node.glibc; \
     rm -f /tmp/libc6.deb
+
+COPY infra/docker/casaos/openclaw/ffmpeg-clean-env.cjs /opt/amadeus/ffmpeg-clean-env.cjs
+RUN set -eux; \
+    mkdir -p /usr/libexec/amadeus; \
+    mv /usr/bin/ffmpeg /usr/libexec/amadeus/ffmpeg.real; \
+    mv /usr/bin/ffprobe /usr/libexec/amadeus/ffprobe.real; \
+    cp /opt/amadeus/ffmpeg-clean-env.cjs /usr/bin/ffmpeg; \
+    cp /opt/amadeus/ffmpeg-clean-env.cjs /usr/bin/ffprobe; \
+    chmod 755 /usr/bin/ffmpeg /usr/bin/ffprobe; \
+    node -e 'const {spawnSync}=require("node:child_process"); const p=spawnSync("/usr/bin/ffmpeg",["-hide_banner","-version"],{encoding:"utf8"}); if(p.status!==0) process.exit(1);'
 
 USER node

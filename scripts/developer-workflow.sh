@@ -181,6 +181,10 @@ pnpm check:architecture
 if ((has_openclaw_deploy)); then
   printf '+ bash scripts/test-openclaw-candidate-deploy.sh\n'
   bash scripts/test-openclaw-candidate-deploy.sh
+  printf '+ node --check infra/docker/casaos/openclaw/ffmpeg-clean-env.cjs\n'
+  node --check infra/docker/casaos/openclaw/ffmpeg-clean-env.cjs
+  printf '+ bash -n scripts/test-openclaw-voice-image.sh\n'
+  bash -n scripts/test-openclaw-voice-image.sh
   printf '+ python3 scripts/test-openclaw-speech-config.py\n'
   python3 scripts/test-openclaw-speech-config.py
 fi
