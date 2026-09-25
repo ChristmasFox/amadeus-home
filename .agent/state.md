@@ -1,3 +1,11 @@
+## 2026-09-25：日文语音可见文字后处理修复（源码已验证，尚未部署）
+
+用户实测 1.5.3 candidate 后仍只看到中文。根因是前一版仅靠 voice Skill 要求模型同时输出日文行，验证只证明了 TTS parser 合同，并没有在 WhatsApp 最终发送边界保证可见文字；实际 TTS 音频 payload 已带有 `ttsSupplement.spokenText`，但其文字 payload 可能只有中文或为空。
+
+已在 WhatsApp `delivery.preparePayload` 增加确定性后处理：仅当本轮入站为语音且出站 payload 同时含媒体与实际 spoken text 时，补上/同步 `日本語：<spokenText>` 行；日文内容直接取实际 TTS 文本，确保和 PTT 一致。文本-only/non-voice 回复不变。精确 pinned `@openclaw/whatsapp@2026.9.4` monitor fixture 已通过 patch、幂等和 `node --check`；集成测试覆盖中文-only payload、已有/错配日文行、media-only TTS supplement 和 typed-only 旁路。
+
+`pnpm test`、`pnpm typecheck`、`pnpm check:architecture`、`pnpm check:secrets` 和 `git diff --check` 通过。**本修复尚未部署**，当前 CasaOS 仍是前一候选 `local/openclaw-amadeus:git-fb1d4578bafe-20260925152845`；`VERSION=1.5.3` 不变。需要将本源码变更发布为同版本候选后，实测一条语音私聊、两条连续群语音和一条 typed-only 中文消息。详见 `.agent/checkpoints/2026-09-25-amadeus-japanese-visible-text-postprocessor-source.md` 与待办 `.agent/tasks/2026-09-25-amadeus-japanese-visible-text-candidate-deploy.md`。
+
 ## 2026-09-25：语音回复已加日文假名/汉字可见行（同版本候选已部署，待实机确认）
 
 针对用户要求，voice Skill 现输出中文 summary、自然日文汉字+假名可见行、以及匹配该日文行的音频指令；
