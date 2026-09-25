@@ -524,6 +524,8 @@ if config.get('tools', {}).get('sessions', {}).get('visibility') != 'self':
     raise SystemExit('session history visibility must be self to prevent cross-conversation memory leaks')
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
+if config.get('tools', {}).get('deny') != ['tts']:
+    raise SystemExit('agent-facing TTS tool must be denied; native auto-inbound TTS remains active')
 if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):

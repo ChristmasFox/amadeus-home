@@ -66,6 +66,7 @@
   },
   "tools": {
     "profile": "full",
+    "deny": ["tts"],
     "sessions": {
       "visibility": "self"
     },
