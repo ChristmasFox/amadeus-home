@@ -1,4 +1,4 @@
-## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音 lifecycle 正式发布（手机验收仍待）
+## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音 lifecycle 正式发布（本项 smoke 用户确认正常；整体矩阵仍待）
 
 用户明确要求将已部署候选正式上线。`VERSION=1.5.3`，release commit `9d02a89` 已 push，正式 OpenClaw
 image `local/openclaw-amadeus:git-9d02a896b018-20260925120916` 已 apply。恢复点
@@ -14,9 +14,7 @@ core queue 与外置 monitor 生命周期 marker 各一次。全量部署前验�
 并报告 `GC=BLOCKED`，没有绕过 storage gate。`doctor` 目前 2 个失败：`media-organizer-adapter` 缺失，以及
 external-storage/Immich media-boundary identity 检查失败；这些不是语音代码失败，但整体环境不为 0/0。
 
-真实 WhatsApp 手机端输入状态显示与 PTT/中文 summary receipt、以及群内竞争消息排队顺序仍无本轮证据；不能把
-源码 fixture 或用户“看起来没问题”当作 handset proof。正式 release 已按用户指令完成，后续应补 direct voice DM、
-群 concurrency、A–L 其余矩阵、TTS/ASR fallback 与 reboot acceptance；不宣称这些验收已全部通过。详情见
+用户在收到 direct voice 与群并发测试请求后反馈“正常”，记录为本次 lifecycle smoke 的 owner qualitative confirmation：输入状态、PTT/中文 summary 与群内顺序用户未报告异常；本轮没有收集单条消息计数或精确时间戳。正式 release 已按用户指令完成；A–L 其余矩阵、TTS/ASR fallback、质量/时延和 reboot acceptance 仍待完成，不宣称整体 voice I/O 矩阵全通过。详情见
 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-formal-release.md` 和 task 文件。
 
 ## 2026-09-24 — WhatsApp direct session identity fallback deployed
