@@ -9,9 +9,35 @@ export const VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
 export const CORE_MARKER = 'amadeus-whatsapp-voice-followup-v1';
 export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
 export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
+export const WHATSAPP_JAPANESE_TEXT_MARKER = 'amadeus-whatsapp-japanese-visible-tts-v1';
 
 export function resolveVoiceFollowup(lease, currentMessageId) {
   return Boolean(lease && lease.messageId !== currentMessageId);
+}
+
+export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
+  if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;
+  const hasMedia = (typeof payload.mediaUrl === 'string' && payload.mediaUrl.trim().length > 0)
+    || (Array.isArray(payload.mediaUrls) && payload.mediaUrls.some((url) => typeof url === 'string' && url.trim().length > 0));
+  if (!hasMedia) return payload;
+  const supplementText = typeof payload.ttsSupplement?.spokenText === 'string' ? payload.ttsSupplement.spokenText : '';
+  const spokenText = (supplementText || (typeof payload.spokenText === 'string' ? payload.spokenText : '')).trim();
+  if (!spokenText) return payload;
+  const visibleText = typeof payload.text === 'string' ? payload.text : '';
+  const outputLines = [];
+  let japaneseLineWritten = false;
+  for (const line of visibleText.split(/\r?\n/u)) {
+    const trimmed = line.trim();
+    if (/^日本語[：:]/u.test(trimmed) || trimmed === spokenText) {
+      if (!japaneseLineWritten) outputLines.push(`日本語：${spokenText}`);
+      japaneseLineWritten = true;
+      continue;
+    }
+    outputLines.push(line);
+  }
+  if (!japaneseLineWritten) outputLines.push(`日本語：${spokenText}`);
+  const nextText = outputLines.join('\n').trim();
+  return nextText === visibleText ? payload : { ...payload, text: nextText };
 }
 
 function replaceOnce(source, before, after, label) {
@@ -229,6 +255,30 @@ export function patchWhatsAppIngressQueueSource(original) {
   return result;
 }
 
+export function patchWhatsAppJapaneseTextSource(original) {
+  if (original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) return original;
+  if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
+  let result = replaceOnce(
+    original,
+    'function createWhatsAppReplyPlan(params) {',
+    `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n${ensureAmadeusJapaneseVoiceText.toString()}\nfunction createWhatsAppReplyPlan(params) {`,
+    'Japanese voice-text postprocessor insertion',
+  );
+  result = replaceOnce(
+    result,
+    '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(deliveryPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
+    '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst voiceTextPayload = ensureAmadeusJapaneseVoiceText(deliveryPayload, isAmadeusVoiceInbound);\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(voiceTextPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
+    'Japanese visible-text delivery',
+  );
+  result = replaceOnce(
+    result,
+    '\t\t\t\tconst normalizedDeliveryPayload = deliveryPayload.text === void 0 ? {',
+    '\t\t\t\tconst normalizedDeliveryPayload = voiceTextPayload.text === void 0 ? {',
+    'Japanese visible text normalization',
+  );
+  return result;
+}
+
 async function patchFile(path, transform, marker) {
   const original = await readFile(path, 'utf8');
   if (original.includes(marker)) return 'already-applied';
@@ -280,6 +330,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (!path) throw new Error('pinned WhatsApp monitor module missing');
     console.log(`WHATSAPP_VOICE_TYPING_PATCH=${await patchFile(path, patchWhatsAppSource, WHATSAPP_MARKER)}`);
     console.log(`WHATSAPP_VOICE_INGRESS_QUEUE_PATCH=${await patchFile(path, patchWhatsAppIngressQueueSource, WHATSAPP_INGRESS_QUEUE_MARKER)}`);
+    console.log(`WHATSAPP_JAPANESE_TEXT_PATCH=${await patchFile(path, patchWhatsAppJapaneseTextSource, WHATSAPP_JAPANESE_TEXT_MARKER)}`);
   }
 }
 

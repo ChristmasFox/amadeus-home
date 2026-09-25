@@ -8,9 +8,12 @@ import {
   CORE_MARKER,
   WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER,
+  WHATSAPP_JAPANESE_TEXT_MARKER,
+  ensureAmadeusJapaneseVoiceText,
   patchCoreSource,
   patchWhatsAppSource,
   patchWhatsAppIngressQueueSource,
+  patchWhatsAppJapaneseTextSource,
   resolveVoiceFollowup,
   whatsappHelpers,
   whatsappIngressQueueHelpers,
@@ -78,6 +81,18 @@ function createWhatsAppReplyPlan(params) {
 				return whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);
 			},
 			onReplyStart: params.transport.sendComposing
+		},
+		delivery: {
+			preparePayload: async (payload, info) => {
+				const deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);
+				if (!deliveryPayload) return null;
+				const normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(deliveryPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });
+				const normalizedDeliveryPayload = deliveryPayload.text === void 0 ? {
+					...normalizedOutboundPayload,
+					text: void 0
+				} : normalizedOutboundPayload;
+				return normalizedDeliveryPayload;
+			}
 		}
 	};
 }
@@ -121,9 +136,11 @@ assert.ok(patchedCore.includes('messageInjectionDisposition === "accepted" && !a
 assert.equal(patchCoreSource(patchedCore), patchedCore, 'core patch is idempotent');
 
 const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
-const patchedWhatsApp = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
+const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
+const patchedWhatsApp = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
 assert.ok(patchedWhatsApp.includes(WHATSAPP_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_INGRESS_QUEUE_MARKER));
+assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_TIMEOUT_MS = 120000'));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_REFRESH_MS = 3000'));
 assert.ok(patchedWhatsApp.includes('finally(() => closeAmadeusVoiceReplyLeaseForTurn(params.route.sessionKey, params.msg.event.id))'), 'the lease is held until the whole inbound dispatcher settles');
@@ -135,7 +152,23 @@ assert.ok(patchedWhatsApp.includes('if (!isAmadeusVoiceInbound) return await par
 assert.ok(patchedWhatsApp.includes('onSettled: async () => {\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();'), 'the final dispatcher flush remains awaited');
 assert.equal(patchWhatsAppSource(patchedWhatsApp), patchedWhatsApp, 'base WhatsApp patch is idempotent');
 assert.equal(patchWhatsAppIngressQueueSource(patchedWhatsApp), patchedWhatsApp, 'ingress queue patch is idempotent');
+assert.equal(patchWhatsAppJapaneseTextSource(patchedWhatsApp), patchedWhatsApp, 'Japanese visible-text patch is idempotent');
 
+const japaneseVoice = '少し待って。結論を先に言うわ。';
+const chineseVoice = `中文：我会先说结论。`;
+const voicePayload = {
+  text: chineseVoice,
+  mediaUrl: 'tts.ogg',
+  ttsSupplement: { spokenText: japaneseVoice },
+};
+assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'voice audio payload appends the Japanese line derived from actual TTS text');
+assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：${japaneseVoice}` }, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'matching Japanese line is not duplicated');
+assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
+assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false), voicePayload, 'typed turns remain unchanged');
+assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
+
+// Exercise the injected WhatsApp preparePayload hook against a TTS supplement,
+// including media-only TTS payloads whose Chinese text was delivered earlier.
 // Exercise the exact injected lease helper with deterministic fake timers.
 const timerCallbacks = new Map();
 let nextTimer = 0;
@@ -147,9 +180,47 @@ const sandbox = {
   setTimeout(callback, delay) { const id = ++nextTimer; timerCallbacks.set(id, { callback, delay, kind: 'timeout' }); return { id, unref() {} }; },
   clearInterval(timer) { if (timer) clearedTimers.push(timer.id); },
   clearTimeout(timer) { if (timer) clearedTimers.push(timer.id); },
+  resolveTextChunkLimit: () => 1024,
+  resolveChunkMode: () => 'split',
+  resolveMarkdownTableMode$1: () => 'preserve',
+  getAgentScopedMediaLocalRoots: () => [],
+  resolveWhatsAppInboundReplyPolicy: () => ({}),
+  createWhatsAppMediaOnlyReplyCoalescer: () => ({
+    flushAll: async () => ({ delivered: 0, droppedDuplicateMedia: 0 }),
+    flushNonDuplicateMedia: async () => ({ delivered: 0, droppedDuplicateMedia: 0 }),
+  }),
+  resolveWhatsAppDeliverablePayload: (payload) => payload,
+  normalizeWhatsAppOutboundPayload: (payload) => ({ ...payload, mediaUrls: payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []) }),
+  normalizeWhatsAppPayloadTextPreservingIndentation: (text) => text,
+  resolveSendableOutboundReplyParts: (payload) => ({ hasMedia: Boolean(payload.mediaUrl || payload.mediaUrls?.length), text: payload.text ?? '' }),
+  shouldDeferWhatsAppMediaOnlyPayload: () => false,
+  logWhatsAppMediaOnlyFlushResult: () => {},
 };
 sandbox.globalThis = sandbox;
-vm.runInNewContext(`${patchedWhatsApp}\nglobalThis.testApi = { getAmadeusVoiceReplyRegistry, startAmadeusVoiceReplyLease, closeAmadeusVoiceReplyLease, clearAmadeusVoiceReplyLeases, clearAmadeusVoiceReplyLeasesForChat, runAmadeusWhatsAppVoiceScopedIngress };`, sandbox);
+vm.runInNewContext(`${patchedWhatsApp}\nglobalThis.testApi = { getAmadeusVoiceReplyRegistry, startAmadeusVoiceReplyLease, closeAmadeusVoiceReplyLease, clearAmadeusVoiceReplyLeases, clearAmadeusVoiceReplyLeasesForChat, runAmadeusWhatsAppVoiceScopedIngress, createWhatsAppReplyPlan };`, sandbox);
+const buildReplyPlan = (media) => sandbox.testApi.createWhatsAppReplyPlan({
+  inbound: { conversation: { id: 'voice-contract@g.us' }, media },
+  cfg: {},
+  route: { accountId: 'default', agentId: 'main' },
+  context: {},
+  transport: { sendComposing: async () => {} },
+});
+const deliveryVoicePlan = buildReplyPlan([{ kind: 'audio', contentType: 'audio/ogg' }]);
+const preparedVoicePayload = await deliveryVoicePlan.delivery.preparePayload({
+  text: chineseVoice,
+  mediaUrl: 'tts.ogg',
+  audioAsVoice: true,
+  spokenText: japaneseVoice,
+  ttsSupplement: { spokenText: japaneseVoice, visibleTextAlreadyDelivered: true },
+}, { kind: 'final' });
+assert.equal(preparedVoicePayload.text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'actual patched WhatsApp preparePayload adds Japanese to a media-only TTS supplement');
+const deliveryTypedPlan = buildReplyPlan(undefined);
+const preparedTypedPayload = await deliveryTypedPlan.delivery.preparePayload({
+  text: '中文：只用中文回答。',
+  mediaUrl: 'unrelated.ogg',
+  spokenText: japaneseVoice,
+}, { kind: 'final' });
+assert.equal(preparedTypedPayload.text, '中文：只用中文回答。', 'actual patched WhatsApp preparePayload leaves typed replies unchanged');
 const sends = [];
 const lease = sandbox.testApi.startAmadeusVoiceReplyLease({
   sessionKey: 'whatsapp:group:test',
