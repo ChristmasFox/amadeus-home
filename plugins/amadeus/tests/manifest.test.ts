@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { identityContextFromOpenClaw } from '../src/identity.js';
@@ -40,7 +41,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   const registered: string[] = [];
   const api = {
     pluginConfig: {},
-    rootDir: '/tmp/amadeus-test',
+    rootDir: fileURLToPath(new URL('..', import.meta.url)),
     logger: { info() {}, warn() {} },
     on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, handler); },
     registerService() {},
@@ -51,9 +52,26 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(registered.some((name) => /trade|order|balance|position|portfolio/iu.test(name)), false);
   assert.equal(registered.includes('amadeus_market_quote'), true);
   assert.equal(registered.includes('amadeus_macos_host_status'), true);
-  assert.equal(hooks.has('before_prompt_build'), false);
+  assert.equal(hooks.has('message_received'), true);
+  assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
+
+  hooks.get('message_received')?.(
+    { runId: 'voice-run', media: [{ contentType: 'audio/ogg; codecs=opus' }] },
+    { channelId: 'whatsapp', runId: 'voice-run' },
+  );
+  const voicePrompt = hooks.get('before_prompt_build')?.(
+    { prompt: 'transcribed voice text', messages: [] },
+    { channel: 'whatsapp', runId: 'voice-run' },
+  ) as { appendSystemContext?: string } | undefined;
+  assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
+  const typedPrompt = hooks.get('before_prompt_build')?.(
+    { prompt: 'typed text', messages: [] },
+    { channel: 'whatsapp', runId: 'typed-run' },
+  );
+  assert.equal(typedPrompt, undefined);
 
   hooks.get('before_dispatch')?.(
     { sessionKey: 'agent:main:hook-test', channel: 'whatsapp', replyToSender: 'reply-1' },
