@@ -77,6 +77,23 @@ function secretEquals(actual, expected) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+function byteBucket(size) {
+  if (!Number.isFinite(size)) return 'unknown';
+  if (size <= 1024 * 1024) return '<=1MiB';
+  if (size <= 3 * 1024 * 1024) return '1-3MiB';
+  if (size <= 6 * 1024 * 1024) return '3-6MiB';
+  return '>6MiB';
+}
+
+function durationBucket(wav) {
+  // Converted PCM16 mono 16 kHz: roughly 32,000 bytes per second.
+  const seconds = wav.length / 32000;
+  if (seconds <= 15) return '<=15s';
+  if (seconds <= 60) return '15-60s';
+  if (seconds <= 180) return '60-180s';
+  return '>180s';
+}
+
 export function createAsrServer({ bridgeKey, upstreamKey, upstreamUrl, model = MODEL, fetchFn = fetch, convert = convertToWav }) {
   if (bridgeKey.length < 32 || upstreamKey.length < 20) throw new Error('protected_asr_keys_required');
   const endpoint = new URL(upstreamUrl);
@@ -84,13 +101,18 @@ export function createAsrServer({ bridgeKey, upstreamKey, upstreamUrl, model = M
       !(endpoint.hostname.endsWith('.maas.aliyuncs.com') || endpoint.hostname === 'maas.qianwenaiapi.com') ||
       endpoint.pathname !== '/api/v1/services/aigc/multimodal-generation/generation') throw new Error('invalid_asr_endpoint');
   const cache = new Map();
+  const inFlight = new Map();
   return createServer(async (req, res) => {
     const started = Date.now();
+    let requestHash = 'none';
+    let sizeBucket = 'unknown';
+    let audioDuration = 'unknown';
+    let cacheState = 'none';
     const send = (status, body) => {
       const bytes = Buffer.from(JSON.stringify(body));
       res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': bytes.length });
       res.end(bytes);
-      console.info(`asr outcome=${status === 200 ? 'ok' : body.error?.type} ms=${Date.now() - started}`);
+      if (req.url !== '/healthz') console.info(`asr direction=inbound route=amadeus-asr request=${requestHash} size=${sizeBucket} duration=${audioDuration} cache=${cacheState} outcome=${status === 200 ? 'ok' : body.error?.type} ms=${Date.now() - started}`);
     };
     if (req.url === '/healthz' && req.method === 'GET') return send(200, { status: 'ready', model });
     if (req.url !== '/v1/audio/transcriptions' || req.method !== 'POST') return send(404, failure(404, 'not_found').body);
@@ -111,38 +133,61 @@ export function createAsrServer({ bridgeKey, upstreamKey, upstreamUrl, model = M
       return send(415, failure(415, 'unsupported_audio').body);
     }
     const audio = Buffer.from(await file.arrayBuffer());
+    sizeBucket = byteBucket(audio.length);
     const id = createHash('sha256').update(model).update(audio).digest('hex');
+    requestHash = id.slice(0, 12);
     const cached = cache.get(id);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return send(200, { text: cached.text });
-    let wav;
-    try { wav = await convert(audio); }
-    catch { return send(415, failure(415, 'unsupported_audio').body); }
-    if (!Buffer.isBuffer(wav) || wav.length < 1024 || wav.length > MAX_WAV) return send(415, failure(415, 'unsupported_audio').body);
-    const requestBody = {
-      model,
-      input: { messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: `data:audio/wav;base64,${wav.toString('base64')}` } }] }] },
-      parameters: { format: 'wav', sample_rate: '16000' },
-    };
-    try {
-      const upstream = await fetchFn(endpoint, {
-        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
-        headers: { Authorization: `Bearer ${upstreamKey}`, 'Content-Type': 'application/json', 'X-DashScope-SSE': 'disable' },
-        body: JSON.stringify(requestBody),
-      });
-      if (!upstream.ok) {
-        const outcome = upstreamCategory(upstream.status);
-        return send(outcome.status, outcome.body);
+    if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+      cacheState = 'hit';
+      return send(200, { text: cached.text });
+    }
+    const pending = inFlight.get(id);
+    if (pending) {
+      cacheState = 'coalesced';
+      const outcome = await pending;
+      audioDuration = outcome.duration ?? 'unknown';
+      return send(outcome.status, outcome.body);
+    }
+    if (inFlight.size >= 8) return send(503, failure(503, 'provider_unavailable').body);
+    cacheState = 'miss';
+    const task = (async () => {
+      let wav;
+      try { wav = await convert(audio); }
+      catch { return failure(415, 'unsupported_audio'); }
+      if (!Buffer.isBuffer(wav) || wav.length < 1024 || wav.length > MAX_WAV) return failure(415, 'unsupported_audio');
+      const duration = durationBucket(wav);
+      const requestBody = {
+        model,
+        input: { messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: `data:audio/wav;base64,${wav.toString('base64')}` } }] }] },
+        parameters: { format: 'wav', sample_rate: '16000' },
+      };
+      try {
+        const upstream = await fetchFn(endpoint, {
+          method: 'POST', redirect: 'error', signal: AbortSignal.timeout(TIMEOUT_MS),
+          headers: { Authorization: `Bearer ${upstreamKey}`, 'Content-Type': 'application/json', 'X-DashScope-SSE': 'disable' },
+          body: JSON.stringify(requestBody),
+        });
+        if (!upstream.ok) return { ...upstreamCategory(upstream.status), duration };
+        const raw = await readBounded(Readable.fromWeb(upstream.body), MAX_RESPONSE);
+        const text = normalizeUpstream(JSON.parse(raw.toString('utf8')));
+        if (!text) return { ...failure(502, 'transcription_failed'), duration };
+        return { status: 200, body: { text }, duration };
+      } catch (err) {
+        const timedOut = err?.name === 'TimeoutError' || err?.name === 'AbortError';
+        return { ...failure(timedOut ? 504 : 503, timedOut ? 'timeout' : 'provider_unavailable'), duration };
       }
-      const raw = await readBounded(Readable.fromWeb(upstream.body), MAX_RESPONSE);
-      const text = normalizeUpstream(JSON.parse(raw.toString('utf8')));
-      if (!text) return send(502, failure(502, 'transcription_failed').body);
-      cache.set(id, { text, at: Date.now() });
-      while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
-      return send(200, { text });
-    } catch (err) {
-      return send(err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 504 : 503,
-        failure(err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 504 : 503,
-          err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 'timeout' : 'provider_unavailable').body);
+    })().catch(() => failure(503, 'provider_unavailable'));
+    inFlight.set(id, task);
+    try {
+      const outcome = await task;
+      audioDuration = outcome.duration ?? 'unknown';
+      if (outcome.status === 200) {
+        cache.set(id, { text: outcome.body.text, at: Date.now() });
+        while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
+      }
+      return send(outcome.status, outcome.body);
+    } finally {
+      inFlight.delete(id);
     }
   });
 }
