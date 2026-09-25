@@ -595,3 +595,13 @@ linked/connected。尚未有 post-restart 真实语音：双语 summary/语音�
 voice-reply Skill 改为每次语音都日文音频+中文摘要，不再以中文请求作为跳过条件。
 定向 SOUL/USER、Skill parser、voice hook、Amadeus tests 已通过；**源码未部署**，
 live USER/SOUL 仍需备份后定点同步，plugin Skill 需要新镜像 candidate build。
+
+## 2026-09-25：按最终文字/语音规则更新唯一候选
+
+用户最后澄清：**文字默认中文；语音固定日文 PTT + 一句中文摘要**。已提交源码
+`415410e`，以 `--apply --candidate --build-auto --machine nyannyan` 构建并更新唯一
+OpenClaw；外部 checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925074349`。
+在 checkpoint 后核对 SOUL 旧 seed hash，再仅同步 SOUL；对 USER 使用受保护的一行迁移，
+将旧日语默认改回普通文字简体中文，保留其余 10 行；Gateway 重启后 healthy，
+WhatsApp linked/connected。live SOUL 对应新 seed，USER 仅一个简体中文偏好。
+尚无此版本重启后的真实 inbound；日文 PTT+中文摘要确收、文字输入中文默认均未验收。
