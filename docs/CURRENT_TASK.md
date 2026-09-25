@@ -661,3 +661,9 @@ TTS 侧已发现本次 Agent 实际输出的音频专用日文约 68 字符、�
 更新为默认一句自然短句、目标不超过 50 codepoint，保留结论/关键 caveat，绝不截掉
 安全警示，中文摘要承载必要事实。这个目标预计降低语音生成时间但不是已测结果；本次测试
 message/skill/parser fixture passed，**尚未构建/部署/用户试听**。
+
+16:40 已部署日文语音≤50 codepoint目标到唯一 candidate：image
+`local/openclaw-amadeus:git-4861970f0338-20260925083938`，恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925083938`。预检和健康/WhatsApp
+linked/connected通过。**尚无新语音实测**，此限长是 LLM 软提示；要比较 TTS engine_ms/audio_ms
+与摘要准确度，并听测不生硬/不丢安全信息。
