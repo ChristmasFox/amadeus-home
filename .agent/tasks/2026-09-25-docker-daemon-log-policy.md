@@ -1,0 +1,4 @@
+# Complete host-wide Docker log-policy application safely
+
+- Status: 1.5.7 post-deploy policy script warned. Managed containers currently report bounded `local` logs (20m/5), but `/etc/docker/daemon.json` is absent, so the daemon default remains unaudited/unbounded. The first compose pass also failed on an Immich inline logging anchor after the script incorrectly inserted a second key; the exact pre-apply compose backup was restored and validated. Source detection now recognizes inline/anchor logging keys in 1.5.8 source.
+- The application-specific `apply-docker-log-policy.sh --daemon-apply` restarts OrbStack. Do not run casually; keep the current SSH/container-control path and backup, then run with explicit operator apply when separately authorized. Verify all containers/health after restart. Do not mutate Immich media data or prune unknown objects.

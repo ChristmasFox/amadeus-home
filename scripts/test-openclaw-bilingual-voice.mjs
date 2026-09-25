@@ -10,7 +10,9 @@ const file = (await readdir(dist)).find((name) => /^directives-.*\.mjs$/u.test(n
 assert.ok(file, 'pinned OpenClaw directive parser missing');
 const skill = await readFile(join(process.cwd(), 'plugins/amadeus/skills/voice-reply/SKILL.md'), 'utf8');
 assert.match(skill, /^description: REQUIRED for every inbound voice note: answer with one Japanese voice reply, one visible Japanese kanji-kana line, and one visible Chinese text summary\.$/mu);
-assert.match(skill, /around 100 words or fewer, but this is a flexible guideline, not a requirement/u);
+assert.match(skill, /around 100 words as a soft upper guideline, not a target or a requirement/u);
+assert.match(skill, /existing 120-second WhatsApp voice\/TTS window/u);
+assert.match(skill, /under about 150 Japanese characters; this is guidance, not a hard cap/u);
 assert.match(skill, /中文：<one faithful, concise Chinese sentence summarizing the answer>\n\n日本語：/u);
 assert.match(skill, /never omit a safety-critical warning/iu);
 assert.match(skill, /spoken audio MUST be\s+Japanese/u);

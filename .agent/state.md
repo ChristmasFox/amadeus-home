@@ -1,11 +1,11 @@
-## 2026-09-25 UTC：Amadeus 1.5.7 发布准备（版本已 bump，正式部署待执行）
+## 2026-09-25 UTC：1.5.8 日语语音超时 hotfix 准备中
 
-- 新增 `storage-preflight.sh --identity-only`：验证 Avalon host UUID/sentinel，并验证 OrbStack guest 可见同一 sentinel、目标路径类型/读写权限和可用空间；post-deploy Docker log policy 与 storage-maintenance 改用此门禁，不再要求旧 Immich 迁移源。复制迁移仍保留严格 source、跨 filesystem 和空间检查。测试覆盖“缺失旧 source + 正确外部身份”可通过，以及 UUID 不匹配仍失败。
-- 语音日文建议长度从 50 codepoints 改为约 100 words 的弹性建议，不是必须遵守；配置的 TTS 硬上限不变。中文摘要和日文文本之间固定空一行。
-- 发布说明改为中文，并在版本校验中要求发布正文包含中文用户更新内容，防止部署完成通知继续发英文变更说明。
-- 定向测试、插件 typecheck/33 tests、migration/storage runtime fixtures、双语 directive/lifecycle tests、secrets scan 与 diff check 通过。**VERSION=1.5.7，中文 release notes 已准备；代码尚未 commit/push，CasaOS 部署及 storage/log-policy apply 待执行。** 定向验证通过；正式发布必须生成外部恢复点，部署后检查唯一 runtime、健康状态、中文通知与两个存储门禁。
+- 1.5.7 已 push 与部署，OpenClaw/Product Radar health、NAS SSH smoke 和 owner outbox smoke 均通过。但用户报告文字到了、语音条缺失；生产日志显示 OpenClaw 调 9Router `/v1/audio/speech` 在 120 秒超时，9Router 随后将 TTS provider 锁定。Mac Qwen TTS `/healthz` 为 ready，但直接短句合成也在 90 秒超时；历史日志中 >320 字输入耗时 223 秒，超过既有 120 秒 voice/TTS 窗口。故故障在 TTS 合成/超时，不是中日文本格式。一次 1.5.7 日语语音较长输出可能令 MPS inference 卡住并阻塞后续队列。
+- 1.5.8 hotfix 将约 100 词明确为“软上限而非输出目标”，常规语音建议保持在约 150 日文字符内，长说明优先放进中文摘要；保留 120 秒边界，不延长超时。发布后需重启卡住的受控 Qwen TTS LaunchAgent 并通过短句合成 smoke，再请用户验收完整 WhatsApp 链路。
+- 同一 source commit 包含已验证的外部存储 identity-only caller 修正、doctor 实际 Immich upload mount boundary 检查，以及日志策略识别 `logging: *anchor` 等行内 YAML key，避免再次生成重复 key。
+- 1.5.7 部署时 storage identity gate 与 bounded maintenance/retention 均通过；日志策略在 Immich Compose duplicate-key 校验失败。已从同次 apply 的 `immich.before.yml` 精确恢复，Compose `config --quiet` 再验通过、Immich 容器仍 healthy。Doctor 的外部 storage 项现在通过；唯一剩余 doctor failure 为之前已记录的可选 media-organizer-adapter 缺席。
 
-详见 `.agent/checkpoints/2026-09-25-voice-storage-notice-source.md` 和 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。
+详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.7-formal-release.md` 和 `.agent/tasks/2026-09-25-docker-daemon-log-policy.md`。
 
 ## 2026-09-25 UTC：外部存储门禁 warning 根因已定位（只读检查）
 

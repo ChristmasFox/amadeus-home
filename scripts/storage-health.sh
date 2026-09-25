@@ -65,7 +65,7 @@ targets=[json.loads(x) for x in sys.argv[1:] if x]
 print(json.dumps(targets))
 PY
 )"
-  if bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null 2>&1; then
+  if bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT" >/dev/null 2>&1; then
     external_identity=healthy
   else
     external_identity=missing
