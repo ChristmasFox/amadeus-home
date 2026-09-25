@@ -130,7 +130,19 @@ export function checkArchitecture(root = REPO_ROOT) {
   for (const token of personaForbidden) if (soul.includes(token)) errors.push(`integrations/openclaw/workspace-seed/SOUL.seed.md contains capability-specific token: ${token}`);
 
   const amadeusSource = text(root, 'plugins/amadeus/src/index.ts');
-  checkForbiddenImports(root, 'plugins/amadeus/src', /before_prompt_build|appendSystemContext/iu, 'amadeus source contains global prompt injection', errors);
+  const amadeusSourceFiles = files(join(root, 'plugins/amadeus/src'));
+  const scopedVoicePrompt = join(root, 'plugins/amadeus/src/voice-reply-prompt.ts');
+  for (const path of amadeusSourceFiles) {
+    const content = readFileSync(path, 'utf8');
+    if (/before_prompt_build|appendSystemContext/iu.test(content) && path !== scopedVoicePrompt) {
+      errors.push(`amadeus source contains unscoped prompt enrichment: ${path.slice(root.length + 1)}`);
+    }
+  }
+  const voicePrompt = text(root, 'plugins/amadeus/src/voice-reply-prompt.ts');
+  for (const token of ["channel !== 'whatsapp'", "startsWith('audio/')", 'tracker.record(context.channelId', 'event.runId', 'context.runId', 'VOICE_RUN_TTL_MS', 'VOICE_RUN_MAX', 'skills/voice-reply/SKILL.md']) {
+    if (!voicePrompt.includes(token)) errors.push(`voice prompt enrichment is missing bounded audio guard: ${token}`);
+  }
+  if (voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not copy inbound user content');
   for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerMacosHost', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
   }

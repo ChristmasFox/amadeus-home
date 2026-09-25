@@ -67,6 +67,12 @@ renderer 负责用户显示时间。默认同一显示日只显示 `HH:mm`，跨
 `src/capabilities/<name>/register.ts` 注册，公共 lifecycle/工具包装在 `src/shared/`，业务实现
 仍留在同一个 plugin 内，不拆成第二个 runtime 或 sender。
 
+`plugins/amadeus/src/voice-reply-prompt.ts` 是经验证 modality 到 Skill 的窄例外：只在同一
+WhatsApp `runId` 的可信入站 media fact 明确为 audio 时，将唯一权威
+`skills/voice-reply/SKILL.md` 的正文追加到该轮 system context；typed/其他渠道不注入。
+追踪仅保存 runId/expiry，TTL 10 分钟、上限 128，不保存 prompt、转录或媒体。这里不能构造
+第二 planner、复制业务 Skill 正文、日志记录用户内容或修改 SOUL/全局 AGENTS。
+
 ## 原生插件边界
 
 ### PUBG

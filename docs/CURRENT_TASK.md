@@ -565,3 +565,17 @@ block；15:11:16 仅有一条 PTT 发送，无中文文字发送日志。根因�
 输出合同。未用被 architecture check 禁止的全局 prompt-injection hook，也未引入第二
 sender/Agent。配置测试、Skill fixture、Amadeus typecheck/tests 已过；新镜像/规则
 尚未部署，需新 checkpoint candidate apply 后再真实验收。
+
+## 2026-09-25：Skill 元数据仍未被真实 voice turn 选中，改为精确 run 的 Skill 注入
+
+15:10 的真实语音没有摘要格式。移除 SOUL 的绝对禁止后，15:26 新镜像普通 CLI
+“WhatsApp 语音转写”提示仍只返回日语，说明 Skill metadata/description 让模型自行
+决定是否读取并不可靠。没有用关键词路由，也没有往全局人格/AGENTS 加 capability workflow。
+
+新源码采用 OpenClaw 2026.9.4 原生 `message_received`/`before_prompt_build` hooks：
+只当受信 WhatsApp 入站同一 runId 的 `media`/`originalMedia` 明确为 `kind=audio`
+或 `audio/*` MIME，才读取唯一的 `voice-reply/SKILL.md` 正文并追加到该 run system context；
+typed/Telegram 不注入。tracking 只存 runId/过期时间（10 分钟 TTL、128 上限），不存 prompt、
+transcript/audio。architecture check 被收窄为只允许这个测试覆盖的文件与边界。
+定向 Amadeus 35 tests、typecheck、architecture/secrets/diff checks 已通过；尚未提交或部署。
+下阶段需 candidate build/checkpoint/实际语音验收。
