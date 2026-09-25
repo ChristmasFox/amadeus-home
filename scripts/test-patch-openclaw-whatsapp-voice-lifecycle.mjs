@@ -95,6 +95,9 @@ function handleConnectionUpdate(update) {
 assert.equal(resolveVoiceFollowup(undefined, 'typed-message'), false, 'typed turns are unaffected when no voice lease exists');
 assert.equal(resolveVoiceFollowup({ messageId: 'voice-message' }, 'voice-message'), false, 'voice owner is not queued behind itself');
 assert.equal(resolveVoiceFollowup({ messageId: 'voice-message' }, 'typed-message'), true, 'same-session concurrent turn is recognized as a voice followup');
+const deploySource = await readFile(new URL('./deploy-openclaw.sh', import.meta.url), 'utf8');
+assert.ok(deploySource.includes('\"$OPENCLAW_DATA_DIR/config/npm/projects\" openclaw-whatsapp-npm-projects.before'), 'candidate checkpoint covers the canonical mounted WhatsApp npm project tree');
+assert.ok(!deploySource.includes('\"$OPENCLAW_DATA_DIR/npm/projects\" openclaw-whatsapp-npm-projects.before'), 'checkpoint must not target the non-mounted parent path');
 
 const patchedCore = patchCoreSource(coreFixture);
 assert.ok(patchedCore.includes(CORE_MARKER));

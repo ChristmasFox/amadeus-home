@@ -5,7 +5,7 @@
 - Added `scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs`, pinned by exact anchors to OpenClaw / `@openclaw/whatsapp` 2026.9.4.
 - OpenClaw core treats a new event in a session with a live WhatsApp voice lease as `enqueue-followup`, not steering. The queue lock is read from a process-global map created only for active WhatsApp audio replies; typed-only runs, heartbeat/reset paths and other channels retain existing behavior.
 - The WhatsApp reply dispatcher starts a composing keepalive for audio inbound replies, refreshes every 3 seconds, and clears it when the complete WhatsApp inbound-turn promise settles after final sends/flush. It has a hard 120-second fallback, is released on WhatsApp disconnect, and is cleared if composing presence cannot be sent.
-- Deployment backs up the external `npm/projects` tree before the persistent channel-package patch. The immutable OpenClaw image carries the source patch for core queue behavior.
+- Initial source added an external WhatsApp npm-project backup, but the first path lacked the `config/` mount component; candidate deployment revealed and corrected this. The core-image patch itself is source-controlled and remains part of the immutable image. See the live checkpoint for the path correction and file-level prepatch recovery supplement.
 - Added fixture and lease tests, and registered them in the default test command.
 
 ## Validation completed
