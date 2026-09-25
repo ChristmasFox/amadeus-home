@@ -1,3 +1,20 @@
+## 2026-09-25：M204 9Router 容器启动代理环境已恢复（DNS/回退问题仍待查）
+
+按旧 Mac 的受保护 Compose 记录，在 M204 9Router 的 Git 模板及 live Compose 恢复
+`HTTP_PROXY`/`HTTPS_PROXY` 大小写两套环境变量（`host.docker.internal:7897`）与
+`NO_PROXY`/`no_proxy`；保留现有镜像、API 鉴权、应用内代理设置及本地/Docker/LAN 绕过。
+仅对 9Router 执行 `docker compose up -d --no-build --no-deps`。外部恢复点：
+`/DATA/AppData/9router/backups/proxy-env-20260925T043942Z`（Compose + SQLite 一致快照）。
+健康 200、未认证 models 401、容器启动环境六项、镜像未变均通过。
+
+真实 `arthur-combo` 验收第一次超时，日志显示 `[ProxyFetch] Proxy failed, falling back to direct`
+及 `ENOTFOUND chatgpt.com`；第二次返回 200。故 **不能宣称 TLS 故障完全修复**。
+成功请求可见 `host.docker.internal:7897` 出站；Tailscale/system DNS 曾对 OpenAI 域名
+返回异常地址或无应答，而经代理 DoH 返回不同结果。后续必须确认代理失败原因并让
+Codex/OpenAI 请求 fail-closed，不得以关闭证书校验或恢复第二 runtime 规避。
+见 `.agent/checkpoints/2026-09-25-9router-startup-proxy-env.md` 和待办
+`.agent/tasks/2026-09-25-9router-dns-proxy-failclosed.md`。
+
 # 当前任务
 
 ## 2026-09-24：HostAgent 能耗报告边界收紧（待部署）

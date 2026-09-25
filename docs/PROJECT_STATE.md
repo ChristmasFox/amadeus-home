@@ -1,3 +1,12 @@
+## 2026-09-25：M204 9Router 启动代理恢复，间歇故障未关闭
+
+旧 Mac 保留 Compose 有大小写两套 HTTP(S)_PROXY 和 NO_PROXY；迁移后 M204 仅有
+9Router Settings 出站代理，容器启动环境缺失。Git 模板与 M204 live Compose 已恢复旧机
+代理环境合同，保留当前 immutable image、鉴权、媒体桥接与数据库；受保护恢复点为
+`/DATA/AppData/9router/backups/proxy-env-20260925T043942Z`。Compose/health/401/环境
+验证通过。真实 `arthur-combo` 首次超时并记录代理失败后直连、`ENOTFOUND`，重试 200；
+此项仅完成配置一致性，不是端到端稳定性结案。DNS/代理 fail-closed 见待办。
+
 ## 2026-09-24：HostAgent 能耗报告边界收紧（待部署）
 
 针对 16.5% CPU 使用率同时报告 SoC 33.3 mW 的不一致观测，确认 `powermetrics`

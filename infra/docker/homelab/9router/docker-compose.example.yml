@@ -13,6 +13,14 @@ services:
         max-size: "${DOCKER_LOG_MAX_SIZE:-20m}"
         max-file: "${DOCKER_LOG_MAX_FILE:-5}"
     environment:
+      # Keep the source Mac's process-start proxy contract: some upstream clients
+      # read these before 9Router's persisted outbound-proxy setting is loaded.
+      HTTP_PROXY: http://host.docker.internal:7897
+      HTTPS_PROXY: http://host.docker.internal:7897
+      http_proxy: http://host.docker.internal:7897
+      https_proxy: http://host.docker.internal:7897
+      NO_PROXY: localhost,127.0.0.1,::1,host.docker.internal,host.orb.internal,gateway.docker.internal,9router,openclaw,product-radar,media-organizer-adapter,changedetection,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      no_proxy: localhost,127.0.0.1,::1,host.docker.internal,host.orb.internal,gateway.docker.internal,9router,openclaw,product-radar,media-organizer-adapter,changedetection,.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
       HOSTNAME: 0.0.0.0
       PORT: "20128"
       NODE_ENV: production
