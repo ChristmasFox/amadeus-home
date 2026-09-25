@@ -579,3 +579,10 @@ typed/Telegram 不注入。tracking 只存 runId/过期时间（10 分钟 TTL、
 transcript/audio。architecture check 被收窄为只允许这个测试覆盖的文件与边界。
 定向 Amadeus 35 tests、typecheck、architecture/secrets/diff checks 已通过；尚未提交或部署。
 下阶段需 candidate build/checkpoint/实际语音验收。
+
+15:35 source `1c98642` 已重新构建 ARM64 immutable OpenClaw 镜像
+`local/openclaw-amadeus:git-1c986422c6fe-20260925073459`，经显式
+`--apply --candidate --build-auto --machine nyannyan` 切入唯一实例；新外部恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925073459`。OpenClaw、Product
+Radar 健康与预检通过；plugin 注册成功，voice-reply skill eligible，WhatsApp
+linked/connected。尚未有 post-restart 真实语音：双语 summary/语音分离依然不算手机实收。
