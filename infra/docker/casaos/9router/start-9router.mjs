@@ -3,7 +3,12 @@
 // Exit if either process exits so Docker restart/health can recover both together.
 import { spawn } from 'node:child_process';
 const children = [
-  spawn(process.execPath, ['/opt/amadeus/asr-bridge.mjs'], { stdio: 'inherit' }),
+  // Node 22's built-in fetch does not honor HTTPS_PROXY by default. Scope the
+  // existing host proxy to ASR only; packaged 9Router keeps its own persisted
+  // outbound-proxy policy. NO_PROXY still covers container-loopback routes.
+  spawn(process.execPath, ['/opt/amadeus/asr-bridge.mjs'], {
+    stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' },
+  }),
   spawn(process.execPath, ['/usr/local/lib/node_modules/9router/app/custom-server.js'], { stdio: 'inherit' }),
 ];
 let ending = false;
