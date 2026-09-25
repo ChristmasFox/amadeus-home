@@ -174,9 +174,9 @@ const voicePayload = {
   mediaUrl: 'tts.ogg',
   ttsSupplement: { spokenText: japaneseVoice },
 };
-assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'voice audio payload appends the Japanese line derived from actual TTS text');
-assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：${japaneseVoice}` }, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'matching Japanese line is not duplicated');
-assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
+assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'voice audio payload appends the Japanese line derived from actual TTS text');
+assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n\n日本語：${japaneseVoice}` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'matching Japanese line is not duplicated');
+assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
 assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false), voicePayload, 'typed turns remain unchanged');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
 const chineseTtsPayload = {
@@ -245,7 +245,7 @@ const preparedVoicePayload = await deliveryVoicePlan.delivery.preparePayload({
   spokenText: japaneseVoice,
   ttsSupplement: { spokenText: japaneseVoice, visibleTextAlreadyDelivered: true },
 }, { kind: 'final' });
-assert.equal(preparedVoicePayload.text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'actual patched WhatsApp preparePayload adds Japanese to a media-only TTS supplement');
+assert.equal(preparedVoicePayload.text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'actual patched WhatsApp preparePayload adds Japanese to a media-only TTS supplement');
 const preparedBlockedChinese = await deliveryVoicePlan.delivery.preparePayload(chineseTtsPayload, { kind: 'final' });
 assert.equal(preparedBlockedChinese.mediaUrl, undefined, 'patched preparePayload cannot pass a Chinese PTT through');
 assert.equal(preparedBlockedChinese.mediaUrls.length, 0);

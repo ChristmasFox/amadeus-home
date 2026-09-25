@@ -1,3 +1,12 @@
+## 2026-09-25 UTC：Amadeus 1.5.7 发布准备（版本已 bump，正式部署待执行）
+
+- 新增 `storage-preflight.sh --identity-only`：验证 Avalon host UUID/sentinel，并验证 OrbStack guest 可见同一 sentinel、目标路径类型/读写权限和可用空间；post-deploy Docker log policy 与 storage-maintenance 改用此门禁，不再要求旧 Immich 迁移源。复制迁移仍保留严格 source、跨 filesystem 和空间检查。测试覆盖“缺失旧 source + 正确外部身份”可通过，以及 UUID 不匹配仍失败。
+- 语音日文建议长度从 50 codepoints 改为约 100 words 的弹性建议，不是必须遵守；配置的 TTS 硬上限不变。中文摘要和日文文本之间固定空一行。
+- 发布说明改为中文，并在版本校验中要求发布正文包含中文用户更新内容，防止部署完成通知继续发英文变更说明。
+- 定向测试、插件 typecheck/33 tests、migration/storage runtime fixtures、双语 directive/lifecycle tests、secrets scan 与 diff check 通过。**VERSION=1.5.7，中文 release notes 已准备；代码尚未 commit/push，CasaOS 部署及 storage/log-policy apply 待执行。** 定向验证通过；正式发布必须生成外部恢复点，部署后检查唯一 runtime、健康状态、中文通知与两个存储门禁。
+
+详见 `.agent/checkpoints/2026-09-25-voice-storage-notice-source.md` 和 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。
+
 ## 2026-09-25 UTC：外部存储门禁 warning 根因已定位（只读检查）
 
 1.5.6 部署后的 `LOG_POLICY=warning` 和 `POST_DEPLOY_MAINTENANCE=warning` 不是因为 Avalon 磁盘掉线：本机 `diskutil` 确认 `/Volumes/Avalon` 已挂载，配置 UUID 匹配、设备与 root 分离，sentinel 也匹配。实际失败点是两项 post-deploy 检查复用迁移型 `storage-preflight.sh`，还要求 Ubuntu/OrbStack guest 内存在旧 Immich 源 `/DATA/Gallery/immich`；只读检查发现该路径在 guest 缺失（旧源保留在 guest 外）。预检随后把 source stats 失败和 free-space unknown 汇总成模糊的“verified external storage unavailable”。

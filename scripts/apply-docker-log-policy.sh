@@ -101,7 +101,7 @@ audit() {
 
 apply_daemon_policy() {
   command -v orbctl >/dev/null 2>&1 || { printf '%s\n' 'OrbStack control CLI not found' >&2; return 1; }
-  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
+  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
     printf '%s\n' 'DAEMON_LOG_POLICY=blocked; verified external storage is unavailable' >&2
     return 1
   }
@@ -164,7 +164,7 @@ compose_entries() {
 }
 
 apply_policy() {
-  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
+  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT" >/dev/null || {
     printf '%s\n' 'LOG_POLICY=blocked; verified external storage is unavailable' >&2
     return 1
   }

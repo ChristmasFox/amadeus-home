@@ -58,8 +58,6 @@ command -v orb >/dev/null 2>&1 || { printf '%s\n' 'OrbStack CLI not found' >&2; 
 report_root="${SKULD_BACKUP_ROOT:-/Volumes/Avalon/backups/operation-skuld}/storage-maintenance"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 report_dir="$report_root/$stamp"
-mkdir -p "$report_dir"
-chmod 700 "$report_dir"
 
 print_status() {
   printf 'STORAGE_MAINTENANCE_MODE=%s\n' "$MODE"
@@ -79,12 +77,22 @@ fi
 # --scheduled is the scheduler's explicit safe-apply mode. --post-deploy/--apply are also apply modes.
 APPLY=0
 [[ "$MODE" == scheduled || "$MODE" == post-deploy || "$MODE" == apply ]] && APPLY=1
-if ((APPLY)); then
-  bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >"$report_dir/storage-preflight.txt" 2>&1 || {
-    printf 'GC=BLOCKED\nREASON=verified external storage gate failed\n' | tee "$report_dir/result.txt" >&2
-    exit 1
-  }
+# Every non-status path writes an external evidence report, so all must authenticate
+# the volume before even creating the report directory. Apply modes additionally GC.
+preflight_log="$(mktemp "${TMPDIR:-/tmp}/amadeus-storage-preflight.XXXXXX")"
+if ! bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT" >"$preflight_log" 2>&1; then
+  cat "$preflight_log" >&2
+  rm -f "$preflight_log"
+  if ((APPLY)); then
+    printf '%s\n' 'GC=BLOCKED' 'REASON=verified external storage gate failed' >&2
+  else
+    printf '%s\n' 'STORAGE_MAINTENANCE=BLOCKED' 'REASON=verified external storage gate failed' >&2
+  fi
+  exit 1
 fi
+mkdir -p "$report_dir"
+chmod 700 "$report_dir"
+mv "$preflight_log" "$report_dir/storage-preflight.txt"
 
 before="$(orb -m "$MACHINE" -u root df -Pk / | awk 'NR == 2 {print $4 * 1024; exit}')"
 print_status | tee "$report_dir/status-before.txt"

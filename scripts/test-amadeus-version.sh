@@ -17,7 +17,7 @@ cp "$VERSION_TOOL" "$test_root/scripts/amadeus-version.sh"
 write_fixture() {
   local fixture_version="$1"
   printf '%s\n' "$fixture_version" > "$test_root/VERSION"
-  printf '# Amadeus %s\nfixture\n' "$fixture_version" > "$test_root/RELEASE_NOTES.md"
+  printf '# Amadeus %s\n修复内容\n' "$fixture_version" > "$test_root/RELEASE_NOTES.md"
 }
 
 write_fixture '0.0.8'
@@ -59,6 +59,14 @@ write_fixture '1.4.9'
 write_fixture '1.99.9'
 (cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
 [[ "$(<"$test_root/VERSION")" == '2.0.0' ]]
+
+write_fixture '1.4.0'
+printf '# Amadeus 1.4.0\nEnglish-only update.\n' > "$test_root/RELEASE_NOTES.md"
+if (cd "$test_root" && bash scripts/amadeus-version.sh check >"$test_root/english.out" 2>"$test_root/english.err"); then
+  printf '%s\n' 'English-only release notes unexpectedly passed' >&2
+  exit 1
+fi
+grep -Fq 'must include Chinese user-facing update content' "$test_root/english.err"
 
 write_fixture '1.4.0'
 if (cd "$test_root" && bash scripts/amadeus-version.sh bump minor >"$test_root/minor.out" 2>"$test_root/minor.err"); then

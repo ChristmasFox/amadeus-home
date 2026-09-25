@@ -37,6 +37,8 @@ if len(headings) != 1:
 body = "\n".join(lines[1:]).strip()
 if not body:
     raise SystemExit("Release notes body must not be empty")
+if not any("\u4e00" <= char <= "\u9fff" for char in body):
+    raise SystemExit("Release notes must include Chinese user-facing update content")
 if "openclaw" in body.lower():
     raise SystemExit("Release notes must not mention OpenClaw")
 PY
@@ -57,7 +59,7 @@ Version policy:
   bump minor and bump major are not supported.
 
 After bumping, replace the first line and body of RELEASE_NOTES.md before deploy. The body is a concise
-single-release summary only; do not append prior release notes or repeat unchanged capabilities.
+single-release summary only, written in Chinese for the deployment notice; do not append prior release notes or repeat unchanged capabilities.
 USAGE
 }
 
