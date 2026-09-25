@@ -1,10 +1,12 @@
-## 2026-09-25 UTC：语音仍出现中文的真实根因与修复（源码已验证，待候选部署）
+## 2026-09-25 UTC：语音中文根因修复已部署同版本候选，待手机实测
 
-用户澄清最新语音并未要求汉语，实际仍偶发中文 PTT。只读脱敏检查确认最近语音 turn 的 assistant final 只有中文、无日文行和 TTS directive。live SOUL/USER 的默认中文只面向普通文字；并非两条规则同时生效互相覆盖。真正问题是 pinned WhatsApp 2026.9.4 的 `message_received` plugin hook 默认关闭，live 全局/账户均未 opt-in，且 WhatsApp channel 显式 `suppressMessageReceivedHooks: true`。此前两版 voice Skill tracker 都依赖这个**从未触发**的 hook，所以日语 Skill 实际没有注入；默认中文规则自然接管。
+用户没有要求汉语，却仍收到中文 PTT。已查明并非两个活跃规则互相覆盖：live SOUL/USER 只设普通文字默认中文，语音 Skill 应覆盖；但 pinned WhatsApp 2026.9.4 把 `message_received` plugin hook 设为 opt-in（live 未启用），且 channel 显式压制 core fallback。之前两版 voice Skill tracker 都等不到该 hook，所以模型最终只生成中文，原生 inbound TTS 随之生成中文语音。
 
-已删除这一失效的观测链，改为 Amadeus `before_prompt_build` 读取现有 WhatsApp ingress 建立的**受信 active voice lease**（仅音频、单一 session、120 秒上限，完整发送后释放），不开放通用 message-received 内容钩子。并在 WhatsApp `delivery.preparePayload` 加可恢复 v2 音频门禁：入站语音的 TTS/PTT 源文本缺少日语假名或未知时，在发送前剥除音频，只回文字与“日语语音暂时无法生成”的提示，避免继续发出明显中文语音；typed-only 仍原样。该门禁是保守 fail-closed，不声称能对任意混合文本证明语言。
+源码 commit `12df1ae` 已 push：Amadeus 不再依赖关闭的内容 hook，改用 WhatsApp ingress 在 Agent 前创建、完整投递后释放的受信语音 lease 来注入 Skill。WhatsApp 发送边界也升级 v2 防护：若语音轮次的 PTT 源文本没有日语假名或无法确认，则在发送前剥除音频，仅发送文字和“日语语音暂时无法生成”提示，不再把明显中文语音发出。普通 typed-only 消息没有语音 lease，行为不变；这是保守 fail-closed，不是任意混合语言的完美检测器。
 
-Amadeus typecheck/tests/build、完整 `pnpm test`、voice lifecycle/parser fixture、architecture、secrets 均通过；对已 patch 的 live pinned monitor 与 fresh 2026.9.4 monitor 做了临时内存态 v2 补丁、幂等和 Node syntax 验证。`VERSION=1.5.5` 不变，源码尚未部署；需同版本单实例候选 + 真实语音验收，之后才能 bump 1.5.6 正式发布。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-japanese-voice-lease-guard-source.md`。
+同版本 `VERSION=1.5.5` candidate 已以 `--apply --candidate --build-openclaw` 更新唯一 OpenClaw：镜像 `local/openclaw-amadeus:git-12df1ae6b2e1-20260925182336`；rollback checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925182336`，manifest 包含 WhatsApp npm projects 目录备份（71,206,995 bytes）。OpenClaw healthy/restart=0，WhatsApp linked/connected，四个 lifecycle/FIFO/visible-text/audio-guard markers 各一次。对 live helper 的 synthetic 非投递测试证明中文-only PTT 被剥除，日语 PTT 保留，typed-only 不变；完整 tests/typecheck/build/architecture/secrets 均通过。
+
+**尚未收到此候选后的真实语音验收**。请发一条不要求任何语言的 WhatsApp 语音：预期日语 PTT + 匹配的日文行 + 中文摘要；若模型仍未产生日语，应只收到文字错误，不应再有中文 PTT。用户确认前不 bump 到 1.5.6。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-japanese-voice-lease-guard-source.md`。
 
 ## 2026-09-25 UTC：1.5.5 日语语音注入 hotfix 候选已部署，待实测
 
