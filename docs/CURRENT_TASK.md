@@ -420,3 +420,13 @@ WhatsApp secondary linked/connected，9Router 未授权 models 401；live pinned
 并通过语法检查。13:51 重启之后尚无新的 WhatsApp voice ingress，不能宣称 PTT 送达。
 此前 13:38 一次入站对应五条 9Router TTS 请求、五次媒体失败，说明不能把多次合成
 误判为多次入站；具体分段/重试原因待后续检验。
+
+## 2026-09-25：修复后第三条真实语音已成功从 WhatsApp 发送 PTT（手机实收待确认）
+
+用户在 13:55:15 重发 direct Opus。9Router 13:55:13 一条 ASR `outcome=ok`，
+OpenClaw 经正常 Agent 模型调用，9Router 13:55:22、13:55:52、13:56:16
+三次 TTS，WhatsApp 分别在 13:56:17、13:56:18、13:56:39 记录三条
+`Sent media reply`，本次窗口无 `Media upload failed`/文字 fallback。固定
+WhatsApp 外部包的 audio 发送分支设置 `ptt: true`。这证明 Gateway/transport 已接受
+三条语音发送，**不等于用户手机实收或主观音质确认**；需用户报告收到几条语音/文字、
+能否播放和音质，再查为何一次入站产生三段回复。单次首次 PTT 日志延迟约 62 秒。
