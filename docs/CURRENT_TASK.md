@@ -514,3 +514,11 @@ Agent 最终文字结构上为中文（75 个汉字、0 个假名），14:44:17 
 SOUL/USER 日文偏好已生效于至少后一条，但上一条在工具结果/中文输入历史下
 未稳定遵循。SOUL 唯一人格归属处新增逐轮、工具后同样适用的强约束，
 不加关键词路由或第二 LLM；源码候选尚未部署，不能保证模型绝不违反。
+
+14:48 SOUL-only 候选已用受保护恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925064813` 更新；前后 SHA
+锚点一致，显式单文件同步后 live SOUL 与 Git 新 seed SHA 一致，唯一 Gateway
+重启后健康、WhatsApp linked/connected。14:49 无新真实语音。一个不投递到
+WhatsApp 的全新临时 CLI session 用**中文输入但未要求中文回复**，得到日文
+最终文字（27 个假名、17 个汉字），仅证明新 session 普通路径的语言倾向；
+既有 WhatsApp session 的工具后回复、手机音色和三点仍待实收。
