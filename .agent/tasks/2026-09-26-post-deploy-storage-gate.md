@@ -1,10 +1,8 @@
-# Investigate post-deploy external storage gate warnings
+# Fix post-deploy storage gates without weakening external identity checks
 
-- Status: pending read-only diagnosis; do not re-run apply gates until the external storage mount and identity are verified.
-- Amadeus 1.5.4 formal release is healthy and complete; this is a separate post-deploy maintenance warning, not a release rollback trigger.
-- Evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925161434/log-policy.log` says `LOG_POLICY=blocked; verified external storage is unavailable`; `storage-maintenance.log` says `REASON=verified external storage gate failed`.
-- 1.5.4 evidence also contains this warning. The 1.5.5 release repeated it at `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925164645/{log-policy.log,storage-maintenance.log}`.
-- Consequently Docker logging policy was not applied and post-deploy cleanup was not executed in either release. No external-storage gate was bypassed.
-- Next: use `storage-preflight.sh --status` and mount/sentinel/UUID evidence to reconcile the host-shared `/Volumes/Avalon` path versus the guest's verified external storage gate. Preserve the release rollback checkpoint. Once the required external storage identity is verifiably available, separately authorize/apply the log-policy and storage-maintenance operations; never bypass the gate or prune broad resources.
-
-- Amadeus 1.5.6 formal release repeated the same blocked gates: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925183945/{log-policy.log,storage-maintenance.log}`. Voice release is healthy; these separate operations remain unapplied. No broad cleanup was performed.
+- Status: root cause identified by read-only diagnosis; no storage/log-policy apply or cleanup was performed.
+- The Avalon host volume is mounted with matching configured UUID and sentinel; it is distinct from the internal root filesystem. The OrbStack guest sees `/Volumes` via host `virtiofs`.
+- The post-deploy preflight incorrectly requires legacy Immich source `/DATA/Gallery/immich` inside the guest. That source is absent from the destination guest (retained externally). Source-stat failure cascades into unknown filesystem/free-space results and a generic “verified external storage unavailable” message.
+- Evidence: `.agent/checkpoints/2026-09-25-postdeploy-storage-gate-diagnosis.md`; release evidence logs for 1.5.4, 1.5.5, 1.5.6 show the generic message.
+- Next: update `apply-docker-log-policy.sh` and `storage-maintenance.sh` so their post-deploy gates verify Avalon mount UUID/sentinel and relevant destination, without requiring a legacy migration source. Keep strict source checks for copy-first migrations. Add fixtures for mounted-valid-volume + missing legacy source; prove no cleanup occurs when identity fails.
+- After source tests and secrets/architecture gates, commit/push. Apply only the bounded log-policy/storage-maintenance correction with explicit authorization, backup/checkpoint, and post-apply verification. Never bypass the identity gate or run broad prune.

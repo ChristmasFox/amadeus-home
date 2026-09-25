@@ -1,3 +1,8 @@
+## 2026-09-25 UTC：外部存储门禁 warning 根因已定位（只读检查）
+
+1.5.6 部署后的 `LOG_POLICY=warning` 和 `POST_DEPLOY_MAINTENANCE=warning` 不是因为 Avalon 磁盘掉线：本机 `diskutil` 确认 `/Volumes/Avalon` 已挂载，配置 UUID 匹配、设备与 root 分离，sentinel 也匹配。实际失败点是两项 post-deploy 检查复用迁移型 `storage-preflight.sh`，还要求 Ubuntu/OrbStack guest 内存在旧 Immich 源 `/DATA/Gallery/immich`；只读检查发现该路径在 guest 缺失（旧源保留在 guest 外）。预检随后把 source stats 失败和 free-space unknown 汇总成模糊的“verified external storage unavailable”。
+
+因此 Docker 日志策略没有应用，post-deploy cleanup/GC 没有执行；未绕过门禁、未修改 runtime 或 Avalon 媒体数据。下一步是让这些 post-deploy callers 在需要时验证挂载 UUID/sentinel/目标路径，而不要把 legacy migration source 当作前置条件；迁移复制检查仍须保留 source 校验。详见 `.agent/checkpoints/2026-09-25-postdeploy-storage-gate-diagnosis.md` 与更新后的 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。
 ## 2026-09-25 UTC：Amadeus 1.5.6 正式发布完成
 
 Owner 在 1.5.5 hotfix candidate 上确认“现在好了”后，明确要求正式发布。按唯一版本入口从 1.5.5 patch bump 至 1.5.6，release commit `bdcc07c` 已 push；`./scripts/deploy-openclaw.sh --apply --build-auto` 正式部署完成。
