@@ -55,9 +55,16 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 orb -m "$ORBSTACK_MACHINE" -u root docker exec -i "$name" node --input-type=module - <<'JS'
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
+const processes=readdirSync('/proc').filter(name=>/^\d+$/.test(name)).flatMap(name=>{
+  try{return [{args:readFileSync('/proc/'+name+'/cmdline','utf8'),env:readFileSync('/proc/'+name+'/environ','utf8')}]}catch{return []}
+});
+const bridgeProc=processes.find(p=>p.args.includes('/opt/amadeus/asr-bridge.mjs'));
+const routerProc=processes.find(p=>p.args.includes('/usr/local/lib/node_modules/9router/app/custom-server.js'));
+if(!bridgeProc?.env.includes('NODE_USE_ENV_PROXY=1') || !routerProc || routerProc.env.includes('NODE_USE_ENV_PROXY=1'))
+  throw new Error('scoped_asr_proxy_env_missing_or_globalized');
 const base='http://127.0.0.1:20129';
 const health=await fetch(base+'/healthz');
 if (!health.ok) throw new Error('bridge_unhealthy');

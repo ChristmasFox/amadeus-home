@@ -86,7 +86,7 @@ for path in "${FILES[@]-}"; do
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
-    scripts/test-openclaw-candidate-deploy.sh) has_fast=1 ;;
+    scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py) has_fast=1 ;;
     scripts/storage-*|scripts/backup.sh|scripts/service-aware-backup.sh|scripts/sqlite-consistent-snapshot.py|scripts/reclaim-immich-old-source.sh|scripts/migrate-immich-media.sh|scripts/secrets-inventory.sh|scripts/export-skuld-secrets.sh|scripts/import-skuld-secrets.sh|scripts/test-*skuld*|scripts/test-storage-*)
       has_storage=1
       [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
@@ -181,6 +181,8 @@ pnpm check:architecture
 if ((has_openclaw_deploy)); then
   printf '+ bash scripts/test-openclaw-candidate-deploy.sh\n'
   bash scripts/test-openclaw-candidate-deploy.sh
+  printf '+ python3 scripts/test-openclaw-speech-config.py\n'
+  python3 scripts/test-openclaw-speech-config.py
 fi
 if ((has_storage || has_backup)); then
   printf '+ pnpm test:storage-runtime\n'; pnpm test:storage-runtime

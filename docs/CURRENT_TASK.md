@@ -356,3 +356,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：单一 OpenClaw 验收候选部署门禁
 
 9Router 两个原生逻辑语音路由已真实 HTTP 200 验收，但 OpenClaw 旧镜像缺 ffmpeg，WhatsApp MP3→Opus 尚不能交付。Dockerfile 已声明 ffmpeg/libopus。原 deploy 脚本要求 VERSION 超过 live，不能在真实 WhatsApp 验收前假装发布 1.5.3；新增显式 `--apply --candidate --build-auto`：仍只切换 canonical **一个** runtime、做原有 backup/build/health，不发 1.5.2 的错误 release 通知，也不执行 release-only maintenance。静态与 dry-run 测试通过，尚未 apply。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-candidate-deploy-gate.md`。
+
+## 2026-09-25：语音边界的两层网络门禁已定位（源码待切换）
+
+单一 OpenClaw 验收候选已运行、ffmpeg/libopus 与 WhatsApp patch 已验证；真实 WhatsApp 仍待验收。原生 audio CLI 的合成音频在上传前被媒体 SSRF 默认策略阻断 `9router` 私网 DNS；pinned schema 的 provider 级 `request.allowPrivateNetwork=true` 临时试验已穿过此层，现已仅对固定 `http://9router:20128/v1` 的 OpenAI-compatible provider 写入源码。随后请求到达 9Router，但 ASR bridge 的 Node22 fetch 对 QwenAI 域名 `ENOTFOUND`，账户暂时 503/锁定；临时启用 Node env-proxy 后上游无 key 请求到达 401。源码仅对 ASR bridge 子进程启用 `NODE_USE_ENV_PROXY=1`，不改 9Router chat 的独立代理策略。两项修复尚未部署，也不宣称解决另一个 Codex/OpenAI 间歇性 DNS/代理任务。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-speech-private-route.md`。

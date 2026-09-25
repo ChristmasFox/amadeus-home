@@ -59,6 +59,7 @@
         "baseUrl": "http://9router:20128/v1",
         "apiKey": { "source": "env", "provider": "default", "id": "OPENCLAW_9ROUTER_API_KEY" },
         "api": "openai-completions",
+        "request": { "allowPrivateNetwork": true },
         "models": []
       }
     }
