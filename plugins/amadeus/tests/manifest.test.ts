@@ -67,6 +67,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   ) as { appendSystemContext?: string } | undefined;
   assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /do not call the read tool to retrieve that Skill again/u);
   const typedPrompt = hooks.get('before_prompt_build')?.(
     { prompt: 'typed text', messages: [] },
     { channel: 'whatsapp', runId: 'typed-run' },

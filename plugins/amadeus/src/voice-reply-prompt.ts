@@ -61,7 +61,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
     if (!tracker.shouldInject(context.channel, context.runId)) return;
     return {
       appendSystemContext: [
-        'The verified current WhatsApp run has an inbound audio attachment. Apply this voice capability Skill to the current final reply; do not generalize it to other runs.',
+        'The verified current WhatsApp run has an inbound audio attachment. The complete voice-reply Skill body is included below; do not call the read tool to retrieve that Skill again. Apply it directly to this final reply and do not generalize it to other runs.',
         skill,
       ].join('\n\n'),
     };
