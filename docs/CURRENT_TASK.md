@@ -1,24 +1,23 @@
-## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音回复生命周期（候选已部署，实机验收待用户）
+## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音 lifecycle 正式发布（手机验收仍待）
 
-候选 commit `7198206` 已构建并 apply 到 OrbStack `nyannyan`，OpenClaw image 为
-`local/openclaw-amadeus:git-7198206b9ca5-20260925114919`，恢复点
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925114919`，部署证据位于
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925114919`。
-OpenClaw health 通过、重启次数 0，core 与外置 WhatsApp monitor patch marker 各为 1。
+用户明确要求将已部署候选正式上线。`VERSION=1.5.3`，release commit `9d02a89` 已 push，正式 OpenClaw
+image `local/openclaw-amadeus:git-9d02a896b018-20260925120916` 已 apply。恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925120916`，部署证据
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925120916`。
+Product Radar 复用原 image。release notification 与 owner outbox smoke 均 sent/passed。
 
-apply 后检查发现，初次 deploy script 把 WhatsApp npm backup 路径写成
-`/DATA/AppData/openclaw/npm/projects`，而真实 bind mount 是
-`/DATA/AppData/openclaw/config -> /home/node/.openclaw`，因此 checkpoint manifest 没有包含
-`config/npm/projects`。原始 monitor 文件在 patch/apply 前已读入 Mac 临时快照，并已补存为外置恢复文件：
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925114919/rollback-whatsapp-monitor/monitor-DaIAK4fT.before-lifecycle.js`
-（SHA-256 `66ec565a6806e23616202caa96d6b7a3c295b2bb2b22abdbf9fea90a144e95e9`）。
-部署源码已修正为备份 `$OPENCLAW_DATA_DIR/config/npm/projects`，并新增路径回归测试；待修正提交
-push 后，供下次 apply 完整备份 npm subtree。此候选恢复点的外置 monitor 单文件恢复源已补齐。
+apply 前 checkpoint 已确认覆盖真实挂载路径 `/DATA/AppData/openclaw/config/npm/projects`（目录存在，约
+71,202,900 bytes）。OpenClaw 容器 running/healthy、restart=0，WhatsApp accounts linked/connected，
+core queue 与外置 monitor 生命周期 marker 各一次。全量部署前验证/test/typecheck/secrets gate 通过。
 
-`doctor` 报告 2 个非本次变更问题：`media-organizer-adapter` 缺失、外置存储身份/Immich media
-boundary 检查失败；OpenClaw/Product Radar/9Router 与 Immich health 项目通过。真实 WhatsApp
-手机端 typing 持续性、单条日文 PTT + 中文 summary、群并发消息排队顺序还未验收；`VERSION=1.5.2`，
-未做正式 release。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-typing-lifecycle-live.md`。
+部署脚本因 verified external storage unavailable 将 `LOG_POLICY=warning`、`POST_DEPLOY_MAINTENANCE=warning`
+并报告 `GC=BLOCKED`，没有绕过 storage gate。`doctor` 目前 2 个失败：`media-organizer-adapter` 缺失，以及
+external-storage/Immich media-boundary identity 检查失败；这些不是语音代码失败，但整体环境不为 0/0。
+
+真实 WhatsApp 手机端输入状态显示与 PTT/中文 summary receipt、以及群内竞争消息排队顺序仍无本轮证据；不能把
+源码 fixture 或用户“看起来没问题”当作 handset proof。正式 release 已按用户指令完成，后续应补 direct voice DM、
+群 concurrency、A–L 其余矩阵、TTS/ASR fallback 与 reboot acceptance；不宣称这些验收已全部通过。详情见
+`.agent/checkpoints/2026-09-25-amadeus-1.5.3-formal-release.md` 和 task 文件。
 
 ## 2026-09-25：M204 9Router 应用层代理已关闭，旧机代理权威一致
 

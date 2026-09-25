@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-20（Amadeus 1.4.2 implementation in progress）
+更新时间：2026-09-25（Amadeus 1.5.3 voice lifecycle deployed; handset acceptance remains open）
 
 ## Worldline notification boundary
 
