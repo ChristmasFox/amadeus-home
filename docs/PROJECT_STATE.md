@@ -1,12 +1,10 @@
-## 2026-09-25 UTC：语音中文根因修复已部署同版本候选，待手机实测
+## 2026-09-25 UTC：Amadeus 1.5.6 语音日语固定规则已验收，正式发布准备中
 
-用户没有要求汉语，却仍收到中文 PTT。已查明并非两个活跃规则互相覆盖：live SOUL/USER 只设普通文字默认中文，语音 Skill 应覆盖；但 pinned WhatsApp 2026.9.4 把 `message_received` plugin hook 设为 opt-in（live 未启用），且 channel 显式压制 core fallback。之前两版 voice Skill tracker 都等不到该 hook，所以模型最终只生成中文，原生 inbound TTS 随之生成中文语音。
+用户确认 1.5.5 hotfix 候选“现在好了”，并明确要求提交、push 和正式部署。此前根因是 WhatsApp 2026.9.4 的 `message_received` plugin hook 默认关闭；上一修复改用 ingress active voice lease 后，prompt injection 才与当前实际语音 run 对齐，出站对无日语假名/未知 spokenText 的 PTT fail-closed。
 
-源码 commit `12df1ae` 已 push：Amadeus 不再依赖关闭的内容 hook，改用 WhatsApp ingress 在 Agent 前创建、完整投递后释放的受信语音 lease 来注入 Skill。WhatsApp 发送边界也升级 v2 防护：若语音轮次的 PTT 源文本没有日语假名或无法确认，则在发送前剥除音频，仅发送文字和“日语语音暂时无法生成”提示，不再把明显中文语音发出。普通 typed-only 消息没有语音 lease，行为不变；这是保守 fail-closed，不是任意混合语言的完美检测器。
+候选 `local/openclaw-amadeus:git-12df1ae6b2e1-20260925182336` 已通过 owner 实测；只读脱敏 trace 最近三条语音回复均含 `中文：` 与日文假名行，无原文入库。typed-only 语音 lease 不活跃，文本路径未改。按唯一版本脚本从 1.5.5 patch bump 到 1.5.6，`RELEASE_NOTES.md` 已替换为当前单次发布说明。
 
-同版本 `VERSION=1.5.5` candidate 已以 `--apply --candidate --build-openclaw` 更新唯一 OpenClaw：镜像 `local/openclaw-amadeus:git-12df1ae6b2e1-20260925182336`；rollback checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925182336`，manifest 包含 WhatsApp npm projects 目录备份（71,206,995 bytes）。OpenClaw healthy/restart=0，WhatsApp linked/connected，四个 lifecycle/FIFO/visible-text/audio-guard markers 各一次。对 live helper 的 synthetic 非投递测试证明中文-only PTT 被剥除，日语 PTT 保留，typed-only 不变；完整 tests/typecheck/build/architecture/secrets 均通过。
-
-**尚未收到此候选后的真实语音验收**。请发一条不要求任何语言的 WhatsApp 语音：预期日语 PTT + 匹配的日文行 + 中文摘要；若模型仍未产生日语，应只收到文字错误，不应再有中文 PTT。用户确认前不 bump 到 1.5.6。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-japanese-voice-lease-guard-source.md`。
+正式部署前运行 full test、typecheck、architecture、version、voice guard/parser、secrets gates；随后 commit/push 并 dry-run，再使用 `./scripts/deploy-openclaw.sh --apply --build-auto` 更新唯一 CasaOS runtime、保存回滚点并核验 health/WhatsApp/通知。当前仍运行已验收的 1.5.5 candidate，1.5.6 尚未正式 apply。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.6-formal-release.md`。
 
 ## 2026-09-25 UTC：1.5.5 日语语音注入 hotfix 候选已部署，待实测
 
