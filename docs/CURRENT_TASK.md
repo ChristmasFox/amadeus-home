@@ -378,3 +378,5 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：OpenClaw 原生语音链候选已连通，WhatsApp 实收发未验收
 
 9Router ASR bridge 仅自身启用 Node env proxy 的 immutable 镜像已带 checkpoint 切换；一条新的合成中文 WAV 经 live `amadeus-asr` 返回 200/非空转录。OpenClaw candidate 配置在受保护 checkpoint 后以 `--candidate --no-build` 应用，日志确认 scoped private-network policy 热加载；唯一 Gateway healthy，WhatsApp linked/connected，Telegram running，`VERSION=1.5.2`，未发送发布通知。原生 `capability audio transcribe` 经 9Router 返回一个非空 `audio.transcription`；Gateway `tts.speak` 经同一逻辑路由返回有效 MP3。**以上都是合成/本地调用，不是实际 WhatsApp voice-note 入站、PTT 发出或 fallback 证据。** 见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-native-speech-chain.md`；下一步需用户在 WhatsApp 私聊发送受控中文/日文语音与文字 follow-up 后执行 A–L 验收，之后才 bump/release。
+
+原生长文本/编码补充：Gateway `tts.speak` 对 1201 字符返回 `INVALID_REQUEST` 且无音频；另一条短文本 TTS 的 MP3 已在 live OpenClaw ffmpeg 内成功转换为 48 kHz Ogg/Opus。仍必须从真实 WhatsApp 语音入站看到文字 fallback 与 PTT 出站，不能把本地转换等同于手机交付。
