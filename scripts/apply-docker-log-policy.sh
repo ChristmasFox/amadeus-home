@@ -229,7 +229,7 @@ for position in reversed(range(len(service_starts))):
     )
     if property_indent is None:
         continue
-    if any(line.strip() == 'logging:' for line in block):
+    if any(re.match(r'^\s*logging\s*:', line) for line in block):
         continue
     list_indent = ' ' * (len(property_indent.replace('\t', '    ')) + 2)
     insertion = next((index for index in range(start + 1, end) if lines[index].startswith(property_indent + 'restart:')), start)

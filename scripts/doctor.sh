@@ -102,10 +102,11 @@ else
   fail '9Router expected runtime image is unavailable'
 fi
 
-if bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --allow-existing --source /DATA/Gallery/immich --destination "$IMMICH_MEDIA_ROOT" >/dev/null 2>&1; then
-  pass 'verified external storage identity and Immich media boundary'
+immich_media_mount="$(orb -m "$MACHINE" -u root docker inspect --format '{{range .Mounts}}{{if eq .Destination "/usr/src/app/upload"}}{{.Source}}{{end}}{{end}}' immich-server 2>/dev/null || true)"
+if bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT" >/dev/null 2>&1 && [[ "$immich_media_mount" == "$IMMICH_MEDIA_ROOT" ]]; then
+  pass 'verified external storage identity and live Immich media mount boundary'
 else
-  fail 'verified external storage identity and Immich media boundary'
+  fail 'verified external storage identity and live Immich media mount boundary'
 fi
 if orb -m "$MACHINE" -u root docker system df >/dev/null 2>&1; then
   pass 'Docker storage accounting is available'

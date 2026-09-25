@@ -115,6 +115,11 @@ if env PATH="$gate_bin:$PATH" AMADEUS_HOST_PROFILE="$fixture/no-host-profile" \
 fi
 [[ ! -e "$external/backups/operation-skuld/storage-maintenance" ]]
 [[ ! -e "$gate_orb_marker" ]]
+# Host health/diagnostic callers must not depend on the retired migration source.
+grep -Fq 'storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT"' "$ROOT_DIR/scripts/doctor.sh"
+grep -Fq 'storage-preflight.sh" --status --identity-only --destination "$IMMICH_MEDIA_ROOT"' "$ROOT_DIR/scripts/storage-health.sh"
+# Existing inline/anchor-style Compose logging keys must be detected to avoid duplicate YAML keys.
+grep -Fq "re.match(r'^\\s*logging\\s*:'" "$ROOT_DIR/scripts/apply-docker-log-policy.sh"
 
 compose="$fixture/immich-compose.yml"
 printf '%s\n' 'services:' '  immich-server:' >"$compose"
