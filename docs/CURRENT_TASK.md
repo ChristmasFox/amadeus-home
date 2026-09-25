@@ -1,21 +1,15 @@
-## 2026-09-25：连续群语音 PTT 回退已修复为 FIFO 候选，等待重测
+## 2026-09-25：语音回复新增日文假名/汉字可见行（源码候选待部署）
 
-用户报告两条连续群语音只有一条得到 PTT。脱敏 trace 显示两个 Ogg 音频入站、两个助手最终回合、仅一次媒体发送；
-固定版 follow-up `routeReply` 绕过正常自动 TTS 是与症状吻合的根因。修复 commit `02fdf49` 已 push，候选已
-apply 到唯一 runtime：`local/openclaw-amadeus:git-02fdf490f8bb-20260925130109`。
+用户要求每次语音回复除日文 PTT 与中文 summary 外，再显示日文文字。voice-reply Skill 已改为三段：
+`中文：<忠实摘要>`、`日本語：<与语音内容相同的自然汉字+假名句子>`、以及只用于语音合成的
+`[[tts:text]]...[[/tts:text]]`。日文可见行与 PTT 文本必须完全一致；使用常见汉字、平假名/片假名，不用罗马字；
+难读汉字可附括号假名。typed-only 路径仍是普通简体中文文字，不加日文行或 TTS 指令。
 
-候选通过在 WhatsApp `processForRoute` 入站边界加 voice-scoped FIFO，让每个后续语音在前一轮完整 TTS/发送完成后，
-重新走各自正常 inbound/TTS 管线；后续文字也排在前面语音之后。每条 queued voice 有自己的 composing lease/120秒上限。
-核心队列只保留为绕行入口的 fallback；正常 WhatsApp 会话在进入 core 前已序列化。
-
-新恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925130109` 已确认包含完整
-`/DATA/AppData/openclaw/config/npm/projects`（约 71,202,900 bytes）。部署后 OpenClaw healthy、restart=0，
-WhatsApp linked/connected；core/v1/v2 markers 各 1。全量 `pnpm test`、typecheck、architecture、secrets 与
-同版 monitor 临时 patch/语法/幂等/stdin 验证通过。
-
-仍需用户重发两条连续群语音：预期每条各收到一条日文 PTT 和一条中文 summary，按输入顺序完成，且每轮三点持续到
-PTT/summary 都发完。当前仍为 1.5.3 同版本候选热修，不 bump 1.5.4，直到该实机重测通过。详见
-`.agent/checkpoints/2026-09-25-amadeus-1.5.3-consecutive-voice-tts-candidate.md`。
+`plugins/amadeus/tests/manifest.test.ts` 和 pinned parser fixture `scripts/test-openclaw-bilingual-voice.mjs`
+覆盖可见中日文两行、语音文本严格匹配、汉字+假名混写、普通文字不触发 TTS；相关定向测试通过。
+目前正式 `VERSION=1.5.3` 仍在线，当前连续语音 FIFO 修复候选 `02fdf49` 也已部署；本次可见日文行更改尚未 commit/build/deploy。
+下一步完成匹配验证、commit/push 后构建同版本单实例 candidate，再请用户测试一条语音和两条连续群语音，确认
+日文可见文本、中文 summary 与各自 PTT 对齐。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-japanese-written-text-source.md`。
 
 ## 2026-09-25：M204 9Router 应用层代理已关闭，旧机代理权威一致
 
