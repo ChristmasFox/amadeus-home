@@ -59,7 +59,8 @@ class ProvisionTest(unittest.TestCase):
             self.assertIn("healthz", run.call_args.args[0][-1])
         with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 1)):
             self.assertFalse(routes.runtime_speech_ready("nyannyan"))
-        with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0), CompletedProcess([], 1), CompletedProcess([], 0)]) as run, patch.object(routes.time, "sleep"):
+        http_401 = routes.urllib.error.HTTPError("http://127.0.0.1:20128/v1/models", 401, "unauthorized", {}, None)
+        with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0), CompletedProcess([], 1), CompletedProcess([], 0)]) as run, patch.object(routes.urllib.request, "urlopen", side_effect=http_401), patch.object(routes.time, "sleep"):
             routes.restart_and_verify("nyannyan")
             self.assertEqual(run.call_count, 3)
         with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0)] + [CompletedProcess([], 1)] * 45), patch.object(routes.time, "sleep"):

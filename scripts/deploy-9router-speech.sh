@@ -108,11 +108,16 @@ changed=1
 orb -m "$MACHINE" -u root bash -lc 'cd "$1" && docker compose config --quiet && docker compose up -d --no-build' -- "$APP_DIR"
 for _ in $(seq 1 50); do
   if orb -m "$MACHINE" -u root docker exec 9router node -e '
-    Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz"),fetch("http://127.0.0.1:20128/v1/models")]).then(([a,b,c])=>process.exit(a.ok&&b.ok&&c.status===401?0:1)).catch(()=>process.exit(1))
+    Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz")]).then(([a,b])=>process.exit(a.ok&&b.ok?0:1)).catch(()=>process.exit(1))
   ' >/dev/null 2>&1; then
-    trap - ERR
-    echo 'NINE_ROUTER_SPEECH_DEPLOY=healthy (direct ASR and WhatsApp acceptance still required)'
-    exit 0
+    # 9Router exempts container-local loopback from the API-key gate. Probe
+    # through the actual published host route, not from inside the container.
+    unauth_status="$(curl --silent --max-time 4 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:20128/v1/models || true)"
+    if [[ "$unauth_status" == 401 ]]; then
+      trap - ERR
+      echo 'NINE_ROUTER_SPEECH_DEPLOY=healthy (direct ASR and WhatsApp acceptance still required)'
+      exit 0
+    fi
   fi
   sleep 2
 done
