@@ -465,3 +465,18 @@ SOUL 与原 Git seed hash 相同，需在带备份的候选 apply 后经已有 p
 `tools.deny=['tts','message']`、`tts.auto=inbound`，Gateway healthy、WhatsApp
 linked/connected、9Router 未授权 models 401。14:18:21 重启后尚无新语音入站；
 默认日语与单条 PTT 仍**必须真实复验**，本次只宣称配置/健康通过。
+
+## 2026-09-25：单条 PTT 实收，语言冲突与输入中指示
+
+14:22:11 的真实 direct Opus：单次 ASR、单次 TTS，14:22:56 仅一条 WhatsApp
+`Sent media reply`，用户确认手机收到一条；从入站到发送约 45 秒。当前回复仍为中文。
+查到新 SOUL 虽已生效，但独立的 live `USER.md` 仍写
+`Prefer Simplified Chinese.`，与新默认日语策略冲突；它还包含用户额外内容，
+不能整文件覆盖。已更新 Git USER seed，并新增只替换该**单行旧锚点**的显式
+`--apply` 迁移脚本及保留定制/拒绝漂移测试；尚未部署。
+
+用户所说的“三个点”按 WhatsApp 输入中（typing）指示理解：固定 OpenClaw
+2026.9.4 官方随包文档将 presence 描述为 best-effort；DM 默认 instant，但
+原配置未显式写入，当前没有发送失败日志证据。源码候选显式设置
+`typingMode=instant`、3 秒 refresh，提高可见机会；不能保证客户端在 TTS
+合成的全程显示三个点。若用户指的不是输入中指示，需进一步澄清。

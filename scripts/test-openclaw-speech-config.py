@@ -26,6 +26,11 @@ assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
 assert c["tools"]["profile"] == "full"
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch"]
+assert c["agents"]["defaults"]["typingMode"] == "instant"
+assert c["agents"]["defaults"]["typingIntervalSeconds"] == 3
+user_seed = (ROOT / "integrations/openclaw/workspace-seed/USER.seed.md").read_text()
+assert "Prefer Japanese replies by default" in user_seed
+assert "Prefer Simplified Chinese." not in user_seed
 speech = c["tts"]
 assert speech["auto"] == "inbound" and speech["mode"] == "final"
 assert speech["providers"]["openai"]["baseUrl"] == provider["baseUrl"]
