@@ -480,3 +480,12 @@ linked/connected、9Router 未授权 models 401。14:18:21 重启后尚无新语
 原配置未显式写入，当前没有发送失败日志证据。源码候选显式设置
 `typingMode=instant`、3 秒 refresh，提高可见机会；不能保证客户端在 TTS
 合成的全程显示三个点。若用户指的不是输入中指示，需进一步澄清。
+
+14:30 已以显式候选 apply 建立外部恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925063005`，随后在已备份的
+live workspace 运行单行 USER 迁移（old=1→new=1，额外行保留）并再次重启。
+live 现为 `typingMode=instant`/3 秒、`tools.deny=['tts','message']`、
+`tts.auto=inbound`；USER 不再含旧中文优先偏好，SOUL 仍为日文默认。
+Gateway healthy、WhatsApp linked/connected。**尚无 14:30 后的真实语音**；
+日文回复和手机“三点”是否出现要再实收确认。presence 本质 best-effort，
+不能将配置存在等同手机可见。
