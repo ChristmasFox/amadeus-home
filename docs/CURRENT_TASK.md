@@ -626,3 +626,5 @@ Qwen host TTS 的此前三次观测约 58.5s、48.1s、34.1s，样本少、不�
 MPS TTS 延迟和冷/暖生成基线。日志仅有该 group 的一条媒体发送记录，**没有找到对应
 独立中文文字 `Sent message` 记录**；所以不能声称中文摘要已单独送达。15:52:25 的私聊
 文字及15:52:28发送是另一个 session，不应混入此链路。
+
+用户现确认收到中文文字；这对 15:51:48 群聊 voice turn 构成一次双语摘要实收（模型 final 有日文音频块，OpenClaw 仅记一条 PTT，用户确认文字）。该 turn 仍有总延迟 63.6s。源代码优化已加到 run-scoped injection：明确 Skill 正文已预先包含、禁止为取回 Skill 再调用 `read`，避免已观测到的第一轮 15.5s 模型/工具回合；Amadeus 35 tests、typecheck、architecture、secrets 通过。优化尚未部署/真实测后续对照，仍剩约 34.1s 的 Qwen3-TTS 生成是最大瓶颈。
