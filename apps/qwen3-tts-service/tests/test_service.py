@@ -94,9 +94,17 @@ class SpeechTest(unittest.TestCase):
                 self.assertTrue(data.startswith(magic))
 
     def test_audio(self):
-        code, mime, body = self.request("POST", "/v1/audio/speech", {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界", "response_format": "wav"})
+        with self.assertLogs(service.LOG, level="INFO") as captured:
+            code, mime, body = self.request("POST", "/v1/audio/speech", {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "VOICE_PRIVACY_SENTINEL", "response_format": "wav"})
         self.assertEqual((code, mime), (200, "audio/wav"))
         self.assertTrue(body.startswith(b"RIFF"))
+        timing = next(line for line in captured.output if "speech_synthesis_ok" in line)
+        self.assertIn("input_chars=<=40", timing)
+        self.assertIn("audio_ms=", timing)
+        self.assertIn("engine_ms=", timing)
+        self.assertIn("encode_ms=", timing)
+        self.assertIn("total_ms=", timing)
+        self.assertNotIn("VOICE_PRIVACY_SENTINEL", timing)
 
 
 if __name__ == "__main__":
