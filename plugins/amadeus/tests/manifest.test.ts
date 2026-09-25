@@ -66,6 +66,9 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     { channel: 'whatsapp', runId: 'voice-run' },
   ) as { appendSystemContext?: string } | undefined;
   assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /spoken audio MUST be\s+Japanese/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /even if the user explicitly asks for a Chinese\s+spoken reply/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /preserve the\s+existing ordinary text-message behavior, including the user's explicit\s+language request/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /the same Japanese answer, written naturally with Japanese kanji and kana/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the same Japanese sentence as the 日本語 line/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);

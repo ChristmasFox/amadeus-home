@@ -12,6 +12,9 @@ const skill = await readFile(join(process.cwd(), 'plugins/amadeus/skills/voice-r
 assert.match(skill, /^description: REQUIRED for every inbound voice note: answer with one Japanese voice reply, one visible Japanese kanji-kana line, and one visible Chinese text summary\.$/mu);
 assert.match(skill, /targeting at most 50 Unicode codepoints/u);
 assert.match(skill, /Never omit a safety-critical warning/u);
+assert.match(skill, /spoken audio MUST be\s+Japanese/u);
+assert.match(skill, /even if the user explicitly asks for a Chinese\s+spoken reply/u);
+assert.match(skill, /preserve the\s+existing ordinary text-message behavior, including the user's explicit\s+language request/u);
 const module = await import(pathToFileURL(join(dist, file)));
 const parse = module.n ?? module.parseTtsDirectives;
 assert.equal(typeof parse, 'function');
