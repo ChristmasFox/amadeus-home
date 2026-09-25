@@ -22,8 +22,7 @@ parts, even when the recognized audio itself is Japanese:
 The Chinese line is visible text. The `[[tts:text]]` block is audio-only under
 the pinned OpenClaw TTS parser. The final payload's one audio attachment and
 one visible Chinese line must be delivered through the existing WhatsApp reply
-path, not through a separate sender. Keep the Japanese spoken text bounded by
-the configured TTS limit. Do not leak directive markers into the Chinese line.
+path, not through a separate sender. Keep the Japanese spoken reply to one natural short sentence, targeting at most 50 Unicode codepoints; include only the direct answer and essential caveat. If more detail is needed, use the Chinese summary sentence to carry key facts. Never omit a safety-critical warning merely to meet the target. The configured TTS limit remains a hard upper bound. Do not leak directive markers into the Chinese line.
 Do not invent details in the summary, especially after partial/tool errors.
 
 For typed input, continue the ordinary Simplified Chinese text-only path and do
