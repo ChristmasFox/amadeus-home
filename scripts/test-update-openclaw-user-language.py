@@ -8,8 +8,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts/update-openclaw-user-language.py"
-OLD = "- Prefer Simplified Chinese."
-NEW = "- Prefer Japanese replies by default; switch to Simplified Chinese only when explicitly requested."
+OLD = "- Prefer Japanese replies by default; switch to Simplified Chinese only when explicitly requested."
+NEW = "- Prefer Simplified Chinese for ordinary text replies."
 
 with tempfile.TemporaryDirectory() as tmp:
     workspace = Path(tmp)
@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as tmp:
     applied = run("--apply")
     assert applied.returncode == 0, applied.stderr
     assert target.read_text() == original.replace(OLD, NEW)
-    assert "USER_LANGUAGE=already-japanese" in run("--apply").stdout
+    assert "USER_LANGUAGE=already-current" in run("--apply").stdout
     target.write_text("# User preferences\n- Custom language preference\n")
     refused = run("--apply")
     assert refused.returncode != 0 and "refusing overwrite" in refused.stderr

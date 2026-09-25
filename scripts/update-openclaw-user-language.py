@@ -9,8 +9,8 @@ import stat
 import tempfile
 from pathlib import Path
 
-OLD = b"- Prefer Simplified Chinese."
-NEW = b"- Prefer Japanese replies by default; switch to Simplified Chinese only when explicitly requested."
+OLD = b"- Prefer Japanese replies by default; switch to Simplified Chinese only when explicitly requested."
+NEW = b"- Prefer Simplified Chinese for ordinary text replies."
 WORKSPACE = Path(os.environ.get("OPENCLAW_WORKSPACE_DIR", "/DATA/AppData/openclaw/workspace"))
 
 
@@ -23,7 +23,7 @@ def main() -> None:
         raise SystemExit("USER.md must be a regular file in a real workspace")
     before = target.read_bytes()
     if before.count(NEW) == 1 and OLD not in before:
-        print("USER_LANGUAGE=already-japanese")
+        print("USER_LANGUAGE=already-current")
         return
     if before.count(OLD) != 1 or NEW in before:
         raise SystemExit("legacy USER.md language anchor changed; refusing overwrite")
