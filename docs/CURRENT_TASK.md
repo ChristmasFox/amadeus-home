@@ -1,13 +1,13 @@
-## 2026-09-25 UTC：Amadeus 1.5.8 已部署，语音恢复 smoke 通过，待 WhatsApp 实测
+## 2026-09-25 UTC：Amadeus 1.5.8 语音恢复已由用户确认正常
 
 - 用户在 1.5.7 部署后反馈收到中日文字但没有语音条。根因已定位到 TTS，不是文字格式：OpenClaw 对 9Router `/v1/audio/speech` 等待 120 秒后超时；9Router 报 `fetch failed` 并锁定 self-hosted TTS。Mac Qwen 服务 health 虽为 ready，但旧推理一直占用串行 inference lock，90 秒短句烟测也超时。历史 `>320` 字日语合成记录耗时约 223 秒，超过固定 120 秒窗口。
 - 1.5.8 将“约 100 词”改为**软性上限而不是输出目标**；常规日语语音建议约 150 日文字符内，长细节放中文摘要，保留既有 120 秒 timeout/lease，不靠延长等待掩盖慢合成。
 - Release commit `b54c2ed` 已 push；正式 apply 使用 live OrbStack `nyannyan`（本机 `orb list` 唯一的 Ubuntu Noble VM），OpenClaw image `local/openclaw-amadeus:git-b54c2ed84ee4-20260925195233`，Product Radar 复用既有 image。checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925195233`；evidence `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925195233`。
 - OpenClaw/Product Radar health、NAS SSH smoke、中文 owner release 通知与 outbox smoke 通过。修正后的 external identity-only gate 与 post-deploy bounded maintenance 都通过；Docker Compose 校验通过，Immich healthy。日志策略本次只剩全局 `/etc/docker/daemon.json` 缺失警告；所有受管容器仍通过 per-container `local/20m/5` 检查。没有重启 OrbStack、没有修改媒体内容。
-- TTS LaunchAgent 首次 `manage-qwen3-tts.sh --apply` 在 `launchctl bootstrap` 报 I/O error；检查确认服务已停止，随后手动 `launchctl bootstrap gui/501 .../com.amadeus.qwen3-tts.plist` 成功。health 恢复 ready；本机短句合成返回 HTTP 200 / audio-mpeg（24,812 bytes），容器经 9Router 的同一 TTS 路径返回 HTTP 200 / audio-mp3（22,796 bytes），均约 8 秒。此证明合成和代理已恢复，但**尚未替代用户 WhatsApp 端到端验收**。
+- TTS LaunchAgent 首次 `manage-qwen3-tts.sh --apply` 在 `launchctl bootstrap` 报 I/O error；检查确认服务已停止，随后手动 `launchctl bootstrap gui/501 .../com.amadeus.qwen3-tts.plist` 成功。health 恢复 ready；本机短句合成返回 HTTP 200 / audio-mpeg（24,812 bytes），容器经 9Router 的同一 TTS 路径返回 HTTP 200 / audio-mp3（22,796 bytes），均约 8 秒。随后用户确认“现在正常了”，WhatsApp 端到端语音回复验收通过。
 - `doctor.sh` 当前仅报告可选 media-organizer-adapter 缺席；外部存储身份和 Immich upload 挂载边界通过，其余服务 health 通过。
 
-详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.8-formal-release.md`、`.agent/tasks/2026-09-25-voice-tts-acceptance.md` 与独立的 daemon log-policy follow-up。
+详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.8-formal-release.md`、`.agent/checkpoints/2026-09-25-amadeus-1.5.8-whatsapp-voice-acceptance.md` 与独立的 daemon log-policy follow-up。
 
 ## 2026-09-25 UTC：外部存储门禁 warning 根因已定位（只读检查）
 
