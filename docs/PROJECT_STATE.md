@@ -1,21 +1,18 @@
-## 2026-09-25：Amadeus 1.5.3 WhatsApp 语音 lifecycle 正式发布（本项 smoke 用户确认正常；整体矩阵仍待）
+## 2026-09-25：1.5.3 连续群语音只生成一条 PTT（入站 FIFO 修复候选）
 
-用户明确要求将已部署候选正式上线。`VERSION=1.5.3`，release commit `9d02a89` 已 push，正式 OpenClaw
-image `local/openclaw-amadeus:git-9d02a896b018-20260925120916` 已 apply。恢复点
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925120916`，部署证据
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925120916`。
-Product Radar 复用原 image。release notification 与 owner outbox smoke 均 sent/passed。
+用户报告在群聊连续发两条语音，只有一条得到 PTT，另一条只有文字。12:18–12:19Z 脱敏日志可见两个
+Ogg 音频入站、两个助手最终回合、仅一条媒体发送。固定 OpenClaw 2026.9.4 的 followup 队列将结果通过
+直接 `routeReply` 投递，绕过正常 inbound final TTS 应用；该源码路径与“queued voice 只有文字”吻合。
 
-apply 前 checkpoint 已确认覆盖真实挂载路径 `/DATA/AppData/openclaw/config/npm/projects`（目录存在，约
-71,202,900 bytes）。OpenClaw 容器 running/healthy、restart=0，WhatsApp accounts linked/connected，
-core queue 与外置 monitor 生命周期 marker 各一次。全量部署前验证/test/typecheck/secrets gate 通过。
+修复候选已把排队边界移动到 WhatsApp `processForRoute`：同一 session 只在活动 voice lease 时用 FIFO 等待，
+前一轮完整 settle 后，每个 queued voice 都重新经过正常 `processMessage`/`runChannelInboundEvent`/TTS 路径；
+后续 text 也按顺序处理。每条 queued voice 在自己开始时获得独立的 3 秒 composing lease/120 秒上限。Presence
+发送失败仅停止刷新、不提前释放队列；断连、turn settle 与硬超时仍会清理。typed-only concurrency 不变。
 
-部署脚本因 verified external storage unavailable 将 `LOG_POLICY=warning`、`POST_DEPLOY_MAINTENANCE=warning`
-并报告 `GC=BLOCKED`，没有绕过 storage gate。`doctor` 目前 2 个失败：`media-organizer-adapter` 缺失，以及
-external-storage/Immich media-boundary identity 检查失败；这些不是语音代码失败，但整体环境不为 0/0。
-
-用户在收到 direct voice 与群并发测试请求后反馈“正常”，记录为本次 lifecycle smoke 的 owner qualitative confirmation：输入状态、PTT/中文 summary 与群内顺序用户未报告异常；本轮没有收集单条消息计数或精确时间戳。正式 release 已按用户指令完成；A–L 其余矩阵、TTS/ASR fallback、质量/时延和 reboot acceptance 仍待完成，不宣称整体 voice I/O 矩阵全通过。详情见
-`.agent/checkpoints/2026-09-25-amadeus-1.5.3-formal-release.md` 和 task 文件。
+`pnpm test`、`pnpm typecheck`、architecture、secrets 与 pinned monitor 临时副本 patch/语法/幂等/stdin 检查通过。
+修复源码还未 commit、push 或部署；正式 1.5.3 镜像仍运行。下一步 commit/push 后使用 `--candidate` build/apply
+并带 corrected full npm subtree checkpoint，再请用户重复连续群语音，确认两条各自一条日文 PTT+中文 summary。
+详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-consecutive-voice-tts-regression.md`。
 
 ## 2026-09-25：9Router 应用层重复代理已关闭
 
