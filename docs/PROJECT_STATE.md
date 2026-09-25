@@ -1,11 +1,13 @@
-## 2026-09-25 UTC：1.5.8 日语语音超时 hotfix 准备中
+## 2026-09-25 UTC：Amadeus 1.5.8 已部署，语音恢复 smoke 通过，待 WhatsApp 实测
 
-- 1.5.7 已 push 与部署，OpenClaw/Product Radar health、NAS SSH smoke 和 owner outbox smoke 均通过。但用户报告文字到了、语音条缺失；生产日志显示 OpenClaw 调 9Router `/v1/audio/speech` 在 120 秒超时，9Router 随后将 TTS provider 锁定。Mac Qwen TTS `/healthz` 为 ready，但直接短句合成也在 90 秒超时；历史日志中 >320 字输入耗时 223 秒，超过既有 120 秒 voice/TTS 窗口。故故障在 TTS 合成/超时，不是中日文本格式。一次 1.5.7 日语语音较长输出可能令 MPS inference 卡住并阻塞后续队列。
-- 1.5.8 hotfix 将约 100 词明确为“软上限而非输出目标”，常规语音建议保持在约 150 日文字符内，长说明优先放进中文摘要；保留 120 秒边界，不延长超时。发布后需重启卡住的受控 Qwen TTS LaunchAgent 并通过短句合成 smoke，再请用户验收完整 WhatsApp 链路。
-- 同一 source commit 包含已验证的外部存储 identity-only caller 修正、doctor 实际 Immich upload mount boundary 检查，以及日志策略识别 `logging: *anchor` 等行内 YAML key，避免再次生成重复 key。
-- 1.5.7 部署时 storage identity gate 与 bounded maintenance/retention 均通过；日志策略在 Immich Compose duplicate-key 校验失败。已从同次 apply 的 `immich.before.yml` 精确恢复，Compose `config --quiet` 再验通过、Immich 容器仍 healthy。Doctor 的外部 storage 项现在通过；唯一剩余 doctor failure 为之前已记录的可选 media-organizer-adapter 缺席。
+- 用户在 1.5.7 部署后反馈收到中日文字但没有语音条。根因已定位到 TTS，不是文字格式：OpenClaw 对 9Router `/v1/audio/speech` 等待 120 秒后超时；9Router 报 `fetch failed` 并锁定 self-hosted TTS。Mac Qwen 服务 health 虽为 ready，但旧推理一直占用串行 inference lock，90 秒短句烟测也超时。历史 `>320` 字日语合成记录耗时约 223 秒，超过固定 120 秒窗口。
+- 1.5.8 将“约 100 词”改为**软性上限而不是输出目标**；常规日语语音建议约 150 日文字符内，长细节放中文摘要，保留既有 120 秒 timeout/lease，不靠延长等待掩盖慢合成。
+- Release commit `b54c2ed` 已 push；正式 apply 使用 live OrbStack `nyannyan`（本机 `orb list` 唯一的 Ubuntu Noble VM），OpenClaw image `local/openclaw-amadeus:git-b54c2ed84ee4-20260925195233`，Product Radar 复用既有 image。checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925195233`；evidence `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925195233`。
+- OpenClaw/Product Radar health、NAS SSH smoke、中文 owner release 通知与 outbox smoke 通过。修正后的 external identity-only gate 与 post-deploy bounded maintenance 都通过；Docker Compose 校验通过，Immich healthy。日志策略本次只剩全局 `/etc/docker/daemon.json` 缺失警告；所有受管容器仍通过 per-container `local/20m/5` 检查。没有重启 OrbStack、没有修改媒体内容。
+- TTS LaunchAgent 首次 `manage-qwen3-tts.sh --apply` 在 `launchctl bootstrap` 报 I/O error；检查确认服务已停止，随后手动 `launchctl bootstrap gui/501 .../com.amadeus.qwen3-tts.plist` 成功。health 恢复 ready；本机短句合成返回 HTTP 200 / audio-mpeg（24,812 bytes），容器经 9Router 的同一 TTS 路径返回 HTTP 200 / audio-mp3（22,796 bytes），均约 8 秒。此证明合成和代理已恢复，但**尚未替代用户 WhatsApp 端到端验收**。
+- `doctor.sh` 当前仅报告可选 media-organizer-adapter 缺席；外部存储身份和 Immich upload 挂载边界通过，其余服务 health 通过。
 
-详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.7-formal-release.md` 和 `.agent/tasks/2026-09-25-docker-daemon-log-policy.md`。
+详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.8-formal-release.md`、`.agent/tasks/2026-09-25-voice-tts-acceptance.md` 与独立的 daemon log-policy follow-up。
 
 ## 2026-09-25 UTC：外部存储门禁 warning 根因已定位（只读检查）
 
