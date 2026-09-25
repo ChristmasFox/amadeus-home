@@ -281,6 +281,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
+  node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
+  node scripts/test-patch-openclaw-whatsapp-media-agent.mjs
   pnpm check:secrets
 )
 
@@ -306,6 +308,7 @@ MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
 PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
+MEDIA_AGENT_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-media-agent.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
@@ -314,7 +317,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -423,6 +426,8 @@ orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
 orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$VOICE_PATCH_RUNTIME"
+orb -m "$MACHINE" -u root docker exec -i openclaw node - \
+  /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'
@@ -546,7 +551,9 @@ print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null"
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null && docker compose restart openclaw >/dev/null"
+# The pinned WhatsApp module is volume-installed. A same-image compose up can
+# leave the Node process running with the old media agent; restart loads it.
 
 for attempt in $(seq 1 40); do
   if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then break; fi
