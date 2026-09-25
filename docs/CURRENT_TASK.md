@@ -528,3 +528,17 @@ WhatsApp 的全新临时 CLI session 用**中文输入但未要求中文回复**
 中文输入/工具路径回复中文的反例仍有效；14:48 加强版 SOUL 后尚未有真实 WhatsApp
 中文语音入站。下一个验收应是中文语音、不明确要求中文回复，检查文本语种、
 PTT 实收数量/语言及工具路径；不能把 14:45 归为默认日文策略通过。
+
+## 2026-09-25：语音非中文回复追加一句中文文字（源码候选）
+
+用户要求发语音时，若 Kurisu 不是用中文回复，则在语音之外追加**一条简短中文
+文字消息**。按“忠实的一句中文摘要”实现，不把整段日文强行逐字翻译；明确要求
+中文回复时，保持中文语音、不追加同义中文文字；打字输入仍不触发语音。
+
+固定 OpenClaw 2026.9.4 已有 `[[tts:text]]...[[/tts:text]]` 音频专用段，
+`tts.modelOverrides.allowText` 支持分离 spoken 与 visible；WhatsApp 原生音频
+发送分支对 visible caption 可另发文字。源码新增 Amadeus `voice-reply` Skill
+定义最终一次回答中的“中文可见摘要 + 日文音频专用段”，保持唯一 Agent/
+原生 TTS/原 WhatsApp reply sender；配置显式启用 allowText，部署预检覆盖
+Skill 与模式，离线 pinned parser fixture 证明分离。**未构建/部署，更未手机实收**；
+必须避免把静态 parser 能力误报为 one PTT + one 中文文字送达。

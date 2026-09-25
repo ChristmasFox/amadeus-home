@@ -443,6 +443,16 @@ If OpenClaw's native equivalent of `tts.auto = inbound` exists in the pinned ver
 
 TTS failure -> text fallback.
 
+For the owner's added bilingual preference: when an inbound voice turn is
+answered in Japanese or another non-Chinese language, speak one reply and
+append **one concise Chinese text summary** of the same facts. Use OpenClaw's
+native visible-text / `[[tts:text]]` audio-only split and the one existing
+WhatsApp reply transport; no extra Agent tool/sender or translation runtime.
+An explicit request for Chinese output yields one Chinese voice reply without a
+redundant Chinese text summary. Typed messages remain text-only. Verify the
+pinned directive parser, actual phone order/count, TTS failure fallback and
+faithfulness of the summary before release.
+
 ASR failure -> a concise text error response, not a synthesized hallucinated answer.
 
 ### 4.3 WhatsApp only
