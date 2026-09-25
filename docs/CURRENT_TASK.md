@@ -1,8 +1,8 @@
-## 2026-09-25：语音回复音频固定日语（源码规则已改，尚未部署）
+## 2026-09-25：Amadeus 1.5.5 语音日语固定规则（正式部署准备中）
 
-按用户新要求，语音回复的音频必须始终为日语，即使用户在语音中明确要求用汉语/普通话回答，也不改变 spoken language；回答内容仍需满足用户意图。语音回复现有的可见中文摘要 + 日文汉字/假名行 + 与日文行完全一致的日语 PTT/TTS 格式保持不变。typed-only 文字消息行为（包括用户明确指定的文字回复语言）完全不变，不新增语音或日文行。
+用户要求语音输出固定日语，即使语音请求明确要求汉语也不改变音频语言；文字消息保持原样。随后用户明确要求“正式发布”，因此按用户指令不等待独立候选实机验收，直接准备 1.5.5 正式 release。唯一版本入口已将 `VERSION` 从 1.5.4 patch bump 到 1.5.5，`RELEASE_NOTES.md` 只包含本次规则变化。
 
-已更新唯一 owner `plugins/amadeus/skills/voice-reply/SKILL.md`，并在 plugin manifest 测试和 pinned OpenClaw bilingual voice fixture 中增加硬规则与 typed-only 不变的断言。该任务只修改规则源和测试；没有 bump `VERSION`、构建镜像、修改 live runtime 或部署。正式版本仍是 1.5.4；要让运行中的 Kurisu 使用新规则，后续须按 `--apply` 发布流程构建、备份并切换。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-japanese-audio-policy-source.md` 与待办 `.agent/tasks/2026-09-25-amadeus-voice-japanese-audio-policy-deploy.md`。
+语音回复仍保留一条中文摘要、与 PTT 完全一致的日文汉字/假名行及日语语音；typed-only 行为（含明确语言请求）不变。正式部署前须跑 release tests/typecheck/architecture/version/secrets gates，commit/push，再 dry-run 并使用 `./scripts/deploy-openclaw.sh --apply --build-auto` 单实例部署、写外部回滚点并验健康。当前 CasaOS 仍运行 Amadeus 1.5.4；在 apply 完成前不宣称 1.5.5 live。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-formal-release.md`。
 
 ## 2026-09-26：Amadeus 1.5.4 正式发布已部署
 

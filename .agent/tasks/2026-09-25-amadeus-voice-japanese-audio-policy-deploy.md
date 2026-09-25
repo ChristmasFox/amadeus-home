@@ -1,9 +1,9 @@
-# Deploy fixed Japanese voice-audio language policy
+# Formal release: fixed Japanese voice-audio language policy
 
-- Status: source rule and tests updated; candidate deployment/real acceptance pending.
-- Request: voice-response audio must stay Japanese even if the user asks for Chinese speech; ordinary text-message behavior remains unchanged.
-- Source: `plugins/amadeus/skills/voice-reply/SKILL.md`; tests in the Amadeus manifest and pinned bilingual TTS fixture.
-- Current live release remains Amadeus 1.5.4. This source-only change has not been built or applied.
-- After explicit apply authorization, first deploy a same-version 1.5.4 candidate using `./scripts/deploy-openclaw.sh --apply --candidate --build-openclaw`, preserving the external rollback checkpoint and verifying health/WhatsApp state.
-- Candidate acceptance: (1) send voice input explicitly requesting Chinese speech; expect Japanese PTT matching the visible Japanese kanji/kana line, plus the existing Chinese summary; (2) verify typed-only messages retain previous text behavior, including explicit language requests, without TTS/Japanese rows.
-- Only after owner accepts the candidate, bump to `1.5.5` with `./scripts/amadeus-version.sh bump patch`, replace release notes, run all release gates, commit/push, and deploy the formal release.
+- Status: 1.5.5 formal release requested by the owner and in progress.
+- User instruction: voice replies always speak Japanese, even if the user asks for Chinese speech; text-message behavior remains unchanged.
+- Source rule and tests are in `plugins/amadeus/skills/voice-reply/SKILL.md`, `plugins/amadeus/tests/manifest.test.ts`, and `scripts/test-openclaw-bilingual-voice.mjs`.
+- Owner explicitly requested formal release directly; per that direction, do not wait for a separate same-version candidate.
+- `VERSION` was advanced from 1.5.4 to 1.5.5 using `./scripts/amadeus-version.sh bump patch`; release notes replaced with this release only.
+- Formal deploy: after release gates and commit/push, dry-run then `./scripts/deploy-openclaw.sh --apply --build-auto`; retain checkpoint/evidence, verify health and notification. Post-deploy handset acceptance is still needed for the Chinese-spoken-request case and typed-only unchanged case.
+- Final evidence goes in `.agent/checkpoints/2026-09-25-amadeus-1.5.5-formal-release.md`.

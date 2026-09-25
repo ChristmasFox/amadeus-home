@@ -1,6 +1,7 @@
-# Amadeus 1.5.4
+# Amadeus 1.5.5
 
-Make bilingual WhatsApp voice replies deterministic through the final delivery path.
+Lock WhatsApp voice-reply audio to Japanese without changing text-message behavior.
 
-- Add a visible Japanese kanji-and-kana line derived from the exact Japanese TTS speech, alongside the Chinese summary for voice replies.
-- Keep typed-only replies Chinese-only, serialize consecutive voice turns through the normal TTS path, and maintain composing status through final delivery.
+- Always speak Japanese in replies triggered by inbound voice notes, even when the user asks for Chinese speech.
+- Preserve the existing Chinese summary and Japanese kanji/kana line synchronized with the PTT.
+- Keep typed-only message behavior, including explicit language requests, unchanged.
