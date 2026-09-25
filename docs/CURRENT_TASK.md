@@ -335,3 +335,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：9Router 原生 STT/TTS 全部 live，OpenClaw 尚未切换
 
 受保护 checkpoint `/DATA/AppData/9router/backups/voice-1.5.3-20260925T040813Z` 保存旧 DB/Compose/env/image 元数据；前后 SQLite integrity 均为 ok。旧 `amadeus-asr` Chat Combo 已退休，Self-hosted STT/TTS 各一条连接，两个逻辑 alias 生效并在重启后验收。Mac 合成短语音直接调用真实 9Router 标准 `/v1/audio/transcriptions` 返回 200/非空转录；`/v1/audio/speech` 返回 200/有效 MP3。OpenClaw 仍为旧 config/image，`VERSION=1.5.2`。发现 pinned OpenClaw 镜像缺 ffmpeg，WhatsApp MP3→Opus 发送将失败；已加入 Dockerfile 依赖，必须构建 immutable OpenClaw image 后再接入。证据见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-router-speech-routes.md`。
+
+## 2026-09-25：单一 OpenClaw 验收候选部署门禁
+
+9Router 两个原生逻辑语音路由已真实 HTTP 200 验收，但 OpenClaw 旧镜像缺 ffmpeg，WhatsApp MP3→Opus 尚不能交付。Dockerfile 已声明 ffmpeg/libopus。原 deploy 脚本要求 VERSION 超过 live，不能在真实 WhatsApp 验收前假装发布 1.5.3；新增显式 `--apply --candidate --build-auto`：仍只切换 canonical **一个** runtime、做原有 backup/build/health，不发 1.5.2 的错误 release 通知，也不执行 release-only maintenance。静态与 dry-run 测试通过，尚未 apply。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-candidate-deploy-gate.md`。
