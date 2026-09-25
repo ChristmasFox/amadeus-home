@@ -384,3 +384,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：ASR 重试 single-flight 与脱敏日志（源码待部署）
 
 为 1.5.3 的 WhatsApp 重投递风险，ASR bridge 已加入同音频/模型的进程内并发合并、五分钟且最多 128 条成功转录文字缓存、最多八条不同请求同时推理；日志仅保留 12 位哈希、体积/时长桶、缓存状态、结果类别和耗时。隔离 fixture 验证两条同时请求只触发一次上游调用，未记录转录文本或密钥。当前 live 9Router 镜像尚未包含本次源码；需 checkpoint/build/apply 后复测真实路由，再用真实 WhatsApp 重试验收 L。证据见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-asr-idempotency.md`。
+
+## 2026-09-25：ASR 去重镜像已部署，WhatsApp 重试仍待实收
+
+带同请求 single-flight、最多八路不同请求、五分钟/128 条成功转录缓存和脱敏结构化日志的 9Router immutable 镜像已通过外部备份 checkpoint 切换。OpenClaw 原生音频 CLI 用新的合成中文片段再验收为 `ok=true`/非空转录；live bridge 只记录哈希、体积/时长桶、`cache=miss`、结果和耗时，未记录音频或转录内容。真实 WhatsApp 重投递 L、文字 fallback 和 PTT 交付仍无证据；不能将单机 fixture 当作真实用户验收。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-asr-idempotency-live.md`。

@@ -898,3 +898,5 @@ The single live OpenClaw candidate now reaches QwenAI ASR through its native aud
 A live Gateway one-shot TTS >1,200-character request fails boundedly, and the live OpenClaw image converts Gateway MP3 into valid Ogg/Opus with libopus. These are local pre-send checks; user-visible long-reply text fallback and actual WhatsApp voice-note delivery remain unproven.
 
 The ASR bridge source now has bounded in-flight singleflight deduplication and privacy-scoped structured logs, with fixtures covering concurrent duplicate calls and no transcript/key leakage. This is not yet deployed; the live path remains healthy on the prior immutable image. Real WhatsApp duplicate delivery and across-restart behavior remain unverified.
+
+The bounded ASR singleflight/privacy-logging image is now the sole live 9Router. A new synthetic native OpenClaw transcription succeeded through it and emitted only sanitized metadata; API-key protection remained 401 from published ingress. This does not establish real WhatsApp retry behavior, text fallback, PTT delivery or subjective voice quality. VERSION is still 1.5.2 pending A–L acceptance.
