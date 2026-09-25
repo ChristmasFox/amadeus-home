@@ -21,11 +21,10 @@ audio = [x for x in media["models"] if "audio" in x.get("capabilities", [])]
 assert len(audio) == 1 and audio[0]["provider"] == "openai"
 assert audio[0]["model"] == "amadeus-asr" and audio[0]["baseUrl"] == provider["baseUrl"]
 assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
-# The automatic final-response TTS path is not the Agent-facing `tts` tool.
-# With the latter available, a voice input yielded two explicit tool calls
-# plus a third automatic PTT on the pinned 2026.9.4 runtime.
+# Native final-response TTS is separate from Agent-facing `tts` and
+# `message` tools. Both have produced redundant audio sends on 2026.9.4.
 assert c["tools"]["profile"] == "full"
-assert c["tools"].get("deny") == ["tts"]
+assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch"]
 speech = c["tts"]
 assert speech["auto"] == "inbound" and speech["mode"] == "final"
@@ -47,10 +46,10 @@ if cli.is_file():
         "node", "--input-type=module", "-e",
         "import { pathToFileURL } from 'node:url'; "
         "const m = await import(pathToFileURL(process.argv[1])); const filter = m.r ?? m.filterToolsByPolicy; "
-        "const tools = [{name:'tts'}, {name:'web_search'}, {name:'amadeus_nas'}]; "
-        "const afterGlobal = filter(tools, {deny:['tts']}); "
+        "const tools = [{name:'tts'}, {name:'message'}, {name:'web_search'}, {name:'amadeus_nas'}]; "
+        "const afterGlobal = filter(tools, {deny:['tts','message']}); "
         "const afterOwner = filter(afterGlobal, {allow:['*']}); "
-        "if (afterOwner.some(t=>t.name==='tts') || afterOwner.length!==2) process.exit(1);",
+        "if (afterOwner.some(t=>['tts','message'].includes(t.name)) || afterOwner.length!==2) process.exit(1);",
         str(policy_module),
     ], cwd=ROOT, capture_output=True, text=True)
     assert policy_check.returncode == 0, policy_check.stderr
