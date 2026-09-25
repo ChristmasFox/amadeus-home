@@ -1,6 +1,6 @@
 # Japanese voice-audio policy — hotfix follow-up
 
-- Status: 1.5.5 formal deployment is live, but owner reports Japanese-audio policy was not honored; hotfix source prepared, candidate deployment and reacceptance pending.
+- Status: 1.5.5 formal deployment plus same-version prompt-injection hotfix candidate are live; owner retest pending.
 - Sanitized trace showed the latest voice final as Chinese-only, with no `日本語：` label or `[[tts:text]]`; message text itself was not recorded.
 - Root cause: pinned OpenClaw 2026.9.4 `message_received` mapping omits `runId`, while the voice Skill tracker previously required it. The Skill was not injected for that voice run.
 - Hotfix binds an audio marker by `sessionKey` when runId is missing, promotes it to the actual run at `before_prompt_build`, and clears it on `agent_end`; TTL/size bounds and typed-only scope are preserved.
