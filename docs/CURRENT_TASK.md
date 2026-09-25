@@ -325,3 +325,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：9Router 语音镜像首次 apply 自动回退，探针已修正
 
 用户明确同意现有 `qianwenaiapi.com` 作为正式 ASR 上游。首次 9Router apply 已创建受保护 SQLite/Compose/env/secret checkpoint 和旧镜像外部归档、构建新 immutable 镜像；由于验收脚本错误地要求容器内 loopback `/v1/models` 返回 401，健康探针失败并自动恢复旧 Compose/image。真实 Mac 入口仍是 401，旧 9Router/OpenClaw 健康。隔离复制的 live DB 验证新镜像 Router/bridge health 均为 200；源码已改为从 Mac 发布入口验证 API-key 401。待提交后重试 apply，不宣称首次尝试发布成功。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-router-probe-rollback.md`。
+
+## 2026-09-25：9Router speech 镜像 live，模型 alias 尚未配置
+
+用户已同意现有 QwenAI 上游。第二次显式 9Router apply 在受保护 checkpoint 后成功；canonical Compose 运行 `local/9router:git-d882528fd59a-20260925T032728Z`。Mac 发布入口 health 200、未授权 models 401，容器内 ASR bridge 与到 M204 TTS 的 health 均 200。短合成音频对**live bridge** 的真实 QwenAI 请求返回 200/非空转录，约 8 秒；私人音频和密钥未外传或记录。仍缺 9Router 原生 STT/TTS 连接/alias。已查明 upstream 受保护 CLI 管理 token，可不重置 dashboard 密码，由源码脚本使用。证据见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-router-live-and-cli-auth.md`。

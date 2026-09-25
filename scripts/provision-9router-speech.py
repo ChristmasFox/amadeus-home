@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Explicit, idempotent 9Router STT/TTS connection and alias provisioning.
 
-Requires a protected dashboard password file and provider key files outside Git.
-Never prints API payloads, cookies, credentials or provider responses.
+Uses the upstream's protected local CLI token by default; an operator password
+file is optional. Provider keys remain outside Git. Never prints credentials.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import subprocess
 import time
 import http.cookiejar
 import json
+import re
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -35,17 +36,36 @@ def protected(path: str) -> str:
     return data
 
 
+def local_cli_token(machine: str) -> str:
+    # Upstream 0.5.81's getConsistentMachineId("9r-cli-auth") uses the persisted
+    # machine-id plus random cli-secret. Derive inside the container; only the
+    # short token crosses to this local API client and is never printed.
+    code = """const fs=require('node:fs'),crypto=require('node:crypto');
+const raw=fs.readFileSync('/app/data/machine-id','utf8').trim();
+const secret=fs.readFileSync('/app/data/auth/cli-secret','utf8').trim();
+process.stdout.write(crypto.createHash('sha256').update(raw+'9r-cli-auth'+secret).digest('hex').slice(0,16));"""
+    result = subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "exec", "9router", "node", "-e", code],
+                            capture_output=True, timeout=12, check=True)
+    token = result.stdout.decode().strip()
+    if not re.fullmatch(r"[a-f0-9]{16}", token):
+        raise RuntimeError("local_cli_token_unavailable")
+    return token
+
+
 class Dashboard:
-    def __init__(self, base: str):
+    def __init__(self, base: str, cli_token: str | None = None):
         if base != "http://127.0.0.1:20128":
             raise ValueError("dashboard_must_be_loopback")
         self.base = base
+        self.cli_token = cli_token
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
     def request(self, method: str, path: str, body: dict | None = None) -> dict:
         data = json.dumps(body).encode() if body is not None else None
-        req = urllib.request.Request(self.base + path, data=data,
-                                     headers={"Content-Type": "application/json"} if data is not None else {}, method=method)
+        headers = {"Content-Type": "application/json"} if data is not None else {}
+        if self.cli_token:
+            headers["x-9r-cli-token"] = self.cli_token
+        req = urllib.request.Request(self.base + path, data=data, headers=headers, method=method)
         try:
             with self.opener.open(req, timeout=15) as res:
                 return json.load(res)
@@ -164,18 +184,21 @@ def main() -> None:
     parser.add_argument("--machine", default="nyannyan", help="M204 OrbStack guest")
     args = parser.parse_args()
     if not args.apply:
-        print("MODE=dry-run; no dashboard login, provider or alias write")
+        print("MODE=dry-run; no local CLI auth, provider or alias write")
         print("ASR=selfhosted-stt via local bounded DashScope multimodal protocol adapter; old Chat Combo retired after guest checkpoint")
         print("TTS=selfhosted-tts via M204 native port 18792")
         return
-    if not all((args.dashboard_password_file, args.asr_key_file, args.tts_key_file)):
-        parser.error("--apply requires dashboard password and ASR bridge/TTS key files")
+    if not all((args.asr_key_file, args.tts_key_file)):
+        parser.error("--apply requires protected ASR bridge/TTS key files")
     if "/" in args.asr_model or not args.asr_model.strip():
         parser.error("ASR model id must be a single segment")
     if not runtime_speech_ready(args.machine):
         raise RuntimeError("speech_runtime_not_ready; no dashboard write")
-    api = Dashboard("http://127.0.0.1:20128")
-    api.login(protected(args.dashboard_password_file))
+    api = Dashboard("http://127.0.0.1:20128",
+                    cli_token=None if args.dashboard_password_file else local_cli_token(args.machine))
+    if args.dashboard_password_file:
+        api.login(protected(args.dashboard_password_file))
+    api.request("GET", "/api/providers")  # fail closed on auth before backup/write
     checkpoint = backup_live(args.machine)
     print("ROLLBACK_CHECKPOINT=" + checkpoint)
     asr = ensure_connection(api, ASR_PROVIDER, ASR_CONNECTION, protected(args.asr_key_file), ASR_URL)

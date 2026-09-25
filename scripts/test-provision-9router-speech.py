@@ -3,8 +3,9 @@
 import importlib.util
 from pathlib import Path
 import tempfile
+import io
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from subprocess import CompletedProcess
 
 spec = importlib.util.spec_from_file_location("speech_routes", Path(__file__).with_name("provision-9router-speech.py"))
@@ -66,6 +67,22 @@ class ProvisionTest(unittest.TestCase):
         with patch.object(routes.subprocess, "run", side_effect=[CompletedProcess([], 0)] + [CompletedProcess([], 1)] * 45), patch.object(routes.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "post_alias_restart"):
                 routes.restart_and_verify("nyannyan")
+
+    def test_local_cli_auth_is_protected_and_not_logged(self):
+        with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0, stdout=b"0123456789abcdef")) as run:
+            token = routes.local_cli_token("nyannyan")
+            self.assertEqual(token, "0123456789abcdef")
+            self.assertIn("docker", run.call_args.args[0])
+        with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0, stdout=b"invalid")):
+            with self.assertRaisesRegex(RuntimeError, "local_cli_token_unavailable"):
+                routes.local_cli_token("nyannyan")
+        api = routes.Dashboard("http://127.0.0.1:20128", cli_token=token)
+        response = MagicMock()
+        response.__enter__.return_value = io.BytesIO(b'{"connections":[]}')
+        with patch.object(api.opener, "open", return_value=response) as opened:
+            self.assertEqual(api.request("GET", "/api/providers"), {"connections": []})
+            request = opened.call_args.args[0]
+            self.assertEqual(request.get_header("X-9r-cli-token"), token)
 
     def test_secret_file_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:
