@@ -388,3 +388,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：ASR 去重镜像已部署，WhatsApp 重试仍待实收
 
 带同请求 single-flight、最多八路不同请求、五分钟/128 条成功转录缓存和脱敏结构化日志的 9Router immutable 镜像已通过外部备份 checkpoint 切换。OpenClaw 原生音频 CLI 用新的合成中文片段再验收为 `ok=true`/非空转录；live bridge 只记录哈希、体积/时长桶、`cache=miss`、结果和耗时，未记录音频或转录内容。真实 WhatsApp 重投递 L、文字 fallback 和 PTT 交付仍无证据；不能将单机 fixture 当作真实用户验收。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-asr-idempotency-live.md`。
+
+## 2026-09-25：首次真实 WhatsApp 语音入站成功，PTT 出站失败
+
+用户按要求发送真实私聊语音。OpenClaw 收到 direct audio，9Router ASR 成功，Agent 继续，TTS 本机合成成功；但 WhatsApp 发媒体时 ffmpeg 多次 exit 127，最终日志是 warning/仅文字，**B 案例未通过**。根因是 OpenClaw 为 Longbridge 私有 glibc 导出的 `LD_LIBRARY_PATH` 被 ffmpeg 子进程继承，造成 `GLIBC_PRIVATE` 符号错误。隔离命令验证私有 loader 的 `--library-path` 只作用于 Node 时 Longbridge 与 ffmpeg 均可运行；Dockerfile 已修正并有旧镜像预期失败的 fixture。两次 TTS 调用/实际手机收到几条消息尚需查明。尚未构建/部署修复镜像，不 bump 1.5.3。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-whatsapp-first-real-failure.md`。
