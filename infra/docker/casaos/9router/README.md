@@ -8,7 +8,7 @@
 - Guest `/DATA/AppData/9router/secrets/asr-upstream-api-key`: operator-provided upstream key or a protected copy from the existing Qwen provider, uid 1000, mode 0600.
 - Guest `/DATA/AppData/9router/9router.env`: `AMADEUS_ASR_UPSTREAM_URL` with the exact allowlisted multimodal-generation path, matching the key issuer. Official Model Studio uses `<workspace>.<region>.maas.aliyuncs.com`; the existing operator-configured Qwen platform uses `maas.qianwenaiapi.com`. The latter is a distinct authority, not silently equivalent to the original Goal. Preserve the existing API-key, proxy and other settings; no value or workspace identifier belongs in Git.
 - M204 `~/Library/Application Support/Amadeus/speech/tts.token`: existing local TTS token for the Self-hosted TTS connection.
-- A protected dashboard-password file on M204 for one-time `scripts/provision-9router-speech.py --apply`; no password goes on a command line or into Git.
+- `scripts/provision-9router-speech.py --apply` uses the upstream's protected local CLI token derived within the live container by default; an optional protected dashboard-password file is supported. No password/token is logged or committed.
 
 ## Gates and rollback
 
