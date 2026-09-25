@@ -396,3 +396,5 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：私有 glibc loader 候选被 SQLite worker 门禁拒绝，修复转向 ffmpeg 子进程
 
 为修复首条真实语音的 WhatsApp PTT ffmpeg exit 127，先前“仅给 Node 显式 loader path”的 immutable 镜像虽通过 Longbridge/ffmpeg 小范围 fixture，但正式 candidate apply 在 Compose 更新前的 SQLite read-only worker 预检失败：`process.execPath` 变成 loader，JS worker 被当作 ELF。旧 OpenClaw 保持 healthy，checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925052705` 已保留。进一步确认 `/bin/sh`/`env`/`bash` 也会在继承 LD_LIBRARY_PATH 时于启动前失败，不能靠 shell wrapper。源码已恢复原 Node 启动器，并在 immutable 镜像中仅对 ffmpeg/ffprobe 使用 Node 子进程清理 LD_LIBRARY_PATH 的包装器；新的 fixture 同时检查 Longbridge、Node worker 自启动和真实 Opus 转码，尚待构建/部署/用户重发。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-loader-worker-boundary.md`。
+
+Node worker-compatible ffmpeg/ffprobe 包装器镜像现已从 `c64e29a` 构建：Docker build 的 child smoke 通过；修正 fixture 脚本自身的引号问题后，隔离镜像同时通过 Node worker 自启动、Longbridge native binding、真实 MP3→Ogg/Opus 和 ffprobe 子进程四项。**尚未替换 live OpenClaw**，必须先提交测试源码，再使用显式 candidate apply/新 checkpoint，之后要求用户重发真实语音验收 PTT。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-ffmpeg-wrapper-fixture.md`。
