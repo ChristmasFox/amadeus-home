@@ -1,9 +1,13 @@
-## 2026-09-26：Amadeus 1.5.4 voice contract 已验收，正式部署准备中
+## 2026-09-26：Amadeus 1.5.4 正式发布已部署
 
-用户确认修复后的语音回复“没问题了”，并明确要求提交、push、正式部署。语音 contract 的 owner acceptance 已通过：语音回复显示中文摘要、与日文 PTT 一致的日文汉字/假名行；typed-only 保持中文路径，连续语音 FIFO 保持已部署修复。正式发布版本按规则由 `./scripts/amadeus-version.sh bump patch` 从 1.5.3 递增为 1.5.4；`RELEASE_NOTES.md` 已替换为本次唯一发布说明。
+Owner 已确认日文可见文字修复“没问题了”。按唯一版本入口将 `VERSION` 从 1.5.3 patch bump 至 1.5.4；release notes 已只保留本次说明。release commit `ac179bb` 已 push，并以 `./scripts/deploy-openclaw.sh --apply --build-auto` 完成 CasaOS 正式部署。
 
-正式部署前仍需跑完整测试、typecheck、architecture、version 与 secrets gate，提交并 push release source，再用 `./scripts/deploy-openclaw.sh --apply --build-auto` 按 live commit 差异只重建必要镜像并切换唯一 CasaOS runtime。当前运行的 1.5.3 candidate 仍为 `local/openclaw-amadeus:git-b655dba924f9-20260925155559`；尚未宣称 1.5.4 正式部署。部署成功后补记不可变 image、外部恢复点、健康与发布通知证据。
-## 2026-09-25：语音回复已加日文假名/汉字可见行（同版本候选已部署，待实机确认）
+正式 OpenClaw image：`local/openclaw-amadeus:git-ac179bbd28b9-20260925161434`；Product Radar 镜像复用。外部 rollback checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925161434`；部署 evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925161434`。OpenClaw 与 Product Radar health、NAS SSH smoke 均通过；OpenClaw restart=0，WhatsApp linked/connected/healthy；WhatsApp lifecycle、ingress FIFO、Japanese visible-text markers 各一次且 monitor `node --check` 通过。唯一 OpenClaw runtime 保持在线。正式 owner release notice 已送达，outbox smoke 通过。
+
+发布后另有两项非阻断 warning：日志策略和 storage maintenance 都被 verified external storage preflight 阻止，evidence 分别记录 `LOG_POLICY=blocked; verified external storage is unavailable` 与 `REASON=verified external storage gate failed`。因此本次未应用 Docker 日志策略，也未执行 post-deploy storage cleanup；详细追查列为 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。可选 media organizer adapter 当前缺席，其网络 smoke 按脚本跳过；不影响本次 WhatsApp voice release，但媒体工具 acceptance 仍独立 pending。
+
+版本 1.5.4 正式部署已完成，语音回复 contract 已 owner 接受。详见 `.agent/checkpoints/2026-09-26-amadeus-1.5.4-formal-release.md`。
+## 2026-09-25：语音回复已加日文假名/汉字可见行（1.5.3 候选历史记录，已由 1.5.4 正式发布 supersede）
 
 针对用户要求，voice Skill 现输出中文 summary、自然日文汉字+假名可见行、以及匹配该日文行的音频指令；
 PTT 发音和 `日本語：` 行必须一致，难读汉字必要时给括号假名。typed-only 保持原来的简体中文文本路径。
@@ -18,10 +22,8 @@ inbound/TTS 路径，不走会丢失 auto-TTS 的核心 followup routeReply。
 WhatsApp linked/connected，ingress-FIFO marker 1 次，镜像 Skill 包含新 `日本語：` 书写规则。匹配 tests、
 typecheck、architecture、secrets gates 均通过。
 
-`VERSION` 仍为 1.5.3，当前为同版本 pre-acceptance candidate，尚未 bump 1.5.4。需要用户重测一条 voice DM
-和两条连续群 voice：每条应有一个日文 PTT + 一条中文 summary，并额外看到与 PTT 内容一致的日文汉字/假名行；
-顺序 FIFO，输入状态覆盖每轮 PTT 与文字发送。确认前不发新正式 release。详见
-`.agent/checkpoints/2026-09-25-amadeus-voice-japanese-written-text-candidate.md`。
+该时点 `VERSION=1.5.3`，为同版本 pre-acceptance candidate；之后用户实测反馈缺少可见日文行，已按上方记录修复、接受并正式发布 1.5.4。候选原计划重测一条 voice DM 和两条连续群 voice：每条应有一个日文 PTT + 一条中文 summary，并额外看到与 PTT 内容一致的日文汉字/假名行；
+顺序 FIFO，输入状态覆盖每轮 PTT 与文字发送。该历史验收记录已被 `.agent/checkpoints/2026-09-26-amadeus-1.5.4-formal-release.md` supersede。
 
 ## 2026-09-25：9Router 应用层重复代理已关闭
 
