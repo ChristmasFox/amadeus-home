@@ -29,6 +29,8 @@
         "primary": "nine_router/arthur-combo"
       },
       "userTimezone": "Asia/Shanghai",
+      "typingMode": "instant",
+      "typingIntervalSeconds": 3,
       "timeoutSeconds": 300
     }
   },
