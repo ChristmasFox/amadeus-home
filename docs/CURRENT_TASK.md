@@ -457,3 +457,11 @@ tool、只发一条原生自动 PTT；之前三条实收是修复前有效证据
 明确要求中文时中文。定向配置/工作区/架构测试通过，**尚未部署**。旧 workspace
 SOUL 与原 Git seed hash 相同，需在带备份的候选 apply 后经已有 per-file
 `openclaw-workspace-sync.py --apply --approve-file SOUL.md` 显式同步并重启。
+
+14:18 已以 `--apply --candidate --no-build --machine nyannyan` 更新唯一 OpenClaw，
+外部恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925061743`。
+旧 live SOUL SHA 与前版 Git seed 完全一致，按已有 per-file 工具显式同步
+`SOUL.md` 后再次重启 Gateway；live SHA 与新 seed 一致。当前 live
+`tools.deny=['tts','message']`、`tts.auto=inbound`，Gateway healthy、WhatsApp
+linked/connected、9Router 未授权 models 401。14:18:21 重启后尚无新语音入站；
+默认日语与单条 PTT 仍**必须真实复验**，本次只宣称配置/健康通过。
