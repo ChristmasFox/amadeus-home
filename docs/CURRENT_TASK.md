@@ -605,3 +605,24 @@ OpenClaw；外部 checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20
 将旧日语默认改回普通文字简体中文，保留其余 10 行；Gateway 重启后 healthy，
 WhatsApp linked/connected。live SOUL 对应新 seed，USER 仅一个简体中文偏好。
 尚无此版本重启后的真实 inbound；日文 PTT+中文摘要确收、文字输入中文默认均未验收。
+
+## 2026-09-25：链路时延剖析（15:51:48 WhatsApp 群语音）
+
+用户请求追踪刚发消息。最近可匹配的一条是 **15:51:48.274 WhatsApp group audio/ogg**
+（非私聊）。去敏日志/当前 run metadata 显示：ASR 0.405s；OpenClaw agent 两次模型调用
+分别 15.522s 和 10.685s，共 26.207s；第一轮调用 `read` 获取 voice Skill，返回仅用约 27ms，
+但为此多走一次慢 LLM 回合；最终产生一个中文可见摘要和一个隐藏的日文
+`[[tts:text]]` block（只存了脚本计数，不存内容）。Qwen3-TTS 服务端生成/MP3 耗时
+34.121s（15:52:16.677→15:52:49.930），之后 WhatsApp 记录一条 group media send
+15:52:51.840（约 1.91s 投递尾段）。入站到 PTT 总计约 63.566s。该轮 9Router 模型输入
+字段记录 `IN≈475,996`（缓存字段约 20,249；不对字段单位作臆测），且 group session
+跨 7 天累计 2,878 条 transcript events、当前 context snapshot 64 条 message。
+
+最显著时间花在 TTS (~34s, 54%) 和 Agent (~26s, 41%)；ASR/出站各不到 1s/~2s。
+Qwen host TTS 的此前三次观测约 58.5s、48.1s、34.1s，样本少、不能作为稳定 p50。
+建议：A) prompt hook 明确说明 Skill 正文已注入、禁止为读取它额外调用 `read`，省掉约
+15.5s 一轮；B) 缩短日文朗读文本/避免复述上下文；C) 对已含 2,878 events 的 group session
+按受控 checkpoint 评估 OpenClaw compaction，先查输入规模/缓存，保留会话连续性；D) 调查
+MPS TTS 延迟和冷/暖生成基线。日志仅有该 group 的一条媒体发送记录，**没有找到对应
+独立中文文字 `Sent message` 记录**；所以不能声称中文摘要已单独送达。15:52:25 的私聊
+文字及15:52:28发送是另一个 session，不应混入此链路。
