@@ -430,3 +430,11 @@ OpenClaw 经正常 Agent 模型调用，9Router 13:55:22、13:55:52、13:56:16
 WhatsApp 外部包的 audio 发送分支设置 `ptt: true`。这证明 Gateway/transport 已接受
 三条语音发送，**不等于用户手机实收或主观音质确认**；需用户报告收到几条语音/文字、
 能否播放和音质，再查为何一次入站产生三段回复。单次首次 PTT 日志延迟约 62 秒。
+
+用户确认 13:55 的**三条 PTT 均在手机实收且可播放**。这使真实 WhatsApp 中文语音的
+ASR→Agent→TTS→PTT 链路与播放验收成立；但一次语音产生三条回复并非期望的单条
+自动回复。只读检查同一个 OpenClaw session 的结构化 transcript：一条 user 入站、
+两条 Agent 内建 `tts` toolCall（各自音频自动发送），再加一条 final text 触发
+`tts.auto=inbound`，恰好解释三条媒体；不是 WhatsApp 重投递或 ASR 三次收费。
+当前源码候选在全局 tool policy `deny:["tts"]`，保留 `tools.profile=full`、owner
+其他原生工具和 OpenClaw 边界原生自动 TTS；尚未 candidate apply/重发验收。
