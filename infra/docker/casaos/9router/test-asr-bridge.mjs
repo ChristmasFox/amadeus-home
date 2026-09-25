@@ -10,6 +10,11 @@ let calls = 0;
 let upstreamStatus = 200;
 let empty = false;
 let timeout = false;
+let holdGate = null;
+let signalEntered = null;
+const logs = [];
+const originalInfo = console.info;
+console.info = (...args) => logs.push(args.join(' '));
 const server = createAsrServer({
   bridgeKey: KEY, upstreamKey: CLOUD, upstreamUrl: URL,
   convert: async (input) => { assert.equal(input.length, original.length); return wav; },
@@ -21,6 +26,7 @@ const server = createAsrServer({
     assert.equal(body.model, 'qwen-audio-3.0-asr-flash');
     assert.match(body.input.messages[0].content[0].input_audio.data, /^data:audio\/wav;base64,/);
     if (timeout) throw new DOMException('fixture timeout', 'TimeoutError');
+    if (holdGate) { signalEntered?.(); await holdGate; }
     return new Response(JSON.stringify(empty ? { output: { output: {} } } : { output: { output: { text: '你好，世界。' } } }), { status: upstreamStatus });
   },
 });
@@ -43,6 +49,25 @@ try {
   assert.deepEqual(result, [200, { text: '你好，世界。' }]);
   assert.equal((await post())[0], 200);
   assert.equal(calls, 1, 'success retry should reuse bounded transcription cache');
+  // Concurrent same media must share one in-flight paid request, not merely a
+  // cache entry populated after both provider calls already started.
+  let release;
+  holdGate = new Promise(resolve => { release = resolve; });
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  const beforeConcurrent = calls;
+  const concurrentAudio = Buffer.alloc(2048, 12);
+  const first = post(undefined, KEY, concurrentAudio);
+  await entered;
+  const second = post(undefined, KEY, concurrentAudio);
+  await new Promise(resolve => setTimeout(resolve, 25));
+  release();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult[0], 200);
+  assert.deepEqual(secondResult, firstResult);
+  assert.equal(calls, beforeConcurrent + 1, 'concurrent retry must not start a second upstream call');
+  assert(logs.some(line => line.includes('cache=coalesced')));
+  holdGate = null;
+  signalEntered = null;
   // A different input avoids the success cache for error-contract cases.
   upstreamStatus = 401;
   result = await post(undefined, KEY, Buffer.alloc(2048, 8));
@@ -69,7 +94,10 @@ try {
     assert.deepEqual([reply.status,await reply.json()],[200,{text:'你好，世界。'}]);
   } finally {qwen.close();}
   assert.throws(() => createAsrServer({bridgeKey:KEY,upstreamKey:CLOUD,upstreamUrl:'https://maas.qianwenaiapi.com.evil.test/api/v1/services/aigc/multimodal-generation/generation'}),/invalid_asr_endpoint/);
+  assert(logs.some(line => /request=[a-f0-9]{12} size=<=1MiB duration=<=15s/.test(line)));
+  assert(!logs.some(line => line.includes('你好，世界。') || line.includes(KEY) || line.includes(CLOUD)), 'logs must not contain transcript or credentials');
   console.log('ASR_BRIDGE_FIXTURE=passed');
 } finally {
+  console.info = originalInfo;
   server.close();
 }
