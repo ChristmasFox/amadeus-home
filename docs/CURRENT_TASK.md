@@ -444,3 +444,16 @@ ASR→Agent→TTS→PTT 链路与播放验收成立；但一次语音产生三�
 预检、健康、WhatsApp linked/connected 均通过；live 配置仍为
 `tts.auto=inbound`、`mode=final`。尚需新的语音实测确认 Agent 不再调用 `tts`
 tool、只发一条原生自动 PTT；之前三条实收是修复前有效证据，不能当作该变更验收。
+
+## 2026-09-25：语言偏好与再次重复语音的修正候选
+
+用户确认三条先前 PTT 都可播放，并要求 Kurisu 默认日语，**仅明确要求中文回复时**
+改用中文。14:11:58 新一条真实 direct Opus 的 ASR 成功；在已禁用 `tts` tool 的
+14:07 候选上仍产生多条语音。只读结构化会话事件显示 Agent 此次改用三次
+内建 `message` 工具、`action=send` 且含 `voiceText`，对应三次 TTS；与群聊
+同期消息属于不同 session。故仅禁用 `tts` 不足，且不是多次 ASR 入站。
+源码候选把全局 Agent tool deny 改为 `['tts','message']`，保留固定 owner outbox
+和原生 final auto-TTS；Persona 唯一来源 `SOUL.seed.md` 改为默认日语，仅用户
+明确要求中文时中文。定向配置/工作区/架构测试通过，**尚未部署**。旧 workspace
+SOUL 与原 Git seed hash 相同，需在带备份的候选 apply 后经已有 per-file
+`openclaw-workspace-sync.py --apply --approve-file SOUL.md` 显式同步并重启。
