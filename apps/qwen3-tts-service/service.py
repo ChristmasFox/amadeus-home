@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import threading
 import time
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Protocol
 
@@ -182,19 +183,27 @@ class SpeechHandler(BaseHTTPRequestHandler):
         if fmt not in ("wav", "mp3", "opus"):
             self._error(400, "unsupported_format")
             return
-        start = time.monotonic()
+        started = time.monotonic()
+        engine_started = time.monotonic()
         try:
             wav, _ = self.server.engine.synthesize(text)
+            engine_ms = int((time.monotonic() - engine_started) * 1000)
             if not wav or len(wav) > MAX_AUDIO:
                 raise RuntimeError("invalid_audio")
+            with wave.open(io.BytesIO(wav), "rb") as reader:
+                audio_duration_ms = int(reader.getnframes() * 1000 / reader.getframerate())
+            encode_started = time.monotonic()
             audio, mime = encode(wav, fmt)
+            encode_ms = int((time.monotonic() - encode_started) * 1000)
             if not audio:
                 raise RuntimeError("invalid_audio")
         except Exception as exc:
             LOG.error("speech_synthesis_failed category=%s", type(exc).__name__)
             self._error(503, "synthesis_failed")
             return
-        LOG.info("speech_synthesis_ok model=%s voice=%s format=%s ms=%d", MODEL_ID, VOICE_ID, fmt, int((time.monotonic()-start)*1000))
+        input_bucket = "<=40" if len(text) <= 40 else "<=80" if len(text) <= 80 else "<=160" if len(text) <= 160 else "<=320" if len(text) <= 320 else ">320"
+        total_ms = int((time.monotonic() - started) * 1000)
+        LOG.info("speech_synthesis_ok model=%s voice=%s format=%s input_chars=%s audio_ms=%d engine_ms=%d encode_ms=%d total_ms=%d", MODEL_ID, VOICE_ID, fmt, input_bucket, audio_duration_ms, engine_ms, encode_ms, total_ms)
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(audio)))

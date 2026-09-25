@@ -648,3 +648,10 @@ OpenClaw 只有一轮模型请求 16:19:17.417–20.889（3.471s），会话 tra
 差不应直接归因于单一改动，但输入规模/组会话上下文很可能也相关。最大剩余瓶颈是
 Qwen3-TTS（本次35.162s）；其中 host 日志把生成+编码合并，需要进一步拆分计时。
 Transport 日志确认 PTT 已送，用户尚未确认**本条 DM**手机是否同时收到中文文字。
+
+为优化最大时段，在原生 Qwen3-TTS HTTP 边界加入隐私安全 timing：将 engine synthesis
+和 MP3/Opus encoding 分开计时，另记总时长、解码音频时长和输入字符桶，不记录文本/音频。
+host health running；单测覆盖字段及敏感输入不入日志；Python 6 项测试 5 过 1 个编码器依赖
+不可用而跳过，secrets scan 通过。**源码待 commit，live LaunchAgent 尚未更新**；下步需
+外部备份当前 service.py/plist 和进程状态，再显式 `manage-qwen3-tts.sh --apply`，重启并
+跑一组固定短日文 warm/cold 统计，之后再决定 TTS 生成参数是否值得调整。
