@@ -37,13 +37,21 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
 });
 
 test('Amadeus registers typed inbound identity context hooks', () => {
-  const hooks = new Map<string, (...args: unknown[]) => unknown>();
+  const hooks = new Map<string, Array<(...args: unknown[]) => unknown>>();
   const registered: string[] = [];
+  const runHooks = (name: string, ...args: unknown[]): unknown => {
+    let result: unknown;
+    for (const handler of hooks.get(name) ?? []) {
+      const next = handler(...args);
+      if (next !== undefined) result = next;
+    }
+    return result;
+  };
   const api = {
     pluginConfig: {},
     rootDir: fileURLToPath(new URL('..', import.meta.url)),
     logger: { info() {}, warn() {} },
-    on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, handler); },
+    on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
     registerService() {},
     registerTool(_factory: unknown, options: { name: string }) { registered.push(options.name); },
   } as unknown as OpenClawPluginApi;
@@ -57,13 +65,16 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
 
-  hooks.get('message_received')?.(
-    { runId: 'voice-run', media: [{ contentType: 'audio/ogg; codecs=opus' }] },
-    { channelId: 'whatsapp', runId: 'voice-run' },
+  // The pinned OpenClaw 2026.9.4 message_received mapper omits runId from
+  // the event/context. SessionKey is the verified bridge until the harness
+  // supplies the concrete runId to before_prompt_build.
+  runHooks('message_received',
+    { sessionKey: 'voice-session', media: [{ contentType: 'audio/ogg; codecs=opus' }] },
+    { channelId: 'whatsapp', sessionKey: 'voice-session' },
   );
-  const voicePrompt = hooks.get('before_prompt_build')?.(
+  const voicePrompt = runHooks('before_prompt_build',
     { prompt: 'transcribed voice text', messages: [] },
-    { channel: 'whatsapp', runId: 'voice-run' },
+    { channel: 'whatsapp', runId: 'voice-run', sessionKey: 'voice-session' },
   ) as { appendSystemContext?: string } | undefined;
   assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /spoken audio MUST be\s+Japanese/u);
@@ -73,13 +84,14 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the same Japanese sentence as the 日本語 line/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /do not call the read tool to retrieve that Skill again/u);
-  const typedPrompt = hooks.get('before_prompt_build')?.(
+  runHooks('agent_end', {}, { runId: 'voice-run', sessionKey: 'voice-session' });
+  const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
-    { channel: 'whatsapp', runId: 'typed-run' },
+    { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'voice-session' },
   );
-  assert.equal(typedPrompt, undefined);
+  assert.equal(typedPrompt, undefined, 'session fallback is cleared before any later typed-only turn');
 
-  hooks.get('before_dispatch')?.(
+  runHooks('before_dispatch',
     { sessionKey: 'agent:main:hook-test', channel: 'whatsapp', replyToSender: 'reply-1' },
     { sessionKey: 'agent:main:hook-test', channelId: 'whatsapp', accountId: 'secondary', conversationId: 'group-1@g.us', replyToSender: 'reply-1' },
   );
@@ -90,7 +102,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     nativeChannelId: 'group-1@g.us',
   } as OpenClawPluginToolContext;
   assert.equal(identityContextFromOpenClaw(context).replySender?.platformUserId, 'reply-1');
-  hooks.get('agent_end')?.({}, { sessionKey: 'agent:main:hook-test' });
+  runHooks('agent_end', {}, { sessionKey: 'agent:main:hook-test' });
   assert.equal(identityContextFromOpenClaw(context).replySender, undefined);
 });
 

@@ -139,7 +139,7 @@ export function checkArchitecture(root = REPO_ROOT) {
     }
   }
   const voicePrompt = text(root, 'plugins/amadeus/src/voice-reply-prompt.ts');
-  for (const token of ["channel !== 'whatsapp'", "startsWith('audio/')", 'tracker.record(context.channelId', 'event.runId', 'context.runId', 'VOICE_RUN_TTL_MS', 'VOICE_RUN_MAX', 'skills/voice-reply/SKILL.md']) {
+  for (const token of ["channel !== 'whatsapp'", "startsWith('audio/')", 'tracker.record(', 'event.runId ?? context.runId', 'event.sessionKey ?? context.sessionKey', 'tracker.shouldInject(', 'context.channel ?? context.channelId', 'tracker.clear(context.runId, context.sessionKey)', 'VOICE_RUN_TTL_MS', 'VOICE_RUN_MAX', 'skills/voice-reply/SKILL.md']) {
     if (!voicePrompt.includes(token)) errors.push(`voice prompt enrichment is missing bounded audio guard: ${token}`);
   }
   if (voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not copy inbound user content');

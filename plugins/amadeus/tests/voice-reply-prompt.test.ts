@@ -27,3 +27,13 @@ test('voice-reply run tracking has bounded retention', () => {
   assert.equal(tracker.shouldInject('whatsapp', 'run-0', 201), false);
   assert.equal(tracker.shouldInject('whatsapp', `run-${VOICE_RUN_MAX + 11}`, 201), true);
 });
+
+
+test('voice-reply marker binds by session when pinned message_received mapping omits runId', () => {
+  const tracker = new VoiceReplyTurnTracker();
+  assert.equal(tracker.record('whatsapp', undefined, [{ contentType: 'audio/ogg' }], 100, 'voice-session'), true);
+  assert.equal(tracker.shouldInject('whatsapp', 'voice-agent-run', 101, 'voice-session'), true);
+  assert.equal(tracker.shouldInject('whatsapp', 'different-typed-run', 102, 'voice-session'), false);
+  tracker.clear('voice-agent-run', 'voice-session');
+  assert.equal(tracker.shouldInject('whatsapp', 'later-typed-run', 103, 'voice-session'), false);
+});

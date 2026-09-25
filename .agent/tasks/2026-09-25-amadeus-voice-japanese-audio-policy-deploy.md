@@ -1,9 +1,8 @@
-# Fixed Japanese voice-audio language policy — deployed
+# Japanese voice-audio policy — hotfix follow-up
 
-- Status: Amadeus 1.5.5 formal release deployed; post-release handset acceptance pending.
-- Owner requested voice-response audio always stay Japanese even when asking for Chinese speech; ordinary text-message behavior remains unchanged.
-- `VERSION=1.5.5`, release commit `07918b6`, pushed to `work/amadeus-1.5.3-voice-io`.
-- Image `local/openclaw-amadeus:git-07918b6aea33-20260925164645`; rollback checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925164645`.
-- Health passed, WhatsApp linked/connected, restart count 0, owner formal release notice sent.
-- Owner retest still needed: (1) voice input explicitly asks for Chinese speech; PTT should remain Japanese and match the visible Japanese line, while keeping the Chinese summary; (2) typed-only language behavior unchanged.
-- Non-blocking external-storage log-policy and maintenance warnings are separately tracked at `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`.
+- Status: 1.5.5 formal deployment is live, but owner reports Japanese-audio policy was not honored; hotfix source prepared, candidate deployment and reacceptance pending.
+- Sanitized trace showed the latest voice final as Chinese-only, with no `日本語：` label or `[[tts:text]]`; message text itself was not recorded.
+- Root cause: pinned OpenClaw 2026.9.4 `message_received` mapping omits `runId`, while the voice Skill tracker previously required it. The Skill was not injected for that voice run.
+- Hotfix binds an audio marker by `sessionKey` when runId is missing, promotes it to the actual run at `before_prompt_build`, and clears it on `agent_end`; TTL/size bounds and typed-only scope are preserved.
+- Hotfix source: `plugins/amadeus/src/voice-reply-prompt.ts`; manifest/tracker regressions added.
+- Keep `VERSION=1.5.5` for same-version candidate. After owner acceptance of Japanese PTT despite Chinese request and unchanged typed text behavior, bump patch to `1.5.6` and formally release.
