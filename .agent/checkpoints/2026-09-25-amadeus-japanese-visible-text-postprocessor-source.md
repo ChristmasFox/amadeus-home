@@ -21,9 +21,18 @@
 - Applied all three lifecycle transforms to the official npm package `@openclaw/whatsapp@2026.9.4` `monitor` source in a temporary directory; patch anchors, idempotency, and Node syntax check passed.
 - `pnpm test`, `pnpm typecheck`, `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check` passed.
 
-## Runtime and next action
+## Candidate deployment
 
-- No CasaOS/runtime mutation was performed for this source fix. Existing candidate remains `local/openclaw-amadeus:git-fb1d4578bafe-20260925152845`; prior rollback checkpoint remains `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925152845`.
-- `VERSION` remains `1.5.3`. Do not bump to `1.5.4` until owner accepts the delivered visible Japanese line and consecutive voice FIFO.
-- The source change is ready to publish; the CasaOS deployment has not been performed. When explicitly authorized, deploy it as a same-version candidate with the existing backup/checkpoint flow.
-- Owner acceptance: one voice DM, two consecutive voice notes in one group (each must have Japanese PTT + matching Japanese kanji/kana line + Chinese summary in FIFO order), and one typed-only Chinese input (Chinese text only).
+- Source commit `b655dba` was pushed to `work/amadeus-1.5.3-voice-io`.
+- Applied with `./scripts/deploy-openclaw.sh --apply --candidate --build-openclaw`; this is a same-version candidate, not a formal release.
+- `VERSION=1.5.3`; OpenClaw image `local/openclaw-amadeus:git-b655dba924f9-20260925155559`; Product Radar reused `local/product-radar:git-d988000e1c5d-20260924130631`.
+- External rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925155559`.
+- Deployment evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925155559`.
+- Post-apply OpenClaw state: running/healthy, restart count 0; WhatsApp linked/connected/healthy; only one OpenClaw runtime.
+- Read-only live check found lifecycle, ingress FIFO, and Japanese visible-text patch markers exactly once in the pinned WhatsApp monitor; `node --check` passed.
+- The optional media organizer adapter was absent during this deployment, so its separate network smoke was skipped; this voice change does not depend on it.
+
+## Owner acceptance still required
+
+- Do not bump to `1.5.4` until owner accepts the delivered visible Japanese line and consecutive voice FIFO.
+- Send one voice DM, two consecutive voice notes in the same group (each must receive Japanese PTT + matching Japanese kanji/kana line + Chinese summary in FIFO order), and one typed-only Chinese input (Chinese text only).
