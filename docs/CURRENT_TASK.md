@@ -667,3 +667,14 @@ message/skill/parser fixture passed，**尚未构建/部署/用户试听**。
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925083938`。预检和健康/WhatsApp
 linked/connected通过。**尚无新语音实测**，此限长是 LLM 软提示；要比较 TTS engine_ms/audio_ms
 与摘要准确度，并听测不生硬/不丢安全信息。
+
+## 2026-09-25：TTS 分段计时已在 M204 生效，短句候选等下一条语音测量
+
+在外部恢复点 `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/timing-20260925T082939Z`
+保护原 service.py/LaunchAgent plist 后，应用了分段计时代码；首次脚本 bootstrap 报
+I/O error，但手动重新 bootstrap/enable 后 job running、`/healthz=200`，runtime source
+SHA 与 Git 一致。合成日志现区分 `engine_ms`、`encode_ms`、`audio_ms`、`total_ms` 和字符桶，
+不记录文本/音频。两条隔离固定短日语 MP3 smoke 显示 `engine/encode=15.840s/0.337s`
+和 `39.733s/0.205s`（音频 4.72s/5.04s），变异很大、还不足下结论；编码确实只占
+极小部分。OpenClaw Skill 已要求日文语音一句、目标≤50字符保留安全信息，但 16:40
+后的入站只有文字；**没有短句政策下的真实语音测量**。
