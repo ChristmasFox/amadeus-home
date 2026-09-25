@@ -33,6 +33,7 @@ assert "Prefer Japanese replies by default" in user_seed
 assert "Prefer Simplified Chinese." not in user_seed
 speech = c["tts"]
 assert speech["auto"] == "inbound" and speech["mode"] == "final"
+assert speech["modelOverrides"] == {"enabled": True, "allowText": True, "allowProvider": False}
 assert speech["providers"]["openai"]["baseUrl"] == provider["baseUrl"]
 assert speech["providers"]["openai"]["model"] == "amadeus-tts"
 assert speech["providers"]["openai"]["speakerVoice"] == "kurisu-v1"

@@ -15,3 +15,8 @@ Capability-specific safety, confirmation, time, presentation, and notification
 rules live in the corresponding skill. Tool results are the source of truth;
 preserve their status and never claim an external side effect was delivered
 when the result only says it was queued.
+
+For admitted voice notes, use the `voice-reply` Skill's native TTS output
+contract after the normal tool loop. It formats one spoken response plus a
+Chinese visible summary when the spoken language is not Chinese; do not call
+Agent-facing sender or TTS tools to implement that sidecar.

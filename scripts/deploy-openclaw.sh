@@ -283,6 +283,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
   node scripts/test-patch-openclaw-whatsapp-media-agent.mjs
+  node scripts/test-openclaw-bilingual-voice.mjs
   pnpm check:secrets
 )
 
@@ -506,7 +507,7 @@ for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pu
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
 for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus','market','macos-host','vps']:
+for name in ['pubg','amadeus','voice-reply','market','macos-host','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY
@@ -526,6 +527,9 @@ if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
 if config.get('tools', {}).get('deny') != ['tts', 'message']:
     raise SystemExit('agent-facing TTS and generic message tools must be denied; native auto-inbound TTS remains active')
+tts = config.get('tts', {})
+if tts.get('auto') != 'inbound' or tts.get('mode') != 'final' or tts.get('modelOverrides', {}).get('allowText') is not True:
+    raise SystemExit('native final inbound TTS must allow audio-only text directives')
 if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):

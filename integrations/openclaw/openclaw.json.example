@@ -185,6 +185,7 @@
   "tts": {
     "auto": "inbound",
     "mode": "final",
+    "modelOverrides": { "enabled": true, "allowText": true, "allowProvider": false },
     "provider": "openai",
     "maxTextLength": 1200,
     "timeoutMs": 120000,

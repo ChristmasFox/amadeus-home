@@ -46,6 +46,7 @@
   "skills": [
     "skills/amadeus",
     "skills/identity",
+    "skills/voice-reply",
     "skills/product-radar",
     "skills/media-organizer",
     "skills/nas",
