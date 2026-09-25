@@ -1,3 +1,15 @@
+## 2026-09-25：M204 9Router 应用层代理已关闭，旧机代理权威一致
+
+核对旧 Mac source-freeze SQLite（`quick_check=ok`）：旧机
+`outboundProxyEnabled=false`；M204 在前一轮修复后为 true。用户明确要求关闭。
+M204 先建立仓库外 SQLite online backup、Compose 和 env 恢复点
+`/DATA/AppData/9router/backups/app-proxy-off-20260925T045736Z`，经 9Router 本地
+CLI 鉴权 API 将 `outboundProxyEnabled=false`，URL/no-proxy 清空，再只重启 9Router。
+容器启动的大小写两套 HTTP(S)_PROXY/NO_PROXY 保留；health 200、未认证 models 401、
+真实 `arthur-combo` chat HTTP 200/1 choice，网络命名空间仅观察到代理 `:7897` 出站，
+该验收窗口内无 TLS/代理回退错误。此为单次成功，**不证明间歇 DNS/代理故障已消失**；
+fail-closed 待办仍有效。详见 `.agent/checkpoints/2026-09-25-9router-app-proxy-disabled.md`。
+
 ## 2026-09-25：M204 9Router 容器启动代理环境已恢复（DNS/回退问题仍待查）
 
 按旧 Mac 的受保护 Compose 记录，在 M204 9Router 的 Git 模板及 live Compose 恢复

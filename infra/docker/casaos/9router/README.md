@@ -10,6 +10,18 @@
 - M204 `~/Library/Application Support/Amadeus/speech/tts.token`: existing local TTS token for the Self-hosted TTS connection.
 - `scripts/provision-9router-speech.py --apply` uses the upstream's protected local CLI token derived within the live container by default; an optional protected dashboard-password file is supported. No password/token is logged or committed.
 
+## OpenAI/Codex proxy authority on M204
+
+Use the container startup `HTTP_PROXY`/`HTTPS_PROXY` (both cases) and
+`NO_PROXY`/`no_proxy` from `infra/docker/homelab/9router/docker-compose.example.yml`.
+Keep 9Router Settings `outboundProxyEnabled=false`, `outboundProxyUrl=""`, and
+`outboundNoProxy=""`; the source Mac's protected SQLite snapshot had the app
+proxy disabled. Do not enable the app setting as a second proxy authority after
+restoring a database. The proxy endpoint must be reachable from the container
+before restarting, and authenticated chat must actually traverse port 7897.
+This startup parity does **not** make 9Router's proxy-failure direct fallback
+fail-closed; treat TLS/DNS mismatches as an unresolved separate problem.
+
 ## Gates and rollback
 
 1. `pnpm workflow:plan`, focused tests and `pnpm check:secrets`.

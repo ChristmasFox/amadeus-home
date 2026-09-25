@@ -1,3 +1,11 @@
+## 2026-09-25：9Router 应用层重复代理已关闭
+
+旧机 source-freeze SQLite 确认应用层代理 disabled。M204 保留旧机容器启动代理环境，
+通过受保护本地 API 关闭应用层出站代理并清空应用层 URL/no-proxy；外部恢复点
+`/DATA/AppData/9router/backups/app-proxy-off-20260925T045736Z`。服务重启后 health 200、
+API 鉴权 401、真实 chat HTTP 200 且仅观察到代理 :7897 出站。一次成功不关闭此前的
+间歇 DNS/代理回退调查；不要关闭 TLS 证书验证。
+
 ## 2026-09-25：M204 9Router 启动代理恢复，间歇故障未关闭
 
 旧 Mac 保留 Compose 有大小写两套 HTTP(S)_PROXY 和 NO_PROXY；迁移后 M204 仅有
