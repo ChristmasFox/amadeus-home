@@ -24,5 +24,6 @@ The Git deploy script is corrected to include `$OPENCLAW_DATA_DIR/config/npm/pro
 ## Health caveats and remaining acceptance
 
 - `scripts/doctor.sh`: OpenClaw, Product Radar, 9Router and Immich health probes pass, but it reports two unrelated existing failures: media-organizer-adapter is absent, and external-storage/Immich media-boundary identity verification fails. Do not report global doctor as clean.
+- Pinned-runtime source audit: `runChannelInboundEvent` awaits `runChannelTurn`; the turn awaits routed dispatch; the delivery owner awaits the outbound dispatcher and then settles all pending channel-delivery attempts before returning. The WhatsApp monitor `finally` lease boundary therefore remains active through awaited PTT/text delivery; this is source-path evidence, not handset proof.
 - No real WhatsApp handset acceptance has occurred after this deployment. Still required: verify the composing dots persist through both Japanese PTT and Chinese text, one reply each, and in a group send a competing same-session message during TTS to confirm it queues and is answered afterward.
 - Provider/client presence is best-effort; source/config health is not proof of handset-visible dots.
