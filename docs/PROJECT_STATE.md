@@ -1,15 +1,22 @@
-## 2026-09-25：语音回复新增日文假名/汉字可见行（源码候选待部署）
+## 2026-09-25：语音回复已加日文假名/汉字可见行（同版本候选已部署，待实机确认）
 
-用户要求每次语音回复除日文 PTT 与中文 summary 外，再显示日文文字。voice-reply Skill 已改为三段：
-`中文：<忠实摘要>`、`日本語：<与语音内容相同的自然汉字+假名句子>`、以及只用于语音合成的
-`[[tts:text]]...[[/tts:text]]`。日文可见行与 PTT 文本必须完全一致；使用常见汉字、平假名/片假名，不用罗马字；
-难读汉字可附括号假名。typed-only 路径仍是普通简体中文文字，不加日文行或 TTS 指令。
+针对用户要求，voice Skill 现输出中文 summary、自然日文汉字+假名可见行、以及匹配该日文行的音频指令；
+PTT 发音和 `日本語：` 行必须一致，难读汉字必要时给括号假名。typed-only 保持原来的简体中文文本路径。
+此前连续群语音 FIFO 修复（commit `02fdf49`）也包含在该 image 中，因此新的连续 voice turn 会各自回到普通
+inbound/TTS 路径，不走会丢失 auto-TTS 的核心 followup routeReply。
 
-`plugins/amadeus/tests/manifest.test.ts` 和 pinned parser fixture `scripts/test-openclaw-bilingual-voice.mjs`
-覆盖可见中日文两行、语音文本严格匹配、汉字+假名混写、普通文字不触发 TTS；相关定向测试通过。
-目前正式 `VERSION=1.5.3` 仍在线，当前连续语音 FIFO 修复候选 `02fdf49` 也已部署；本次可见日文行更改尚未 commit/build/deploy。
-下一步完成匹配验证、commit/push 后构建同版本单实例 candidate，再请用户测试一条语音和两条连续群语音，确认
-日文可见文本、中文 summary 与各自 PTT 对齐。详见 `.agent/checkpoints/2026-09-25-amadeus-voice-japanese-written-text-source.md`。
+来源 commit `fb1d457` 已 push，并以 `--candidate` apply 到唯一 OpenClaw：
+`local/openclaw-amadeus:git-fb1d4578bafe-20260925152845`。恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925152845`，已验证包括完整挂载的
+`/DATA/AppData/openclaw/config/npm/projects`（约 71,205,506 bytes）；部署证据在
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925152845`。OpenClaw healthy/restart=0，
+WhatsApp linked/connected，ingress-FIFO marker 1 次，镜像 Skill 包含新 `日本語：` 书写规则。匹配 tests、
+typecheck、architecture、secrets gates 均通过。
+
+`VERSION` 仍为 1.5.3，当前为同版本 pre-acceptance candidate，尚未 bump 1.5.4。需要用户重测一条 voice DM
+和两条连续群 voice：每条应有一个日文 PTT + 一条中文 summary，并额外看到与 PTT 内容一致的日文汉字/假名行；
+顺序 FIFO，输入状态覆盖每轮 PTT 与文字发送。确认前不发新正式 release。详见
+`.agent/checkpoints/2026-09-25-amadeus-voice-japanese-written-text-candidate.md`。
 
 ## 2026-09-25：9Router 应用层重复代理已关闭
 

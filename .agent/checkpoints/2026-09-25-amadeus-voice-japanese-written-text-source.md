@@ -11,7 +11,7 @@
 
 - `scripts/test-openclaw-bilingual-voice.mjs` uses the pinned OpenClaw 2026.9.4 parser to assert Chinese and Japanese visible text survive, the TTS directive yields exactly the matching Japanese sentence, that sentence includes kanji and kana, and typed-only input has no TTS.
 - Amadeus manifest test asserts the injected voice Skill includes the Japanese visible-line contract.
-- Targeted voice parser and Amadeus plugin tests passed. The source is not yet committed, built or deployed.
+- Targeted voice parser and Amadeus plugin tests passed. The source was committed/pushed as `fb1d457` and deployed as a same-version candidate; see `.agent/checkpoints/2026-09-25-amadeus-voice-japanese-written-text-candidate.md`.
 
 ## Next
 
