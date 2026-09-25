@@ -374,3 +374,7 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 单一 OpenClaw 验收候选已运行、ffmpeg/libopus 与 WhatsApp patch 已验证；真实 WhatsApp 仍待验收。原生 audio CLI 的合成音频在上传前被媒体 SSRF 默认策略阻断 `9router` 私网 DNS；pinned schema 的 provider 级 `request.allowPrivateNetwork=true` 临时试验已穿过此层，现已仅对固定 `http://9router:20128/v1` 的 OpenAI-compatible provider 写入源码。随后请求到达 9Router，但 ASR bridge 的 Node22 fetch 对 QwenAI 域名 `ENOTFOUND`，账户暂时 503/锁定；临时启用 Node env-proxy 后上游无 key 请求到达 401。源码仅对 ASR bridge 子进程启用 `NODE_USE_ENV_PROXY=1`，不改 9Router chat 的独立代理策略。两项修复尚未部署，也不宣称解决另一个 Codex/OpenAI 间歇性 DNS/代理任务。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-speech-private-route.md`。
 
 9Router 新镜像的 network-none 隔离启动再次通过；以容器 `node` UID 检查进程环境，确认仅 ASR bridge 子进程启用 `NODE_USE_ENV_PROXY=1`，Next server 未启用。fixture 已清理；生产旧镜像未因此切换。
+
+## 2026-09-25：OpenClaw 原生语音链候选已连通，WhatsApp 实收发未验收
+
+9Router ASR bridge 仅自身启用 Node env proxy 的 immutable 镜像已带 checkpoint 切换；一条新的合成中文 WAV 经 live `amadeus-asr` 返回 200/非空转录。OpenClaw candidate 配置在受保护 checkpoint 后以 `--candidate --no-build` 应用，日志确认 scoped private-network policy 热加载；唯一 Gateway healthy，WhatsApp linked/connected，Telegram running，`VERSION=1.5.2`，未发送发布通知。原生 `capability audio transcribe` 经 9Router 返回一个非空 `audio.transcription`；Gateway `tts.speak` 经同一逻辑路由返回有效 MP3。**以上都是合成/本地调用，不是实际 WhatsApp voice-note 入站、PTT 发出或 fallback 证据。** 见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-native-speech-chain.md`；下一步需用户在 WhatsApp 私聊发送受控中文/日文语音与文字 follow-up 后执行 A–L 验收，之后才 bump/release。
