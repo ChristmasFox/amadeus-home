@@ -402,3 +402,14 @@ Node worker-compatible ffmpeg/ffprobe 包装器镜像现已从 `c64e29a` 构建�
 ## 2026-09-25：worker-safe ffmpeg 镜像已进入唯一 OpenClaw 候选，等真实重发
 
 `c64e29a` 的 ARM64 OpenClaw 镜像经隔离 fixture 验证 Node worker 自启动、Longbridge、MP3→Ogg/Opus 和 ffprobe 后，以 `--apply --candidate --no-build` 切入 canonical 单实例；受保护恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925053431`。与前次失败不同，正式 SQLite worker 预检通过；live Node `process.execPath=node.glibc` 且子 ffmpeg exit 0，WhatsApp linked/connected、健康。仍未收到**修复之后**的真实语音重发或手机端 PTT 确认；B 与最终发布不可宣称完成。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-ffmpeg-child-live.md`。
+
+## 2026-09-25：第二条真实 WhatsApp 语音的媒体上传故障（修复候选）
+
+13:38:54 的 direct Opus 入站已走 ASR/Agent/TTS，ffmpeg 子进程不再报 127，
+但 13:40:32–13:40:52 WhatsApp 多次报 `Media upload failed on all hosts`；
+不能算 PTT 已送达，且五次 TTS 请求须继续排查。固定在 OpenClaw 2026.9.4 的
+WhatsApp 外部包中，媒体上传使用 Node `https.request({agent})`，原代码却给 Baileys
+Undici dispatcher（无 `addRequest`），已隔离复现 `ERR_INVALID_ARG_TYPE`。
+源码补丁只在该媒体代理边界使用已有的 Node-compatible proxy agent，部署脚本增加
+锚点/语法/幂等预检与明确重启，未改变 WebSocket 代理；真实再次验收仍待 apply 和用户重发。
+见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-media-upload-fix-source.md`。
