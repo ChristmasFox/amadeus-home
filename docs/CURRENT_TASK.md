@@ -329,3 +329,5 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：9Router speech 镜像 live，模型 alias 尚未配置
 
 用户已同意现有 QwenAI 上游。第二次显式 9Router apply 在受保护 checkpoint 后成功；canonical Compose 运行 `local/9router:git-d882528fd59a-20260925T032728Z`。Mac 发布入口 health 200、未授权 models 401，容器内 ASR bridge 与到 M204 TTS 的 health 均 200。短合成音频对**live bridge** 的真实 QwenAI 请求返回 200/非空转录，约 8 秒；私人音频和密钥未外传或记录。仍缺 9Router 原生 STT/TTS 连接/alias。已查明 upstream 受保护 CLI 管理 token，可不重置 dashboard 密码，由源码脚本使用。证据见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-router-live-and-cli-auth.md`。
+
+1.5.3 9Router alias provisioning 首次尝试在受保护数据库备份预检处因嵌入的 guest Python 换行转义错误而失败，**未写入 provider/alias、未重启现网**。源码已改为 raw string，并新增编译实际生成脚本的回归测试；提交后重试。证据见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-provider-checkpoint-preflight.md`。

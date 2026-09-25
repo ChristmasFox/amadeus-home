@@ -113,7 +113,7 @@ def backup_live(machine: str) -> str:
     """SQLite online backup plus protected env/compose and image metadata in guest."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     target = f"/DATA/AppData/9router/backups/voice-1.5.3-{stamp}"
-    code = """import os,sqlite3,shutil,sys,json,subprocess
+    code = r"""import os,sqlite3,shutil,sys,json,subprocess
 from pathlib import Path
 out=Path(sys.argv[1]); out.mkdir(mode=0o700,parents=True,exist_ok=False)
 src=sqlite3.connect('file:/DATA/AppData/9router/data/db/data.sqlite?mode=ro',uri=True)
@@ -126,8 +126,11 @@ image=subprocess.check_output(['docker','inspect','9router','--format','{{.Confi
 for p in out.iterdir(): p.chmod(0o600)
 print('BACKUP_CREATED')
 """
-    result = subprocess.run(["orb", "-m", machine, "-u", "root", "python3", "-c", code, target],
-                            capture_output=True, text=True, timeout=120, check=True)
+    try:
+        result = subprocess.run(["orb", "-m", machine, "-u", "root", "python3", "-c", code, target],
+                                capture_output=True, text=True, timeout=120, check=True)
+    except subprocess.CalledProcessError:
+        raise RuntimeError("protected_guest_backup_failed") from None
     if result.stdout.strip() != "BACKUP_CREATED":
         raise RuntimeError("guest_backup_unverified")
     return target

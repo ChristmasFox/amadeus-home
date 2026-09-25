@@ -84,6 +84,12 @@ class ProvisionTest(unittest.TestCase):
             request = opened.call_args.args[0]
             self.assertEqual(request.get_header("X-9r-cli-token"), token)
 
+    def test_guest_checkpoint_script_compiles_before_any_write(self):
+        with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0, stdout="BACKUP_CREATED\n")) as run:
+            self.assertIn("/DATA/AppData/9router/backups/", routes.backup_live("nyannyan"))
+            guest_code = run.call_args.args[0][7]
+            compile(guest_code, "<guest-checkpoint>", "exec")
+
     def test_secret_file_permissions(self):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "key"
