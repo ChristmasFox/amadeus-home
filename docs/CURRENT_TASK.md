@@ -489,3 +489,16 @@ live 现为 `typingMode=instant`/3 秒、`tools.deny=['tts','message']`、
 Gateway healthy、WhatsApp linked/connected。**尚无 14:30 后的真实语音**；
 日文回复和手机“三点”是否出现要再实收确认。presence 本质 best-effort，
 不能将配置存在等同手机可见。
+
+## 2026-09-25：真实 ASR 失败与账户 30 秒锁定（候选仍健康）
+
+14:34:50 用户短语音经 9Router `amadeus-asr` 上游返回失败；桥接适配器
+`outcome=transcription_failed`，9Router 将其作为 502 并锁定唯一 STT 账户 30 秒。
+14:34:51 和 14:34:58 的后续 STT 尝试均在锁定窗口内直接失败；OpenClaw
+按 ASR 失败边界返回“暂无法识别”文字，未调用正常 Agent 猜测内容。
+只在运行时诊断、未保存/输出私有语音：用同一转换协议直连 QwenAI，首次短片段
+重复得到 HTTP 400/空 JSON；较早成功片段仍 HTTP 200，第二条短片段在锁定
+解除后直连 HTTP 200，14:39:26 再经真实 `amadeus-asr` 得 200/非空转录。
+故不是密钥过期或整体 ASR 宕机；单条被上游拒绝的具体原因（上游空错误）
+仍未知，400→502 的锁定放大须单独修正/验收。当前无需重发私有内容到 Git。
+日文默认和 typing 的真实验收因本次 ASR 失败仍待新的语音。
