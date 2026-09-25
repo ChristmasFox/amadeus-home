@@ -1,8 +1,9 @@
-# Japanese voice-audio policy — hotfix follow-up
+# Japanese voice-audio policy — complete
 
-- Status: owner accepted the 1.5.5 hotfix candidate; 1.5.6 formal release is in progress.
-- Sanitized trace showed the latest voice final as Chinese-only, with no `日本語：` label or `[[tts:text]]`; message text itself was not recorded.
-- Root cause: pinned OpenClaw 2026.9.4 `message_received` mapping omits `runId`, while the voice Skill tracker previously required it. The Skill was not injected for that voice run.
-- Hotfix binds an audio marker by `sessionKey` when runId is missing, promotes it to the actual run at `before_prompt_build`, and clears it on `agent_end`; TTL/size bounds and typed-only scope are preserved.
-- Hotfix source: `plugins/amadeus/src/voice-reply-prompt.ts`; manifest/tracker regressions added.
-- Keep `VERSION=1.5.5` for same-version candidate. After owner acceptance of Japanese PTT despite Chinese request and unchanged typed text behavior, bump patch to `1.5.6` and formally release.
+- Status: complete — owner accepted the 1.5.5 hotfix candidate and Amadeus 1.5.6 is formally deployed.
+- Release commit: `bdcc07c`; documentation completion commit will follow.
+- Live image: `local/openclaw-amadeus:git-bdcc07c43afc-20260925183945`; rollback checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925183945`.
+- Verified result: OpenClaw healthy/restarts=0; WhatsApp linked/connected; one runtime; formal release notification sent.
+- Accepted contract: voice reply = Japanese PTT + matching Japanese kanji/kana line + Chinese summary; typed-only behavior unchanged.
+- Formal release evidence: `.agent/checkpoints/2026-09-25-amadeus-1.5.6-formal-release.md`.
+- Separate external-storage log-policy/maintenance warning remains tracked at `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`.

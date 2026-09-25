@@ -1,10 +1,12 @@
-## 2026-09-25 UTC：Amadeus 1.5.6 语音日语固定规则已验收，正式发布准备中
+## 2026-09-25 UTC：Amadeus 1.5.6 正式发布完成
 
-用户确认 1.5.5 hotfix 候选“现在好了”，并明确要求提交、push 和正式部署。此前根因是 WhatsApp 2026.9.4 的 `message_received` plugin hook 默认关闭；上一修复改用 ingress active voice lease 后，prompt injection 才与当前实际语音 run 对齐，出站对无日语假名/未知 spokenText 的 PTT fail-closed。
+Owner 在 1.5.5 hotfix candidate 上确认“现在好了”后，明确要求正式发布。按唯一版本入口从 1.5.5 patch bump 至 1.5.6，release commit `bdcc07c` 已 push；`./scripts/deploy-openclaw.sh --apply --build-auto` 正式部署完成。
 
-候选 `local/openclaw-amadeus:git-12df1ae6b2e1-20260925182336` 已通过 owner 实测；只读脱敏 trace 最近三条语音回复均含 `中文：` 与日文假名行，无原文入库。typed-only 语音 lease 不活跃，文本路径未改。按唯一版本脚本从 1.5.5 patch bump 到 1.5.6，`RELEASE_NOTES.md` 已替换为当前单次发布说明。
+OpenClaw image：`local/openclaw-amadeus:git-bdcc07c43afc-20260925183945`（UTC 2026-09-25 18:39:45；Asia/Shanghai 2026-09-26 02:39:45），Product Radar 复用现有 image。回滚 checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925183945`，已验证 WhatsApp npm projects 目录备份（71,207,880 bytes）；部署 evidence `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925183945`。OpenClaw/Product Radar health、NAS SSH smoke 通过；OpenClaw healthy/restart=0、WhatsApp linked/connected/healthy，唯一 runtime 在线。正式 release outbox sent，outbox smoke passed。Live image 已确认包含 Japanese audio Skill、active-lease 注入和 Chinese-only PTT fail-closed guard；四个 WhatsApp lifecycle/FIFO/text/audio-guard markers 各一次，monitor `node --check` passed。
 
-正式部署前运行 full test、typecheck、architecture、version、voice guard/parser、secrets gates；随后 commit/push 并 dry-run，再使用 `./scripts/deploy-openclaw.sh --apply --build-auto` 更新唯一 CasaOS runtime、保存回滚点并核验 health/WhatsApp/通知。当前仍运行已验收的 1.5.5 candidate，1.5.6 尚未正式 apply。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.6-formal-release.md`。
+发布后两项非阻断 warning 再次发生：verified external storage 不可用，故 Docker log policy 未应用，post-deploy storage maintenance/GC 未执行；没有绕过门禁。详见外部 evidence 的 `log-policy.log` 与 `storage-maintenance.log`，跟进任务 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。可选 media-organizer-adapter 缺席，本次 network smoke 跳过；它不影响语音功能但其媒体 capability acceptance 仍独立 pending。
+
+1.5.5 candidate 已由 owner 实际验收，1.5.6 同代码正式发布完成；后续无需再做同一规则的候选确认。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.6-formal-release.md`。
 
 ## 2026-09-25 UTC：1.5.5 日语语音注入 hotfix 候选已部署，待实测
 
