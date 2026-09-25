@@ -139,14 +139,17 @@ def restart_and_verify(machine: str) -> None:
                    capture_output=True, timeout=90, check=True)
     probe = r'''Promise.all([
       fetch("http://127.0.0.1:20128/api/health"),
-      fetch("http://127.0.0.1:20129/healthz"),
-      fetch("http://127.0.0.1:20128/v1/models")
-    ]).then(([router,bridge,auth])=>process.exit(router.ok&&bridge.ok&&auth.status===401?0:1)).catch(()=>process.exit(1))'''
+      fetch("http://127.0.0.1:20129/healthz")
+    ]).then(([router,bridge])=>process.exit(router.ok&&bridge.ok?0:1)).catch(()=>process.exit(1))'''
     for _ in range(45):
         result = subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "exec", "9router", "node", "-e", probe],
                                 capture_output=True, timeout=12)
         if result.returncode == 0:
-            return
+            try:
+                urllib.request.urlopen("http://127.0.0.1:20128/v1/models", timeout=4)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 401:
+                    return
         time.sleep(2)
     raise RuntimeError("post_alias_restart_health_or_auth_failed; restore protected checkpoint")
 
