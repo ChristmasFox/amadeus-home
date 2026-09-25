@@ -628,3 +628,10 @@ MPS TTS 延迟和冷/暖生成基线。日志仅有该 group 的一条媒体发�
 文字及15:52:28发送是另一个 session，不应混入此链路。
 
 用户现确认收到中文文字；这对 15:51:48 群聊 voice turn 构成一次双语摘要实收（模型 final 有日文音频块，OpenClaw 仅记一条 PTT，用户确认文字）。该 turn 仍有总延迟 63.6s。源代码优化已加到 run-scoped injection：明确 Skill 正文已预先包含、禁止为取回 Skill 再调用 `read`，避免已观测到的第一轮 15.5s 模型/工具回合；Amadeus 35 tests、typecheck、architecture、secrets 通过。优化尚未部署/真实测后续对照，仍剩约 34.1s 的 Qwen3-TTS 生成是最大瓶颈。
+
+16:15 已部署第一项时延优化：在已带入目标 Skill 正文的同一 voice run context 里显式说明
+“不需要再调用 read 取回该 Skill”。新 immutable image
+`local/openclaw-amadeus:git-68a51e2a96ed-20260925081444` 已经 `--apply --candidate --build-auto`
+切入唯一 Gateway，恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925081444`；
+WhatsApp healthy/connected。**还没有下一条真实语音对比数据**；预计可去掉旧样本中第一个
+15.5s model/read 回合，但需实测验证；MPS TTS ~34.1s 未优化。
