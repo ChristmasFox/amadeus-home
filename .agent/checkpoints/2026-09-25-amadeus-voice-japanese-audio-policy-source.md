@@ -22,4 +22,5 @@
 - No package build or Docker build was run: the change is Skill text plus assertions, and the workflow plan requested typecheck/tests only; deployment remains explicit.
 - No version bump, image build, runtime edit, or deployment was performed for this request.
 - Formal version remains `1.5.4` and is unchanged in CasaOS; these source changes are not live yet.
-- After explicit deploy authorization, bump patch only through `./scripts/amadeus-version.sh bump patch` (next version `1.5.5`), replace `RELEASE_NOTES.md`, verify, commit/push, then use the formal candidate/release flow as authorized. Do not claim the live voice audio is fixed until post-deploy acceptance.
+- After explicit deployment authorization, first apply this as a same-version `1.5.4` candidate and ask the owner to test: (1) voice input explicitly asks for Chinese speech but the PTT remains Japanese and matches the Japanese visible line, with the Chinese summary still present; (2) typed-only language behavior remains unchanged. Do not bump before this candidate acceptance.
+- After owner acceptance, bump patch only through `./scripts/amadeus-version.sh bump patch` (next version `1.5.5`), replace `RELEASE_NOTES.md`, run release gates, commit/push, and apply the formal release. Do not claim the live voice audio is fixed until deployment and acceptance.
