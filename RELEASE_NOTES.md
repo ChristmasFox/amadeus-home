@@ -1,7 +1,6 @@
-# Amadeus 1.5.3
+# Amadeus 1.5.4
 
-Keep WhatsApp voice replies responsive through final delivery while preserving the bilingual voice contract.
+Make bilingual WhatsApp voice replies deterministic through the final delivery path.
 
-- Refresh WhatsApp composing during an active audio reply and clear it after PTT/text delivery, cancellation, failure, disconnect, or the 120-second safety limit.
-- Queue same-session WhatsApp messages during an active voice turn so they do not steer or alter the current reply; leave typed-only behavior unchanged.
-- Add pinned lifecycle regression tests and checkpoint the mounted WhatsApp package before deployment patches.
+- Add a visible Japanese kanji-and-kana line derived from the exact Japanese TTS speech, alongside the Chinese summary for voice replies.
+- Keep typed-only replies Chinese-only, serialize consecutive voice turns through the normal TTS path, and maintain composing status through final delivery.

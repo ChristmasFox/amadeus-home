@@ -1,10 +1,8 @@
-## 2026-09-25：日文语音可见文字后处理候选已部署，待实测
+## 2026-09-26：Amadeus 1.5.4 voice contract 已验收，正式部署准备中
 
-用户实测前一个 1.5.3 candidate 后仍只看到中文。原因是之前仅靠 voice Skill 要求模型产生日文可见行，没有在 WhatsApp 最终发送边界兜底。已增加确定性后处理：只针对语音入站且带音频媒体的发送，从 TTS payload 的实际 `ttsSupplement.spokenText`/`spokenText` 补上或同步 `日本語：` 行，因此与 PTT 内容一致；typed-only 和非媒体消息不改动。
+用户确认修复后的语音回复“没问题了”，并明确要求提交、push、正式部署。语音 contract 的 owner acceptance 已通过：语音回复显示中文摘要、与日文 PTT 一致的日文汉字/假名行；typed-only 保持中文路径，连续语音 FIFO 保持已部署修复。正式发布版本按规则由 `./scripts/amadeus-version.sh bump patch` 从 1.5.3 递增为 1.5.4；`RELEASE_NOTES.md` 已替换为本次唯一发布说明。
 
-源码提交 `b655dba` 已 push，并以 `./scripts/deploy-openclaw.sh --apply --candidate --build-openclaw` 部署同版本候选；`VERSION=1.5.3` 未递增。OpenClaw 镜像 `local/openclaw-amadeus:git-b655dba924f9-20260925155559`，Product Radar 复用现有镜像。恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925155559`，证据 `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925155559`。部署 health 通过；OpenClaw `healthy`、restart=0，WhatsApp `linked/connected/healthy`。实机 monitor 的生命周期、ingress FIFO 和日文可见行三个 marker 各一次，`node --check` 通过；目前仍只有一个 OpenClaw runtime。
-
-本地 full tests、typecheck、architecture、secrets scan 以及精确 `@openclaw/whatsapp@2026.9.4` monitor patch/幂等/syntax 验证均通过。待 owner 验收：一条语音私聊、同群连续两条语音（各自 PTT + 匹配的日文汉字/假名行 + 中文摘要，FIFO）、以及一条中文文字消息（仍仅中文，不出日文/语音）。验收前不 bump 到 1.5.4。恢复和回归记录见 `.agent/checkpoints/2026-09-25-amadeus-japanese-visible-text-postprocessor-source.md`；待办 `.agent/tasks/2026-09-25-amadeus-japanese-visible-text-candidate-deploy.md`。
+正式部署前仍需跑完整测试、typecheck、architecture、version 与 secrets gate，提交并 push release source，再用 `./scripts/deploy-openclaw.sh --apply --build-auto` 按 live commit 差异只重建必要镜像并切换唯一 CasaOS runtime。当前运行的 1.5.3 candidate 仍为 `local/openclaw-amadeus:git-b655dba924f9-20260925155559`；尚未宣称 1.5.4 正式部署。部署成功后补记不可变 image、外部恢复点、健康与发布通知证据。
 ## 2026-09-25：语音回复已加日文假名/汉字可见行（同版本候选已部署，待实机确认）
 
 针对用户要求，voice Skill 现输出中文 summary、自然日文汉字+假名可见行、以及匹配该日文行的音频指令；
