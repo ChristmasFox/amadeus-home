@@ -1,7 +1,7 @@
-# Amadeus 1.5.5
+# Amadeus 1.5.6
 
-Lock WhatsApp voice-reply audio to Japanese without changing text-message behavior.
+Keep voice-note audio in Japanese while preserving ordinary text replies.
 
-- Always speak Japanese in replies triggered by inbound voice notes, even when the user asks for Chinese speech.
-- Preserve the existing Chinese summary and Japanese kanji/kana line synchronized with the PTT.
-- Keep typed-only message behavior, including explicit language requests, unchanged.
+- Apply the Japanese voice format to verified voice notes, with a matching Japanese written line and concise Chinese summary.
+- If Japanese speech cannot be produced, send a clear text notice rather than a Chinese voice reply.
+- Leave typed-only message behavior unchanged.
