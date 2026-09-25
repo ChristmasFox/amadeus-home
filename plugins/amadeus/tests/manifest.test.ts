@@ -6,6 +6,7 @@ import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plug
 import { identityContextFromOpenClaw } from '../src/identity.js';
 import entry from '../src/index.js';
 import { macHostStatus } from '../src/machost.js';
+import { WHATSAPP_VOICE_RUNS_GLOBAL } from '../src/voice-reply-prompt.js';
 
 test('Amadeus manifest exposes the native Identity contract', async () => {
   const manifest = JSON.parse(await readFile(new URL('../openclaw.plugin.json', import.meta.url), 'utf8')) as {
@@ -60,18 +61,18 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(registered.some((name) => /trade|order|balance|position|portfolio/iu.test(name)), false);
   assert.equal(registered.includes('amadeus_market_quote'), true);
   assert.equal(registered.includes('amadeus_macos_host_status'), true);
-  assert.equal(hooks.has('message_received'), true);
+  assert.equal(hooks.has('message_received'), false, 'WhatsApp message_received plugin hooks are disabled by default; voice Skill must not depend on them');
   assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
 
-  // The pinned OpenClaw 2026.9.4 message_received mapper omits runId from
-  // the event/context. SessionKey is the verified bridge until the harness
-  // supplies the concrete runId to before_prompt_build.
-  runHooks('message_received',
-    { sessionKey: 'voice-session', media: [{ contentType: 'audio/ogg; codecs=opus' }] },
-    { channelId: 'whatsapp', sessionKey: 'voice-session' },
-  );
+  // The pinned WhatsApp monitor creates this lease before Agent dispatch.
+  // message_received plugin hooks remain disabled, so no event is fired here.
+  const globals = globalThis as Record<string, unknown>;
+  const previousRegistry = globals[WHATSAPP_VOICE_RUNS_GLOBAL];
+  globals[WHATSAPP_VOICE_RUNS_GLOBAL] = new Map([
+    ['voice-session', { sessionKey: 'voice-session', messageId: 'voice-note', closed: false }],
+  ]);
   const voicePrompt = runHooks('before_prompt_build',
     { prompt: 'transcribed voice text', messages: [] },
     { channel: 'whatsapp', runId: 'voice-run', sessionKey: 'voice-session' },
@@ -84,12 +85,14 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the same Japanese sentence as the 日本語 line/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /do not call the read tool to retrieve that Skill again/u);
-  runHooks('agent_end', {}, { runId: 'voice-run', sessionKey: 'voice-session' });
+  (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');
   const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
     { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'voice-session' },
   );
-  assert.equal(typedPrompt, undefined, 'session fallback is cleared before any later typed-only turn');
+  assert.equal(typedPrompt, undefined, 'typed-only turn has no active audio lease');
+  if (previousRegistry === undefined) delete globals[WHATSAPP_VOICE_RUNS_GLOBAL];
+  else globals[WHATSAPP_VOICE_RUNS_GLOBAL] = previousRegistry;
 
   runHooks('before_dispatch',
     { sessionKey: 'agent:main:hook-test', channel: 'whatsapp', replyToSender: 'reply-1' },

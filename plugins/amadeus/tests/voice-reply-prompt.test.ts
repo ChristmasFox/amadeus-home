@@ -1,39 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VoiceReplyTurnTracker, VOICE_RUN_MAX, VOICE_RUN_TTL_MS } from '../src/voice-reply-prompt.js';
+import { hasActiveWhatsAppVoiceLease, WHATSAPP_VOICE_RUNS_GLOBAL } from '../src/voice-reply-prompt.js';
 
-test('voice-reply Skill injection is scoped to exact WhatsApp audio run id', () => {
-  const tracker = new VoiceReplyTurnTracker();
-  assert.equal(tracker.record('whatsapp', 'voice-run', [{ contentType: 'audio/ogg; codecs=opus' }], 100), true);
-  assert.equal(tracker.shouldInject('whatsapp', 'voice-run', 101), true);
-  assert.equal(tracker.shouldInject('whatsapp', 'typed-run', 101), false);
-  assert.equal(tracker.shouldInject('telegram', 'voice-run', 101), false);
-});
-
-test('voice-reply tracker recognizes audio kind and ignores text/image/unknown channels', () => {
-  const tracker = new VoiceReplyTurnTracker();
-  assert.equal(tracker.record('whatsapp', 'audio-kind', [{ kind: 'audio' }], 100), true);
-  assert.equal(tracker.record('whatsapp', 'image', [{ contentType: 'image/jpeg' }], 100), false);
-  assert.equal(tracker.record('whatsapp', 'text', [{ contentType: 'text/plain' }], 100), false);
-  assert.equal(tracker.record('telegram', 'other-channel', [{ kind: 'audio' }], 100), false);
-  assert.equal(tracker.record('whatsapp', undefined, [{ kind: 'audio' }], 100), false);
-});
-
-test('voice-reply run tracking has bounded retention', () => {
-  const tracker = new VoiceReplyTurnTracker();
-  tracker.record('whatsapp', 'expired', [{ kind: 'audio' }], 100);
-  assert.equal(tracker.shouldInject('whatsapp', 'expired', 100 + VOICE_RUN_TTL_MS), false);
-  for (let i = 0; i < VOICE_RUN_MAX + 12; i++) tracker.record('whatsapp', `run-${i}`, [{ kind: 'audio' }], 200);
-  assert.equal(tracker.shouldInject('whatsapp', 'run-0', 201), false);
-  assert.equal(tracker.shouldInject('whatsapp', `run-${VOICE_RUN_MAX + 11}`, 201), true);
-});
-
-
-test('voice-reply marker binds by session when pinned message_received mapping omits runId', () => {
-  const tracker = new VoiceReplyTurnTracker();
-  assert.equal(tracker.record('whatsapp', undefined, [{ contentType: 'audio/ogg' }], 100, 'voice-session'), true);
-  assert.equal(tracker.shouldInject('whatsapp', 'voice-agent-run', 101, 'voice-session'), true);
-  assert.equal(tracker.shouldInject('whatsapp', 'different-typed-run', 102, 'voice-session'), false);
-  tracker.clear('voice-agent-run', 'voice-session');
-  assert.equal(tracker.shouldInject('whatsapp', 'later-typed-run', 103, 'voice-session'), false);
+test('voice-reply Skill follows the verified WhatsApp audio lease, not message_received opt-in', () => {
+  const globals = globalThis as Record<string, unknown>;
+  const previous = globals[WHATSAPP_VOICE_RUNS_GLOBAL];
+  const lease = { sessionKey: 'voice-session', messageId: 'voice-message', closed: false };
+  try {
+    globals[WHATSAPP_VOICE_RUNS_GLOBAL] = new Map([['voice-session', lease]]);
+    assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'voice-session'), true);
+    assert.equal(hasActiveWhatsAppVoiceLease('WhatsApp', 'voice-session'), true);
+    assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'typed-session'), false);
+    assert.equal(hasActiveWhatsAppVoiceLease('telegram', 'voice-session'), false);
+    lease.closed = true;
+    assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'voice-session'), false);
+    lease.closed = false;
+    (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');
+    assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'voice-session'), false);
+  } finally {
+    if (previous === undefined) delete globals[WHATSAPP_VOICE_RUNS_GLOBAL];
+    else globals[WHATSAPP_VOICE_RUNS_GLOBAL] = previous;
+  }
 });

@@ -9,11 +9,13 @@ import {
   WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER,
   WHATSAPP_JAPANESE_TEXT_MARKER,
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER,
   ensureAmadeusJapaneseVoiceText,
   patchCoreSource,
   patchWhatsAppSource,
   patchWhatsAppIngressQueueSource,
   patchWhatsAppJapaneseTextSource,
+  patchWhatsAppJapaneseAudioGuardSource,
   resolveVoiceFollowup,
   whatsappHelpers,
   whatsappIngressQueueHelpers,
@@ -137,10 +139,20 @@ assert.equal(patchCoreSource(patchedCore), patchedCore, 'core patch is idempoten
 
 const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
 const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
-const patchedWhatsApp = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
+const patchedWhatsAppVisible = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
+const patchedWhatsApp = patchWhatsAppJapaneseAudioGuardSource(patchedWhatsAppVisible);
+const legacyVisible = patchedWhatsAppVisible.replace(
+  ensureAmadeusJapaneseVoiceText.toString(),
+  'function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) { return payload; }',
+);
+assert.notEqual(legacyVisible, patchedWhatsAppVisible, 'migration fixture retains the legacy v1 helper anchor');
+const migratedWhatsApp = patchWhatsAppJapaneseAudioGuardSource(legacyVisible);
+assert.ok(migratedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER), 'new guard upgrades the already-patched live monitor');
+assert.equal(patchWhatsAppJapaneseAudioGuardSource(migratedWhatsApp), migratedWhatsApp, 'audio guard upgrade is idempotent');
 assert.ok(patchedWhatsApp.includes(WHATSAPP_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_INGRESS_QUEUE_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));
+assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_TIMEOUT_MS = 120000'));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_REFRESH_MS = 3000'));
 assert.ok(patchedWhatsApp.includes('finally(() => closeAmadeusVoiceReplyLeaseForTurn(params.route.sessionKey, params.msg.event.id))'), 'the lease is held until the whole inbound dispatcher settles');
@@ -153,6 +165,7 @@ assert.ok(patchedWhatsApp.includes('onSettled: async () => {\n\t\t\t\tconst flus
 assert.equal(patchWhatsAppSource(patchedWhatsApp), patchedWhatsApp, 'base WhatsApp patch is idempotent');
 assert.equal(patchWhatsAppIngressQueueSource(patchedWhatsApp), patchedWhatsApp, 'ingress queue patch is idempotent');
 assert.equal(patchWhatsAppJapaneseTextSource(patchedWhatsApp), patchedWhatsApp, 'Japanese visible-text patch is idempotent');
+assert.equal(patchWhatsAppJapaneseAudioGuardSource(patchedWhatsApp), patchedWhatsApp, 'Japanese audio guard patch is idempotent');
 
 const japaneseVoice = '少し待って。結論を先に言うわ。';
 const chineseVoice = `中文：我会先说结论。`;
@@ -166,6 +179,25 @@ assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseV
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
 assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false), voicePayload, 'typed turns remain unchanged');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
+const chineseTtsPayload = {
+  text: chineseVoice,
+  mediaUrl: 'chinese-tts.ogg',
+  audioAsVoice: true,
+  spokenText: '好的，我用中文回答。',
+  ttsSupplement: { spokenText: '好的，我用中文回答。' },
+  trustedLocalMedia: true,
+};
+const blockedChineseAudio = ensureAmadeusJapaneseVoiceText(chineseTtsPayload, true);
+assert.equal(blockedChineseAudio.mediaUrl, undefined, 'non-Japanese speech media is removed before WhatsApp delivery');
+assert.equal(blockedChineseAudio.ttsSupplement, undefined, 'TTS supplement metadata does not reintroduce audio');
+assert.equal(blockedChineseAudio.audioAsVoice, undefined);
+assert.match(blockedChineseAudio.text, /日语语音暂时无法生成/u, 'Chinese PTT fails closed to a visible text notice');
+assert.equal(ensureAmadeusJapaneseVoiceText(chineseTtsPayload, false), chineseTtsPayload, 'typed-only turns keep their existing delivery path');
+const missingSpeechText = ensureAmadeusJapaneseVoiceText({ mediaUrl: 'unknown-ptt.ogg', audioAsVoice: true }, true);
+assert.equal(missingSpeechText.mediaUrl, undefined, 'PTT without speech source also fails closed');
+assert.match(missingSpeechText.text, /日语语音暂时无法生成/u);
+const unrelatedMedia = { mediaUrl: 'document.ogg', text: chineseVoice };
+assert.equal(ensureAmadeusJapaneseVoiceText(unrelatedMedia, true), unrelatedMedia, 'unrelated media without TTS metadata remains untouched');
 
 // Exercise the injected WhatsApp preparePayload hook against a TTS supplement,
 // including media-only TTS payloads whose Chinese text was delivered earlier.
@@ -214,6 +246,10 @@ const preparedVoicePayload = await deliveryVoicePlan.delivery.preparePayload({
   ttsSupplement: { spokenText: japaneseVoice, visibleTextAlreadyDelivered: true },
 }, { kind: 'final' });
 assert.equal(preparedVoicePayload.text, `${chineseVoice}\n日本語：${japaneseVoice}`, 'actual patched WhatsApp preparePayload adds Japanese to a media-only TTS supplement');
+const preparedBlockedChinese = await deliveryVoicePlan.delivery.preparePayload(chineseTtsPayload, { kind: 'final' });
+assert.equal(preparedBlockedChinese.mediaUrl, undefined, 'patched preparePayload cannot pass a Chinese PTT through');
+assert.equal(preparedBlockedChinese.mediaUrls.length, 0);
+assert.match(preparedBlockedChinese.text, /日语语音暂时无法生成/u);
 const deliveryTypedPlan = buildReplyPlan(undefined);
 const preparedTypedPayload = await deliveryTypedPlan.delivery.preparePayload({
   text: '中文：只用中文回答。',
@@ -389,9 +425,11 @@ const root = await mkdtemp(join(tmpdir(), 'amadeus-voice-lifecycle-'));
 try {
   const corePath = join(root, 'patched-core.mjs');
   const whatsappPath = join(root, 'patched-whatsapp.mjs');
+  const upgradedPath = join(root, 'upgraded-whatsapp.mjs');
   await writeFile(corePath, patchedCore);
   await writeFile(whatsappPath, patchedWhatsApp);
-  for (const path of [corePath, whatsappPath]) {
+  await writeFile(upgradedPath, migratedWhatsApp);
+  for (const path of [corePath, whatsappPath, upgradedPath]) {
     const check = spawnSync(process.execPath, ['--check', path], { encoding: 'utf8' });
     assert.equal(check.status, 0, `${path} syntax: ${check.stderr || check.stdout}`);
   }
