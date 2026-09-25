@@ -1,8 +1,10 @@
-## 2026-09-25：Amadeus 1.5.5 语音日语固定规则（正式部署准备中）
+## 2026-09-25 UTC：Amadeus 1.5.5 正式发布已部署
 
-用户要求语音输出固定日语，即使语音请求明确要求汉语也不改变音频语言；文字消息保持原样。随后用户明确要求“正式发布”，因此按用户指令不等待独立候选实机验收，直接准备 1.5.5 正式 release。唯一版本入口已将 `VERSION` 从 1.5.4 patch bump 到 1.5.5，`RELEASE_NOTES.md` 只包含本次规则变化。
+用户明确要求将语音音频固定为日语后“正式发布”。`VERSION` 已按唯一入口从 1.5.4 patch bump 至 1.5.5，release commit `07918b6` 已 push，正式部署通过 `./scripts/deploy-openclaw.sh --apply --build-auto` 完成。
 
-语音回复仍保留一条中文摘要、与 PTT 完全一致的日文汉字/假名行及日语语音；typed-only 行为（含明确语言请求）不变。正式部署前须跑 release tests/typecheck/architecture/version/secrets gates，commit/push，再 dry-run 并使用 `./scripts/deploy-openclaw.sh --apply --build-auto` 单实例部署、写外部回滚点并验健康。当前 CasaOS 仍运行 Amadeus 1.5.4；在 apply 完成前不宣称 1.5.5 live。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-formal-release.md`。
+OpenClaw image：`local/openclaw-amadeus:git-07918b6aea33-20260925164645`（UTC 2026-09-25 16:46:45；Asia/Shanghai 2026-09-26 00:46:45），Product Radar 镜像复用。CasaOS 回滚 checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925164645`；外部部署 evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925164645`。OpenClaw/Product Radar health 通过，OpenClaw restart=0，WhatsApp linked/connected/healthy；唯一 runtime 仍在线。正式 release outbox 状态为 sent。
+
+发布后日志策略和存储维护仍被 verified external storage gate 阻止，分别记录 `LOG_POLICY=blocked; verified external storage is unavailable` 与 `REASON=verified external storage gate failed`；没有绕过门禁，也未执行日志策略/GC。该重复 warning 记录在 `.agent/tasks/2026-09-26-post-deploy-storage-gate.md`。本次正式发布按 owner 直接授权，没有单独候选阶段；**新规则的真实手机端语言行为仍待用户实测**：语音输入明确要求汉语时音频应仍为日语，typed-only 文字行为应保持不变。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-formal-release.md`。
 
 ## 2026-09-26：Amadeus 1.5.4 正式发布已部署
 
