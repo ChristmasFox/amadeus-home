@@ -1,18 +1,21 @@
-## 2026-09-25：1.5.3 连续群语音只生成一条 PTT（入站 FIFO 修复候选）
+## 2026-09-25：连续群语音 PTT 回退已修复为 FIFO 候选，等待重测
 
-用户报告在群聊连续发两条语音，只有一条得到 PTT，另一条只有文字。12:18–12:19Z 脱敏日志可见两个
-Ogg 音频入站、两个助手最终回合、仅一条媒体发送。固定 OpenClaw 2026.9.4 的 followup 队列将结果通过
-直接 `routeReply` 投递，绕过正常 inbound final TTS 应用；该源码路径与“queued voice 只有文字”吻合。
+用户报告两条连续群语音只有一条得到 PTT。脱敏 trace 显示两个 Ogg 音频入站、两个助手最终回合、仅一次媒体发送；
+固定版 follow-up `routeReply` 绕过正常自动 TTS 是与症状吻合的根因。修复 commit `02fdf49` 已 push，候选已
+apply 到唯一 runtime：`local/openclaw-amadeus:git-02fdf490f8bb-20260925130109`。
 
-修复候选已把排队边界移动到 WhatsApp `processForRoute`：同一 session 只在活动 voice lease 时用 FIFO 等待，
-前一轮完整 settle 后，每个 queued voice 都重新经过正常 `processMessage`/`runChannelInboundEvent`/TTS 路径；
-后续 text 也按顺序处理。每条 queued voice 在自己开始时获得独立的 3 秒 composing lease/120 秒上限。Presence
-发送失败仅停止刷新、不提前释放队列；断连、turn settle 与硬超时仍会清理。typed-only concurrency 不变。
+候选通过在 WhatsApp `processForRoute` 入站边界加 voice-scoped FIFO，让每个后续语音在前一轮完整 TTS/发送完成后，
+重新走各自正常 inbound/TTS 管线；后续文字也排在前面语音之后。每条 queued voice 有自己的 composing lease/120秒上限。
+核心队列只保留为绕行入口的 fallback；正常 WhatsApp 会话在进入 core 前已序列化。
 
-`pnpm test`、`pnpm typecheck`、architecture、secrets 与 pinned monitor 临时副本 patch/语法/幂等/stdin 检查通过。
-修复源码还未 commit、push 或部署；正式 1.5.3 镜像仍运行。下一步 commit/push 后使用 `--candidate` build/apply
-并带 corrected full npm subtree checkpoint，再请用户重复连续群语音，确认两条各自一条日文 PTT+中文 summary。
-详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-consecutive-voice-tts-regression.md`。
+新恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925130109` 已确认包含完整
+`/DATA/AppData/openclaw/config/npm/projects`（约 71,202,900 bytes）。部署后 OpenClaw healthy、restart=0，
+WhatsApp linked/connected；core/v1/v2 markers 各 1。全量 `pnpm test`、typecheck、architecture、secrets 与
+同版 monitor 临时 patch/语法/幂等/stdin 验证通过。
+
+仍需用户重发两条连续群语音：预期每条各收到一条日文 PTT 和一条中文 summary，按输入顺序完成，且每轮三点持续到
+PTT/summary 都发完。当前仍为 1.5.3 同版本候选热修，不 bump 1.5.4，直到该实机重测通过。详见
+`.agent/checkpoints/2026-09-25-amadeus-1.5.3-consecutive-voice-tts-candidate.md`。
 
 ## 2026-09-25：M204 9Router 应用层代理已关闭，旧机代理权威一致
 
