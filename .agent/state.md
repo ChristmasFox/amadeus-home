@@ -1,3 +1,11 @@
+## 2026-09-25 UTC：语音仍出现中文的真实根因与修复（源码已验证，待候选部署）
+
+用户澄清最新语音并未要求汉语，实际仍偶发中文 PTT。只读脱敏检查确认最近语音 turn 的 assistant final 只有中文、无日文行和 TTS directive。live SOUL/USER 的默认中文只面向普通文字；并非两条规则同时生效互相覆盖。真正问题是 pinned WhatsApp 2026.9.4 的 `message_received` plugin hook 默认关闭，live 全局/账户均未 opt-in，且 WhatsApp channel 显式 `suppressMessageReceivedHooks: true`。此前两版 voice Skill tracker 都依赖这个**从未触发**的 hook，所以日语 Skill 实际没有注入；默认中文规则自然接管。
+
+已删除这一失效的观测链，改为 Amadeus `before_prompt_build` 读取现有 WhatsApp ingress 建立的**受信 active voice lease**（仅音频、单一 session、120 秒上限，完整发送后释放），不开放通用 message-received 内容钩子。并在 WhatsApp `delivery.preparePayload` 加可恢复 v2 音频门禁：入站语音的 TTS/PTT 源文本缺少日语假名或未知时，在发送前剥除音频，只回文字与“日语语音暂时无法生成”的提示，避免继续发出明显中文语音；typed-only 仍原样。该门禁是保守 fail-closed，不声称能对任意混合文本证明语言。
+
+Amadeus typecheck/tests/build、完整 `pnpm test`、voice lifecycle/parser fixture、architecture、secrets 均通过；对已 patch 的 live pinned monitor 与 fresh 2026.9.4 monitor 做了临时内存态 v2 补丁、幂等和 Node syntax 验证。`VERSION=1.5.5` 不变，源码尚未部署；需同版本单实例候选 + 真实语音验收，之后才能 bump 1.5.6 正式发布。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-japanese-voice-lease-guard-source.md`。
+
 ## 2026-09-25 UTC：1.5.5 日语语音注入 hotfix 候选已部署，待实测
 
 Owner 反馈正式版语音仍为中文。脱敏 trace 的最新 inbound audio 对应 Chinese-only assistant final，没有 `日本語：` 行和 TTS directive。根因已定位：pinned OpenClaw 2026.9.4 `message_received` mapper 不传 `runId`，而旧 tracker 强制要求 runId，所以语音 Skill 没有注入该实际请求。

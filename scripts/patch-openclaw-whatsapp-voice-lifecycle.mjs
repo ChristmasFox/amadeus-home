@@ -10,6 +10,7 @@ export const CORE_MARKER = 'amadeus-whatsapp-voice-followup-v1';
 export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
 export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
 export const WHATSAPP_JAPANESE_TEXT_MARKER = 'amadeus-whatsapp-japanese-visible-tts-v1';
+export const WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER = 'amadeus-whatsapp-japanese-audio-guard-v1';
 
 export function resolveVoiceFollowup(lease, currentMessageId) {
   return Boolean(lease && lease.messageId !== currentMessageId);
@@ -20,10 +21,21 @@ export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   const hasMedia = (typeof payload.mediaUrl === 'string' && payload.mediaUrl.trim().length > 0)
     || (Array.isArray(payload.mediaUrls) && payload.mediaUrls.some((url) => typeof url === 'string' && url.trim().length > 0));
   if (!hasMedia) return payload;
+  const isTtsVoice = payload.audioAsVoice === true || typeof payload.ttsSupplement?.spokenText === 'string';
+  if (!isTtsVoice) return payload;
   const supplementText = typeof payload.ttsSupplement?.spokenText === 'string' ? payload.ttsSupplement.spokenText : '';
   const spokenText = (supplementText || (typeof payload.spokenText === 'string' ? payload.spokenText : '')).trim();
-  if (!spokenText) return payload;
   const visibleText = typeof payload.text === 'string' ? payload.text : '';
+  if (!/[\u3040-\u30ff]/u.test(spokenText)) {
+    // An untagged Chinese-only final must never become a Chinese WhatsApp PTT.
+    // Return text-only instead of trying to relabel or reuse already-synthesized audio.
+    const safeText = visibleText.split(/\r?\n/u).filter((line) => !/^日本語[：:]/u.test(line.trim())).join('\n').trim();
+    const warning = '日语语音暂时无法生成，请稍后重试。';
+    const { mediaUrl: _mediaUrl, mediaUrls: _mediaUrls, audioAsVoice: _audioAsVoice,
+      spokenText: _spokenText, ttsSupplement: _ttsSupplement, trustedLocalMedia: _trustedLocalMedia,
+      ...textOnlyPayload } = payload;
+    return { ...textOnlyPayload, text: safeText ? `${safeText}\n${warning}` : warning };
+  }
   const outputLines = [];
   let japaneseLineWritten = false;
   for (const line of visibleText.split(/\r?\n/u)) {
@@ -255,6 +267,19 @@ export function patchWhatsAppIngressQueueSource(original) {
   return result;
 }
 
+export function patchWhatsAppJapaneseAudioGuardSource(original) {
+  if (original.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER)) return original;
+  const marker = `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n`;
+  const count = original.split(marker).length - 1;
+  if (count !== 1) throw new Error(`Japanese visible-text patch must be applied first: marker count=${count}`);
+  const start = original.indexOf(marker) + marker.length;
+  const end = original.indexOf('\nfunction createWhatsAppReplyPlan(params) {', start);
+  if (end < 0 || !original.slice(start, end).startsWith('function ensureAmadeusJapaneseVoiceText(')) {
+    throw new Error('pinned Japanese visible-text helper anchor missing');
+  }
+  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
+}
+
 export function patchWhatsAppJapaneseTextSource(original) {
   if (original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) return original;
   if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
@@ -331,6 +356,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(`WHATSAPP_VOICE_TYPING_PATCH=${await patchFile(path, patchWhatsAppSource, WHATSAPP_MARKER)}`);
     console.log(`WHATSAPP_VOICE_INGRESS_QUEUE_PATCH=${await patchFile(path, patchWhatsAppIngressQueueSource, WHATSAPP_INGRESS_QUEUE_MARKER)}`);
     console.log(`WHATSAPP_JAPANESE_TEXT_PATCH=${await patchFile(path, patchWhatsAppJapaneseTextSource, WHATSAPP_JAPANESE_TEXT_MARKER)}`);
+    console.log(`WHATSAPP_JAPANESE_AUDIO_GUARD_PATCH=${await patchFile(path, patchWhatsAppJapaneseAudioGuardSource, WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER)}`);
   }
 }
 

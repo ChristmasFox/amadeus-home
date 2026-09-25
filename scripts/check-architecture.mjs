@@ -139,10 +139,12 @@ export function checkArchitecture(root = REPO_ROOT) {
     }
   }
   const voicePrompt = text(root, 'plugins/amadeus/src/voice-reply-prompt.ts');
-  for (const token of ["channel !== 'whatsapp'", "startsWith('audio/')", 'tracker.record(', 'event.runId ?? context.runId', 'event.sessionKey ?? context.sessionKey', 'tracker.shouldInject(', 'context.channel ?? context.channelId', 'tracker.clear(context.runId, context.sessionKey)', 'VOICE_RUN_TTL_MS', 'VOICE_RUN_MAX', 'skills/voice-reply/SKILL.md']) {
-    if (!voicePrompt.includes(token)) errors.push(`voice prompt enrichment is missing bounded audio guard: ${token}`);
+  for (const token of ["channel.trim().toLowerCase() !== 'whatsapp'", 'WHATSAPP_VOICE_RUNS_GLOBAL', 'registry instanceof Map', 'lease.closed === false', 'lease.sessionKey === sessionKey', 'context.channel ?? context.messageProvider', 'skills/voice-reply/SKILL.md']) {
+    if (!voicePrompt.includes(token)) errors.push(`voice prompt enrichment is missing the verified audio-lease guard: ${token}`);
   }
-  if (voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not copy inbound user content');
+  const voiceLifecyclePatch = text(root, 'scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs');
+  if (!voiceLifecyclePatch.includes("VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925'")) errors.push('WhatsApp voice lease global marker has drifted from Amadeus');
+  if (voicePrompt.includes("api.on('message_received'") || voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not depend on optional content hooks or copy inbound user content');
   for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerMacosHost', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
   }
