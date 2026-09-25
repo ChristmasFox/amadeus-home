@@ -57,12 +57,12 @@ check_version
 version_fixture="$fixture/version-check"
 mkdir -p "$version_fixture/scripts"
 printf '%s\n' '1.4.4' > "$version_fixture/VERSION"
-printf '%s\n' '# Amadeus 1.4.4' '' 'Storage runtime fixture.' > "$version_fixture/RELEASE_NOTES.md"
+printf '%s\n' '# Amadeus 1.4.4' '' '存储运行时测试。' > "$version_fixture/RELEASE_NOTES.md"
 cp "$original_root/scripts/amadeus-version.sh" "$version_fixture/scripts/amadeus-version.sh"
 chmod 755 "$version_fixture/scripts/amadeus-version.sh"
 ROOT_DIR="$version_fixture"
 check_version
-printf '%s\n' '# Amadeus 1.4.2' '' 'Stale release fixture.' > "$version_fixture/RELEASE_NOTES.md"
+printf '%s\n' '# Amadeus 1.4.2' '' '过期版本测试。' > "$version_fixture/RELEASE_NOTES.md"
 if check_version >/dev/null 2>&1; then
   printf '%s\n' 'stale release notes unexpectedly passed dynamic version check' >&2
   exit 1

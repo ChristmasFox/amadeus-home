@@ -1,7 +1,6 @@
-# Amadeus 1.5.6
+# Amadeus 1.5.7
 
-Keep voice-note audio in Japanese while preserving ordinary text replies.
+修正外部存储门禁：按卷 UUID、sentinel 和 guest 目标路径验证，不再依赖旧 Immich 迁移源；身份校验失败时不创建外部维护报告或执行清理。
 
-- Apply the Japanese voice format to verified voice notes, with a matching Japanese written line and concise Chinese summary.
-- If Japanese speech cannot be produced, send a clear text notice rather than a Chinese voice reply.
-- Leave typed-only message behavior unchanged.
+- 日语语音回复长度改为约 100 词的弹性建议，不再作为必须遵守的限制；中文摘要与日文文本之间空一行。
+- 部署完成通知中的更新内容使用中文，并在发布校验中阻止英文-only 的说明。

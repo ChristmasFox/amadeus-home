@@ -48,6 +48,15 @@ export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
     outputLines.push(line);
   }
   if (!japaneseLineWritten) outputLines.push(`日本語：${spokenText}`);
+  const japaneseIndex = outputLines.findIndex((line) => /^日本語[：:]/u.test(line.trim()));
+  if (japaneseIndex > 0) {
+    let insertAt = japaneseIndex;
+    while (insertAt > 0 && outputLines[insertAt - 1].trim() === '') {
+      outputLines.splice(insertAt - 1, 1);
+      insertAt -= 1;
+    }
+    outputLines.splice(insertAt, 0, '');
+  }
   const nextText = outputLines.join('\n').trim();
   return nextText === visibleText ? payload : { ...payload, text: nextText };
 }

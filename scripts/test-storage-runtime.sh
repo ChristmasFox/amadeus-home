@@ -85,6 +85,36 @@ if env "${preflight_env[@]}" STORAGE_TEST_DESTINATION_FREE_BYTES=1 bash "$ROOT_D
   exit 1
 fi
 run_preflight >/dev/null
+# Post-deploy checks must pass when the legacy copy-first migration source is absent,
+# while still rejecting a mismatched external-volume identity.
+identity_output="$(env "${preflight_env[@]}" bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --source "$fixture/missing-legacy-source" --destination "$destination")"
+printf '%s\n' "$identity_output" | grep -Fq 'external storage identity preflight passed'
+if env "${preflight_env[@]}" STORAGE_TEST_ACTUAL_VOLUME_UUID='wrong-uuid' bash "$ROOT_DIR/scripts/storage-preflight.sh" --status --identity-only --source "$fixture/missing-legacy-source" --destination "$destination" >/dev/null 2>&1; then
+  printf '%s\n' 'identity-only gate unexpectedly accepted a mismatched external volume' >&2
+  exit 1
+fi
+# A failed post-deploy identity gate must not invoke guest cleanup or create an
+# external report directory before the volume has been authenticated.
+gate_bin="$fixture/gate-bin"
+mkdir -p "$gate_bin"
+gate_orb_marker="$fixture/orb-called"
+cat >"$gate_bin/orb" <<SH
+#!/usr/bin/env bash
+printf '%s\n' called >> "$gate_orb_marker"
+exit 99
+SH
+chmod 755 "$gate_bin/orb"
+if env PATH="$gate_bin:$PATH" AMADEUS_HOST_PROFILE="$fixture/no-host-profile" \
+  EXTERNAL_STORAGE_ROOT="$external" EXTERNAL_STORAGE_VOLUME_UUID='fixture-volume-uuid' \
+  STORAGE_TEST_ACTUAL_VOLUME_UUID='wrong-uuid' EXTERNAL_STORAGE_SENTINEL_ID='fixture-external' \
+  IMMICH_MEDIA_ROOT="$destination" SKULD_BACKUP_ROOT="$external/backups/operation-skuld" \
+  STORAGE_PREFLIGHT_TEST_MODE=1 ORBSTACK_MACHINE=fixture \
+  bash "$ROOT_DIR/scripts/storage-maintenance.sh" --post-deploy >/dev/null 2>&1; then
+  printf '%s\n' 'post-deploy maintenance unexpectedly passed a mismatched external identity' >&2
+  exit 1
+fi
+[[ ! -e "$external/backups/operation-skuld/storage-maintenance" ]]
+[[ ! -e "$gate_orb_marker" ]]
 
 compose="$fixture/immich-compose.yml"
 printf '%s\n' 'services:' '  immich-server:' >"$compose"

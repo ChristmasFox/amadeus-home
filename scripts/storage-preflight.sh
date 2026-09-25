@@ -87,6 +87,49 @@ PY
   storage_pass 'external storage sentinel initialized'
 }
 
+storage_identity_only_check() {
+  local destination="$1" machine="${ORBSTACK_MACHINE:-ubuntu}" parent status
+  [[ -e "$destination" && -L "$destination" ]] && { storage_fail 'external destination is a symlink'; return; }
+  parent="$(storage_existing_parent "$destination")"
+  if ((STORAGE_TEST_MODE)); then
+    [[ -d "$parent" && -r "$parent" && -w "$parent" ]] || { storage_fail "external destination parent is not readable/writable: $parent"; return; }
+    storage_pass 'external destination is visible and writable in the guest fixture'
+    return
+  fi
+  command -v orb >/dev/null 2>&1 || { storage_fail 'OrbStack CLI is unavailable for guest external-storage verification'; return; }
+  if orb -m "$machine" -u root python3 - "$EXTERNAL_STORAGE_ROOT" "$destination" "$EXTERNAL_STORAGE_SENTINEL_ID" <<'PY'
+import json, os, sys
+from pathlib import Path
+root, destination = Path(sys.argv[1]), Path(sys.argv[2])
+expected_id = sys.argv[3]
+if not root.is_dir():
+    raise SystemExit('external storage root is not visible inside the guest')
+sentinel = root / '.amadeus-storage.json'
+try:
+    value = json.loads(sentinel.read_text(encoding='utf-8'))
+except Exception as error:
+    raise SystemExit(f'external storage sentinel is unreadable inside the guest: {error}')
+if value.get('schemaVersion') != 1 or value.get('storageId') != expected_id or value.get('purpose') != 'amadeus-homelab-storage':
+    raise SystemExit('external storage sentinel identity mismatch inside the guest')
+if destination.is_symlink():
+    raise SystemExit('external destination is a symlink')
+parent = destination if destination.is_dir() else destination.parent
+while not parent.exists() and parent != parent.parent:
+    parent = parent.parent
+if not parent.is_dir() or not os.access(parent, os.R_OK | os.W_OK):
+    raise SystemExit('external destination parent is not readable/writable inside the guest')
+stat = os.statvfs(parent)
+print(f'EXTERNAL_DESTINATION_FREE_BYTES={stat.f_bavail * stat.f_frsize}')
+PY
+  then
+    storage_pass 'external storage identity and destination are verified inside the guest'
+  else
+    status=$?
+    storage_fail 'external storage identity or destination check failed inside the guest'
+    return "$status"
+  fi
+}
+
 storage_stats() {
   local source="$1" destination="$2" machine="${ORBSTACK_MACHINE:-ubuntu}" output
   if ((STORAGE_TEST_MODE)); then
@@ -176,10 +219,15 @@ storage_preflight() {
   local source="${1:-${IMMICH_SOURCE_ROOT:-/DATA/Gallery/immich}}"
   local destination="${2:-$IMMICH_MEDIA_ROOT}"
   local allow_existing="${3:-0}"
-  local parent stats source_bytes destination_free source_device destination_device
+  local parent stats source_bytes destination_free source_device destination_device identity_only="${4:-0}"
   storage_host_volume_check "$EXTERNAL_STORAGE_ROOT" "$EXTERNAL_STORAGE_VOLUME_UUID"
   if ((STORAGE_FAILURES == 0)); then
     storage_read_sentinel "$EXTERNAL_STORAGE_ROOT" "$EXTERNAL_STORAGE_SENTINEL_ID"
+  fi
+  if ((identity_only)); then
+    if ((STORAGE_FAILURES == 0)); then storage_identity_only_check "$destination"; fi
+    ((STORAGE_FAILURES == 0)) && storage_pass 'external storage identity preflight passed'
+    return
   fi
   [[ -e "$destination" && -L "$destination" ]] && storage_fail 'Immich destination is a symlink; refusing an ambiguous mount target'
   parent="$(storage_existing_parent "$destination")"
@@ -227,16 +275,17 @@ storage_preflight() {
 }
 
 run_storage_preflight() {
-  local mode='check' init=0 source='' destination=''
+  local mode='check' init=0 identity_only=0 source='' destination=''
   while (($#)); do
     case "$1" in
       --init-sentinel) init=1 ;;
+      --identity-only) identity_only=1 ;;
       --allow-existing) export STORAGE_ALLOW_RESUMABLE_DEST=1 ;;
       --source) shift; source="${1:?--source requires a path}" ;;
       --destination) shift; destination="${1:?--destination requires a path}" ;;
       --status|--plan|--check) mode="${1#--}" ;;
       --help|-h)
-        printf '%s\n' 'Usage: scripts/storage-preflight.sh [--plan|--status|--check] [--init-sentinel] [--allow-existing] [--source PATH] [--destination PATH]'
+        printf '%s\n' 'Usage: scripts/storage-preflight.sh [--plan|--status|--check] [--identity-only] [--init-sentinel] [--allow-existing] [--source PATH] [--destination PATH]'
         return 0
         ;;
       *) printf 'Unknown option: %s\n' "$1" >&2; return 2 ;;
@@ -245,7 +294,7 @@ run_storage_preflight() {
   done
   : "$mode"
   if ((init)); then storage_init_sentinel "$EXTERNAL_STORAGE_ROOT" "$EXTERNAL_STORAGE_SENTINEL_ID"; fi
-  storage_preflight "$source" "$destination" "${STORAGE_ALLOW_RESUMABLE_DEST:-0}"
+  storage_preflight "$source" "$destination" "${STORAGE_ALLOW_RESUMABLE_DEST:-0}" "$identity_only"
   printf 'STORAGE_PREFLIGHT=%s\n' "$((STORAGE_FAILURES == 0 ? 0 : 1))"
   printf 'STORAGE_WARNINGS=%s\n' "$STORAGE_WARNINGS"
   return "$((STORAGE_FAILURES == 0 ? 0 : 1))"
