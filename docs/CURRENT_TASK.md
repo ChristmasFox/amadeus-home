@@ -542,3 +542,12 @@ PTT 实收数量/语言及工具路径；不能把 14:45 归为默认日文策�
 原生 TTS/原 WhatsApp reply sender；配置显式启用 allowText，部署预检覆盖
 Skill 与模式，离线 pinned parser fixture 证明分离。**未构建/部署，更未手机实收**；
 必须避免把静态 parser 能力误报为 one PTT + one 中文文字送达。
+
+带新 Skill 的 OpenClaw ARM64 immutable 镜像
+`local/openclaw-amadeus:git-6e004aa1eca0-20260925070633` 已以
+`--apply --candidate --build-auto --machine nyannyan` 切入唯一实例，外部恢复点
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925070633`。预检、
+Gateway/Product Radar 健康、WhatsApp linked/connected 通过；`voice-reply`
+Skill `eligible=true`。非投递 synthetic CLI 语音转写提示得到一次 final，
+包含 `中文：` 可见段和日文 `[[tts:text]]` 音频专用段；这不是实际 voice ingress，
+**尚无手机端“一条 PTT + 一条中文文本”验收**，日文/中文例外、TTS 失败亦待验证。
