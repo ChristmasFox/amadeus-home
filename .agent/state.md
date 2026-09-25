@@ -1,11 +1,10 @@
-## 2026-09-25：日文语音可见文字后处理修复（源码已验证，尚未部署）
+## 2026-09-25：日文语音可见文字后处理候选已部署，待实测
 
-用户实测 1.5.3 candidate 后仍只看到中文。根因是前一版仅靠 voice Skill 要求模型同时输出日文行，验证只证明了 TTS parser 合同，并没有在 WhatsApp 最终发送边界保证可见文字；实际 TTS 音频 payload 已带有 `ttsSupplement.spokenText`，但其文字 payload 可能只有中文或为空。
+用户实测前一个 1.5.3 candidate 后仍只看到中文。原因是之前仅靠 voice Skill 要求模型产生日文可见行，没有在 WhatsApp 最终发送边界兜底。已增加确定性后处理：只针对语音入站且带音频媒体的发送，从 TTS payload 的实际 `ttsSupplement.spokenText`/`spokenText` 补上或同步 `日本語：` 行，因此与 PTT 内容一致；typed-only 和非媒体消息不改动。
 
-已在 WhatsApp `delivery.preparePayload` 增加确定性后处理：仅当本轮入站为语音且出站 payload 同时含媒体与实际 spoken text 时，补上/同步 `日本語：<spokenText>` 行；日文内容直接取实际 TTS 文本，确保和 PTT 一致。文本-only/non-voice 回复不变。精确 pinned `@openclaw/whatsapp@2026.9.4` monitor fixture 已通过 patch、幂等和 `node --check`；集成测试覆盖中文-only payload、已有/错配日文行、media-only TTS supplement 和 typed-only 旁路。
+源码提交 `b655dba` 已 push，并以 `./scripts/deploy-openclaw.sh --apply --candidate --build-openclaw` 部署同版本候选；`VERSION=1.5.3` 未递增。OpenClaw 镜像 `local/openclaw-amadeus:git-b655dba924f9-20260925155559`，Product Radar 复用现有镜像。恢复点 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925155559`，证据 `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260925155559`。部署 health 通过；OpenClaw `healthy`、restart=0，WhatsApp `linked/connected/healthy`。实机 monitor 的生命周期、ingress FIFO 和日文可见行三个 marker 各一次，`node --check` 通过；目前仍只有一个 OpenClaw runtime。
 
-`pnpm test`、`pnpm typecheck`、`pnpm check:architecture`、`pnpm check:secrets` 和 `git diff --check` 通过。**本修复尚未部署**，当前 CasaOS 仍是前一候选 `local/openclaw-amadeus:git-fb1d4578bafe-20260925152845`；`VERSION=1.5.3` 不变。需要将本源码变更发布为同版本候选后，实测一条语音私聊、两条连续群语音和一条 typed-only 中文消息。详见 `.agent/checkpoints/2026-09-25-amadeus-japanese-visible-text-postprocessor-source.md` 与待办 `.agent/tasks/2026-09-25-amadeus-japanese-visible-text-candidate-deploy.md`。
-
+本地 full tests、typecheck、architecture、secrets scan 以及精确 `@openclaw/whatsapp@2026.9.4` monitor patch/幂等/syntax 验证均通过。待 owner 验收：一条语音私聊、同群连续两条语音（各自 PTT + 匹配的日文汉字/假名行 + 中文摘要，FIFO）、以及一条中文文字消息（仍仅中文，不出日文/语音）。验收前不 bump 到 1.5.4。恢复和回归记录见 `.agent/checkpoints/2026-09-25-amadeus-japanese-visible-text-postprocessor-source.md`；待办 `.agent/tasks/2026-09-25-amadeus-japanese-visible-text-candidate-deploy.md`。
 ## 2026-09-25：语音回复已加日文假名/汉字可见行（同版本候选已部署，待实机确认）
 
 针对用户要求，voice Skill 现输出中文 summary、自然日文汉字+假名可见行、以及匹配该日文行的音频指令；
@@ -103,7 +102,7 @@ diff check 通过。M204 已运行 `local/openclaw-amadeus:git-805e6b4-202609240
 - Execution state is persisted in `.agent/EXECUTION_PLAN.md`, `.agent/run-state.example.json`, and external evidence under `SKULD_BACKUP_ROOT`.
 # Agent State
 
-更新时间：2026-09-24（Asia/Shanghai）
+更新时间：2026-09-25（Asia/Shanghai）
 
 2026-09-24 frpc/public restore：已从 source-freeze 外置归档恢复官方 frp 0.69.0，systemd
 服务 active，配置校验通过。删除了 9router 与 Homarr 的隧道映射，frpc 管理面和 Glances

@@ -1,8 +1,8 @@
 # Deploy Japanese visible voice-text postprocessor candidate
 
-- Status: source fix verified; CasaOS candidate deployment and owner handset acceptance remain pending.
-- Current runtime is still the prior same-version candidate `local/openclaw-amadeus:git-fb1d4578bafe-20260925152845`.
+- Status: same-version candidate deployed; owner handset acceptance remains pending.
+- Current candidate: `local/openclaw-amadeus:git-b655dba924f9-20260925155559` (source `b655dba`).
 - Keep `VERSION=1.5.3`; do not create a formal release before owner acceptance.
-- After explicit CasaOS apply authorization, run the deployment script in dry-run first, then use the same-version candidate path with OpenClaw-only build/apply; preserve the external rollback checkpoint and verify the patched WhatsApp monitor has the Japanese-text marker exactly once, OpenClaw healthy/restarts=0, and WhatsApp linked/connected.
+- Deployment used `./scripts/deploy-openclaw.sh --apply --candidate --build-openclaw`; rollback checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260925155559`. Post-apply health passed, restart count is 0, WhatsApp is linked/connected, and all three lifecycle/FIFO/Japanese-text markers occur once.
 - Owner retest: one voice DM, two consecutive group voice notes (FIFO, each Japanese PTT + matching visible Japanese line + Chinese summary), and typed-only Chinese (no Japanese line/PTT).
-- Record runtime image, backup checkpoint, and redacted acceptance evidence in a dated checkpoint. Do not copy message content or secrets into Git.
+- Record owner result in a dated checkpoint. Do not copy message content or secrets into Git.
