@@ -1,7 +1,7 @@
-# Amadeus 1.5.2
+# Amadeus 1.5.3
 
-Expose measured macOS SoC power telemetry through the owner-only host status tool.
+Keep WhatsApp voice replies responsive through final delivery while preserving the bilingual voice contract.
 
-- Add a root-owned powermetrics sampler with atomic, fresh snapshots.
-- Report CPU, GPU, ANE, SoC milliwatts, watts, sample duration, scope, and accuracy metadata.
-- Keep the user HTTP agent bounded and degrade explicitly when privileged samples are missing or stale.
+- Refresh WhatsApp composing during an active audio reply and clear it after PTT/text delivery, cancellation, failure, disconnect, or the 120-second safety limit.
+- Queue same-session WhatsApp messages during an active voice turn so they do not steer or alter the current reply; leave typed-only behavior unchanged.
+- Add pinned lifecycle regression tests and checkpoint the mounted WhatsApp package before deployment patches.
