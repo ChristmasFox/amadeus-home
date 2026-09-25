@@ -1,3 +1,10 @@
+## 2026-09-25 UTC：1.5.5 日语语音注入 hotfix（源码已修，待候选部署）
+
+Owner 报告 1.5.5 后语音仍为中文。只读的脱敏 trace 显示最近语音 turn 的 assistant final 为中文-only（没有 `日本語：` 行，也没有 `[[tts:text]]`）；不含任何原文内容。根因在 pinned OpenClaw 2026.9.4 边界：`message_received` mapper 不传 `runId`，但原 voice Skill tracker 只接受 `runId`，因此未记录/注入 `voice-reply` Skill，最终模型没有得到固定日语音频规则。
+
+已修 tracker：语音入站缺 `runId` 时暂按可信 `sessionKey` 记录，在实际 `before_prompt_build` 收到本轮 `runId` 后绑定到该 run；`agent_end` 按 run/session 清理，保留 WhatsApp+audio 限定、10 分钟 TTL 和 128 项上限，避免污染后续 typed-only 请求。manifest 测试复现 pinned 映射（event/context 都没有 runId），验证 Skill 会注入并在结束后清理；单测覆盖 session fallback、run 绑定与不同 typed run 不注入。
+
+定向 Amadeus typecheck/tests、Amadeus build、双语 TTS fixture、architecture、secrets 检查通过。`VERSION=1.5.5` 不变；源码尚未部署。下一步是同版本 1.5.5 hotfix candidate，真人复测“语音要求汉语但 PTT 仍日语”，通过后再按 patch bump 发布 1.5.6。详见 `.agent/checkpoints/2026-09-25-amadeus-1.5.5-japanese-audio-injection-hotfix-source.md` 和待办 `.agent/tasks/2026-09-25-amadeus-1.5.5-japanese-audio-injection-hotfix-candidate.md`。
 ## 2026-09-25 UTC：Amadeus 1.5.5 正式发布已部署
 
 用户明确要求将语音音频固定为日语后“正式发布”。`VERSION` 已按唯一入口从 1.5.4 patch bump 至 1.5.5，release commit `07918b6` 已 push，正式部署通过 `./scripts/deploy-openclaw.sh --apply --build-auto` 完成。
