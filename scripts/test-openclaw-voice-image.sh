@@ -24,7 +24,7 @@ docker --context orbstack run --rm --network none --workdir /app/dist/extensions
   --entrypoint /usr/local/bin/node "$IMAGE" -e '
 const {spawnSync}=require("node:child_process");
 if(!process.env.LD_LIBRARY_PATH || !process.execPath.endsWith("/node.glibc")) throw new Error("node_worker_exec_path_changed");
-const worker=spawnSync(process.execPath,["-e","process.stdout.write("worker-ready")"],{encoding:"utf8"});
+const worker=spawnSync(process.execPath,["-e",`process.stdout.write("worker-ready")`],{encoding:"utf8"});
 if(worker.status!==0 || worker.stdout!=="worker-ready") throw new Error("node_worker_spawn_failed");
 import("longbridge").then(sdk=>{
   if(!sdk || !Object.keys(sdk).length) throw new Error("longbridge_import_failed");
