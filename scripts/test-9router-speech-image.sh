@@ -54,17 +54,17 @@ for _ in $(seq 1 60); do
   if orb -m "$ORBSTACK_MACHINE" -u root docker exec "$name" node -e 'Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz")]).then(([a,b])=>process.exit(a.ok&&b.ok?0:1)).catch(()=>process.exit(1))' >/dev/null 2>&1; then break; fi
   sleep 1
 done
-orb -m "$ORBSTACK_MACHINE" -u root docker exec -i "$name" node --input-type=module - <<'JS'
+orb -m "$ORBSTACK_MACHINE" -u root docker exec -u node -i "$name" node --input-type=module - <<'JS'
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:http';
 const processes=readdirSync('/proc').filter(name=>/^\d+$/.test(name)).flatMap(name=>{
-  try{return [{args:readFileSync('/proc/'+name+'/cmdline','utf8'),env:readFileSync('/proc/'+name+'/environ','utf8')}]}catch{return []}
+  try{return [{argv:readFileSync('/proc/'+name+'/cmdline','utf8').split('\0').filter(Boolean),env:readFileSync('/proc/'+name+'/environ','utf8')}]}catch{return []}
 });
-const bridgeProc=processes.find(p=>p.args.includes('/opt/amadeus/asr-bridge.mjs'));
-const routerProc=processes.find(p=>p.args.includes('/usr/local/lib/node_modules/9router/app/custom-server.js'));
+const bridgeProc=processes.find(p=>p.argv[1]==='/opt/amadeus/asr-bridge.mjs');
+const routerProc=processes.find(p=>p.argv[0]?.startsWith('next-server'));
 if(!bridgeProc?.env.includes('NODE_USE_ENV_PROXY=1') || !routerProc || routerProc.env.includes('NODE_USE_ENV_PROXY=1'))
-  throw new Error('scoped_asr_proxy_env_missing_or_globalized');
+  throw new Error('scoped_asr_proxy_env_missing_or_globalized bridge='+Boolean(bridgeProc)+' bridgeFlag='+Boolean(bridgeProc?.env.includes('NODE_USE_ENV_PROXY=1'))+' router='+Boolean(routerProc)+' routerFlag='+Boolean(routerProc?.env.includes('NODE_USE_ENV_PROXY=1')));
 const base='http://127.0.0.1:20129';
 const health=await fetch(base+'/healthz');
 if (!health.ok) throw new Error('bridge_unhealthy');
@@ -131,7 +131,7 @@ for _ in $(seq 1 60); do
   if orb -m "$ORBSTACK_MACHINE" -u root docker exec "$name" node -e 'fetch("http://127.0.0.1:20128/api/health").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))' >/dev/null 2>&1; then break; fi
   sleep 1
 done
-orb -m "$ORBSTACK_MACHINE" -u root docker exec -i "$name" node --input-type=module - <<'JS'
+orb -m "$ORBSTACK_MACHINE" -u root docker exec -u node -i "$name" node --input-type=module - <<'JS'
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 const wav=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','anullsrc=r=16000:cl=mono','-t','1','-f','wav','pipe:1'],{maxBuffer:2*1024*1024}).stdout;

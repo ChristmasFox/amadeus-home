@@ -4,8 +4,9 @@
 import { spawn } from 'node:child_process';
 const children = [
   // Node 22's built-in fetch does not honor HTTPS_PROXY by default. Scope the
-  // existing host proxy to ASR only; packaged 9Router keeps its own persisted
-  // outbound-proxy policy. NO_PROXY still covers container-loopback routes.
+  // existing host proxy to ASR only; packaged 9Router keeps its separate
+  // transport policy and does not inherit this Node-wide opt-in. NO_PROXY
+  // still covers container-loopback routes.
   spawn(process.execPath, ['/opt/amadeus/asr-bridge.mjs'], {
     stdio: 'inherit', env: { ...process.env, NODE_USE_ENV_PROXY: '1' },
   }),

@@ -372,3 +372,5 @@ Doctor 0/0，`migration-readiness.sh` 0 failures / 0 warnings，`OPERATION_SKULD
 ## 2026-09-25：语音边界的两层网络门禁已定位（源码待切换）
 
 单一 OpenClaw 验收候选已运行、ffmpeg/libopus 与 WhatsApp patch 已验证；真实 WhatsApp 仍待验收。原生 audio CLI 的合成音频在上传前被媒体 SSRF 默认策略阻断 `9router` 私网 DNS；pinned schema 的 provider 级 `request.allowPrivateNetwork=true` 临时试验已穿过此层，现已仅对固定 `http://9router:20128/v1` 的 OpenAI-compatible provider 写入源码。随后请求到达 9Router，但 ASR bridge 的 Node22 fetch 对 QwenAI 域名 `ENOTFOUND`，账户暂时 503/锁定；临时启用 Node env-proxy 后上游无 key 请求到达 401。源码仅对 ASR bridge 子进程启用 `NODE_USE_ENV_PROXY=1`，不改 9Router chat 的独立代理策略。两项修复尚未部署，也不宣称解决另一个 Codex/OpenAI 间歇性 DNS/代理任务。见 `.agent/checkpoints/2026-09-25-amadeus-1.5.3-speech-private-route.md`。
+
+9Router 新镜像的 network-none 隔离启动再次通过；以容器 `node` UID 检查进程环境，确认仅 ASR bridge 子进程启用 `NODE_USE_ENV_PROXY=1`，Next server 未启用。fixture 已清理；生产旧镜像未因此切换。
