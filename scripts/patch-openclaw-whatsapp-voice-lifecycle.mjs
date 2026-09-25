@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 export const VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
 export const CORE_MARKER = 'amadeus-whatsapp-voice-followup-v1';
 export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
+export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
 
 export function resolveVoiceFollowup(lease, currentMessageId) {
   return Boolean(lease && lease.messageId !== currentMessageId);
@@ -124,6 +125,45 @@ function startAmadeusVoiceReplyLease(params) {
 }
 `;
 
+export const whatsappIngressQueueHelpers = `// ${WHATSAPP_INGRESS_QUEUE_MARKER}: serialize WhatsApp arrivals behind a voice run before Agent dispatch.
+const AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS = new Map();
+async function runAmadeusWhatsAppVoiceScopedIngress(params) {
+\tconst sessionKey = String(params.sessionKey ?? "").trim();
+\tconst messageId = String(params.messageId ?? "").trim();
+\tif (!sessionKey || !messageId || typeof params.run !== "function") return await params.run();
+\tconst registry = getAmadeusVoiceReplyRegistry();
+\tconst previousTail = AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.get(sessionKey);
+\tconst activeLease = registry.get(sessionKey);
+\tconst mustQueue = Boolean(previousTail || activeLease && activeLease.messageId !== messageId);
+\tif (!mustQueue) {
+\t\tconst lease = params.isVoice ? activeLease && activeLease.messageId === messageId ? activeLease : startAmadeusVoiceReplyLease({ sessionKey, messageId, chatJid: params.chatJid, sendComposing: params.sendComposing }) : void 0;
+\t\ttry { return await params.run(); }
+\t\tfinally { if (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled"); }
+\t}
+\tlet releaseSlot;
+\tconst slot = new Promise((resolve) => { releaseSlot = resolve; });
+\tconst predecessor = previousTail ?? Promise.resolve();
+\tconst tail = predecessor.catch(() => {}).then(() => slot);
+\tAMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.set(sessionKey, tail);
+\tlet lease;
+\ttry {
+\t\tawait predecessor.catch(() => {});
+\t\twhile (true) {
+\t\t\tconst current = registry.get(sessionKey);
+\t\t\tif (!current || current.messageId === messageId) break;
+\t\t\tawait current.settled;
+\t\t}
+\t\tconst current = registry.get(sessionKey);
+\t\tif (params.isVoice) lease = current?.messageId === messageId ? current : startAmadeusVoiceReplyLease({ sessionKey, messageId, chatJid: params.chatJid, sendComposing: params.sendComposing });
+\t\treturn await params.run();
+\t} finally {
+\t\tif (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled");
+\t\treleaseSlot();
+\t\tif (AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.get(sessionKey) === tail) AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.delete(sessionKey);
+\t}
+}
+`;
+
 export function patchWhatsAppSource(original) {
   if (original.includes(WHATSAPP_MARKER)) return original;
   let result = replaceOnce(
@@ -161,6 +201,30 @@ export function patchWhatsAppSource(original) {
     '\t});\n\tconst didSendReply = turnResult.dispatched ? finalizeReply?.(turnResult.dispatchResult) ?? false : false;',
     '\t}).finally(() => closeAmadeusVoiceReplyLeaseForTurn(params.route.sessionKey, params.msg.event.id));\n\tconst didSendReply = turnResult.dispatched ? finalizeReply?.(turnResult.dispatchResult) ?? false : false;',
     'voice inbound turn settlement',
+  );
+  return result;
+}
+
+export function patchWhatsAppIngressQueueSource(original) {
+  if (original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) return original;
+  if (!original.includes(WHATSAPP_MARKER)) throw new Error('WhatsApp lifecycle base patch must be applied first');
+  let result = replaceOnce(
+    original,
+    'function createWebOnMessageHandler(params) {',
+    `${whatsappIngressQueueHelpers}\nfunction createWebOnMessageHandler(params) {`,
+    'voice-scoped ingress queue helper insertion',
+  );
+  result = replaceOnce(
+    result,
+    'function clearAmadeusVoiceReplyLeasesForChat(chatJid) {\n\tconst registry = getAmadeusVoiceReplyRegistry();\n\tfor (const lease of registry.values()) if (lease.chatJid === chatJid) closeAmadeusVoiceReplyLease(lease, "presence-error");\n}',
+    'function clearAmadeusVoiceReplyLeasesForChat(chatJid) {\n\tconst registry = getAmadeusVoiceReplyRegistry();\n\tfor (const lease of registry.values()) if (lease.chatJid === chatJid) { clearInterval(lease.refreshTimer); lease.refreshTimer = null; lease.presenceFailed = true; }\n}',
+    'voice presence failure retains queue lock',
+  );
+  result = replaceOnce(
+    result,
+    '\t\treturn processMessage(processParams);',
+    '\t\tconst admission = requireWhatsAppInboundAdmission(msg);\n\t\tconst media = msg.payload.media;\n\t\tconst isVoice = admission.ingress.admission === "dispatch" && (media?.kind === "audio" || String(media?.type ?? "").toLowerCase().startsWith("audio/"));\n\t\treturn runAmadeusWhatsAppVoiceScopedIngress({\n\t\t\tsessionKey: route.sessionKey,\n\t\t\tmessageId: msg.event.id,\n\t\t\tisVoice,\n\t\t\tchatJid: msg.platform.chatJid,\n\t\t\tsendComposing: msg.platform.sendComposing,\n\t\t\trun: () => processMessage(processParams)\n\t\t});',
+    'voice-scoped WhatsApp ingress dispatch',
   );
   return result;
 }
@@ -215,6 +279,7 @@ export async function main(argv = process.argv.slice(2)) {
     const path = await findFile(options['whatsapp-root'], /^monitor-.*\.js$/u, 'function createWhatsAppReplyPlan(params) {');
     if (!path) throw new Error('pinned WhatsApp monitor module missing');
     console.log(`WHATSAPP_VOICE_TYPING_PATCH=${await patchFile(path, patchWhatsAppSource, WHATSAPP_MARKER)}`);
+    console.log(`WHATSAPP_VOICE_INGRESS_QUEUE_PATCH=${await patchFile(path, patchWhatsAppIngressQueueSource, WHATSAPP_INGRESS_QUEUE_MARKER)}`);
   }
 }
 
