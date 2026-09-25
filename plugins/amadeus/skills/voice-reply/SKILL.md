@@ -1,6 +1,6 @@
 ---
 name: voice-reply
-description: Format admitted voice-note replies using native Auto-TTS as one spoken response plus, when the speech is not Chinese, one short Chinese text summary.
+description: REQUIRED for every inbound voice note: use one native Auto-TTS spoken reply plus one visible Chinese summary for non-Chinese speech; explicit Chinese output requests skip the summary.
 user-invocable: false
 ---
 

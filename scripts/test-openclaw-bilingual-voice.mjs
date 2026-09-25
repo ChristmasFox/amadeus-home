@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Pinned OpenClaw 2026.9.4 directive contract: Chinese visible, Japanese spoken.
 import assert from 'node:assert/strict';
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const dist = join(process.cwd(), 'node_modules/.pnpm/openclaw@2026.9.4/node_modules/openclaw/dist');
 const file = (await readdir(dist)).find((name) => /^directives-.*\.mjs$/u.test(name));
 assert.ok(file, 'pinned OpenClaw directive parser missing');
+const skill = await readFile(join(process.cwd(), 'plugins/amadeus/skills/voice-reply/SKILL.md'), 'utf8');
+assert.match(skill, /^description: REQUIRED for every inbound voice note:/mu);
 const module = await import(pathToFileURL(join(dist, file)));
 const parse = module.n ?? module.parseTtsDirectives;
 assert.equal(typeof parse, 'function');

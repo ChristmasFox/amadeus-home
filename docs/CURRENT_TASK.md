@@ -551,3 +551,17 @@ Gateway/Product Radar 健康、WhatsApp linked/connected 通过；`voice-reply`
 Skill `eligible=true`。非投递 synthetic CLI 语音转写提示得到一次 final，
 包含 `中文：` 可见段和日文 `[[tts:text]]` 音频专用段；这不是实际 voice ingress，
 **尚无手机端“一条 PTT + 一条中文文本”验收**，日文/中文例外、TTS 失败亦待验证。
+
+## 2026-09-25：中文摘要缺失的实际原因与修正候选
+
+15:10:11 的真实 WhatsApp audio 单次 ASR 成功；15:10:16 Agent final 只有日文
+文本（26 汉字、91 假名），**没有** `中文：` 可见前缀，也没有 `[[tts:text]]`
+block；15:11:16 仅有一条 PTT 发送，无中文文字发送日志。根因不是 WhatsApp
+丢弃了已生成的中文，而是 Agent 根本没有按 voice-reply Skill 生成双语合同。
+
+还发现当前 SOUL 有“日文回复后不要附未经请求中文翻译”，这与用户新确认的语音摘要
+要求冲突。已在源码删除这个绝对禁止，改为“普通文字回复不附未经请求翻译，遵从当前
+明确格式”；voice-reply Skill description 加强为**所有入站语音必须使用**，并明确
+输出合同。未用被 architecture check 禁止的全局 prompt-injection hook，也未引入第二
+sender/Agent。配置测试、Skill fixture、Amadeus typecheck/tests 已过；新镜像/规则
+尚未部署，需新 checkpoint candidate apply 后再真实验收。
