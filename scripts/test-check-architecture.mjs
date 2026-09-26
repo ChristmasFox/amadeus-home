@@ -23,6 +23,13 @@ const copies = [
 try {
   for (const relative of copies) cpSync(join(root, relative), join(fixture, relative), { recursive: true });
   assert.deepEqual(checkArchitecture(fixture), []);
+  const agentRules = join(fixture, 'AGENTS.md');
+  writeFileSync(agentRules, "当前 Goal 是 `docs/OLD_PERFORMANCE_GOAL.md`。\n" + readFileSync(agentRules, 'utf8'));
+  assert.ok(checkArchitecture(fixture).some((error) => error.includes('AGENTS.md hardcodes an active Goal')));
+  cpSync(join(root, 'AGENTS.md'), agentRules);
+  writeFileSync(agentRules, readFileSync(agentRules, 'utf8') + "\nThe current Goal is `docs/RETIRED_GOAL.md`.\n");
+  assert.ok(checkArchitecture(fixture).some((error) => error.includes('AGENTS.md hardcodes an active Goal')));
+  cpSync(join(root, 'AGENTS.md'), agentRules);
 
   const bootstrapPlan = join(fixture, 'scripts/plan-destination-bootstrap.sh');
   writeFileSync(bootstrapPlan, `${readFileSync(bootstrapPlan, 'utf8')}\nACTIVE_HOME=/Users/blacksidev/runtime\n`);

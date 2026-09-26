@@ -2,6 +2,7 @@ import importlib.util
 import json
 import plistlib
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -63,3 +64,33 @@ class ProtectedMlxAssetsTest(unittest.TestCase):
                 (model / 'model.safetensors').write_bytes(b'changed')
                 with self.assertRaisesRegex(ValueError, 'mlx_asset_manifest_mismatch'):
                     assets.verify_manifest(root, assets.preflight(root, CONFIG))
+
+class EarlyLaunchdLogTest(unittest.TestCase):
+    def test_render_and_private_capped_fixture(self):
+        helper = load('tts_early_log', ROOT / 'infra/macos/prepare-qwen3-tts-early-log.py')
+        manager = (ROOT / 'infra/macos/manage-qwen3-tts.sh').read_text()
+        self.assertIn('prepare-qwen3-tts-early-log.py', manager)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            log = root / 'log'
+            log.mkdir()
+            path = log / 'qwen3-tts-launchd.err.log'
+            parsed = plistlib.loads(renderer.render(TEMPLATE, root / 'base', root / 'A', log, root / 'mlx', 'mlx'))
+            self.assertEqual(parsed['StandardErrorPath'], str(path))
+            self.assertEqual(parsed['StandardOutPath'], '/dev/null')
+            helper.prepare(path)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            # Simulate a pre-service import failure using the rendered stderr destination,
+            # never by crashing the production LaunchAgent.
+            with path.open('ab') as stderr:
+                failed = subprocess.run([sys.executable, '-c', 'raise ImportError("fixture_boot_failure")'],
+                                        stdout=subprocess.DEVNULL, stderr=stderr, check=False)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn(b'fixture_boot_failure', path.read_bytes())
+            path.write_bytes(b'x' * (helper.CAP_BYTES + 1))  # invalid fixture, never the live model
+            helper.prepare(path)
+            self.assertEqual(path.stat().st_size, 0)
+            path.unlink()
+            path.symlink_to(root / 'other')
+            with self.assertRaisesRegex(ValueError, 'early_log_symlink_forbidden'):
+                helper.prepare(path)

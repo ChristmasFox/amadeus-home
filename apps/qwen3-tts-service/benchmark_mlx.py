@@ -1,4 +1,4 @@
-"""Experimental community MLX 1.7B Base 8-bit clone benchmark; not production."""
+"""Offline benchmark harness for the selected community MLX backend; not a service entrypoint."""
 from __future__ import annotations
 
 import argparse

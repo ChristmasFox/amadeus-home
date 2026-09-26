@@ -1,4 +1,4 @@
-"""Experimental community MLX backend behind the existing speech-engine contract."""
+"""Selected production MLX backend behind the existing speech-engine contract."""
 from __future__ import annotations
 
 import io
@@ -10,7 +10,7 @@ from engine_contract import SynthesisTiming
 
 
 class QwenMlxEngine:
-    """Community mlx-audio 1.7B Base 8-bit ICL clone; opt-in, never default."""
+    """Selected 1.7B Base 8-bit ICL clone via third-party community mlx-audio (not official Qwen MLX)."""
 
     def __init__(self, profile: Path, model_path: Path, on_warmup=None):
         if not profile.is_dir() or not (profile / "reference.wav").is_file():

@@ -64,6 +64,10 @@ function hasActiveReference(content, pattern) {
 
 export function checkArchitecture(root = REPO_ROOT) {
   const errors = [];
+  const taskRules = text(root, 'AGENTS.md');
+  if (/(?:当前\s*Goal\s*是|current\s+goal\s+is)\s*`?docs\/[^\s`]+_GOAL\.md/i.test(taskRules)) {
+    errors.push('AGENTS.md hardcodes an active Goal instead of pointing to CURRENT_TASK');
+  }
   const required = [
     'packages/presentation/package.json',
     'packages/presentation/src/index.ts',

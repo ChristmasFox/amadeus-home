@@ -15,5 +15,5 @@ class EngineBoundaryTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unsupported_speech_engine'):
                 service.create_engine(Path('/outside'), 'model')
         with patch.dict(os.environ, {'AMADEUS_TTS_ENGINE':'mlx'}, clear=True):
-            with self.assertRaisesRegex(ValueError, 'experimental_mlx_model_path_required'):
+            with self.assertRaisesRegex(ValueError, 'mlx_model_path_required'):
                 service.create_engine(Path('/outside'), 'model')

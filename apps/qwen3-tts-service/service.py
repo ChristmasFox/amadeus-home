@@ -185,7 +185,7 @@ def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngin
     if backend == "mlx":
         explicit_path = os.environ.get("AMADEUS_TTS_MLX_MODEL_PATH")
         if not explicit_path:
-            raise ValueError("experimental_mlx_model_path_required")
+            raise ValueError("mlx_model_path_required")
         from mlx_engine import QwenMlxEngine
         return QwenMlxEngine(profile, Path(explicit_path), on_warmup=on_warmup)
     raise ValueError("unsupported_speech_engine")
