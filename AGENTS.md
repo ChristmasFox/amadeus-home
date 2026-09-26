@@ -1,6 +1,6 @@
-# 当前任务优先约束（2026-09-26）
+# 当前任务指针
 
-当前 Goal 是 `docs/AMADEUS_POST_VOICE_ENGINEERING_PERFORMANCE_GOAL.md`，按 phase 顺序执行；不要为优化引入第二 Agent runtime、新 Voice 功能或放宽 timeout。Git 和 live runtime 是当前事实来源；历史报告与 checkpoint 仅供审计。旧迁移 Goal 已完成，不再是当前执行计划。
+`docs/CURRENT_TASK.md` 是当前任务的 canonical 指针；仅在该文件或操作者明确指定活动 Goal 时读取对应 Goal 文档并按其 phase 执行。历史 Goal 文档和 checkpoint 是审计证据，不是 live 指令。Git 和 live runtime 是当前事实来源。
 
 # Agent Monorepo 工作规则
 

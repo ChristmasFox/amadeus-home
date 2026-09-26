@@ -34,6 +34,8 @@ def render(template: Path, base: Path, voice: Path, log: Path,
         raise ValueError('tts_engine_render_mismatch')
     if parsed['ProgramArguments'][0] != str(python):
         raise ValueError('tts_python_render_mismatch')
+    if parsed['StandardErrorPath'] != str(log / 'qwen3-tts-launchd.err.log'):
+        raise ValueError('tts_early_log_render_mismatch')
     return text.encode()
 
 

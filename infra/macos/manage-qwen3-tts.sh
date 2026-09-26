@@ -94,6 +94,7 @@ if [[ "$mode" == --apply ]]; then
   install -m 600 "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
 fi
 [[ -s "$BASE/service.py" && -s "$BASE/mlx_engine.py" && -s "$BASE/engine_contract.py" ]] || { echo 'service source missing; use --apply' >&2; exit 1; }
+python3 "$ROOT/infra/macos/prepare-qwen3-tts-early-log.py" "$LOG/qwen3-tts-launchd.err.log"
 temporary="$(mktemp "$PLIST.tmp.XXXXXX")"
 trap 'rm -f "$temporary"' EXIT
 python3 "$ROOT/infra/macos/render-qwen3-tts-plist.py" \

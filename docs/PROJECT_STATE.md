@@ -15,6 +15,10 @@
 
 - PUBG group safety repair in 1.6.1: a factual reply without a successful current-turn native data result, or a person question answered with `team=true`, is replaced with explicit cannot-confirm text at `reply_payload_sending`. A real controlled WhatsApp group delivery proved the replacement log precedes send. Model tool selection is not guaranteed; this guard prevents unsupported delivery rather than auto-fetching the person every time. Earlier candidate paths (host finalize revision, legacy message_sending) were rejected after real tests; see `.agent/checkpoints/2026-09-26-pubg-evidence-guard-release.md`.
 
+## 1.6.2 stability candidate (not released)
+
+- The historical 1.5.3 Voice remote branch was audited (branch-only commit contained only an older Goal document) and retired. MLX terminology is being aligned with the selected community backend. The 1.6.2 native LaunchAgent candidate is applied with private 1 MiB pre-bootstrap stderr cap; the previous native source/plist, protected A profile/token and exact MPS rollback remain outside Git. Same A/MLX/Auto/Interactive source and engine are verified. Port 18792 remains deliberately wildcard for OrbStack/9Router; guest-to-host/LAN-address and authenticated 9Router speech route succeeded, while independent physical LAN-peer reachability was not tested. Unauthorized speech/inventory return 401. Real owner WhatsApp voice/typed acceptance is still pending; do not call 1.6.2 released yet. See `.agent/checkpoints/2026-09-26-amadeus-1.6.2-stability-candidate.md`.
+
 ## Measured limits and operational watch
 
 - Original single DM baseline: ASR 0.702s, Agent 3.471s, TTS+MP3 35.162s, end-to-end 42.462s. Fixed short HTTP A/MPS Interactive 20-run p50 4.48s/p95 5.28s; A/MLX 20-run p50 3.30s/p95 3.52s. A/MLX normal five-run p50 5.42s. MP3 encode remains minor; direct Opus not selected.
