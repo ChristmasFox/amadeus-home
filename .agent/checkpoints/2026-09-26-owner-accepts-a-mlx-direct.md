@@ -1,0 +1,5 @@
+# Owner A+MLX direct listening decision — 2026-09-26
+
+- The owner asked whether the original ~46s A reference could be retained while replacing only MPS with MLX. The protected direct benchmark already contained exactly that A/MPS versus A/MLX comparison with the same Japanese normal fixture: the specific listening WAVs were generated in 9.7162s (MPS; 8.32s audio) and 5.1875s (MLX 1.7B Base 8-bit; 8.00s audio).
+- After listening to those two named files, the owner said A+MLX sounded acceptable and explicitly requested implementation. This later, narrower A+MLX judgment supersedes the earlier broad MLX timbre rejection **for A only**; D short-reference remains rejected for character loss. Do not infer that real WhatsApp audio or all MLX utterances are already accepted.
+- Candidate design must retain A and Auto, use the same OpenAI-compatible endpoint, one LaunchAgent and one inference worker, no timeout increase, no second Agent runtime, protected MPS rollback, one major variable (backend) at a time, and measured HTTP/memory/WhatsApp acceptance before formal release.

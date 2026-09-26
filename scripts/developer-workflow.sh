@@ -92,7 +92,7 @@ for path in "${FILES[@]-}"; do
     scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-openclaw-voice-policy.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
       has_voice_patch=1
       ;;
-    scripts/test-openclaw-docker-cache-order.py|scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;
+    scripts/export-tts-performance-data.py|scripts/check-tts-performance-report.py|scripts/test-openclaw-docker-cache-order.py|scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;
     scripts/storage-*|scripts/backup.sh|scripts/service-aware-backup.sh|scripts/sqlite-consistent-snapshot.py|scripts/reclaim-immich-old-source.sh|scripts/migrate-immich-media.sh|scripts/secrets-inventory.sh|scripts/export-skuld-secrets.sh|scripts/import-skuld-secrets.sh|scripts/test-*skuld*|scripts/test-storage-*)
       has_storage=1
       [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
