@@ -56,7 +56,8 @@ def endpoint_summary(path: Path) -> dict:
             'min_ms': min(times), 'max_ms': max(times)}
 
 
-def export(mps_root: Path, mlx_root: Path, endpoint_root: Path, source_sync_root: Path) -> dict:
+def export(mps_root: Path, mlx_root: Path, endpoint_root: Path,
+           source_sync_root: Path, mlx_candidate_root: Path) -> dict:
     mps = aggregate(mps_root, allow_partial=True)
     mlx = aggregate(mlx_root, allow_partial=True)
     if set(mps['missing']) != EXPECTED_B_TIMEOUTS or set(mps['timeouts']) != EXPECTED_B_TIMEOUTS:
@@ -79,6 +80,11 @@ def export(mps_root: Path, mlx_root: Path, endpoint_root: Path, source_sync_root
                              for name, filename in ENDPOINT_FILES.items()},
             'post_source_sync_endpoint': endpoint_summary(
                 source_sync_root / 'endpoint-A-Auto-short-after-source-sync.jsonl'),
+            'mlx_candidate_endpoint': {
+                'short_initial_5': endpoint_summary(mlx_candidate_root / 'endpoint-A-MLX-Auto-short.jsonl'),
+                'short_sustained_20': endpoint_summary(mlx_candidate_root / 'endpoint-A-MLX-Auto-short-20.jsonl'),
+                'normal_5': endpoint_summary(mlx_candidate_root / 'endpoint-A-MLX-Auto-normal.jsonl'),
+            },
             'decision': {'profile': 'A', 'backend': 'MLX', 'language': 'Auto',
                          'quality': 'owner_A_MLX_direct_sample_acceptable',
                          'rejected': ['D:owner_voice_character_loss'],
@@ -98,6 +104,7 @@ def main() -> None:
     parser.add_argument('--mlx-root', type=Path, required=True)
     parser.add_argument('--endpoint-root', type=Path, required=True)
     parser.add_argument('--source-sync-root', type=Path, required=True)
+    parser.add_argument('--mlx-candidate-root', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     if not args.apply:
@@ -106,7 +113,8 @@ def main() -> None:
     expected = ROOT / 'docs/reports/data/AMADEUS_TTS_PERFORMANCE_2026_09.json'
     if args.output.resolve() != expected:
         raise ValueError('report_output_path_mismatch')
-    data = export(args.mps_root, args.mlx_root, args.endpoint_root, args.source_sync_root)
+    data = export(args.mps_root, args.mlx_root, args.endpoint_root,
+                  args.source_sync_root, args.mlx_candidate_root)
     expected.parent.mkdir(parents=True, exist_ok=True)
     temporary = expected.with_suffix('.json.tmp')
     temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + '\n')

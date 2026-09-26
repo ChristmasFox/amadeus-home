@@ -51,7 +51,9 @@ def check() -> None:
                 assert abs(summary[key]['max'] - round(max(values), 2)) < .011
             for row in rows:
                 assert not (set(row) & {'text', 'transcript', 'audio_bytes', 'user', 'jid', 'reference'})
-    for name, stats in data['qos_endpoint'].items():
+    assert set(data['mlx_candidate_endpoint']) == {'short_initial_5', 'short_sustained_20', 'normal_5'}
+    assert data['mlx_candidate_endpoint']['short_sustained_20']['count'] == 20
+    for name, stats in {**data['qos_endpoint'], **data['mlx_candidate_endpoint']}.items():
         values = stats['total_ms_samples']
         assert stats['count'] == len(values) and all(x > 0 for x in values), name
         assert abs(stats['p50_ms'] - round(percentile(values, .5), 2)) < .011
@@ -61,7 +63,7 @@ def check() -> None:
         if not re.search(r'^## \d+\. ' + re.escape(heading) + r'\s*$', text, re.M):
             raise ValueError('missing_report_section_' + heading)
     assert 'B' in text and '110s' in text and 'incomplete' in text.lower()
-    assert '9.3 GiB' in text and 'A/MLX/Auto' in text
+    assert '9.3 GiB' in text and '17.5 GiB' in text and 'A/MLX/Auto' in text
     for forbidden in ('reference.wav', 'reference.txt', 'Bearer ', '@s.whatsapp.net', '@g.us'):
         if forbidden.lower() in text.lower():
             raise ValueError('private_content_in_report')
