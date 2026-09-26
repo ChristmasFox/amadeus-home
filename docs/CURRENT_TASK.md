@@ -15,7 +15,7 @@ Phases 0–3 and 5–7 have verified source/benchmarks; **Phase 4 B remains safe
 ## Remaining Goal item
 
 1. Amadeus 1.6.0 full gates, immutable CasaOS switch, protected checkpoint, owner notification and post-release real WhatsApp voice/typed acceptance passed. Canonical `main` fast-forwarded/pushed; both merged work branches were retired. Live OpenClaw release image source `c730b49` is an ancestor of main.
-2. Four B reference matrix configurations remain **safety-incomplete** under the 110s watchdog. Follow `.agent/tasks/2026-09-26-b-icl-reference-matrix.md` for a clean, matched private B reference and an isolated five-run benchmark. Do not invent timings, increase timeout, stress live TTS during user traffic or mark the full Goal complete while this explicit item remains.
+2. Four B reference matrix configurations remain **safety-incomplete** under the 110s watchdog. Local-only ASR/forced alignment found the old 15.4s B cut overshot the transcript line-5 endpoint by 1.64s; a separate protected 14.05s B at a clean pause improved ASR similarity (0.843 vs 0.807). Follow `.agent/tasks/2026-09-26-b-icl-reference-matrix.md` for an isolated five-run MPS benchmark; alignment is not performance proof. Do not invent timings, increase timeout, stress live TTS during user traffic or mark the full Goal complete while this explicit item remains.
 3. Continue read-only MLX memory-pressure/swap observation. The released A+MLX remains live with protected exact A/MPS rollback unless a real regression is observed.
 
 Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.
