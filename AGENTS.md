@@ -1,8 +1,6 @@
-# 当前任务优先约束（2026-09-18）
+# 当前任务优先约束（2026-09-26）
 
-当前 Amadeus 迁移目标见 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md`。所有仍有价值的能力统一进入唯一 OpenClaw/Kurisu：Telegram、WhatsApp 和未来渠道只负责入口，原生 plugin/tool 调用确定性 Domain 或明确的外部服务；旧 LangBot、n8n、旧 Runtime、旧通知路径和关键词路由必须退休，不做灰度、shadow、双跑或兼容 fallback。用户已授权本 Goal 所需的构建、CasaOS 一次性切换、数据迁移、删除、提交和 push；仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
-
-当前实现以 Git、live CasaOS 和最新 checkpoint 为准；历史报告仅供审计，不是运行时指令。
+当前 Goal 是 `docs/AMADEUS_POST_VOICE_ENGINEERING_PERFORMANCE_GOAL.md`，按 phase 顺序执行；不要为优化引入第二 Agent runtime、新 Voice 功能或放宽 timeout。Git 和 live runtime 是当前事实来源；历史报告与 checkpoint 仅供审计。旧迁移 Goal 已完成，不再是当前执行计划。
 
 # Agent Monorepo 工作规则
 
@@ -23,22 +21,7 @@ sender。执行仍须保留外部数据备份、secret 保护、真实验收和�
 
 ## 新会话启动
 
-每次 Codex 新会话必须先读取以下文件，然后再修改代码或配置：
-
-1. `README.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/PROJECT_STATE.md`
-4. `docs/CURRENT_TASK.md`
-5. `.agent/state.md`
-
-随后执行：
-
-```sh
-git status --short --branch
-git log -5 --oneline --decorate
-```
-
-这些文件和 Git 状态是任务上下文的来源；不要把聊天历史当作唯一状态。
+先读 `docs/CONTEXT.md`、`docs/CURRENT_TASK.md` 和当前 Goal；然后执行 `git status --short --branch`、`git log -5 --oneline --decorate`。对具体改动按需阅读 `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATE.md`、`.agent/state.md` 及相关源码。不要将历史 diary 当成 live 指令，也不要仅依赖聊天历史。
 
 ## 全局工程规则
 
@@ -109,15 +92,11 @@ Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
 - 调用 `/goal` 或 `create_goal` 时不得传入 `token_budget`，只能使用 Codex 默认预算机制。
 - 如果系统达到平台上限，应开启新的任务或会话继续；不得通过仓库规则伪造或解除平台限制。
 
-## 阶段完成协议
+## 验证与 checkpoint 分级
 
-每完成一个阶段任务，都要：
-
-- 更新 `docs/CURRENT_TASK.md` 和 `docs/PROJECT_STATE.md`；
-- 在 `.agent/checkpoints/` 写入带日期的 checkpoint；
-- 如果产生后续任务，写入 `.agent/tasks/`；
-- 跑与改动匹配的测试和 `scripts/check-secrets.sh`。
-- 提交前确认 `git diff --check`、`git status` 和最近提交记录；部署或迁移阶段还要保留可回滚的 checkpoint。
+- 普通 FAST/RUNTIME 源码提交：只要求 focused tests、受影响的 typecheck/syntax 和 `git diff --check`；提交前按安全边界运行 `pnpm check:secrets`。不默认部署、Docker build、版本 bump、状态日记或 checkpoint。
+- 只有 deploy、release、migration、storage/database mutation、security-sensitive runtime change，或其他明确需要回滚点的高风险操作才写 dated checkpoint，并更新 `docs/CURRENT_TASK.md` / `docs/PROJECT_STATE.md` 的当前事实；未完成项写 `.agent/tasks/`。
+- 外部写入必须显式 apply；生产发布仍按 tests -> secrets -> immutable image -> protected checkpoint -> CasaOS switch -> health/smoke -> rollback evidence。不要削弱 secret、备份和真实验收边界。
 
 ## 目录与运行时
 
@@ -153,4 +132,4 @@ source tree 与生产切换目标中删除。迁移脚本只会把外部数据�
 
 ## 任务完成定义
 
-任务只有在以下内容都完成后才算完成：代码或配置已进入 Git、匹配的测试已运行、secrets scan 通过、`docs/CURRENT_TASK.md` 与 `docs/PROJECT_STATE.md` 已更新，并在 `.agent/checkpoints/` 写入可恢复记录。未完成项必须写入 `.agent/tasks/`，不能只留在聊天记录中。
+普通开发完成于 Git 源码与最小充分本地验证；高风险运行时阶段还需要可恢复 checkpoint、相应状态更新、secrets scan 和真实验收。Goal 完成必须以 Goal 文档逐项核对证据，不以局部 test 通过代替。

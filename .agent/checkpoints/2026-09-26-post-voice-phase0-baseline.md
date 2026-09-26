@@ -1,0 +1,7 @@
+# Post-Voice Phase 0 verified baseline and branch closure — 2026-09-26
+
+- Initial tree clean at `0658aa3` on `work/amadeus-1.5.3-voice-io`; `main...HEAD` was 0/86, `origin/main...HEAD` 0/87. No merge conflicts; original branch remains for audit.
+- Production on OrbStack `nyannyan`: OpenClaw container running/healthy, restart count 0, image `local/openclaw-amadeus:git-3f9171f47b19-20260926043743`; Compose has the same image line; image exists with `org.opencontainers.image.version=2026.9.4`. Live `/app/dist/runtime-api-zquJnB-O.mjs` has `amadeus-whatsapp-japanese-tts-input-v1` marker. Git release commit `3f9171f` has `VERSION=1.5.9`, contains that marker's patch source, and is an ancestor of the canonical tip. This proves the recorded image/source relationship and marker; it is not a byte-for-byte audit of all running files or owner handset acceptance.
+- Protected checkpoint directory `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260926043743` exists. Previous release evidence: `.agent/checkpoints/2026-09-26-amadeus-1.5.9-formal-release.md`. Previous performance samples: `.agent/checkpoints/2026-09-25-amadeus-1.5.3-no-read-direct-dm-benchmark.md` and `2026-09-25-amadeus-1.5.3-tts-split-timing-live.md`.
+- Fast-forwarded local `main` to `0658aa3` and pushed `origin/main`; created `work/post-voice-engineering-performance`. No CasaOS deploy or TTS change in this phase.
+- Previous active diaries are retained in `docs/history/` as audit, not startup instructions.
