@@ -17,6 +17,8 @@ import unicodedata
 MODEL_ID = 'mlx-community/Qwen3-ForcedAligner-0.6B-8bit'
 MODEL_REV = '0e1a68e91d815300c7c9754b2a7639378b23db15'
 NAGISA_VERSION = '0.3.0'
+SIX_VERSION = '1.17.0'
+DYNET_VERSION = '2.2'
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -87,9 +89,14 @@ def main() -> None:
         deps=args.model_root/'alignment-deps'
         deps.mkdir(mode=0o700,exist_ok=True)
         private(deps,directory=True)
-        if not any(deps.glob('nagisa-*.dist-info')):
+        missing=[]
+        for pattern,pin in (('nagisa-*.dist-info','nagisa=='+NAGISA_VERSION),
+                            ('six-*.dist-info','six=='+SIX_VERSION),
+                            ('dyNET38-*.dist-info','DyNet38=='+DYNET_VERSION)):
+            if not any(deps.glob(pattern)):missing.append(pin)
+        if missing:
             subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir','--no-deps',
-                                   '--target',str(deps),'nagisa=='+NAGISA_VERSION],
+                                   '--target',str(deps),*missing],
                                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         print(f'B_LOCAL_ALIGNER_MODEL=ready free_percent_before={free} (public weights outside Git)')
         return
@@ -102,7 +109,8 @@ def main() -> None:
     private(deps,directory=True)
     sys.path.insert(0,str(deps))
     import importlib.metadata
-    if importlib.metadata.version('nagisa')!=NAGISA_VERSION:raise ValueError('pinned_local_japanese_tokenizer_missing')
+    for name,version in (('nagisa',NAGISA_VERSION),('six',SIX_VERSION),('DyNet38',DYNET_VERSION)):
+        if importlib.metadata.version(name)!=version:raise ValueError('pinned_local_japanese_tokenizer_dependency_missing')
     os.environ['HF_HUB_OFFLINE']='1';os.environ['TRANSFORMERS_OFFLINE']='1'
     lines=(args.source_profile/'reference.txt').read_text(encoding='utf-8').strip().splitlines()
     transcript='\n'.join(lines)
