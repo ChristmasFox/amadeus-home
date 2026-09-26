@@ -58,6 +58,7 @@ def run_config(command: list[str], log_path: Path, timeout_path: Path) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--backend", choices=("mps", "mlx"), default="mps")
     parser.add_argument("--profile-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--model-path", type=Path, required=True)
@@ -68,7 +69,7 @@ def main() -> None:
     profiles, languages, buckets = args.profiles.split(","), args.languages.split(","), args.buckets.split(",")
     if set(profiles)-set(PROFILES) or set(languages)-set(LANGUAGES) or set(buckets)-set(FIXTURES):
         raise SystemExit("invalid_matrix_selection")
-    print(f"CONFIGS={len(profiles)*len(languages)*len(buckets)} HARD_SAMPLE_LIMIT_S={MAX_SAMPLE_S}")
+    print(f"BACKEND={args.backend} CONFIGS={len(profiles)*len(languages)*len(buckets)} HARD_SAMPLE_LIMIT_S={MAX_SAMPLE_S}")
     if not args.apply:
         print("SUPERVISOR=plan_only")
         return
@@ -91,7 +92,8 @@ def main() -> None:
                     incomplete.append(name)
                     print(f"CONFIG_PREVIOUSLY_INCOMPLETE={name}", flush=True)
                     continue
-                command = [sys.executable, str(Path(__file__).with_name("benchmark.py")), "--apply",
+                worker_script = "benchmark_mlx.py" if args.backend == "mlx" else "benchmark.py"
+                command = [sys.executable, str(Path(__file__).with_name(worker_script)), "--apply",
                            "--profile-root", str(args.profile_root), "--output-dir", str(args.output_dir),
                            "--model-path", str(args.model_path), "--profiles", profile,
                            "--languages", language, "--buckets", bucket, "--runs", "5"]

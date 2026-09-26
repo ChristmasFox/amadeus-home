@@ -41,6 +41,9 @@ speech="$(scope apps/qwen3-tts-service/service.py)"
 assert_line "$speech" 'CHANGE_SCOPE_LEVEL=RUNTIME'
 assert_line "$speech" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
 assert_line "$speech" 'DOCKER_IMAGE_SET=none'
+mlx_poc="$(scope scripts/prepare-mlx-tts-poc.sh)"
+assert_line "$mlx_poc" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_line "$mlx_poc" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
 speech_route="$(scope scripts/provision-9router-speech.py)"
 assert_line "$speech_route" 'CHANGE_SCOPE_WORKFLOW=QWEN3_TTS'
 
