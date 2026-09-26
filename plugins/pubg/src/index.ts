@@ -4,6 +4,7 @@ import { jsonResult } from 'openclaw/plugin-sdk/core';
 import { defineToolPlugin } from 'openclaw/plugin-sdk/tool-plugin';
 import { Static, Type, type TSchema as TypeSchema } from 'typebox';
 import { openClawConversationAdapter } from './adapters/openclaw.js';
+import { registerPubgEvidenceGuard } from './evidence-guard.js';
 import { IdentityStore, type IdentityResolution, type PersonSnapshot } from '@agent/identity';
 import {
   adaptWorldlineNotification,
@@ -913,5 +914,11 @@ const entry = defineToolPlugin({
     }),
   ],
 });
+
+const registerTools = entry.register;
+entry.register = (api) => {
+  registerTools(api);
+  registerPubgEvidenceGuard(api);
+};
 
 export default entry;
