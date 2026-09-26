@@ -14,6 +14,9 @@ class SummaryTest(unittest.TestCase):
         result = report.summarize(rows)
         self.assertEqual(result["total_ms"]["p50"], 3)
         self.assertEqual(result["total_ms"]["p95"], 4.8)
-        self.assertEqual(result["cold_samples"][0]["phase"], "model_cold")
+        self.assertEqual(result["first_samples"][0]["phase"], "model_cold")
         with self.assertRaises(ValueError):
             report.summarize(rows[:5])
+        rows[1]["first_for_fixture"] = True
+        with self.assertRaises(ValueError):
+            report.summarize(rows)
