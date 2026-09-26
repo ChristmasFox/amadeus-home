@@ -4,7 +4,7 @@ Date: 2026-09-26. Authoritative scope: `docs/AMADEUS_POST_VOICE_ENGINEERING_PERF
 
 ## Current phase
 
-Phases 0–3 and 5–7 have verified source/benchmarks; Phase 4 B four cells remain safety-incomplete in the report, and the owner explicitly cancelled further B testing (Goal §12). The optional Phase 8 decision is recorded. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live 1.6.0 release configuration**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
+Phases 0–3 and 5–7 have verified source/benchmarks; Phase 4 B four cells remain safety-incomplete in the report, and the owner explicitly cancelled further B testing (Goal §12). The optional Phase 8 decision is recorded. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live 1.6.0 release configuration**. Owner accepted exact A+MLX timbre in direct listening, confirmed real WhatsApp one Japanese PTT/nonduplicated text/typed-without-voice, and explicitly reported no Japanese pronunciation, naturalness, volume or rhythm anomaly after release. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
 
 ## Measured evidence and limits
 

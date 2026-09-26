@@ -67,6 +67,7 @@ def check() -> None:
             raise ValueError('missing_report_section_' + heading)
     assert 'B' in text and '110s' in text and 'incomplete' in text.lower()
     assert 'owner-cancelled' in text.lower()
+    assert 'pronunciation/naturalness, volume and rhythm' in text
     assert '9.3 GiB' in text and '18.4 GiB' in text and 'A/MLX/Auto' in text
     for forbidden in ('reference.wav', 'reference.txt', 'Bearer ', '@s.whatsapp.net', '@g.us'):
         if forbidden.lower() in text.lower():

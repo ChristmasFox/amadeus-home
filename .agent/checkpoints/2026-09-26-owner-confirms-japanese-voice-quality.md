@@ -1,0 +1,5 @@
+# Final owner Japanese voice-quality confirmation — 2026-09-26
+
+- After A+MLX/Auto 1.7B 8-bit release, direct A/MPS-vs-A/MLX listening acceptance, candidate and post-release real WhatsApp PTT/text/typed acceptance, the owner was explicitly asked whether the Japanese pronunciation/naturalness, volume and rhythm had any obvious abnormality. Owner answered “t没有异常” (no abnormality). This closes the named owner subjective quality dimensions for the selected A+MLX output; no raw message, voice reference, transcript, sample or private identity is stored here.
+- Earlier D short-reference timbre loss remains a rejection of D, not the selected original A reference. B matrix cells remain incomplete under the 110s watchdog, and the owner explicitly cancelled further B testing in Goal §12; no false five-run claim is made.
+- The owner confirmation is a human observation, not a numerical similarity score or proof of every future utterance. Retain exact protected A/MPS and immutable CasaOS rollback points and monitor the documented 18.4 GiB MLX peak memory risk.
