@@ -2,80 +2,19 @@
 // Pinned OpenClaw 2026.9.4: keep WhatsApp composing active for voice replies
 // through channel settlement and queue same-session arrivals behind that run.
 import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-export const VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
-export const CORE_MARKER = 'amadeus-whatsapp-voice-followup-v1';
-export const TTS_MARKER = 'amadeus-whatsapp-japanese-tts-input-v1';
-export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
-export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
-export const WHATSAPP_JAPANESE_TEXT_MARKER = 'amadeus-whatsapp-japanese-visible-tts-v1';
-export const WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER = 'amadeus-whatsapp-japanese-audio-guard-v1';
-
-export function resolveVoiceFollowup(lease, currentMessageId) {
-  return Boolean(lease && lease.messageId !== currentMessageId);
-}
-
-export function resolveAmadeusJapaneseSpeechText(visibleText, explicitTtsText = '') {
-  const source = typeof visibleText === 'string' ? visibleText : '';
-  const labeledCandidates = source.split(/\r?\n/u)
-    .map((line) => line.trim().match(/^日本語[：:]\s*(.*)$/u)?.[1]?.trim() ?? '')
-    .filter((line) => line && /[\u3040-\u30ff]/u.test(line));
-  if (labeledCandidates.length > 0) return labeledCandidates.at(-1);
-
-  const explicit = typeof explicitTtsText === 'string' ? explicitTtsText.trim() : '';
-  if (explicit && !/(?:^|\n)\s*(?:中文|日本語)[：:]/u.test(explicit) && /[\u3040-\u30ff]/u.test(explicit)) {
-    return explicit;
-  }
-  return '';
-}
-
-export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
-  if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;
-  const hasMedia = (typeof payload.mediaUrl === 'string' && payload.mediaUrl.trim().length > 0)
-    || (Array.isArray(payload.mediaUrls) && payload.mediaUrls.some((url) => typeof url === 'string' && url.trim().length > 0));
-  if (!hasMedia) return payload;
-  const isTtsVoice = payload.audioAsVoice === true || typeof payload.ttsSupplement?.spokenText === 'string';
-  if (!isTtsVoice) return payload;
-  const supplementText = typeof payload.ttsSupplement?.spokenText === 'string' ? payload.ttsSupplement.spokenText : '';
-  const spokenText = (supplementText || (typeof payload.spokenText === 'string' ? payload.spokenText : '')).trim();
-  const visibleText = typeof payload.text === 'string' ? payload.text : '';
-  const spokenTextIsStructuredOrMultiline = /(?:^|\n)\s*(?:中文|日本語)[：:]/u.test(spokenText) || /\r?\n/u.test(spokenText);
-  if (spokenTextIsStructuredOrMultiline || !/[\u3040-\u30ff]/u.test(spokenText)) {
-    // An untagged Chinese-only final must never become a Chinese WhatsApp PTT.
-    // Return text-only instead of trying to relabel or reuse already-synthesized audio.
-    const safeText = visibleText.split(/\r?\n/u).filter((line) => !/^日本語[：:]/u.test(line.trim())).join('\n').trim();
-    const warning = '日语语音暂时无法生成，请稍后重试。';
-    const { mediaUrl: _mediaUrl, mediaUrls: _mediaUrls, audioAsVoice: _audioAsVoice,
-      spokenText: _spokenText, ttsSupplement: _ttsSupplement, trustedLocalMedia: _trustedLocalMedia,
-      ...textOnlyPayload } = payload;
-    return { ...textOnlyPayload, text: safeText ? `${safeText}\n${warning}` : warning };
-  }
-  const outputLines = [];
-  let japaneseLineWritten = false;
-  for (const line of visibleText.split(/\r?\n/u)) {
-    const trimmed = line.trim();
-    if (/^日本語[：:]/u.test(trimmed) || trimmed === spokenText) {
-      if (!japaneseLineWritten) outputLines.push(`日本語：${spokenText}`);
-      japaneseLineWritten = true;
-      continue;
-    }
-    outputLines.push(line);
-  }
-  if (!japaneseLineWritten) outputLines.push(`日本語：${spokenText}`);
-  const japaneseIndex = outputLines.findIndex((line) => /^日本語[：:]/u.test(line.trim()));
-  if (japaneseIndex > 0) {
-    let insertAt = japaneseIndex;
-    while (insertAt > 0 && outputLines[insertAt - 1].trim() === '') {
-      outputLines.splice(insertAt - 1, 1);
-      insertAt -= 1;
-    }
-    outputLines.splice(insertAt, 0, '');
-  }
-  const nextText = outputLines.join('\n').trim();
-  return nextText === visibleText ? payload : { ...payload, text: nextText };
-}
+import { fileURLToPath } from 'node:url';
+import { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
+import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
+import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
+  WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER } from './openclaw-voice-markers.mjs';
+export { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText,
+  resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
+export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
+  WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER };
 
 function replaceOnce(source, before, after, label) {
   const count = source.split(before).length - 1;
@@ -158,100 +97,6 @@ export function patchTtsSource(original) {
   );
   return `// ${TTS_MARKER}\n${result}`;
 }
-
-export const whatsappHelpers = `// ${WHATSAPP_MARKER}: lease scoped to an admitted WhatsApp voice reply.
-const AMADEUS_VOICE_REPLY_TIMEOUT_MS = 120000;
-const AMADEUS_VOICE_REPLY_REFRESH_MS = 3000;
-function getAmadeusVoiceReplyRegistry() {
-\tconst current = globalThis.${VOICE_RUNS_GLOBAL};
-\tif (current instanceof Map) return current;
-\tconst registry = new Map();
-\tObject.defineProperty(globalThis, "${VOICE_RUNS_GLOBAL}", { value: registry, configurable: true, writable: true });
-\treturn registry;
-}
-function closeAmadeusVoiceReplyLease(lease, reason = "settled") {
-\tif (!lease || lease.closed) return;
-\tlease.closed = true;
-\tclearInterval(lease.refreshTimer);
-\tclearTimeout(lease.timeoutTimer);
-\tif (lease.registry.get(lease.sessionKey) === lease) lease.registry.delete(lease.sessionKey);
-\tlease.resolveSettled({ reason });
-}
-function clearAmadeusVoiceReplyLeases() {
-\tconst registry = getAmadeusVoiceReplyRegistry();
-\tfor (const lease of registry.values()) closeAmadeusVoiceReplyLease(lease, "disconnect");
-}
-function clearAmadeusVoiceReplyLeasesForChat(chatJid) {
-\tconst registry = getAmadeusVoiceReplyRegistry();
-\tfor (const lease of registry.values()) if (lease.chatJid === chatJid) closeAmadeusVoiceReplyLease(lease, "presence-error");
-}
-function closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId) {
-\tconst lease = getAmadeusVoiceReplyRegistry().get(sessionKey);
-\tif (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled");
-}
-function startAmadeusVoiceReplyLease(params) {
-\tif (!params.sessionKey || typeof params.sendComposing !== "function") return null;
-\tconst registry = getAmadeusVoiceReplyRegistry();
-\tconst previous = registry.get(params.sessionKey);
-\tif (previous && !previous.closed) return previous;
-\tlet resolveSettled;
-\tconst lease = {
-\t\tregistry,
-\t\tsessionKey: params.sessionKey,
-\t\tmessageId: params.messageId,
-\t\tchatJid: params.chatJid,
-\t\tclosed: false,
-\t\tsettled: new Promise((resolve) => { resolveSettled = resolve; }),
-\t\tresolveSettled: (value) => resolveSettled(value)
-\t};
-\tlease.refreshTimer = setInterval(() => { Promise.resolve(params.sendComposing()).catch(() => {}); }, AMADEUS_VOICE_REPLY_REFRESH_MS);
-\tlease.timeoutTimer = setTimeout(() => closeAmadeusVoiceReplyLease(lease, "timeout"), AMADEUS_VOICE_REPLY_TIMEOUT_MS);
-\tlease.refreshTimer.unref?.();
-\tlease.timeoutTimer.unref?.();
-\tregistry.set(params.sessionKey, lease);
-\tPromise.resolve(params.sendComposing()).catch(() => {});
-\treturn lease;
-}
-`;
-
-export const whatsappIngressQueueHelpers = `// ${WHATSAPP_INGRESS_QUEUE_MARKER}: serialize WhatsApp arrivals behind a voice run before Agent dispatch.
-const AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS = new Map();
-async function runAmadeusWhatsAppVoiceScopedIngress(params) {
-\tconst sessionKey = String(params.sessionKey ?? "").trim();
-\tconst messageId = String(params.messageId ?? "").trim();
-\tif (!sessionKey || !messageId || typeof params.run !== "function") return await params.run();
-\tconst registry = getAmadeusVoiceReplyRegistry();
-\tconst previousTail = AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.get(sessionKey);
-\tconst activeLease = registry.get(sessionKey);
-\tconst mustQueue = Boolean(previousTail || activeLease && activeLease.messageId !== messageId);
-\tif (!mustQueue) {
-\t\tconst lease = params.isVoice ? activeLease && activeLease.messageId === messageId ? activeLease : startAmadeusVoiceReplyLease({ sessionKey, messageId, chatJid: params.chatJid, sendComposing: params.sendComposing }) : void 0;
-\t\ttry { return await params.run(); }
-\t\tfinally { if (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled"); }
-\t}
-\tlet releaseSlot;
-\tconst slot = new Promise((resolve) => { releaseSlot = resolve; });
-\tconst predecessor = previousTail ?? Promise.resolve();
-\tconst tail = predecessor.catch(() => {}).then(() => slot);
-\tAMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.set(sessionKey, tail);
-\tlet lease;
-\ttry {
-\t\tawait predecessor.catch(() => {});
-\t\twhile (true) {
-\t\t\tconst current = registry.get(sessionKey);
-\t\t\tif (!current || current.messageId === messageId) break;
-\t\t\tawait current.settled;
-\t\t}
-\t\tconst current = registry.get(sessionKey);
-\t\tif (params.isVoice) lease = current?.messageId === messageId ? current : startAmadeusVoiceReplyLease({ sessionKey, messageId, chatJid: params.chatJid, sendComposing: params.sendComposing });
-\t\treturn await params.run();
-\t} finally {
-\t\tif (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled");
-\t\treleaseSlot();
-\t\tif (AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.get(sessionKey) === tail) AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.delete(sessionKey);
-\t}
-}
-`;
 
 export function patchWhatsAppSource(original) {
   if (original.includes(WHATSAPP_MARKER)) return original;
@@ -414,6 +259,6 @@ export async function main(argv = process.argv.slice(2)) {
   }
 }
 
-if (process.argv[1] === "-" || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
+if (process.argv[1] === "-" || (process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]))) {
   await main();
 }

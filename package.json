@@ -15,7 +15,7 @@
   "test:openclaw-migration-safe": "python3 scripts/test-openclaw-migration-safe.py",
   "test:openclaw-runtime-gate": "python3 scripts/test-openclaw-unique-runtime-gate.py",
     "verify:amadeus": "pnpm typecheck:amadeus && pnpm test:amadeus && git diff --check",
-    "verify:openclaw-patch": "node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs && node scripts/test-patch-openclaw-voice-failure.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs && git diff --check",
+    "verify:openclaw-patch": "node scripts/test-openclaw-voice-policy.mjs && bash scripts/test-openclaw-voice-module-bundle.sh && node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs && node scripts/test-patch-openclaw-voice-failure.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs && git diff --check",
     "verify:voice": "bash scripts/verify-voice.sh",
     "accept:voice": "bash scripts/accept-voice.sh",
     "test:openclaw-voice-lifecycle": "node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs",

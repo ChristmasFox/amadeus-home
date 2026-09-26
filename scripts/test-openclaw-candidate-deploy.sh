@@ -16,6 +16,12 @@ assert "owner_notification_status='skipped-candidate'\nelse\nACCEPTANCE_KEY=\"am
 assert "post_deploy_maintenance='skipped-candidate'" in s
 assert "OWNER_OUTBOX_SMOKE=%s" in s
 assert 'Single OpenClaw candidate runtime ready for real acceptance; not a release.' in s
+assert 'scripts/openclaw-voice-*.mjs|pnpm-lock.yaml' in s
+assert 'tar -C "$ROOT_DIR/scripts" -cf -' in s
+assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root' in s
+image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
+assert 'COPY scripts/openclaw-voice-*.mjs /tmp/' in image
+assert '/tmp/openclaw-voice-*.mjs' in image
 assert 'Owner release notification remained pending after 30 seconds.' in s
 PY
 printf '%s\n' 'OPENCLAW_CANDIDATE_MODE_FIXTURE=passed'

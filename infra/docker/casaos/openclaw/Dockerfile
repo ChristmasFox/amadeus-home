@@ -14,6 +14,7 @@ WORKDIR /app
 # patched from the same source-controlled script during an apply.
 COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-identity.mjs
 COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
+COPY scripts/openclaw-voice-*.mjs /tmp/
 USER root
 # The pinned WhatsApp channel converts OpenAI-compatible MP3 replies to native
 # 48 kHz Ogg/Opus voice notes. Without ffmpeg, a healthy TTS response cannot be
@@ -24,7 +25,7 @@ RUN apt-get update \
     && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libopus
 RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/openclaw-voice-*.mjs
 
 # Install our business plugins in OpenClaw's bundled-extension tree. This keeps
 # the plugin runtime trusted for narrow host-owned capabilities such as the
