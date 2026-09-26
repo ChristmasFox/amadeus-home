@@ -80,15 +80,28 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     // revision. Do not ask the harness to retry; fail closed at delivery.
     return;
   });
-  api.on('message_sending', (event, context) => {
-    const key = context.sessionKey;
+  api.on('reply_payload_sending', (event, context) => {
+    // WhatsApp's inbound delivery runs this hook with the canonical session key.
+    // Its legacy message_sending hook may omit that key, so it cannot correlate
+    // the current-turn verdict and must not be used for this safety boundary.
+    const key = event.sessionKey ?? context.sessionKey;
     if (!key) return;
     const guard = pending.get(key);
     if (!guard || Date.now() - guard.at > 120_000) { pending.delete(key); return; }
-    if (!FACT.test(event.content)) return;
-    if (guard.delivered) return { cancel: true, cancelReason: 'pubg_unverified_followup_chunk' };
+    const content = event.payload.text ?? '';
+    if (!FACT.test(content)) return;
+    if (guard.delivered) return { cancel: true, reason: 'pubg_unverified_followup_chunk' };
     guard.delivered = true;
     api.logger.warn('pubg evidence guard replaced unverified outbound match claim');
-    return { content: SAFE_REPLY };
+    return {
+      payload: {
+        ...event.payload,
+        text: SAFE_REPLY,
+        mediaUrl: undefined,
+        mediaUrls: undefined,
+        audioAsVoice: false,
+        spokenText: undefined,
+      },
+    };
   });
 }
