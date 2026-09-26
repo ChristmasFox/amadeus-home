@@ -1,3 +1,13 @@
+## 2026-09-26：nyannyan.top 公网服务 502 已恢复
+
+- 本地 CasaOS 服务正常：OpenClaw `:18789/healthz=200`、Product Radar `:5315/health=200`；问题在公网回源链路，不是本次 OpenClaw 语音部署本身。
+- M204 的 `frpc.service` 虽然 active，但日志持续出现 `StartWorkConn contains error: invalid NewWorkConn`，说明 VPS frps/Caddy 使用的部分 frp work connection 已失效。
+- 已执行可恢复的 `orb -m nyannyan -u root systemctl restart frpc`；frpc 重新 login 成功并注册 8 个既有映射。
+- 绕过本机代理直连公网验收通过：`immich=200`、`emby=302`、`jellyfin=302`、`aria=200`、`qb=200`、`monitor=200`；`claw=403` 为预期 token 保护；restart 后 5 分钟无新的 frpc error。
+- `9router.nyannyan.top` 仍无 DNS/frpc 映射，按设计不作为公网服务。
+
+详见 `.agent/checkpoints/2026-09-26-frpc-502-recovery.md`。
+
 ## 2026-09-26：Amadeus 1.5.9 群聊日语 TTS guard 已正式部署
 
 - `VERSION=1.5.9`，release commit `3f9171f` 已 push；`./scripts/deploy-openclaw.sh --apply --build-auto` 已完成受影响 OpenClaw image 构建和 CasaOS 切换。
