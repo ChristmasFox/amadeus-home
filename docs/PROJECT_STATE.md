@@ -1,3 +1,13 @@
+## 2026-09-26：定位 WhatsApp 群聊中日双语被合成两段的问题（源码 guard 待发布）
+
+- 群聊 `/tts status` 为 `Chat override: default`、`Provider: openai`、最近一次 `openai:success(ok)`；这排除了群级 TTS 开关/Provider override 作为首要根因。
+- pinned OpenClaw 2026.9.4 的 Auto-TTS 在缺少 `[[tts:text]]...[[/tts:text]]` 时会把整段可见回复送入 TTS。voice Skill 虽要求 directive，但模型若漏写，中文摘要和日本語行会一起合成。随后现有 WhatsApp visible-text postprocessor 会把整段 `spokenText` 填回 `日本語：`，导致 `日本語：中文：... 日本語：...` 的重复显示。
+- 已在 `scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs` 增加 WhatsApp inbound voice 的 deterministic 日文行选择：优先取最后一个含假名的 `日本語：` 行作为唯一 TTS 输入；找不到则不合成。delivery guard 同时拒绝已经是双语/多行的 `spokenText`，避免发送混合 PTT。
+- `pnpm test:openclaw-voice-lifecycle`、`pnpm check:architecture`、`pnpm check:secrets` 和 `git diff --check` 通过。
+- 当前 live 仍是 `local/openclaw-amadeus:git-b54c2ed84ee4-20260925195233`，本次修复尚未 build/deploy；待发布后用真实群聊验收，不清空群聊记忆。
+
+详见 `.agent/checkpoints/2026-09-26-whatsapp-group-japanese-tts-input-guard.md` 与 `.agent/tasks/2026-09-26-whatsapp-group-voice-tts-guard.md`。
+
 ## 2026-09-25 UTC：Amadeus 1.5.8 语音恢复已由用户确认正常
 
 - 用户在 1.5.7 部署后反馈收到中日文字但没有语音条。根因已定位到 TTS，不是文字格式：OpenClaw 对 9Router `/v1/audio/speech` 等待 120 秒后超时；9Router 报 `fetch failed` 并锁定 self-hosted TTS。Mac Qwen 服务 health 虽为 ready，但旧推理一直占用串行 inference lock，90 秒短句烟测也超时。历史 `>320` 字日语合成记录耗时约 223 秒，超过固定 120 秒窗口。

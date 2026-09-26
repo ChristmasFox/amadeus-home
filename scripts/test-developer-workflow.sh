@@ -71,6 +71,10 @@ assert_line "$image" 'DOCKER_BUILD=required only in explicit RELEASE'
 config="$(scope scripts/deploy-openclaw.sh)"
 assert_line "$config" 'CHANGE_SCOPE_LEVEL=RELEASE'
 assert_line "$config" 'CHANGE_SCOPE_WORKFLOW=OPENCLAW_RELEASE_CONFIG'
+voice_image="$(scope scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs)"
+assert_line "$voice_image" 'CHANGE_SCOPE_LEVEL=RELEASE'
+assert_line "$voice_image" 'CHANGE_SCOPE_WORKFLOW=RELEASE_BUILD_REQUIRED'
+assert_line "$voice_image" 'DOCKER_IMAGE_SET=openclaw'
 
 env_output="$(scope .env.example)"
 assert_line "$env_output" 'CHANGE_SCOPE_LEVEL=RELEASE'

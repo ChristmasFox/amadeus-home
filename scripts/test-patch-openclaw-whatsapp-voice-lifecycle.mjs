@@ -6,11 +6,14 @@ import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   CORE_MARKER,
+  TTS_MARKER,
   WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER,
   WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER,
   ensureAmadeusJapaneseVoiceText,
+  resolveAmadeusJapaneseSpeechText,
+  patchTtsSource,
   patchCoreSource,
   patchWhatsAppSource,
   patchWhatsAppIngressQueueSource,
@@ -137,6 +140,23 @@ assert.ok(patchedCore.includes('amadeusVoiceFollowup ? { handled: false } : awai
 assert.ok(patchedCore.includes('messageInjectionDisposition === "accepted" && !amadeusVoiceFollowup'), 'accepted steering injection is bypassed only for the active voice lock');
 assert.equal(patchCoreSource(patchedCore), patchedCore, 'core patch is idempotent');
 
+const ttsFixture = `const params = { inboundAudio: true, channel: "whatsapp" };
+const explicitTtsText = "";
+const visibleText = "中文：先说结论。\n\n日本語：少し待って。結論を先に言うわ。";
+const ttsText = explicitTtsText || visibleText;
+const nextPayload = { text: visibleText };
+if (!ttsText.trim()) return nextPayload;
+async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) { return params; }`;
+const patchedTts = patchTtsSource(ttsFixture);
+assert.ok(patchedTts.includes(`// ${TTS_MARKER}`), 'TTS patch marker is present');
+assert.match(patchedTts, /resolveAmadeusJapaneseSpeechText\(visibleText, explicitTtsText\)/u, 'TTS input is selected from the Japanese line');
+assert.match(patchedTts, /amadeusInboundWhatsAppVoice && !ttsText\.trim\(\)/u, 'TTS fails closed without a Japanese line');
+assert.equal(patchTtsSource(patchedTts), patchedTts, 'TTS patch is idempotent');
+assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：少し待って。結論を先に言うわ。'), '少し待って。結論を先に言うわ。');
+assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：中文：先说结论。\n日本語：少し待って。'), '少し待って。');
+assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。', '中文：先说结论。'), '');
+assert.equal(resolveAmadeusJapaneseSpeechText('', '少し待って。'), '少し待って。');
+
 const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
 const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
 const patchedWhatsAppVisible = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
@@ -192,6 +212,18 @@ assert.equal(blockedChineseAudio.mediaUrl, undefined, 'non-Japanese speech media
 assert.equal(blockedChineseAudio.ttsSupplement, undefined, 'TTS supplement metadata does not reintroduce audio');
 assert.equal(blockedChineseAudio.audioAsVoice, undefined);
 assert.match(blockedChineseAudio.text, /日语语音暂时无法生成/u, 'Chinese PTT fails closed to a visible text notice');
+const mixedBilingualTtsPayload = {
+  text: '中文：那只猴子不会学习。\n日本語：中文：那只猴子不会学习。\n日本語：あの猿が勉強するわけないでしょ。',
+  mediaUrl: 'mixed-bilingual-tts.ogg',
+  audioAsVoice: true,
+  spokenText: '中文：那只猴子不会学习。\n日本語：中文：那只猴子不会学习。\n日本語：あの猿が勉強するわけないでしょ。',
+  ttsSupplement: { spokenText: '中文：那只猴子不会学习。\n日本語：中文：那只猴子不会学习。\n日本語：あの猿が勉強するわけないでしょ。' },
+  trustedLocalMedia: true,
+};
+const blockedMixedBilingualAudio = ensureAmadeusJapaneseVoiceText(mixedBilingualTtsPayload, true);
+assert.equal(blockedMixedBilingualAudio.mediaUrl, undefined, 'mixed bilingual PTT is removed before WhatsApp delivery');
+assert.doesNotMatch(blockedMixedBilingualAudio.text, /日本語：/u, 'mixed bilingual visible text does not retain duplicated Japanese labels');
+assert.match(blockedMixedBilingualAudio.text, /日语语音暂时无法生成/u, 'mixed bilingual PTT fails closed to a visible text notice');
 assert.equal(ensureAmadeusJapaneseVoiceText(chineseTtsPayload, false), chineseTtsPayload, 'typed-only turns keep their existing delivery path');
 const missingSpeechText = ensureAmadeusJapaneseVoiceText({ mediaUrl: 'unknown-ptt.ogg', audioAsVoice: true }, true);
 assert.equal(missingSpeechText.mediaUrl, undefined, 'PTT without speech source also fails closed');
