@@ -13,7 +13,9 @@ import threading
 import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from concurrent.futures import CancelledError, Future
+import queue
 from typing import Protocol
 
 MODEL_ID = "qwen3-tts-1.7b"
@@ -23,6 +25,8 @@ MAX_TEXT = 1200
 MAX_BODY = 8192
 MAX_AUDIO = 12 * 1024 * 1024
 LOG = logging.getLogger("amadeus.speech")
+MAX_PENDING_INFERENCES = 1
+QUEUE_START_TIMEOUT_S = 5  # fail closed before the upstream 120s TTS window
 
 
 @dataclass(frozen=True)
@@ -105,6 +109,81 @@ def encode(wav: bytes, fmt: str) -> tuple[bytes, str]:
     return result.stdout, "audio/ogg" if fmt == "opus" else "audio/mpeg"
 
 
+class TtsBusyError(Exception):
+    pass
+
+@dataclass
+class InferenceJob:
+    text: str
+    admitted_ns: int
+    started: threading.Event
+    result: Future[tuple[bytes, int, SynthesisTiming]]
+
+class InferenceWorker:
+    """One model worker, one bounded waiting slot; no second Agent/runtime."""
+
+    def __init__(self, server: SpeechServer):
+        self.server = server
+        self.pending: queue.Queue[InferenceJob] = queue.Queue(maxsize=MAX_PENDING_INFERENCES)
+        self.closed = threading.Event()
+        self.admission_lock = threading.Lock()
+        self.thread = threading.Thread(target=self._run, name="qwen-inference", daemon=True)
+        self.thread.start()
+
+    def submit(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
+        with self.admission_lock:
+            if self.closed.is_set():
+                raise TtsBusyError()
+            job = InferenceJob(text, time.monotonic_ns(), threading.Event(), Future())
+            try:
+                self.pending.put_nowait(job)
+            except queue.Full as exc:
+                raise TtsBusyError() from exc
+        if not job.started.wait(QUEUE_START_TIMEOUT_S):
+            if job.result.cancel():
+                raise TtsBusyError()
+            # Worker claimed the job at the deadline; wait only for that inference.
+        try:
+            return job.result.result()
+        except CancelledError as exc:
+            raise TtsBusyError() from exc
+
+    def _run(self) -> None:
+        while not self.closed.is_set():
+            try:
+                job = self.pending.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                if not job.result.set_running_or_notify_cancel():
+                    continue
+                begun_ns = time.monotonic_ns()
+                job.started.set()
+                engine = self.server.engine
+                if engine is None or self.server.state != "ready":
+                    raise TtsBusyError()
+                wav, rate, timing = engine.synthesize_timed(job.text)
+                wait_ms = (begun_ns - job.admitted_ns) / 1_000_000
+                job.result.set_result((wav, rate, replace(timing, queue_wait_ms=wait_ms + timing.queue_wait_ms)))
+            except Exception as exc:
+                job.result.set_exception(exc)
+            finally:
+                self.pending.task_done()
+
+    def close(self) -> None:
+        with self.admission_lock:
+            self.closed.set()
+            while True:
+                try:
+                    job = self.pending.get_nowait()
+                except queue.Empty:
+                    break
+                job.result.cancel()
+                job.started.set()  # unblock the HTTP waiter during shutdown
+                self.pending.task_done()
+        # An in-flight model call cannot safely be interrupted; the worker is daemonized.
+        self.thread.join(timeout=0.5)
+
 class SpeechServer(ThreadingHTTPServer):
     daemon_threads = True
 
@@ -114,6 +193,11 @@ class SpeechServer(ThreadingHTTPServer):
         self.engine: Synthesizer | None = None
         self.state = "starting"
         self.started = time.monotonic()
+        self.inference = InferenceWorker(self)
+
+    def server_close(self) -> None:
+        self.inference.close()
+        super().server_close()
 
     def load(self, profile: Path, model_path: str = UPSTREAM_MODEL) -> None:
         self.state = "loading_model"
@@ -209,7 +293,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
             return
         started = time.monotonic()
         try:
-            wav, _, timing = self.server.engine.synthesize_timed(text)
+            wav, _, timing = self.server.inference.submit(text)
             if not wav or len(wav) > MAX_AUDIO:
                 raise RuntimeError("invalid_audio")
             with wave.open(io.BytesIO(wav), "rb") as reader:
@@ -219,6 +303,10 @@ class SpeechHandler(BaseHTTPRequestHandler):
             encode_ms = int((time.monotonic() - encode_started) * 1000)
             if not audio:
                 raise RuntimeError("invalid_audio")
+        except TtsBusyError:
+            LOG.warning("speech_synthesis_rejected category=tts_busy")
+            self._error(503, "tts_busy")
+            return
         except Exception as exc:
             LOG.error("speech_synthesis_failed category=%s", type(exc).__name__)
             self._error(503, "synthesis_failed")
