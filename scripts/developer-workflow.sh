@@ -79,7 +79,7 @@ for path in "${FILES[@]-}"; do
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
-    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
+    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|infra/macos/*mlx*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
     scripts/prepare-mlx-tts-poc.sh) has_speech=1 ;;
     scripts/deploy-9router-speech.sh|scripts/test-9router-speech-image.sh|scripts/prepare-9router-speech-secrets.sh|scripts/provision-9router-qwen-asr.sh) has_router=1 ;;
     infra/docker/casaos/9router/*) has_router=1; has_package_meta=1 ;;

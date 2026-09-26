@@ -1,0 +1,11 @@
+# Pinned community MLX backend; source/model revisions live in qwen3-tts-engine.json.
+mlx-audio==0.5.6
+mlx==0.32.2
+transformers==5.17.0
+huggingface-hub==1.33.0
+numpy==2.3.5
+soundfile==0.14.0
+imageio-ffmpeg==0.6.0
+psutil==7.2.2
+socksio==1.0.0
+sentencepiece==0.2.2
