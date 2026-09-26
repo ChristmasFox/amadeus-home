@@ -158,6 +158,17 @@ class BlockingEngine(FakeEngine):
         self.release.wait(2)
         return super().synthesize_timed(text)
 
+class FailOnceEngine(FakeEngine):
+    def __init__(self):
+        super().__init__()
+        self.failed = False
+
+    def synthesize_timed(self, text):
+        if not self.failed:
+            self.failed = True
+            raise RuntimeError("fixture_model_failure")
+        return super().synthesize_timed(text)
+
 class QueueSafetyTest(unittest.TestCase):
     def test_bounded_queue_rejects_full_and_cancels_stale_waiter(self):
         server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
@@ -248,6 +259,38 @@ class QueueSafetyTest(unittest.TestCase):
             serving.join(2)
             service.QUEUE_START_TIMEOUT_S = previous
         self.assertEqual(engine.calls, 1)
+        self.assertFalse(server.inference.thread.is_alive())
+
+    def test_model_failure_fails_closed_and_worker_recovers_next_request(self):
+        server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
+        server.engine = FailOnceEngine()
+        server.state = "ready"
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        def request():
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            body = json.dumps({"model": service.MODEL_ID, "voice": service.VOICE_ID,
+                               "input": "safe fixture", "response_format": "wav"}).encode()
+            conn.request("POST", "/v1/audio/speech", body,
+                         {"Authorization": "Bearer " + "x" * 32, "Content-Type": "application/json"})
+            response = conn.getresponse()
+            result = response.status, response.read()
+            conn.close()
+            return result
+        try:
+            with self.assertLogs(service.LOG, level="ERROR") as captured:
+                failed_status, failed_body = request()
+            self.assertEqual(failed_status, 503)
+            self.assertEqual(json.loads(failed_body)["error"]["type"], "synthesis_failed")
+            self.assertNotIn("safe fixture", " ".join(captured.output))
+            success_status, success_body = request()
+            self.assertEqual(success_status, 200)
+            self.assertTrue(success_body.startswith(b"RIFF"))
+            self.assertTrue(server.inference.thread.is_alive())
+        finally:
+            server.shutdown()
+            server.server_close()
+            serving.join(2)
         self.assertFalse(server.inference.thread.is_alive())
 
     def test_close_cancels_queued_request_and_returns_promptly(self):
