@@ -8,7 +8,7 @@ LOG="$HOME/Library/Logs/Amadeus"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 TARGET="gui/$(id -u)"
 mode="${1:---dry-run}"
-case "$mode" in --dry-run|--prepare-apply|--apply|--status|--uninstall) ;; *) echo 'Usage: manage-qwen3-tts.sh [--dry-run|--prepare-apply|--apply|--status|--uninstall]' >&2; exit 2;; esac
+case "$mode" in --dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall) ;; *) echo 'Usage: manage-qwen3-tts.sh [--dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall]' >&2; exit 2;; esac
 [[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
 if [[ "$mode" == --status ]]; then
   launchctl print "$TARGET/$LABEL" 2>/dev/null | grep -E 'state =|pid =|last exit code =' || true
@@ -22,7 +22,7 @@ if [[ "$mode" == --uninstall ]]; then
   rm -f -- "$PLIST" # preserve voice, token, model cache, logs and venv for rollback
   exit 0
 fi
-if [[ "$mode" == --apply ]]; then
+if [[ "$mode" == --apply || "$mode" == --apply-plist-only ]]; then
   [[ -s "$VOICE/reference.wav" && -s "$VOICE/reference.txt" ]] || { echo 'operator-owned kurisu-v1 profile missing' >&2; exit 1; }
   [[ "$(stat -f %Lp "$VOICE/reference.wav")" == 600 && "$(stat -f %Lp "$VOICE/reference.txt")" == 600 ]] || { echo 'reference pair must have mode 600' >&2; exit 1; }
   [[ -s "$BASE/tts.token" ]] || { echo "create protected 32+ character token at $BASE/tts.token" >&2; exit 1; }
@@ -30,8 +30,10 @@ if [[ "$mode" == --apply ]]; then
   [[ -s "$BASE/model/config.json" ]] || { echo 'pinned model absent; run --prepare-apply first' >&2; exit 1; }
 fi
 mkdir -p "$BASE" "$LOG" "$(dirname "$PLIST")"
-if [[ ! -x "$BASE/venv/bin/python" ]]; then python3 -m venv "$BASE/venv"; fi
-"$BASE/venv/bin/python" -m pip install -r "$ROOT/apps/qwen3-tts-service/requirements.txt"
+if [[ "$mode" != --apply-plist-only ]]; then
+  if [[ ! -x "$BASE/venv/bin/python" ]]; then python3 -m venv "$BASE/venv"; fi
+  "$BASE/venv/bin/python" -m pip install -r "$ROOT/apps/qwen3-tts-service/requirements.txt"
+fi
 if [[ "$mode" == --prepare-apply ]]; then
   HF_HOME="$BASE/model-cache" "$BASE/venv/bin/python" - "$BASE/model" <<'PYMODEL'
 from huggingface_hub import snapshot_download
@@ -56,8 +58,10 @@ PYTOKEN
   fi
   exit 0
 fi
-install -m 600 "$ROOT/apps/qwen3-tts-service/service.py" "$BASE/service.py"
-cp "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
+if [[ "$mode" == --apply ]]; then
+  install -m 600 "$ROOT/apps/qwen3-tts-service/service.py" "$BASE/service.py"
+  cp "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
+fi
 python3 - "$ROOT/infra/macos/com.amadeus.qwen3-tts.plist.example" "$PLIST" "$BASE" "$VOICE" "$LOG" <<'PY'
 import sys
 from pathlib import Path
