@@ -102,7 +102,7 @@ class SpeechTest(unittest.TestCase):
         timing = next(line for line in captured.output if "speech_synthesis_ok" in line)
         self.assertIn("input_chars=<=40", timing)
         self.assertIn("audio_ms=", timing)
-        self.assertIn("queue_wait_ms=1.0", timing)
+        self.assertRegex(timing, r"queue_wait_ms=1\.[0-9]+")
         self.assertIn("generate_or_model_ms=25.0", timing)
         self.assertIn("decode_stage=inside_model_api", timing)
         self.assertIn("wav_serialize_ms=2.0", timing)
@@ -145,6 +145,140 @@ class TimingBoundaryTest(unittest.TestCase):
         self.assertGreaterEqual(timing.generate_or_model_ms, 20)
         self.assertGreaterEqual(timing.wav_serialize_ms, 8)
         self.assertAlmostEqual(timing.engine_inside_lock_ms, timing.generate_or_model_ms + timing.wav_serialize_ms, delta=1)
+
+class BlockingEngine(FakeEngine):
+    def __init__(self):
+        super().__init__()
+        self.entered = threading.Event()
+        self.release = threading.Event()
+
+    def synthesize_timed(self, text):
+        self.entered.set()
+        self.release.wait(2)
+        return super().synthesize_timed(text)
+
+class QueueSafetyTest(unittest.TestCase):
+    def test_bounded_queue_rejects_full_and_cancels_stale_waiter(self):
+        server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
+        engine = BlockingEngine()
+        server.engine = engine
+        server.state = "ready"
+        previous = service.QUEUE_START_TIMEOUT_S
+        service.QUEUE_START_TIMEOUT_S = 0.05
+        completed = []
+        first = threading.Thread(target=lambda: completed.append(server.inference.submit("first")))
+        second_errors = []
+        second = threading.Thread(target=lambda: self._submit_error(server, second_errors))
+        try:
+            first.start()
+            self.assertTrue(engine.entered.wait(1))
+            second.start()
+            # Wait until the second job is actually pending; avoid scheduling races.
+            deadline = time.monotonic() + 1
+            while server.inference.pending.qsize() != 1 and time.monotonic() < deadline:
+                time.sleep(0.001)
+            self.assertEqual(server.inference.pending.qsize(), 1)
+            with self.assertRaises(service.TtsBusyError):
+                server.inference.submit("third")
+            second.join(1)
+            self.assertFalse(second.is_alive())
+            self.assertEqual(len(second_errors), 1)
+            self.assertIsInstance(second_errors[0], service.TtsBusyError)
+            engine.release.set()
+            first.join(1)
+            self.assertFalse(first.is_alive())
+            self.assertEqual(engine.calls, 1, "expired queued request must not synthesize")
+            self.assertEqual(len(completed), 1)
+        finally:
+            engine.release.set()
+            first.join(2)
+            second.join(2)
+            service.QUEUE_START_TIMEOUT_S = previous
+            server.server_close()
+        self.assertFalse(server.inference.thread.is_alive())
+
+    @staticmethod
+    def _submit_error(server, errors):
+        try:
+            server.inference.submit("second")
+        except Exception as exc:
+            errors.append(exc)
+
+    def test_http_queue_full_returns_503_tts_busy(self):
+        server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
+        engine = BlockingEngine()
+        server.engine = engine
+        server.state = "ready"
+        serving = threading.Thread(target=server.serve_forever, daemon=True)
+        serving.start()
+        previous = service.QUEUE_START_TIMEOUT_S
+        service.QUEUE_START_TIMEOUT_S = 0.2
+        results = []
+        def request():
+            conn = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+            body = json.dumps({"model": service.MODEL_ID, "voice": service.VOICE_ID,
+                               "input": "safe fixture", "response_format": "wav"}).encode()
+            conn.request("POST", "/v1/audio/speech", body,
+                         {"Authorization": "Bearer " + "x" * 32, "Content-Type": "application/json"})
+            response = conn.getresponse()
+            results.append((response.status, response.read()))
+            conn.close()
+        first = threading.Thread(target=request)
+        second = threading.Thread(target=request)
+        try:
+            first.start()
+            self.assertTrue(engine.entered.wait(1))
+            second.start()
+            deadline = time.monotonic() + 1
+            while server.inference.pending.qsize() != 1 and time.monotonic() < deadline:
+                time.sleep(0.001)
+            self.assertEqual(server.inference.pending.qsize(), 1)
+            request()
+            self.assertTrue(any(status == 503 and json.loads(body)["error"]["type"] == "tts_busy"
+                                for status, body in results))
+            second.join(2)
+            self.assertFalse(second.is_alive())
+        finally:
+            engine.release.set()
+            first.join(3)
+            second.join(3)
+            server.shutdown()
+            server.server_close()
+            serving.join(2)
+            service.QUEUE_START_TIMEOUT_S = previous
+        self.assertEqual(engine.calls, 1)
+        self.assertFalse(server.inference.thread.is_alive())
+
+    def test_close_cancels_queued_request_and_returns_promptly(self):
+        server = service.SpeechServer(("127.0.0.1", 0), "x" * 32)
+        engine = BlockingEngine()
+        server.engine = engine
+        server.state = "ready"
+        first = threading.Thread(target=lambda: server.inference.submit("first"))
+        errors = []
+        second = threading.Thread(target=lambda: self._submit_error(server, errors))
+        first.start()
+        self.assertTrue(engine.entered.wait(1))
+        second.start()
+        deadline = time.monotonic() + 1
+        while server.inference.pending.qsize() != 1 and time.monotonic() < deadline:
+            time.sleep(0.001)
+        try:
+            self.assertEqual(server.inference.pending.qsize(), 1)
+            started = time.monotonic()
+            server.server_close()
+            self.assertLess(time.monotonic() - started, 1)
+            second.join(1)
+            self.assertFalse(second.is_alive())
+            self.assertIsInstance(errors[0], service.TtsBusyError)
+            with self.assertRaises(service.TtsBusyError):
+                server.inference.submit("after-close")
+        finally:
+            engine.release.set()
+            first.join(2)
+            second.join(2)
+        server.inference.thread.join(1)
+        self.assertFalse(server.inference.thread.is_alive())
 
 if __name__ == "__main__":
     unittest.main()
