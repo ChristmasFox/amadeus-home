@@ -59,6 +59,7 @@ has_amadeus=0
 has_presentation=0
 has_product=0
 has_speech=0
+has_voice_patch=0
 has_router=0
 has_package_meta=0
 has_openclaw_deploy=0
@@ -86,11 +87,11 @@ for path in "${FILES[@]-}"; do
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
-    scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs)
-      has_openclaw_deploy=1
-      has_package_meta=1
+    scripts/patch-openclaw-channel-identity.mjs) has_openclaw_deploy=1 ;;
+    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
+      has_voice_patch=1
       ;;
-    scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh) has_fast=1 ;;
+    scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;
     scripts/storage-*|scripts/backup.sh|scripts/service-aware-backup.sh|scripts/sqlite-consistent-snapshot.py|scripts/reclaim-immich-old-source.sh|scripts/migrate-immich-media.sh|scripts/secrets-inventory.sh|scripts/export-skuld-secrets.sh|scripts/import-skuld-secrets.sh|scripts/test-*skuld*|scripts/test-storage-*)
       has_storage=1
       [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
@@ -139,6 +140,8 @@ elif ((has_product)); then
   LEVEL=RUNTIME; WORKFLOW=PRODUCT_RADAR
 elif ((has_speech)); then
   LEVEL=RUNTIME; WORKFLOW=QWEN3_TTS
+elif ((has_voice_patch)); then
+  LEVEL=RUNTIME; WORKFLOW=VOICE_PATCH
 fi
 
 printf 'CHANGE_SCOPE_LEVEL=%s\n' "$LEVEL"
@@ -147,11 +150,11 @@ printf 'DOCKER_BUILD=%s\n' "$DOCKER_BUILD"
 printf 'COMPOSE_MODE=%s\n' "$COMPOSE_MODE"
 DOCKER_IMAGE_SET=none
 if ((has_package_meta)); then DOCKER_IMAGE_SET=both; fi
-if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy)); then DOCKER_IMAGE_SET=openclaw; fi
+if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy || has_voice_patch)); then DOCKER_IMAGE_SET=openclaw; fi
 if ((has_product)); then if [[ "$DOCKER_IMAGE_SET" == openclaw ]]; then DOCKER_IMAGE_SET=both; else DOCKER_IMAGE_SET=product-radar; fi; fi
 if ((has_presentation)); then DOCKER_IMAGE_SET=both; fi
 if ((has_router)); then
-  if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy || has_product || has_presentation)); then
+  if ((has_pubg || has_identity || has_amadeus || has_openclaw_deploy || has_voice_patch || has_product || has_presentation)); then
     DOCKER_IMAGE_SET="${DOCKER_IMAGE_SET}+9router"
   else
     DOCKER_IMAGE_SET=9router
@@ -169,6 +172,7 @@ case "$WORKFLOW" in
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
   QWEN3_TTS) printf '%s\n' 'VERIFY=Python speech tests, host plist/shell lint, git diff --check; deployment remains explicit.' ;;
+  VOICE_PATCH) printf '%s\n' 'VERIFY=pnpm verify:openclaw-patch, git diff --check; Docker/Compose/deploy remain explicit.' ;;
   ROUTER_RELEASE_CONFIG) printf '%s\n' 'VERIFY=9Router adapter tests and compose lint; deployment remains explicit.' ;;
   STORAGE_RUNTIME) printf '%s\n' 'VERIFY=bash -n changed shell, pnpm test:storage-runtime, migration/readiness fixtures; no package-wide tests.' ;;
   SKULD_CONSISTENCY) printf '%s\n' 'VERIFY=JSON parse, pnpm test:skuld-consistency, git diff --check; no Docker/Compose/deploy.' ;;
@@ -191,6 +195,9 @@ if ((has_openclaw_deploy)); then
   bash -n scripts/test-openclaw-voice-image.sh
   printf '+ python3 scripts/test-openclaw-speech-config.py\n'
   python3 scripts/test-openclaw-speech-config.py
+fi
+if ((has_voice_patch)); then
+  printf '+ pnpm verify:openclaw-patch\n'; pnpm verify:openclaw-patch
 fi
 if ((has_storage || has_backup)); then
   printf '+ pnpm test:storage-runtime\n'; pnpm test:storage-runtime
