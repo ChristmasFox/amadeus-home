@@ -13,6 +13,7 @@ import threading
 import time
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from dataclasses import dataclass
 from typing import Protocol
 
 MODEL_ID = "qwen3-tts-1.7b"
@@ -24,8 +25,17 @@ MAX_AUDIO = 12 * 1024 * 1024
 LOG = logging.getLogger("amadeus.speech")
 
 
+@dataclass(frozen=True)
+class SynthesisTiming:
+    # The upstream generate_voice_clone call includes acoustic decode/postprocessing.
+    # This library boundary cannot currently attribute decode time separately.
+    queue_wait_ms: float
+    generate_or_model_ms: float
+    wav_serialize_ms: float
+    engine_inside_lock_ms: float
+
 class Synthesizer(Protocol):
-    def synthesize(self, text: str) -> tuple[bytes, int]: ...
+    def synthesize_timed(self, text: str) -> tuple[bytes, int, SynthesisTiming]: ...
 
 
 class QwenEngine:
@@ -55,13 +65,27 @@ class QwenEngine:
         self.synthesize("你好，我已经准备好了。")
 
     def synthesize(self, text: str) -> tuple[bytes, int]:
+        wav, rate, _ = self.synthesize_timed(text)
+        return wav, rate
+
+    def synthesize_timed(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
+        queued_at = time.monotonic_ns()
         with self._lock:
+            locked_at = time.monotonic_ns()
             samples, rate = self._model.generate_voice_clone(
                 text=text, language="Auto", voice_clone_prompt=self._prompt
             )
+            generated_at = time.monotonic_ns()
             output = io.BytesIO()
             self._sf.write(output, samples[0], rate, format="WAV")
-            return output.getvalue(), rate
+            wav = output.getvalue()
+            serialized_at = time.monotonic_ns()
+        return wav, rate, SynthesisTiming(
+            queue_wait_ms=(locked_at - queued_at) / 1_000_000,
+            generate_or_model_ms=(generated_at - locked_at) / 1_000_000,
+            wav_serialize_ms=(serialized_at - generated_at) / 1_000_000,
+            engine_inside_lock_ms=(serialized_at - locked_at) / 1_000_000,
+        )
 
 
 def encode(wav: bytes, fmt: str) -> tuple[bytes, str]:
@@ -184,10 +208,8 @@ class SpeechHandler(BaseHTTPRequestHandler):
             self._error(400, "unsupported_format")
             return
         started = time.monotonic()
-        engine_started = time.monotonic()
         try:
-            wav, _ = self.server.engine.synthesize(text)
-            engine_ms = int((time.monotonic() - engine_started) * 1000)
+            wav, _, timing = self.server.engine.synthesize_timed(text)
             if not wav or len(wav) > MAX_AUDIO:
                 raise RuntimeError("invalid_audio")
             with wave.open(io.BytesIO(wav), "rb") as reader:
@@ -203,7 +225,16 @@ class SpeechHandler(BaseHTTPRequestHandler):
             return
         input_bucket = "<=40" if len(text) <= 40 else "<=80" if len(text) <= 80 else "<=160" if len(text) <= 160 else "<=320" if len(text) <= 320 else ">320"
         total_ms = int((time.monotonic() - started) * 1000)
-        LOG.info("speech_synthesis_ok model=%s voice=%s format=%s input_chars=%s audio_ms=%d engine_ms=%d encode_ms=%d total_ms=%d", MODEL_ID, VOICE_ID, fmt, input_bucket, audio_duration_ms, engine_ms, encode_ms, total_ms)
+        rtf = timing.engine_inside_lock_ms / audio_duration_ms if audio_duration_ms > 0 else float("nan")
+        LOG.info(
+            "speech_synthesis_ok model=%s voice=%s format=%s input_chars=%s "
+            "audio_ms=%d queue_wait_ms=%.1f generate_or_model_ms=%.1f "
+            "decode_stage=inside_model_api wav_serialize_ms=%.1f engine_inside_lock_ms=%.1f "
+            "encode_ms=%d total_ms=%d rtf=%.3f",
+            MODEL_ID, VOICE_ID, fmt, input_bucket, audio_duration_ms,
+            timing.queue_wait_ms, timing.generate_or_model_ms, timing.wav_serialize_ms,
+            timing.engine_inside_lock_ms, encode_ms, total_ms, rtf,
+        )
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(audio)))
