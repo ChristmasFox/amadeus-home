@@ -18,10 +18,11 @@ def main() -> None:
     parser.add_argument("--token-file", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runs", type=int, default=5)
+    parser.add_argument("--bucket", choices=tuple(FIXTURES), default="short")
     args = parser.parse_args()
     if args.runs < 5 or args.runs > 20:
         raise ValueError("five_to_twenty_runs_required")
-    print(f"ENDPOINT_RUNS={args.runs} REQUEST_TIMEOUT_S=120")
+    print(f"ENDPOINT_RUNS={args.runs} BUCKET={args.bucket} REQUEST_TIMEOUT_S=120")
     if not args.apply:
         print("ENDPOINT_BENCHMARK=plan_only")
         return
@@ -33,7 +34,7 @@ def main() -> None:
         raise ValueError("protected_token_required")
     token = args.token_file.read_text().strip()
     request = json.dumps({"model": MODEL_ID, "voice": VOICE_ID,
-                          "input": FIXTURES["short"], "response_format": "mp3"}, ensure_ascii=False).encode()
+                          "input": FIXTURES[args.bucket], "response_format": "mp3"}, ensure_ascii=False).encode()
     rows = []
     for index in range(args.runs):
         start = time.monotonic()
