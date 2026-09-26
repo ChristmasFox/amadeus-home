@@ -12,10 +12,10 @@ Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. T
 - MLX `vmmap` cold/real footprint peak 18.4 GiB on 24 GiB host; swap rose ~3 GiB on cold switch, then declined while memory pressure recovered. Monitor this risk; protected exact A/MPS rollback is `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/protected-performance/pre-a-mlx-candidate-20260926T123834Z`.
 - Four B reference matrix configs were safety-aborted at 110s, so five warmed successes are **not** claimed for them. The published numeric report explicitly marks this gap; no B promotion. BuildKit patch-only candidate improved 39s→3s, with no CasaOS build/restart for ordinary edits.
 
-## Remaining gates
+## Remaining Goal item
 
-1. Formal 1.6.0 release source `c730b49` and affected-only immutable OpenClaw image `git-c730b495763a-20260926130153` are live. Full build/typecheck/test, report verifier, secrets, protected CasaOS checkpoint `amadeus-openclaw-20260926130153`, health/smoke and owner release notification passed.
-2. Post-release real WhatsApp acceptance passed: one voice inbound→media 22.772s, TTS 9.221s; non-audio inbound did not trigger TTS and owner confirmed phone-side normal. Monitor MLX peak memory (18.4 GiB observed) and swap; rollback on regression.
-3. Finalize the performance report with post-release acceptance evidence, then fast-forward/push canonical `main`. Four B reference matrix configs remain safety-incomplete; do not claim five successful runs or mark the full Goal complete without resolving that explicit gap under a safe isolated plan.
+1. Amadeus 1.6.0 full gates, immutable CasaOS switch, protected checkpoint, owner notification and post-release real WhatsApp voice/typed acceptance passed. Canonical `main` fast-forwarded/pushed; both merged work branches were retired. Live OpenClaw release image source `c730b49` is an ancestor of main.
+2. Four B reference matrix configurations remain **safety-incomplete** under the 110s watchdog. Follow `.agent/tasks/2026-09-26-b-icl-reference-matrix.md` for a clean, matched private B reference and an isolated five-run benchmark. Do not invent timings, increase timeout, stress live TTS during user traffic or mark the full Goal complete while this explicit item remains.
+3. Continue read-only MLX memory-pressure/swap observation. The released A+MLX remains live with protected exact A/MPS rollback unless a real regression is observed.
 
 Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.

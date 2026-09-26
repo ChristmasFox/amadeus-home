@@ -1,0 +1,6 @@
+# Canonical main and short-lived branch closure — 2026-09-26
+
+- Full Amadeus 1.6.0 release and real post-release owner WhatsApp acceptance are in Git. `origin/main` was an ancestor of the released work branch (0 left / 37 right), and local `main` fast-forwarded cleanly to `140c1dc`; push updated `origin/main`. The immutable live OpenClaw release source commit `c730b49` is an ancestor of canonical main.
+- Both historical `work/amadeus-1.5.3-voice-io` and short-lived `work/post-voice-engineering-performance` were verified merged into main and removed locally/remotely. No checkpoint, history or release commit was deleted; canonical `main` is the sole current source branch.
+- Live release remains OpenClaw `local/openclaw-amadeus:git-c730b495763a-20260926130153`, selected A+MLX/Auto single native TTS service and Product Radar, with external CasaOS and MPS rollback checkpoints. Owner confirmed normal post-release WhatsApp voice/text/typed behavior. Known optional media adapter absence and Docker daemon log-policy warning remain documented.
+- The Phase 4 B reference safety-incomplete cells still do not have five warmed runs. Do not mark the **full** performance Goal complete solely because the release succeeded; follow `.agent/tasks/2026-09-26-b-icl-reference-matrix.md` and retain stop/rollback rules.
