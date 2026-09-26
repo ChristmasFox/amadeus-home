@@ -1,0 +1,7 @@
+# Phase 3 bounded inference candidate — 2026-09-26
+
+- Source commit `6e531ea`, model/profile/language/timeout unchanged. Queue has one worker and one pending slot; wait for worker start is bounded at 5s; full queue returns `503 tts_busy`. Offline tests exercise full HTTP error, stale cancellation and shutdown.
+- Pre-apply rollback: `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/performance-queue-20260926T082155Z` (private 0700, source/plist/requirements+SHA manifest 0600). Current source/live SHA `0e93e28ed591a87a6a64240283e922e58a14fc581c23606447b3ff8ca6e7ab46` after apply.
+- Existing `manage-qwen3-tts.sh --apply` again returned bootstrap I/O error 5, old job transiently reported SIGTERMed; after it disappeared, manual `launchctl bootstrap gui/501 ...` and `launchctl enable gui/501/com.amadeus.qwen3-tts` recovered. Health became 200 after ~40s warmup; LaunchAgent running. Follow-up source adds bounded wait/retry; that change is not yet live-validated.
+- Three simultaneous fixed synthetic Japanese MP3 requests: first HTTP 200, client 12,483ms/40,940 audio bytes; second HTTP 503 `tts_busy` in 5,199ms; third HTTP 503 `tts_busy` in 2ms. Sanitized success log: queue 0.3ms, model 12,104.5ms, WAV 2.0ms, encode 371ms, audio 3,360ms, total 12,478ms, RTF 3.603. No deadlock observed. No real WhatsApp/owner quality confirmation in this candidate gate.
+- Rollback: restore pre-queue files from protected checkpoint with 0600, restart LaunchAgent (wait until old job retires), verify health 200 and source SHA. Private voice/token unchanged.

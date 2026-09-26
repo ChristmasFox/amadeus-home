@@ -79,6 +79,22 @@ target.chmod(0o600)
 PY
 plutil -lint "$PLIST"
 launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
-launchctl bootstrap "$TARGET" "$PLIST"
+# launchd may still report the old job as SIGTERMed immediately after bootout.
+# Do not race bootstrap against the retiring job (observed error 5 on M204).
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+  if ! launchctl print "$TARGET/$LABEL" >/dev/null 2>&1; then break; fi
+  if [[ "$attempt" == 10 ]]; then
+    echo 'old LaunchAgent did not retire; use protected checkpoint to recover' >&2
+    exit 1
+  fi
+  sleep 1
+done
+bootstrapped=0
+for attempt in 1 2 3; do
+  if launchctl bootstrap "$TARGET" "$PLIST"; then bootstrapped=1; break; fi
+  [[ "$attempt" == 3 ]] && break
+  sleep 1
+done
+[[ "$bootstrapped" == 1 ]] || { echo 'LaunchAgent bootstrap failed; use protected checkpoint to recover' >&2; exit 1; }
 launchctl enable "$TARGET/$LABEL"
 echo 'QWEN3_TTS=installed (health readiness may take model-download/warmup time)'
