@@ -4,7 +4,7 @@ Date: 2026-09-26. Authoritative scope: `docs/AMADEUS_POST_VOICE_ENGINEERING_PERF
 
 ## Current phase
 
-Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live candidate**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
+Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live 1.6.0 release configuration**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
 
 ## Measured evidence and limits
 
@@ -14,8 +14,8 @@ Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. T
 
 ## Remaining gates
 
-1. Git release target `VERSION=1.6.0` and single-release Chinese notes are staged. Run full build/typecheck/test, report verifier, secrets and diff checks; commit/push a clean release source.
-2. Explicit immutable CasaOS release `--apply --build-auto` with protected checkpoint, affected-only image build, health/smoke, owner notification and post-release real WhatsApp voice/typed acceptance.
-3. Finalize `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md` with release evidence and memory caveat; fast-forward/push canonical `main`, retire this short-lived work branch only after all gates pass.
+1. Formal 1.6.0 release source `c730b49` and affected-only immutable OpenClaw image `git-c730b495763a-20260926130153` are live. Full build/typecheck/test, report verifier, secrets, protected CasaOS checkpoint `amadeus-openclaw-20260926130153`, health/smoke and owner release notification passed.
+2. Await **post-release** real WhatsApp voice/typed handset confirmation. Read-only `scripts/accept-voice.sh --apply` passed technical runtime gates. Monitor MLX peak memory (18.4 GiB observed) and swap; rollback on regression.
+3. Finalize the performance report with post-release acceptance evidence, then fast-forward/push canonical `main` and retire this short-lived work branch only after all gates pass.
 
 Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.
