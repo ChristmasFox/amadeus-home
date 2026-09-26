@@ -1,0 +1,15 @@
+# TTS LaunchAgent ProcessType controlled A/B candidate — 2026-09-26
+
+- Hypothesis: launchd `ProcessType=Background` throttles latency-sensitive Qwen MPS inference in the HTTP service. Upstream Apple `launchd.plist` documentation describes resource priority differences; this was an experiment, not assumed causality.
+- Baseline A/Auto/current ~46s ICL, fixed public short Japanese fixture over protected local HTTP, five sequential responses: 22.381/10.254/11.213/13.540/10.009s (p50 11.213s, interpolated p95 20.613s). Sanitized service logs attribute almost all time to `generate_voice_clone`, queue ~0, encode ~0.15–0.30s. Production stayed healthy.
+- Pre-candidate protected checkpoint `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/qos-ab-20260926T092129Z` has 0600 `service.py` and `launchagent.plist` plus SHA manifest, directory 0700. Baseline ProcessType was `Background`; service SHA `0e93e28ed591a87a6a64240283e922e58a14fc581c23606447b3ff8ca6e7ab46`.
+- Source commit `6dae539` changes only plist ProcessType to `Interactive` and adds `manage-qwen3-tts.sh --apply-plist-only`, avoiding pip/service source replacement. Focused offline tests/plutil/shell lint/secrets passed. `--apply-plist-only` succeeded on M204 without bootstrap I/O error; health 200 after startup. Live service SHA unchanged, model/profile/language/timeout unchanged.
+- Same five-request HTTP fixture after switch: 4.770/4.553/4.562/4.144/4.058s (p50 4.553s, p95 4.729s); sanitized engine model phase ~4.0–4.7s, encode ~0.03–0.09s, queue ~0.1ms. This is a large controlled A/B association but samples are small and order/restart effects remain possible; a 20-run Interactive stability batch is pending. No owner voice/WhatsApp acceptance or general production release claim.
+- Raw timing evidence external/private: `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/perf-matrix-20260926/endpoint-A-Auto-short*.jsonl`. No text, token, reference, or generated audio in Git.
+- Rollback: restore checkpoint `launchagent.plist` with mode 0600, bootout/rebootstrap after old job retires, health 200; confirm ProcessType `Background` and service SHA unchanged. Do not touch private profile/token.
+
+## Reversal and stability continuation
+
+- Interactive 20-request sustained local HTTP batch: 20/20 valid MP3, p50 4.476s, p95 5.278s, min 3.992s, max 6.241s.
+- To isolate restart/order effects, the protected original plist was restored **without changing the service SHA/model/profile/language**. After health returned 200, five same-fixture Background requests had p50 10.391s, p95 10.907s (8.915–10.938s).
+- Reapplying the Git Interactive template with `--apply-plist-only` succeeded. After health 200, five same-fixture requests had p50 4.503s, p95 5.064s (4.060–5.092s). Final live ProcessType is `Interactive`, source SHA unchanged, health 200. This A/B/A/B reversal strongly supports launchd process policy as the major observed HTTP latency difference on this host, though owner quality and real WhatsApp voice remain separate acceptance gates.
