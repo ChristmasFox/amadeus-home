@@ -33,7 +33,7 @@ test('valid individual facts and safe uncertainty pass; unrelated conversation i
   assert.equal(assessPubgEvidence([user('中午吃什么')], '今天没有吃鸡。'), 'not_applicable');
 });
 
-test('finalize revises first, then outbound fails closed if the unsupported claim persists', () => {
+test('outbound fails closed without a host finalize revision when unsupported claims persist', () => {
   const hooks = new Map<string, (event: any, context: any) => any>();
   const warnings: string[] = [];
   registerPubgEvidenceGuard({
@@ -45,8 +45,9 @@ test('finalize revises first, then outbound fails closed if the unsupported clai
   const context = { sessionKey: 'group-session', trigger: 'user' };
   assert.equal(finalize({ lastAssistantMessage: 'PUBG 战绩为零', messages: [user('PUBG 战绩')] }, { sessionKey: 'cron-session', trigger: 'cron' }), undefined);
   const event = { runId: 'turn-1', sessionKey: 'group-session', lastAssistantMessage: reply, messages: [user('今日猴的战绩'), assistant(reply)] };
-  assert.equal(finalize(event, context)?.action, 'revise');
+  assert.equal(finalize(event, context), undefined);
   assert.match(outbound({ content: reply }, context)?.content ?? '', /不能确认结果/);
+  assert.deepEqual(outbound({ content: reply }, context), { cancel: true, cancelReason: 'pubg_unverified_followup_chunk' });
   assert.equal(outbound({ content: '普通文字' }, context), undefined);
   assert.equal(finalize({ ...event, messages: [user('今日猴的战绩'), call('pubg_query_stats', { personIds: ['p1'] }), result('pubg_query_stats', 'ok')] }, context), undefined);
   assert.equal(outbound({ content: reply }, context), undefined);
