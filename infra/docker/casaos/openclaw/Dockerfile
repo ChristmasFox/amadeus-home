@@ -9,12 +9,6 @@ WORKDIR /app
 # The plugin bundle is self-contained; the OpenClaw SDK remains provided by
 # the pinned base image. No source, credentials, media directory, or Docker
 # socket is copied into the image.
-# Carry provider-native identity metadata through the pinned OpenClaw 2026.9.4
-# Telegram ingress. The WhatsApp package is installed outside this image and is
-# patched from the same source-controlled script during an apply.
-COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-identity.mjs
-COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
-COPY scripts/openclaw-voice-*.mjs /tmp/
 USER root
 # The pinned WhatsApp channel converts OpenAI-compatible MP3 replies to native
 # 48 kHz Ogg/Opus voice notes. Without ffmpeg, a healthy TTS response cannot be
@@ -23,35 +17,6 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/* \
     && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libopus
-RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
-    && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/openclaw-voice-*.mjs
-
-# Install our business plugins in OpenClaw's bundled-extension tree. This keeps
-# the plugin runtime trusted for narrow host-owned capabilities such as the
-# in-process WhatsApp owner notifier; load.paths would classify them as local
-# external plugins and deny Gateway runtime requests.
-COPY plugins/pubg/dist/index.js /app/dist/extensions/pubg/dist/index.js
-COPY plugins/pubg/dist/index.js.map /app/dist/extensions/pubg/dist/index.js.map
-COPY plugins/pubg/dist/migrate.js /app/dist/extensions/pubg/dist/migrate.js
-COPY plugins/pubg/dist/migrate.js.map /app/dist/extensions/pubg/dist/migrate.js.map
-COPY plugins/pubg/openclaw.plugin.json /app/dist/extensions/pubg/openclaw.plugin.json
-COPY plugins/pubg/package.json /app/dist/extensions/pubg/package.json
-COPY plugins/pubg/README.md /app/dist/extensions/pubg/README.md
-COPY plugins/pubg/skills /app/dist/extensions/pubg/skills
-COPY plugins/amadeus/dist/index.js /app/dist/extensions/amadeus/dist/index.js
-COPY plugins/amadeus/dist/index.js.map /app/dist/extensions/amadeus/dist/index.js.map
-COPY plugins/amadeus/openclaw.plugin.json /app/dist/extensions/amadeus/openclaw.plugin.json
-COPY plugins/amadeus/package.json /app/dist/extensions/amadeus/package.json
-COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
-COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
-
-# The official Longbridge SDK ships a platform-native quote transport. Keep it
-# external to esbuild and install the linux/arm64 optional binary in the
-# extension's dependency boundary.
-RUN cd /app/dist/extensions/amadeus \
-    && node -e 'const fs=require("fs"); const path="package.json"; const pkg=JSON.parse(fs.readFileSync(path,"utf8")); delete pkg.devDependencies; fs.writeFileSync(path, JSON.stringify(pkg)+"\n");' \
-    && npm install --omit=dev --legacy-peer-deps --ignore-scripts=false
 
 # The official Longbridge arm64 binding is built against glibc 2.39 while the
 # pinned OpenClaw image is Debian 12 (glibc 2.36). Keep the base image intact
@@ -96,5 +61,41 @@ RUN set -eux; \
     cp /opt/amadeus/ffmpeg-clean-env.cjs /usr/bin/ffprobe; \
     chmod 755 /usr/bin/ffmpeg /usr/bin/ffprobe; \
     node -e 'const {spawnSync}=require("node:child_process"); const p=spawnSync("/usr/bin/ffmpeg",["-hide_banner","-version"],{encoding:"utf8"}); if(p.status!==0) process.exit(1);'
+
+# The official Longbridge SDK ships a platform-native quote transport. Keep it
+# external to esbuild and install the linux/arm64 optional binary in the
+# extension's dependency boundary.
+COPY plugins/amadeus/package.json /app/dist/extensions/amadeus/package.json
+RUN cd /app/dist/extensions/amadeus \
+    && node -e 'const fs=require("fs"); const path="package.json"; const pkg=JSON.parse(fs.readFileSync(path,"utf8")); delete pkg.devDependencies; fs.writeFileSync(path, JSON.stringify(pkg)+"\n");' \
+    && npm install --omit=dev --legacy-peer-deps --ignore-scripts=false
+
+# Install our business plugins in OpenClaw's bundled-extension tree. This keeps
+# the plugin runtime trusted for narrow host-owned capabilities such as the
+# in-process WhatsApp owner notifier; load.paths would classify them as local
+# external plugins and deny Gateway runtime requests.
+COPY plugins/pubg/dist/index.js /app/dist/extensions/pubg/dist/index.js
+COPY plugins/pubg/dist/index.js.map /app/dist/extensions/pubg/dist/index.js.map
+COPY plugins/pubg/dist/migrate.js /app/dist/extensions/pubg/dist/migrate.js
+COPY plugins/pubg/dist/migrate.js.map /app/dist/extensions/pubg/dist/migrate.js.map
+COPY plugins/pubg/openclaw.plugin.json /app/dist/extensions/pubg/openclaw.plugin.json
+COPY plugins/pubg/package.json /app/dist/extensions/pubg/package.json
+COPY plugins/pubg/README.md /app/dist/extensions/pubg/README.md
+COPY plugins/pubg/skills /app/dist/extensions/pubg/skills
+COPY plugins/amadeus/dist/index.js /app/dist/extensions/amadeus/dist/index.js
+COPY plugins/amadeus/dist/index.js.map /app/dist/extensions/amadeus/dist/index.js.map
+COPY plugins/amadeus/openclaw.plugin.json /app/dist/extensions/amadeus/openclaw.plugin.json
+COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
+COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
+
+# Patch only after stable OS/runtime, dependency install, and plugin payload.
+# The volume-installed WhatsApp package is patched from the same Git modules
+# during explicit CasaOS apply; no compiled patch source enters runtime image.
+COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-identity.mjs
+COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
+COPY scripts/openclaw-voice-*.mjs /tmp/
+RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
+    && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/openclaw-voice-*.mjs
 
 USER node
