@@ -4,13 +4,9 @@
 
 # Agent Monorepo 工作规则
 
-## OpenClaw Amadeus 实施范围
+## OpenClaw Amadeus 稳态边界
 
-本仓库当前唯一产品 Goal 是 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md`：PUBG 保持原生
-plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 群成员和 Codex
-通知等仍有价值的能力迁移到原生 `plugins/amadeus` 与 owner outbox。OpenClaw 是唯一
-Agent runtime；不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套
-sender。执行仍须保留外部数据备份、secret 保护、真实验收和可恢复 checkpoint。
+OpenClaw 是唯一 Agent runtime：PUBG 保持原生 plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 与 Codex 通知留在原生 `plugins/amadeus`/明确外部服务及 owner outbox。旧 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md` 是已完成历史目标，不是运行时或新任务指令。不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套 sender；部署仍须外部备份、secret 保护、真实验收和可恢复 checkpoint。
 
 ## Source of Truth
 
@@ -21,7 +17,7 @@ sender。执行仍须保留外部数据备份、secret 保护、真实验收和�
 
 ## 新会话启动
 
-先读 `docs/CONTEXT.md`、`docs/CURRENT_TASK.md` 和当前 Goal；然后执行 `git status --short --branch`、`git log -5 --oneline --decorate`。对具体改动按需阅读 `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATE.md`、`.agent/state.md` 及相关源码。不要将历史 diary 当成 live 指令，也不要仅依赖聊天历史。
+先读 `docs/CONTEXT.md`、`docs/CURRENT_TASK.md`，如有活动 Goal 再读其文档；然后执行 `git status --short --branch`、`git log -5 --oneline --decorate`。对具体改动按需阅读 `README.md`、`docs/ARCHITECTURE.md`、`docs/PROJECT_STATE.md`、`.agent/state.md` 及相关源码。不要将历史 diary 当成 live 指令，也不要仅依赖聊天历史。
 
 ## 全局工程规则
 
