@@ -10,11 +10,13 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import unicodedata
 
 MODEL_ID = 'mlx-community/Qwen3-ForcedAligner-0.6B-8bit'
 MODEL_REV = '0e1a68e91d815300c7c9754b2a7639378b23db15'
+NAGISA_VERSION = '0.3.0'
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -82,6 +84,13 @@ def main() -> None:
         from huggingface_hub import snapshot_download
         snapshot_download(MODEL_ID,revision=MODEL_REV,local_dir=model_dir)
         private(model_dir,directory=True)
+        deps=args.model_root/'alignment-deps'
+        deps.mkdir(mode=0o700,exist_ok=True)
+        private(deps,directory=True)
+        if not any(deps.glob('nagisa-*.dist-info')):
+            subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir','--no-deps',
+                                   '--target',str(deps),'nagisa=='+NAGISA_VERSION],
+                                  stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         print(f'B_LOCAL_ALIGNER_MODEL=ready free_percent_before={free} (public weights outside Git)')
         return
     private(args.model_root,directory=True)
@@ -89,6 +98,11 @@ def main() -> None:
     if not (model_dir/'config.json').is_file():raise ValueError('local_aligner_model_missing')
     private(args.output.parent,directory=True)
     if args.output.exists():raise ValueError('alignment_output_already_exists')
+    deps=args.model_root/'alignment-deps'
+    private(deps,directory=True)
+    sys.path.insert(0,str(deps))
+    import importlib.metadata
+    if importlib.metadata.version('nagisa')!=NAGISA_VERSION:raise ValueError('pinned_local_japanese_tokenizer_missing')
     os.environ['HF_HUB_OFFLINE']='1';os.environ['TRANSFORMERS_OFFLINE']='1'
     lines=(args.source_profile/'reference.txt').read_text(encoding='utf-8').strip().splitlines()
     transcript='\n'.join(lines)
