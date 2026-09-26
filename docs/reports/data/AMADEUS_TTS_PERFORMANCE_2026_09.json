@@ -1,6 +1,6 @@
 {
   "decision": {
-    "B": "four_configs_safety_incomplete",
+    "B": "owner_cancelled_after_safety_incomplete",
     "backend": "MLX",
     "language": "Auto",
     "profile": "A",
@@ -7415,6 +7415,12 @@
         "sample": "B-icl-Japanese-short-2"
       }
     }
+  },
+  "owner_scope_amendment": {
+    "date": "2026-09-26",
+    "existing_B_cells": "four_safety_incomplete_not_imputed",
+    "further_B_runs_required": false,
+    "other_goal_requirements_unchanged": true
   },
   "post_source_sync_endpoint": {
     "count": 5,

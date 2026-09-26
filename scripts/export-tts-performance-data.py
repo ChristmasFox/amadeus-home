@@ -88,7 +88,10 @@ def export(mps_root: Path, mlx_root: Path, endpoint_root: Path,
             'decision': {'profile': 'A', 'backend': 'MLX', 'language': 'Auto',
                          'quality': 'owner_A_MLX_direct_sample_acceptable',
                          'rejected': ['D:owner_voice_character_loss'],
-                         'B': 'four_configs_safety_incomplete'},
+                         'B': 'owner_cancelled_after_safety_incomplete'},
+            'owner_scope_amendment': {'date': '2026-09-26', 'further_B_runs_required': False,
+                                      'existing_B_cells': 'four_safety_incomplete_not_imputed',
+                                      'other_goal_requirements_unchanged': True},
             }
     for name in EXPECTED_B_TIMEOUTS:
         partial = mps_root / f'{name}.partial.jsonl'
