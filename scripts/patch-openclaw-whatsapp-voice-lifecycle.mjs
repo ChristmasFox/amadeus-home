@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 
 export const VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
 export const CORE_MARKER = 'amadeus-whatsapp-voice-followup-v1';
+export const TTS_MARKER = 'amadeus-whatsapp-japanese-tts-input-v1';
 export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
 export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
 export const WHATSAPP_JAPANESE_TEXT_MARKER = 'amadeus-whatsapp-japanese-visible-tts-v1';
@@ -14,6 +15,20 @@ export const WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER = 'amadeus-whatsapp-japanese-a
 
 export function resolveVoiceFollowup(lease, currentMessageId) {
   return Boolean(lease && lease.messageId !== currentMessageId);
+}
+
+export function resolveAmadeusJapaneseSpeechText(visibleText, explicitTtsText = '') {
+  const source = typeof visibleText === 'string' ? visibleText : '';
+  const labeledCandidates = source.split(/\r?\n/u)
+    .map((line) => line.trim().match(/^日本語[：:]\s*(.*)$/u)?.[1]?.trim() ?? '')
+    .filter((line) => line && /[\u3040-\u30ff]/u.test(line));
+  if (labeledCandidates.length > 0) return labeledCandidates.at(-1);
+
+  const explicit = typeof explicitTtsText === 'string' ? explicitTtsText.trim() : '';
+  if (explicit && !/(?:^|\n)\s*(?:中文|日本語)[：:]/u.test(explicit) && /[\u3040-\u30ff]/u.test(explicit)) {
+    return explicit;
+  }
+  return '';
 }
 
 export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
@@ -26,7 +41,8 @@ export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   const supplementText = typeof payload.ttsSupplement?.spokenText === 'string' ? payload.ttsSupplement.spokenText : '';
   const spokenText = (supplementText || (typeof payload.spokenText === 'string' ? payload.spokenText : '')).trim();
   const visibleText = typeof payload.text === 'string' ? payload.text : '';
-  if (!/[\u3040-\u30ff]/u.test(spokenText)) {
+  const spokenTextIsStructuredOrMultiline = /(?:^|\n)\s*(?:中文|日本語)[：:]/u.test(spokenText) || /\r?\n/u.test(spokenText);
+  if (spokenTextIsStructuredOrMultiline || !/[\u3040-\u30ff]/u.test(spokenText)) {
     // An untagged Chinese-only final must never become a Chinese WhatsApp PTT.
     // Return text-only instead of trying to relabel or reuse already-synthesized audio.
     const safeText = visibleText.split(/\r?\n/u).filter((line) => !/^日本語[：:]/u.test(line.trim())).join('\n').trim();
@@ -115,6 +131,32 @@ export function patchCoreSource(original) {
     'voice queue drain',
   );
   return result;
+}
+
+export function patchTtsSource(original) {
+  if (original.includes(TTS_MARKER)) return original;
+  let result = replaceOnce(
+    original,
+    'const ttsText = explicitTtsText || visibleText;',
+    `const amadeusInboundWhatsAppVoice = params.inboundAudio === true && String(params.channel ?? '').toLowerCase() === 'whatsapp';
+	const ttsText = amadeusInboundWhatsAppVoice
+		? resolveAmadeusJapaneseSpeechText(visibleText, explicitTtsText)
+		: (explicitTtsText || visibleText);`,
+    'Japanese voice TTS input selection',
+  );
+  result = replaceOnce(
+    result,
+    'async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {',
+    `${resolveAmadeusJapaneseSpeechText.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
+    'Japanese voice TTS helper',
+  );
+  result = replaceOnce(
+    result,
+    'if (!ttsText.trim()) return nextPayload;',
+    'if (amadeusInboundWhatsAppVoice && !ttsText.trim()) return nextPayload;\n\tif (!ttsText.trim()) return nextPayload;',
+    'Japanese voice TTS fail-closed guard',
+  );
+  return `// ${TTS_MARKER}\n${result}`;
 }
 
 export const whatsappHelpers = `// ${WHATSAPP_MARKER}: lease scoped to an admitted WhatsApp voice reply.
@@ -358,6 +400,9 @@ export async function main(argv = process.argv.slice(2)) {
     const path = await findFile(options['core-root'], /^agent-runner\.runtime-.*\.mjs$/u, 'function runReplyAgent(params) {');
     if (!path) throw new Error('pinned OpenClaw agent-runner module missing');
     console.log(`CORE_VOICE_QUEUE_PATCH=${await patchFile(path, patchCoreSource, CORE_MARKER)}`);
+    const ttsPath = await findFile(options['core-root'], /^runtime-api-.*\.mjs$/u, 'const ttsText = explicitTtsText || visibleText;');
+    if (!ttsPath) throw new Error('pinned OpenClaw TTS runtime module missing');
+    console.log(`CORE_JAPANESE_TTS_PATCH=${await patchFile(ttsPath, patchTtsSource, TTS_MARKER)}`);
   }
   if (options['whatsapp-root']) {
     const path = await findFile(options['whatsapp-root'], /^monitor-.*\.js$/u, 'function createWhatsAppReplyPlan(params) {');
