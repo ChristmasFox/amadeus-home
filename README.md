@@ -49,12 +49,13 @@ pnpm check:secrets
 \`\`\`sh
 pnpm workflow:plan
 pnpm workflow:verify
+pnpm verify:voice  # 离线 unit/fixture/typecheck，不跑模型或 Docker
 pnpm test:workflow
 \`\`\`
 
 ## Amadeus 版本管理
 
-产品版本唯一记录在根目录 `VERSION`，当前正式发布版本为 `1.5.6`。每次只执行 `bump patch` 并递增
+产品版本唯一记录在根目录 `VERSION`，当前正式发布版本为 `1.5.9`。每次只执行 `bump patch` 并递增
 `0.0.1`；patch 位为 `0..9`，到 9 时进位到 minor（`0.9.9 -> 0.10.0`），minor 位为 `0..99`，到 99 且
 patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文来自
 `RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
@@ -74,7 +75,7 @@ patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文�
 
 ## CasaOS 部署
 
-长期服务运行在 OrbStack Linux machine \`ubuntu\` 的 CasaOS。OpenClaw canonical Compose
+长期服务运行在由本地 `infra/host-profile.env` 解析的 OrbStack CasaOS machine（当前 M204 为 `nyannyan`）。OpenClaw canonical Compose
 路径是 \`/var/lib/casaos/apps/openclaw/docker-compose.yml\`，持久化数据是
 \`/DATA/AppData/openclaw\`。生产 secrets、身份、数据库和媒体数据都在仓库外。
 

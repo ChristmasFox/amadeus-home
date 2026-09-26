@@ -12,7 +12,7 @@ WhatsApp 语义；severity 与 significance 是两个独立字段。生产者清
 `docs/PROACTIVE_NOTIFICATION_PRODUCERS.md`，正式词汇与映射见
 `packages/presentation/src/worldline/`。
 
-当前持久化运行目标仍是 OrbStack `ubuntu` 内的 CasaOS。OpenClaw 与 Product
+当前持久化运行目标是本地 host profile 指定的 OrbStack CasaOS machine（M204 当前为 `nyannyan`）。OpenClaw 与 Product
 Radar 使用可配置的 `amadeus_network`，主机、Mac control user、FashionSigLIP
 端口和 Codex hook 路径由 `scripts/host-profile.sh` 统一解析；真实值在本机
 `infra/host-profile.env`，不进入 Git。Operation Skuld 只做 readiness 和临时
@@ -186,7 +186,7 @@ WhatsApp owner 投递、合同渲染、长消息分段、sent marker 和幂等 r
 
 ## CasaOS 发布
 
-canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
+canonical runtime 是 host profile 指定的 OrbStack CasaOS machine（M204 当前 `nyannyan`）：
 
 - OpenClaw Compose：\`/var/lib/casaos/apps/openclaw/docker-compose.yml\`
 - Product Radar Compose：\`/var/lib/casaos/apps/product-radar/docker-compose.yml\`
@@ -218,15 +218,13 @@ canonical runtime 是 OrbStack \`ubuntu\` 内的 CasaOS：
 4. 只验证现有 OpenClaw 运行时 secret 文件和 owner/Telegram 配置；旧 LangBot DB、旧
    app/data 和旧凭据只留在仓库外 checkpoint 用于审计/人工恢复，不参与运行时 fallback。
 5. 新 compose/config 预检，确认两个 plugin 和两个 Skill 都已加载。
-6. 停止 LangBot、n8n、n8n-sandbox，移除其 canonical app/data 路径到 checkpoint。
-7. 启动 Product Radar/OpenClaw，注册 09:30/23:00 Asia/Shanghai VPS report cron；VPS cron
-   只 allow-list 四个 VPS read tools 与 \`amadeus_notify_owner\`。
-8. 检查 health、media adapter、NAS read-only SSH、channel status 和真实 WhatsApp owner outbox。
+6. 使用 immutable image 在 CasaOS Compose 执行 `up -d --no-build`；已退休 runtime 不重新启动。
+7. 检查 health、可用外部服务、NAS read-only SSH、channel status 和真实 WhatsApp owner outbox；保留回滚 checkpoint。
 
 旧数据仅用于备份/审计/恢复，不作为运行时 fallback；未执行旧架构回滚演练。
 
-## Voice I/O boundary (1.5.3 candidate; not yet live)
+## Voice I/O boundary (1.5.9 live)
 
-WhatsApp stays transport-only. Pinned OpenClaw/Kurisu owns the existing session, transcription lifecycle, tools and `tts.auto=inbound` response modality. 9Router remains the sole speech route/control plane via logical `amadeus-asr` and `amadeus-tts` aliases; the existing Chat Combo does **not** satisfy STT. A native M204 user-session Qwen3-TTS service at port 18792 only synthesizes authenticated bounded text with the operator-owned `kurisu-v1` profile; it has no conversation, planner, channel or notification logic. The example config is not deployed until direct STT/TTS and WhatsApp acceptance prove this chain and text fallback. No Telegram-specific speech path is part of this release.
+WhatsApp stays transport-only. Pinned OpenClaw/Kurisu owns the existing session, transcription lifecycle, tools and `tts.auto=inbound` response modality. 9Router remains the sole speech route/control plane via logical `amadeus-asr` and `amadeus-tts` aliases; the existing Chat Combo does **not** satisfy STT. A native M204 user-session Qwen3-TTS service at port 18792 only synthesizes authenticated bounded text with the operator-owned `kurisu-v1` profile; it has no conversation, planner, channel or notification logic. This chain is deployed in 1.5.9; real WhatsApp voice has passed earlier acceptance, while the newest group Japanese-only guard still needs owner handset confirmation. No Telegram-specific speech path is part of this release.
 
-The 1.5.3 candidate adds a small **protocol-only** ASR adapter in the repository-managed 9Router container: `selfhosted-stt` at container loopback `20129` converts bounded WhatsApp audio to DashScope's synchronous Qwen-Audio multimodal-generation shape and normalizes a transcript. This is not another model router or Agent; `amadeus-asr` remains a 9Router model alias, and the M204 Qwen3-TTS process is independent so TTS outages need not take down ASR. Both provider credentials stay outside Git. Pinned WhatsApp ingress requires a narrow patch to return a text error on failed direct voice transcription before Agent dispatch; it reuses the channel's existing transport reply.
+A small **protocol-only** ASR adapter in the repository-managed 9Router container: `selfhosted-stt` at container loopback `20129` converts bounded WhatsApp audio to DashScope's synchronous Qwen-Audio multimodal-generation shape and normalizes a transcript. This is not another model router or Agent; `amadeus-asr` remains a 9Router model alias, and the M204 Qwen3-TTS process is independent so TTS outages need not take down ASR. Both provider credentials stay outside Git. Pinned WhatsApp ingress uses a compatibility patch to return a text error on failed direct voice transcription before Agent dispatch; it reuses the channel's existing transport reply.

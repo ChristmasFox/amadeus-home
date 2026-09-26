@@ -28,7 +28,7 @@ sender。执行仍须保留外部数据备份、secret 保护、真实验收和�
 - Secrets 永远不入库：Bot Token、API Key、Access Token、APP_SECRET、数据库密码、Tunnel Token、n8n credentials、`.env`、真实证书和业务数据都必须在仓库外恢复。
 - Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 OpenClaw API 细节写入 PUBG/domain package；平台差异放在 plugin、adapter 或 integration 层。
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
-- 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是 OrbStack `ubuntu` 内的 CasaOS。
+- 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是本地 host profile 指定的 OrbStack CasaOS（M204 当前为 `nyannyan`）。
 - 版本唯一来源是根目录 `VERSION`；release 只允许执行 `scripts/amadeus-version.sh bump patch`。
   patch 位范围为 `0..9`，minor 位范围为 `0..99`；`0.9.9 -> 0.10.0`，`0.99.9 -> 1.0.0`。
   `bump minor` 和 `bump major` 不支持，`RELEASE_NOTES.md` 只写当前单次 release。
@@ -102,15 +102,15 @@ Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
 
 - `plugins/pubg` 和 `plugins/amadeus` 是当前 OpenClaw 业务 plugin；`packages/pubg-domain` 是 PUBG 领域实现。
 - `integrations/openclaw`、`infra/docker/casaos/openclaw`、`apps/product-radar` 和 `infra/macos` 是当前运行定义；LangBot/n8n 执行源和旧 facade 不在当前树中。
-- 长期 HomeLab 服务部署到 OrbStack Linux machine `ubuntu` 的 CasaOS，不默认使用 macOS host Docker。
+- 长期 HomeLab 服务部署到 host profile 指定的 OrbStack Linux machine（M204 当前 `nyannyan`）的 CasaOS，不默认使用 macOS host Docker。
 - CasaOS compose 真正位置：`/var/lib/casaos/apps/<app>/docker-compose.yml`；持久化数据：`/DATA/AppData/<app>`；共享存储：`/Volumes/Avalon/...`。
 
 常用命令：
 
 ```sh
-orb -m ubuntu ...
-orb -m ubuntu -u root ...
-orb -m ubuntu -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d --no-build'
+orb -m "$ORBSTACK_MACHINE" ...
+orb -m "$ORBSTACK_MACHINE" -u root ...
+orb -m "$ORBSTACK_MACHINE" -u root bash -lc 'cd /var/lib/casaos/apps/<app> && docker compose up -d --no-build'
 ```
 
 ## 安全边界
