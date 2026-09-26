@@ -1,6 +1,6 @@
 # Amadeus TTS Performance — September 2026
 
-Status: **A/MLX direct sample accepted by owner; live MLX candidate and formal release pending**. Measured on M204 Apple Silicon / 24 GiB with the existing OpenClaw single-Agent architecture. This report uses only aggregate or numeric timing/memory data. The machine-checkable companion is [`data/AMADEUS_TTS_PERFORMANCE_2026_09.json`](data/AMADEUS_TTS_PERFORMANCE_2026_09.json); verify offline with `python3 scripts/check-tts-performance-report.py`. Protected raw logs, references and listening WAVs remain outside Git. No message content, transcript, user identity, token or voice bytes are published here.
+Status: **single A/MLX/Auto candidate live with protected MPS rollback; real WhatsApp owner acceptance and formal release pending**. Measured on M204 Apple Silicon / 24 GiB with the existing OpenClaw single-Agent architecture. This report uses only aggregate or numeric timing/memory data. The machine-checkable companion is [`data/AMADEUS_TTS_PERFORMANCE_2026_09.json`](data/AMADEUS_TTS_PERFORMANCE_2026_09.json); verify offline with `python3 scripts/check-tts-performance-report.py`. Protected raw logs, references and listening WAVs remain outside Git. No message content, transcript, user identity, token or voice bytes are published here.
 
 ## 1. Original production baseline
 
@@ -51,11 +51,11 @@ A separate **community** `Blaizzy/mlx-audio` PoC used its pinned 1.7B Base 8-bit
 | D Japanese normal | 7457/7638 | 3199/3322 |
 | D Japanese long | 14558/14757 | 5592/5811 |
 
-MLX was faster directly, especially long. Earlier owner feedback that “MLX sacrificed timbre” may have included D’s short-reference effect; after a specific same-reference A/MPS versus A/MLX comparison, the owner found **A/MLX acceptable** and explicitly requested implementation. This does not establish handset quality yet. MLX also has a separate community dependency/model conversion stack and larger Metal peak allocation. The first cold MLX model load was ~23.7s (subsequent process loads often benefited from cache). A real isolated `QwenMlxEngine` WAV smoke passed, but **no MLX production or OpenAI-compatible channel switch had occurred at report creation**. Evidence: `.agent/checkpoints/2026-09-26-tts-phase5-mlx-poc.md`.
+MLX was faster directly, especially long. Earlier owner feedback that “MLX sacrificed timbre” may have included D’s short-reference effect; after a specific same-reference A/MPS versus A/MLX comparison, the owner found **A/MLX acceptable** and explicitly requested implementation. This does not establish handset quality yet. MLX also has a separate community dependency/model conversion stack and larger Metal peak allocation. The first cold MLX model load was ~23.7s (subsequent process loads often benefited from cache). A real isolated `QwenMlxEngine` WAV smoke passed; the same native service later switched to MLX without running MPS in parallel. The OpenAI-compatible route/contract stayed unchanged. Evidence: `.agent/checkpoints/2026-09-26-tts-phase5-mlx-poc.md`.
 
 ## 6. p50 / p95 / min / max
 
-A/MPS/Auto production baseline and current-candidate evidence (milliseconds; fixture scope must not be conflated with real-turn latency):
+A/MPS/Auto baseline and A/MLX/Auto candidate evidence (milliseconds; fixture scope must not be conflated with real-turn latency):
 
 | Measurement | n | p50 | p95 | min | max |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -64,9 +64,11 @@ A/MPS/Auto production baseline and current-candidate evidence (milliseconds; fix
 | Direct warmed MPS long | 5 | 16263 | 16999 | 15760 | 17178 |
 | HTTP Background reversal, short | 5 | 10391 | 10907 | 8915 | 10938 |
 | HTTP Interactive, short | 20 | 4476 | 5278 | 3992 | 6241 |
-| HTTP Interactive after Git source sync, short | 5 | 4638 | 5174 | 4142 | 5245 |
+| HTTP Interactive after Git source sync, MPS short | 5 | 4638 | 5174 | 4142 | 5245 |
+| HTTP Interactive candidate MLX short | 20 | 3296 | 3516 | 3185 | 3528 |
+| HTTP Interactive candidate MLX normal | 5 | 5424 | 5568 | 5217 | 5591 |
 
-The same-fixture Background reversal→Interactive p50 reduction is ~57%; the 20-run Interactive p95 is below the target 15s for that fixed short phrase. This is **not** a real-WhatsApp p95. Two real post-candidate inbound voice turns took TTS 9.331s/9.907s and inbound→media 22.577s/20.743s. Earlier post-QoS real turns also included TTS 7.480s and 25.360s, demonstrating substantial remaining variance. No claim that every reply is five seconds or that all end-to-end turns meet 10–18s is supported.
+The same-fixture Background reversal→Interactive MPS p50 reduction was ~57%. For the same A/Auto/short HTTP fixture, MLX 20-run p50/p95 was 3.296s/3.516s versus MPS 4.476s/5.278s. MLX normal (~50-char) HTTP p50 was 5.424s. Both short p95 values are below the 15s target for that fixed phrase; neither is a real-WhatsApp p95. Two earlier A/MPS post-candidate inbound voice turns took TTS 9.331s/9.907s and inbound→media 22.577s/20.743s. The first observed A/MLX real voice turn took TTS **5.947s** and inbound→media **15.270s** (input bucket `<=80`, audio 6.800s); phone-side quality and typed boundary were still pending at this observation. Earlier post-QoS real turns also included TTS 7.480s and 25.360s, demonstrating substantial remaining variance. No claim that every reply is five seconds or that all end-to-end turns meet 10–18s is supported.
 
 ## 7. RTF
 
@@ -76,7 +78,7 @@ The same-fixture Background reversal→Interactive p50 reduction is ~57%; the 20
 
 - M204 has 24 GiB unified memory. Live A/MPS baseline TTS `vmmap` physical footprint was ~**9.3 GiB** after ~70 minutes resident; this includes more than model weights (working allocations/caches) and cannot be inferred from the small process RSS alone. A separate 19:55 local snapshot showed OrbStack Helper RSS ~4.1 GiB, macOS compressed ~3.96 GiB, swap used ~3.64 GiB and `memory_pressure -Q` reporting 73% free. These different accounting bases must **not** be added together. No proof of sustained active swap churn or a memory-leak rate was collected.
 - Direct MPS D Metal driver peaks were ~5.0–6.1 GiB; the earlier A MPS direct matrix did not record the driver counter, so it is **unknown**, not zero. MLX Metal peaks were ~6.2–7.4 GiB for D and ~10.3–12.1 GiB for A. Both were measured alongside the production service; counters and cached allocations are backend-specific and not identical accounting measures.
-- Keeping A/MPS resident buys low-latency warm replies but occupies substantial unified memory. Idle CPU was observed at 0% at two read-only samples. No `empty_cache`, idle eviction or restart-on-demand was applied: each is a separate latency/memory variable requiring its own controlled benchmark before adoption.
+- During the one-engine A/MPS→A/MLX candidate switch, the old MPS process exited before MLX bootstrapped. MLX cold startup `vmmap` physical-footprint peak reached **17.5 GiB**; macOS swap used grew from ~3.63 GiB to ~6.75 GiB. After warmup, idle MLX footprint was ~3.3 GiB (a short-batch immediate snapshot reached ~12.2 GiB), `memory_pressure -Q` later reported ~70–80% free, and swap used stabilized near ~6.76 GiB rather than continuing to rise during the sampled batches. A single `top` snapshot did not show active swap churn, but this does **not** prove long-term memory safety. The 24 GiB host needs continued real-traffic observation; rollback on pressure or instability. No `empty_cache`, idle eviction or restart-on-demand was introduced.
 
 ## 9. Owner quality acceptance
 
@@ -84,21 +86,21 @@ The owner rejected D’s loss of Kurisu character. After listening to the **same
 
 ## 10. Chosen production configuration
 
-**Candidate A/MLX/Auto**: original operator-owned ~46s reference, community MLX 1.7B Base 8-bit ICL, the same OpenAI-compatible service contract, one inference worker and bounded pending slot, unchanged 120s external TTS window and `ProcessType=Interactive`. The existing A/MPS source is the rollback point, not a second running engine. OpenClaw remains the single Agent runtime. **The live backend switch, memory/latency/real WhatsApp acceptance and formal release remain pending** at report creation.
+**Candidate A/MLX/Auto**: original operator-owned ~46s reference, community MLX 1.7B Base 8-bit ICL, the same OpenAI-compatible service contract, one inference worker and bounded pending slot, unchanged 120s external TTS window and `ProcessType=Interactive`. The existing A/MPS source is the rollback point, not a second running engine. OpenClaw remains the single Agent runtime. **The single-engine live candidate switch succeeded** with protected A/MPS rollback; fixed HTTP short/normal timing and cold/idle memory were measured. Real WhatsApp handset quality, longer-running memory stability and formal release remain pending.
 
 ## 11. Rejected alternatives
 
 - **D short profile**: p50 short synthesis saved ~1.86s versus A, but owner judged the voice character worse. **C/E**: faster in some matrix cells but not owner-approved; no quality-safe production case. **B**: high variance and four 110s watchdog stops; incomplete, unsafe to claim five warmed successes for those cells. Transcript/crop alignment uncertainty prevents inferring that *all* 15s references are poor.
-- **MLX 1.7B 8-bit** is conditionally selected for A only after direct owner listening; higher A Metal peak and community dependency upkeep are candidate gates, not hidden costs. **0.6B** was unnecessary and not substituted. **Direct Ogg/Opus** remains optional/not switched: measured MP3 encode ~0.03–0.37s and native WhatsApp PTT/MIME/duration equivalence across channels was not proven.
+- **MLX 1.7B 8-bit** is conditionally selected for A only after direct owner listening; cold A footprint peak 17.5 GiB, temporary swap growth and community dependency upkeep are candidate gates, not hidden costs. **0.6B** was unnecessary and not substituted. **Direct Ogg/Opus** remains optional/not switched: measured MP3 encode ~0.03–0.37s and native WhatsApp PTT/MIME/duration equivalence across channels was not proven.
 - **Timeout increase, second Agent, keyword router, unbounded queue, format-first optimization**: forbidden or contradicted by measured engine-dominated latency. No such fallback is present.
 
 ## 12. Remaining bottleneck
 
-Model generation dominates: controlled HTTP queue wait was near zero and encode tens to hundreds of milliseconds, while actual MPS model stage ranged from ~7.37s to ~24.98s in earlier real post-QoS turns. The selected scheduling change strongly improved identical short work in reversible A/B/A/B tests; for MLX, the remaining uncertainty is live HTTP/WhatsApp tail latency and resident Metal memory with the 46s reference. Do not infer those from direct benchmark alone. Profile MPS/MLX allocation and any cache/idle policy **only** as a separate measured variable with rollback. Do not substitute a longer timeout or silently trim essential answer content.
+Model generation dominates: controlled HTTP queue wait was near zero and encode tens to hundreds of milliseconds, while actual MPS model stage ranged from ~7.37s to ~24.98s in earlier real post-QoS turns. The selected scheduling change strongly improved identical short work in reversible A/B/A/B tests; for live MLX, fixed HTTP latency is measured but real WhatsApp tail latency, handset timbre and peak memory pressure with the 46s reference remain the gates. Do not infer those from direct benchmark alone. Profile MPS/MLX allocation and any cache/idle policy **only** as a separate measured variable with rollback. Do not substitute a longer timeout or silently trim essential answer content.
 
 ## 13. Rollback instructions
 
 - OpenClaw candidate checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260926104238`; previous immutable 1.5.9 image is recorded in `.agent/checkpoints/2026-09-26-amadeus-1.5.9-formal-release.md`. The final release must add its own protected checkpoint and image tag. Restore Compose/config from the named checkpoint using the repository deployment/rollback procedure, then `docker compose up -d --no-build` and health/WhatsApp acceptance; do not revive retired runtimes.
-- Native TTS pre-source-sync checkpoint: `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/pre-source-sync-20260926T104532Z`; pre-Interactive plist: `qos-ab-20260926T092129Z` under the same external TTS backup root. Restore protected 0600 service/plist files only when needed, restart the **same** LaunchAgent after old job retirement, wait for ready health, compare SHA against the checkpoint manifest, then perform a fixed synthetic and real owner voice smoke. Preserve private A reference/token/weights unchanged. No rollback drill or unrequested WhatsApp message was sent.
+- **Pre-A+MLX protected rollback:** `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/protected-performance/pre-a-mlx-candidate-20260926T123834Z` holds the exact A/MPS service/plist/reference/token with SHA manifest and 0600 permissions. On MLX memory/quality/health failure, explicitly run `infra/macos/manage-qwen3-tts.sh --apply-plist-only --engine mps` (the prior MPS venv/model remain intact), then wait for ready health, compare source SHA and perform fixed synthetic plus real owner voice acceptance. If source files differ, restore them from that protected checkpoint first. Never start two resident engines. Earlier pre-source-sync and pre-QoS checkpoints remain audit-only. No rollback drill or unrequested WhatsApp message was sent.
 
 Build-cache evidence: `.agent/checkpoints/2026-09-26-openclaw-docker-cache-benchmark.md` (patch-only wall 39s→3s, plugin-dist-only 1s with apt/glibc/npm cached). All external raw timings and samples remain under protected `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/perf-matrix-20260926/`; JSON here deliberately strips private paths/content and retains the four B safety-incomplete markers.
