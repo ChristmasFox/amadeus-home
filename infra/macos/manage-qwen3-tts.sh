@@ -60,6 +60,8 @@ PYTOKEN
 fi
 if [[ "$mode" == --apply ]]; then
   install -m 600 "$ROOT/apps/qwen3-tts-service/service.py" "$BASE/service.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/mlx_engine.py" "$BASE/mlx_engine.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/engine_contract.py" "$BASE/engine_contract.py"
   cp "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
 fi
 python3 - "$ROOT/infra/macos/com.amadeus.qwen3-tts.plist.example" "$PLIST" "$BASE" "$VOICE" "$LOG" <<'PY'

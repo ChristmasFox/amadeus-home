@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import dataclass, replace
 from concurrent.futures import CancelledError, Future
 import queue
-from typing import Protocol
+from engine_contract import SpeechEngine, SynthesisTiming
 
 MODEL_ID = "qwen3-tts-1.7b"
 VOICE_ID = "kurisu-v1"
@@ -27,19 +27,6 @@ MAX_AUDIO = 12 * 1024 * 1024
 LOG = logging.getLogger("amadeus.speech")
 MAX_PENDING_INFERENCES = 1
 QUEUE_START_TIMEOUT_S = 5  # fail closed before the upstream 120s TTS window
-
-
-@dataclass(frozen=True)
-class SynthesisTiming:
-    # The upstream generate_voice_clone call includes acoustic decode/postprocessing.
-    # This library boundary cannot currently attribute decode time separately.
-    queue_wait_ms: float
-    generate_or_model_ms: float
-    wav_serialize_ms: float
-    engine_inside_lock_ms: float
-
-class Synthesizer(Protocol):
-    def synthesize_timed(self, text: str) -> tuple[bytes, int, SynthesisTiming]: ...
 
 
 class QwenEngine:
@@ -191,13 +178,25 @@ class InferenceWorker:
         # An in-flight model call cannot safely be interrupted; the worker is daemonized.
         self.thread.join(timeout=0.5)
 
+def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngine:
+    backend = os.environ.get("AMADEUS_TTS_ENGINE", "mps")
+    if backend == "mps":
+        return QwenEngine(profile, model_path, on_warmup=on_warmup)
+    if backend == "mlx":
+        explicit_path = os.environ.get("AMADEUS_TTS_MLX_MODEL_PATH")
+        if not explicit_path:
+            raise ValueError("experimental_mlx_model_path_required")
+        from mlx_engine import QwenMlxEngine
+        return QwenMlxEngine(profile, Path(explicit_path), on_warmup=on_warmup)
+    raise ValueError("unsupported_speech_engine")
+
 class SpeechServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], token: str):
         super().__init__(address, SpeechHandler)
         self.token = token
-        self.engine: Synthesizer | None = None
+        self.engine: SpeechEngine | None = None
         self.state = "starting"
         self.started = time.monotonic()
         self.inference = InferenceWorker(self)
@@ -217,8 +216,8 @@ class SpeechServer(ThreadingHTTPServer):
         watchdog.start()
         try:
             # QwenEngine loads model, profile and performs actual warmup before returning.
-            self.engine = QwenEngine(profile, model_path,
-                                     on_warmup=lambda: setattr(self, "state", "warming_up") if self.state != "failed" else None)
+            self.engine = create_engine(profile, model_path,
+                                        on_warmup=lambda: setattr(self, "state", "warming_up") if self.state != "failed" else None)
             if self.state != "failed":
                 self.state = "ready"
         except Exception as exc:
