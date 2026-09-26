@@ -12,6 +12,17 @@ from benchmark import FIXTURES, write_private
 from service import MODEL_ID, VOICE_ID
 
 
+def response_error(status: int, body: bytes) -> str:
+    if status == 503:
+        try:
+            category = json.loads(body).get("error", {}).get("type")
+            if category in ("tts_busy", "synthesis_failed", "provider_unavailable"):
+                return category
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            pass
+    return "invalid_response"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
@@ -48,7 +59,7 @@ def main() -> None:
             valid = response.status == 200 and (audio.startswith(b"ID3") or audio[:1] == b"\xff")
             row = {"run_index": index, "status": response.status, "total_ms": elapsed,
                    "audio_bytes": len(audio) if valid else None,
-                   "success": valid, "error": None if valid else "invalid_response"}
+                   "success": valid, "error": None if valid else response_error(response.status, audio)}
         except Exception as exc:
             row = {"run_index": index, "total_ms": round((time.monotonic()-start)*1000, 1),
                    "success": False, "error": type(exc).__name__}
