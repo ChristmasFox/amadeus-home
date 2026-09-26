@@ -18,3 +18,15 @@ class WatchdogTest(unittest.TestCase):
                 self.assertEqual((root/'timeout.json').stat().st_mode & 0o777, 0o600)
             finally:
                 supervisor.MAX_SAMPLE_S = old
+
+    def test_whole_config_is_bounded_even_if_samples_keep_starting(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            old = supervisor.MAX_CONFIG_S
+            supervisor.MAX_CONFIG_S = .1
+            try:
+                command = [sys.executable, "-u", "-c", "import time; print('START=fixture-0',flush=True); time.sleep(10)"]
+                self.assertFalse(supervisor.run_config(command, root/'run.log', root/'timeout.json'))
+                self.assertIn('config_watchdog_timeout', (root/'timeout.json').read_text())
+            finally:
+                supervisor.MAX_CONFIG_S = old

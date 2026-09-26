@@ -15,6 +15,7 @@ from benchmark import FIXTURES, LANGUAGES, PROFILES, prepare_paths, protected_fi
 
 MAX_SAMPLE_S = 110  # below the unchanged upstream 120s TTS timeout
 MAX_STARTUP_S = 900
+MAX_CONFIG_S = 180  # one complete config must leave room to restore the live service
 
 
 def run_config(command: list[str], log_path: Path, timeout_path: Path) -> bool:
@@ -22,7 +23,8 @@ def run_config(command: list[str], log_path: Path, timeout_path: Path) -> bool:
     with os.fdopen(fd, "w", encoding="utf-8") as log:
         child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                  text=True, bufsize=1, start_new_session=True)
-        last_start = time.monotonic()
+        born_at = time.monotonic()
+        last_start = born_at
         sample = "startup"
         timed_out = False
         try:
@@ -36,10 +38,14 @@ def run_config(command: list[str], log_path: Path, timeout_path: Path) -> bool:
                         if line.startswith("START="):
                             sample = line.strip().split("=", 1)[1]
                             last_start = time.monotonic()
-                limit = MAX_STARTUP_S if sample == "startup" else MAX_SAMPLE_S
-                if time.monotonic() - last_start > limit:
+                now = time.monotonic()
+                sample_limit = MAX_STARTUP_S if sample == "startup" else MAX_SAMPLE_S
+                config_expired = now - born_at > MAX_CONFIG_S
+                if config_expired or now - last_start > sample_limit:
                     timed_out = True
-                    write_private(timeout_path, (json.dumps({"sample": sample, "reason": "watchdog_timeout",
+                    reason = "config_watchdog_timeout" if config_expired else "watchdog_timeout"
+                    limit = MAX_CONFIG_S if config_expired else sample_limit
+                    write_private(timeout_path, (json.dumps({"sample": sample, "reason": reason,
                                                              "limit_seconds": limit})+"\n").encode())
                     os.killpg(child.pid, signal.SIGTERM)
                     try:
@@ -69,7 +75,7 @@ def main() -> None:
     profiles, languages, buckets = args.profiles.split(","), args.languages.split(","), args.buckets.split(",")
     if set(profiles)-set(PROFILES) or set(languages)-set(LANGUAGES) or set(buckets)-set(FIXTURES):
         raise SystemExit("invalid_matrix_selection")
-    print(f"BACKEND={args.backend} CONFIGS={len(profiles)*len(languages)*len(buckets)} HARD_SAMPLE_LIMIT_S={MAX_SAMPLE_S}")
+    print(f"BACKEND={args.backend} CONFIGS={len(profiles)*len(languages)*len(buckets)} HARD_SAMPLE_LIMIT_S={MAX_SAMPLE_S} HARD_CONFIG_LIMIT_S={MAX_CONFIG_S}")
     if not args.apply:
         print("SUPERVISOR=plan_only")
         return
