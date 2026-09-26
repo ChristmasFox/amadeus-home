@@ -104,6 +104,7 @@ plutil -lint "$temporary"
 install -m 600 "$temporary" "$PLIST"
 trap - EXIT
 rm -f "$temporary"
+old_pid="$(launchctl print "$TARGET/$LABEL" 2>/dev/null | awk '/pid =/{print $3;exit}' || true)"
 launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
   if ! launchctl print "$TARGET/$LABEL" >/dev/null 2>&1; then break; fi
@@ -113,6 +114,17 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   fi
   sleep 1
 done
+# Never overlap the previous resident MPS allocation with MLX on this 24 GiB host.
+if [[ "$old_pid" =~ ^[0-9]+$ ]]; then
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if ! kill -0 "$old_pid" 2>/dev/null; then break; fi
+    if [[ "$attempt" == 20 ]]; then
+      echo 'old inference process still alive; refusing a second resident engine' >&2
+      exit 1
+    fi
+    sleep 1
+  done
+fi
 bootstrapped=0
 for attempt in 1 2 3; do
   if launchctl bootstrap "$TARGET" "$PLIST"; then bootstrapped=1; break; fi
