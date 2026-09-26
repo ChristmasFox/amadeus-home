@@ -1,0 +1,6 @@
+# Owner voice-quality decision — 2026-09-26
+
+- Owner reports the D short-reference experiment loses some of Kurisu's intended character and the community MLX output sacrifices voice timbre substantially. The ~2s MPS short-fixture advantage from A→D is not worth the quality cost to the owner.
+- Production choice: retain A (original protected ~46s reference), official Qwen3-TTS 1.7B Base PyTorch MPS/FP16, `x_vector_only_mode=False`, `language="Auto"`. Reject D and MLX for this release. C and E were benchmarked but not owner-approved; no reason to replace accepted A for this Goal.
+- The live service already uses A/MPS/Auto with `ProcessType=Interactive`; it is healthy. No reference, model, language, timeout, or secret changed as a result of this feedback. Isolated MLX weights/samples remain external to Git and never served production traffic.
+- The scheduling-only A/B/A/B evidence remains valid for this choice: identical short fixture `Background` reversal p50 10.391s versus `Interactive` 20-run p50 4.476s/p95 5.278s. Real WhatsApp samples vary (post-change TTS 7.480s and 25.360s; total inbound-to-media 14.463s and 36.400s) and must not be described as consistently 5s. A real final WhatsApp voice/typed boundary acceptance still precedes release.
