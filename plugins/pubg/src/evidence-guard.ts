@@ -64,29 +64,21 @@ export function assessPubgEvidence(messages: unknown, finalText: string): Eviden
 }
 
 export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
-  const pending = new Map<string, { at: number; text: string }>();
+  const pending = new Map<string, { at: number; delivered: boolean }>();
   api.on('before_agent_finalize', (event, context) => {
     if (context.trigger && context.trigger !== 'user') return; // scheduled prefetch/report has its own contract
     const key = context.sessionKey ?? event.sessionKey;
     const reply = event.lastAssistantMessage ?? '';
     const verdict = assessPubgEvidence(event.messages, reply);
     if (key) {
-      if (verdict === 'missing_data' || verdict === 'wrong_scope') pending.set(key, { at: Date.now(), text: reply });
+      if (verdict === 'missing_data' || verdict === 'wrong_scope') pending.set(key, { at: Date.now(), delivered: false });
       else pending.delete(key);
     }
     if (verdict !== 'missing_data' && verdict !== 'wrong_scope') return;
-    api.logger.warn(`pubg evidence guard requested revision: ${verdict}`);
-    return {
-      action: 'revise' as const,
-      reason: `pubg_${verdict}`,
-      retry: {
-        instruction: verdict === 'wrong_scope'
-          ? 'Your PUBG answer used team=true for a person request. Resolve the named person with identity_resolve and call the PUBG data tool with personIds for this turn. Do not reuse squad statistics as individual facts.'
-          : 'Your PUBG match claim has no successful current-turn native PUBG data result. Call the relevant native tool (and identity_resolve first for a person) now. If tools fail, say that the data cannot be confirmed; never claim zero matches from memory.',
-        idempotencyKey: `pubg-evidence-${event.runId ?? event.turnId ?? key ?? 'turn'}-${verdict}`,
-        maxAttempts: 1,
-      },
-    };
+    api.logger.warn(`pubg evidence guard will block unsupported outbound claim: ${verdict}`);
+    // Pinned OpenClaw 2026.9.4 can fail transcript projection on a finalize
+    // revision. Do not ask the harness to retry; fail closed at delivery.
+    return;
   });
   api.on('message_sending', (event, context) => {
     const key = context.sessionKey;
@@ -94,7 +86,8 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     const guard = pending.get(key);
     if (!guard || Date.now() - guard.at > 120_000) { pending.delete(key); return; }
     if (!FACT.test(event.content)) return;
-    pending.delete(key);
+    if (guard.delivered) return { cancel: true, cancelReason: 'pubg_unverified_followup_chunk' };
+    guard.delivered = true;
     api.logger.warn('pubg evidence guard replaced unverified outbound match claim');
     return { content: SAFE_REPLY };
   });
