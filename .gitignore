@@ -71,3 +71,8 @@ __pycache__/
 .vscode/
 *.swp
 *.swo
+
+# Only de-identified numeric TTS report data; all other runtime data remains ignored.
+!docs/reports/data/
+docs/reports/data/*
+!docs/reports/data/AMADEUS_TTS_PERFORMANCE_2026_09.json
