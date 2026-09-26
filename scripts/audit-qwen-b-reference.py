@@ -17,6 +17,7 @@ import unicodedata
 MODEL_ID = 'mlx-community/Qwen3-ASR-0.6B-8bit'
 MODEL_REV = '89e96d92ba34aca20b3e29fb10cc284097d1219f'
 REPO = Path(__file__).resolve().parents[1]
+PROFILE_IDS = ('A', 'B', 'C', 'D', 'E')
 
 
 def private(path: Path, directory: bool = False) -> None:
@@ -53,6 +54,8 @@ def main() -> None:
     if (not args.model_root.is_absolute() or args.model_root == REPO or REPO in args.model_root.parents
             or not args.output.is_absolute() or args.output == REPO or REPO in args.output.parents):
         raise ValueError('external_absolute_paths_required')
+    if args.profile.name not in PROFILE_IDS:
+        raise ValueError('known_private_profile_id_required')
     private(args.profile, directory=True)
     for name in ('reference.wav', 'reference.txt'):
         private(args.profile / name)
@@ -95,7 +98,7 @@ def main() -> None:
     if not recognized or not expected:
         raise ValueError('empty_local_asr_result')
     summary = {
-        'profile_id': 'B', 'model_id': MODEL_ID, 'model_revision': MODEL_REV,
+        'profile_id': args.profile.name, 'model_id': MODEL_ID, 'model_revision': MODEL_REV,
         'audio_duration_ms': round(sf.info(args.profile / 'reference.wav').duration * 1000),
         'expected_chars': len(expected), 'asr_chars': len(recognized),
         'normalized_similarity': round(SequenceMatcher(None, expected, recognized).ratio(), 4),
