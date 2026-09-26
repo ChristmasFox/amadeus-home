@@ -29,7 +29,8 @@ def summarize(rows: list[dict], minimum_warm: int = 5) -> dict:
                                 for row in rows if row.get("first_for_fixture") or row.get("cold_or_warm") != "warm"],
               "model_startup_ms": rows[0].get("model_startup_ms"), "prompt_ms": rows[0].get("prompt_ms"),
               "rss_peak_bytes": max(row["rss_bytes"] for row in rows if row.get("rss_bytes") is not None),
-              "mps_driver_peak_bytes": max((row["mps_driver_bytes"] for row in rows if row.get("mps_driver_bytes") is not None), default=None)}
+              "mps_driver_peak_bytes": max((row["mps_driver_bytes"] for row in rows if row.get("mps_driver_bytes") is not None), default=None),
+              "mlx_peak_bytes": max((row["mlx_peak_bytes"] for row in rows if row.get("mlx_peak_bytes") is not None), default=None)}
     for key in ("total_ms", "engine_ms", "queue_wait_ms", "encode_ms", "audio_duration_ms", "rtf"):
         values = [float(row[key]) for row in warm]
         result[key] = {"p50": round(percentile(values, .50), 2),
