@@ -36,8 +36,9 @@ At completion, provide measured evidence for:
 5. Does sustained sequential synthesis cause progressive latency degradation, Metal/physical-footprint growth, or swap growth?
 6. Under contention, does the existing one-worker/bounded-pending design continue to fail fast instead of creating an unbounded wait?
 7. After long/stress workloads, does the same short control fixture return to approximately its pre-test latency distribution?
+8. For every tested length, what does one representative real production synthesis sound like when paired with the exact text that produced it?
 
-This Goal does **not** decide the future `MAX_TEXT`, preferred spoken length, warning threshold, segmentation policy, or restart/eviction policy. The owner will decide those after reviewing the completed tables.
+This Goal does **not** decide the future `MAX_TEXT`, preferred spoken length, warning threshold, segmentation policy, or restart/eviction policy. The owner will decide those after reviewing the completed tables and representative listening artifacts.
 
 ---
 
@@ -72,7 +73,8 @@ Any future candidate configuration that is compared with this control must reuse
 4. the exact same benchmark schedule/order/seed;
 5. the same warmup/exclusion rules;
 6. the same endpoint and response format;
-7. the same statistical implementation.
+7. the same statistical implementation;
+8. the same representative-listening-artifact selection rule.
 
 Do not compare a future candidate against a different prompt corpus or different run count and call it an A/B result.
 
@@ -271,6 +273,59 @@ This is the core owner-facing result.
 
 Also provide A/B fixture sub-results if the two fixture families differ materially, so content sensitivity is not hidden by aggregation.
 
+### Representative listening artifact per length
+
+For every **complete** length bucket, preserve exactly one representative production audio sample paired with the exact fixture text that produced it.
+
+The artifact must come from the actual measured Phase C production HTTP requests. **Do not re-synthesize after the benchmark and do not hand-pick the nicest sounding run.**
+
+Use this deterministic selection rule:
+
+1. consider only the 10 successful warmed measured samples for `fixture A` at that length;
+2. compute the fixture-A `total_ms` p50 with the same quantile implementation used elsewhere;
+3. choose the successful sample whose `total_ms` has the smallest absolute distance from that fixture-A p50;
+4. break an exact tie by the lower `run_index`;
+5. preserve the exact MP3 bytes returned by that measured request.
+
+This intentionally produces a representative, non-cherry-picked listening sample while keeping the content family consistent across every length.
+
+The harness may temporarily retain measured audio outside Git until selection is complete. After selection, keep only the required representative artifacts unless other raw audio is explicitly required for debugging. Do not alter the measured request path merely to capture audio.
+
+Store the retained artifacts under the protected external benchmark root using a stable logical layout such as:
+
+```text
+listening/
+  25/
+    sample.mp3
+    sample.txt
+    sample.json
+  50/
+    sample.mp3
+    sample.txt
+    sample.json
+  ...
+  1200/
+    sample.mp3
+    sample.txt
+    sample.json
+```
+
+Requirements:
+
+- external listening root/directory mode `0700`;
+- retained files mode `0600`;
+- `sample.mp3` = exact response bytes from the selected measured production request;
+- `sample.txt` = exact immutable fixture-A text used for that request;
+- `sample.json` = content-safe metadata including control id, length, fixture id, run index, total/model/audio/RTF metrics, and SHA-256 of the text and MP3;
+- never include Bearer tokens, protected reference audio/text, user content, or private identifiers;
+- do not commit the generated voice MP3 files to Git.
+
+The aggregate report must include a listening-artifact index mapping each complete length to its logical external artifact path and selected run metadata, without embedding audio bytes.
+
+If a bucket is `safety-incomplete`, it has no representative p50 sample. If its excluded safety probe successfully produced audio and retaining that artifact is useful, it may be kept separately and must be labeled `safety-probe`, **never** `representative` and never presented as a p50-derived sample.
+
+For any future candidate A/B comparison, generate the listening counterpart from the same fixture-A text at each length using the same representative-selection rule. This preserves a same-text listening comparison across control and candidate configurations.
+
 ---
 
 ## 10. Phase D — sustained sequential-load characterization
@@ -365,7 +420,7 @@ Flag material latency or memory drift for owner review. Do not automatically int
 
 ## 13. Raw evidence and report outputs
 
-Raw benchmark evidence must remain outside Git in a protected 0700/0600 directory. It may include numeric JSONL/CSV, host snapshots, sanitized logs, schedule, and private run manifests. Do not store tokens, actual protected A reference bytes/text, real user messages, or generated production voice audio in Git.
+Raw benchmark evidence and retained listening artifacts must remain outside Git in a protected 0700/0600 directory. It may include numeric JSONL/CSV, host snapshots, sanitized logs, schedule, private run manifests, and the per-length representative MP3/text/metadata pairs. Do not store tokens, actual protected A reference bytes/text, real user messages, or generated production voice audio in Git.
 
 Commit only:
 
@@ -389,6 +444,7 @@ The report must include:
 - per-length p50/p95/max table;
 - per-length model/audio/RTF table;
 - failed/safety-incomplete buckets without fabricated percentiles;
+- representative-listening-artifact index for every complete length;
 - sequential soak results;
 - queue-contention results;
 - pre/post stress control comparison;
@@ -405,7 +461,7 @@ High-variance / pressure region: measured facts only
 Safety-incomplete region: measured facts only
 ```
 
-Do not select the production policy. The owner and ChatGPT will discuss the policy after measurement is complete.
+Do not select the production policy. The owner and ChatGPT will discuss the policy after measurement and listening review are complete.
 
 ---
 
@@ -447,16 +503,17 @@ Do not hide a safety stop by restarting the service and continuing the same data
 3. Build fixture/harness/tests first; no live TTS behavior changes.
 4. Freeze fixture manifest and schedule before measurement.
 5. Capture control manifest before the first measured request.
-6. Keep raw results outside Git.
+6. Keep raw results and retained listening artifacts outside Git.
 7. Run safety probes before expensive long buckets.
 8. Run the full matrix only against unchanged production configuration.
-9. Run sequential soak and bounded contention only after ordinary latency characterization.
-10. Re-run the exact short control after stress.
-11. Generate aggregate report/JSON from raw evidence programmatically.
-12. Verify report numbers are reproducible from the protected raw data.
-13. Run focused tests, `git diff --check`, architecture/secrets checks as appropriate.
-14. Merge/push tooling/report only after the dataset is internally consistent.
-15. Do not bump `VERSION`, do not release/deploy a new runtime, and do not change `MAX_TEXT` under this Goal.
+9. Select and preserve one deterministic representative measured fixture-A MP3/text/metadata artifact per complete length.
+10. Run sequential soak and bounded contention only after ordinary latency characterization.
+11. Re-run the exact short control after stress.
+12. Generate aggregate report/JSON from raw evidence programmatically.
+13. Verify report numbers and listening-artifact selections are reproducible from the protected raw data.
+14. Run focused tests, `git diff --check`, architecture/secrets checks as appropriate.
+15. Merge/push tooling/report only after the dataset is internally consistent.
+16. Do not bump `VERSION`, do not release/deploy a new runtime, and do not change `MAX_TEXT` under this Goal.
 
 ---
 
@@ -467,13 +524,15 @@ This Goal is complete only when:
 - the production control manifest is verified;
 - immutable exact-length fixtures exist for all declared buckets;
 - every complete bucket has 20 successful measured samples and p50/p95/max;
+- every complete bucket has exactly one deterministic representative measured production MP3 plus its exact paired fixture text and metadata retained outside Git;
 - every safety-aborted bucket is explicitly marked incomplete with no fabricated percentile;
 - sequential-soak results exist;
 - queue-contention results exist;
 - pre/post stress control comparison exists;
 - memory/swap/pressure observations are documented honestly;
 - aggregate report and machine-readable JSON are generated;
+- listening-artifact index exists for owner review;
 - no production TTS parameter was changed;
-- the owner can inspect one concise table and compare every tested character length directly.
+- the owner can inspect one concise table and compare every tested character length directly, then listen to one representative production sample for each complete length.
 
-After completion, stop. Do not implement a new output-length policy until the owner reviews the data and explicitly chooses the next production strategy.
+After completion, stop. Do not implement a new output-length policy until the owner reviews the data and listening artifacts and explicitly chooses the next production strategy.
