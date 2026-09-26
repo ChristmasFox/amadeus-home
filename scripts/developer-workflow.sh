@@ -89,7 +89,7 @@ for path in "${FILES[@]-}"; do
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
     scripts/patch-openclaw-channel-identity.mjs) has_openclaw_deploy=1 ;;
-    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
+    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-openclaw-voice-policy.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
       has_voice_patch=1
       ;;
     scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;

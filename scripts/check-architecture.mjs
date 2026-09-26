@@ -143,7 +143,11 @@ export function checkArchitecture(root = REPO_ROOT) {
     if (!voicePrompt.includes(token)) errors.push(`voice prompt enrichment is missing the verified audio-lease guard: ${token}`);
   }
   const voiceLifecyclePatch = text(root, 'scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs');
-  if (!voiceLifecyclePatch.includes("VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925'")) errors.push('WhatsApp voice lease global marker has drifted from Amadeus');
+  const voiceMarkers = text(root, 'scripts/openclaw-voice-markers.mjs');
+  if (!voiceMarkers.includes("VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925'") ||
+      !voiceLifecyclePatch.includes("from './openclaw-voice-markers.mjs'")) {
+    errors.push('WhatsApp voice lease global marker has drifted from Amadeus');
+  }
   if (voicePrompt.includes("api.on('message_received'") || voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not depend on optional content hooks or copy inbound user content');
   for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerMacosHost', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
