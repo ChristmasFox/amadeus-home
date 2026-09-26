@@ -1,3 +1,13 @@
+## 2026-09-26：Amadeus 1.5.9 群聊日语 TTS guard 已正式部署
+
+- `VERSION=1.5.9`，release commit `3f9171f` 已 push；`./scripts/deploy-openclaw.sh --apply --build-auto` 已完成受影响 OpenClaw image 构建和 CasaOS 切换。
+- live image：`local/openclaw-amadeus:git-3f9171f47b19-20260926043743`；rollback checkpoint：`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260926043743`；evidence：`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260926043743`。
+- OpenClaw healthy、restart=0，Product Radar healthy；live runtime 已确认 `amadeus-whatsapp-japanese-tts-input-v1` marker，WhatsApp 已重新连接并监听 DM + all groups；release owner outbox smoke 已 sent。
+- `doctor.sh` strict 仍有 1 个已知非阻断失败：可选 `media-organizer-adapter` 缺席；`DOCTOR_STRICT=0` 下其余健康、存储、日志和外部卷检查通过。
+- 真实群聊音频入站已在 2026-09-26 12:43 Asia/Shanghai 观察到；最终验收仍需用户确认收到的音频是否只有一段日语、文字是否不再嵌套重复。
+
+详见 `.agent/checkpoints/2026-09-26-amadeus-1.5.9-formal-release.md` 与 `.agent/tasks/2026-09-26-whatsapp-group-voice-tts-guard.md`。
+
 ## 2026-09-26：定位 WhatsApp 群聊中日双语被合成两段的问题（源码 guard 待发布）
 
 - 群聊 `/tts status` 为 `Chat override: default`、`Provider: openai`、最近一次 `openai:success(ok)`；这排除了群级 TTS 开关/Provider override 作为首要根因。
