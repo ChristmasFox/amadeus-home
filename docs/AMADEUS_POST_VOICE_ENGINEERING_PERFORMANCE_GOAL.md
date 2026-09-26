@@ -754,3 +754,11 @@ release
 ```
 
 最终标准不是“多写了多少框架和文档”，而是：**Amadeus 的单 Agent 架构继续稳定，开发迭代明显更快，语音回复的主要等待时间被真实测量并显著降低。**
+
+---
+
+## 12. Owner scope amendment — 2026-09-26
+
+After Amadeus 1.6.0 was released and the owner accepted the real A+MLX/Auto WhatsApp voice and typed boundaries, the owner explicitly said further B testing was unnecessary. **Do not perform more B reference benchmarks or pause the live TTS for B.** B was only an experimental ~15s crop, never the production voice; the production profile remains the original A ~46s reference.
+
+This owner instruction supersedes **only** the Phase 4 requirement to obtain five runs for every B × language × fixture cell. The four B cells stopped by the 110s fail-closed watchdog remain honestly labelled **incomplete/safety-aborted**, not passing, and no performance or quality conclusion about all 15s references is inferred. A/C/D/E fixed-fixture measurements, Auto/Japanese comparison, owner quality acceptance, MLX PoC, engineering gates, report, rollback and release requirements are unchanged. Protected B audit history is preserved under Git tag `audit/tts-b-reference-20260926` and outside Git; it is not a current runtime or task dependency.

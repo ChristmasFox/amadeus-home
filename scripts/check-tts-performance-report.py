@@ -36,6 +36,9 @@ def check() -> None:
     assert len(data['mlx']['runs']) == 12
     assert len(data['mps']['missing']) == len(data['mps']['timeouts']) == 4
     assert all(name.startswith('B-icl-') for name in data['mps']['missing'])
+    assert data['decision']['B'] == 'owner_cancelled_after_safety_incomplete'
+    assert data['owner_scope_amendment']['further_B_runs_required'] is False
+    assert data['owner_scope_amendment']['other_goal_requirements_unchanged'] is True
     for backend in ('mps', 'mlx'):
         for name, rows in data[backend]['runs'].items():
             warm = [r for r in rows if r.get('success') and r.get('cold_or_warm') == 'warm'
@@ -63,6 +66,7 @@ def check() -> None:
         if not re.search(r'^## \d+\. ' + re.escape(heading) + r'\s*$', text, re.M):
             raise ValueError('missing_report_section_' + heading)
     assert 'B' in text and '110s' in text and 'incomplete' in text.lower()
+    assert 'owner-cancelled' in text.lower()
     assert '9.3 GiB' in text and '18.4 GiB' in text and 'A/MLX/Auto' in text
     for forbidden in ('reference.wav', 'reference.txt', 'Bearer ', '@s.whatsapp.net', '@g.us'):
         if forbidden.lower() in text.lower():

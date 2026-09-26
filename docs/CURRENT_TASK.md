@@ -4,7 +4,7 @@ Date: 2026-09-26. Authoritative scope: `docs/AMADEUS_POST_VOICE_ENGINEERING_PERF
 
 ## Current phase
 
-Phases 0–3 and 5–7 have verified source/benchmarks; **Phase 4 B remains safety-incomplete**. The optional Phase 8 decision is recorded. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live 1.6.0 release configuration**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
+Phases 0–3 and 5–7 have verified source/benchmarks; Phase 4 B four cells remain safety-incomplete in the report, and the owner explicitly cancelled further B testing (Goal §12). The optional Phase 8 decision is recorded. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live 1.6.0 release configuration**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
 
 ## Measured evidence and limits
 
@@ -12,10 +12,10 @@ Phases 0–3 and 5–7 have verified source/benchmarks; **Phase 4 B remains safe
 - MLX `vmmap` cold/real footprint peak 18.4 GiB on 24 GiB host; swap rose ~3 GiB on cold switch, then declined while memory pressure recovered. Monitor this risk; protected exact A/MPS rollback is `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/protected-performance/pre-a-mlx-candidate-20260926T123834Z`.
 - Four B reference matrix configs were safety-aborted at 110s, so five warmed successes are **not** claimed for them. The published numeric report explicitly marks this gap; no B promotion. BuildKit patch-only candidate improved 39s→3s, with no CasaOS build/restart for ordinary edits.
 
-## Remaining Goal item
+## Final audit
 
-1. Amadeus 1.6.0 full gates, immutable CasaOS switch, protected checkpoint, owner notification and post-release real WhatsApp voice/typed acceptance passed. Canonical `main` fast-forwarded/pushed; both merged work branches were retired. Live OpenClaw release image source `c730b49` is an ancestor of main.
-2. Four B reference matrix configurations remain **safety-incomplete** under the 110s watchdog. Follow `.agent/tasks/2026-09-26-b-icl-reference-matrix.md` for a clean, matched private B reference and an isolated five-run benchmark. Do not invent timings, increase timeout, stress live TTS during user traffic or mark the full Goal complete while this explicit item remains.
-3. Continue read-only MLX memory-pressure/swap observation. The released A+MLX remains live with protected exact A/MPS rollback unless a real regression is observed.
+1. Amadeus 1.6.0 full gates, immutable CasaOS switch, protected checkpoint, owner notification and post-release real WhatsApp voice/typed acceptance passed. Canonical `main` is pushed; old Voice/performance work branches were retired. The released A+MLX/Auto is healthy with protected exact A/MPS rollback.
+2. The owner explicitly stopped further B tests. Four B matrix cells are still **incomplete**, not fabricated; the amended Goal excludes further B runs only. The proposed TTS outage/quiet-window benchmark is cancelled. Complete the requirement-by-requirement Goal audit without claiming B passed.
+3. Retain read-only MLX memory-pressure/swap monitoring as an operational caveat; rollback on real quality/health/pressure regression. No further product change is planned in this Goal.
 
 Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.
