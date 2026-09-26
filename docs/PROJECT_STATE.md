@@ -2,16 +2,18 @@
 
 ## Source and architecture
 
-- Canonical `main` contains the complete 1.6.0 release; the old Voice and short-lived performance branches were merged and retired. `VERSION=1.6.0` is formally applied to the CasaOS Agent image; native A+MLX TTS is the selected single backend. External references, samples, weights and secrets never enter Git.
+- Canonical `main` contains the complete 1.6.1 release; the old Voice and short-lived performance branches were merged and retired. `VERSION=1.6.1` is formally applied to the CasaOS Agent image; native A+MLX TTS is the selected single backend. External references, samples, weights and secrets never enter Git.
 - OpenClaw 2026.9.4 is the sole Agent runtime. Native Amadeus/PUBG plugins, deterministic domain/presentation and one owner outbox remain; no retired runtime, keyword router or sender fallback.
 
 ## Live release and rollback
 
-- M204 OrbStack `nyannyan` CasaOS: OpenClaw release `local/openclaw-amadeus:git-c730b495763a-20260926130153`, Product Radar `local/product-radar:git-d988000e1c5d-20260924130631`, both healthy, OpenClaw restarts 0, WhatsApp linked. Protected OpenClaw release checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260926130153`; prior candidate image/checkpoint retained for rollback.
+- M204 OrbStack `nyannyan` CasaOS: OpenClaw release `local/openclaw-amadeus:git-55fbdc3b1076-20260926155013`, Product Radar `local/product-radar:git-d988000e1c5d-20260924130631`, both healthy, WhatsApp linked. Protected 1.6.1 release checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260926155013`; prior 1.6.0 image/checkpoint retained for rollback.
 - The **same** Mac `com.amadeus.qwen3-tts` LaunchAgent now serves the original A (~46s) reference with pinned community MLX 1.7B Base 8-bit ICL, `language=Auto`, one bounded inference worker and `ProcessType=Interactive`. MPS exited before MLX started; no dual-running TTS. OpenAI-compatible endpoint health ready; Git service source SHA `41420a36aa09b294e74e4f7a40e2ed9bc5b5bc9bfb6be19017917e92c3157005` matches live. Pinned source/model/dependency manifest is protected outside Git. Exact MPS rollback: `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/protected-performance/pre-a-mlx-candidate-20260926T123834Z`.
 - Owner rejected short D reference, then accepted the same-A direct MLX comparison, confirmed real WhatsApp Japanese PTT/nonduplicated visible text/typed-without-voice, and explicitly reported no pronunciation/naturalness/volume/rhythm anomaly after release. Four real turns had TTS 5.95/5.82/7.53/6.42s and inbound→media 15.27/12.01/22.18/21.35s. This is not a real p95; a fifth real voice also delivered during a synthetic test's bounded queue contention.
 
 - Public Control UI ingress repaired on 2026-09-26: Docker published-port source is now `172.20.0.1` (`9router_default` bridge), not the formerly trusted `172.24.0.1`. Git/live `gateway.trustedProxies` now narrowly trusts `127.0.0.1` and `172.20.0.1`; public `/` and `/healthz` return 200 with valid TLS. This is an ingress config correction, not a product release or token-auth bypass. Backup and rollback are recorded in `.agent/checkpoints/2026-09-26-claw-proxy-attribution-recovery.md`. Recheck the observed bridge source after future network recreation.
+
+- PUBG group safety repair in 1.6.1: a factual reply without a successful current-turn native data result, or a person question answered with `team=true`, is replaced with explicit cannot-confirm text at `reply_payload_sending`. A real controlled WhatsApp group delivery proved the replacement log precedes send. Model tool selection is not guaranteed; this guard prevents unsupported delivery rather than auto-fetching the person every time. Earlier candidate paths (host finalize revision, legacy message_sending) were rejected after real tests; see `.agent/checkpoints/2026-09-26-pubg-evidence-guard-release.md`.
 
 ## Measured limits and operational watch
 
