@@ -2,7 +2,7 @@
 
 ## Source and architecture
 
-- Canonical `main` contains the complete 1.6.1 release; the old Voice and short-lived performance branches were merged and retired. `VERSION=1.6.1` is formally applied to the CasaOS Agent image; native A+MLX TTS is the selected single backend. External references, samples, weights and secrets never enter Git.
+- Canonical `main` contains the complete 1.6.2 source cleanup release; the historical Voice branch was audited and retired (its older Goal document was already superseded on main), and the short-lived performance branch was previously merged and retired. `VERSION=1.6.2` is the Git product version; the unchanged 1.6.1 CasaOS Agent image remains live because this release changed only native Mac TTS startup diagnostics and source/docs, not container runtime source/config. Native A+MLX TTS remains the selected single backend. External references, samples, weights and secrets never enter Git.
 - OpenClaw 2026.9.4 is the sole Agent runtime. Native Amadeus/PUBG plugins, deterministic domain/presentation and one owner outbox remain; no retired runtime, keyword router or sender fallback.
 
 ## Live release and rollback
@@ -15,9 +15,11 @@
 
 - PUBG group safety repair in 1.6.1: a factual reply without a successful current-turn native data result, or a person question answered with `team=true`, is replaced with explicit cannot-confirm text at `reply_payload_sending`. A real controlled WhatsApp group delivery proved the replacement log precedes send. Model tool selection is not guaranteed; this guard prevents unsupported delivery rather than auto-fetching the person every time. Earlier candidate paths (host finalize revision, legacy message_sending) were rejected after real tests; see `.agent/checkpoints/2026-09-26-pubg-evidence-guard-release.md`.
 
-## 1.6.2 stability candidate (not released)
+## 1.6.2 stability cleanup release
 
-- The historical 1.5.3 Voice remote branch was audited (branch-only commit contained only an older Goal document) and retired. MLX terminology is being aligned with the selected community backend. The 1.6.2 native LaunchAgent candidate is applied with private 1 MiB pre-bootstrap stderr cap; the previous native source/plist, protected A profile/token and exact MPS rollback remain outside Git. Same A/MLX/Auto/Interactive source and engine are verified. Port 18792 remains deliberately wildcard for OrbStack/9Router; guest-to-host/LAN-address and authenticated 9Router speech route succeeded, while independent physical LAN-peer reachability was not tested. Unauthorized speech/inventory return 401. Real owner WhatsApp voice/typed acceptance is still pending; do not call 1.6.2 released yet. See `.agent/checkpoints/2026-09-26-amadeus-1.6.2-stability-candidate.md`.
+- The historical 1.5.3 Voice remote branch had only an older Goal document and was retired after main-content comparison. MLX source terminology now says selected community backend, preserving the third-party caveat and explicit MPS rollback.
+- Native LaunchAgent was applied with private launchd stderr, truncated above 1 MiB before each bootstrap. The previous native source/plist, protected A profile/token and exact MPS rollback remain outside Git. Same A/MLX/Auto/Interactive engine, model, timeout, worker and format are verified. Port 18792 remains deliberately wildcard for OrbStack/9Router; guest-to-host/LAN-address and authenticated 9Router speech succeeded, unauthenticated synthesis/inventory returned 401. No independent physical LAN peer test was available, so LAN exposure is conservatively assumed.
+- A real WhatsApp audio inbound produced one media reply with Japanese TTS and a Chinese visible summary; an ordinary typed inbound produced a text-only reply. The owner replied “确认正常 通过” when asked to verify accepted Kurisu sound, visible text correctness/nonduplication and typed isolation. No Docker/CasaOS rebuild or new voice experiment was run. Protected native recovery and real acceptance: `.agent/checkpoints/2026-09-26-amadeus-1.6.2-stability-release.md`.
 
 ## Measured limits and operational watch
 
