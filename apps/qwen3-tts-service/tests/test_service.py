@@ -130,6 +130,7 @@ class TimingBoundaryTest(unittest.TestCase):
         engine._model = SlowModel()
         engine._sf = FakeSoundFile()
         engine._prompt = object()
+        engine._language = "Auto"
         engine._lock = threading.Lock()
         engine._lock.acquire()
         def release():

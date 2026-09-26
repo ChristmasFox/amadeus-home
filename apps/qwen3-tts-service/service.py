@@ -45,7 +45,9 @@ class Synthesizer(Protocol):
 class QwenEngine:
     """Load the official model and reusable voice prompt once, on M204's MPS."""
 
-    def __init__(self, profile: Path, model_path: str = UPSTREAM_MODEL, on_warmup=None):
+    def __init__(self, profile: Path, model_path: str = UPSTREAM_MODEL, on_warmup=None,
+                 *, language: str = "Auto", x_vector_only_mode: bool = False,
+                 shared_model=None, warmup: bool = True):
         if not profile.is_dir() or not (profile / "reference.wav").is_file():
             raise ValueError("voice_profile_unavailable")
         reference_text = (profile / "reference.txt").read_text(encoding="utf-8").strip()
@@ -58,15 +60,20 @@ class QwenEngine:
         if not torch.backends.mps.is_available():
             raise RuntimeError("mps_unavailable")
         self._sf = sf
-        self._model = Qwen3TTSModel.from_pretrained(model_path, device_map="mps", dtype=torch.float16)
-        self._prompt = self._model.create_voice_clone_prompt(
-            ref_audio=str(profile / "reference.wav"), ref_text=reference_text, x_vector_only_mode=False
+        self._model = shared_model if shared_model is not None else Qwen3TTSModel.from_pretrained(
+            model_path, device_map="mps", dtype=torch.float16
         )
+        self._prompt = self._model.create_voice_clone_prompt(
+            ref_audio=str(profile / "reference.wav"), ref_text=reference_text,
+            x_vector_only_mode=x_vector_only_mode
+        )
+        self._language = language
         self._lock = threading.Lock()
-        if on_warmup is not None:
-            on_warmup()
-        # Warm up real synthesis; readiness must not mean merely loaded weights.
-        self.synthesize("你好，我已经准备好了。")
+        if warmup:
+            if on_warmup is not None:
+                on_warmup()
+            # Real synthesis before production readiness; benchmark opts out to measure first call.
+            self.synthesize("你好，我已经准备好了。")
 
     def synthesize(self, text: str) -> tuple[bytes, int]:
         wav, rate, _ = self.synthesize_timed(text)
@@ -77,7 +84,7 @@ class QwenEngine:
         with self._lock:
             locked_at = time.monotonic_ns()
             samples, rate = self._model.generate_voice_clone(
-                text=text, language="Auto", voice_clone_prompt=self._prompt
+                text=text, language=self._language, voice_clone_prompt=self._prompt
             )
             generated_at = time.monotonic_ns()
             output = io.BytesIO()
