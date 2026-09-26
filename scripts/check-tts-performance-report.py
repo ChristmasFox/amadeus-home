@@ -63,7 +63,7 @@ def check() -> None:
         if not re.search(r'^## \d+\. ' + re.escape(heading) + r'\s*$', text, re.M):
             raise ValueError('missing_report_section_' + heading)
     assert 'B' in text and '110s' in text and 'incomplete' in text.lower()
-    assert '9.3 GiB' in text and '17.5 GiB' in text and 'A/MLX/Auto' in text
+    assert '9.3 GiB' in text and '18.4 GiB' in text and 'A/MLX/Auto' in text
     for forbidden in ('reference.wav', 'reference.txt', 'Bearer ', '@s.whatsapp.net', '@g.us'):
         if forbidden.lower() in text.lower():
             raise ValueError('private_content_in_report')
