@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 
 # Source-specific cuts are supplied in a protected JSON file, never committed.
 # Each entry: {"start_seconds": 0.0, "end_seconds": 15.0, "line_start": 1, "line_end": 5}.
@@ -74,8 +73,7 @@ def main() -> None:
     baseline.mkdir(mode=0o700)
     for name in ("reference.wav", "reference.txt"):
         target = baseline / name
-        shutil.copyfile(args.source / name, target)
-        target.chmod(0o600)
+        write_private(target, (args.source / name).read_bytes())
     manifest["profiles"]["A"] = {"duration_ms": round(info.duration*1000), "mode": "icl"}
     for name in IDS:
         cut = cuts[name]
@@ -84,8 +82,10 @@ def main() -> None:
         start = round(cut["start_seconds"] * sample_rate)
         end = round(cut["end_seconds"] * sample_rate)
         wav = target / "reference.wav"
-        sf.write(str(wav), samples[start:end], sample_rate, format="WAV", subtype=info.subtype)
-        wav.chmod(0o600)
+        # Open with 0600 before any audio bytes are written (no world-readable window).
+        fd = os.open(wav, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as target_file:
+            sf.write(target_file, samples[start:end], sample_rate, format="WAV", subtype=info.subtype)
         transcript = "\n".join(lines[cut["line_start"]-1:cut["line_end"]]).strip() + "\n"
         write_private(target / "reference.txt", transcript.encode("utf-8"))
         manifest["profiles"][name] = {"duration_ms": round((end-start)*1000/sample_rate),

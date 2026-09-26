@@ -114,44 +114,68 @@ def main() -> None:
                 listen_path = args.output_dir / f"{config_prefix}-{bucket}-listen.wav"
                 if listen_path.exists():
                     raise ValueError("incomplete_config_requires_private_cleanup")
+                partial = args.output_dir / f"{config_prefix}-{bucket}.partial.jsonl"
+                if partial.exists():
+                    raise ValueError("incomplete_config_requires_private_cleanup")
+                fd = os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
                 rows = []
-                for index in range(args.runs + 1):
-                    started = time.monotonic()
-                    row = {"profile_id": profile_id, "clone_mode": mode, "language": language,
-                           "input_bucket": bucket,
-                           "cold_or_warm": "model_cold" if global_first_synthesis else "profile_cold" if first_for_profile else "warm",
-                           "first_for_fixture": index == 0,
-                           "run_index": index, "model_startup_ms": round(startup_ms, 1),
-                           "prompt_ms": round(prompt_ms, 1), "timestamp_utc": datetime.now(timezone.utc).isoformat()}
-                    global_first_synthesis = False
-                    first_for_profile = False
-                    try:
-                        wav, _, timing = engine.synthesize_timed(FIXTURES[bucket])
-                        duration = audio_ms(wav)
-                        encode_start = time.monotonic()
-                        encoded, _ = service.encode(wav, "mp3")
-                        encode_ms = (time.monotonic() - encode_start) * 1000
-                        if not encoded or duration <= 0:
-                            raise RuntimeError("invalid_audio")
-                        row.update({"queue_wait_ms": round(timing.queue_wait_ms, 1),
-                                    "engine_ms": round(timing.engine_inside_lock_ms, 1),
-                                    "generate_or_model_ms": round(timing.generate_or_model_ms, 1),
-                                    "wav_serialize_ms": round(timing.wav_serialize_ms, 1),
-                                    "encode_ms": round(encode_ms, 1),
-                                    "total_ms": round((time.monotonic()-started)*1000, 1),
-                                    "audio_duration_ms": duration,
-                                    "rtf": round(timing.engine_inside_lock_ms/duration, 3),
-                                    "rss_bytes": rss_bytes(), "success": True})
-                        if index == 1:
-                            write_private(listen_path, wav)
-                    except Exception as exc:
-                        row.update({"success": False, "error": type(exc).__name__,
-                                    "total_ms": round((time.monotonic()-started)*1000, 1),
-                                    "rss_bytes": rss_bytes()})
-                    rows.append(row)
-                    print(f"SAMPLE={config_prefix}-{bucket}-{index} success={row['success']} total_ms={row['total_ms']}", flush=True)
-                write_private(destination, ("\n".join(json.dumps(row, sort_keys=True) for row in rows)+"\n").encode())
+                with os.fdopen(fd, "w", encoding="utf-8") as partial_file:
+                    for index in range(args.runs + 1):
+                        row = run_one(engine, args, profile_id, mode, language, bucket, index,
+                                      startup_ms, prompt_ms, global_first_synthesis, first_for_profile,
+                                      listen_path)
+                        global_first_synthesis = False
+                        first_for_profile = False
+                        rows.append(row)
+                        partial_file.write(json.dumps(row, sort_keys=True) + "\n")
+                        partial_file.flush()
+                os.replace(partial, destination)
+                print(f"CONFIG_COMPLETED={config_prefix}-{bucket}", flush=True)
     print("BENCHMARK=completed; private outputs are outside Git")
+
+
+def run_one(engine, args, profile_id, mode, language, bucket, index,
+            startup_ms, prompt_ms, global_first_synthesis, first_for_profile, listen_path):
+    import torch
+    config_prefix = f"{profile_id}-{mode}-{language}"
+    print(f"START={config_prefix}-{bucket}-{index}", flush=True)
+    started = time.monotonic()
+    row = {"profile_id": profile_id, "clone_mode": mode, "language": language,
+           "input_bucket": bucket,
+           "cold_or_warm": "model_cold" if global_first_synthesis else "profile_cold" if first_for_profile else "warm",
+           "first_for_fixture": index == 0,
+           "run_index": index, "model_startup_ms": round(startup_ms, 1),
+           "prompt_ms": round(prompt_ms, 1), "timestamp_utc": datetime.now(timezone.utc).isoformat()}
+    try:
+        wav, _, timing = engine.synthesize_timed(FIXTURES[bucket])
+        duration = audio_ms(wav)
+        encode_start = time.monotonic()
+        encoded, _ = service.encode(wav, "mp3")
+        encode_ms = (time.monotonic() - encode_start) * 1000
+        if not encoded or duration <= 0:
+            raise RuntimeError("invalid_audio")
+        row.update({"queue_wait_ms": round(timing.queue_wait_ms, 1),
+                    "engine_ms": round(timing.engine_inside_lock_ms, 1),
+                    "generate_or_model_ms": round(timing.generate_or_model_ms, 1),
+                    "wav_serialize_ms": round(timing.wav_serialize_ms, 1),
+                    "encode_ms": round(encode_ms, 1),
+                    "total_ms": round((time.monotonic()-started)*1000, 1),
+                    "audio_duration_ms": duration,
+                    "rtf": round(timing.engine_inside_lock_ms/duration, 3),
+                    "rss_bytes": rss_bytes(),
+                    "mps_current_bytes": torch.mps.current_allocated_memory(),
+                    "mps_driver_bytes": torch.mps.driver_allocated_memory(),
+                    "success": True})
+        if index == 1:
+            write_private(listen_path, wav)
+    except Exception as exc:
+        row.update({"success": False, "error": type(exc).__name__,
+                    "total_ms": round((time.monotonic()-started)*1000, 1),
+                    "rss_bytes": rss_bytes(),
+                    "mps_current_bytes": torch.mps.current_allocated_memory(),
+                    "mps_driver_bytes": torch.mps.driver_allocated_memory()})
+    print(f"SAMPLE={config_prefix}-{bucket}-{index} success={row['success']} total_ms={row['total_ms']}", flush=True)
+    return row
 
 if __name__ == "__main__":
     main()

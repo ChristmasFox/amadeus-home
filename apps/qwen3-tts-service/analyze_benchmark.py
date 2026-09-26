@@ -20,15 +20,16 @@ def percentile(values: list[float], p: float) -> float:
 
 
 def summarize(rows: list[dict], minimum_warm: int = 5) -> dict:
-    warm = [row for row in rows if row.get("cold_or_warm") == "warm" and row.get("success")]
+    warm = [row for row in rows if row.get("cold_or_warm") == "warm" and not row.get("first_for_fixture") and row.get("success")]
     errors = [row.get("error", "unknown") for row in rows if not row.get("success")]
     if len(warm) < minimum_warm:
         raise ValueError("insufficient_successful_warm_runs")
     result = {"warm_count": len(warm), "failure_count": len(errors), "failure_categories": sorted(set(errors)),
-              "cold_samples": [{"phase": row.get("cold_or_warm"), "total_ms": row.get("total_ms")}
-                               for row in rows if row.get("cold_or_warm") != "warm"],
+              "first_samples": [{"phase": row.get("cold_or_warm"), "total_ms": row.get("total_ms")}
+                                for row in rows if row.get("first_for_fixture") or row.get("cold_or_warm") != "warm"],
               "model_startup_ms": rows[0].get("model_startup_ms"), "prompt_ms": rows[0].get("prompt_ms"),
-              "rss_peak_bytes": max(row["rss_bytes"] for row in rows if row.get("rss_bytes") is not None)}
+              "rss_peak_bytes": max(row["rss_bytes"] for row in rows if row.get("rss_bytes") is not None),
+              "mps_driver_peak_bytes": max((row["mps_driver_bytes"] for row in rows if row.get("mps_driver_bytes") is not None), default=None)}
     for key in ("total_ms", "engine_ms", "queue_wait_ms", "encode_ms", "audio_duration_ms", "rtf"):
         values = [float(row[key]) for row in warm]
         result[key] = {"p50": round(percentile(values, .50), 2),
@@ -60,7 +61,14 @@ def aggregate(root: Path, allow_partial: bool = False) -> dict:
                 output[name] = summarize(rows)
     if missing and not allow_partial:
         raise ValueError("incomplete_matrix_" + str(len(missing)))
-    return {"configs": output, "missing": missing, "complete": not missing}
+    timeouts = {}
+    for name in missing:
+        marker = root / f"{name}.timeout.json"
+        if marker.is_file():
+            if marker.is_symlink() or marker.stat().st_mode & 0o077:
+                raise ValueError("protected_timeout_marker_required")
+            timeouts[name] = json.loads(marker.read_text())
+    return {"configs": output, "missing": missing, "timeouts": timeouts, "complete": not missing}
 
 
 def main() -> None:
