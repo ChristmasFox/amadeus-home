@@ -62,6 +62,10 @@ def main() -> None:
         os.umask(0o077)
         args.model_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         private(args.model_root, directory=True)
+        cache = args.model_root / 'cache'
+        cache.mkdir(mode=0o700, exist_ok=True)
+        private(cache, directory=True)
+        os.environ['HF_HOME'] = str(cache)
         from huggingface_hub import snapshot_download
         snapshot_download(MODEL_ID, revision=MODEL_REV, local_dir=model_dir)
         private(model_dir, directory=True)
