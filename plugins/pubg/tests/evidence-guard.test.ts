@@ -41,15 +41,16 @@ test('outbound fails closed without a host finalize revision when unsupported cl
     logger: { warn: (message: string) => warnings.push(message) },
   } as unknown as OpenClawPluginApi);
   const finalize = hooks.get('before_agent_finalize')!;
-  const outbound = hooks.get('message_sending')!;
+  const outbound = hooks.get('reply_payload_sending')!;
+  assert.equal(hooks.has('message_sending'), false);
   const context = { sessionKey: 'group-session', trigger: 'user' };
   assert.equal(finalize({ lastAssistantMessage: 'PUBG 战绩为零', messages: [user('PUBG 战绩')] }, { sessionKey: 'cron-session', trigger: 'cron' }), undefined);
   const event = { runId: 'turn-1', sessionKey: 'group-session', lastAssistantMessage: reply, messages: [user('今日猴的战绩'), assistant(reply)] };
   assert.equal(finalize(event, context), undefined);
-  assert.match(outbound({ content: reply }, context)?.content ?? '', /不能确认结果/);
-  assert.deepEqual(outbound({ content: reply }, context), { cancel: true, cancelReason: 'pubg_unverified_followup_chunk' });
-  assert.equal(outbound({ content: '普通文字' }, context), undefined);
+  assert.match(outbound({ payload: { text: reply, mediaUrl: 'file:///unsafe' }, sessionKey: 'group-session' }, { channelId: 'whatsapp' })?.payload?.text ?? '', /不能确认结果/);
+  assert.deepEqual(outbound({ payload: { text: reply }, sessionKey: 'group-session' }, context), { cancel: true, reason: 'pubg_unverified_followup_chunk' });
+  assert.equal(outbound({ payload: { text: '普通文字' }, sessionKey: 'group-session' }, context), undefined);
   assert.equal(finalize({ ...event, messages: [user('今日猴的战绩'), call('pubg_query_stats', { personIds: ['p1'] }), result('pubg_query_stats', 'ok')] }, context), undefined);
-  assert.equal(outbound({ content: reply }, context), undefined);
+  assert.equal(outbound({ payload: { text: reply }, sessionKey: 'group-session' }, context), undefined);
   assert.ok(warnings.length >= 2);
 });
