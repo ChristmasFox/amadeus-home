@@ -1,21 +1,21 @@
 # Current Task — Post-Voice Engineering & TTS Performance
 
-Date: 2026-09-26. Scope and acceptance: `docs/AMADEUS_POST_VOICE_ENGINEERING_PERFORMANCE_GOAL.md`.
+Date: 2026-09-26. Authoritative scope: `docs/AMADEUS_POST_VOICE_ENGINEERING_PERFORMANCE_GOAL.md`.
 
 ## Current phase
 
-Phases 0–7 have source, focused tests, measured benchmarks and protected runtime candidates. Phase 8's optional direct-Opus shortcut was declined: MP3 encode is minor compared with model variance, and native WhatsApp PTT equivalence was not proven. **Current work is the owner-approved A+MLX backend candidate, its real memory/WhatsApp acceptance, then final report and release**, not further Voice feature development.
+Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. The original A (~46s private reference) with community **1.7B MLX 8-bit ICL**, Auto language and Interactive scheduling is the **single live candidate**. Owner accepted this exact A+MLX timbre in direct listening, then confirmed real WhatsApp one Japanese PTT, nonduplicated visible text and ordinary typed input without voice. D remains rejected. No second Agent/sender, timeout increase, profile switch or direct-Opus shortcut.
 
-## Selected configuration and evidence
+## Measured evidence and limits
 
-- Owner retained original A (~46s private reference) and `language=Auto`, rejected D. After comparing the exact A/MPS versus A/MLX direct sample, owner found A+MLX acceptable and requested implementation; live A+MLX handset quality is not yet proven. The host LaunchAgent uses `ProcessType=Interactive`; no model/profile/timeout increase or second runtime.
-- Same short-fixture HTTP A/B/A/B: Background reversal p50 10.39s; Interactive 20-run p50 4.48s/p95 5.28s. Post-source-sync five-run p50 4.64s/p95 5.17s. Real post-candidate WhatsApp turns: TTS 9.33s/9.91s; inbound→media 22.58s/20.74s. Owner confirmed one Japanese PTT, nonduplicated text and typed input without voice. These two real turns are not a distribution.
-- MPS/MLX controlled matrix and Docker patch-only cache build (39s→3s) are in dated checkpoints. Four B ICL configs were stopped by a 110s fail-closed benchmark watchdog; they are **not** five-successful-run configurations and must be marked incomplete in the report. No B/D promotion; MLX is candidate-only pending real acceptance.
+- A/MPS→A/MLX kept the same protected reference and OpenAI-compatible endpoint, replacing only the backend in one LaunchAgent. HTTP short 20-run A/MLX p50 3.30s/p95 3.52s; normal five-run p50 5.42s. Four real post-switch voice turns: TTS 5.95/5.82/7.53/6.42s, inbound→media 15.27/12.01/22.18/21.35s. These are not a real p95. One later real voice survived synthetic queue contention; a synthetic request, not the real request, returned bounded `503 tts_busy`.
+- MLX `vmmap` cold/real footprint peak 18.4 GiB on 24 GiB host; swap rose ~3 GiB on cold switch, then declined while memory pressure recovered. Monitor this risk; protected exact A/MPS rollback is `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/protected-performance/pre-a-mlx-candidate-20260926T123834Z`.
+- Four B reference matrix configs were safety-aborted at 110s, so five warmed successes are **not** claimed for them. The published numeric report explicitly marks this gap; no B promotion. BuildKit patch-only candidate improved 39s→3s, with no CasaOS build/restart for ordinary edits.
 
 ## Remaining gates
 
-1. A+MLX single-engine candidate is live with protected MPS rollback. Fixed HTTP short 20-run p50 3.30s/p95 3.52s, normal 5-run p50 5.42s; cold Metal footprint peaked 17.5 GiB and swap rose ~3 GiB before stabilizing. Four real post-MLX WhatsApp voice turns had TTS 5.947/5.824/7.533/6.420s and one media send each; owner confirms A timbre, visible text and ordinary typed input are normal. One synthetic request hit bounded `503 tts_busy` during a fifth real voice (which still delivered); technical acceptance is now read-only unless benchmark explicitly requested. Monitor memory and rollback on regressions. Then finalize and verify the content-free, machine-checkable `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md` with all 13 required sections, B timeout limitation, memory snapshot, quality verdict and rollback.
-2. Run full release tests, type/build, secrets scan and source checks; bump the single version via `scripts/amadeus-version.sh bump patch`, replace single-release Chinese notes, commit/push clean source.
-3. Explicit immutable CasaOS release apply with protected checkpoint, health/smoke, owner release notification and post-release WhatsApp voice/typed acceptance; record final evidence. Fast-forward/push canonical `main` only after verified release.
+1. Git release target `VERSION=1.6.0` and single-release Chinese notes are staged. Run full build/typecheck/test, report verifier, secrets and diff checks; commit/push a clean release source.
+2. Explicit immutable CasaOS release `--apply --build-auto` with protected checkpoint, affected-only image build, health/smoke, owner notification and post-release real WhatsApp voice/typed acceptance.
+3. Finalize `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md` with release evidence and memory caveat; fast-forward/push canonical `main`, retire this short-lived work branch only after all gates pass.
 
-Known non-Voice doctor issue: optional `media-organizer-adapter` is absent. No fallback or second sender. History is in `.agent/checkpoints/` and `docs/history/`, not in this startup file.
+Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.
