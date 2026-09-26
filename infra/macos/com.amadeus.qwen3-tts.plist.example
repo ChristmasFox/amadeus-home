@@ -10,6 +10,8 @@
     <key>AMADEUS_TTS_VOICE_DIR</key><string>__VOICE_DIR__</string>
     <key>AMADEUS_TTS_LOG_DIR</key><string>__LOG_DIR__</string>
     <key>AMADEUS_TTS_MODEL_PATH</key><string>__MODEL_PATH__</string>
+    <key>AMADEUS_TTS_ENGINE</key><string>__TTS_ENGINE__</string>
+    <key>AMADEUS_TTS_MLX_MODEL_PATH</key><string>__MLX_MODEL_PATH__</string>
     <key>HF_HOME</key><string>__MODEL_CACHE__</string>
   </dict>
   <key>RunAtLoad</key><true/>
