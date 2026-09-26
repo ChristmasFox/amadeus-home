@@ -15,7 +15,7 @@ Phases 0–7 source/benchmarks and the optional Phase 8 decision are complete. T
 ## Remaining gates
 
 1. Formal 1.6.0 release source `c730b49` and affected-only immutable OpenClaw image `git-c730b495763a-20260926130153` are live. Full build/typecheck/test, report verifier, secrets, protected CasaOS checkpoint `amadeus-openclaw-20260926130153`, health/smoke and owner release notification passed.
-2. Await **post-release** real WhatsApp voice/typed handset confirmation. Read-only `scripts/accept-voice.sh --apply` passed technical runtime gates. Monitor MLX peak memory (18.4 GiB observed) and swap; rollback on regression.
-3. Finalize the performance report with post-release acceptance evidence, then fast-forward/push canonical `main` and retire this short-lived work branch only after all gates pass.
+2. Post-release real WhatsApp acceptance passed: one voice inbound→media 22.772s, TTS 9.221s; non-audio inbound did not trigger TTS and owner confirmed phone-side normal. Monitor MLX peak memory (18.4 GiB observed) and swap; rollback on regression.
+3. Finalize the performance report with post-release acceptance evidence, then fast-forward/push canonical `main`. Four B reference matrix configs remain safety-incomplete; do not claim five successful runs or mark the full Goal complete without resolving that explicit gap under a safe isolated plan.
 
 Known non-Voice doctor issue: optional `media-organizer-adapter` absent. Historical evidence is in `.agent/checkpoints/` and `docs/history/`; do not treat earlier MPS-selection checkpoints as the current runtime instruction.
