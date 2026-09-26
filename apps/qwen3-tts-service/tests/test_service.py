@@ -4,6 +4,7 @@ import json
 import importlib.util
 import sys
 import threading
+import time
 import unittest
 import wave
 from pathlib import Path
@@ -16,7 +17,7 @@ class FakeEngine:
     def __init__(self):
         self.calls = 0
 
-    def synthesize(self, text):
+    def synthesize_timed(self, text):
         self.calls += 1
         out = io.BytesIO()
         with wave.open(out, "wb") as wav:
@@ -24,7 +25,7 @@ class FakeEngine:
             wav.setsampwidth(2)
             wav.setframerate(24000)
             wav.writeframes(b"\0\0" * 2400)
-        return out.getvalue(), 24000
+        return out.getvalue(), 24000, service.SynthesisTiming(1.0, 25.0, 2.0, 27.0)
 
 
 class SpeechTest(unittest.TestCase):
@@ -101,11 +102,49 @@ class SpeechTest(unittest.TestCase):
         timing = next(line for line in captured.output if "speech_synthesis_ok" in line)
         self.assertIn("input_chars=<=40", timing)
         self.assertIn("audio_ms=", timing)
-        self.assertIn("engine_ms=", timing)
+        self.assertIn("queue_wait_ms=1.0", timing)
+        self.assertIn("generate_or_model_ms=25.0", timing)
+        self.assertIn("decode_stage=inside_model_api", timing)
+        self.assertIn("wav_serialize_ms=2.0", timing)
+        self.assertIn("engine_inside_lock_ms=27.0", timing)
+        self.assertIn("rtf=0.270", timing)
         self.assertIn("encode_ms=", timing)
         self.assertIn("total_ms=", timing)
         self.assertNotIn("VOICE_PRIVACY_SENTINEL", timing)
 
+
+
+class SlowModel:
+    def generate_voice_clone(self, **kwargs):
+        time.sleep(0.025)
+        return [b"samples"], 24000
+
+class FakeSoundFile:
+    def write(self, output, samples, rate, format):
+        time.sleep(0.01)
+        output.write(b"RIFF")
+
+class TimingBoundaryTest(unittest.TestCase):
+    def test_lock_wait_separate_from_generate_and_wav(self):
+        engine = object.__new__(service.QwenEngine)
+        engine._model = SlowModel()
+        engine._sf = FakeSoundFile()
+        engine._prompt = object()
+        engine._lock = threading.Lock()
+        engine._lock.acquire()
+        def release():
+            time.sleep(0.025)
+            engine._lock.release()
+        waiter = threading.Thread(target=release)
+        waiter.start()
+        try:
+            _, _, timing = engine.synthesize_timed("safe fixture")
+        finally:
+            waiter.join()
+        self.assertGreaterEqual(timing.queue_wait_ms, 15)
+        self.assertGreaterEqual(timing.generate_or_model_ms, 20)
+        self.assertGreaterEqual(timing.wav_serialize_ms, 8)
+        self.assertAlmostEqual(timing.engine_inside_lock_ms, timing.generate_or_model_ms + timing.wav_serialize_ms, delta=1)
 
 if __name__ == "__main__":
     unittest.main()
