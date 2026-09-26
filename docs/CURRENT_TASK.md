@@ -14,7 +14,7 @@ Phases 0–7 have source, focused tests, measured benchmarks and protected runti
 
 ## Remaining gates
 
-1. Preserve the A/MPS rollback, switch the same TTS service to pinned A/MLX 1.7B 8-bit with protected checkpoint, measure HTTP latency, Metal/memory pressure and real WhatsApp voice/typed quality; rollback if worse. Then finalize and verify the content-free, machine-checkable `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md` with all 13 required sections, B timeout limitation, memory snapshot, quality verdict and rollback.
+1. A+MLX single-engine candidate is live with protected MPS rollback. Fixed HTTP short 20-run p50 3.30s/p95 3.52s, normal 5-run p50 5.42s; cold Metal footprint peaked 17.5 GiB and swap rose ~3 GiB before stabilizing. Await real WhatsApp voice/typed owner quality and monitor memory; rollback on regressions. Then finalize and verify the content-free, machine-checkable `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md` with all 13 required sections, B timeout limitation, memory snapshot, quality verdict and rollback.
 2. Run full release tests, type/build, secrets scan and source checks; bump the single version via `scripts/amadeus-version.sh bump patch`, replace single-release Chinese notes, commit/push clean source.
 3. Explicit immutable CasaOS release apply with protected checkpoint, health/smoke, owner release notification and post-release WhatsApp voice/typed acceptance; record final evidence. Fast-forward/push canonical `main` only after verified release.
 
