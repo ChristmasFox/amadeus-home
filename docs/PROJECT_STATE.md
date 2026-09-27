@@ -1,5 +1,21 @@
 # Project State — 2026-09-27
 
+## Active model-capability adapter candidate — partial production state
+
+9Router now has the protected, idempotently provisioned `kind=image`
+`amadeus-image` Combo with strict Gemini 3.1 Flash Image → GPT Image 2.5
+fallback order. One authenticated request from the live OpenClaw network
+succeeded through Gemini; a synthetic 429 fixture against the exact live
+Combo helper advanced to GPT Image 2.5 without a second logical request. A
+safe live first-model fault was not induced. Router-level missing-prompt 400
+returned before Combo dispatch, while the pinned helper treats an upstream
+HTTP 400 as fallback-eligible; do not overclaim the latter. The router and
+native TTS processes were not restarted. OpenClaw still runs the previous
+1.6.4 image/config with the concrete image default and `tts.auto=inbound`;
+**candidate rollout and real group/voice acceptance are pending**. Protected
+prestate and independent rollback paths are recorded in
+`.agent/checkpoints/2026-09-27-amadeus-model-capability-combo-provision.md`.
+
 ## Source and architecture
 
 - Canonical `origin/main` is the 1.6.2 source cleanup baseline; active image-generation branch `codex/amadeus-default-image-generation-2026-09` contains released source commits `ac021ae` (1.6.3) and `b389e86` (1.6.4), with remote push/merge still separate. Live CasaOS runs 1.6.4. Keep source branch, live image tag, and release version distinct.
