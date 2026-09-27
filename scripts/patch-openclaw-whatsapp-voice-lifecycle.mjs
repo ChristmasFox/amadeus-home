@@ -183,7 +183,7 @@ export function patchWhatsAppJapaneseAudioGuardSource(original) {
 }
 
 export function patchWhatsAppTaggedTypedGuardSource(original) {
-  if (original.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER)) return original;
+  const typedMarker = `// ${WHATSAPP_TAGGED_TYPED_GUARD_MARKER}\n`;
   const marker = `// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n`;
   const count = original.split(marker).length - 1;
   if (count !== 1) throw new Error(`pinned Japanese audio guard must precede typed upgrade: marker count=${count}`);
@@ -191,13 +191,14 @@ export function patchWhatsAppTaggedTypedGuardSource(original) {
   const end = original.indexOf('\nfunction createWhatsAppReplyPlan(params) {', start);
   if (end < 0) throw new Error('pinned Japanese voice helper end anchor missing');
   const previous = original.slice(start, end);
+  const previousHelper = previous.startsWith(typedMarker) ? previous.slice(typedMarker.length) : previous;
   const updated = ensureAmadeusJapaneseVoiceText.toString();
-  const oldGate = "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;";
-  if (!previous.startsWith('function ensureAmadeusJapaneseVoiceText(') ||
-      (previous !== updated && !previous.includes(oldGate))) {
+  if (!previousHelper.startsWith('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('unknown Japanese voice helper version; refusing typed upgrade');
   }
-  return `${original.slice(0, start)}// ${WHATSAPP_TAGGED_TYPED_GUARD_MARKER}\n${updated}${original.slice(end)}`;
+  if (previousHelper === updated && original.includes(typedMarker)) return original;
+  const typedMarkerText = original.includes(typedMarker) ? '' : typedMarker;
+  return `${original.slice(0, start)}${typedMarkerText}${updated}${original.slice(end)}`;
 }
 
 export function patchWhatsAppJapaneseTextSource(original) {
@@ -226,11 +227,10 @@ export function patchWhatsAppJapaneseTextSource(original) {
 
 async function patchFile(path, transform, marker) {
   const original = await readFile(path, 'utf8');
-  if (original.includes(marker)) return 'already-applied';
   const transformed = transform(original);
-  if (transformed === original) throw new Error(`patch made no change: ${path}`);
+  if (transformed === original) return 'already-applied';
   await writeAtomic(path, transformed);
-  return 'applied';
+  return original.includes(marker) ? 'updated' : 'applied';
 }
 
 async function findFile(root, pattern, anchor) {
