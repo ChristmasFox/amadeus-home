@@ -12,6 +12,7 @@ import {
   WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER,
   WHATSAPP_TAGGED_TYPED_GUARD_MARKER,
+  WHATSAPP_TYPING_INDICATOR_MARKER,
   ensureAmadeusJapaneseVoiceText,
   resolveAmadeusJapaneseSpeechText,
   patchTtsSource,
@@ -21,6 +22,7 @@ import {
   patchWhatsAppJapaneseTextSource,
   patchWhatsAppJapaneseAudioGuardSource,
   patchWhatsAppTaggedTypedGuardSource,
+  patchWhatsAppTypingIndicatorSource,
   resolveVoiceFollowup,
   whatsappHelpers,
   whatsappIngressQueueHelpers,
@@ -168,7 +170,8 @@ const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
 const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
 const patchedWhatsAppVisible = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
 const patchedWhatsAppAudio = patchWhatsAppJapaneseAudioGuardSource(patchedWhatsAppVisible);
-const patchedWhatsApp = patchWhatsAppTaggedTypedGuardSource(patchedWhatsAppAudio);
+let patchedWhatsApp = patchWhatsAppTaggedTypedGuardSource(patchedWhatsAppAudio);
+patchedWhatsApp = patchWhatsAppTypingIndicatorSource(patchedWhatsApp);
 const legacyVisible = patchedWhatsAppVisible.replace(
   ensureAmadeusJapaneseVoiceText.toString(),
   'function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) { return payload; }',
@@ -182,6 +185,7 @@ assert.ok(patchedWhatsApp.includes(WHATSAPP_INGRESS_QUEUE_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER));
+assert.ok(patchedWhatsApp.includes(WHATSAPP_TYPING_INDICATOR_MARKER));
 const v1Audio = patchedWhatsAppAudio.replace(
   "if (!payload || typeof payload !== 'object') return payload;",
   "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;",
@@ -207,6 +211,7 @@ assert.equal(patchWhatsAppIngressQueueSource(patchedWhatsApp), patchedWhatsApp, 
 assert.equal(patchWhatsAppJapaneseTextSource(patchedWhatsApp), patchedWhatsApp, 'Japanese visible-text patch is idempotent');
 assert.equal(patchWhatsAppJapaneseAudioGuardSource(patchedWhatsApp), patchedWhatsApp, 'Japanese audio guard patch is idempotent');
 assert.equal(patchWhatsAppTaggedTypedGuardSource(patchedWhatsApp), patchedWhatsApp, 'tagged typed guard upgrade is idempotent');
+assert.equal(patchWhatsAppTypingIndicatorSource(patchedWhatsApp), patchedWhatsApp, 'typing indicator patch is idempotent');
 
 const japaneseVoice = '少し待って。結論を先に言うわ。';
 const chineseVoice = `中文：我会先说结论。`;
