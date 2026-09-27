@@ -2,10 +2,12 @@
 
 ## Active model-capability adapter candidate — partial production state
 
-The owner has requested GPT Image 2.5 as the first image backend and Gemini
-as fallback. The Goal and Git desired state have been amended; until the
-protected Combo reconcile, the live runtime still has the prior Gemini-first
-order. The earlier smoke/checkpoint below are historical for that order.
+The owner requested GPT Image 2.5 as the first image backend and Gemini as
+fallback. The Goal, Git desired state and live 9Router Combo now agree on
+strict GPT Image 2.5 → Gemini 3.1 Flash Image fallback. The priority-only
+prestate snapshot and a fresh GPT-first successful transport smoke are in
+`.agent/checkpoints/2026-09-27-amadeus-image-gpt-first.md`. The earlier
+Gemini-first candidate smoke/checkpoint below remain historical.
 
 The 1.6.4 **candidate** OpenClaw image
 `local/openclaw-amadeus:git-02df41443a54-20260927125732` is live and healthy
@@ -14,10 +16,10 @@ on M204; no final release/version bump has occurred. It uses
 and a narrowly scoped WhatsApp/Telegram group image policy. `arthur-combo`,
 `amadeus-asr`, `amadeus-tts`, `kurisu-v1`, MP3, 1200 characters, the 120-second
 TTS timeout, and the global Agent-facing `tts,message` deny are unchanged.
-The 9Router `kind=image` Combo has strict Gemini 3.1 Flash Image → GPT Image
-2.5 fallback order; an authenticated image transport smoke succeeded through
-Gemini, and a synthetic 429 against the exact live helper advanced to GPT
-without a second logical request. No safe live first-model fault was induced.
+The 9Router `kind=image` Combo now has strict GPT Image 2.5 → Gemini
+3.1 Flash Image fallback order; an authenticated image transport smoke
+succeeded through GPT, and a synthetic 429 against the exact live helper
+advanced to Gemini without a second logical request. No safe live first-model fault was induced.
 Router-level missing-prompt 400 returned before Combo dispatch, but the pinned
 helper treats upstream HTTP 400 as fallback-eligible; do not claim broader
 no-fallback behavior. Router and native TTS PIDs were not restarted.
