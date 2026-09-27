@@ -1,27 +1,27 @@
 # Project State — 2026-09-27
 
-## Model-capability adapter — accepted candidate awaiting final 1.6.5 release
+## Amadeus 1.6.5 model-capability adapter release — owner-accepted
 
-The owner confirmed the repaired real behavior after the final candidate
-redeploy: typed voice replies now preserve one audio attachment and the exact
-visible format `中文：...` followed by `日本語：...`. The earlier intermittent
-text-loss cause was the tagged-TTS media-only normalization path plus a stale
-volume-installed WhatsApp helper marker; the fixes preserve typed text+audio,
-canonicalize both labels, and upgrade existing monitor markers.
+Amadeus 1.6.5 is deployed on M204 OrbStack `nyannyan` with healthy immutable
+OpenClaw image `local/openclaw-amadeus:git-fb7dd742b609-20260927142412`.
+The owner confirmed the final repaired typed-to-voice behavior: one audio
+attachment plus visible text in the exact `中文：...` / `日本語：...` format.
 
-The candidate image `local/openclaw-amadeus:git-0827dafec807-20260927140017`
-was healthy; its latest protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927140017` (0700 root,
-0600 config/manifests). The live 9Router Combo remains strict GPT Image 2.5 →
-Gemini 3.1 Flash Image; GPT-first transport smoke and synthetic fallback proof
-passed. `arthur-combo`, ASR/TTS contracts, sensitive-tool restrictions, and
-unrelated services remain unchanged. No 9Router or native TTS restart occurred.
+OpenClaw uses only the logical `openai/amadeus-image` capability. 9Router owns
+strict GPT Image 2.5 → Gemini 3.1 Flash Image fallback; its Combo was
+provisioned and reconciled through the existing management API, without source
+or database edits. `arthur-combo`, `amadeus-asr`, `amadeus-tts`, `kurisu-v1`,
+MP3, tagged TTS limits, global sensitive-tool denials, group admission and
+unrelated service permissions remain preserved. Group image access is limited
+to the existing admitted WhatsApp/Telegram groups plus the native
+`image_generate` capability; direct non-owner access remains web-only.
 
-The owner acceptance disposition covers the candidate's real image/group and
-voice behavior; the remaining action is the single Amadeus 1.6.5 release bump,
-immutable final build/apply, protected release evidence, owner notification,
-health/smoke, and final Goal closure. The pinned 9Router upstream-400
-fallback caveat remains documented; no 9Router source change is introduced.
+Release gates, protected checkpoint, owner notification, health/smoke, real
+transport/fallback evidence and post-deploy evidence are recorded in
+`.agent/checkpoints/2026-09-27-amadeus-model-capability-final-release.md`.
+The known pinned 9Router caveat remains: upstream HTTP 400 is
+fallback-eligible, while missing-prompt 400 is rejected before Combo
+ dispatch; no 9Router source change was introduced. The Goal is complete.
 
 ## Source and architecture
 
