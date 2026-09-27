@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 NON_OWNER_TOOL_ALLOWLIST = ["web_search", "web_fetch"]
+GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 
 
 def ensure_owner(path: Path, mode: int = 0o600) -> None:
@@ -162,6 +163,42 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
     ]
 
 
+def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = None) -> None:
+    """Only the admitted groups get image_generate; preserve their admission rules.
+
+    The pinned OpenClaw sender allowlist remains read-only web for non-owner
+    direct messages. A version-pinned core patch grants image_generate across
+    that sender layer only when this explicit group allowlist and verified
+    group context both apply. Unexpected pre-existing group tool rules fail
+    closed instead of being silently replaced.
+    """
+    groups = channel.get("groups", {})
+    if not isinstance(groups, dict):
+        raise SystemExit("channel groups must be an object")
+    scopes = [groups]
+    accounts = channel.get("accounts", {})
+    if isinstance(accounts, dict):
+        for account in accounts.values():
+            if isinstance(account, dict) and "groups" in account:
+                if not isinstance(account["groups"], dict):
+                    raise SystemExit("account groups must be an object")
+                scopes.append(account["groups"])
+    wanted_tools = {"allow": GROUP_IMAGE_TOOL_ALLOWLIST}
+    wanted_owner = {key: {"allow": ["*"]} for key in owner_keys or []}
+    for group_map in scopes:
+        for group in group_map.values():
+            if not isinstance(group, dict):
+                raise SystemExit("group config must be an object")
+            old_tools = group.get("tools")
+            if old_tools is not None and old_tools != wanted_tools:
+                raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
+            old_senders = group.get("toolsBySender")
+            if old_senders is not None and old_senders != wanted_owner:
+                raise SystemExit("unexpected group sender policy; refuse to replace unrelated restrictions")
+            group["tools"] = {"allow": list(GROUP_IMAGE_TOOL_ALLOWLIST)}
+            if owner_keys:
+                group["toolsBySender"] = {key: {"allow": ["*"]} for key in owner_keys}
+
 def main() -> None:
     if len(sys.argv) != 8:
         raise SystemExit("usage: openclaw_prepare.py DATA_DIR CONFIG_B64 TEAM_B64 AGENTS_SEED_B64 SOUL_SEED_B64 USER_SEED_B64 MEMORY_SEED_B64")
@@ -277,11 +314,8 @@ def main() -> None:
                 account["dmPolicy"] = "open"
                 account["allowFrom"] = ["*"]
                 account["configWrites"] = False
-    groups = whatsapp.setdefault("groups", {})
-    for group in groups.values():
-        if isinstance(group, dict):
-            group.pop("tools", None)
-            group.pop("toolsBySender", None)
+    ensure_group_image_policies(whatsapp, owner_tool_policy_keys(phone))
+    ensure_group_image_policies(config.setdefault("channels", {}).setdefault("telegram", {}))
 
     temporary = config_dir / "openclaw.json.codex-tmp"
     temporary.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n")

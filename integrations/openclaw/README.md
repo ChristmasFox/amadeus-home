@@ -51,12 +51,33 @@ files, writes concrete runtime values to the mounted config with a backup, and
 refuses to start if the identities or required secret files are missing.
 
 WhatsApp Web pairing state is runtime data under `/DATA/AppData/openclaw`; it
-is never copied into Git. Channel policy is configured as open groups with
-`requireMention=false`; group members inherit the full agent tool profile,
-including PUBG and normal Amadeus capabilities. High-risk operations still
-enforce their own owner/confirmation checks. The current runtime account id is
-`secondary`; the previous default account's credentials were archived outside
-the repository before the switch.
+is never copied into Git. Channel admission remains open groups with
+`requireMention=false`. The owner retains the full native tool profile minus
+the global `tts,message` deny. Other admitted group senders receive only
+`web_search`, `web_fetch`, and native `image_generate`; non-owner direct chats
+remain web-only. The source-managed group policy is scoped to WhatsApp and
+Telegram and does not grant sensitive Amadeus, runtime, filesystem, NAS,
+HomeLab, VPS, or Identity mutation tools. The pinned 2026.9.4 policy layers
+intersect group and global sender allowlists; the strict version-pinned image
+policy patch in the immutable OpenClaw image lets only a verified group image
+allowlist add `image_generate` through the global sender layer. It does not
+remove any deny or create a second tool. High-risk operations keep their
+owner/confirmation checks. The current WhatsApp runtime account id is
+`secondary`; its previous account credentials were archived outside Git.
+
+The candidate default image model is the stable `openai/amadeus-image` logical
+capability over the existing 9Router OpenAI-compatible provider and SecretRef.
+One native `image_generate` call reaches 9Router; 9Router, not OpenClaw,
+performs ordered fallback from `ag/gemini-3.1-flash-image` to
+`cx/gpt-image-2.5`. The image Skill is provider-neutral and covers new-image
+generation only; reference-image editing parity is deferred. Native TTS uses
+`tts.auto=tagged`: a verified inbound voice note or a typed explicit voice
+request can emit the same `voice-reply` block and receive Japanese audio plus
+visible Japanese/Chinese text. Ordinary untagged typed replies stay text-only;
+`amadeus-tts`, `kurisu-v1`, MP3, the 1200-character cap, and the 120-second
+timeout remain unchanged. The inbound WhatsApp voice lease is still required
+for inbound-audio-specific prompt injection and is never synthesized by a
+typed request.
 
 `workspace-seed/*.seed.md` files are Git-managed initial seeds only. Runtime
 state under `/DATA/AppData/openclaw/workspace` is authoritative: prepare/apply

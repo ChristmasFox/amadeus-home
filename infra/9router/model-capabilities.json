@@ -1,0 +1,11 @@
+{
+  "image": {
+    "name": "amadeus-image",
+    "kind": "image",
+    "strategy": "fallback",
+    "models": [
+      "ag/gemini-3.1-flash-image",
+      "cx/gpt-image-2.5"
+    ]
+  }
+}

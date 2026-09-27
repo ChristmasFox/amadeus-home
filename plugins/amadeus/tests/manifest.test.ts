@@ -79,10 +79,11 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   ) as { appendSystemContext?: string } | undefined;
   assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /spoken audio MUST be\s+Japanese/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /even if the user explicitly asks for a Chinese\s+spoken reply/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /preserve the\s+existing ordinary text-message behavior, including the user's explicit\s+language request/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /even if the user asks\s+for Chinese speech/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /For typed input that does not explicitly request voice output, continue the\s+existing text-only path/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /A typed request never impersonates the\s+verified inbound WhatsApp voice lease/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /the same Japanese answer, written naturally with Japanese kanji and kana/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the same Japanese sentence as the 日本語 line/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the\s+same Japanese sentence as the 日本語 line/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /do not call the read tool to retrieve that Skill again/u);
   (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');

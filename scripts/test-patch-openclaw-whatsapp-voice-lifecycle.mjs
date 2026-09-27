@@ -11,6 +11,7 @@ import {
   WHATSAPP_INGRESS_QUEUE_MARKER,
   WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER,
+  WHATSAPP_TAGGED_TYPED_GUARD_MARKER,
   ensureAmadeusJapaneseVoiceText,
   resolveAmadeusJapaneseSpeechText,
   patchTtsSource,
@@ -19,6 +20,7 @@ import {
   patchWhatsAppIngressQueueSource,
   patchWhatsAppJapaneseTextSource,
   patchWhatsAppJapaneseAudioGuardSource,
+  patchWhatsAppTaggedTypedGuardSource,
   resolveVoiceFollowup,
   whatsappHelpers,
   whatsappIngressQueueHelpers,
@@ -160,7 +162,8 @@ assert.equal(resolveAmadeusJapaneseSpeechText('', '少し待って。'), '少し
 const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
 const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);
 const patchedWhatsAppVisible = patchWhatsAppJapaneseTextSource(patchedWhatsAppIngress);
-const patchedWhatsApp = patchWhatsAppJapaneseAudioGuardSource(patchedWhatsAppVisible);
+const patchedWhatsAppAudio = patchWhatsAppJapaneseAudioGuardSource(patchedWhatsAppVisible);
+const patchedWhatsApp = patchWhatsAppTaggedTypedGuardSource(patchedWhatsAppAudio);
 const legacyVisible = patchedWhatsAppVisible.replace(
   ensureAmadeusJapaneseVoiceText.toString(),
   'function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) { return payload; }',
@@ -173,6 +176,16 @@ assert.ok(patchedWhatsApp.includes(WHATSAPP_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_INGRESS_QUEUE_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER));
+assert.ok(patchedWhatsApp.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER));
+const v1Audio = patchedWhatsAppAudio.replace(
+  "if (!payload || typeof payload !== 'object') return payload;",
+  "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;",
+);
+assert.notEqual(v1Audio, patchedWhatsAppAudio);
+const upgradedTyped = patchWhatsAppTaggedTypedGuardSource(v1Audio);
+assert.ok(upgradedTyped.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER));
+assert.ok(upgradedTyped.includes("if (!payload || typeof payload !== 'object') return payload;"));
+assert.ok(!upgradedTyped.includes("if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;"));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_TIMEOUT_MS = 120000'));
 assert.ok(patchedWhatsApp.includes('AMADEUS_VOICE_REPLY_REFRESH_MS = 3000'));
 assert.ok(patchedWhatsApp.includes('finally(() => closeAmadeusVoiceReplyLeaseForTurn(params.route.sessionKey, params.msg.event.id))'), 'the lease is held until the whole inbound dispatcher settles');
@@ -186,6 +199,7 @@ assert.equal(patchWhatsAppSource(patchedWhatsApp), patchedWhatsApp, 'base WhatsA
 assert.equal(patchWhatsAppIngressQueueSource(patchedWhatsApp), patchedWhatsApp, 'ingress queue patch is idempotent');
 assert.equal(patchWhatsAppJapaneseTextSource(patchedWhatsApp), patchedWhatsApp, 'Japanese visible-text patch is idempotent');
 assert.equal(patchWhatsAppJapaneseAudioGuardSource(patchedWhatsApp), patchedWhatsApp, 'Japanese audio guard patch is idempotent');
+assert.equal(patchWhatsAppTaggedTypedGuardSource(patchedWhatsApp), patchedWhatsApp, 'tagged typed guard upgrade is idempotent');
 
 const japaneseVoice = '少し待って。結論を先に言うわ。';
 const chineseVoice = `中文：我会先说结论。`;
@@ -197,7 +211,7 @@ const voicePayload = {
 assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'voice audio payload appends the Japanese line derived from actual TTS text');
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n\n日本語：${japaneseVoice}` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'matching Japanese line is not duplicated');
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
-assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false), voicePayload, 'typed turns remain unchanged');
+assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'tagged typed TTS uses the same Japanese visible-text contract');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
 const chineseTtsPayload = {
   text: chineseVoice,
@@ -224,7 +238,7 @@ const blockedMixedBilingualAudio = ensureAmadeusJapaneseVoiceText(mixedBilingual
 assert.equal(blockedMixedBilingualAudio.mediaUrl, undefined, 'mixed bilingual PTT is removed before WhatsApp delivery');
 assert.doesNotMatch(blockedMixedBilingualAudio.text, /日本語：/u, 'mixed bilingual visible text does not retain duplicated Japanese labels');
 assert.match(blockedMixedBilingualAudio.text, /日语语音暂时无法生成/u, 'mixed bilingual PTT fails closed to a visible text notice');
-assert.equal(ensureAmadeusJapaneseVoiceText(chineseTtsPayload, false), chineseTtsPayload, 'typed-only turns keep their existing delivery path');
+assert.equal(ensureAmadeusJapaneseVoiceText(chineseTtsPayload, false).mediaUrl, undefined, 'tagged typed Chinese speech fails closed');
 const missingSpeechText = ensureAmadeusJapaneseVoiceText({ mediaUrl: 'unknown-ptt.ogg', audioAsVoice: true }, true);
 assert.equal(missingSpeechText.mediaUrl, undefined, 'PTT without speech source also fails closed');
 assert.match(missingSpeechText.text, /日语语音暂时无法生成/u);
