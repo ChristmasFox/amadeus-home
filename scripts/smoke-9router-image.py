@@ -52,7 +52,7 @@ def main() -> None:
     parser.add_argument("--machine", default="nyannyan")
     args = parser.parse_args()
     desired = json.loads(DESIRED.read_text())["image"]
-    if desired["name"] != "amadeus-image" or desired["models"] != ["ag/gemini-3.1-flash-image", "cx/gpt-image-2.5"]:
+    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.5", "ag/gemini-3.1-flash-image"]:
         raise SystemExit("desired image Combo no longer matches the pinned smoke")
     if not args.apply:
         print("MODE=dry-run; no authenticated image request")
@@ -80,8 +80,8 @@ def main() -> None:
         capture_output=True, text=True, timeout=30,
     )
     output = logs.stdout + logs.stderr if logs.returncode == 0 else ""
-    first = 'Trying model 1/2: ag/gemini-3.1-flash-image' in output
-    first_ok = 'Model ag/gemini-3.1-flash-image succeeded' in output
+    first = 'Trying model 1/2: cx/gpt-image-2.5' in output
+    first_ok = 'Model cx/gpt-image-2.5 succeeded' in output
     print("FIRST_BACKEND_ATTEMPT=" + ("observed" if first else "unverified"))
     print("FIRST_BACKEND_SUCCESS=" + ("observed" if first_ok else "unverified"))
     print("GENERATED_MEDIA=memory_only_not_retained")

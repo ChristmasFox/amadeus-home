@@ -68,8 +68,8 @@ owner/confirmation checks. The current WhatsApp runtime account id is
 The candidate default image model is the stable `openai/amadeus-image` logical
 capability over the existing 9Router OpenAI-compatible provider and SecretRef.
 One native `image_generate` call reaches 9Router; 9Router, not OpenClaw,
-performs ordered fallback from `ag/gemini-3.1-flash-image` to
-`cx/gpt-image-2.5`. The image Skill is provider-neutral and covers new-image
+performs ordered fallback from `cx/gpt-image-2.5` to
+`ag/gemini-3.1-flash-image`. The image Skill is provider-neutral and covers new-image
 generation only; reference-image editing parity is deferred. Native TTS uses
 `tts.auto=tagged`: a verified inbound voice note or a typed explicit voice
 request can emit the same `voice-reply` block and receive Japanese audio plus

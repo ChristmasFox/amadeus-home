@@ -361,12 +361,15 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before \
   "$OPENCLAW_DATA_DIR/config/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
-import hashlib, json, os, shutil, subprocess, sys
+import hashlib, json, os, shutil, stat, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 checkpoint = Path(sys.argv[1])
-if checkpoint.exists(): raise SystemExit('checkpoint already exists: ' + str(checkpoint))
-checkpoint.mkdir(parents=True)
+if checkpoint.exists() or checkpoint.is_symlink(): raise SystemExit('checkpoint already exists: ' + str(checkpoint))
+os.umask(0o077)
+checkpoint.mkdir(mode=0o700, parents=True)
+if stat.S_IMODE(checkpoint.stat().st_mode) != 0o700:
+    raise SystemExit('protected checkpoint directory is not mode 0700')
 args = sys.argv[2:]
 if len(args) % 2: raise SystemExit('checkpoint pairs are unbalanced')
 for i in range(0, len(args), 2):
@@ -403,6 +406,9 @@ for i in range(0, len(args), 2):
     'containersBeforeSwitch': containers,
     'note': 'External checkpoint; contains runtime data and protected secret copies needed for recovery. Secret contents are never printed or checksummed.'
 }, ensure_ascii=False, indent=2) + '\n')
+for name in ('backup-manifest.json', 'checkpoint.json'):
+    if stat.S_IMODE((checkpoint / name).stat().st_mode) != 0o600:
+        raise SystemExit('protected checkpoint manifest is not mode 0600')
 print('CHECKPOINT=' + str(checkpoint))
 PY
 

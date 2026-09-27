@@ -4,8 +4,8 @@
     "kind": "image",
     "strategy": "fallback",
     "models": [
-      "ag/gemini-3.1-flash-image",
-      "cx/gpt-image-2.5"
+      "cx/gpt-image-2.5",
+      "ag/gemini-3.1-flash-image"
     ]
   }
 }
