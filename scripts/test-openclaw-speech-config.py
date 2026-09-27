@@ -23,6 +23,11 @@ assert provider["models"] == [{
     "id": "ag/gemini-3.1-flash-image",
     "name": "Gemini 3.1 Flash Image",
 }]
+amadeus_manifest = json.loads((ROOT / "plugins/amadeus/openclaw.plugin.json").read_text())
+assert "skills/image-generation" in amadeus_manifest["skills"]
+image_skill = (ROOT / "plugins/amadeus/skills/image-generation/SKILL.md").read_text()
+assert "image_generate" in image_skill and "fixed trigger phrases" in image_skill
+assert "ag/gemini-3.1-flash-image" not in image_skill
 assert all(k == "openai" or not v.get("request", {}).get("allowPrivateNetwork")
            for k, v in c["models"]["providers"].items())
 media = c["tools"]["media"]
