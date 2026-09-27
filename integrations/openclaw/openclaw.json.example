@@ -22,11 +22,22 @@
     "dmScope": "per-account-channel-peer",
     "groupScope": "per-group"
   },
+  "browser": {
+    "ssrfPolicy": {
+      "dangerouslyAllowPrivateNetwork": true
+    }
+  },
   "agents": {
     "defaults": {
       "workspace": "/home/node/.openclaw/workspace",
       "model": {
         "primary": "nine_router/arthur-combo"
+      },
+      "mediaModels": {
+        "image": {
+          "primary": "openai/ag/gemini-3.1-flash-image",
+          "timeoutMs": 180000
+        }
       },
       "userTimezone": "Asia/Shanghai",
       "typingMode": "instant",
@@ -62,7 +73,12 @@
         "apiKey": { "source": "env", "provider": "default", "id": "OPENCLAW_9ROUTER_API_KEY" },
         "api": "openai-completions",
         "request": { "allowPrivateNetwork": true },
-        "models": []
+        "models": [
+          {
+            "id": "ag/gemini-3.1-flash-image",
+            "name": "Gemini 3.1 Flash Image"
+          }
+        ]
       }
     }
   },
