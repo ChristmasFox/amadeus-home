@@ -1,0 +1,2606 @@
+{
+  "additional_preserved_attempts": [
+    {
+      "anchor_pre_attempts": 0,
+      "anchor_pre_successful_endpoint_ms_excluded": [],
+      "anchor_pre_successful_samples": 0,
+      "created_utc": "2026-09-26T20:42:31.706467+00:00",
+      "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+      "launchagent_pid": 50062,
+      "matrix_attempts": 0,
+      "matrix_successes": 0,
+      "phase_status": {
+        "anchor-pre": {
+          "phase": "anchor-pre",
+          "status": "not_run"
+        },
+        "contention": {
+          "phase": "contention",
+          "status": "not_run"
+        },
+        "matrix": {
+          "phase": "matrix",
+          "status": "not_run"
+        },
+        "probes": {
+          "phase": "probes",
+          "status": "not_run"
+        },
+        "recovery": {
+          "phase": "recovery",
+          "status": "not_run"
+        },
+        "soak": {
+          "phase": "soak",
+          "status": "not_run"
+        },
+        "warmup": {
+          "completed_utc": "2026-09-26T20:49:41.888023+00:00",
+          "excluded_from_quantiles": true,
+          "phase": "warmup",
+          "reason": "swap_growth_over_512_mib_persisted_without_clear_decline_after_120s_idle_confirmation",
+          "status": "stopped",
+          "successful_warmups": null
+        }
+      },
+      "production_control_invariants_verified": true,
+      "relationship": "separate preserved attempt; not merged into primary statistics",
+      "resource_observations": {
+        "baseline_swap_used_bytes": 5955387392,
+        "max_observed_swap_growth_bytes": 1393232445,
+        "min_memory_free_percent": 66,
+        "min_observed_swap_free_bytes": 1241314754
+      },
+      "run_root_basename": "boundary-stress-2026-09-rebaseline-3",
+      "safety_stop_guards": {
+        "memory_free_percent_below": 10,
+        "physical_footprint_bytes_at_or_above": 21474836480,
+        "swap_free_immediate_stop_bytes": 536870912,
+        "swap_growth_clear_decline_bytes": 134217728,
+        "swap_growth_confirmation_window_s": 30,
+        "swap_growth_immediate_stop_bytes": 2147483648,
+        "swap_growth_max_confirmation_windows": 4,
+        "swap_growth_persistent_warning_bytes": 536870912
+      },
+      "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+      "stop_marker_discrepancy": null,
+      "stop_reason": "swap_growth_over_512_mib_persisted_without_clear_decline_after_120s_idle_confirmation",
+      "stopped_phase": "warmup",
+      "warmup": {
+        "attempts": 2,
+        "successful": 2,
+        "successful_endpoint_ms_excluded": [
+          6752.7,
+          6132.4
+        ]
+      }
+    },
+    {
+      "anchor_pre_attempts": 0,
+      "anchor_pre_successful_endpoint_ms_excluded": [],
+      "anchor_pre_successful_samples": 0,
+      "created_utc": "2026-09-26T21:14:50.935484+00:00",
+      "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+      "launchagent_pid": 50062,
+      "matrix_attempts": 0,
+      "matrix_successes": 0,
+      "phase_status": {
+        "anchor-pre": {
+          "phase": "anchor-pre",
+          "status": "not_run"
+        },
+        "contention": {
+          "phase": "contention",
+          "status": "not_run"
+        },
+        "matrix": {
+          "phase": "matrix",
+          "status": "not_run"
+        },
+        "probes": {
+          "phase": "probes",
+          "status": "not_run"
+        },
+        "recovery": {
+          "phase": "recovery",
+          "status": "not_run"
+        },
+        "soak": {
+          "phase": "soak",
+          "status": "not_run"
+        },
+        "warmup": {
+          "completed_utc": "2026-09-26T21:17:43.478183+00:00",
+          "excluded_from_quantiles": true,
+          "phase": "warmup",
+          "reason": "swap_growth_over_512_mib_persisted_without_clear_decline_after_120s_idle_confirmation",
+          "status": "stopped",
+          "successful_warmups": null
+        }
+      },
+      "production_control_invariants_verified": true,
+      "relationship": "separate preserved attempt; not merged into primary statistics",
+      "resource_observations": {
+        "baseline_swap_used_bytes": 6169621954,
+        "max_observed_swap_growth_bytes": 1124010558,
+        "min_memory_free_percent": 67,
+        "min_observed_swap_free_bytes": 1296302080
+      },
+      "run_root_basename": "boundary-stress-2026-09-rebaseline-4",
+      "safety_stop_guards": {
+        "memory_free_percent_below": 10,
+        "physical_footprint_bytes_at_or_above": 21474836480,
+        "swap_free_immediate_stop_bytes": 536870912,
+        "swap_growth_clear_decline_bytes": 134217728,
+        "swap_growth_confirmation_window_s": 30,
+        "swap_growth_immediate_stop_bytes": 2147483648,
+        "swap_growth_max_confirmation_windows": 4,
+        "swap_growth_persistent_warning_bytes": 536870912
+      },
+      "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+      "stop_marker_discrepancy": null,
+      "stop_reason": "swap_growth_over_512_mib_persisted_without_clear_decline_after_120s_idle_confirmation",
+      "stopped_phase": "warmup",
+      "warmup": {
+        "attempts": 1,
+        "successful": 1,
+        "successful_endpoint_ms_excluded": [
+          6782.9
+        ]
+      }
+    },
+    {
+      "anchor_pre_attempts": 1,
+      "anchor_pre_successful_endpoint_ms_excluded": [
+        6589.4
+      ],
+      "anchor_pre_successful_samples": 1,
+      "created_utc": "2026-09-26T21:27:39.819625+00:00",
+      "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+      "launchagent_pid": 50062,
+      "matrix_attempts": 0,
+      "matrix_successes": 0,
+      "phase_status": {
+        "anchor-pre": {
+          "completed_utc": "2026-09-26T21:34:50.573513+00:00",
+          "phase": "anchor-pre",
+          "reason": "system_free_swap_below_256_mib_safety_guard",
+          "status": "stopped",
+          "successful_samples": 1
+        },
+        "contention": {
+          "phase": "contention",
+          "status": "not_run"
+        },
+        "matrix": {
+          "phase": "matrix",
+          "status": "not_run"
+        },
+        "probes": {
+          "phase": "probes",
+          "status": "not_run"
+        },
+        "recovery": {
+          "phase": "recovery",
+          "status": "not_run"
+        },
+        "soak": {
+          "phase": "soak",
+          "status": "not_run"
+        },
+        "warmup": {
+          "completed_utc": "2026-09-26T21:33:52.118946+00:00",
+          "excluded_from_quantiles": true,
+          "phase": "warmup",
+          "status": "complete",
+          "successful_warmups": 3
+        }
+      },
+      "production_control_invariants_verified": true,
+      "relationship": "separate preserved attempt; not merged into primary statistics",
+      "resource_observations": {
+        "baseline_swap_used_bytes": 6353972101,
+        "max_observed_swap_growth_bytes": 1839076475,
+        "min_memory_free_percent": 69,
+        "min_observed_swap_free_bytes": 396886016
+      },
+      "run_root_basename": "boundary-stress-2026-09-rebaseline-5",
+      "safety_stop_guards": {
+        "memory_free_percent_below": 10,
+        "physical_footprint_bytes_at_or_above": 21474836480,
+        "swap_free_immediate_stop_bytes": 536870912,
+        "swap_growth_clear_decline_bytes": 134217728,
+        "swap_growth_confirmation_window_s": 30,
+        "swap_growth_immediate_stop_bytes": 2147483648,
+        "swap_growth_max_confirmation_windows": 12,
+        "swap_growth_persistent_warning_bytes": 536870912
+      },
+      "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+      "stop_marker_discrepancy": {
+        "marker_text_threshold_mib": 256,
+        "note": "Preserved marker text says 256 MiB; run manifest/configured guard is 512 MiB. Raw evidence is not rewritten.",
+        "observed_min_free_swap_bytes": 396886016,
+        "run_manifest_threshold_bytes": 536870912
+      },
+      "stop_reason": "system_free_swap_below_256_mib_safety_guard",
+      "stopped_phase": "anchor-pre",
+      "warmup": {
+        "attempts": 3,
+        "successful": 3,
+        "successful_endpoint_ms_excluded": [
+          7050.0,
+          6167.1,
+          6409.0
+        ]
+      }
+    },
+    {
+      "anchor_pre_attempts": 2,
+      "anchor_pre_successful_endpoint_ms_excluded": [
+        6323.4,
+        6397.7
+      ],
+      "anchor_pre_successful_samples": 2,
+      "created_utc": "2026-09-26T21:49:06.228822+00:00",
+      "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+      "launchagent_pid": 50062,
+      "matrix_attempts": 0,
+      "matrix_successes": 0,
+      "phase_status": {
+        "anchor-pre": {
+          "completed_utc": "2026-09-26T21:56:15.242072+00:00",
+          "phase": "anchor-pre",
+          "reason": "system_free_swap_below_512_mib_safety_guard",
+          "status": "stopped",
+          "successful_samples": 2
+        },
+        "contention": {
+          "phase": "contention",
+          "status": "not_run"
+        },
+        "matrix": {
+          "phase": "matrix",
+          "status": "not_run"
+        },
+        "probes": {
+          "phase": "probes",
+          "status": "not_run"
+        },
+        "recovery": {
+          "phase": "recovery",
+          "status": "not_run"
+        },
+        "soak": {
+          "phase": "soak",
+          "status": "not_run"
+        },
+        "warmup": {
+          "completed_utc": "2026-09-26T21:53:15.574325+00:00",
+          "excluded_from_quantiles": true,
+          "phase": "warmup",
+          "status": "complete",
+          "successful_warmups": 3
+        }
+      },
+      "production_control_invariants_verified": true,
+      "relationship": "separate preserved attempt; not merged into primary statistics",
+      "resource_observations": {
+        "baseline_swap_used_bytes": 6850871296,
+        "max_observed_swap_growth_bytes": 1282995650,
+        "min_memory_free_percent": 68,
+        "min_observed_swap_free_bytes": 456067645
+      },
+      "run_root_basename": "boundary-stress-2026-09-rebaseline-6",
+      "safety_stop_guards": {
+        "memory_free_percent_below": 10,
+        "physical_footprint_bytes_at_or_above": 21474836480,
+        "swap_free_immediate_stop_bytes": 536870912,
+        "swap_growth_clear_decline_bytes": 134217728,
+        "swap_growth_confirmation_window_s": 30,
+        "swap_growth_immediate_stop_bytes": 2147483648,
+        "swap_growth_max_confirmation_windows": 12,
+        "swap_growth_persistent_warning_bytes": 536870912
+      },
+      "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+      "stop_marker_discrepancy": null,
+      "stop_reason": "system_free_swap_below_512_mib_safety_guard",
+      "stopped_phase": "anchor-pre",
+      "warmup": {
+        "attempts": 3,
+        "successful": 3,
+        "successful_endpoint_ms_excluded": [
+          6136.1,
+          6428.1,
+          5905.1
+        ]
+      }
+    }
+  ],
+  "control": {
+    "9router_host_tts_health_route": "ready",
+    "active_mlx_library_mapped": true,
+    "disk_plist_valid_at_capture": true,
+    "engine": "mlx",
+    "engine_config": {
+      "mlxDependencies": {
+        "huggingface-hub": "1.33.0",
+        "imageio-ffmpeg": "0.6.0",
+        "mlx": "0.32.2",
+        "numpy": "2.3.5",
+        "psutil": "7.2.2",
+        "sentencepiece": "0.2.2",
+        "socksio": "1.0.0",
+        "soundfile": "0.14.0",
+        "transformers": "5.17.0"
+      },
+      "mlxModelId": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit",
+      "mlxModelRevision": "e7dd0585652209fa0d7783659aad4e8a324de11c",
+      "mlxPackageVersion": "0.5.6",
+      "mlxSourceRevision": "4ab7e6f7dedd69a136cfaa318c5dc8aed5119446",
+      "productionEngine": "mlx",
+      "profileId": "kurisu-v1"
+    },
+    "engine_source_config_sha256": "91e9b7383047ad59e11cc0c919604f45f0c05fa1ee729ed2cafe36ce26a9f2aa",
+    "git_commit": "858eaea783d51a2183732697bce059d8c03c8137",
+    "language": "Auto",
+    "launchagent_runtime_before_measurement": {
+      "health": "ready",
+      "launchd_runs": 1,
+      "launchd_state": "running",
+      "memory_free_percent": 72,
+      "physical_footprint_bytes": 3543348019,
+      "physical_footprint_peak_bytes": 18575733555,
+      "pid": 50062,
+      "process_elapsed": "14:02",
+      "process_start": "Sun Sep 27 03:00:11 2026",
+      "rss_bytes": 43679744,
+      "swap_growth_check": null,
+      "swap_total_bytes": 8589934592,
+      "swap_used_bytes": 7114787389
+    },
+    "launchd_process_type": "Interactive",
+    "launchd_spawn_type": "interactive",
+    "live_openclaw_tts_config": {
+      "baseUrl": "http://9router:20128/v1",
+      "maxTextLength": 1200,
+      "model": "amadeus-tts",
+      "provider": "openai",
+      "responseFormat": "mp3",
+      "speakerVoice": "kurisu-v1",
+      "timeoutMs": 120000
+    },
+    "mac_model_identifier": "Mac18,5",
+    "macos_version": "27.0",
+    "max_text_codepoints": 1200,
+    "openclaw_external_timeout_ms": 120000,
+    "pending_slots": 1,
+    "pending_start_timeout_s": 5,
+    "production_configuration_changed_by_goal": false,
+    "protected_a_reference_verified_unchanged": true,
+    "response_format": "mp3",
+    "service_bind": "0.0.0.0",
+    "service_port": 18792,
+    "service_source_sha256": "de6780fc0b96a6dea1be790a64b9f9c72bc299f433f968ef5bfb5ade16ce393a",
+    "unified_memory": "24 GB",
+    "version": "1.6.2",
+    "voice_profile_id": "kurisu-v1",
+    "workers": 1
+  },
+  "control_id": "prod-1.6.2-a-mlx-auto-interactive",
+  "decision_input_only": {
+    "extended_anchor_length": null,
+    "final_production_boundary_decision": "deferred to owner review; no policy recommendation",
+    "highest_p95_to_p50_ratios": [],
+    "routine_anchor_length": 150,
+    "safety_incomplete_buckets": [
+      {
+        "attempts": 1,
+        "length": 200,
+        "reason": "matrix phase stopped after memory-free fell to 10% during swap confirmation",
+        "status": "safety-incomplete",
+        "successful_samples": 1
+      },
+      {
+        "attempts": 0,
+        "length": 800,
+        "reason": "probe_measurement_or_connection_integrity_failed",
+        "status": "safety-incomplete",
+        "successful_samples": 0
+      },
+      {
+        "attempts": 0,
+        "length": 1000,
+        "reason": "progressive safety probes stopped at 800 codepoints",
+        "status": "not_probed_after_stop",
+        "successful_samples": 0
+      },
+      {
+        "attempts": 0,
+        "length": 1200,
+        "reason": "progressive safety probes stopped at 800 codepoints",
+        "status": "not_probed_after_stop",
+        "successful_samples": 0
+      }
+    ]
+  },
+  "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+  "goal_status": "incomplete-safety-stopped",
+  "input_length_unit": "Python Unicode codepoints; same semantics as len(text)",
+  "known_limitations": [
+    "This is one host, one protected voice profile, one selected MLX model revision, Auto Japanese fixtures, and MP3 endpoint responses.",
+    "The workload is a controlled synthetic benchmark and not real WhatsApp user traffic or a production SLA sample.",
+    "The unchanged MLX HTTP service does not expose separate Metal-driver allocation counters; physical footprint/RSS are point-sampled process/host proxies, not direct Metal allocation traces.",
+    "Model/decode work is exposed as generate_or_model_ms; the current MLX API does not provide a separate decode-stage boundary.",
+    "The experimental 110-second watchdog is below the unchanged 120-second OpenClaw timeout.",
+    "The report does not select a MAX_TEXT value, preferred spoken length, warning threshold, segmentation policy, or lifecycle policy."
+  ],
+  "matrix_buckets": [
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 25,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 4889.6
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 50,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 5899.7
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 100,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 8212.5
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 150,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 11227.4
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 1,
+      "failure_rate": 0.0,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 200,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 13401.2
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "matrix phase stopped after memory-free fell to 10% during swap confirmation",
+      "status": "safety-incomplete",
+      "successful_samples": 1
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 250,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 15259.9
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 320,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 20757.3
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 400,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 27136.8
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 500,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 29667.6
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 600,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": null,
+            "http_status": 200,
+            "request_submitted": true,
+            "success": true,
+            "total_ms": 33955.7
+          }
+        ],
+        "status": "passed"
+      },
+      "reason": "Phase C stopped at the 200-codepoint matrix batch",
+      "status": "matrix-not-run-after-safety-stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 800,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [
+          {
+            "error_category": "watchdog_timeout",
+            "http_status": null,
+            "request_submitted": true,
+            "success": false,
+            "total_ms": 110002.5
+          }
+        ],
+        "status": "safety-incomplete"
+      },
+      "reason": "probe_measurement_or_connection_integrity_failed",
+      "status": "safety-incomplete",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 1000,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [],
+        "status": "not_probed_after_stop"
+      },
+      "reason": "progressive safety probes stopped at 800 codepoints",
+      "status": "not_probed_after_stop",
+      "successful_samples": 0
+    },
+    {
+      "attempts": 0,
+      "failure_rate": null,
+      "failures": 0,
+      "fixture_A_B": null,
+      "length_codepoints": 1200,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "encode_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "engine_inside_lock_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "generate_or_model_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "queue_wait_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "rtf": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "total_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        },
+        "wav_serialize_ms": {
+          "max": null,
+          "n": 0,
+          "p50": null,
+          "p95": null
+        }
+      },
+      "probe": {
+        "attempts": [],
+        "status": "not_probed_after_stop"
+      },
+      "reason": "progressive safety probes stopped at 800 codepoints",
+      "status": "not_probed_after_stop",
+      "successful_samples": 0
+    }
+  ],
+  "matrix_not_run_after_safety_stop": [],
+  "matrix_safety_stop_observation": {
+    "additional_tts_requests_after_stop": 0,
+    "observed_free_percent_at_operator_stop": 10,
+    "observed_swap_free_mib_at_operator_stop": 563.44,
+    "operator_interrupted": true,
+    "partial_response_count": 1,
+    "persisted_matrix_rows": 1,
+    "post_stop_service": {
+      "health": "ready",
+      "launchd_runs": 1,
+      "memory_free_percent": 72,
+      "physical_footprint_bytes": 3650722201,
+      "physical_footprint_peak_bytes": 20508468838,
+      "pid": 50062,
+      "swap_free_bytes": 847773696,
+      "swap_used_bytes": 6668419072
+    },
+    "reason": "A live read-only system snapshot during the post-request idle swap-confirmation wait showed memory free at 10% and 563.44 MiB free swap; the active matrix phase was stopped conservatively."
+  },
+  "memory_observations": {
+    "accounting_notes": [
+      "RSS is the inference process resident set; physical footprint comes from point-sampled vmmap output after/before requests.",
+      "vmmap physical-footprint peak is a process-lifetime high-water mark, not an individual-request attribution.",
+      "memory_pressure free percentage and vm.swapusage are system-wide macOS snapshots; swap can retain prior workload history.",
+      "A sampled maximum is not a continuous trace; transient peaks between snapshots may be missed."
+    ],
+    "baseline_before_stress": {
+      "health": "ready",
+      "launchd_runs": 1,
+      "launchd_state": "running",
+      "memory_free_percent": 72,
+      "physical_footprint_bytes": 3543348019,
+      "physical_footprint_peak_bytes": 18575733555,
+      "pid": 50062,
+      "process_elapsed": "14:02",
+      "process_start": "Sun Sep 27 03:00:11 2026",
+      "rss_bytes": 43679744,
+      "swap_growth_check": null,
+      "swap_total_bytes": 8589934592,
+      "swap_used_bytes": 7114787389
+    },
+    "matrix_max_sampled_physical_footprint_bytes": 4080218931,
+    "matrix_max_sampled_process_lifetime_footprint_peak_bytes": 20508468838,
+    "matrix_max_sampled_rss_bytes": 136052736,
+    "matrix_min_system_memory_free_percent": 70,
+    "matrix_swap_delta_min_to_max_bytes": 677306696,
+    "matrix_swap_max_bytes": 8222010245,
+    "matrix_swap_min_bytes": 7544703549,
+    "maximum_observed_process_lifetime_footprint_peak_bytes": 20508468838,
+    "post_safety_stop_process_lifetime_footprint_peak_bytes": 20508468838,
+    "preflight_min_system_memory_free_percent": 67,
+    "preflight_point_sampled_max_physical_footprint_bytes": 14388140441,
+    "preflight_point_sampled_max_rss_bytes": 205438976,
+    "preflight_process_lifetime_footprint_peak_bytes": 20508468838,
+    "preflight_swap_growth_checks": [
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          71
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 982578626,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          576454656,
+          492568576
+        ],
+        "initial_delta_bytes": 576454656,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1542916669,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1190584648,
+          1005972357
+        ],
+        "initial_delta_bytes": 1190584648,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1752631869,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          947252101,
+          796257157
+        ],
+        "initial_delta_bytes": 947252101,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1678445117,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1029827461,
+          870443909
+        ],
+        "initial_delta_bytes": 1029827461,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          73,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 882051645,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          845278085,
+          778169221,
+          593095557
+        ],
+        "initial_delta_bytes": 845278085,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1530522501,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1337133629,
+          1018366525
+        ],
+        "initial_delta_bytes": 1337133629,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          73,
+          74
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 935004733,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          984812093,
+          892537405,
+          540142469
+        ],
+        "initial_delta_bytes": 984812093,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          71
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1734543933,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1124796989,
+          814345093
+        ],
+        "initial_delta_bytes": 1124796989,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1013710848,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          696317379,
+          461436355
+        ],
+        "initial_delta_bytes": 696317379,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          74,
+          75
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1298986434,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1409286144,
+          1308622848,
+          1249902592
+        ],
+        "initial_delta_bytes": 1409286144,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          75,
+          75
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1483535810,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1224736768,
+          1157627904,
+          1065353216
+        ],
+        "initial_delta_bytes": 1224736768,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1529348096,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1455748547,
+          1019540931
+        ],
+        "initial_delta_bytes": 1455748547,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1747514818,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          960820675,
+          801374208
+        ],
+        "initial_delta_bytes": 960820675,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1604971397,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1078135357,
+          943917629
+        ],
+        "initial_delta_bytes": 1078135357,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          73,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1823075205,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          918751805,
+          851642941,
+          725813821
+        ],
+        "initial_delta_bytes": 918751805,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3758096384,
+        "confirmation_swap_free_bytes": 1634404925,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1250028421,
+          914484101
+        ],
+        "initial_delta_bytes": 1250028421,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 3,
+        "confirmation_memory_free_percent": [
+          73,
+          73,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3758096384,
+        "confirmation_swap_free_bytes": 845875773,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          872541061,
+          822209413,
+          755100549,
+          629271429
+        ],
+        "initial_delta_bytes": 872541061,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          71,
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 965937725,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          668593029,
+          551152517,
+          509209477
+        ],
+        "initial_delta_bytes": 668593029,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1024983040,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          575993283,
+          450164163
+        ],
+        "initial_delta_bytes": 575993283,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          72,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 835452928,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          799077827,
+          715191747,
+          639694275
+        ],
+        "initial_delta_bytes": 799077827,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          73,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 944504832,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          631305667,
+          572585411,
+          530642371
+        ],
+        "initial_delta_bytes": 631305667,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          72,
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 999880130,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          743765443,
+          668267971,
+          475267072
+        ],
+        "initial_delta_bytes": 743765443,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          72,
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 856361533,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          794946437,
+          677505925,
+          618785669
+        ],
+        "initial_delta_bytes": 794946437,
+        "state": "elevated_but_decreasing"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1007356477,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          618785669,
+          467790725
+        ],
+        "initial_delta_bytes": 618785669,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          71,
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1089470464,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          629009285,
+          570289029,
+          385676739
+        ],
+        "initial_delta_bytes": 629009285,
+        "state": "transient_recovered"
+      },
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 943980544,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          598275523,
+          531166659
+        ],
+        "initial_delta_bytes": 598275523,
+        "state": "transient_recovered"
+      }
+    ],
+    "preflight_swap_max_bytes": 8570535936,
+    "preflight_swap_min_bytes": 7251427328,
+    "swap_growth_confirmation_observations": [
+      {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          71
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 813233602,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1107222856,
+          661913600
+        ],
+        "initial_delta_bytes": 1107222856,
+        "state": "elevated_but_decreasing"
+      }
+    ]
+  },
+  "p95_interpretation": "Controlled descriptive p95; n=20 is not an SLA or a high-confidence production tail estimate.",
+  "partial_matrix_attempts_excluded_from_quantiles": [
+    {
+      "audio_duration_ms": 24960,
+      "client_total_ms": 15024.1,
+      "family": "A",
+      "generate_or_model_ms": 14703.5,
+      "length": 200,
+      "percentile_eligible": false,
+      "representative": false,
+      "request_submitted": true,
+      "rtf": 0.589,
+      "success_response_row_persisted": true
+    },
+    {
+      "audio_duration_ms": 32320,
+      "client_total_ms": null,
+      "family": "B",
+      "generate_or_model_ms": 15812.5,
+      "length": 200,
+      "note": "Validated MP3 was retained outside Git, but the client-timing JSON row was interrupted before fsync; service metrics are time-correlated only and client total_ms is unavailable.",
+      "percentile_eligible": false,
+      "representative": false,
+      "request_submitted": true,
+      "rtf": 0.489,
+      "success_response_row_persisted": false
+    }
+  ],
+  "phase_status": {
+    "anchor-pre": {
+      "attempts": 20,
+      "completed_utc": "2026-09-26T19:26:27.350020+00:00",
+      "phase": "anchor-pre",
+      "status": "complete",
+      "successful_samples": 20
+    },
+    "contention": {
+      "phase": "contention",
+      "status": "not_run"
+    },
+    "matrix": {
+      "completed_utc": "2026-09-26T20:13:01.448277+00:00",
+      "memory_free_percent_at_stop": 10,
+      "partial_responses": 1,
+      "persisted_rows": 1,
+      "phase": "matrix",
+      "reason": "safety stop: live snapshot during post-request swap confirmation reached 10% system memory free with 563.44 MiB free swap",
+      "scheduled_length_at_stop": 200,
+      "status": "stopped",
+      "swap_free_mib_at_stop": 563.44,
+      "uncontrolled_service_restart": false
+    },
+    "probes": {
+      "completed_utc": "2026-09-26T19:45:19.691417+00:00",
+      "passed_lengths": [
+        25,
+        50,
+        100,
+        150,
+        200,
+        250,
+        320,
+        400,
+        500,
+        600
+      ],
+      "phase": "probes",
+      "reason": "probe_measurement_or_connection_integrity_failed",
+      "status": "stopped"
+    },
+    "recovery": {
+      "phase": "recovery",
+      "status": "not_run"
+    },
+    "soak": {
+      "phase": "soak",
+      "status": "not_run"
+    },
+    "warmup": {
+      "completed_utc": "2026-09-26T19:15:39.175720+00:00",
+      "excluded_from_quantiles": true,
+      "phase": "warmup",
+      "status": "complete",
+      "successful_warmups": 3
+    }
+  },
+  "pre_post_stress_control": {
+    "post": {
+      "attempts": 0,
+      "failure": 0,
+      "host_after": null,
+      "host_before": null,
+      "observations": 0,
+      "success": 0,
+      "total_ms": {
+        "max": null,
+        "n": 0,
+        "p50": null,
+        "p95": null
+      }
+    },
+    "post_p50_change_vs_pre": null,
+    "pre": {
+      "attempts": 20,
+      "failure": 0,
+      "host_after": {
+        "health": "ready",
+        "launchd_runs": 1,
+        "launchd_state": "running",
+        "memory_free_percent": 73,
+        "physical_footprint_bytes": 3543348019,
+        "physical_footprint_peak_bytes": 18790481920,
+        "pid": 50062,
+        "process_elapsed": "26:15",
+        "process_start": "Sun Sep 27 03:00:11 2026",
+        "rss_bytes": 53641216,
+        "swap_growth_check": null,
+        "swap_total_bytes": 8589934592,
+        "swap_used_bytes": 7645954048
+      },
+      "host_before": {
+        "health": "ready",
+        "launchd_runs": 1,
+        "launchd_state": "running",
+        "memory_free_percent": 74,
+        "physical_footprint_bytes": 3543348019,
+        "physical_footprint_peak_bytes": 18575733555,
+        "pid": 50062,
+        "process_elapsed": "15:39",
+        "process_start": "Sun Sep 27 03:00:11 2026",
+        "rss_bytes": 49709056,
+        "swap_growth_check": null,
+        "swap_total_bytes": 8589934592,
+        "swap_used_bytes": 7593462333
+      },
+      "observations": 20,
+      "success": 20,
+      "total_ms": {
+        "max": 5950.4,
+        "n": 20,
+        "p50": 5795.05,
+        "p95": 5950.115000000001
+      }
+    }
+  },
+  "predecessor_preflight_attempt": {
+    "first_warmup_post_sample_swap_used_bytes": 8123968389,
+    "first_warmup_swap_delta_bytes": 832758088,
+    "first_warmup_swap_growth_check": {
+      "confirmation_memory_free_percent": 71,
+      "confirmation_physical_footprint_bytes": 3543348019,
+      "confirmation_swap_used_bytes": 7838755717,
+      "confirmation_window_s": 30,
+      "confirmed_delta_bytes": 547545416,
+      "initial_delta_bytes": 832758088,
+      "state": "persistent_stop"
+    },
+    "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+    "idle_observation_after_stop": {
+      "elapsed_seconds": 2106.1,
+      "health": {
+        "http_status": 200,
+        "model": "qwen3-tts-1.7b",
+        "status": "ready",
+        "voice": "kurisu-v1"
+      },
+      "launchd_pid": 50062,
+      "launchd_runs": 1,
+      "memory_free_percent": 73,
+      "observed_utc": "2026-09-26T19:13:34.700514+00:00",
+      "physical_footprint_bytes": 3543348019,
+      "physical_footprint_peak_bytes": 18575733555,
+      "production_service_restarted_for_same_value_repair": true,
+      "swap_delta_from_first_warmup_bytes": -950460744,
+      "swap_delta_from_prior_control_bytes": -117702656,
+      "swap_used_bytes": 7173507645
+    },
+    "matrix_or_anchor_samples_collected": 0,
+    "prior_attempt_chain": [
+      {
+        "first_warmup_post_sample_swap_used_bytes": 7594898882,
+        "first_warmup_swap_delta_bytes": 897182597,
+        "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+        "idle_observation_after_stop": {
+          "elapsed_seconds": 487.8,
+          "health": {
+            "http_status": 200,
+            "model": "qwen3-tts-1.7b",
+            "status": "ready",
+            "voice": "kurisu-v1"
+          },
+          "launchd_pid": 26512,
+          "launchd_runs": 1,
+          "memory_free_percent": 72,
+          "observed_utc": "2026-09-26T18:35:35.965613+00:00",
+          "physical_footprint_bytes": 3543348019,
+          "physical_footprint_peak_bytes": 19434727014,
+          "production_service_restarted": false,
+          "swap_delta_from_first_warmup_bytes": -295299973,
+          "swap_delta_from_prior_control_bytes": 601882624,
+          "swap_used_bytes": 7299598909
+        },
+        "matrix_or_anchor_samples_collected": 0,
+        "prior_control_baseline_swap_used_bytes": 6697716285,
+        "rebaseline_reason": "The first run was terminated and preserved. A new run captures a fresh ambient baseline; its persistent-swap confirmation guard was set before any sample.",
+        "run_root_basename": "boundary-stress-2026-09",
+        "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+        "status": "stopped",
+        "stop_reason": "swap_growth_reached_512_mib_safety_guard",
+        "stopped_phase": "first excluded 50-character A warmup",
+        "successful_excluded_warmups": 1
+      }
+    ],
+    "prior_control_baseline_swap_used_bytes": 7291210301,
+    "rebaseline_reason": "All stopped attempts are preserved and excluded. This run shares the exact fixture/schedule hashes, captures a fresh control after the explicitly authorized same-value plist recovery, and uses a trend-based swap guard fixed before measurement.",
+    "run_root_basename": "boundary-stress-2026-09-rebaseline-1",
+    "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+    "status": "stopped",
+    "stop_reason": "swap_growth_persisted_512_mib_after_30s_idle_confirmation",
+    "stopped_phase": "first excluded 50-character A warmup",
+    "successful_excluded_warmups": 1
+  },
+  "prior_preflight_attempt_chain": [
+    {
+      "first_warmup_post_sample_swap_used_bytes": 7594898882,
+      "first_warmup_swap_delta_bytes": 897182597,
+      "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+      "idle_observation_after_stop": {
+        "elapsed_seconds": 487.8,
+        "health": {
+          "http_status": 200,
+          "model": "qwen3-tts-1.7b",
+          "status": "ready",
+          "voice": "kurisu-v1"
+        },
+        "launchd_pid": 26512,
+        "launchd_runs": 1,
+        "memory_free_percent": 72,
+        "observed_utc": "2026-09-26T18:35:35.965613+00:00",
+        "physical_footprint_bytes": 3543348019,
+        "physical_footprint_peak_bytes": 19434727014,
+        "production_service_restarted": false,
+        "swap_delta_from_first_warmup_bytes": -295299973,
+        "swap_delta_from_prior_control_bytes": 601882624,
+        "swap_used_bytes": 7299598909
+      },
+      "matrix_or_anchor_samples_collected": 0,
+      "prior_control_baseline_swap_used_bytes": 6697716285,
+      "rebaseline_reason": "The first run was terminated and preserved. A new run captures a fresh ambient baseline; its persistent-swap confirmation guard was set before any sample.",
+      "run_root_basename": "boundary-stress-2026-09",
+      "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+      "status": "stopped",
+      "stop_reason": "swap_growth_reached_512_mib_safety_guard",
+      "stopped_phase": "first excluded 50-character A warmup",
+      "successful_excluded_warmups": 1
+    }
+  ],
+  "quantile_method": "Hyndman-Fan type 7 (linear interpolation; h=(n-1)p)",
+  "queue_contention": {
+    "by_length": {},
+    "phase": {
+      "phase": "contention",
+      "status": "not_run"
+    },
+    "summary": {
+      "reason": null,
+      "status": "not_run"
+    }
+  },
+  "report_generated_utc": "2026-09-26T21:57:51.102495+00:00",
+  "representative_listening_artifacts": {
+    "artifacts": [],
+    "control_id": "prod-1.6.2-a-mlx-auto-interactive",
+    "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+    "incomplete_buckets": [
+      {
+        "attempts": 0,
+        "length": 25,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 50,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 100,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 150,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 1,
+        "length": 200,
+        "reason": "matrix stopped during post-request memory-pressure confirmation after one persisted and one partial 200-codepoint response",
+        "representative": false,
+        "status": "safety-incomplete",
+        "success": 1
+      },
+      {
+        "attempts": 0,
+        "length": 250,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 320,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 400,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 500,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 600,
+        "reason": "Phase C stopped at the 200-codepoint matrix batch",
+        "representative": false,
+        "status": "matrix-not-run-after-safety-stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 800,
+        "reason": "probe_measurement_or_connection_integrity_failed",
+        "representative": false,
+        "status": "safety-incomplete",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 1000,
+        "reason": "progressive safety probes stopped at 800 codepoints",
+        "representative": false,
+        "status": "not_probed_after_stop",
+        "success": 0
+      },
+      {
+        "attempts": 0,
+        "length": 1200,
+        "reason": "progressive safety probes stopped at 800 codepoints",
+        "representative": false,
+        "status": "not_probed_after_stop",
+        "success": 0
+      }
+    ],
+    "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+    "selection_rule": "fixture A only; type-7 p50 total_ms; nearest absolute distance; lower fixture_run_index breaks ties"
+  },
+  "safety_probe_failures": [
+    {
+      "error_category": "watchdog_timeout",
+      "http_status": null,
+      "length": 800,
+      "total_ms": 110002.5
+    }
+  ],
+  "safety_stop_guards": {
+    "memory_free_percent_below": 10,
+    "physical_footprint_bytes_at_or_above": 21474836480,
+    "swap_free_immediate_stop_bytes": 536870912,
+    "swap_growth_clear_decline_bytes": 134217728,
+    "swap_growth_confirmation_window_s": 30,
+    "swap_growth_immediate_stop_bytes": 2147483648,
+    "swap_growth_max_confirmation_windows": 4,
+    "swap_growth_persistent_warning_bytes": 536870912
+  },
+  "safety_stop_observation": {
+    "additional_tts_requests_after_stop": 0,
+    "captured_utc": "2026-09-26T19:53:31.163582+00:00",
+    "client_watchdog_s": 110,
+    "failure_log_attribution": "time-correlated only; no request id; benchmark initiated no further synthesis after watchdog",
+    "latest_post_stop_synthesis_failure_log": {
+      "error_category": "RuntimeError",
+      "timestamp_local": "2026-09-27 03:45:43,340"
+    },
+    "launchd_pid": 50062,
+    "launchd_runs": 1,
+    "launchd_spawn_type": "interactive",
+    "memory_free_percent": 76,
+    "physical_footprint_peak_raw": "19.1G",
+    "physical_footprint_raw": "3.8G",
+    "probe_error": "watchdog_timeout",
+    "probe_timestamp_utc": "2026-09-26T19:45:18.928259+00:00",
+    "probe_total_ms": 110002.5,
+    "production_service_restarted_after_stop": false,
+    "request_id_available_in_unchanged_service_log": false,
+    "safety_phase": "B progressive safety probes",
+    "service_health": {
+      "model": "qwen3-tts-1.7b",
+      "status": "ready",
+      "voice": "kurisu-v1"
+    },
+    "stopped_at_codepoints": 800,
+    "swapusage_raw": "vm.swapusage: total = 8192.00M  used = 7435.19M  free = 756.81M  (encrypted)"
+  },
+  "same_value_recovery_checkpoint": {
+    "checkpoint_root_basename": "boundary-plist-repair-2026-09-26",
+    "current_plist_sha256": "0a20d8d507e6fab84eb4743d1f99fb47b1cfecc5e0f52dff10f84b059f43e24d",
+    "engine": "mlx",
+    "post_repair_pid": 50062,
+    "pre_repair_pid": 26512,
+    "process_type": "interactive",
+    "service_source_sha256_unchanged": "de6780fc0b96a6dea1be790a64b9f9c72bc299f433f968ef5bfb5ade16ce393a",
+    "tts_parameters_changed": false
+  },
+  "schedule_rows": 260,
+  "schedule_seed": 20260927,
+  "schedule_sha256": "ccf30683b6b1cf0d6c7ce69ec9876466d1c09393857c220bafa4ffeed0141a3f",
+  "schema_version": 1,
+  "sequential_soak": {
+    "reason": null,
+    "status": "not_run"
+  },
+  "single_safety_probe_observations_excluded_from_quantiles": [
+    {
+      "audio_duration_ms": 4560,
+      "endpoint_total_ms": 4889.6,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-25",
+      "generate_or_model_ms": 4846.6,
+      "http_status": 200,
+      "length_codepoints": 25,
+      "memory_free_percent_after": 67,
+      "physical_footprint_bytes_after": 12992276070,
+      "request_submitted": true,
+      "rtf": 1.063,
+      "success": true,
+      "swap_growth_check": null
+    },
+    {
+      "audio_duration_ms": 8627,
+      "endpoint_total_ms": 5899.7,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-50",
+      "generate_or_model_ms": 5848.9,
+      "http_status": 200,
+      "length_codepoints": 50,
+      "memory_free_percent_after": 69,
+      "physical_footprint_bytes_after": 3543348019,
+      "request_submitted": true,
+      "rtf": 0.678,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          71
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 982578626,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          576454656,
+          492568576
+        ],
+        "initial_delta_bytes": 576454656,
+        "state": "transient_recovered"
+      }
+    },
+    {
+      "audio_duration_ms": 14400,
+      "endpoint_total_ms": 8212.5,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-100",
+      "generate_or_model_ms": 8154.0,
+      "http_status": 200,
+      "length_codepoints": 100,
+      "memory_free_percent_after": 70,
+      "physical_footprint_bytes_after": 14388140441,
+      "request_submitted": true,
+      "rtf": 0.566,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1542916669,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1190584648,
+          1005972357
+        ],
+        "initial_delta_bytes": 1190584648,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 23120,
+      "endpoint_total_ms": 11227.4,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-150",
+      "generate_or_model_ms": 11154.7,
+      "http_status": 200,
+      "length_codepoints": 150,
+      "memory_free_percent_after": 71,
+      "physical_footprint_bytes_after": 3650722201,
+      "request_submitted": true,
+      "rtf": 0.483,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1678445117,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1029827461,
+          870443909
+        ],
+        "initial_delta_bytes": 1029827461,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 28400,
+      "endpoint_total_ms": 13401.2,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-200",
+      "generate_or_model_ms": 13309.7,
+      "http_status": 200,
+      "length_codepoints": 200,
+      "memory_free_percent_after": 70,
+      "physical_footprint_bytes_after": 3650722201,
+      "request_submitted": true,
+      "rtf": 0.469,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3543348019,
+        "confirmation_swap_free_bytes": 1530522501,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1337133629,
+          1018366525
+        ],
+        "initial_delta_bytes": 1337133629,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 32720,
+      "endpoint_total_ms": 15259.9,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-250",
+      "generate_or_model_ms": 15167.1,
+      "http_status": 200,
+      "length_codepoints": 250,
+      "memory_free_percent_after": 70,
+      "physical_footprint_bytes_after": 3650722201,
+      "request_submitted": true,
+      "rtf": 0.464,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          71
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1734543933,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1124796989,
+          814345093
+        ],
+        "initial_delta_bytes": 1124796989,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 47399,
+      "endpoint_total_ms": 20757.3,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-320",
+      "generate_or_model_ms": 20651.3,
+      "http_status": 200,
+      "length_codepoints": 320,
+      "memory_free_percent_after": 71,
+      "physical_footprint_bytes_after": 3650722201,
+      "request_submitted": true,
+      "rtf": 0.436,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 2,
+        "confirmation_memory_free_percent": [
+          74,
+          75
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1298986434,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1409286144,
+          1308622848,
+          1249902592
+        ],
+        "initial_delta_bytes": 1409286144,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 58960,
+      "endpoint_total_ms": 27136.8,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-400",
+      "generate_or_model_ms": 27000.0,
+      "http_status": 200,
+      "length_codepoints": 400,
+      "memory_free_percent_after": 71,
+      "physical_footprint_bytes_after": 3650722201,
+      "request_submitted": true,
+      "rtf": 0.458,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1529348096,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1455748547,
+          1019540931
+        ],
+        "initial_delta_bytes": 1455748547,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 70991,
+      "endpoint_total_ms": 29667.6,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-500",
+      "generate_or_model_ms": 29532.1,
+      "http_status": 200,
+      "length_codepoints": 500,
+      "memory_free_percent_after": 70,
+      "physical_footprint_bytes_after": 3758096384,
+      "request_submitted": true,
+      "rtf": 0.416,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          73
+        ],
+        "confirmation_physical_footprint_bytes": 3650722201,
+        "confirmation_swap_free_bytes": 1604971397,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1078135357,
+          943917629
+        ],
+        "initial_delta_bytes": 1078135357,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": 81680,
+      "endpoint_total_ms": 33955.7,
+      "error_category": null,
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-600",
+      "generate_or_model_ms": 33790.0,
+      "http_status": 200,
+      "length_codepoints": 600,
+      "memory_free_percent_after": 70,
+      "physical_footprint_bytes_after": 3758096384,
+      "request_submitted": true,
+      "rtf": 0.414,
+      "success": true,
+      "swap_growth_check": {
+        "confirmation_count": 1,
+        "confirmation_memory_free_percent": [
+          72
+        ],
+        "confirmation_physical_footprint_bytes": 3758096384,
+        "confirmation_swap_free_bytes": 1634404925,
+        "confirmation_window_s": 30,
+        "confirmed_deltas_bytes": [
+          1250028421,
+          914484101
+        ],
+        "initial_delta_bytes": 1250028421,
+        "state": "elevated_but_decreasing"
+      }
+    },
+    {
+      "audio_duration_ms": null,
+      "endpoint_total_ms": 110002.5,
+      "error_category": "watchdog_timeout",
+      "excluded_from_quantiles": true,
+      "fixture_id": "A-800",
+      "generate_or_model_ms": null,
+      "http_status": null,
+      "length_codepoints": 800,
+      "memory_free_percent_after": 74,
+      "physical_footprint_bytes_after": 11166914969,
+      "request_submitted": true,
+      "rtf": null,
+      "success": false,
+      "swap_growth_check": null
+    }
+  ]
+}

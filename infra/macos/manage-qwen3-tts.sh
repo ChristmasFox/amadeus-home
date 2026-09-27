@@ -27,11 +27,11 @@ done
 [[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
 if [[ "$mode" == --status ]]; then
   ((explicit_engine == 0)) || { echo '--status does not select an engine' >&2; exit 2; }
-  if [[ -f "$PLIST" ]]; then
-    current="$(plutil -extract EnvironmentVariables.AMADEUS_TTS_ENGINE raw "$PLIST" 2>/dev/null || printf mps)"
-    printf 'ENGINE=%s\n' "$current"
-  fi
-  launchctl print "$TARGET/$LABEL" 2>/dev/null | grep -E 'state =|pid =|last exit code =' || true
+  python3 "$ROOT/infra/macos/inspect-qwen3-tts-plist.py" "$PLIST"
+  launchd_output="$(launchctl print "$TARGET/$LABEL" 2>/dev/null || true)"
+  live_engine="$(printf '%s\n' "$launchd_output" | sed -n 's/^[[:space:]]*AMADEUS_TTS_ENGINE =>[[:space:]]*//p' | head -n 1)"
+  printf 'LIVE_ENGINE=%s\n' "${live_engine:-unknown}"
+  printf '%s\n' "$launchd_output" | grep -E 'state =|pid =|last exit code =' || true
   /usr/bin/curl -s -o /dev/null -w 'HEALTH_HTTP=%{http_code}\n' --max-time 2 http://127.0.0.1:18792/healthz || true
   exit 0
 fi
