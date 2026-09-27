@@ -34,6 +34,21 @@ function closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId) {
 \tconst lease = getAmadeusVoiceReplyRegistry().get(sessionKey);
 \tif (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled");
 }
+function startAmadeusWhatsAppTypingIndicator(sendComposing) {
+	if (typeof sendComposing !== "function") return () => {};
+	let closed = false;
+	const pulse = () => {
+		if (closed) return;
+		Promise.resolve(sendComposing()).catch(() => {});
+	};
+	pulse();
+	const timer = setInterval(pulse, AMADEUS_VOICE_REPLY_REFRESH_MS);
+	timer.unref?.();
+	return () => {
+		closed = true;
+		clearInterval(timer);
+	};
+}
 function startAmadeusVoiceReplyLease(params) {
 \tif (!params.sessionKey || typeof params.sendComposing !== "function") return null;
 \tconst registry = getAmadeusVoiceReplyRegistry();
