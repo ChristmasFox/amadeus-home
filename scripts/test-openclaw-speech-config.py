@@ -10,10 +10,19 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 config_path = ROOT / "integrations/openclaw/openclaw.json.example"
 c = json.loads(config_path.read_text())
+assert c["browser"]["ssrfPolicy"]["dangerouslyAllowPrivateNetwork"] is True
 provider = c["models"]["providers"]["openai"]
 assert provider["baseUrl"] == "http://9router:20128/v1"
 assert provider["request"] == {"allowPrivateNetwork": True}
 assert provider["apiKey"]["id"] == "OPENCLAW_9ROUTER_API_KEY"
+assert c["agents"]["defaults"]["mediaModels"]["image"] == {
+    "primary": "openai/ag/gemini-3.1-flash-image",
+    "timeoutMs": 180000,
+}
+assert provider["models"] == [{
+    "id": "ag/gemini-3.1-flash-image",
+    "name": "Gemini 3.1 Flash Image",
+}]
 assert all(k == "openai" or not v.get("request", {}).get("allowPrivateNetwork")
            for k, v in c["models"]["providers"].items())
 media = c["tools"]["media"]
@@ -45,6 +54,13 @@ if cli.is_file():
     result = subprocess.run(["node", str(cli), "config", "validate", "--json"],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=True)
     assert json.loads(result.stdout)["valid"] is True
+    runtime_root = cli.parent / "dist"
+    tool_descriptors = list(runtime_root.glob("core-tool-factory-descriptors-*.mjs"))
+    assert len(tool_descriptors) == 1
+    assert 'name: "image_generate"' in tool_descriptors[0].read_text()
+    openai_image_provider = runtime_root / "extensions/openai/index.js"
+    assert "api.registerImageGenerationProvider(buildOpenAIImageGenerationProvider" \
+        in openai_image_provider.read_text()
     policy_module = next(cli.parent.glob("dist/tool-policy-match-*.mjs"))
     # The pinned matcher applies each layer to the remaining tools. Owner
     # allow=["*"] cannot reintroduce a tool filtered by global deny.
@@ -52,10 +68,10 @@ if cli.is_file():
         "node", "--input-type=module", "-e",
         "import { pathToFileURL } from 'node:url'; "
         "const m = await import(pathToFileURL(process.argv[1])); const filter = m.r ?? m.filterToolsByPolicy; "
-        "const tools = [{name:'tts'}, {name:'message'}, {name:'web_search'}, {name:'amadeus_nas'}]; "
+        "const tools = [{name:'image_generate'}, {name:'tts'}, {name:'message'}, {name:'web_search'}, {name:'amadeus_nas'}]; "
         "const afterGlobal = filter(tools, {deny:['tts','message']}); "
         "const afterOwner = filter(afterGlobal, {allow:['*']}); "
-        "if (afterOwner.some(t=>['tts','message'].includes(t.name)) || afterOwner.length!==2) process.exit(1);",
+        "if (!afterOwner.some(t=>t.name==='image_generate') || afterOwner.some(t=>['tts','message'].includes(t.name)) || afterOwner.length!==3) process.exit(1);",
         str(policy_module),
     ], cwd=ROOT, capture_output=True, text=True)
     assert policy_check.returncode == 0, policy_check.stderr
