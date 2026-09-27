@@ -218,6 +218,9 @@ assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseV
 assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'tagged typed TTS uses the same Japanese visible-text contract');
 const typedAudioPayload = { text: chineseVoice, mediaUrl: 'typed.ogg', audioAsVoice: true, spokenText: japaneseVoice, trustedLocalMedia: true };
 assert.equal(ensureAmadeusJapaneseVoiceText(typedAudioPayload, false).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'typed audio without supplement metadata keeps visible text');
+const reportedChineseOnlyText = '你家那只脸盘子圆滚滚、成天一副呆萌模样的小猫，不就是菠萝萝嘛！到底要问几遍你才满意啊？';
+const reportedTypedAudioPayload = { text: reportedChineseOnlyText, mediaUrl: 'reported.ogg', audioAsVoice: true, spokenText: japaneseVoice, trustedLocalMedia: true };
+assert.equal(ensureAmadeusJapaneseVoiceText(reportedTypedAudioPayload, false).text, `${reportedChineseOnlyText}\n\n日本語：${japaneseVoice}`, 'Chinese-only visible text gains the required Japanese line for typed voice');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
 const chineseTtsPayload = {
   text: chineseVoice,

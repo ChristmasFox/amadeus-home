@@ -13,8 +13,12 @@ empty. A later typed voice request had visible text, proving the behavior was
 intermittent. This matched the report that typed voice replies could arrive as
 audio only.
 
-The pinned OpenClaw TTS pipeline classified every text-bearing tagged audio
-payload as a `ttsSupplement`. During final/block delivery, its media-only
+The owner further clarified that the missing visible reply was the Chinese
+sentence beginning “你家那只脸盘子圆滚滚…” and that no visible Japanese line
+was present. The regression fixture now covers this Chinese-only visible-text
+shape and verifies that the delivery guard appends the required Japanese line
+from the actual spoken text. The pinned OpenClaw TTS pipeline classified every
+text-bearing tagged audio payload as a `ttsSupplement`. During final/block delivery, its media-only
 normalization can strip `text` after a streamed visible block has or has not
 been finalized. The WhatsApp voice guard could not reconstruct the lost
 Chinese summary once it had been stripped.
