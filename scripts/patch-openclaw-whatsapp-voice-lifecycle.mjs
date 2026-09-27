@@ -202,20 +202,18 @@ export function patchWhatsAppTaggedTypedGuardSource(original) {
 }
 
 export function patchWhatsAppTypingIndicatorSource(original) {
-  if (original.includes(WHATSAPP_TYPING_INDICATOR_MARKER)) return original;
-  if (!original.includes(WHATSAPP_MARKER)) throw new Error('WhatsApp lifecycle patch must be applied first');
   const marker = `// ${WHATSAPP_TYPING_INDICATOR_MARKER}\n`;
-  const existingHelper = 'startAmadeusWhatsAppTypingIndicator(sendTypingPresence)';
-  const isVoiceAnchor = '\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;';
-  if (original.includes(existingHelper)) {
-    const count = original.split(isVoiceAnchor).length - 1;
-    if (count !== 1) throw new Error(`existing WhatsApp typing helper anchor count=${count}`);
-    return original.replace(isVoiceAnchor, marker + isVoiceAnchor);
-  }
-  const initBefore = '\tconst mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {\n\t\treturn await deliverNormalizedPayload(pending.payload, pending.info);\n\t} });\n\treturn {';
-  const initAfter = `${marker}\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;\n\tlet amadeusVoiceLease;\n\tlet amadeusTypingStop;\n\tconst sendTypingPresence = async () => { await params.transport.sendComposing?.(); };\n\tconst ensureAmadeusTypingIndicator = () => {\n\t\tif (isAmadeusVoiceInbound || amadeusTypingStop) return;\n\t\tamadeusTypingStop = startAmadeusWhatsAppTypingIndicator(sendTypingPresence);\n\t};\n\tconst stopAmadeusTypingIndicator = () => {\n\t\tamadeusTypingStop?.();\n\t\tamadeusTypingStop = null;\n\t};\n\tconst mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {\n\t\treturn await deliverNormalizedPayload(pending.payload, pending.info);\n\t} });\n\tensureAmadeusTypingIndicator();\n\treturn {`;
-  let result = replaceOnce(original, initBefore, initAfter, 'WhatsApp typing indicator initialization');
+  if (!original.includes(WHATSAPP_MARKER)) throw new Error('WhatsApp lifecycle patch must be applied first');
+  const voiceAnchor = '\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;';
+  const declarationStart = original.indexOf(voiceAnchor);
+  const returnStart = declarationStart >= 0 ? original.indexOf('\n\treturn {', declarationStart) : -1;
+  if (declarationStart < 0 || returnStart < 0) throw new Error('WhatsApp typing indicator initialization anchor missing');
+  const markerStart = original.indexOf(marker);
+  const initStart = markerStart >= 0 && markerStart < declarationStart ? markerStart : declarationStart;
+  const initReplacement = `${marker}\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;\n\tlet amadeusVoiceLease;\n\tlet amadeusTypingStop;\n\tconst sendTypingPresence = async () => { await params.transport.sendComposing?.(); };\n\tconst ensureAmadeusTypingIndicator = () => {\n\t\tif (isAmadeusVoiceInbound || amadeusTypingStop) return;\n\t\tamadeusTypingStop = startAmadeusWhatsAppTypingIndicator(sendTypingPresence);\n\t};\n\tconst stopAmadeusTypingIndicator = () => {\n\t\tamadeusTypingStop?.();\n\t\tamadeusTypingStop = null;\n\t};\n\tconst mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {\n\t\treturn await deliverNormalizedPayload(pending.payload, pending.info);\n\t} });\n\tensureAmadeusTypingIndicator();`;
+  let result = original.slice(0, initStart) + initReplacement + original.slice(returnStart);
   const lifecycleAfter = '\t\t\tonSettled: async () => {\n\t\t\t\tstopAmadeusTypingIndicator();\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();\n\t\t\t\tlogWhatsAppMediaOnlyFlushResult(flushResult);\n\t\t\t\treturn whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);\n\t\t\t},\n\t\t\tonReplyStart: async () => {\n\t\t\t\tif (!isAmadeusVoiceInbound) {\n\t\t\t\t\tensureAmadeusTypingIndicator();\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tamadeusVoiceLease ??= startAmadeusVoiceReplyLease({\n\t\t\t\t\tsessionKey: params.route.sessionKey,\n\t\t\t\t\tmessageId: params.inbound.event?.id,\n\t\t\t\t\tsendComposing: sendTypingPresence\n\t\t\t\t});\n\t\t\t}';
+  if (result.includes(lifecycleAfter)) return result;
   const lifecycleBeforeOriginal = '\t\t\tonSettled: async () => {\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();\n\t\t\t\tlogWhatsAppMediaOnlyFlushResult(flushResult);\n\t\t\t\treturn whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);\n\t\t\t},\n\t\t\tonReplyStart: params.transport.sendComposing';
   const lifecycleBeforeAsync = '\t\t\tonSettled: async () => {\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();\n\t\t\t\tlogWhatsAppMediaOnlyFlushResult(flushResult);\n\t\t\t\treturn whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);\n\t\t\t},\n\t\t\tonReplyStart: async () => {\n\t\t\t\tif (!isAmadeusVoiceInbound) return await params.transport.sendComposing?.();\n\t\t\t\tamadeusVoiceLease ??= startAmadeusVoiceReplyLease({\n\t\t\t\t\tsessionKey: params.route.sessionKey,\n\t\t\t\t\tmessageId: params.inbound.event?.id,\n\t\t\t\t\tsendComposing: sendTypingPresence\n\t\t\t\t});\n\t\t\t}';
   if (result.includes(lifecycleBeforeOriginal)) return replaceOnce(result, lifecycleBeforeOriginal, lifecycleAfter, 'WhatsApp typing indicator lifecycle');
