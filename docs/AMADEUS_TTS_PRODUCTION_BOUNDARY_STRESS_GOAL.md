@@ -536,3 +536,13 @@ This Goal is complete only when:
 - the owner can inspect one concise table and compare every tested character length directly, then listen to one representative production sample for each complete length.
 
 After completion, stop. Do not implement a new output-length policy until the owner reviews the data and listening artifacts and explicitly chooses the next production strategy.
+## 18. Owner-directed one-shot timing amendment — 2026-09-27
+
+The owner has redirected the immediate follow-up: **do not continue pressure/stress testing**. For the requested next readout, the target is one sequential endpoint timing per declared public synthetic fixture (`A` and `B`) at each length, with no retries, no n=20 matrix, no soak, and no contention. These are individual observations (`n=1`), not percentiles, an SLA, or a production boundary recommendation.
+
+Keep the same production control, MP3 endpoint, fixtures, and safety guards. A timeout, failed response, or safety guard stop remains an explicit incomplete sample; never force a request, lower the swap guard, or reuse a stopped run. Historical one-shot A safety probes may be shown as context but are not paired A/B evidence from a new single-pass run. This amendment does not make the original stress-characterization Goal complete; soak/contention/stress questions remain unmeasured and the owner has said not to pursue them now.
+
+
+## 19. Owner disposition — 2026-09-27
+
+The owner has directed this Goal to stop after the incomplete safety-stopped report, numeric data, and protected checkpoints are committed and pushed. Do not send further TTS requests or continue one-shot, matrix, soak, contention, or recovery tests under this Goal. The original definition of done remains unmet; the work is paused/incomplete, not completed. Do not infer missing percentiles or choose a production policy.

@@ -20,9 +20,28 @@ def load(name, path):
 
 renderer = load('tts_plist_renderer', ROOT / 'infra/macos/render-qwen3-tts-plist.py')
 assets = load('tts_mlx_assets', ROOT / 'infra/macos/verify-qwen3-mlx-assets.py')
+plist_status = load('tts_plist_status', ROOT / 'infra/macos/inspect-qwen3-tts-plist.py')
 CONFIG = json.loads((ROOT / 'infra/macos/qwen3-tts-engine.json').read_text())
 TEMPLATE = ROOT / 'infra/macos/com.amadeus.qwen3-tts.plist.example'
 
+
+class PlistStatusInspectionTest(unittest.TestCase):
+    def test_invalid_or_missing_plist_never_falls_back_to_mps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / 'com.amadeus.qwen3-tts.plist'
+            self.assertEqual(plist_status.inspect(path), ('missing', 'unknown'))
+            path.write_text('["/path/to/python", "/path/to/service.py"]')
+            self.assertEqual(plist_status.inspect(path), ('invalid', 'unknown'))
+            path.write_bytes(plistlib.dumps({'EnvironmentVariables': {'AMADEUS_TTS_ENGINE': 'mlx'}}))
+            self.assertEqual(plist_status.inspect(path), ('valid', 'mlx'))
+            path.write_bytes(plistlib.dumps({'EnvironmentVariables': {'AMADEUS_TTS_ENGINE': 'mps'}}))
+            self.assertEqual(plist_status.inspect(path), ('valid', 'mps'))
+            path.write_bytes(plistlib.dumps({'EnvironmentVariables': {'AMADEUS_TTS_ENGINE': 'unexpected'}}))
+            self.assertEqual(plist_status.inspect(path), ('valid_unsupported_engine', 'unknown'))
+        manager = (ROOT / 'infra/macos/manage-qwen3-tts.sh').read_text()
+        self.assertIn('inspect-qwen3-tts-plist.py', manager)
+        self.assertNotIn('|| printf mps', manager)
 
 class PlistRenderTest(unittest.TestCase):
     def test_explicit_single_backend_preserves_a_profile(self):
