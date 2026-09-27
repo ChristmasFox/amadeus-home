@@ -17,7 +17,8 @@ export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
   // The same final-response guard also covers an explicitly tagged typed
   // voice reply. Untagged typed media without a TTS supplement is untouched.
-  if (!isVoiceInbound && typeof payload.ttsSupplement?.spokenText !== 'string') return payload;
+  if (!isVoiceInbound && typeof payload.ttsSupplement?.spokenText !== 'string'
+      && !(payload.audioAsVoice === true && typeof payload.spokenText === 'string')) return payload;
   const hasMedia = (typeof payload.mediaUrl === 'string' && payload.mediaUrl.trim().length > 0)
     || (Array.isArray(payload.mediaUrls) && payload.mediaUrls.some((url) => typeof url === 'string' && url.trim().length > 0));
   if (!hasMedia) return payload;

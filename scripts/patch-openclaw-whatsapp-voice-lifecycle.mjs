@@ -95,6 +95,12 @@ export function patchTtsSource(original) {
     'if (amadeusInboundWhatsAppVoice && !ttsText.trim()) return nextPayload;\n\tif (!ttsText.trim()) return nextPayload;',
     'Japanese voice TTS fail-closed guard',
   );
+  result = replaceOnce(
+    result,
+    'return nextPayload.text?.trim() ? markReplyPayloadAsTtsSupplement(payloadWithAudio) : payloadWithAudio;',
+    `const amadeusPreserveTypedVisibleTts = params.inboundAudio !== true && Boolean(nextPayload.text?.trim());\n\treturn amadeusPreserveTypedVisibleTts\n\t\t? payloadWithAudio\n\t\t: nextPayload.text?.trim() ? markReplyPayloadAsTtsSupplement(payloadWithAudio) : payloadWithAudio;`,
+    'typed TTS visible-text preservation',
+  );
   return `// ${TTS_MARKER}\n${result}`;
 }
 

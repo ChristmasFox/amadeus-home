@@ -148,11 +148,15 @@ const visibleText = "中文：先说结论。\n\n日本語：少し待って。�
 const ttsText = explicitTtsText || visibleText;
 const nextPayload = { text: visibleText };
 if (!ttsText.trim()) return nextPayload;
+const payloadWithAudio = { ...nextPayload, mediaUrl: 'fixture.ogg', audioAsVoice: true, spokenText: ttsText };
+if (true) return nextPayload.text?.trim() ? markReplyPayloadAsTtsSupplement(payloadWithAudio) : payloadWithAudio;
 async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) { return params; }`;
 const patchedTts = patchTtsSource(ttsFixture);
 assert.ok(patchedTts.includes(`// ${TTS_MARKER}`), 'TTS patch marker is present');
 assert.match(patchedTts, /resolveAmadeusJapaneseSpeechText\(visibleText, explicitTtsText\)/u, 'TTS input is selected from the Japanese line');
 assert.match(patchedTts, /amadeusInboundWhatsAppVoice && !ttsText\.trim\(\)/u, 'TTS fails closed without a Japanese line');
+assert.match(patchedTts, /amadeusPreserveTypedVisibleTts = params\.inboundAudio !== true/u, 'typed tagged TTS preserves visible text with audio');
+assert.match(patchedTts, /\? payloadWithAudio/u, 'typed tagged TTS is not downgraded to media-only supplement');
 assert.equal(patchTtsSource(patchedTts), patchedTts, 'TTS patch is idempotent');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：少し待って。結論を先に言うわ。'), '少し待って。結論を先に言うわ。');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：中文：先说结论。\n日本語：少し待って。'), '少し待って。');
@@ -212,6 +216,8 @@ assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, true).text, `${chinese
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n\n日本語：${japaneseVoice}` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'matching Japanese line is not duplicated');
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...voicePayload, text: `${chineseVoice}\n日本語：古い文章です。` }, true).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'stale Japanese line is synchronized to the exact spoken text');
 assert.equal(ensureAmadeusJapaneseVoiceText(voicePayload, false).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'tagged typed TTS uses the same Japanese visible-text contract');
+const typedAudioPayload = { text: chineseVoice, mediaUrl: 'typed.ogg', audioAsVoice: true, spokenText: japaneseVoice, trustedLocalMedia: true };
+assert.equal(ensureAmadeusJapaneseVoiceText(typedAudioPayload, false).text, `${chineseVoice}\n\n日本語：${japaneseVoice}`, 'typed audio without supplement metadata keeps visible text');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: chineseVoice, spokenText: japaneseVoice }, true).text, chineseVoice, 'a non-audio payload is not misclassified as a voice attachment');
 const chineseTtsPayload = {
   text: chineseVoice,
