@@ -9,12 +9,12 @@ import { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText } from
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER } from './openclaw-voice-markers.mjs';
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './openclaw-voice-markers.mjs';
 export { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER };
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER };
 
 function replaceOnce(source, before, after, label) {
   const count = source.split(before).length - 1;
@@ -201,6 +201,25 @@ export function patchWhatsAppTaggedTypedGuardSource(original) {
   return `${original.slice(0, start)}${typedMarkerText}${updated}${original.slice(end)}`;
 }
 
+export function patchWhatsAppTypingIndicatorSource(original) {
+  if (original.includes(WHATSAPP_TYPING_INDICATOR_MARKER)) return original;
+  if (!original.includes(WHATSAPP_MARKER)) throw new Error('WhatsApp lifecycle patch must be applied first');
+  const marker = `// ${WHATSAPP_TYPING_INDICATOR_MARKER}\n`;
+  const existingHelper = 'startAmadeusWhatsAppTypingIndicator(sendTypingPresence)';
+  const isVoiceAnchor = '\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;';
+  if (original.includes(existingHelper)) {
+    const count = original.split(isVoiceAnchor).length - 1;
+    if (count !== 1) throw new Error(`existing WhatsApp typing helper anchor count=${count}`);
+    return original.replace(isVoiceAnchor, marker + isVoiceAnchor);
+  }
+  const initBefore = '\tconst mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {\n\t\treturn await deliverNormalizedPayload(pending.payload, pending.info);\n\t} });\n\treturn {';
+  const initAfter = `${marker}\tconst isAmadeusVoiceInbound = params.inbound.media?.some((media) => media?.kind === "audio" || String(media?.contentType ?? "").toLowerCase().startsWith("audio/")) === true;\n\tlet amadeusVoiceLease;\n\tlet amadeusTypingStop;\n\tconst sendTypingPresence = async () => { await params.transport.sendComposing?.(); };\n\tconst ensureAmadeusTypingIndicator = () => {\n\t\tif (isAmadeusVoiceInbound || amadeusTypingStop) return;\n\t\tamadeusTypingStop = startAmadeusWhatsAppTypingIndicator(sendTypingPresence);\n\t};\n\tconst stopAmadeusTypingIndicator = () => {\n\t\tamadeusTypingStop?.();\n\t\tamadeusTypingStop = null;\n\t};\n\tconst mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {\n\t\treturn await deliverNormalizedPayload(pending.payload, pending.info);\n\t} });\n\tensureAmadeusTypingIndicator();\n\treturn {`;
+  let result = replaceOnce(original, initBefore, initAfter, 'WhatsApp typing indicator initialization');
+  const lifecycleBefore = '\t\t\tonSettled: async () => {\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();\n\t\t\t\tlogWhatsAppMediaOnlyFlushResult(flushResult);\n\t\t\t\treturn whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);\n\t\t\t},\n\t\t\tonReplyStart: params.transport.sendComposing';
+  const lifecycleAfter = '\t\t\tonSettled: async () => {\n\t\t\t\tstopAmadeusTypingIndicator();\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();\n\t\t\t\tlogWhatsAppMediaOnlyFlushResult(flushResult);\n\t\t\t\treturn whatsAppReplyDeliveryVisibility(didSendReply || flushResult.delivered > 0);\n\t\t\t},\n\t\t\tonReplyStart: async () => {\n\t\t\t\tif (!isAmadeusVoiceInbound) {\n\t\t\t\t\tensureAmadeusTypingIndicator();\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tamadeusVoiceLease ??= startAmadeusVoiceReplyLease({\n\t\t\t\t\tsessionKey: params.route.sessionKey,\n\t\t\t\t\tmessageId: params.inbound.event?.id,\n\t\t\t\t\tsendComposing: sendTypingPresence\n\t\t\t\t});\n\t\t\t}';
+  return replaceOnce(result, lifecycleBefore, lifecycleAfter, 'WhatsApp typing indicator lifecycle');
+}
+
 export function patchWhatsAppJapaneseTextSource(original) {
   if (original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) return original;
   if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
@@ -281,6 +300,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(`WHATSAPP_JAPANESE_TEXT_PATCH=${await patchFile(path, patchWhatsAppJapaneseTextSource, WHATSAPP_JAPANESE_TEXT_MARKER)}`);
     console.log(`WHATSAPP_JAPANESE_AUDIO_GUARD_PATCH=${await patchFile(path, patchWhatsAppJapaneseAudioGuardSource, WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER)}`);
     console.log(`WHATSAPP_TAGGED_TYPED_GUARD_PATCH=${await patchFile(path, patchWhatsAppTaggedTypedGuardSource, WHATSAPP_TAGGED_TYPED_GUARD_MARKER)}`);
+    console.log(`WHATSAPP_TYPING_INDICATOR_PATCH=${await patchFile(path, patchWhatsAppTypingIndicatorSource, WHATSAPP_TYPING_INDICATOR_MARKER)}`);
   }
 }
 
