@@ -76,6 +76,7 @@ const whatsappFixture = `async function enqueueInboundMessage(chatJid) {
 			}
 		};
 }
+let didSendReply = false;
 function createWhatsAppReplyPlan(params) {
 	const mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {
 		return await deliverNormalizedPayload(pending.payload, pending.info);
@@ -197,8 +198,10 @@ assert.ok(patchedWhatsApp.includes('clearAmadeusVoiceReplyLeases();'));
 assert.ok(patchedWhatsApp.includes('lease.refreshTimer = null; lease.presenceFailed = true;'), 'presence errors stop refresh without unlocking the active turn');
 assert.ok(patchedWhatsApp.includes('runAmadeusWhatsAppVoiceScopedIngress({'), 'WhatsApp messages wait at ingress before OpenClaw dispatch');
 assert.ok(patchedWhatsApp.includes('run: () => processMessage(processParams)'), 'queued messages replay through the normal inbound pipeline instead of followup routeReply');
-assert.ok(patchedWhatsApp.includes('if (!isAmadeusVoiceInbound) return await params.transport.sendComposing?.();'), 'typed replies retain their existing typing behavior');
-assert.ok(patchedWhatsApp.includes('onSettled: async () => {\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();'), 'the final dispatcher flush remains awaited');
+assert.ok(patchedWhatsApp.includes('amadeusTypingStop = startAmadeusWhatsAppTypingIndicator(sendTypingPresence)'), 'WhatsApp typing indicator starts before long-running tool execution');
+assert.ok(patchedWhatsApp.includes('stopAmadeusTypingIndicator();'), 'WhatsApp typing indicator stops after turn settlement');
+assert.ok(patchedWhatsApp.includes('if (!isAmadeusVoiceInbound) {'), 'typed replies keep the generic typing path');
+assert.ok(patchedWhatsApp.includes('onSettled: async () => {\n\t\t\t\tstopAmadeusTypingIndicator();\n\t\t\t\tconst flushResult = await mediaOnlyCoalescer.flushAll();'), 'typing stops before the final dispatcher flush');
 assert.equal(patchWhatsAppSource(patchedWhatsApp), patchedWhatsApp, 'base WhatsApp patch is idempotent');
 assert.equal(patchWhatsAppIngressQueueSource(patchedWhatsApp), patchedWhatsApp, 'ingress queue patch is idempotent');
 assert.equal(patchWhatsAppJapaneseTextSource(patchedWhatsApp), patchedWhatsApp, 'Japanese visible-text patch is idempotent');
@@ -282,15 +285,16 @@ const sandbox = {
   resolveSendableOutboundReplyParts: (payload) => ({ hasMedia: Boolean(payload.mediaUrl || payload.mediaUrls?.length), text: payload.text ?? '' }),
   shouldDeferWhatsAppMediaOnlyPayload: () => false,
   logWhatsAppMediaOnlyFlushResult: () => {},
+  whatsAppReplyDeliveryVisibility: (visibleReplySent) => ({ visibleReplySent }),
 };
 sandbox.globalThis = sandbox;
 vm.runInNewContext(`${patchedWhatsApp}\nglobalThis.testApi = { getAmadeusVoiceReplyRegistry, startAmadeusVoiceReplyLease, closeAmadeusVoiceReplyLease, clearAmadeusVoiceReplyLeases, clearAmadeusVoiceReplyLeasesForChat, runAmadeusWhatsAppVoiceScopedIngress, createWhatsAppReplyPlan };`, sandbox);
-const buildReplyPlan = (media) => sandbox.testApi.createWhatsAppReplyPlan({
+const buildReplyPlan = (media, sendComposing = async () => {}) => sandbox.testApi.createWhatsAppReplyPlan({
   inbound: { conversation: { id: 'voice-contract@g.us' }, media },
   cfg: {},
   route: { accountId: 'default', agentId: 'main' },
   context: {},
-  transport: { sendComposing: async () => {} },
+  transport: { sendComposing },
 });
 const deliveryVoicePlan = buildReplyPlan([{ kind: 'audio', contentType: 'audio/ogg' }]);
 const preparedVoicePayload = await deliveryVoicePlan.delivery.preparePayload({
@@ -305,13 +309,30 @@ const preparedBlockedChinese = await deliveryVoicePlan.delivery.preparePayload(c
 assert.equal(preparedBlockedChinese.mediaUrl, undefined, 'patched preparePayload cannot pass a Chinese PTT through');
 assert.equal(preparedBlockedChinese.mediaUrls.length, 0);
 assert.match(preparedBlockedChinese.text, /日语语音暂时无法生成/u);
-const deliveryTypedPlan = buildReplyPlan(undefined);
+timerCallbacks.clear();
+clearedTimers.length = 0;
+const genericTyping = [];
+const deliveryTypedPlan = buildReplyPlan(undefined, async () => { genericTyping.push('composing'); });
+await Promise.resolve();
+assert.equal(genericTyping.length, 1, 'typed WhatsApp plan starts composing before tool execution');
+const genericInterval = [...timerCallbacks.entries()].find(([, timer]) => timer.kind === 'interval');
+assert.equal(genericInterval?.[1].delay, 3000, 'generic composing refresh cadence is 3 seconds');
+await genericInterval[1].callback();
+await Promise.resolve();
+assert.equal(genericTyping.length, 2, 'generic composing refreshes while image/tool work runs');
+await deliveryTypedPlan.dispatcherOptions.onSettled();
+await genericInterval[1].callback();
+await Promise.resolve();
+assert.equal(genericTyping.length, 2, 'generic composing stops after settlement');
 const preparedTypedPayload = await deliveryTypedPlan.delivery.preparePayload({
   text: '中文：只用中文回答。',
   mediaUrl: 'unrelated.ogg',
   spokenText: japaneseVoice,
 }, { kind: 'final' });
 assert.equal(preparedTypedPayload.text, '中文：只用中文回答。', 'actual patched WhatsApp preparePayload leaves typed replies unchanged');
+// Isolate the voice-lease cadence assertions from the generic indicator timers.
+timerCallbacks.clear();
+clearedTimers.length = 0;
 const sends = [];
 const lease = sandbox.testApi.startAmadeusVoiceReplyLease({
   sessionKey: 'whatsapp:group:test',
