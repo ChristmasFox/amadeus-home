@@ -695,7 +695,7 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
         "",
         "## Immutable production control",
         "",
-        f"- Canonical production baseline: `{control.get('canonical_main_commit')}` / Amadeus `{control.get('version')}`; measurement branch commit `{control.get('git_commit')}`.",
+        f"- Canonical main at fresh control capture: `{control.get('canonical_main_commit')}` / Amadeus `{control.get('version')}`; captured source-tree HEAD `{control.get('git_commit')}`.",
         f"- Service SHA-256 `{control.get('service_source_sha256')}`; engine-config SHA-256 `{control.get('engine_source_config_sha256')}`.",
         f"- Engine/profile/language: `{control.get('engine')}` / `{control.get('voice_profile_id')}` / `{control.get('language')}`; protected A reference verified unchanged: `{control.get('protected_a_reference_verified_unchanged')}`.",
         f"- LaunchAgent: `{control.get('launchd_process_type')}` / `{control.get('launchd_spawn_type')}`; MP3; workers={control.get('workers')}, pending={control.get('pending_slots')}, admission wait={control.get('pending_start_timeout_s')}s.",

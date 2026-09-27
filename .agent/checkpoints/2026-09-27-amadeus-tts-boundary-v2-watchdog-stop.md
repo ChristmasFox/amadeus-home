@@ -25,8 +25,8 @@ Protected run root: `/Volumes/Avalon/backups/operation-skuld/qwen3-tts/boundary-
 
 ## Publication / disposition
 
-- V2 report: `docs/reports/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_2026_09.md`, SHA-256 `7a44b226709f045b753562713ce737a7e16049711d336c74679eb47392c3c65b`.
-- V2 data: `docs/reports/data/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_2026_09.json`, SHA-256 `d32fbebcf723ef79cd287c1eba986fafddf2cd72938066cc20782bd0640d53d2`.
+- V2 report: `docs/reports/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_2026_09.md`, SHA-256 `36dbe369adf2cfbc7495954f1481f72aa5ffb04a3c11071f08d99f3c65ab23b0`.
+- V2 data: `docs/reports/data/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_2026_09.json`, SHA-256 `98e9e451cdc3e4f2abdb0b0533c66beeaa89c5bc420ad12b8975fd1eba89941b`.
 - Prior safety-stopped branch/report/data remain unchanged and unpooled. Tooling revision ledger and raw evidence are protected outside Git; partial audio was not pruned.
 - Focused V2/boundary tests passed (14); complete TTS test discovery passed (38, 1 skipped); `pnpm check:secrets`, Python compilation, `git diff --check`, and RUNTIME workflow planning passed. Final publication/commit checks remain a separate step.
 - Result is **incomplete-safety-stopped**, not Goal completion: zero complete matrix buckets and zero representative-listening artifacts. Do not submit more TTS requests under this run or change production policy.

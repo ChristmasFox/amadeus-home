@@ -1,6 +1,6 @@
 # Amadeus TTS — Production Boundary Rebaseline v2
 
-Generated: 2026-09-27T08:54:05.298651+00:00 UTC<br>
+Generated: 2026-09-27T08:59:28.357780+00:00 UTC<br>
 Control ID: `prod-1.6.2-a-mlx-auto-interactive`<br>
 Overall V2 status: **incomplete-safety-stopped**
 
@@ -8,7 +8,7 @@ Measurement-only. Production Amadeus 1.6.2 configuration and output policy were 
 
 ## Immutable production control
 
-- Canonical production baseline: `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6` / Amadeus `1.6.2`; measurement branch commit `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6`.
+- Canonical main at fresh control capture: `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6` / Amadeus `1.6.2`; captured source-tree HEAD `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6`.
 - Service SHA-256 `de6780fc0b96a6dea1be790a64b9f9c72bc299f433f968ef5bfb5ade16ce393a`; engine-config SHA-256 `91e9b7383047ad59e11cc0c919604f45f0c05fa1ee729ed2cafe36ce26a9f2aa`.
 - Engine/profile/language: `mlx` / `kurisu-v1` / `Auto`; protected A reference verified unchanged: `True`.
 - LaunchAgent: `Interactive` / `interactive`; MP3; workers=1, pending=1, admission wait=5s.

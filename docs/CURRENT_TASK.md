@@ -1,6 +1,6 @@
 # Current Task — Amadeus TTS Production Boundary Rebaseline v2
 
-Date: 2026-09-27 local. Active Goal: `docs/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_GOAL.md`, explicitly resumed by the owner. Work branch: `codex/tts-boundary-rebaseline-v2-2026-09`, based on canonical `origin/main` `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6` (Amadeus `1.6.2`).
+Date: 2026-09-27 local. Active Goal: `docs/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_GOAL.md`, explicitly resumed by the owner. Work branch: `codex/tts-boundary-rebaseline-v2-2026-09`; its current parent is `origin/main` `63d3b7927d2198cc9a0d015f9c3703b184c64e27`. The fresh production control was captured earlier against canonical main `bb9cfb8533c0e17a4a9e0c94a2b830a7b06eb4a6`; the subsequent upstream change was docs-only, and production source/config hashes still match canonical production files.
 
 Measurement-only. Production service source, protected A reference, community MLX 1.7B Base 8-bit model, Auto language, Interactive scheduling, MP3 response, one worker/one pending slot, 5-second admission wait, 120-second OpenClaw timeout, and `MAX_TEXT=1200` remain immutable. No version bump, deployment, restart, or production output-policy change occurred.
 
