@@ -10,7 +10,7 @@ prestate snapshot and a fresh GPT-first successful transport smoke are in
 Gemini-first candidate smoke/checkpoint below remain historical.
 
 The 1.6.4 **candidate** OpenClaw image
-`local/openclaw-amadeus:git-6c0840a27351-20260927133716` is live and healthy
+`local/openclaw-amadeus:git-0827dafec807-20260927140017` is live and healthy
 on M204; no final release/version bump has occurred. It uses
 `openai/amadeus-image` over the existing 9Router provider, `tts.auto=tagged`,
 and a narrowly scoped WhatsApp/Telegram group image policy. `arthur-combo`,
@@ -37,12 +37,14 @@ acceptance are still pending**. See
 
 A real candidate transcript revealed an intermittent typed-to-voice delivery
 bug: tagged TTS could arrive as audio while the visible text payload was empty.
-Commit `6c0840a` preserves typed tagged TTS as text plus audio and keeps the
-verified inbound voice supplement contract unchanged. Focused patched-runtime
-fixtures passed; the candidate was redeployed with a protected 0700/0600
-checkpoint at `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927133716`.
-The owner still needs to re-test a real typed explicit voice reply after this
-fix; no final release or version bump has occurred.
+The subsequent `9f29a23`/`0827daf` fixes preserve typed tagged TTS as text plus
+audio, canonicalize visible output to exactly `中文：...` and `日本語：...`,
+and upgrade an already-marked volume monitor. Focused patched-runtime
+fixtures and the exact Chinese-only regression pass. The candidate was
+redeployed with a protected 0700/0600 checkpoint at
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927140017`. The owner
+still needs to re-test a real typed explicit voice reply after this fix; no
+final release or version bump has occurred.
 
 ## Source and architecture
 

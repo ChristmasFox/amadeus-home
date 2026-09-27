@@ -8,15 +8,15 @@ The `amadeus-image` Combo was idempotently provisioned with an external
 minimal prestate rollback, and a real authenticated OpenClaw-network image
 transport smoke succeeded through Gemini. Exact live 9Router helper tests
 proved synthetic 429 fallback under the then Gemini-first order; no damaging live fault was
-induced. OpenClaw **candidate** `6c0840a` is now live on M204 with version 1.6.4
+induced. OpenClaw **candidate** `0827daf` is now live on M204 with version 1.6.4
 unchanged, logical `openai/amadeus-image`, tagged TTS, and narrowly
 scoped group image policy. Read-only live policy projection passed; it is not
 real group ingress acceptance. The prior image/config and 9Router prestate
 are independently recoverable. See the dated Combo and candidate checkpoints.
 
-The release checkpoint directory initially had mode 0755, was tightened to
-0700 with 0600 manifests, and the deployment source has been fixed to create
-protected mode from the outset; validate this on final release. 9Router and
+Candidate release checkpoints are now created and verified at directory 0700
+with config/manifests 0600; the deployment source creates these modes from the
+outset. Validate the same on final release. 9Router and
 native TTS PIDs were unchanged. On 2026-09-27 the owner amended the image priority to GPT Image 2.5 first,
 Gemini 3.1 Flash Image second. The Goal, Git desired state, and live 9Router
 Combo now agree on that order. A protected priority-only rollback snapshot
@@ -30,12 +30,12 @@ Gemini-first candidate checkpoint remains historical evidence. The pinned 9Route
 HTTP 400 as fallback-eligible, whereas request-level missing-prompt 400 is
 rejected before Combo dispatch; do not overclaim a general non-fallback
 boundary or modify 9Router source. A real candidate transcript exposed an intermittent typed-to-voice bug where
-TTS audio could be persisted without visible text. Commit `6c0840a` fixes this
-by preserving typed tagged TTS as a normal text+audio payload while retaining
-the inbound-voice supplement contract; the patched candidate is deployed and
-its in-container runtime fixture passed. Real owner re-test of typed voice
-must still confirm the visible Chinese/Japanese text and single audio
-attachment. Real owner/non-owner group image and remaining three-way voice
+TTS audio could be persisted without visible text. Commits `6c0840a`, `9f29a23`
+and `0827daf` now preserve typed tagged TTS as a normal text+audio payload,
+canonicalize visible output to exactly `中文：...` plus `日本語：...`, and upgrade
+already-marked volume monitors. The patched candidate is deployed and its
+in-container/runtime fixtures passed. Real owner re-test must still confirm
+the exact bilingual text and single audio attachment. Real owner/non-owner group image and remaining three-way voice
 acceptance remain pending, as do the single version bump,
 final release, project-state closure, and Goal completion. The separate V2
 TTS worktree remains untouched.
