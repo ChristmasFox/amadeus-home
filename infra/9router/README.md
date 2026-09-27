@@ -4,7 +4,7 @@
 
 `infra/9router/model-capabilities.json` is the Git desired state for the
 `kind=image` `amadeus-image` Combo: `strategy=fallback` with
-`ag/gemini-3.1-flash-image` first and `cx/gpt-image-2.5` second. OpenClaw
+`cx/gpt-image-2.5` first and `ag/gemini-3.1-flash-image` second. OpenClaw
 references only `openai/amadeus-image`; it does not retry concrete models.
 The existing 9Router management API is used through the shared protected
 loopback client in `scripts/nine_router_management.py`. No 9Router source,

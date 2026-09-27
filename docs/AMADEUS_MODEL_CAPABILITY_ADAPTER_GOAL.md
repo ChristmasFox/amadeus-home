@@ -2,6 +2,17 @@
 
 Date: 2026-09-27
 
+## Owner amendment — image priority, 2026-09-27
+
+After testing the 1.6.4 candidate, the owner explicitly requested GPT Image
+2.5 as the preferred image-generation backend. This supersedes the original
+Gemini-first order **within the same Goal**: the current canonical ordered
+fallback is `cx/gpt-image-2.5` first, then
+`ag/gemini-3.1-flash-image`. The earlier Gemini-first candidate and protected
+checkpoint remain historical evidence, not the desired release state. All
+other Goal boundaries and acceptance gates remain in force; the owner's broad
+"no issues" feedback does not by itself verify each group/voice case.
+
 ## Goal
 
 Establish the first production-ready model-capability abstraction between OpenClaw and 9Router without changing the current Agent architecture.
@@ -11,8 +22,8 @@ OpenClaw remains the sole Agent/planner and decides **which capability** is need
 This Goal delivers three scoped changes:
 
 1. Replace the concrete default image model exposed to OpenClaw with the stable logical capability `amadeus-image`, backed by a 9Router ordered fallback chain:
-   1. `ag/gemini-3.1-flash-image`
-   2. `cx/gpt-image-2.5`
+   1. `cx/gpt-image-2.5`
+   2. `ag/gemini-3.1-flash-image`
 2. Extend the existing voice-reply contract so a user can explicitly request a voice reply from typed text while preserving the accepted Japanese-audio + bilingual-visible-text format and existing length/safety constraints.
 3. Allow all users in supported group chats to call native `image_generate` directly, without owner approval, while preserving existing restrictions on sensitive tools and capabilities.
 
@@ -51,8 +62,8 @@ The first production image chain is fixed for this Goal:
 
 ```text
 amadeus-image
-1. ag/gemini-3.1-flash-image
-2. cx/gpt-image-2.5
+1. cx/gpt-image-2.5
+2. ag/gemini-3.1-flash-image
 ```
 
 Fallback is strict ordered fallback, not round robin.
@@ -95,8 +106,8 @@ The combo must have:
 kind: image
 strategy: fallback
 models, in this exact order:
-1. ag/gemini-3.1-flash-image
-2. cx/gpt-image-2.5
+1. cx/gpt-image-2.5
+2. ag/gemini-3.1-flash-image
 ```
 
 The current 9Router dashboard intentionally hides image/TTS combo creation, so provisioning must not depend on a visible `Create Combo` button. Use the supported 9Router management API/persistence boundary already used by the deployment/provisioning layer rather than editing 9Router source or hand-editing its database.
@@ -145,12 +156,12 @@ Use 9Router's existing fallback error classification. Do not implement a second 
 Expected behavior:
 
 ```text
-Gemini success
+GPT Image 2.5 success
 → return image
 
-Gemini fallback-eligible failure
+GPT Image 2.5 fallback-eligible failure
 (e.g. 429, quota/capacity, transient 5xx according to 9Router rules)
-→ try cx/gpt-image-2.5
+→ try ag/gemini-3.1-flash-image
 
 Request-scoped non-fallback client error
 → return the real error; do not blindly switch models
@@ -345,10 +356,10 @@ Update repository tests so they assert at minimum:
 From the live OpenClaw network context, prove:
 
 1. authenticated request using `model=amadeus-image` returns a valid generated image;
-2. logs/evidence show the first backend is `ag/gemini-3.1-flash-image` during a healthy request;
+2. logs/evidence show the first backend is `cx/gpt-image-2.5` during a healthy request;
 3. exercise a safe, reversible fallback test without damaging account state or production credentials:
    - use a controlled temporary test combo or a supported non-destructive simulation/config override if necessary;
-   - demonstrate first-backend fallback-eligible failure causes the second model `cx/gpt-image-2.5` to be attempted and succeed;
+   - demonstrate first-backend fallback-eligible failure causes the second model `ag/gemini-3.1-flash-image` to be attempted and succeed;
    - restore canonical production ordering/state immediately afterward;
 4. do not intentionally exhaust quota or corrupt credentials merely to trigger fallback.
 
@@ -414,7 +425,7 @@ Rollback must not require rolling back unrelated 9Router accounts, TTS model fil
 Update the appropriate project state/checkpoint/release documentation with:
 
 - `amadeus-image` as the stable OpenClaw-facing image capability;
-- exact fallback order: Gemini 3.1 Flash Image → GPT Image 2.5;
+- exact fallback order: GPT Image 2.5 → Gemini 3.1 Flash Image;
 - confirmation that fallback is owned by 9Router, not OpenClaw;
 - explicit typed-to-voice behavior and unchanged Japanese-audio/bilingual-text contract;
 - group image access for all admitted group members;
@@ -453,10 +464,10 @@ The Goal is complete only when all of the following are true:
 
 1. OpenClaw uses `openai/amadeus-image`, not a concrete image provider/model, as its canonical default image model.
 2. 9Router has an idempotently provisioned `kind=image` logical combo `amadeus-image` with strict order:
-   - `ag/gemini-3.1-flash-image`
    - `cx/gpt-image-2.5`
+   - `ag/gemini-3.1-flash-image`
 3. A normal image request succeeds through `amadeus-image`.
-4. There is credible tested evidence that a fallback-eligible first-model failure advances to GPT Image 2.5 without OpenClaw issuing a second model-specific request.
+4. There is credible tested evidence that a fallback-eligible first-model failure advances to Gemini 3.1 Flash Image without OpenClaw issuing a second model-specific request.
 5. `arthur-combo`, ASR, and unrelated capabilities are unchanged.
 6. Inbound voice replies still work exactly as accepted.
 7. A typed user who explicitly asks for voice receives Japanese audio plus the existing Japanese/Chinese visible text format.

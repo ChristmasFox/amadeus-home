@@ -17,6 +17,9 @@ assert "post_deploy_maintenance='skipped-candidate'" in s
 assert "OWNER_OUTBOX_SMOKE=%s" in s
 assert 'Single OpenClaw candidate runtime ready for real acceptance; not a release.' in s
 assert 'scripts/openclaw-voice-*.mjs|pnpm-lock.yaml' in s
+assert 'checkpoint.mkdir(mode=0o700, parents=True)' in s
+assert "protected checkpoint directory is not mode 0700" in s
+assert "protected checkpoint manifest is not mode 0600" in s
 assert 'tar -C "$ROOT_DIR/scripts" -cf -' in s
 assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root' in s
 image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
