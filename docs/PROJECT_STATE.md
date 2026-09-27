@@ -10,7 +10,7 @@ prestate snapshot and a fresh GPT-first successful transport smoke are in
 Gemini-first candidate smoke/checkpoint below remain historical.
 
 The 1.6.4 **candidate** OpenClaw image
-`local/openclaw-amadeus:git-02df41443a54-20260927125732` is live and healthy
+`local/openclaw-amadeus:git-6c0840a27351-20260927133716` is live and healthy
 on M204; no final release/version bump has occurred. It uses
 `openai/amadeus-image` over the existing 9Router provider, `tts.auto=tagged`,
 and a narrowly scoped WhatsApp/Telegram group image policy. `arthur-combo`,
@@ -33,6 +33,16 @@ minimal 9Router Combo prestate support independent rollback. The live policy
 projection passed, but **real owner/non-owner group image and three-way voice
 acceptance are still pending**. See
 `.agent/checkpoints/2026-09-27-amadeus-model-capability-candidate.md`.
+
+
+A real candidate transcript revealed an intermittent typed-to-voice delivery
+bug: tagged TTS could arrive as audio while the visible text payload was empty.
+Commit `6c0840a` preserves typed tagged TTS as text plus audio and keeps the
+verified inbound voice supplement contract unchanged. Focused patched-runtime
+fixtures passed; the candidate was redeployed with a protected 0700/0600
+checkpoint at `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927133716`.
+The owner still needs to re-test a real typed explicit voice reply after this
+fix; no final release or version bump has occurred.
 
 ## Source and architecture
 

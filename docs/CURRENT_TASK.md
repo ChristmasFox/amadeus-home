@@ -8,8 +8,8 @@ The `amadeus-image` Combo was idempotently provisioned with an external
 minimal prestate rollback, and a real authenticated OpenClaw-network image
 transport smoke succeeded through Gemini. Exact live 9Router helper tests
 proved synthetic 429 fallback under the then Gemini-first order; no damaging live fault was
-induced. OpenClaw **candidate** `02df414` is now live on M204 with version
-1.6.4 unchanged, logical `openai/amadeus-image`, tagged TTS, and narrowly
+induced. OpenClaw **candidate** `6c0840a` is now live on M204 with version 1.6.4
+unchanged, logical `openai/amadeus-image`, tagged TTS, and narrowly
 scoped group image policy. Read-only live policy projection passed; it is not
 real group ingress acceptance. The prior image/config and 9Router prestate
 are independently recoverable. See the dated Combo and candidate checkpoints.
@@ -29,8 +29,14 @@ restart occurred. See
 Gemini-first candidate checkpoint remains historical evidence. The pinned 9Router helper treats upstream
 HTTP 400 as fallback-eligible, whereas request-level missing-prompt 400 is
 rejected before Combo dispatch; do not overclaim a general non-fallback
-boundary or modify 9Router source. Real owner/non-owner group image and
-three-way voice acceptance remain pending, as do the single version bump,
+boundary or modify 9Router source. A real candidate transcript exposed an intermittent typed-to-voice bug where
+TTS audio could be persisted without visible text. Commit `6c0840a` fixes this
+by preserving typed tagged TTS as a normal text+audio payload while retaining
+the inbound-voice supplement contract; the patched candidate is deployed and
+its in-container runtime fixture passed. Real owner re-test of typed voice
+must still confirm the visible Chinese/Japanese text and single audio
+attachment. Real owner/non-owner group image and remaining three-way voice
+acceptance remain pending, as do the single version bump,
 final release, project-state closure, and Goal completion. The separate V2
 TTS worktree remains untouched.
 
