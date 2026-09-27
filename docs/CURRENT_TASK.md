@@ -7,7 +7,7 @@ Execute the Goal end-to-end: provision the 9Router-owned `amadeus-image` fallbac
 The `amadeus-image` Combo was idempotently provisioned with an external
 minimal prestate rollback, and a real authenticated OpenClaw-network image
 transport smoke succeeded through Gemini. Exact live 9Router helper tests
-proved synthetic 429 fallback to GPT Image 2.5; no damaging live fault was
+proved synthetic 429 fallback under the then Gemini-first order; no damaging live fault was
 induced. OpenClaw **candidate** `02df414` is now live on M204 with version
 1.6.4 unchanged, logical `openai/amadeus-image`, tagged TTS, and narrowly
 scoped group image policy. Read-only live policy projection passed; it is not
@@ -18,10 +18,15 @@ The release checkpoint directory initially had mode 0755, was tightened to
 0700 with 0600 manifests, and the deployment source has been fixed to create
 protected mode from the outset; validate this on final release. 9Router and
 native TTS PIDs were unchanged. On 2026-09-27 the owner amended the image priority to GPT Image 2.5 first,
-Gemini 3.1 Flash Image second. The Git desired state/Goal and focused tests
-now reflect that order, but the live Combo still has the earlier order until
-a protected reconcile and fresh GPT-first smoke complete. The prior candidate
-checkpoint remains historical evidence. The pinned 9Router helper treats upstream
+Gemini 3.1 Flash Image second. The Goal, Git desired state, and live 9Router
+Combo now agree on that order. A protected priority-only rollback snapshot
+preceded the idempotent API reconcile; the fresh OpenClaw-network smoke
+returned a valid PNG and logs showed GPT Image 2.5 succeed as backend 1/2.
+The exact live Combo helper passed a synthetic GPT-429 → Gemini fallback
+fixture without a second logical request. No 9Router/OpenClaw/native TTS
+restart occurred. See
+`.agent/checkpoints/2026-09-27-amadeus-image-gpt-first.md`; the earlier
+Gemini-first candidate checkpoint remains historical evidence. The pinned 9Router helper treats upstream
 HTTP 400 as fallback-eligible, whereas request-level missing-prompt 400 is
 rejected before Combo dispatch; do not overclaim a general non-fallback
 boundary or modify 9Router source. Real owner/non-owner group image and
