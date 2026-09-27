@@ -1,50 +1,27 @@
 # Project State — 2026-09-27
 
-## Active model-capability adapter candidate — partial production state
+## Model-capability adapter — accepted candidate awaiting final 1.6.5 release
 
-The owner requested GPT Image 2.5 as the first image backend and Gemini as
-fallback. The Goal, Git desired state and live 9Router Combo now agree on
-strict GPT Image 2.5 → Gemini 3.1 Flash Image fallback. The priority-only
-prestate snapshot and a fresh GPT-first successful transport smoke are in
-`.agent/checkpoints/2026-09-27-amadeus-image-gpt-first.md`. The earlier
-Gemini-first candidate smoke/checkpoint below remain historical.
+The owner confirmed the repaired real behavior after the final candidate
+redeploy: typed voice replies now preserve one audio attachment and the exact
+visible format `中文：...` followed by `日本語：...`. The earlier intermittent
+text-loss cause was the tagged-TTS media-only normalization path plus a stale
+volume-installed WhatsApp helper marker; the fixes preserve typed text+audio,
+canonicalize both labels, and upgrade existing monitor markers.
 
-The 1.6.4 **candidate** OpenClaw image
-`local/openclaw-amadeus:git-0827dafec807-20260927140017` is live and healthy
-on M204; no final release/version bump has occurred. It uses
-`openai/amadeus-image` over the existing 9Router provider, `tts.auto=tagged`,
-and a narrowly scoped WhatsApp/Telegram group image policy. `arthur-combo`,
-`amadeus-asr`, `amadeus-tts`, `kurisu-v1`, MP3, 1200 characters, the 120-second
-TTS timeout, and the global Agent-facing `tts,message` deny are unchanged.
-The 9Router `kind=image` Combo now has strict GPT Image 2.5 → Gemini
-3.1 Flash Image fallback order; an authenticated image transport smoke
-succeeded through GPT, and a synthetic 429 against the exact live helper
-advanced to Gemini without a second logical request. No safe live first-model fault was induced.
-Router-level missing-prompt 400 returned before Combo dispatch, but the pinned
-helper treats upstream HTTP 400 as fallback-eligible; do not claim broader
-no-fallback behavior. Router and native TTS PIDs were not restarted.
+The candidate image `local/openclaw-amadeus:git-0827dafec807-20260927140017`
+was healthy; its latest protected checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927140017` (0700 root,
+0600 config/manifests). The live 9Router Combo remains strict GPT Image 2.5 →
+Gemini 3.1 Flash Image; GPT-first transport smoke and synthetic fallback proof
+passed. `arthur-combo`, ASR/TTS contracts, sensitive-tool restrictions, and
+unrelated services remain unchanged. No 9Router or native TTS restart occurred.
 
-The candidate deployment checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927125732` (manually
-tightened to 0700; config and manifests 0600), with post-deploy evidence at
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260927125732`
-(0700). A separate pre-goal OpenClaw config/monitor/image checkpoint and the
-minimal 9Router Combo prestate support independent rollback. The live policy
-projection passed, but **real owner/non-owner group image and three-way voice
-acceptance are still pending**. See
-`.agent/checkpoints/2026-09-27-amadeus-model-capability-candidate.md`.
-
-
-A real candidate transcript revealed an intermittent typed-to-voice delivery
-bug: tagged TTS could arrive as audio while the visible text payload was empty.
-The subsequent `9f29a23`/`0827daf` fixes preserve typed tagged TTS as text plus
-audio, canonicalize visible output to exactly `中文：...` and `日本語：...`,
-and upgrade an already-marked volume monitor. Focused patched-runtime
-fixtures and the exact Chinese-only regression pass. The candidate was
-redeployed with a protected 0700/0600 checkpoint at
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260927140017`. The owner
-still needs to re-test a real typed explicit voice reply after this fix; no
-final release or version bump has occurred.
+The owner acceptance disposition covers the candidate's real image/group and
+voice behavior; the remaining action is the single Amadeus 1.6.5 release bump,
+immutable final build/apply, protected release evidence, owner notification,
+health/smoke, and final Goal closure. The pinned 9Router upstream-400
+fallback caveat remains documented; no 9Router source change is introduced.
 
 ## Source and architecture
 
