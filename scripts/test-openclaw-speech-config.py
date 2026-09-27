@@ -16,18 +16,19 @@ assert provider["baseUrl"] == "http://9router:20128/v1"
 assert provider["request"] == {"allowPrivateNetwork": True}
 assert provider["apiKey"]["id"] == "OPENCLAW_9ROUTER_API_KEY"
 assert c["agents"]["defaults"]["mediaModels"]["image"] == {
-    "primary": "openai/ag/gemini-3.1-flash-image",
+    "primary": "openai/amadeus-image",
     "timeoutMs": 180000,
 }
 assert provider["models"] == [{
-    "id": "ag/gemini-3.1-flash-image",
-    "name": "Gemini 3.1 Flash Image",
+    "id": "amadeus-image",
+    "name": "Amadeus Image",
 }]
 amadeus_manifest = json.loads((ROOT / "plugins/amadeus/openclaw.plugin.json").read_text())
 assert "skills/image-generation" in amadeus_manifest["skills"]
 image_skill = (ROOT / "plugins/amadeus/skills/image-generation/SKILL.md").read_text()
 assert "image_generate" in image_skill and "fixed trigger phrases" in image_skill
 assert "ag/gemini-3.1-flash-image" not in image_skill
+assert "cx/gpt-image-2.5" not in image_skill
 assert all(k == "openai" or not v.get("request", {}).get("allowPrivateNetwork")
            for k, v in c["models"]["providers"].items())
 media = c["tools"]["media"]
@@ -46,11 +47,21 @@ user_seed = (ROOT / "integrations/openclaw/workspace-seed/USER.seed.md").read_te
 assert "Prefer Simplified Chinese for ordinary text replies." in user_seed
 assert "Prefer Japanese replies by default" not in user_seed
 speech = c["tts"]
-assert speech["auto"] == "inbound" and speech["mode"] == "final"
+assert speech["auto"] == "tagged" and speech["mode"] == "final"
 assert speech["modelOverrides"] == {"enabled": True, "allowText": True, "allowProvider": False}
 assert speech["providers"]["openai"]["baseUrl"] == provider["baseUrl"]
 assert speech["providers"]["openai"]["model"] == "amadeus-tts"
 assert speech["providers"]["openai"]["speakerVoice"] == "kurisu-v1"
+assert speech["providers"]["openai"]["responseFormat"] == "mp3"
+assert speech["maxTextLength"] == 1200 and speech["timeoutMs"] == 120000
+for channel in ("whatsapp", "telegram"):
+    group = c["channels"][channel]["groups"]["*"]
+    assert group["requireMention"] is False
+    assert group["tools"] == {"allow": ["web_search", "web_fetch", "image_generate"]}
+assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
+voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
+assert "explicit typed request" in voice_skill and "tts.auto=tagged" in voice_skill
+assert "verified inbound WhatsApp voice lease" in voice_skill
 assert "tts" not in c["channels"].get("telegram", {})
 cli = ROOT / "node_modules/.pnpm/openclaw@2026.9.4/node_modules/openclaw/openclaw.mjs"
 if cli.is_file():

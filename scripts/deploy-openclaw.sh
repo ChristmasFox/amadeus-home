@@ -75,7 +75,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -246,6 +246,7 @@ git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; c
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
 if ((CANDIDATE)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
 
+python3 "$ROOT_DIR/scripts/provision-9router-image-combo.py" --verify-live --machine "$MACHINE"
 if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
 if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 
@@ -281,12 +282,15 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
+  node --check scripts/patch-openclaw-group-image-policy.mjs
+  node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-openclaw-voice-policy.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
   node scripts/test-patch-openclaw-whatsapp-media-agent.mjs
   node scripts/test-openclaw-bilingual-voice.mjs
+  pnpm test:model-capability-adapter
   pnpm check:secrets
 )
 
@@ -544,10 +548,10 @@ if config.get('tools', {}).get('sessions', {}).get('visibility') != 'self':
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
 if config.get('tools', {}).get('deny') != ['tts', 'message']:
-    raise SystemExit('agent-facing TTS and generic message tools must be denied; native auto-inbound TTS remains active')
+    raise SystemExit('agent-facing TTS and generic message tools must be denied; native tagged TTS remains active')
 tts = config.get('tts', {})
-if tts.get('auto') != 'inbound' or tts.get('mode') != 'final' or tts.get('modelOverrides', {}).get('allowText') is not True:
-    raise SystemExit('native final inbound TTS must allow audio-only text directives')
+if tts.get('auto') != 'tagged' or tts.get('mode') != 'final' or tts.get('modelOverrides', {}).get('allowText') is not True:
+    raise SystemExit('native final tagged TTS must allow explicit audio-only text directives')
 if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):
@@ -567,10 +571,25 @@ if whatsapp.get('dmPolicy') != 'open' or whatsapp.get('allowFrom') != ['*']:
 for account in whatsapp.get('accounts', {}).values():
     if isinstance(account, dict) and (account.get('dmPolicy') != 'open' or account.get('allowFrom') != ['*']):
         raise SystemExit('WhatsApp account DM policy is not open for all senders')
-wildcard_group = whatsapp.get('groups', {}).get('*', {})
-if 'tools' in wildcard_group or 'toolsBySender' in wildcard_group:
-    raise SystemExit('WhatsApp group tool policy must inherit the full agent profile')
+if config.get('agents', {}).get('defaults', {}).get('mediaModels', {}).get('image', {}).get('primary') != 'openai/amadeus-image':
+    raise SystemExit('OpenClaw must use the logical amadeus-image capability')
+expected_group_tools = ['web_search', 'web_fetch', 'image_generate']
+for channel in ('whatsapp', 'telegram'):
+    channel_config = config.get('channels', {}).get(channel, {})
+    scopes = [channel_config.get('groups', {})]
+    scopes.extend(a['groups'] for a in channel_config.get('accounts', {}).values() if isinstance(a, dict) and 'groups' in a)
+    for groups in scopes:
+        if not isinstance(groups, dict):
+            raise SystemExit('channel group map must be an object')
+        for group in groups.values():
+            if not isinstance(group, dict) or group.get('tools') != {'allow': expected_group_tools}:
+                raise SystemExit('group image policy must be scoped to the three safe native tools')
+            if channel == 'whatsapp' and group.get('toolsBySender', {}).get('e164:' + owner_phone, {}).get('allow') != ['*']:
+                raise SystemExit('WhatsApp owner group tool profile must remain full')
+            if channel == 'telegram' and group.get('toolsBySender'):
+                raise SystemExit('Telegram group sender policy unexpectedly widened')
 print('OWNER_TOOL_POLICY=full')
+print('GROUP_IMAGE_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 

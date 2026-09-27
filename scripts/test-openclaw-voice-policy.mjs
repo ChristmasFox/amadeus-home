@@ -11,7 +11,10 @@ assert.equal(resolveAmadeusJapaneseSpeechText(chinese, chinese), '', 'Chinese-on
 assert.equal(resolveAmadeusJapaneseSpeechText('', japanese), japanese, 'Japanese-only directive is usable');
 assert.equal(resolveAmadeusJapaneseSpeechText('', `日本語：${japanese}`), '', 'structured fallback is not speech');
 const typed = { text: chinese, mediaUrl: 'file://audio.mp3', audioAsVoice: true, spokenText: japanese };
-assert.equal(ensureAmadeusJapaneseVoiceText(typed, false), typed, 'typed session remains untouched');
+assert.equal(ensureAmadeusJapaneseVoiceText(typed, false), typed, 'typed media without a TTS supplement remains untouched');
+const taggedTyped = { ...typed, ttsSupplement: { spokenText: japanese } };
+assert.equal(ensureAmadeusJapaneseVoiceText(taggedTyped, false).text, `${chinese}\n\n日本語：${japanese}`, 'tagged typed voice uses the same visible Japanese rule');
+assert.equal(ensureAmadeusJapaneseVoiceText({ ...taggedTyped, ttsSupplement: { spokenText: chinese } }, false).mediaUrl, undefined, 'tagged typed Chinese audio fails closed');
 const voice = ensureAmadeusJapaneseVoiceText(typed, true);
 assert.equal(voice.text, `${chinese}\n\n日本語：${japanese}`);
 const rejected = ensureAmadeusJapaneseVoiceText({ ...typed, spokenText: chinese }, true);

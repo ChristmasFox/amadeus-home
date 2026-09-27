@@ -6,3 +6,4 @@ export const WHATSAPP_MARKER = 'amadeus-whatsapp-voice-typing-lifecycle-v1';
 export const WHATSAPP_INGRESS_QUEUE_MARKER = 'amadeus-whatsapp-voice-ingress-queue-v1';
 export const WHATSAPP_JAPANESE_TEXT_MARKER = 'amadeus-whatsapp-japanese-visible-tts-v1';
 export const WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER = 'amadeus-whatsapp-japanese-audio-guard-v1';
+export const WHATSAPP_TAGGED_TYPED_GUARD_MARKER = 'amadeus-whatsapp-tagged-japanese-audio-guard-v1';

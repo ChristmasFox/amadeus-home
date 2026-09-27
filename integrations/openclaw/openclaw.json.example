@@ -35,7 +35,7 @@
       },
       "mediaModels": {
         "image": {
-          "primary": "openai/ag/gemini-3.1-flash-image",
+          "primary": "openai/amadeus-image",
           "timeoutMs": 180000
         }
       },
@@ -75,8 +75,8 @@
         "request": { "allowPrivateNetwork": true },
         "models": [
           {
-            "id": "ag/gemini-3.1-flash-image",
-            "name": "Gemini 3.1 Flash Image"
+            "id": "amadeus-image",
+            "name": "Amadeus Image"
           }
         ]
       }
@@ -167,7 +167,8 @@
       "groupPolicy": "open",
       "groups": {
         "*": {
-          "requireMention": false
+          "requireMention": false,
+          "tools": { "allow": ["web_search", "web_fetch", "image_generate"] }
         }
       },
       "streaming": {
@@ -192,14 +193,15 @@
       "groupPolicy": "open",
       "groups": {
         "*": {
-          "requireMention": false
+          "requireMention": false,
+          "tools": { "allow": ["web_search", "web_fetch", "image_generate"] }
         }
       },
       "configWrites": false
     }
   },
   "tts": {
-    "auto": "inbound",
+    "auto": "tagged",
     "mode": "final",
     "modelOverrides": { "enabled": true, "allowText": true, "allowProvider": false },
     "provider": "openai",

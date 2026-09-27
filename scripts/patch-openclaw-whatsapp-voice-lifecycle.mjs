@@ -9,12 +9,12 @@ import { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText } from
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER } from './openclaw-voice-markers.mjs';
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER } from './openclaw-voice-markers.mjs';
 export { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER };
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER };
 
 function replaceOnce(source, before, after, label) {
   const count = source.split(before).length - 1;
@@ -176,6 +176,24 @@ export function patchWhatsAppJapaneseAudioGuardSource(original) {
   return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
 }
 
+export function patchWhatsAppTaggedTypedGuardSource(original) {
+  if (original.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER)) return original;
+  const marker = `// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n`;
+  const count = original.split(marker).length - 1;
+  if (count !== 1) throw new Error(`pinned Japanese audio guard must precede typed upgrade: marker count=${count}`);
+  const start = original.indexOf(marker) + marker.length;
+  const end = original.indexOf('\nfunction createWhatsAppReplyPlan(params) {', start);
+  if (end < 0) throw new Error('pinned Japanese voice helper end anchor missing');
+  const previous = original.slice(start, end);
+  const updated = ensureAmadeusJapaneseVoiceText.toString();
+  const oldGate = "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;";
+  if (!previous.startsWith('function ensureAmadeusJapaneseVoiceText(') ||
+      (previous !== updated && !previous.includes(oldGate))) {
+    throw new Error('unknown Japanese voice helper version; refusing typed upgrade');
+  }
+  return `${original.slice(0, start)}// ${WHATSAPP_TAGGED_TYPED_GUARD_MARKER}\n${updated}${original.slice(end)}`;
+}
+
 export function patchWhatsAppJapaneseTextSource(original) {
   if (original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) return original;
   if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
@@ -256,6 +274,7 @@ export async function main(argv = process.argv.slice(2)) {
     console.log(`WHATSAPP_VOICE_INGRESS_QUEUE_PATCH=${await patchFile(path, patchWhatsAppIngressQueueSource, WHATSAPP_INGRESS_QUEUE_MARKER)}`);
     console.log(`WHATSAPP_JAPANESE_TEXT_PATCH=${await patchFile(path, patchWhatsAppJapaneseTextSource, WHATSAPP_JAPANESE_TEXT_MARKER)}`);
     console.log(`WHATSAPP_JAPANESE_AUDIO_GUARD_PATCH=${await patchFile(path, patchWhatsAppJapaneseAudioGuardSource, WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER)}`);
+    console.log(`WHATSAPP_TAGGED_TYPED_GUARD_PATCH=${await patchFile(path, patchWhatsAppTaggedTypedGuardSource, WHATSAPP_TAGGED_TYPED_GUARD_MARKER)}`);
   }
 }
 
