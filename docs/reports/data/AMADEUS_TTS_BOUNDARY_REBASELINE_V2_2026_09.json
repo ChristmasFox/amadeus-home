@@ -9471,7 +9471,7 @@
       "status": "not_run"
     }
   },
-  "report_generated_utc": "2026-09-27T08:54:05.298651+00:00",
+  "report_generated_utc": "2026-09-27T08:59:28.357780+00:00",
   "representative_listening_artifacts": {
     "artifacts": [],
     "control_id": "prod-1.6.2-a-mlx-auto-interactive",
@@ -9999,10 +9999,10 @@
       "partial_mp3_files_preserved": 122,
       "preserved_pre_normalization_listening_index_sha256": "ce17221210536b34a5bc2656c8f77def69fbafb306658324ec278b07e2ab5d41",
       "production_configuration_changed": false,
-      "recorded_utc": "2026-09-27T08:54:05.259009+00:00",
+      "recorded_utc": "2026-09-27T08:59:28.193590+00:00",
       "representative_artifacts": 0,
       "source_sha256": {
-        "apps/qwen3-tts-service/analyze_production_boundary.py": "a0c88620738c38c1b2d903b7816a578a3e8a4604fe7240672cb32b48a57ea70c",
+        "apps/qwen3-tts-service/analyze_production_boundary.py": "9d38f344caa5281dfbb535a5a080c9426ac79067c41f776cc8bb9794e01513bf",
         "apps/qwen3-tts-service/finalize_production_boundary_samples.py": "2f86129c77e942845a5812189e850d736e9aa7b43e8c80853ebb7c38cb13028f",
         "apps/qwen3-tts-service/production_boundary_benchmark.py": "a12e8a0638c9ff79dae990a5af8730fe4c097c481970b338012f3d67acffaa43"
       }
