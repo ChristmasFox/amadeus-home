@@ -121,6 +121,8 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(identityContextFromOpenClaw(context).replySender, undefined);
 });
 
-test('host telemetry rejects owner messages in group conversations', async () => {
-  await assert.rejects(() => macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: true, sessionKey: 'agent:main:group:1', nativeChannelId: 'group-1@g.us' } as never), /private/u);
+test('host telemetry permits bounded group queries but keeps direct owner checks for notifications', async () => {
+  const result = await macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:group:1', nativeChannelId: 'group-1@g.us' } as never);
+  assert.deepEqual(result, { status: 'unavailable', error: 'host telemetry unavailable', host: 'Amadeus-M204' });
+  await assert.rejects(() => macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:chat' } as never), /owner or group query authorization/u);
 });

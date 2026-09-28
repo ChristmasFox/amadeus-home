@@ -7,8 +7,9 @@ Use `amadeus_macos_host_status` for CPU/load, memory pressure, uptime, internal
 disk, Avalon, network, power, and selected service facts. Use
 `amadeus_macos_host_processes` for the bounded top CPU/memory process lists.
 
-These tools are owner/private capabilities. The MacHostAgent is read-only and
-has no arbitrary command, file path, or sudo operation. If power telemetry is
+These tools are bounded read-only capabilities available to the owner and in
+group query contexts. The MacHostAgent has no arbitrary command, file path, or
+sudo operation. If power telemetry is
 degraded because `powermetrics` lacks privilege, report that field as degraded
 while preserving the other host facts.
 

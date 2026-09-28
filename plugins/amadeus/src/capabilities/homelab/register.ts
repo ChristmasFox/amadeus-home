@@ -10,5 +10,5 @@ const HomeLabParameters = Type.Object({
 }, { additionalProperties: false });
 
 export function registerHomeLab(api: OpenClawPluginApi): void {
-  registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status. It never restarts or modifies services; notifyOwner is an explicit owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(configFor(api), context, notifier, params.notifyOwner === true, params.reportPeriod, signal));
+  registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status from owner or group query contexts. It never restarts or modifies services; notifyOwner is an explicit direct-owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(configFor(api), context, notifier, params.notifyOwner === true, params.reportPeriod, signal));
 }
