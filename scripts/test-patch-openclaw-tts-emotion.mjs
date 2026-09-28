@@ -7,6 +7,7 @@ const patched = patchProviderSource(provider);
 assert.match(patched, new RegExp(MARKER));
 assert.match(patched, /case "emotion"/);
 assert.match(patched, /case "mood"/);
+assert.doesNotMatch(patched, /if \(!ctx\.policy\.allowEmotion\)/);
 assert.match(patched, /invalid_emotion/);
 assert.match(patched, /\.\.\.style == null \? \{\} : \{ style \}/);
 assert.equal(patchProviderSource(patched), patched);
