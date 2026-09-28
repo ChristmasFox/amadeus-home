@@ -17,8 +17,13 @@
 
 - `python3 -m unittest infra/macos/test_machostagent.py`：10 tests passed。
 - `pnpm --filter @agent/amadeus-plugin typecheck`：passed。
-- `pnpm --filter @agent/amadeus-plugin test`：37 tests passed。
+- `pnpm --filter @agent/amadeus-plugin test`：38 tests passed，包含群聊只读查询与通知边界。
+- `pnpm test:architecture`、`pnpm check:secrets`、受影响 package build：passed。
 - `bash -n scripts/deploy-openclaw.sh scripts/host-profile.sh infra/macos/install-machostagent.sh`：passed。
-- M204 LaunchAgent `com.amadeus.machostagent` 已切换到仓库实现并运行；`/health`、`/v1/status`、`/v1/history`、`/v1/anomalies` 已用真实 token 查询。真实快照确认物理内存 `24.00 GB`、Memory Pressure、Swap `5.14 GB`、约 `103 mW` SoC estimate（不是整机输入功耗）、Avalon `7.28 TB / 981.67 GB free / mounted`，无 OrbStack guest memory fallback。
+- M204 LaunchAgent `com.amadeus.machostagent` 已切换到仓库实现并运行；`/health`、`/v1/status`、`/v1/history`、`/v1/anomalies` 已用真实 token 查询。最新真实快照确认物理内存 `24.00 GB`、Memory Pressure `normal`、Swap `6.09 GB`、约 `102 mW` SoC estimate（不是整机输入功耗）、Avalon `7.28 TB / 981.67 GB free / mounted`，无 OrbStack guest memory fallback；`/v1/anomalies` 已使用公开 camelCase 字段驱动桥接。
+- HomeLab 查询允许 Owner 或群聊上下文的只读请求；`notifyOwner` 与早晚报告仍要求 direct owner/cron，并固定写入既有 WhatsApp owner outbox。
+- 候选镜像 `local/openclaw-amadeus:git-ef4c9ff39b7d-20260928083101` 健康，恢复点为 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928083101`；真实晚报 cron `amadeus-mac-host-evening` 手动运行成功，摘要按手机宽度分组，功耗显示为 `mW（SoC 估算）` 并单列整机输入功耗未知，OpenWrt 只出现一次且标明独立 endpoint。最新 manual outbox key 为 `mac-host-report:manual:2026-09-28T08:37:44.486Z`。
+- 异常桥真实写入并复用现有 OwnerNotifier：`mac-host-anomaly:storage_warning:avalon`、`mac-host-anomaly:service_unhealthy:ssh`、`mac-host-anomaly:swap_growth` 各有一个 `.sent.json`；经过轮询后没有重复 marker。
+- 运行态已移除旧 Glances：容器、镜像、`/var/lib/casaos/apps/glances` 和 61208 配置均不存在；旧 compose 仅保存在 `/DATA/AppData/openclaw/backups/amadeus-glances-retired-20260928081939/docker-compose.yml` 恢复点中。
 
-待最终 runtime acceptance：通过 candidate OpenClaw 部署执行 HomeLab 查询、晨间/晚间 owner outbox 投递及异常 dedupe/cooldown 证据；未完成前不宣称 Goal 完成。
+以上证据覆盖 M204 查询、历史聚合、候选 HomeLab 报告、owner outbox 投递、异常 dedupe/cooldown 和运行态退休清理。

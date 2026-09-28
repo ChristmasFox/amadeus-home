@@ -135,6 +135,9 @@ Avalon：5.36 / 8.00 TB（67%），剩余 2.64 TB，已挂载
 - 本时间窗异常及持续时间；
 - HomeLab critical services / OpenWrt 状态。
 
+群聊可以调用上述只读查询；任何 `notifyOwner`、早晚报告或异常投递仍只
+允许 direct owner/cron，并继续使用既有 WhatsApp owner outbox。
+
 必须清楚区分“宿主机事实”和“服务状态”，不能再次出现 OrbStack 12GB 被描述成 M204 物理内存。
 
 ## 8. 早晚通知：严格沿用现有 VPS 规范

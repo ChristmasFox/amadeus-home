@@ -1,4 +1,22 @@
-# Current Task — Typed voice reply modality heartbeat isolation (Candidate live)
+# Current Task — MacHost Telemetry V1 (Complete)
+
+Date: 2026-09-28 local. Based on latest `origin/main` (`6d82598`), the
+MacHost Telemetry V1 implementation is complete. The MacHostAgent source,
+SQLite history/anomaly engine, HomeLab adapter, mobile report format, group
+read-only query boundary, existing owner outbox bridge, and 09:30/23:00 cron
+jobs are implemented and verified. M204 runtime acceptance covers status,
+history, anomalies, the candidate HomeLab report, owner outbox delivery, and
+anomaly dedupe. The retired Glances runtime was stopped and removed after its
+compose was preserved at
+`/DATA/AppData/openclaw/backups/amadeus-glances-retired-20260928081939`.
+Candidate image: `local/openclaw-amadeus:git-ef4c9ff39b7d-20260928083101`.
+Rollback checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928083101`.
+Implementation evidence: `docs/MAC_HOST_TELEMETRY_V1_IMPLEMENTATION.md`.
+
+The following previous task remains for historical continuity.
+
+# Previous Task — Typed voice reply modality heartbeat isolation (Candidate live)
 
 Date: 2026-09-28 local. Commit `bce1cc6` is pushed to `origin/main` and deployed as candidate image `local/openclaw-amadeus:git-bce1cc67fc8a-20260928054649`. Runtime inspection traced the leaked `[[amadeus:reply-modality=default]]\nNO_REPLY` to OpenClaw heartbeat turns: the native `inputProvenance.kind=internal_system` heartbeat shared the WhatsApp route, while the previous hook injected the typed-user protocol based only on `channel=whatsapp`. The hook now admits the protocol only for `inputProvenance.kind=external_user`; inbound voice still follows the verified lease. The WhatsApp postprocessor also suppresses a marked `NO_REPLY` after stripping the marker, preserving core silent delivery if a stale/model-generated marker appears. Focused tests, Amadeus full tests, OpenClaw 2026.9.4 patch fixtures, architecture, secrets, and build passed. Rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928054649`. Candidate health passed, and a manual run of the same heartbeat completed with exact plain `NO_REPLY` and no WhatsApp outbound log. Evidence: `.agent/checkpoints/2026-09-28-typed-voice-heartbeat-isolation-candidate-live.md`.
 
