@@ -1,21 +1,25 @@
 # Project State — 2026-09-27
 
-## 2026-09-28 typed voice reply modality candidate — owner-accepted
+## 2026-09-28 typed voice semantic modality candidate — handset acceptance pending
 
-Commit `89826fd` is pushed to `origin/main` and deployed as
-`local/openclaw-amadeus:git-89826fd8e5cc-20260928035547` on M204 OrbStack
-`nyannyan`. The turn-scoped `replyModality` classifier and deterministic
-`voice-reply` Skill injection passed focused tests, and the pinned OpenClaw
-TTS patch now receives `runId`/`sessionKey` so missing-marker recovery is
-limited to the current typed voice turn. The existing verified inbound voice
-lease remains unchanged.
+Commit `f8f073b` is pushed to `origin/main` and deployed as
+`local/openclaw-amadeus:git-f8f073b75eaa-20260928042013` on M204 OrbStack
+`nyannyan`. The previous fixed typed-text classifier was removed. Each typed
+WhatsApp turn initializes a turn-scoped `replyModality=default`; the same
+Agent turn semantically chooses `voice` or `default` and emits hidden control
+metadata. The pinned OpenClaw TTS/WhatsApp patch records that metadata for the
+current run/session, strips it before delivery, gates missing-marker recovery
+on `voice`, and clears it at `agent_end`/TTL. The existing verified inbound
+voice lease and sole `voice-reply` Skill remain unchanged.
 
 The protected rollback checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928035547`; health,
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928042013`; health,
 Product Radar, NAS read-only smoke, and WhatsApp linked/connected checks
-passed. Real WhatsApp inbound acceptance produced exactly one media reply for
-the explicit voice turn and a text-only reply for the following ordinary turn.
-Evidence: `.agent/checkpoints/2026-09-28-typed-voice-modality-candidate-live.md`.
+passed. Focused tests, Amadeus full tests, OpenClaw 2026.9.4 patch fixtures,
+architecture, secrets, and build passed. No post-restart handset messages
+have arrived yet; real acceptance for typed voice, feature discussion,
+translation, and next-turn reset remains pending. Evidence:
+`.agent/checkpoints/2026-09-28-typed-voice-semantic-modality-candidate-live.md`.
 
 ## Amadeus 1.6.5 model-capability adapter release — owner-accepted
 
