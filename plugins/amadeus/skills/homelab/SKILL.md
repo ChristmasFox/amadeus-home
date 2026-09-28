@@ -1,12 +1,15 @@
 ---
 name: homelab
-description: Read HomeLab probes and optionally request a fixed owner notification.
+description: Read owner-authorized MacHostAgent telemetry and bounded HomeLab/OpenWrt probes.
 user-invocable: false
 ---
 
 # HomeLab
 
-Use `amadeus_homelab_status` for the bounded Glances, uptime, and fixed
-service probes. It does not restart or modify services. Set `notifyOwner=true`
-only for an explicit owner request and preserve the returned queued/sent
-delivery status.
+Use `amadeus_homelab_status` for the real M204 macOS host facts, SQLite-backed
+current-day aggregates, bounded service probes, and the explicitly configured
+OpenWrt endpoint. MacHostAgent is the only host telemetry source; if it is
+unavailable, preserve `host telemetry unavailable` and never substitute guest
+or container metrics. Set `notifyOwner=true` only for an explicit owner or
+scheduled report request. Morning/evening reports reuse the existing owner
+outbox and delivery worker.

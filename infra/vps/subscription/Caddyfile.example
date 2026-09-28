@@ -50,11 +50,6 @@ qb.nyannyan.top {
     reverse_proxy 127.0.0.1:8080
 }
 
-monitor.nyannyan.top {
-    encode gzip
-    reverse_proxy 127.0.0.1:61208
-}
-
 9router.nyannyan.top {
     encode gzip
     reverse_proxy 127.0.0.1:20128

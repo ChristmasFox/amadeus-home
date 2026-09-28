@@ -19,8 +19,8 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
   送到 VPS 的 frps `18789`，Caddy 以 `claw.nyannyan.top` 终止 HTTPS 并反代到该本机端口；
   OpenClaw 的 `allowedOrigins` 同时允许该 HTTPS 来源。
 - HomeLab public services：Caddy 通过 frps 回源到 `immich.nyannyan.top`（2283）、
-  `jellyfin.nyannyan.top`（8097）、`aria.nyannyan.top`（6880）、`qb.nyannyan.top`（8080）、
-  `monitor.nyannyan.top`（Glances，61208）和 `9router.nyannyan.top`（20128）。
+  `jellyfin.nyannyan.top`（8097）、`aria.nyannyan.top`（6880）、`qb.nyannyan.top`（8080）和
+  `9router.nyannyan.top`（20128）。
 - 本任务不启用 Docker、Nginx 或 Web 管理面板。
 - 运行时配置：`/etc/xray/config.json`，权限应为 `root:xray`、`0640`。
 - 工作目录：`/var/lib/xray`，权限应为 `xray:xray`、`0750`。
@@ -48,7 +48,6 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 | 8097 | TCP | Jellyfin frp 回源端口 | Caddy `jellyfin.nyannyan.top` |
 | 6880 | TCP | AriaNG frp 回源端口 | Caddy `aria.nyannyan.top` |
 | 8080 | TCP | qBittorrent WebUI frp 回源端口 | Caddy `qb.nyannyan.top` |
-| 61208 | TCP | Glances frp 回源端口 | Caddy `monitor.nyannyan.top` |
 | 20128 | TCP | 9Router frp 回源端口 | Caddy `9router.nyannyan.top`；API 仍要求 key |
 | 6800/7575 | TCP | 其他现有 frp 映射 | 当前按 frpc 配置监听；未新增 Caddy 公网站点 |
 | 80 | TCP | Caddy ACME HTTP-01 / HTTPS 跳转 | 不承载代理流量 |
@@ -144,7 +143,7 @@ ssh amadeus-gateway 'systemctl status frps.service --no-pager -l'
 ssh amadeus-gateway 'journalctl -u frps.service -n 100 --no-pager'
 ssh amadeus-gateway 'systemctl status hysteria-server.service --no-pager -l'
 ssh amadeus-gateway 'journalctl -u hysteria-server.service -n 100 --no-pager'
-ssh amadeus-gateway 'ss -lntup | grep -E ":(22|80|443|2053|7000|8443|8096|2283|6880|6800|20128|8080|8097|7575|61208) "'
+ssh amadeus-gateway 'ss -lntup | grep -E ":(22|22|80|443|2053|7000|8443|8096|2283|6880|6800|20128|8080|8097|7575) "'
 ssh amadeus-gateway 'ss -lunp | grep ":2053 "'
 ssh amadeus-gateway '/usr/local/bin/xray run -test -config /etc/xray/config.json'
 ssh amadeus-gateway '/usr/local/bin/frps verify -c /etc/frp/frps.toml'

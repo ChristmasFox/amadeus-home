@@ -18,12 +18,29 @@ async function headers(config: AmadeusConfig): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export async function requestMacHost(config: AmadeusConfig, path: string, signal?: AbortSignal): Promise<unknown> {
+  try {
+    return await requestJson(`${config.macHostAgentBaseUrl}${path}`, { headers: await headers(config), signal, timeoutMs: 8_000, includeErrorDetail: false });
+  } catch {
+    return { status: 'unavailable', error: 'host telemetry unavailable', host: 'Amadeus-M204' };
+  }
+}
+
 export async function macHostStatus(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
   assertOwner(context);
-  return requestJson(`${config.macHostAgentBaseUrl}/v1/status`, { headers: await headers(config), signal, timeoutMs: 8_000, includeErrorDetail: false });
+  return requestMacHost(config, '/v1/status', signal);
+}
+
+export async function macHostHistory(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
+  assertOwner(context);
+  return requestMacHost(config, '/v1/history', signal);
 }
 
 export async function macHostProcesses(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
   assertOwner(context);
-  return requestJson(`${config.macHostAgentBaseUrl}/v1/processes`, { headers: await headers(config), signal, timeoutMs: 8_000, includeErrorDetail: false });
+  return requestMacHost(config, '/v1/processes', signal);
+}
+
+export async function macHostAnomalies(config: AmadeusConfig, signal?: AbortSignal): Promise<unknown> {
+  return requestMacHost(config, '/v1/anomalies', signal);
 }

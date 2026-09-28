@@ -6,8 +6,9 @@ import { Type } from 'typebox';
 
 const HomeLabParameters = Type.Object({
   notifyOwner: Type.Optional(Type.Boolean()),
+  reportPeriod: Type.Optional(Type.Union([Type.Literal('morning'), Type.Literal('evening')])),
 }, { additionalProperties: false });
 
 export function registerHomeLab(api: OpenClawPluginApi): void {
-  registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status. It never restarts or modifies services; notifyOwner is an explicit owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(configFor(api), context, notifier, params.notifyOwner === true, signal));
+  registerTool(api, 'amadeus_homelab_status', 'Read current HomeLab host and service status. It never restarts or modifies services; notifyOwner is an explicit owner-only delivery request.', HomeLabParameters, async (params, context, notifier, signal) => homelabStatus(configFor(api), context, notifier, params.notifyOwner === true, params.reportPeriod, signal));
 }

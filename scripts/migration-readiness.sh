@@ -194,7 +194,7 @@ check_crons() {
   orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json | python3 -c '
 import json,sys
 jobs={item.get("name") for item in json.load(sys.stdin).get("jobs",[])}
-expected={"amadeus-vps-morning","amadeus-vps-evening","amadeus-pubg-telemetry-hourly","amadeus-pubg-sync-daily","amadeus-market-open","amadeus-market-close"}
+expected={"amadeus-vps-morning","amadeus-vps-evening","amadeus-mac-host-morning","amadeus-mac-host-evening","amadeus-pubg-telemetry-hourly","amadeus-pubg-sync-daily","amadeus-market-open","amadeus-market-close"}
 raise SystemExit(0 if expected <= jobs else 1)
 '
 }

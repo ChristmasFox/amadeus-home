@@ -24,7 +24,7 @@ shadow/double-run 或兼容 fallback。
 - Emby 媒体整理：继续使用独立 media-organizer-adapter；OpenClaw 原生工具强制
   `scan → preview → 同一会话显式确认 → execute`，一次只处理用户明确指定的一项。
 - Mac/NAS：status、disk、owner-only sleep；SSH key 只在运行时 secret。
-- HomeLab Status：Glances、uptime 和固定服务探针；读取为主，通知为显式 owner action，
+- HomeLab Status：MacHostAgent 真实 macOS host、固定服务探针和独立 OpenWrt endpoint；读取为主，通知为显式 owner action，
   不负责重启。
 - VPS Read-only Capability：通过固定 KiwiVM API 读取 service info、live status 和 raw usage，
   通过固定只读 SSH probe 读取 uptime/load/memory/root filesystem 与 Caddy、Xray、Hysteria2、

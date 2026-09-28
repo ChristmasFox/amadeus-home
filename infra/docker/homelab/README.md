@@ -1,6 +1,6 @@
 # HomeLab Templates
 
-这些模板覆盖迁移时最容易遗漏的 aria2、AriaNG、Dashdot、Emby、qBittorrent、Glances、Jellyfin、frpc、9router、Filebrowser 和 Xiaoya。它们只保存
+这些模板覆盖迁移时最容易遗漏的 aria2、AriaNG、Dashdot、Emby、qBittorrent、Jellyfin、frpc、9router、Filebrowser 和 Xiaoya。它们只保存
 路径、端口、镜像和变量名；RPC secret、JWT secret、初始密码和 machine salt
 必须由外部 secret store 注入。
 

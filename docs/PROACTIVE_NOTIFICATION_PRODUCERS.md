@@ -12,7 +12,9 @@ outbox and delivery policy own that boundary.
 | Amadeus release/deploy | `scripts/deploy-openclaw.sh` → `scripts/notify-owner.sh` | After health/preflight, queues the structured release event into both checkpoint evidence and the production owner outbox, then waits for `.sent.json` | 世界线收束 | ACTIVE |
 | Codex completion hook | `integrations/openclaw/codex-notify.sh` → `scripts/notify-owner.sh` | Generic event with redacted summary and stable idempotency key | 世界线观测 | ACTIVE |
 | VPS scheduled report | CasaOS cron declaration in `scripts/deploy-openclaw.sh` | Cron emits `worldline_notification_intent`, with facts supplied by bounded VPS tools | D-Mail; severity/significance remain factual | ACTIVE |
-| HomeLab status | `plugins/amadeus/src/homelab.ts` | Service and resource facts; unknown metrics remain null/unknown | observation or divergence | ACTIVE |
+| Mac Host morning/evening report | `plugins/amadeus/src/homelab.ts` + native OpenClaw cron | MacHostAgent current-day aggregates, Avalon, services and independent OpenWrt facts; stable `mac-host-report:<date>:<period>` key | D-Mail or factual divergence | ACTIVE |
+| Mac Host anomaly bridge | `plugins/amadeus/src/shared/lifecycle.ts` | Deterministic MacHostAgent anomaly events become normalized owner events with cooldown and existing outbox idempotency | 世界线偏移 | ACTIVE |
+| HomeLab status | `plugins/amadeus/src/homelab.ts` | MacHostAgent host facts plus bounded service/OpenWrt probes; unavailable metrics remain explicit | observation or divergence | ACTIVE |
 | Storage health and maintenance | `scripts/storage-health.sh` / `scripts/storage-maintenance.sh` | External-volume identity, capacity, migration and bounded Docker-maintenance facts; missing storage remains an explicit failure | observation or divergence | ACTIVE |
 | Media organizer | `plugins/amadeus/src/media.ts` | Completed operation facts from the adapter | 世界线收束 | ACTIVE |
 | NAS | `plugins/amadeus/src/nas.ts` | Interactive read-only capability; no proactive notification side effect | none | ACTIVE / no proactive event |
