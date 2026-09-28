@@ -1,6 +1,5 @@
-# Amadeus 1.6.6
+# Amadeus 1.6.7
 
-- 将 Kurisu 语音切换到固定版本的 OminiX Qwen3-TTS Base x-vector 引擎，保留 `amadeus-tts`、`kurisu-v1` 兼容契约，并支持七项受限情绪。
-- 优化 Kurisu 默认语音的句级抑扬、关键词强调和“先尖后软”的傲娇弧线，并将七项情感改为可观察的停顿、速度、音高、能量与句尾行为。
-- 固化 9Router 语音情绪透传与 WhatsApp 控制标记清理，避免内部指令出现在可见正文。
-- 增强候选与正式发布的 owner outbox 通知和回滚证据。
+- 新增仅限本机回环的 Kurisu TTS Tuner，可在不加载第二个模型的情况下比较 PROD/A/B/C、句级风格和 pinned OminiX 生成参数。
+- 将 Kurisu 生产风格收敛到 Git 管理的 canonical 配置，加入受保护草稿、哈希绑定 proposal、显式 promotion 与热加载边界。
+- 保持 `amadeus-tts`、`kurisu-v1`、`18792` 生产契约与生产优先调度，并补充 timing/RTF、CSRF、loopback 隔离和 owner 通知验收。
