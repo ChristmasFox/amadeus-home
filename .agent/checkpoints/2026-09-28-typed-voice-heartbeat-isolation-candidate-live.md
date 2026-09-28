@@ -44,9 +44,12 @@
 - OpenClaw 2026.9.4 lifecycle/TTS fixtures: passed
 - Architecture check, secrets scan, build, and diff check: passed
 
-## Remaining acceptance
+## Live heartbeat acceptance
 
-The next scheduled heartbeat must complete without a WhatsApp outbound message
-or a visible modality marker. Owner handset acceptance remains pending for this
-heartbeat-specific fix; the prior typed voice and inbound voice acceptance is
-preserved in the earlier candidate checkpoint.
+The native `heartbeat-main` job was manually run after deployment with
+`deliveryStatus=not-requested` and `completionStatus=succeeded`. The resulting
+transcript retained `provenance.kind=internal_system` and the assistant output
+was exactly `NO_REPLY`; the post-restart WhatsApp log contained no outbound
+`Sending message` or `Sent message` entry for that run. The prior typed voice
+and inbound voice handset acceptance is preserved in the earlier candidate
+checkpoint.

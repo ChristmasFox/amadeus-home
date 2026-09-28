@@ -21,8 +21,9 @@ protected rollback checkpoint is
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928054649`; post-deploy
 evidence is under
 `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260928054649`.
-The next scheduled heartbeat remains the live silence observation before
-owner acceptance. Evidence:
+The same heartbeat job was manually run after deployment. Its transcript
+returned exact plain `NO_REPLY`, and the post-restart WhatsApp log contained no
+outbound send for that run. Evidence:
 `.agent/checkpoints/2026-09-28-typed-voice-heartbeat-isolation-candidate-live.md`.
 
 ## 2026-09-28 typed voice semantic modality candidate — owner-accepted
