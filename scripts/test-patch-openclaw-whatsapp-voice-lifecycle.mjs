@@ -33,6 +33,7 @@ import {
   whatsappIngressQueueHelpers,
 } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
 import vm from 'node:vm';
+import { parseAmadeusReplyModalityMarker } from './openclaw-voice-policy.mjs';
 
 const coreFixture = `const resolveActiveRunQueueAction = () => "run-now";
 const scheduleFollowupDrain = () => {};
@@ -207,6 +208,9 @@ assert.notEqual(legacyVisible, patchedWhatsAppVisible, 'migration fixture retain
 const migratedWhatsApp = patchWhatsAppJapaneseAudioGuardSource(legacyVisible);
 assert.ok(migratedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER), 'new guard upgrades the already-patched live monitor');
 assert.equal(patchWhatsAppJapaneseAudioGuardSource(migratedWhatsApp), migratedWhatsApp, 'audio guard upgrade is idempotent');
+const staleAudioGuard = `${patchedWhatsAppVisible.split(`// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n`)[0]}// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${parseAmadeusReplyModalityMarker.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}${patchedWhatsAppVisible.slice(patchedWhatsAppVisible.indexOf('\nfunction createWhatsAppReplyPlan(params) {'))}`;
+const migratedStaleAudioGuard = patchWhatsAppJapaneseAudioGuardSource(staleAudioGuard);
+assert.match(migratedStaleAudioGuard, /function stripAmadeusTtsControlMarkers\(/u, 'persisted audio guard receives the legacy mood scrubber');
 assert.ok(patchedWhatsApp.includes(WHATSAPP_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_INGRESS_QUEUE_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));

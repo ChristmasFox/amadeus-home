@@ -251,16 +251,24 @@ export function patchWhatsAppIngressQueueSource(original) {
 }
 
 export function patchWhatsAppJapaneseAudioGuardSource(original) {
-  if (original.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER)) return original;
   const marker = `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n`;
   const count = original.split(marker).length - 1;
   if (count !== 1) throw new Error(`Japanese visible-text patch must be applied first: marker count=${count}`);
-  const start = original.indexOf(marker) + marker.length;
+  const audioMarker = `// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n`;
+  const hasAudioMarker = original.includes(audioMarker);
+  const start = hasAudioMarker
+    ? original.indexOf(audioMarker) + audioMarker.length
+    : original.indexOf(marker) + marker.length;
   const end = original.indexOf('\nfunction createWhatsAppReplyPlan(params) {', start);
   if (end < 0 || !original.slice(start, end).includes('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('pinned Japanese visible-text helper anchor missing');
   }
-  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${parseAmadeusReplyModalityMarker.toString()}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
+  const existing = original.slice(start, end);
+  const typedMarker = `// ${WHATSAPP_TAGGED_TYPED_GUARD_MARKER}\n`;
+  const typedPrefix = existing.startsWith(typedMarker) ? typedMarker : '';
+  const helpers = `${typedPrefix}${parseAmadeusReplyModalityMarker.toString()}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}`;
+  if (hasAudioMarker && existing === helpers) return original;
+  return `${original.slice(0, hasAudioMarker ? start : original.indexOf(marker) + marker.length)}${hasAudioMarker ? '' : audioMarker}${helpers}${original.slice(end)}`;
 }
 
 export function patchWhatsAppTaggedTypedGuardSource(original) {
