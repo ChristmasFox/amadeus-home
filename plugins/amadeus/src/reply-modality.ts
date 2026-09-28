@@ -40,12 +40,13 @@ function keysFor(context: ReplyTurnContext): string[] {
 }
 
 function hasResponseAction(text: string): boolean {
-  return /(?:回答|回复|告诉|说|解释|读|念|播报|答えて|返事して|教えて|説明して|answer|reply|respond|tell|explain)/iu.test(text);
+  return /(?:回答|回复|告诉|说|解释|读|念|播报|发|发送|答えて|返事して|教えて|説明して|送って|answer|reply|respond|tell|explain|send)/iu.test(text);
 }
 
 function hasVoiceOutputPhrase(text: string): boolean {
   return /(?:用|以|通过)\s*(?:语音|声音|音频|语音消息|voice|audio)\s*(?:回答|回复|告诉|说|解释|读|念|播报)/iu.test(text)
     || /(?:回答|回复|告诉|说|解释|读|念|播报)\s*(?:我|一下|我一下)?\s*(?:用|以|通过)\s*(?:语音|声音|音频|语音消息|voice|audio)/iu.test(text)
+    || /(?:发|发送|给我发|给我发送)\s*(?:一条|一段|一个|个)?\s*(?:语音|声音|音频|语音消息|voice|audio)\s*(?:给我)?\s*(?:回答|回复|告诉|说|解释|读|念|播报)?/iu.test(text)
     || /(?:音声|ボイス|音声メッセージ)で\s*(?:答えて|返事して|教えて|説明して)/iu.test(text)
     || /(?:answer|reply|respond|tell|explain)\s+(?:me\s+)?(?:by|with|in)\s+(?:a\s+)?(?:voice|audio)\b/iu.test(text)
     || /(?:voice|audio)\s+(?:reply|response)\b/iu.test(text);
