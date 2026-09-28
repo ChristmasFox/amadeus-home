@@ -49,8 +49,10 @@ export function recordAmadeusReplyModalityForTts(params, modality) {
     ...(sessionKey ? { sessionKey } : {}),
     expiresAt: Date.now() + 120_000,
   };
+  // Keep concurrent turns isolated by run id. Session scope is a compatibility
+  // fallback only when the pinned runtime cannot provide run provenance.
   if (runId) registry.set(`run:${runId}`, record);
-  if (sessionKey) registry.set(`session:${sessionKey}`, record);
+  else if (sessionKey) registry.set(`session:${sessionKey}`, record);
 }
 
 export function resolveAmadeusReplyModalityForTts(params, responseText = '') {
@@ -63,7 +65,7 @@ export function resolveAmadeusReplyModalityForTts(params, responseText = '') {
   if (!(registry instanceof Map)) return 'default';
   const runId = typeof params?.runId === 'string' && params.runId ? `run:${params.runId}` : '';
   const sessionKey = typeof params?.sessionKey === 'string' && params.sessionKey ? `session:${params.sessionKey}` : '';
-  for (const key of [runId, sessionKey]) {
+  for (const key of [runId || sessionKey]) {
     if (!key) continue;
     const record = registry.get(key);
     if (!record) continue;
