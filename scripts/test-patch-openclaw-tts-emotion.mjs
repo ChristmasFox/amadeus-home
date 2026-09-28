@@ -6,6 +6,7 @@ const provider = `function readSpeechOverrides(overrides) {\n\tif (!overrides) r
 const patched = patchProviderSource(provider);
 assert.match(patched, new RegExp(MARKER));
 assert.match(patched, /case "emotion"/);
+assert.match(patched, /case "mood"/);
 assert.match(patched, /invalid_emotion/);
 assert.match(patched, /\.\.\.style == null \? \{\} : \{ style \}/);
 assert.equal(patchProviderSource(patched), patched);

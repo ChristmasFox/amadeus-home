@@ -22,8 +22,8 @@ export function patchProviderSource(original) {
     'speech override style');
   result = replaceOnce(result,
     '\t\tcase "model":\n\t\tcase "model_id":',
-    `\t\tcase "emotion":\n\t\t\tif (!ctx.policy.allowEmotion) return { handled: true };\n\t\t\tif (!new Set([${EMOTIONS.split('|').map((v) => JSON.stringify(v)).join(', ')}]).has(ctx.value)) return { handled: true, warnings: ["invalid_emotion"] };\n\t\t\treturn { handled: true, overrides: { style: ctx.value } };\n\t\tcase "model":\n\t\tcase "model_id":`,
-    'speech emotion directive');
+    `\t\tcase "emotion":\n\t\tcase "mood":\n\t\t\tif (!ctx.policy.allowEmotion) return { handled: true };\n\t\t\tif (!new Set([${EMOTIONS.split('|').map((v) => JSON.stringify(v)).join(', ')}]).has(ctx.value)) return { handled: true, warnings: ["invalid_emotion"] };\n\t\t\treturn { handled: true, overrides: { style: ctx.value } };\n\t\tcase "model":\n\t\tcase "model_id":`,
+    'speech emotion directive and legacy mood alias');
   result = replaceOnce(result,
     '\t\t\tconst speed = overrides.speed ?? config.speed;\n',
     '\t\t\tconst speed = overrides.speed ?? config.speed;\n\t\t\tconst style = overrides.style;\n',

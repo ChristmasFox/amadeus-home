@@ -38,6 +38,18 @@ export function parseAmadeusReplyModalityMarker(value) {
   };
 }
 
+// Older Kurisu turns used `tts:mood`; keep that bounded control line from
+// leaking into channel text while the pinned provider accepts it as an alias
+// for the current `tts:emotion` directive. Strip the text wrapper as a final
+// delivery defense when the upstream parser leaves it in the payload.
+export function stripAmadeusTtsControlMarkers(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/\[\[tts:(?:emotion|mood)=[^\]\r\n]*\]\]/giu, '')
+    .replace(/\[\[\/?tts:text\]\]/giu, '')
+    .replace(/^\s+|\s+$/gu, '');
+}
+
 export function recordAmadeusReplyModalityForTts(params, modality) {
   const registry = globalThis.__amadeusReplyModalityRuns20260928;
   if (!(registry instanceof Map)) return;
@@ -81,7 +93,8 @@ export function resolveAmadeusReplyModalityForTts(params, responseText = '') {
 export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
   const modalityMarker = parseAmadeusReplyModalityMarker(payload.text);
-  if (modalityMarker.present) payload = { ...payload, text: modalityMarker.text };
+  const cleanedText = stripAmadeusTtsControlMarkers(modalityMarker.text);
+  if (modalityMarker.present || cleanedText !== modalityMarker.text) payload = { ...payload, text: cleanedText };
   // Core suppresses the exact NO_REPLY token before channel delivery. If a
   // control marker was prepended first, that check has already been missed;
   // remove the now-cleaned silent payload here before it can reach WhatsApp.
