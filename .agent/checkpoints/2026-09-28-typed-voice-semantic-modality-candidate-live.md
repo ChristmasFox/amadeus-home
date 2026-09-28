@@ -2,16 +2,16 @@
 
 ## Source
 
-- Commit: `f8f073b` (`fix(amadeus): derive typed voice modality in agent turn`)
+- Commit: `235387f` (`fix(amadeus): strip modality metadata from outbound text`)
 - Branch: `main`, pushed to `origin/main`
 - Runtime: OpenClaw `2026.9.4`, sole Agent runtime
 
 ## Candidate deployment
 
-- Image: `local/openclaw-amadeus:git-f8f073b75eaa-20260928042013`
+- Image: `local/openclaw-amadeus:git-235387f23d2e-20260928043207`
 - Host: OrbStack machine `nyannyan`
-- Rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928042013`
-- Post-deploy evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260928042013`
+- Rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928043207`
+- Post-deploy evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260928043207`
 - OpenClaw health: passed; Product Radar health: passed; NAS read-only smoke: passed
 - WhatsApp: linked, connected, and listening after restart
 
@@ -20,7 +20,7 @@
 - Removed the previous typed prompt regex classifier.
 - `before_prompt_build` initializes the current WhatsApp typed turn as `replyModality=default` and provides the model semantic protocol plus the canonical `skills/voice-reply/SKILL.md` body.
 - The same Agent turn chooses `voice` or `default` from the complete request and emits one hidden `[[amadeus:reply-modality=...]]` control line.
-- The runtime records that decision under the current run/session, gates missing `[[tts:text]]` recovery on `voice`, strips the control line before delivery, and clears the state at `agent_end` or TTL.
+- The runtime records that decision under the current run/session, gates missing `[[tts:text]]` recovery on `voice`, strips every modality control line from outbound text before delivery, and clears the state at `agent_end` or TTL.
 - Verified inbound WhatsApp voice turns continue to use the existing lease and do not synthesize a lease from typed text.
 
 ## Verification

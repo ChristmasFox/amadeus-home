@@ -2,18 +2,18 @@
 
 ## 2026-09-28 typed voice semantic modality candidate — handset acceptance pending
 
-Commit `f8f073b` is pushed to `origin/main` and deployed as
-`local/openclaw-amadeus:git-f8f073b75eaa-20260928042013` on M204 OrbStack
+Commit `235387f` is pushed to `origin/main` and deployed as
+`local/openclaw-amadeus:git-235387f23d2e-20260928043207` on M204 OrbStack
 `nyannyan`. The previous fixed typed-text classifier was removed. Each typed
 WhatsApp turn initializes a turn-scoped `replyModality=default`; the same
 Agent turn semantically chooses `voice` or `default` and emits hidden control
 metadata. The pinned OpenClaw TTS/WhatsApp patch records that metadata for the
-current run/session, strips it before delivery, gates missing-marker recovery
+current run/session, strips it globally before delivery, gates missing-marker recovery
 on `voice`, and clears it at `agent_end`/TTL. The existing verified inbound
 voice lease and sole `voice-reply` Skill remain unchanged.
 
 The protected rollback checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928042013`; health,
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928043207`; health,
 Product Radar, NAS read-only smoke, and WhatsApp linked/connected checks
 passed. Focused tests, Amadeus full tests, OpenClaw 2026.9.4 patch fixtures,
 architecture, secrets, and build passed. No post-restart handset messages
