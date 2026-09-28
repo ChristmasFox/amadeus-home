@@ -47,6 +47,18 @@ test('manual VPS cron runs cannot consume the scheduled report event key', () =>
   assert.equal(scheduled.eventKey, input.eventKey);
 });
 
+test('manual Mac Host cron runs cannot consume the scheduled report event key', () => {
+  const input = notification({
+    eventKey: 'mac-host-report:2026-09-18:morning',
+    source: 'mac-host-report',
+    headline: '🖥 M204 晨间状态',
+    summary: 'ok',
+    occurredAt: '2026-09-18T01:26:17.000Z',
+  });
+  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
+  assert.equal(manual.eventKey, 'mac-host-report:manual:2026-09-18T01:26:17.000Z:morning');
+});
+
 test('manual market cron runs cannot consume the scheduled observation event key', () => {
   const input = notification({
     eventKey: 'market-indices:2026-09-18:close',
