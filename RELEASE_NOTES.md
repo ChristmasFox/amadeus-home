@@ -1,4 +1,4 @@
-# Amadeus 1.7.1
+# Amadeus 1.7.2
 
-- 修复 M204 状态请求被 guest shell 劫持的问题，并在拦截后强制转向 MacHostAgent 原生只读工具。
-- 宿主机工具兼容模型附带的只读 `reason` 字段，避免原生查询再次因参数校验失败。
+- 修复群聊文字请求语音时被外层 TTS eligibility gate 短路的问题；显式语音模态现在会进入日语语音兜底链路。
+- 增加 typed voice TTS gate 回归覆盖，避免模型漏发 TTS 控制行时再次只发送文字。

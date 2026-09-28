@@ -10,13 +10,13 @@ import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } fr
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
-  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
+  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER, PAYLOADS_TTS_GATE_MARKER } from './openclaw-voice-markers.mjs';
 export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, stripAmadeusTtsControlMarkers, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
-  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
+  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER, PAYLOADS_TTS_GATE_MARKER } from './openclaw-voice-markers.mjs';
 
 function replaceOnce(source, before, after, label) {
   const count = source.split(before).length - 1;
@@ -148,7 +148,7 @@ export function patchTtsSource(original) {
 }
 
 export function patchPayloadsTtsContextSource(original) {
-  if (original.includes(PAYLOADS_TTS_CONTEXT_MARKER)) return original;
+  let result = original;
   const before = [
     '\t\t\treturn await maybeApplyTtsToReplyPayload({',
     '\t\t\t\t...ttsParams,',
@@ -163,7 +163,36 @@ export function patchPayloadsTtsContextSource(original) {
     '\t\t\t\tsessionKey: params.amadeusSessionKey',
     '\t\t\t});',
   ].join('\n');
-  return `// ${PAYLOADS_TTS_CONTEXT_MARKER}\n${replaceOnce(original, before, after, 'TTS turn context propagation')}`;
+  if (!result.includes(PAYLOADS_TTS_CONTEXT_MARKER)) {
+    result = `// ${PAYLOADS_TTS_CONTEXT_MARKER}\n${replaceOnce(result, before, after, 'TTS turn context propagation')}`;
+  }
+  if (result.includes(PAYLOADS_TTS_GATE_MARKER)) return result;
+  const gateBefore = [
+    'async function maybeApplyTtsToReplyPayload(params) {',
+    '\tif (isReplyPayloadStatusNotice(params.payload)) return params.payload;',
+    '\tif (!shouldAttemptTtsPayload({',
+    '\t\tcfg: params.cfg,',
+    '\t\tttsAuto: params.ttsAuto,',
+    '\t\tagentId: params.agentId,',
+    '\t\tchannelId: params.channel,',
+    '\t\taccountId: params.accountId',
+    '\t})) return params.payload;'
+  ].join('\n');
+  const gateAfter = [
+    'async function maybeApplyTtsToReplyPayload(params) {',
+    '\tif (isReplyPayloadStatusNotice(params.payload)) return params.payload;',
+    '\tconst amadeusTypedVoiceMarker = String(params.channel ?? "").toLowerCase() === "whatsapp"',
+    '\t\t&& /\\[\\[amadeus:reply-modality=voice\\]\\]/iu.test(String(params.payload?.text ?? ""));',
+    '\tconst amadeusShouldAttemptTts = shouldAttemptTtsPayload({',
+    '\t\tcfg: params.cfg,',
+    '\t\tttsAuto: params.ttsAuto,',
+    '\t\tagentId: params.agentId,',
+    '\t\tchannelId: params.channel,',
+    '\t\taccountId: params.accountId',
+    '\t});',
+    '\tif (!amadeusShouldAttemptTts && !amadeusTypedVoiceMarker) return params.payload;'
+  ].join('\n');
+  return `// ${PAYLOADS_TTS_GATE_MARKER}\n${replaceOnce(result, gateBefore, gateAfter, 'typed voice TTS eligibility gate')}`;
 }
 
 export function patchDispatchTtsContextSource(original) {

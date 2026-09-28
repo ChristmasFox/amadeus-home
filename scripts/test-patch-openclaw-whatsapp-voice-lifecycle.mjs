@@ -15,6 +15,7 @@ import {
   WHATSAPP_TYPING_INDICATOR_MARKER,
   TTS_CONTEXT_MARKER,
   PAYLOADS_TTS_CONTEXT_MARKER,
+  PAYLOADS_TTS_GATE_MARKER,
   ensureAmadeusJapaneseVoiceText,
   resolveAmadeusJapaneseSpeechText,
   isAmadeusBilingualVoiceContract,
@@ -209,6 +210,9 @@ const patchedPayloads = patchPayloadsTtsContextSource(payloadsSource);
 assert.match(patchedPayloads, new RegExp(PAYLOADS_TTS_CONTEXT_MARKER));
 assert.match(patchedPayloads, /runId: params\.amadeusRunId\?\.\(\)/u);
 assert.match(patchedPayloads, /sessionKey: params\.amadeusSessionKey/u);
+assert.match(patchedPayloads, new RegExp(PAYLOADS_TTS_GATE_MARKER));
+assert.match(patchedPayloads, /amadeusTypedVoiceMarker/u);
+assert.match(patchedPayloads, /!amadeusShouldAttemptTts && !amadeusTypedVoiceMarker/u);
 assert.equal(patchPayloadsTtsContextSource(patchedPayloads), patchedPayloads, 'TTS payload context patch is idempotent');
 const dispatchSource = await readFile(join(pinnedDist, 'dispatch-from-config-CmAXENud.mjs'), 'utf8');
 const patchedDispatch = patchDispatchTtsContextSource(dispatchSource);
