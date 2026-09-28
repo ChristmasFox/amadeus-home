@@ -10,6 +10,8 @@ Deployment notification reliability is part of this Goal. Real candidate/native/
 
 Implementation and release execution are complete through the protected A backup, OminiX C cutover, bounded Kurisu emotion contract, pinned OpenClaw/9Router pass-through, release 1.6.6, deployment notifications, rollback evidence, and a real owner handset inbound voice acceptance. See `.agent/checkpoints/2026-09-28-amadeus-kurisu-ominix-release.md` for content-safe evidence. The CLI `agent --deliver` path remains excluded because it bypasses the channel TTS finalizer.
 
+Owner follow-up within the same 1.6.6 target: the source OminiX style instructions now make sentence-level pitch/prosody, key-word emphasis, contrastive rhythm/energy, and the sharp-to-soft Kurisu tsundere contour explicit. The seven bounded emotion deltas describe observable timing, pitch, energy, emphasis, pauses, and sentence endings. Model, x-vector, routing, sampling parameters, version target, and deployment plan remain unchanged; the live runtime remains on the recorded release until that existing deployment plan is applied.
+
 ## Previous task — Kurisu A/C Emotion PoC (Complete / owner accepted)
 
 Goal: `docs/AMADEUS_KURISU_AC_EMOTION_POC_GOAL.md`.
