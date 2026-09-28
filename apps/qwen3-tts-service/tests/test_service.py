@@ -93,6 +93,8 @@ class SpeechTest(unittest.TestCase):
             code, _, payload = self.request("POST", "/v1/audio/speech", base | {"style": "free-form prompt"})
             self.assertEqual(code, 400)
             self.assertEqual(json.loads(payload)["error"]["type"], "invalid_style")
+            alias_code, _, _ = self.request("POST", "/v1/audio/speech", base | {"model": "amadeus-tts"})
+            self.assertEqual(alias_code, 200)
         finally:
             self.server.engine = previous
 

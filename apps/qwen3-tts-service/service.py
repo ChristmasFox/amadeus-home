@@ -20,6 +20,7 @@ from engine_contract import SpeechEngine, SynthesisTiming
 from kurisu_emotion import normalize_emotion
 
 MODEL_ID = "qwen3-tts-1.7b"
+MODEL_ALIASES = frozenset((MODEL_ID, "amadeus-tts"))
 VOICE_ID = "kurisu-v1"
 UPSTREAM_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
 MAX_TEXT = 1200
@@ -303,7 +304,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
         except (UnicodeDecodeError, json.JSONDecodeError):
             self._error(400, "invalid_request")
             return
-        if not isinstance(data, dict) or data.get("model") != MODEL_ID:
+        if not isinstance(data, dict) or data.get("model") not in MODEL_ALIASES:
             self._error(400, "unknown_model")
             return
         if data.get("voice") != VOICE_ID:
