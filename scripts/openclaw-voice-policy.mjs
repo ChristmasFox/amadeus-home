@@ -23,6 +23,27 @@ export function isAmadeusBilingualVoiceContract(visibleText) {
   return Boolean(japanese && /[\u3040-\u30ff]/u.test(japanese));
 }
 
+// The plugin writes this turn-scoped registry before Agent dispatch. The core
+// TTS patch reads it only for missing-marker recovery; explicit TTS directives
+// and verified inbound voice leases keep their existing paths.
+export function resolveAmadeusReplyModalityForTts(params) {
+  const registry = globalThis.__amadeusReplyModalityRuns20260928;
+  if (!(registry instanceof Map)) return 'default';
+  const runId = typeof params?.runId === 'string' && params.runId ? `run:${params.runId}` : '';
+  const sessionKey = typeof params?.sessionKey === 'string' && params.sessionKey ? `session:${params.sessionKey}` : '';
+  for (const key of [runId, sessionKey]) {
+    if (!key) continue;
+    const record = registry.get(key);
+    if (!record) continue;
+    if (typeof record.expiresAt === 'number' && record.expiresAt <= Date.now()) {
+      registry.delete(key);
+      continue;
+    }
+    return record.modality === 'voice' ? 'voice' : 'default';
+  }
+  return 'default';
+}
+
 export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
   // The same final-response guard also covers an explicitly tagged typed

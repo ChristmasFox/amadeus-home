@@ -2,6 +2,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import {
+  classifyTypedReplyModality,
+  clearReplyModalityForTurn,
+  setReplyModalityForTurn,
+} from './reply-modality.js';
 
 // Pinned WhatsApp lifecycle patch creates this registry only for admitted audio
 // turns, before Agent dispatch, and removes each lease after full delivery.
@@ -29,13 +34,34 @@ function loadVoiceSkill(api: OpenClawPluginApi): string {
 
 export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
   const skill = loadVoiceSkill(api);
-  api.on('before_prompt_build', (_event, context) => {
-    if (!hasActiveWhatsAppVoiceLease(context.channel ?? context.messageProvider, context.sessionKey)) return;
-    return {
-      appendSystemContext: [
-        'The verified current WhatsApp run has an inbound audio attachment. The complete voice-reply Skill body is included below; do not call the read tool to retrieve that Skill again. Apply it directly to this final reply and do not generalize it to other runs.',
-        skill,
-      ].join('\n\n'),
-    };
+  api.on('before_prompt_build', ({ prompt }, context) => {
+    const channel = context.channel ?? context.messageProvider;
+    const inboundVoice = hasActiveWhatsAppVoiceLease(channel, context.sessionKey);
+    if (inboundVoice) {
+      clearReplyModalityForTurn(context);
+      return {
+        appendSystemContext: [
+          'The verified current WhatsApp run has an inbound audio attachment. The complete voice-reply Skill body is included below; do not call the read tool to retrieve that Skill again. Apply it directly to this final reply and do not generalize it to other runs.',
+          skill,
+        ].join('\n\n'),
+      };
+    }
+    const typedModality = typeof channel === 'string' && channel.trim().toLowerCase() === 'whatsapp'
+      ? classifyTypedReplyModality(prompt)
+      : 'default';
+    if (typedModality === 'voice') {
+      setReplyModalityForTurn(context, typedModality);
+      return {
+        appendSystemContext: [
+          'The current typed WhatsApp request explicitly asks for a voice reply. This turn has replyModality=voice. Include the complete voice-reply Skill body below and follow its final Chinese/Japanese voice contract. This state is scoped to this turn only; do not infer voice output for later turns, and do not create or change the verified inbound voice lease.',
+          skill,
+        ].join('\n\n'),
+      };
+    }
+    clearReplyModalityForTurn(context);
+    return;
+  });
+  api.on('agent_end', (_event, context) => {
+    clearReplyModalityForTurn(context);
   });
 }
