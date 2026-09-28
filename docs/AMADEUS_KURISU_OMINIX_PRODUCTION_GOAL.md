@@ -2,9 +2,9 @@
 
 Date: 2026-09-28 local
 
-Status: **active planning; execution requires an explicit `/goal` handoff**.
+Status: **complete** (2026-09-28).
 
-Target release: **Amadeus 1.6.6**. The repository is currently at 1.6.5. Do not bump `VERSION` in this planning-only commit; the implementation must perform exactly one `./scripts/amadeus-version.sh bump patch` only after the new production path is implementation-complete and ready for final release.
+Target release: **Amadeus 1.6.6**. The repository and production runtime now carry 1.6.6; the single patch bump and final release are recorded in the dated checkpoint.
 
 ## 1. Owner decisions and objective
 
@@ -437,4 +437,4 @@ This Goal does not authorize:
 
 The Goal is complete only when Amadeus 1.6.6 is running with C as the sole production TTS engine, Kurisu voice replies use the deterministic personality baseline plus bounded emotion contract, the stable `amadeus-tts` path works end-to-end through real WhatsApp, A can be restored from a verified protected checkpoint, and the 1.6.6 deployment notification has been delivered through the existing owner outbox/WhatsApp notifier.
 
-Then stop. Any later emotion expansion is a separate Goal.
+All completion gates are satisfied. The dated checkpoint records the pinned revisions, runtime images, protected A rollback checkpoint, focused verification, release sent marker, and the real WhatsApp inbound-to-media acceptance at 20:33:50–20:34:04 Asia/Shanghai. Then stop. Any later emotion expansion is a separate Goal.
