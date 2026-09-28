@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER } from './openclaw-voice-markers.mjs';
 
@@ -13,6 +13,12 @@ assert.equal(resolveAmadeusJapaneseSpeechText('', `日本語：${japanese}`), ''
 assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n\n日本語：${japanese}`), true, 'the exact bilingual voice contract is recoverable when the marker is missing');
 assert.equal(isAmadeusBilingualVoiceContract('只用中文回答。'), false, 'ordinary Chinese text stays text-only');
 assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n日本語：`), false, 'an empty Japanese line is not a voice contract');
+assert.deepEqual(parseAmadeusReplyModalityMarker(`[[amadeus:reply-modality=voice]]\n${chinese}`), {
+  modality: 'voice',
+  text: chinese,
+  present: true,
+}, 'model voice metadata is parsed and stripped from the delivered payload');
+assert.equal(parseAmadeusReplyModalityMarker(`${chinese}`).present, false, 'ordinary bilingual text has no implicit modality');
 const modalityGlobal = '__amadeusReplyModalityRuns20260928';
 const previousModalityRegistry = globalThis[modalityGlobal];
 globalThis[modalityGlobal] = new Map([
@@ -26,6 +32,7 @@ if (previousModalityRegistry === undefined) delete globalThis[modalityGlobal];
 else globalThis[modalityGlobal] = previousModalityRegistry;
 const typed = { text: chinese, mediaUrl: 'file://audio.mp3', audioAsVoice: true, spokenText: japanese };
 assert.equal(ensureAmadeusJapaneseVoiceText(typed, false).text, `${chinese}\n\n日本語：${japanese}`, 'typed audio preserves visible text even without supplement metadata');
+assert.equal(ensureAmadeusJapaneseVoiceText({ text: `[[amadeus:reply-modality=default]]\n${chinese}` }, false).text, chinese, 'modality metadata never reaches WhatsApp text delivery');
 const taggedTyped = { ...typed, ttsSupplement: { spokenText: japanese } };
 assert.equal(ensureAmadeusJapaneseVoiceText(taggedTyped, false).text, `${chinese}\n\n日本語：${japanese}`, 'tagged typed voice uses the same visible Japanese rule');
 assert.equal(ensureAmadeusJapaneseVoiceText({ ...taggedTyped, ttsSupplement: { spokenText: chinese } }, false).mediaUrl, undefined, 'tagged typed Chinese audio fails closed');

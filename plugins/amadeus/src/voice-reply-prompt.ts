@@ -3,7 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import {
-  classifyTypedReplyModality,
   clearReplyModalityForTurn,
   setReplyModalityForTurn,
 } from './reply-modality.js';
@@ -34,7 +33,7 @@ function loadVoiceSkill(api: OpenClawPluginApi): string {
 
 export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
   const skill = loadVoiceSkill(api);
-  api.on('before_prompt_build', ({ prompt }, context) => {
+  api.on('before_prompt_build', ({ prompt: _prompt }, context) => {
     const channel = context.channel ?? context.messageProvider;
     const inboundVoice = hasActiveWhatsAppVoiceLease(channel, context.sessionKey);
     if (inboundVoice) {
@@ -46,14 +45,18 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
         ].join('\n\n'),
       };
     }
-    const typedModality = typeof channel === 'string' && channel.trim().toLowerCase() === 'whatsapp'
-      ? classifyTypedReplyModality(prompt)
-      : 'default';
-    if (typedModality === 'voice') {
-      setReplyModalityForTurn(context, typedModality);
+    const isTypedWhatsApp = typeof channel === 'string' && channel.trim().toLowerCase() === 'whatsapp';
+    if (isTypedWhatsApp) {
+      // The model makes the semantic decision in this same Agent turn. The
+      // runtime only trusts its explicit control marker; no user-text regex or
+      // second classifier is involved. Default is fail-closed until the model
+      // emits the current turn's voice marker.
+      setReplyModalityForTurn(context, 'default');
       return {
         appendSystemContext: [
-          'The current typed WhatsApp request explicitly asks for a voice reply. This turn has replyModality=voice. Include the complete voice-reply Skill body below and follow its final Chinese/Japanese voice contract. This state is scoped to this turn only; do not infer voice output for later turns, and do not create or change the verified inbound voice lease.',
+          'The runtime has initialized this turn-scoped replyModality to default. Before answering, semantically classify the user\'s requested reply modality from the complete current request and conversation context, then set replyModality to voice or default. Do not classify by matching fixed trigger words. An explicit request for this answer to be sent, told, or answered as a voice/audio reply is voice; a question about how voice, TTS, or audio works is default; an ordinary translation request is default; if intent is ambiguous, choose default.',
+          'Your final payload MUST begin with exactly one hidden control line, either [[amadeus:reply-modality=voice]] or [[amadeus:reply-modality=default]], followed immediately by the user-facing answer. The line is the serialized replyModality metadata for the current turn, not user-visible text. Never mention it, omit it, or put a second modality marker in the answer.',
+          'When and only when your semantic decision is voice, apply the canonical voice-reply Skill body below and produce its exact Chinese/Japanese plus TTS contract. When the decision is default, answer normally and do not produce a Japanese voice line or TTS directive. This modality belongs only to the current turn; never create or change the verified inbound voice lease and never carry it into a later turn.',
           skill,
         ].join('\n\n'),
       };

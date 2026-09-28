@@ -2,19 +2,34 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { hasActiveWhatsAppVoiceLease, WHATSAPP_VOICE_RUNS_GLOBAL, registerVoiceReplyPrompt } from '../src/voice-reply-prompt.js';
 import {
-  classifyTypedReplyModality,
   clearReplyModalityForTurn,
   getReplyModalityForTurn,
+  parseReplyModalityMarker,
   REPLY_MODALITY_RUNS_GLOBAL,
   setReplyModalityForTurn,
 } from '../src/reply-modality.js';
 
-test('typed voice intent is semantic and turn scoped', () => {
-  assert.equal(classifyTypedReplyModality('用语音回答我'), 'voice');
-  assert.equal(classifyTypedReplyModality('今天纳指怎么样，用语音告诉我'), 'voice');
-  assert.equal(classifyTypedReplyModality('发语音告诉我今天西安天气'), 'voice');
-  assert.equal(classifyTypedReplyModality('你的语音怎么实现的？'), 'default');
-  assert.equal(classifyTypedReplyModality('把你好翻译成中文和日文'), 'default');
+test('same-turn model metadata carries semantic voice/default decisions without text classification', () => {
+  const cases = [
+    ['用语音回答我', 'voice'],
+    ['今天纳指怎么样，用语音告诉我', 'voice'],
+    ['你的语音怎么实现的？', 'default'],
+    ['把你好翻译成中文和日文', 'default'],
+  ] as const;
+  for (const [request, modality] of cases) {
+    // The request is interpreted by the Agent. This fixture represents that
+    // model decision and verifies only the transport metadata parser.
+    const parsed = parseReplyModalityMarker(`[[amadeus:reply-modality=${modality}]]\n${request}`);
+    assert.equal(parsed.present, true, request);
+    assert.equal(parsed.modality, modality, request);
+    assert.equal(parsed.text, request, 'control metadata is stripped before delivery');
+  }
+  const ordinary = parseReplyModalityMarker('中文：你好。\n\n日本語：こんにちは。');
+  assert.equal(ordinary.present, false, 'a bilingual translation without model voice metadata is not TTS input');
+  assert.equal(ordinary.modality, 'default');
+});
+
+test('replyModality is initialized per turn and cleared after completion', () => {
   const context = { runId: 'voice-run', sessionKey: 'same-session' };
   const globals = globalThis as Record<string, unknown>;
   const previous = globals[REPLY_MODALITY_RUNS_GLOBAL];
@@ -31,7 +46,7 @@ test('typed voice intent is semantic and turn scoped', () => {
   }
 });
 
-test('typed voice prompt injects the existing voice-reply Skill without creating an inbound lease', () => {
+test('typed WhatsApp prompt delegates modality to the model and provisions the sole voice-reply Skill', () => {
   const hooks = new Map<string, Array<(...args: any[]) => unknown>>();
   const api = {
     rootDir: new URL('../', import.meta.url).pathname,
@@ -39,13 +54,16 @@ test('typed voice prompt injects the existing voice-reply Skill without creating
   } as never;
   registerVoiceReplyPrompt(api);
   const beforePrompt = hooks.get('before_prompt_build')?.[0];
-  const context = { channel: 'whatsapp', runId: 'typed-voice', sessionKey: 'typed-session' };
-  const voice = beforePrompt?.({ prompt: '用语音回答我', messages: [] }, context) as { appendSystemContext?: string };
-  assert.match(voice?.appendSystemContext ?? '', /replyModality=voice/u);
-  assert.match(voice?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
+  const context = { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'typed-session' };
+  const prompt = beforePrompt?.({ prompt: '今天纳指怎么样，用语音告诉我', messages: [] }, context) as { appendSystemContext?: string };
+  assert.match(prompt?.appendSystemContext ?? '', /turn-scoped replyModality to default/u);
+  assert.match(prompt?.appendSystemContext ?? '', /semantically classify the user's requested reply modality/u);
+  assert.match(prompt?.appendSystemContext ?? '', /Do not classify by matching fixed trigger words/u);
+  assert.match(prompt?.appendSystemContext ?? '', /\[\[amadeus:reply-modality=voice\]\]/u);
+  assert.match(prompt?.appendSystemContext ?? '', /\[\[amadeus:reply-modality=default\]\]/u);
+  assert.match(prompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
+  assert.equal(getReplyModalityForTurn(context), 'default', 'typed turn starts fail-closed');
   assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'typed-session'), false);
-  const ordinary = beforePrompt?.({ prompt: '把你好翻译成中文和日文', messages: [] }, context);
-  assert.equal(ordinary, undefined, 'translation remains the default text modality');
   hooks.get('agent_end')?.[0]?.({}, context);
   assert.equal(getReplyModalityForTurn(context), 'default', 'agent_end clears the turn state');
 });

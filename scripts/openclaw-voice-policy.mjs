@@ -23,10 +23,42 @@ export function isAmadeusBilingualVoiceContract(visibleText) {
   return Boolean(japanese && /[\u3040-\u30ff]/u.test(japanese));
 }
 
-// The plugin writes this turn-scoped registry before Agent dispatch. The core
-// TTS patch reads it only for missing-marker recovery; explicit TTS directives
-// and verified inbound voice leases keep their existing paths.
-export function resolveAmadeusReplyModalityForTts(params) {
+// The plugin initializes this turn-scoped registry before Agent dispatch. The
+// model's same-turn control marker is authoritative for the current payload;
+// the runtime records it under the current run/session and consumes it only
+// until agent_end/TTL cleanup. User text is never classified here.
+export function parseAmadeusReplyModalityMarker(value) {
+  const source = typeof value === 'string' ? value : '';
+  const match = source.match(/^\s*\[\[amadeus:reply-modality=(voice|default)\]\]\s*/iu);
+  if (!match) return { modality: 'default', text: source, present: false };
+  return {
+    modality: match[1].toLowerCase() === 'voice' ? 'voice' : 'default',
+    text: source.slice(match[0].length),
+    present: true,
+  };
+}
+
+export function recordAmadeusReplyModalityForTts(params, modality) {
+  const registry = globalThis.__amadeusReplyModalityRuns20260928;
+  if (!(registry instanceof Map)) return;
+  const runId = typeof params?.runId === 'string' && params.runId ? params.runId : '';
+  const sessionKey = typeof params?.sessionKey === 'string' && params.sessionKey ? params.sessionKey : '';
+  const record = {
+    modality: modality === 'voice' ? 'voice' : 'default',
+    ...(runId ? { runId } : {}),
+    ...(sessionKey ? { sessionKey } : {}),
+    expiresAt: Date.now() + 120_000,
+  };
+  if (runId) registry.set(`run:${runId}`, record);
+  if (sessionKey) registry.set(`session:${sessionKey}`, record);
+}
+
+export function resolveAmadeusReplyModalityForTts(params, responseText = '') {
+  const marker = parseAmadeusReplyModalityMarker(responseText);
+  if (marker.present) {
+    recordAmadeusReplyModalityForTts(params, marker.modality);
+    return marker.modality;
+  }
   const registry = globalThis.__amadeusReplyModalityRuns20260928;
   if (!(registry instanceof Map)) return 'default';
   const runId = typeof params?.runId === 'string' && params.runId ? `run:${params.runId}` : '';
@@ -46,6 +78,8 @@ export function resolveAmadeusReplyModalityForTts(params) {
 
 export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
+  const modalityMarker = parseAmadeusReplyModalityMarker(payload.text);
+  if (modalityMarker.present) payload = { ...payload, text: modalityMarker.text };
   // The same final-response guard also covers an explicitly tagged typed
   // voice reply. Untagged typed media without TTS metadata is untouched.
   if (!isVoiceInbound && typeof payload.ttsSupplement?.spokenText !== 'string'
