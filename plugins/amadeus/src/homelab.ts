@@ -1,7 +1,7 @@
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { adaptWorldlineNotification } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
-import { macHostStatus } from './machost.js';
+import { assertMacHostQueryContext, isGroupContext, macHostStatus } from './machost.js';
 import { requestJson } from './http.js';
 import { isTrustedOwnerContext, ownerEventForContext, type OwnerNotifier } from './owner.js';
 
@@ -65,7 +65,10 @@ export async function homelabStatus(
   reportPeriod?: 'morning' | 'evening',
   signal?: AbortSignal,
 ): Promise<unknown> {
-  if (!isTrustedOwnerContext(context)) throw new Error('HomeLab status requires owner authorization');
+  assertMacHostQueryContext(context);
+  if ((notifyOwner || reportPeriod) && (isGroupContext(context) || !isTrustedOwnerContext(context))) {
+    throw new Error('HomeLab owner notification requires direct owner authorization');
+  }
   const host = hostRecord(await macHostStatus(config, context, signal));
   const serviceUrls: Record<string, string> = {
     OpenClaw: 'http://openclaw:18789/healthz',

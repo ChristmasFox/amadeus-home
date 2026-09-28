@@ -4,12 +4,15 @@ import { readOptionalFile } from './config.js';
 import { requestJson } from './http.js';
 import { isTrustedOwnerContext } from './owner.js';
 
-function assertOwner(context: OpenClawPluginToolContext): void {
-  if (!isTrustedOwnerContext(context)) throw new Error('macOS host telemetry requires owner authorization');
+export function isGroupContext(context: OpenClawPluginToolContext): boolean {
   const conversationId = typeof context.nativeChannelId === 'string' ? context.nativeChannelId : '';
   const sessionKey = context.sessionKey ?? '';
-  if (/@g\.us$/u.test(conversationId) || /^-\d+$/u.test(conversationId) || /:group[:/]/u.test(sessionKey)) {
-    throw new Error('macOS host telemetry is private and unavailable in group conversations');
+  return /@g\.us$/u.test(conversationId) || /^-\d+$/u.test(conversationId) || /:group[:/]/u.test(sessionKey);
+}
+
+export function assertMacHostQueryContext(context: OpenClawPluginToolContext): void {
+  if (!isTrustedOwnerContext(context) && !isGroupContext(context)) {
+    throw new Error('macOS host telemetry requires owner or group query authorization');
   }
 }
 
@@ -27,17 +30,17 @@ export async function requestMacHost(config: AmadeusConfig, path: string, signal
 }
 
 export async function macHostStatus(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
-  assertOwner(context);
+  assertMacHostQueryContext(context);
   return requestMacHost(config, '/v1/status', signal);
 }
 
 export async function macHostHistory(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
-  assertOwner(context);
+  assertMacHostQueryContext(context);
   return requestMacHost(config, '/v1/history', signal);
 }
 
 export async function macHostProcesses(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
-  assertOwner(context);
+  assertMacHostQueryContext(context);
   return requestMacHost(config, '/v1/processes', signal);
 }
 
