@@ -57,7 +57,12 @@ test('typed WhatsApp prompt delegates modality to the model and provisions the s
   } as never;
   registerVoiceReplyPrompt(api);
   const beforePrompt = hooks.get('before_prompt_build')?.[0];
-  const context = { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'typed-session' };
+  const context = {
+    channel: 'whatsapp',
+    runId: 'typed-run',
+    sessionKey: 'typed-session',
+    inputProvenance: { kind: 'external_user' },
+  };
   const prompt = beforePrompt?.({ prompt: '今天纳指怎么样，用语音告诉我', messages: [] }, context) as { appendSystemContext?: string };
   assert.match(prompt?.appendSystemContext ?? '', /turn-scoped replyModality to default/u);
   assert.match(prompt?.appendSystemContext ?? '', /semantically classify the user's requested reply modality/u);
@@ -69,6 +74,26 @@ test('typed WhatsApp prompt delegates modality to the model and provisions the s
   assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'typed-session'), false);
   hooks.get('agent_end')?.[0]?.({}, context);
   assert.equal(getReplyModalityForTurn(context), 'default', 'agent_end clears the turn state');
+});
+
+test('heartbeat and internal WhatsApp turns do not receive typed reply modality metadata', () => {
+  const hooks = new Map<string, Array<(...args: any[]) => unknown>>();
+  const api = {
+    rootDir: new URL('../', import.meta.url).pathname,
+    on(name: string, handler: (...args: any[]) => unknown) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
+  } as never;
+  registerVoiceReplyPrompt(api);
+  const beforePrompt = hooks.get('before_prompt_build')?.[0];
+  const context = {
+    channel: 'whatsapp',
+    trigger: 'user',
+    runId: 'heartbeat-run',
+    sessionKey: 'heartbeat-session',
+    inputProvenance: { kind: 'internal_system', sourceTool: 'heartbeat' },
+  };
+  const prompt = beforePrompt?.({ prompt: '[OpenClaw heartbeat poll]', messages: [] }, context);
+  assert.equal(prompt, undefined);
+  assert.equal(getReplyModalityForTurn(context), 'default');
 });
 
 test('voice-reply Skill follows the verified WhatsApp audio lease, not message_received opt-in', () => {
