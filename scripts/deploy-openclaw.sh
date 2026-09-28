@@ -581,7 +581,7 @@ for account in whatsapp.get('accounts', {}).values():
         raise SystemExit('WhatsApp account DM policy is not open for all senders')
 if config.get('agents', {}).get('defaults', {}).get('mediaModels', {}).get('image', {}).get('primary') != 'openai/amadeus-image':
     raise SystemExit('OpenClaw must use the logical amadeus-image capability')
-expected_group_tools = ['web_search', 'web_fetch', 'image_generate']
+expected_group_tools = ['web_search', 'web_fetch', 'image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report']
 for channel in ('whatsapp', 'telegram'):
     channel_config = config.get('channels', {}).get(channel, {})
     scopes = [channel_config.get('groups', {})]
@@ -591,13 +591,13 @@ for channel in ('whatsapp', 'telegram'):
             raise SystemExit('channel group map must be an object')
         for group in groups.values():
             if not isinstance(group, dict) or group.get('tools') != {'allow': expected_group_tools}:
-                raise SystemExit('group image policy must be scoped to the three safe native tools')
+                raise SystemExit('group capability policy must expose web/image plus the full read-only PUBG tool family')
             if channel == 'whatsapp' and group.get('toolsBySender', {}).get('e164:' + owner_phone, {}).get('allow') != ['*']:
                 raise SystemExit('WhatsApp owner group tool profile must remain full')
             if channel == 'telegram' and group.get('toolsBySender'):
                 raise SystemExit('Telegram group sender policy unexpectedly widened')
 print('OWNER_TOOL_POLICY=full')
-print('GROUP_IMAGE_TOOL_POLICY=scoped')
+print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 

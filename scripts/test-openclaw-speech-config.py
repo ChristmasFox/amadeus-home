@@ -57,7 +57,13 @@ assert speech["maxTextLength"] == 1200 and speech["timeoutMs"] == 120000
 for channel in ("whatsapp", "telegram"):
     group = c["channels"][channel]["groups"]["*"]
     assert group["requireMention"] is False
-    assert group["tools"] == {"allow": ["web_search", "web_fetch", "image_generate"]}
+    assert group["tools"] == {"allow": [
+        "web_search", "web_fetch", "image_generate",
+        "pubg_resolve_players", "pubg_search_matches", "pubg_query_stats",
+        "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
+        "pubg_get_period_review", "pubg_query_team_damage",
+        "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
+    ]}
 assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
 assert "explicit typed request" in voice_skill and "tts.auto=tagged" in voice_skill

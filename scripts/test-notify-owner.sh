@@ -55,6 +55,6 @@ after="$(find "$fixture" -maxdepth 1 -type f -name '*.pending.json' | wc -l | tr
 [[ "$before" == 1 && "$after" == 1 ]]
 
 grep -Fq -- 'for owner_outbox in "$CHECKPOINT_DIR/owner-smoke" "$OPENCLAW_DATA_DIR/notifications"' "$ROOT_DIR/scripts/deploy-openclaw.sh"
-grep -Fq -- 'Owner release notification remained pending after 30 seconds.' "$ROOT_DIR/scripts/deploy-openclaw.sh"
+grep -Fq -- 'Owner deployment notification remained pending after 30 seconds.' "$ROOT_DIR/scripts/deploy-openclaw.sh"
 
 printf '%s\n' 'NOTIFY_OWNER_TEST=passed'

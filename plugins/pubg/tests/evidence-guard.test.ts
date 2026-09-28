@@ -33,7 +33,7 @@ test('valid individual facts and safe uncertainty pass; unrelated conversation i
   assert.equal(assessPubgEvidence([user('中午吃什么')], '今天没有吃鸡。'), 'not_applicable');
 });
 
-test('outbound fails closed without a host finalize revision when unsupported claims persist', () => {
+test('unsupported claims request one native-tool revision and still fail closed if it persists', () => {
   const hooks = new Map<string, (event: any, context: any) => any>();
   const warnings: string[] = [];
   registerPubgEvidenceGuard({
@@ -46,7 +46,10 @@ test('outbound fails closed without a host finalize revision when unsupported cl
   const context = { sessionKey: 'group-session', trigger: 'user' };
   assert.equal(finalize({ lastAssistantMessage: 'PUBG 战绩为零', messages: [user('PUBG 战绩')] }, { sessionKey: 'cron-session', trigger: 'cron' }), undefined);
   const event = { runId: 'turn-1', sessionKey: 'group-session', lastAssistantMessage: reply, messages: [user('今日猴的战绩'), assistant(reply)] };
-  assert.equal(finalize(event, context), undefined);
+  const revision = finalize(event, context) as { action?: string; retry?: { maxAttempts?: number; instruction?: string } };
+  assert.equal(revision.action, 'revise');
+  assert.equal(revision.retry?.maxAttempts, 1);
+  assert.match(revision.retry?.instruction ?? '', /native PUBG tool/u);
   assert.match(outbound({ payload: { text: reply, mediaUrl: 'file:///unsafe' }, sessionKey: 'group-session' }, { channelId: 'whatsapp' })?.payload?.text ?? '', /不能确认结果/);
   assert.deepEqual(outbound({ payload: { text: reply }, sessionKey: 'group-session' }, context), { cancel: true, reason: 'pubg_unverified_followup_chunk' });
   assert.equal(outbound({ payload: { text: '普通文字' }, sessionKey: 'group-session' }, context), undefined);

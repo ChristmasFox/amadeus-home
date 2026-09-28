@@ -14,7 +14,20 @@ from pathlib import Path
 
 
 NON_OWNER_TOOL_ALLOWLIST = ["web_search", "web_fetch"]
-GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
+GROUP_PUBG_TOOL_ALLOWLIST = [
+    "pubg_resolve_players",
+    "pubg_search_matches",
+    "pubg_query_stats",
+    "pubg_compare_stats",
+    "pubg_get_match",
+    "pubg_get_review_facts",
+    "pubg_get_period_review",
+    "pubg_query_team_damage",
+    "pubg_prefetch_telemetry",
+    "pubg_telemetry_sync_report",
+]
+GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate", *GROUP_PUBG_TOOL_ALLOWLIST]
+LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
 
 
 def ensure_owner(path: Path, mode: int = 0o600) -> None:
@@ -190,7 +203,8 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
             if not isinstance(group, dict):
                 raise SystemExit("group config must be an object")
             old_tools = group.get("tools")
-            if old_tools is not None and old_tools != wanted_tools:
+            legacy_tools = {"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST}
+            if old_tools is not None and old_tools not in (wanted_tools, legacy_tools):
                 raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
             old_senders = group.get("toolsBySender")
             if old_senders is not None and old_senders != wanted_owner:

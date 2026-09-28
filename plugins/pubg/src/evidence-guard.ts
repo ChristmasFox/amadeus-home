@@ -76,9 +76,19 @@ export function registerPubgEvidenceGuard(api: OpenClawPluginApi): void {
     }
     if (verdict !== 'missing_data' && verdict !== 'wrong_scope') return;
     api.logger.warn(`pubg evidence guard will block unsupported outbound claim: ${verdict}`);
-    // Pinned OpenClaw 2026.9.4 can fail transcript projection on a finalize
-    // revision. Do not ask the harness to retry; fail closed at delivery.
-    return;
+    // Ask the pinned harness for one fresh model pass. This gives the Agent a
+    // chance to call the native PUBG tool after a stale-context answer. The
+    // outbound hook below remains the final fail-closed boundary if the retry
+    // still has no verified result.
+    return {
+      action: 'revise',
+      reason: `pubg_${verdict}`,
+      retry: {
+        instruction: 'The previous draft contains PUBG facts without a successful native PUBG tool result for the current user request. Call the relevant native PUBG tool now, using the current sender/mention identity and a fresh selector, then answer only from that result. Do not use web_fetch or an earlier answer as a substitute.',
+        idempotencyKey: event.runId ? `pubg-evidence:${event.runId}` : undefined,
+        maxAttempts: 1,
+      },
+    };
   });
   api.on('reply_payload_sending', (event, context) => {
     // WhatsApp's inbound delivery runs this hook with the canonical session key.
