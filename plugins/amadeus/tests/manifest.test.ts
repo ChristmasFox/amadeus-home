@@ -35,6 +35,10 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
   assert.equal(manifest.skills?.includes('skills/identity'), true);
   assert.equal(manifest.skills?.includes('skills/market'), true);
   assert.equal(manifest.skills?.includes('skills/vps'), true);
+  const configKeys = Object.keys((manifest as { configSchema?: { properties?: Record<string, unknown> } }).configSchema?.properties ?? {});
+  assert.equal(configKeys.includes('homeLabServiceBaseUrl'), true);
+  assert.equal(configKeys.includes('openWrtBaseUrl'), true);
+  assert.equal(configKeys.some((key) => /glances|61208|homeLabHost|homeLabBaseUrl/iu.test(key)), false);
 });
 
 test('Amadeus registers typed inbound identity context hooks', () => {

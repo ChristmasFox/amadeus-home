@@ -50,11 +50,6 @@ qb.example.com {
     reverse_proxy 127.0.0.1:8080
 }
 
-monitor.example.com {
-    encode gzip
-    reverse_proxy 127.0.0.1:61208
-}
-
 9router.example.com {
     encode gzip
     reverse_proxy 127.0.0.1:20128

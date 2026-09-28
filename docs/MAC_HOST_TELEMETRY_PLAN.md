@@ -1,6 +1,6 @@
 # Mac Host Telemetry V1 计划
 
-状态：PLAN
+状态：IMPLEMENTED V1（代码与 M204 MacHostAgent acceptance 已完成；OpenClaw runtime notification acceptance 见实现记录）
 日期：2026-09-28
 范围：M204 macOS 宿主机遥测、HomeLab 状态纠偏、Avalon 存储、早晚报告与异常通知
 

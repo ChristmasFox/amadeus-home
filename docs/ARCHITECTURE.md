@@ -33,7 +33,7 @@ plugins/pubg                    plugins/amadeus
        ▼                              ├─ Product Radar HTTP service
 packages/pubg-domain             ├─ media-organizer-adapter
        │                         ├─ Mac NAS fixed SSH commands
-       ▼                         ├─ Glances / HomeLab probes
+       ▼                         ├─ MacHostAgent / HomeLab service probes
 official PUBG API + SQLite       ├─ KOOK API, current-session only
                                  ├─ KiwiVM + bounded read-only VPS SSH probes
                                  ├─ deterministic NASDAQ-100/S&P 500 market observer
@@ -120,7 +120,7 @@ PUBG 的 `pubg_prefetch_telemetry` 是唯一的定时预取入口：每小时刷
   owner、previewId 和 \`confirm=true\`。
 - \`amadeus_nas\`：固定命令 \`nas.status\`、\`nas.disk\`、owner-only \`nas.sleep\`；
   不接受任意 shell。
-- \`amadeus_homelab_status\`：Glances、uptime 和固定探针；读取为主，显式 owner/cron
+- \`amadeus_homelab_status\`：MacHostAgent 真实 macOS host、固定服务探针和独立 OpenWrt endpoint；读取为主，显式 owner/cron
   才能通知，不负责重启。
 - \`amadeus_kook_group_members\`：只能读取当前 KOOK channel/guild，不主动推送。
 - \`amadeus_notify_owner\`：不接受 channel/recipient 参数，接受已校验的

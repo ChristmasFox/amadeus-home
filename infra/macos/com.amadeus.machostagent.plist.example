@@ -11,6 +11,7 @@
     <key>MACHOSTAGENT_HOST_NAME</key><string>Amadeus-M204</string>
     <key>MACHOSTAGENT_AVALON_PATH</key><string>/Volumes/Avalon</string>
     <key>MACHOSTAGENT_TOKEN_FILE</key><string>/Library/Application Support/Amadeus/machostagent.token</string>
+    <key>MACHOSTAGENT_DB_PATH</key><string>/Library/Application Support/Amadeus/machostagent.sqlite3</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>

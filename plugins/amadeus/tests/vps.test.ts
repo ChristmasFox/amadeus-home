@@ -10,10 +10,8 @@ function config(directory: string): AmadeusConfig {
   return {
     productRadarBaseUrl: 'http://product-radar',
     mediaAdapterBaseUrl: 'http://media-adapter',
-    homeLabHost: 'http://homelab',
-    homeLabBaseUrl: 'http://homelab',
-    homeLabGlancesUrl: 'http://homelab/glances',
-    homeLabUptimeUrl: 'http://homelab/uptime',
+    homeLabServiceBaseUrl: 'http://homelab',
+    openWrtBaseUrl: 'http://openwrt',
     macSshHost: 'host.docker.internal',
     macSshUser: 'test',
     macSshKeyFile: join(directory, 'mac-key'),

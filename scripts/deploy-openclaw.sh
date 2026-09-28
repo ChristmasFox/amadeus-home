@@ -417,11 +417,11 @@ orb -m "$MACHINE" -u root python3 - \
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" \
-  "$HOME_LAB_HOST" "$HOME_LAB_BASE_URL" "$HOME_LAB_GLANCES_URL" "$HOME_LAB_UPTIME_URL" "$CONTROL_UI_LAN_ORIGIN" <<'PY'
+  "$HOME_LAB_SERVICE_BASE_URL" "$OPENWRT_BASE_URL" "$MAC_HOST_AGENT_BASE_URL" "$CONTROL_UI_LAN_ORIGIN" <<'PY'
 import os, sys
 from pathlib import Path
 path = Path(sys.argv[1])
-host, user, home_lab_host, home_lab_base_url, home_lab_glances_url, home_lab_uptime_url, control_ui_lan_origin = sys.argv[2:]
+host, user, home_lab_service_base_url, openwrt_base_url, mac_host_agent_base_url, control_ui_lan_origin = sys.argv[2:]
 lines = path.read_text().splitlines() if path.is_file() else []
 def set_env(key, value):
     prefix = key + '='
@@ -432,10 +432,9 @@ def set_env(key, value):
     lines.append(prefix + value)
 set_env('MAC_CONTROL_HOST', host)
 set_env('MAC_CONTROL_USER', user)
-set_env('HOME_LAB_HOST', home_lab_host)
-set_env('HOME_LAB_BASE_URL', home_lab_base_url)
-set_env('HOME_LAB_GLANCES_URL', home_lab_glances_url)
-set_env('HOME_LAB_UPTIME_URL', home_lab_uptime_url)
+set_env('HOME_LAB_SERVICE_BASE_URL', home_lab_service_base_url)
+set_env('OPENWRT_BASE_URL', openwrt_base_url)
+set_env('MAC_HOST_AGENT_BASE_URL', mac_host_agent_base_url)
 set_env('CONTROL_UI_LAN_ORIGIN', control_ui_lan_origin)
 path.write_text('\n'.join(lines) + '\n')
 os.chmod(path, 0o600)
@@ -646,6 +645,9 @@ remove_cron amadeus-briefing-morning
 remove_cron amadeus-briefing-evening
 ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_morning、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:morning、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:morning，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
 ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_evening、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:evening、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:evening，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+
+ensure_cron amadeus-mac-host-morning '30 9 * * *' '调用 amadeus_homelab_status，参数 notifyOwner=true、reportPeriod=morning。报告必须以 MacHostAgent 的真实 M204 macOS host 数据为准，包含当前 CPU 与当天 avg/p95/max/maxAt、Memory Pressure、Swap、功耗、Macintosh HD、Avalon 容量/挂载、异常、关键服务和独立 OpenWrt 状态；host telemetry unavailable 必须明确保留。使用正式 eventKey=mac-host-report:当天日期:morning，source=mac-host-report，固定 WhatsApp owner outbox/delivery；手动或补跑使用独立 manual key，不得发送到 Telegram、KOOK 或群聊。' 'amadeus_homelab_status'
+ensure_cron amadeus-mac-host-evening '0 23 * * *' '调用 amadeus_homelab_status，参数 notifyOwner=true、reportPeriod=evening。报告必须以 MacHostAgent 的真实 M204 macOS host 数据为准，包含当日历史聚合、Memory Pressure、Swap、功耗、Macintosh HD、Avalon 容量/挂载、异常、关键服务和独立 OpenWrt 状态；unknown/unavailable 不得写成健康。使用正式 eventKey=mac-host-report:当天日期:evening，source=mac-host-report，固定 WhatsApp owner outbox/delivery；手动或补跑使用独立 manual key，不得发送到 Telegram、KOOK 或群聊。' 'amadeus_homelab_status'
 ensure_cron amadeus-pubg-telemetry-hourly '5 * * * *' '只调用 pubg_prefetch_telemetry，参数 team=true、maxMatches=500、maxFetches=20、concurrency=2。该任务每小时刷新所有配置 PUBG 玩家最新对局，只获取本地不存在的新 Match API 详情，再为新对局或到期重试对局获取 Telemetry 并写入持久化缓存；严格保留工具返回的 status、cacheStatus、availability、dataUpdatedAt 和计数，不要把 status=FETCHED/cacheStatus=MISS/availability=AVAILABLE 说成数据缺失；不要调用其他工具、不要发送通知，定时任务使用 no-deliver。' 'pubg_prefetch_telemetry'
 ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_report，参数 team=true。报告统计上一自然日；仅当 status/data 有效时把 data.notification 这个完整的 owner_notification 结构化对象原样传给 amadeus_notify_owner，保留 theme、significance、eventType、eventKey、source、headline、facts、summary、dataUpdatedAt、occurredAt 和 worldLineClosing，不得改写事实。' 'pubg_telemetry_sync_report amadeus_notify_owner'
 ensure_cron amadeus-market-open '30 9 * * 1-5' '调用 amadeus_market_overview（phase=open）与 amadeus_market_session；由 Longbridge trading day/session 事实判断是否为有效开盘检查，不能把固定时钟当作市场真相。有效时把 overview.notification 的完整结构化对象原样传给 amadeus_notify_owner；非交易日、休市、OAuth reauth 或 provider unavailable 时直接结束，不得改写行情或数据时间。' 'amadeus_market_overview amadeus_market_session amadeus_notify_owner' 'America/New_York'

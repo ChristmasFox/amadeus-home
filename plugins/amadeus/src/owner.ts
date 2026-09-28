@@ -30,6 +30,7 @@ function isManualCronContext(context: OpenClawPluginToolContext): boolean {
 const scheduledReportEventKeys = [
   { prefix: 'vps-report', pattern: /^vps-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u },
   { prefix: 'market-indices', pattern: /^market-indices:\d{4}-\d{2}-\d{2}:(open|close)$/u },
+  { prefix: 'mac-host-report', pattern: /^mac-host-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u },
 ] as const;
 
 function idFor(eventKey: string): string {
