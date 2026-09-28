@@ -1,6 +1,6 @@
 # Project State — 2026-09-27
 
-## 2026-09-28 typed voice semantic modality candidate — handset acceptance pending
+## 2026-09-28 typed voice semantic modality candidate — owner-accepted
 
 Commit `235387f` is pushed to `origin/main` and deployed as
 `local/openclaw-amadeus:git-235387f23d2e-20260928043207` on M204 OrbStack
@@ -16,9 +16,8 @@ The protected rollback checkpoint is
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928043207`; health,
 Product Radar, NAS read-only smoke, and WhatsApp linked/connected checks
 passed. Focused tests, Amadeus full tests, OpenClaw 2026.9.4 patch fixtures,
-architecture, secrets, and build passed. No post-restart handset messages
-have arrived yet; real acceptance for typed voice, feature discussion,
-translation, and next-turn reset remains pending. Evidence:
+architecture, secrets, and build passed. The owner confirmed the post-deploy
+WhatsApp text and voice behavior is normal. Evidence:
 `.agent/checkpoints/2026-09-28-typed-voice-semantic-modality-candidate-live.md`.
 
 ## Amadeus 1.6.5 model-capability adapter release — owner-accepted
