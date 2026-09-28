@@ -21,6 +21,20 @@ reply directive; the existing channel reply path owns the sole delivery. An
 ordinary typed reply without an explicit voice request must remain untagged
 and text-only.
 
+Choose one bounded speech emotion for each eligible voice reply when it helps
+the meaning: `default`, `irritated`, `embarrassed`, `angry`, `sarcastic`,
+`soft`, or `sad`. Use the semantic label rather than trigger words or a free
+form style prompt. Emit it as a separate directive immediately before the
+speech block:
+
+```text
+[[tts:emotion=soft]][[tts:text]]<the exact Japanese sentence>[[/tts:text]]
+```
+
+If no emotional shading is needed, omit the emotion directive and use the
+`default` baseline. The transport accepts only those seven labels and strips
+the directive before visible delivery.
+
 ## Fixed language rule for every voice reply
 
 The spoken audio MUST be Japanese. This is a fixed voice-output rule, not a

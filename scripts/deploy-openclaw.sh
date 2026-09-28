@@ -75,7 +75,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -283,6 +283,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
+  node --check scripts/patch-openclaw-tts-emotion.mjs
+  node scripts/test-patch-openclaw-tts-emotion.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-openclaw-voice-policy.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
@@ -318,6 +320,7 @@ PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
 MEDIA_AGENT_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-media-agent.mjs"
 VOICE_LIFECYCLE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs"
+TTS_EMOTION_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-tts-emotion.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
@@ -330,7 +333,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$TTS_EMOTION_PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -662,22 +665,34 @@ if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
 
 if ((CANDIDATE)); then
-  owner_notification_status='skipped-candidate'
+  ACCEPTANCE_KEY="amadeus-candidate-deploy:$CHECKPOINT_ID"
+  DEPLOYMENT_SUMMARY="候选 OpenClaw 运行时已部署到当前 CasaOS 主机 ${MACHINE}，等待真实验收；此通知不是版本发布。来源提交 ${COMMIT}，checkpoint ${CHECKPOINT_ID}。"
+  NOTIFICATION_SOURCE='amadeus-candidate-deploy'
+  NOTIFICATION_HEADLINE="Amadeus 候选运行时 · ${CHECKPOINT_ID}"
+  NOTIFICATION_SEVERITY='warning'
+  NOTIFICATION_SIGNIFICANCE='major'
+  NOTIFICATION_THEME='worldline_observation'
 else
-ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"
-DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
+  ACCEPTANCE_KEY="amadeus-release:$AMADEUS_VERSION"
+  DEPLOYMENT_SUMMARY="${RELEASE_NOTES}
 已部署到当前 CasaOS 主机 ${MACHINE}。"
+  NOTIFICATION_SOURCE='amadeus-release'
+  NOTIFICATION_HEADLINE="Amadeus $AMADEUS_VERSION · 世界线收束"
+  NOTIFICATION_SEVERITY='success'
+  NOTIFICATION_SIGNIFICANCE='major'
+  NOTIFICATION_THEME='worldline_convergence'
+fi
 for owner_outbox in "$CHECKPOINT_DIR/owner-smoke" "$OPENCLAW_DATA_DIR/notifications"; do
   "$ROOT_DIR/scripts/notify-owner.sh" \
     --remote-machine "$MACHINE" \
     --outbox-dir "$owner_outbox" \
     --event-key "$ACCEPTANCE_KEY" \
-    --source amadeus-release \
-    --headline "Amadeus $AMADEUS_VERSION · 世界线收束" \
+    --source "$NOTIFICATION_SOURCE" \
+    --headline "$NOTIFICATION_HEADLINE" \
     --summary "$DEPLOYMENT_SUMMARY" \
-    --severity success \
-    --significance major \
-    --theme worldline_convergence \
+    --severity "$NOTIFICATION_SEVERITY" \
+    --significance "$NOTIFICATION_SIGNIFICANCE" \
+    --theme "$NOTIFICATION_THEME" \
     --fact-label 版本 \
     --fact-value "$AMADEUS_VERSION" \
     --worldline-closing
@@ -697,9 +712,7 @@ for attempt in $(seq 1 30); do
   fi
   sleep 1
 done
-[[ "$owner_notification_status" == sent ]] || fail 'Owner release notification remained pending after 30 seconds.'
-
-fi
+[[ "$owner_notification_status" == sent ]] || fail 'Owner deployment notification remained pending after 30 seconds.'
 
 POST_DEPLOY_EVIDENCE_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
 [[ "$POST_DEPLOY_EVIDENCE_DIR" == "$EXTERNAL_STORAGE_ROOT/"* ]] || fail 'post-deploy evidence must be stored on the verified external volume.'
@@ -749,7 +762,7 @@ printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
 if ((MEDIA_ADAPTER_PRESENT)); then printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'; fi
 printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
 printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
-printf 'OWNER_OUTBOX_SMOKE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf skipped-candidate || printf passed)"
+printf 'OWNER_OUTBOX_SMOKE=%s\n' passed
 printf '%s\n' "LOG_POLICY=$log_policy_status"
 printf '%s\n' "POST_DEPLOY_MAINTENANCE=$post_deploy_maintenance"
 printf '%s\n' "AMADEUS_NETWORK=$AMADEUS_NETWORK_NAME"

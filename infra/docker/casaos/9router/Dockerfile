@@ -12,6 +12,8 @@ RUN npm install --global 9router@0.5.81 --prefer-online \
 RUN apk add --no-cache ffmpeg
 COPY infra/docker/casaos/9router/asr-bridge.mjs /opt/amadeus/asr-bridge.mjs
 COPY infra/docker/casaos/9router/start-9router.mjs /opt/amadeus/start-9router.mjs
+COPY infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs /opt/amadeus/patch-selfhosted-tts-style.mjs
+RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_modules/9router
 
 # The upstream Docker image runs the packaged server directly. The npm CLI is
 # desktop-oriented and can exit after launching its tray/server child in a

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Single native TTS LaunchAgent; Git-declared engine is MLX, explicit MPS rollback only.
+# Single native TTS LaunchAgent; Git-declared engine is OminiX, explicit MLX rollback only.
 set -Eeuo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 CONFIG="$ROOT/infra/macos/qwen3-tts-engine.json"
@@ -7,6 +7,7 @@ LABEL='com.amadeus.qwen3-tts'
 BASE="$HOME/Library/Application Support/Amadeus/speech"
 VOICE="$HOME/Library/Application Support/Amadeus/voices/kurisu-v1"
 MLX_ROOT="$BASE/mlx-poc" # retained protected PoC path; no duplicate model/venv migration
+OMINIX_ROOT="$BASE/ominix"
 LOG="$HOME/Library/Logs/Amadeus"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 TARGET="gui/$(id -u)"
@@ -17,13 +18,13 @@ while (($#)); do
   case "$1" in
     --dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall) mode="$1" ;;
     --engine)
-      (($# >= 2)) || { echo '--engine requires mps or mlx' >&2; exit 2; }
+      (($# >= 2)) || { echo '--engine requires mps, mlx or ominix' >&2; exit 2; }
       engine="$2"; explicit_engine=1; shift ;;
-    *) echo 'Usage: manage-qwen3-tts.sh [--dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall] [--engine mlx|mps]' >&2; exit 2 ;;
+    *) echo 'Usage: manage-qwen3-tts.sh [--dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall] [--engine mlx|mps|ominix]' >&2; exit 2 ;;
   esac
   shift
 done
-[[ "$engine" == mlx || "$engine" == mps ]] || { echo 'unsupported TTS engine' >&2; exit 2; }
+[[ "$engine" == mlx || "$engine" == mps || "$engine" == ominix ]] || { echo 'unsupported TTS engine' >&2; exit 2; }
 [[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
 if [[ "$mode" == --status ]]; then
   ((explicit_engine == 0)) || { echo '--status does not select an engine' >&2; exit 2; }
@@ -45,7 +46,11 @@ if [[ "$mode" == --uninstall ]]; then
 fi
 mkdir -p "$BASE" "$LOG" "$(dirname "$PLIST")"
 if [[ "$mode" == --prepare-apply ]]; then
-  if [[ "$engine" == mlx ]]; then
+  if [[ "$engine" == ominix ]]; then
+    [[ -x "$BASE/venv/bin/python" ]] || python3 -m venv "$BASE/venv"
+    "$BASE/venv/bin/python" -m pip install -r "$ROOT/apps/qwen3-tts-service/requirements.txt"
+    "$ROOT/infra/macos/prepare-ominix-tts.sh" --apply --root "$OMINIX_ROOT" --model "$MLX_ROOT/model-8bit"
+  elif [[ "$engine" == mlx ]]; then
     "$ROOT/scripts/prepare-mlx-tts-poc.sh" --apply
   else
     [[ -x "$BASE/venv/bin/python" ]] || python3 -m venv "$BASE/venv"
@@ -78,29 +83,33 @@ from pathlib import Path
 import sys
 if len(Path(sys.argv[1]).read_text().strip()) < 32: raise SystemExit('protected TTS token length invalid')
 PYTOKEN_CHECK
-if [[ "$engine" == mlx ]]; then
+if [[ "$engine" == ominix ]]; then
+  [[ -x "$OMINIX_ROOT/worker" && -s "$MLX_ROOT/model-8bit/config.json" ]] || { echo 'prepared OminiX worker/model missing' >&2; exit 1; }
+elif [[ "$engine" == mlx ]]; then
   python3 "$ROOT/infra/macos/verify-qwen3-mlx-assets.py" --root "$MLX_ROOT" --config "$CONFIG"
   [[ -x "$MLX_ROOT/venv/bin/python" ]] || { echo 'prepared MLX venv missing' >&2; exit 1; }
 else
   [[ -s "$BASE/model/config.json" && -x "$BASE/venv/bin/python" ]] || { echo 'prepared MPS model/venv missing' >&2; exit 1; }
 fi
 if [[ "$mode" == --apply ]]; then
-  if [[ "$engine" == mps ]]; then
+  if [[ "$engine" == mps || "$engine" == ominix ]]; then
     "$BASE/venv/bin/python" -m pip install -r "$ROOT/apps/qwen3-tts-service/requirements.txt"
   fi
   install -m 600 "$ROOT/apps/qwen3-tts-service/service.py" "$BASE/service.py"
   install -m 600 "$ROOT/apps/qwen3-tts-service/mlx_engine.py" "$BASE/mlx_engine.py"
   install -m 600 "$ROOT/apps/qwen3-tts-service/engine_contract.py" "$BASE/engine_contract.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/kurisu_emotion.py" "$BASE/kurisu_emotion.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/ominix_engine.py" "$BASE/ominix_engine.py"
   install -m 600 "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
 fi
-[[ -s "$BASE/service.py" && -s "$BASE/mlx_engine.py" && -s "$BASE/engine_contract.py" ]] || { echo 'service source missing; use --apply' >&2; exit 1; }
+[[ -s "$BASE/service.py" && -s "$BASE/mlx_engine.py" && -s "$BASE/engine_contract.py" && -s "$BASE/kurisu_emotion.py" && -s "$BASE/ominix_engine.py" ]] || { echo 'service source missing; use --apply' >&2; exit 1; }
 python3 "$ROOT/infra/macos/prepare-qwen3-tts-early-log.py" "$LOG/qwen3-tts-launchd.err.log"
 temporary="$(mktemp "$PLIST.tmp.XXXXXX")"
 trap 'rm -f "$temporary"' EXIT
 python3 "$ROOT/infra/macos/render-qwen3-tts-plist.py" \
   --template "$ROOT/infra/macos/com.amadeus.qwen3-tts.plist.example" \
   --output "$temporary" --base "$BASE" --voice "$VOICE" --log "$LOG" \
-  --mlx-root "$MLX_ROOT" --engine "$engine"
+  --mlx-root "$MLX_ROOT" --ominix-root "$OMINIX_ROOT" --engine "$engine"
 plutil -lint "$temporary"
 install -m 600 "$temporary" "$PLIST"
 trap - EXIT
@@ -115,7 +124,7 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
   fi
   sleep 1
 done
-# Never overlap the previous resident MPS allocation with MLX on this 24 GiB host.
+# Never overlap the previous resident engine with the replacement on this 24 GiB host.
 if [[ "$old_pid" =~ ^[0-9]+$ ]]; then
   for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     if ! kill -0 "$old_pid" 2>/dev/null; then break; fi

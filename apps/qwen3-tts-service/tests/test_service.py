@@ -28,6 +28,16 @@ class FakeEngine:
         return out.getvalue(), 24000, service.SynthesisTiming(1.0, 25.0, 2.0, 27.0)
 
 
+class EmotionEngine(FakeEngine):
+    def __init__(self):
+        super().__init__()
+        self.emotions = []
+
+    def synthesize_timed(self, text, emotion="default"):
+        self.emotions.append(emotion)
+        return super().synthesize_timed(text)
+
+
 class SpeechTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -70,6 +80,21 @@ class SpeechTest(unittest.TestCase):
             code, _, payload = self.request("POST", "/v1/audio/speech", case)
             self.assertEqual(code, 400)
             self.assertEqual(json.loads(payload)["error"]["type"], expected)
+
+    def test_bounded_style_is_forwarded_and_arbitrary_style_rejected(self):
+        engine = EmotionEngine()
+        previous = self.server.engine
+        self.server.engine = engine
+        try:
+            base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界", "response_format": "wav"}
+            code, _, _ = self.request("POST", "/v1/audio/speech", base | {"style": "soft"})
+            self.assertEqual(code, 200)
+            self.assertEqual(engine.emotions, ["soft"])
+            code, _, payload = self.request("POST", "/v1/audio/speech", base | {"style": "free-form prompt"})
+            self.assertEqual(code, 400)
+            self.assertEqual(json.loads(payload)["error"]["type"], "invalid_style")
+        finally:
+            self.server.engine = previous
 
     def test_unavailable_and_format(self):
         base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界"}
