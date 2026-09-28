@@ -1,4 +1,4 @@
-# Current Task — Kurisu OminiX Production Migration (Planning Active)
+# Current Task — Kurisu OminiX Production Migration (Release 1.6.6)
 
 Date: 2026-09-28 local. Active Goal: `docs/AMADEUS_KURISU_OMINIX_PRODUCTION_GOAL.md`.
 
@@ -8,7 +8,7 @@ Current repository version is 1.6.5. This migration is targeted for Amadeus **1.
 
 Deployment notification reliability is part of this Goal. Real candidate/native/release runtime switches must no longer complete silently: candidate and final release events use distinct idempotent owner-outbox notifications, and final `amadeus-release:1.6.6` delivery must have a sent marker before the Goal is complete. Keep the existing OwnerNotifier/WhatsApp secondary delivery path; do not add another sender or hardcode an owner target.
 
-Execution has not started. An explicit `/goal` handoff should execute the Goal document end-to-end, including the protected A backup, C cutover, bounded Kurisu personality/emotion contract, pinned OpenClaw/9Router pass-through work, release 1.6.6, real WhatsApp smoke, notification evidence and rollback checkpoint.
+Implementation and release execution are complete through the protected A backup, OminiX C cutover, bounded Kurisu emotion contract, pinned OpenClaw/9Router pass-through, release 1.6.6, deployment notifications, and rollback evidence. See `.agent/checkpoints/2026-09-28-amadeus-kurisu-ominix-release.md` for content-safe evidence. A fresh owner handset inbound voice turn is still required to close the manual acceptance item; the CLI `agent --deliver` path is not evidence because it bypasses the channel TTS finalizer.
 
 ## Previous task — Kurisu A/C Emotion PoC (Complete / owner accepted)
 
