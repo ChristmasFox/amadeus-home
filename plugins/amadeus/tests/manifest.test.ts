@@ -90,8 +90,10 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
     { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'voice-session' },
-  );
-  assert.equal(typedPrompt, undefined, 'typed-only turn has no active audio lease');
+  ) as { appendSystemContext?: string } | undefined;
+  assert.match(typedPrompt?.appendSystemContext ?? '', /semantically classify the user's requested reply modality/u);
+  assert.match(typedPrompt?.appendSystemContext ?? '', /\[\[amadeus:reply-modality=voice\]\]/u);
+  assert.equal(typedPrompt?.appendSystemContext?.includes('one faithful, concise Chinese sentence'), true, 'typed turns receive the canonical Skill protocol');
   if (previousRegistry === undefined) delete globals[WHATSAPP_VOICE_RUNS_GLOBAL];
   else globals[WHATSAPP_VOICE_RUNS_GLOBAL] = previousRegistry;
 

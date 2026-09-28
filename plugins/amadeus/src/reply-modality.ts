@@ -1,5 +1,11 @@
 export type ReplyModality = 'default' | 'voice';
 
+// The Agent emits this marker as the first line of its final payload after
+// deciding the user's intent from the whole turn. It is removed by the pinned
+// TTS/WhatsApp lifecycle before anything is delivered to the user.
+export const REPLY_MODALITY_MARKER_PREFIX = '[[amadeus:reply-modality=';
+export const REPLY_MODALITY_MARKER_SUFFIX = ']]';
+
 // This registry is intentionally turn keyed. The runtime patch reads the same
 // name when it decides whether marker recovery is allowed for a typed turn.
 export const REPLY_MODALITY_RUNS_GLOBAL = '__amadeusReplyModalityRuns20260928';
@@ -39,40 +45,20 @@ function keysFor(context: ReplyTurnContext): string[] {
   ].filter((key): key is string => Boolean(key));
 }
 
-function hasResponseAction(text: string): boolean {
-  return /(?:回答|回复|告诉|说|解释|读|念|播报|发|发送|答えて|返事して|教えて|説明して|送って|answer|reply|respond|tell|explain|send)/iu.test(text);
-}
-
-function hasVoiceOutputPhrase(text: string): boolean {
-  return /(?:用|以|通过)\s*(?:语音|声音|音频|语音消息|voice|audio)\s*(?:回答|回复|告诉|说|解释|读|念|播报)/iu.test(text)
-    || /(?:回答|回复|告诉|说|解释|读|念|播报)\s*(?:我|一下|我一下)?\s*(?:用|以|通过)\s*(?:语音|声音|音频|语音消息|voice|audio)/iu.test(text)
-    || /(?:发|发送|给我发|给我发送)\s*(?:一条|一段|一个|个)?\s*(?:语音|声音|音频|语音消息|voice|audio)\s*(?:给我)?\s*(?:回答|回复|告诉|说|解释|读|念|播报)?/iu.test(text)
-    || /(?:音声|ボイス|音声メッセージ)で\s*(?:答えて|返事して|教えて|説明して)/iu.test(text)
-    || /(?:answer|reply|respond|tell|explain)\s+(?:me\s+)?(?:by|with|in)\s+(?:a\s+)?(?:voice|audio)\b/iu.test(text)
-    || /(?:voice|audio)\s+(?:reply|response)\b/iu.test(text);
-}
-
-function isFeatureDiscussion(text: string): boolean {
-  return /(?:怎么|如何|什么|为什么|原理|实现|设置|开启|关闭|配置|支持|能不能|可以不可以|介绍|区别|怎么做|如何做|どう|なに|何|仕組み|実装|設定|対応|できますか|how|what|why|implement|configure|support)/iu.test(text)
-    && /(?:语音|声音|音频|语音消息|tts|voice|audio|音声|ボイス)/iu.test(text);
-}
-
-function isTranslationRequest(text: string): boolean {
-  return /(?:翻译|翻成|译成|译为|转换成|翻訳|translate|translation)/iu.test(text)
-    && /(?:中文|汉语|普通话|日文|日语|日本語|英文|英语|Chinese|Japanese|English)/iu.test(text);
-}
-
 /**
- * Classifies a typed request from its action and output slots. A lone mention
- * of voice/TTS is never enough: feature questions and translation requests
- * stay on the normal text modality.
+ * Parse only the model's explicit control marker. User text is never matched
+ * here: semantic intent is decided by the Agent under the typed-turn protocol
+ * injected by voice-reply-prompt.ts.
  */
-export function classifyTypedReplyModality(prompt: unknown): ReplyModality {
-  const text = typeof prompt === 'string' ? prompt.normalize('NFKC').trim() : '';
-  if (!text || isTranslationRequest(text)) return 'default';
-  if (isFeatureDiscussion(text) && !hasVoiceOutputPhrase(text)) return 'default';
-  if (hasResponseAction(text) && hasVoiceOutputPhrase(text)) return 'voice';
-  return 'default';
+export function parseReplyModalityMarker(value: unknown): { modality: ReplyModality; text: string; present: boolean } {
+  const text = typeof value === 'string' ? value : '';
+  const match = text.match(/^\s*\[\[amadeus:reply-modality=(voice|default)\]\]\s*/iu);
+  if (!match) return { modality: 'default', text, present: false };
+  return {
+    modality: match[1]?.toLowerCase() === 'voice' ? 'voice' : 'default',
+    text: text.slice(match[0].length),
+    present: true,
+  };
 }
 
 export function setReplyModalityForTurn(context: ReplyTurnContext, modality: ReplyModality): void {

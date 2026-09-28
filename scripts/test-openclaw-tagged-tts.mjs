@@ -61,7 +61,11 @@ try {
   const translated = await run('中文：你好。\n\n日本語：こんにちは。', false, 'translation');
   assert.equal(translated.mediaUrl, undefined, 'ordinary bilingual translation stays text-only without voice modality');
 
-  const recovered = await run('中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', false, 'typed-recovered');
+  const defaultMarkedTranslation = await run('[[amadeus:reply-modality=default]]\n中文：你好。\n\n日本語：こんにちは。', false, 'default-marked-translation');
+  assert.equal(defaultMarkedTranslation.text, '中文：你好。\n\n日本語：こんにちは。', 'default modality marker is transport-only');
+  assert.equal(defaultMarkedTranslation.mediaUrl, undefined, 'model default decision cannot trigger TTS');
+
+  const recovered = await run('[[amadeus:reply-modality=voice]]\n中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', false, 'typed-marker-recovered');
   assert.equal(recovered.text, '中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', 'bilingual voice output survives a missing TTS marker');
   assert.equal(recovered.spokenText, '少し待って。結論を先に言うわ。');
   assert.equal(recovered.mediaUrl, 'file:///tmp/amadeus-test-only.mp3');
@@ -72,7 +76,8 @@ try {
     { label: 'verified inbound voice', inboundAudio: true, japanese: '聞こえたわ。', chinese: '听到了。' },
   ];
   for (const { label, inboundAudio, japanese, chinese } of cases) {
-    const text = `中文：${chinese}\n\n日本語：${japanese}\n[[tts:text]]${japanese}[[/tts:text]]`;
+    const marker = inboundAudio ? '' : '[[amadeus:reply-modality=voice]]\n';
+    const text = `${marker}中文：${chinese}\n\n日本語：${japanese}\n[[tts:text]]${japanese}[[/tts:text]]`;
     const output = await run(text, inboundAudio, inboundAudio ? 'inbound-voice' : 'typed-explicit');
     assert.equal(output.text, `中文：${chinese}\n\n日本語：${japanese}`, `${label}: directive must not leak`);
     assert.equal(output.spokenText, japanese, `${label}: spoken and visible Japanese must match`);

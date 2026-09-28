@@ -5,13 +5,13 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
   TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
-export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts,
+export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
@@ -76,11 +76,33 @@ export function patchCoreSource(original) {
 
 export function patchTtsSource(original) {
   if (original.includes(TTS_MARKER)) return original;
-  let result = replaceOnce(
-    original,
+  let result = original;
+  if (original.includes('const text = reply.text;')) {
+    result = replaceOnce(
+      result,
+      'const text = reply.text;',
+      `const rawText = reply.text;
+	const amadeusReplyMarker = parseAmadeusReplyModalityMarker(rawText);
+	const text = amadeusReplyMarker.text;`,
+      'reply modality marker parsing',
+    );
+  } else {
+    // Keep the pinned fixture/minimal source useful for patch verification.
+    result = replaceOnce(
+      result,
+      'const ttsText = explicitTtsText || visibleText;',
+      `const rawText = visibleText;
+	const amadeusReplyMarker = parseAmadeusReplyModalityMarker(rawText);
+	const text = amadeusReplyMarker.text;
+	const ttsText = explicitTtsText || visibleText;`,
+      'reply modality marker fixture parsing',
+    );
+  }
+  result = replaceOnce(
+    result,
     'const ttsText = explicitTtsText || visibleText;',
     `const amadeusInboundWhatsAppVoice = params.inboundAudio === true && String(params.channel ?? '').toLowerCase() === 'whatsapp';
-	const amadeusReplyModality = resolveAmadeusReplyModalityForTts(params);
+	const amadeusReplyModality = resolveAmadeusReplyModalityForTts(params, rawText);
 	const amadeusImplicitTypedWhatsAppVoice = String(params.channel ?? '').toLowerCase() === 'whatsapp'
 		&& amadeusReplyModality === 'voice'
 		&& !explicitTts && !directives.hasDirective && isAmadeusBilingualVoiceContract(visibleText);
@@ -90,10 +112,18 @@ export function patchTtsSource(original) {
 		: (explicitTtsText || visibleText);`,
     'Japanese voice TTS input selection',
   );
+  if (result.includes('const nextPayload = visibleText === text.trim() ? params.payload : {')) {
+    result = replaceOnce(
+      result,
+      'const nextPayload = visibleText === text.trim() ? params.payload : {',
+      'const nextPayload = visibleText === rawText.trim() ? params.payload : {',
+      'reply modality marker delivery cleanup',
+    );
+  }
   result = replaceOnce(
     result,
     'async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {',
-    `${resolveAmadeusJapaneseSpeechText.toString()}\n${isAmadeusBilingualVoiceContract.toString()}\n${resolveAmadeusReplyModalityForTts.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
+    `${resolveAmadeusJapaneseSpeechText.toString()}\n${isAmadeusBilingualVoiceContract.toString()}\n${parseAmadeusReplyModalityMarker.toString()}\n${recordAmadeusReplyModalityForTts.toString()}\n${resolveAmadeusReplyModalityForTts.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
     'Japanese voice TTS helper',
   );
   result = replaceOnce(
@@ -230,7 +260,7 @@ export function patchWhatsAppJapaneseAudioGuardSource(original) {
   if (end < 0 || !original.slice(start, end).startsWith('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('pinned Japanese visible-text helper anchor missing');
   }
-  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
+  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${parseAmadeusReplyModalityMarker.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
 }
 
 export function patchWhatsAppTaggedTypedGuardSource(original) {
@@ -243,8 +273,9 @@ export function patchWhatsAppTaggedTypedGuardSource(original) {
   if (end < 0) throw new Error('pinned Japanese voice helper end anchor missing');
   const previous = original.slice(start, end);
   const previousHelper = previous.startsWith(typedMarker) ? previous.slice(typedMarker.length) : previous;
-  const updated = ensureAmadeusJapaneseVoiceText.toString();
-  if (!previousHelper.startsWith('function ensureAmadeusJapaneseVoiceText(')) {
+  const updated = `${parseAmadeusReplyModalityMarker.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}`;
+  if (!previousHelper.startsWith('function parseAmadeusReplyModalityMarker(')
+      && !previousHelper.startsWith('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('unknown Japanese voice helper version; refusing typed upgrade');
   }
   if (previousHelper === updated && original.includes(typedMarker)) return original;
