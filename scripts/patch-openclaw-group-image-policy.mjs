@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * Version-pinned OpenClaw 2026.9.4 policy bridge for native group image access.
+ * Version-pinned OpenClaw 2026.9.4 policy bridge for native group capabilities.
  *
  * Group tools and global toolsBySender are intersecting filters in 2026.9.4.
  * The non-owner global sender allowlist must remain web-only for WhatsApp DMs.
- * Add precisely image_generate to that sender layer when a trusted WhatsApp or
- * Telegram group turn has an explicit group image allowlist. The group layer,
+ * Add only the explicit read-only group capabilities to that sender layer when
+ * a trusted WhatsApp or Telegram group turn has the matching allowlist. The group layer,
  * global deny, and all unrelated sender restrictions still apply. Patch both
  * the normal ESM module and its independently bundled worker copy.
  */
@@ -26,6 +26,8 @@ export const GROUP_READONLY_CAPABILITY_TOOLS = [
   'pubg_query_team_damage',
   'pubg_prefetch_telemetry',
   'pubg_telemetry_sync_report',
+  'amadeus_macos_host_status',
+  'amadeus_macos_host_processes',
 ];
 
 export function extendSenderPolicyForGroupImage(capabilityProfile) {
@@ -46,7 +48,7 @@ export function extendSenderPolicyForGroupImage(capabilityProfile) {
   const offset = sessionParts[0] === 'agent' ? 2 : 0;
   if (sessionParts[offset] !== channel || sessionParts[offset + 1] !== 'group' ||
       !sessionParts[offset + 2]) return senderPolicy;
-  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report'];
+  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report', 'amadeus_macos_host_status', 'amadeus_macos_host_processes'];
   if (!Array.isArray(groupPolicy?.allow) || !groupPolicy.allow.some((tool) => groupCapabilityTools.includes(tool))) return senderPolicy;
   // Do not remove any deny: the native matcher still gives deny precedence.
   const groupCapabilities = groupPolicy.allow.filter((tool) => groupCapabilityTools.includes(tool));

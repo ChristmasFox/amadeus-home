@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source-managed group policy is additive only for native image generation."""
+"""Source-managed group policy is additive only for scoped native capabilities."""
 from __future__ import annotations
 
 import copy
@@ -37,6 +37,7 @@ class GroupImagePolicyTest(unittest.TestCase):
                 "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
                 "pubg_get_period_review", "pubg_query_team_damage",
                 "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
+                "amadeus_macos_host_status", "amadeus_macos_host_processes",
             ]})
             self.assertEqual(group["toolsBySender"], {key: {"allow": ["*"]} for key in keys})
         self.assertFalse(channel["groups"]["*"]["requireMention"])
@@ -58,12 +59,19 @@ class GroupImagePolicyTest(unittest.TestCase):
                 "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
                 "pubg_get_period_review", "pubg_query_team_damage",
                 "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
+                "amadeus_macos_host_status", "amadeus_macos_host_processes",
             ]})
         self.assertNotIn("toolsBySender", channel["groups"]["*"])
 
     def test_legacy_group_image_policy_is_upgraded_to_include_pubg_tools(self):
         channel = {"groups": {"*": {"requireMention": False,
                                     "tools": {"allow": ["web_search", "web_fetch", "image_generate"]}}}}
+        prepare.ensure_group_image_policies(channel)
+        self.assertEqual(channel["groups"]["*"]["tools"]["allow"], prepare.GROUP_IMAGE_TOOL_ALLOWLIST)
+
+    def test_previous_pubg_group_policy_is_upgraded_to_include_mac_host_tools(self):
+        channel = {"groups": {"*": {"requireMention": False,
+                                    "tools": {"allow": prepare.LEGACY_GROUP_PUBG_TOOL_ALLOWLIST}}}}
         prepare.ensure_group_image_policies(channel)
         self.assertEqual(channel["groups"]["*"]["tools"]["allow"], prepare.GROUP_IMAGE_TOOL_ALLOWLIST)
 

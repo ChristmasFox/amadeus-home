@@ -53,16 +53,16 @@ refuses to start if the identities or required secret files are missing.
 WhatsApp Web pairing state is runtime data under `/DATA/AppData/openclaw`; it
 is never copied into Git. Channel admission remains open groups with
 `requireMention=false`. The owner retains the full native tool profile minus
-the global `tts,message` deny. Other admitted group senders receive only
-`web_search`, `web_fetch`, and native `image_generate`; non-owner direct chats
-remain web-only. The source-managed group policy is scoped to WhatsApp and
-Telegram and does not grant sensitive Amadeus, runtime, filesystem, NAS,
-HomeLab, VPS, or Identity mutation tools. The pinned 2026.9.4 policy layers
-intersect group and global sender allowlists; the strict version-pinned image
-policy patch in the immutable OpenClaw image lets only a verified group image
-allowlist add `image_generate` through the global sender layer. It does not
-remove any deny or create a second tool. High-risk operations keep their
-owner/confirmation checks. The current WhatsApp runtime account id is
+the global `tts,message` deny. Other admitted group senders receive the
+scoped web/image/PUBG capabilities plus bounded read-only M204 host status and
+process queries; non-owner direct chats remain web-only. The source-managed
+group policy is scoped to WhatsApp and Telegram and does not grant runtime,
+filesystem, NAS, HomeLab aggregate, VPS, Identity, or mutation tools. The
+pinned 2026.9.4 policy layers intersect group and global sender allowlists;
+the strict version-pinned capability policy patch in the immutable OpenClaw
+image lets only verified group capabilities add their matching tools through
+the global sender layer. It does not remove any deny or create a second tool.
+High-risk operations keep their owner/confirmation checks. The current WhatsApp runtime account id is
 `secondary`; its previous account credentials were archived outside Git.
 
 The candidate default image model is the stable `openai/amadeus-image` logical
