@@ -80,6 +80,12 @@ export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
   const modalityMarker = parseAmadeusReplyModalityMarker(payload.text);
   if (modalityMarker.present) payload = { ...payload, text: modalityMarker.text };
+  // Core suppresses the exact NO_REPLY token before channel delivery. If a
+  // control marker was prepended first, that check has already been missed;
+  // remove the now-cleaned silent payload here before it can reach WhatsApp.
+  if (modalityMarker.present && modalityMarker.text.trim() === 'NO_REPLY') {
+    return { ...payload, text: undefined };
+  }
   // The same final-response guard also covers an explicitly tagged typed
   // voice reply. Untagged typed media without TTS metadata is untouched.
   if (!isVoiceInbound && typeof payload.ttsSupplement?.spokenText !== 'string'

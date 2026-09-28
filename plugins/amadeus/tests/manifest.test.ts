@@ -89,7 +89,12 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');
   const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
-    { channel: 'whatsapp', runId: 'typed-run', sessionKey: 'voice-session' },
+    {
+      channel: 'whatsapp',
+      runId: 'typed-run',
+      sessionKey: 'voice-session',
+      inputProvenance: { kind: 'external_user' },
+    },
   ) as { appendSystemContext?: string } | undefined;
   assert.match(typedPrompt?.appendSystemContext ?? '', /semantically classify the user's requested reply modality/u);
   assert.match(typedPrompt?.appendSystemContext ?? '', /\[\[amadeus:reply-modality=voice\]\]/u);

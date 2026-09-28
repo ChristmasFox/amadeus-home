@@ -20,6 +20,7 @@ assert.deepEqual(parseAmadeusReplyModalityMarker(`[[amadeus:reply-modality=voice
 }, 'model voice metadata is parsed and stripped from the delivered payload');
 assert.equal(parseAmadeusReplyModalityMarker(`${chinese}`).present, false, 'ordinary bilingual text has no implicit modality');
 assert.equal(parseAmadeusReplyModalityMarker(`回答内容\n[[amadeus:reply-modality=default]]`).text, '回答内容\n', 'mid-payload metadata is stripped before delivery');
+assert.equal(ensureAmadeusJapaneseVoiceText({ text: '[[amadeus:reply-modality=default]]\nNO_REPLY' }, false).text, undefined, 'a marked silent reply is suppressed before WhatsApp delivery');
 const modalityGlobal = '__amadeusReplyModalityRuns20260928';
 const previousModalityRegistry = globalThis[modalityGlobal];
 globalThis[modalityGlobal] = new Map([

@@ -46,7 +46,11 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
       };
     }
     const isTypedWhatsApp = typeof channel === 'string' && channel.trim().toLowerCase() === 'whatsapp';
-    if (isTypedWhatsApp) {
+    // OpenClaw supplies native turn provenance. Heartbeats, cron runs, and
+    // internal handoffs can share the WhatsApp route but must not receive a
+    // user-reply modality protocol or emit its control marker.
+    const isExternalUserTurn = context.inputProvenance?.kind === 'external_user';
+    if (isTypedWhatsApp && isExternalUserTurn) {
       // The model makes the semantic decision in this same Agent turn. The
       // runtime only trusts its explicit control marker; no user-text regex or
       // second classifier is involved. Default is fail-closed until the model
