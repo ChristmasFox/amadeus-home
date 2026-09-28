@@ -15,3 +15,12 @@
 The owner handset screenshot exposed a legacy `tts:mood` leak. The repository now maps that bounded legacy alias, strips control markers before WhatsApp delivery, and keeps the seven-value emotion contract in the pinned provider patch. CLI `agent --deliver` was excluded from voice evidence because it bypasses the channel TTS finalizer.
 
 Manual acceptance passed on 2026-09-28: a real owner WhatsApp inbound event at 20:33:50 (Asia/Shanghai) produced one channel media reply at 20:34:04. The channel log records `auto-reply sent (media)` with the generated file `voice---2d373ae5-edd8-432d-9d6d-20b708ee2db6.mp3`, `mediaSizeBytes=92188`, and `durationMs=1746`. The same outbound record contains only the visible Chinese/Japanese reply and `mediaUrl`; no `tts:mood`, `tts:emotion`, or `amadeus:reply-modality` control marker appears in that final channel record. Historical marker counts in the persistent session database are expected from earlier rejected CLI probes and are not used as acceptance evidence.
+
+## 1.6.6 style optimization deployment
+
+- Source pushed: `6d99e1f` (style instructions), followed by `306c39e` (voice acceptance marker alignment).
+- Native Mac apply: `ENGINE=ominix`, LaunchAgent running, `/healthz=200`, installed `kurisu_emotion.py` matches the pushed source.
+- Same-version candidate OpenClaw image: `local/openclaw-amadeus:git-6d99e1f999e8-20260928125615`.
+- Candidate checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928125615`; post-deploy evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260928125615`.
+- Candidate owner notification sent marker: `/DATA/AppData/openclaw/notifications/c5a7d98ce9719d18df7e97bbb818df0d2331bcb3.sent.json` for `amadeus-candidate-deploy:amadeus-openclaw-20260928125615`.
+- Technical speech smoke: native `default` MP3 returned HTTP 200 (46,700 bytes); 9Router `amadeus-tts` `default` and `soft` both returned HTTP 200 with distinct audio lengths/hashes. `scripts/accept-voice.sh --apply` passed with TTS ready and WhatsApp linked/running/connected. No new A/C matrix was run and sampling parameters were unchanged.
