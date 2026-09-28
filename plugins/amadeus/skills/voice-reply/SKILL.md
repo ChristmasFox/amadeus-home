@@ -32,8 +32,11 @@ speech block:
 ```
 
 If no emotional shading is needed, omit the emotion directive and use the
-`default` baseline. The transport accepts only those seven labels and strips
-the directive before visible delivery.
+`default` baseline. That baseline is intentionally distinctive: keep Kurisu's
+slightly sharp, reluctant opening and let concern soften the later delivery;
+do not flatten the default into a neutral or customer-service voice. The
+transport accepts only those seven labels and strips the directive before
+visible delivery.
 
 ## Fixed language rule for every voice reply
 

@@ -82,13 +82,13 @@ There must be exactly one resident 1.7B production TTS engine after cutover. Do 
 
 Kurisu is the spoken persona inspired by Makise Kurisu. The default spoken delivery must not collapse to a generic neutral female voice whenever no strong situational emotion is selected.
 
-The TTS service owns one deterministic `kurisu-default` baseline instruction. It should describe observable delivery characteristics rather than rely on the single label “tsundere”. Baseline intent:
+The TTS service owns one deterministic `kurisu-default` baseline instruction. It describes observable delivery characteristics rather than relying on the single label “tsundere”:
 
-- rational, composed, intelligent and self-assured;
-- natural and restrained rather than theatrical;
-- slightly sharp/dry, with light impatience or dry wit when appropriate;
-- lightly tsundere / reluctant-to-admit-concern flavor;
-- no forced moe voice, no exaggerated anime acting, no repeated catchphrases.
+- use natural sentence-level pitch movement and prosody, with light emphasis on important words;
+- change rhythm and vocal energy when the sentence contains a meaningful contrast;
+- begin slightly sharp and reluctant, then soften the voice and sentence ending when concern shows through;
+- keep the recognizable tsundere contour in an ordinary conversational voice;
+- avoid anime voice imitation, shouting, sugary delivery, and customer-service intonation.
 
 The baseline is a speech-delivery contract. General conversation personality remains owned by the existing persona layer; do not move capability workflow into `SOUL.md` or global `AGENTS.md`.
 
@@ -110,13 +110,13 @@ sad
 
 Semantics:
 
-- `default`: Kurisu baseline only; this is the fallback for missing/unknown semantic need.
-- `irritated`: stronger impatience / mild reproach while remaining controlled.
-- `embarrassed`: flustered, reluctant, slightly hesitant, trying to hide the feeling.
-- `angry`: clearly angry/sharp but restrained; do not shout by default.
-- `sarcastic`: dry sarcasm, teasing/complaining, restrained mockery.
-- `soft`: concern/comfort with a softer voice while preserving Kurisu’s restrained character.
-- `sad`: subdued and restrained sadness, slightly lower/slow delivery.
+- `default`: use the distinctive baseline; start slightly sharp and let concern soften the voice and sentence ending when it appears.
+- `irritated`: sharpen the opening and key reproach words, pause briefly, continue a little faster, and cut the sentence ending cleanly.
+- `embarrassed`: start with a sharp reply, pause before the revealing word, speed up slightly afterward, and soften the ending.
+- `angry`: raise vocal energy and consonant sharpness, stress key words, use short divisions, and keep the ending hard without shouting.
+- `sarcastic`: lightly stress the ironic words, pause around them, keep a light tempo, and pull back the ending to make the dry tease audible.
+- `soft`: lower vocal energy, softly stress reassuring words, lengthen pauses slightly, and round the ending while retaining the initial reserve.
+- `sad`: lower pitch, speed, and energy, pause longer before important words, and let the ending trail with a subdued aftertone.
 
 The service combines:
 
