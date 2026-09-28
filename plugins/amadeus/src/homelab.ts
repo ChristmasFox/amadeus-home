@@ -3,7 +3,7 @@ import { adaptWorldlineNotification } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 import { macHostStatus } from './machost.js';
 import { requestJson } from './http.js';
-import { isTrustedOwnerContext, ownerEvent, type OwnerNotifier } from './owner.js';
+import { isTrustedOwnerContext, ownerEventForContext, type OwnerNotifier } from './owner.js';
 
 function healthy(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
@@ -90,7 +90,7 @@ export async function homelabStatus(
     const period = reportPeriod ?? 'manual';
     const eventKey = reportPeriod ? `mac-host-report:${date}:${reportPeriod}` : `mac-host-report:manual:${occurredAt}`;
     const allHealthy = !unavailable && Object.values(services).every(Boolean) && !anomalies.length;
-    notification = await notifier.notify(ownerEvent(adaptWorldlineNotification({
+    notification = await notifier.notify(ownerEventForContext(adaptWorldlineNotification({
       type: 'worldline_notification_intent',
       eventType: reportPeriod ? `mac_host_report_${reportPeriod}` : 'mac_host_report',
       kind: allHealthy ? 'scheduled_report' : 'network_degraded',
@@ -108,7 +108,7 @@ export async function homelabStatus(
       ],
       summary: text,
       occurredAt,
-    })));
+    }), context));
   }
   return { text, host, services, openWrt: { ok: openWrt.ok, data: openWrt.data }, anomalies, ...(notification === undefined ? {} : { notification }) };
 }
