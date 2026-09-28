@@ -79,7 +79,7 @@ for path in "${FILES[@]-}"; do
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
-    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|infra/macos/*mlx*|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
+    apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|infra/macos/*mlx*|infra/macos/prepare-ominix-tts.sh|infra/macos/patch-ominix-source.py|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
     scripts/prepare-mlx-tts-poc.sh) has_speech=1 ;;
     scripts/deploy-9router-speech.sh|scripts/test-9router-speech-image.sh|scripts/prepare-9router-speech-secrets.sh|scripts/provision-9router-qwen-asr.sh) has_router=1 ;;
     infra/docker/casaos/9router/*) has_router=1; has_package_meta=1 ;;
@@ -89,7 +89,7 @@ for path in "${FILES[@]-}"; do
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
     scripts/patch-openclaw-channel-identity.mjs) has_openclaw_deploy=1 ;;
-    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-openclaw-voice-policy.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
+    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/test-patch-openclaw-tts-emotion.mjs|scripts/openclaw-voice-*.mjs|scripts/test-openclaw-voice-policy.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs)
       has_voice_patch=1
       ;;
     scripts/export-tts-performance-data.py|scripts/check-tts-performance-report.py|scripts/test-openclaw-docker-cache-order.py|scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;
@@ -196,6 +196,8 @@ if ((has_openclaw_deploy)); then
   bash -n scripts/test-openclaw-voice-image.sh
   printf '+ python3 scripts/test-openclaw-speech-config.py\n'
   python3 scripts/test-openclaw-speech-config.py
+  printf '+ node scripts/test-patch-openclaw-tts-emotion.mjs\n'
+  node scripts/test-patch-openclaw-tts-emotion.mjs
 fi
 if ((has_voice_patch)); then
   printf '+ pnpm verify:openclaw-patch\n'; pnpm verify:openclaw-patch
@@ -229,6 +231,8 @@ if ((has_router)); then
   node infra/docker/casaos/9router/test-asr-bridge.mjs
   printf '+ node --check infra/docker/casaos/9router/start-9router.mjs\n'
   node --check infra/docker/casaos/9router/start-9router.mjs
+  printf '+ node infra/docker/casaos/9router/test-selfhosted-tts-style.mjs\n'
+  node infra/docker/casaos/9router/test-selfhosted-tts-style.mjs
   printf '+ bash -n 9Router speech scripts\n'
   bash -n scripts/deploy-9router-speech.sh scripts/test-9router-speech-image.sh scripts/prepare-9router-speech-secrets.sh scripts/provision-9router-qwen-asr.sh
 fi
@@ -236,7 +240,7 @@ if ((has_speech)); then
   printf '+ python3 -m unittest discover -s apps/qwen3-tts-service/tests\n'
   python3 -m unittest discover -s apps/qwen3-tts-service/tests
   printf '+ python3 -m unittest scripts/test-provision-9router-speech.py\n'
-  python3 -m unittest scripts/test-provision-9router-speech.py
+  PYTHONPATH=scripts python3 -m unittest scripts/test-provision-9router-speech.py
   printf '+ node scripts/test-patch-openclaw-voice-failure.mjs\n'
   node scripts/test-patch-openclaw-voice-failure.mjs
   printf '+ python3 -m py_compile apps/qwen3-tts-service/service.py scripts/provision-9router-speech.py\n'

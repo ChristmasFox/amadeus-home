@@ -8,11 +8,12 @@ import plistlib
 
 
 def render(template: Path, base: Path, voice: Path, log: Path,
-           mlx_root: Path, engine: str) -> bytes:
-    if engine not in ('mps', 'mlx'):
+           mlx_root: Path, engine: str, ominix_root: Path | None = None) -> bytes:
+    if engine not in ('mps', 'mlx', 'ominix'):
         raise ValueError('unsupported_tts_engine')
-    python = base / 'venv/bin/python' if engine == 'mps' else mlx_root / 'venv/bin/python'
-    cache = base / 'model-cache' if engine == 'mps' else mlx_root / 'cache'
+    python = base / 'venv/bin/python' if engine in ('mps', 'ominix') else mlx_root / 'venv/bin/python'
+    cache = base / 'model-cache' if engine in ('mps', 'ominix') else mlx_root / 'cache'
+    ominix_root = ominix_root or (base / 'ominix')
     replacements = {
         '__VENV_PYTHON__': str(python),
         '__SERVICE_SCRIPT__': str(base / 'service.py'),
@@ -22,6 +23,8 @@ def render(template: Path, base: Path, voice: Path, log: Path,
         '__MODEL_CACHE__': str(cache),
         '__MODEL_PATH__': str(base / 'model'),
         '__MLX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'mlx' else '',
+        '__OMINIX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'ominix' else '',
+        '__OMINIX_WORKER_PATH__': str(ominix_root / 'worker') if engine == 'ominix' else '',
         '__TTS_ENGINE__': engine,
     }
     text = template.read_text()
@@ -43,9 +46,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('template', 'output', 'base', 'voice', 'log', 'mlx-root'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--engine', choices=('mps', 'mlx'), required=True)
+    parser.add_argument('--engine', choices=('mps', 'mlx', 'ominix'), required=True)
+    parser.add_argument('--ominix-root', type=Path)
     args = parser.parse_args()
-    data = render(args.template, args.base, args.voice, args.log, args.mlx_root, args.engine)
+    data = render(args.template, args.base, args.voice, args.log, args.mlx_root, args.engine, args.ominix_root)
     args.output.write_bytes(data)
     args.output.chmod(0o600)
     print(f'TTS_PLIST_RENDERED={args.engine}')

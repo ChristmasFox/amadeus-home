@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from concurrent.futures import CancelledError, Future
 import queue
 from engine_contract import SpeechEngine, SynthesisTiming
+from kurisu_emotion import normalize_emotion
 
 MODEL_ID = "qwen3-tts-1.7b"
 VOICE_ID = "kurisu-v1"
@@ -66,7 +67,9 @@ class QwenEngine:
         wav, rate, _ = self.synthesize_timed(text)
         return wav, rate
 
-    def synthesize_timed(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
+    def synthesize_timed(self, text: str, emotion: str = "default") -> tuple[bytes, int, SynthesisTiming]:
+        if normalize_emotion(emotion) != "default":
+            raise ValueError("emotion_requires_ominix_engine")
         queued_at = time.monotonic_ns()
         with self._lock:
             locked_at = time.monotonic_ns()
@@ -109,6 +112,7 @@ class TtsBusyError(Exception):
 @dataclass
 class InferenceJob:
     text: str
+    emotion: str
     admitted_ns: int
     started: threading.Event
     result: Future[tuple[bytes, int, SynthesisTiming]]
@@ -124,11 +128,11 @@ class InferenceWorker:
         self.thread = threading.Thread(target=self._run, name="qwen-inference", daemon=True)
         self.thread.start()
 
-    def submit(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
+    def submit(self, text: str, emotion: str = "default") -> tuple[bytes, int, SynthesisTiming]:
         with self.admission_lock:
             if self.closed.is_set():
                 raise TtsBusyError()
-            job = InferenceJob(text, time.monotonic_ns(), threading.Event(), Future())
+            job = InferenceJob(text, emotion, time.monotonic_ns(), threading.Event(), Future())
             try:
                 self.pending.put_nowait(job)
             except queue.Full as exc:
@@ -156,7 +160,12 @@ class InferenceWorker:
                 engine = self.server.engine
                 if engine is None or self.server.state != "ready":
                     raise TtsBusyError()
-                wav, rate, timing = engine.synthesize_timed(job.text)
+                # Keep old A-engine test doubles and rollback artifacts compatible;
+                # the C engine receives the bounded semantic value explicitly.
+                if job.emotion == "default":
+                    wav, rate, timing = engine.synthesize_timed(job.text)
+                else:
+                    wav, rate, timing = engine.synthesize_timed(job.text, job.emotion)
                 wait_ms = (begun_ns - job.admitted_ns) / 1_000_000
                 job.result.set_result((wav, rate, replace(timing, queue_wait_ms=wait_ms + timing.queue_wait_ms)))
             except Exception as exc:
@@ -188,6 +197,13 @@ def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngin
             raise ValueError("mlx_model_path_required")
         from mlx_engine import QwenMlxEngine
         return QwenMlxEngine(profile, Path(explicit_path), on_warmup=on_warmup)
+    if backend == "ominix":
+        worker_path = os.environ.get("AMADEUS_TTS_OMINIX_WORKER_PATH")
+        model_path = os.environ.get("AMADEUS_TTS_OMINIX_MODEL_PATH")
+        if not worker_path or not model_path:
+            raise ValueError("ominix_assets_required")
+        from ominix_engine import OminiXEngine
+        return OminiXEngine(profile, Path(model_path), Path(worker_path), on_warmup=on_warmup)
     raise ValueError("unsupported_speech_engine")
 
 class SpeechServer(ThreadingHTTPServer):
@@ -203,6 +219,10 @@ class SpeechServer(ThreadingHTTPServer):
 
     def server_close(self) -> None:
         self.inference.close()
+        engine = self.engine
+        close = getattr(engine, "close", None)
+        if callable(close):
+            close()
         super().server_close()
 
     def load(self, profile: Path, model_path: str = UPSTREAM_MODEL) -> None:
@@ -293,13 +313,18 @@ class SpeechHandler(BaseHTTPRequestHandler):
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
             self._error(400, "invalid_input")
             return
+        try:
+            emotion = normalize_emotion(data.get("style", "default"))
+        except ValueError:
+            self._error(400, "invalid_style")
+            return
         fmt = data.get("response_format", "mp3")
         if fmt not in ("wav", "mp3", "opus"):
             self._error(400, "unsupported_format")
             return
         started = time.monotonic()
         try:
-            wav, _, timing = self.server.inference.submit(text)
+            wav, _, timing = self.server.inference.submit(text, emotion)
             if not wav or len(wav) > MAX_AUDIO:
                 raise RuntimeError("invalid_audio")
             with wave.open(io.BytesIO(wav), "rb") as reader:

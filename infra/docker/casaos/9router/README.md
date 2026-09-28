@@ -1,6 +1,8 @@
-# 9Router speech adapter — 1.5.3 candidate
+# 9Router speech adapter — pinned 0.5.81
 
 9Router remains the sole model/provider control plane. The companion `asr-bridge.mjs` is a bounded transport adapter for the synchronous Qwen-Audio-3.0-ASR-Flash multimodal-generation contract, **not** an Agent or second router. It listens on container loopback `127.0.0.1:20129`, never publishes a host port, and returns OpenAI-compatible `{ "text": ... }` to 9Router's Self-hosted STT provider. `amadeus-asr` must be an alias for `selfhosted-stt/qwen-audio-3.0-asr-flash`, not the old Chat Combo. TTS uses 9Router Self-hosted TTS -> M204 port 18792 and `amadeus-tts` -> `selfhosted-tts/qwen3-tts-1.7b/kurisu-v1`.
+
+The image installs npm `9router@0.5.81` and applies `patch-selfhosted-tts-style.mjs` to the compiled self-hosted TTS adapter. The patch is version and anchor guarded, idempotent, and forwards the bounded `style` field from the route's existing options object to `/v1/audio/speech`; no provider, alias, or credential is changed.
 
 ## Protected runtime files (never commit values)
 
