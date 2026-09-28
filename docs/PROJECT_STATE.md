@@ -1,5 +1,30 @@
 # Project State — 2026-09-27
 
+## 2026-09-28 typed voice semantic modality heartbeat isolation — candidate live
+
+Commit `bce1cc6` is pushed to `origin/main` and deployed as
+`local/openclaw-amadeus:git-bce1cc67fc8a-20260928054649` on M204 OrbStack
+`nyannyan`. Runtime SQLite/transcript evidence showed the reported private
+message came from the 13:04 and 13:34 OpenClaw heartbeat polls, not an
+inbound user message. Those turns carry native
+`inputProvenance.kind=internal_system`, but the prior hook treated every
+WhatsApp turn as typed input and caused `[[amadeus:reply-modality=default]]`
+to prefix `NO_REPLY`, bypassing the core exact-token suppression.
+
+The hook now injects typed reply modality only for
+`inputProvenance.kind=external_user`. A marked `NO_REPLY` is also removed
+before WhatsApp delivery as a narrow fail-closed guard. Existing inbound voice
+lease handling and the sole voice-reply Skill are unchanged. Focused tests,
+Amadeus tests, OpenClaw patch fixtures, architecture, secrets and build passed;
+candidate health, Product Radar health and NAS read-only smoke passed. The
+protected rollback checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928054649`; post-deploy
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260928054649`.
+The next scheduled heartbeat remains the live silence observation before
+owner acceptance. Evidence:
+`.agent/checkpoints/2026-09-28-typed-voice-heartbeat-isolation-candidate-live.md`.
+
 ## 2026-09-28 typed voice semantic modality candidate — owner-accepted
 
 Commit `235387f` is pushed to `origin/main` and deployed as
