@@ -46,6 +46,30 @@ class ProductionBoundaryScheduleTest(unittest.TestCase):
                 self.assertEqual({r["cycle"] for r in selected}, set(range(5)))
                 self.assertEqual({r["fixture_run_index"] for r in selected}, set(range(10)))
 
+    def test_safe_prefix_schedule_preserves_full_v2_survivor_order(self):
+        full = boundary.matrix_schedule()
+        prefix_lengths = boundary.DEFAULT_V2_LENGTHS[:5]
+        subset = boundary.matrix_schedule(lengths=prefix_lengths)
+        historical = boundary.historical_matrix_schedule()
+        expected = [row for row in historical if row["length"] in prefix_lengths]
+        self.assertEqual([row["source_order_index"] for row in subset],
+                         [row["order_index"] for row in expected])
+        self.assertEqual(len(subset), 100)
+        self.assertEqual({row["length"] for row in subset}, set(prefix_lengths))
+        self.assertEqual(boundary.schedule_sha256(boundary.matrix_schedule()),
+                         "6c307496951095b0c377e17efc78aa048f6df1e03679f9c47dd12dcbdddf7f80")
+
+    def test_execution_scope_can_only_be_a_safe_prefix(self):
+        original = boundary.LENGTHS
+        try:
+            self.assertEqual(boundary.set_execution_lengths(boundary.DEFAULT_V2_LENGTHS[:5]),
+                             (25, 50, 100, 150, 200))
+            self.assertEqual(boundary.LENGTHS, (25, 50, 100, 150, 200))
+            with self.assertRaisesRegex(ValueError, "execution_lengths_must_be_a_nonempty_v2_prefix"):
+                boundary.set_execution_lengths((25, 50, 100, 150, 250))
+        finally:
+            boundary.set_execution_lengths(original)
+
     def test_quantile_uses_type_7_linear_interpolation(self):
         self.assertEqual(boundary.quantile([], 0.5), None)
         self.assertEqual(boundary.quantile([1, 2, 3, 4], 0.5), 2.5)
@@ -236,8 +260,11 @@ class ProductionBoundaryReportTest(unittest.TestCase):
         invariants = {
             "control_id": boundary.CONTROL_ID,
             "git_commit": "commit",
+            "canonical_production_file_sha256": {"apps/qwen3-tts-service/service.py": "same-service-sha"},
             "version": "1.6.2",
             "service_source_sha256": "service-sha",
+            "protected_a_reference_verified_unchanged": True,
+            "production_configuration_changed_by_goal": False,
             "engine_source_config_sha256": "engine-sha",
             "engine": "mlx",
             "voice_profile_id": "kurisu-v1",
@@ -265,7 +292,9 @@ class ProductionBoundaryReportTest(unittest.TestCase):
                    "safety_stop_guards": {"swap_growth_confirmation_window_s": 30,
                                           "swap_growth_max_confirmation_windows": 4,
                                           "swap_free_immediate_stop_bytes": 512 * runtime.MIB}}
-            control = {**invariants, "fixture_manifest_sha256": fixture_sha,
+            control = {**invariants, "git_commit": "later-docs-only-commit",
+                       "canonical_main_commit": "later-main-docs-commit",
+                       "fixture_manifest_sha256": fixture_sha,
                        "schedule_sha256": schedule_sha,
                        "runtime": {**snapshot, "swap": {"used_bytes": 1000}}}
             warmup_row = {
@@ -307,7 +336,15 @@ class ProductionBoundaryReportTest(unittest.TestCase):
                 path.chmod(0o600)
             summary = analyzer.summarize_related_attempt(related, primary_run, primary_control,
                                                          fixture_sha, schedule_sha)
+            mismatched_control = json.loads((related / "control-manifest.json").read_text())
+            mismatched_control["canonical_production_file_sha256"]["apps/qwen3-tts-service/service.py"] = "different"
+            (related / "control-manifest.json").write_text(json.dumps(mismatched_control))
+            with self.assertRaisesRegex(ValueError, "related_attempt_canonical_production_file_hashes_mismatch"):
+                analyzer.summarize_related_attempt(related, primary_run, primary_control, fixture_sha, schedule_sha)
         self.assertTrue(summary["production_control_invariants_verified"])
+        self.assertEqual(summary["measurement_git_commit"], "later-docs-only-commit")
+        self.assertEqual(summary["canonical_main_commit"], "later-main-docs-commit")
+        self.assertTrue(summary["canonical_production_file_hashes_match_primary"])
         self.assertEqual(summary["warmup"]["successful_endpoint_ms_excluded"], [6500.0])
         self.assertEqual(summary["resource_observations"]["max_observed_swap_growth_bytes"], 900 * runtime.MIB)
         self.assertEqual(summary["resource_observations"]["min_memory_free_percent"], 66)

@@ -42,6 +42,7 @@ def main() -> None:
         raise ValueError("private_run_root_required")
     control = read_private(root / "control-manifest.json")
     run = read_private(root / "run-manifest.json")
+    boundary.set_execution_lengths(run.get("executed_lengths", boundary.DEFAULT_V2_LENGTHS))
     summary = read_private(root / "matrix-summary.json", optional=True) or {"buckets": {}}
     probe_summary = read_private(root / "probe-summary.json", optional=True) or {"buckets": {}}
     stop_observation = read_private(root / "post-safety-stop-observation.json", optional=True) or {}
@@ -96,10 +97,14 @@ def main() -> None:
                 "status": effective_status,
                 "success": success_count,
                 "attempts": attempt_count,
-                "reason": (stop_observation.get("stop_reason") if length == stop_length else
-                           (f"partial bucket ended when the matrix stopped at {stop_length} codepoints; no bucket-specific hard stop"
-                            if bucket_rows and stop_observation else
-                            bucket_status.get("reason") or probe_status.get("reason"))),
+                "reason": (
+                    ("owner-requested stop before the final persisted client row; a service success event/audio exists without a client timing row"
+                     if stop_observation.get("owner_requested_stop") and length == (stop_observation.get("unpersisted_client_timing_row") or {}).get("length")
+                     else f"partial bucket ended when the matrix stopped at {stop_length} codepoints; no bucket-specific hard stop")
+                    if stop_observation and bucket_rows else
+                    (stop_observation.get("stop_reason") if length == stop_length else
+                     bucket_status.get("reason") or probe_status.get("reason"))
+                ),
                 "representative": False,
             })
             continue
