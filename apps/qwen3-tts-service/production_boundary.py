@@ -13,7 +13,8 @@ CONTROL_ID = "prod-1.6.2-a-mlx-auto-interactive"
 HISTORICAL_LENGTHS = (25, 50, 100, 150, 200, 250, 320, 400, 500, 600, 800, 1000, 1200)
 # V2 executes only 25–600. Keep the immutable full fixture corpus so its
 # manifest hash and the historical 800/1000/1200 evidence remain unchanged.
-LENGTHS = (25, 50, 100, 150, 200, 250, 320, 400, 500, 600)
+DEFAULT_V2_LENGTHS = (25, 50, 100, 150, 200, 250, 320, 400, 500, 600)
+LENGTHS = DEFAULT_V2_LENGTHS
 FIXTURE_FILE = Path(__file__).with_name("production_boundary_fixtures.json")
 SCHEDULE_SEED = 20260927
 QUIET_INTERVAL_S = 2.0
@@ -108,19 +109,34 @@ def historical_matrix_schedule(seed: int = SCHEDULE_SEED) -> list[dict[str, Any]
                 raise AssertionError("matrix_schedule_fixture_count_invalid")
     return rows
 
-def matrix_schedule(seed: int = SCHEDULE_SEED) -> list[dict[str, Any]]:
-    """Filter the old deterministic schedule to V2 buckets, preserving order."""
+def set_execution_lengths(lengths: Sequence[int]) -> tuple[int, ...]:
+    """Set the executable safe prefix for this independently frozen run."""
+    global LENGTHS
+    selected = tuple(lengths)
+    if (not selected or selected != tuple(sorted(set(selected))) or
+            selected != DEFAULT_V2_LENGTHS[:len(selected)]):
+        raise ValueError("execution_lengths_must_be_a_nonempty_v2_prefix")
+    LENGTHS = selected
+    return LENGTHS
+
+def matrix_schedule(seed: int = SCHEDULE_SEED,
+                    lengths: Sequence[int] | None = None) -> list[dict[str, Any]]:
+    """Filter the old deterministic schedule to a V2 prefix, preserving order."""
+    active_lengths = tuple(lengths) if lengths is not None else LENGTHS
+    if (not active_lengths or active_lengths != tuple(sorted(set(active_lengths))) or
+            active_lengths != DEFAULT_V2_LENGTHS[:len(active_lengths)]):
+        raise ValueError("matrix_schedule_lengths_invalid")
     rows: list[dict[str, Any]] = []
     for historical in historical_matrix_schedule(seed):
-        if historical["length"] not in LENGTHS:
+        if historical["length"] not in active_lengths:
             continue
         row = dict(historical)
         row["source_order_index"] = historical["order_index"]
         row["order_index"] = len(rows)
         rows.append(row)
-    if len(rows) != len(LENGTHS) * 20:
+    if len(rows) != len(active_lengths) * 20:
         raise AssertionError("v2_matrix_schedule_size_invalid")
-    for n in LENGTHS:
+    for n in active_lengths:
         for family in ("A", "B"):
             bucket = [r for r in rows if r["length"] == n and r["family"] == family]
             if len(bucket) != 10 or {r["fixture_run_index"] for r in bucket} != set(range(10)):

@@ -268,9 +268,10 @@ def main() -> None:
         raise RuntimeError("launchagent_changed_during_control_capture")
     runtime = admission_snapshots[-1]
     fixtures, fixture_sha = boundary.load_fixture_manifest()
+    run_manifest = json.loads((output / "run-manifest.json").read_text())
     schedule = json.loads((output / "schedule.json").read_text())
     schedule_sha = boundary.schedule_sha256(schedule)
-    if schedule_sha != json.loads((output / "run-manifest.json").read_text()).get("schedule_sha256"):
+    if schedule_sha != run_manifest.get("schedule_sha256"):
         raise RuntimeError("frozen_schedule_hash_mismatch")
 
     os_version = command(["sw_vers", "-productVersion"])
@@ -316,8 +317,11 @@ def main() -> None:
         "git_branch": git_branch,
         "version": version,
         "fixture_manifest_sha256": fixture_sha,
-        "schedule_seed": json.loads((output / "run-manifest.json").read_text())["schedule_seed"],
+        "schedule_seed": run_manifest["schedule_seed"],
         "schedule_sha256": schedule_sha,
+        "executed_lengths": run_manifest.get("executed_lengths", list(boundary.DEFAULT_V2_LENGTHS)),
+        "execution_scope_rationale": run_manifest.get("execution_scope_rationale"),
+        "prior_v2_hardstop_evidence": run_manifest.get("prior_v2_hardstop_evidence"),
         "service_source_sha256": source_sha,
         "engine_source_config_sha256": engine_config_sha,
         "engine_config": config,

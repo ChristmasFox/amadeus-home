@@ -115,6 +115,7 @@ def summarize_related_attempt(root: Path, primary_run: dict, primary_control: di
                               fixture_sha: str, schedule_sha: str) -> dict:
     """Summarize a separate protected run without mixing its rows into primary statistics."""
     run = read_private(root / "run-manifest.json")
+    boundary.set_execution_lengths(run.get("executed_lengths", boundary.DEFAULT_V2_LENGTHS))
     control = read_private(root / "control-manifest.json")
     if (run.get("control_id") != primary_run.get("control_id") or
             control.get("control_id") != primary_control.get("control_id")):
@@ -128,11 +129,17 @@ def summarize_related_attempt(root: Path, primary_run: dict, primary_control: di
             control.get("schedule_sha256") != schedule_sha or
             related_schedule_sha != schedule_sha):
         raise ValueError("related_attempt_schedule_mismatch")
+    primary_production_hashes = primary_control.get("canonical_production_file_sha256")
+    related_production_hashes = control.get("canonical_production_file_sha256")
+    if (not isinstance(primary_production_hashes, dict) or not primary_production_hashes or
+            related_production_hashes != primary_production_hashes):
+        raise ValueError("related_attempt_canonical_production_file_hashes_mismatch")
     invariant_fields = (
-        "git_commit", "version", "service_source_sha256", "engine_source_config_sha256",
-        "engine", "voice_profile_id", "language", "launchd_process_type", "response_format",
-        "workers", "pending_slots", "pending_start_timeout_s", "openclaw_external_timeout_ms",
-        "max_text_codepoints",
+        "version", "service_source_sha256", "engine_source_config_sha256",
+        "engine", "voice_profile_id", "protected_a_reference_verified_unchanged",
+        "language", "launchd_process_type", "response_format", "workers", "pending_slots",
+        "pending_start_timeout_s", "openclaw_external_timeout_ms", "max_text_codepoints",
+        "production_configuration_changed_by_goal",
     )
     for field in invariant_fields:
         if control.get(field) != primary_control.get(field):
@@ -182,6 +189,9 @@ def summarize_related_attempt(root: Path, primary_run: dict, primary_control: di
         "run_root_basename": root.name,
         "created_utc": run.get("created_utc"),
         "relationship": "separate preserved attempt; not merged into primary statistics",
+        "measurement_git_commit": control.get("git_commit"),
+        "canonical_main_commit": control.get("canonical_main_commit"),
+        "canonical_production_file_hashes_match_primary": True,
         "production_control_invariants_verified": True,
         "fixture_manifest_sha256": fixture_sha,
         "schedule_sha256": schedule_sha,
@@ -242,6 +252,7 @@ def checked_listening_index(root: Path, complete_lengths: list[int]) -> dict:
 
 def build_document(root: Path, related_attempt_roots: list[Path] | None = None) -> tuple[dict, str]:
     run = read_private(root / "run-manifest.json")
+    boundary.set_execution_lengths(run.get("executed_lengths", boundary.DEFAULT_V2_LENGTHS))
     control = read_private(root / "control-manifest.json")
     tooling_revisions = read_private(root / "tooling-revisions.json", optional=True) or {}
     probe = read_private(root / "probe-summary.json", optional=True) or {"passed_lengths": [], "buckets": {}}
@@ -320,7 +331,14 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
                 status = probe_status
         reason = declared.get("reason") or p.get("reason")
         if matrix_phase.get("status") == "stopped" and stop_observation:
-            if length == matrix_stop_length:
+            if stop_observation.get("owner_requested_stop"):
+                unpersisted = stop_observation.get("unpersisted_client_timing_row") or {}
+                if length == unpersisted.get("length"):
+                    reason = ("owner-requested stop before the final client timing row was persisted; "
+                              "a service success event/audio exists but is excluded from n and percentiles")
+                elif bucket_rows and status != "complete":
+                    reason = f"owner-requested stop ended this matrix bucket at {len(success_rows)}/20 client rows"
+            elif length == matrix_stop_length:
                 reason = (stop_observation.get("stop_reason") or
                           f"request watchdog at {length} codepoints")
             elif bucket_rows:
@@ -563,10 +581,13 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
     contention_complete = (phase_status["contention"].get("status") == "complete" and
                            contention_summary.get("status") == "complete")
     listening_complete = len(listening.get("artifacts", [])) == len(boundary.LENGTHS)
-    done = (len(complete_lengths) == len(boundary.LENGTHS) and probes_all_passed and
+    full_v2_scope = tuple(boundary.LENGTHS) == boundary.DEFAULT_V2_LENGTHS
+    inherited_v2_stop = run.get("prior_v2_hardstop_evidence") is not None
+    done = (full_v2_scope and not inherited_v2_stop and
+            len(complete_lengths) == len(boundary.LENGTHS) and probes_all_passed and
             warmups_complete and pre_anchor_complete and post_anchor_complete and
             soak_complete and contention_complete and listening_complete and required_phases_complete)
-    has_hard_stop = any(phase_status[name].get("status") == "stopped" for name in phase_names)
+    has_hard_stop = inherited_v2_stop or any(phase_status[name].get("status") == "stopped" for name in phase_names)
     goal_status = "complete" if done else ("incomplete-safety-stopped" if has_hard_stop else "incomplete")
     admission = control.get("admission_baseline") or {}
     admission_public = {
@@ -625,6 +646,9 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
         "v2_executed_lengths": list(boundary.LENGTHS),
         "historical_fixture_lengths": list(boundary.HISTORICAL_LENGTHS),
         "schedule_filter": run.get("schedule_filter"),
+        "execution_scope_rationale": run.get("execution_scope_rationale"),
+        "prior_v2_hardstop_evidence": run.get("prior_v2_hardstop_evidence"),
+        "excluded_lengths": run.get("excluded_lengths", {}),
         "prior_safety_evidence": prior_evidence,
         "tooling_revisions": tooling_revisions,
         "historical_long_input_status": {
@@ -737,6 +761,15 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
         matrix_successes = attempt.get("matrix_successes", 0)
         evidence = f"anchor {anchors_count}; matrix {matrix_successes}/{matrix_attempts}"
         lines.append(f"| `{attempt.get('run_root_basename')}` | {attempt.get('stopped_phase')} | `{attempt.get('stop_reason')}` | {warmups} | {evidence} |")
+    inherited_stop = report.get("prior_v2_hardstop_evidence") or {}
+    if inherited_stop:
+        lines += [
+            "",
+            "## Inherited V2 hard-stop boundary",
+            "",
+            f"- Earlier protected V2 run `{inherited_stop.get('run_root_basename')}` stopped at {inherited_stop.get('stop_fixture_id')} / {inherited_stop.get('stop_length_codepoints')} codepoints with `{inherited_stop.get('stop_reason')}`.",
+            f"- This fresh root executes only the lower safe prefix {', '.join(map(str, report.get('v2_executed_lengths', [])))}; excluded 250–600 lengths are listed in `excluded_lengths`. The earlier partial rows are not pooled.",
+        ]
     lines += [
         "",
         "## Revised V2 swap and memory policy",
@@ -753,7 +786,8 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
         "## Frozen fixtures and statistics",
         "",
         f"- Fixture manifest SHA-256: `{report.get('fixture_manifest_sha256')}`. Historical corpus lengths: {', '.join(map(str, report.get('historical_fixture_lengths', [])))}.",
-        f"- Executed V2 lengths only: {', '.join(map(str, report.get('v2_executed_lengths', [])))}; fixed seed {report.get('schedule_seed')}; 200 rows; V2 schedule SHA-256 `{report.get('schedule_sha256')}`.",
+        f"- Executed V2 lengths for this root: {', '.join(map(str, report.get('v2_executed_lengths', [])))}; fixed seed {report.get('schedule_seed')}; frozen schedule SHA-256 `{report.get('schedule_sha256')}`.",
+        f"- Safe-subset rationale: `{report.get('execution_scope_rationale') or 'full 25–600 V2 scope'}`.",
         f"- Schedule derivation: `{report.get('schedule_filter')}`. Five cycles; fixture A=10 and B=10 measured requests per complete bucket; three excluded A-50 warmups; 2s quiet interval. Input length uses Python Unicode codepoints (`len(text)`).",
         f"- Quantile method: {report.get('quantile_method')}. p95 is descriptive for n=20, not an SLA or a high-confidence tail estimate.",
         "",
@@ -801,16 +835,25 @@ def build_document(root: Path, related_attempt_roots: list[Path] | None = None) 
     stop = report.get("safety_stop_observation") or {}
     if stop:
         sample = stop.get("timed_out_sample") or {}
+        owner_unpersisted = stop.get("unpersisted_client_timing_row") or {}
         post = stop.get("post_stop_runtime") or {}
         late = stop.get("post_saved_log_cursor_events") or []
+        if stop.get("owner_requested_stop"):
+            stop_description = (f"Owner requested stop with {stop.get('matrix_rows_persisted')} persisted client rows; "
+                                f"the pending next fixture was `{owner_unpersisted.get('fixture_id')}` at "
+                                f"{owner_unpersisted.get('length')} codepoints. No watchdog failure occurred in this run.")
+        else:
+            stop_description = (f"Matrix stopped immediately on `{sample.get('fixture_id')}` at "
+                                f"{fmt_num(sample.get('total_ms'))} ms with `{sample.get('error_category')}`; "
+                                f"hard-stop reason `{stop.get('stop_reason')}`.")
         lines += [
             "",
-            "## V2 matrix hard stop and post-stop verification",
+            "## V2 matrix stop and post-stop verification",
             "",
-            f"- Matrix stopped immediately on `{sample.get('fixture_id')}` at {fmt_num(sample.get('total_ms'))} ms with `{sample.get('error_category')}`; hard-stop reason `{stop.get('stop_reason')}`.",
-            f"- Persisted matrix rows: {stop.get('matrix_rows_persisted')}; successful rows: {stop.get('matrix_successful_rows')}; failures: {stop.get('matrix_failures')}; no request was submitted after stop by the harness.",
+            f"- {stop_description}",
+            f"- Persisted matrix rows: {stop.get('matrix_rows_persisted')}; successful client rows: {stop.get('matrix_successful_rows', stop.get('successful_client_rows'))}; failures: {stop.get('matrix_failures', 0)}; no request was submitted after stop by the harness.",
             f"- Post-stop service: health `{post.get('health')}` (HTTP {post.get('health_http_status')}), PID/runs {post.get('pid')}/{post.get('runs')}, memory free {post.get('memory_free_percent')}%, current TTS footprint {fmt_bytes(post.get('physical_footprint_bytes'))}, lifetime peak {fmt_bytes(post.get('physical_footprint_peak_bytes'))}, swap free {fmt_bytes(post.get('swap_free_bytes'))}, route `{post.get('host_route_ready')}`. Restart: `{stop.get('production_service_restarted_after_stop')}`.",
-            f"- A late log event after the saved matrix cursor was observed: `{late}`. Attribution is time-correlated only (the unchanged service has no request ID); it was not pooled as a successful client sample and no retry was sent.",
+            f"- Late log events after the saved matrix cursor: `{late}`. Attribution is time-correlated only (the unchanged service has no request ID); an unpersisted client row is excluded from n/percentiles/representative selection, and no retry was sent.",
         ]
     lines += [
         "",
@@ -925,12 +968,21 @@ def main() -> None:
     parser.add_argument("--run-root", type=Path, required=True)
     parser.add_argument("--related-attempt-root", type=Path, action="append", default=[],
                         help="separate protected attempt to document without pooling into primary statistics; repeatable")
+    parser.add_argument("--report-md", type=Path, default=REPORT_MD,
+                        help="repository Markdown output path (default: V2 primary report)")
+    parser.add_argument("--report-json", type=Path, default=REPORT_JSON,
+                        help="repository JSON output path (default: V2 primary data)")
     args = parser.parse_args()
     root = args.run_root.resolve()
     if root == ROOT or ROOT in root.parents or not str(root).startswith("/Volumes/Avalon/"):
         raise ValueError("protected_external_run_root_required")
     if not root.is_dir() or root.is_symlink() or root.stat().st_mode & 0o077:
         raise ValueError("private_run_root_required")
+    report_md = args.report_md.expanduser().resolve()
+    report_json = args.report_json.expanduser().resolve()
+    if (ROOT not in report_md.parents or ROOT not in report_json.parents or
+            report_md.suffix.lower() != ".md" or report_json.suffix.lower() != ".json"):
+        raise ValueError("public_report_outputs_must_be_repository_md_json_paths")
     related_roots = []
     for candidate in args.related_attempt_root:
         related = candidate.resolve()
@@ -946,12 +998,12 @@ def main() -> None:
     if not args.apply:
         print("REPORT=plan_only; --apply required to write aggregate docs")
         return
-    REPORT_MD.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_JSON.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_MD.write_text(markdown, encoding="utf-8")
-    REPORT_JSON.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print("REPORT_WRITTEN=" + str(REPORT_MD.relative_to(ROOT)))
-    print("DATA_WRITTEN=" + str(REPORT_JSON.relative_to(ROOT)))
+    report_md.parent.mkdir(parents=True, exist_ok=True)
+    report_json.parent.mkdir(parents=True, exist_ok=True)
+    report_md.write_text(markdown, encoding="utf-8")
+    report_json.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print("REPORT_WRITTEN=" + str(report_md.relative_to(ROOT)))
+    print("DATA_WRITTEN=" + str(report_json.relative_to(ROOT)))
     print("PRODUCTION_CONFIGURATION=unchanged; no boundary policy recommendation")
 
 

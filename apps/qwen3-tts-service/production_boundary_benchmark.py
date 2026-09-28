@@ -69,6 +69,7 @@ def validate_run(root_arg: Path) -> tuple[Path, dict[int, dict], dict, list[dict
     if not root.is_dir() or root.is_symlink() or root.stat().st_mode & 0o077:
         raise ValueError("private_run_root_required")
     run_manifest = read_json(root / "run-manifest.json")
+    boundary.set_execution_lengths(run_manifest.get("executed_lengths", boundary.DEFAULT_V2_LENGTHS))
     schedule = read_json(root / "schedule.json")
     control = read_json(root / "control-manifest.json")
     fixtures, fixture_sha = boundary.load_fixture_manifest()
