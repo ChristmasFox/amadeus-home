@@ -49,6 +49,27 @@ test('replyModality is initialized per turn and cleared after completion', () =>
   }
 });
 
+test('concurrent turns in one WhatsApp session keep modality state isolated by run id', () => {
+  const first = { runId: 'voice-one', sessionKey: 'same-session' };
+  const second = { runId: 'voice-two', sessionKey: 'same-session' };
+  const globals = globalThis as Record<string, unknown>;
+  const previous = globals[REPLY_MODALITY_RUNS_GLOBAL];
+  try {
+    clearReplyModalityForTurn(first);
+    clearReplyModalityForTurn(second);
+    setReplyModalityForTurn(first, 'voice');
+    setReplyModalityForTurn(second, 'default');
+    assert.equal(getReplyModalityForTurn(first), 'voice');
+    assert.equal(getReplyModalityForTurn(second), 'default');
+    clearReplyModalityForTurn(first);
+    assert.equal(getReplyModalityForTurn(first), 'default');
+    assert.equal(getReplyModalityForTurn(second), 'default', 'ending one run must not clear its sibling');
+  } finally {
+    if (previous === undefined) delete globals[REPLY_MODALITY_RUNS_GLOBAL];
+    else globals[REPLY_MODALITY_RUNS_GLOBAL] = previous;
+  }
+});
+
 test('typed WhatsApp prompt delegates modality to the model and provisions the sole voice-reply Skill', () => {
   const hooks = new Map<string, Array<(...args: any[]) => unknown>>();
   const api = {

@@ -39,10 +39,13 @@ function registry(): Map<string, ReplyModalityRecord> {
 function keysFor(context: ReplyTurnContext): string[] {
   const runId = asString(context.runId);
   const sessionKey = asString(context.sessionKey);
-  return [
-    runId ? `run:${runId}` : undefined,
-    sessionKey ? `session:${sessionKey}` : undefined,
-  ].filter((key): key is string => Boolean(key));
+  // A run id is the isolation boundary. Session fallback is only for older
+  // runtimes that do not expose run provenance; writing both keys lets one
+  // concurrent turn clear or overwrite another turn in the same WhatsApp
+  // chat.
+  return runId
+    ? [`run:${runId}`]
+    : sessionKey ? [`session:${sessionKey}`] : [];
 }
 
 /**
