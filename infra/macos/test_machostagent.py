@@ -60,6 +60,8 @@ class MacHostAgentContractTest(unittest.TestCase):
             self.assertEqual(public["memory"]["total"], machostagent.human_bytes(24_000_000_000))
             self.assertNotIn("totalBytes", public["memory"])
             self.assertNotIn("freeBytes", public["disks"]["avalon"])
+            self.assertEqual(public["power"]["socPower"], "2000 mW (SoC estimate)")
+            self.assertEqual(public["power"]["wallPower"], "未知（需要外部墙上电表）")
             self.assertEqual({"host_samples", "storage_samples", "service_samples", "anomaly_events", "minute_rollups", "hourly_rollups", "daily_rollups"}, {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")})
 
     def test_anomaly_detection_is_deterministic_and_deduplicated(self):

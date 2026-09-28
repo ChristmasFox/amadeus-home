@@ -205,7 +205,7 @@ def power() -> dict[str, Any]:
     try:
         snapshot = json.loads(POWER_FILE.read_text(encoding="utf8"))
     except (OSError, json.JSONDecodeError):
-        return {**base, "telemetry": "degraded", "source": "powermetrics", "powerWatts": None, "powerSummary": None, "message": "privileged power sampler is not installed"}
+        return {**base, "telemetry": "degraded", "source": "powermetrics", "scope": "soc", "accuracy": "estimated_soc_not_wall_input", "powerWatts": None, "wallPowerWatts": None, "powerSummary": None, "message": "privileged power sampler is not installed"}
     updated = snapshot.get("updatedAt") if isinstance(snapshot, dict) else None
     try:
         observed = parse_timestamp(str(updated))
@@ -213,8 +213,8 @@ def power() -> dict[str, Any]:
     except (TypeError, ValueError, OverflowError):
         age = float("inf")
     if not isinstance(snapshot, dict) or snapshot.get("status") != "ok" or age > POWER_MAX_AGE_SECONDS:
-        return {**base, "telemetry": "degraded", "source": "powermetrics", "powerWatts": None, "powerSummary": None, "updatedAt": updated, "message": "privileged power sample is unavailable or stale"}
-    return {**base, **snapshot, "ageSeconds": round(max(age, 0.0), 1), "powerSummary": "powermetrics SoC estimate"}
+        return {**base, "telemetry": "degraded", "source": "powermetrics", "scope": "soc", "accuracy": "estimated_soc_not_wall_input", "powerWatts": None, "wallPowerWatts": None, "powerSummary": None, "updatedAt": updated, "message": "privileged power sample is unavailable or stale"}
+    return {**base, **snapshot, "scope": "soc", "accuracy": "estimated_soc_not_wall_input", "wallPowerWatts": None, "ageSeconds": round(max(age, 0.0), 1), "powerSummary": "powermetrics SoC estimate"}
 
 
 def process_rows() -> list[dict[str, Any]]:
@@ -655,6 +655,10 @@ def public_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
     network = value.get("network")
     if isinstance(network, dict):
         network.pop("rxBytes", None); network.pop("txBytes", None)
+    power_value = value.get("power") if isinstance(value.get("power"), dict) else {}
+    watts = power_value.get("powerWatts")
+    power_value["socPower"] = f"{float(watts) * 1000:.0f} mW (SoC estimate)" if isinstance(watts, (int, float)) else "未知"
+    power_value["wallPower"] = "未知（需要外部墙上电表）"
     return value
 
 
@@ -677,6 +681,10 @@ def public_history(history: dict[str, Any]) -> dict[str, Any]:
         swap["current"] = human_bytes(swap.pop("currentBytes"))
     if "deltaBytes" in swap:
         swap["delta"] = human_bytes(swap.pop("deltaBytes"))
+    power_metric = metrics.get("powerWatts") if isinstance(metrics.get("powerWatts"), dict) else {}
+    power_metric["scope"] = "soc"
+    power_metric["accuracy"] = "estimated_soc_not_wall_input"
+    power_metric["wallPower"] = "未知（需要外部墙上电表）"
     return value
 
 

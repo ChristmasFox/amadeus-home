@@ -29,6 +29,27 @@ function bytes(value: unknown): string {
   return `${index === 0 ? amount.toFixed(0) : amount.toFixed(2)} ${units[index]}`;
 }
 
+function compactNumber(value: unknown, digits = 1): string {
+  const current = metric(value);
+  return current === null ? '未知' : current.toFixed(digits);
+}
+
+function summaryLine(summary: Record<string, unknown>, suffix: string): string {
+  const maxAt = typeof summary.maxAt === 'string' ? summary.maxAt.replace('T', ' ').replace('Z', '') : null;
+  const peak = `${compactNumber(summary.max)}${suffix}${maxAt ? ` @ ${maxAt.slice(5, 16)}` : ''}`;
+  return `avg/p95/峰值 ${compactNumber(summary.avg)}${suffix}/${compactNumber(summary.p95)}${suffix}/${peak}`;
+}
+
+function powerLine(power: Record<string, unknown>, summary: Record<string, unknown>): string {
+  const currentWatts = metric(power.powerWatts);
+  const current = currentWatts === null ? '未知（SoC 估算不可用）' : `${(currentWatts * 1000).toFixed(0)} mW（SoC 估算）`;
+  const values = ['avg', 'p95', 'max'].map((key) => {
+    const watts = metric(summary[key]);
+    return watts === null ? '未知' : `${(watts * 1000).toFixed(0)} mW`;
+  });
+  return `SoC 功耗估算：${current}；今日 avg/p95/峰值 ${values.join('/')}`;
+}
+
 async function probe(url: string, signal?: AbortSignal): Promise<{ ok: boolean; data?: unknown }> {
   try {
     const data = await requestJson(url, { ...(signal ? { signal } : {}), timeoutMs: 8_000 });
@@ -68,19 +89,26 @@ export async function homelabStatus(
   const history = host.history && typeof host.history === 'object' ? host.history as Record<string, unknown> : {};
   const metrics = history.metrics && typeof history.metrics === 'object' ? history.metrics as Record<string, unknown> : {};
   const cpuSummary = metrics.cpu && typeof metrics.cpu === 'object' ? metrics.cpu as Record<string, unknown> : {};
+  const swapSummary = metrics.swap && typeof metrics.swap === 'object' ? metrics.swap as Record<string, unknown> : {};
   const powerSummary = metrics.powerWatts && typeof metrics.powerWatts === 'object' ? metrics.powerWatts as Record<string, unknown> : {};
+  const power = host.power && typeof host.power === 'object' ? host.power as Record<string, unknown> : {};
   const anomalies = Array.isArray(host.anomalies) ? host.anomalies : [];
+  const serviceEntries = Object.entries(services).filter(([name]) => name !== 'OpenWrt');
+  const unhealthyServices = serviceEntries.filter(([, ok]) => !ok).map(([name]) => name);
+  const unhealthyText = [...unhealthyServices, ...(openWrt.ok ? [] : ['OpenWrt（独立 endpoint）'])].join('、');
+  const conclusion = unavailable ? '❌ 宿主机遥测不可用' : anomalies.length || unhealthyText ? '⚠️ 需要关注' : '✅ 正常';
+  const serviceText = serviceEntries.filter(([, ok]) => ok).map(([name]) => name).join('、') || '无';
   const lines = [
-    '🖥 M204 HomeLab 状态', '',
-    unavailable ? '宿主机遥测：不可用（host telemetry unavailable）' : '宿主机：Amadeus-M204（真实 macOS host）',
-    `CPU：${metric(cpu.utilizationPercent) === null ? '未知' : `${metric(cpu.utilizationPercent)!.toFixed(1)}%`}；今日 avg/p95/max：${cpuSummary.avg ?? '未知'}/${cpuSummary.p95 ?? '未知'}/${cpuSummary.max ?? '未知'}%`,
-    `内存：${bytes(memory.used)} / ${bytes(memory.total)}；Memory Pressure：${String(memory.pressure ?? 'unknown')}；Swap：${bytes(swap.used)}`,
-    `功耗：${metric((host.power as Record<string, unknown> | undefined)?.powerWatts) === null ? '未知' : `${metric((host.power as Record<string, unknown>).powerWatts)!.toFixed(2)} W`}；今日 avg/p95/max：${powerSummary.avg ?? '未知'}/${powerSummary.p95 ?? '未知'}/${powerSummary.max ?? '未知'} W`,
-    `Macintosh HD：${bytes(internal.used)} / ${bytes(internal.total)}，剩余 ${bytes(internal.free)}（${internal.mounted === false ? '未挂载' : '已挂载'}）`,
-    `Avalon：${bytes(avalon.used)} / ${bytes(avalon.total)}，剩余 ${bytes(avalon.free)}（${avalon.mounted === true ? '已挂载' : '不可用'}）`,
-    '', '🧩 服务',
-    ...Object.entries(services).map(([name, ok]) => `${ok ? '✅' : '❌'} ${name}`),
-    `异常：${anomalies.length ? anomalies.map((item) => (item as Record<string, unknown>).summary ?? 'unknown').join('；') : '无'}`,
+    '🖥 M204 状态', `结论：${conclusion}`, '', '宿主机',
+    unavailable ? '• 遥测不可用（host telemetry unavailable）' : `• Amadeus-M204｜CPU ${compactNumber(cpu.utilizationPercent)}%｜${summaryLine(cpuSummary, '%')}`,
+    `• 内存 ${bytes(memory.used)} / ${bytes(memory.total)}｜Pressure ${String(memory.pressure ?? 'unknown')}`,
+    `• Swap ${bytes(swap.used)}｜趋势 ${String(swapSummary.delta ?? '未知')}`,
+    `• ${powerLine(power, powerSummary)}`,
+    '• 整机输入功耗：未知（需外部墙上电表）', '', '存储',
+    `• Macintosh HD ${bytes(internal.used)} / ${bytes(internal.total)}｜剩余 ${bytes(internal.free)}｜${internal.mounted === false ? '未挂载' : '已挂载'}`,
+    `• Avalon ${bytes(avalon.used)} / ${bytes(avalon.total)}｜剩余 ${bytes(avalon.free)}｜${avalon.mounted === true ? '已挂载' : '不可用'}`,
+    '', '服务', `• ✅ ${serviceText}`, `• ${openWrt.ok ? '✅' : '⚠️'} OpenWrt（独立 endpoint）`, ...(unhealthyText ? [`• ⚠️ ${unhealthyText}`] : []),
+    '', '异常', `• ${anomalies.length ? anomalies.map((item) => (item as Record<string, unknown>).summary ?? 'unknown').join('；') : '无'}`,
   ];
   const text = lines.join('\n');
   let notification: unknown;
