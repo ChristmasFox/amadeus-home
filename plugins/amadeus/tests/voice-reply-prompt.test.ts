@@ -12,6 +12,7 @@ import {
 test('typed voice intent is semantic and turn scoped', () => {
   assert.equal(classifyTypedReplyModality('用语音回答我'), 'voice');
   assert.equal(classifyTypedReplyModality('今天纳指怎么样，用语音告诉我'), 'voice');
+  assert.equal(classifyTypedReplyModality('发语音告诉我今天西安天气'), 'voice');
   assert.equal(classifyTypedReplyModality('你的语音怎么实现的？'), 'default');
   assert.equal(classifyTypedReplyModality('把你好翻译成中文和日文'), 'default');
   const context = { runId: 'voice-run', sessionKey: 'same-session' };
