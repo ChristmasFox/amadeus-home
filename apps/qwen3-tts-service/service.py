@@ -438,7 +438,8 @@ def main() -> None:
             import sys
             sys.modules.setdefault("service", sys.modules[__name__])
             from tuner import TunerServer
-            tuner = TunerServer(("127.0.0.1", tuner_port), server)
+            tuner_bind = os.environ.get("AMADEUS_TTS_TUNER_BIND", "127.0.0.1").strip()
+            tuner = TunerServer((tuner_bind, tuner_port), server)
         except OSError as exc:
             server.server_close()
             raise RuntimeError("tuner_port_unavailable") from exc

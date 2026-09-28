@@ -1,12 +1,12 @@
-# Current Task — Kurisu TTS Tuner (Active Planning / target 1.6.7)
+# Current Task — Kurisu TTS Tuner (Completed / release 1.6.7)
 
-Date: 2026-09-28 local. Active Goal: `docs/AMADEUS_KURISU_TTS_TUNER_GOAL.md`.
+Date: 2026-09-28 local. Completed Goal: `docs/AMADEUS_KURISU_TTS_TUNER_GOAL.md`.
 
 The owner explicitly confirmed that the Amadeus 1.6.6 Kurisu OminiX production Goal is complete and requested the next development plan: build a highly adjustable local HTML tuner for Kurisu voice style/prosody/generation parameters.
 
-The new Goal is planning-only until an explicit `/goal` handoff. Do not implement or deploy from this planning commit. `VERSION` remains **1.6.6** during planning and development; the target final release is **1.6.7**, with exactly one patch bump only after implementation and runtime acceptance are ready.
+The Goal was implemented and released as **1.6.7** with exactly one patch bump. Runtime acceptance and the final OpenClaw release deployment are recorded in `.agent/checkpoints/2026-09-28-amadeus-kurisu-tts-tuner-release.md`.
 
-The tuner must reuse the existing single resident OminiX Base 1.7B production model and cached `kurisu-v1` x-vector. It must not start a second model. Production remains on the existing bounded `amadeus-tts` / `:18792` contract. The proposed tuner is an owner-local loopback UI/API on `127.0.0.1:18793`, served by the same native TTS process, with no 9Router/OpenClaw/channel/public path.
+The tuner reuses the existing single resident OminiX Base 1.7B production model and cached `kurisu-v1` x-vector. It does not start a second model. Production remains on the existing bounded `amadeus-tts` / `:18792` contract. Per the owner's explicit LAN-access request, the tuner is served by the same native TTS process on `0.0.0.0:18793`; Host/Origin allowlists expose the intended `192.168.5.3` browser endpoint without adding a 9Router/OpenClaw/channel/public route.
 
 The design priority is strong adjustability without fake controls: editable baseline and emotion delta, PROD/A/B/C controlled comparison, text/style/seed/sampling/speed locks, STYLE ONLY / SAMPLING / VARIANCE / FREE COMPARE modes, and the actual pinned OminiX controls `temperature`, `top_k`, `top_p`, `max_new_tokens`, `seed`, `speed_factor`, and `repetition_penalty`. Model/reference/x-vector/language identity remain locked.
 
