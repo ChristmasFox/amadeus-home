@@ -25,3 +25,7 @@ W or kWh, request an external wall meter/smart-plug reading; compute kWh by
 integrating timestamped watts over time, not multiplying a single sample by
 hours. If the reported SoC estimate appears inconsistent with sustained CPU
 activity, say it is unverified and avoid a whole-device power conclusion.
+
+For mobile-facing HomeLab reports, render this as `mW（SoC 估算）` and keep
+`整机输入功耗：未知（需外部墙上电表）` as a separate line. Never shorten the
+estimate to a bare `W` value that could be read as wall-input power.
