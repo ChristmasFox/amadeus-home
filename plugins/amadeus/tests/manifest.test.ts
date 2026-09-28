@@ -6,6 +6,7 @@ import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plug
 import { identityContextFromOpenClaw } from '../src/identity.js';
 import entry from '../src/index.js';
 import { macHostStatus } from '../src/machost.js';
+import { isMacHostAgentHttpProbe, isMacHostShellProbe } from '../src/capabilities/macos-host/tool-guard.js';
 import { WHATSAPP_VOICE_RUNS_GLOBAL } from '../src/voice-reply-prompt.js';
 
 test('Amadeus manifest exposes the native Identity contract', async () => {
@@ -68,6 +69,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(hooks.has('message_received'), false, 'WhatsApp message_received plugin hooks are disabled by default; voice Skill must not depend on them');
   assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
+  assert.equal(hooks.has('before_tool_call'), true);
   assert.equal(hooks.has('agent_end'), true);
   assert.equal(hooks.has('reply_payload_sending'), true);
 
@@ -120,10 +122,25 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(identityContextFromOpenClaw(context).replySender?.platformUserId, 'reply-1');
   runHooks('agent_end', {}, { sessionKey: 'agent:main:hook-test' });
   assert.equal(identityContextFromOpenClaw(context).replySender, undefined);
+
+  const blocked = runHooks('before_tool_call',
+    { toolName: 'exec', params: { command: 'free -m; cat /proc/loadavg; uptime' } },
+    { toolName: 'exec' },
+  ) as { block?: boolean; blockReason?: string } | undefined;
+  assert.equal(blocked?.block, true);
+  assert.match(blocked?.blockReason ?? '', /amadeus_macos_host_status/iu);
 });
 
 test('host telemetry permits bounded group queries but keeps direct owner checks for notifications', async () => {
   const result = await macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:group:1', nativeChannelId: 'group-1@g.us' } as never);
   assert.deepEqual(result, { status: 'unavailable', error: 'host telemetry unavailable', host: 'Amadeus-M204' });
   await assert.rejects(() => macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:chat' } as never), /owner or group query authorization/u);
+});
+
+test('host telemetry blocks guest shell and raw HTTP substitutes', () => {
+  assert.equal(isMacHostShellProbe('free -m; cat /proc/loadavg; uptime'), true);
+  assert.equal(isMacHostShellProbe('df -h /; diskutil info /'), true);
+  assert.equal(isMacHostShellProbe('git status --short'), false);
+  assert.equal(isMacHostAgentHttpProbe('http://host.docker.internal:18791/v1/status'), true);
+  assert.equal(isMacHostAgentHttpProbe('http://product-radar:5315/health'), false);
 });
