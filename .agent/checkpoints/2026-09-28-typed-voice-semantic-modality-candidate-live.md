@@ -31,9 +31,10 @@
 - Exactly-one-audio fixture, missing-marker recovery, ordinary translation/default, and inbound voice preservation: passed
 - Architecture check, secrets scan, build, and diff check: passed
 
-## Pending acceptance
+## Acceptance
 
-The candidate is live, but no post-restart handset messages have arrived yet. Real WhatsApp acceptance remains required for:
+The owner confirmed the post-deploy WhatsApp text and voice behavior is
+normal. This closes handset acceptance for the candidate:
 
 1. typed `发语音告诉我今天西安天气` → one audio plus the existing bilingual visible contract;
 2. `你的语音怎么实现的？` → text only;
