@@ -1,4 +1,4 @@
-# Amadeus 1.6.9
+# Amadeus 1.7.0
 
-- 群聊开放 M204 Mac 宿主机的只读状态与进程查询，支持 CPU、内存、功耗、硬盘和受限进程列表。
-- 保持私聊非 owner 的工具隔离，MacHostAgent 继续禁止任意命令、路径和 sudo 操作。
+- 修复 M204 状态请求误调用 guest shell 读取 OrbStack/Linux 数据的问题。
+- 宿主机指标统一要求调用 MacHostAgent 原生只读工具；阻断 guest shell 和原始 MacHostAgent HTTP 替代路径。

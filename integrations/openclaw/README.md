@@ -55,7 +55,9 @@ is never copied into Git. Channel admission remains open groups with
 `requireMention=false`. The owner retains the full native tool profile minus
 the global `tts,message` deny. Other admitted group senders receive the
 scoped web/image/PUBG capabilities plus bounded read-only M204 host status and
-process queries; non-owner direct chats remain web-only. The source-managed
+process queries; those host metrics are served only by the native MacHostAgent
+tools, while guest shell probes and raw agent HTTP substitutes are blocked;
+non-owner direct chats remain web-only. The source-managed
 group policy is scoped to WhatsApp and Telegram and does not grant runtime,
 filesystem, NAS, HomeLab aggregate, VPS, Identity, or mutation tools. The
 pinned 2026.9.4 policy layers intersect group and global sender allowlists;

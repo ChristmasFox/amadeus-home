@@ -7,6 +7,12 @@ Use `amadeus_macos_host_status` for CPU/load, memory pressure, uptime, internal
 disk, Avalon, network, power, and selected service facts. Use
 `amadeus_macos_host_processes` for the bounded top CPU/memory process lists.
 
+For any request about `M204`, `Mac`, 宿主机、服务器状态、CPU、内存、功耗、
+硬盘、uptime 或进程，you MUST call one of these native tools first. Never use
+`exec`, `free`, `/proc`, `uptime`, `df`, `diskutil`, `powermetrics`, `ps`,
+`top`, or raw MacHostAgent HTTP as a substitute; those can report the
+OrbStack/Linux guest or bypass the host telemetry contract.
+
 These tools are bounded read-only capabilities available to the owner and all
 admitted group members. The MacHostAgent has no arbitrary command, file path,
 or sudo operation. If power telemetry is
