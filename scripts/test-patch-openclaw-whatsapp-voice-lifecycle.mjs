@@ -13,10 +13,14 @@ import {
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER,
   WHATSAPP_TAGGED_TYPED_GUARD_MARKER,
   WHATSAPP_TYPING_INDICATOR_MARKER,
+  TTS_CONTEXT_MARKER,
+  PAYLOADS_TTS_CONTEXT_MARKER,
   ensureAmadeusJapaneseVoiceText,
   resolveAmadeusJapaneseSpeechText,
   isAmadeusBilingualVoiceContract,
   patchTtsSource,
+  patchPayloadsTtsContextSource,
+  patchDispatchTtsContextSource,
   patchCoreSource,
   patchWhatsAppSource,
   patchWhatsAppIngressQueueSource,
@@ -169,6 +173,19 @@ assert.match(patchedTts, /amadeusInboundWhatsAppVoice && !ttsText\.trim\(\)/u, '
 assert.match(patchedTts, /amadeusPreserveTypedVisibleTts = params\.inboundAudio !== true/u, 'typed tagged TTS preserves visible text with audio');
 assert.match(patchedTts, /\? payloadWithAudio/u, 'typed tagged TTS is not downgraded to media-only supplement');
 assert.equal(patchTtsSource(patchedTts), patchedTts, 'TTS patch is idempotent');
+const pinnedDist = join(process.cwd(), 'node_modules/.pnpm/openclaw@2026.9.4/node_modules/openclaw/dist');
+const payloadsSource = await readFile(join(pinnedDist, 'dispatch-from-config.payloads-BfDc5DiG.mjs'), 'utf8');
+const patchedPayloads = patchPayloadsTtsContextSource(payloadsSource);
+assert.match(patchedPayloads, new RegExp(PAYLOADS_TTS_CONTEXT_MARKER));
+assert.match(patchedPayloads, /runId: params\.amadeusRunId\?\.\(\)/u);
+assert.match(patchedPayloads, /sessionKey: params\.amadeusSessionKey/u);
+assert.equal(patchPayloadsTtsContextSource(patchedPayloads), patchedPayloads, 'TTS payload context patch is idempotent');
+const dispatchSource = await readFile(join(pinnedDist, 'dispatch-from-config-CmAXENud.mjs'), 'utf8');
+const patchedDispatch = patchDispatchTtsContextSource(dispatchSource);
+assert.match(patchedDispatch, new RegExp(TTS_CONTEXT_MARKER));
+assert.match(patchedDispatch, /amadeusRunId: getAgentRunId/u);
+assert.match(patchedDispatch, /amadeusSessionKey: dispatchOperationSessionKey/u);
+assert.equal(patchDispatchTtsContextSource(patchedDispatch), patchedDispatch, 'dispatch TTS context patch is idempotent');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：少し待って。結論を先に言うわ。'), '少し待って。結論を先に言うわ。');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：中文：先说结论。\n日本語：少し待って。'), '少し待って。');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。', '中文：先说结论。'), '');

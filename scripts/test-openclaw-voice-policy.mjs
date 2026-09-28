@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER } from './openclaw-voice-markers.mjs';
 
@@ -13,6 +13,17 @@ assert.equal(resolveAmadeusJapaneseSpeechText('', `日本語：${japanese}`), ''
 assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n\n日本語：${japanese}`), true, 'the exact bilingual voice contract is recoverable when the marker is missing');
 assert.equal(isAmadeusBilingualVoiceContract('只用中文回答。'), false, 'ordinary Chinese text stays text-only');
 assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n日本語：`), false, 'an empty Japanese line is not a voice contract');
+const modalityGlobal = '__amadeusReplyModalityRuns20260928';
+const previousModalityRegistry = globalThis[modalityGlobal];
+globalThis[modalityGlobal] = new Map([
+  ['run:typed-voice', { modality: 'voice', expiresAt: Date.now() + 60_000 }],
+  ['run:expired', { modality: 'voice', expiresAt: Date.now() - 1 }],
+]);
+assert.equal(resolveAmadeusReplyModalityForTts({ runId: 'typed-voice' }), 'voice', 'only the current typed voice turn enables recovery');
+assert.equal(resolveAmadeusReplyModalityForTts({ runId: 'ordinary-translation' }), 'default', 'ordinary turns keep default modality');
+assert.equal(resolveAmadeusReplyModalityForTts({ runId: 'expired' }), 'default', 'expired turn state is discarded');
+if (previousModalityRegistry === undefined) delete globalThis[modalityGlobal];
+else globalThis[modalityGlobal] = previousModalityRegistry;
 const typed = { text: chinese, mediaUrl: 'file://audio.mp3', audioAsVoice: true, spokenText: japanese };
 assert.equal(ensureAmadeusJapaneseVoiceText(typed, false).text, `${chinese}\n\n日本語：${japanese}`, 'typed audio preserves visible text even without supplement metadata');
 const taggedTyped = { ...typed, ttsSupplement: { spokenText: japanese } };

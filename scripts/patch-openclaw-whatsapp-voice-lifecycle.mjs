@@ -5,16 +5,18 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './openclaw-voice-markers.mjs';
-export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText,
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
+  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
+export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, resolveAmadeusReplyModalityForTts,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
-  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER };
+  WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
+  TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
 
 function replaceOnce(source, before, after, label) {
   const count = source.split(before).length - 1;
@@ -78,7 +80,9 @@ export function patchTtsSource(original) {
     original,
     'const ttsText = explicitTtsText || visibleText;',
     `const amadeusInboundWhatsAppVoice = params.inboundAudio === true && String(params.channel ?? '').toLowerCase() === 'whatsapp';
+	const amadeusReplyModality = resolveAmadeusReplyModalityForTts(params);
 	const amadeusImplicitTypedWhatsAppVoice = String(params.channel ?? '').toLowerCase() === 'whatsapp'
+		&& amadeusReplyModality === 'voice'
 		&& !explicitTts && !directives.hasDirective && isAmadeusBilingualVoiceContract(visibleText);
 	const ttsText = amadeusInboundWhatsAppVoice
 		|| amadeusImplicitTypedWhatsAppVoice
@@ -89,7 +93,7 @@ export function patchTtsSource(original) {
   result = replaceOnce(
     result,
     'async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {',
-    `${resolveAmadeusJapaneseSpeechText.toString()}\n${isAmadeusBilingualVoiceContract.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
+    `${resolveAmadeusJapaneseSpeechText.toString()}\n${isAmadeusBilingualVoiceContract.toString()}\n${resolveAmadeusReplyModalityForTts.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
     'Japanese voice TTS helper',
   );
   result = replaceOnce(
@@ -111,6 +115,44 @@ export function patchTtsSource(original) {
     'typed TTS visible-text preservation',
   );
   return `// ${TTS_MARKER}\n${result}`;
+}
+
+export function patchPayloadsTtsContextSource(original) {
+  if (original.includes(PAYLOADS_TTS_CONTEXT_MARKER)) return original;
+  const before = [
+    '\t\t\treturn await maybeApplyTtsToReplyPayload({',
+    '\t\t\t\t...ttsParams,',
+    '\t\t\t\tinboundAudio: params.hasInboundAudio()',
+    '\t\t\t});',
+  ].join('\n');
+  const after = [
+    '\t\t\treturn await maybeApplyTtsToReplyPayload({',
+    '\t\t\t\t...ttsParams,',
+    '\t\t\t\tinboundAudio: params.hasInboundAudio(),',
+    '\t\t\t\trunId: params.amadeusRunId?.(),',
+    '\t\t\t\tsessionKey: params.amadeusSessionKey',
+    '\t\t\t});',
+  ].join('\n');
+  return `// ${PAYLOADS_TTS_CONTEXT_MARKER}\n${replaceOnce(original, before, after, 'TTS turn context propagation')}`;
+}
+
+export function patchDispatchTtsContextSource(original) {
+  if (original.includes(TTS_CONTEXT_MARKER)) return original;
+  const before = [
+    '\tconst maybeApplyTtsWithFinalizationLease = createFinalizationAwareTtsPayloadApplier({',
+    '\t\tgetReplyOperation: getDispatchReplyOperation,',
+    '\t\thasInboundAudio: () => inboundAudio || getDispatchReplyOperation()?.acceptedSteeredInboundAudio === true',
+    '\t});',
+  ].join('\n');
+  const after = [
+    '\tconst maybeApplyTtsWithFinalizationLease = createFinalizationAwareTtsPayloadApplier({',
+    '\t\tgetReplyOperation: getDispatchReplyOperation,',
+    '\t\thasInboundAudio: () => inboundAudio || getDispatchReplyOperation()?.acceptedSteeredInboundAudio === true,',
+    '\t\tamadeusRunId: getAgentRunId,',
+    '\t\tamadeusSessionKey: dispatchOperationSessionKey',
+    '\t});',
+  ].join('\n');
+  return `// ${TTS_CONTEXT_MARKER}\n${replaceOnce(original, before, after, 'dispatch TTS turn context')}`;
 }
 
 export function patchWhatsAppSource(original) {
@@ -305,6 +347,12 @@ export async function main(argv = process.argv.slice(2)) {
     const ttsPath = await findFile(options['core-root'], /^runtime-api-.*\.mjs$/u, 'const ttsText = explicitTtsText || visibleText;');
     if (!ttsPath) throw new Error('pinned OpenClaw TTS runtime module missing');
     console.log(`CORE_JAPANESE_TTS_PATCH=${await patchFile(ttsPath, patchTtsSource, TTS_MARKER)}`);
+    const payloadsPath = await findFile(options['core-root'], /^dispatch-from-config\.payloads-.*\.mjs$/u, 'function createFinalizationAwareTtsPayloadApplier(params) {');
+    if (!payloadsPath) throw new Error('pinned OpenClaw dispatch payloads module missing');
+    console.log(`CORE_TTS_PAYLOAD_CONTEXT_PATCH=${await patchFile(payloadsPath, patchPayloadsTtsContextSource, PAYLOADS_TTS_CONTEXT_MARKER)}`);
+    const dispatchPath = await findFile(options['core-root'], /^dispatch-from-config-.*\.mjs$/u, 'const maybeApplyTtsWithFinalizationLease = createFinalizationAwareTtsPayloadApplier({');
+    if (!dispatchPath) throw new Error('pinned OpenClaw dispatch module missing');
+    console.log(`CORE_TTS_DISPATCH_CONTEXT_PATCH=${await patchFile(dispatchPath, patchDispatchTtsContextSource, TTS_CONTEXT_MARKER)}`);
   }
   if (options['whatsapp-root']) {
     const path = await findFile(options['whatsapp-root'], /^monitor-.*\.js$/u, 'function createWhatsAppReplyPlan(params) {');

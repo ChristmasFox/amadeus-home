@@ -37,13 +37,19 @@ try {
   const patchedRuntimeSource = patchTtsSource(runtimeSource);
   writeFileSync(runtimeFixturePath, patchedRuntimeSource, { flag: 'wx' });
   const runtime = await import(pathToFileURL(runtimeFixturePath).href);
+  const modalityGlobal = '__amadeusReplyModalityRuns20260928';
+  const previousModalityRegistry = globalThis[modalityGlobal];
+  globalThis[modalityGlobal] = new Map([
+    ['run:typed-recovered', { modality: 'voice', expiresAt: Date.now() + 60_000 }],
+    ['run:typed-explicit', { modality: 'voice', expiresAt: Date.now() + 60_000 }],
+  ]);
   const persist = async ({ audioBuffer, fileExtension }) => {
     assert.ok(audioBuffer.length > 0);
     assert.equal(fileExtension, '.mp3');
     return 'file:///tmp/amadeus-test-only.mp3';
   };
-  const run = (text, inboundAudio) => runtime.u({
-    cfg, payload: { text }, channel: 'whatsapp', kind: 'final', inboundAudio,
+  const run = (text, inboundAudio, runId = 'ordinary') => runtime.u({
+    cfg, payload: { text }, channel: 'whatsapp', kind: 'final', inboundAudio, runId, sessionKey: 'tagged-test',
   }, persist);
 
   const ordinary = '你的语音是怎么实现的？我只是询问原理。';
@@ -52,7 +58,10 @@ try {
   assert.equal(ordinaryOutput.mediaUrl, undefined);
   assert.equal(calls.length, 0, 'ordinary typed text must not call the speech provider');
 
-  const recovered = await run('中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', false);
+  const translated = await run('中文：你好。\n\n日本語：こんにちは。', false, 'translation');
+  assert.equal(translated.mediaUrl, undefined, 'ordinary bilingual translation stays text-only without voice modality');
+
+  const recovered = await run('中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', false, 'typed-recovered');
   assert.equal(recovered.text, '中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', 'bilingual voice output survives a missing TTS marker');
   assert.equal(recovered.spokenText, '少し待って。結論を先に言うわ。');
   assert.equal(recovered.mediaUrl, 'file:///tmp/amadeus-test-only.mp3');
@@ -64,7 +73,7 @@ try {
   ];
   for (const { label, inboundAudio, japanese, chinese } of cases) {
     const text = `中文：${chinese}\n\n日本語：${japanese}\n[[tts:text]]${japanese}[[/tts:text]]`;
-    const output = await run(text, inboundAudio);
+    const output = await run(text, inboundAudio, inboundAudio ? 'inbound-voice' : 'typed-explicit');
     assert.equal(output.text, `中文：${chinese}\n\n日本語：${japanese}`, `${label}: directive must not leak`);
     assert.equal(output.spokenText, japanese, `${label}: spoken and visible Japanese must match`);
     assert.equal(output.mediaUrl, 'file:///tmp/amadeus-test-only.mp3', `${label}: one attachment`);
@@ -82,6 +91,8 @@ try {
     assert.equal(data.input, expectedInputs[index]);
     assert.doesNotMatch(data.input, /中文|好，我来回答|听到了/u, 'Chinese must not be synthesized');
   }
+  if (previousModalityRegistry === undefined) delete globalThis[modalityGlobal];
+  else globalThis[modalityGlobal] = previousModalityRegistry;
   console.log('OPENCLAW_TAGGED_TTS_THREE_WAY=passed');
 } finally {
   await new Promise((done) => server.close(done));
