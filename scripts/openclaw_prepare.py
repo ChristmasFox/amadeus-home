@@ -26,8 +26,22 @@ GROUP_PUBG_TOOL_ALLOWLIST = [
     "pubg_prefetch_telemetry",
     "pubg_telemetry_sync_report",
 ]
-GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate", *GROUP_PUBG_TOOL_ALLOWLIST]
+GROUP_MAC_HOST_TOOL_ALLOWLIST = [
+    "amadeus_macos_host_status",
+    "amadeus_macos_host_processes",
+]
+GROUP_IMAGE_TOOL_ALLOWLIST = [
+    *NON_OWNER_TOOL_ALLOWLIST,
+    "image_generate",
+    *GROUP_PUBG_TOOL_ALLOWLIST,
+    *GROUP_MAC_HOST_TOOL_ALLOWLIST,
+]
 LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST = [*NON_OWNER_TOOL_ALLOWLIST, "image_generate"]
+LEGACY_GROUP_PUBG_TOOL_ALLOWLIST = [
+    *NON_OWNER_TOOL_ALLOWLIST,
+    "image_generate",
+    *GROUP_PUBG_TOOL_ALLOWLIST,
+]
 
 
 def ensure_owner(path: Path, mode: int = 0o600) -> None:
@@ -177,13 +191,13 @@ def owner_tool_policy_keys(phone: str) -> list[str]:
 
 
 def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = None) -> None:
-    """Only the admitted groups get image_generate; preserve their admission rules.
+    """Only the admitted groups get the scoped read-only capability set; preserve their admission rules.
 
     The pinned OpenClaw sender allowlist remains read-only web for non-owner
-    direct messages. A version-pinned core patch grants image_generate across
-    that sender layer only when this explicit group allowlist and verified
-    group context both apply. Unexpected pre-existing group tool rules fail
-    closed instead of being silently replaced.
+    direct messages. A version-pinned core patch grants only the capabilities
+    in this explicit group allowlist across that sender layer when verified
+    group context applies. Unexpected pre-existing group tool rules fail closed
+    instead of being silently replaced.
     """
     groups = channel.get("groups", {})
     if not isinstance(groups, dict):
@@ -203,8 +217,9 @@ def ensure_group_image_policies(channel: dict, owner_keys: list[str] | None = No
             if not isinstance(group, dict):
                 raise SystemExit("group config must be an object")
             old_tools = group.get("tools")
-            legacy_tools = {"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST}
-            if old_tools is not None and old_tools not in (wanted_tools, legacy_tools):
+            legacy_tools = ({"allow": LEGACY_GROUP_IMAGE_TOOL_ALLOWLIST},
+                            {"allow": LEGACY_GROUP_PUBG_TOOL_ALLOWLIST})
+            if old_tools is not None and old_tools != wanted_tools and old_tools not in legacy_tools:
                 raise SystemExit("unexpected group tool policy; refuse to replace unrelated restrictions")
             old_senders = group.get("toolsBySender")
             if old_senders is not None and old_senders != wanted_owner:

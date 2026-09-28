@@ -63,6 +63,7 @@ for channel in ("whatsapp", "telegram"):
         "pubg_compare_stats", "pubg_get_match", "pubg_get_review_facts",
         "pubg_get_period_review", "pubg_query_team_damage",
         "pubg_prefetch_telemetry", "pubg_telemetry_sync_report",
+        "amadeus_macos_host_status", "amadeus_macos_host_processes",
     ]}
 assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
