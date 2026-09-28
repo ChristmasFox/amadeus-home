@@ -1,5 +1,22 @@
 # Project State — 2026-09-27
 
+## 2026-09-28 typed voice reply modality candidate — owner-accepted
+
+Commit `89826fd` is pushed to `origin/main` and deployed as
+`local/openclaw-amadeus:git-89826fd8e5cc-20260928035547` on M204 OrbStack
+`nyannyan`. The turn-scoped `replyModality` classifier and deterministic
+`voice-reply` Skill injection passed focused tests, and the pinned OpenClaw
+TTS patch now receives `runId`/`sessionKey` so missing-marker recovery is
+limited to the current typed voice turn. The existing verified inbound voice
+lease remains unchanged.
+
+The protected rollback checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928035547`; health,
+Product Radar, NAS read-only smoke, and WhatsApp linked/connected checks
+passed. Real WhatsApp inbound acceptance produced exactly one media reply for
+the explicit voice turn and a text-only reply for the following ordinary turn.
+Evidence: `.agent/checkpoints/2026-09-28-typed-voice-modality-candidate-live.md`.
+
 ## Amadeus 1.6.5 model-capability adapter release — owner-accepted
 
 Amadeus 1.6.5 is deployed on M204 OrbStack `nyannyan` with healthy immutable

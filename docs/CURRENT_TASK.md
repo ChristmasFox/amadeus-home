@@ -1,4 +1,10 @@
-# Current Task — Amadeus TTS Boundary Rebaseline V2 (Paused)
+# Current Task — Typed voice reply modality (Completed)
+
+Date: 2026-09-28 local. The typed text to voice reply fix is complete on `main` at `89826fd` and is deployed as the candidate image `local/openclaw-amadeus:git-89826fd8e5cc-20260928035547`. The turn-scoped `replyModality` classifier, deterministic `voice-reply` Skill injection, gated missing-marker recovery, and inbound voice lease preservation passed focused tests and real WhatsApp inbound acceptance. Rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260928035547`. Evidence: `.agent/checkpoints/2026-09-28-typed-voice-modality-candidate-live.md`.
+
+The previously paused TTS Boundary Rebaseline V2 pointer follows for historical continuity.
+
+# Previous Task — Amadeus TTS Boundary Rebaseline V2 (Paused)
 
 Date: 2026-09-27 local. Goal: `docs/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_GOAL.md`. The owner requested delivery of only the complete 25/50/100/150-codepoint report and to stop promptly. The broader 25–600 Goal is paused, not complete.
 
