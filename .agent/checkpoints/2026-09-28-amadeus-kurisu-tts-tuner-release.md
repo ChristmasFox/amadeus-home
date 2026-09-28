@@ -37,7 +37,7 @@ The original Goal accepted a loopback tuner. During finalization the owner expli
 
 ## Verification
 
-- `python3 -m unittest discover -s apps/qwen3-tts-service/tests -v`: 45 tests, 1 skipped, all passed.
+- `python3 -m unittest discover -s apps/qwen3-tts-service/tests -v`: 46 tests, 1 skipped, all passed.
 - Pinned OminiX Rust worker `cargo check`: passed.
 - `scripts/accept-voice.sh --apply`: TTS health ready, WhatsApp linked/running/connected, technical voice runtime passed.
 - `node scripts/check-architecture.mjs`: passed.
