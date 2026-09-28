@@ -45,6 +45,7 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
 test('Amadeus registers typed inbound identity context hooks', () => {
   const hooks = new Map<string, Array<(...args: unknown[]) => unknown>>();
   const registered: string[] = [];
+  const registeredFactories = new Map<string, unknown>();
   const runHooks = (name: string, ...args: unknown[]): unknown => {
     let result: unknown;
     for (const handler of hooks.get(name) ?? []) {
@@ -59,13 +60,23 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     logger: { info() {}, warn() {} },
     on(name: string, handler: (...args: unknown[]) => unknown) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
     registerService() {},
-    registerTool(_factory: unknown, options: { name: string }) { registered.push(options.name); },
+    registerTool(_factory: unknown, options: { name: string }) {
+      registered.push(options.name);
+      registeredFactories.set(options.name, _factory);
+    },
   } as unknown as OpenClawPluginApi;
 
   entry.register(api);
   assert.equal(registered.some((name) => /trade|order|balance|position|portfolio/iu.test(name)), false);
   assert.equal(registered.includes('amadeus_market_quote'), true);
   assert.equal(registered.includes('amadeus_macos_host_status'), true);
+  const hostFactory = registeredFactories.get('amadeus_macos_host_status');
+  assert.equal(typeof hostFactory, 'function');
+  const hostTool = (hostFactory as (context: OpenClawPluginToolContext) => {
+    parameters: { additionalProperties?: boolean; properties?: Record<string, unknown> };
+  })({} as OpenClawPluginToolContext);
+  assert.equal(hostTool.parameters.additionalProperties, false);
+  assert.equal(typeof hostTool.parameters.properties?.reason, 'object');
   assert.equal(hooks.has('message_received'), false, 'WhatsApp message_received plugin hooks are disabled by default; voice Skill must not depend on them');
   assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
