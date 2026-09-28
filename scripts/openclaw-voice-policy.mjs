@@ -29,11 +29,11 @@ export function isAmadeusBilingualVoiceContract(visibleText) {
 // until agent_end/TTL cleanup. User text is never classified here.
 export function parseAmadeusReplyModalityMarker(value) {
   const source = typeof value === 'string' ? value : '';
-  const match = source.match(/^\s*\[\[amadeus:reply-modality=(voice|default)\]\]\s*/iu);
+  const match = source.match(/\[\[amadeus:reply-modality=(voice|default)\]\]/iu);
   if (!match) return { modality: 'default', text: source, present: false };
   return {
     modality: match[1].toLowerCase() === 'voice' ? 'voice' : 'default',
-    text: source.slice(match[0].length),
+    text: source.replace(/\[\[amadeus:reply-modality=(?:voice|default)\]\]/giu, '').replace(/^\s+/u, ''),
     present: true,
   };
 }

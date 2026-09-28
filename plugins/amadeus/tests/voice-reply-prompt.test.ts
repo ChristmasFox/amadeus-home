@@ -21,9 +21,12 @@ test('same-turn model metadata carries semantic voice/default decisions without 
     // model decision and verifies only the transport metadata parser.
     const parsed = parseReplyModalityMarker(`[[amadeus:reply-modality=${modality}]]\n${request}`);
     assert.equal(parsed.present, true, request);
-    assert.equal(parsed.modality, modality, request);
-    assert.equal(parsed.text, request, 'control metadata is stripped before delivery');
+  assert.equal(parsed.modality, modality, request);
+  assert.equal(parsed.text, request, 'control metadata is stripped before delivery');
   }
+  const leakedLine = parseReplyModalityMarker(`回答内容\n[[amadeus:reply-modality=default]]\n补充内容`);
+  assert.equal(leakedLine.modality, 'default');
+  assert.equal(leakedLine.text, '回答内容\n\n补充内容', 'metadata is stripped even when the model places it mid-payload');
   const ordinary = parseReplyModalityMarker('中文：你好。\n\n日本語：こんにちは。');
   assert.equal(ordinary.present, false, 'a bilingual translation without model voice metadata is not TTS input');
   assert.equal(ordinary.modality, 'default');

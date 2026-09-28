@@ -52,11 +52,11 @@ function keysFor(context: ReplyTurnContext): string[] {
  */
 export function parseReplyModalityMarker(value: unknown): { modality: ReplyModality; text: string; present: boolean } {
   const text = typeof value === 'string' ? value : '';
-  const match = text.match(/^\s*\[\[amadeus:reply-modality=(voice|default)\]\]\s*/iu);
+  const match = text.match(/\[\[amadeus:reply-modality=(voice|default)\]\]/iu);
   if (!match) return { modality: 'default', text, present: false };
   return {
     modality: match[1]?.toLowerCase() === 'voice' ? 'voice' : 'default',
-    text: text.slice(match[0].length),
+    text: text.replace(/\[\[amadeus:reply-modality=(?:voice|default)\]\]/giu, '').replace(/^\s+/u, ''),
     present: true,
   };
 }
