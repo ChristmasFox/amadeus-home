@@ -95,6 +95,15 @@ test('typed WhatsApp prompt delegates modality to the model and provisions the s
   assert.equal(hasActiveWhatsAppVoiceLease('whatsapp', 'typed-session'), false);
   hooks.get('agent_end')?.[0]?.({}, context);
   assert.equal(getReplyModalityForTurn(context), 'default', 'agent_end clears the turn state');
+  const delivery = hooks.get('reply_payload_sending')?.[0];
+  const cleaned = delivery?.({
+    payload: { text: '[[amadeus:reply-modality=default]]\n群聊里的普通文字。' },
+  }, context) as { payload?: { text?: string } } | undefined;
+  assert.equal(cleaned?.payload?.text, '群聊里的普通文字。', 'final plugin delivery hook strips modality markers');
+  const noReply = delivery?.({
+    payload: { text: '[[amadeus:reply-modality=default]]\nNO_REPLY' },
+  }, context) as { payload?: { text?: string } } | undefined;
+  assert.equal(noReply?.payload, undefined, 'marked NO_REPLY remains silent');
 });
 
 test('heartbeat and internal WhatsApp turns do not receive typed reply modality metadata', () => {

@@ -14,6 +14,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const MARKER = 'AMADEUS_GROUP_IMAGE_POLICY_2026_09';
+export const GROUP_READONLY_CAPABILITY_TOOLS = [
+  'image_generate',
+  'pubg_resolve_players',
+  'pubg_search_matches',
+  'pubg_query_stats',
+  'pubg_compare_stats',
+  'pubg_get_match',
+  'pubg_get_review_facts',
+  'pubg_get_period_review',
+  'pubg_query_team_damage',
+  'pubg_prefetch_telemetry',
+  'pubg_telemetry_sync_report',
+];
 
 export function extendSenderPolicyForGroupImage(capabilityProfile) {
   const policy = capabilityProfile?.policy;
@@ -33,9 +46,11 @@ export function extendSenderPolicyForGroupImage(capabilityProfile) {
   const offset = sessionParts[0] === 'agent' ? 2 : 0;
   if (sessionParts[offset] !== channel || sessionParts[offset + 1] !== 'group' ||
       !sessionParts[offset + 2]) return senderPolicy;
-  if (!Array.isArray(groupPolicy?.allow) || !groupPolicy.allow.includes('image_generate')) return senderPolicy;
+  const groupCapabilityTools = ['image_generate', 'pubg_resolve_players', 'pubg_search_matches', 'pubg_query_stats', 'pubg_compare_stats', 'pubg_get_match', 'pubg_get_review_facts', 'pubg_get_period_review', 'pubg_query_team_damage', 'pubg_prefetch_telemetry', 'pubg_telemetry_sync_report'];
+  if (!Array.isArray(groupPolicy?.allow) || !groupPolicy.allow.some((tool) => groupCapabilityTools.includes(tool))) return senderPolicy;
   // Do not remove any deny: the native matcher still gives deny precedence.
-  return { ...senderPolicy, allow: [...new Set([...senderPolicy.allow, 'image_generate'])] };
+  const groupCapabilities = groupPolicy.allow.filter((tool) => groupCapabilityTools.includes(tool));
+  return { ...senderPolicy, allow: [...new Set([...senderPolicy.allow, ...groupCapabilities])] };
 }
 
 function replaceOnce(source, find, replacement, label) {

@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import {
   extendSenderPolicyForGroupImage,
+  GROUP_READONLY_CAPABILITY_TOOLS,
   MARKER,
   patchConversationPolicySource,
   policyPaths,
@@ -35,13 +36,13 @@ const base = {
   policy: {
     delegated: false,
     trustedGroup: { groupId: 'fixture-group', dropped: false },
-    groupPolicy: { allow: ['web_search', 'web_fetch', 'image_generate'] },
+    groupPolicy: { allow: [...GROUP_READONLY_CAPABILITY_TOOLS, 'web_search', 'web_fetch'] },
     senderPolicy: { allow: ['web_search', 'web_fetch'] },
     globalPolicy: { deny: ['tts', 'message'] },
   },
 };
 const amended = extendSenderPolicyForGroupImage(base);
-assert.deepEqual(amended, { allow: ['web_search', 'web_fetch', 'image_generate'] });
+assert.deepEqual(amended, { allow: ['web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS] });
 assert.deepEqual(base.policy.senderPolicy.allow, ['web_search', 'web_fetch'], 'input must not be mutated');
 for (const invalid of [
   { conversation: { ...base.conversation, chatType: 'direct' } },
@@ -72,28 +73,29 @@ try {
     const check = spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
     assert.equal(check.status, 0, check.stderr);
   }
-  const runtime = await import(pathToFileURL(temporaryEsm).href);
+const runtime = await import(pathToFileURL(temporaryEsm).href);
   const matchModule = path.join(runtimeRoot, fs.readdirSync(runtimeRoot).find((name) => /^tool-policy-match-.*\.mjs$/.test(name) &&
     fs.readFileSync(path.join(runtimeRoot, name), 'utf8').includes('function filterToolsByPolicy(')));
   const { r: filterToolsByPolicy } = await import(pathToFileURL(matchModule).href);
-  const catalog = ['image_generate', 'web_search', 'web_fetch', 'amadeus_nas', 'exec', 'tts', 'message'].map((name) => ({ name }));
+  const catalog = ['image_generate', 'web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate'), 'amadeus_nas', 'exec', 'tts', 'message'].map((name) => ({ name }));
+  const expectedGroupTools = ['image_generate', 'web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate')];
   const effective = (profile) => {
     const policies = runtime.r({ capabilityProfile: profile });
     return [policies.globalPolicy, policies.groupPolicy, policies.senderPolicy].reduce(
       (tools, policy) => filterToolsByPolicy(tools, policy), catalog,
     ).map((tool) => tool.name);
   };
-  assert.deepEqual(effective(base), ['image_generate', 'web_search', 'web_fetch']);
-  assert.deepEqual(effective(telegram), ['image_generate', 'web_search', 'web_fetch']);
+  assert.deepEqual(effective(base), expectedGroupTools);
+  assert.deepEqual(effective(telegram), expectedGroupTools);
   assert.deepEqual(effective({ ...base, conversation: { ...base.conversation, chatType: 'direct' }, policy: {
     ...base.policy, groupPolicy: undefined, trustedGroup: { groupId: undefined, dropped: false },
   } }), ['web_search', 'web_fetch'], 'non-owner DM stays web-only');
   assert.deepEqual(effective({ ...base, policy: { ...base.policy, groupPolicy: { allow: ['*'] }, senderPolicy: { allow: ['*'] } } }),
-    ['image_generate', 'web_search', 'web_fetch', 'amadeus_nas', 'exec'], 'owner group stays full except global deny');
+    ['image_generate', 'web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate'), 'amadeus_nas', 'exec'], 'owner group stays full except global deny');
   assert.deepEqual(effective({ ...base, policy: { ...base.policy, groupPolicy: { allow: ['web_search', 'web_fetch', 'image_generate'], deny: ['image_generate'] } } }),
     ['web_search', 'web_fetch'], 'group deny still wins');
   assert.deepEqual(effective({ ...base, policy: { ...base.policy, globalPolicy: { deny: ['tts', 'message', 'image_generate'] } } }),
-    ['web_search', 'web_fetch'], 'global deny still wins');
+    ['web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate')], 'global deny still wins');
   // Exercise the pinned requester/group resolvers with the actual source
   // config. This covers optional caller groupId and direct-chat isolation.
   const config = JSON.parse(fs.readFileSync('integrations/openclaw/openclaw.json.example', 'utf8'));
@@ -121,15 +123,15 @@ try {
     };
   };
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'group', sender: 'fixture-nonowner' })),
-    ['image_generate', 'web_search', 'web_fetch'], 'admitted WhatsApp group sender gets image');
+    expectedGroupTools, 'admitted WhatsApp group sender gets group capabilities');
   assert.deepEqual(effective(profileFor({ channel: 'telegram', scope: 'group', sender: 'fixture-nonowner' })),
-    ['image_generate', 'web_search', 'web_fetch'], 'admitted Telegram group sender gets image');
+    expectedGroupTools, 'admitted Telegram group sender gets group capabilities');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-nonowner' })),
     ['web_search', 'web_fetch'], 'WhatsApp non-owner DM does not gain image');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-owner' })),
-    ['image_generate', 'web_search', 'web_fetch', 'amadeus_nas', 'exec'], 'owner DM unchanged');
+    [...expectedGroupTools, 'amadeus_nas', 'exec'], 'owner DM unchanged');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'group', sender: 'fixture-owner' })),
-    ['image_generate', 'web_search', 'web_fetch', 'amadeus_nas', 'exec'], 'owner group unchanged');
+    ['image_generate', 'web_search', 'web_fetch', ...GROUP_READONLY_CAPABILITY_TOOLS.filter((name) => name !== 'image_generate'), 'amadeus_nas', 'exec'], 'owner group unchanged');
   assert.deepEqual(effective(profileFor({ channel: 'whatsapp', scope: 'direct', sender: 'fixture-nonowner',
     suppliedGroupId: 'fixture-group' })), ['web_search', 'web_fetch'], 'forged direct groupId cannot grant image');
 } finally {

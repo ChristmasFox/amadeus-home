@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import {
   clearReplyModalityForTurn,
+  parseReplyModalityMarker,
   setReplyModalityForTurn,
 } from './reply-modality.js';
 
@@ -70,5 +71,19 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
   });
   api.on('agent_end', (_event, context) => {
     clearReplyModalityForTurn(context);
+  });
+  // This is the plugin-level final defense. The pinned WhatsApp lifecycle
+  // patch also scrubs the marker, but channel delivery must remain safe when a
+  // core path bypasses that adapter-specific normalizer.
+  api.on('reply_payload_sending', (event) => {
+    const parsed = parseReplyModalityMarker(event.payload.text);
+    if (!parsed.present) return;
+    if (parsed.text.trim() === 'NO_REPLY') return { cancel: true, reason: 'amadeus_no_reply' };
+    return {
+      payload: {
+        ...event.payload,
+        text: parsed.text,
+      },
+    };
   });
 }

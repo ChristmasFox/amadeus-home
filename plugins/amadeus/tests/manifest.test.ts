@@ -69,6 +69,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('agent_end'), true);
+  assert.equal(hooks.has('reply_payload_sending'), true);
 
   // The pinned WhatsApp monitor creates this lease before Agent dispatch.
   // message_received plugin hooks remain disabled, so no event is fired here.
