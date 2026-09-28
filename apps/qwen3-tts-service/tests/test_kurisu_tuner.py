@@ -71,13 +71,20 @@ class TunerApiTest(unittest.TestCase):
     def tearDown(self):
         self.server.shutdown(); self.server.server_close(); self.production.server_close()
 
-    def request(self, method, path, body=None, csrf=None, origin=None):
+    def request(self, method, path, body=None, csrf=None, origin=None, host=None):
         conn = http.client.HTTPConnection("127.0.0.1", self.server.server_port)
         headers = {"Content-Type": "application/json"}
         if csrf: headers["X-Amadeus-CSRF"] = csrf
         if origin: headers["Origin"] = origin
+        if host: headers["Host"] = host
         conn.request(method, path, json.dumps(body).encode() if body is not None else None, headers)
         response = conn.getresponse(); result = response.status, response.read(); conn.close(); return result
+
+    def test_owner_lan_host_is_allowed_and_unexpected_host_is_rejected(self):
+        code, _ = self.request("GET", "/api/v1/status", host="192.168.5.3:18793")
+        self.assertEqual(code, 200)
+        code, _ = self.request("GET", "/api/v1/status", host="unexpected.example")
+        self.assertEqual(code, 403)
 
     def test_mutations_require_nonce_and_production_rejects_lab_fields(self):
         code, payload = self.request("POST", "/api/v1/drafts", {})
