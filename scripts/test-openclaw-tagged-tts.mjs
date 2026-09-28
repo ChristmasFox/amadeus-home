@@ -52,6 +52,12 @@ try {
   assert.equal(ordinaryOutput.mediaUrl, undefined);
   assert.equal(calls.length, 0, 'ordinary typed text must not call the speech provider');
 
+  const recovered = await run('中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', false);
+  assert.equal(recovered.text, '中文：我马上回答你的问题。\n\n日本語：少し待って。結論を先に言うわ。', 'bilingual voice output survives a missing TTS marker');
+  assert.equal(recovered.spokenText, '少し待って。結論を先に言うわ。');
+  assert.equal(recovered.mediaUrl, 'file:///tmp/amadeus-test-only.mp3');
+  assert.equal(recovered.ttsSupplement, undefined, 'typed recovery keeps visible text as a normal payload');
+
   const cases = [
     { label: 'typed explicit voice', inboundAudio: false, japanese: 'はい、答えるわ。', chinese: '好，我来回答。' },
     { label: 'verified inbound voice', inboundAudio: true, japanese: '聞こえたわ。', chinese: '听到了。' },
@@ -66,13 +72,14 @@ try {
     if (inboundAudio) assert.equal(output.ttsSupplement?.spokenText, japanese);
     else assert.equal(output.ttsSupplement, undefined, `${label}: typed reply must keep visible text as a normal payload`);
   }
-  assert.equal(calls.length, 2, 'only two tagged replies reach the speech provider');
+  assert.equal(calls.length, 3, 'explicit tagged replies and one recovered bilingual reply reach the speech provider');
+  const expectedInputs = ['少し待って。結論を先に言うわ。', 'はい、答えるわ。', '聞こえたわ。'];
   for (const [index, { path, data }] of calls.entries()) {
     assert.equal(path, '/v1/audio/speech');
     assert.equal(data.model, 'amadeus-tts');
     assert.equal(data.voice, 'kurisu-v1');
     assert.equal(data.response_format, 'mp3');
-    assert.equal(data.input, cases[index].japanese);
+    assert.equal(data.input, expectedInputs[index]);
     assert.doesNotMatch(data.input, /中文|好，我来回答|听到了/u, 'Chinese must not be synthesized');
   }
   console.log('OPENCLAW_TAGGED_TTS_THREE_WAY=passed');

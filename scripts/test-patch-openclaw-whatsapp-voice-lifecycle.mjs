@@ -15,6 +15,7 @@ import {
   WHATSAPP_TYPING_INDICATOR_MARKER,
   ensureAmadeusJapaneseVoiceText,
   resolveAmadeusJapaneseSpeechText,
+  isAmadeusBilingualVoiceContract,
   patchTtsSource,
   patchCoreSource,
   patchWhatsAppSource,
@@ -146,10 +147,14 @@ assert.ok(patchedCore.includes('messageInjectionDisposition === "accepted" && !a
 assert.equal(patchCoreSource(patchedCore), patchedCore, 'core patch is idempotent');
 
 const ttsFixture = `const params = { inboundAudio: true, channel: "whatsapp" };
+const explicitTts = false;
+const directives = { hasDirective: false };
+const autoMode = "tagged";
 const explicitTtsText = "";
 const visibleText = "中文：先说结论。\n\n日本語：少し待って。結論を先に言うわ。";
 const ttsText = explicitTtsText || visibleText;
 const nextPayload = { text: visibleText };
+if (!explicitTts && autoMode === "tagged" && !directives.hasDirective) return nextPayload;
 if (!ttsText.trim()) return nextPayload;
 const payloadWithAudio = { ...nextPayload, mediaUrl: 'fixture.ogg', audioAsVoice: true, spokenText: ttsText };
 if (true) return nextPayload.text?.trim() ? markReplyPayloadAsTtsSupplement(payloadWithAudio) : payloadWithAudio;
@@ -157,6 +162,9 @@ async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) { return para
 const patchedTts = patchTtsSource(ttsFixture);
 assert.ok(patchedTts.includes(`// ${TTS_MARKER}`), 'TTS patch marker is present');
 assert.match(patchedTts, /resolveAmadeusJapaneseSpeechText\(visibleText, explicitTtsText\)/u, 'TTS input is selected from the Japanese line');
+assert.match(patchedTts, /amadeusImplicitTypedWhatsAppVoice/u, 'missing typed TTS markers are recoverable only for the bilingual voice contract');
+assert.match(patchedTts, /isAmadeusBilingualVoiceContract\(visibleText\)/u, 'typed recovery uses the strict bilingual contract');
+assert.match(patchedTts, /!amadeusImplicitTypedWhatsAppVoice\) return nextPayload/u, 'ordinary tagged text remains text-only');
 assert.match(patchedTts, /amadeusInboundWhatsAppVoice && !ttsText\.trim\(\)/u, 'TTS fails closed without a Japanese line');
 assert.match(patchedTts, /amadeusPreserveTypedVisibleTts = params\.inboundAudio !== true/u, 'typed tagged TTS preserves visible text with audio');
 assert.match(patchedTts, /\? payloadWithAudio/u, 'typed tagged TTS is not downgraded to media-only supplement');
@@ -165,6 +173,8 @@ assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本�
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。\n日本語：中文：先说结论。\n日本語：少し待って。'), '少し待って。');
 assert.equal(resolveAmadeusJapaneseSpeechText('中文：先说结论。', '中文：先说结论。'), '');
 assert.equal(resolveAmadeusJapaneseSpeechText('', '少し待って。'), '少し待って。');
+assert.equal(isAmadeusBilingualVoiceContract('中文：先说结论。\n\n日本語：少し待って。結論を先に言うわ。'), true);
+assert.equal(isAmadeusBilingualVoiceContract('中文：先说结论。'), false);
 
 const patchedWhatsAppBase = patchWhatsAppSource(whatsappFixture);
 const patchedWhatsAppIngress = patchWhatsAppIngressQueueSource(patchedWhatsAppBase);

@@ -5,12 +5,12 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './openclaw-voice-markers.mjs';
-export { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText,
+export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
@@ -78,7 +78,10 @@ export function patchTtsSource(original) {
     original,
     'const ttsText = explicitTtsText || visibleText;',
     `const amadeusInboundWhatsAppVoice = params.inboundAudio === true && String(params.channel ?? '').toLowerCase() === 'whatsapp';
+	const amadeusImplicitTypedWhatsAppVoice = String(params.channel ?? '').toLowerCase() === 'whatsapp'
+		&& !explicitTts && !directives.hasDirective && isAmadeusBilingualVoiceContract(visibleText);
 	const ttsText = amadeusInboundWhatsAppVoice
+		|| amadeusImplicitTypedWhatsAppVoice
 		? resolveAmadeusJapaneseSpeechText(visibleText, explicitTtsText)
 		: (explicitTtsText || visibleText);`,
     'Japanese voice TTS input selection',
@@ -86,8 +89,14 @@ export function patchTtsSource(original) {
   result = replaceOnce(
     result,
     'async function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {',
-    `${resolveAmadeusJapaneseSpeechText.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
+    `${resolveAmadeusJapaneseSpeechText.toString()}\n${isAmadeusBilingualVoiceContract.toString()}\nasync function maybeApplyTtsToPayloadCore(params, persistTtsAudio) {`,
     'Japanese voice TTS helper',
+  );
+  result = replaceOnce(
+    result,
+    'if (!explicitTts && autoMode === "tagged" && !directives.hasDirective) return nextPayload;',
+    'if (!explicitTts && autoMode === "tagged" && !directives.hasDirective && !amadeusImplicitTypedWhatsAppVoice) return nextPayload;',
+    'tagged typed bilingual voice recovery guard',
   );
   result = replaceOnce(
     result,
