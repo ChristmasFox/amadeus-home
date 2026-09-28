@@ -1,23 +1,27 @@
-# Current Task — Kurisu OminiX Production Migration (Release 1.6.6)
+# Current Task — Kurisu TTS Tuner (Active Planning / target 1.6.7)
 
-Date: 2026-09-28 local. Completed Goal: `docs/AMADEUS_KURISU_OMINIX_PRODUCTION_GOAL.md`.
+Date: 2026-09-28 local. Active Goal: `docs/AMADEUS_KURISU_TTS_TUNER_GOAL.md`.
 
-The owner accepted the completed Kurisu A/C Emotion PoC and authorized the production direction: do not repeat the A/C matrix; preserve the current A runtime as a protected rollback checkpoint, then cut production TTS over to the accepted OminiX Base 1.7B x-vector + bounded emotion path. The stable `amadeus-tts` capability, `kurisu-v1` voice identity, port 18792 and existing channel delivery remain the compatibility boundary.
+The owner explicitly confirmed that the Amadeus 1.6.6 Kurisu OminiX production Goal is complete and requested the next development plan: build a highly adjustable local HTML tuner for Kurisu voice style/prosody/generation parameters.
 
-Current repository and production release are **1.6.6**. The patch bump was performed exactly once, and the single-release Chinese notes, verification, deployment, rollback evidence, and owner notification are recorded in the checkpoint below.
+The new Goal is planning-only until an explicit `/goal` handoff. Do not implement or deploy from this planning commit. `VERSION` remains **1.6.6** during planning and development; the target final release is **1.6.7**, with exactly one patch bump only after implementation and runtime acceptance are ready.
 
-Deployment notification reliability is part of this Goal. Real candidate/native/release runtime switches must no longer complete silently: candidate and final release events use distinct idempotent owner-outbox notifications, and final `amadeus-release:1.6.6` delivery must have a sent marker before the Goal is complete. Keep the existing OwnerNotifier/WhatsApp secondary delivery path; do not add another sender or hardcode an owner target.
+The tuner must reuse the existing single resident OminiX Base 1.7B production model and cached `kurisu-v1` x-vector. It must not start a second model. Production remains on the existing bounded `amadeus-tts` / `:18792` contract. The proposed tuner is an owner-local loopback UI/API on `127.0.0.1:18793`, served by the same native TTS process, with no 9Router/OpenClaw/channel/public path.
 
-Implementation and release execution are complete through the protected A backup, OminiX C cutover, bounded Kurisu emotion contract, pinned OpenClaw/9Router pass-through, release 1.6.6, deployment notifications, rollback evidence, and a real owner handset inbound voice acceptance. See `.agent/checkpoints/2026-09-28-amadeus-kurisu-ominix-release.md` for content-safe evidence. The CLI `agent --deliver` path remains excluded because it bypasses the channel TTS finalizer.
+The design priority is strong adjustability without fake controls: editable baseline and emotion delta, PROD/A/B/C controlled comparison, text/style/seed/sampling/speed locks, STYLE ONLY / SAMPLING / VARIANCE / FREE COMPARE modes, and the actual pinned OminiX controls `temperature`, `top_k`, `top_p`, `max_new_tokens`, `seed`, `speed_factor`, and `repetition_penalty`. Model/reference/x-vector/language identity remain locked.
 
-Owner follow-up within the same 1.6.6 target: the OminiX style instructions now make sentence-level pitch/prosody, key-word emphasis, contrastive rhythm/energy, and the sharp-to-soft Kurisu tsundere contour explicit. The seven bounded emotion deltas describe observable timing, pitch, energy, emphasis, pauses, and sentence endings. Model, x-vector, routing, sampling parameters, version target, and deployment plan remain unchanged. A follow-up WhatsApp delivery fix also scrubs `[[amadeus:reply-modality=...]]` at the final send boundary and upgrades existing marked monitors in place, so group text cannot expose the control marker. Source commits `3bb1da1` and `857fbf1` are pushed; candidate `local/openclaw-amadeus:git-857fbf184dcf-20260928134856` is deployed with health and focused lifecycle smokes passed; owner handset listening remains the existing acceptance boundary before any later release-state promotion.
+Git remains the production source of truth. Runtime drafts/history/audio stay protected outside Git. The browser may create a hash-bound production proposal, but production style is changed only by an explicit repo-owned promotion path that updates the canonical Git-tracked style config, validates, commits/installs the reviewed state, smokes production, and uses the existing owner-notification path. Do not give the TTS HTTP service general Git/shell mutation authority.
 
-## Previous task — Kurisu A/C Emotion PoC (Complete / owner accepted)
+Production voice work has priority over Lab batches; Lab samples are sequential and yield between samples. Any real native/candidate switch and final 1.6.7 release must preserve the deployment-notification guarantee established in 1.6.6.
 
-Goal: `docs/AMADEUS_KURISU_AC_EMOTION_POC_GOAL.md`.
+## Previous task — Kurisu OminiX Production Migration (Release 1.6.6, Complete)
 
-Execution evidence: `docs/reports/AMADEUS_KURISU_AC_EMOTION_POC_2026_09.md`.
+Completed Goal: `docs/AMADEUS_KURISU_OMINIX_PRODUCTION_GOAL.md`.
 
-The PoC used the same accepted Kurisu reference and Qwen3-TTS 1.7B Base family for the production A control and pinned OminiX C path. C0-C5 used OminiX Base x-vector / clone+instruct, not CustomVoice; all labeled samples were delivered to the owner WhatsApp target. The owner has now listened and accepted C for production, superseding the report's earlier `pending_owner_listening` decision state.
+Release 1.6.6 completed the protected A backup, production cutover to OminiX Base 1.7B x-vector + bounded Kurisu emotion, pinned OpenClaw/9Router style transport, deployment-notification repair, rollback evidence and real owner handset acceptance. Current production remains the compatibility baseline for the tuner.
+
+The existing bounded emotion IDs are `default`, `irritated`, `embarrassed`, `angry`, `sarcastic`, `soft`, and `sad`. The current production style already includes explicit sentence-level prosody, emphasis, contrastive rhythm/energy and the sharp-to-soft Kurisu tsundere contour; the tuner exists to let the owner iterate on those characteristics efficiently without reopening the migration.
+
+Evidence remains in `.agent/checkpoints/2026-09-28-amadeus-kurisu-ominix-release.md` and the existing completed Goal/report history.
 
 Older completed/paused Goals and checkpoints remain historical evidence in their existing documents; they are not live instructions.
