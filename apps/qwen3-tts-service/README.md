@@ -3,7 +3,7 @@
 ## Kurisu TTS Tuner (1.6.7)
 
 The native OminiX process serves an owner-local, dependency-free tuner at
-`http://127.0.0.1:18793`. It shares the resident Base 1.7B worker and cached
+`http://192.168.5.3:18793` (listener `0.0.0.0:18793`). It shares the resident Base 1.7B worker and cached
 `kurisu-v1` x-vector with the authenticated production endpoint on `:18792`.
 The lab API accepts one sample at a time or a bounded four-slot batch and uses
 the production-priority scheduler; generated audio, history, drafts and

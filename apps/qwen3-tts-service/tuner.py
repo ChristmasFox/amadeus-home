@@ -1,4 +1,4 @@
-"""Owner-local loopback tuner API sharing the resident production engine."""
+"""Owner-local tuner API sharing the resident production engine."""
 from __future__ import annotations
 
 import hashlib
@@ -23,7 +23,7 @@ MAX_TUNER_BODY = 96 * 1024
 MAX_BATCH = 4
 MAX_HISTORY = 200
 MAX_HISTORY_BYTES = 512 * 1024 * 1024
-ALLOWED_ORIGINS = {"http://127.0.0.1:18793", "http://localhost:18793"}
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost"}
 
 
 def _safe_id(value: str) -> bool:
@@ -94,6 +94,16 @@ class TunerServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], production_server):
         super().__init__(address, TunerHandler)
         self.production = production_server
+        self.bind_host = address[0]
+        configured_hosts = os.environ.get("AMADEUS_TTS_TUNER_ALLOWED_HOSTS", "127.0.0.1,localhost,192.168.5.3")
+        self.allowed_hosts = LOOPBACK_HOSTS | {
+            item.strip() for item in configured_hosts.split(",") if item.strip()
+        }
+        self.allowed_origins = {
+            f"http://127.0.0.1:{self.server_port}",
+            f"http://localhost:{self.server_port}",
+            *(f"http://{host}:{self.server_port}" for host in self.allowed_hosts if host not in LOOPBACK_HOSTS),
+        }
         self.csrf_nonce = secrets.token_urlsafe(32)
         self.storage = TunerStorage()
         self.started = time.time()
@@ -101,7 +111,7 @@ class TunerServer(ThreadingHTTPServer):
     def status(self) -> dict[str, Any]:
         style = self.production.style
         return {
-            "lab": {"status": "ready", "bind": "127.0.0.1", "port": self.server_port},
+            "lab": {"status": "ready", "bind": self.bind_host, "port": self.server_port},
             "production": {"status": self.production.state, "port": self.production.server_address[1]},
             "engine": os.environ.get("AMADEUS_TTS_ENGINE", "unknown"),
             "residentModelCount": 1,
@@ -143,14 +153,15 @@ class TunerHandler(BaseHTTPRequestHandler):
         self._json(code, {"error": category})
 
     def _host_ok(self) -> bool:
-        return self.headers.get("Host", "").split(":", 1)[0] in {"127.0.0.1", "localhost"}
+        host = self.headers.get("Host", "").split(":", 1)[0]
+        return host in self.server.allowed_hosts
 
     def _mutation_ok(self) -> bool:
         if not self._host_ok():
             self._error(403, "invalid_host")
             return False
         origin = self.headers.get("Origin")
-        if origin and origin not in ALLOWED_ORIGINS:
+        if origin and origin not in self.server.allowed_origins:
             self._error(403, "invalid_origin")
             return False
         if not secrets.compare_digest(self.headers.get("X-Amadeus-CSRF", ""), self.server.csrf_nonce):

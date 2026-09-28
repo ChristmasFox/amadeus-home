@@ -2,9 +2,11 @@
 
 Date: 2026-09-28 local
 
-Status: **active planning; execution requires an explicit `/goal` handoff**.
+Status: **completed; Amadeus 1.6.7 released**.
 
-Target release: **Amadeus 1.6.7**. Release 1.6.6 is complete and is the production baseline for this Goal. Do not reopen the 1.6.6 migration, do not rerun the A/C matrix, and do not change `VERSION` in this planning-only commit.
+Target release: **Amadeus 1.6.7**. Release 1.6.6 was the production baseline. The implementation, runtime acceptance, LAN bind amendment and release are complete; see `.agent/checkpoints/2026-09-28-amadeus-kurisu-tts-tuner-release.md`.
+
+Scope amendment: after the initial loopback-only acceptance, the owner explicitly requested LAN access. The released tuner binds `0.0.0.0:18793` and allows the intended `192.168.5.3` Host/Origin alongside loopback aliases. Production `:18792`, one-model ownership, queue priority and secret boundaries remain unchanged.
 
 ## 1. Owner decision and objective
 
@@ -125,7 +127,7 @@ Target architecture:
                          single macOS process boundary
 
 Production clients                                    Owner browser
-OpenClaw -> 9Router -> :18792                         http://127.0.0.1:18793
+OpenClaw -> 9Router -> :18792                         http://192.168.5.3:18793
           bounded API                                      |
                  \                                         |
                   \                                        v
@@ -142,13 +144,13 @@ OpenClaw -> 9Router -> :18792                         http://127.0.0.1:18793
 Requirements:
 
 - `18792` behavior stays production-compatible;
-- tuner default listener is `127.0.0.1:18793` only;
+- tuner listener is `0.0.0.0:18793`, with the explicit browser Host/Origin allowlist;
 - implementation must preflight that the configured tuner port is free; do not silently choose a random replacement port;
 - tuner and production share the same already-loaded engine and speaker embedding;
 - no second OminiX model process, no second 1.7B allocation, no per-request CLI/model startup;
 - no 9Router, OpenClaw, WhatsApp, Telegram or public tunnel is used for tuner traffic;
 - no CORS access from arbitrary origins;
-- remote/mobile exposure is explicitly out of scope for V1.
+- public/mobile exposure is explicitly out of scope for V1.
 
 The tuner may run as a second `ThreadingHTTPServer` thread inside the existing native TTS process. Do not create a separate Node/Vite/Next service just to serve the UI.
 
@@ -351,11 +353,11 @@ Add concurrency tests proving normal production can preempt between Lab variants
 
 ## 9. Security and browser boundary
 
-V1 is owner-local only.
+V1 is an owner-local/LAN operator tool. The owner-approved listener is `0.0.0.0:18793`; the browser endpoint is `http://192.168.5.3:18793`.
 
 Required controls:
 
-- bind Lab listener to loopback, not `0.0.0.0`;
+- bind Lab listener to the owner-approved `0.0.0.0` endpoint and keep Host/Origin allowlists explicit (`127.0.0.1`, `localhost`, `192.168.5.3`);
 - reject unexpected `Host`/`Origin` values;
 - do not emit permissive CORS headers;
 - use same-origin static assets only;
@@ -366,7 +368,7 @@ Required controls:
 - bound request bodies, style length, history storage and generated audio size;
 - sanitize logs: no spoken text, arbitrary instruct, test sentence, credentials or private paths in normal logs.
 
-If implementation requires binding the tuner beyond loopback, stop. Remote access needs a separate owner decision and authentication design.
+Any expansion beyond the owner-approved LAN endpoint, or any public/mobile exposure, needs a separate owner decision and authentication design.
 
 ## 10. Draft/history storage
 
@@ -495,7 +497,7 @@ A tuner experiment or draft save is not a deployment and must not send notificat
 
 ### Phase 2 — Lab scheduling/API
 
-- add loopback listener sharing the existing server/engine;
+- add the owner-approved LAN listener sharing the existing server/engine;
 - add production-priority vs Lab-low-priority scheduler;
 - implement schema/status/config/synthesize endpoints;
 - add CSRF/origin/body/path protections;
@@ -551,7 +553,7 @@ With explicit apply authorization from the active Goal:
 - deploy one updated native TTS process only;
 - confirm one resident OminiX model;
 - confirm production :18792 health and speech first;
-- confirm tuner is reachable only at loopback :18793;
+- confirm tuner is reachable at the owner-approved LAN endpoint `192.168.5.3:18793` and loopback aliases;
 - run one controlled STYLE ONLY comparison and one SAMPLING override without changing production style;
 - during a multi-sample Lab run, submit/observe a production speech request and prove it gets priority between Lab samples;
 - verify history/proposal files and permissions;
@@ -569,28 +571,28 @@ With explicit apply authorization from the active Goal:
 
 ## 15. Validation checklist
 
-- [ ] 1.6.6 is treated as completed baseline, not reopened.
-- [ ] `VERSION` stays 1.6.6 until final release bump.
-- [ ] Exactly one resident OminiX model/x-vector allocation.
-- [ ] Production remains `:18792`; Lab is loopback-only `:18793`.
-- [ ] `amadeus-tts`, `kurisu-v1` and bounded production emotion contract remain compatible.
-- [ ] Canonical Git-tracked style config eliminates Python/Rust prompt duplication.
-- [ ] Lab can edit baseline and emotion delta freely without leaking free-form control into production API.
-- [ ] Temperature/top-k/top-p/max-new-tokens/seed/speed/repetition-penalty controls are backed by pinned upstream fields.
-- [ ] Unsupported/fake sliders are absent.
-- [ ] PROD/A/B/C slots and controlled variable locks work.
-- [ ] Fixed-seed comparisons are explicit; random seed changes are never silent.
-- [ ] Detailed timing/RTF is visible without logging spoken text.
-- [ ] Production queue wins between Lab samples.
-- [ ] Batch size/history/audio storage are bounded.
-- [ ] Lab never exposes secrets/reference/x-vector/private paths.
-- [ ] No public/CORS access and mutating calls have same-origin/CSRF protection.
-- [ ] Drafts/history/audio remain outside Git.
-- [ ] Production proposal is hash-bound and stale proposals fail closed.
-- [ ] Production style only changes through Git-backed explicit promotion.
-- [ ] Real runtime switch and final release each produce the required owner notification evidence.
-- [ ] Focused tests, workflow plan, diff check and secrets scan pass.
-- [ ] Final release is exactly 1.6.7 with one-release notes.
+- [x] 1.6.6 is treated as completed baseline, not reopened.
+- [x] `VERSION` stayed 1.6.6 until the final release bump.
+- [x] Exactly one resident OminiX model/x-vector allocation.
+- [x] Production remains `:18792`; Lab binds `0.0.0.0:18793` with the explicit Host/Origin allowlist.
+- [x] `amadeus-tts`, `kurisu-v1` and bounded production emotion contract remain compatible.
+- [x] Canonical Git-tracked style config eliminates Python/Rust prompt duplication.
+- [x] Lab can edit baseline and emotion delta freely without leaking free-form control into production API.
+- [x] Temperature/top-k/top-p/max-new-tokens/seed/speed/repetition-penalty controls are backed by pinned upstream fields.
+- [x] Unsupported/fake sliders are absent.
+- [x] PROD/A/B/C slots and controlled variable locks work.
+- [x] Fixed-seed comparisons are explicit; random seed changes are never silent.
+- [x] Detailed timing/RTF is visible without logging spoken text.
+- [x] Production queue wins between Lab samples.
+- [x] Batch size/history/audio storage are bounded.
+- [x] Lab never exposes secrets/reference/x-vector/private paths.
+- [x] No public/CORS access and mutating calls have same-origin/CSRF protection.
+- [x] Drafts/history/audio remain outside Git.
+- [x] Production proposal is hash-bound and stale proposals fail closed.
+- [x] Production style only changes through Git-backed explicit promotion.
+- [x] Real runtime switch and final release each produce the required owner notification evidence.
+- [x] Focused tests, workflow plan, diff check and secrets scan pass.
+- [x] Final release is exactly 1.6.7 with one-release notes.
 
 ## 16. Stop conditions
 
@@ -631,7 +633,7 @@ This Goal does not:
 
 The Goal is complete only when all of the following are true:
 
-1. the local browser tuner is reachable on the M204 loopback interface and nowhere else;
+1. the owner-approved browser tuner is reachable at `192.168.5.3:18793` and loopback aliases, with no public/mobile route;
 2. production and tuner demonstrably share one resident OminiX Base 1.7B model and one cached `kurisu-v1` x-vector;
 3. the owner can compare PROD/A/B/C using editable test text, baseline, emotion delta and all verified OminiX generation controls;
 4. experiment modes and locks make controlled comparisons obvious and reproducible;
