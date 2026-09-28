@@ -392,6 +392,24 @@ def anomalies(connection: sqlite3.Connection, start_epoch: float, end_epoch: flo
     return [dict(row) for row in rows]
 
 
+def public_anomalies(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "eventKey": item.get("event_key"),
+            "observedAt": item.get("observed_at"),
+            "kind": item.get("kind"),
+            "severity": item.get("severity"),
+            "status": item.get("status"),
+            "summary": item.get("summary"),
+            "metric": item.get("metric"),
+            "threshold": item.get("threshold"),
+            "durationSeconds": item.get("duration_seconds"),
+            "resolvedAt": item.get("resolved_at"),
+        }
+        for item in items
+    ]
+
+
 def day_window() -> tuple[float, float]:
     local_now = dt.datetime.now().astimezone()
     start = local_now.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(dt.timezone.utc)
@@ -628,7 +646,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, {"status": "ok", "host": HOST_NAME, "summary": public_history(summary(connection, start, end))})
         elif parsed.path == "/v1/anomalies":
             start, end = day_window()
-            self.send_json(200, {"status": "ok", "items": anomalies(connection, start, end)})
+            self.send_json(200, {"status": "ok", "items": public_anomalies(anomalies(connection, start, end))})
         elif parsed.path == "/v1/processes":
             rows = process_rows()
             self.send_json(200, {"status": "ok", "host": HOST_NAME, "topCpu": sorted(rows, key=lambda row: row["cpuPercent"], reverse=True)[:10], "topMemory": sorted(rows, key=lambda row: row["memoryPercent"], reverse=True)[:10]})
@@ -685,6 +703,8 @@ def public_history(history: dict[str, Any]) -> dict[str, Any]:
     power_metric["scope"] = "soc"
     power_metric["accuracy"] = "estimated_soc_not_wall_input"
     power_metric["wallPower"] = "未知（需要外部墙上电表）"
+    if isinstance(value.get("anomalies"), list):
+        value["anomalies"] = public_anomalies(value["anomalies"])
     return value
 
 
