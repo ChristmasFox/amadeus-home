@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, resolveAmadeusReplyModalityForTts, stripAmadeusTtsControlMarkers } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER } from './openclaw-voice-markers.mjs';
 
@@ -19,6 +19,8 @@ assert.deepEqual(parseAmadeusReplyModalityMarker(`[[amadeus:reply-modality=voice
   present: true,
 }, 'model voice metadata is parsed and stripped from the delivered payload');
 assert.equal(parseAmadeusReplyModalityMarker(`${chinese}`).present, false, 'ordinary bilingual text has no implicit modality');
+assert.equal(stripAmadeusTtsControlMarkers('[[tts:mood=soft]]\n中文：好。\n[[tts:text]]日本語：はい。[[/tts:text]]'), '中文：好。\n日本語：はい。', 'legacy and current TTS controls never leak');
+assert.equal(ensureAmadeusJapaneseVoiceText({ text: '[[tts:mood=soft]]\n中文：好。' }, false).text, '中文：好。', 'legacy mood control is removed even without media');
 assert.equal(parseAmadeusReplyModalityMarker(`回答内容\n[[amadeus:reply-modality=default]]`).text, '回答内容\n', 'mid-payload metadata is stripped before delivery');
 assert.equal(ensureAmadeusJapaneseVoiceText({ text: '[[amadeus:reply-modality=default]]\nNO_REPLY' }, false).text, undefined, 'a marked silent reply is suppressed before WhatsApp delivery');
 const modalityGlobal = '__amadeusReplyModalityRuns20260928';

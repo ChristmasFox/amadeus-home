@@ -5,13 +5,13 @@ import { chmod, readdir, readFile, rename, stat, writeFile } from 'node:fs/promi
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, stripAmadeusTtsControlMarkers, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
   WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER, WHATSAPP_TAGGED_TYPED_GUARD_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER,
   TTS_CONTEXT_MARKER, PAYLOADS_TTS_CONTEXT_MARKER } from './openclaw-voice-markers.mjs';
-export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts,
+export { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText, parseAmadeusReplyModalityMarker, stripAmadeusTtsControlMarkers, recordAmadeusReplyModalityForTts, resolveAmadeusReplyModalityForTts,
   resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers };
 export { VOICE_RUNS_GLOBAL, CORE_MARKER, TTS_MARKER, WHATSAPP_MARKER,
   WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_JAPANESE_TEXT_MARKER,
@@ -257,10 +257,10 @@ export function patchWhatsAppJapaneseAudioGuardSource(original) {
   if (count !== 1) throw new Error(`Japanese visible-text patch must be applied first: marker count=${count}`);
   const start = original.indexOf(marker) + marker.length;
   const end = original.indexOf('\nfunction createWhatsAppReplyPlan(params) {', start);
-  if (end < 0 || !original.slice(start, end).startsWith('function ensureAmadeusJapaneseVoiceText(')) {
+  if (end < 0 || !original.slice(start, end).includes('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('pinned Japanese visible-text helper anchor missing');
   }
-  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${parseAmadeusReplyModalityMarker.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
+  return `${original.slice(0, start)}// ${WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER}\n${parseAmadeusReplyModalityMarker.toString()}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}${original.slice(end)}`;
 }
 
 export function patchWhatsAppTaggedTypedGuardSource(original) {
@@ -273,7 +273,7 @@ export function patchWhatsAppTaggedTypedGuardSource(original) {
   if (end < 0) throw new Error('pinned Japanese voice helper end anchor missing');
   const previous = original.slice(start, end);
   const previousHelper = previous.startsWith(typedMarker) ? previous.slice(typedMarker.length) : previous;
-  const updated = `${parseAmadeusReplyModalityMarker.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}`;
+  const updated = `${parseAmadeusReplyModalityMarker.toString()}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}`;
   if (!previousHelper.startsWith('function parseAmadeusReplyModalityMarker(')
       && !previousHelper.startsWith('function ensureAmadeusJapaneseVoiceText(')) {
     throw new Error('unknown Japanese voice helper version; refusing typed upgrade');
@@ -313,7 +313,7 @@ export function patchWhatsAppJapaneseTextSource(original) {
   let result = replaceOnce(
     original,
     'function createWhatsAppReplyPlan(params) {',
-    `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n${ensureAmadeusJapaneseVoiceText.toString()}\nfunction createWhatsAppReplyPlan(params) {`,
+    `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}\nfunction createWhatsAppReplyPlan(params) {`,
     'Japanese voice-text postprocessor insertion',
   );
   result = replaceOnce(
