@@ -1,0 +1,669 @@
+{
+  "aggregation": {
+    "cross_run_pooling": false,
+    "selected_lengths_codepoints": [
+      25,
+      50,
+      100,
+      150
+    ],
+    "source": "protected run evidence"
+  },
+  "control_id": "prod-1.6.2-a-mlx-auto-interactive",
+  "evidence": {
+    "control_manifest_sha256": "8ba3e4698e057861c4196c92d236ab738aa8a9d94762bc5b377ef0b95af8b676",
+    "listening_index_sha256": "86575da43d469a80adbc1a2066a811c27470bc554b53255a9f97adfd9c10acff",
+    "matrix_jsonl_sha256": "8accaeb7ea8e2602a0b21560dd543500b8153ece0d7f97bd8cc5fc567d5b802b",
+    "run_manifest_sha256": "145b775a8f56d8a6d7f65eb8d50269d719b693f8406a15109073b07939236500",
+    "run_root_basename": "boundary-rebaseline-v2-safe-25-200-2026-09"
+  },
+  "fixture_manifest_sha256": "2342110427127531e30f18b7c8d350d367d5b2364b7329a6d8117155729a505c",
+  "generated_utc": "2026-09-27T10:40:57.215829+00:00",
+  "lengths": [
+    {
+      "attempts": 20,
+      "fixture_A_B": {
+        "A": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 5200.0,
+            "n": 10,
+            "p50": 4560.0,
+            "p95": 5128.0
+          },
+          "encode_ms": {
+            "max": 39.0,
+            "n": 10,
+            "p50": 24.5,
+            "p95": 38.55
+          },
+          "engine_inside_lock_ms": {
+            "max": 5165.5,
+            "n": 10,
+            "p50": 4268.45,
+            "p95": 5019.655
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 5164.7,
+            "n": 10,
+            "p50": 4267.4,
+            "p95": 5018.855
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.1,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 1.133,
+            "n": 10,
+            "p50": 0.9359999999999999,
+            "p95": 1.0798999999999999
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 5206.6,
+            "n": 10,
+            "p50": 4296.05,
+            "p95": 5061.5199999999995
+          },
+          "wav_serialize_ms": {
+            "max": 4.0,
+            "n": 10,
+            "p50": 0.8500000000000001,
+            "p95": 3.684999999999999
+          }
+        },
+        "B": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 5040.0,
+            "n": 10,
+            "p50": 4556.0,
+            "p95": 5040.0
+          },
+          "encode_ms": {
+            "max": 29.0,
+            "n": 10,
+            "p50": 27.5,
+            "p95": 29.0
+          },
+          "engine_inside_lock_ms": {
+            "max": 4866.3,
+            "n": 10,
+            "p50": 4225.75,
+            "p95": 4735.53
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 4865.5,
+            "n": 10,
+            "p50": 4224.799999999999,
+            "p95": 4734.775
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.1,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 1.021,
+            "n": 10,
+            "p50": 0.9345,
+            "p95": 0.9962499999999999
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 4897.7,
+            "n": 10,
+            "p50": 4255.45,
+            "p95": 4766.389999999999
+          },
+          "wav_serialize_ms": {
+            "max": 3.2,
+            "n": 10,
+            "p50": 0.8,
+            "p95": 2.389999999999998
+          }
+        }
+      },
+      "length_codepoints": 25,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": 5200.0,
+          "n": 20,
+          "p50": 4560.0,
+          "p95": 5048.0
+        },
+        "generate_or_model_ms": {
+          "max": 5164.7,
+          "n": 20,
+          "p50": 4258.799999999999,
+          "p95": 4880.46
+        },
+        "rtf": {
+          "max": 1.133,
+          "n": 20,
+          "p50": 0.9359999999999999,
+          "p95": 1.0266
+        },
+        "total_ms": {
+          "max": 5206.6,
+          "n": 20,
+          "p50": 4288.65,
+          "p95": 4913.145
+        }
+      },
+      "representative_listening_artifact": {
+        "audio_duration_ms": 4560,
+        "fixture_id": "A-25",
+        "fixture_run_index": 1,
+        "generate_or_model_ms": 4254.4,
+        "logical_external_path": "listening/25/sample.mp3",
+        "metadata_path": "listening/25/sample.json",
+        "mp3_sha256": "6b4e3bffbef597d77b166d033e22fdaeedc254cc1f12066e1218e83e06efc48c",
+        "paired_text_path": "listening/25/sample.txt",
+        "rtf": 0.933,
+        "text_sha256": "5d9d9af0119fa08a567a3ede00163cafc71de9a223db4928db80a92324b4eb44",
+        "total_ms": 4284.3
+      },
+      "status": "complete",
+      "successful_samples": 20
+    },
+    {
+      "attempts": 20,
+      "fixture_A_B": {
+        "A": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 9426.0,
+            "n": 10,
+            "p50": 8627.0,
+            "p95": 9354.0
+          },
+          "encode_ms": {
+            "max": 48.0,
+            "n": 10,
+            "p50": 32.5,
+            "p95": 47.55
+          },
+          "engine_inside_lock_ms": {
+            "max": 6249.4,
+            "n": 10,
+            "p50": 5722.5,
+            "p95": 6206.29
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 6248.2,
+            "n": 10,
+            "p50": 5720.5,
+            "p95": 6205.089999999999
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.1,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 0.728,
+            "n": 10,
+            "p50": 0.683,
+            "p95": 0.7262
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 6299.3,
+            "n": 10,
+            "p50": 5761.7,
+            "p95": 6249.44
+          },
+          "wav_serialize_ms": {
+            "max": 4.1,
+            "n": 10,
+            "p50": 1.15,
+            "p95": 3.6049999999999986
+          }
+        },
+        "B": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 9280.0,
+            "n": 10,
+            "p50": 8400.0,
+            "p95": 9244.0
+          },
+          "encode_ms": {
+            "max": 46.0,
+            "n": 10,
+            "p50": 31.5,
+            "p95": 45.099999999999994
+          },
+          "engine_inside_lock_ms": {
+            "max": 6267.7,
+            "n": 10,
+            "p50": 5648.25,
+            "p95": 6267.16
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 6266.6,
+            "n": 10,
+            "p50": 5646.9,
+            "p95": 6265.79
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.1,
+            "p95": 0.15499999999999992
+          },
+          "rtf": {
+            "max": 0.712,
+            "n": 10,
+            "p50": 0.6825000000000001,
+            "p95": 0.7057
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 6316.0,
+            "n": 10,
+            "p50": 5682.15,
+            "p95": 6315.235
+          },
+          "wav_serialize_ms": {
+            "max": 4.3,
+            "n": 10,
+            "p50": 1.25,
+            "p95": 3.1299999999999972
+          }
+        }
+      },
+      "length_codepoints": 50,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": 9426.0,
+          "n": 20,
+          "p50": 8593.5,
+          "p95": 9287.3
+        },
+        "generate_or_model_ms": {
+          "max": 6266.6,
+          "n": 20,
+          "p50": 5675.65,
+          "p95": 6264.89
+        },
+        "rtf": {
+          "max": 0.728,
+          "n": 20,
+          "p50": 0.6825000000000001,
+          "p95": 0.7242
+        },
+        "total_ms": {
+          "max": 6316.0,
+          "n": 20,
+          "p50": 5710.3,
+          "p95": 6314.385
+        }
+      },
+      "representative_listening_artifact": {
+        "audio_duration_ms": 8227,
+        "fixture_id": "A-50",
+        "fixture_run_index": 8,
+        "generate_or_model_ms": 5692.6,
+        "logical_external_path": "listening/50/sample.mp3",
+        "metadata_path": "listening/50/sample.json",
+        "mp3_sha256": "f9d45f6e3b12cbf05c2cf7244fe1d7fd38d567851523e7280f0fd33300d4e86e",
+        "paired_text_path": "listening/50/sample.txt",
+        "rtf": 0.692,
+        "text_sha256": "18c3deac301ec8994beab2085cb0ca36f796484058c3d87adb78527133aca11e",
+        "total_ms": 5727.5
+      },
+      "status": "complete",
+      "successful_samples": 20
+    },
+    {
+      "attempts": 20,
+      "fixture_A_B": {
+        "A": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 15920.0,
+            "n": 10,
+            "p50": 14640.0,
+            "p95": 15632.0
+          },
+          "encode_ms": {
+            "max": 130.0,
+            "n": 10,
+            "p50": 53.0,
+            "p95": 119.64999999999998
+          },
+          "engine_inside_lock_ms": {
+            "max": 9273.2,
+            "n": 10,
+            "p50": 8299.3,
+            "p95": 8964.05
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 9267.8,
+            "n": 10,
+            "p50": 8296.25,
+            "p95": 8958.83
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.15000000000000002,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 0.633,
+            "n": 10,
+            "p50": 0.561,
+            "p95": 0.6095999999999999
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 9328.3,
+            "n": 10,
+            "p50": 8355.85,
+            "p95": 9043.675
+          },
+          "wav_serialize_ms": {
+            "max": 7.6,
+            "n": 10,
+            "p50": 4.85,
+            "p95": 6.879999999999998
+          }
+        },
+        "B": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 16160.0,
+            "n": 10,
+            "p50": 15549.5,
+            "p95": 16042.55
+          },
+          "encode_ms": {
+            "max": 63.0,
+            "n": 10,
+            "p50": 54.5,
+            "p95": 60.74999999999999
+          },
+          "engine_inside_lock_ms": {
+            "max": 9121.6,
+            "n": 10,
+            "p50": 8346.25,
+            "p95": 8919.37
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 9113.7,
+            "n": 10,
+            "p50": 8340.55,
+            "p95": 8911.2
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.15000000000000002,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 0.595,
+            "n": 10,
+            "p50": 0.541,
+            "p95": 0.57655
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 9177.6,
+            "n": 10,
+            "p50": 8404.0,
+            "p95": 8980.995
+          },
+          "wav_serialize_ms": {
+            "max": 8.5,
+            "n": 10,
+            "p50": 3.75,
+            "p95": 8.23
+          }
+        }
+      },
+      "length_codepoints": 100,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": 16160.0,
+          "n": 20,
+          "p50": 15280.0,
+          "p95": 15932.0
+        },
+        "generate_or_model_ms": {
+          "max": 9267.8,
+          "n": 20,
+          "p50": 8327.400000000001,
+          "p95": 9121.405
+        },
+        "rtf": {
+          "max": 0.633,
+          "n": 20,
+          "p50": 0.5455000000000001,
+          "p95": 0.5969
+        },
+        "total_ms": {
+          "max": 9328.3,
+          "n": 20,
+          "p50": 8386.900000000001,
+          "p95": 9185.135
+        }
+      },
+      "representative_listening_artifact": {
+        "audio_duration_ms": 15280,
+        "fixture_id": "A-100",
+        "fixture_run_index": 3,
+        "generate_or_model_ms": 8256.4,
+        "logical_external_path": "listening/100/sample.mp3",
+        "metadata_path": "listening/100/sample.json",
+        "mp3_sha256": "4462da0766d5e6a6170ba1371bd9f362b6bdbf5d4f3edc382604af9620482ed0",
+        "paired_text_path": "listening/100/sample.txt",
+        "rtf": 0.541,
+        "text_sha256": "68c25744f38677a1196e80932300b5b81855fe10a494a9ba9577b929215427e0",
+        "total_ms": 8317.5
+      },
+      "status": "complete",
+      "successful_samples": 20
+    },
+    {
+      "attempts": 20,
+      "fixture_A_B": {
+        "A": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 24320.0,
+            "n": 10,
+            "p50": 22840.0,
+            "p95": 23816.0
+          },
+          "encode_ms": {
+            "max": 289.0,
+            "n": 10,
+            "p50": 65.5,
+            "p95": 203.94999999999982
+          },
+          "engine_inside_lock_ms": {
+            "max": 11640.0,
+            "n": 10,
+            "p50": 11173.35,
+            "p95": 11600.715
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 11636.5,
+            "n": 10,
+            "p50": 11167.05,
+            "p95": 11592.535
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.15000000000000002,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 0.508,
+            "n": 10,
+            "p50": 0.4875,
+            "p95": 0.5053
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 11849.8,
+            "n": 10,
+            "p50": 11242.15,
+            "p95": 11786.215
+          },
+          "wav_serialize_ms": {
+            "max": 28.1,
+            "n": 10,
+            "p50": 4.8,
+            "p95": 21.709999999999987
+          }
+        },
+        "B": {
+          "attempts": 10,
+          "audio_duration_ms": {
+            "max": 25782.0,
+            "n": 10,
+            "p50": 19975.0,
+            "p95": 24872.1
+          },
+          "encode_ms": {
+            "max": 119.0,
+            "n": 10,
+            "p50": 63.5,
+            "p95": 100.54999999999995
+          },
+          "engine_inside_lock_ms": {
+            "max": 12211.3,
+            "n": 10,
+            "p50": 9994.45,
+            "p95": 11883.699999999999
+          },
+          "failure": 0,
+          "generate_or_model_ms": {
+            "max": 12206.0,
+            "n": 10,
+            "p50": 9991.150000000001,
+            "p95": 11877.185
+          },
+          "queue_wait_ms": {
+            "max": 0.2,
+            "n": 10,
+            "p50": 0.1,
+            "p95": 0.2
+          },
+          "rtf": {
+            "max": 0.549,
+            "n": 10,
+            "p50": 0.4975,
+            "p95": 0.53415
+          },
+          "success": 10,
+          "total_ms": {
+            "max": 12290.9,
+            "n": 10,
+            "p50": 10057.65,
+            "p95": 11957.9
+          },
+          "wav_serialize_ms": {
+            "max": 8.0,
+            "n": 10,
+            "p50": 2.5,
+            "p95": 7.955
+          }
+        }
+      },
+      "length_codepoints": 150,
+      "metrics": {
+        "audio_duration_ms": {
+          "max": 25782.0,
+          "n": 20,
+          "p50": 22600.0,
+          "p95": 24393.100000000002
+        },
+        "generate_or_model_ms": {
+          "max": 12206.0,
+          "n": 20,
+          "p50": 11016.95,
+          "p95": 11664.975
+        },
+        "rtf": {
+          "max": 0.549,
+          "n": 20,
+          "p50": 0.494,
+          "p95": 0.51765
+        },
+        "total_ms": {
+          "max": 12290.9,
+          "n": 20,
+          "p50": 11105.95,
+          "p95": 11871.855
+        }
+      },
+      "representative_listening_artifact": {
+        "audio_duration_ms": 22640,
+        "fixture_id": "A-150",
+        "fixture_run_index": 0,
+        "generate_or_model_ms": 11166.0,
+        "logical_external_path": "listening/150/sample.mp3",
+        "metadata_path": "listening/150/sample.json",
+        "mp3_sha256": "8213aa620fd5217b81cc004d1c6dbb0fd11a128e56aac86d85c7341af35f8a30",
+        "paired_text_path": "listening/150/sample.txt",
+        "rtf": 0.494,
+        "text_sha256": "da3b94e5a09c476326d30409836d5d13bb6ee9fcb4c4aa873da2ff00eeb9a0f4",
+        "total_ms": 11244.8
+      },
+      "status": "complete",
+      "successful_samples": 20
+    }
+  ],
+  "limitations": [
+    "This extract covers only the four explicitly requested complete buckets; it does not claim completion of the full 25–600 Goal.",
+    "No rows were pooled across run roots; statistics use the independent safe-prefix run only.",
+    "Representative MP3, paired text, and metadata remain in the protected external run root and are not committed.",
+    "No production boundary or output-policy recommendation is made."
+  ],
+  "production_control": {
+    "engine": "mlx",
+    "engine_source_config_sha256": "91e9b7383047ad59e11cc0c919604f45f0c05fa1ee729ed2cafe36ce26a9f2aa",
+    "language": "Auto",
+    "max_text_codepoints": 1200,
+    "openclaw_external_timeout_ms": 120000,
+    "pending_slots": 1,
+    "pending_start_timeout_s": 5,
+    "production_configuration_changed_by_goal": false,
+    "response_format": "mp3",
+    "service_source_sha256": "de6780fc0b96a6dea1be790a64b9f9c72bc299f433f968ef5bfb5ade16ce393a",
+    "version": "1.6.2",
+    "voice_profile_id": "kurisu-v1",
+    "workers": 1
+  },
+  "quantile_method": "Hyndman-Fan type 7 (linear interpolation; h=(n-1)p)",
+  "report_kind": "requested-four-bucket-extract",
+  "samples_per_fixture_family": 10,
+  "samples_per_length": 20,
+  "schedule_sha256": "6c307496951095b0c377e17efc78aa048f6df1e03679f9c47dd12dcbdddf7f80",
+  "schema_version": 1,
+  "scope_codepoints": [
+    25,
+    50,
+    100,
+    150
+  ]
+}
