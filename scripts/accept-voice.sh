@@ -48,7 +48,7 @@ whatsapp=channels.get("whatsapp",{})
 if not all(whatsapp.get(key) is True for key in ("linked","running","connected")):
  raise SystemExit("WhatsApp candidate not linked/running/connected")
 print("WHATSAPP_CHANNEL=linked,running,connected")'
-core_marker="$(orb -m "$ORBSTACK_MACHINE" -u root docker exec openclaw sh -lc 'grep -l "amadeus-whatsapp-japanese-tts-input-v1" /app/dist/runtime-api-*.mjs | wc -l' | tr -d '[:space:]')"
+core_marker="$(orb -m "$ORBSTACK_MACHINE" -u root docker exec openclaw sh -lc 'grep -l "amadeus-whatsapp-japanese-tts-input-v2" /app/dist/runtime-api-*.mjs | wc -l' | tr -d '[:space:]')"
 voice_marker="$(orb -m "$ORBSTACK_MACHINE" -u root docker exec openclaw sh -lc 'grep -Rl "amadeus-whatsapp-japanese-audio-guard-v1" /home/node/.openclaw/npm/projects --include="monitor-*.js" 2>/dev/null | wc -l' | tr -d '[:space:]')"
 [[ "$core_marker" == 1 && "$voice_marker" == 1 ]] || { echo 'pinned Voice patch markers not unique' >&2; exit 1; }
 if ((BENCHMARK)); then

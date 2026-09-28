@@ -13,6 +13,16 @@ export function resolveAmadeusJapaneseSpeechText(visibleText, explicitTtsText = 
   return '';
 }
 
+export function isAmadeusBilingualVoiceContract(visibleText) {
+  const lines = (typeof visibleText === 'string' ? visibleText : '')
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length !== 2 || !/^中文[：:]\s*\S/u.test(lines[0])) return false;
+  const japanese = lines[1].match(/^日本語[：:]\s*(.*)$/u)?.[1]?.trim() ?? '';
+  return Boolean(japanese && /[\u3040-\u30ff]/u.test(japanese));
+}
+
 export function ensureAmadeusJapaneseVoiceText(payload, isVoiceInbound) {
   if (!payload || typeof payload !== 'object') return payload;
   // The same final-response guard also covers an explicitly tagged typed

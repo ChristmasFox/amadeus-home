@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { resolveAmadeusJapaneseSpeechText, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
+import { resolveAmadeusJapaneseSpeechText, isAmadeusBilingualVoiceContract, ensureAmadeusJapaneseVoiceText } from './openclaw-voice-policy.mjs';
 import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 import { WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER } from './openclaw-voice-markers.mjs';
 
@@ -10,6 +10,9 @@ assert.equal(resolveAmadeusJapaneseSpeechText(`${chinese}\n日本語：古い文
 assert.equal(resolveAmadeusJapaneseSpeechText(chinese, chinese), '', 'Chinese-only audio fails closed');
 assert.equal(resolveAmadeusJapaneseSpeechText('', japanese), japanese, 'Japanese-only directive is usable');
 assert.equal(resolveAmadeusJapaneseSpeechText('', `日本語：${japanese}`), '', 'structured fallback is not speech');
+assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n\n日本語：${japanese}`), true, 'the exact bilingual voice contract is recoverable when the marker is missing');
+assert.equal(isAmadeusBilingualVoiceContract('只用中文回答。'), false, 'ordinary Chinese text stays text-only');
+assert.equal(isAmadeusBilingualVoiceContract(`${chinese}\n日本語：`), false, 'an empty Japanese line is not a voice contract');
 const typed = { text: chinese, mediaUrl: 'file://audio.mp3', audioAsVoice: true, spokenText: japanese };
 assert.equal(ensureAmadeusJapaneseVoiceText(typed, false).text, `${chinese}\n\n日本語：${japanese}`, 'typed audio preserves visible text even without supplement metadata');
 const taggedTyped = { ...typed, ttsSupplement: { spokenText: japanese } };
