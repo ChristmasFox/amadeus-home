@@ -95,8 +95,8 @@ export async function homelabStatus(
   const anomalies = Array.isArray(host.anomalies) ? host.anomalies : [];
   const serviceEntries = Object.entries(services).filter(([name]) => name !== 'OpenWrt');
   const unhealthyServices = serviceEntries.filter(([, ok]) => !ok).map(([name]) => name);
-  const unhealthyText = [...unhealthyServices, ...(openWrt.ok ? [] : ['OpenWrt（独立 endpoint）'])].join('、');
-  const conclusion = unavailable ? '❌ 宿主机遥测不可用' : anomalies.length || unhealthyText ? '⚠️ 需要关注' : '✅ 正常';
+  const unhealthyText = unhealthyServices.join('、');
+  const conclusion = unavailable ? '❌ 宿主机遥测不可用' : anomalies.length || unhealthyServices.length || !openWrt.ok ? '⚠️ 需要关注' : '✅ 正常';
   const serviceText = serviceEntries.filter(([, ok]) => ok).map(([name]) => name).join('、') || '无';
   const lines = [
     '🖥 M204 状态', `结论：${conclusion}`, '', '宿主机',
