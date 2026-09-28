@@ -1,4 +1,15 @@
-# Current Task — MacHost Telemetry V1 (Complete)
+# Current Task — Kurisu A/C Emotion PoC (Active)
+
+Date: 2026-09-28 local. Goal: `docs/AMADEUS_KURISU_AC_EMOTION_POC_GOAL.md`.
+The owner explicitly activated this Goal after confirming the previous MacHost Telemetry V1 Goal is complete.
+
+Execution scope is limited to the isolated A/C listening PoC defined by that Goal: generate A0 from the current accepted production Base 1.7B ICL path, generate C0-C5 from the pinned OminiX Qwen3-TTS MLX Base x-vector / clone+instruct path, deliver the labeled seven-sample set plus objective timing metrics to the configured owner WhatsApp target, preserve production TTS unchanged, stop the temporary OminiX process, and leave subjective quality as `pending_owner_listening`.
+
+Do not promote C to production, change `amadeus-tts`, change 9Router/OpenClaw TTS routing, restart or replace the production TTS service, substitute CustomVoice, add model fallback, or expand into dynamic emotion inference. Follow the Goal stop conditions and preserve all private audio/model/owner-target assets outside Git.
+
+The following completed task remains for historical continuity.
+
+# Previous Task — MacHost Telemetry V1 (Complete)
 
 Date: 2026-09-28 local. Based on latest `origin/main` (`6d82598`), the
 MacHost Telemetry V1 implementation is complete. The MacHostAgent source,
