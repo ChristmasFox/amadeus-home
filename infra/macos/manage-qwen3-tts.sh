@@ -100,9 +100,18 @@ if [[ "$mode" == --apply ]]; then
   install -m 600 "$ROOT/apps/qwen3-tts-service/engine_contract.py" "$BASE/engine_contract.py"
   install -m 600 "$ROOT/apps/qwen3-tts-service/kurisu_emotion.py" "$BASE/kurisu_emotion.py"
   install -m 600 "$ROOT/apps/qwen3-tts-service/ominix_engine.py" "$BASE/ominix_engine.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/kurisu_style.py" "$BASE/kurisu_style.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/kurisu_emotion.py" "$BASE/kurisu_emotion.py"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/kurisu_style.json" "$BASE/kurisu_style.json"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/tuner.py" "$BASE/tuner.py"
+  rm -rf "$BASE/tuner"
+  install -d -m 700 "$BASE/tuner"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/tuner/index.html" "$BASE/tuner/index.html"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/tuner/app.js" "$BASE/tuner/app.js"
+  install -m 600 "$ROOT/apps/qwen3-tts-service/tuner/style.css" "$BASE/tuner/style.css"
   install -m 600 "$ROOT/apps/qwen3-tts-service/requirements.txt" "$BASE/requirements.txt"
 fi
-[[ -s "$BASE/service.py" && -s "$BASE/mlx_engine.py" && -s "$BASE/engine_contract.py" && -s "$BASE/kurisu_emotion.py" && -s "$BASE/ominix_engine.py" ]] || { echo 'service source missing; use --apply' >&2; exit 1; }
+[[ -s "$BASE/service.py" && -s "$BASE/mlx_engine.py" && -s "$BASE/engine_contract.py" && -s "$BASE/kurisu_emotion.py" && -s "$BASE/ominix_engine.py" && -s "$BASE/kurisu_style.py" && -s "$BASE/kurisu_style.json" && -s "$BASE/tuner.py" && -s "$BASE/tuner/index.html" ]] || { echo 'service source missing; use --apply' >&2; exit 1; }
 python3 "$ROOT/infra/macos/prepare-qwen3-tts-early-log.py" "$LOG/qwen3-tts-launchd.err.log"
 temporary="$(mktemp "$PLIST.tmp.XXXXXX")"
 trap 'rm -f "$temporary"' EXIT

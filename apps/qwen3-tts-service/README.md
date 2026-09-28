@@ -1,5 +1,29 @@
 # M204 native Qwen3-TTS service (1.6.0 released)
 
+## Kurisu TTS Tuner (1.6.7)
+
+The native OminiX process serves an owner-local, dependency-free tuner at
+`http://127.0.0.1:18793`. It shares the resident Base 1.7B worker and cached
+`kurisu-v1` x-vector with the authenticated production endpoint on `:18792`.
+The lab API accepts one sample at a time or a bounded four-slot batch and uses
+the production-priority scheduler; generated audio, history, drafts and
+proposals stay under the protected runtime tuner directory outside Git.
+
+`kurisu_style.json` is the single Git-tracked production style source. The
+browser can create a hash-bound proposal, but only the repo-owned command may
+promote it:
+
+```sh
+./scripts/promote-kurisu-style.sh --proposal ID --dry-run
+./scripts/promote-kurisu-style.sh --proposal ID --apply
+```
+
+The apply path validates the proposal, updates only the canonical style file
+and asks the running process to hot-reload it without loading another model.
+The UI never receives the production token, reference audio, x-vector or
+private paths. Lab options are the verified pinned OminiX controls: temperature,
+top-k, top-p, max-new-tokens, seed, speed-factor and repetition-penalty.
+
 One resident **selected community MLX 1.7B Base 8-bit** engine uses the original protected ~46s `kurisu-v1` A ICL reference; the official PyTorch MPS/FP16 model remains an explicit protected rollback, never a simultaneous fallback. This is an inference boundary, not an Agent or speech planner. MLX source/model/dependencies are pinned in `infra/macos/qwen3-tts-engine.json` and `requirements-mlx-tts.txt`; weights and profile stay outside Git.
 
 Provision an operator-owned, licensed `reference.wav` (short clean speech) and matching `reference.txt` in `~/Library/Application Support/Amadeus/voices/kurisu-v1/`, both mode 600. Do not commit either file or generated embeddings. `manage-qwen3-tts.sh --prepare-apply` creates `~/Library/Application Support/Amadeus/speech/tts.token` mode 600 if absent (never prints its value); then configure 9Router's Self-hosted TTS provider with the same secret outside Git. Endpoint for the OrbStack guest: `http://host.docker.internal:18792/v1`, accepting the stable `amadeus-tts` alias and canonical `qwen3-tts-1.7b` model IDs, with voice `kurisu-v1`. `GET /healthz` is public and exposes only readiness/model/voice identifiers; speech and voice inventory require Bearer auth.

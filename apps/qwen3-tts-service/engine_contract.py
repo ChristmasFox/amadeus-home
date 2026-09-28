@@ -11,6 +11,10 @@ class SynthesisTiming:
     generate_or_model_ms: float
     wav_serialize_ms: float
     engine_inside_lock_ms: float
+    prefill_ms: float | None = None
+    generation_ms: float | None = None
+    decode_ms: float | None = None
+    generation_frames: int | None = None
 
 class SpeechEngine(Protocol):
-    def synthesize_timed(self, text: str, emotion: str = "default") -> tuple[bytes, int, SynthesisTiming]: ...
+    def synthesize_timed(self, text: str, emotion: str = "default", *, instruct: str | None = None, options: dict | None = None) -> tuple[bytes, int, SynthesisTiming]: ...
