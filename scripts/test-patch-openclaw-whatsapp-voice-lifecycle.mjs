@@ -248,6 +248,14 @@ assert.ok(patchedWhatsApp.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_TYPING_INDICATOR_MARKER));
 assert.ok(patchedWhatsApp.includes('const safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);'), 'final WhatsApp delivery path sanitizes payloads even when preparePayload is bypassed');
 assert.ok(patchedWhatsApp.includes('replyResult: safeDeliveryPayload'), 'final WhatsApp delivery sends the sanitized payload');
+const legacyFinalDelivery = patchedWhatsApp
+  .replace('\n\t\t// Final defense: some pinned OpenClaw paths call deliver() without preparePayload.\n\t\tconst safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);\n\t\tconst reply = resolveSendableOutboundReplyParts(safeDeliveryPayload);', '\n\t\tconst reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);')
+  .replace('replyResult: safeDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: safeDeliveryPayload,', 'replyResult: normalizedDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: normalizedDeliveryPayload,')
+  .replace('recordDeliveredPayload(safeDeliveryPayload);', 'recordDeliveredPayload(normalizedDeliveryPayload);');
+assert.notEqual(legacyFinalDelivery, patchedWhatsApp);
+const upgradedLegacyDelivery = patchWhatsAppJapaneseTextSource(legacyFinalDelivery);
+assert.ok(upgradedLegacyDelivery.includes('const safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);'), 'existing marked WhatsApp patch upgrades to the final-delivery scrub');
+assert.equal(patchWhatsAppJapaneseTextSource(upgradedLegacyDelivery), upgradedLegacyDelivery, 'final-delivery scrub upgrade is idempotent');
 const v1Audio = patchedWhatsAppAudio.replace(
   "if (!payload || typeof payload !== 'object') return payload;",
   "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;",

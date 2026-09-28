@@ -316,44 +316,48 @@ export function patchWhatsAppTypingIndicatorSource(original) {
 }
 
 export function patchWhatsAppJapaneseTextSource(original) {
-  if (original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) return original;
-  if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
-  let result = replaceOnce(
-    original,
-    'function createWhatsAppReplyPlan(params) {',
-    `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}\nfunction createWhatsAppReplyPlan(params) {`,
-    'Japanese voice-text postprocessor insertion',
-  );
-  result = replaceOnce(
-    result,
-    '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(deliveryPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
-    '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst voiceTextPayload = ensureAmadeusJapaneseVoiceText(deliveryPayload, isAmadeusVoiceInbound);\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(voiceTextPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
-    'Japanese visible-text delivery',
-  );
-  result = replaceOnce(
-    result,
-    '\t\t\t\tconst normalizedDeliveryPayload = deliveryPayload.text === void 0 ? {',
-    '\t\t\t\tconst normalizedDeliveryPayload = voiceTextPayload.text === void 0 ? {',
-    'Japanese visible text normalization',
-  );
-  result = replaceOnce(
-    result,
-    '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\tconst reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);',
-    '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\t// Final defense: some pinned OpenClaw paths call deliver() without preparePayload.\n\t\tconst safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);\n\t\tconst reply = resolveSendableOutboundReplyParts(safeDeliveryPayload);',
-    'Japanese visible-text final delivery scrub',
-  );
-  result = replaceOnce(
-    result,
-    '\t\t\t\treplyResult: normalizedDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: normalizedDeliveryPayload,',
-    '\t\t\t\treplyResult: safeDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: safeDeliveryPayload,',
-    'Japanese visible-text final delivery payload',
-  );
-  result = replaceOnce(
-    result,
-    '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(normalizedDeliveryPayload);',
-    '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(safeDeliveryPayload);',
-    'Japanese visible-text final delivery bookkeeping',
-  );
+  let result = original;
+  if (!original.includes(WHATSAPP_JAPANESE_TEXT_MARKER)) {
+    if (!original.includes(WHATSAPP_INGRESS_QUEUE_MARKER)) throw new Error('WhatsApp ingress FIFO patch must be applied first');
+    result = replaceOnce(
+      result,
+      'function createWhatsAppReplyPlan(params) {',
+      `// ${WHATSAPP_JAPANESE_TEXT_MARKER}\n${stripAmadeusTtsControlMarkers.toString()}\n${ensureAmadeusJapaneseVoiceText.toString()}\nfunction createWhatsAppReplyPlan(params) {`,
+      'Japanese voice-text postprocessor insertion',
+    );
+    result = replaceOnce(
+      result,
+      '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(deliveryPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
+      '\t\t\t\tconst deliveryPayload = resolveWhatsAppDeliverablePayload(payload, info);\n\t\t\t\tif (!deliveryPayload) return null;\n\t\t\t\tconst voiceTextPayload = ensureAmadeusJapaneseVoiceText(deliveryPayload, isAmadeusVoiceInbound);\n\t\t\t\tconst normalizedOutboundPayload = normalizeWhatsAppOutboundPayload(voiceTextPayload, { normalizeText: normalizeWhatsAppPayloadTextPreservingIndentation });',
+      'Japanese visible-text delivery',
+    );
+    result = replaceOnce(
+      result,
+      '\t\t\t\tconst normalizedDeliveryPayload = deliveryPayload.text === void 0 ? {',
+      '\t\t\t\tconst normalizedDeliveryPayload = voiceTextPayload.text === void 0 ? {',
+      'Japanese visible text normalization',
+    );
+  }
+  if (!result.includes('const safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);')) {
+    result = replaceOnce(
+      result,
+      '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\tconst reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);',
+      '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\t// Final defense: some pinned OpenClaw paths call deliver() without preparePayload.\n\t\tconst safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);\n\t\tconst reply = resolveSendableOutboundReplyParts(safeDeliveryPayload);',
+      'Japanese visible-text final delivery scrub',
+    );
+    result = replaceOnce(
+      result,
+      '\t\t\t\treplyResult: normalizedDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: normalizedDeliveryPayload,',
+      '\t\t\t\treplyResult: safeDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: safeDeliveryPayload,',
+      'Japanese visible-text final delivery payload',
+    );
+    result = replaceOnce(
+      result,
+      '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(normalizedDeliveryPayload);',
+      '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(safeDeliveryPayload);',
+      'Japanese visible-text final delivery bookkeeping',
+    );
+  }
   return result;
 }
 
