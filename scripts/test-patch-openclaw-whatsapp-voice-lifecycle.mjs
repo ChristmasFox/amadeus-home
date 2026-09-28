@@ -86,6 +86,29 @@ const whatsappFixture = `async function enqueueInboundMessage(chatJid) {
 }
 let didSendReply = false;
 function createWhatsAppReplyPlan(params) {
+	const recordDeliveredPayload = () => { didSendReply = true; };
+	const deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {
+		const reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);
+		if (!reply.hasMedia && !reply.text.trim()) return whatsAppReplyDeliveryVisibility(false);
+		let delivery;
+		delivery = await params.deliverReply({
+				replyResult: normalizedDeliveryPayload,
+				normalizedReplyResult: normalizedDeliveryPayload,
+			transport: params.transport,
+			mediaLocalRoots: [],
+			maxMediaBytes: 0,
+			textLimit: 1024,
+			chunkMode: 'split',
+			replyLogger: params.replyLogger,
+			connectionId: params.connectionId,
+			skipLog: false,
+			tableMode: 'preserve',
+			onMediaAccepted: options?.onMediaAccepted
+		});
+		const result = createWhatsAppChannelDeliveryResult({ content: reply.text, delivery });
+		if (options?.recordDelivery !== false) recordDeliveredPayload(normalizedDeliveryPayload);
+		return result;
+	};
 	const mediaOnlyCoalescer = createWhatsAppMediaOnlyReplyCoalescer({ deliver: async (pending) => {
 		return await deliverNormalizedPayload(pending.payload, pending.info);
 	} });
@@ -108,6 +131,12 @@ function createWhatsAppReplyPlan(params) {
 					text: void 0
 				} : normalizedOutboundPayload;
 				return normalizedDeliveryPayload;
+			},
+			deliver: async (payload, info) => {
+				const normalizedDeliveryPayload = payload;
+				const reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);
+				if (!reply.hasMedia && !reply.text.trim()) return whatsAppReplyDeliveryVisibility(false);
+				return await deliverNormalizedPayload(normalizedDeliveryPayload, info, { recordDelivery: false });
 			}
 		}
 	};
@@ -217,6 +246,8 @@ assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_TEXT_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_JAPANESE_AUDIO_GUARD_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_TAGGED_TYPED_GUARD_MARKER));
 assert.ok(patchedWhatsApp.includes(WHATSAPP_TYPING_INDICATOR_MARKER));
+assert.ok(patchedWhatsApp.includes('const safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);'), 'final WhatsApp delivery path sanitizes payloads even when preparePayload is bypassed');
+assert.ok(patchedWhatsApp.includes('replyResult: safeDeliveryPayload'), 'final WhatsApp delivery sends the sanitized payload');
 const v1Audio = patchedWhatsAppAudio.replace(
   "if (!payload || typeof payload !== 'object') return payload;",
   "if (!isVoiceInbound || !payload || typeof payload !== 'object') return payload;",
@@ -299,6 +330,7 @@ assert.equal(ensureAmadeusJapaneseVoiceText(unrelatedMedia, true), unrelatedMedi
 const timerCallbacks = new Map();
 let nextTimer = 0;
 const clearedTimers = [];
+const deliveredPayloads = [];
 const sandbox = {
   Map,
   Promise,
@@ -322,6 +354,7 @@ const sandbox = {
   shouldDeferWhatsAppMediaOnlyPayload: () => false,
   logWhatsAppMediaOnlyFlushResult: () => {},
   whatsAppReplyDeliveryVisibility: (visibleReplySent) => ({ visibleReplySent }),
+  createWhatsAppChannelDeliveryResult: ({ content, delivery }) => ({ visibleReplySent: true, content, delivery }),
 };
 sandbox.globalThis = sandbox;
 vm.runInNewContext(`${patchedWhatsApp}\nglobalThis.testApi = { getAmadeusVoiceReplyRegistry, startAmadeusVoiceReplyLease, closeAmadeusVoiceReplyLease, clearAmadeusVoiceReplyLeases, clearAmadeusVoiceReplyLeasesForChat, runAmadeusWhatsAppVoiceScopedIngress, createWhatsAppReplyPlan };`, sandbox);
@@ -330,7 +363,10 @@ const buildReplyPlan = (media, sendComposing = async () => {}) => sandbox.testAp
   cfg: {},
   route: { accountId: 'default', agentId: 'main' },
   context: {},
-  transport: { sendComposing },
+  transport: { sendComposing, chatJid: 'voice-contract@g.us' },
+  deliverReply: async ({ replyResult }) => { deliveredPayloads.push(replyResult); return { accepted: true }; },
+  replyLogger: { warn() {} },
+  connectionId: 'test-connection',
 });
 const deliveryVoicePlan = buildReplyPlan([{ kind: 'audio', contentType: 'audio/ogg' }]);
 const preparedVoicePayload = await deliveryVoicePlan.delivery.preparePayload({
@@ -366,6 +402,10 @@ const preparedTypedPayload = await deliveryTypedPlan.delivery.preparePayload({
   spokenText: japaneseVoice,
 }, { kind: 'final' });
 assert.equal(preparedTypedPayload.text, '中文：只用中文回答。', 'actual patched WhatsApp preparePayload leaves typed replies unchanged');
+const leakedMarkerPayload = { text: '[[amadeus:reply-modality=default]]\n群组里的普通文字。' };
+await deliveryTypedPlan.delivery.deliver(leakedMarkerPayload, { kind: 'final' });
+assert.equal(deliveredPayloads.at(-1).text, '群组里的普通文字。', 'final WhatsApp deliver() scrub removes modality markers when preparePayload is bypassed');
+assert.doesNotMatch(deliveredPayloads.at(-1).text, /\[\[amadeus:reply-modality=/u);
 // Isolate the voice-lease cadence assertions from the generic indicator timers.
 timerCallbacks.clear();
 clearedTimers.length = 0;

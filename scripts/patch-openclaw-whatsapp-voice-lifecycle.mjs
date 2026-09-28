@@ -336,6 +336,24 @@ export function patchWhatsAppJapaneseTextSource(original) {
     '\t\t\t\tconst normalizedDeliveryPayload = voiceTextPayload.text === void 0 ? {',
     'Japanese visible text normalization',
   );
+  result = replaceOnce(
+    result,
+    '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\tconst reply = resolveSendableOutboundReplyParts(normalizedDeliveryPayload);',
+    '\tconst deliverNormalizedPayload = async (normalizedDeliveryPayload, info, options) => {\n\t\t// Final defense: some pinned OpenClaw paths call deliver() without preparePayload.\n\t\tconst safeDeliveryPayload = ensureAmadeusJapaneseVoiceText(normalizedDeliveryPayload, isAmadeusVoiceInbound);\n\t\tconst reply = resolveSendableOutboundReplyParts(safeDeliveryPayload);',
+    'Japanese visible-text final delivery scrub',
+  );
+  result = replaceOnce(
+    result,
+    '\t\t\t\treplyResult: normalizedDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: normalizedDeliveryPayload,',
+    '\t\t\t\treplyResult: safeDeliveryPayload,\n\t\t\t\tnormalizedReplyResult: safeDeliveryPayload,',
+    'Japanese visible-text final delivery payload',
+  );
+  result = replaceOnce(
+    result,
+    '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(normalizedDeliveryPayload);',
+    '\t\tif (options?.recordDelivery !== false) recordDeliveredPayload(safeDeliveryPayload);',
+    'Japanese visible-text final delivery bookkeeping',
+  );
   return result;
 }
 
