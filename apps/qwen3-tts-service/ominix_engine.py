@@ -12,6 +12,7 @@ import uuid
 
 from engine_contract import SynthesisTiming
 from kurisu_emotion import normalize_emotion
+from kurisu_style import validate_options
 
 
 class OminiXEngine:
@@ -59,13 +60,14 @@ class OminiXEngine:
             raise RuntimeError("ominix_worker_protocol_error")
         return value
 
-    def synthesize_timed(self, text: str, emotion: str = "default") -> tuple[bytes, int, SynthesisTiming]:
+    def synthesize_timed(self, text: str, emotion: str = "default", *, instruct: str | None = None, options: dict | None = None) -> tuple[bytes, int, SynthesisTiming]:
         emotion = normalize_emotion(emotion)
         if self._proc.poll() is not None or self._proc.stdin is None:
             raise RuntimeError("ominix_worker_exited")
         output = self._tmp / f"{uuid.uuid4().hex}.wav"
         request_started = time.monotonic_ns()
-        request = {"text": text, "emotion": emotion, "output": str(output)}
+        safe_options = validate_options(options or {})
+        request = {"text": text, "emotion": emotion, "output": str(output), "instruct": instruct, "options": safe_options}
         with self._lock:
             self._proc.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
             self._proc.stdin.flush()
@@ -85,6 +87,10 @@ class OminiXEngine:
             generate_or_model_ms=worker_ms,
             wav_serialize_ms=max(0.0, total_ms - worker_ms),
             engine_inside_lock_ms=total_ms,
+            prefill_ms=float(result["prefillMs"]) if result.get("prefillMs") is not None else None,
+            generation_ms=float(result["generationMs"]) if result.get("generationMs") is not None else None,
+            decode_ms=float(result["decodeMs"]) if result.get("decodeMs") is not None else None,
+            generation_frames=int(result["generationFrames"]) if result.get("generationFrames") is not None else None,
         )
 
     def close(self) -> None:

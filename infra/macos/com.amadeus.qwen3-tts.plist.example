@@ -15,6 +15,12 @@
     <key>AMADEUS_TTS_MLX_MODEL_PATH</key><string>__MLX_MODEL_PATH__</string>
     <key>AMADEUS_TTS_OMINIX_MODEL_PATH</key><string>__OMINIX_MODEL_PATH__</string>
     <key>AMADEUS_TTS_OMINIX_WORKER_PATH</key><string>__OMINIX_WORKER_PATH__</string>
+    <key>AMADEUS_TTS_STYLE_FILE</key><string>__STYLE_FILE__</string>
+    <key>AMADEUS_TTS_TUNER_ENABLED</key><string>1</string>
+    <key>AMADEUS_TTS_TUNER_PORT</key><string>18793</string>
+    <key>AMADEUS_TTS_MODEL_REVISION</key><string>e7dd0585652209fa0d7783659aad4e8a324de11c</string>
+    <key>AMADEUS_TTS_OMINIX_REVISION</key><string>4988a3fcfa48b8cb5d0780a501b92c6a41401523</string>
+    <key>AMADEUS_TTS_RELEASE_VERSION</key><string>__RELEASE_VERSION__</string>
     <key>HF_HOME</key><string>__MODEL_CACHE__</string>
   </dict>
   <key>RunAtLoad</key><true/>

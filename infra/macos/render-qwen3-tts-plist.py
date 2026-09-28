@@ -14,6 +14,8 @@ def render(template: Path, base: Path, voice: Path, log: Path,
     python = base / 'venv/bin/python' if engine in ('mps', 'ominix') else mlx_root / 'venv/bin/python'
     cache = base / 'model-cache' if engine in ('mps', 'ominix') else mlx_root / 'cache'
     ominix_root = ominix_root or (base / 'ominix')
+    version_file = Path(__file__).resolve().parents[2] / 'VERSION'
+    release_version = version_file.read_text(encoding='utf-8').strip() if version_file.is_file() else 'unknown'
     replacements = {
         '__VENV_PYTHON__': str(python),
         '__SERVICE_SCRIPT__': str(base / 'service.py'),
@@ -25,6 +27,8 @@ def render(template: Path, base: Path, voice: Path, log: Path,
         '__MLX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'mlx' else '',
         '__OMINIX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'ominix' else '',
         '__OMINIX_WORKER_PATH__': str(ominix_root / 'worker') if engine == 'ominix' else '',
+        '__STYLE_FILE__': str(base / 'kurisu_style.json'),
+        '__RELEASE_VERSION__': release_version,
         '__TTS_ENGINE__': engine,
     }
     text = template.read_text()
