@@ -74,7 +74,7 @@ function startAmadeusVoiceReplyLease(params) {
 }
 `;
 
-export const whatsappIngressQueueHelpers = `// ${WHATSAPP_INGRESS_QUEUE_MARKER}: serialize WhatsApp arrivals behind a voice run before Agent dispatch.
+export const whatsappIngressQueueHelpers = `// ${WHATSAPP_INGRESS_QUEUE_MARKER}: serialize WhatsApp arrivals per session before Agent dispatch.
 const AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS = new Map();
 async function runAmadeusWhatsAppVoiceScopedIngress(params) {
 \tconst sessionKey = String(params.sessionKey ?? "").trim();
@@ -82,13 +82,6 @@ async function runAmadeusWhatsAppVoiceScopedIngress(params) {
 \tif (!sessionKey || !messageId || typeof params.run !== "function") return await params.run();
 \tconst registry = getAmadeusVoiceReplyRegistry();
 \tconst previousTail = AMADEUS_WHATSAPP_VOICE_INGRESS_TAILS.get(sessionKey);
-\tconst activeLease = registry.get(sessionKey);
-\tconst mustQueue = Boolean(previousTail || activeLease && activeLease.messageId !== messageId);
-\tif (!mustQueue) {
-\t\tconst lease = params.isVoice ? activeLease && activeLease.messageId === messageId ? activeLease : startAmadeusVoiceReplyLease({ sessionKey, messageId, chatJid: params.chatJid, sendComposing: params.sendComposing }) : void 0;
-\t\ttry { return await params.run(); }
-\t\tfinally { if (lease && lease.messageId === messageId) closeAmadeusVoiceReplyLease(lease, "turn-settled"); }
-\t}
 \tlet releaseSlot;
 \tconst slot = new Promise((resolve) => { releaseSlot = resolve; });
 \tconst predecessor = previousTail ?? Promise.resolve();
@@ -97,6 +90,7 @@ async function runAmadeusWhatsAppVoiceScopedIngress(params) {
 \tlet lease;
 \ttry {
 \t\tawait predecessor.catch(() => {});
+\t\tconst activeLease = registry.get(sessionKey);
 \t\twhile (true) {
 \t\t\tconst current = registry.get(sessionKey);
 \t\t\tif (!current || current.messageId === messageId) break;

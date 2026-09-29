@@ -2,7 +2,7 @@
 
 Date: 2026-09-29
 Type: production TTS integration / staged cutover / rollback-controlled runtime change
-Status: `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE` — production apply completed on 2026-09-29; the real owner-channel gate remains open.
+Status: `IN_PROGRESS_GROUP_CHANNEL_FIX` — production apply completed on 2026-09-29; direct-message acceptance passed, but group-channel acceptance exposed a concurrency defect.
 Prerequisite: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md` completed as `ACCEPTED_FOR_FURTHER_INTEGRATION`.
 
 ## Decision already made
@@ -37,9 +37,20 @@ OminiX is uninstalled with no listeners on `:18792`/`:18793`. The complete
 rollback checkpoint remains protected and readable. Evidence is retained at
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
 
-The only remaining acceptance gate is a real owner-channel voice turn. Keep
-this Goal open until the owner confirms Japanese pronunciation, Kurisu
-identity, visible text behavior and typed-text isolation.
+The direct-message path was accepted, but the owner reported incorrect
+group-chat behavior. The retained diagnosis at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/group-chat-diagnosis-20260929T173255Z/`
+shows that GPT-SoVITS and ASR completed while concurrent group arrivals could
+overlap in the same session and let a later text run reach the final WhatsApp
+delivery boundary first. The repo-only candidate fix changes the ingress tail
+to serialize every inbound WhatsApp arrival per session, not only arrivals
+that already observe a voice lease. Focused lifecycle, bundle, policy,
+voice-failure, bilingual-envelope, group-policy, syntax, diff and secrets
+checks pass. The fix has not been applied to production; do not restart or
+switch the live service until the explicit apply phase. Keep this Goal open
+until a real group text voice request, inbound group voice note, concurrent
+group messages, ordinary group text isolation, and owner DM regression all
+pass.
 
 ## Non-goals
 
