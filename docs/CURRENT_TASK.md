@@ -72,13 +72,16 @@ The earlier PoC Goal is closed as `ACCEPTED_FOR_FURTHER_INTEGRATION`; its MPS ru
 
 ---
 
-# Paused Task — Image Asset + On-Demand Upscale
+# Image Goal Runtime Record
 
 Date: 2026-09-29 local.
 
-Paused Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
+Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
 
-The image asset/on-demand upscale Goal remains valid but is temporarily paused because the owner explicitly chose to validate the Kurisu GPT-SoVITS character voice first. Do not delete or reinterpret that Goal. Resume it only after the owner returns to the image work.
+This historical note is superseded by the active image Goal pointer at the top
+of this file. The implementation, deployment, rollback checkpoint, and host
+smokes are recorded in `.agent/checkpoints/2026-09-29-amadeus-image-assets.md`;
+the only remaining gate is real owner-channel inbound acceptance.
 
 ---
 
