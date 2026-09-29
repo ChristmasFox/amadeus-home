@@ -1,6 +1,16 @@
-# Current Task — Kurisu GPT-SoVITS MPS Production Cutover
+# Current Task — Amadeus Image Asset and On-Demand Upscale
 
 Date: 2026-09-29 local.
+
+Active Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
+
+Status: `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`.
+
+The image Goal is the explicit active operator request. The prior Kurisu
+GPT-SoVITS cutover remains historical evidence below and is not a live task
+pointer.
+
+## Historical Kurisu GPT-SoVITS MPS production cutover
 
 Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
 

@@ -1,5 +1,38 @@
 # Project State — 2026-09-29
 
+## 2026-09-29 Amadeus image assets and on-demand upscale — deployed; owner-channel acceptance pending
+
+The host-native image asset service is installed as launchd label
+`com.amadeus.image-assets` and reports Apple MLX readiness on port `18792`.
+The default Mac-local asset root, registry, model cache and token paths are
+derived from the active `$HOME` host profile; no username or absolute personal
+path is encoded in Git. The external volume remains an explicit override after
+launchd write access is verified.
+
+Source commits `849041e`, `d745e4f`, `6210c70`, and `7175240` add the opaque
+`imageId` registry, native generation-result correlation, explicit-only
+`amadeus_image_upscale`, Apple Silicon `realesrgan-mlx` runtime, CasaOS
+read-only mount, and deployment Compose-path propagation. OpenClaw 1.7.4 is
+healthy at image
+`local/openclaw-amadeus:git-6210c70b0ca6-20260929215321`; the candidate
+Compose environment is verified against the live host asset root and token.
+
+Host acceptance passed for realistic 2x, anime 2x, explicit anime 4x, manual
+`imageId`, authenticated controlled media reads, unauthenticated `401`, host
+service restart durability, and OpenClaw container recreate durability. The
+protected deployment checkpoints are
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260929215321` and the
+candidate refresh
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260929215636`; post-deploy
+evidence is retained under the matching external-volume deployment paths.
+
+The remaining gate is a real owner WhatsApp inbound turn. Synthetic CLI runs
+deliver through WhatsApp but lack trusted inbound sender metadata and therefore
+see only the safe web tools; production sender policy was not weakened to make
+the CLI probe pass. Do not claim owner-channel image-generation/upscale
+acceptance until the owner sends a real inbound request and the reply/asset
+correlation is recorded.
+
 ## 2026-09-29 Kurisu GPT-SoVITS v2Pro MPS production cutover — applied; owner acceptance pending
 
 The production `amadeus-tts` cutover is applied from source commit `606270b`.
