@@ -27,9 +27,11 @@ class FakeDashboard:
             if path == "/api/combos": return {"combos": self.combos}
         self.writes.append((method, path, body))
         if method == "POST" and path == "/api/providers":
-            self.connections.append({"name": body["name"], "provider": body["provider"], "providerSpecificData": body["providerSpecificData"]})
+            self.connections.append({"id": f"provider-{len(self.connections)}", "name": body["name"], "provider": body["provider"], "providerSpecificData": body["providerSpecificData"]})
         if method == "PUT" and path == "/api/models/alias": self.aliases[body["alias"]] = body["model"]
-        if method == "DELETE": self.combos = []
+        if method == "DELETE" and path.startswith("/api/providers/"):
+            self.connections = [item for item in self.connections if str(item.get("id")) != path.rsplit("/", 1)[1]]
+        if method == "DELETE" and path.startswith("/api/combos/"): self.combos = []
         return {"success": True}
 
 
@@ -53,6 +55,15 @@ class ProvisionTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "alias_drift"):
             routes.ensure_alias(api, "amadeus-asr", "selfhosted-stt/model")
         self.assertFalse(api.writes)
+
+    def test_tts_connection_switch_is_bounded_to_known_adapter_and_local_urls(self):
+        api = FakeDashboard()
+        api.connections = [{"id": "tts-1", "name": routes.TTS_CONNECTION, "provider": routes.TTS_PROVIDER,
+                            "providerSpecificData": {"baseUrl": routes.TTS_LOCAL_URL}}]
+        self.assertEqual(routes.ensure_tts_connection(api, "test-only", routes.TTS_ADAPTER_URL), "replaced")
+        self.assertEqual(api.connections[0]["providerSpecificData"]["baseUrl"], routes.TTS_ADAPTER_URL)
+        with self.assertRaisesRegex(RuntimeError, "connection_drift"):
+            routes.ensure_tts_connection(api, "test-only", "http://unexpected")
 
     def test_runtime_gate_and_post_alias_restart(self):
         with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0)) as run:

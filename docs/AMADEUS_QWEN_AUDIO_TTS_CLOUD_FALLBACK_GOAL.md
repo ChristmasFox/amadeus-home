@@ -44,7 +44,8 @@ qwen-audio-3.0-tts-flash
 官方声音复刻文档确认：
 
 - Qwen-Audio-TTS 支持声音复刻；
-- 音频样本建议 10～20 秒；
+- 音频样本建议 10～20 秒，官方允许最长 60 秒；本 Goal 可使用已授权且满足质量要求的 46 秒样本；
+- `max_prompt_audio_length` 按官方 API 合法范围固定为 30 秒上限；它不改变原始样本允许 60 秒的校验边界；
 - 创建音色时通过 `target_model` 绑定模型；
 - Qwen-Audio-TTS Flash 的 `target_model` 可使用 `qwen-audio-3.0-tts-flash`；
 - 创建音色返回 `voice_id`；
@@ -68,7 +69,7 @@ qwen-audio-3.0-tts-flash
 - 不停止或替换当前本地 TTS，直到云端候选通过对照和真实验收。
 - 不同时运行第二个本地 1.7B 模型。
 - 不把云端 API Key、voice_id、参考音频 URL、音频内容或私有目标写入 Git。
-- 不把本地 46 秒 reference 直接上传云端；先制作独立的 10～20 秒、授权、干净的复刻样本。
+- 仅上传仓库外受保护、已授权、干净的样本；10～20 秒为推荐长度，最长 60 秒，因此符合质量要求的现有 46 秒 reference 可直接使用。
 - 不在没有 `--apply` 或等价显式边界时修改运行中的 9Router、OpenClaw 或 CasaOS。
 - 不把 HTTP 4xx 参数错误、鉴权错误、模型不存在、余额/权限错误伪装成 fallback 成功。
 
@@ -135,7 +136,7 @@ infra/docker/casaos/9router/tts-bridge.mjs
 
 ### Phase 1 — 准备复刻样本
 
-- 从 operator-owned Kurisu source 中选择 10～20 秒日语样本；
+- 从 operator-owned Kurisu source 中选择 10～60 秒日语样本（10～20 秒推荐；当前 46 秒样本需通过受保护校验）；
 - 保持单人、无音乐、低混响、无明显剪辑和稳定音量；
 - 音频只存于仓库外 0600/受保护目录；
 - 不提交 reference、voice_id、音频 URL 或生成结果；
@@ -395,4 +396,3 @@ Goal 只有在以下全部满足时完成：
 - 需要把不可恢复配置错误静默转换为本地成功。
 
 完成一个 stop condition 后不要通过增加 timeout、无界重试、关键词路由、第二个 Agent、公共 tunnel 或临时容器修改来绕过。
-

@@ -11,6 +11,8 @@ RUN npm install --global 9router@0.5.81 --prefer-online \
 # the model alias, provider selection and credentials remain 9Router-owned.
 RUN apk add --no-cache ffmpeg
 COPY infra/docker/casaos/9router/asr-bridge.mjs /opt/amadeus/asr-bridge.mjs
+COPY infra/docker/casaos/9router/tts-bridge.mjs /opt/amadeus/tts-bridge.mjs
+COPY apps/qwen3-tts-service/kurisu_style.json /opt/amadeus/kurisu_style.json
 COPY infra/docker/casaos/9router/start-9router.mjs /opt/amadeus/start-9router.mjs
 COPY infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs /opt/amadeus/patch-selfhosted-tts-style.mjs
 RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_modules/9router

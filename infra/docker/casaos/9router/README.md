@@ -1,8 +1,12 @@
-# 9Router speech adapter — pinned 0.5.81
+# 9Router speech adapters — pinned 0.5.81
 
-9Router remains the sole model/provider control plane. The companion `asr-bridge.mjs` is a bounded transport adapter for the synchronous Qwen-Audio-3.0-ASR-Flash multimodal-generation contract, **not** an Agent or second router. It listens on container loopback `127.0.0.1:20129`, never publishes a host port, and returns OpenAI-compatible `{ "text": ... }` to 9Router's Self-hosted STT provider. `amadeus-asr` must be an alias for `selfhosted-stt/qwen-audio-3.0-asr-flash`, not the old Chat Combo. TTS uses 9Router Self-hosted TTS -> M204 port 18792 and `amadeus-tts` -> `selfhosted-tts/qwen3-tts-1.7b/kurisu-v1`.
+9Router remains the sole model/provider control plane. The companion `asr-bridge.mjs` is a bounded transport adapter for the synchronous Qwen-Audio-3.0-ASR-Flash multimodal-generation contract, **not** an Agent or second router. It listens on container loopback `127.0.0.1:20129`, never publishes a host port, and returns OpenAI-compatible `{ "text": ... }` to 9Router's Self-hosted STT provider. `amadeus-asr` must be an alias for `selfhosted-stt/qwen-audio-3.0-asr-flash`, not the old Chat Combo.
 
-The image installs npm `9router@0.5.81` and applies `patch-selfhosted-tts-style.mjs` to the compiled self-hosted TTS adapter. The patch is version and anchor guarded, idempotent, and forwards the bounded `style` field from the route's existing options object to `/v1/audio/speech`; no provider, alias, or credential is changed.
+The staged `tts-bridge.mjs` listens on container loopback `127.0.0.1:20130` and keeps the one logical `amadeus-tts` route. It calls the official `qwen-audio-3.0-tts-flash` HTTP API once, then calls the existing M204 `:18792` OminiX service once only for timeout/network/408/429/5xx/empty-or-undecodable-audio failures. HTTP 400/401/403, voice/model mismatches and other configuration errors fail closed. The bridge logs only provider/category/timing/size buckets; it never logs text, audio, Authorization or the protected cloud voice id.
+
+The adapter is disabled until the direct cloud smoke, protected checkpoint and owner acceptance gates pass. The canonical compose template enables it for the explicit release image and expects `AMADEUS_TTS_CLOUD_URL` in the protected guest `9router.env`; the four TTS secret files are uid 1000/mode 0600. `scripts/provision-9router-speech.py` switches only the Self-hosted TTS connection/alias to the adapter after its health check; `--tts-mode local` remains the rollback path.
+
+The image installs npm `9router@0.5.81`, copies the repository-owned TTS bridge and canonical Kurisu cloud-style mapping, and applies `patch-selfhosted-tts-style.mjs` to the compiled self-hosted TTS adapter. The patch is version and anchor guarded, idempotent, and forwards the bounded `style` field from the route's existing options object to `/v1/audio/speech`; no provider, alias, or credential is changed.
 
 ## Protected runtime files (never commit values)
 
@@ -10,6 +14,8 @@ The image installs npm `9router@0.5.81` and applies `patch-selfhosted-tts-style.
 - Guest `/DATA/AppData/9router/secrets/asr-upstream-api-key`: operator-provided upstream key or a protected copy from the existing Qwen provider, uid 1000, mode 0600.
 - Guest `/DATA/AppData/9router/9router.env`: `AMADEUS_ASR_UPSTREAM_URL` with the exact allowlisted multimodal-generation path, matching the key issuer. Official Model Studio uses `<workspace>.<region>.maas.aliyuncs.com`; the existing operator-configured Qwen platform uses `maas.qianwenaiapi.com`. The latter is a distinct authority, not silently equivalent to the original Goal. Preserve the existing API-key, proxy and other settings; no value or workspace identifier belongs in Git.
 - M204 `~/Library/Application Support/Amadeus/speech/tts.token`: existing local TTS token for the Self-hosted TTS connection.
+- Guest `tts-bridge-key`, `tts-cloud-api-key`, `tts-cloud-voice-id`, and `tts-local-key`: prepared by `scripts/prepare-qwen-audio-tts-runtime.sh --apply`; each is protected 0600, never printed, and never committed. When the TTS credential is the same as the existing ASR credential, pass `--reuse-asr-api-key` so the script copies the protected guest ASR key without exposing it. The cloud voice id file contains the `voice_id` returned by the Qwen-Audio-TTS voice-enrollment API; its manifest stores only hashes and the target model.
+- Guest `9router.env` must contain the allowlisted `AMADEUS_TTS_CLOUD_URL` ending in `/api/v1/services/audio/tts/SpeechSynthesizer`. Workspace identifiers and keys remain outside Git.
 - `scripts/provision-9router-speech.py --apply` uses the upstream's protected local CLI token derived within the live container by default; an optional protected dashboard-password file is supported. No password/token is logged or committed.
 
 ## OpenAI/Codex proxy authority on M204
