@@ -45,6 +45,9 @@ Real WhatsApp evidence from the candidate log at 20:54–20:55 local time:
 - Group inbound voice: one inbound `audio/ogg` event and one `auto-reply sent
   (media)` with visible bilingual text and one audio file.
 - No old marker or compatibility symbol appears in the live WhatsApp module.
+- The 9Router log records one successful ASR request for the group audio and
+  one successful cloud TTS request for each voice reply; no duplicate send is
+  associated with either group correlation id.
 
 ## Remaining work
 
