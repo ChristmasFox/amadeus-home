@@ -17,7 +17,7 @@ class SmokeEvidenceTest(unittest.TestCase):
     def test_evidence_is_atomic_and_protected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "evidence.json"
-            smoke.write_evidence(path, [{"status": 200}])
+            smoke.write_evidence(path, [{"status": 200}], "qwen-audio-3.0-tts-flash")
             self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(json.loads(path.read_text())["cases"][0]["status"], 200)
 
@@ -29,7 +29,7 @@ class SmokeEvidenceTest(unittest.TestCase):
             path = root / "evidence.json"
             path.symlink_to(target)
             with self.assertRaisesRegex(RuntimeError, "evidence_file_unprotected"):
-                smoke.write_evidence(path, [])
+                smoke.write_evidence(path, [], "qwen-audio-3.0-tts-flash")
             self.assertEqual(target.read_text(), "keep")
 
     def test_unprotected_parent_is_rejected(self):
@@ -37,7 +37,7 @@ class SmokeEvidenceTest(unittest.TestCase):
             parent = Path(tmp) / "evidence"
             parent.mkdir(mode=0o755)
             with self.assertRaisesRegex(RuntimeError, "evidence_parent_unprotected"):
-                smoke.write_evidence(parent / "result.json", [])
+                smoke.write_evidence(parent / "result.json", [], "qwen-audio-3.0-tts-flash")
 
 
 if __name__ == "__main__":

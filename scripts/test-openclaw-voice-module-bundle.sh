@@ -5,12 +5,11 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/amadeus-voice-bundle.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 tar -C "$ROOT/scripts" -cf - \
   patch-openclaw-whatsapp-voice-lifecycle.mjs openclaw-voice-markers.mjs \
-  openclaw-voice-policy.mjs openclaw-voice-lease.mjs | tar -C "$TMP" -xf -
+  openclaw-voice-lease.mjs | tar -C "$TMP" -xf -
 VOICE_PATCH_BUNDLE="$TMP/patch-openclaw-whatsapp-voice-lifecycle.mjs" node --input-type=module -e '
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 const mod = await import(pathToFileURL(process.env.VOICE_PATCH_BUNDLE));
-assert.equal(mod.resolveAmadeusJapaneseSpeechText("日本語：少し待って。"), "少し待って。");
 assert.match(mod.whatsappIngressQueueHelpers, /runAmadeusWhatsAppVoiceScopedIngress/u);
 console.log("OPENCLAW_VOICE_BUNDLE_IMPORT=passed");
 '

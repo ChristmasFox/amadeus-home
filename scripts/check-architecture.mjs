@@ -106,6 +106,9 @@ export function checkArchitecture(root = REPO_ROOT) {
     'integrations/openclaw/workspace-seed/README.md',
     'package.json',
     'scripts/developer-workflow.sh',
+    'plugins/amadeus/src/reply-envelope.ts',
+    'plugins/amadeus/src/reply-planner.ts',
+    'plugins/amadeus/src/reply-delivery.ts',
   ];
   for (const relative of required) if (!existsSync(join(root, relative))) errors.push(`missing required file: ${relative}`);
 
@@ -153,6 +156,36 @@ export function checkArchitecture(root = REPO_ROOT) {
     errors.push('WhatsApp voice lease global marker has drifted from Amadeus');
   }
   if (voicePrompt.includes("api.on('message_received'") || voicePrompt.includes('event.prompt') || voicePrompt.includes('event.content')) errors.push('voice prompt enrichment must not depend on optional content hooks or copy inbound user content');
+  const replyEnvelopeSource = [
+    text(root, 'plugins/amadeus/src/reply-envelope.ts'),
+    text(root, 'plugins/amadeus/src/reply-planner.ts'),
+    text(root, 'plugins/amadeus/src/reply-delivery.ts'),
+    voicePrompt,
+    text(root, 'scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs'),
+    text(root, 'infra/docker/casaos/9router/tts-bridge.mjs'),
+  ].join('\n');
+  const retiredReplyProtocol = [
+    /\[\[amadeus:/iu,
+    /reply-modality/iu,
+    /stripAmadeusTtsControlMarkers/iu,
+    /ensureAmadeusJapaneseVoiceText/iu,
+    /isAmadeusBilingualVoiceContract/iu,
+    /resolveAmadeusJapaneseSpeechText/iu,
+    /resolveAmadeusReplyModality/iu,
+    /amadeusImplicitTypedWhatsAppVoice/iu,
+    /NO_REPLY/iu,
+    /ttsSupplement/iu,
+    /audioAsVoice/iu,
+  ];
+  for (const pattern of retiredReplyProtocol) if (pattern.test(replyEnvelopeSource)) errors.push(`retired reply protocol remains in active source: ${pattern}`);
+  if (existsSync(join(root, 'plugins/amadeus/src/reply-modality.ts'))) errors.push('retired reply modality module still exists');
+  if (existsSync(join(root, 'scripts/openclaw-voice-policy.mjs'))) errors.push('retired voice policy module still exists');
+  const envelopeSource = text(root, 'plugins/amadeus/src/reply-envelope.ts');
+  for (const token of ['validateReplyEnvelope', 'createSilentEnvelope', 'createTextEnvelope', 'createVoiceEnvelope']) if (!envelopeSource.includes(token)) errors.push(`ReplyEnvelope contract missing ${token}`);
+  const plannerSource = text(root, 'plugins/amadeus/src/reply-planner.ts');
+  for (const token of ['parseTypedReplyPlan', 'resolveReplyEnvelope']) if (!plannerSource.includes(token)) errors.push(`ReplyEnvelope planner missing ${token}`);
+  const deliverySource = text(root, 'plugins/amadeus/src/reply-delivery.ts');
+  for (const token of ['deliverReplyEnvelope', 'deliveryId', 'final_status']) if (!deliverySource.includes(token)) errors.push(`ReplyEnvelope delivery missing ${token}`);
   for (const name of ['registerIdentity', 'registerProductRadar', 'registerMedia', 'registerNas', 'registerHomeLab', 'registerKook', 'registerMarket', 'registerMacosHost', 'registerNotification', 'registerVps']) {
     if (!amadeusSource.includes(name)) errors.push(`amadeus bootstrap does not register ${name}`);
   }

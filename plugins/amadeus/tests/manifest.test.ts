@@ -98,12 +98,12 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /spoken audio MUST be\s+Japanese/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /even if the user asks\s+for Chinese speech/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /For typed input that does not explicitly request voice output, continue the\s+existing text-only path/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /For typed input that does not explicitly request voice output, return/u);
   assert.match(voicePrompt?.appendSystemContext ?? '', /A typed request never impersonates the\s+verified inbound WhatsApp voice lease/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /the same Japanese answer, written naturally with Japanese kanji and kana/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the\s+same Japanese sentence as the 日本語 line/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /\[\[tts:text\]\]/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /do not call the read tool to retrieve that Skill again/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /Write the Japanese line with natural Japanese kanji, hiragana, and katakana/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the Japanese sentence shown on the 日本語 line/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /strict JSON object/u);
+  assert.match(voicePrompt?.appendSystemContext ?? '', /Return one strict JSON object with exactly visibleText, speechText, modality, and emotion/u);
   (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');
   const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
@@ -114,8 +114,8 @@ test('Amadeus registers typed inbound identity context hooks', () => {
       inputProvenance: { kind: 'external_user' },
     },
   ) as { appendSystemContext?: string } | undefined;
-  assert.match(typedPrompt?.appendSystemContext ?? '', /semantically classify the user's requested reply modality/u);
-  assert.match(typedPrompt?.appendSystemContext ?? '', /\[\[amadeus:reply-modality=voice\]\]/u);
+  assert.match(typedPrompt?.appendSystemContext ?? '', /structured reply planner/u);
+  assert.match(typedPrompt?.appendSystemContext ?? '', /"modality":"(?:text|voice)"/u);
   assert.equal(typedPrompt?.appendSystemContext?.includes('one faithful, concise Chinese sentence'), true, 'typed turns receive the canonical Skill protocol');
   if (previousRegistry === undefined) delete globals[WHATSAPP_VOICE_RUNS_GLOBAL];
   else globals[WHATSAPP_VOICE_RUNS_GLOBAL] = previousRegistry;

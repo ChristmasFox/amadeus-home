@@ -67,7 +67,9 @@ for channel in ("whatsapp", "telegram"):
     ]}
 assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
-assert "explicit typed request" in voice_skill and "tts.auto=tagged" in voice_skill
+assert "ReplyEnvelope" in voice_skill and '"modality": "voice"' in voice_skill
+assert '"speechText"' in voice_skill and '"emotion"' in voice_skill
+assert "NO_REPLY" not in voice_skill and "reply-modality" not in voice_skill
 assert "verified inbound WhatsApp voice lease" in voice_skill
 assert "tts" not in c["channels"].get("telegram", {})
 cli = ROOT / "node_modules/.pnpm/openclaw@2026.9.4/node_modules/openclaw/openclaw.mjs"

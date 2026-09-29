@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { createTtsServer, buildCloudRequest, classifyCloudFailure } from './tts-bridge.mjs';
 
@@ -25,10 +26,10 @@ function cloudUrlPayload(url) {
   return JSON.stringify({ request_id: 'request-id-is-not-logged', output: { finish_reason: 'stop', audio: { url } } });
 }
 
-async function request(server, body, token = BRIDGE) {
+async function request(server, body, token = BRIDGE, extraHeaders = {}) {
   const address = server.address();
   return await new Promise((resolve, reject) => {
-    const req = http.request({ hostname: '127.0.0.1', port: address.port, path: '/v1/audio/speech', method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }, (res) => {
+    const req = http.request({ hostname: '127.0.0.1', port: address.port, path: '/v1/audio/speech', method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...extraHeaders } }, (res) => {
       const chunks = [];
       res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
@@ -54,8 +55,9 @@ assert.deepEqual(defaultRequest.input, {
   format: 'mp3',
   sample_rate: 24000,
   language_hints: ['ja'],
+  instruction: defaultRequest.input.instruction,
 });
-assert.equal('instruction' in defaultRequest.input, false);
+assert.equal(typeof defaultRequest.input.instruction, 'string');
 assert.equal(JSON.stringify(defaultRequest).includes('persona'), false);
 const instruction = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'angry', format: 'wav', style: { cloudPersona: 'persona:', emotions: { angry: { cloudInstruction: 'anger' } } } });
 assert.equal(instruction.model, 'qwen-audio-3.1-tts-flash');
@@ -79,7 +81,7 @@ assert.equal(calls.length, 1);
 assert.equal(calls[0].body.model, 'qwen-audio-3.1-tts-flash');
 assert.equal(calls[0].body.input.voice, VOICE31);
 assert.equal(calls[0].body.input.text, base.input);
-assert.equal('instruction' in calls[0].body.input, false);
+assert.equal(typeof calls[0].body.input.instruction, 'string');
 assert.equal(calls[0].auth, `Bearer ${CLOUD}`);
 assert.equal(JSON.stringify(calls[0].body).includes(CLOUD), false);
 assert.equal(JSON.stringify(calls[0].body).includes(VOICE31), true); // payload is sent, never logged
@@ -190,5 +192,78 @@ const invalidServer = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, clou
 await running(invalidServer);
 assert.equal((await request(invalidServer, invalid)).status, 400);
 await close(invalidServer);
+
+// A bounded provider timeout advances through the secondary cloud model and
+// then reaches local within the same caller deadline. No attempt may reset it.
+calls = [];
+const timeoutFallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 100, localTimeoutMs: 200,
+  fetchFn: async (url, options) => {
+    calls.push(String(url));
+    if (calls.length <= 2) return await new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
+    });
+    return response(200, mp3, { 'Content-Type': 'audio/mpeg' });
+  } });
+await running(timeoutFallback);
+const timeoutStarted = Date.now();
+result = await request(timeoutFallback, base, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
+const timeoutElapsed = Date.now() - timeoutStarted;
+assert.equal(result.status, 200);
+assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
+assert.equal(calls.length, 3);
+assert.ok(timeoutElapsed < 700, `deadline exceeded: ${timeoutElapsed}ms`);
+await close(timeoutFallback);
+
+// A cloud audio URL shares the provider deadline with its download. The
+// hanging download is classified as a provider timeout and cannot run past
+// the bounded fallback sequence.
+calls = [];
+const urlTimeout = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 120, localTimeoutMs: 120,
+  fetchFn: async (url, options) => {
+    calls.push(String(url));
+    if (calls.length === 1) return response(200, cloudUrlPayload('https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/audio'));
+    if (calls.length === 2) return await new Promise((resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
+    });
+    return response(200, mp3, { 'Content-Type': 'audio/mpeg' });
+  } });
+await running(urlTimeout);
+const urlTimeoutStarted = Date.now();
+result = await request(urlTimeout, base, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
+const urlTimeoutElapsed = Date.now() - urlTimeoutStarted;
+assert.equal(result.status, 200);
+assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
+assert.ok(urlTimeoutElapsed < 700, `URL deadline exceeded: ${urlTimeoutElapsed}ms`);
+await close(urlTimeout);
+
+// A format conversion that never closes is bounded by the same provider
+// deadline; the local provider can still return a valid requested format.
+calls = [];
+const ffmpegTimeout = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 120, localTimeoutMs: 120,
+  fetchFn: async (url) => {
+    calls.push(String(url));
+    return calls.length <= 2 ? response(200, cloudPayload(mp3)) : response(200, wav, { 'Content-Type': 'audio/wav' });
+  },
+  spawnFn: () => {
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stdin = new EventEmitter();
+    child.stdin.end = () => {};
+    child.kill = () => {};
+    return child;
+  } });
+await running(ffmpegTimeout);
+const ffmpegStarted = Date.now();
+result = await request(ffmpegTimeout, { ...base, response_format: 'wav' }, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
+const ffmpegElapsed = Date.now() - ffmpegStarted;
+assert.equal(result.status, 200);
+assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
+assert.equal(result.body.subarray(0, 4).toString(), 'RIFF');
+assert.equal(calls.length, 3);
+assert.ok(ffmpegElapsed < 700, `ffmpeg deadline exceeded: ${ffmpegElapsed}ms`);
+await close(ffmpegTimeout);
 
 console.log('TTS_BRIDGE_TEST=passed');
