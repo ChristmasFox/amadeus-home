@@ -43,3 +43,7 @@ The current cloud `default` request is a pure voice-clone baseline: `text`, mode
 The protected `amadeus-tts` bridge uses the bounded order `qwen-audio-3.1-tts-flash` -> `qwen-audio-3.0-tts-flash` -> M204 OminiX local fallback. Production health/owner acceptance and rollback evidence are recorded in `docs/PROJECT_STATE.md` and the dated `.agent/checkpoints/` entries.
 
 Older completed Goals/checkpoints remain historical evidence, not live instructions.
+
+## Latest live checkpoint — 2026-09-29
+
+The isolated GPT-SoVITS v2Pro candidate loaded on MPS and produced Japanese audio. An 8-line, identical-text Qwen 3.1 versus GPT-SoVITS A/B set and a five-run warm benchmark are stored outside Git under `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/`. Production `com.amadeus.qwen3-tts` remains unchanged and healthy on PID `18387`; the PoC is loopback-only on `127.0.0.1:19870`. Current status is `WAITING_FOR_OWNER_LISTENING`; do not integrate or mark this Goal complete before the owner gives the character-identity verdict.
