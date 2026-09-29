@@ -348,6 +348,7 @@ MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR" \
   "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml \
+  "$OPENCLAW_APP_DIR/.env" openclaw-compose.env.before \
   "$RADAR_COMPOSE_FILE" product-radar-compose.before.yml \
   "$RADAR_ENV_FILE" product-radar.env.before \
   "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml \
@@ -464,10 +465,12 @@ tar -C "$ROOT_DIR/scripts" -cf - \
   '
 
 orb -m "$MACHINE" -u root python3 - \
-  "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" <<'PY'
+  "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" \
+  "$OPENCLAW_APP_DIR/.env" "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" \
+  "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" <<'PY'
 import base64, os, re, sys
 from pathlib import Path
-app_dir, compose_path, encoded, image = sys.argv[1:]
+app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file = sys.argv[1:]
 if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
 content = base64.b64decode(encoded).decode()
 matches = list(re.finditer(r'(?m)^(\s*)image:\s*.*$', content))
@@ -477,7 +480,23 @@ content = content[:m.start()] + m.group(1) + 'image: ' + image + content[m.end()
 Path(app_dir).mkdir(parents=True, exist_ok=True)
 temporary = Path(compose_path + '.codex-tmp')
 temporary.write_text(content); os.chmod(temporary, 0o644); os.replace(temporary, compose_path)
+env_path = Path(compose_env_path)
+env_lines = env_path.read_text().splitlines() if env_path.is_file() else []
+def set_env(key, value):
+    prefix = key + '='
+    for index, line in enumerate(env_lines):
+        if line.strip().startswith(prefix):
+            env_lines[index] = prefix + value
+            return
+    env_lines.append(prefix + value)
+set_env('AMADEUS_IMAGE_SERVICE_BASE_URL', image_service_base_url)
+set_env('AMADEUS_IMAGE_ASSET_HOST_DIR', image_asset_host_dir)
+set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
+set_env('AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets')
+env_path.write_text('\n'.join(env_lines) + '\n')
+os.chmod(env_path, 0o600)
 print('OPENCLAW_COMPOSE=installed')
+print('OPENCLAW_COMPOSE_ENV=installed')
 PY
 
 orb -m "$MACHINE" -u root python3 - \
