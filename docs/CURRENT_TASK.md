@@ -1,8 +1,12 @@
-# Current Task — Kurisu GPT-SoVITS Character Voice PoC (Active Goal)
+# Current Task — Kurisu GPT-SoVITS Character Voice PoC (Completed; next Goal pending)
 
 Date: 2026-09-29 local.
 
-Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`.
+Completed Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`.
+
+Status: `ACCEPTED_FOR_FURTHER_INTEGRATION`.
+
+Owner verdict on 2026-09-29: `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
 
 The owner wants to deploy and validate `bysq/TTS-KurisuMakise` (GPT-SoVITS-v2Pro) on the current macOS host because the target is not generic voice similarity but an immediately recognizable Makise Kurisu voice.
 
@@ -22,7 +26,11 @@ OminiX/MLX GPT-SoVITS is a follow-up feasibility target only after the candidate
 
 Model checkpoints, pretrained weights, reference WAVs, generated audio, caches and secrets stay outside Git. Bind the PoC locally, run non-root, discover a free port, and do not assume `18793` is available because the existing Kurisu tuner already owns a host endpoint.
 
-This Goal does **not** authorize adding GPT-SoVITS to `amadeus-tts` production routing. A successful outcome is `ACCEPTED_FOR_FURTHER_INTEGRATION`, followed by a separate integration/MLX decision.
+This Goal is closed without production routing changes. The MPS runtime, model/reference assets and all external A/B, benchmark and smoke evidence remain retained outside Git.
+
+Next planned Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
+It is intentionally not active; do not execute it until the owner invokes `/goal`.
+That next Goal uses GPT-SoVITS v2Pro MPS as primary and retains Qwen 3.1 -> Qwen 3.0 -> OminiX as fallback. MLX conversion is deferred to a later independent optimization Goal.
 
 ---
 
@@ -46,4 +54,4 @@ Older completed Goals/checkpoints remain historical evidence, not live instructi
 
 ## Latest live checkpoint — 2026-09-29
 
-The isolated GPT-SoVITS v2Pro candidate loaded on MPS and produced Japanese audio. An 8-line, identical-text Qwen 3.1 versus GPT-SoVITS A/B set and a five-run warm benchmark are stored outside Git under `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/`. Production `com.amadeus.qwen3-tts` remains unchanged and healthy on PID `18387`; the PoC is loopback-only on `127.0.0.1:19870`. Current status is `WAITING_FOR_OWNER_LISTENING`; do not integrate or mark this Goal complete before the owner gives the character-identity verdict.
+The isolated GPT-SoVITS v2Pro candidate loaded on MPS and produced Japanese audio. An 8-line, identical-text Qwen 3.1 versus GPT-SoVITS A/B set and a five-run warm benchmark are stored outside Git under `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/`. Production `com.amadeus.qwen3-tts` remains unchanged and healthy on PID `18387`; the PoC is loopback-only on `127.0.0.1:19870`. Current status is `ACCEPTED_FOR_FURTHER_INTEGRATION`; do not execute the next production cutover Goal until a new `/goal` request.
