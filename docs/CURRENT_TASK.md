@@ -1,36 +1,26 @@
-# Current Task — Kurisu GPT-SoVITS Character Voice PoC (Completed; next Goal pending)
+# Current Task — Kurisu GPT-SoVITS MPS Production Cutover
 
 Date: 2026-09-29 local.
 
-Completed Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`.
+Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
 
-Status: `ACCEPTED_FOR_FURTHER_INTEGRATION`.
+Status: `IN_PROGRESS`.
 
 Owner verdict on 2026-09-29: `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
 
-The owner wants to deploy and validate `bysq/TTS-KurisuMakise` (GPT-SoVITS-v2Pro) on the current macOS host because the target is not generic voice similarity but an immediately recognizable Makise Kurisu voice.
+The accepted PoC is now being promoted to the production `amadeus-tts` boundary. GPT-SoVITS v2Pro MPS is the only intended resident local TTS; the normal order is GPT-SoVITS MPS -> Qwen Audio 3.1 -> Qwen Audio 3.0. OminiX Qwen3-TTS remains a protected rollback asset only.
 
-Execute the Goal as an isolated host-native PoC. The existing production TTS chain must remain unchanged during validation:
+The production cutover must preserve OpenClaw, ReplyEnvelope, channel behavior, protected Qwen voice IDs and bounded request contracts. It must not perform MLX conversion.
 
 ```text
-qwen-audio-3.1-tts-flash
+GPT-SoVITS v2Pro MPS :19871
+  -> qwen-audio-3.1-tts-flash
   -> qwen-audio-3.0-tts-flash
-  -> existing OminiX Qwen3-TTS fallback :18792
 ```
 
-Cloud `default` remains the accepted zero-delta pure-clone baseline. Do not change its instruction/persona/style behavior, cloud model order, protected voice IDs, OpenClaw, channel behavior or ReplyEnvelope while evaluating GPT-SoVITS.
+Phase 0 dry-run has verified the current OminiX service and tuner on `:18792`/`:18793`, the validated GPT-SoVITS runtime on `:19870`, and the PoC proxy on `:56708`. The protected rollback checkpoint must be created before any service mutation.
 
-First prove the candidate with pinned upstream GPT-SoVITS v2Pro on the Mac, Japanese synthesis and a clean neutral Kurisu reference. Then generate controlled Qwen 3.1 vs GPT-SoVITS A/B samples from identical Japanese text. Character identity is the primary acceptance criterion; latency/RTF and memory are secondary viability evidence. The owner listening verdict gates all further work.
-
-OminiX/MLX GPT-SoVITS is a follow-up feasibility target only after the candidate clearly wins the voice-quality A/B. Do not spend the main PoC on MLX conversion or production integration before that gate.
-
-Model checkpoints, pretrained weights, reference WAVs, generated audio, caches and secrets stay outside Git. Bind the PoC locally, run non-root, discover a free port, and do not assume `18793` is available because the existing Kurisu tuner already owns a host endpoint.
-
-This Goal is closed without production routing changes. The MPS runtime, model/reference assets and all external A/B, benchmark and smoke evidence remain retained outside Git.
-
-Next planned Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
-It is intentionally not active; do not execute it until the owner invokes `/goal`.
-That next Goal uses GPT-SoVITS v2Pro MPS as the only resident local TTS, keeps Qwen Audio 3.1 -> Qwen Audio 3.0 as the live fallback chain, and safely stops/disables the OminiX `:18792` service and `:18793` tuner while retaining complete OminiX rollback assets. MLX conversion is deferred to a later independent optimization Goal.
+The earlier PoC Goal is closed as `ACCEPTED_FOR_FURTHER_INTEGRATION`; its MPS runtime, model/reference assets and external A/B evidence remain retained outside Git.
 
 ---
 

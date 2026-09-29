@@ -2,7 +2,7 @@
 
 Date: 2026-09-29
 Type: production TTS integration / staged cutover / rollback-controlled runtime change
-Status: `PLANNED_NOT_ACTIVE` — execute only after the owner invokes `/goal`.
+Status: `IN_PROGRESS` — owner explicitly restarted production cutover on 2026-09-29.
 Prerequisite: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md` completed as `ACCEPTED_FOR_FURTHER_INTEGRATION`.
 
 ## Decision already made

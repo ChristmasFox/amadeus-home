@@ -19,7 +19,7 @@ import urllib.request
 ASR_PROVIDER = "selfhosted-stt"
 TTS_PROVIDER = "selfhosted-tts"
 ASR_CONNECTION = "Amadeus ASR (Qwen upstream)"
-TTS_CONNECTION = "Amadeus TTS (Qwen cloud primary + M204 fallback)"
+TTS_CONNECTION = "Amadeus TTS (GPT-SoVITS MPS primary + Qwen fallback)"
 ASR_URL = "http://127.0.0.1:20129/v1/audio/transcriptions"
 TTS_ADAPTER_URL = "http://127.0.0.1:20130"
 TTS_LOCAL_URL = "http://host.docker.internal:18792"
@@ -167,16 +167,16 @@ def main() -> None:
     parser.add_argument("--tts-key-file")
     parser.add_argument("--asr-model", default="qwen-audio-3.0-asr-flash")
     parser.add_argument("--tts-mode", choices=("adapter", "local"), default="adapter",
-                        help="adapter is cloud-primary with bounded M204 fallback; local is rollback-only")
+                        help="adapter is GPT-SoVITS-MPS-primary with Qwen fallback; local is OminiX rollback-only")
     parser.add_argument("--machine", default="nyannyan", help="M204 OrbStack guest")
     args = parser.parse_args()
     if not args.apply:
         print("MODE=dry-run; no local CLI auth, provider or alias write")
         print("ASR=selfhosted-stt via local bounded DashScope multimodal protocol adapter; old Chat Combo retired after guest checkpoint")
         if args.tts_mode == "adapter":
-            print("TTS=selfhosted-tts via container TTS adapter (Qwen-Audio-TTS primary; M204 18792 fallback)")
+            print("TTS=selfhosted-tts via container TTS adapter (GPT-SoVITS MPS primary; Qwen 3.1 -> 3.0 fallback)")
         else:
-            print("TTS=selfhosted-tts via M204 native port 18792 (rollback-only mode)")
+            print("TTS=selfhosted-tts via M204 native port 18792 (OminiX rollback-only mode)")
         return
     if not all((args.asr_key_file, args.tts_key_file)):
         parser.error("--apply requires protected ASR bridge/TTS key files")
