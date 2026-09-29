@@ -24,18 +24,18 @@ All post-apply evidence is under
 
 On 2026-09-29 the latest active reference was changed through the
 source-controlled MPS manager to
-`WAV/crs_0274.WAV_0000000000_0000250880.wav`, using its matching dataset
-transcript `間違いかもしれないから、やらないの?だったらあんたは一生、あの小汚いビルに引きこもって王様を気取っていなさい。`.
-The source changes are commits `e5e38ad` and `b0e6ecc`, applied with
+`WAV/crs_0695.WAV_0000000000_0000224000.wav`, using its matching dataset
+transcript `裸の得意点が作れていないなら、つまり被験者はブラックホールに放り込まれるのと同じだから。`.
+The source change is commit `fa434dc`, applied with
 `infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply`. Per owner request, the
 active model directory retains only this one reference WAV alongside the
-GPT-SoVITS weights. The previous active `crs_2263` WAV, before-change plist,
+GPT-SoVITS weights. The previous active `crs_0274` WAV, before-change plist,
 live health and final synthesis are retained in protected rollback/evidence at
-`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T194251Z-0274/`.
-The checkpoint also records the externally installed NLTK `cmudict` and
-`averaged_perceptron_tagger_eng` resources required by the GPT-SoVITS runtime.
-Earlier `crs_1373`, `crs_0695` and `crs_2263` reference evidence remains in
-their respective external checkpoints.
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T200040Z-0695/`.
+The earlier `crs_1373`, `crs_2263` and `crs_0274` reference evidence remains in
+their respective external checkpoints. The NLTK `cmudict` and
+`averaged_perceptron_tagger_eng` resources remain installed under the declared
+`NLTK_DATA` runtime path.
 
 The Goal remains open as `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`. The owner
 still needs to verify the real production voice turn for Japanese
