@@ -1,4 +1,24 @@
-# Current Task — Kurisu TTS Tuner (Completed / release 1.6.7)
+# Current Task — Qwen Audio TTS cloud primary (Completed)
+
+Date: 2026-09-29 local. Completed Goal:
+`docs/AMADEUS_QWEN_AUDIO_TTS_CLOUD_FALLBACK_GOAL.md`.
+
+The cloud `qwen-audio-3.0-tts-flash` voice path is now the primary
+`amadeus-tts` provider, with the existing M204 OminiX service as a bounded
+transient-failure fallback. The 46-second protected reference was cloned,
+the 9Router adapter was deployed, and real owner WhatsApp acceptance passed
+for typed voice, ordinary text-only, and inbound voice-note turns. The owner
+confirmed both generated voice replies were playable. Evidence and rollback
+details are recorded in
+`.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-cloud-release.md` and
+the protected runtime paths listed there.
+
+There is no active Goal after this completion. Older completed Goals below
+remain historical evidence and are not live instructions.
+
+---
+
+# Previous Task — Kurisu TTS Tuner (Completed / release 1.6.7)
 
 Date: 2026-09-28 local. Completed Goal: `docs/AMADEUS_KURISU_TTS_TUNER_GOAL.md`.
 
