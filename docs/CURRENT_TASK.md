@@ -34,17 +34,17 @@ sample update below does not apply this group-channel patch. Keep the Goal open
 until the patch is explicitly applied and real group-channel acceptance passes.
 
 Reference update on 2026-09-29: the latest active production reference is now
-`WAV/crs_2263.WAV_0000155200_0000352960.wav` with the matching transcript
-`そして世界はパラレルワールドとしてここではマユリが助からなかった未来が`.
+`WAV/crs_0274.WAV_0000000000_0000250880.wav` with the matching transcript
+`間違いかもしれないから、やらないの?だったらあんたは一生、あの小汚いビルに引きこもって王様を気取っていなさい。`.
 The change is applied through
-`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply` from source commit
-`f342339`. Per owner request, the active model directory retains only this one
-reference WAV; the GPT-SoVITS weights remain. The prior active `crs_1373`
-reference, before-change plist, live health and real synthesis are retained in
-the protected checkpoint
-`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T192942Z-2263/`.
-The superseded `crs_0695` evidence remains at
-`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T184957Z-0695/`.
+`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply` from source commits
+`e5e38ad` and `b0e6ecc`. Per owner request, the active model directory retains
+only this one reference WAV; the GPT-SoVITS weights remain. The prior active
+`crs_2263` reference, before-change plist, live health and final synthesis are
+retained in the protected checkpoint
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T194251Z-0274/`.
+The earlier `crs_1373`, `crs_0695` and `crs_2263` evidence remains in their
+respective external checkpoints.
 
 ```text
 GPT-SoVITS v2Pro MPS :19871
