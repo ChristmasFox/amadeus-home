@@ -157,7 +157,10 @@ def main() -> None:
     rows = []
     for emotion, fmt, text in CASES:
         started = time.monotonic()
-        payload = {"model": args.target_model, "input": {"text": text, "voice": voice, "format": fmt, "sample_rate": 24000, "language_hints": ["ja"], "instruction": cloud_instruction(style, emotion)}}
+        request_input = {"text": text, "voice": voice, "format": fmt, "sample_rate": 24000, "language_hints": ["ja"]}
+        if emotion != "default":
+            request_input["instruction"] = cloud_instruction(style, emotion)
+        payload = {"model": args.target_model, "input": request_input}
         status, result, request_id = request_json(endpoint, key, payload)
         if status != 200: raise RuntimeError(f"qwen_tts_smoke_http_{status}")
         raw = audio_from_response(result, fmt)

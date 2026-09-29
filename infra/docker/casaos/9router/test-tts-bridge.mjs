@@ -47,6 +47,16 @@ async function close(server) {
 }
 
 const base = { model: 'amadeus-tts', voice: 'kurisu-v1', input: '短いテストです。', response_format: 'mp3', style: 'default' };
+const defaultRequest = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'default', format: 'mp3' });
+assert.deepEqual(defaultRequest.input, {
+  text: base.input,
+  voice: VOICE31,
+  format: 'mp3',
+  sample_rate: 24000,
+  language_hints: ['ja'],
+});
+assert.equal('instruction' in defaultRequest.input, false);
+assert.equal(JSON.stringify(defaultRequest).includes('persona'), false);
 const instruction = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'angry', format: 'wav', style: { cloudPersona: 'persona:', emotions: { angry: { cloudInstruction: 'anger' } } } });
 assert.equal(instruction.model, 'qwen-audio-3.1-tts-flash');
 assert.equal(instruction.input.voice, VOICE31);
@@ -69,6 +79,7 @@ assert.equal(calls.length, 1);
 assert.equal(calls[0].body.model, 'qwen-audio-3.1-tts-flash');
 assert.equal(calls[0].body.input.voice, VOICE31);
 assert.equal(calls[0].body.input.text, base.input);
+assert.equal('instruction' in calls[0].body.input, false);
 assert.equal(calls[0].auth, `Bearer ${CLOUD}`);
 assert.equal(JSON.stringify(calls[0].body).includes(CLOUD), false);
 assert.equal(JSON.stringify(calls[0].body).includes(VOICE31), true); // payload is sent, never logged
