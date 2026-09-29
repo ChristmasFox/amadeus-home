@@ -12,6 +12,7 @@
     <key>PYTHONUNBUFFERED</key><string>1</string>
     <key>PYTORCH_ENABLE_MPS_FALLBACK</key><string>1</string>
     <key>HF_HOME</key><string>__MODEL_CACHE__</string>
+    <key>NLTK_DATA</key><string>__POC_ROOT__/venv/nltk_data</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>

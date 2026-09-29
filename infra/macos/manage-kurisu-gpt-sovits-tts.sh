@@ -25,6 +25,7 @@ GPT_ROOT="$POC_ROOT/GPT-SoVITS"
 PYTHON="$POC_ROOT/venv/bin/python"
 API_SCRIPT="$GPT_ROOT/api_v2.py"
 CONFIG="$POC_ROOT/config/tts-infer-mps.yaml"
+NLTK_DATA="$POC_ROOT/venv/nltk_data"
 REFERENCE_AUDIO="$POC_ROOT/models/TTS-KurisuMakise/WAV/crs_0274.WAV_0000000000_0000250880.wav"
 ADAPTER_SCRIPT="$ROOT/scripts/kurisu-gpt-sovits-production-adapter.py"
 TOKEN_DIR="$HOME/Library/Application Support/Amadeus/speech"
@@ -79,6 +80,7 @@ fi
 
 [[ -x "$PYTHON" && -s "$API_SCRIPT" && -s "$CONFIG" && -s "$REFERENCE_AUDIO" && -s "$ADAPTER_SCRIPT" ]] || { echo 'GPT-SoVITS PoC runtime or adapter missing' >&2; exit 1; }
 [[ -x /opt/homebrew/bin/ffmpeg ]] || { echo 'ffmpeg missing at /opt/homebrew/bin/ffmpeg' >&2; exit 1; }
+[[ -e "$NLTK_DATA/corpora/cmudict" && -e "$NLTK_DATA/taggers/averaged_perceptron_tagger_eng" ]] || { echo 'GPT-SoVITS NLTK runtime data missing' >&2; exit 1; }
 
 if [[ "$MODE" == dry-run ]]; then
   echo 'ACTION=install LaunchAgents for GPT-SoVITS API and authenticated adapter'
