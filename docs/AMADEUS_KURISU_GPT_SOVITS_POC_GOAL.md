@@ -318,6 +318,17 @@ Pass if the candidate can remain loaded or be started on demand without unaccept
 
 **Out of scope for this Goal.** Even if A-C pass, do not change `amadeus-tts` routing until a separate integration decision is approved.
 
+## Recorded owner outcome and closure
+
+- Gate A passed: the pinned upstream GPT-SoVITS v2Pro candidate loaded on MPS and produced intelligible Japanese.
+- Gate B passed on 2026-09-29: the owner listened to the controlled paired samples and judged GPT-SoVITS clearly more like Makise Kurisu than Qwen 3.1: `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
+- Gate C passed for continued evaluation: warm RTF was `0.432–0.552`, API RSS was approximately `1.67–1.77 GiB`, and the candidate remained isolated on loopback.
+- Final outcome: `ACCEPTED_FOR_FURTHER_INTEGRATION`.
+- The MPS PoC runtime and all external A/B, benchmark and smoke evidence remain retained; no cleanup or deletion is authorized by this closure.
+- Production routing, protected voice IDs, OpenClaw, 9Router and the existing `:18792`/`:18793` services were not changed.
+- The next phase is a separate, not-yet-active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
+- MLX conversion is explicitly deferred to a later independent optimization Goal.
+
 ## Expected repository changes
 
 Keep the implementation small. Likely tracked artifacts, subject to Codex discovery, are:

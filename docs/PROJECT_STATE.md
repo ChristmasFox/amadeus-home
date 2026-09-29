@@ -1,6 +1,6 @@
 # Project State — 2026-09-29
 
-## 2026-09-29 Kurisu GPT-SoVITS v2Pro PoC — awaiting owner listening
+## 2026-09-29 Kurisu GPT-SoVITS v2Pro PoC — accepted for further integration
 
 The isolated `bysq/TTS-KurisuMakise` v2Pro candidate loaded on MPS and passed
 Japanese synthesis. An 8-line identical-text A/B set against the direct
@@ -10,8 +10,12 @@ remain outside Git under
 The candidate listens only on loopback `127.0.0.1:19870`; it is not managed by
 launchd and has not been added to production routing. Production
 `com.amadeus.qwen3-tts` remains healthy on PID `18387`, ports `18792`/`18793`,
-and its Phase 0 file hashes are unchanged. The owner listening verdict is the
-acceptance gate; no MLX conversion or production integration is authorized yet.
+and its Phase 0 file hashes are unchanged. The owner listened to the paired
+files and judged `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
+The outcome is `ACCEPTED_FOR_FURTHER_INTEGRATION`; the MPS runtime and all
+external evidence remain retained. The next planned Goal is
+`docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`, not yet active.
+MLX conversion is deferred to a later independent optimization Goal.
 Evidence and rollback scope are recorded in
 `.agent/checkpoints/2026-09-29-amadeus-kurisu-gpt-sovits-poc-ab.md`.
 

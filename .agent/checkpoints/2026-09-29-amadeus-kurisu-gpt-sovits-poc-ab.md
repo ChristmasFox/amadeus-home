@@ -1,7 +1,7 @@
 # Amadeus Kurisu GPT-SoVITS PoC checkpoint
 
 - Date: 2026-09-29 (Asia/Shanghai)
-- Status: `WAITING_FOR_OWNER_LISTENING`
+- Status: `ACCEPTED_FOR_FURTHER_INTEGRATION`
 - Source commit at PoC start: `ea3ec283e3cd71646698430416c9562c942a7b33`
 - Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`
 
@@ -21,6 +21,7 @@
 - A/B raw and loudness-normalized files remain outside Git under the same `phase5` directory; the report records the Qwen model as `qwen-audio-3.1-tts-flash`, emotion `default`, and instruction absent.
 - Warm benchmark evidence: `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/phase6/warm-benchmark.json`; five requests returned HTTP 200, warm RTF was `0.432–0.552`, and API RSS samples were approximately `1.67–1.77 GiB`.
 - Host memory free percentage changed from `51%` before the warm sequence to `32%` afterward; this is viability evidence, not an acceptance verdict.
+- Owner listening verdict on 2026-09-29: `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
 
 ## Production invariants
 
@@ -31,4 +32,4 @@
 
 ## Gate
 
-The PoC is not complete and must not be integrated into `amadeus-tts` yet. The next action is owner listening of the paired normalized files, followed by an explicit character-identity verdict. Only a clear Kurisu win authorizes a separate MLX/OminiX compatibility follow-up.
+The owner accepted the candidate for further integration. The PoC is complete as `ACCEPTED_FOR_FURTHER_INTEGRATION`; the MPS runtime and all external evidence remain retained. Production `amadeus-tts` routing is unchanged. The next planned Goal is `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`, which is not active until the owner invokes `/goal`. MLX conversion remains deferred to a later independent optimization Goal.
