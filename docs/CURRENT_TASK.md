@@ -30,7 +30,7 @@ This Goal is closed without production routing changes. The MPS runtime, model/r
 
 Next planned Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
 It is intentionally not active; do not execute it until the owner invokes `/goal`.
-That next Goal uses GPT-SoVITS v2Pro MPS as primary and retains Qwen 3.1 -> Qwen 3.0 -> OminiX as fallback. MLX conversion is deferred to a later independent optimization Goal.
+That next Goal uses GPT-SoVITS v2Pro MPS as the only resident local TTS, keeps Qwen Audio 3.1 -> Qwen Audio 3.0 as the live fallback chain, and safely stops/disables the OminiX `:18792` service and `:18793` tuner while retaining complete OminiX rollback assets. MLX conversion is deferred to a later independent optimization Goal.
 
 ---
 
