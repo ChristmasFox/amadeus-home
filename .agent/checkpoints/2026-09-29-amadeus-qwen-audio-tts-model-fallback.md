@@ -9,6 +9,11 @@ Date: 2026-09-29 Asia/Shanghai.
 - Live image: `local/9router:git-13cbd559ab24-20260929T062044Z`.
 - Protected rollback checkpoint: `/DATA/AppData/9router/backups/qwen-audio-tts-deploy-20260929T062044Z`.
 - Existing OpenClaw image and ASR route were preserved.
+- The upstream registry metadata pull stalled in the local BuildKit builder. The
+  immutable tag was therefore built with the already deployed, protected
+  9Router image as its local base and only the repository-owned TTS bridge was
+  overlaid; the resulting image digest was loaded into the guest before the
+  compose switch.
 
 ## Fallback contract
 
