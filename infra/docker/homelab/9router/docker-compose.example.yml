@@ -41,6 +41,7 @@ services:
       AMADEUS_TTS_BRIDGE_ENABLED: "1"
       AMADEUS_TTS_BRIDGE_KEY_FILE: /run/secrets/tts_bridge_key
       AMADEUS_TTS_CLOUD_API_KEY_FILE: /run/secrets/tts_cloud_api_key
+      AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE: /run/secrets/tts_cloud_voice_id_31
       AMADEUS_TTS_CLOUD_VOICE_ID_FILE: /run/secrets/tts_cloud_voice_id
       AMADEUS_TTS_LOCAL_KEY_FILE: /run/secrets/tts_local_key
       AMADEUS_TTS_STYLE_FILE: /opt/amadeus/kurisu_style.json
@@ -53,6 +54,7 @@ services:
       - ${NINE_ROUTER_ASR_BRIDGE_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/asr-bridge-key}:/run/secrets/asr_bridge_key:ro
       - ${NINE_ROUTER_TTS_BRIDGE_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/tts-bridge-key}:/run/secrets/tts_bridge_key:ro
       - ${NINE_ROUTER_TTS_CLOUD_API_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/tts-cloud-api-key}:/run/secrets/tts_cloud_api_key:ro
+      - ${NINE_ROUTER_TTS_CLOUD_VOICE_ID_31_HOST_FILE:-/DATA/AppData/9router/secrets/tts-cloud-voice-id-31}:/run/secrets/tts_cloud_voice_id_31:ro
       - ${NINE_ROUTER_TTS_CLOUD_VOICE_ID_HOST_FILE:-/DATA/AppData/9router/secrets/tts-cloud-voice-id}:/run/secrets/tts_cloud_voice_id:ro
       - ${NINE_ROUTER_TTS_LOCAL_KEY_HOST_FILE:-/DATA/AppData/9router/secrets/tts-local-key}:/run/secrets/tts_local_key:ro
     x-casaos:

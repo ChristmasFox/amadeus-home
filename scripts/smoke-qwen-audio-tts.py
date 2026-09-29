@@ -19,7 +19,11 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps/qwen3-tts-service"))
 from kurisu_style import cloud_instruction, load_style
 
-TARGET_MODEL = "qwen-audio-3.0-tts-flash"
+SUPPORTED_TARGET_MODELS = (
+    "qwen-audio-3.1-tts-flash",
+    "qwen-audio-3.0-tts-flash",
+)
+TARGET_MODEL = SUPPORTED_TARGET_MODELS[1]
 DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer"
 MAX_AUDIO = 12 * 1024 * 1024
 # The provider may inline audio as base64, which expands the binary payload.
@@ -43,6 +47,12 @@ def endpoint_ok(value: str) -> str:
     allowed = host in {"dashscope.aliyuncs.com", "maas.qianwenaiapi.com"} or host.endswith(".maas.aliyuncs.com")
     if parsed.scheme != "https" or not allowed or parsed.path != "/api/v1/services/audio/tts/SpeechSynthesizer":
         raise RuntimeError("invalid_qwen_tts_endpoint")
+    return value
+
+
+def validate_target_model(value: str) -> str:
+    if value not in SUPPORTED_TARGET_MODELS:
+        raise RuntimeError("unsupported_qwen_tts_target_model")
     return value
 
 
@@ -99,7 +109,7 @@ def duration_seconds(raw: bytes, fmt: str) -> float | None:
             return None
 
 
-def write_evidence(path: Path, rows: list[dict]) -> None:
+def write_evidence(path: Path, rows: list[dict], model: str) -> None:
     path = path.expanduser()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     parent_stat = path.parent.lstat()
@@ -109,7 +119,7 @@ def write_evidence(path: Path, rows: list[dict]) -> None:
         existing = path.lstat()
         if path.is_symlink() or not path.is_file() or existing.st_mode & 0o077:
             raise RuntimeError("evidence_file_unprotected")
-    payload = json.dumps({"schemaVersion": 1, "model": TARGET_MODEL, "cases": rows, "createdAt": int(time.time())}, indent=2) + "\n"
+    payload = json.dumps({"schemaVersion": 1, "model": model, "cases": rows, "createdAt": int(time.time())}, indent=2) + "\n"
     fd, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent), text=True)
     try:
         os.fchmod(fd, 0o600)
@@ -127,14 +137,16 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--endpoint", default=os.environ.get("AMADEUS_TTS_CLOUD_URL", DEFAULT_ENDPOINT))
+    parser.add_argument("--target-model", default=TARGET_MODEL, choices=SUPPORTED_TARGET_MODELS)
     parser.add_argument("--api-key-file")
     parser.add_argument("--voice-id-file")
     parser.add_argument("--evidence-file")
     args = parser.parse_args()
     endpoint = endpoint_ok(args.endpoint)
+    validate_target_model(args.target_model)
     if not args.apply:
         print("MODE=dry-run; no cloud synthesis, audio download or evidence write")
-        print("TARGET_MODEL=" + TARGET_MODEL)
+        print("TARGET_MODEL=" + args.target_model)
         print("CASES=default,angry,soft,embarrassed; formats=mp3,wav")
         return
     for name in ("api_key_file", "voice_id_file", "evidence_file"):
@@ -145,12 +157,14 @@ def main() -> None:
     rows = []
     for emotion, fmt, text in CASES:
         started = time.monotonic()
-        payload = {"model": TARGET_MODEL, "input": {"text": text, "voice": voice, "format": fmt, "sample_rate": 24000, "language_hints": ["ja"], "instruction": cloud_instruction(style, emotion)}}
+        payload = {"model": args.target_model, "input": {"text": text, "voice": voice, "format": fmt, "sample_rate": 24000, "language_hints": ["ja"], "instruction": cloud_instruction(style, emotion)}}
         status, result, request_id = request_json(endpoint, key, payload)
         if status != 200: raise RuntimeError(f"qwen_tts_smoke_http_{status}")
         raw = audio_from_response(result, fmt)
         rows.append({"emotion": emotion, "format": fmt, "status": status, "requestIdSha256": hashlib.sha256((request_id or "").encode()).hexdigest() if request_id else None, "bytes": len(raw), "audioSha256": hashlib.sha256(raw).hexdigest(), "durationSeconds": duration_seconds(raw, fmt), "totalMs": round((time.monotonic() - started) * 1000, 1)})
-    write_evidence(Path(args.evidence_file).expanduser(), rows)
+    # Keep the model in the protected evidence so the result cannot be
+    # mistaken for the legacy 3.0 smoke.
+    write_evidence(Path(args.evidence_file).expanduser(), rows, args.target_model)
     print("CLOUD_SMOKE=passed")
     print("CASES=4")
     print("EVIDENCE=protected")
