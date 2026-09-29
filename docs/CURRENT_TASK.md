@@ -4,7 +4,7 @@ Date: 2026-09-29 local.
 
 Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
 
-Status: `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`.
+Status: `IN_PROGRESS_GROUP_CHANNEL_FIX`.
 
 Owner verdict on 2026-09-29: `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
 
@@ -20,8 +20,17 @@ resident local TTS (`127.0.0.1:19870` API plus authenticated adapter on
 `qwen-audio-3.1-tts-flash`, and the executable bridge test proves the exact
 `qwen-audio-3.1-tts-flash` -> `qwen-audio-3.0-tts-flash` order. Full evidence is
 under `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
-The remaining gate is a real owner-channel acceptance turn; do not close the
-Goal before that acceptance is recorded.
+The owner confirmed direct-message behavior but reported that the group-chat
+behavior is wrong. The first diagnosis is retained at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/group-chat-diagnosis-20260929T173255Z/`:
+GPT-SoVITS and ASR both completed, while concurrent group arrivals allowed a
+later text run to overlap the voice run and win the final WhatsApp delivery
+boundary. A repo-only candidate fix now serializes every inbound WhatsApp
+arrival per session in `scripts/openclaw-voice-lease.mjs`; focused lifecycle,
+bundle, policy, voice-failure, bilingual-envelope, group-policy, syntax, diff,
+and secrets checks pass. This fix is not deployed yet, so the live production
+image and MPS runtime remain unchanged. Keep the Goal open until the patch is
+explicitly applied and real group-channel acceptance passes.
 
 ```text
 GPT-SoVITS v2Pro MPS :19871

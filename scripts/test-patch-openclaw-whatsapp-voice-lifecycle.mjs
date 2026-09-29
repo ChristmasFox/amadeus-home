@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import { patchCoreSource, patchDispatchTtsContextSource, patchMessageActionSource, patchWhatsAppSource, patchWhatsAppIngressQueueSource, patchWhatsAppTypingIndicatorSource, REPLY_ENVELOPE_MESSAGE_ACTION_MARKER, REPLY_ENVELOPE_WHATSAPP_BOUNDARY_MARKER, CORE_MARKER, WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
-import { resolveVoiceFollowup } from './openclaw-voice-lease.mjs';
+import { resolveVoiceFollowup, whatsappHelpers, whatsappIngressQueueHelpers } from './openclaw-voice-lease.mjs';
 
 assert.equal(resolveVoiceFollowup(undefined, 'typed'), false);
 assert.equal(resolveVoiceFollowup({ messageId: 'voice' }, 'typed'), true);
@@ -66,4 +67,35 @@ assert.match(patchedMessageAction, /sessionKey: params\.sessionKey/u);
 assert.match(patchedMessageAction, /runId: params\.runId/u);
 assert.match(patchedMessageAction, /amadeusEnvelope\?\.modality !== "voice"/u);
 assert.equal(patchMessageActionSource(patchedMessageAction), patchedMessageAction);
+
+const queueContext = {
+  globalThis: {},
+  Map,
+  Promise,
+  setInterval,
+  clearInterval,
+  setTimeout,
+  clearTimeout,
+};
+vm.runInNewContext(`${whatsappHelpers}\n${whatsappIngressQueueHelpers}\nglobalThis.runIngress = runAmadeusWhatsAppVoiceScopedIngress;`, queueContext);
+const ingressEvents = [];
+let activeIngressRuns = 0;
+await Promise.all([
+  ['first', 25],
+  ['second', 5],
+  ['third', 0],
+].map(([messageId, delay]) => queueContext.globalThis.runIngress({
+  sessionKey: 'agent:main:whatsapp:group:fixture',
+  messageId,
+  isVoice: false,
+  run: async () => {
+    activeIngressRuns += 1;
+    assert.equal(activeIngressRuns, 1);
+    ingressEvents.push(`${messageId}:start`);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    ingressEvents.push(`${messageId}:end`);
+    activeIngressRuns -= 1;
+  },
+})));
+assert.deepEqual(ingressEvents, ['first:start', 'first:end', 'second:start', 'second:end', 'third:start', 'third:end']);
 console.log('OPENCLAW_REPLY_ENVELOPE_LIFECYCLE=passed');
