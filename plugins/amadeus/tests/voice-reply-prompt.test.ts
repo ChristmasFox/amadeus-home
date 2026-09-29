@@ -62,6 +62,24 @@ test('typed planner is strict and invalid plans default to text', () => {
   assert.deepEqual(planTypedReply('{"modality":"voice","answer_plan":"answer_with_voice","unknown":true}'), { modality: 'text', answer_plan: 'answer_with_text' });
 });
 
+test('internal control tokens never leak into visible or spoken reply text', () => {
+  const legacyControlToken = '[[amadeus:reply-modality=voice]]';
+  const legacyText = `${legacyControlToken} 中文：收到。\n\n日本語：了解したわ。`;
+  const textEnvelope = resolveReplyEnvelope(context, legacyText, { modality: 'text', answer_plan: 'answer_with_text' });
+  assert.equal(textEnvelope.visibleText, '中文：收到。\n\n日本語：了解したわ。');
+  assert.doesNotMatch(textEnvelope.visibleText, /\[\[/u);
+
+  const voiceEnvelope = resolveReplyEnvelope(context, JSON.stringify({
+    visibleText: legacyText,
+    speechText: `${legacyControlToken}了解したわ。`,
+    modality: 'voice',
+    emotion: 'default',
+  }), { modality: 'voice', answer_plan: 'answer_with_voice' });
+  assert.equal(voiceEnvelope.visibleText, '中文：收到。\n\n日本語：了解したわ。');
+  assert.equal(voiceEnvelope.speechText, '了解したわ。');
+  assert.doesNotMatch(voiceEnvelope.speechText ?? '', /\[\[/u);
+});
+
 test('concurrent envelopes are isolated by run and duplicate delivery is suppressed', async () => {
   const delivery = createReplyDeliveryContext();
   const first = createTextEnvelope({ ...context, runId: 'one', deliveryId: 'one:text' }, '一');

@@ -80,6 +80,14 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function containsInternalControlToken(value: unknown): boolean {
+  return typeof value === 'string' && /\[\[[^\]\r\n]+\]\]/u.test(value);
+}
+
+function visibleReplyText(value: string): string {
+  return value.replace(/\[\[[^\]\r\n]+\]\]/gu, '').trim();
+}
+
 function immutable<T extends object>(value: T): Readonly<T> {
   return Object.freeze(value);
 }
@@ -97,8 +105,10 @@ export function validateReplyEnvelope(value: unknown): value is ReplyEnvelope {
     || typeof envelope.silent !== 'boolean'
     || typeof envelope.visibleText !== 'string'
     || !SOURCES.has(envelope.source as ReplySource)) return false;
+  if (containsInternalControlToken(envelope.visibleText)) return false;
   if (envelope.emotion !== undefined && !EMOTIONS.has(envelope.emotion as ReplyEmotion)) return false;
   if (envelope.speechText !== undefined && typeof envelope.speechText !== 'string') return false;
+  if (containsInternalControlToken(envelope.speechText)) return false;
   if (envelope.fallbackReason !== undefined
     && !['planner_invalid', 'speech_missing', 'tts_failed'].includes(String(envelope.fallbackReason))) return false;
   if (envelope.silent) {
@@ -147,7 +157,7 @@ export function createTextEnvelope(
     origin: context.origin,
     modality: 'text',
     silent: false,
-    visibleText: visibleText.trim(),
+    visibleText: visibleReplyText(visibleText),
     source: options.source,
     ...(options.fallbackReason ? { fallbackReason: options.fallbackReason } : {}),
   });
@@ -168,8 +178,8 @@ export function createVoiceEnvelope(
     origin: context.origin,
     modality: 'voice',
     silent: false,
-    visibleText: visibleText.trim(),
-    speechText: speechText.trim(),
+    visibleText: visibleReplyText(visibleText),
+    speechText: visibleReplyText(speechText),
     emotion,
     source,
   });
@@ -208,4 +218,3 @@ export function parseStructuredReplyJson(value: unknown): ReturnType<typeof pars
     return null;
   }
 }
-
