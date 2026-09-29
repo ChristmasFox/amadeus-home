@@ -31,6 +31,9 @@ export interface AmadeusConfig {
   longbridgeSdkTokenDir: string;
   macHostAgentBaseUrl: string;
   macHostAgentTokenFile: string;
+  imageAssetServiceBaseUrl: string;
+  imageAssetServiceTokenFile: string;
+  imageAssetContainerRoot: string;
   kiwiVmBaseUrl: string;
   kiwiVmCredentialsFile: string;
   vpsSshHost: string;
@@ -61,6 +64,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const identityPresetsFile = optionalFile('identityPresetsFile', 'IDENTITY_PRESETS_FILE');
   const longbridgeClientSecretFile = optionalFile('longbridgeClientSecretFile', 'LONGBRIDGE_CLIENT_SECRET_FILE');
   const macHostAgentTokenFile = optionalFile('macHostAgentTokenFile', 'MAC_HOST_AGENT_TOKEN_FILE');
+  const imageAssetServiceTokenFile = optionalFile('imageAssetServiceTokenFile', 'AMADEUS_IMAGE_SERVICE_TOKEN_FILE');
   const ownerDeliverySetting = value.ownerNotificationDeliveryEnabled ?? env('OWNER_NOTIFICATION_DELIVERY_ENABLED');
   let ownerNotificationDeliveryEnabled: boolean;
   if (ownerDeliverySetting === undefined) ownerNotificationDeliveryEnabled = true;
@@ -93,6 +97,9 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     longbridgeSdkTokenDir: file('longbridgeSdkTokenDir', 'LONGBRIDGE_SDK_TOKEN_DIR', '/home/node/.longbridge/openapi/tokens'),
     macHostAgentBaseUrl: file('macHostAgentBaseUrl', 'MAC_HOST_AGENT_BASE_URL', 'http://host.docker.internal:18791').replace(/\/$/u, ''),
     macHostAgentTokenFile: macHostAgentTokenFile ?? '/run/secrets/mac_host_agent_token',
+    imageAssetServiceBaseUrl: file('imageAssetServiceBaseUrl', 'AMADEUS_IMAGE_SERVICE_BASE_URL', 'http://host.docker.internal:18792').replace(/\/$/u, ''),
+    imageAssetServiceTokenFile: imageAssetServiceTokenFile ?? '/run/secrets/amadeus_image_service_token',
+    imageAssetContainerRoot: file('imageAssetContainerRoot', 'AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets').replace(/\/$/u, ''),
     kiwiVmBaseUrl: file('kiwiVmBaseUrl', 'KIWIVM_BASE_URL', 'https://api.64clouds.com/v1').replace(/\/$/u, ''),
     kiwiVmCredentialsFile: file('kiwiVmCredentialsFile', 'KIWIVM_CREDENTIALS_FILE', '/run/secrets/kiwivm_credentials.json'),
     vpsSshHost: file('vpsSshHost', 'VPS_SSH_HOST', 'amadeus-gateway'),

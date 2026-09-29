@@ -419,11 +419,12 @@ orb -m "$MACHINE" -u root python3 - \
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" \
-  "$HOME_LAB_SERVICE_BASE_URL" "$OPENWRT_BASE_URL" "$MAC_HOST_AGENT_BASE_URL" "$CONTROL_UI_LAN_ORIGIN" <<'PY'
+  "$HOME_LAB_SERVICE_BASE_URL" "$OPENWRT_BASE_URL" "$MAC_HOST_AGENT_BASE_URL" "$CONTROL_UI_LAN_ORIGIN" \
+  "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" <<'PY'
 import os, sys
 from pathlib import Path
 path = Path(sys.argv[1])
-host, user, home_lab_service_base_url, openwrt_base_url, mac_host_agent_base_url, control_ui_lan_origin = sys.argv[2:]
+host, user, home_lab_service_base_url, openwrt_base_url, mac_host_agent_base_url, control_ui_lan_origin, image_service_base_url, image_asset_host_dir, image_service_token_host_file = sys.argv[2:]
 lines = path.read_text().splitlines() if path.is_file() else []
 def set_env(key, value):
     prefix = key + '='
@@ -438,6 +439,9 @@ set_env('HOME_LAB_SERVICE_BASE_URL', home_lab_service_base_url)
 set_env('OPENWRT_BASE_URL', openwrt_base_url)
 set_env('MAC_HOST_AGENT_BASE_URL', mac_host_agent_base_url)
 set_env('CONTROL_UI_LAN_ORIGIN', control_ui_lan_origin)
+set_env('AMADEUS_IMAGE_SERVICE_BASE_URL', image_service_base_url)
+set_env('AMADEUS_IMAGE_ASSET_HOST_DIR', image_asset_host_dir)
+set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
 path.write_text('\n'.join(lines) + '\n')
 os.chmod(path, 0o600)
 print('MAC_CONTROL_PROFILE=installed')
@@ -534,9 +538,9 @@ amadeus = json.dumps(json.loads(Path(sys.argv[2]).read_text()), ensure_ascii=Fal
 skills = json.dumps(json.loads(Path(sys.argv[3]).read_text()), ensure_ascii=False)
 for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pubg_compare_stats','pubg_get_match','pubg_get_review_facts','pubg_query_team_damage','pubg_prefetch_telemetry','pubg_telemetry_sync_report']:
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
-for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
+for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','amadeus_image_upscale','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus','voice-reply','market','macos-host','vps']:
+for name in ['pubg','amadeus','voice-reply','market','macos-host','image-upscale','vps']:
     if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY

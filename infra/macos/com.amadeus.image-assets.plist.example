@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.amadeus.image-assets</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__AMADEUS_IMAGE_SERVICE_VENV_DIR__/bin/python</string>
+    <string>__AMADEUS_IMAGE_SERVICE_INSTALL_DIR__/service.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>AMADEUS_IMAGE_ASSET_ROOT</key>
+    <string>__AMADEUS_IMAGE_ASSET_ROOT__</string>
+    <key>AMADEUS_IMAGE_SERVICE_TOKEN_FILE</key>
+    <string>__AMADEUS_IMAGE_SERVICE_TOKEN_FILE__</string>
+    <key>AMADEUS_IMAGE_SERVICE_BIND</key>
+    <string>__AMADEUS_IMAGE_SERVICE_BIND__</string>
+    <key>AMADEUS_IMAGE_SERVICE_PORT</key>
+    <string>__AMADEUS_IMAGE_SERVICE_PORT__</string>
+    <key>REALESRGAN_MLX_WEIGHTS_DIR</key>
+    <string>__AMADEUS_IMAGE_SERVICE_MODEL_CACHE_DIR__</string>
+    <key>AMADEUS_IMAGE_REGISTRY_PATH</key>
+    <string>__AMADEUS_IMAGE_REGISTRY_PATH__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+</dict>
+</plist>

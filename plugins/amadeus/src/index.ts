@@ -11,6 +11,7 @@ import { registerNotification } from './capabilities/notification/register.js';
 import { registerProductRadar } from './capabilities/product-radar/register.js';
 import { registerVps } from './capabilities/vps/register.js';
 import { registerVoiceReplyPrompt } from './voice-reply-prompt.js';
+import { registerImageAssets } from './image-assets.js';
 import { registerIdentityLifecycle, registerOwnerNotificationWorker } from './shared/lifecycle.js';
 
 const entry = definePluginEntry({
@@ -22,6 +23,7 @@ const entry = definePluginEntry({
     const config = configFor(api);
     registerIdentityLifecycle(api);
     registerVoiceReplyPrompt(api);
+    registerImageAssets(api);
     registerOwnerNotificationWorker(api, config);
     registerIdentity(api);
     registerProductRadar(api);

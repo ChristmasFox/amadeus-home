@@ -26,6 +26,9 @@ services:
       OWNER_NOTIFICATION_OUTBOX_DIR: /var/lib/openclaw/notifications
       OWNER_NOTIFICATION_DELIVERY_ENABLED: ${OWNER_NOTIFICATION_DELIVERY_ENABLED:-true}
       OWNER_WHATSAPP_ACCOUNT_ID: ${OWNER_WHATSAPP_ACCOUNT_ID:-secondary}
+      AMADEUS_IMAGE_SERVICE_BASE_URL: ${AMADEUS_IMAGE_SERVICE_BASE_URL:-http://host.docker.internal:18792}
+      AMADEUS_IMAGE_SERVICE_TOKEN_FILE: /run/secrets/amadeus_image_service_token
+      AMADEUS_IMAGE_ASSET_CONTAINER_ROOT: ${AMADEUS_IMAGE_ASSET_CONTAINER_ROOT:-/var/lib/amadeus/image-assets}
       TZ: Asia/Shanghai
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
@@ -44,12 +47,14 @@ services:
       - ${OPENCLAW_OWNER_TARGET_HOST_FILE:-/DATA/AppData/openclaw/secrets/owner-whatsapp-target}:/run/secrets/owner_whatsapp_target:ro
       - ${OPENCLAW_MAC_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-ssh-key}:/run/secrets/mac_ssh_key:ro
       - ${OPENCLAW_MAC_HOST_AGENT_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
+      - ${OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/amadeus-image-service-token}:/run/secrets/amadeus_image_service_token:ro
       - ${OPENCLAW_LONGBRIDGE_CLIENT_ID_HOST_FILE:-/DATA/AppData/openclaw/secrets/longbridge-client-id}:/run/secrets/longbridge_client_id:ro
       - ${OPENCLAW_KOOK_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/kook-bot-token}:/run/secrets/kook_bot_token:ro
       - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro
       - ${OPENCLAW_VPS_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key}:/run/secrets/vps_ssh_key:ro
       - ${OPENCLAW_VPS_SSH_KNOWN_HOSTS_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts}:/run/secrets/vps_ssh_known_hosts:ro
       - ${OPENCLAW_OWNER_OUTBOX_HOST_DIR:-/DATA/AppData/openclaw/notifications}:/var/lib/openclaw/notifications
+      - ${AMADEUS_IMAGE_ASSET_HOST_DIR:-/Volumes/Avalon/amadeus/image-assets}:/var/lib/amadeus/image-assets:ro
     ports:
       - "${OPENCLAW_BIND_ADDRESS:-0.0.0.0}:${OPENCLAW_PORT:-18789}:18789"
     networks:
