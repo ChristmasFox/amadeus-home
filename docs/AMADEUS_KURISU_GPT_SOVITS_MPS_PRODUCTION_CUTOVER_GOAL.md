@@ -15,23 +15,23 @@ The validated candidate is the pinned `bysq/TTS-KurisuMakise` GPT-SoVITS-v2Pro r
 
 ## Goal
 
-Promote the already validated GPT-SoVITS v2Pro MPS implementation into the production `amadeus-tts` boundary as the primary TTS provider, while retaining the current fallback order:
+Promote the already validated GPT-SoVITS v2Pro MPS implementation into the production `amadeus-tts` boundary as the only resident local TTS provider, with the normal fallback order:
 
 ```text
 GPT-SoVITS v2Pro MPS primary
   -> qwen-audio-3.1-tts-flash
   -> qwen-audio-3.0-tts-flash
-  -> existing OminiX Qwen3-TTS fallback
 ```
 
-The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts, protected Qwen model-bound voice IDs, bounded request policy, deterministic fallback behavior and a tested rollback to the current accepted production path.
+The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts, protected Qwen model-bound voice IDs, bounded request policy, deterministic fallback behavior and a tested rollback to the current accepted production path. The OminiX Qwen3-TTS runtime is retained as a complete rollback asset but is not part of the post-cutover normal route or resident local TTS set.
 
 ## Non-goals
 
 - Do not convert the model to MLX or change the OminiX MLX runtime in this Goal.
 - Do not retrain or fine-tune the candidate.
 - Do not change OpenClaw persona, Skills, ReplyEnvelope, channel routing or sender policy.
-- Do not remove Qwen 3.1, Qwen 3.0 or the existing OminiX fallback.
+- Do not remove Qwen 3.1 or Qwen 3.0, their protected model-bound voice IDs, or the complete OminiX rollback assets.
+- Do not leave OminiX Qwen3-TTS resident after cutover; safely boot it out and disable its `:18792` service and `:18793` tuner.
 - Do not expose GPT-SoVITS, reference audio, checkpoints or tokens publicly.
 - Do not delete the MPS PoC runtime or external acceptance evidence.
 - Do not change production until the explicit apply phase after all dry-run and compatibility checks pass.
@@ -40,9 +40,9 @@ The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts,
 
 ### Phase 0 — freeze and protected checkpoint
 
-1. Read the current Git/live state and verify the production `amadeus-tts` route, LaunchAgent, ports `18792`/`18793`, protected tokens and current health.
-2. Record the current source hashes, provider/alias state and exact rollback artifacts outside Git.
-3. Confirm the candidate checkpoint/reference hashes still match the PoC checkpoint and that no shared cache or unrelated service will be removed.
+1. Read the current Git/live state and verify the production `amadeus-tts` route, OminiX LaunchAgent, ports `18792`/`18793`, protected tokens and current health.
+2. Record the current source hashes, provider/alias state and complete OminiX rollback artifacts outside Git.
+3. Confirm the candidate checkpoint/reference hashes still match the PoC checkpoint and that stopping OminiX will not delete shared caches or unrelated service data.
 
 ### Phase 1 — production-compatible GPT-SoVITS boundary
 
@@ -54,35 +54,38 @@ The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts,
 
 ### Phase 2 — fallback routing design and dry-run
 
-1. Define the provider/adapter changes required so GPT-SoVITS is attempted first and provider failures/timeouts fall through to Qwen 3.1, Qwen 3.0 and OminiX in that order.
+1. Define the provider/adapter changes required so GPT-SoVITS is attempted first and provider failures/timeouts fall through to Qwen 3.1 and then Qwen 3.0.
 2. Preserve the current Qwen `default` pure-clone contract and model-bound voice IDs on every fallback path.
-3. Verify that only the intended `amadeus-tts` route changes; unrelated ASR, image, OpenClaw and other provider/Combo state must fail closed on drift.
+3. Verify that OminiX is not selected by the normal post-cutover route; it is rollback-only. Unrelated ASR, image, OpenClaw and other provider/Combo state must fail closed on drift.
 4. Run repository tests, type/syntax checks, `pnpm check:secrets`, `git diff --check` and a no-write route smoke before any runtime mutation.
 
 ### Phase 3 — explicit staged apply
 
 1. Require an explicit `--apply` or equivalent operator confirmation for each runtime/provider write.
-2. Stop or drain the current resident TTS process before starting GPT-SoVITS; never overlap two resident speech models on the 24 GB host.
-3. Apply the smallest possible provider/adapter/LaunchAgent change, retaining the current Qwen/OminiX artifacts for immediate rollback.
-4. Restart only the affected service, then verify health, auth, model/voice contract, Japanese synthesis and fallback dispatch.
+2. Start and warm GPT-SoVITS MPS first on a dedicated production boundary, then stop or drain the current OminiX resident TTS process; never overlap two resident local speech models on the 24 GB host.
+3. Safely boot out the OminiX `com.amadeus.qwen3-tts` service, verify no OminiX listener remains on `:18792`, and safely disable the `:18793` tuner. Preserve the complete OminiX source, model, voice, token, plist and rollback checkpoint outside Git.
+4. Apply the smallest possible provider/adapter/route change so only GPT-SoVITS is resident locally and Qwen 3.1 -> Qwen 3.0 are the live fallbacks.
+5. Verify health, auth, model/voice contract, Japanese synthesis and fallback dispatch after the cutover.
 
 ### Phase 4 — acceptance and rollback evidence
 
 1. Run direct GPT-SoVITS health and synthesis smoke with the production request contract.
 2. Run 9Router `amadeus-tts` provider smoke and verify the primary provider identity.
-3. Force controlled GPT-SoVITS failure cases and prove Qwen 3.1 -> Qwen 3.0 -> OminiX fallback ordering without fabricating successful primary evidence.
-4. Run a real owner-channel voice acceptance test covering Japanese pronunciation, character identity, visible text behavior and typed-text isolation.
-5. Record latency/RTF, RSS, host memory pressure and rollback status in a dated checkpoint.
-6. If any acceptance or resource gate fails, restore the protected Qwen/OminiX route and verify health before stopping.
+3. Force controlled GPT-SoVITS failure cases and prove Qwen 3.1 -> Qwen 3.0 fallback ordering without fabricating successful primary evidence; verify OminiX is not attempted in the normal route.
+4. Verify the OminiX service and tuner are stopped, disabled and no longer listening on `:18792`/`:18793`, while all rollback assets remain readable and protected.
+5. Run a real owner-channel voice acceptance test covering Japanese pronunciation, character identity, visible text behavior and typed-text isolation.
+6. Record latency/RTF, RSS, host memory pressure and rollback status in a dated checkpoint.
+7. If any acceptance or resource gate fails, restore the protected pre-cutover Qwen 3.1 -> Qwen 3.0 -> OminiX route, including the OminiX service/tuner, and verify health before stopping.
 
 ## Acceptance gates
 
 - **Compatibility:** GPT-SoVITS serves the existing authenticated `amadeus-tts` request contract without changing caller behavior.
 - **Primary identity:** owner confirms the production path still sounds recognizably like Kurisu and matches the accepted PoC.
-- **Fallback correctness:** forced primary failures produce Qwen 3.1, then Qwen 3.0, then OminiX in the exact documented order.
-- **Host viability:** one resident MPS model coexists with the host workload without unacceptable sustained memory pressure or swap growth.
+- **Fallback correctness:** forced primary failures produce Qwen 3.1, then Qwen 3.0 in the exact documented order; OminiX is not part of the normal post-cutover route.
+- **Host viability:** GPT-SoVITS MPS is the only resident local TTS model and coexists with the host workload without unacceptable sustained memory pressure or swap growth.
+- **OminiX retirement:** the OminiX `:18792` service and `:18793` tuner are safely stopped and disabled, with no OminiX process/listener left resident; complete rollback assets remain protected and usable.
 - **Safety:** secrets and private media stay outside Git; no public listener or second Agent/runtime is introduced.
-- **Rollback:** a single protected checkpoint restores the current accepted Qwen 3.1 -> Qwen 3.0 -> OminiX route and all health checks pass.
+- **Rollback:** a single protected checkpoint restores the pre-cutover Qwen 3.1 -> Qwen 3.0 -> OminiX route, including OminiX service/tuner recovery, and all health checks pass.
 
 ## Completion evidence
 
