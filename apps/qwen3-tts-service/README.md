@@ -1,5 +1,11 @@
 # M204 native Qwen3-TTS service (1.6.0 released)
 
+## Cloud Qwen-Audio-TTS migration boundary
+
+The production source remains the single resident OminiX Qwen3-TTS-MLX service on M204 `:18792`. The staged 9Router `tts-bridge.mjs` makes official `qwen-audio-3.0-tts-flash` voice cloning the primary path and uses this service as a bounded, one-request fallback for transient cloud failures. It sends the same `amadeus-tts` contract (`kurisu-v1`, seven bounded emotion ids and `wav`/`mp3`/`opus`) to either backend; OpenClaw and 9Router never see the cloud model id.
+
+`kurisu_style.json` is the semantic source of truth. Its `cloudPersona`/`cloudInstruction` fields are a deterministic cloud rendering of the seven emotions; the existing `instruct` and generation controls remain the local OminiX contract. Cloud enrollment is performed only by `scripts/provision-qwen-audio-tts-voice.py --apply --confirm-authorized-sample` with an operator-owned protected 10–60 second Japanese sample (10–20 seconds recommended, 60 seconds maximum) and a protected temporary HTTPS URL. The enrollment request keeps the API's `max_prompt_audio_length` at its valid 30-second maximum. When the Qwen credential is the existing guest ASR secret, use `--api-key-guest-file /DATA/AppData/9router/secrets/asr-upstream-api-key`; the value is read only into process memory. The script stores only a protected voice-id file plus a hash manifest. `scripts/smoke-qwen-audio-tts.py --apply` exercises cloud-only default/angry/soft/embarrassed MP3/WAV cases; it never invokes the local fallback.
+
 ## Kurisu TTS Tuner (1.6.7)
 
 The native OminiX process serves an owner-local, dependency-free tuner at

@@ -19,9 +19,12 @@ import urllib.request
 ASR_PROVIDER = "selfhosted-stt"
 TTS_PROVIDER = "selfhosted-tts"
 ASR_CONNECTION = "Amadeus ASR (Qwen upstream)"
-TTS_CONNECTION = "Amadeus TTS (M204)"
+TTS_CONNECTION = "Amadeus TTS (Qwen cloud primary + M204 fallback)"
 ASR_URL = "http://127.0.0.1:20129/v1/audio/transcriptions"
-TTS_URL = "http://host.docker.internal:18792"
+TTS_ADAPTER_URL = "http://127.0.0.1:20130"
+TTS_LOCAL_URL = "http://host.docker.internal:18792"
+# Compatibility alias used by the existing deterministic provisioning tests.
+TTS_URL = TTS_ADAPTER_URL
 TTS_MODEL = "selfhosted-tts/qwen3-tts-1.7b/kurisu-v1"
 
 
@@ -57,10 +60,40 @@ def ensure_alias(api: Dashboard, alias: str, model: str) -> str:
     return "created"
 
 
+def ensure_tts_connection(api: Dashboard, key: str, url: str) -> str:
+    """Reconcile only the named Amadeus TTS connection after its checkpoint.
+
+    The provider model/alias stays stable; switching adapter/local changes only
+    this one known connection URL.  Any unrelated drift fails closed.
+    """
+    if url.rstrip("/") not in {TTS_ADAPTER_URL, TTS_LOCAL_URL}:
+        raise RuntimeError(f"connection_drift:{TTS_CONNECTION}")
+    connections = api.request("GET", "/api/providers").get("connections", [])
+    matches = [c for c in connections if c.get("name") == TTS_CONNECTION]
+    if len(matches) > 1:
+        raise RuntimeError(f"ambiguous_connection:{TTS_CONNECTION}")
+    if not matches:
+        return ensure_connection(api, TTS_PROVIDER, TTS_CONNECTION, key, url)
+    current = matches[0]
+    current_url = current.get("providerSpecificData", {}).get("baseUrl", "").rstrip("/")
+    if current.get("provider") != TTS_PROVIDER:
+        raise RuntimeError(f"connection_drift:{TTS_CONNECTION}")
+    if current_url == url.rstrip("/"):
+        return "existing"
+    if current_url not in {TTS_ADAPTER_URL, TTS_LOCAL_URL} or not current.get("id"):
+        raise RuntimeError(f"connection_drift:{TTS_CONNECTION}")
+    api.request("DELETE", "/api/providers/" + str(current["id"]))
+    api.request("POST", "/api/providers", {
+        "provider": TTS_PROVIDER, "name": TTS_CONNECTION, "apiKey": key,
+        "providerSpecificData": {"baseUrl": url},
+    })
+    return "replaced"
+
+
 def backup_live(machine: str) -> str:
     """SQLite online backup plus protected env/compose and image metadata in guest."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    target = f"/DATA/AppData/9router/backups/voice-1.5.3-{stamp}"
+    target = f"/DATA/AppData/9router/backups/qwen-audio-tts-{stamp}"
     code = r"""import os,sqlite3,shutil,sys,json,subprocess
 from pathlib import Path
 from nine_router_management import Dashboard, local_cli_token, protected
@@ -71,7 +104,7 @@ for source,name in [('/DATA/AppData/9router/9router.env','9router.env'),('/var/l
     p=Path(source)
     if p.is_file(): shutil.copyfile(p,out/name); (out/name).chmod(0o600)
 image=subprocess.check_output(['docker','inspect','9router','--format','{{.Config.Image}} {{.Image}}'],text=True).strip()
-(out/'runtime.json').write_text(json.dumps({'image_and_digest':image,'purpose':'voice-1.5.3-rollback'},indent=2)+'\n')
+(out/'runtime.json').write_text(json.dumps({'image_and_digest':image,'purpose':'qwen-audio-tts-rollback'},indent=2)+'\n')
 for p in out.iterdir(): p.chmod(0o600)
 print('BACKUP_CREATED')
 """
@@ -96,11 +129,11 @@ def retire_old_combo(api: Dashboard) -> str:
     return "retired"
 
 
-def runtime_speech_ready(machine: str) -> bool:
+def runtime_speech_ready(machine: str, tts_url: str = TTS_ADAPTER_URL) -> bool:
     """Refuse alias writes until both actual speech endpoints are healthy."""
-    probe = r'''Promise.all([
+    probe = f'''Promise.all([
       fetch("http://127.0.0.1:20129/healthz"),
-      fetch("http://host.docker.internal:18792/healthz")
+      fetch("{tts_url}/healthz")
     ]).then(([asr,tts])=>process.exit(asr.ok&&tts.ok?0:1)).catch(()=>process.exit(1))'''
     return subprocess.run(["orb", "-m", machine, "-u", "root", "docker", "exec", "9router", "node", "-e", probe],
                           capture_output=True, timeout=12).returncode == 0
@@ -129,22 +162,29 @@ def restart_and_verify(machine: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="explicitly select the default plan-only mode")
     parser.add_argument("--dashboard-password-file")
     parser.add_argument("--asr-key-file")
     parser.add_argument("--tts-key-file")
     parser.add_argument("--asr-model", default="qwen-audio-3.0-asr-flash")
+    parser.add_argument("--tts-mode", choices=("adapter", "local"), default="adapter",
+                        help="adapter is cloud-primary with bounded M204 fallback; local is rollback-only")
     parser.add_argument("--machine", default="nyannyan", help="M204 OrbStack guest")
     args = parser.parse_args()
     if not args.apply:
         print("MODE=dry-run; no local CLI auth, provider or alias write")
         print("ASR=selfhosted-stt via local bounded DashScope multimodal protocol adapter; old Chat Combo retired after guest checkpoint")
-        print("TTS=selfhosted-tts via M204 native port 18792")
+        if args.tts_mode == "adapter":
+            print("TTS=selfhosted-tts via container TTS adapter (Qwen-Audio-TTS primary; M204 18792 fallback)")
+        else:
+            print("TTS=selfhosted-tts via M204 native port 18792 (rollback-only mode)")
         return
     if not all((args.asr_key_file, args.tts_key_file)):
         parser.error("--apply requires protected ASR bridge/TTS key files")
     if "/" in args.asr_model or not args.asr_model.strip():
         parser.error("ASR model id must be a single segment")
-    if not runtime_speech_ready(args.machine):
+    tts_url = TTS_ADAPTER_URL if args.tts_mode == "adapter" else TTS_LOCAL_URL
+    if not runtime_speech_ready(args.machine, tts_url):
         raise RuntimeError("speech_runtime_not_ready; no dashboard write")
     api = Dashboard("http://127.0.0.1:20128",
                     cli_token=None if args.dashboard_password_file else local_cli_token(args.machine))
@@ -154,7 +194,7 @@ def main() -> None:
     checkpoint = backup_live(args.machine)
     print("ROLLBACK_CHECKPOINT=" + checkpoint)
     asr = ensure_connection(api, ASR_PROVIDER, ASR_CONNECTION, protected(args.asr_key_file), ASR_URL)
-    tts = ensure_connection(api, TTS_PROVIDER, TTS_CONNECTION, protected(args.tts_key_file), TTS_URL)
+    tts = ensure_tts_connection(api, protected(args.tts_key_file), tts_url)
     print("ASR_CONNECTION=" + asr)
     print("TTS_CONNECTION=" + tts)
     print("OLD_ASR_COMBO=" + retire_old_combo(api))

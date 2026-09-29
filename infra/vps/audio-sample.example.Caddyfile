@@ -1,0 +1,11 @@
+# Temporary public origin for Qwen-Audio voice enrollment.
+# Remove this site immediately after voice provisioning and delete the DNS
+# record. The sample is served by the local temporary HTTP server through frp.
+audio.nyannyan.top {
+    encode gzip
+    @sample path /reference.wav
+    handle @sample {
+        reverse_proxy 127.0.0.1:18796
+    }
+    respond 404
+}

@@ -72,17 +72,19 @@ def validate_style(raw: Any) -> dict[str, Any]:
     if raw.get("profile") != PROFILE or raw.get("language") != LANGUAGE:
         raise StyleConfigError("invalid_style_identity")
     baseline = _text(raw.get("baseline"), "baseline", allow_empty=False)
+    cloud_persona = _text(raw.get("cloudPersona"), "cloud_persona", allow_empty=False)
     defaults = validate_options(raw.get("generationDefaults", {}))
     emotions = raw.get("emotions")
     if not isinstance(emotions, dict) or set(emotions) != set(EMOTION_SET):
         raise StyleConfigError("invalid_emotion_ids")
-    normalized: dict[str, Any] = {"schemaVersion": STYLE_SCHEMA_VERSION, "profile": PROFILE, "language": LANGUAGE, "baseline": baseline, "generationDefaults": defaults, "emotions": {}}
+    normalized: dict[str, Any] = {"schemaVersion": STYLE_SCHEMA_VERSION, "profile": PROFILE, "language": LANGUAGE, "baseline": baseline, "cloudPersona": cloud_persona, "generationDefaults": defaults, "emotions": {}}
     for emotion in EMOTION_IDS:
         item = emotions[emotion]
-        if not isinstance(item, dict) or set(item) - {"instruct", "generationOverrides"}:
+        if not isinstance(item, dict) or set(item) - {"instruct", "generationOverrides", "cloudInstruction"}:
             raise StyleConfigError("invalid_emotion_config")
         normalized["emotions"][emotion] = {
             "instruct": _text(item.get("instruct", ""), f"{emotion}_instruct"),
+            "cloudInstruction": _text(item.get("cloudInstruction", ""), f"{emotion}_cloud_instruction", allow_empty=False),
             "generationOverrides": validate_options(item.get("generationOverrides", {})),
         }
     return normalized
@@ -116,6 +118,14 @@ def compose(style: dict[str, Any], emotion: str, *, baseline: str | None = None,
         merged.update(validate_options(overrides))
     return effective, merged, style_hash({**normalized, "baseline": baseline_value, "emotions": {**normalized["emotions"], emotion: {**normalized["emotions"][emotion], "instruct": delta}}})
 
+
+
+def cloud_instruction(style: dict[str, Any], emotion: str) -> str:
+    """Compose the bounded cloud instruction without exposing local OminiX prose."""
+    normalized = validate_style(style)
+    if emotion not in EMOTION_SET:
+        raise StyleConfigError("invalid_emotion")
+    return f"{normalized['cloudPersona']}{normalized['emotions'][emotion]['cloudInstruction']}"
 
 def schema() -> dict[str, Any]:
     fields = []

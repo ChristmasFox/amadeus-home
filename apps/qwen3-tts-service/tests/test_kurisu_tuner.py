@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import service
-from kurisu_style import EMOTION_SET, StyleConfigError, load_style, schema, style_hash, validate_options
+from kurisu_style import EMOTION_SET, StyleConfigError, cloud_instruction, load_style, schema, style_hash, validate_options
 from tuner import TunerServer, TunerStorage
 
 
@@ -44,6 +44,15 @@ class StyleTest(unittest.TestCase):
         controls = [style["baseline"], *(item["instruct"] for item in style["emotions"].values())]
         self.assertTrue(all(isinstance(text, str) and text.strip() for text in controls))
         self.assertTrue(all("[[" not in text and "]]" not in text for text in controls))
+
+    def test_cloud_style_has_a_separate_bounded_instruction_for_each_emotion(self):
+        style = load_style()
+        self.assertTrue(style["cloudPersona"])
+        for emotion in EMOTION_SET:
+            rendered = cloud_instruction(style, emotion)
+            self.assertIn("日本語", rendered)
+            self.assertNotEqual(rendered, style["emotions"][emotion]["instruct"])
+            self.assertLessEqual(len(rendered), 2500)
 
     def test_option_bounds_are_server_side(self):
         with self.assertRaises(StyleConfigError): validate_options({"temperature": 3})

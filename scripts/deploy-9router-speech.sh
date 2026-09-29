@@ -39,9 +39,9 @@ orb -m "$MACHINE" -u root python3 - "$DATA_DIR" "$ALLOW_QWENAI" <<'PY'
 from pathlib import Path
 import os,sys
 base=Path(sys.argv[1]); allow_qwenai=sys.argv[2]=='1'; env=base/'9router.env'
-for name in ('asr-upstream-api-key','asr-bridge-key'):
+for name in ('asr-upstream-api-key','asr-bridge-key','tts-bridge-key','tts-cloud-api-key','tts-cloud-voice-id','tts-local-key'):
     p=base/'secrets'/name
-    if not p.is_file() or not p.stat().st_size or p.stat().st_mode & 0o077 or p.stat().st_uid != 1000:
+    if p.is_symlink() or not p.is_file() or not p.stat().st_size or p.stat().st_mode & 0o077 or p.stat().st_uid != 1000:
         raise SystemExit('protected 9Router speech secret missing/unreadable by container uid 1000: '+name)
 if not env.is_file(): raise SystemExit('protected 9router.env missing')
 from urllib.parse import urlparse
@@ -52,12 +52,18 @@ if u.scheme!='https' or not allowed or u.path!='/api/v1/services/aigc/multimodal
     raise SystemExit('ASR upstream URL not allowlisted')
 if u.hostname=='maas.qianwenaiapi.com' and not allow_qwenai:
     raise SystemExit('QwenAI platform is not the original Goal authority; explicit --allow-qwenai-upstream required')
+tts_urls=[line.split('=',1)[1].strip() for line in env.read_text().splitlines() if line.startswith('AMADEUS_TTS_CLOUD_URL=')]
+if len(tts_urls)!=1:
+    raise SystemExit('TTS cloud endpoint missing/ambiguous')
+tu=urlparse(tts_urls[0]); allowed=(tu.hostname or '').endswith('.maas.aliyuncs.com') or tu.hostname in ('dashscope.aliyuncs.com','maas.qianwenaiapi.com')
+if tu.scheme!='https' or not allowed or tu.path!='/api/v1/services/audio/tts/SpeechSynthesizer':
+    raise SystemExit('TTS cloud endpoint not allowlisted')
 print('SPEECH_SECRET_PREFLIGHT=passed (values suppressed)')
 PY
 sha="$(git rev-parse --short=12 HEAD)"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 image="local/9router:git-${sha}-${stamp}"
-checkpoint="$DATA_DIR/backups/voice-1.5.3-deploy-$stamp"
+checkpoint="$DATA_DIR/backups/qwen-audio-tts-deploy-$stamp"
 # Retain an exact old-image artifact outside Git, as well as the still-loaded tag.
 NINE_ROUTER_IMAGE="$old_image" scripts/export-9router-runtime.sh --apply >/dev/null
 orb -m "$MACHINE" -u root python3 - "$checkpoint" "$COMPOSE" "$DATA_DIR" "$old_image" "$image" "$sha" <<'PY'
@@ -108,14 +114,14 @@ changed=1
 orb -m "$MACHINE" -u root bash -lc 'cd "$1" && docker compose config --quiet && docker compose up -d --no-build' -- "$APP_DIR"
 for _ in $(seq 1 50); do
   if orb -m "$MACHINE" -u root docker exec 9router node -e '
-    Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz")]).then(([a,b])=>process.exit(a.ok&&b.ok?0:1)).catch(()=>process.exit(1))
+    Promise.all([fetch("http://127.0.0.1:20128/api/health"),fetch("http://127.0.0.1:20129/healthz"),fetch("http://127.0.0.1:20130/healthz")]).then(([a,b,c])=>process.exit(a.ok&&b.ok&&c.ok?0:1)).catch(()=>process.exit(1))
   ' >/dev/null 2>&1; then
     # 9Router exempts container-local loopback from the API-key gate. Probe
     # through the actual published host route, not from inside the container.
     unauth_status="$(curl --silent --max-time 4 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:20128/v1/models || true)"
     if [[ "$unauth_status" == 401 ]]; then
       trap - ERR
-      echo 'NINE_ROUTER_SPEECH_DEPLOY=healthy (direct ASR and WhatsApp acceptance still required)'
+      echo 'NINE_ROUTER_SPEECH_DEPLOY=healthy (direct cloud/fallback ASR and WhatsApp acceptance still required)'
       exit 0
     fi
   fi

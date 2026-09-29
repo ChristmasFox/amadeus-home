@@ -81,7 +81,7 @@ for path in "${FILES[@]-}"; do
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
     apps/qwen3-tts-service/*|infra/macos/*qwen3-tts*|infra/macos/*mlx*|infra/macos/prepare-ominix-tts.sh|infra/macos/patch-ominix-source.py|scripts/promote-kurisu-style.sh|scripts/provision-9router-speech.py|scripts/test-provision-9router-speech.py|scripts/patch-openclaw-voice-failure.mjs|scripts/test-patch-openclaw-voice-failure.mjs) has_speech=1 ;;
     scripts/prepare-mlx-tts-poc.sh) has_speech=1 ;;
-    scripts/deploy-9router-speech.sh|scripts/test-9router-speech-image.sh|scripts/prepare-9router-speech-secrets.sh|scripts/provision-9router-qwen-asr.sh) has_router=1 ;;
+    scripts/deploy-9router-speech.sh|scripts/test-9router-speech-image.sh|scripts/prepare-9router-speech-secrets.sh|scripts/prepare-qwen-audio-tts-runtime.sh|scripts/provision-9router-qwen-asr.sh|scripts/provision-qwen-audio-tts-voice.py|scripts/test-provision-qwen-audio-tts-voice.py|scripts/smoke-qwen-audio-tts.py|scripts/test-smoke-qwen-audio-tts.py) has_router=1 ;;
     infra/docker/casaos/9router/*) has_router=1; has_package_meta=1 ;;
     infra/docker/homelab/9router/*) has_router=1 ;;
     infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh)
@@ -229,12 +229,22 @@ fi
 if ((has_router)); then
   printf '+ node infra/docker/casaos/9router/test-asr-bridge.mjs\n'
   node infra/docker/casaos/9router/test-asr-bridge.mjs
+  printf '+ node infra/docker/casaos/9router/test-tts-bridge.mjs\n'
+  node infra/docker/casaos/9router/test-tts-bridge.mjs
   printf '+ node --check infra/docker/casaos/9router/start-9router.mjs\n'
   node --check infra/docker/casaos/9router/start-9router.mjs
   printf '+ node infra/docker/casaos/9router/test-selfhosted-tts-style.mjs\n'
   node infra/docker/casaos/9router/test-selfhosted-tts-style.mjs
   printf '+ bash -n 9Router speech scripts\n'
-  bash -n scripts/deploy-9router-speech.sh scripts/test-9router-speech-image.sh scripts/prepare-9router-speech-secrets.sh scripts/provision-9router-qwen-asr.sh
+  bash -n scripts/deploy-9router-speech.sh scripts/test-9router-speech-image.sh scripts/prepare-9router-speech-secrets.sh scripts/prepare-qwen-audio-tts-runtime.sh scripts/provision-9router-qwen-asr.sh
+  printf '+ python3 -m unittest scripts/test-provision-qwen-audio-tts-voice.py\n'
+  python3 -m unittest scripts/test-provision-qwen-audio-tts-voice.py
+  printf '+ python3 scripts/provision-qwen-audio-tts-voice.py --dry-run\n'
+  python3 scripts/provision-qwen-audio-tts-voice.py --dry-run
+  printf '+ python3 scripts/smoke-qwen-audio-tts.py --dry-run\n'
+  python3 scripts/smoke-qwen-audio-tts.py --dry-run
+  printf '+ python3 -m unittest scripts/test-smoke-qwen-audio-tts.py\n'
+  python3 -m unittest scripts/test-smoke-qwen-audio-tts.py
 fi
 if ((has_speech)); then
   printf '+ python3 -m unittest discover -s apps/qwen3-tts-service/tests\n'

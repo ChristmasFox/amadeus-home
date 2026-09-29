@@ -1,0 +1,9 @@
+# Temporary Qwen-Audio voice-enrollment sample proxy.
+# Apply only while provisioning the cloned voice, then remove this proxy and
+# the public DNS record. The frps token remains outside Git.
+[[proxies]]
+name = "amadeus-audio-sample"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 18796
+remotePort = 18796

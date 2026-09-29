@@ -33,6 +33,9 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
   rootfs 和四个 systemd unit 状态。账号无密码，authorized key 禁用交互命令、端口转发、agent
   forwarding、X11 和 pty。
 - Emby 回源：Caddy `emby.<domain>:443` → frps 本机 `127.0.0.1:8096` → HomeLab Emby。
+- 临时 Qwen-Audio voice enrollment：使用 `infra/vps/frpc/audio-sample-proxy.example.toml` 和
+  `infra/vps/audio-sample.example.Caddyfile` 发布 `audio.nyannyan.top/reference.wav`；只在复刻
+  apply 期间启用，成功后删除 frpc 映射、Caddy site 和 Cloudflare DNS 记录。
 
 端口用途：
 
