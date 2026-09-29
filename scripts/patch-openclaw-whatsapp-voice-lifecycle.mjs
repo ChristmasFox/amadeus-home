@@ -14,6 +14,7 @@ export { VOICE_RUNS_GLOBAL, CORE_MARKER, WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE
 
 export const REPLY_ENVELOPE_TTS_MARKER = 'amadeus-reply-envelope-tts-v1';
 export const REPLY_ENVELOPE_WHATSAPP_BOUNDARY_MARKER = 'amadeus-whatsapp-reply-envelope-boundary-v1';
+export const REPLY_ENVELOPE_MESSAGE_ACTION_MARKER = 'amadeus-message-action-reply-envelope-v1';
 const REPLY_ENVELOPE_RESOLVER_GLOBAL = '__amadeusReplyEnvelopeResolver20260929';
 
 function replaceOnce(source, before, after, label) {
@@ -147,6 +148,38 @@ function normalizeAmadeusReplyEnvelopePayload(payload, params, info) {
   return result;
 }
 
+export function patchMessageActionSource(original) {
+  if (original.includes(REPLY_ENVELOPE_MESSAGE_ACTION_MARKER)) return original;
+  const helper = `// ${REPLY_ENVELOPE_MESSAGE_ACTION_MARKER}
+function normalizeAmadeusMessageActionPayload(params) {
+\tconst payload = params.payload;
+\tif (!payload || typeof payload !== "object") return payload;
+\tconst existing = payload.amadeusEnvelope;
+\tif (existing && typeof existing === "object" && existing.version === 1 && typeof existing.visibleText === "string" && (existing.modality === "text" || existing.modality === "voice")) return { ...payload, text: existing.visibleText };
+\tconst resolver = globalThis[${JSON.stringify(REPLY_ENVELOPE_RESOLVER_GLOBAL)}];
+\tif (typeof resolver !== "function") return payload;
+\tconst candidate = payload.text;
+\tif (typeof candidate !== "string" && (!candidate || typeof candidate !== "object")) return payload;
+\ttry {
+\t\tconst envelope = resolver({ runId: params.runId, sessionKey: params.sessionKey, channel: params.channel, kind: "final", payload, candidate });
+\t\tif (!envelope || typeof envelope !== "object") return payload;
+\t\tif (envelope.silent) return { ...payload, text: void 0, amadeusEnvelope: envelope };
+\t\treturn { ...payload, text: envelope.visibleText, amadeusEnvelope: envelope, ...(envelope.speechText ? { spokenText: envelope.speechText } : {}) };
+\t} catch {
+\t\treturn payload;
+\t}
+}
+`;
+  let result = replaceOnce(original, 'async function maybeApplyTtsToMessageActionSendPayload(params) {', `${helper}async function maybeApplyTtsToMessageActionSendPayload(params) {`, 'ReplyEnvelope message action helper');
+  const before = '\tif (params.dryRun) return params.payload;\n\tconst ttsAuto = resolveMessageActionSessionTtsAuto({';
+  const after = '\tif (params.dryRun) return params.payload;\n\tconst normalizedPayload = normalizeAmadeusMessageActionPayload(params);\n\tif (normalizedPayload?.amadeusEnvelope?.silent) return normalizedPayload;\n\tconst ttsAuto = resolveMessageActionSessionTtsAuto({';
+  result = replaceOnce(result, before, after, 'ReplyEnvelope message action normalization');
+  result = replaceOnce(result, 'if (!(getReplyPayloadMetadata(params.payload)?.ttsExplicit === true) && !shouldAttemptTtsPayload({', 'if (normalizedPayload?.amadeusEnvelope?.modality !== "voice" && !(getReplyPayloadMetadata(normalizedPayload)?.ttsExplicit === true) && !shouldAttemptTtsPayload({', 'ReplyEnvelope message action TTS gate');
+  result = replaceOnce(result, '\treturn await maybeApplyTtsToPayload({\n\t\tpayload: params.payload,', '\treturn await maybeApplyTtsToPayload({\n\t\tpayload: normalizedPayload,', 'ReplyEnvelope message action payload');
+  result = replaceOnce(result, '\t\taccountId: params.accountId ?? void 0\n\t});', '\t\taccountId: params.accountId ?? void 0,\n\t\tsessionKey: params.sessionKey,\n\t\trunId: params.runId\n\t});', 'ReplyEnvelope message action context');
+  return result;
+}
+
 export function patchWhatsAppSource(original) {
   let result = original;
   if (!result.includes(WHATSAPP_MARKER)) {
@@ -213,6 +246,8 @@ export async function main(argv = process.argv.slice(2)) {
     const ttsPath = await findFile(options['core-root'], /^runtime-api-.*\.mjs$/u, 'const ttsText = explicitTtsText || visibleText;');
     if (!ttsPath) throw new Error('pinned OpenClaw TTS runtime module missing');
     console.log(`CORE_REPLY_ENVELOPE_TTS_PATCH=${await patchFile(ttsPath, patchTtsSource)}`);
+    const messageActionPath = await findFile(options['core-root'], /^message-action-runner-.*\.mjs$/u, 'async function maybeApplyTtsToMessageActionSendPayload(params) {');
+    if (messageActionPath) console.log(`CORE_REPLY_ENVELOPE_MESSAGE_ACTION_PATCH=${await patchFile(messageActionPath, patchMessageActionSource)}`);
     const payloadsPath = await findFile(options['core-root'], /^dispatch-from-config\.payloads-.*\.mjs$/u, 'function createFinalizationAwareTtsPayloadApplier(params) {');
     if (payloadsPath) console.log(`CORE_REPLY_ENVELOPE_CONTEXT_PATCH=${await patchFile(payloadsPath, patchPayloadsTtsContextSource)}`);
     const dispatchPath = await findFile(options['core-root'], /^dispatch-from-config-.*\.mjs$/u, 'const maybeApplyTtsWithFinalizationLease = createFinalizationAwareTtsPayloadApplier({');

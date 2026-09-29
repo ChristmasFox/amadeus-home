@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { patchCoreSource, patchDispatchTtsContextSource, patchWhatsAppSource, patchWhatsAppIngressQueueSource, patchWhatsAppTypingIndicatorSource, REPLY_ENVELOPE_WHATSAPP_BOUNDARY_MARKER, CORE_MARKER, WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
+import { patchCoreSource, patchDispatchTtsContextSource, patchMessageActionSource, patchWhatsAppSource, patchWhatsAppIngressQueueSource, patchWhatsAppTypingIndicatorSource, REPLY_ENVELOPE_MESSAGE_ACTION_MARKER, REPLY_ENVELOPE_WHATSAPP_BOUNDARY_MARKER, CORE_MARKER, WHATSAPP_MARKER, WHATSAPP_INGRESS_QUEUE_MARKER, WHATSAPP_TYPING_INDICATOR_MARKER } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
 import { resolveVoiceFollowup } from './openclaw-voice-lease.mjs';
 
 assert.equal(resolveVoiceFollowup(undefined, 'typed'), false);
@@ -32,4 +32,38 @@ const patchedDispatch = patchDispatchTtsContextSource(dispatch);
 assert.match(patchedDispatch, /getChannel: \(\) => replyRoute\.channel \?\? ctx\.Surface \?\? ctx\.Provider/u);
 assert.doesNotMatch(patchedDispatch, /deliveryChannel/u);
 assert.equal(patchDispatchTtsContextSource(patchedDispatch), patchedDispatch);
+const messageAction = `async function maybeApplyTtsToMessageActionSendPayload(params) {
+\tif (params.dryRun) return params.payload;
+\tconst ttsAuto = resolveMessageActionSessionTtsAuto({
+\t\tcfg: params.cfg,
+\t\tsessionKey: params.sessionKey,
+\t\tagentId: params.agentId
+\t});
+\tif (!(getReplyPayloadMetadata(params.payload)?.ttsExplicit === true) && !shouldAttemptTtsPayload({
+\t\tcfg: params.cfg,
+\t\tttsAuto,
+\t\tagentId: params.agentId,
+\t\tchannelId: params.channel,
+\t\taccountId: params.accountId ?? void 0
+\t})) return params.payload;
+\tconst { maybeApplyTtsToPayload } = await loadMessageActionTtsRuntime();
+\treturn await maybeApplyTtsToPayload({
+\t\tpayload: params.payload,
+\t\tcfg: params.cfg,
+\t\tchannel: params.channel,
+\t\tkind: "final",
+\t\tinboundAudio: params.inboundAudio,
+\t\tttsAuto,
+\t\tagentId: params.agentId,
+\t\taccountId: params.accountId ?? void 0
+\t});
+}`;
+const patchedMessageAction = patchMessageActionSource(messageAction);
+assert.match(patchedMessageAction, new RegExp(REPLY_ENVELOPE_MESSAGE_ACTION_MARKER));
+assert.match(patchedMessageAction, /normalizeAmadeusMessageActionPayload\(params\)/u);
+assert.match(patchedMessageAction, /payload: normalizedPayload/u);
+assert.match(patchedMessageAction, /sessionKey: params\.sessionKey/u);
+assert.match(patchedMessageAction, /runId: params\.runId/u);
+assert.match(patchedMessageAction, /amadeusEnvelope\?\.modality !== "voice"/u);
+assert.equal(patchMessageActionSource(patchedMessageAction), patchedMessageAction);
 console.log('OPENCLAW_REPLY_ENVELOPE_LIFECYCLE=passed');
