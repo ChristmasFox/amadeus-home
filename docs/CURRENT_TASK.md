@@ -1,3 +1,25 @@
+# Current Task — Qwen Audio TTS model fallback (Completed)
+
+Date: 2026-09-29 local.
+
+The `amadeus-tts` route now tries `qwen-audio-3.1-tts-flash`, then the
+model-bound `qwen-audio-3.0-tts-flash` voice, then the existing M204 OminiX
+service for bounded transient cloud failures. A separate protected 3.1 cloned
+voice was enrolled from the authorized 46-second sample because Qwen binds a
+cloned voice to its target model.
+
+Source commit: `13cbd55`. Live 9Router image: `local/9router:git-13cbd559ab24-20260929T062044Z`.
+The 3.1 direct smoke, protected secret preparation, live bridge smoke, health
+checks, and rollback checkpoint all passed. Evidence and rollback details are
+recorded in `.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-model-fallback.md`.
+
+The temporary public voice-enrollment origin and frp mapping were removed after
+provisioning. The Cloudflare `audio.nyannyan.top` DNS record may still exist;
+remove that record when convenient because the sample endpoint is no longer
+served. There is no active Goal after this completion.
+
+---
+
 # Current Task — Qwen Audio TTS cloud primary (Completed)
 
 Date: 2026-09-29 local. Completed Goal:

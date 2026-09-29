@@ -1,4 +1,24 @@
-# Project State — 2026-09-27
+# Project State — 2026-09-29
+
+## 2026-09-29 Qwen Audio TTS model fallback — deployed
+
+The protected `amadeus-tts` bridge now uses the bounded order
+`qwen-audio-3.1-tts-flash` → `qwen-audio-3.0-tts-flash` → M204 OminiX local
+fallback. The 3.1 and 3.0 cloned voices are separate protected files because
+voice enrollment is model-bound. Source commit `13cbd55` is deployed as
+`local/9router:git-13cbd559ab24-20260929T062044Z`; OpenClaw and ASR remain
+unchanged.
+
+3.1 voice enrollment from the authorized 46-second sample, four-case direct
+cloud smoke, protected runtime preparation, live cloud bridge smoke, health/auth
+checks, and the protected deployment checkpoint all passed. The temporary
+`audio.nyannyan.top` Caddy/frp sample route was removed after enrollment; its
+Cloudflare DNS record must be removed separately if it remains.
+
+The protected deployment checkpoint is
+`/DATA/AppData/9router/backups/qwen-audio-tts-deploy-20260929T062044Z`; the
+dated source checkpoint is
+`.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-model-fallback.md`.
 
 ## 2026-09-29 Qwen Audio TTS cloud primary — owner accepted
 
