@@ -1,67 +1,45 @@
-# Current Task — Amadeus ReplyEnvelope architecture migration (Active)
+# Current Task — Kurisu GPT-SoVITS Character Voice PoC (Active Goal)
 
 Date: 2026-09-29 local.
 
-Canonical Goal: `docs/AMADEUS_REPLY_ENVELOPE_ARCHITECTURE_MIGRATION_GOAL.md`.
+Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`.
 
-## Current state
+The owner wants to deploy and validate `bysq/TTS-KurisuMakise` (GPT-SoVITS-v2Pro) on the current macOS host because the target is not generic voice similarity but an immediately recognizable Makise Kurisu voice.
 
-The ReplyEnvelope contract, strict planner/resolver, run scoped origin context,
-delivery idempotency, OpenClaw lifecycle bridge, and shared deadline TTS bridge
-are implemented in Git. The retired modality marker, text protocol, registry,
-scrub/recovery policy, and old policy module are removed from active source.
+Execute the Goal as an isolated host-native PoC. The existing production TTS chain must remain unchanged during validation:
 
-Source evidence passing:
+```text
+qwen-audio-3.1-tts-flash
+  -> qwen-audio-3.0-tts-flash
+  -> existing OminiX Qwen3-TTS fallback :18792
+```
 
-- Amadeus and root typechecks; full `pnpm test`; `pnpm check:secrets`.
-- ReplyEnvelope policy, lifecycle, TTS (including shared-deadline timeout,
-  URL-download and ffmpeg timeout fallback), bilingual contract, module bundle,
-  and architecture fixture tests.
-- `pnpm check:architecture` and `git diff --check`.
+Cloud `default` remains the accepted zero-delta pure-clone baseline. Do not change its instruction/persona/style behavior, cloud model order, protected voice IDs, OpenClaw, channel behavior or ReplyEnvelope while evaluating GPT-SoVITS.
 
-## Release runtime checkpoint
+First prove the candidate with pinned upstream GPT-SoVITS v2Pro on the Mac, Japanese synthesis and a clean neutral Kurisu reference. Then generate controlled Qwen 3.1 vs GPT-SoVITS A/B samples from identical Japanese text. Character identity is the primary acceptance criterion; latency/RTF and memory are secondary viability evidence. The owner listening verdict gates all further work.
 
-The user authorized formal release deployment. Release `1.7.3` image
-`local/openclaw-amadeus:git-bd4736661f5e-20260929130719` is healthy and the
-WhatsApp account is linked and connected. The deployment checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260929130719`; post-deploy
-evidence is stored at
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260929130719`.
-The first candidate exposed a real `deliveryChannel` reference error during
-dispatch; the route-derived channel fix is in `735ee01`. A real group-chat
-check then exposed stale volume patch code that bypassed ReplyEnvelope and
-sent structured JSON verbatim. The boundary cleanup and no-run-id resolver
-fallback are in `b64a8d4`; the redeployed candidate has no stale WhatsApp
-compatibility symbols in the runtime. The group `message` action had a second
-raw-payload path; `182417e` patches that final boundary and the candidate
-runtime contains `amadeus-message-action-reply-envelope-v1`.
+OminiX/MLX GPT-SoVITS is a follow-up feasibility target only after the candidate clearly wins the voice-quality A/B. Do not spend the main PoC on MLX conversion or production integration before that gate.
 
-Real WhatsApp evidence from the candidate log at 20:54–20:55 local time:
+Model checkpoints, pretrained weights, reference WAVs, generated audio, caches and secrets stay outside Git. Bind the PoC locally, run non-root, discover a free port, and do not assume `18793` is available because the existing Kurisu tuner already owns a host endpoint.
 
-- Group typed voice request `发语音说喵喵`: one `auto-reply sent (media)` with
-  visible bilingual text and one audio file; no structured JSON was sent.
-- Group ordinary text `欸 好了`: one outbound text send with
-  `hasMedia=false`.
-- Group inbound voice: one inbound `audio/ogg` event and one `auto-reply sent
-  (media)` with visible bilingual text and one audio file.
-- No old marker or compatibility symbol appears in the live WhatsApp module.
-- The 9Router log records one successful ASR request for the group audio and
-  one successful cloud TTS request for each voice reply; no duplicate send is
-  associated with either group correlation id.
-- Formal release post-deploy checks passed: OpenClaw and Product Radar health,
-  NAS SSH read-only smoke, owner outbox smoke, and post-deploy maintenance.
+This Goal does **not** authorize adding GPT-SoVITS to `amadeus-tts` production routing. A successful outcome is `ACCEPTED_FOR_FURTHER_INTEGRATION`, followed by a separate integration/MLX decision.
 
-## Remaining work
+---
 
-1. Record real WhatsApp evidence for internal heartbeat/cron silence, duplicate
-   ingress, and TTS fallback. Until that evidence exists, this Goal remains
-   incomplete.
-2. Preserve the candidate checkpoint and collect enough message/log evidence to
-   support rollback or an explicit production release decision.
+# Paused Task — Image Asset + On-Demand Upscale
 
-Release `1.7.3` is live. The Goal remains active until the remaining real
-WhatsApp acceptance evidence and dated rollback audit are complete; no further
-production promotion is implied by this checkpoint.
+Date: 2026-09-29 local.
 
-Historical task records remain in `docs/PROJECT_STATE.md` and dated
-`.agent/checkpoints/`; they are audit evidence only.
+Paused Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
+
+The image asset/on-demand upscale Goal remains valid but is temporarily paused because the owner explicitly chose to validate the Kurisu GPT-SoVITS character voice first. Do not delete or reinterpret that Goal. Resume it only after the owner returns to the image work.
+
+---
+
+# Recent production TTS baseline — deployed
+
+The current cloud `default` request is a pure voice-clone baseline: `text`, model-bound `voice`, `format`, `sample_rate`, and Japanese `language_hints`, with no instruction/persona/style/speed/pitch controls. Non-default emotions retain bounded instructions.
+
+The protected `amadeus-tts` bridge uses the bounded order `qwen-audio-3.1-tts-flash` -> `qwen-audio-3.0-tts-flash` -> M204 OminiX local fallback. Production health/owner acceptance and rollback evidence are recorded in `docs/PROJECT_STATE.md` and the dated `.agent/checkpoints/` entries.
+
+Older completed Goals/checkpoints remain historical evidence, not live instructions.
