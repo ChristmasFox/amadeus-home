@@ -1,4 +1,10 @@
-# Amadeus 1.7.3
+# Amadeus 1.7.4
 
-- 修复群聊消息发送分支绕过结构化回复边界的问题，群聊语音请求现在会正确发送可见文本和语音，普通文字保持纯文字。
-- 补充群聊入站语音、ASR、TTS 和去重验收记录，移除运行时残留的旧协议符号。
+- 新增 host-native durable image asset registry with opaque `imageId` identity,
+  immutable originals, derived lineage, controlled media reads, and native
+  `image_generate` result correlation.
+- 新增 explicit-only `amadeus_image_upscale` capability and Skill with
+  conversation-scoped reply precedence, bounded 2x/4x `auto|realistic|anime`
+  modes, manual `imageId` invocation, and no automatic enhancement.
+- 新增 Apple Silicon `realesrgan-mlx` launchd service installation, CasaOS
+  read-only asset mount, rollback runbook, and host acceptance evidence.
