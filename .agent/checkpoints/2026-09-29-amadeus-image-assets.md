@@ -27,6 +27,10 @@
   `e8f8f13605f77da0116ad15d6e0934bdbc51f8d7b7acd581cb2176407486aa08`.
 - Live plugin preflight contains `amadeus_image_upscale` and Skill
   preflight contains `image-upscale`.
+- A direct source-level `upscaleImage` invocation against the live service
+  returned `img_7411df57670b42d284b4f1f0e533ce45`, parent
+  `img_75bc75b5296841f6955dc1217284aaf0`, `2160x2880`, and a structured image
+  attachment/media path under the container asset root.
 - `pnpm workflow:plan`, focused Python/TypeScript tests, build, secrets scan,
   and diff checks passed before release apply.
 
