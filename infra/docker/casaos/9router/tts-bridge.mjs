@@ -3,9 +3,9 @@
  * OpenAI-compatible TTS transport adapter for the Amadeus logical voice.
  *
  * 9Router remains the provider/control plane.  This process owns only the
- * protocol boundary: Qwen-Audio-TTS Flash is attempted once, then the
- * already-installed M204 OminiX service is attempted once for transient cloud
- * failures.  No text, audio, token or cloud voice id is written to logs.
+ * protocol boundary: Qwen-Audio-TTS Flash models are attempted in order, then
+ * the already-installed M204 OminiX service is attempted once for transient
+ * cloud failures.  No text, audio, token or cloud voice id is written to logs.
  */
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -13,7 +13,12 @@ import { spawn } from 'node:child_process';
 import { timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 
-export const CLOUD_MODEL = 'qwen-audio-3.0-tts-flash';
+export const CLOUD_MODELS = Object.freeze([
+  'qwen-audio-3.1-tts-flash',
+  'qwen-audio-3.0-tts-flash',
+]);
+export const CLOUD_MODEL = CLOUD_MODELS[0];
+export const CLOUD_FALLBACK_MODEL = CLOUD_MODELS[1];
 export const MODEL_ALIASES = new Set(['amadeus-tts', 'qwen3-tts-1.7b']);
 export const VOICE_ID = 'kurisu-v1';
 export const MAX_TEXT = 1200;
@@ -195,12 +200,13 @@ function cloudError(status) {
   return { fallback: false, result: failure(502, 'provider_unavailable') };
 }
 
-export function buildCloudRequest({ text, voiceId, emotion, format, style }) {
+export function buildCloudRequest({ model = CLOUD_MODEL, text, voiceId, emotion, format, style }) {
   if (!MODEL_ALIASES.has('amadeus-tts')) throw new Error('adapter_model_contract');
+  if (!CLOUD_MODELS.includes(model)) throw new Error('unsupported_cloud_model');
   if (typeof voiceId !== 'string' || !voiceId.trim()) throw new Error('cloud_voice_id_required');
   if (!CLOUD_FORMATS.has(format)) throw new Error('unsupported_format');
   return {
-    model: CLOUD_MODEL,
+    model,
     input: {
       text,
       voice: voiceId,
@@ -224,6 +230,8 @@ export function createTtsServer({
   bridgeKey,
   cloudKey,
   cloudVoiceId,
+  cloudVoiceId31,
+  cloudVoiceId30,
   localKey,
   cloudUrl,
   localUrl = 'http://host.docker.internal:18792/v1/audio/speech',
@@ -233,7 +241,12 @@ export function createTtsServer({
   cloudTimeoutMs = DEFAULT_CLOUD_TIMEOUT_MS,
   localTimeoutMs = DEFAULT_LOCAL_TIMEOUT_MS,
 }) {
-  if (!bridgeKey || bridgeKey.length < 32 || !cloudKey || cloudKey.length < 20 || !cloudVoiceId || !localKey || localKey.length < 32) throw new Error('protected_tts_keys_required');
+  // `cloudVoiceId` is retained as a compatibility alias for the old single
+  // voice configuration. New runtime configuration must provide both model
+  // specific voice ids; the old alias is accepted only by focused fixtures.
+  cloudVoiceId30 ||= cloudVoiceId;
+  cloudVoiceId31 ||= cloudVoiceId;
+  if (!bridgeKey || bridgeKey.length < 32 || !cloudKey || cloudKey.length < 20 || !cloudVoiceId31 || !cloudVoiceId30 || !localKey || localKey.length < 32) throw new Error('protected_tts_keys_required');
   validateCloudStyle(style);
   const endpoint = validCloudEndpoint(cloudUrl);
   const localEndpoint = new URL(localUrl);
@@ -254,7 +267,7 @@ export function createTtsServer({
       });
       res.end(audio);
     };
-    if (req.url === '/healthz' && req.method === 'GET') return sendJson(200, { status: 'ready', model: 'amadeus-tts', voice: VOICE_ID });
+    if (req.url === '/healthz' && req.method === 'GET') return sendJson(200, { status: 'ready', model: 'amadeus-tts', cloudModels: CLOUD_MODELS, voice: VOICE_ID });
     if (req.url !== '/v1/audio/speech' || req.method !== 'POST') return sendJson(404, failure(404, 'not_found').body);
     if (!authMatches(req.headers.authorization, bridgeKey)) return sendJson(401, failure(401, 'auth_unavailable').body);
     const size = Number(req.headers['content-length'] || 0);
@@ -270,35 +283,37 @@ export function createTtsServer({
     if (typeof emotion !== 'string' || !EMOTIONS.has(emotion)) return sendJson(400, failure(400, 'invalid_style').body);
     if (data.language !== undefined && data.language !== 'ja') return sendJson(400, failure(400, 'invalid_language').body);
 
-    const common = { text: data.input, voiceId: cloudVoiceId, emotion, format, style };
     let cloudFailure = null;
-    try {
-      const body = buildCloudRequest(common);
-      const response = await fetchWithTimeout(fetchFn, endpoint, {
-        method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${cloudKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      }, cloudTimeoutMs);
-      if (!response.ok) {
-        const classified = cloudError(response.status);
-        if (!classified.fallback) { sendJson(classified.result.status, classified.result.body); console.info(`tts provider=cloud category=${classified.result.body.error.type} outcome=error format=${format} input=${inputBucket(data.input)} ms=${Date.now() - started}`); return; }
-        cloudFailure = classified.category;
-      } else {
-        const raw = await readBounded((response.body && typeof response.body.getReader === 'function') ? Readable.fromWeb(response.body) : response.body, MAX_CLOUD_RESPONSE_BODY);
-        const payload = JSON.parse(raw.toString('utf8'));
-        const audio = await normalizeCloudAudio(payload, format, fetchFn, spawnFn);
-        if (!validAudio(audio, format)) throw new Error('cloud_audio_invalid');
-        sendAudio(audio, format, 'cloud', false);
-        console.info(`tts provider=cloud category=ok outcome=success format=${format} bytes=${byteBucket(audio.length)} input=${inputBucket(data.input)} ms=${Date.now() - started}`);
-        return;
+    for (const [index, model] of CLOUD_MODELS.entries()) {
+      const voiceId = model === CLOUD_MODELS[0] ? cloudVoiceId31 : cloudVoiceId30;
+      try {
+        const body = buildCloudRequest({ model, text: data.input, voiceId, emotion, format, style });
+        const response = await fetchWithTimeout(fetchFn, endpoint, {
+          method: 'POST', redirect: 'error', headers: { Authorization: `Bearer ${cloudKey}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        }, cloudTimeoutMs);
+        if (!response.ok) {
+          const classified = cloudError(response.status);
+          if (!classified.fallback) { sendJson(classified.result.status, classified.result.body); console.info(`tts provider=cloud model=${model} category=${classified.result.body.error.type} outcome=error format=${format} input=${inputBucket(data.input)} ms=${Date.now() - started}`); return; }
+          cloudFailure = `${model}:${classified.category}`;
+        } else {
+          const raw = await readBounded((response.body && typeof response.body.getReader === 'function') ? Readable.fromWeb(response.body) : response.body, MAX_CLOUD_RESPONSE_BODY);
+          const payload = JSON.parse(raw.toString('utf8'));
+          const audio = await normalizeCloudAudio(payload, format, fetchFn, spawnFn);
+          if (!validAudio(audio, format)) throw new Error('cloud_audio_invalid');
+          sendAudio(audio, format, 'cloud', false);
+          console.info(`tts provider=cloud model=${model} attempt=${index + 1} category=ok outcome=success format=${format} bytes=${byteBucket(audio.length)} input=${inputBucket(data.input)} ms=${Date.now() - started}`);
+          return;
+        }
+      } catch (error) {
+        const classified = classifyCloudFailure(error);
+        if (!classified.fallback) {
+          const result = classified.result || failure(502, 'provider_unavailable');
+          sendJson(result.status, result.body);
+          console.info(`tts provider=cloud model=${model} category=${result.body.error.type} outcome=error format=${format} input=${inputBucket(data.input)} ms=${Date.now() - started}`);
+          return;
+        }
+        cloudFailure = `${model}:${classified.category}`;
       }
-    } catch (error) {
-      const classified = classifyCloudFailure(error);
-      if (!classified.fallback) {
-        const result = classified.result || failure(502, 'provider_unavailable');
-        sendJson(result.status, result.body);
-        console.info(`tts provider=cloud category=${result.body.error.type} outcome=error format=${format} input=${inputBucket(data.input)} ms=${Date.now() - started}`);
-        return;
-      }
-      cloudFailure = classified.category;
     }
 
     try {
@@ -339,7 +354,8 @@ if (process.argv[1]?.endsWith('/tts-bridge.mjs')) {
   const server = createTtsServer({
     bridgeKey: read('AMADEUS_TTS_BRIDGE_KEY_FILE', 'tts_bridge_key', { min: 32 }),
     cloudKey: read('AMADEUS_TTS_CLOUD_API_KEY_FILE', 'tts_cloud_api_key', { min: 20 }),
-    cloudVoiceId: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }),
+    cloudVoiceId31: read('AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE', 'tts_cloud_voice_id_31', { min: 8, max: 256 }),
+    cloudVoiceId30: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }),
     localKey: read('AMADEUS_TTS_LOCAL_KEY_FILE', 'tts_local_key', { min: 32 }),
     cloudUrl: process.env.AMADEUS_TTS_CLOUD_URL,
     localUrl: process.env.AMADEUS_TTS_LOCAL_URL || 'http://host.docker.internal:18792/v1/audio/speech',

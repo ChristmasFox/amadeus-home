@@ -24,7 +24,14 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-TARGET_MODEL = "qwen-audio-3.0-tts-flash"
+SUPPORTED_TARGET_MODELS = (
+    "qwen-audio-3.1-tts-flash",
+    "qwen-audio-3.0-tts-flash",
+)
+# Preserve the existing 3.0 default for callers that do not request a new
+# voice explicitly. A cloned voice is model-bound, so each model gets its own
+# protected voice-id file.
+TARGET_MODEL = SUPPORTED_TARGET_MODELS[1]
 ENROLLMENT_MODEL = "voice-enrollment"
 DEFAULT_ENDPOINT = "https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"
 MAX_RESPONSE = 1024 * 1024
@@ -33,6 +40,12 @@ RECOMMENDED_REFERENCE_SECONDS = (10.0, 20.0)
 MAX_PROMPT_AUDIO_LENGTH = 30.0
 MAX_REFERENCE_BYTES = 10 * 1024 * 1024
 VOICE_RE = re.compile(r"^[A-Za-z0-9._-]{8,256}$")
+
+
+def validate_target_model(value: str) -> str:
+    if value not in SUPPORTED_TARGET_MODELS:
+        raise ValueError("unsupported_qwen_tts_target_model")
+    return value
 
 
 def digest(value: bytes | str) -> str:
@@ -199,6 +212,7 @@ def write_manifest(path: Path, *, voice_id: str, target_model: str, reference_sh
 
 
 def apply(args: argparse.Namespace) -> None:
+    target_model = validate_target_model(getattr(args, "target_model", TARGET_MODEL))
     endpoint = validate_endpoint(args.endpoint)
     guest_key_file = getattr(args, "api_key_guest_file", None)
     if args.api_key_file and guest_key_file:
@@ -219,9 +233,9 @@ def apply(args: argparse.Namespace) -> None:
             "input": {"action": "query_voice", "voice_id": existing},
         })
         output = payload.get("output", {}) if isinstance(payload, dict) else {}
-        if status != 200 or output.get("target_model") != TARGET_MODEL or output.get("status") not in (None, "OK"):
+        if status != 200 or output.get("target_model") != target_model or output.get("status") not in (None, "OK"):
             raise RuntimeError("existing_voice_not_ready_or_target_mismatch")
-        write_manifest(manifest_path, voice_id=existing, target_model=TARGET_MODEL, reference_sha256=None, duration=None, request_id=request_id)
+        write_manifest(manifest_path, voice_id=existing, target_model=target_model, reference_sha256=None, duration=None, request_id=request_id)
         print("VOICE_ACTION=reused_existing")
         print("VOICE_ID=protected")
         print("VOICE_ID_SHA256=" + digest(existing))
@@ -240,7 +254,7 @@ def apply(args: argparse.Namespace) -> None:
     status, payload, request_id = post_json(endpoint, key, {
         "model": ENROLLMENT_MODEL,
         "input": {
-            "action": "create_voice", "target_model": TARGET_MODEL,
+            "action": "create_voice", "target_model": target_model,
             "prefix": prefix, "url": audio_url, "language_hints": ["ja"],
             # The source file may be up to 60 seconds, while this API control
             # accepts only [3, 30] seconds for the post-preprocessing prompt.
@@ -254,7 +268,7 @@ def apply(args: argparse.Namespace) -> None:
         raise RuntimeError("voice_api_create_failed")
     voice_id = extract_voice(payload)
     atomic_secret_write(voice_path, voice_id)
-    write_manifest(manifest_path, voice_id=voice_id, target_model=TARGET_MODEL, reference_sha256=reference_sha, duration=duration, request_id=request_id, authorization_confirmed=True)
+    write_manifest(manifest_path, voice_id=voice_id, target_model=target_model, reference_sha256=reference_sha, duration=duration, request_id=request_id, authorization_confirmed=True)
     print("VOICE_ACTION=created")
     print("VOICE_ID=protected")
     print("VOICE_ID_SHA256=" + digest(voice_id))
@@ -268,6 +282,7 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--endpoint", default=os.environ.get("AMADEUS_TTS_CLOUD_ENROLLMENT_URL", DEFAULT_ENDPOINT))
+    parser.add_argument("--target-model", default=TARGET_MODEL, choices=SUPPORTED_TARGET_MODELS)
     parser.add_argument("--api-key-file")
     parser.add_argument("--api-key-guest-file", help="protected guest file, such as the existing ASR upstream key")
     parser.add_argument("--voice-id-file")
@@ -281,8 +296,9 @@ def main() -> None:
     args = parser.parse_args()
     if not args.apply:
         validate_endpoint(args.endpoint)
+        validate_target_model(args.target_model)
         print("MODE=dry-run; no cloud request, audio upload or protected runtime write")
-        print("TARGET_MODEL=" + TARGET_MODEL)
+        print("TARGET_MODEL=" + args.target_model)
         print("ENROLLMENT_MODEL=" + ENROLLMENT_MODEL)
         print("REFERENCE=operator-owned 10-60 second Japanese sample outside Git; 10-20 seconds recommended")
         return

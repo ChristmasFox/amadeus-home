@@ -39,7 +39,7 @@ orb -m "$MACHINE" -u root python3 - "$DATA_DIR" "$ALLOW_QWENAI" <<'PY'
 from pathlib import Path
 import os,sys
 base=Path(sys.argv[1]); allow_qwenai=sys.argv[2]=='1'; env=base/'9router.env'
-for name in ('asr-upstream-api-key','asr-bridge-key','tts-bridge-key','tts-cloud-api-key','tts-cloud-voice-id','tts-local-key'):
+for name in ('asr-upstream-api-key','asr-bridge-key','tts-bridge-key','tts-cloud-api-key','tts-cloud-voice-id-31','tts-cloud-voice-id','tts-local-key'):
     p=base/'secrets'/name
     if p.is_symlink() or not p.is_file() or not p.stat().st_size or p.stat().st_mode & 0o077 or p.stat().st_uid != 1000:
         raise SystemExit('protected 9Router speech secret missing/unreadable by container uid 1000: '+name)
