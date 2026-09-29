@@ -32,6 +32,17 @@ and secrets checks pass. This fix is not deployed yet, so the live production
 image and MPS runtime remain unchanged. Keep the Goal open until the patch is
 explicitly applied and real group-channel acceptance passes.
 
+Reference update on 2026-09-29: the pinned public `bysq/TTS-KurisuMakise`
+revision `8bbdc59cb265a95013ed03ce5404d18d73b5f0e7` is fully retained outside
+Git at the existing model directory with all `979` repository files present.
+The active production reference is now
+`WAV/crs_0225.WAV_0000000000_0000195840.wav` with the matching transcript
+`からあげのことはどうでもいい今は電話レンジに何が起きたのか解析するのが先`.
+The change was applied through
+`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply`; the pre-change
+reference and plist are retained at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T182634Z/`.
+
 ```text
 GPT-SoVITS v2Pro MPS :19871
   -> qwen-audio-3.1-tts-flash

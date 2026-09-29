@@ -9,7 +9,7 @@
     <key>AMADEUS_GPT_SOVITS_TTS_PORT</key><string>19871</string>
     <key>AMADEUS_GPT_SOVITS_TTS_TOKEN_FILE</key><string>__TOKEN_FILE__</string>
     <key>AMADEUS_GPT_SOVITS_REFERENCE_AUDIO</key><string>__REFERENCE_AUDIO__</string>
-    <key>AMADEUS_GPT_SOVITS_PROMPT_TEXT</key><string>あなたに会いに来たの？岡部倫太郎さん？じゃなくて…</string>
+  <key>AMADEUS_GPT_SOVITS_PROMPT_TEXT</key><string>からあげのことはどうでもいい今は電話レンジに何が起きたのか解析するのが先</string>
     <key>AMADEUS_GPT_SOVITS_UPSTREAM_URL</key><string>http://127.0.0.1:19870/tts</string>
     <key>AMADEUS_GPT_SOVITS_FFMPEG</key><string>__FFMPEG__</string>
     <key>AMADEUS_GPT_SOVITS_TIMEOUT_SECONDS</key><string>55</string>
