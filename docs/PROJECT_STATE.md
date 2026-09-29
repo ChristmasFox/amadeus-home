@@ -1,5 +1,20 @@
 # Project State — 2026-09-29
 
+## 2026-09-29 Kurisu GPT-SoVITS v2Pro PoC — awaiting owner listening
+
+The isolated `bysq/TTS-KurisuMakise` v2Pro candidate loaded on MPS and passed
+Japanese synthesis. An 8-line identical-text A/B set against the direct
+`qwen-audio-3.1-tts-flash` model-bound voice, plus a five-run warm benchmark,
+remain outside Git under
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/`.
+The candidate listens only on loopback `127.0.0.1:19870`; it is not managed by
+launchd and has not been added to production routing. Production
+`com.amadeus.qwen3-tts` remains healthy on PID `18387`, ports `18792`/`18793`,
+and its Phase 0 file hashes are unchanged. The owner listening verdict is the
+acceptance gate; no MLX conversion or production integration is authorized yet.
+Evidence and rollback scope are recorded in
+`.agent/checkpoints/2026-09-29-amadeus-kurisu-gpt-sovits-poc-ab.md`.
+
 ## 2026-09-29 Qwen Audio TTS default pure voice clone — deployed
 
 The cloud `default` request is now a pure voice-clone baseline. The bridge
