@@ -53,6 +53,19 @@ pnpm verify:voice  # 离线 unit/fixture/typecheck，不跑模型或 Docker
 pnpm test:workflow
 \`\`\`
 
+## ReplyEnvelope reply boundary
+
+Kurisu 的 WhatsApp 回复由 `plugins/amadeus/src/reply-envelope.ts`、
+`reply-planner.ts` 和 `reply-delivery.ts` 贯穿。每个 run 绑定一个 immutable
+合同和 `deliveryId`：text 只发送 `visibleText`，voice 只把日语
+`speechText` 交给 TTS 后发送语音及同一合同的可见文本，silent 不触发任何
+TTS 或频道发送。入站语音由已验证的 transport fact 固定为 voice；typed turn
+使用严格结构化 planner，heartbeat、cron 和内部 handoff 使用 silent。
+
+ReplyEnvelope 的 TTS bridge 使用共享 110 秒 deadline（云端 25 秒、备用云端
+25 秒、本地 55 秒、5 秒 reserve）。ReplyEnvelope 迁移仍需真实 WhatsApp 验收；
+本地验证不会自动执行 release、镜像构建或生产部署。
+
 ## Amadeus 版本管理
 
 产品版本唯一记录在根目录 `VERSION`，当前正式发布版本为 `1.6.0`。每次只执行 `bump patch` 并递增

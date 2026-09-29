@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-26（Amadeus 1.6.0 Voice release and owner handset acceptance）
+更新时间：2026-09-29（ReplyEnvelope migration in progress; no production switch）
 
 ## Worldline notification boundary
 
@@ -49,6 +49,26 @@ provider-neutral external account。OpenClaw 只提供可信 channel/account/sen
 OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facade、关键词路由、
 第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界；统计、权限、预览确认、
 状态转换和排序保持 deterministic。
+
+## ReplyEnvelope reply boundary
+
+Kurisu 的最终回复由 `plugins/amadeus/src/reply-envelope.ts` 定义 immutable
+`ReplyEnvelope`，由 `reply-planner.ts` 在当前 run 上解析 strict JSON，并由
+`reply-delivery.ts` 按 `text`、`voice`、`silent` 三种状态记录一次 delivery。
+`runId` 与 `deliveryId` 贯穿到 settled；不会使用 session 级 modality 状态。
+
+- `inbound_voice` 由已验证的 WhatsApp audio lease 固定为 `voice`，speechText
+  必须含日语字符；typed WhatsApp 由结构化 planner 决定，失败回退为 text。
+- `heartbeat`、`cron`、`internal_handoff` 和 `system` 在 run context 明确标记，
+  resolver 生成 `silent`，不进入 TTS、文本发送或 outbound record。
+- text 只发送 visibleText；voice 只将 speechText 交给唯一 TTS bridge，再按
+  同一合同发送语音和可见文本；channel adapter 不解析控制文本。
+- `infra/docker/casaos/9router/tts-bridge.mjs` 使用一个 110 秒 deadline：云端首选
+  25 秒、备用云端 25 秒、本地 55 秒、reserve 5 秒。provider、下载和转换共享
+  剩余时间，失败只返回结构化错误分类。
+
+迁移尚未完成真实 WhatsApp 验收；源码门禁通过前不得 release/deploy，验收证据和
+rollback checkpoint 记录在 dated `.agent/checkpoints/` 后才可关闭 Goal。
 
 ## Presentation contract 与时间语义
 
@@ -223,8 +243,22 @@ canonical runtime 是 host profile 指定的 OrbStack CasaOS machine（M204 当�
 
 旧数据仅用于备份/审计/恢复，不作为运行时 fallback；未执行旧架构回滚演练。
 
-## Voice I/O boundary (1.6.0 live)
+## Voice I/O boundary (historical 1.6.0 deployment)
 
-WhatsApp stays transport-only. Pinned OpenClaw/Kurisu owns the existing session, transcription lifecycle, tools and `tts.auto=inbound` response modality. 9Router remains the sole speech route/control plane via logical `amadeus-asr` and `amadeus-tts` aliases; the existing Chat Combo does **not** satisfy STT. A native M204 user-session Qwen3-TTS service at port 18792 only synthesizes authenticated bounded text with the operator-owned `kurisu-v1` profile; it has no conversation, planner, channel or notification logic. This chain is deployed in 1.6.0 with the original protected A reference and exactly one community MLX 1.7B Base 8-bit engine; explicit MPS rollback is protected outside Git, not a serving fallback. The owner accepted real post-release WhatsApp voice and typed isolation. The older group-specific handset check remains a separate historical follow-up, not a second speech path. No Telegram-specific speech path is part of this release.
+WhatsApp stays transport-only. The current ReplyEnvelope boundary owns response
+modality and feeds the pinned OpenClaw TTS path; this replaces the older
+`tts.auto=inbound` response decision. 9Router remains the sole speech route/control
+plane via logical `amadeus-asr` and `amadeus-tts` aliases; the existing Chat Combo
+does **not** satisfy STT. A native M204 user-session Qwen3-TTS service at port
+18792 only synthesizes authenticated bounded text with the operator-owned
+`kurisu-v1` profile; it has no conversation, planner, channel or notification
+logic. The 1.6.0 deployment and its owner acceptance are historical evidence;
+fresh WhatsApp acceptance is required for the active migration Goal.
 
-A small **protocol-only** ASR adapter in the repository-managed 9Router container: `selfhosted-stt` at container loopback `20129` converts bounded WhatsApp audio to DashScope's synchronous Qwen-Audio multimodal-generation shape and normalizes a transcript. This is not another model router or Agent; `amadeus-asr` remains a 9Router model alias, and the M204 Qwen3-TTS process is independent so TTS outages need not take down ASR. Both provider credentials stay outside Git. The pinned OpenClaw Voice compatibility adapter imports pure `scripts/openclaw-voice-policy.mjs`, lease/queue bridge helpers, and fixed markers; its compiled-file patcher only discovers anchors, injects bridges and fails closed on mismatches. No stable pinned plugin TTS hook was found, so the remaining TTS input/WhatsApp lifecycle anchors are retained rather than forked. Pinned WhatsApp ingress uses a compatibility patch to return a text error on failed direct voice transcription before Agent dispatch; it reuses the channel's existing transport reply.
+A small **protocol-only** ASR adapter in the repository-managed 9Router container: `selfhosted-stt` at container loopback `20129` converts bounded WhatsApp audio to DashScope's synchronous Qwen-Audio multimodal-generation shape and normalizes a transcript. This is not another model router or Agent; `amadeus-asr` remains a 9Router model alias, and the M204 Qwen3-TTS process is independent so TTS outages need not take down ASR. Both provider credentials stay outside Git. The pinned OpenClaw compatibility adapter keeps only transport lifecycle wiring in
+`scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs`: voice lease/queue admission,
+typing cleanup, and a narrow TTS bridge call into the plugin's stateless ReplyEnvelope
+resolver. It does not own modality, parse markers, clean user text, recover speech,
+or maintain session modality state. Pinned WhatsApp ingress still fails closed at the
+channel boundary when direct voice transcription cannot be admitted; it does not send
+an Agent-facing control string.

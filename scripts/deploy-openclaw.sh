@@ -286,7 +286,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-tts-emotion.mjs
   node scripts/test-patch-openclaw-tts-emotion.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
-  node scripts/test-openclaw-voice-policy.mjs
+  node scripts/test-reply-envelope-policy.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
@@ -328,7 +328,6 @@ for source in \
   "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
   "$VOICE_LIFECYCLE_PATCH_RUNTIME" \
   "$ROOT_DIR/scripts/openclaw-voice-markers.mjs" \
-  "$ROOT_DIR/scripts/openclaw-voice-policy.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-lease.mjs" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
@@ -452,7 +451,7 @@ orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   /home/node/.openclaw/npm/projects < "$MEDIA_AGENT_PATCH_RUNTIME"
 tar -C "$ROOT_DIR/scripts" -cf - \
   patch-openclaw-whatsapp-voice-lifecycle.mjs openclaw-voice-markers.mjs \
-  openclaw-voice-policy.mjs openclaw-voice-lease.mjs | \
+  openclaw-voice-lease.mjs | \
   orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
     tmp=$(mktemp -d /tmp/amadeus-voice-patch.XXXXXX)
     trap "rm -rf $tmp" EXIT

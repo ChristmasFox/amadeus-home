@@ -2,15 +2,14 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
-import {
-  clearReplyModalityForTurn,
-  parseReplyModalityMarker,
-  setReplyModalityForTurn,
-} from './reply-modality.js';
+import { parseStructuredReplyJson, validateReplyEnvelope, type ReplyEnvelope, type ReplyOrigin } from './reply-envelope.js';
+import { planTypedReply, resolveReplyEnvelope } from './reply-planner.js';
 
-// Pinned WhatsApp lifecycle patch creates this registry only for admitted audio
-// turns, before Agent dispatch, and removes each lease after full delivery.
+/** The transport lease is lifecycle state, not modality state. */
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
+/** Stateless bridge used by the pinned OpenClaw TTS boundary to call this resolver. */
+export const REPLY_ENVELOPE_RESOLVER_GLOBAL = '__amadeusReplyEnvelopeResolver20260929';
+const REPLY_ENVELOPE_RUN_CONTEXT_NAMESPACE = 'amadeus.reply-envelope';
 
 type VoiceLease = { closed?: unknown; messageId?: unknown; sessionKey?: unknown };
 
@@ -32,57 +31,169 @@ function loadVoiceSkill(api: OpenClawPluginApi): string {
   return body;
 }
 
+function originForContext(context: { inputProvenance?: { kind?: string; sourceTool?: string }; trigger?: string }): ReplyOrigin {
+  if (context.trigger === 'heartbeat' || context.inputProvenance?.kind === 'heartbeat') return 'heartbeat';
+  if (context.trigger === 'cron' || context.inputProvenance?.kind === 'cron' || context.inputProvenance?.sourceTool === 'cron') return 'cron';
+  if (context.inputProvenance?.kind === 'inter_session') return 'internal_handoff';
+  if (context.inputProvenance?.kind === 'internal_system') return 'system';
+  return 'external_user';
+}
+
+function isReplyOrigin(value: unknown): value is ReplyOrigin {
+  return value === 'external_user' || value === 'inbound_voice' || value === 'heartbeat'
+    || value === 'cron' || value === 'internal_handoff' || value === 'system';
+}
+
+type ReplyEnvelopeRunContext = Readonly<{
+  origin: ReplyOrigin;
+  sessionKey?: string;
+  channel?: string;
+}>;
+
+type ReplyEnvelopeResolverInput = Readonly<{
+  runId?: unknown;
+  sessionKey?: unknown;
+  channel?: unknown;
+  kind?: unknown;
+  payload?: unknown;
+  candidate?: unknown;
+}>;
+
+type ReplyEnvelopeResolver = (input: ReplyEnvelopeResolverInput) => ReplyEnvelope | null;
+
+function fallbackRunId(input: ReplyEnvelopeResolverInput, sessionKey: string, channel: string): string {
+  const payload = input.payload && typeof input.payload === 'object'
+    ? input.payload as Record<string, unknown>
+    : undefined;
+  for (const key of ['replyToId', 'messageId', 'idempotencyKey', 'deliveryId']) {
+    const value = payload?.[key];
+    if (typeof value === 'string' && value.trim()) return `amadeus:${channel}:${sessionKey}:${key}:${value}`;
+  }
+  return `amadeus:${channel}:${sessionKey}:reply`;
+}
+
+function runContextFor(api: OpenClawPluginApi, runId: string): ReplyEnvelopeRunContext | undefined {
+  const value = api.runContext?.getRunContext({ runId, namespace: REPLY_ENVELOPE_RUN_CONTEXT_NAMESPACE });
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as Record<string, unknown>;
+  return isReplyOrigin(candidate.origin)
+    ? {
+      origin: candidate.origin,
+      ...(typeof candidate.sessionKey === 'string' ? { sessionKey: candidate.sessionKey } : {}),
+      ...(typeof candidate.channel === 'string' ? { channel: candidate.channel } : {}),
+    }
+    : undefined;
+}
+
+function candidateFromPayload(input: ReplyEnvelopeResolverInput): unknown {
+  if (input.candidate !== undefined) return input.candidate;
+  if (!input.payload || typeof input.payload !== 'object') return undefined;
+  const payload = input.payload as Record<string, unknown>;
+  return payload.amadeusEnvelope ?? payload.text;
+}
+
+function registerReplyEnvelopeResolver(api: OpenClawPluginApi): void {
+  const resolver: ReplyEnvelopeResolver = (input) => {
+    if (input.kind !== undefined && input.kind !== 'final') return null;
+    const observedRunId = typeof input.runId === 'string' && input.runId.trim() ? input.runId : undefined;
+    const runContext = observedRunId ? runContextFor(api, observedRunId) : undefined;
+    const channel = typeof input.channel === 'string' && input.channel.trim()
+      ? input.channel
+      : runContext?.channel ?? 'unknown';
+    const sessionKey = typeof input.sessionKey === 'string' && input.sessionKey.trim()
+      ? input.sessionKey
+      : runContext?.sessionKey ?? observedRunId ?? 'unknown';
+    const runId = observedRunId ?? fallbackRunId(input, sessionKey, channel);
+    const origin = runContext?.origin
+      ?? (hasActiveWhatsAppVoiceLease(channel, sessionKey) ? 'inbound_voice' : 'external_user');
+    const candidate = candidateFromPayload(input);
+    const existing = validateReplyEnvelope(candidate)
+      && candidate.runId === runId
+      && candidate.sessionKey === sessionKey
+      && candidate.channel === channel
+      ? candidate
+      : undefined;
+    if (existing) return existing;
+    const parsed = parseStructuredReplyJson(candidate);
+    const plan = planTypedReply(parsed?.modality === 'voice'
+      ? { modality: 'voice', answer_plan: 'answer_with_voice', ...(parsed.emotion ? { emotion: parsed.emotion } : {}) }
+      : { modality: 'text', answer_plan: 'answer_with_text' });
+    return resolveReplyEnvelope({
+      runId,
+      deliveryId: `${runId}:delivery`,
+      sessionKey,
+      channel,
+      origin,
+    }, candidate, plan);
+  };
+  (globalThis as Record<string, unknown>)[REPLY_ENVELOPE_RESOLVER_GLOBAL] = resolver;
+}
+
 export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
   const skill = loadVoiceSkill(api);
+  registerReplyEnvelopeResolver(api);
   api.on('before_prompt_build', ({ prompt: _prompt }, context) => {
     const channel = context.channel ?? context.messageProvider;
     const inboundVoice = hasActiveWhatsAppVoiceLease(channel, context.sessionKey);
+    const origin = inboundVoice ? 'inbound_voice' : originForContext(context);
+    if (context.runId) {
+      api.runContext?.setRunContext({
+        runId: context.runId,
+        namespace: REPLY_ENVELOPE_RUN_CONTEXT_NAMESPACE,
+        value: {
+          origin,
+          ...(context.sessionKey ? { sessionKey: context.sessionKey } : {}),
+          ...(channel ? { channel: String(channel) } : {}),
+        },
+      });
+    }
     if (inboundVoice) {
-      clearReplyModalityForTurn(context);
       return {
         appendSystemContext: [
-          'The verified current WhatsApp run has an inbound audio attachment. The complete voice-reply Skill body is included below; do not call the read tool to retrieve that Skill again. Apply it directly to this final reply and do not generalize it to other runs.',
+          'The verified current WhatsApp run has an inbound audio attachment. The complete voice-reply Skill body is included below; apply it directly to this final reply and do not generalize it to other runs.',
           skill,
+          'Return one strict JSON object with exactly visibleText, speechText, modality, and emotion. Use modality voice and a Japanese speechText for this run.',
         ].join('\n\n'),
       };
     }
     const isTypedWhatsApp = typeof channel === 'string' && channel.trim().toLowerCase() === 'whatsapp';
-    // OpenClaw supplies native turn provenance. Heartbeats, cron runs, and
-    // internal handoffs can share the WhatsApp route but must not receive a
-    // user-reply modality protocol or emit its control marker.
-    const isExternalUserTurn = context.inputProvenance?.kind === 'external_user';
+    const isExternalUserTurn = context.inputProvenance?.kind === 'external_user'
+      || (context.inputProvenance === undefined && origin === 'external_user');
     if (isTypedWhatsApp && isExternalUserTurn) {
-      // The model makes the semantic decision in this same Agent turn. The
-      // runtime only trusts its explicit control marker; no user-text regex or
-      // second classifier is involved. Default is fail-closed until the model
-      // emits the current turn's voice marker.
-      setReplyModalityForTurn(context, 'default');
       return {
         appendSystemContext: [
-          'The runtime has initialized this turn-scoped replyModality to default. Before answering, semantically classify the user\'s requested reply modality from the complete current request and conversation context, then set replyModality to voice or default. Do not classify by matching fixed trigger words. An explicit request for this answer to be sent, told, or answered as a voice/audio reply is voice; a question about how voice, TTS, or audio works is default; an ordinary translation request is default; if intent is ambiguous, choose default.',
-          'Your final payload MUST begin with exactly one hidden control line, either [[amadeus:reply-modality=voice]] or [[amadeus:reply-modality=default]], followed immediately by the user-facing answer. The line is the serialized replyModality metadata for the current turn, not user-visible text. Never mention it, omit it, or put a second modality marker in the answer.',
-          'When and only when your semantic decision is voice, apply the canonical voice-reply Skill body below and produce its exact Chinese/Japanese plus TTS contract. When the decision is default, answer normally and do not produce a Japanese voice line or TTS directive. This modality belongs only to the current turn; never create or change the verified inbound voice lease and never carry it into a later turn.',
+          'This is an external WhatsApp turn. Decide the answer modality with the single structured reply planner. The planner input is strict JSON: {"modality":"text"|"voice","answer_plan":"answer_with_text"|"answer_with_voice","emotion":"default"|"irritated"|"embarrassed"|"angry"|"sarcastic"|"soft"|"sad"}. Questions about voice or TTS remain text answers; an explicit request for this answer as audio is voice; ambiguity defaults to text.',
+          'Return the final answer as one strict JSON object with exactly visibleText, speechText, modality, and emotion. Never put routing metadata into visibleText. If modality is text, omit speechText. If modality is voice, speechText must be Japanese and visibleText must contain the final Chinese/Japanese contract from the Skill.',
           skill,
         ].join('\n\n'),
       };
     }
-    clearReplyModalityForTurn(context);
+    // Internal runs are represented by a silent envelope at the resolver
+    // boundary. Keep this hook free of a session registry or text protocol.
+    if (origin !== 'external_user') {
+      return;
+    }
     return;
   });
-  api.on('agent_end', (_event, context) => {
-    clearReplyModalityForTurn(context);
-  });
-  // This is the plugin-level final defense. The pinned WhatsApp lifecycle
-  // patch also scrubs the marker, but channel delivery must remain safe when a
-  // core path bypasses that adapter-specific normalizer.
   api.on('reply_payload_sending', (event) => {
-    const parsed = parseReplyModalityMarker(event.payload.text);
-    if (!parsed.present) return;
-    if (parsed.text.trim() === 'NO_REPLY') return { cancel: true, reason: 'amadeus_no_reply' };
+    const runId = typeof event.runId === 'string' && event.runId ? event.runId : undefined;
+    if (event.kind !== undefined && event.kind !== 'final') return;
+    const resolver = (globalThis as Record<string, unknown>)[REPLY_ENVELOPE_RESOLVER_GLOBAL] as ReplyEnvelopeResolver | undefined;
+    const envelope = resolver?.({
+      runId,
+      sessionKey: event.sessionKey,
+      channel: event.channel,
+      kind: event.kind,
+      payload: event.payload,
+    });
+    if (!envelope) return;
+    if (envelope.silent) return { cancel: true, reason: 'silent_reply_envelope' };
     return {
       payload: {
         ...event.payload,
-        text: parsed.text,
+        text: envelope.visibleText,
+        amadeusEnvelope: envelope,
+        ...(envelope.speechText ? { spokenText: envelope.speechText } : {}),
       },
     };
   });
