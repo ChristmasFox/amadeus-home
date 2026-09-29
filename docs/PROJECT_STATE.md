@@ -22,13 +22,17 @@ Warm direct synthesis measured 2.581646 seconds for 3.312 seconds of audio
 All post-apply evidence is under
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
 
-On 2026-09-29 the active reference was changed through the source-controlled
-MPS manager to `WAV/crs_0695.WAV_0000000000_0000224000.wav`, using its matching
-dataset transcript `裸の得意点が作られていないなら、つまり被験者はブラックホールに放り込まれるのと同じだから。`.
-Per owner request, the active model directory retains only this reference WAV
-alongside the GPT-SoVITS weights. The previous reference is not retained as an
-audio file; its hash and the before-change plist remain in protected rollback
-evidence at
+On 2026-09-29 the latest active reference was changed through the
+source-controlled MPS manager to
+`WAV/crs_2263.WAV_0000155200_0000352960.wav`, using its matching dataset
+transcript `そして世界はパラレルワールドとしてここではマユリが助からなかった未来が`.
+The source change is commit `f342339`, applied with
+`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply`. Per owner request, the
+active model directory retains only this one reference WAV alongside the
+GPT-SoVITS weights. The previous active `crs_1373` WAV, before-change plist,
+live health and real synthesis are retained in protected rollback/evidence at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T192942Z-2263/`.
+The superseded `crs_0695` reference evidence remains at
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T184957Z-0695/`.
 
 The Goal remains open as `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`. The owner

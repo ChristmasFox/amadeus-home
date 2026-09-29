@@ -28,18 +28,22 @@ later text run to overlap the voice run and win the final WhatsApp delivery
 boundary. A repo-only candidate fix now serializes every inbound WhatsApp
 arrival per session in `scripts/openclaw-voice-lease.mjs`; focused lifecycle,
 bundle, policy, voice-failure, bilingual-envelope, group-policy, syntax, diff,
-and secrets checks pass. This fix is not deployed yet, so the live production
-image and MPS runtime remain unchanged. Keep the Goal open until the patch is
-explicitly applied and real group-channel acceptance passes.
+and secrets checks pass. This fix is not deployed yet, so the live OpenClaw
+image and group-ingress behavior remain unchanged. The separate reference
+sample update below does not apply this group-channel patch. Keep the Goal open
+until the patch is explicitly applied and real group-channel acceptance passes.
 
-Reference update on 2026-09-29: the active production reference is now
-`WAV/crs_0695.WAV_0000000000_0000224000.wav` with the matching transcript
-`裸の得意点が作られていないなら、つまり被験者はブラックホールに放り込まれるのと同じだから。`.
+Reference update on 2026-09-29: the latest active production reference is now
+`WAV/crs_2263.WAV_0000155200_0000352960.wav` with the matching transcript
+`そして世界はパラレルワールドとしてここではマユリが助からなかった未来が`.
 The change is applied through
-`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply`. Per owner request, the
-active model directory retains only this one reference WAV; the GPT-SoVITS
-weights remain, and the prior reference remains only in protected rollback
-evidence as hashes/configuration at
+`infra/macos/manage-kurisu-gpt-sovits-tts.sh --apply` from source commit
+`f342339`. Per owner request, the active model directory retains only this one
+reference WAV; the GPT-SoVITS weights remain. The prior active `crs_1373`
+reference, before-change plist, live health and real synthesis are retained in
+the protected checkpoint
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T192942Z-2263/`.
+The superseded `crs_0695` evidence remains at
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T184957Z-0695/`.
 
 ```text
