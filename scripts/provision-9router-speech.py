@@ -96,7 +96,6 @@ def backup_live(machine: str) -> str:
     target = f"/DATA/AppData/9router/backups/qwen-audio-tts-{stamp}"
     code = r"""import os,sqlite3,shutil,sys,json,subprocess
 from pathlib import Path
-from nine_router_management import Dashboard, local_cli_token, protected
 out=Path(sys.argv[1]); out.mkdir(mode=0o700,parents=True,exist_ok=False)
 src=sqlite3.connect('file:/DATA/AppData/9router/data/db/data.sqlite?mode=ro',uri=True)
 dst=sqlite3.connect(out/'data.sqlite'); src.backup(dst); dst.close(); src.close()
