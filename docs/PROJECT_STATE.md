@@ -1,5 +1,33 @@
 # Project State — 2026-09-27
 
+## 2026-09-29 Qwen Audio TTS cloud primary — owner accepted
+
+The Qwen Audio TTS Goal is complete. Source commits `13ca03f` and `9347de1`
+add the protected voice provisioning flow, the OpenAI-compatible 9Router
+adapter, cloud-first `qwen-audio-3.0-tts-flash` synthesis, and one bounded
+M204 OminiX fallback. The deployed 9Router image is
+`local/9router:git-13ca03fa6fe0-20260929T051222Z`; OpenClaw remains on the
+existing healthy `local/openclaw-amadeus:git-9e30a3dc08e8-20260928171059`
+image. No second Agent/runtime or second resident local TTS model was added,
+and the existing ASR route remains unchanged.
+
+The protected 46-second reference and cloned voice identity stay outside Git.
+Direct cloud smoke passed for the supported emotion cases and formats. The
+real owner WhatsApp acceptance passed for all three required cases: typed
+explicit voice produced one playable cloud media reply, ordinary typed text
+produced no speech request and no media, and an inbound `audio/ogg; codecs=opus`
+voice note produced one playable cloud media reply. No fallback was used in
+these acceptance turns. The owner confirmed playback. The CLI
+`openclaw agent --deliver` path is explicitly excluded from acceptance because
+it bypasses the WhatsApp TTS lifecycle.
+
+The protected deployment checkpoint is
+`/DATA/AppData/9router/backups/qwen-audio-tts-deploy-20260929T051222Z`; the
+owner acceptance evidence is
+`/DATA/AppData/9router/backups/qwen-audio-tts-owner-acceptance-20260929T054329Z/evidence.json`.
+The dated source checkpoint is
+`.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-cloud-release.md`.
+
 ## 2026-09-28 typed voice semantic modality heartbeat isolation — candidate live
 
 Commit `bce1cc6` is pushed to `origin/main` and deployed as
