@@ -1,10 +1,10 @@
 # Canonical context — 2026-09-29
 
 Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
-The active Goal is `docs/AMADEUS_REPLY_ENVELOPE_ARCHITECTURE_MIGRATION_GOAL.md`.
-The ReplyEnvelope source migration is in progress; real WhatsApp acceptance is
-still required. Older Goal documents and checkpoints remain audit evidence, not
-live instructions.
+The active Goal is `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
+The GPT-SoVITS MPS production apply is complete and real owner-channel
+acceptance is still required. Older Goal documents and checkpoints remain
+audit evidence, not live instructions.
 
 - Released product: `VERSION=1.6.5`, source release commit `fb7dd74` with
   final content/state documentation commit `6fb4926` on

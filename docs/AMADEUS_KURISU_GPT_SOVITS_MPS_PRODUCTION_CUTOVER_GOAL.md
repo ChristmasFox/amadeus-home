@@ -2,7 +2,7 @@
 
 Date: 2026-09-29
 Type: production TTS integration / staged cutover / rollback-controlled runtime change
-Status: `IN_PROGRESS` — owner explicitly restarted production cutover on 2026-09-29.
+Status: `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE` — production apply completed on 2026-09-29; the real owner-channel gate remains open.
 Prerequisite: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md` completed as `ACCEPTED_FOR_FURTHER_INTEGRATION`.
 
 ## Decision already made
@@ -24,6 +24,22 @@ GPT-SoVITS v2Pro MPS primary
 ```
 
 The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts, protected Qwen model-bound voice IDs, bounded request policy, deterministic fallback behavior and a tested rollback to the current accepted production path. The OminiX Qwen3-TTS runtime is retained as a complete rollback asset but is not part of the post-cutover normal route or resident local TTS set.
+
+## Current execution checkpoint — 2026-09-29
+
+The explicit apply phase is complete. GPT-SoVITS v2Pro MPS is ready through
+the loopback API on `:19870` and authenticated adapter on `:19871`; the live
+`amadeus-tts` bridge returned `gpt-sovits-mps` for the primary smoke. With the
+adapter deliberately stopped, the bridge returned valid cloud audio and the
+9Router audit log recorded `qwen-audio-3.1-tts-flash` as the first fallback;
+the executable bridge test records the subsequent 3.0 fallback ordering.
+OminiX is uninstalled with no listeners on `:18792`/`:18793`. The complete
+rollback checkpoint remains protected and readable. Evidence is retained at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
+
+The only remaining acceptance gate is a real owner-channel voice turn. Keep
+this Goal open until the owner confirms Japanese pronunciation, Kurisu
+identity, visible text behavior and typed-text isolation.
 
 ## Non-goals
 
@@ -90,6 +106,11 @@ The cutover must preserve the existing OpenClaw/ReplyEnvelope/channel contracts,
 ## Completion evidence
 
 The Goal is complete only when the dated checkpoint contains the exact candidate/provider revisions, route diff, health and auth evidence, primary-provider proof, fallback proof, owner-channel acceptance, resource measurements, protected rollback location and post-cutover health. A plan or dry-run alone is not completion.
+
+The current dated checkpoint is
+`.agent/checkpoints/2026-09-29-amadeus-kurisu-gpt-sovits-post-cutover.md`.
+It records all non-owner-channel gates and explicitly marks owner-channel
+acceptance as pending.
 
 ## Deferred MLX optimization
 

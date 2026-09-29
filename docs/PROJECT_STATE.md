@@ -1,20 +1,47 @@
 # Project State — 2026-09-29
 
+## 2026-09-29 Kurisu GPT-SoVITS v2Pro MPS production cutover — applied; owner acceptance pending
+
+The production `amadeus-tts` cutover is applied from source commit `606270b`.
+GPT-SoVITS v2Pro MPS is the only resident local TTS: the API listens on
+loopback `127.0.0.1:19870` and the authenticated production adapter listens on
+`127.0.0.1:19871`. The live bridge primary smoke returned
+`X-Amadeus-TTS-Provider: gpt-sovits-mps` with valid MP3 audio. During a
+controlled adapter stop, the same bridge returned valid cloud audio and the
+container audit recorded `qwen-audio-3.1-tts-flash` as attempt 1 with
+`provider_unavailable`; the executable bridge test records the exact
+`qwen-audio-3.1-tts-flash` -> `qwen-audio-3.0-tts-flash` ordering.
+
+The OminiX `com.amadeus.qwen3-tts` LaunchAgent is uninstalled and ports
+`:18792` and `:18793` have no listeners. The complete rollback checkpoint is
+retained at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-20260929T164028Z`;
+its 2823-file manifest verifies with no missing, changed or symlinked entries.
+Warm direct synthesis measured 2.581646 seconds for 3.312 seconds of audio
+(RTF 0.7795); swap remained at 2202 MiB while sampled free memory was 62–78%.
+All post-apply evidence is under
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
+
+The Goal remains open as `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`. The owner
+still needs to verify the real production voice turn for Japanese
+pronunciation, Kurisu identity, visible text behavior and typed-text
+isolation. MLX conversion remains a later independent Goal.
+
 ## 2026-09-29 Kurisu GPT-SoVITS v2Pro PoC — accepted for further integration
 
-The isolated `bysq/TTS-KurisuMakise` v2Pro candidate loaded on MPS and passed
+At the PoC checkpoint time, the isolated `bysq/TTS-KurisuMakise` v2Pro candidate loaded on MPS and passed
 Japanese synthesis. An 8-line identical-text A/B set against the direct
 `qwen-audio-3.1-tts-flash` model-bound voice, plus a five-run warm benchmark,
 remain outside Git under
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-poc-20260929/`.
-The candidate listens only on loopback `127.0.0.1:19870`; it is not managed by
-launchd and has not been added to production routing. Production
-`com.amadeus.qwen3-tts` remains healthy on PID `18387`, ports `18792`/`18793`,
-and its Phase 0 file hashes are unchanged. The owner listened to the paired
+The candidate then listened only on loopback `127.0.0.1:19870`; it was not
+managed by launchd and had not been added to production routing. Production
+`com.amadeus.qwen3-tts` was healthy at that checkpoint on PID `18387`, ports
+`18792`/`18793`, and its Phase 0 file hashes were unchanged. The owner listened to the paired
 files and judged `GPT-SoVITS 明显比 Qwen 3.1 更像牧濑红莉栖，Gate B 通过。`
-The outcome is `ACCEPTED_FOR_FURTHER_INTEGRATION`; the MPS runtime and all
-external evidence remain retained. The next planned Goal is
-`docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`, not yet active.
+The outcome was `ACCEPTED_FOR_FURTHER_INTEGRATION`; the MPS runtime and all
+external evidence remain retained. The next planned Goal was
+`docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
 MLX conversion is deferred to a later independent optimization Goal.
 Evidence and rollback scope are recorded in
 `.agent/checkpoints/2026-09-29-amadeus-kurisu-gpt-sovits-poc-ab.md`.
