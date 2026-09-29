@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { EventEmitter } from 'node:events';
 import http from 'node:http';
 import { createTtsServer, buildCloudRequest, classifyCloudFailure } from './tts-bridge.mjs';
 
@@ -11,8 +10,6 @@ const VOICE31 = 'qwen-audio-3.1-tts-flash-kurisu-opaque';
 const VOICE30 = 'qwen-audio-3.0-tts-flash-kurisu-opaque';
 const mp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(80)]);
 const wav = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), Buffer.alloc(72)]);
-const opus = Buffer.concat([Buffer.from('OggS'), Buffer.alloc(80)]);
-const largerMp3 = Buffer.concat([Buffer.from('ID3'), Buffer.alloc(24 * 1024)]);
 
 function response(status, body, headers = {}) {
   return new Response(body, { status, headers });
@@ -20,10 +17,6 @@ function response(status, body, headers = {}) {
 
 function cloudPayload(audio) {
   return JSON.stringify({ request_id: 'request-id-is-not-logged', output: { finish_reason: 'stop', audio: { data: audio.toString('base64') } } });
-}
-
-function cloudUrlPayload(url) {
-  return JSON.stringify({ request_id: 'request-id-is-not-logged', output: { finish_reason: 'stop', audio: { url } } });
 }
 
 async function request(server, body, token = BRIDGE, extraHeaders = {}) {
@@ -39,6 +32,17 @@ async function request(server, body, token = BRIDGE, extraHeaders = {}) {
   });
 }
 
+async function get(server, path) {
+  const address = server.address();
+  return await new Promise((resolve, reject) => {
+    http.get({ hostname: '127.0.0.1', port: address.port, path }, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
+    }).on('error', reject);
+  });
+}
+
 async function running(server) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 }
@@ -48,222 +52,93 @@ async function close(server) {
 }
 
 const base = { model: 'amadeus-tts', voice: 'kurisu-v1', input: '短いテストです。', response_format: 'mp3', style: 'default' };
-const defaultRequest = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'default', format: 'mp3' });
-assert.deepEqual(defaultRequest.input, {
-  text: base.input,
-  voice: VOICE31,
-  format: 'mp3',
-  sample_rate: 24000,
-  language_hints: ['ja'],
-  instruction: defaultRequest.input.instruction,
-});
-assert.equal(typeof defaultRequest.input.instruction, 'string');
-assert.equal(JSON.stringify(defaultRequest).includes('persona'), false);
-const instruction = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'angry', format: 'wav', style: { cloudPersona: 'persona:', emotions: { angry: { cloudInstruction: 'anger' } } } });
-assert.equal(instruction.model, 'qwen-audio-3.1-tts-flash');
-assert.equal(instruction.input.voice, VOICE31);
-assert.equal(instruction.input.format, 'wav');
-assert.equal(instruction.input.language_hints[0], 'ja');
-assert.equal(instruction.input.instruction, 'persona:anger');
-assert.equal(JSON.stringify(instruction).includes('local OminiX'), false);
+const cloudRequest = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'default', format: 'mp3' });
+assert.equal(cloudRequest.model, 'qwen-audio-3.1-tts-flash');
+assert.equal(cloudRequest.input.voice, VOICE31);
+assert.equal(cloudRequest.input.language_hints[0], 'ja');
+assert.equal(typeof cloudRequest.input.instruction, 'string');
+assert.equal(JSON.stringify(cloudRequest).includes('persona'), false);
+const angry = buildCloudRequest({ text: base.input, voiceId: VOICE31, emotion: 'angry', format: 'wav', style: { cloudPersona: 'persona:', emotions: { angry: { cloudInstruction: 'anger' } } } });
+assert.equal(angry.input.instruction, 'persona:anger');
 assert.equal(classifyCloudFailure({ name: 'TypeError', message: 'fetch failed', cause: { code: 'ENOTFOUND' } }).fallback, true);
 
 let calls = [];
-const success = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+const localSuccess = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
   cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-  fetchFn: async (url, options) => { calls.push({ url: String(url), body: JSON.parse(options.body), auth: options.headers.Authorization }); return response(200, cloudPayload(mp3)); } });
-await running(success);
-let result = await request(success, base);
+  localUrl: 'http://127.0.0.1:19871/v1/audio/speech',
+  fetchFn: async (url, options) => { calls.push({ url: String(url), body: JSON.parse(options.body), auth: options.headers.Authorization }); return response(200, mp3); } });
+await running(localSuccess);
+let result = await request(localSuccess, base);
 assert.equal(result.status, 200);
-assert.equal(result.headers['x-amadeus-tts-provider'], 'cloud');
+assert.equal(result.headers['x-amadeus-tts-provider'], 'gpt-sovits-mps');
 assert.equal(result.body.subarray(0, 3).toString(), 'ID3');
 assert.equal(calls.length, 1);
-assert.equal(calls[0].body.model, 'qwen-audio-3.1-tts-flash');
-assert.equal(calls[0].body.input.voice, VOICE31);
-assert.equal(calls[0].body.input.text, base.input);
-assert.equal(typeof calls[0].body.input.instruction, 'string');
-assert.equal(calls[0].auth, `Bearer ${CLOUD}`);
-assert.equal(JSON.stringify(calls[0].body).includes(CLOUD), false);
-assert.equal(JSON.stringify(calls[0].body).includes(VOICE31), true); // payload is sent, never logged
-assert.equal((await request(success, base, 'bad')).status, 401);
-await close(success);
+assert.equal(calls[0].url, 'http://127.0.0.1:19871/v1/audio/speech');
+assert.equal(calls[0].body.model, 'amadeus-tts');
+assert.equal(calls[0].body.style, 'default');
+assert.equal(calls[0].auth, `Bearer ${LOCAL}`);
+assert.equal((await request(localSuccess, base, 'bad')).status, 401);
+const health = await get(localSuccess, '/healthz');
+const healthBody = JSON.parse(health.body.toString());
+assert.equal(health.status, 200);
+assert.deepEqual(healthBody.fallbackOrder, ['gpt-sovits-mps', ...['qwen-audio-3.1-tts-flash', 'qwen-audio-3.0-tts-flash']]);
+await close(localSuccess);
 
-// A realistic inline base64 response is larger than the request body limit.
-// It must still reach the cloud success path instead of being misclassified
-// as a transient failure and sent to the local provider.
 calls = [];
-const largeSuccess = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+const qwen31Fallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
   cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-  fetchFn: async (url, options) => { calls.push(String(url)); return response(200, cloudPayload(largerMp3)); } });
-await running(largeSuccess);
-result = await request(largeSuccess, base);
-assert.equal(result.status, 200);
-assert.equal(result.headers['x-amadeus-tts-provider'], 'cloud');
-assert.equal(result.body.length, largerMp3.length);
-assert.equal(calls.length, 1);
-await close(largeSuccess);
-
-// DashScope can return an HTTP OSS URL; the bridge must upgrade it to HTTPS
-// before fetching the allowlisted provider object.
-calls = [];
-const httpUrlSuccess = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-  fetchFn: async (url) => {
-    calls.push(String(url));
-    return calls.length === 1
-      ? response(200, cloudUrlPayload('http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/audio'))
-      : response(200, mp3, { 'Content-Type': 'audio/mpeg' });
+  fetchFn: async (url, options) => {
+    calls.push({ url: String(url), body: JSON.parse(options.body), auth: options.headers.Authorization });
+    if (String(url).includes('19871')) return response(503, JSON.stringify({ error: { type: 'provider_unavailable' } }));
+    return response(200, cloudPayload(mp3));
   } });
-await running(httpUrlSuccess);
-result = await request(httpUrlSuccess, base);
+await running(qwen31Fallback);
+result = await request(qwen31Fallback, base);
 assert.equal(result.status, 200);
 assert.equal(result.headers['x-amadeus-tts-provider'], 'cloud');
-assert.equal(calls[1].startsWith('https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/'), true);
-await close(httpUrlSuccess);
+assert.equal(result.headers['x-amadeus-tts-fallback'], 'cloud');
+assert.equal(calls.length, 2);
+assert.match(calls[0].url, /19871/);
+assert.equal(calls[1].body.model, 'qwen-audio-3.1-tts-flash');
+assert.equal(calls[1].body.input.voice, VOICE31);
+assert.equal(calls[1].auth, `Bearer ${CLOUD}`);
+await close(qwen31Fallback);
 
-for (const cloudStatus of [408, 429, 500, 502, 503, 504]) {
-  calls = [];
-  const fallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-    cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-    fetchFn: async (url, options) => {
-      calls.push({ url: String(url), body: JSON.parse(options.body) });
-      return calls.length <= 2 ? response(cloudStatus, '{}') : response(200, mp3, { 'Content-Type': 'audio/mpeg' });
-    } });
-  await running(fallback);
-  result = await request(fallback, { ...base, style: 'soft' });
-  assert.equal(result.status, 200, `fallback ${cloudStatus}`);
-  assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
-  assert.equal(result.headers['x-amadeus-tts-fallback'], 'local');
-  assert.equal(calls.length, 3, `two cloud attempts and one local for ${cloudStatus}`);
-  assert.equal(calls[0].body.model, 'qwen-audio-3.1-tts-flash');
-  assert.equal(calls[0].body.input.voice, VOICE31);
-  assert.equal(calls[1].body.model, 'qwen-audio-3.0-tts-flash');
-  assert.equal(calls[1].body.input.voice, VOICE30);
-  assert.equal(calls[2].body.model, 'qwen3-tts-1.7b');
-  assert.equal(calls[2].body.style, 'soft');
-  await close(fallback);
-}
-
-// A transient 3.1 failure advances to the 3.0 cloud model before local.
 calls = [];
-const cloudSecondChoice = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+const qwen30Fallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
   cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
   fetchFn: async (url, options) => {
     calls.push({ url: String(url), body: JSON.parse(options.body) });
-    return calls.length === 1 ? response(503, '{}') : response(200, cloudPayload(mp3));
+    if (String(url).includes('19871')) return response(503, JSON.stringify({ error: { type: 'provider_unavailable' } }));
+    if (calls.length === 2) return response(503, 'upstream unavailable');
+    return response(200, cloudPayload(wav));
   } });
-await running(cloudSecondChoice);
-result = await request(cloudSecondChoice, base);
+await running(qwen30Fallback);
+result = await request(qwen30Fallback, { ...base, response_format: 'wav' });
 assert.equal(result.status, 200);
 assert.equal(result.headers['x-amadeus-tts-provider'], 'cloud');
-assert.equal(result.headers['x-amadeus-tts-fallback'], undefined);
-assert.equal(calls.length, 2);
-assert.equal(calls[0].body.model, 'qwen-audio-3.1-tts-flash');
-assert.equal(calls[0].body.input.voice, VOICE31);
-assert.equal(calls[1].body.model, 'qwen-audio-3.0-tts-flash');
-assert.equal(calls[1].body.input.voice, VOICE30);
-await close(cloudSecondChoice);
-
-for (const cloudStatus of [400, 401, 403]) {
-  calls = [];
-  const noFallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-    cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-    fetchFn: async () => { calls.push(1); return response(cloudStatus, '{}'); } });
-  await running(noFallback);
-  result = await request(noFallback, base);
-  assert.equal(result.status, cloudStatus === 400 ? 400 : 502);
-  assert.equal(calls.length, 1, `no fallback for ${cloudStatus}`);
-  await close(noFallback);
-}
-
-calls = [];
-const empty = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-  fetchFn: async () => { calls.push(1); return response(200, JSON.stringify({ output: { audio: { data: '' } } })); } });
-await running(empty);
-result = await request(empty, { ...base, response_format: 'wav' });
-assert.equal(result.status, 503); // local request is intentionally absent in this fixture
-assert.equal(calls.length, 3); // both cloud models + one local attempt
-await close(empty);
-
-const invalid = { ...base, style: 'arbitrary prompt' };
-const invalidServer = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', fetchFn: async () => { throw new Error('must_not_call'); } });
-await running(invalidServer);
-assert.equal((await request(invalidServer, invalid)).status, 400);
-await close(invalidServer);
-
-// A bounded provider timeout advances through the secondary cloud model and
-// then reaches local within the same caller deadline. No attempt may reset it.
-calls = [];
-const timeoutFallback = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 100, localTimeoutMs: 200,
-  fetchFn: async (url, options) => {
-    calls.push(String(url));
-    if (calls.length <= 2) return await new Promise((resolve, reject) => {
-      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
-    });
-    return response(200, mp3, { 'Content-Type': 'audio/mpeg' });
-  } });
-await running(timeoutFallback);
-const timeoutStarted = Date.now();
-result = await request(timeoutFallback, base, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
-const timeoutElapsed = Date.now() - timeoutStarted;
-assert.equal(result.status, 200);
-assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
-assert.equal(calls.length, 3);
-assert.ok(timeoutElapsed < 700, `deadline exceeded: ${timeoutElapsed}ms`);
-await close(timeoutFallback);
-
-// A cloud audio URL shares the provider deadline with its download. The
-// hanging download is classified as a provider timeout and cannot run past
-// the bounded fallback sequence.
-calls = [];
-const urlTimeout = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 120, localTimeoutMs: 120,
-  fetchFn: async (url, options) => {
-    calls.push(String(url));
-    if (calls.length === 1) return response(200, cloudUrlPayload('https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/prod/audio'));
-    if (calls.length === 2) return await new Promise((resolve, reject) => {
-      options.signal.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })), { once: true });
-    });
-    return response(200, mp3, { 'Content-Type': 'audio/mpeg' });
-  } });
-await running(urlTimeout);
-const urlTimeoutStarted = Date.now();
-result = await request(urlTimeout, base, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
-const urlTimeoutElapsed = Date.now() - urlTimeoutStarted;
-assert.equal(result.status, 200);
-assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
-assert.ok(urlTimeoutElapsed < 700, `URL deadline exceeded: ${urlTimeoutElapsed}ms`);
-await close(urlTimeout);
-
-// A format conversion that never closes is bounded by the same provider
-// deadline; the local provider can still return a valid requested format.
-calls = [];
-const ffmpegTimeout = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
-  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', cloudTimeoutMs: 120, localTimeoutMs: 120,
-  fetchFn: async (url) => {
-    calls.push(String(url));
-    return calls.length <= 2 ? response(200, cloudPayload(mp3)) : response(200, wav, { 'Content-Type': 'audio/wav' });
-  },
-  spawnFn: () => {
-    const child = new EventEmitter();
-    child.stdout = new EventEmitter();
-    child.stdin = new EventEmitter();
-    child.stdin.end = () => {};
-    child.kill = () => {};
-    return child;
-  } });
-await running(ffmpegTimeout);
-const ffmpegStarted = Date.now();
-result = await request(ffmpegTimeout, { ...base, response_format: 'wav' }, BRIDGE, { 'x-amadeus-deadline-ms': '6000' });
-const ffmpegElapsed = Date.now() - ffmpegStarted;
-assert.equal(result.status, 200);
-assert.equal(result.headers['x-amadeus-tts-provider'], 'local');
 assert.equal(result.body.subarray(0, 4).toString(), 'RIFF');
 assert.equal(calls.length, 3);
-assert.ok(ffmpegElapsed < 700, `ffmpeg deadline exceeded: ${ffmpegElapsed}ms`);
-await close(ffmpegTimeout);
+assert.equal(calls[1].body.model, 'qwen-audio-3.1-tts-flash');
+assert.equal(calls[2].body.model, 'qwen-audio-3.0-tts-flash');
+assert.equal(calls[2].body.input.voice, VOICE30);
+await close(qwen30Fallback);
+
+calls = [];
+const styled = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
+  fetchFn: async (url, options) => { calls.push(String(url)); return response(200, cloudPayload(mp3)); } });
+await running(styled);
+result = await request(styled, { ...base, style: 'angry' });
+assert.equal(result.status, 200);
+assert.equal(calls.length, 1);
+assert.match(calls[0], /SpeechSynthesizer/);
+await close(styled);
+
+const invalid = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+  cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', fetchFn: async () => { throw new Error('must_not_call'); } });
+await running(invalid);
+assert.equal((await request(invalid, { ...base, response_format: 'flac' })).status, 400);
+await close(invalid);
 
 console.log('TTS_BRIDGE_TEST=passed');

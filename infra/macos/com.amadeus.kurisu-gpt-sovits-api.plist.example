@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.amadeus.kurisu-gpt-sovits-api</string>
+  <key>ProgramArguments</key><array>
+    <string>__PYTHON__</string><string>__API_SCRIPT__</string>
+    <string>-a</string><string>127.0.0.1</string><string>-p</string><string>19870</string>
+    <string>-c</string><string>__CONFIG__</string>
+  </array>
+  <key>WorkingDirectory</key><string>__GPT_ROOT__</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PYTHONUNBUFFERED</key><string>1</string>
+    <key>PYTORCH_ENABLE_MPS_FALLBACK</key><string>1</string>
+    <key>HF_HOME</key><string>__MODEL_CACHE__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>__LOG_DIR__/kurisu-gpt-sovits-api.log</string>
+  <key>StandardErrorPath</key><string>__LOG_DIR__/kurisu-gpt-sovits-api.err.log</string>
+</dict></plist>
