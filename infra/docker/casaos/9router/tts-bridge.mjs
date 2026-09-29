@@ -203,18 +203,23 @@ function cloudError(status) {
 export function buildCloudRequest({ model = CLOUD_MODEL, text, voiceId, emotion, format, style }) {
   if (!MODEL_ALIASES.has('amadeus-tts')) throw new Error('adapter_model_contract');
   if (!CLOUD_MODELS.includes(model)) throw new Error('unsupported_cloud_model');
+  if (!EMOTIONS.has(emotion)) throw new Error('invalid_style');
   if (typeof voiceId !== 'string' || !voiceId.trim()) throw new Error('cloud_voice_id_required');
   if (!CLOUD_FORMATS.has(format)) throw new Error('unsupported_format');
+  const input = {
+    text,
+    voice: voiceId,
+    format,
+    sample_rate: format === 'opus' ? 48000 : 24000,
+    language_hints: ['ja'],
+  };
+  // A default request is deliberately pure voice cloning: do not send the
+  // persona, style, speed, pitch, or any instruction so the cloned voice
+  // remains the baseline for all other emotions.
+  if (emotion !== 'default') input.instruction = cloudInstruction(style, emotion);
   return {
     model,
-    input: {
-      text,
-      voice: voiceId,
-      format,
-      sample_rate: format === 'opus' ? 48000 : 24000,
-      language_hints: ['ja'],
-      instruction: cloudInstruction(style, emotion),
-    },
+    input,
   };
 }
 
