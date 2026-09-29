@@ -39,6 +39,13 @@ class StyleTest(unittest.TestCase):
         self.assertEqual({c["id"] for c in schema()["controls"]}, {"temperature", "top_k", "top_p", "max_new_tokens", "seed", "speed_factor", "repetition_penalty"})
         self.assertEqual(len(style_hash(style)), 64)
 
+    def test_kurisu_style_controls_are_chinese_not_japanese(self):
+        style = load_style()
+        controls = [style["baseline"], *(item["instruct"] for item in style["emotions"].values() if item["instruct"])]
+        self.assertTrue(controls)
+        self.assertTrue(all(any("\u4e00" <= char <= "\u9fff" for char in text) for text in controls))
+        self.assertTrue(all(not any("\u3040" <= char <= "\u30ff" for char in text) for text in controls))
+
     def test_option_bounds_are_server_side(self):
         with self.assertRaises(StyleConfigError): validate_options({"temperature": 3})
         with self.assertRaises(StyleConfigError): validate_options({"top_k": "50"})
