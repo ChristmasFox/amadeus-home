@@ -23,13 +23,13 @@ All post-apply evidence is under
 `/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-cutover-postapply-20260929T171128Z/`.
 
 On 2026-09-29 the active reference was changed through the source-controlled
-MPS manager to `WAV/crs_0225.WAV_0000000000_0000195840.wav`, using its matching
-dataset transcript `からあげのことはどうでもいい今は電話レンジに何が起きたのか解析するのが先`.
-The complete pinned `bysq/TTS-KurisuMakise` revision
-`8bbdc59cb265a95013ed03ce5404d18d73b5f0e7` is retained outside Git with all
-`979` files present. The before/after reference, plist and content manifest
-are retained at
-`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T182634Z/`.
+MPS manager to `WAV/crs_0695.WAV_0000000000_0000224000.wav`, using its matching
+dataset transcript `裸の得意点が作られていないなら、つまり被験者はブラックホールに放り込まれるのと同じだから。`.
+Per owner request, the active model directory retains only this reference WAV
+alongside the GPT-SoVITS weights. The previous reference is not retained as an
+audio file; its hash and the before-change plist remain in protected rollback
+evidence at
+`/Volumes/Avalon/backups/operation-skuld/kurisu-gpt-sovits-reference-20260929T184957Z-0695/`.
 
 The Goal remains open as `WAITING_FOR_OWNER_CHANNEL_ACCEPTANCE`. The owner
 still needs to verify the real production voice turn for Japanese
