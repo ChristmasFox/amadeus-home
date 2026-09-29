@@ -1,4 +1,18 @@
-# Current Task — Qwen Audio TTS default pure voice clone (Completed)
+# Current Task — Image Asset + On-Demand Upscale (Active Goal)
+
+Date: 2026-09-29 local.
+
+Active Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
+
+Implement durable generated-image assets on the actual current macOS host and an explicit on-demand super-resolution capability. Normal image generation must remain unchanged and must not automatically upscale. OpenClaw stays the sole Agent and should be able to upscale a structurally replied image, the recent eligible image in the current conversation, or an explicit `imageId`; 2x is the default, 4x is explicit, and both realistic/general and anime/illustration profiles are required.
+
+Machine-specific details are intentionally not prescribed here. Codex must discover the current host/profile and choose the durable host media root, service address/port, metadata persistence and Apple-Silicon-native upscale engine consistent with repository conventions. Do not hardcode any historical macOS username, `/Users/<name>` path, LAN IP or domain. The image asset root must live on the macOS host and survive OpenClaw/container recreation.
+
+Execute only through the authoritative Goal and preserve the existing native `image_generate`, thin channel adapters, ReplyEnvelope boundaries, secrets/runtime apply controls and rollback requirements.
+
+---
+
+# Previous Task — Qwen Audio TTS default pure voice clone (Completed)
 
 Date: 2026-09-29 local. The cloud `default` route now uses the model-bound
 cloned voice as the baseline: its request contains `text`, `voice`, `format`,
