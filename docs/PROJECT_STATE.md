@@ -1,5 +1,21 @@
 # Project State — 2026-09-29
 
+## 2026-09-29 Qwen Audio TTS default pure voice clone — deployed
+
+The cloud `default` request is now a pure voice-clone baseline. The bridge
+sends only `text`, model-bound `voice`, `format`, `sample_rate`, and Japanese
+`language_hints`; it omits instruction/persona/style, speed, and pitch.
+Non-default emotions append the bounded emotion instruction.
+
+Source commit `cc1ebfd` is deployed as
+`local/9router:git-cc1ebfdeec3b-20260929T081836Z`. Focused bridge tests,
+syntax checks, dry-run smoke, secrets scan, all three speech health checks,
+and a real cloud default MP3 synthesis passed. The protected rollback
+checkpoint is `/DATA/AppData/9router/backups/qwen-audio-tts-deploy-20260929T081836Z`;
+source evidence is `.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-default-pure-clone.md`.
+
+# Project State — 2026-09-29
+
 ## 2026-09-29 Qwen Audio TTS model fallback — deployed
 
 The protected `amadeus-tts` bridge now uses the bounded order

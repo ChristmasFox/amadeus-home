@@ -1,3 +1,18 @@
+# Current Task — Qwen Audio TTS default pure voice clone (Completed)
+
+Date: 2026-09-29 local. The cloud `default` route now uses the model-bound
+cloned voice as the baseline: its request contains `text`, `voice`, `format`,
+`sample_rate`, and `language_hints: ["ja"]`, with no instruction/persona/style,
+speed, or pitch controls. Non-default emotions retain bounded instructions.
+
+Source commit `cc1ebfd` is deployed as
+`local/9router:git-cc1ebfdeec3b-20260929T081836Z`. Live health and a real
+cloud default synthesis passed. The protected rollback checkpoint and evidence
+are recorded in `.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-default-pure-clone.md`.
+There is no active Goal after this completion.
+
+---
+
 # Current Task — Qwen Audio TTS model fallback (Completed)
 
 Date: 2026-09-29 local.
