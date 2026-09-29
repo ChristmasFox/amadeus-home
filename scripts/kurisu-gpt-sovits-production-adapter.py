@@ -42,7 +42,7 @@ class AdapterConfig:
 
 def _read_secret(path: Path) -> str:
     stat = path.lstat()
-    if not stat.is_file() or stat.is_symlink() or stat.st_mode & 0o077:
+    if not path.is_file() or path.is_symlink() or stat.st_mode & 0o077:
         raise RuntimeError("token_file_unprotected")
     value = path.read_text(encoding="utf-8").strip()
     if not value or len(value) < 32 or len(value) > 4096:
@@ -52,7 +52,7 @@ def _read_secret(path: Path) -> str:
 
 def _validate_reference(path: Path) -> None:
     stat = path.lstat()
-    if not stat.is_file() or stat.is_symlink() or not stat.st_size:
+    if not path.is_file() or path.is_symlink() or not stat.st_size:
         raise RuntimeError("reference_audio_invalid")
 
 
