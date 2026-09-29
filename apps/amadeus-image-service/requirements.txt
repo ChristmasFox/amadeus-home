@@ -1,0 +1,6 @@
+# Host-only dependencies. The Real-ESRGAN implementation is installed from
+# the pinned source commit by scripts/manage-amadeus-image-service.sh.
+mlx>=0.31,<0.33
+numpy>=2.0,<3
+Pillow>=11,<12
+huggingface-hub>=0.34,<1
