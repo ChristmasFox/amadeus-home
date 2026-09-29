@@ -1,98 +1,45 @@
-# Current Task — Image Asset + On-Demand Upscale (Active Goal)
+# Current Task — Kurisu GPT-SoVITS Character Voice PoC (Active Goal)
 
 Date: 2026-09-29 local.
 
-Active Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
+Active Goal: `docs/AMADEUS_KURISU_GPT_SOVITS_POC_GOAL.md`.
 
-Implement durable generated-image assets on the actual current macOS host and an explicit on-demand super-resolution capability. Normal image generation must remain unchanged and must not automatically upscale. OpenClaw stays the sole Agent and should be able to upscale a structurally replied image, the recent eligible image in the current conversation, or an explicit `imageId`; 2x is the default, 4x is explicit, and both realistic/general and anime/illustration profiles are required.
+The owner wants to deploy and validate `bysq/TTS-KurisuMakise` (GPT-SoVITS-v2Pro) on the current macOS host because the target is not generic voice similarity but an immediately recognizable Makise Kurisu voice.
 
-Machine-specific details are intentionally not prescribed here. Codex must discover the current host/profile and choose the durable host media root, service address/port, metadata persistence and Apple-Silicon-native upscale engine consistent with repository conventions. Do not hardcode any historical macOS username, `/Users/<name>` path, LAN IP or domain. The image asset root must live on the macOS host and survive OpenClaw/container recreation.
+Execute the Goal as an isolated host-native PoC. The existing production TTS chain must remain unchanged during validation:
 
-Execute only through the authoritative Goal and preserve the existing native `image_generate`, thin channel adapters, ReplyEnvelope boundaries, secrets/runtime apply controls and rollback requirements.
+```text
+qwen-audio-3.1-tts-flash
+  -> qwen-audio-3.0-tts-flash
+  -> existing OminiX Qwen3-TTS fallback :18792
+```
+
+Cloud `default` remains the accepted zero-delta pure-clone baseline. Do not change its instruction/persona/style behavior, cloud model order, protected voice IDs, OpenClaw, channel behavior or ReplyEnvelope while evaluating GPT-SoVITS.
+
+First prove the candidate with pinned upstream GPT-SoVITS v2Pro on the Mac, Japanese synthesis and a clean neutral Kurisu reference. Then generate controlled Qwen 3.1 vs GPT-SoVITS A/B samples from identical Japanese text. Character identity is the primary acceptance criterion; latency/RTF and memory are secondary viability evidence. The owner listening verdict gates all further work.
+
+OminiX/MLX GPT-SoVITS is a follow-up feasibility target only after the candidate clearly wins the voice-quality A/B. Do not spend the main PoC on MLX conversion or production integration before that gate.
+
+Model checkpoints, pretrained weights, reference WAVs, generated audio, caches and secrets stay outside Git. Bind the PoC locally, run non-root, discover a free port, and do not assume `18793` is available because the existing Kurisu tuner already owns a host endpoint.
+
+This Goal does **not** authorize adding GPT-SoVITS to `amadeus-tts` production routing. A successful outcome is `ACCEPTED_FOR_FURTHER_INTEGRATION`, followed by a separate integration/MLX decision.
 
 ---
 
-# Previous Task — Qwen Audio TTS default pure voice clone (Completed)
-
-Date: 2026-09-29 local. The cloud `default` route now uses the model-bound
-cloned voice as the baseline: its request contains `text`, `voice`, `format`,
-`sample_rate`, and `language_hints: ["ja"]`, with no instruction/persona/style,
-speed, or pitch controls. Non-default emotions retain bounded instructions.
-
-Source commit `cc1ebfd` is deployed as
-`local/9router:git-cc1ebfdeec3b-20260929T081836Z`. Live health and a real
-cloud default synthesis passed. The protected rollback checkpoint and evidence
-are recorded in `.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-default-pure-clone.md`.
-There is no active Goal after this completion.
-
----
-
-# Current Task — Qwen Audio TTS model fallback (Completed)
+# Paused Task — Image Asset + On-Demand Upscale
 
 Date: 2026-09-29 local.
 
-The `amadeus-tts` route now tries `qwen-audio-3.1-tts-flash`, then the
-model-bound `qwen-audio-3.0-tts-flash` voice, then the existing M204 OminiX
-service for bounded transient cloud failures. A separate protected 3.1 cloned
-voice was enrolled from the authorized 46-second sample because Qwen binds a
-cloned voice to its target model.
+Paused Goal: `docs/AMADEUS_IMAGE_ASSET_AND_ON_DEMAND_UPSCALE_GOAL.md`.
 
-Source commit: `13cbd55`. Live 9Router image: `local/9router:git-13cbd559ab24-20260929T062044Z`.
-The 3.1 direct smoke, protected secret preparation, live bridge smoke, health
-checks, and rollback checkpoint all passed. Evidence and rollback details are
-recorded in `.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-model-fallback.md`.
-
-The temporary public voice-enrollment origin and frp mapping were removed after
-provisioning. The Cloudflare `audio.nyannyan.top` DNS record may still exist;
-remove that record when convenient because the sample endpoint is no longer
-served. There is no active Goal after this completion.
+The image asset/on-demand upscale Goal remains valid but is temporarily paused because the owner explicitly chose to validate the Kurisu GPT-SoVITS character voice first. Do not delete or reinterpret that Goal. Resume it only after the owner returns to the image work.
 
 ---
 
-# Current Task — Qwen Audio TTS cloud primary (Completed)
+# Recent production TTS baseline — deployed
 
-Date: 2026-09-29 local. Completed Goal:
-`docs/AMADEUS_QWEN_AUDIO_TTS_CLOUD_FALLBACK_GOAL.md`.
+The current cloud `default` request is a pure voice-clone baseline: `text`, model-bound `voice`, `format`, `sample_rate`, and Japanese `language_hints`, with no instruction/persona/style/speed/pitch controls. Non-default emotions retain bounded instructions.
 
-The cloud `qwen-audio-3.0-tts-flash` voice path is now the primary
-`amadeus-tts` provider, with the existing M204 OminiX service as a bounded
-transient-failure fallback. The 46-second protected reference was cloned,
-the 9Router adapter was deployed, and real owner WhatsApp acceptance passed
-for typed voice, ordinary text-only, and inbound voice-note turns. The owner
-confirmed both generated voice replies were playable. Evidence and rollback
-details are recorded in
-`.agent/checkpoints/2026-09-29-amadeus-qwen-audio-tts-cloud-release.md` and
-the protected runtime paths listed there.
+The protected `amadeus-tts` bridge uses the bounded order `qwen-audio-3.1-tts-flash` -> `qwen-audio-3.0-tts-flash` -> M204 OminiX local fallback. Production health/owner acceptance and rollback evidence are recorded in `docs/PROJECT_STATE.md` and the dated `.agent/checkpoints/` entries.
 
-There is no active Goal after this completion. Older completed Goals below
-remain historical evidence and are not live instructions.
-
----
-
-# Previous Task — Kurisu TTS Tuner (Completed / release 1.6.7)
-
-Date: 2026-09-28 local. Completed Goal: `docs/AMADEUS_KURISU_TTS_TUNER_GOAL.md`.
-
-The owner explicitly confirmed that the Amadeus 1.6.6 Kurisu OminiX production Goal is complete and requested the next development plan: build a highly adjustable local HTML tuner for Kurisu voice style/prosody/generation parameters.
-
-The Goal was implemented and released as **1.6.7** with exactly one patch bump. Runtime acceptance and the final OpenClaw release deployment are recorded in `.agent/checkpoints/2026-09-28-amadeus-kurisu-tts-tuner-release.md`.
-
-The tuner reuses the existing single resident OminiX Base 1.7B production model and cached `kurisu-v1` x-vector. It does not start a second model. Production remains on the existing bounded `amadeus-tts` / `:18792` contract. Per the owner's explicit LAN-access request, the tuner is served by the same native TTS process on `0.0.0.0:18793`; Host/Origin allowlists expose the intended `192.168.5.3` browser endpoint without adding a 9Router/OpenClaw/channel/public route.
-
-The design priority is strong adjustability without fake controls: editable baseline and emotion delta, PROD/A/B/C controlled comparison, text/style/seed/sampling/speed locks, STYLE ONLY / SAMPLING / VARIANCE / FREE COMPARE modes, and the actual pinned OminiX controls `temperature`, `top_k`, `top_p`, `max_new_tokens`, `seed`, `speed_factor`, and `repetition_penalty`. Model/reference/x-vector/language identity remain locked.
-
-Git remains the production source of truth. Runtime drafts/history/audio stay protected outside Git. The browser may create a hash-bound production proposal, but production style is changed only by an explicit repo-owned promotion path that updates the canonical Git-tracked style config, validates, commits/installs the reviewed state, smokes production, and uses the existing owner-notification path. Do not give the TTS HTTP service general Git/shell mutation authority.
-
-Production voice work has priority over Lab batches; Lab samples are sequential and yield between samples. Any real native/candidate switch and final 1.6.7 release must preserve the deployment-notification guarantee established in 1.6.6.
-
-## Previous task — Kurisu OminiX Production Migration (Release 1.6.6, Complete)
-
-Completed Goal: `docs/AMADEUS_KURISU_OMINIX_PRODUCTION_GOAL.md`.
-
-Release 1.6.6 completed the protected A backup, production cutover to OminiX Base 1.7B x-vector + bounded Kurisu emotion, pinned OpenClaw/9Router style transport, deployment-notification repair, rollback evidence and real owner handset acceptance. Current production remains the compatibility baseline for the tuner.
-
-The existing bounded emotion IDs are `default`, `irritated`, `embarrassed`, `angry`, `sarcastic`, `soft`, and `sad`. The current production style already includes explicit sentence-level prosody, emphasis, contrastive rhythm/energy and the sharp-to-soft Kurisu tsundere contour; the tuner exists to let the owner iterate on those characteristics efficiently without reopening the migration.
-
-Evidence remains in `.agent/checkpoints/2026-09-28-amadeus-kurisu-ominix-release.md` and the existing completed Goal/report history.
-
-Older completed/paused Goals and checkpoints remain historical evidence in their existing documents; they are not live instructions.
+Older completed Goals/checkpoints remain historical evidence, not live instructions.
