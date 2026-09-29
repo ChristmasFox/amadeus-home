@@ -19,14 +19,14 @@ Source evidence passing:
   and architecture fixture tests.
 - `pnpm check:architecture` and `git diff --check`.
 
-## Candidate runtime checkpoint
+## Release runtime checkpoint
 
-The user authorized a controlled candidate deployment. Candidate image
-`local/openclaw-amadeus:git-182417e8c4a2-20260929125242` is healthy and the
+The user authorized formal release deployment. Release `1.7.3` image
+`local/openclaw-amadeus:git-bd4736661f5e-20260929130719` is healthy and the
 WhatsApp account is linked and connected. The deployment checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260929125242`; post-deploy
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260929130719`; post-deploy
 evidence is stored at
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260929125242`.
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260929130719`.
 The first candidate exposed a real `deliveryChannel` reference error during
 dispatch; the route-derived channel fix is in `735ee01`. A real group-chat
 check then exposed stale volume patch code that bypassed ReplyEnvelope and
@@ -48,6 +48,8 @@ Real WhatsApp evidence from the candidate log at 20:54–20:55 local time:
 - The 9Router log records one successful ASR request for the group audio and
   one successful cloud TTS request for each voice reply; no duplicate send is
   associated with either group correlation id.
+- Formal release post-deploy checks passed: OpenClaw and Product Radar health,
+  NAS SSH read-only smoke, owner outbox smoke, and post-deploy maintenance.
 
 ## Remaining work
 
@@ -57,10 +59,9 @@ Real WhatsApp evidence from the candidate log at 20:54–20:55 local time:
 2. Preserve the candidate checkpoint and collect enough message/log evidence to
    support rollback or an explicit production release decision.
 
-This is a candidate runtime only. No production release, VERSION bump, release
-notification, or production promotion has occurred. Do not mark the Goal
-complete before real WhatsApp acceptance and dated rollback evidence are
-recorded.
+Release `1.7.3` is live. The Goal remains active until the remaining real
+WhatsApp acceptance evidence and dated rollback audit are complete; no further
+production promotion is implied by this checkpoint.
 
 Historical task records remain in `docs/PROJECT_STATE.md` and dated
 `.agent/checkpoints/`; they are audit evidence only.
