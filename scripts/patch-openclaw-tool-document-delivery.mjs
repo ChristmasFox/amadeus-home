@@ -49,7 +49,8 @@ const executePath = await findBundle(/^execute\.runtime-.*\.mjs$/u, ['let toolTr
 const embeddedPath = await findBundle(/^embedded-agent-.*\.mjs$/u, ['toolTrustedLocalMedia: attempt.toolTrustedLocalMedia,', 'mergeAttemptToolMediaPayloads({']);
 const payloadPath = await findBundle(/^tool-media-payloads-.*\.mjs$/u, ['function mergeAttemptToolMediaPayloads(params)', 'trustedLocalMedia: params.toolTrustedLocalMedia || void 0']);
 const deliverPath = await findBundle(/^deliver-prepare-.*\.mjs$/u, ['const payloadCtx = {', '\t\t\t\tpayload\n\t\t\t};']);
-if (!mediaPath || !executePath || !embeddedPath || !payloadPath || !deliverPath) throw new Error('pinned tool document delivery bundles missing');
+const builtinPath = await findBundle(/^builtin-openclaw-.*\.mjs$/u, ['function queuePendingToolMedia(ctx, mediaReply, allowedMediaUrls, autoDeliveryMediaUrls)', 'pendingToolMediaReply?.trustedLocalMedia']);
+if (!mediaPath || !executePath || !embeddedPath || !payloadPath || !deliverPath || !builtinPath) throw new Error('pinned tool document delivery bundles missing');
 
 const mediaOriginal = await readFile(mediaPath, 'utf8');
 if (!mediaOriginal.includes(MARKER)) {
@@ -104,5 +105,19 @@ if (!deliverOriginal.includes(MARKER)) {
   await writeFile(deliverPath, `${deliverOriginal.replace(before, after)}\n// ${MARKER}\n`);
   console.log('TOOL_DOCUMENT_DELIVERY=applied');
 } else console.log('TOOL_DOCUMENT_DELIVERY=already-applied');
+
+const builtinOriginal = await readFile(builtinPath, 'utf8');
+if (!builtinOriginal.includes(MARKER)) {
+  let builtinPatched = builtinOriginal;
+  builtinPatched = builtinPatched.replaceAll('state.pendingToolAudioAsVoice = false;', 'state.pendingToolAudioAsVoice = false;\n\tstate.pendingToolForceDocument = false;');
+  builtinPatched = builtinPatched.replace('if (mediaReply.audioAsVoice) ctx.state.pendingToolAudioAsVoice = true;', 'if (mediaReply.audioAsVoice) ctx.state.pendingToolAudioAsVoice = true;\n\tif (mediaReply.forceDocument) ctx.state.pendingToolForceDocument = true;');
+  builtinPatched = builtinPatched.replaceAll('audioAsVoice: state.pendingToolAudioAsVoice || void 0,', 'audioAsVoice: state.pendingToolAudioAsVoice || void 0,\n\t\tforceDocument: state.pendingToolForceDocument || void 0,');
+  builtinPatched = builtinPatched.replace('state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;', 'state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;\n\tstate.pendingToolForceDocument ||= payload.forceDocument === true;');
+  builtinPatched = builtinPatched.replace('toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,', 'toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,\n\t\ttoolForceDocument: pendingToolMediaReply?.forceDocument,');
+  builtinPatched = builtinPatched.replaceAll('pendingToolAudioAsVoice: false,', 'pendingToolAudioAsVoice: false,\n\t\tpendingToolForceDocument: false,');
+  if (builtinPatched === builtinOriginal) throw new Error(`builtin tool media anchors changed in ${builtinPath}`);
+  await writeFile(builtinPath, `${builtinPatched}\n// ${MARKER}\n`);
+  console.log('TOOL_DOCUMENT_BUILTIN=applied');
+} else console.log('TOOL_DOCUMENT_BUILTIN=already-applied');
 
 await stat(mediaPath);
