@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, readFile, realpath } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { Type, type Static } from 'typebox';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
@@ -6,8 +6,9 @@ import { configFor, readRequiredFile, type AmadeusConfig } from './config.js';
 import { identityContextFromOpenClaw } from './identity.js';
 import { registerTool } from './shared/register-tool.js';
 import { deliveryRuns } from './delivery-runs.js';
-import { readRegisteredAsset, type AssetMetadata } from './delivery-assets.js';
+import { assetPath, readRegisteredAsset, type AssetMetadata } from './delivery-assets.js';
 import { createAttachmentPart, type AttachmentPart } from './delivery-envelope.js';
+import { IMAGE_CAPTION_FALLBACK, normalizeImageCaption, type ImageCaptionEnricher } from './image-caption.js';
 
 const ImageUpscaleParameters = Type.Object({
   target: Type.Optional(Type.Object({
@@ -196,12 +197,13 @@ function inboundMediaPaths(event: { media?: Array<{ path?: string; contentType?:
   });
 }
 
-export function imageAssetAttachment(asset: ImageAssetResult, disposition: AttachmentPart['disposition']): AttachmentPart {
+export function imageAssetAttachment(asset: ImageAssetResult, disposition: AttachmentPart['disposition'], caption?: string): AttachmentPart {
   if (asset.status !== 'ready') throw new Error('image_asset_not_ready');
   return createAttachmentPart({
     assetId: asset.imageId, mimeType: asset.mimeType,
     fileName: asset.fileName ?? basename(asset.storageKey), disposition,
     byteSize: asset.byteSize, sha256: asset.sha256,
+    ...(caption ? { caption } : {}),
   });
 }
 export async function resolveRegisteredImageAsset(config: AmadeusConfig, part: AttachmentPart) {
@@ -249,17 +251,63 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   };
 }
 
-/** Source integration passes native typed completion attachments, never prompt text. */
-export function enqueueGeneratedCompletionAssets(
-  api: OpenClawPluginApi, runId: string, attachments: readonly { type?: string; path?: string; mimeType?: string }[],
-): void {
-  if (deliveryRuns.originFor(runId) !== 'media_completion' || !attachments.length || attachments.length > 4
-    || attachments.some((item) => item.type !== 'image' || typeof item.path !== 'string' || !item.path.startsWith('/') || !['image/png', 'image/jpeg', 'image/webp'].includes(item.mimeType ?? ''))) throw new Error('image_completion_attachments_invalid');
+export type GeneratedCompletionAttachment = Readonly<{ type?: string; path?: string; mimeType?: string }>;
+export type GeneratedCompletionAssetOptions = Readonly<{
+  taskId: string;
+  agentId: string;
+  sessionKey: string;
+  channel: 'whatsapp' | 'telegram';
+  requestContext?: string;
+  captionEnricher?: ImageCaptionEnricher;
+}>;
+
+export async function resolveRegisteredImageCaptionInput(config: AmadeusConfig, part: AttachmentPart): Promise<{ filePath: string; mimeType: string }> {
+  if (!/^img_[a-f0-9]{32}$/u.test(part.assetId) || part.disposition !== 'inline' || !part.mimeType.startsWith('image/')) throw new Error('caption_asset_invalid');
+  const response = await serviceJson(config, `/v1/assets/${part.assetId}/metadata`);
+  const asset = parseServiceResult(response);
+  if (asset.imageId !== part.assetId || asset.status !== 'ready' || asset.mimeType !== part.mimeType) throw new Error('caption_asset_metadata_invalid');
+  // Reuse strict registry/root/hash validation as native delivery. Captioning
+  // receives only this verified persisted asset path, never a model-authored path.
+  await readRegisteredAsset(config.imageAssetContainerRoot, part, asset as AssetMetadata);
+  const root = await realpath(config.imageAssetContainerRoot);
+  return { filePath: assetPath(root, asset.storageKey), mimeType: asset.mimeType };
+}
+
+/** Import only OpenClaw's persisted structured image attachments, then enrich from the registered bytes. */
+export async function importGeneratedCompletionAssets(
+  api: OpenClawPluginApi,
+  attachments: readonly GeneratedCompletionAttachment[],
+  options: GeneratedCompletionAssetOptions,
+): Promise<readonly AttachmentPart[]> {
+  if (!attachments.length || attachments.length > 4
+    || attachments.some((item) => item.type !== 'image' || typeof item.path !== 'string' || !item.path.startsWith('/')
+      || !['image/png', 'image/jpeg', 'image/webp'].includes(item.mimeType ?? ''))) throw new Error('image_completion_attachments_invalid');
   const config = configFor(api);
-  deliveryRuns.addAssets(runId, Promise.all(attachments.map(async (item) => {
-    const asset = await importImageAsset(config, item.path!, item.mimeType!, 'generated', { runId });
-    return imageAssetAttachment(asset, 'inline');
-  })));
+  return await Promise.all(attachments.map(async (item) => {
+    const asset = await importImageAsset(config, item.path!, item.mimeType!, 'generated', { runId: `image_generate:${options.taskId}` });
+    const base = imageAssetAttachment(asset, 'inline');
+    let caption = IMAGE_CAPTION_FALLBACK;
+    let fallbackReason: 'timeout' | 'model_error' | 'invalid_result' | 'unsupported' | undefined;
+    if (options.captionEnricher) {
+      try {
+        const image = await resolveRegisteredImageCaptionInput(config, base);
+        const outcome = await options.captionEnricher({
+          ...image, taskId:options.taskId, agentId: options.agentId, sessionKey: options.sessionKey, channel: options.channel,
+          ...(options.requestContext ? { requestContext: options.requestContext.slice(0, 2_000) } : {}),
+        });
+        const safeCaption = normalizeImageCaption(outcome?.caption);
+        if (safeCaption) caption = safeCaption;
+        else fallbackReason = 'invalid_result';
+      } catch {
+        // Enrichment/registry path lookup can never make an imported image
+        // ineligible for the existing DeliveryEnvelope settlement.
+        caption = IMAGE_CAPTION_FALLBACK;
+        fallbackReason = 'unsupported';
+      }
+    }
+    if (fallbackReason) api.logger.info(`amadeus image caption ${JSON.stringify({ task_id: options.taskId, asset_id:asset.imageId, lifecycle_stage:'captioning', caption_status:'fallback', caption_fallback_reason:fallbackReason })}`);
+    return imageAssetAttachment(asset, 'inline', caption);
+  }));
 }
 
 export function registerImageAssets(api: OpenClawPluginApi): void {

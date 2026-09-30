@@ -1,37 +1,35 @@
-# Current Task — Amadeus Image Generation Background Completion Fix
+# Current Task — Amadeus Image Generation Lifecycle + Caption UX
 
-Date: 2026-09-30 local.
+Date: 2026-10-01 local.
 
-Active Goal: `docs/AMADEUS_IMAGE_GENERATION_BACKGROUND_COMPLETION_FIX_GOAL.md`.
-Parent architecture: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
+Active Goal: `docs/AMADEUS_IMAGE_GENERATION_LIFECYCLE_CAPTION_UX_GOAL.md`.
+Prerequisites: `docs/AMADEUS_IMAGE_GENERATION_BACKGROUND_COMPLETION_FIX_GOAL.md` and
+`docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md` remain historical source/architecture evidence.
 
-Status: `CANDIDATE_APPLIED_REAL_OWNER_GATES_PENDING` (source committed; Goal open).
+Status: `SOURCE_IMPLEMENTATION_VALIDATED_NOT_APPLIED` (source/tests/required validation passed;
+owner-channel Gates A–F remain pending until a separately authorized deployment).
 
-The protected candidate image `local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`
-was built from source commit `d7f2847d82f4f1dc15f84589a8a5907890992cae` and
-applied to the single CasaOS OpenClaw on OrbStack `nyannyan`. OpenClaw and
-Product Radar health passed; Amadeus registered at Gateway startup. The
-protected external checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930154020`; deploy
-summary/evidence is at
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930154020/deployment-summary.md`.
-No product-version release/bump was performed.
+Read-only live check on 2026-10-01 observed the healthy CasaOS OpenClaw image
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`, OpenClaw `2026.9.4`, on OrbStack
+`nyannyan`; Gateway logs confirm Amadeus registration. This is the prior corrective background-completion
+candidate, not the lifecycle/caption implementation in the worktree. No production apply/build/switch is authorized or performed for this task.
 
-The pinned OpenClaw 2026.9.4 `wakeMediaGenerationTaskCompletion(params)`
-boundary now claims successful `image_generation` structured attachments
-before `deliverSubagentAnnouncement` can start the completion Agent. Amadeus
-imports them into the host registry and settles an inline DeliveryEnvelope v2
-attachment through the existing ledger/WhatsApp image adapter. The immediate
-async started receipt is not treated as the final image. The exact pinned
-handler is exercised by the source integration test; the focused Amadeus
-lifecycle test covers started receipt, detached attachment, asset import,
-inline send and retry deduplication. Full Goal validation scenarios and all
-real WhatsApp Gates A–F have not been recorded; do not claim owner acceptance.
+The source uses one version/digest/AST-anchored integration module for the pinned OpenClaw image:
+accepted is attached to `notifyMediaGenerationAsyncTaskStarted` after the detached task is scheduled;
+success/failure are attached to typed `wakeMediaGenerationTaskCompletion(params)` status and the original
+requester route. `ImageGenerationLifecycleCoordinator` holds bounded taskId state; successful persisted
+OpenClaw `attachments[]` are imported once into the registry, described through bounded multimodal caption
+enrichment using the verified registry image, then settled as DeliveryEnvelope v2 inline attachments.
+Caption failure uses deterministic fallback and does not block media settlement. WhatsApp uses one native
+`sendMedia({image, mimetype, caption})`; Telegram uses native `sendPhoto` caption. Start/failure use typed
+lifecycle notifications and never parse prose or expose raw provider failures. The image-generation Skill
+makes the ordinary accepted interim Agent reply silent to prevent duplicate acknowledgements.
 
-Previous incompatible image-completion candidates and their failures below
-remain historical evidence only. Do not restore `llm_input/historyMessages`
-recovery or retired pending/automatic media senders. Production is currently
-on the corrective candidate; any rollback must use the protected checkpoint.
+The task state and delivery ledger are bounded process-local state, not a durable cross-restart journal.
+The protected image asset registry persists; cross-restart exactly-once lifecycle behavior is not claimed
+without the future deployed restart/replay gates. The source-level exact pinned integration contract and
+focused tests pass. Real WhatsApp Gates A–F have not been performed for this candidate and remain required
+after separately authorized apply.
 
 ## Separate request — upscale default 2x (candidate applied)
 
@@ -148,4 +146,4 @@ The protected pre-cutover rollback checkpoint is `/Volumes/Avalon/backups/operat
 
 # Current execution rule
 
-Only `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md` is the active Goal unless the operator explicitly selects another task. Historical Goals/checkpoints are evidence, not live instructions. Before implementation, Codex must re-read Git and live runtime as the source of truth and follow `AGENTS.md` validation/deployment boundaries.
+Only the Goal named by `docs/CURRENT_TASK.md` is active; it is currently `docs/AMADEUS_IMAGE_GENERATION_LIFECYCLE_CAPTION_UX_GOAL.md`. Historical Goals/checkpoints are evidence, not live instructions. Before implementation, re-read Git and live runtime as the source of truth and follow `AGENTS.md` validation/deployment boundaries.

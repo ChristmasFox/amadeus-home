@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { validateDeliveryEnvelope, type DeliveryOrigin } from './delivery-envelope.js';
 import { deliveryRuns } from './delivery-runs.js';
-import { registerDeliveryBoundary } from './delivery-boundary.js';
+import { registerDeliveryBoundary, type DeliveryBoundaryOptions } from './delivery-boundary.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
 
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
@@ -22,10 +22,10 @@ function originFor(context: { trigger?: string; inputProvenance?: { kind?: strin
   if (context.inputProvenance?.kind === 'internal_system') return 'system';
   return 'external_user';
 }
-export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
+export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions: DeliveryBoundaryOptions = {}): void {
   const root = api.rootDir ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const skill = readFileSync(resolve(root, 'skills/voice-reply/SKILL.md'), 'utf8');
-  registerDeliveryBoundary(api);
+  registerDeliveryBoundary(api, boundaryOptions);
   api.on('before_prompt_build', (_event, context) => {
     const channel = context.channel ?? context.messageProvider;
     const origin = hasActiveWhatsAppVoiceLease(channel, context.sessionKey) ? 'inbound_voice' : originFor(context);

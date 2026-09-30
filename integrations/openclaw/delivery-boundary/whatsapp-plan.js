@@ -38,7 +38,7 @@ function createWhatsAppReplyPlan(params) {
       const native = await prepareWhatsAppOutboundMedia({ buffer: audio, contentType: mimeType, fileName: 'kurisu.mp3' });
       return receipt(await params.transport.sendMedia({ audio: native.buffer, ptt: true, mimetype: native.mimetype }, quote()));
     },
-    sendImage: async (asset) => receipt(await params.transport.sendMedia({ image: asset.bytes, mimetype: asset.mimeType }, quote())),
+    sendImage: async (asset, caption) => receipt(await params.transport.sendMedia({ image: asset.bytes, mimetype: asset.mimeType, ...(caption ? { caption } : {}) }, quote())),
     // Image MIME cannot affect this payload: no image key/optimizer or fallback.
     sendDocument: async (asset) => receipt(await params.transport.sendMedia({ document: asset.bytes, mimetype: asset.mimeType, fileName: asset.fileName }, quote())),
   });

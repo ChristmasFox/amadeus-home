@@ -19,7 +19,7 @@
     "verify:openclaw-patch": "node scripts/test-delivery-boundary.mjs && bash scripts/test-openclaw-voice-module-bundle.sh && node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs && node scripts/test-patch-openclaw-voice-failure.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node scripts/test-patch-openclaw-group-image-policy.mjs && node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs && node --check scripts/patch-openclaw-group-image-policy.mjs && git diff --check",
     "verify:voice": "bash scripts/verify-voice.sh",
     "accept:voice": "bash scripts/accept-voice.sh",
-    "test:delivery": "pnpm --filter @agent/amadeus-plugin exec tsx --test tests/delivery-envelope.test.ts tests/delivery-assets.test.ts tests/delivery-runtime.test.ts tests/voice-reply-prompt.test.ts && node scripts/test-delivery-boundary.mjs",
+    "test:delivery": "pnpm --filter @agent/amadeus-plugin exec tsx --test tests/delivery-envelope.test.ts tests/delivery-assets.test.ts tests/delivery-runtime.test.ts tests/image-caption.test.ts tests/image-generation-lifecycle.test.ts tests/image-generation-messages.test.ts tests/voice-reply-prompt.test.ts && node scripts/test-delivery-boundary.mjs",
     "test:openclaw-voice-lifecycle": "node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs",
     "test:openclaw-secret-bundle": "bash scripts/test-openclaw-secret-bundle.sh",
     "test:skuld-secret-rewrap": "bash scripts/test-skuld-secret-rewrap.sh",

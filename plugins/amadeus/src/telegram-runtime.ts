@@ -42,7 +42,18 @@ export async function settleTelegramDelivery(api: OpenClawPluginApi, envelope: D
   };
   const config = configFor(api);
   const attachment = createTelegramAttachmentSender((part) => resolveRegisteredImageAsset(config, part), {
-    sendPhoto: (asset) => upload('sendPhoto', 'photo', asset.bytes, asset.mimeType, asset.fileName),
+    sendPhoto: async (asset, caption) => {
+      // Telegram's native sendPhoto accepts caption in the same media message.
+      const form = new FormData(); form.set('chat_id', route.conversationId!);
+      if (route.threadId) form.set('message_thread_id', String(route.threadId));
+      if (route.replyToId) form.set('reply_parameters', JSON.stringify({ message_id: Number(route.replyToId), allow_sending_without_reply: true }));
+      form.set('photo', new Blob([new Uint8Array(asset.bytes)], { type: asset.mimeType }), asset.fileName);
+      if (caption) form.set('caption', caption);
+      const response = await transportFetch(`${(account.config.apiRoot ?? 'https://api.telegram.org').replace(/\/$/u, '')}/bot${account.token}/sendPhoto`, { method: 'POST', body: form, signal: AbortSignal.timeout(60_000) });
+      const body = await response.json() as { ok?: boolean; result?: { message_id?: number } };
+      if (!response.ok || body.ok !== true || !body.result?.message_id) throw new Error('telegram_provider_rejected');
+      return { messageId: String(body.result.message_id) };
+    },
     sendDocument: (asset) => upload('sendDocument', 'document', asset.bytes, asset.mimeType, asset.fileName),
   });
   const result = await settleDelivery(envelope, {

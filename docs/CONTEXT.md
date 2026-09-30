@@ -1,24 +1,19 @@
-# Canonical context — 2026-09-30
+# Canonical context — 2026-10-01
 
-Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
-The active Goal is `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`
-per `docs/CURRENT_TASK.md`. An authorized DeliveryEnvelope v2 candidate reached health, but real
-owner WhatsApp Gate A failed with no reply; the candidate was rolled back
-to the healthy old image. Gates A–F remain open. Earlier pre-switch attempts and the persisted plugin-index
-recovery are historical rollback evidence. The GPT-SoVITS MPS production
-cutover below is historical runtime evidence, not a live instruction.
-Older Goal documents and checkpoints remain audit evidence.
+Read this with `docs/CURRENT_TASK.md` and inspect current Git/live state before work. The active Goal is
+`docs/AMADEUS_IMAGE_GENERATION_LIFECYCLE_CAPTION_UX_GOAL.md`. The current worktree implements the
+accepted/success/failure typed image lifecycle, multimodal Kurisu caption and same-bubble native media
+caption on top of the existing DeliveryEnvelope v2/background-completion source.
 
-## Current Git/runtime boundary (2026-09-30)
+## Current Git/runtime boundary (2026-10-01)
 
-Git `main` defines the DeliveryEnvelope v2 candidate. The one live OpenClaw now runs the prior healthy immutable image
-`local/openclaw-amadeus:git-6311e21b412c-20260930044402`, with Amadeus
-registered and WhatsApp connected. The v2 candidate is not live after the
-failed owner Gate A and protected rollback. Protected rollback and external evidence
-are listed in `.agent/checkpoints/2026-09-30-delivery-envelope-candidate-applied.md`.
-The owner-channel file/voice/text acceptance and recreate gates remain pending.
-9Router was upgraded under a separate task; do not infer its live state from
-the older release snapshot.
+Git `main` HEAD at task start was `9a95368` (`docs: plan image generation lifecycle caption UX`). The
+read-only runtime check observed the healthy single OpenClaw container on OrbStack CasaOS `nyannyan` using
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020` and OpenClaw `2026.9.4`; Gateway logs
+confirm Amadeus registration. This is the prior background-completion candidate; lifecycle/caption work is not live. No production apply was performed.
+Source-level tests/typecheck/build/secrets gates have passed, but lifecycle/caption source is not live. A
+separately authorized deployment and real owner WhatsApp Gates A–F remain necessary. The bounded task coordinator and delivery ledger are in-process;
+cross-restart exactly-once is not claimed by source tests.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
