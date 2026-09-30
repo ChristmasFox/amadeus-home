@@ -164,11 +164,11 @@ function parseServiceResult(value: unknown): ImageAssetResult {
   return asset as unknown as ImageAssetResult;
 }
 
-async function importGeneratedImage(config: AmadeusConfig, path: string, mimeType: string, origin: ImageAssetOrigin, signal?: AbortSignal): Promise<ImageAssetResult> {
+async function importImageAsset(config: AmadeusConfig, path: string, mimeType: string, sourceKind: string, origin: ImageAssetOrigin, signal?: AbortSignal): Promise<ImageAssetResult> {
   const body = await readFile(path);
   const headers = await serviceHeaders(config);
   headers.set('Content-Type', mimeType);
-  headers.set('X-Amadeus-Source-Kind', 'generated');
+  headers.set('X-Amadeus-Source-Kind', sourceKind);
   headers.set('X-Amadeus-Origin', JSON.stringify(origin));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 45_000);
@@ -183,6 +183,16 @@ async function importGeneratedImage(config: AmadeusConfig, path: string, mimeTyp
     clearTimeout(timer);
     signal?.removeEventListener('abort', abort);
   }
+}
+
+function inboundMediaPaths(event: { media?: Array<{ path?: string; contentType?: string; kind?: unknown }>; originalMedia?: Array<{ path?: string; contentType?: string; kind?: unknown }> }): Array<{ path: string; mimeType: string }> {
+  const facts = Array.isArray(event.media) && event.media.length ? event.media : event.originalMedia ?? [];
+  return facts.flatMap((fact) => {
+    const path = text(fact.path);
+    if (!path || !path.startsWith('/')) return [];
+    const mimeType = text(fact.contentType) ?? (fact.kind === 'image' ? 'image/png' : generatedMime(undefined, path));
+    return [{ path, mimeType }];
+  });
 }
 
 async function bindDeliveredAssets(config: AmadeusConfig, assetIds: string[], messageId: string, origin: ImageAssetOrigin): Promise<void> {
@@ -257,6 +267,35 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
 }
 
 export function registerImageAssets(api: OpenClawPluginApi): void {
+  const importedInboundMedia = new Map<string, number>();
+  api.on('message_received', async (event, hookContext) => {
+    const media = inboundMediaPaths(event);
+    if (!media.length) return;
+    const config = configFor(api);
+    const messageId = text(event.messageId);
+    const channel = text(hookContext.channelId);
+    const conversationId = text(hookContext.conversationId) ?? hookContext.sessionKey;
+    const replyToMessageId = text(event.replyToId);
+    const runId = text(event.runId);
+    const origin: ImageAssetOrigin = {
+      ...(channel ? { channel } : {}),
+      ...(conversationId ? { conversationId } : {}),
+      ...(messageId ? { messageId } : {}),
+      ...(replyToMessageId ? { replyToMessageId } : {}),
+      ...(runId ? { runId } : {}),
+    };
+    for (const item of media.slice(0, 4)) {
+      const key = `${messageId ?? 'unknown'}\u0000${item.path}`;
+      const importedAt = importedInboundMedia.get(key);
+      if (importedAt && Date.now() - importedAt < IMAGE_CONTEXT_TTL_MS) continue;
+      importedInboundMedia.set(key, Date.now());
+      try {
+        await importImageAsset(config, item.path, item.mimeType, 'inbound', origin);
+      } catch (error) {
+        api.logger.warn(`amadeus inbound image asset registration failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  });
   api.on('before_dispatch', (event, hookContext) => {
     const sessionKey = text(hookContext.sessionKey ?? event.sessionKey);
     if (!sessionKey) return;
@@ -292,7 +331,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const assets: ImageAssetResult[] = [];
     for (const path of paths.slice(0, 4)) {
       try {
-        assets.push(await importGeneratedImage(config, path, generatedMime(event.result, path), origin, hookContext.abortSignal));
+        assets.push(await importImageAsset(config, path, generatedMime(event.result, path), 'generated', origin, hookContext.abortSignal));
       } catch (error) {
         api.logger.warn(`amadeus image asset registration failed: ${error instanceof Error ? error.message : String(error)}`);
       }

@@ -82,7 +82,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
   })({} as OpenClawPluginToolContext);
   assert.equal(hostTool.parameters.additionalProperties, false);
   assert.equal(typeof hostTool.parameters.properties?.reason, 'object');
-  assert.equal(hooks.has('message_received'), false, 'WhatsApp message_received plugin hooks are disabled by default; voice Skill must not depend on them');
+  assert.equal(hooks.has('message_received'), true, 'image asset registration uses the typed inbound media hook');
   assert.equal(hooks.has('before_prompt_build'), true);
   assert.equal(hooks.has('before_dispatch'), true);
   assert.equal(hooks.has('before_tool_call'), true);
