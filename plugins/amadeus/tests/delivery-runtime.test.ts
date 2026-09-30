@@ -24,11 +24,11 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const api={rootDir:new URL('../',import.meta.url).pathname,config:{},pluginConfig:{imageAssetServiceBaseUrl:`http://127.0.0.1:${port}`,imageAssetServiceTokenFile:join(root,'token'),imageAssetContainerRoot:root},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);},registerTool(factory:any,options:{name:string}){tools.set(options.name,factory);}} as unknown as OpenClawPluginApi;
   registerVoiceReplyPrompt(api);registerImageAssets(api);
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string}>=[];
-  const sessionKey=`runtime-${source}-${mimeType}`;const runId=source==='completion'?'image_generate:00000000-0000-4000-8000-000000000001:ok:agent-loop':`run-${sessionKey}`;
+  const sessionKey=`runtime-${source}-${mimeType}`;const taskId='00000000-0000-4000-8000-000000000001';const runId=`run-${sessionKey}`;
   const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async asset=>{sends.push({kind:'image',bytes:asset.bytes});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
-  for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp',...(source==='completion'?{inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'}}:{})});
+  for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
   for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:source==='upscale2'?'请把刚才的图超分 2x':'请把刚才的图超分'}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
   let result:unknown;
   if(source==='upscale'||source==='upscale2'){
@@ -36,16 +36,21 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:source==='upscale2'?4:2,mode:'anime'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
     const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale2'?2:4, 'user multiplier or default overrides an incorrect model-supplied scale');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
-  }else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'MEDIA:/native/tool/result'}]};
+  }else if(source==='completion') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
+  else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'tool result text is not an image authority'}]};
   const jobs=source==='completion'?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   if(source==='completion'){
-    const user={role:'user',provenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'},content:[{type:'text',text:'internal completion; never present this text'},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]};
-    await (hooks.get('llm_input')??[])[0]!({runId,historyMessages:[user]}, {runId,sessionKey,channel:'whatsapp'});
-    const late=await (hooks.get('reply_payload_sending')??[])[0]!({runId,sessionKey,channel:'whatsapp',kind:'final',payload:{text:'malformed raw protocol'}},{channelId:'whatsapp'});
-    assert.equal(late.cancel,true);
+    assert.equal((result as any).details.async,true);
+    assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);
+    assert.equal(sends.length,0);
+    const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {completeImageGeneration(input:any):Promise<void>};
+    await boundary.completeImageGeneration({taskId,sessionKey,channel:'whatsapp',attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType:'image/png'}]});
+    // Replayed detached completion shares the stable delivery id and cannot duplicate send.
+    await boundary.completeImageGeneration({taskId,sessionKey,channel:'whatsapp',attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType:'image/png'}]});
     assert.deepEqual(sends.map(x=>x.kind),['image']);
     assert.deepEqual(sends[0]?.bytes,bytes);
     assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);
+    assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     return;
   }
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
