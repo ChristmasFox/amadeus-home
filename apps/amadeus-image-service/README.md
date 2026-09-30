@@ -15,6 +15,11 @@ resolved paths. Use `--apply install` only after confirming the current host
 profile. The service token, Python environment, model cache, launchd plist and
 asset registry are runtime state outside Git.
 
+An omitted multiplier defaults to 4x; an explicit 2x request remains 2x.
+The 2K/4K options cap the output long edge independently of the multiplier;
+output-pixel/resource bounds still fail closed rather than silently downscaling
+the requested multiplier.
+
 The service never parses chat text, selects a channel, or performs automatic
 upscaling. OpenClaw owns the semantic capability and passes either a trusted
 `imageId` or scoped conversation/reply identifiers.

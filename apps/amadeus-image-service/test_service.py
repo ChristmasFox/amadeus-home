@@ -71,6 +71,25 @@ class AssetServiceTests(unittest.TestCase):
             self.assertEqual(store.get(original.image_id).storage_key, original.storage_key)
             self.assertNotEqual(derived.storage_key, original.storage_key)
 
+    def test_omitted_multiplier_defaults_to_4_and_explicit_2_remains_2(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AssetStore(directory, engine=FakeEngine())
+            original = store.register(png(4, 3), "image/png", "generated")
+            default = store.upscale(original.image_id, None, None, None, "auto")
+            self.assertEqual((default.width, default.height), (16, 12))
+            self.assertEqual(default.transform["scale"], 4)
+            two = store.upscale(original.image_id, None, None, 2, "auto")
+            self.assertEqual((two.width, two.height), (8, 6))
+            self.assertEqual(two.transform["scale"], 2)
+
+    def test_default_4x_respects_output_pixel_limit_without_2x_fallback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AssetStore(directory, engine=FakeEngine(), max_output_pixels=100)
+            original = store.register(png(4, 4), "image/png", "generated")
+            with self.assertRaises(ServiceError) as rejected:
+                store.upscale(original.image_id, None, None, None, "auto")
+            self.assertEqual(rejected.exception.code, "image_output_limit_exceeded")
+
     def test_4k_resolution_profile_caps_long_edge(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AssetStore(directory, engine=FakeEngine())

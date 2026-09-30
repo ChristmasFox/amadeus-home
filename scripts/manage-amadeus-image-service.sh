@@ -29,7 +29,7 @@ Commands:
   upscale IMAGE_ID        Upscale a known image id through the host service.
 
 Upscale options:
-  --scale 2|4             Default: 2
+  --scale 2|4             Default: 4
   --mode auto|realistic|anime  Default: auto
   --resolution 2k|4k        Optional long-edge target profile.
   --json                  Print the raw JSON response.
@@ -165,7 +165,7 @@ status() {
 }
 
 upscale() {
-  local image_id="" scale=2 mode=auto resolution="" raw=false
+  local image_id="" scale=4 mode=auto resolution="" raw=false
   while (($#)); do
     case "$1" in
       --scale) scale="${2:?--scale requires 2 or 4}"; shift 2 ;;

@@ -214,7 +214,8 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   const current = currentContextFor(context.sessionKey);
   const identity = identityContextFromOpenClaw(context);
   const origin = originForContext(context, current);
-  const scale = current?.explicitScale ?? input.scale;
+  // A user turn defaults to 4x even when the model invents 2x; explicit user 2x wins.
+  const scale = current ? current.explicitScale ?? 4 : input.scale ?? 4;
   const response = await serviceJson(config, '/v1/upscale', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -233,7 +234,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     status: 'ok',
     imageId: asset.imageId,
     parentImageId: asset.parentImageId,
-    scale: asset.transform?.scale ?? scale ?? 2,
+    scale: asset.transform?.scale ?? scale,
     mode: asset.transform?.mode ?? input.mode ?? 'auto',
     ...(asset.transform?.resolution ? { resolution: asset.transform.resolution } : input.resolution ? { resolution: input.resolution } : {}),
     mimeType: asset.mimeType,
@@ -317,7 +318,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return job.then(() => undefined);
   }, { matcher: ['image_generate', 'amadeus_image_upscale'], timeoutMs: 60_000 });
 
-  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. For an explicit 4x/4倍 request pass scale:4 (never scale:2); 4K is a resolution profile, not a multiplier. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
+  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:4; an explicit user 2x/2倍 request uses scale:2. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 
 export { ImageUpscaleParameters };

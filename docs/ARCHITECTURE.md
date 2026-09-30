@@ -62,6 +62,7 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   是 text part 内容，不通过检测末尾 JSON 字符串来猜测。
 - `delivery-runs.ts` 在同一 run 汇合最终文本和已完成工具的语义图片结果；
   image_generate 登记到权威 registry 后为 inline，显式 upscale 派生文件为 document。
+  按需超分默认 4×，当前请求明确指定 2× 时保持 2×；2K/4K 是独立的长边上限档位。
   `delivery-assets.ts` 验证 ready registry、canonical root、无 symlink、实际文件
   MIME、size 和 SHA-256。内部 heartbeat/cron/handoff/system runs silent。
 - `delivery-settlement.ts` 为所有 channel 使用同一 ledger，重复 deliveryId 不重复
