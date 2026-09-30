@@ -59,7 +59,9 @@ trusted completion turn's typed image part equal the generated file bytes.
 The old candidate incorrectly waited for the second LLM reply's media payload;
 that LLM can time out. New source imports the typed image bytes and settles an
 attachment-only envelope before that LLM call; focused tests pass. This
-follow-up source has a protected candidate apply and is not yet owner-accepted.
+follow-up source has a protected candidate apply, but the real owner retry
+failed: this completion was text-only, with no typed image bytes reaching the
+pre-LLM hook, and no inline settlement.
 See `.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
