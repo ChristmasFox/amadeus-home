@@ -203,9 +203,9 @@
     }
   },
   "tts": {
-    "auto": "tagged",
+    "auto": "off",
     "mode": "final",
-    "modelOverrides": { "enabled": true, "allowText": true, "allowProvider": false },
+    "modelOverrides": { "enabled": false },
     "provider": "openai",
     "maxTextLength": 1200,
     "timeoutMs": 120000,

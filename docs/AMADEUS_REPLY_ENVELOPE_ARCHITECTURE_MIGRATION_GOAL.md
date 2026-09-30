@@ -1,3 +1,5 @@
+> Historical-only audit evidence. Superseded by `docs/CURRENT_TASK.md`; retired contract names below are not live instructions or runtime dependencies.
+
 # Amadeus ReplyEnvelope 架构一次性切换 Goal
 
 更新时间：2026-09-29

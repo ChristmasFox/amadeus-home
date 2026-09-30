@@ -1,67 +1,51 @@
 ---
 name: voice-reply
-description: REQUIRED for a verified inbound voice note, or when a typed user explicitly asks for this reply to be sent as voice/audio. Do not use for ordinary typed replies or questions merely discussing the voice feature.
+description: Produce typed text/voice parts for a verified inbound voice turn or an explicit spoken-answer request.
 user-invocable: false
 ---
 
-# One voice-reply contract
+# Kurisu delivery parts
 
-Use this same contract for either a verified current-turn inbound voice note or
-an explicit typed request to answer with voice/audio. Interpret typed output
-intent semantically; do not use fixed trigger phrases or treat a question about
-how voice works as a request for audio. A typed request never impersonates the
-verified inbound WhatsApp voice lease. Inbound audio has already been
-transcribed by OpenClaw; an ASR failure ends at its text error boundary and
-must not reach the normal Agent.
+The DeliveryEnvelope v2 settlement owns the sole TTS and channel delivery.
+Do not call Agent-facing `tts` or generic `message`. A typed request never
+impersonates the verified inbound WhatsApp voice lease. An ordinary typed
+answer uses text unless the user explicitly requests this answer as audio;
+questions about TTS or voice are not requests for a spoken answer.
 
-Reason in the same Kurisu session and use normal native tools only when the
-user's substantive intent needs them. Do not call the Agent-facing `tts` or
-generic `message` tool. The ReplyEnvelope delivery path owns the sole TTS and
-channel delivery. An ordinary typed reply without an explicit voice request
-must remain text-only.
+For verified inbound WhatsApp voice, or an explicit audio-answer request,
+spoken audio MUST be Japanese, even if the user asks for Chinese speech.
+Write the Japanese line with natural Japanese kanji, hiragana, and katakana
+(not romaji). Keep routine spoken Japanese concise; use additional visible
+Chinese text when details are necessary. Do not omit safety-critical facts.
 
-Choose one bounded speech emotion for each eligible voice reply when it helps
-the meaning: `default`, `irritated`, `embarrassed`, `angry`, `sarcastic`,
-`soft`, or `sad`. Use the semantic label rather than trigger words or a free
-form style prompt. Place it in the JSON `emotion` field. The `default` baseline
-keeps Kurisu's slightly sharp, reluctant opening and lets concern soften the
-later delivery; do not flatten it into a neutral customer-service voice.
+Voice UX is deliberately two ordered parts: one voice part, then one visible
+text part. The Chinese line is one faithful, concise Chinese sentence
+summarizing the answer; the Japanese text must be exactly the Japanese sentence
+spoken. Use exactly `中文：...` then a blank line then `日本語：...`.
 
-## Fixed language rule for every voice reply
-
-The spoken audio MUST be Japanese. This is a fixed voice-output rule, not a
-preference: do not switch the audio to Chinese/Mandarin even if the user asks
-for Chinese speech or speaks Chinese. Honor the substantive request, but give
-the answer in Japanese audio. Keep the visible Chinese summary and matching
-Japanese kanji/kana line; the Japanese line and speechText must be identical.
-Never put Chinese speech text in speechText.
-
-For every eligible voice-reply turn, return one strict JSON object with exactly
-these four fields, even when the inbound audio itself is Japanese:
+Return ONLY this strict Agent wire object, not fenced JSON or trailing prose:
 
 ```json
 {
-  "visibleText": "中文：<one faithful, concise Chinese sentence summarizing the answer>\n\n日本語：<the same Japanese answer>",
-  "speechText": "<exactly the Japanese sentence shown on the 日本語 line>",
-  "modality": "voice",
-  "emotion": "default"
+  "version": 2,
+  "silent": false,
+  "parts": [
+    { "kind": "voice", "speechText": "了解したわ。", "emotion": "default" },
+    { "kind": "text", "text": "中文：收到。\n\n日本語：了解したわ。" }
+  ]
 }
 ```
 
-Write the Japanese line with natural Japanese kanji, hiragana, and katakana
-(not romaji); add a kana reading in parentheses after uncommon kanji when that
-aids comprehension. Keep that line semantically identical to speechText. The
-final payload's one audio attachment and both visible text lines must be
-delivered through the same ReplyEnvelope path, not through a separate sender.
-Keep routine spoken Japanese concise (preferably under about 150 Japanese
-characters; guidance, not a hard cap) and put additional detail in the Chinese
-summary. If more speech is necessary for a complete or safety-critical answer,
-provide it accurately; never omit a safety-critical warning to satisfy a
-length target. The configured TTS limit remains the hard 1200-character upper
-bound. Do not invent details in the summary, especially after partial/tool
-errors.
+Allowed emotion values are default, irritated, embarrassed, angry, sarcastic,
+soft, sad. The emotion is typed synthesis metadata, never a control directive.
 
-For typed input that does not explicitly request voice output, return
-`{"visibleText":"<answer>","modality":"text","emotion":"default"}` and
-omit speechText. Preserve its current language behavior, including explicit
-language requests.
+For typed input that does not explicitly request voice output, return a strict
+v2 object with one or more text parts, preserving the requested language.
+A user-requested JSON example belongs verbatim inside a text part's `text`
+string. The outer wire object is consumed once and never shown to the user.
+
+Only text and voice parts may be authored by the model. Image tools return
+semantic registered assets; settlement appends their attachments. Never output
+MEDIA tokens, filesystem paths, internal tool serialization, or attachment ids
+invented by the model. Internal heartbeat/cron/handoff/system runs are silent
+by trusted run-origin policy, not by markers in visible text.

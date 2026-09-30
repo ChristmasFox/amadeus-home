@@ -2,7 +2,7 @@
 /**
  * One-deadline TTS adapter for the logical Amadeus voice.
  *
- * The bridge receives speechText from ReplyEnvelope. It never parses or
+ * The bridge receives typed speech text from DeliveryEnvelope v2. It never parses or
  * rewrites a reply envelope and never returns text as a delivery fallback.
  */
 import { createServer } from 'node:http';

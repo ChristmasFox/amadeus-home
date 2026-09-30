@@ -53,22 +53,28 @@ pnpm verify:voice  # 离线 unit/fixture/typecheck，不跑模型或 Docker
 pnpm test:workflow
 \`\`\`
 
-## ReplyEnvelope reply boundary
+## DeliveryEnvelope v2 reply and attachment boundary
 
-Kurisu 的 WhatsApp 回复由 `plugins/amadeus/src/reply-envelope.ts`、
-`reply-planner.ts` 和 `reply-delivery.ts` 贯穿。每个 run 绑定一个 immutable
-合同和 `deliveryId`：text 只发送 `visibleText`，voice 只把日语
-`speechText` 交给 TTS 后发送语音及同一合同的可见文本，silent 不触发任何
-TTS 或频道发送。入站语音由已验证的 transport fact 固定为 voice；typed turn
-使用严格结构化 planner，heartbeat、cron 和内部 handoff 使用 silent。
+Kurisu 的用户回复由 `plugins/amadeus/src/delivery-envelope.ts` 定义唯一 immutable
+`DeliveryEnvelope`：`version: 2`、run/delivery/session/channel/origin、`silent` 与有序
+`text` / `voice` / `attachment` parts。Agent 严格 JSON wire 只在
+`delivery-decoder.ts` 解码一次，raw wire 与 tools 原始 media 字段不进入发送；
+格式错误 fail closed，用户要求的 JSON 作为普通 text part 保留。
 
-ReplyEnvelope 的 TTS bridge 使用共享 110 秒 deadline（云端 25 秒、备用云端
-25 秒、本地 55 秒、5 秒 reserve）。ReplyEnvelope 迁移仍需真实 WhatsApp 验收；
-本地验证不会自动执行 release、镜像构建或生产部署。
+`delivery-runs.ts` 汇合当前 run 的图片登记与回答，`delivery-settlement.ts` 唯一
+`deliveryId` ledger 顺序交付。普通生图 disposition=inline，派生超分文件
+disposition=document；`assetId` 经权威 registry、根目录 realpath/no-follow 和
+MIME/size/SHA-256 核验。WhatsApp 的 pinned 单一 typed boundary 首先按 disposition
+选择 Baileys `image` 或 `document` payload，document 绝不降级为图片；语音
+通过原 TTS bridge 合成并转换为 Ogg/Opus PTT，失败只发送 typed text part。
+Telegram 以同一 settlement 映射 photo/document；owner outbox 不受改动。
+
+当前只完成 Git 源码切换，不会自动构建、部署或重启。生产仍在旧 immutable image，
+待另行显式授权部署并完成真实 WhatsApp Gates A–F。
 
 ## Amadeus 版本管理
 
-产品版本唯一记录在根目录 `VERSION`，当前正式发布版本为 `1.6.0`。每次只执行 `bump patch` 并递增
+产品版本唯一记录在根目录 `VERSION`，不要从文档推断当前版本。每次只执行 `bump patch` 并递增
 `0.0.1`；patch 位为 `0..9`，到 9 时进位到 minor（`0.9.9 -> 0.10.0`），minor 位为 `0..99`，到 99 且
 patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文来自
 `RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
