@@ -118,6 +118,14 @@ if (!builtinOriginal.includes(MARKER)) {
   const selectedPayloadAfter = 'const payloadWithForceDocument = state.pendingToolForceDocument ? { ...payloadWithMetadata, forceDocument: true } : payloadWithMetadata;\n\t\tconst selectedPayload = allSelectedMediaIsPending && (payload.mediaUrls ?? []).every((url) => state.pendingToolMediaTrustByUrl.get(url.trim()) === true) ? {\n\t\t\t...payloadWithForceDocument,\n\t\t\ttrustedLocalMedia: true\n\t\t} : payloadWithForceDocument;';
   if (!builtinPatched.includes(selectedPayloadBefore)) throw new Error(`builtin selected-media anchor changed in ${builtinPath}`);
   builtinPatched = builtinPatched.replace(selectedPayloadBefore, selectedPayloadAfter);
+  const consumeAnchor = 'function consumePendingToolMediaIntoReply(state, payload) {\n\tif (payload.isReasoning) return payload;';
+  const consumeReplacement = 'function stripPendingToolMediaStructuredTail(text) {\n\treturn text.replace(/^\\s*MEDIA:\\s*[^\\n]+\\n*/iu, "").replace(/\\n\\s*\\{\\s*"(?:visibleText|modality)"\\s*:[\\s\\S]*\\}\\s*$/u, "").trim();\n}\nfunction consumePendingToolMediaIntoReply(state, payload) {\n\tif (payload.isReasoning) return payload;\n\tif (typeof payload.text === "string") payload = { ...payload, text: stripPendingToolMediaStructuredTail(payload.text) };';
+  if (!builtinPatched.includes(consumeAnchor)) throw new Error(`builtin pending media anchor changed in ${builtinPath}`);
+  builtinPatched = builtinPatched.replace(consumeAnchor, consumeReplacement);
+  const mergedForceAnchor = 'audioAsVoice: payload.audioAsVoice || state.pendingToolAudioAsVoice || void 0,\n\t\t...payload.trustedLocalMedia || allPendingMediaTrusted ? { trustedLocalMedia: true } : {}';
+  const mergedForceReplacement = 'audioAsVoice: payload.audioAsVoice || state.pendingToolAudioAsVoice || void 0,\n\t\tforceDocument: state.pendingToolForceDocument || void 0,\n\t\t...payload.trustedLocalMedia || allPendingMediaTrusted ? { trustedLocalMedia: true } : {}';
+  if (!builtinPatched.includes(mergedForceAnchor)) throw new Error(`builtin merged media anchor changed in ${builtinPath}`);
+  builtinPatched = builtinPatched.replace(mergedForceAnchor, mergedForceReplacement);
   builtinPatched = builtinPatched.replace('state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;', 'state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;\n\tstate.pendingToolForceDocument ||= payload.forceDocument === true;');
   builtinPatched = builtinPatched.replace('toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,', 'toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,\n\t\ttoolForceDocument: pendingToolMediaReply?.forceDocument,');
   builtinPatched = builtinPatched.replaceAll('pendingToolAudioAsVoice: false,', 'pendingToolAudioAsVoice: false,\n\t\tpendingToolForceDocument: false,');
