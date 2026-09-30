@@ -4,13 +4,29 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `REGISTRY_RECOVERED_CANDIDATE_APPLY_READY` (v2 runtime not yet accepted).
+Status: `CANDIDATE_APPLIED_AWAITING_REAL_WHATSAPP_GATES` (not a release; Goal open).
 
-The Git source implements the typed v2 contract, one structured decoder and
-one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
-integration, and no independent Amadeus auto/pending tool-media sender. Source
-checks and the scoped Git commit must pass before treating this source phase
-as complete. Production still runs the previous immutable image.
+The one OpenClaw runtime now uses immutable candidate image
+`local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303` from source commit
+`a1df7b7`. Source tests/secrets, checksum-pinned WhatsApp typed boundary,
+consistent SQLite backup and registry refresh, strict Amadeus tool/Skill
+preflight, actual Gateway registration, health/smoke, and owner outbox delivery
+passed. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930095303`.
+External post-deploy evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930095303`.
+Real owner WhatsApp Gates A–F and recipient-downloaded file SHA-256 equality
+remain open. No VERSION bump or release announcement occurred.
+
+**Next action:** use real owner WhatsApp inbound messages to test normal text,
+intentional JSON, Japanese voice and typed text fallback, ordinary inline
+image, and 2x/4x upscale documents. Download PNG/JPEG derived files and
+compare recipient SHA-256/byte size with authoritative host assets; then
+perform the authorized restart/recreate Gate F and invoke a new upscale. On
+failure restore the protected checkpoint/previous immutable image, never the
+retired source path. Do not mark the full Goal complete on synthetic tests.
+
+## Earlier attempts and plugin-index recovery (historical audit only)
 
 **Authorized apply in progress:** first candidate stopped before Compose switch;
 the old config was restored from protected checkpoint
@@ -58,14 +74,6 @@ the official `plugins registry --refresh` rebuilt 64 entries including Amadeus.
 The old Gateway now registers Amadeus, its Skills are visible, and it is healthy.
 The candidate remains unapplied. See
 `.agent/checkpoints/2026-09-30-amadeus-plugin-registry-recovery.md`.
-
-**Next phase under this explicit authorization:** take a
-protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
-restore the pinned WhatsApp module and install the typed plan, switch CasaOS,
-run health/smoke and real owner-channel Gates A–F. Download both PNG/JPEG upscale
-documents and compare received SHA-256 and byte size with registry/host assets;
-then restart/recreate and repeat a new upscale. Do not close the Goal on local
-tests alone or weaken any rollback/secret boundary.
 
 Independent 9Router maintenance on 2026-09-30 (not this Goal): CasaOS 9Router
 was upgraded to npm `0.5.91`; the version-guarded `gpt-image-2.5` account
