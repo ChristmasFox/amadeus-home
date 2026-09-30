@@ -16,7 +16,7 @@ context; if the user replied to an older image, that replied image wins over a
 newer image. If there is no reply target, use the most recent eligible image in
 the current conversation only. Never guess from another conversation.
 
-The default scale is `2`. Preserve an explicit `4` request. Interpret an
+The default scale is `4`. Preserve an explicit `2` request. Interpret an
 explicit `4K`/`2K` request as the bounded `resolution` profile (`4k` uses a
 3840px long-edge cap; `2k` uses a 2560px long-edge cap) rather than inventing
 an arbitrary pixel count. Preserve an explicit `realistic` or `anime` mode;

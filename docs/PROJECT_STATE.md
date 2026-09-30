@@ -37,6 +37,11 @@ digest and size, but the recipient-downloaded file remains unverified. Gates Aâ€
 equality still require real evidence. The earlier rollback and failed candidate
 attempts below are historical audit, not current runtime state.
 
+The owner subsequently requested 4x as the default when no multiplier is
+specified. The current live image/service still default to 2x until the
+source changes are tested, committed and applied; explicit 2x must remain
+available.
+
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
 Git source now defines one v2 typed user-facing settlement across text, voice and

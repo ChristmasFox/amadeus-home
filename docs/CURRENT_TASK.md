@@ -29,6 +29,11 @@ produced 3412×7376 PNG (26,037,181 bytes), SHA-256 matching its own
 registry, and one document attachment settled as `sent`. The recipient-
 downloaded file hash remains unverified; do not claim full Gate completion.
 
+Owner requested a new 4x default for unspecified upscale (explicit 2x remains 2x).
+Source now aligns the native tool, Skill, host service and manual CLI. This
+change is pending focused verification, source commit and protected apply;
+the above live image still uses the prior 2x default until then.
+
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
 where real evidence has not been recorded. Production apply requires the

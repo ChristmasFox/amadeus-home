@@ -145,7 +145,7 @@ def validate_image_id(value: str) -> str:
 
 def validate_scale(value: Any) -> int:
     if value is None:
-        return 2
+        return 4
     if value not in {2, 4}:
         raise ServiceError("scale_must_be_2_or_4", status=422)
     return int(value)
@@ -461,7 +461,7 @@ class AssetStore:
 
     def upscale(self, image_id: str | None, conversation_id: str | None, reply_message_id: str | None, scale_value: Any, mode_value: Any, resolution_value: Any = None) -> Asset:
         resolution = validate_resolution(resolution_value)
-        scale = validate_scale(4 if resolution == "4k" and scale_value is None else scale_value)
+        scale = validate_scale(scale_value)
         mode = validate_mode(mode_value)
         parent = self.resolve(image_id, conversation_id, reply_message_id)
         intermediate_width = parent.width * scale
