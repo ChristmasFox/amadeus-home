@@ -4,10 +4,10 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_DEFAULT_4X_OWNER_ACCEPTANCE_PENDING` (Goal open).
+Status: `CANDIDATE_LIVE_IMAGE_GENERATION_OWNER_GATE_PENDING` (Goal open).
 
-The healthy single OpenClaw runtime now uses default-4x candidate
-`git-9221fce0a519-20260930130737`; Amadeus is
+The healthy single OpenClaw runtime now uses image-completion candidate
+`git-77ed8e60a489-20260930133806` (retaining default 4x); Amadeus is
 registered and WhatsApp connected. The owner confirmed direct-message replies
 work and later reported group replies recovered without a source/config change.
 Two group arrivals earlier settled silent, so intermittent group behavior is not
@@ -42,10 +42,10 @@ result has no image paths; the typed completion arrives as an inter-session
 image-generation event. The previous source treated every inter-session turn
 as silent, and neither imported the completion's typed attachments nor settled
 them. Source now gives a verified image completion its own v2 run origin,
-registers the typed image attachments as inline in the same envelope and
-cancels the native competing delivery after one typed settlement. Focused
-regression passes; a new protected candidate apply and real owner generation
-are pending. No rollback to an old image and no automatic media sender.
+registers typed image attachments as inline in the same envelope and cancels
+the native competing delivery after one typed settlement. Focused regression,
+build, secrets and protected candidate apply passed; real owner generation is
+pending. Evidence: `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`. No rollback to an old image and no automatic media sender.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
