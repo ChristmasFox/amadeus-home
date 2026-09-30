@@ -30,7 +30,10 @@ the host asset registry independently records the resulting 2x asset. The
 service accepts 4x. Source now constrains an unambiguous current inbound
 multiplier at the native tool boundary and was deployed from source commit
 `682c69a` after focused regression, pinned boundary checks, secrets scan,
-Gateway registration and health/owner-outbox smoke. It is not owner-accepted yet. Gates A–F and recipient hash
+Gateway registration and health/owner-outbox smoke. A real owner DM retest produced host `scale:4`, 3412×7376 PNG and one
+WhatsApp document settlement; the Agent itself still proposed `scale:2`,
+so the native constraint was decisive. Host bytes match its asset registry
+digest and size, but the recipient-downloaded file remains unverified. Gates A–F and recipient hash
 equality still require real evidence. The earlier rollback and failed candidate
 attempts below are historical audit, not current runtime state.
 

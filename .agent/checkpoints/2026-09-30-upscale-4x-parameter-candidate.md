@@ -28,3 +28,17 @@ Real owner 4x and recipient document verification remain pending. A fresh
 explicit 4x request must produce registry `transform.scale=4`, expected
 bounded dimensions, one document primitive, and recipient hash equality.
 This is not a release, version bump, or full DeliveryEnvelope Goal completion.
+
+## Real owner 4x retest (20:51 local)
+
+After the owner sent a new DM request, the authoritative model tool-call
+transcript still proposed `scale:2`, but the bounded native tool constraint
+sent `scale:4` to the host. The host produced a ready 3412×7376 PNG asset
+(26,037,181 bytes), with registry transform `scale:4`. Reading the host bytes
+confirmed the stored byte size and SHA-256 equal the registry metadata. The
+single DeliveryEnvelope settlement recorded text + one attachment,
+`disposition=document`, provider primitives `text,document`, final `sent`.
+This establishes the explicit-4x parameter correction and document sender
+selection for this real DM. It does **not** establish the recipient-downloaded
+file SHA-256; that requires the owner's received file or hash. No message
+body, personal identifier, image bytes, or digest is retained in Git.
