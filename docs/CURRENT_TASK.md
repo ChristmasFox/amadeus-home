@@ -4,41 +4,29 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `OWNER_GATE_A_FAILED_ROLLED_BACK_SOURCE_FIX` (old image live; Goal open).
+Status: `CANDIDATE_LIVE_UPSCALE_4X_SOURCE_FIX_PENDING_APPLY` (Goal open).
 
-The first real owner WhatsApp Gate A against the candidate produced no reply.
-Protected runtime logs isolated a TypeError reading `observeMessageSent` from
-an undefined channel `delivery` adapter. The candidate was immediately rolled
-back using checkpoint
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930095303`;
-only the plugin-index SQLite row was restored, preserving other live state.
-The old immutable image `git-6311e21b412c` is healthy, Amadeus registered,
-WhatsApp connected and `tts.auto=tagged`. Source now fixes the pinned plan
-shape and adds focused assertions; it needs a new commit/build/checkpoint
-before another authorized candidate test. Evidence:
-`.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-rollback.md`.
+The live single OpenClaw runtime is healthy on immutable candidate
+`local/openclaw-amadeus:git-675d5fbbf974-20260930101930`; Amadeus is
+registered and WhatsApp connected. The owner confirmed direct-message replies
+work and later reported group replies recovered without a source/config change.
+Two group arrivals earlier settled silent, so intermittent group behavior is not
+proven resolved. Do not revert to the prior image on speculation. Protected
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930101930`.
+Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-fix-candidate.md`.
 
-## Prior candidate apply (historical evidence; no longer live)
+Real 4x request diagnosis: host asset registry and authoritative OpenClaw
+transcript tool-call arguments both show `scale:2` for the owner's explicit
+4x request. The host service supports 4x; the Agent selected 2 before the
+plugin/service boundary. A bounded explicit multiplier constraint is now in
+source; focused test/typecheck/build/secrets passed locally. Commit and
+protected candidate apply are pending. A fresh real owner 4x request and
+recipient file verification are required; do not claim Gate completion yet.
 
-The one OpenClaw runtime now uses immutable candidate image
-`local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303` from source commit
-`a1df7b7`. Source tests/secrets, checksum-pinned WhatsApp typed boundary,
-consistent SQLite backup and registry refresh, strict Amadeus tool/Skill
-preflight, actual Gateway registration, health/smoke, and owner outbox delivery
-passed. Protected checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930095303`.
-External post-deploy evidence:
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930095303`.
-Real owner WhatsApp Gates A–F and recipient-downloaded file SHA-256 equality
-remain open. No VERSION bump or release announcement occurred.
-
-**After a newly tested/committed candidate apply:** use real owner WhatsApp inbound messages to test normal text,
-intentional JSON, Japanese voice and typed text fallback, ordinary inline
-image, and 2x/4x upscale documents. Download PNG/JPEG derived files and
-compare recipient SHA-256/byte size with authoritative host assets; then
-perform the authorized restart/recreate Gate F and invoke a new upscale. On
-failure restore the protected checkpoint/previous immutable image, never the
-retired source path. Do not mark the full Goal complete on synthetic tests.
+Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
+SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
+where real evidence has not been recorded. Production apply requires the
+explicit authorized, protected checkpoint flow; no VERSION bump or release.
 
 ## Earlier attempts and plugin-index recovery (historical audit only)
 

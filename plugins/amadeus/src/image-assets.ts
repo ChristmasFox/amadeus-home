@@ -41,10 +41,18 @@ type ImageAssetResult = {
   fileName?: string;
   sha256: string;
 };
-type CurrentImageContext = ImageAssetOrigin & { sessionKey: string; expiresAt: number };
+type CurrentImageContext = ImageAssetOrigin & { sessionKey: string; explicitScale?: 2 | 4; expiresAt: number };
 
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const currentImageContexts = new Map<string, CurrentImageContext>();
+
+/** A bounded parameter constraint, not a capability/tool router. A bare 4K/2K is
+ * a resolution profile and must never be mistaken for an upscale multiplier. */
+export function explicitUpscaleScale(body: string): 2 | 4 | undefined {
+  const four = /(?:\b4\s*[x×倍]|四\s*倍)/iu.test(body);
+  const two = /(?:\b2\s*[x×倍]|二\s*倍|两\s*倍)/iu.test(body);
+  return four === two ? undefined : four ? 4 : 2;
+}
 
 function text(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -206,12 +214,13 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   const current = currentContextFor(context.sessionKey);
   const identity = identityContextFromOpenClaw(context);
   const origin = originForContext(context, current);
+  const scale = current?.explicitScale ?? input.scale;
   const response = await serviceJson(config, '/v1/upscale', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       ...(input.target?.imageId ? { imageId: input.target.imageId } : {}),
-      ...(input.scale !== undefined ? { scale: input.scale } : {}),
+      ...(scale !== undefined ? { scale } : {}),
       ...(input.mode !== undefined ? { mode: input.mode } : {}),
       ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
       ...(origin.conversationId ? { conversationId: origin.conversationId } : {}),
@@ -224,7 +233,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     status: 'ok',
     imageId: asset.imageId,
     parentImageId: asset.parentImageId,
-    scale: asset.transform?.scale ?? input.scale ?? 2,
+    scale: asset.transform?.scale ?? scale ?? 2,
     mode: asset.transform?.mode ?? input.mode ?? 'auto',
     ...(asset.transform?.resolution ? { resolution: asset.transform.resolution } : input.resolution ? { resolution: input.resolution } : {}),
     mimeType: asset.mimeType,
@@ -273,12 +282,14 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const conversationId = text(hookContext.conversationId);
     const messageId = text(hookContext.messageId ?? event.messageId);
     const replyToMessageId = text(hookContext.replyToId ?? event.replyToId);
+    const explicitScale = explicitUpscaleScale(event.body ?? event.content);
     currentImageContexts.set(sessionKey, {
       sessionKey,
       ...(channel ? { channel } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(messageId ? { messageId } : {}),
       ...(replyToMessageId ? { replyToMessageId } : {}),
+      ...(explicitScale !== undefined ? { explicitScale } : {}),
       expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
     });
   });
@@ -306,7 +317,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return job.then(() => undefined);
   }, { matcher: ['image_generate', 'amadeus_image_upscale'], timeoutMs: 60_000 });
 
-  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Use only when the user explicitly asks to enhance or upscale an existing image; reply context is resolved before the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
+  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. For an explicit 4x/4倍 request pass scale:4 (never scale:2); 4K is a resolution profile, not a multiplier. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 
 export { ImageUpscaleParameters };
