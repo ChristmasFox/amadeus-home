@@ -57,6 +57,10 @@ Use the accepted historical values unless live verification proves the existing 
 
 Do not silently upgrade MLX/model dependencies during this rebaseline. First restore the accepted voice path exactly. Dependency modernization is a separate future Goal.
 
+## Phase 0 live-collision exception — 2026-10-01
+
+Read-only M204 inspection found that the accepted historical TTS port `127.0.0.1:18792` is currently owned by the separate Amadeus ImageAssets LaunchAgent, which OpenClaw uses. OrbStack reaches this loopback service through `host.docker.internal`; moving it would require an unrelated OpenClaw restart and image-service port migration, so preserve ImageAssets unchanged. Port `18794` was verified unoccupied and is the rebaseline TTS port under the explicitly allowed live-collision exception above. Bind Qwen TTS to `127.0.0.1:18794`; no GPT compatibility port is reused. The existing ImageAssets listener remains on `127.0.0.1:18792`. A controlled ImageAssets port-reconfiguration attempt returned a launchd bootstrap I/O error and its helper restored the original plist; post-rollback health was HTTP 200 on 18792. Do not retry or restart OpenClaw for this Goal.
+
 ## Non-goals
 
 - Do not train, fine-tune or convert a new model.
@@ -71,7 +75,7 @@ Do not silently upgrade MLX/model dependencies during this rebaseline. First res
 
 1. Follow `AGENTS.md`: read `docs/CONTEXT.md`, `docs/CURRENT_TASK.md`, this Goal, `docs/PROJECT_STATE.md`, current TTS source and deployment files; then run `git status --short --branch` and recent log inspection.
 2. Inspect live Mac and OrbStack/9Router state before mutation:
-   - current listeners on `18792`, `18793`, `19870`, `19871`, `20130`;
+   - current listeners on `18792`, `18793`, `19870`, `19871`, `18794`, `20130`;
    - relevant LaunchAgents/processes;
    - current 9Router TTS bridge health/provider metadata;
    - current local voice profile paths and file hashes;
@@ -113,7 +117,7 @@ This exception keeps semantic correctness while making ordinary/default speech l
 ## Phase 2 — 9Router TTS bridge simplification
 
 1. Keep one logical `amadeus-tts` bridge and current DeliveryEnvelope-facing request contract.
-2. Change the local endpoint from GPT-SoVITS `:19871` back to the authenticated Qwen3-TTS MLX service on `:18792`.
+2. Change the local endpoint from GPT-SoVITS `:19871` back to the authenticated Qwen3-TTS MLX service on `:18794` (Phase 0 collision exception).
 3. Update health/provider metadata to truthfully report:
 
 ```text
@@ -145,7 +149,7 @@ Run the minimum sufficient validation selected by the repository workflow, plus 
 5. `git diff --check`;
 6. repository search confirming no active runtime/config reference to OminiX or GPT-SoVITS remains outside historical docs/checkpoints/archive notes;
 7. dry-run of Mac Qwen3-TTS manager showing `ENGINE=mlx` and the expected protected paths;
-8. dry-run of 9Router deployment/provisioning showing local `:18792` primary and cloud-only fallback.
+8. dry-run of 9Router deployment/provisioning showing local `:18794` primary and cloud-only fallback.
 
 If these automated checks fail, fix them before apply. Do not ask the owner to wake up for a listening verdict.
 
@@ -158,9 +162,9 @@ Apply in this order to avoid two resident local models on the 24 GB Mac:
 1. Ensure the accepted MLX assets and canonical A reference are ready.
 2. Stop/boot out GPT-SoVITS adapter/API LaunchAgents and confirm `:19870`/`:19871` are no longer serving.
 3. Stop any stale OminiX tuner/service process if present and confirm `:18793` is not serving.
-4. Install/render/start `com.amadeus.qwen3-tts` with `AMADEUS_TTS_ENGINE=mlx`, the pinned MLX model path and canonical `kurisu-v1` profile. Warm it to ready on `127.0.0.1:18792`.
+4. Install/render/start `com.amadeus.qwen3-tts` with `AMADEUS_TTS_ENGINE=mlx`, the pinned MLX model path and canonical `kurisu-v1` profile. Warm it to ready on `127.0.0.1:18794` (Phase 0 collision exception).
 5. Run direct authenticated local health and Japanese synthesis smoke before changing 9Router routing.
-6. Apply the 9Router TTS bridge/compose/provider change so the single `amadeus-tts` logical route points local-first to `:18792` and cloud fallback only.
+6. Apply the 9Router TTS bridge/compose/provider change so the single `amadeus-tts` logical route points local-first to `:18794` and cloud fallback only.
 7. Recreate/reload only the minimum affected 9Router service; do not rebuild/restart OpenClaw or unrelated HomeLab services unless the repository's actual dependency graph requires it.
 8. Verify 9Router and TTS health after the switch.
 
@@ -194,9 +198,9 @@ With a controlled temporary local outage/failure, prove the bridge falls back to
 Verify:
 
 - no listener on `19870`, `19871` or `18793`;
+- `18792` remains owned only by ImageAssets; `18794` is owned only by Qwen3-TTS MLX;
 - no GPT-SoVITS/OminiX LaunchAgent loaded;
 - no GPT-SoVITS/OminiX process resident;
-- `18792` is owned only by the Qwen3-TTS MLX service;
 - active 9Router config contains no GPT-SoVITS/OminiX route.
 
 ### F. Host viability

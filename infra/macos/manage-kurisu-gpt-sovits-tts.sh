@@ -7,13 +7,18 @@ source "$ROOT/scripts/host-profile.sh"
 amadeus_host_profile_load "$ROOT"
 
 MODE=dry-run
-case "${1:---dry-run}" in
-  --dry-run) ;;
-  --apply) MODE=apply ;;
-  --status) MODE=status ;;
-  --uninstall) MODE=uninstall ;;
-  *) echo 'Usage: manage-kurisu-gpt-sovits-tts.sh [--dry-run|--apply|--status|--uninstall]' >&2; exit 2 ;;
-esac
+ACTION=install
+while (($#)); do
+  case "$1" in
+    --dry-run) MODE=dry-run ;;
+    --apply) MODE=apply ;;
+    --status) MODE=status ;;
+    --stop) ACTION=stop ;;
+    --uninstall) ACTION=uninstall ;;
+    *) echo 'Usage: manage-kurisu-gpt-sovits-tts.sh [--dry-run|--apply] [--stop|--uninstall] | --status' >&2; exit 2 ;;
+  esac
+  shift
+done
 
 [[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 required' >&2; exit 1; }
 
@@ -71,9 +76,27 @@ if [[ "$MODE" == status ]]; then
   exit 0
 fi
 
-if [[ "$MODE" == uninstall ]]; then
+if [[ "$ACTION" == stop ]]; then
+  printf 'ACTION=stop labels=%s,%s ports=19870,19871\n' "$LABEL_API" "$LABEL_TTS"
+  [[ "$MODE" == apply ]] || exit 0
   stop_label "$LABEL_TTS"
   stop_label "$LABEL_API"
+  for port in 19870 19871; do
+    if lsof -nP -iTCP:"$port" -sTCP:LISTEN 2>/dev/null | tail -n +2 | grep -q .; then
+      echo "listener_remains_on_$port" >&2
+      exit 1
+    fi
+  done
+  echo 'KURISU_GPT_SOVITS=stopped (runtime and model retained for rollback)'
+  exit 0
+fi
+
+if [[ "$ACTION" == uninstall ]]; then
+  printf 'ACTION=uninstall plists=%s,%s\n' "$API_PLIST" "$TTS_PLIST"
+  [[ "$MODE" == apply ]] || exit 0
+  stop_label "$LABEL_TTS"
+  stop_label "$LABEL_API"
+  rm -f -- "$API_PLIST" "$TTS_PLIST"
   echo 'KURISU_GPT_SOVITS=uninstalled (runtime, model and token retained)'
   exit 0
 fi

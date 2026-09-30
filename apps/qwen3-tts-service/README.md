@@ -1,67 +1,36 @@
-# M204 native Qwen3-TTS service (1.6.0 released)
+# M204 native Qwen3-TTS MLX service
 
-## Cloud Qwen-Audio-TTS migration boundary
+The production local engine is the owner-accepted Qwen3-TTS 1.7B Base through
+pinned `mlx-audio` 0.5.6 with the 8-bit
+`mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` model. It uses the original
+operator-owned `kurisu-v1/reference.wav` + matching `reference.txt` profile,
+`lang_code="auto"`, pure ICL cloning, one model worker, and a bounded FIFO
+queue. The local engine does not receive persona/instruction/style/speed/pitch
+controls. Non-default style requests are handled by the 9Router cloud path.
 
-The production source remains the single resident OminiX Qwen3-TTS-MLX service on M204 `:18792`. The staged 9Router `tts-bridge.mjs` makes official `qwen-audio-3.0-tts-flash` voice cloning the primary path and uses this service as a bounded, one-request fallback for transient cloud failures. It sends the same `amadeus-tts` contract (`kurisu-v1`, seven bounded emotion ids and `wav`/`mp3`/`opus`) to either backend; OpenClaw and 9Router never see the cloud model id.
+`infra/macos/qwen3-tts-engine.json` is the declarative source for pinned source,
+model, and dependency revisions. The protected MLX assets remain under the
+historical `~/Library/Application Support/Amadeus/speech/mlx-poc/` path to
+avoid copying the prepared model or venv. `verify-qwen3-mlx-assets.py` checks
+that source, model files, dependency versions, and private permissions match
+the protected manifest before service apply.
 
-`kurisu_style.json` is the semantic source of truth. Its `cloudPersona`/`cloudInstruction` fields are a deterministic cloud rendering of the seven emotions; the existing `instruct` and generation controls remain the local OminiX contract. Cloud enrollment is performed only by `scripts/provision-qwen-audio-tts-voice.py --apply --confirm-authorized-sample` with an operator-owned protected 10–60 second Japanese sample (10–20 seconds recommended, 60 seconds maximum) and a protected temporary HTTPS URL. The enrollment request keeps the API's `max_prompt_audio_length` at its valid 30-second maximum. When the Qwen credential is the existing guest ASR secret, use `--api-key-guest-file /DATA/AppData/9router/secrets/asr-upstream-api-key`; the value is read only into process memory. The script stores only a protected voice-id file plus a hash manifest. `scripts/smoke-qwen-audio-tts.py --apply` exercises cloud-only default/angry/soft/embarrassed MP3/WAV cases; it never invokes the local fallback.
+The authenticated OpenAI-compatible service binds **only** to
+`127.0.0.1:18794`; the OrbStack 9Router guest reaches the host loopback through
+`host.docker.internal`. `/healthz` exposes readiness and provider/model identity;
+`/v1/audio/speech` and `/v1/voices` require the protected Bearer token. The
+logical bridge order is local `qwen3-tts-mlx`, Qwen Audio 3.1, then Qwen Audio
+3.0. Configuration/auth/contract errors fail closed; operational local errors
+may fall through to cloud.
 
-## Kurisu TTS Tuner (1.6.7)
+The live host has a separate Amadeus ImageAssets listener on
+`127.0.0.1:18792`, so the Goal's explicit collision exception selects the
+verified-free TTS port `127.0.0.1:18794`. ImageAssets and OpenClaw configuration
+remain unchanged; the Qwen endpoint is still loopback-only.
 
-The native OminiX process serves an owner-local, dependency-free tuner at
-`http://192.168.5.3:18793` (listener `0.0.0.0:18793`). It shares the resident Base 1.7B worker and cached
-`kurisu-v1` x-vector with the authenticated production endpoint on `:18792`.
-The lab API accepts one sample at a time or a bounded four-slot batch and uses
-the production-priority scheduler; generated audio, history, drafts and
-proposals stay under the protected runtime tuner directory outside Git.
-
-`kurisu_style.json` is the single Git-tracked production style source. The
-browser can create a hash-bound proposal, but only the repo-owned command may
-promote it:
-
-```sh
-./scripts/promote-kurisu-style.sh --proposal ID --dry-run
-./scripts/promote-kurisu-style.sh --proposal ID --apply
-```
-
-The apply path validates the proposal, updates only the canonical style file
-and asks the running process to hot-reload it without loading another model.
-The UI never receives the production token, reference audio, x-vector or
-private paths. Lab options are the verified pinned OminiX controls: temperature,
-top-k, top-p, max-new-tokens, seed, speed-factor and repetition-penalty.
-
-One resident **selected community MLX 1.7B Base 8-bit** engine uses the original protected ~46s `kurisu-v1` A ICL reference; the official PyTorch MPS/FP16 model remains an explicit protected rollback, never a simultaneous fallback. This is an inference boundary, not an Agent or speech planner. MLX source/model/dependencies are pinned in `infra/macos/qwen3-tts-engine.json` and `requirements-mlx-tts.txt`; weights and profile stay outside Git.
-
-Provision an operator-owned, licensed `reference.wav` (short clean speech) and matching `reference.txt` in `~/Library/Application Support/Amadeus/voices/kurisu-v1/`, both mode 600. Do not commit either file or generated embeddings. `manage-qwen3-tts.sh --prepare-apply` creates `~/Library/Application Support/Amadeus/speech/tts.token` mode 600 if absent (never prints its value); then configure 9Router's Self-hosted TTS provider with the same secret outside Git. Endpoint for the OrbStack guest: `http://host.docker.internal:18792/v1`, accepting the stable `amadeus-tts` alias and canonical `qwen3-tts-1.7b` model IDs, with voice `kurisu-v1`. `GET /healthz` is public and exposes only readiness/model/voice identifiers; speech and voice inventory require Bearer auth.
-
-`infra/macos/manage-qwen3-tts.sh --dry-run` is safe by default and declares the selected MLX engine. `--prepare-apply` prepares pinned community MLX assets and a protected token outside Git; explicit `--prepare-apply --engine mps` prepares the official MPS rollback model (revision `fd4b254389122332181a7c3db7f27e918eec64e3`). `--apply` validates the selected engine/profile/token and installs source plus the **same** launchd user agent; `--apply-plist-only --engine mlx|mps` is an explicit single-engine switch, never automatic fallback or dual-running. `--status` checks engine and health, `--uninstall` preserves protected assets. A user LaunchAgent is required for Apple Metal access; `ThrottleInterval=60` bounds crash restarts. Selected model/venv are under the protected historical `speech/mlx-poc/` path; MPS rollback model/venv remain under `speech/model` and `speech/venv`. Sanitized rotating service logs remain under `~/Library/Logs/Amadeus/qwen3-tts.log` (2 MB + 3 backups). Early launchd stderr goes to private `qwen3-tts-launchd.err.log` in the same directory; the manager truncates it when over 1 MiB before each install/bootstrap (not continuously between applies). It is only for interpreter/import/bootstrap diagnostics, not request contents or credentials. Reboot recovery assumes the user's launchd session starts.
-
-Warmup performs actual synthesis before ready. Requests use one inference worker plus one bounded pending slot. A full queue or pending wait beyond 5 seconds returns `503 tts_busy` without invoking synthesis; there is no unbounded lock wait and no increase to the upstream 120-second window. An in-flight model call is not force-interrupted on shutdown; pending requests are cancelled and callers unblocked. The engine lock remains for model safety. Inputs are limited to 1200 Unicode codepoints / 8 KiB JSON / 12 MiB WAV, with a 30-second format-conversion timeout. OpenAI-compatible `response_format` supports `wav`, `mp3`, and `opus` (48 kHz Ogg/Opus). No request text or reference bytes are logged; no media files are retained by this service. Success logs contain only a bounded input-character bucket, decoded audio duration, lock queue wait, `generate_voice_clone` wall time, WAV serialization, inside-lock wall time, output encoding, total and RTF. The upstream `generate_voice_clone` API includes decoding/postprocessing; `decode_stage=inside_model_api` denotes an unmeasurable substage rather than a fabricated metric. RTF is inside-lock synthesis wall time divided by generated audio duration (both in ms), excluding queue wait and encoding. OpenClaw handles inbound temporary media and synthesized-media retention separately.
-
-Test locally without downloading weights: `python3 -m unittest discover -s apps/qwen3-tts-service/tests -v`. Real MPS synthesis, profile quality, Docker-to-host routing, 9Router integration and WhatsApp acceptance are **not** asserted by the unit tests.
-
-## 9Router speech route (deployed; provisioning details retained for audit)
-
-`scripts/provision-9router-speech.py` defaults to dry-run. The upstream model uses DashScope multimodal-generation, not multipart STT. A bounded protocol adapter in the 9Router image exposes local multipart STT at `127.0.0.1:20129`; its external upstream key and URL live only in the guest's protected secret mount and `9router.env`. The existing QwenAI platform connection is a distinct user-configured authority from Alibaba Model Studio; use requires an explicit deployment flag. Use `--apply` with protected 0600 `--asr-key-file` (bridge Bearer token) and `--tts-key-file` (M204 TTS token). It authenticates using the protected local 9Router CLI token over M204 loopback, captures an online SQLite plus compose/env/image rollback checkpoint in the guest, creates/reuses self-hosted STT/TTS connections, retires the conflicting old `amadeus-asr` Chat Combo and provisions the stable aliases. Existing mismatched connections/aliases fail closed; the script never prints secrets. The ASR bridge independently survives an M204 TTS service outage. Initial provisioning required direct audio and normalized transcript smoke before the OpenClaw config apply. The 1.6.0 route is live; real WhatsApp ASR→Agent→TTS→PTT and owner handset/typed acceptance are recorded in the dated checkpoints. Do not rerun provisioning without an explicit migration request.
-
-## Protected performance matrix (explicit hardware phase)
-
-`prepare_profiles.py` accepts a **private, 0600** JSON cut manifest with B/C/D/E start/end seconds and one-based transcript line ranges. It copies A and creates protected crops outside Git; do not assume line/time alignment is correct until the owner audits the clips. The current M204 experimental set is ~46s/~15.4s/~8.15s/~4.55s/~4.55s; E uses the short clip in x-vector-only mode. Neither reference text, audio, nor sample contents belong in a report or Git.
-
-`benchmark.py` is plan-only without `--apply`. On the M204 service venv, pass absolute protected `--profile-root`, external `--output-dir`, and local `--model-path`, plus `--apply` for real MPS. It holds one model resident, records startup and prompt construction separately, compares A–E × Auto/Japanese × three public Japanese fixtures (short/normal/long) with one first-use and **five warmed runs** per combination. Only the very first synthesis after model load is `model_cold`; a new prompt's first synthesis is `profile_cold`, and further runs are `warm`. Each result has stage timings, RTF, memory and error category. One listening WAV per combination is generated in the protected output directory. Completed config files can be reused; a partial config with an orphaned listening sample requires private cleanup before retry. These are direct backend timings, not OpenClaw/WhatsApp end-to-end timings.
-
-`analyze_benchmark.py --results-dir ...` is a strict generic full-30-config checker; the released Goal report instead documents 26 complete MPS cells, four safety-incomplete B cells and the owner's explicit §12 cancellation of further B tests. It never fabricates missing runs. It emits content-free p50/p95/min/max plus error/memory summaries. `--allow-partial` is for progress inspection, never a complete-matrix claim. It cannot assess Kurisu similarity, pronunciation or naturalness; the owner must listen before selecting any production candidate. Do not modify the production profile while benchmarking.
-
-The historical B experiment stopped on a 110-second safety watchdog; the owner explicitly cancelled further B tests in Goal §12. Do not rerun B merely to fill its four missing cells. For a separately authorized future benchmark, use `supervise_benchmark.py --apply` instead of an unbounded direct matrix process. It starts one isolated MPS process per config, preserves private partial JSONL/logs, and terminates only the experimental process if a single `START` sample does not complete within 110 seconds. A timed-out config is **incomplete** and must not be silently included in p50/p95 or selected for production. `quality_sheet.py --apply` creates an external 0600 CSV with one row per available private listening WAV and *blank* owner ratings; it never infers voice quality. Keep orphaned/partial attempts as private evidence, not in Git. Model cold startup and prompt construction are reported separately from warmed inference; each config's first fixture trial is excluded from the five warmed trials used in summary quantiles. With only five samples, p95 is an interpolated descriptive statistic, not a high-confidence tail estimate.
-
-The released LaunchAgent uses `ProcessType=Interactive` for user-requested HTTP TTS. Reversible same-fixture Background/Interactive MPS A/B/A/B measured p50 ~10.39s vs ~4.48s before the separate MLX backend decision. It does not reserve CPU/GPU while idle or guarantee every reply in five seconds. Protected plist/source checkpoints and the unchanged product timeout remain.
-
-## Selected MLX backend boundary (1.6.0)
-
-`engine_contract.py` defines the same timed-WAV `SpeechEngine` protocol for MPS and MLX. The Git-declared target in `infra/macos/qwen3-tts-engine.json` is now `mlx` after owner acceptance of the exact A+MLX direct sample. The existing OpenAI-compatible `/v1/audio/speech` contract, original A reference, Auto language, one worker and unchanged timeout remain. The same LaunchAgent selects **one** backend with explicit `AMADEUS_TTS_ENGINE=mlx` and a protected local `AMADEUS_TTS_MLX_MODEL_PATH`; unknown/missing backends fail closed, not over to MPS. `manage-qwen3-tts.sh --dry-run` previews the target, `--apply-plist-only --engine mlx` is an explicit single-engine switch (used for the released backend), and explicit `--apply-plist-only --engine mps` plus protected checkpoint is the rollback path. No second serving process is introduced.
-
-`mlx_engine.py` is the selected **third-party community** backend (`Blaizzy/mlx-audio`, not Qwen upstream). `scripts/prepare-mlx-tts-poc.sh` defaults to dry-run; `--apply` prepares a separate venv and pinned `mlx-audio` Git commit `4ab7e6f7dedd69a136cfaa318c5dc8aed5119446` plus public `mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit` revision `e7dd0585652209fa0d7783659aad4e8a324de11c`, entirely outside Git/production. `benchmark_mlx.py` uses the same public fixtures/protected A or D reference and records separate first-use/warmed latency, actual output duration, RTF, RSS and MLX Metal peak memory; `supervise_benchmark.py --backend mlx` bounds each sample at 110s. It does not substitute 0.6B for 1.7B or silently change the production API. Owner accepted the exact A+MLX direct sample and real post-release WhatsApp Japanese voice/typed behavior, explicitly reporting no pronunciation/naturalness/volume/rhythm anomaly. Formal 1.6.0 release and protected rollback are recorded in `docs/reports/AMADEUS_TTS_PERFORMANCE_2026_09.md`. MLX peak footprint reached 18.4 GiB on the 24 GiB Mac; continued memory-pressure observation remains an operational caveat, not a zero-risk claim. Separate venv dependency maintenance is a real cost. `scripts/prepare-mlx-tts-poc.sh --apply` validates the pinned source/model/dependency manifest outside Git; the historical `mlx-poc` directory name remains only to avoid moving a prepared 3 GiB model or breaking a venv. Its assets are used by the single native service after explicit switch.
-
-## Native port 18792 boundary (1.6.2)
-
-The M204 LaunchAgent deliberately binds `0.0.0.0:18792`: the OrbStack 9Router container must reach `host.docker.internal:18792`, and loopback-only binding would break the production route. Do not pin a transient OrbStack bridge IP or install an unreconciled `pf` rule. On 2026-09-26 UTC, `lsof` showed one Python IPv4 wildcard listener; the guest reached `/healthz` through `host.docker.internal` and the Mac LAN-interface address (both 200 with proxy bypass). 9Router's container reached host health and its own health (both 200). macOS Application Firewall was off. This proves non-loopback reachability from the guest, **not** that an independent physical LAN peer was tested; treat 18792 as potentially reachable on the LAN, not private loopback. A peer outside the host was unavailable for this audit. Keep Bearer token private (0600 outside Git); unauthenticated `POST /v1/audio/speech` and `GET /v1/voices` returned 401 on the LAN-interface address. Public `/healthz` returns only ready/model/voice identifiers. No anonymous synthesis is permitted. Recheck the route and unauthorized responses after any network/firewall change; do not tighten the bind without verifying 9Router from a new guest connection.
+Run `infra/macos/manage-qwen3-tts.sh --dry-run` to inspect the selected MLX
+profile and protected paths. `--apply` installs the checked service source and
+LaunchAgent; `--prepare-apply` is only needed if pinned assets or the token must
+be prepared. The exact historical voice acceptance is documented at commit
+`c8f9261d1c093a8188db802c73a38a998d018944`; this Goal does not claim new human
+listening acceptance.

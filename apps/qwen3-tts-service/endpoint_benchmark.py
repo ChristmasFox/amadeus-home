@@ -49,7 +49,7 @@ def main() -> None:
     rows = []
     for index in range(args.runs):
         start = time.monotonic()
-        conn = http.client.HTTPConnection("127.0.0.1", 18792, timeout=120)
+        conn = http.client.HTTPConnection("127.0.0.1", 18794, timeout=120)
         try:
             conn.request("POST", "/v1/audio/speech", request,
                          {"Authorization": "Bearer " + token, "Content-Type": "application/json"})

@@ -45,7 +45,7 @@ services:
       AMADEUS_TTS_CLOUD_VOICE_ID_FILE: /run/secrets/tts_cloud_voice_id
       AMADEUS_TTS_LOCAL_KEY_FILE: /run/secrets/tts_local_key
       AMADEUS_TTS_STYLE_FILE: /opt/amadeus/kurisu_style.json
-      AMADEUS_TTS_LOCAL_URL: http://host.docker.internal:19871/v1/audio/speech
+      AMADEUS_TTS_LOCAL_URL: http://host.docker.internal:18794/v1/audio/speech
     ports:
       - "${NINE_ROUTER_PORT:-0.0.0.0:20128}:20128"
     volumes:

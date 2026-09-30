@@ -195,7 +195,7 @@ def main() -> None:
         raise RuntimeError("in_memory_production_engine_or_scheduler_mismatch")
     if env.get("AMADEUS_TTS_VOICE_DIR") != str(PROFILE_PATH):
         raise RuntimeError("production_voice_profile_path_mismatch")
-    if env.get("AMADEUS_TTS_PORT") != "18792" or env.get("AMADEUS_TTS_BIND") != "0.0.0.0":
+    if env.get("AMADEUS_TTS_PORT") != "18794" or env.get("AMADEUS_TTS_BIND") != "127.0.0.1":
         raise RuntimeError("production_tts_bind_or_port_mismatch")
 
     runtime = runtime_snapshot()

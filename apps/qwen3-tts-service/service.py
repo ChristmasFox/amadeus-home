@@ -18,8 +18,6 @@ from dataclasses import dataclass, replace
 from concurrent.futures import CancelledError, Future
 import queue
 from engine_contract import SpeechEngine, SynthesisTiming
-from kurisu_emotion import normalize_emotion
-from kurisu_style import compose, load_style, style_hash, validate_options
 
 MODEL_ID = "qwen3-tts-1.7b"
 MODEL_ALIASES = frozenset((MODEL_ID, "amadeus-tts"))
@@ -34,7 +32,7 @@ QUEUE_START_TIMEOUT_S = 5  # fail closed before the upstream 120s TTS window
 
 
 class QwenEngine:
-    """Load the official model and reusable voice prompt once, on M204's MPS."""
+    """Emergency source-level PyTorch MPS recovery engine; not production selected."""
 
     def __init__(self, profile: Path, model_path: str = UPSTREAM_MODEL, on_warmup=None,
                  *, language: str = "Auto", x_vector_only_mode: bool = False,
@@ -70,9 +68,7 @@ class QwenEngine:
         wav, rate, _ = self.synthesize_timed(text)
         return wav, rate
 
-    def synthesize_timed(self, text: str, emotion: str = "default") -> tuple[bytes, int, SynthesisTiming]:
-        if normalize_emotion(emotion) != "default":
-            raise ValueError("emotion_requires_ominix_engine")
+    def synthesize_timed(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
         queued_at = time.monotonic_ns()
         with self._lock:
             locked_at = time.monotonic_ns()
@@ -115,48 +111,30 @@ class TtsBusyError(Exception):
 @dataclass
 class InferenceJob:
     text: str
-    emotion: str
     admitted_ns: int
     started: threading.Event
     result: Future[tuple[bytes, int, SynthesisTiming]]
-    job_class: str = "production"
-    instruct: str | None = None
-    options: dict | None = None
 
 class InferenceWorker:
-    """One model worker, one bounded waiting slot; no second Agent/runtime."""
+    """One MLX model worker with a bounded FIFO queue."""
 
     def __init__(self, server: SpeechServer):
         self.server = server
-        self.pending: queue.PriorityQueue[tuple[int, int, InferenceJob]] = queue.PriorityQueue(maxsize=MAX_PENDING_INFERENCES)
+        self.pending: queue.PriorityQueue[tuple[int, InferenceJob]] = queue.PriorityQueue(maxsize=MAX_PENDING_INFERENCES)
         self.closed = threading.Event()
         self.admission_lock = threading.Lock()
         self.sequence = 0
-        self.running_class: str | None = None
         self.thread = threading.Thread(target=self._run, name="qwen-inference", daemon=True)
         self.thread.start()
 
-    def submit(self, text: str, emotion: str = "default", *, job_class: str = "production", instruct: str | None = None, options: dict | None = None) -> tuple[bytes, int, SynthesisTiming]:
-        if job_class not in ("production", "lab"):
-            raise ValueError("invalid_job_class")
-        emotion = normalize_emotion(emotion)
-        if job_class == "production":
-            # Production always composes from the canonical Git style. A caller
-            # cannot inject a Lab baseline/delta into the bounded endpoint.
-            effective, effective_options, _ = compose(self.server.style, emotion)
-            instruct, options = effective, effective_options
-        else:
-            if instruct is None:
-                raise ValueError("lab_instruct_required")
-            validate_options(options or {})
+    def submit(self, text: str) -> tuple[bytes, int, SynthesisTiming]:
         with self.admission_lock:
             if self.closed.is_set():
                 raise TtsBusyError()
             self.sequence += 1
-            job = InferenceJob(text, emotion, time.monotonic_ns(), threading.Event(), Future(), job_class, instruct, options)
+            job = InferenceJob(text, time.monotonic_ns(), threading.Event(), Future())
             try:
-                priority = 0 if job_class == "production" else 10
-                self.pending.put_nowait((priority, self.sequence, job))
+                self.pending.put_nowait((self.sequence, job))
             except queue.Full as exc:
                 raise TtsBusyError() from exc
         if not job.started.wait(QUEUE_START_TIMEOUT_S):
@@ -171,7 +149,7 @@ class InferenceWorker:
     def _run(self) -> None:
         while not self.closed.is_set():
             try:
-                _, _, job = self.pending.get(timeout=0.1)
+                _, job = self.pending.get(timeout=0.1)
             except queue.Empty:
                 continue
             try:
@@ -179,46 +157,24 @@ class InferenceWorker:
                     continue
                 begun_ns = time.monotonic_ns()
                 job.started.set()
-                self.running_class = job.job_class
                 engine = self.server.engine
                 if engine is None or self.server.state != "ready":
                     raise TtsBusyError()
-                try:
-                    wav, rate, timing = engine.synthesize_timed(job.text, job.emotion, instruct=job.instruct, options=job.options)
-                except TypeError as exc:
-                    # Existing test doubles and protected rollback engines use
-                    # the pre-tuner two-argument protocol.
-                    if "unexpected keyword" not in str(exc) and "positional" not in str(exc):
-                        raise
-                    try:
-                        wav, rate, timing = engine.synthesize_timed(job.text, job.emotion)
-                    except TypeError as legacy_exc:
-                        if "positional" not in str(legacy_exc) and "argument" not in str(legacy_exc):
-                            raise
-                        wav, rate, timing = engine.synthesize_timed(job.text)
+                wav, rate, timing = engine.synthesize_timed(job.text)
                 wait_ms = (begun_ns - job.admitted_ns) / 1_000_000
                 job.result.set_result((wav, rate, replace(timing, queue_wait_ms=wait_ms + timing.queue_wait_ms)))
-                LOG.info("inference_completed class=%s", job.job_class)
+                LOG.info("inference_completed")
             except Exception as exc:
                 job.result.set_exception(exc)
             finally:
-                self.running_class = None
                 self.pending.task_done()
-
-    def production_waiting(self) -> int:
-        with self.pending.mutex:
-            return sum(1 for _, _, job in list(self.pending.queue) if job.job_class == "production")
-
-    def lab_waiting(self) -> int:
-        with self.pending.mutex:
-            return sum(1 for _, _, job in list(self.pending.queue) if job.job_class == "lab")
 
     def close(self) -> None:
         with self.admission_lock:
             self.closed.set()
             while True:
                 try:
-                    _, _, job = self.pending.get_nowait()
+                    _, job = self.pending.get_nowait()
                 except queue.Empty:
                     break
                 job.result.cancel()
@@ -228,7 +184,7 @@ class InferenceWorker:
         self.thread.join(timeout=0.5)
 
 def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngine:
-    backend = os.environ.get("AMADEUS_TTS_ENGINE", "mps")
+    backend = os.environ.get("AMADEUS_TTS_ENGINE", "mlx")
     if backend == "mps":
         return QwenEngine(profile, model_path, on_warmup=on_warmup)
     if backend == "mlx":
@@ -237,13 +193,6 @@ def create_engine(profile: Path, model_path: str, on_warmup=None) -> SpeechEngin
             raise ValueError("mlx_model_path_required")
         from mlx_engine import QwenMlxEngine
         return QwenMlxEngine(profile, Path(explicit_path), on_warmup=on_warmup)
-    if backend == "ominix":
-        worker_path = os.environ.get("AMADEUS_TTS_OMINIX_WORKER_PATH")
-        model_path = os.environ.get("AMADEUS_TTS_OMINIX_MODEL_PATH")
-        if not worker_path or not model_path:
-            raise ValueError("ominix_assets_required")
-        from ominix_engine import OminiXEngine
-        return OminiXEngine(profile, Path(model_path), Path(worker_path), on_warmup=on_warmup)
     raise ValueError("unsupported_speech_engine")
 
 class SpeechServer(ThreadingHTTPServer):
@@ -252,22 +201,12 @@ class SpeechServer(ThreadingHTTPServer):
     def __init__(self, address: tuple[str, int], token: str):
         super().__init__(address, SpeechHandler)
         self.token = token
-        self.style_path = Path(os.environ.get("AMADEUS_TTS_STYLE_FILE", str(Path(__file__).with_name("kurisu_style.json"))))
-        self.style = load_style(self.style_path)
-        self.style_loaded_at = time.time()
+        self.engine_name = "qwen3-tts-mlx" if os.environ.get("AMADEUS_TTS_ENGINE", "mlx") == "mlx" else "qwen3-tts-mps"
         self.model_revision = os.environ.get("AMADEUS_TTS_MODEL_REVISION", "e7dd0585652209fa0d7783659aad4e8a324de11c")
-        self.ominix_revision = os.environ.get("AMADEUS_TTS_OMINIX_REVISION", "4988a3fcfa48b8cb5d0780a501b92c6a41401523")
-        self.release_version = os.environ.get("AMADEUS_TTS_RELEASE_VERSION", "1.6.6")
         self.engine: SpeechEngine | None = None
         self.state = "starting"
         self.started = time.monotonic()
         self.inference = InferenceWorker(self)
-
-    def reload_style(self) -> str:
-        candidate = load_style(self.style_path)
-        self.style = candidate
-        self.style_loaded_at = time.time()
-        return style_hash(candidate)
 
     def server_close(self) -> None:
         self.inference.close()
@@ -287,7 +226,7 @@ class SpeechServer(ThreadingHTTPServer):
         watchdog.daemon = True
         watchdog.start()
         try:
-            # QwenEngine loads model, profile and performs actual warmup before returning.
+            # The selected Qwen engine performs real synthesis before readiness.
             self.engine = create_engine(profile, model_path,
                                         on_warmup=lambda: setattr(self, "state", "warming_up") if self.state != "failed" else None)
             if self.state != "failed":
@@ -327,7 +266,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         if self.path == "/healthz":
             state = self.server.state
-            self._json(200 if state == "ready" else 503, {"status": state, "model": MODEL_ID, "voice": VOICE_ID})
+            self._json(200 if state == "ready" else 503, {"status": state, "provider": self.server.engine_name, "engine": "mlx" if self.server.engine_name.endswith("-mlx") else "mps", "model": "Qwen3-TTS-12Hz-1.7B-Base-8bit" if self.server.engine_name.endswith("-mlx") else MODEL_ID, "voice": VOICE_ID, "language": "auto"})
         elif self.path == "/v1/voices":
             if self._authorized():
                 self._json(200, {"object": "list", "data": [{"id": VOICE_ID, "model": MODEL_ID}]})
@@ -368,10 +307,8 @@ class SpeechHandler(BaseHTTPRequestHandler):
         if not isinstance(text, str) or not text.strip() or len(text) > MAX_TEXT:
             self._error(400, "invalid_input")
             return
-        try:
-            emotion = normalize_emotion(data.get("style", "default"))
-        except ValueError:
-            self._error(400, "invalid_style")
+        if data.get("style", "default") not in ("", "default"):
+            self._error(400, "unsupported_style")
             return
         fmt = data.get("response_format", "mp3")
         if fmt not in ("wav", "mp3", "opus"):
@@ -379,7 +316,7 @@ class SpeechHandler(BaseHTTPRequestHandler):
             return
         started = time.monotonic()
         try:
-            wav, _, timing = self.server.inference.submit(text, emotion)
+            wav, _, timing = self.server.inference.submit(text)
             if not wav or len(wav) > MAX_AUDIO:
                 raise RuntimeError("invalid_audio")
             with wave.open(io.BytesIO(wav), "rb") as reader:
@@ -426,30 +363,11 @@ def main() -> None:
     if len(token) < 32 or token_file.stat().st_mode & 0o077:
         raise ValueError("protected_tts_token_required")
     profile = Path(os.environ["AMADEUS_TTS_VOICE_DIR"])
-    server = SpeechServer((os.environ.get("AMADEUS_TTS_BIND", "127.0.0.1"), int(os.environ.get("AMADEUS_TTS_PORT", "18792"))), token)
-    tuner = None
-    if os.environ.get("AMADEUS_TTS_TUNER_ENABLED", "1") == "1":
-        tuner_port = int(os.environ.get("AMADEUS_TTS_TUNER_PORT", "18793"))
-        if tuner_port != 18793:
-            raise ValueError("tuner_port_must_be_18793")
-        try:
-            # service.py is launched as __main__; alias it so tuner.py shares
-            # the exact engine/error classes instead of importing a duplicate.
-            import sys
-            sys.modules.setdefault("service", sys.modules[__name__])
-            from tuner import TunerServer
-            tuner_bind = os.environ.get("AMADEUS_TTS_TUNER_BIND", "127.0.0.1").strip()
-            tuner = TunerServer((tuner_bind, tuner_port), server)
-        except OSError as exc:
-            server.server_close()
-            raise RuntimeError("tuner_port_unavailable") from exc
-        threading.Thread(target=tuner.serve_forever, name="amadeus-tuner", daemon=True).start()
+    server = SpeechServer((os.environ.get("AMADEUS_TTS_BIND", "127.0.0.1"), int(os.environ.get("AMADEUS_TTS_PORT", "18794"))), token)
     threading.Thread(target=server.load, args=(profile, os.environ.get("AMADEUS_TTS_MODEL_PATH", UPSTREAM_MODEL)), daemon=True).start()
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
-        if tuner is not None:
-            tuner.shutdown(); tuner.server_close()
         server.server_close()
 
 

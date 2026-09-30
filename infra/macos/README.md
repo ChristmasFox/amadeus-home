@@ -38,10 +38,38 @@ code. The resulting OAuth state is written with mode 0600 to the external
 `/DATA/AppData/openclaw/data` path; normal OpenClaw restarts only reuse that
 state.
 
-## M204 native Qwen3-TTS (1.5.3 candidate)
+## M204 native Qwen3-TTS production rebaseline
 
-`infra/macos/manage-qwen3-tts.sh` defaults to dry-run. `--prepare-apply` installs the pinned venv/model outside Git; `--apply` requires the protected external voice pair and token, installs the user LaunchAgent `com.amadeus.qwen3-tts` and binds authenticated speech on port 18792. User-session launchd keeps MPS available. `--status` reports launchd and `/healthz`; `--uninstall` removes the agent without erasing voice/model/token. Before any apply with new user-supplied audio, `infra/macos/backup-qwen3-tts-profile.sh --apply` copies the reference pair and TTS token to a mode-0700 Avalon checkpoint and stores integrity hashes only in its protected manifest. Never upload reference media, transcript, embeddings or token to Git or a public route.
+`infra/macos/manage-qwen3-tts.sh` defaults to dry-run and reads the selected
+engine from `infra/macos/qwen3-tts-engine.json`. Production is pinned Qwen3-TTS
+1.7B Base through community `mlx-audio` 0.5.6, MLX 8-bit, the protected
+original ~46s `kurisu-v1` A reference pair, and Auto language. The service
+binds authenticated speech on loopback `127.0.0.1:18794`; the single
+`com.amadeus.qwen3-tts` LaunchAgent owns that port. The local synthesis contract
+is pure ICL with no prompt/style/speed/pitch mutation, one worker and a bounded
+queue. The official PyTorch/MPS backend remains source-level emergency recovery
+only and is not an automatic fallback.
 
-`infra/macos/manage-kurisu-gpt-sovits-tts.sh` manages the validated external GPT-SoVITS v2Pro MPS runtime and its authenticated production adapter. It defaults to dry-run; `--apply` adopts the pinned PoC API on `127.0.0.1:19870`, installs `com.amadeus.kurisu-gpt-sovits-api`, starts the adapter on `127.0.0.1:19871`, and copies only the protected 9Router `tts-local-key` into a mode-0600 host token file. `--status` checks both services; `--uninstall` removes only these LaunchAgents and retains the runtime, model, reference audio and token. The adapter is loopback-only and rejects non-default style controls. OminiX `:18792` and tuner `:18793` are retired separately only after the protected rollback checkpoint is complete.
+Before `--apply`, verify the pinned protected MLX assets with
+`infra/macos/verify-qwen3-mlx-assets.py` and confirm the reference pair/token
+are mode 0600. `--prepare-apply` is only needed to construct missing pinned
+assets or the protected token; it is not needed for an already verified
+installation. `--apply` installs the selected source and LaunchAgent, waits for
+real model warmup, and refuses to overlap another model worker. `--status`
+reports the current agent/health; `--uninstall` removes only that agent and
+preserves protected assets. Never add the reference audio, transcript,
+embeddings, generated speech, or token to Git.
 
-M204 currently has a personally approved interim reference and the service was launched only after protected backup. Local Mandarin/Japanese synthesis, auth/format checks, guest-to-host health and launchd restart recovery are engineering acceptance, **not** 9Router or real WhatsApp voice acceptance. The original-voice requirement in the Goal remains a separate product-quality decision.
+Read-only Phase 0 found that `127.0.0.1:18792` is already owned by the
+separate ImageAssets LaunchAgent and used by OpenClaw. Preserve that endpoint
+and avoid restarting OpenClaw; the Goal's explicit collision exception puts
+Qwen TTS on free loopback port `18794`.
+
+The authenticated local bridge at 9Router container loopback `:20130` routes
+default requests to local MLX first and then Qwen Audio 3.1 and 3.0. Explicit
+non-default styles bypass local cloning and use the cloud instruction path.
+Configuration/auth/contract failures do not fall through. The active voice
+path and destructive retirement sequence are specified by
+`docs/AMADEUS_QWEN3_TTS_MLX_REBASELINE_GOAL.md`; this Goal waives new human
+listening and WhatsApp acceptance while retaining automated health,
+synthesis, fallback, rollback and cleanup gates.

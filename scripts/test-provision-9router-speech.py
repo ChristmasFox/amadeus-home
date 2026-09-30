@@ -56,14 +56,30 @@ class ProvisionTest(unittest.TestCase):
             routes.ensure_alias(api, "amadeus-asr", "selfhosted-stt/model")
         self.assertFalse(api.writes)
 
-    def test_tts_connection_switch_is_bounded_to_known_adapter_and_local_urls(self):
+    def test_tts_reconciliation_keeps_one_bridge_and_retires_known_duplicates(self):
         api = FakeDashboard()
-        api.connections = [{"id": "tts-1", "name": routes.TTS_CONNECTION, "provider": routes.TTS_PROVIDER,
-                            "providerSpecificData": {"baseUrl": routes.TTS_LOCAL_URL}}]
-        self.assertEqual(routes.ensure_tts_connection(api, "test-only", routes.TTS_ADAPTER_URL), "replaced")
-        self.assertEqual(api.connections[0]["providerSpecificData"]["baseUrl"], routes.TTS_ADAPTER_URL)
+        api.connections = [
+            {"id": "legacy-a", "name": "Legacy A", "provider": routes.TTS_PROVIDER, "priority": 1,
+             "providerSpecificData": {"baseUrl": routes.TTS_ADAPTER_URL}},
+            {"id": "legacy-b", "name": "Legacy B", "provider": routes.TTS_PROVIDER, "priority": 2,
+             "providerSpecificData": {"baseUrl": routes.TTS_ADAPTER_URL}},
+            {"id": "host-direct", "name": "Old host", "provider": routes.TTS_PROVIDER, "priority": 3,
+             "providerSpecificData": {"baseUrl": routes.TTS_DIRECT_HOST_URL}},
+        ]
+        self.assertEqual(routes.ensure_tts_connection(api, "test-only"), "reconciled")
+        remaining = [c for c in api.connections if c.get("provider") == routes.TTS_PROVIDER]
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["name"], routes.TTS_CONNECTION)
+        self.assertEqual(remaining[0]["providerSpecificData"]["baseUrl"], routes.TTS_ADAPTER_URL)
+        self.assertEqual(routes.ensure_tts_connection(api, "unused"), "existing")
+
+    def test_tts_reconciliation_fails_closed_on_unknown_endpoint(self):
+        api = FakeDashboard()
+        api.connections = [{"id": "unexpected", "name": "Other", "provider": routes.TTS_PROVIDER,
+                            "providerSpecificData": {"baseUrl": "http://unknown.invalid"}}]
         with self.assertRaisesRegex(RuntimeError, "connection_drift"):
-            routes.ensure_tts_connection(api, "test-only", "http://unexpected")
+            routes.ensure_tts_connection(api, "test-only")
+        self.assertFalse(api.writes)
 
     def test_runtime_gate_and_post_alias_restart(self):
         with patch.object(routes.subprocess, "run", return_value=CompletedProcess([], 0)) as run:

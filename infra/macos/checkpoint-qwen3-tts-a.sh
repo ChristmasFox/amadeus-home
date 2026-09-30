@@ -26,7 +26,7 @@ for path in "$VOICE/reference.wav" "$VOICE/reference.txt" "$TOKEN" "$PLIST" "$BA
   [[ -s "$path" ]] || { echo "required A runtime asset missing: $path" >&2; exit 1; }
 done
 [[ "$(stat -f %Lp "$TOKEN")" == 600 && "$(stat -f %Lp "$VOICE/reference.wav")" == 600 && "$(stat -f %Lp "$VOICE/reference.txt")" == 600 ]] || { echo 'A token/reference permissions are not 0600' >&2; exit 1; }
-health="$(curl -sS --max-time 3 http://127.0.0.1:18792/healthz || true)"
+health="$(curl -sS --max-time 3 http://127.0.0.1:18794/healthz || true)"
 python3 - "$health" <<'PY'
 import json, sys
 value = json.loads(sys.argv[1])
@@ -98,14 +98,14 @@ plutil -lint "\$PLIST"
 launchctl bootstrap "\$TARGET" "\$PLIST"
 launchctl enable "\$TARGET/com.amadeus.qwen3-tts"
 for i in \$(seq 1 120); do
-  if curl -fsS --max-time 2 http://127.0.0.1:18792/healthz | grep -q '"status":"ready"'; then break; fi
+  if curl -fsS --max-time 2 http://127.0.0.1:18794/healthz | grep -q '"status":"ready"'; then break; fi
   [[ "\$i" == 120 ]] && { echo 'rollback health timeout' >&2; exit 1; }
   sleep 1
 done
 TOKEN=\$(cat "\$BASE/tts.token")
 curl -fsS --max-time 120 -H "Authorization: Bearer \$TOKEN" -H 'Content-Type: application/json' \\
   -d '{"model":"qwen3-tts-1.7b","voice":"kurisu-v1","input":"rollback smoke","response_format":"wav"}' \\
-  -o /dev/null http://127.0.0.1:18792/v1/audio/speech
+  -o /dev/null http://127.0.0.1:18794/v1/audio/speech
 printf '%s\\n' 'QWEN3_TTS_A_ROLLBACK=passed'
 EOF
 chmod 700 "$out/rollback-a.sh"

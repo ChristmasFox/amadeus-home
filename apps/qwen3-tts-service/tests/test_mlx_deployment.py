@@ -25,19 +25,31 @@ TEMPLATE = ROOT / 'infra/macos/com.amadeus.qwen3-tts.plist.example'
 
 
 class PlistRenderTest(unittest.TestCase):
+    def test_git_declares_only_mlx_production_with_pinned_historical_values(self):
+        self.assertEqual(CONFIG['productionEngine'], 'mlx')
+        self.assertEqual(CONFIG['profileId'], 'kurisu-v1')
+        self.assertEqual(CONFIG['mlxSourceRevision'], '4ab7e6f7dedd69a136cfaa318c5dc8aed5119446')
+        self.assertEqual(CONFIG['mlxPackageVersion'], '0.5.6')
+        self.assertEqual(CONFIG['mlxModelRevision'], 'e7dd0585652209fa0d7783659aad4e8a324de11c')
+        self.assertFalse(any('omini' in key.lower() for key in CONFIG))
+
     def test_explicit_single_backend_preserves_a_profile(self):
         with tempfile.TemporaryDirectory() as tmp:
             base, voice, log, mlx = (Path(tmp) / x for x in ('base','A','log','mlx'))
-            for engine in ('mps', 'mlx'):
+            for engine in ('mlx', 'mps'):
                 parsed = plistlib.loads(renderer.render(TEMPLATE, base, voice, log, mlx, engine))
                 env = parsed['EnvironmentVariables']
                 self.assertEqual(env['AMADEUS_TTS_ENGINE'], engine)
+                self.assertEqual(env['AMADEUS_TTS_BIND'], '127.0.0.1')
+                self.assertEqual(env['AMADEUS_TTS_PORT'], '18794')
+                self.assertNotIn('AMADEUS_TTS_TUNER_PORT', env)
+                self.assertNotIn('AMADEUS_TTS_OMINIX_MODEL_PATH', env)
                 self.assertEqual(env['AMADEUS_TTS_VOICE_DIR'], str(voice))
                 self.assertEqual(parsed['ProcessType'], 'Interactive')
                 self.assertEqual(parsed['ProgramArguments'][0], str((base if engine == 'mps' else mlx) / 'venv/bin/python'))
                 self.assertEqual(env['AMADEUS_TTS_MLX_MODEL_PATH'], str(mlx / 'model-8bit') if engine == 'mlx' else '')
             with self.assertRaisesRegex(ValueError, 'unsupported_tts_engine'):
-                renderer.render(TEMPLATE, base, voice, log, mlx, 'auto-fallback')
+                renderer.render(TEMPLATE, base, voice, log, mlx, 'unsupported-engine')
 
 
 class ProtectedMlxAssetsTest(unittest.TestCase):

@@ -8,12 +8,11 @@ import plistlib
 
 
 def render(template: Path, base: Path, voice: Path, log: Path,
-           mlx_root: Path, engine: str, ominix_root: Path | None = None) -> bytes:
-    if engine not in ('mps', 'mlx', 'ominix'):
+           mlx_root: Path, engine: str) -> bytes:
+    if engine not in ('mps', 'mlx'):
         raise ValueError('unsupported_tts_engine')
-    python = base / 'venv/bin/python' if engine in ('mps', 'ominix') else mlx_root / 'venv/bin/python'
-    cache = base / 'model-cache' if engine in ('mps', 'ominix') else mlx_root / 'cache'
-    ominix_root = ominix_root or (base / 'ominix')
+    python = base / 'venv/bin/python' if engine == 'mps' else mlx_root / 'venv/bin/python'
+    cache = base / 'model-cache' if engine == 'mps' else mlx_root / 'cache'
     version_file = Path(__file__).resolve().parents[2] / 'VERSION'
     release_version = version_file.read_text(encoding='utf-8').strip() if version_file.is_file() else 'unknown'
     replacements = {
@@ -25,9 +24,6 @@ def render(template: Path, base: Path, voice: Path, log: Path,
         '__MODEL_CACHE__': str(cache),
         '__MODEL_PATH__': str(base / 'model'),
         '__MLX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'mlx' else '',
-        '__OMINIX_MODEL_PATH__': str(mlx_root / 'model-8bit') if engine == 'ominix' else '',
-        '__OMINIX_WORKER_PATH__': str(ominix_root / 'worker') if engine == 'ominix' else '',
-        '__STYLE_FILE__': str(base / 'kurisu_style.json'),
         '__RELEASE_VERSION__': release_version,
         '__TTS_ENGINE__': engine,
     }
@@ -50,10 +46,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ('template', 'output', 'base', 'voice', 'log', 'mlx-root'):
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--engine', choices=('mps', 'mlx', 'ominix'), required=True)
-    parser.add_argument('--ominix-root', type=Path)
+    parser.add_argument('--engine', choices=('mps', 'mlx'), required=True)
     args = parser.parse_args()
-    data = render(args.template, args.base, args.voice, args.log, args.mlx_root, args.engine, args.ominix_root)
+    data = render(args.template, args.base, args.voice, args.log, args.mlx_root, args.engine)
     args.output.write_bytes(data)
     args.output.chmod(0o600)
     print(f'TTS_PLIST_RENDERED={args.engine}')
