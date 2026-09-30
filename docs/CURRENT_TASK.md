@@ -4,10 +4,10 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_4X_DOCUMENT_SENT_RECIPIENT_HASH_PENDING` (Goal open).
+Status: `CANDIDATE_LIVE_DEFAULT_4X_OWNER_ACCEPTANCE_PENDING` (Goal open).
 
-The prior candidate `git-675d5fb` was replaced by the new healthy single
-OpenClaw runtime `git-682c69a375b6-20260930110631`; Amadeus is
+The healthy single OpenClaw runtime now uses default-4x candidate
+`git-9221fce0a519-20260930130737`; Amadeus is
 registered and WhatsApp connected. The owner confirmed direct-message replies
 work and later reported group replies recovered without a source/config change.
 Two group arrivals earlier settled silent, so intermittent group behavior is not
@@ -30,9 +30,11 @@ registry, and one document attachment settled as `sent`. The recipient-
 downloaded file hash remains unverified; do not claim full Gate completion.
 
 Owner requested a new 4x default for unspecified upscale (explicit 2x remains 2x).
-Source now aligns the native tool, Skill, host service and manual CLI. This
-change is pending focused verification, source commit and protected apply;
-the above live image still uses the prior 2x default until then.
+The native tool, Skill, host service and manual CLI source are aligned and live.
+Host service is healthy/ready; the OpenClaw candidate is healthy and Amadeus
+registered. Protected host checkpoint and source/apply evidence:
+`.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`. A real owner
+unspecified-multiplier request is still required for acceptance.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open

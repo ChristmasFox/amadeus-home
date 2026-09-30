@@ -18,9 +18,9 @@ are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 ## DeliveryEnvelope v2 — new live candidate; 4x real acceptance pending
 
 The healthy single OpenClaw runtime uses immutable image
-`local/openclaw-amadeus:git-682c69a375b6-20260930110631`, with Amadeus
+`local/openclaw-amadeus:git-9221fce0a519-20260930130737`, with Amadeus
 registered, WhatsApp connected and `tts.auto=off`. Its protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930110631`. The owner
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930130737`. The owner
 confirmed direct-message replies; group replies recovered without intervention,
 but prior group silent settlements remain unaccounted for. This is not Goal
 completion or full channel acceptance.
@@ -38,9 +38,10 @@ equality still require real evidence. The earlier rollback and failed candidate
 attempts below are historical audit, not current runtime state.
 
 The owner subsequently requested 4x as the default when no multiplier is
-specified. The current live image/service still default to 2x until the
-source changes are tested, committed and applied; explicit 2x must remain
-available.
+specified. The current live image and host service now default to 4x; an
+explicit 2x remains available. Source commit `9221fce` passed focused tests
+and protected candidate apply; real owner unspecified-multiplier acceptance
+is pending. See `.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
