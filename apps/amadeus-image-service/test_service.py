@@ -71,6 +71,15 @@ class AssetServiceTests(unittest.TestCase):
             self.assertEqual(store.get(original.image_id).storage_key, original.storage_key)
             self.assertNotEqual(derived.storage_key, original.storage_key)
 
+    def test_4k_resolution_profile_caps_long_edge(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = AssetStore(directory, engine=FakeEngine())
+            original = store.register(png(640, 960), "image/png", "generated")
+            derived = store.upscale(original.image_id, None, None, None, "realistic", "4k")
+            self.assertEqual((derived.width, derived.height), (2560, 3840))
+            self.assertEqual(derived.transform["scale"], 4)
+            self.assertEqual(derived.transform["resolution"], "4k")
+
     def test_bounds_and_invalid_types_fail_closed(self):
         with self.assertRaises(ServiceError):
             inspect_image(b"not-an-image", "image/png")

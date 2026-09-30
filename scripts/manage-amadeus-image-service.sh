@@ -31,6 +31,7 @@ Commands:
 Upscale options:
   --scale 2|4             Default: 2
   --mode auto|realistic|anime  Default: auto
+  --resolution 2k|4k        Optional long-edge target profile.
   --json                  Print the raw JSON response.
 
 Mutating commands require --apply. The default is --plan.
@@ -164,11 +165,12 @@ status() {
 }
 
 upscale() {
-  local image_id="" scale=2 mode=auto raw=false
+  local image_id="" scale=2 mode=auto resolution="" raw=false
   while (($#)); do
     case "$1" in
       --scale) scale="${2:?--scale requires 2 or 4}"; shift 2 ;;
       --mode) mode="${2:?--mode requires auto, realistic or anime}"; shift 2 ;;
+      --resolution) resolution="${2:?--resolution requires 2k or 4k}"; shift 2 ;;
       --json) raw=true; shift ;;
       -*) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
       *) if [[ -n "$image_id" ]]; then printf 'only one IMAGE_ID is allowed\n' >&2; exit 2; fi; image_id="$1"; shift ;;
@@ -177,15 +179,16 @@ upscale() {
   [[ -n "$image_id" ]] || { printf 'IMAGE_ID is required\n' >&2; exit 2; }
   [[ "$scale" == 2 || "$scale" == 4 ]] || { printf 'scale must be 2 or 4\n' >&2; exit 2; }
   [[ "$mode" == auto || "$mode" == realistic || "$mode" == anime ]] || { printf 'mode is invalid\n' >&2; exit 2; }
+  [[ -z "$resolution" || "$resolution" == 2k || "$resolution" == 4k ]] || { printf 'resolution is invalid\n' >&2; exit 2; }
   local header
   header="$(auth_header)"
   local response
   if [[ -n "$header" ]]; then
     response="$(curl --fail --silent --show-error -X POST -H "$header" -H 'Content-Type: application/json' \
-      "$(service_url)/v1/upscale" --data "$(printf '{\"imageId\":\"%s\",\"scale\":%s,\"mode\":\"%s\"}' "$image_id" "$scale" "$mode")")"
+      "$(service_url)/v1/upscale" --data "$(printf '{\"imageId\":\"%s\",\"scale\":%s,\"mode\":\"%s\"%s}' "$image_id" "$scale" "$mode" "${resolution:+,\"resolution\":\"$resolution\"}")")"
   else
     response="$(curl --fail --silent --show-error -X POST -H 'Content-Type: application/json' \
-      "$(service_url)/v1/upscale" --data "$(printf '{\"imageId\":\"%s\",\"scale\":%s,\"mode\":\"%s\"}' "$image_id" "$scale" "$mode")")"
+      "$(service_url)/v1/upscale" --data "$(printf '{\"imageId\":\"%s\",\"scale\":%s,\"mode\":\"%s\"%s}' "$image_id" "$scale" "$mode" "${resolution:+,\"resolution\":\"$resolution\"}")")"
   fi
   if [[ "$raw" == true ]]; then
     printf '%s\n' "$response"

@@ -12,6 +12,7 @@ const ImageUpscaleParameters = Type.Object({
   }, { additionalProperties: false })),
   scale: Type.Optional(Type.Union([Type.Literal(2), Type.Literal(4)])),
   mode: Type.Optional(Type.Union([Type.Literal('auto'), Type.Literal('realistic'), Type.Literal('anime')])),
+  resolution: Type.Optional(Type.Union([Type.Literal('2k'), Type.Literal('4k')])),
 }, { additionalProperties: false });
 
 type ImageUpscaleParameters = Static<typeof ImageUpscaleParameters>;
@@ -238,6 +239,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
       ...(input.target?.imageId ? { imageId: input.target.imageId } : {}),
       ...(input.scale !== undefined ? { scale: input.scale } : {}),
       ...(input.mode !== undefined ? { mode: input.mode } : {}),
+      ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
       ...(origin.conversationId ? { conversationId: origin.conversationId } : {}),
       ...(current?.replyToMessageId ? { replyMessageId: current.replyToMessageId } : {}),
     }),
@@ -255,6 +257,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     parentImageId: asset.parentImageId,
     scale: asset.transform?.scale ?? input.scale ?? 2,
     mode: asset.transform?.mode ?? input.mode ?? 'auto',
+    ...(asset.transform?.resolution ? { resolution: asset.transform.resolution } : input.resolution ? { resolution: input.resolution } : {}),
     mimeType: asset.mimeType,
     width: asset.width,
     height: asset.height,
