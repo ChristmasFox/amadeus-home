@@ -4,7 +4,7 @@ Date: 2026-10-01 local.
 
 Active Goal: `docs/AMADEUS_QWEN3_TTS_MLX_REBASELINE_GOAL.md`.
 
-Status: `AUTHORIZED_AUTO_APPLY`.
+Status: `FINALIZATION_PENDING` — runtime gates A–G passed; final state documentation/source push is pending..
 
 The owner wants the production voice path returned to the previously accepted A/MLX/Auto baseline because that configuration produced the preferred Kurisu voice quality:
 
@@ -25,9 +25,11 @@ local Qwen3-TTS MLX :18794 (18792 is occupied by ImageAssets; Phase 0 collision 
   -> qwen-audio-3.0-tts-flash
 ```
 
-OminiX and GPT-SoVITS/GPT TTS are retired by this Goal. They must not remain as hidden compatibility engines or dormant fallbacks. Preserve the canonical ~46s A reference pair and archive the retired Kurisu TTS package's WAV samples with hashes outside Git; other retired model/runtime/venv/service assets are cleaned after automated post-apply gates pass.
+OminiX and GPT-SoVITS/GPT TTS active source/runtime/model/venv/service assets are now removed. The only local TTS engine is the Qwen3 MLX LaunchAgent; the 9Router TTS provider list contains one bridge connection. The canonical ~46s A reference pair and the retired package WAV sample are preserved outside Git.
 
 The owner explicitly authorizes unattended deployment for this Goal. After repository tests, secrets checks, dry-run and technical health/fallback gates pass, Codex may invoke the repository's explicit `--apply` paths and complete the production cutover without another confirmation prompt. Human listening and manual WhatsApp acceptance are waived for this run; automated health, direct synthesis, provider identity, forced cloud fallback, source integrity, resource snapshot and cleanup verification remain mandatory.
+
+Gate A–G evidence, the retired path list, resource snapshot and protected archive hashes are recorded in `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`. Human listening/owner-channel acceptance was waived and not performed.
 
 Git and live runtime are the source of truth. Follow `AGENTS.md`, especially protected checkpoints, enumerated destructive paths, secret handling and rollback-before-cleanup requirements.
 

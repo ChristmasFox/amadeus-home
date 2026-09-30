@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 Type: production TTS rebaseline / provider simplification / destructive retirement cleanup / automatic apply
-Status: `AUTHORIZED_AUTO_APPLY`
+Status: `FINALIZATION_PENDING`
 
 ## Owner decision
 
@@ -260,3 +260,36 @@ The Goal is complete when all of the following are true:
 Before destructive Phase 5 cleanup, any failed automated apply/health/fallback gate must restore the temporary pre-change route sufficiently to keep `amadeus-tts` available, then stop with evidence. Do not destroy the only working production path after a failed switch.
 
 After A–G pass and retired assets are deliberately deleted, long-term recovery is declarative rather than compatibility-based: rebuild the pinned Qwen3 MLX service from Git + protected A profile, while cloud Qwen remains the runtime fallback. Do not resurrect OminiX/GPT-SoVITS automatically.
+
+
+## Completion evidence — 2026-10-01
+
+All automated gates A–G passed and the authorized retirement cleanup completed.
+
+| Gate | Evidence |
+| --- | --- |
+| A — exact local identity | LaunchAgent health is ready on loopback `127.0.0.1:18794`, with `provider=qwen3-tts-mlx`, the pinned Qwen3-TTS 1.7B Base MLX 8-bit model, `kurisu-v1`, and `language=auto`. Port 18792 remains the separately owned ImageAssets service under the Phase 0 live-collision exception. |
+| B — local synthesis/auth | Direct Japanese WAV and MP3 requests passed; WAV decoded with non-zero bounded duration, MP3 decoded with FFmpeg, and unauthenticated speech returned 401. |
+| C — logical route | The logical `amadeus-tts` alias returned valid MP3. The 9Router sidecar recorded `qwen3-tts-mlx` as the successful local provider. One clean bridge provider connection remains. |
+| D — cloud fallback | Controlled local `busy` was followed by a real successful Qwen Audio 3.1 fallback while the production local service remained healthy. The executable bridge test forced local and 3.1 operational failures and verified 3.0 as attempt 2. |
+| E — retirement state | No listeners remain on 18793, 19870, or 19871; GPT-SoVITS/OminiX LaunchAgents/processes/provider connections are absent. Qwen3-TTS alone owns 18794; ImageAssets remains on 18792. |
+| F — host viability | Current Qwen footprint was 3,380 MiB with 17.2 GiB peak; system free-memory reading was 70%, swap 5,223 MiB, OrbStack host RSS about 5,272 MiB. No repeated crash or severe active memory pressure occurred. |
+| G — source/security integrity | Focused Python and Node tests, Amadeus tests/typecheck/build, pinned MLX asset verification, secrets scan, final active-source search and `git diff --check` passed. Legacy implementation/config/tests/plists are removed from active source. |
+
+The original A WAV remains unchanged (46.000 s, SHA-256
+`fb1ed35df7a872cea3e12d77546e9d7ba885df562214d320007b5e5d1b4482fa`). The
+retired package's one Kurisu sample WAV is protected outside Git at
+`/Volumes/Avalon/backups/operation-skuld/amadeus-kurisu-wav-archive-20261001`;
+its manifest SHA-256 is
+`e1362946d7d04abb4d22faa4ed65e93acbeb97045445c955992ebfd58e75a6c9`.
+The temporary pre-change DB/config checkpoints and old active 9Router image tag
+were removed after the gates passed; the small content-safe Phase 0 hash/state
+record remains at
+`/Volumes/Avalon/backups/operation-skuld/qwen3-tts-rebaseline-20261001/baseline.json`.
+
+Source commits `0fdfdbb` (rebaseline/deployed bridge source) and `45f96a9`
+(final retirement/source cleanup) are committed locally and ready to push to canonical `main`; the dated
+content-safe completion record is
+`.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`. Amadeus
+`VERSION=1.7.4` was not changed. Human listening, owner-channel and WhatsApp
+gates were explicitly waived and were not performed.
