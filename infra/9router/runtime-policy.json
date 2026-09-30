@@ -1,0 +1,11 @@
+{
+  "packageVersion": "0.5.91",
+  "imageAccount": {
+    "provider": "codex",
+    "model": "gpt-image-2.5",
+    "email": "xc13279112887@gmail.com"
+  },
+  "serverActions": {
+    "bodySizeLimit": "20mb"
+  }
+}

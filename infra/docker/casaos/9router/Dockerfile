@@ -16,6 +16,11 @@ COPY apps/qwen3-tts-service/kurisu_style.json /opt/amadeus/kurisu_style.json
 COPY infra/docker/casaos/9router/start-9router.mjs /opt/amadeus/start-9router.mjs
 COPY infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs /opt/amadeus/patch-selfhosted-tts-style.mjs
 RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_modules/9router
+# 9Router has no strict per-model account allowlist and the published CLI is
+# already compiled. Pin/check the exact bundle shape, fail the build on drift.
+COPY infra/9router/runtime-policy.json /opt/amadeus/runtime-policy.json
+COPY infra/docker/casaos/9router/patch-runtime-policy.mjs /opt/amadeus/patch-runtime-policy.mjs
+RUN node /opt/amadeus/patch-runtime-policy.mjs --root /usr/local/lib/node_modules/9router --policy /opt/amadeus/runtime-policy.json --apply
 
 # The upstream Docker image runs the packaged server directly. The npm CLI is
 # desktop-oriented and can exit after launching its tray/server child in a
