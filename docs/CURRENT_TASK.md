@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_AFTER_PINNED_CLI_DIAGNOSIS` (no successful OpenClaw switch yet).
+Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_WITH_LIVE_GATEWAY_CHECK` (no successful OpenClaw switch yet).
 
 The Git source implements the typed v2 contract, one structured decoder and
 one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
@@ -38,6 +38,15 @@ staged definitions/config and the old WhatsApp module. Deployment now checks
 candidate image/manifest before switch and **real Gateway registration** after
 health; any missing registration remains a hard failure with rollback. See
 `.agent/checkpoints/2026-09-30-delivery-envelope-third-apply-failure.md`.
+
+A fourth candidate's offline Skill CLI omitted Amadeus Skills, while uid-1000
+inspection of that exact immutable image read all 14 manifest-declared Skill
+files and 27 tool declarations. The protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930084057` restored the
+staged definitions/config and previous WhatsApp monitor before any switch.
+The candidate preflight now checks every Skill inside the image; the actual
+Gateway registration log remains a hard post-switch gate. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-fourth-apply-failure.md`.
 
 **Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,

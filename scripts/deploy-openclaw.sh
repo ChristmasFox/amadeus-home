@@ -565,9 +565,10 @@ orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose con
 
 # The pinned 2026.9.4 CLI inspector is a false negative for this bundled
 # extension under a mounted config even on the currently healthy old image.
-# Read the candidate image's bundled manifest as uid 1000 before switch; then
-# require real Gateway startup registration immediately after health.
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --entrypoint node openclaw -e 'const p = require(\"/app/dist/extensions/amadeus/openclaw.plugin.json\"); console.log(JSON.stringify({id:p.id,tools:p.contracts?.tools??[]}))' > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json'"
+# Read the candidate image's bundled manifest and every scoped Skill as uid
+# 1000 before switch; then require real Gateway startup registration after
+# health. CLI Skill listing can share that out-of-process false negative.
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --entrypoint node openclaw -e 'const fs = require(\"node:fs\"); const path = require(\"node:path\"); const root = \"/app/dist/extensions/amadeus\"; const p = JSON.parse(fs.readFileSync(path.join(root,\"openclaw.plugin.json\"),\"utf8\")); const skills = (p.skills??[]).map(s=>{ const f = path.resolve(root,s,\"SKILL.md\"); if(!f.startsWith(root+\"/skills/\") || !fs.readFileSync(f,\"utf8\").trim()) throw Error(\"amadeus_skill_unreadable\"); return s; }); console.log(JSON.stringify({id:p.id,tools:p.contracts?.tools??[],skills}))' > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json'"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR/plugin-pubg-preflight.json" "$CHECKPOINT_DIR/plugin-amadeus-preflight.json" "$CHECKPOINT_DIR/skills-preflight.json" <<'PY'
@@ -580,8 +581,9 @@ for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pu
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
 for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','amadeus_image_upscale','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['pubg','amadeus','voice-reply','market','macos-host','image-upscale','vps']:
-    if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
+for name in ['amadeus','voice-reply','market','macos-host','image-upscale','vps']:
+    if 'skills/' + name not in amadeus: raise SystemExit('bundled Amadeus Skill unreadable ' + name)
+if '"name": "pubg"' not in skills: raise SystemExit('bundled PUBG Skill missing')
 print('OPENCLAW_PREFLIGHT=passed')
 PY
 
