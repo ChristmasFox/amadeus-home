@@ -163,7 +163,10 @@ function parseServiceResult(value: unknown): ImageAssetResult {
 async function importImageAsset(config: AmadeusConfig, path: string, mimeType: string, sourceKind: string, origin: ImageAssetOrigin, signal?: AbortSignal): Promise<ImageAssetResult> {
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink() || info.size <= 0 || info.size > 25 * 1024 * 1024) throw new Error('image_import_path_invalid');
-  const body = await readFile(path);
+  return importImageBytes(config, await readFile(path), mimeType, sourceKind, origin, signal);
+}
+
+async function importImageBytes(config: AmadeusConfig, body: Buffer, mimeType: string, sourceKind: string, origin: ImageAssetOrigin, signal?: AbortSignal): Promise<ImageAssetResult> {
   const headers = await serviceHeaders(config);
   headers.set('Content-Type', mimeType);
   headers.set('X-Amadeus-Source-Kind', sourceKind);
@@ -246,21 +249,20 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   };
 }
 
-/** Native detached image completion supplies typed image attachment facts. Consume
- * them as assets of this run, never as a competing OpenClaw media sender. */
-export function enqueueGeneratedCompletionAssets(
-  api: OpenClawPluginApi, runId: string,
-  payload: { attachments?: readonly { type?: string; path?: string; mimeType?: string }[] },
+/** Import only verified runtime image content, never a model-authored media path. */
+export function enqueueGeneratedImageBytes(
+  api: OpenClawPluginApi, runId: string, images: readonly { mimeType: string; data: string }[],
 ): void {
-  if (deliveryRuns.originFor(runId) !== 'media_completion') throw new Error('image_completion_origin_invalid');
-  const images = (payload.attachments ?? []).filter((item) => item.type === 'image' && typeof item.path === 'string' && item.path.startsWith('/')).slice(0, 4);
-  if (!images.length) throw new Error('image_completion_typed_attachments_missing');
+  if (deliveryRuns.originFor(runId) !== 'media_completion' || !images.length || images.length > 4) throw new Error('image_completion_origin_invalid');
   const config = configFor(api);
-  deliveryRuns.addAssets(runId, Promise.all(images.map(async (item) => {
-    const path = item.path!;
-    const asset = await importImageAsset(config, path, item.mimeType ?? generatedMime({}, path), 'generated', { runId });
+  const job = Promise.all(images.map(async ({ mimeType, data }) => {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || data.length > 34 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(data)) throw new Error('image_completion_bytes_invalid');
+    const bytes = Buffer.from(data, 'base64');
+    if (!bytes.length || bytes.length > 25 * 1024 * 1024) throw new Error('image_completion_size_invalid');
+    const asset = await importImageBytes(config, bytes, mimeType, 'generated', { runId });
     return imageAssetAttachment(asset, 'inline');
-  })));
+  }));
+  deliveryRuns.addAssets(runId, job);
 }
 
 export function registerImageAssets(api: OpenClawPluginApi): void {

@@ -26,6 +26,18 @@ export class DeliveryRuns {
     const run = this.runs.get(runId); if (!run) throw new Error('delivery_run_missing');
     return run.envelope ??= decodeAgentReply(run.context, raw).envelope;
   }
+  async prepareToolOnly(runId: string): Promise<DeliveryEnvelope> {
+    const run = this.runs.get(runId); if (!run || run.context.origin !== 'media_completion') throw new Error('delivery_completion_run_missing');
+    if (run.prepared) return run.prepared;
+    if (run.preparing) return run.preparing;
+    run.preparing = (async () => {
+      const parts = (await Promise.all(run.jobs)).flat();
+      const unique = [...new Map(parts.map((part) => [part.assetId, part])).values()];
+      if (!unique.length) throw new Error('delivery_completion_assets_missing');
+      return run.prepared = createDeliveryEnvelope({ ...run.context, deliveryId: run.context.deliveryId ?? `${runId}:delivery`, source: 'tool_result', silent: false, parts: unique });
+    })();
+    try { return await run.preparing; } finally { delete run.preparing; }
+  }
   async prepare(runId: string, raw?: unknown): Promise<DeliveryEnvelope> {
     const run = this.runs.get(runId); if (!run) throw new Error('delivery_run_missing');
     if (run.prepared) return run.prepared;

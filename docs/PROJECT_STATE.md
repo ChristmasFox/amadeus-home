@@ -54,6 +54,13 @@ passed, but real owner generation subsequently failed after a successful
 with no inline settlement. The exact inner exception is not recorded. See
 `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`.
 
+A deeper read-only comparison found that the generated image bytes in the
+trusted completion turn's typed image part equal the generated file bytes.
+The old candidate incorrectly waited for the second LLM reply's media payload;
+that LLM can time out. New source imports the typed image bytes and settles an
+attachment-only envelope before that LLM call; focused tests pass. This
+follow-up source is not yet committed/applied or owner-accepted.
+
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
 Git source now defines one v2 typed user-facing settlement across text, voice and
