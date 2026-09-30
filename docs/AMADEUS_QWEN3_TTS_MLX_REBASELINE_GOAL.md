@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 Type: production TTS rebaseline / provider simplification / destructive retirement cleanup / automatic apply
-Status: `FINALIZATION_PENDING`
+Status: `COMPLETE`
 
 ## Owner decision
 
@@ -287,8 +287,8 @@ were removed after the gates passed; the small content-safe Phase 0 hash/state
 record remains at
 `/Volumes/Avalon/backups/operation-skuld/qwen3-tts-rebaseline-20261001/baseline.json`.
 
-Source commits `0fdfdbb` (rebaseline/deployed bridge source) and `45f96a9`
-(final retirement/source cleanup) are committed locally and ready to push to canonical `main`; the dated
+Source commits `0fdfdbb` (rebaseline/deployed bridge source), `45f96a9`
+(final retirement/source cleanup), and `46d0b49` (content-safe evidence) are pushed to canonical `main`; the dated
 content-safe completion record is
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`. Amadeus
 `VERSION=1.7.4` was not changed. Human listening, owner-channel and WhatsApp

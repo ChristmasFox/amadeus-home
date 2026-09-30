@@ -1,7 +1,7 @@
 # Checkpoint — Amadeus Qwen3-TTS MLX production rebaseline
 
 Date: 2026-10-01 (Asia/Shanghai)
-Status: **runtime cleanup and automated gates A–G passed; final Phase 6 push pending**
+Status: **complete; automated gates A–G passed and final Phase 6 changes are pushed**
 Product `VERSION`: `1.7.4` (unchanged)
 
 ## Source and deployment

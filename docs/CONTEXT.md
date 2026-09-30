@@ -1,9 +1,8 @@
 # Canonical context — 2026-10-01
 
 Read this with `docs/CURRENT_TASK.md`; it points to the Qwen3-TTS MLX
-rebaseline Goal. Runtime Gates A–G passed. At this checkpoint, source cleanup is
-committed locally and final state documentation/push is in progress; re-read
-Git/live state before any further work.
+rebaseline Goal. Runtime Gates A–G passed and final source/state evidence is pushed to canonical
+`main`; re-read Git/live state before any further work.
 
 ## Current Git/runtime boundary — Qwen3-TTS MLX
 
