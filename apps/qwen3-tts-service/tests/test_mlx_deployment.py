@@ -43,7 +43,7 @@ class PlistRenderTest(unittest.TestCase):
                 self.assertEqual(env['AMADEUS_TTS_BIND'], '127.0.0.1')
                 self.assertEqual(env['AMADEUS_TTS_PORT'], '18794')
                 self.assertNotIn('AMADEUS_TTS_TUNER_PORT', env)
-                self.assertNotIn('AMADEUS_TTS_OMINIX_MODEL_PATH', env)
+                self.assertFalse(any('omin' in key.lower() for key in env))
                 self.assertEqual(env['AMADEUS_TTS_VOICE_DIR'], str(voice))
                 self.assertEqual(parsed['ProcessType'], 'Interactive')
                 self.assertEqual(parsed['ProgramArguments'][0], str((base if engine == 'mps' else mlx) / 'venv/bin/python'))

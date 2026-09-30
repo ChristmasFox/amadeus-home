@@ -6,8 +6,8 @@ normal/default request attempts the authenticated Mac-local Qwen3-TTS MLX
 service at `host.docker.internal:18794` first. Operational local failures may
 fall through to Qwen Audio 3.1, then Qwen Audio 3.0. Explicit non-default styles
 skip local MLX and use the cloud instruction-capable path. Local configuration,
-authentication, and contract errors fail closed. No GPT-SoVITS or OminiX
-provider remains in the bridge.
+authentication, and contract errors fail closed. The bridge has no alternate
+local engine or hidden local provider.
 
 Bridge health reports `localProvider=qwen3-tts-mlx`,
 `localModel=Qwen3-TTS-12Hz-1.7B-Base-8bit`, and the deterministic fallback
