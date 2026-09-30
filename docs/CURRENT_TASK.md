@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_WITH_LIVE_GATEWAY_CHECK` (no successful OpenClaw switch yet).
+Status: `REGISTRY_RECOVERED_CANDIDATE_APPLY_READY` (v2 runtime not yet accepted).
 
 The Git source implements the typed v2 contract, one structured decoder and
 one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
@@ -47,6 +47,17 @@ staged definitions/config and previous WhatsApp monitor before any switch.
 The candidate preflight now checks every Skill inside the image; the actual
 Gateway registration log remains a hard post-switch gate. Evidence:
 `.agent/checkpoints/2026-09-30-delivery-envelope-fourth-apply-failure.md`.
+
+A fifth candidate briefly switched to the new image but its real Gateway
+did not register Amadeus. The attempt was rolled back to checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930085757`. Recreating
+the old image also exposed a corrupted **persisted plugin index**: 63 entries,
+Amadeus absent. After a consistent protected SQLite backup at
+`/DATA/AppData/openclaw/backups/amadeus-plugin-registry-recovery-20260930T093520Z`,
+the official `plugins registry --refresh` rebuilt 64 entries including Amadeus.
+The old Gateway now registers Amadeus, its Skills are visible, and it is healthy.
+The candidate remains unapplied. See
+`.agent/checkpoints/2026-09-30-amadeus-plugin-registry-recovery.md`.
 
 **Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
