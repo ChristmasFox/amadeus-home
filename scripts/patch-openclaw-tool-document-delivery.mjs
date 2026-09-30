@@ -102,7 +102,7 @@ if (!payloadOriginal.includes(MARKER)) {
 const deliverOriginal = await readFile(deliverPath, 'utf8');
 if (!deliverOriginal.includes(MARKER)) {
   const before = 'const payloadCtx = {\n\t\t\t\t...resolveCtx(overrides),\n\t\t\t\tkind: "payload",\n\t\t\t\ttext: payload.text ?? "",\n\t\t\t\tmediaUrl: payload.mediaUrl,\n\t\t\t\tpayload\n\t\t\t};';
-  const after = 'const resolvedContext = resolveCtx(overrides);\n\t\t\tconst payloadCtx = {\n\t\t\t\t...resolvedContext,\n\t\t\t\tkind: "payload",\n\t\t\t\tforceDocument: payload.forceDocument === true || resolvedContext.forceDocument === true,\n\t\t\t\ttext: payload.text ?? "",\n\t\t\t\tmediaUrl: payload.mediaUrl,\n\t\t\t\tpayload\n\t\t\t};';
+  const after = 'const resolvedContext = resolveCtx(overrides);\n\t\t\tconst payloadCtx = {\n\t\t\t\t...resolvedContext,\n\t\t\t\tkind: "payload",\n\t\t\t\tforceDocument: payload.forceDocument === true || payload.attachments?.some((attachment) => attachment?.forceDocument === true) === true || resolvedContext.forceDocument === true,\n\t\t\t\ttext: payload.text ?? "",\n\t\t\t\tmediaUrl: payload.mediaUrl,\n\t\t\t\tpayload\n\t\t\t};';
   if (!deliverOriginal.includes(before)) throw new Error(`delivery payload anchor changed in ${deliverPath}`);
   await writeFile(deliverPath, `${deliverOriginal.replace(before, after)}\n// ${MARKER}\n`);
   console.log('TOOL_DOCUMENT_DELIVERY=applied');
