@@ -63,8 +63,6 @@ class ProvisionTest(unittest.TestCase):
              "providerSpecificData": {"baseUrl": routes.TTS_ADAPTER_URL}},
             {"id": "legacy-b", "name": "Legacy B", "provider": routes.TTS_PROVIDER, "priority": 2,
              "providerSpecificData": {"baseUrl": routes.TTS_ADAPTER_URL}},
-            {"id": "host-direct", "name": "Old host", "provider": routes.TTS_PROVIDER, "priority": 3,
-             "providerSpecificData": {"baseUrl": routes.TTS_DIRECT_HOST_URL}},
         ]
         self.assertEqual(routes.ensure_tts_connection(api, "test-only"), "reconciled")
         remaining = [c for c in api.connections if c.get("provider") == routes.TTS_PROVIDER]
@@ -76,7 +74,7 @@ class ProvisionTest(unittest.TestCase):
     def test_tts_reconciliation_fails_closed_on_unknown_endpoint(self):
         api = FakeDashboard()
         api.connections = [{"id": "unexpected", "name": "Other", "provider": routes.TTS_PROVIDER,
-                            "providerSpecificData": {"baseUrl": "http://unknown.invalid"}}]
+                            "providerSpecificData": {"baseUrl": "http://host.docker.internal:18792"}}]
         with self.assertRaisesRegex(RuntimeError, "connection_drift"):
             routes.ensure_tts_connection(api, "test-only")
         self.assertFalse(api.writes)

@@ -22,7 +22,6 @@ ASR_CONNECTION = "Amadeus ASR (Qwen upstream)"
 TTS_CONNECTION = "Amadeus TTS (Qwen3-TTS MLX primary + Qwen Audio fallback)"
 ASR_URL = "http://127.0.0.1:20129/v1/audio/transcriptions"
 TTS_ADAPTER_URL = "http://127.0.0.1:20130"
-TTS_DIRECT_HOST_URL = "http://host.docker.internal:18792"
 # Compatibility alias used by the existing deterministic provisioning tests.
 TTS_URL = TTS_ADAPTER_URL
 TTS_MODEL = "selfhosted-tts/qwen3-tts-1.7b/kurisu-v1"
@@ -71,7 +70,7 @@ def ensure_tts_connection(api: Dashboard, key: str, url: str = TTS_ADAPTER_URL) 
         raise RuntimeError(f"connection_drift:{TTS_CONNECTION}")
     connections = api.request("GET", "/api/providers").get("connections", [])
     owned = [c for c in connections if c.get("provider") == TTS_PROVIDER]
-    known_urls = {TTS_ADAPTER_URL, TTS_DIRECT_HOST_URL}
+    known_urls = {TTS_ADAPTER_URL}
     for connection in owned:
         base = (connection.get("providerSpecificData") or {}).get("baseUrl", "").rstrip("/")
         if base not in known_urls:
@@ -204,7 +203,7 @@ def main() -> None:
     checkpoint = backup_live(args.machine)
     print("ROLLBACK_CHECKPOINT=" + checkpoint)
     asr = ensure_connection(api, ASR_PROVIDER, ASR_CONNECTION, protected(args.asr_key_file), ASR_URL)
-    tts = ensure_tts_connection(api, protected(args.tts_key_file), tts_url)
+    tts = ensure_tts_connection(api, protected(args.tts_key_file), TTS_ADAPTER_URL)
     print("ASR_CONNECTION=" + asr)
     print("TTS_CONNECTION=" + tts)
     print("OLD_ASR_COMBO=" + retire_old_combo(api))
