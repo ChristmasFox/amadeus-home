@@ -86,7 +86,7 @@ test_fixture_mode() {
   python3 - "$out_dir/9router/image-manifest.json" <<'PY'
 import json, sys
 value = json.loads(open(sys.argv[1]).read())
-assert value.get('image') == 'local/9router:0.5.81', value
+assert value.get('image') == 'local/9router:0.5.91', value
 PY
   python3 - "$out_dir/xiaoya/image-manifest.json" "$out_dir/xiaoya/restore-map.json" <<'PY'
 import json, sys

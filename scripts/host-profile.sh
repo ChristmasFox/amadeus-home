@@ -17,7 +17,7 @@ amadeus_host_profile_load() {
   RADAR_DATA_DIR="${RADAR_DATA_DIR:-/DATA/AppData/product-radar}"
   AMADEUS_NETWORK_NAME="${AMADEUS_NETWORK_NAME:-amadeus_network}"
   NINE_ROUTER_NETWORK_NAME="${NINE_ROUTER_NETWORK_NAME:-9router_default}"
-  NINE_ROUTER_IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.81}"
+  NINE_ROUTER_IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.91}"
   MEDIA_ADAPTER_APP_DIR="${MEDIA_ADAPTER_APP_DIR:-/var/lib/casaos/apps/media-organizer-adapter}"
   MEDIA_ADAPTER_CONTAINER="${MEDIA_ADAPTER_CONTAINER:-media-organizer-adapter}"
   MAC_CONTROL_HOST="${MAC_CONTROL_HOST:-host.docker.internal}"

@@ -1,4 +1,4 @@
-# 9Router speech adapters — pinned 0.5.81
+# 9Router speech adapters — pinned 0.5.91
 
 9Router remains the sole model/provider control plane. The companion `asr-bridge.mjs` is a bounded transport adapter for the synchronous Qwen-Audio-3.0-ASR-Flash multimodal-generation contract, **not** an Agent or second router. It listens on container loopback `127.0.0.1:20129`, never publishes a host port, and returns OpenAI-compatible `{ "text": ... }` to 9Router's Self-hosted STT provider. `amadeus-asr` must be an alias for `selfhosted-stt/qwen-audio-3.0-asr-flash`, not the old Chat Combo.
 
@@ -6,7 +6,7 @@ The staged `tts-bridge.mjs` listens on container loopback `127.0.0.1:20130` and 
 
 The adapter is disabled until the direct cloud smoke, protected checkpoint and owner acceptance gates pass. The canonical compose template enables it for the explicit release image and expects `AMADEUS_TTS_CLOUD_URL` in the protected guest `9router.env`; the five TTS secret files are uid 1000/mode 0600. `scripts/provision-9router-speech.py` switches only the Self-hosted TTS connection/alias to the adapter after its health check; `--tts-mode local` remains the rollback path.
 
-The image installs npm `9router@0.5.81`, copies the repository-owned TTS bridge and canonical Kurisu cloud-style mapping, and applies `patch-selfhosted-tts-style.mjs` to the compiled self-hosted TTS adapter. The patch is version and anchor guarded, idempotent, and forwards the bounded `style` field from the route's existing options object to `/v1/audio/speech`; no provider, alias, or credential is changed.
+The image installs npm `9router@0.5.91`, copies the repository-owned TTS bridge and canonical Kurisu cloud-style mapping, and applies `patch-selfhosted-tts-style.mjs` to the compiled self-hosted TTS adapter. The patch is version and anchor guarded, idempotent, and forwards the bounded `style` field from the route's existing options object to `/v1/audio/speech`; no provider, alias, or credential is changed.
 
 ## Protected runtime files (never commit values)
 

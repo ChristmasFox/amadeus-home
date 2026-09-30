@@ -2,7 +2,7 @@ name: 9router
 
 services:
   9router:
-    image: ${NINE_ROUTER_IMAGE:-local/9router:0.5.81}
+    image: ${NINE_ROUTER_IMAGE:-local/9router:0.5.91}
     container_name: 9router
     restart: unless-stopped
     env_file:

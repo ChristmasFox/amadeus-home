@@ -2,8 +2,8 @@
 # Keep the existing image's runtime/base and install the matching npm release.
 FROM decolua/9router:0.5.75@sha256:7c893bc2c27ecea2ae337abd5eacfec9e5763091b3a3b7862fc0625b770bb156
 
-RUN npm install --global 9router@0.5.81 --prefer-online \
-    && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.81" \
+RUN npm install --global 9router@0.5.91 --prefer-online \
+    && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.91" \
     && npm cache clean --force
 
 # Qwen-Audio-3.0-ASR-Flash exposes DashScope multimodal-generation rather than
