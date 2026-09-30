@@ -94,11 +94,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   fallback；TTS 失败只用 envelope 中 typed text part。
 
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
-OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。部署后若在 Gateway
-重启边界重放同一 task，需通过真实 Gates 验证；不得把当前源码测试解释为跨重启 exactly-once
-证据。当前新 source 尚未 apply；live CasaOS OpenClaw 仍是
-`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`，OpenClaw 2026.9.4，healthy。
-新版本部署需要单独显式授权、protected rollback 和 owner-channel Gates A–F。
+OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。当前 candidate 已应用到
+healthy OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`；
+Gate A–F 及跨重启 owner-flow 验收仍未完成，不得将健康检查/registration 解释为用户体验验收。
+外部回滚 checkpoint 与 gate 状态见 `.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`。
 
 ## Presentation contract 与时间语义
 

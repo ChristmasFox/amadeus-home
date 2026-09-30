@@ -1,37 +1,38 @@
 # Project State — 2026-10-01
 
-## Image generation lifecycle + Kurisu caption UX — source validated; production apply pending
+## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F pending
 
-The current source candidate extends the existing OpenClaw 2026.9.4 typed background-completion bridge;
-it has not been Docker-built or applied. One pinned integration module binds the accepted event to
-`notifyMediaGenerationAsyncTaskStarted` after detached scheduling and terminal success/failure to the
-structured `wakeMediaGenerationTaskCompletion(params)` state. `ImageGenerationLifecycleCoordinator`
-keeps a 1,024-task bounded taskId state, claims one terminal state, and ignores failure after success.
-Accepted/failure messages are typed and task-keyed; accepted send errors do not cancel generation. The
-image-generation Skill keeps the ordinary accepted interim Agent reply silent to avoid a duplicate
-acknowledgement.
+Source commits `1dd9dd2` (lifecycle/caption implementation) and `628703c` (Kurisu caption wording refinement)
+are pushed to `main`. Amadeus VERSION remains `1.7.4`; no release bump was performed. Authorized candidate
+apply uses immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-628703c803e7-20260930184906`, image ID
+`sha256:849311277404f7454adaaed3cbcdbf0678e4f92112adb2ff7cdfa8a4738a96f9` (ARM64). OpenClaw and
+Product Radar health, Amadeus registration, NAS read-only smoke and candidate owner outbox smoke passed.
+The protected external rollback checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930184906`; content-safe deployment evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930184906/`.
 
-On success, only OpenClaw's persisted generated `attachments[]` are imported to the asset registry. A
-bounded multimodal CaptionEnricher receives the verified registered image path and current Kurisu
-workspace persona and lets Kurisu choose natural wording without a fixed word-count target; the native
-caption limit is 1024 characters. It returns only `{ caption }`. Timeout/model error/invalid/unavailable
-captions use a safe deterministic fallback and never block the image. DeliveryEnvelope v2 attachment caption is bounded
-normalized presentation data; WhatsApp maps inline image+caption to one native
-`sendMedia({image, mimetype, caption})` call. Telegram maps through native `sendPhoto` caption.
-`document` remains a document.
-No `llm_input/historyMessages` recovery, media prose parsing or pending/automatic sender was restored.
+One pinned OpenClaw integration binds accepted to `notifyMediaGenerationAsyncTaskStarted` after detached
+task scheduling and success/failure to the authoritative typed `wakeMediaGenerationTaskCompletion(params)`
+status. Persisted generated `attachments[]` remain the only image authority. Kurisu's caption prompt now
+allows natural free-form wording without a fixed word-count target; `AttachmentPart.caption` still obeys the
+native provider maximum of 1024 characters. The captioner sees the verified registry image and workspace
+persona; caption errors use a deterministic fallback and cannot block image settlement. WhatsApp uses one
+native image send with caption; Telegram uses native `sendPhoto` caption. The image-generation Skill keeps
+an accepted interim Agent reply silent so it does not duplicate the lifecycle acknowledgement.
 
-Source checks passed: `pnpm workflow:plan` (reports `RELEASE_BUILD_REQUIRED`; no Docker/CasaOS build/apply
-was run), `pnpm test:delivery` (66 focused tests including exact pinned source integration),
-`pnpm test:amadeus` (100 tests), `pnpm typecheck:amadeus`, `pnpm build:amadeus`, `git diff --check`, and
-`pnpm check:secrets`. The local build only produced the Amadeus plugin bundle.
+Source checks passed: `pnpm workflow:plan`, `pnpm test:delivery` (66 focused tests including exact pinned
+source integration), `pnpm test:amadeus` (100 tests), `pnpm typecheck:amadeus`, `pnpm build:amadeus`,
+`git diff --check`, `pnpm check:secrets`, and `pnpm check:architecture`. The deployment workflow rebuilt the
+OpenClaw image on the host; Product Radar reused its unchanged image. `media-organizer-adapter` was absent
+before apply and was not restored; its optional network check was skipped.
 
-The read-only live runtime remains the healthy parent candidate
-`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020` on OpenClaw `2026.9.4`; this source is not live.
-Task coordinator and delivery settlement idempotency are bounded in-process state, not a durable
-cross-restart journal; source tests do not prove restart/replay exactly-once. Real owner WhatsApp Gates
-A–F after a separately authorized deployment remain pending. No production apply was authorized or
-performed.
+**The image UX Goal is not complete.** Real WhatsApp owner Gates A–F remain pending; the deployment owner
+notification is not Gate A. Codex computer-use inventory had no WhatsApp desktop or accessible authenticated
+browser, so no real owner-inbound generation tests were performed. See
+`.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md` for gate status.
+Task coordinator and delivery settlement are bounded process-local state, not a durable cross-restart
+exactly-once journal; no stronger restart/replay claim is made.
 
 ## 9Router 0.5.91 upgrade and strict GPT Image account — deployed
 
@@ -48,19 +49,19 @@ not yet been exercised. Sixteen account definitions, all aliases, and the
 are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 
 
-## Amadeus image generation background completion — corrective candidate applied; owner gates pending
+## Amadeus image generation background completion — prior corrective candidate (2026-09-30; superseded)
 
-The healthy single OpenClaw runtime uses immutable candidate image
+The 2026-09-30 corrective candidate used immutable image
 `local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`, built from committed
-source `d7f2847d82f4f1dc15f84589a8a5907890992cae`. OpenClaw and Product Radar
-health passed, Amadeus registered, and the deployment's NAS read-only and owner
-outbox smokes passed. Protected checkpoint:
+source `d7f2847d82f4f1dc15f84589a8a5907890992cae`. It was superseded by the
+2026-10-01 lifecycle/caption candidate above. This prior candidate's OpenClaw/Product Radar health, Amadeus registration, NAS read-only and owner
+outbox smokes passed at that time. Protected checkpoint:
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930154020`. Deployment
 evidence path:
 `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930154020/deployment-summary.md`.
-This is a candidate apply, not a version release or owner-channel acceptance.
+This was a candidate apply, not a version release or owner-channel acceptance.
 
-The corrective source is committed in `351b33e` and the exact-pinned handler
+The corrective source was committed in `351b33e` and the exact-pinned handler
 integration test in `8533713`. OpenClaw 2026.9.4's
 `wakeMediaGenerationTaskCompletion(params)` has `status`, `handle`, and the
 authoritative generated attachments/media URLs before it builds and hands off
