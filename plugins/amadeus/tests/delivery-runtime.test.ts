@@ -1,7 +1,15 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createServer} from 'node:http';import {mkdtemp,mkdir,writeFile,rm} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/core';
-import {registerImageAssets} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';
+import {registerImageAssets,explicitUpscaleScale} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';
+
+test('explicit multiplier is a bounded parameter constraint, not a 4K resolution guess',()=>{
+ assert.equal(explicitUpscaleScale('把刚才私聊的图超分 4x'),4);
+ assert.equal(explicitUpscaleScale('请做4倍超分'),4);
+ assert.equal(explicitUpscaleScale('超分两倍'),2);
+ assert.equal(explicitUpscaleScale('做4K长边'),undefined);
+ assert.equal(explicitUpscaleScale('比较2x和4x'),undefined);
+});
 
 for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','generate']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'delivery-runtime-'));await mkdir(join(root,'derived'));
@@ -21,13 +29,13 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
-  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey},{channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
+  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:source==='upscale'&&mimeType==='image/png'?'请把刚才的图超分 4x':'普通请求'}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
   let result:unknown;
   if(source==='upscale'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
     result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:mimeType==='image/png'?2:4,mode:'anime'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
-    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,mimeType==='image/png'?2:4);assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
+    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,4, 'explicit 4x overrides an incorrect model-supplied 2x');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
   }else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'MEDIA:/native/tool/result'}]};
   const jobs=(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='upscale'?'amadeus_image_upscale':'image_generate',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
