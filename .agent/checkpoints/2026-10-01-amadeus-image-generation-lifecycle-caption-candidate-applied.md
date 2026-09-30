@@ -28,15 +28,17 @@
 - Exact pinned OpenClaw version/digest/AST contract and focused tests passed before image build; the deployment workflow repeated affected tests/typecheck/build/secrets checks.
 - No `llm_input/historyMessages` recovery, media prose parsing, pending sender, second image sender, or independent caption text send was reintroduced.
 
-## Owner gates still pending — do not claim Goal completion
+## Owner gates A-F — owner-attested pass
 
-Real WhatsApp owner gates A–F have **not** been executed. Deployment outbox notification is not image-generation Gate A. The available Codex computer-use inventory had no WhatsApp desktop app or accessible authenticated browser session, so no real owner-inbound image requests were sent.
+After candidate deployment, the owner directly confirmed in chat on 2026-10-01: “真是AF全部通过”. This is recorded as owner attestation for the real WhatsApp Gates A-F below; the deployment script's owner outbox notification/smoke is not the evidence for these gates. To avoid retaining private chat contents or screenshots, only the owner's gate-level attestation is recorded here.
 
-- A: accepted acknowledgement exactly once — pending.
-- B: successful image plus Kurisu caption in one native WhatsApp bubble — pending.
-- C: caption error/timeout fallback still delivers exactly one image — focused source tests pass; real owner-channel gate pending.
-- D: real generation failure produces exactly one safe user notice — focused source tests pass; real owner-channel gate pending.
-- E: configured provider fallback success reaches WhatsApp with same-bubble caption — pending.
-- F: real text/voice/upscale/default 2x/explicit 4x and post-restart lifecycle/upscale acceptance — runtime health and Amadeus registration passed; owner-channel flow checks pending.
+- A: accepted acknowledgement exactly once — owner-attested pass.
+- B: successful image plus Kurisu caption in one native WhatsApp bubble — owner-attested pass.
+- C: caption error/timeout fallback still delivers exactly one image — owner-attested pass; focused source tests also pass.
+- D: generation failure produces exactly one safe user notice — owner-attested pass; focused source tests also pass.
+- E: configured provider fallback success reaches WhatsApp with same-bubble caption — owner-attested pass.
+- F: text/voice/upscale/default 2x/explicit 4x and post-restart lifecycle/upscale regressions — owner-attested pass. Candidate health and Amadeus registration after restart were independently observed.
+
+This operator attestation closes the Goal's real owner-channel acceptance gates. The separate architectural limitation remains: task coordinator and delivery settlement are bounded process-local state, not a durable cross-restart replay journal; no stronger guarantee than the accepted restart/recreate scenarios is claimed.
 
 The coordinator and delivery settlement remain bounded process-local state, not a durable cross-restart exactly-once journal. No stronger restart/replay claim is made.
