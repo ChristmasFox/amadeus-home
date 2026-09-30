@@ -2,19 +2,19 @@
 
 Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
 The active Goal is `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`
-per `docs/CURRENT_TASK.md`. A DeliveryEnvelope v2 candidate is now applied
-under the operator's explicit authorization; real WhatsApp Gates A–F are
-still open. Earlier pre-switch attempts and the persisted plugin-index
+per `docs/CURRENT_TASK.md`. An authorized DeliveryEnvelope v2 candidate reached health, but real
+owner WhatsApp Gate A failed with no reply; the candidate was rolled back
+to the healthy old image. Gates A–F remain open. Earlier pre-switch attempts and the persisted plugin-index
 recovery are historical rollback evidence. The GPT-SoVITS MPS production
 cutover below is historical runtime evidence, not a live instruction.
 Older Goal documents and checkpoints remain audit evidence.
 
 ## Current Git/runtime boundary (2026-09-30)
 
-Git `main` defines the DeliveryEnvelope v2 candidate. The one live
-OpenClaw now runs healthy immutable image
-`local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303`, with Amadeus
-registered and WhatsApp connected. Protected rollback and external evidence
+Git `main` defines the DeliveryEnvelope v2 candidate. The one live OpenClaw now runs the prior healthy immutable image
+`local/openclaw-amadeus:git-6311e21b412c-20260930044402`, with Amadeus
+registered and WhatsApp connected. The v2 candidate is not live after the
+failed owner Gate A and protected rollback. Protected rollback and external evidence
 are listed in `.agent/checkpoints/2026-09-30-delivery-envelope-candidate-applied.md`.
 The owner-channel file/voice/text acceptance and recreate gates remain pending.
 9Router was upgraded under a separate task; do not infer its live state from

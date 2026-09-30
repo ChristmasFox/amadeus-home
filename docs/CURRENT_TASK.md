@@ -4,7 +4,21 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_APPLIED_AWAITING_REAL_WHATSAPP_GATES` (not a release; Goal open).
+Status: `OWNER_GATE_A_FAILED_ROLLED_BACK_SOURCE_FIX` (old image live; Goal open).
+
+The first real owner WhatsApp Gate A against the candidate produced no reply.
+Protected runtime logs isolated a TypeError reading `observeMessageSent` from
+an undefined channel `delivery` adapter. The candidate was immediately rolled
+back using checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930095303`;
+only the plugin-index SQLite row was restored, preserving other live state.
+The old immutable image `git-6311e21b412c` is healthy, Amadeus registered,
+WhatsApp connected and `tts.auto=tagged`. Source now fixes the pinned plan
+shape and adds focused assertions; it needs a new commit/build/checkpoint
+before another authorized candidate test. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-rollback.md`.
+
+## Prior candidate apply (historical evidence; no longer live)
 
 The one OpenClaw runtime now uses immutable candidate image
 `local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303` from source commit
@@ -18,7 +32,7 @@ External post-deploy evidence:
 Real owner WhatsApp Gates A–F and recipient-downloaded file SHA-256 equality
 remain open. No VERSION bump or release announcement occurred.
 
-**Next action:** use real owner WhatsApp inbound messages to test normal text,
+**After a newly tested/committed candidate apply:** use real owner WhatsApp inbound messages to test normal text,
 intentional JSON, Japanese voice and typed text fallback, ordinary inline
 image, and 2x/4x upscale documents. Download PNG/JPEG derived files and
 compare recipient SHA-256/byte size with authoritative host assets; then

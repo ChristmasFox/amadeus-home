@@ -45,6 +45,12 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
         dispatcherOptions: {
           onReplyStart: () => port.start(),
           onSettled: () => { port.stop(); return { visibleReplySent: visible }; },
+        },
+        // The pinned host's channel-turn contract reads `delivery` directly.
+        // Do not put these methods in dispatcherOptions: the core would see an
+        // undefined delivery and never settle an inbound message.
+        delivery: {
+          observeMessageSent: true,
           // No native durable text/media split: one complete envelope settles here.
           durable: () => false,
           preparePayload: prepare,

@@ -23,13 +23,15 @@ assert.equal(body.includes('mediaOnlyCoalescer'),false);
 assert.equal(body.includes('mediaUrls'),false);
 assert.equal(body.includes('JSON.parse'),false);
 const provider=[];let port;
-const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{}};}}},
+const scope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,createWhatsAppPlan(input){port=input;return {replyOptions:{},dispatcherOptions:{},delivery:{observeMessageSent:true,preparePayload:async()=>null,durable:()=>false,deliver:async()=>({visibleReplySent:false})}};}}},
  buildQuotedMessageOptions:params=>params,listWhatsAppSendResultMessageIds:result=>[result.messageId],markdownToWhatsAppChunks:text=>[text],resolveTextChunkLimit:()=>4000,resolveMarkdownTableMode$1:()=> 'code',resolveChunkMode:()=> 'length',
+ resolveWhatsAppInboundReplyPolicy:()=>({suppressTyping:false,disableBlockStreaming:false}),resolveChannelStreamingBlockEnabled:()=>false,
  startAmadeusVoiceReplyLease:()=>({}),startAmadeusWhatsAppTypingIndicator:()=>()=>{},closeAmadeusVoiceReplyLeaseForTurn:()=>{},
  prepareWhatsAppOutboundMedia:async media=>({buffer:media.buffer,mimetype:'audio/ogg; codecs=opus'})};
 vm.runInNewContext(body+'\nglobalThis.createPlan=createWhatsAppReplyPlan;',scope);
 const params={route:{sessionKey:'s',accountId:'secondary'},cfg:{},inbound:{event:{id:'m'},conversation:{id:'chat'},media:[]},transport:{chatJid:'chat',reply:async text=>{provider.push({text});return{providerAccepted:true,messageId:'t'};},sendMedia:async payload=>{provider.push(payload);return{providerAccepted:true,messageId:'a'};}}};
-scope.globalThis.createPlan(params);
+const plan=scope.globalThis.createPlan(params);
+assert.equal(plan.delivery.observeMessageSent,true);assert.equal(typeof plan.delivery.preparePayload,'function');assert.equal(typeof plan.delivery.deliver,'function');
 for(const mimeType of ['image/png','image/jpeg']){
  const bytes=Buffer.from('original lossless file '+mimeType);await port.sendDocument({bytes,mimeType,fileName:'upscale.png'});const actual=provider.at(-1);
  assert.equal(actual.document,bytes);assert.equal('image' in actual,false);assert.equal(actual.mimetype,mimeType);
