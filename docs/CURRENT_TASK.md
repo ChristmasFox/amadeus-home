@@ -1,71 +1,37 @@
-# Current Task — DeliveryEnvelope v2 + Media Delivery Cutover
+# Current Task — Amadeus Image Generation Background Completion Fix
 
 Date: 2026-09-30 local.
 
-Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
+Active Goal: `docs/AMADEUS_IMAGE_GENERATION_BACKGROUND_COMPLETION_FIX_GOAL.md`.
+Parent architecture: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_IMAGE_PRELLM_GATE_FAILED` (Goal open).
+Status: `CANDIDATE_APPLIED_REAL_OWNER_GATES_PENDING` (source committed; Goal open).
 
-The healthy single OpenClaw runtime now uses pre-LLM image settlement candidate
-`git-0bccf10fed16-20260930142414` (retaining default 4x); Amadeus is
-registered and WhatsApp connected. The owner confirmed direct-message replies
-work and later reported group replies recovered without a source/config change.
-Two group arrivals earlier settled silent, so intermittent group behavior is not
-proven resolved. Do not revert to the prior image on speculation. The previous protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930101930`.
-Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-fix-candidate.md`.
+The protected candidate image `local/openclaw-amadeus:git-853371376e58-20260930152245`
+was built from source commit `853371376e58b0b049265b61d4fffe16e12f30e3` and
+applied to the single CasaOS OpenClaw on OrbStack `nyannyan`. OpenClaw and
+Product Radar health passed; Amadeus registered at Gateway startup. The
+protected external checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930152245`; deploy
+summary/evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930152245/deployment-summary.md`.
+No production release/version bump was performed.
 
-Real 4x request diagnosis: host asset registry and authoritative OpenClaw
-transcript tool-call arguments both show `scale:2` for the owner's explicit
-4x request. The host service supports 4x; the Agent selected 2 before the
-plugin/service boundary. A bounded explicit multiplier constraint is now deployed in immutable image
-`local/openclaw-amadeus:git-682c69a375b6-20260930110631` after focused
-verification and a protected candidate apply. Checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930110631`; external
-evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930110631`.
-A real owner 4x retest succeeded at the tool/host/sender boundary: despite
-the Agent proposing `scale:2`, the native constraint sent `scale:4`; the host
-produced 3412×7376 PNG (26,037,181 bytes), SHA-256 matching its own
-registry, and one document attachment settled as `sent`. The recipient-
-downloaded file hash remains unverified; do not claim full Gate completion.
+The pinned OpenClaw 2026.9.4 `wakeMediaGenerationTaskCompletion(params)`
+boundary now claims successful `image_generation` structured attachments
+before `deliverSubagentAnnouncement` can start the completion Agent. Amadeus
+imports them into the host registry and settles an inline DeliveryEnvelope v2
+attachment through the existing ledger/WhatsApp image adapter. The immediate
+async started receipt is not treated as the final image. The exact pinned
+handler is exercised by the source integration test; the focused Amadeus
+lifecycle test covers started receipt, detached attachment, asset import,
+inline send and retry deduplication. Full Goal validation scenarios and all
+real WhatsApp Gates A–F have not been recorded; do not claim owner acceptance.
 
-Owner requested a new 4x default for unspecified upscale (explicit 2x remains 2x).
-The native tool, Skill, host service and manual CLI source are aligned and live.
-Host service is healthy/ready; the OpenClaw candidate is healthy and Amadeus
-registered. Protected host checkpoint and source/apply evidence:
-`.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`. A real owner
-unspecified-multiplier request is still required for acceptance.
-
-Ordinary image generation has a newly diagnosed production regression: pinned
-OpenClaw detaches `image_generate` into a background task. Its immediate tool
-result has no image paths; the typed completion arrives as an inter-session
-image-generation event. The previous source treated every inter-session turn
-as silent, and neither imported the completion's typed attachments nor settled
-them. Source now gives a verified image completion its own v2 run origin,
-registers typed image attachments as inline in the same envelope and cancels
-the native competing delivery after one typed settlement. Focused regression,
-build, secrets and protected candidate apply passed, but the real owner
-generation gate failed: native tool was invoked and 9Router fallback generated
-an image, yet the completion Agent first timed out and then the typed envelope
-preparation failed closed. No inline attachment was settled. The exact inner
-preparation error was not logged; do not attribute it to an unobserved field. Evidence: `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`. No rollback to an old image and no automatic media sender.
-
-Follow-up diagnosis: the real completion turn contained a typed `image/jpeg`
-part whose bytes exactly matched the generated file. The previous candidate
-waited until after a second LLM call for outbound attachment metadata; that
-call timed out or produced unusable output. Source now registers trusted
-completion image bytes and settles an attachment-only v2 envelope at the
-pre-LLM input hook. The later model reply is canceled for this completion;
-focused tests, source commit and protected candidate apply passed, but real
-WhatsApp acceptance failed: the later completion was text-only with a native
-generated-media reference, not a typed image part. No asset was imported or
-inline image sent. Synthetic typed-image tests did not model this shape. Evidence:
-`.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
-
-Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
-SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
-where real evidence has not been recorded. Production apply requires the
-explicit authorized, protected checkpoint flow; no VERSION bump or release.
+Previous incompatible image-completion candidates and their failures below
+remain historical evidence only. Do not restore `llm_input/historyMessages`
+recovery or retired pending/automatic media senders. Production is currently
+on the corrective candidate; any rollback must use the protected checkpoint.
 
 ## Earlier attempts and plugin-index recovery (historical audit only)
 
