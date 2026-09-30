@@ -6,13 +6,10 @@ Active Goal: `docs/AMADEUS_IMAGE_GENERATION_LIFECYCLE_CAPTION_UX_GOAL.md`.
 Prerequisites: `docs/AMADEUS_IMAGE_GENERATION_BACKGROUND_COMPLETION_FIX_GOAL.md` and
 `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md` remain historical source/architecture evidence.
 
-Status: `SOURCE_IMPLEMENTATION_VALIDATED_NOT_APPLIED` (source/tests/required validation passed;
-owner-channel Gates A–F remain pending until a separately authorized deployment).
+Status: `CANDIDATE_APPLIED_OWNER_GATES_PENDING` (source is committed/pushed and the candidate is healthy; real owner WhatsApp Gates A–F remain pending).
 
-Read-only live check on 2026-10-01 observed the healthy CasaOS OpenClaw image
-`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`, OpenClaw `2026.9.4`, on OrbStack
-`nyannyan`; Gateway logs confirm Amadeus registration. This is the prior corrective background-completion
-candidate, not the lifecycle/caption implementation in the worktree. No production apply/build/switch is authorized or performed for this task.
+Authorized candidate apply on 2026-10-01 now runs healthy OpenClaw `2026.9.4` image
+`local/openclaw-amadeus:git-628703c803e7-20260930184906` on OrbStack `nyannyan`; Gateway logs confirm Amadeus registration. The previous candidate image `local/openclaw-amadeus:git-1dd9dd25d856-20260930183116` is the protected rollback target. The immutable ARM64 image ID and protected external checkpoint are documented in `.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`. No Amadeus version bump/release was performed.
 
 The source uses one version/digest/AST-anchored integration module for the pinned OpenClaw image:
 accepted is attached to `notifyMediaGenerationAsyncTaskStarted` after the detached task is scheduled;
@@ -25,11 +22,7 @@ Caption failure uses deterministic fallback and does not block media settlement.
 lifecycle notifications and never parse prose or expose raw provider failures. The image-generation Skill
 makes the ordinary accepted interim Agent reply silent to prevent duplicate acknowledgements.
 
-The task state and delivery ledger are bounded process-local state, not a durable cross-restart journal.
-The protected image asset registry persists; cross-restart exactly-once lifecycle behavior is not claimed
-without the future deployed restart/replay gates. The source-level exact pinned integration contract and
-focused tests pass. Real WhatsApp Gates A–F have not been performed for this candidate and remain required
-after separately authorized apply.
+Kurisu chooses natural caption wording without a fixed word-count target; the native caption is still capped at 1024 characters. The task state and delivery ledger are bounded process-local state, not a durable cross-restart journal. The protected image registry persists; cross-restart exactly-once lifecycle behavior is not claimed. Source tests and deployment health/registration passed, but real WhatsApp Gates A–F remain pending. The candidate apply is not a release.
 
 ## Separate request — upscale default 2x (candidate applied)
 

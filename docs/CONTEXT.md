@@ -7,13 +7,15 @@ caption on top of the existing DeliveryEnvelope v2/background-completion source.
 
 ## Current Git/runtime boundary (2026-10-01)
 
-Git `main` HEAD at task start was `9a95368` (`docs: plan image generation lifecycle caption UX`). The
-read-only runtime check observed the healthy single OpenClaw container on OrbStack CasaOS `nyannyan` using
-`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020` and OpenClaw `2026.9.4`; Gateway logs
-confirm Amadeus registration. This is the prior background-completion candidate; lifecycle/caption work is not live. No production apply was performed.
-Source-level tests/typecheck/build/secrets gates have passed, but lifecycle/caption source is not live. A
-separately authorized deployment and real owner WhatsApp Gates A–F remain necessary. The bounded task coordinator and delivery ledger are in-process;
-cross-restart exactly-once is not claimed by source tests.
+Lifecycle implementation commit `1dd9dd2` and Kurisu free-form caption prompt refinement commit `628703c` are
+pushed to `main`. The authorized candidate deployment now runs healthy immutable
+image `local/openclaw-amadeus:git-628703c803e7-20260930184906` (OpenClaw `2026.9.4`) on OrbStack
+`nyannyan`; Amadeus registration passed. Protected rollback is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930184906`; content-safe deployment evidence is at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930184906/deployment-summary.md`.
+This is a candidate apply, not a product release or owner acceptance. Real WhatsApp Gates A–F remain open;
+the deployment notification/outbox smoke is not Gate A. The task coordinator and delivery ledger are
+bounded process-local state, so cross-restart exactly-once is not claimed.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
