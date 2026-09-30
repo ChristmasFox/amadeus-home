@@ -18,9 +18,9 @@ are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 ## DeliveryEnvelope v2 — new live candidate; 4x real acceptance pending
 
 The healthy single OpenClaw runtime uses immutable image
-`local/openclaw-amadeus:git-9221fce0a519-20260930130737`, with Amadeus
+`local/openclaw-amadeus:git-77ed8e60a489-20260930133806`, with Amadeus
 registered, WhatsApp connected and `tts.auto=off`. Its protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930130737`. The owner
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930133806`. The owner
 confirmed direct-message replies; group replies recovered without intervention,
 but prior group silent settlements remain unaccounted for. This is not Goal
 completion or full channel acceptance.
@@ -48,8 +48,9 @@ OpenClaw, `image_generate` is detached: its immediate result is only a task
 start, and typed generated media appears on a later completion turn. The
 existing blanket inter-session silence discarded that completion. A source
 repair now claims verified typed image-completion attachments into the single
-DeliveryEnvelope inline settlement; focused tests passed. It is not yet
-applied or owner-accepted. The current live image above still has this bug.
+DeliveryEnvelope inline settlement. Focused tests and protected candidate apply
+passed; real owner generation is pending. See
+`.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
