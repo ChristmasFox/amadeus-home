@@ -1,6 +1,7 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { configFor } from './config.js';
-import { bindImageDelivery, resolveRegisteredImageAsset } from './image-assets.js';
+import { bindImageDelivery, resolveRegisteredImageAsset, enqueueGeneratedCompletionAssets } from './image-assets.js';
+import { settleTelegramDelivery } from './telegram-runtime.js';
 import { deliveryRuns } from './delivery-runs.js';
 import { validateDeliveryEnvelope, type AttachmentPart, type DeliveryEnvelope } from './delivery-envelope.js';
 import { deliverySettlementState, settleDelivery, type DeliveryReceipt } from './delivery-settlement.js';
@@ -23,6 +24,7 @@ const settlement = deliverySettlementState;
 export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
   const speech = createDeliverySpeech(api);
   const completionPorts = new Map<string, { send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
+  const completionTasks = new Map<string, Promise<void>>();
   const boundary = {
     async settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> {
       if (!deliveryRuns.owns(envelope) || envelope.origin !== 'media_completion' || envelope.channel !== 'whatsapp') throw new Error('image_completion_envelope_invalid');
@@ -30,6 +32,22 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
       if (!entry || entry.expiresAt < Date.now()) throw new Error('image_completion_route_missing');
       await entry.send(envelope);
       // Retain the bounded route so a retried completion hits the same ledger.
+    },
+    async completeImageGeneration(input: { taskId: string; sessionKey: string; channel: string; accountId?: string; conversationId?: string; attachments: readonly { type?: string; path?: string; mimeType?: string }[] }): Promise<void> {
+      if (!/^[a-f0-9-]{36}$/iu.test(input.taskId) || !input.sessionKey || !['whatsapp', 'telegram'].includes(input.channel)) throw new Error('image_completion_identity_invalid');
+      const existing = completionTasks.get(input.taskId);
+      if (existing) return existing;
+      const job = (async () => {
+        const runId = `image_generate:${input.taskId}:typed-completion`;
+        deliveryRuns.start({ runId, sessionKey: input.sessionKey, channel: input.channel, origin: 'media_completion', deliveryId: `image-completion:${input.taskId}` });
+        enqueueGeneratedCompletionAssets(api, runId, input.attachments);
+        const envelope = await deliveryRuns.prepareToolOnly(runId);
+        if (input.channel === 'whatsapp') await boundary.settleWhatsAppCompletion(envelope);
+        else await settleTelegramDelivery(api, envelope, { ...(input.accountId ? { accountId: input.accountId } : {}), ...(input.conversationId ? { conversationId: input.conversationId } : {}) });
+      })();
+      completionTasks.set(input.taskId, job);
+      if (completionTasks.size > 1024) completionTasks.delete(completionTasks.keys().next().value!);
+      try { await job; } catch (error) { completionTasks.delete(input.taskId); throw error; }
     },
     version: 2 as const,
     createWhatsAppPlan(port: WhatsAppDeliveryPort) {

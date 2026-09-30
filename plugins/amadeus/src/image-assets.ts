@@ -249,20 +249,17 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   };
 }
 
-/** Import only verified runtime image content, never a model-authored media path. */
-export function enqueueGeneratedImageBytes(
-  api: OpenClawPluginApi, runId: string, images: readonly { mimeType: string; data: string }[],
+/** Source integration passes native typed completion attachments, never prompt text. */
+export function enqueueGeneratedCompletionAssets(
+  api: OpenClawPluginApi, runId: string, attachments: readonly { type?: string; path?: string; mimeType?: string }[],
 ): void {
-  if (deliveryRuns.originFor(runId) !== 'media_completion' || !images.length || images.length > 4) throw new Error('image_completion_origin_invalid');
+  if (deliveryRuns.originFor(runId) !== 'media_completion' || !attachments.length || attachments.length > 4
+    || attachments.some((item) => item.type !== 'image' || typeof item.path !== 'string' || !item.path.startsWith('/') || !['image/png', 'image/jpeg', 'image/webp'].includes(item.mimeType ?? ''))) throw new Error('image_completion_attachments_invalid');
   const config = configFor(api);
-  const job = Promise.all(images.map(async ({ mimeType, data }) => {
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(mimeType) || data.length > 34 * 1024 * 1024 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(data)) throw new Error('image_completion_bytes_invalid');
-    const bytes = Buffer.from(data, 'base64');
-    if (!bytes.length || bytes.length > 25 * 1024 * 1024) throw new Error('image_completion_size_invalid');
-    const asset = await importImageBytes(config, bytes, mimeType, 'generated', { runId });
+  deliveryRuns.addAssets(runId, Promise.all(attachments.map(async (item) => {
+    const asset = await importImageAsset(config, item.path!, item.mimeType!, 'generated', { runId });
     return imageAssetAttachment(asset, 'inline');
-  }));
-  deliveryRuns.addAssets(runId, job);
+  })));
 }
 
 export function registerImageAssets(api: OpenClawPluginApi): void {

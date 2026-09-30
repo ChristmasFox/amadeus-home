@@ -6,9 +6,7 @@ export class DeliveryRuns {
   private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; prepared?: DeliveryEnvelope; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[] }>();
   private sessions = new Map<string, string>();
   start(context: DeliveryContext): void {
-    const existing = this.runs.get(context.runId);
-    if (!existing) this.runs.set(context.runId, { context, jobs: [] });
-    else if (context.origin === 'media_completion' && existing.context.sessionKey === context.sessionKey && existing.context.channel === context.channel && !existing.envelope) existing.context = context;
+    if (!this.runs.has(context.runId)) this.runs.set(context.runId, { context, jobs: [] });
     this.sessions.set(context.sessionKey, context.runId);
     if (this.runs.size > 1024) this.runs.delete(this.runs.keys().next().value!);
   }
