@@ -15,54 +15,38 @@ not yet been exercised. Sixteen account definitions, all aliases, and the
 are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 
 
-## DeliveryEnvelope v2 — new live candidate; 4x real acceptance pending
+## Amadeus image generation background completion — corrective candidate applied; owner gates pending
 
-The healthy single OpenClaw runtime uses immutable image
-`local/openclaw-amadeus:git-0bccf10fed16-20260930142414`, with Amadeus
-registered, WhatsApp connected and `tts.auto=off`. Its protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930142414`. The owner
-confirmed direct-message replies; group replies recovered without intervention,
-but prior group silent settlements remain unaccounted for. This is not Goal
-completion or full channel acceptance.
+The healthy single OpenClaw runtime uses immutable candidate image
+`local/openclaw-amadeus:git-853371376e58-20260930152245`, built from committed
+source `853371376e58b0b049265b61d4fffe16e12f30e3`. OpenClaw and Product Radar
+health passed, Amadeus registered, and the deployment's NAS read-only and owner
+outbox smokes passed. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930152245`. Deployment
+evidence path:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930152245/deployment-summary.md`.
+This is a candidate apply, not a version release or owner-channel acceptance.
 
-The owner's explicit 4x request was actually called as `scale:2` by the Agent;
-the host asset registry independently records the resulting 2x asset. The
-service accepts 4x. Source now constrains an unambiguous current inbound
-multiplier at the native tool boundary and was deployed from source commit
-`682c69a` after focused regression, pinned boundary checks, secrets scan,
-Gateway registration and health/owner-outbox smoke. A real owner DM retest produced host `scale:4`, 3412×7376 PNG and one
-WhatsApp document settlement; the Agent itself still proposed `scale:2`,
-so the native constraint was decisive. Host bytes match its asset registry
-digest and size, but the recipient-downloaded file remains unverified. Gates A–F and recipient hash
-equality still require real evidence. The earlier rollback and failed candidate
-attempts below are historical audit, not current runtime state.
+The corrective source is committed in `351b33e` and the exact-pinned handler
+integration test in `8533713`. OpenClaw 2026.9.4's
+`wakeMediaGenerationTaskCompletion(params)` has `status`, `handle`, and the
+authoritative generated attachments/media URLs before it builds and hands off
+the `task_completion` event. The version/digest-pinned bridge claims successful
+WhatsApp/Telegram `image_generation` attachments there, before the completion
+Agent. Amadeus imports the trusted attachment into the existing host image
+registry, creates an inline DeliveryEnvelope v2 attachment, and settles through
+the single delivery ledger and channel adapter. Native competing completion is
+reported delivered only after this typed handoff/settlement succeeds; bridge
+errors throw instead of silently cancelling. The async tool-start receipt is
+not considered a generated image.
 
-The owner subsequently requested 4x as the default when no multiplier is
-specified. The current live image and host service now default to 4x; an
-explicit 2x remains available. Source commit `9221fce` passed focused tests
-and protected candidate apply; real owner unspecified-multiplier acceptance
-is pending. See `.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`.
-
-The latest owner report exposed ordinary image generation failure. In pinned
-OpenClaw, `image_generate` is detached: its immediate result is only a task
-start, and typed generated media appears on a later completion turn. The
-existing blanket inter-session silence discarded that completion. A source
-repair now claims verified typed image-completion attachments into the single
-DeliveryEnvelope inline settlement. Focused tests and protected candidate apply
-passed, but real owner generation subsequently failed after a successful
-9Router fallback: completion Agent timeout, then envelope preparation failure
-with no inline settlement. The exact inner exception is not recorded. See
-`.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`.
-
-A deeper read-only comparison found that the generated image bytes in the
-trusted completion turn's typed image part equal the generated file bytes.
-The old candidate incorrectly waited for the second LLM reply's media payload;
-that LLM can time out. New source imports the typed image bytes and settles an
-attachment-only envelope before that LLM call; focused tests pass. This
-follow-up source has a protected candidate apply, but the real owner retry
-failed: this completion was text-only, with no typed image bytes reaching the
-pre-LLM hook, and no inline settlement.
-See `.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
+`pnpm workflow:plan`, `pnpm test:delivery` (including execution of the exact
+pinned handler integration), `pnpm test:amadeus`, `pnpm typecheck:amadeus`,
+`pnpm build:amadeus`, `git diff --check`, and `pnpm check:secrets` passed before
+apply. Real owner WhatsApp tests for fallback success, LLM-independent delivery,
+retry behavior, subsequent upscale, document integrity and text/voice regressions
+remain required; the image-generation Goal is open until those gates have real
+evidence. See `.agent/checkpoints/2026-09-30-image-background-completion-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
