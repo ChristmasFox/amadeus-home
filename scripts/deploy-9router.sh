@@ -46,9 +46,10 @@ git -C "$ROOT" archive "$commit" | tar -xf - -C "$context"
     node infra/docker/casaos/9router/test-runtime-policy.mjs
   fi
   node --check infra/docker/casaos/9router/start-9router.mjs
-  bash scripts/check-secrets.sh
+  # The exported Git snapshot has no .git metadata; scan the real worktree.
 )
-NINE_ROUTER_IMAGE="$old" "$ROOT/scripts/export-9router-runtime.sh" --apply
+(cd "$ROOT" && pnpm check:secrets)
+"$ROOT/scripts/export-9router-runtime.sh" --apply --image "$old"
 if ((BUILD == 1)); then
   IMAGE="local/9router:git-${sha}-${stamp}"
   docker buildx build --platform linux/arm64 --load --progress=plain \

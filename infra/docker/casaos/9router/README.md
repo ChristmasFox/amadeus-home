@@ -42,3 +42,38 @@ Bridge caps: 7 MiB multipart input, 6 MiB converted mono 16 kHz WAV (about three
 Pinned 9Router STT route alias caveat: isolated `0.5.81` and `0.5.86` fixtures returned `openai`/400 immediately after creating `amadeus-asr`, then resolved the exact alias to Self-hosted STT only after process restart. The source provisioning script includes that restart **after** its protected DB checkpoint and verifies health plus live API-key 401. Do not edit the alias only in the dashboard and assume it works. TTS alias did not require restart in the fixture, but both aliases are verified again after the single restart. No production paid ASR was tested without DashScope credentials.
 
 The existing 9Router custom node is an active `Qwen` Responses-compatible chat provider at `*.qianwenaiapi.com/compatible-mode/v1`; its `amadeus-asr` **Chat Combo** is not STT. A repository helper, `scripts/provision-9router-qwen-asr.sh`, can reuse this key without printing it: default dry-run; `--apply` writes uid-1000/0600 upstream secret and protected `9router.env` URL after an online SQLite/env checkpoint, leaving live containers untouched. A synthetic 2.71-second direct request to this platform's Qwen-Audio-3.0-ASR-Flash multimodal route returned HTTP 200 and nonempty text with top-level `text`/`output.text`; the bridge normalizes both this shape and Alibaba's nested `output.output.text`. **Production cutover to the Qwen platform requires the explicit `--allow-qwenai-upstream` flag** because the original Goal names Alibaba Model Studio/DashScope; do not claim they are the same provider. Direct image/9Router/WhatsApp acceptance remains separate.
+
+## 9Router 0.5.91 model account policy and Server Actions
+
+`infra/9router/runtime-policy.json` binds **only** `codex/gpt-image-2.5` to the
+account email recorded there. An active nonmatching account is filtered out
+*before* the native selector considers priority, the client `x-connection-id`,
+round-robin, model lock or retry. If the matching account is inactive, locked
+or fails, that model has no alternate Codex account; `amadeus-image` retains its
+existing **different-model** Gemini fallback. Other models/providers are
+unchanged. Do not use provider priority or the preferred-connection header as
+a substitute for this strict policy. The email is an account identifier, not
+a secret; OAuth tokens and all credentials remain in external `/app/data`.
+
+The same declarative policy sets Next.js `experimental.serverActions.bodySizeLimit`
+to `20mb` in the shipped standalone server config and required-server-files
+metadata (the separate proxy-client body limit remains upstream's 128mb).
+`patch-runtime-policy.mjs` is pinned to npm `9router@0.5.91`; it checks package
+version, exact compiled selector anchor/count, and Next config shape, then
+verifies all three outputs. Future 9Router upgrades **must not reuse a 0.5.91
+compiled bundle**: first inspect the new native implementation for a real
+whitelist option, otherwise update the narrow patch against that release, run
+`test-runtime-policy.mjs` on the real compiled bundle, and require a successful
+isolated build/smoke before the production switch. Drift fails the build closed
+and leaves the old image live. Do not upgrade by `npm install` in a running
+container.
+
+`scripts/deploy-9router.sh --dry-run --build` describes the production switch.
+The explicit `--apply --build` uses a *committed* Git snapshot, focused tests,
+secret scan, a protected image export + SQLite/compose/env checkpoint, host
+BuildKit image, isolated network-none fixture, and 9Router-only Compose
+`--no-build` switch. The old image/Compose is restored on failed health or
+auth/config checks; the SQLite backup is retained for a deliberate manual DB
+restore, not blindly overwritten over newer writes. Image generation is a
+separate paid smoke with `scripts/smoke-9router-image.py --apply`, not part of
+startup or the deploy script.
