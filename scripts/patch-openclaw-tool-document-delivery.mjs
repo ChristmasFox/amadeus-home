@@ -92,7 +92,9 @@ const payloadOriginal = await readFile(payloadPath, 'utf8');
 if (!payloadOriginal.includes(MARKER)) {
   const anchor = 'trustedLocalMedia: params.toolTrustedLocalMedia || void 0';
   if (!payloadOriginal.includes(anchor)) throw new Error(`tool payload anchor changed in ${payloadPath}`);
-  const payloadPatched = payloadOriginal.replace(anchor, `${anchor},\n\t\tforceDocument: params.toolForceDocument || void 0`);
+  let payloadPatched = payloadOriginal.replace(anchor, `${anchor},\n\t\tforceDocument: params.toolForceDocument || void 0`);
+  payloadPatched = payloadPatched.replace('extractMediaDirectives: false,', 'extractMediaDirectives: true,');
+  payloadPatched = payloadPatched.replace('text: selected.text', 'text: selected.text.replace(/\\n\\s*\\{\\s*"(?:visibleText|modality)"\\s*:[\\s\\S]*\\}\\s*$/u, "")');
   await writeFile(payloadPath, `${payloadPatched}\n// ${MARKER}\n`);
   console.log('TOOL_DOCUMENT_PAYLOAD=applied');
 } else console.log('TOOL_DOCUMENT_PAYLOAD=already-applied');
@@ -112,6 +114,10 @@ if (!builtinOriginal.includes(MARKER)) {
   builtinPatched = builtinPatched.replaceAll('state.pendingToolAudioAsVoice = false;', 'state.pendingToolAudioAsVoice = false;\n\tstate.pendingToolForceDocument = false;');
   builtinPatched = builtinPatched.replace('if (mediaReply.audioAsVoice) ctx.state.pendingToolAudioAsVoice = true;', 'if (mediaReply.audioAsVoice) ctx.state.pendingToolAudioAsVoice = true;\n\tif (mediaReply.forceDocument) ctx.state.pendingToolForceDocument = true;');
   builtinPatched = builtinPatched.replaceAll('audioAsVoice: state.pendingToolAudioAsVoice || void 0,', 'audioAsVoice: state.pendingToolAudioAsVoice || void 0,\n\t\tforceDocument: state.pendingToolForceDocument || void 0,');
+  const selectedPayloadBefore = 'const selectedPayload = allSelectedMediaIsPending && (payload.mediaUrls ?? []).every((url) => state.pendingToolMediaTrustByUrl.get(url.trim()) === true) ? {\n\t\t\t...payloadWithMetadata,\n\t\t\ttrustedLocalMedia: true\n\t\t} : payloadWithMetadata;';
+  const selectedPayloadAfter = 'const payloadWithForceDocument = state.pendingToolForceDocument ? { ...payloadWithMetadata, forceDocument: true } : payloadWithMetadata;\n\t\tconst selectedPayload = allSelectedMediaIsPending && (payload.mediaUrls ?? []).every((url) => state.pendingToolMediaTrustByUrl.get(url.trim()) === true) ? {\n\t\t\t...payloadWithForceDocument,\n\t\t\ttrustedLocalMedia: true\n\t\t} : payloadWithForceDocument;';
+  if (!builtinPatched.includes(selectedPayloadBefore)) throw new Error(`builtin selected-media anchor changed in ${builtinPath}`);
+  builtinPatched = builtinPatched.replace(selectedPayloadBefore, selectedPayloadAfter);
   builtinPatched = builtinPatched.replace('state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;', 'state.pendingToolAudioAsVoice ||= payload.audioAsVoice === true;\n\tstate.pendingToolForceDocument ||= payload.forceDocument === true;');
   builtinPatched = builtinPatched.replace('toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,', 'toolTrustedLocalMedia: pendingToolMediaReply?.trustedLocalMedia,\n\t\ttoolForceDocument: pendingToolMediaReply?.forceDocument,');
   builtinPatched = builtinPatched.replaceAll('pendingToolAudioAsVoice: false,', 'pendingToolAudioAsVoice: false,\n\t\tpendingToolForceDocument: false,');
