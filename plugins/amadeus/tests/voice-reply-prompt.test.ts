@@ -80,6 +80,14 @@ test('internal control tokens never leak into visible or spoken reply text', () 
   assert.doesNotMatch(voiceEnvelope.speechText ?? '', /\[\[/u);
 });
 
+test('media directives do not cause structured reply JSON to leak into visible text', () => {
+  const envelope = resolveReplyEnvelope(context,
+    'MEDIA:/var/lib/amadeus/image-assets/derived/example.png\n\n{"modality":"text","visibleText":"超分完成。","emotion":"default"}',
+    { modality: 'text', answer_plan: 'answer_with_text' });
+  assert.equal(envelope.visibleText, '超分完成。');
+  assert.doesNotMatch(envelope.visibleText, /MEDIA:|visibleText|modality/u);
+});
+
 test('concurrent envelopes are isolated by run and duplicate delivery is suppressed', async () => {
   const delivery = createReplyDeliveryContext();
   const first = createTextEnvelope({ ...context, runId: 'one', deliveryId: 'one:text' }, '一');
