@@ -96,7 +96,8 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
 OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。当前 candidate 已应用到
 healthy OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`；
-Gate A–F 及跨重启 owner-flow 验收仍未完成，不得将健康检查/registration 解释为用户体验验收。
+Owner 已于 2026-10-01 在对话中直接确认 real WhatsApp Gates A–F 全部通过；健康检查/registration
+本身不替代该 owner attestation。bounded in-process task state 仍不构成跨 Gateway restart 的持久 replay journal。
 外部回滚 checkpoint 与 gate 状态见 `.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`。
 
 ## Presentation contract 与时间语义

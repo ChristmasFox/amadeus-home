@@ -13,8 +13,8 @@ image `local/openclaw-amadeus:git-628703c803e7-20260930184906` (OpenClaw `2026.9
 `nyannyan`; Amadeus registration passed. Protected rollback is
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930184906`; content-safe deployment evidence is at
 `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930184906/deployment-summary.md`.
-This is a candidate apply, not a product release or owner acceptance. Real WhatsApp Gates A–F remain open;
-the deployment notification/outbox smoke is not Gate A. The task coordinator and delivery ledger are
+This is a candidate apply, not a product release. The owner subsequently attested that real WhatsApp Gates
+A–F passed; the deployment notification/outbox smoke itself is not Gate A. The task coordinator and delivery ledger are
 bounded process-local state, so cross-restart exactly-once is not claimed.
 
 ## Historical 2026-09-27 release snapshot (audit only)

@@ -1,6 +1,6 @@
 # Project State — 2026-10-01
 
-## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F pending
+## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F accepted
 
 Source commits `1dd9dd2` (lifecycle/caption implementation) and `628703c` (Kurisu caption wording refinement)
 are pushed to `main`. Amadeus VERSION remains `1.7.4`; no release bump was performed. Authorized candidate
@@ -27,10 +27,10 @@ source integration), `pnpm test:amadeus` (100 tests), `pnpm typecheck:amadeus`, 
 OpenClaw image on the host; Product Radar reused its unchanged image. `media-organizer-adapter` was absent
 before apply and was not restored; its optional network check was skipped.
 
-**The image UX Goal is not complete.** Real WhatsApp owner Gates A–F remain pending; the deployment owner
-notification is not Gate A. Codex computer-use inventory had no WhatsApp desktop or accessible authenticated
-browser, so no real owner-inbound generation tests were performed. See
-`.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md` for gate status.
+The owner directly attested in chat on 2026-10-01, “真是AF全部通过”, confirming real WhatsApp owner Gates
+A–F passed after candidate deployment. This owner attestation, rather than the deployment notification/outbox
+smoke, is the acceptance evidence; no private chat contents/screenshots are retained. Detailed status is in
+`.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`.
 Task coordinator and delivery settlement are bounded process-local state, not a durable cross-restart
 exactly-once journal; no stronger restart/replay claim is made.
 
