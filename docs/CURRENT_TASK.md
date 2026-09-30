@@ -36,6 +36,17 @@ registered. Protected host checkpoint and source/apply evidence:
 `.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`. A real owner
 unspecified-multiplier request is still required for acceptance.
 
+Ordinary image generation has a newly diagnosed production regression: pinned
+OpenClaw detaches `image_generate` into a background task. Its immediate tool
+result has no image paths; the typed completion arrives as an inter-session
+image-generation event. The previous source treated every inter-session turn
+as silent, and neither imported the completion's typed attachments nor settled
+them. Source now gives a verified image completion its own v2 run origin,
+registers the typed image attachments as inline in the same envelope and
+cancels the native competing delivery after one typed settlement. Focused
+regression passes; a new protected candidate apply and real owner generation
+are pending. No rollback to an old image and no automatic media sender.
+
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
 where real evidence has not been recorded. Production apply requires the

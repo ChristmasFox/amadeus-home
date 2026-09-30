@@ -12,6 +12,7 @@ export type DeliveryOrigin =
   | 'heartbeat'
   | 'cron'
   | 'internal_handoff'
+  | 'media_completion'
   | 'system';
 
 export type DeliverySource =
@@ -92,6 +93,7 @@ const ORIGINS = new Set<DeliveryOrigin>([
   'heartbeat',
   'cron',
   'internal_handoff',
+  'media_completion',
   'system',
 ]);
 

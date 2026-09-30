@@ -22,7 +22,15 @@ const settlement = deliverySettlementState;
 
 export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
   const speech = createDeliverySpeech(api);
+  const completionPorts = new Map<string, { send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
   const boundary = {
+    async settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> {
+      if (!deliveryRuns.owns(envelope) || envelope.origin !== 'media_completion' || envelope.channel !== 'whatsapp') throw new Error('image_completion_envelope_invalid');
+      const entry = completionPorts.get(envelope.sessionKey);
+      if (!entry || entry.expiresAt < Date.now()) throw new Error('image_completion_route_missing');
+      await entry.send(envelope);
+      completionPorts.delete(envelope.sessionKey);
+    },
     version: 2 as const,
     createWhatsAppPlan(port: WhatsAppDeliveryPort) {
       let visible = false;
@@ -41,6 +49,27 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
         const envelope = await deliveryRuns.prepare(exactRunId, row.text);
         return { channelData: { amadeusDelivery: envelope } };
       };
+      const settleTyped = async (envelope: DeliveryEnvelope): Promise<void> => {
+            const config = configFor(api);
+            const sendAttachment = createWhatsAppAttachmentSender((part) => resolveRegisteredImageAsset(config, part), port);
+            const result = await settleDelivery(envelope, {
+              sendText: async (part) => { const receipt = await port.sendText(part.text); visible = true; return receipt; },
+              synthesize: speech,
+              sendVoice: async (_part, audio) => { const receipt = await port.sendVoice(audio); visible = true; return receipt; },
+              sendAttachment: async (part: AttachmentPart) => {
+                const receipt = await sendAttachment(part); visible = true;
+                if (receipt.messageId) {
+                  try { await bindImageDelivery(config, part.assetId, receipt.messageId, { channel: 'whatsapp', conversationId: port.conversationId, runId: envelope.runId }); }
+                  catch { api.logger.warn('amadeus asset delivery correlation failed'); }
+                }
+                return receipt;
+              },
+              record: (event) => api.logger.info(`amadeus delivery ${JSON.stringify(event)}`),
+            }, settlement);
+            if (result.final_status === 'failed') throw new Error(`delivery_failed:${result.failure_stage}`);
+      };
+      completionPorts.set(port.sessionKey, { send: settleTyped, expiresAt: Date.now() + 30 * 60_000 });
+      if (completionPorts.size > 1024) completionPorts.delete(completionPorts.keys().next().value!);
       return {
         dispatcherOptions: {
           onReplyStart: () => port.start(),
@@ -59,23 +88,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
             const row = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
             const envelope = (row.channelData as Record<string, unknown> | undefined)?.amadeusDelivery;
             if (!validateDeliveryEnvelope(envelope) || !deliveryRuns.owns(envelope) || envelope.sessionKey !== port.sessionKey || envelope.channel !== 'whatsapp') throw new Error('delivery_typed_payload_required');
-            const config = configFor(api);
-            const sendAttachment = createWhatsAppAttachmentSender((part) => resolveRegisteredImageAsset(config, part), port);
-            const result = await settleDelivery(envelope, {
-              sendText: async (part) => { const receipt = await port.sendText(part.text); visible = true; return receipt; },
-              synthesize: speech,
-              sendVoice: async (_part, audio) => { const receipt = await port.sendVoice(audio); visible = true; return receipt; },
-              sendAttachment: async (part: AttachmentPart) => {
-                const receipt = await sendAttachment(part); visible = true;
-                if (receipt.messageId) {
-                  try { await bindImageDelivery(config, part.assetId, receipt.messageId, { channel: 'whatsapp', conversationId: port.conversationId, runId: envelope.runId }); }
-                  catch { api.logger.warn('amadeus asset delivery correlation failed'); }
-                }
-                return receipt;
-              },
-              record: (event) => api.logger.info(`amadeus delivery ${JSON.stringify(event)}`),
-            }, settlement);
-            if (result.final_status === 'failed') throw new Error(`delivery_failed:${result.failure_stage}`);
+            await settleTyped(envelope);
             return { visibleReplySent: visible };
           },
           onError: () => api.logger.warn('amadeus delivery boundary failed closed'),

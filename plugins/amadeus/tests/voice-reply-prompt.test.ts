@@ -34,3 +34,11 @@ test('missing host channel field uses the verified run context, not text routing
  const result=await hooks.get('reply_payload_sending')?.({runId:'missing-channel-r',sessionKey:'missing-channel-s',kind:'final',payload:{text:'raw protocol'}},{});
  assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'normal text'}]);
 });
+
+test('verified image completion gets the wire decoder; other internal handoffs stay silent',()=>{
+ const hooks=setup();
+ const completion=hooks.get('before_prompt_build')?.({}, {runId:'image-complete-r',sessionKey:'image-complete-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'}});
+ assert.match(completion.appendSystemContext,/text caption only/u);
+ const other=hooks.get('before_prompt_build')?.({}, {runId:'internal-r',sessionKey:'internal-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'other'}});
+ assert.equal(other,undefined);
+});
