@@ -15,7 +15,22 @@ not yet been exercised. Sixteen account definitions, all aliases, and the
 are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 
 
-## DeliveryEnvelope v2 candidate — applied; real owner gates pending
+## DeliveryEnvelope v2 — Gate A failed; candidate rolled back for source fix
+
+The candidate initially reached health and real Gateway registration, but
+the **real owner WhatsApp Gate A received no reply**. Protected logs revealed
+`delivery.observeMessageSent` was read from an undefined adapter: the source
+plan had put settlement callbacks in `dispatcherOptions` rather than native
+`delivery`. Source now separates lifecycle and delivery, with focused pinned
+contract tests. The candidate was rolled back from its protected checkpoint;
+only the persisted plugin-index row was transactionally restored, preserving
+other SQLite state. Live OpenClaw is again the old healthy immutable
+`local/openclaw-amadeus:git-6311e21b412c-20260930044402`, with Amadeus
+registered, WhatsApp connected, and `tts.auto=tagged`. Gate A failed;
+Gates B–F and recipient file hashes remain open. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-rollback.md`.
+
+### Previous candidate apply (historical snapshot)
 
 Candidate source `a1df7b7` is healthy as
 `local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303` on the single

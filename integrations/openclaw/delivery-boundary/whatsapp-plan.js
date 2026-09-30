@@ -43,10 +43,20 @@ function createWhatsAppReplyPlan(params) {
     sendDocument: async (asset) => receipt(await params.transport.sendMedia({ document: asset.bytes, mimetype: asset.mimeType, fileName: asset.fileName }, quote())),
   });
   const statusReactionController = params.statusReactionController ?? null;
+  const replyPolicy = resolveWhatsAppInboundReplyPolicy({
+    cfg: params.cfg, ctx: params.context,
+    blockStreamingEnabled: resolveChannelStreamingBlockEnabled(params.cfg.channels?.whatsapp),
+  });
+  plan.afterRecord = () => { if (statusReactionController) statusReactionController.setThinking(); };
+  plan.dispatcherOptions = { ...params.replyPipeline, ...plan.dispatcherOptions };
+  if (!plan.delivery || plan.delivery.observeMessageSent !== true) throw new Error('delivery_adapter_contract_invalid');
   plan.replyOptions = {
     ...plan.replyOptions,
     ...(params.turnAdoptionLifecycle ? { turnAdoptionLifecycle: params.turnAdoptionLifecycle } : {}),
     onModelSelected: params.onModelSelected,
+    suppressTyping: replyPolicy.suppressTyping,
+    disableBlockStreaming: true,
+    ...(replyPolicy.sourceReplyDeliveryMode ? { sourceReplyDeliveryMode: replyPolicy.sourceReplyDeliveryMode } : {}),
     ...(statusReactionController ? {
       onToolStart: async (payload) => { if (payload.name?.trim()) await statusReactionController.setTool(payload.name.trim()); return false; },
       onCompactionStart: async () => { await statusReactionController.setCompacting(); return false; },

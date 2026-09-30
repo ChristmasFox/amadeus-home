@@ -1,6 +1,8 @@
 # Pending — DeliveryEnvelope v2 owner WhatsApp acceptance
 
-The candidate was applied from source `a1df7b7`; its protected checkpoint and
+The v2 candidate was applied from source `a1df7b7` but failed real owner Gate A
+and was rolled back. The source plan shape has been corrected in the worktree
+and needs a new committed immutable candidate. Its protected checkpoint and
 post-deploy evidence are in
 `.agent/checkpoints/2026-09-30-delivery-envelope-candidate-applied.md`.
 This is not a full Goal completion or release. Real owner WhatsApp Gates A–F

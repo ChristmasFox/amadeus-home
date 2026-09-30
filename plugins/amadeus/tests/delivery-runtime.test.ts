@@ -18,6 +18,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string}>=[];
   const sessionKey=`runtime-${source}-${mimeType}`;const runId=`run-${sessionKey}`;
   const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async asset=>{sends.push({kind:'image',bytes:asset.bytes});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
+  assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
   for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey},{channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
@@ -31,11 +32,11 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const jobs=(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='upscale'?'amadeus_image_upscale':'image_generate',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
   for(const hook of hooks.get('before_agent_finalize')??[])hook({runId,lastAssistantMessage:wire},{});
-  const prepared=await plan.dispatcherOptions.preparePayload({text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
+  const prepared=await plan.delivery.preparePayload({text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
   assert.deepEqual(Object.keys(prepared),['channelData']);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'?'document':'inline');
-  assert.equal(await plan.dispatcherOptions.preparePayload({mediaUrls:['/native/tool/result']},{kind:'tool'}),null);
-  await plan.dispatcherOptions.deliver(prepared,{kind:'tool'});assert.equal(sends.length,0);
-  await plan.dispatcherOptions.deliver(prepared,{kind:'final'});await plan.dispatcherOptions.deliver(prepared,{kind:'final'});
+  assert.equal(await plan.delivery.preparePayload({mediaUrls:['/native/tool/result']},{kind:'tool'}),null);
+  await plan.delivery.deliver(prepared,{kind:'tool'});assert.equal(sends.length,0);
+  await plan.delivery.deliver(prepared,{kind:'final'});await plan.delivery.deliver(prepared,{kind:'final'});
   assert.deepEqual(sends.map(send=>send.kind),['text',source==='upscale'?'document':'image']);assert.equal(sends[0]?.text,'完成。');assert.deepEqual(sends[1]?.bytes,bytes);
   const binding=requests.find(request=>request.path==='/v1/assets/bind-delivery')!.body as any;assert.equal(binding.messageId,source==='upscale'?'document-id':'image-id');assert.deepEqual(binding.assetIds,[id]);
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
