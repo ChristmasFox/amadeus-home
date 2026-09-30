@@ -6,6 +6,7 @@ import { dirname } from 'node:path';
 import vm from 'node:vm';
 import { patchWhatsAppSource, patchWhatsAppIngressQueueSource } from './patch-openclaw-whatsapp-voice-lifecycle.mjs';
 import { installSource, upstream } from '../integrations/openclaw/delivery-boundary/install.mjs';
+import { CORE_PIN as IMAGE_COMPLETION_PIN, installCoreCompletionSource } from '../integrations/openclaw/delivery-boundary/core-completion.mjs';
 const require = createRequire(new URL('../plugins/amadeus/package.json', import.meta.url));
 const host = dirname(dirname(dirname(require.resolve('openclaw/plugin-sdk/core'))));
 const original = process.env.AMADEUS_WHATSAPP_UPSTREAM_MODULE ? await readFile(process.env.AMADEUS_WHATSAPP_UPSTREAM_MODULE,'utf8') : await upstream(process.env.AMADEUS_WHATSAPP_ARCHIVE);
@@ -13,6 +14,25 @@ const template = await readFile(new URL('../integrations/openclaw/delivery-bound
 const acorn=createRequire(host+'/package.json')('acorn');
 function acornParse(source){return acorn.parse(source,{ecmaVersion:'latest',sourceType:'module'});}
 const transformed=installSource(original,template,host);
+// Exercise the exact pinned OpenClaw detached completion function after the
+// narrow source integration. The started tool receipt is intentionally absent
+// from this handler; only the later authoritative generated attachment arrives.
+const coreOriginal=await readFile(`${host}/dist/${IMAGE_COMPLETION_PIN.module}`,'utf8');
+const corePatched=installCoreCompletionSource(coreOriginal,host);
+const coreAst=acornParse(corePatched);
+const completionNode=coreAst.body.find(node=>node.type==='FunctionDeclaration'&&node.id?.name==='wakeMediaGenerationTaskCompletion');
+assert.ok(completionNode,'pinned detached completion handler must remain uniquely anchored');
+const claimed=[];let nativeAnnouncement=false;
+const completionScope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:{version:2,completeImageGeneration:async input=>{claimed.push(input);}}},deliverSubagentAnnouncement:async()=>{nativeAnnouncement=true;return {delivered:true};}};
+const completionHandler=vm.runInNewContext(`${corePatched.slice(completionNode.start,completionNode.end)}; wakeMediaGenerationTaskCompletion`,completionScope);
+const trustedAttachment={type:'image',path:'/tmp/openclaw-generated/image.png',mimeType:'image/png'};
+const completionResult=await completionHandler({eventSource:'image_generation',status:'ok',toolName:'image_generate',attachments:[trustedAttachment],mediaUrls:[],handle:{taskId:'00000000-0000-4000-8000-000000000001',requesterSessionKey:'owner-session',requesterOrigin:{channel:'whatsapp',accountId:'secondary',to:'owner-chat'}}});
+assert.equal(completionResult.status,'delivered');
+assert.equal(claimed.length,1);assert.equal(claimed[0].attachments[0],trustedAttachment);assert.equal(claimed[0].sessionKey,'owner-session');assert.equal(nativeAnnouncement,false,'native completion must be suppressed only after typed claim succeeds');
+completionScope.globalThis.__amadeusDeliveryBoundaryV2_20260930.completeImageGeneration=async()=>{throw new Error('media_completion_handoff_missing');};
+await assert.rejects(completionHandler({eventSource:'image_generation',status:'ok',toolName:'image_generate',attachments:[trustedAttachment],handle:{taskId:'00000000-0000-4000-8000-000000000002',requesterSessionKey:'owner-session',requesterOrigin:{channel:'whatsapp',to:'owner-chat'}}}),/media_completion_handoff_missing/u);
+assert.equal(nativeAnnouncement,false,'failed typed ownership must not silently cancel or continue as delivered');
+
 const withLifecycle = patchWhatsAppIngressQueueSource(patchWhatsAppSource(transformed));
 assert.equal(acornParse(withLifecycle).type, 'Program');
 
