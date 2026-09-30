@@ -1,10 +1,13 @@
-import { readFile } from 'node:fs/promises';
-import { basename, join, normalize, posix } from 'node:path';
+import { lstat, readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { Type, type Static } from 'typebox';
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { configFor, readRequiredFile, type AmadeusConfig } from './config.js';
 import { identityContextFromOpenClaw } from './identity.js';
 import { registerTool } from './shared/register-tool.js';
+import { deliveryRuns } from './delivery-runs.js';
+import { readRegisteredAsset, type AssetMetadata } from './delivery-assets.js';
+import { createAttachmentPart, type AttachmentPart } from './delivery-envelope.js';
 
 const ImageUpscaleParameters = Type.Object({
   target: Type.Optional(Type.Object({
@@ -31,24 +34,17 @@ type ImageAssetResult = {
   mimeType: string;
   width: number;
   height: number;
-  byteSize?: number;
+  byteSize: number;
   storageKey: string;
-  status?: string;
+  status: string;
   transform?: Record<string, unknown>;
-};
-type ImageAttachment = {
-  type: 'image';
-  path: string;
-  mimeType: string;
-  name: string;
-  sizeBytes?: number;
-  forceDocument?: boolean;
+  fileName?: string;
+  sha256: string;
 };
 type CurrentImageContext = ImageAssetOrigin & { sessionKey: string; expiresAt: number };
 
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const currentImageContexts = new Map<string, CurrentImageContext>();
-const pendingDeliveredAssets = new Map<string, { assetIds: string[]; origin: ImageAssetOrigin; expiresAt: number }>();
 
 function text(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -69,18 +65,6 @@ function currentContextFor(sessionKey: string | undefined): CurrentImageContext 
     return undefined;
   }
   return current;
-}
-
-function storagePath(containerRoot: string, storageKey: string): string {
-  const normalized = normalize(storageKey).replaceAll('\\', '/');
-  if (!normalized || normalized.startsWith('/') || normalized.split('/').some((part) => part === '..')) {
-    throw new Error('image_asset_storage_key_invalid');
-  }
-  const root = normalize(containerRoot);
-  const candidate = normalize(join(root, ...normalized.split('/')));
-  const prefix = root.endsWith(posix.sep) ? root : `${root}${posix.sep}`;
-  if (candidate !== root && !candidate.startsWith(prefix)) throw new Error('image_asset_storage_key_invalid');
-  return candidate;
 }
 
 async function serviceHeaders(config: AmadeusConfig): Promise<Headers> {
@@ -160,13 +144,17 @@ function generatedMime(value: unknown, path: string): string {
 function parseServiceResult(value: unknown): ImageAssetResult {
   const payload = object(value);
   const asset = object(payload?.asset) ?? payload;
-  if (!asset || text(asset.imageId) === undefined || text(asset.storageKey) === undefined || typeof asset.mimeType !== 'string' || typeof asset.width !== 'number' || typeof asset.height !== 'number') {
+  if (!asset || text(asset.imageId) === undefined || text(asset.storageKey) === undefined || typeof asset.mimeType !== 'string' || typeof asset.width !== 'number' || typeof asset.height !== 'number'
+    || asset.status !== 'ready' || typeof asset.byteSize !== 'number' || !Number.isSafeInteger(asset.byteSize) || asset.byteSize <= 0
+    || typeof asset.sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(asset.sha256)) {
     throw new Error('image_asset_service_response_invalid');
   }
   return asset as unknown as ImageAssetResult;
 }
 
 async function importImageAsset(config: AmadeusConfig, path: string, mimeType: string, sourceKind: string, origin: ImageAssetOrigin, signal?: AbortSignal): Promise<ImageAssetResult> {
+  const info = await lstat(path);
+  if (!info.isFile() || info.isSymbolicLink() || info.size <= 0 || info.size > 25 * 1024 * 1024) throw new Error('image_import_path_invalid');
   const body = await readFile(path);
   const headers = await serviceHeaders(config);
   headers.set('Content-Type', mimeType);
@@ -197,35 +185,21 @@ function inboundMediaPaths(event: { media?: Array<{ path?: string; contentType?:
   });
 }
 
-async function bindDeliveredAssets(config: AmadeusConfig, assetIds: string[], messageId: string, origin: ImageAssetOrigin): Promise<void> {
-  await serviceJson(config, '/v1/assets/bind-delivery', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ assetIds, messageId, origin }),
+export function imageAssetAttachment(asset: ImageAssetResult, disposition: AttachmentPart['disposition']): AttachmentPart {
+  if (asset.status !== 'ready') throw new Error('image_asset_not_ready');
+  return createAttachmentPart({
+    assetId: asset.imageId, mimeType: asset.mimeType,
+    fileName: asset.fileName ?? basename(asset.storageKey), disposition,
+    byteSize: asset.byteSize, sha256: asset.sha256,
   });
 }
-
-function outputAttachment(config: AmadeusConfig, asset: ImageAssetResult): ImageAttachment {
-  const path = storagePath(config.imageAssetContainerRoot, asset.storageKey);
-  return {
-    type: 'image',
-    path,
-    mimeType: asset.mimeType,
-    name: asset.imageId,
-    forceDocument: true,
-    ...(asset.byteSize !== undefined ? { sizeBytes: asset.byteSize } : {}),
-  };
+export async function resolveRegisteredImageAsset(config: AmadeusConfig, part: AttachmentPart) {
+  if (!/^img_[a-f0-9]{32}$/u.test(part.assetId)) throw new Error('asset_id_invalid');
+  const asset = parseServiceResult(await serviceJson(config, `/v1/assets/${part.assetId}/metadata`));
+  return await readRegisteredAsset(config.imageAssetContainerRoot, part, asset as AssetMetadata);
 }
-
-function pendingForKey(key: string | undefined): { assetIds: string[]; origin: ImageAssetOrigin } | undefined {
-  if (!key) return undefined;
-  const pending = pendingDeliveredAssets.get(key);
-  if (!pending) return undefined;
-  if (pending.expiresAt <= Date.now()) {
-    pendingDeliveredAssets.delete(key);
-    return undefined;
-  }
-  return pending;
+export async function bindImageDelivery(config: AmadeusConfig, assetId: string, messageId: string, origin: ImageAssetOrigin): Promise<void> {
+  await serviceJson(config, '/v1/assets/bind-delivery', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ assetIds: [assetId], messageId, origin }) });
 }
 
 export async function upscaleImage(config: AmadeusConfig, input: ImageUpscaleParameters, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
@@ -245,12 +219,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     }),
   }, signal);
   const asset = parseServiceResult(response);
-  const attachment = outputAttachment(config, asset);
-  const pendingKey = current?.runId ?? context.sessionKey;
-  if (pendingKey) {
-    pendingDeliveredAssets.set(pendingKey, { assetIds: [asset.imageId], origin, expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS });
-  }
-  const mediaPath = attachment.path;
+  const attachment = imageAssetAttachment(asset, 'document');
   return {
     status: 'ok',
     imageId: asset.imageId,
@@ -261,13 +230,8 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     mimeType: asset.mimeType,
     width: asset.width,
     height: asset.height,
-    mediaUrl: mediaPath,
-    mediaUrls: [mediaPath],
-    attachments: [attachment],
-    paths: [mediaPath],
-    media: { mediaUrls: [mediaPath], attachments: [attachment], forceDocument: true },
-    forceDocument: true,
     contentText: `Upscaled image ${asset.imageId}.`,
+    deliveryAttachment: attachment,
     ...(identity.channel ? { channel: identity.channel } : {}),
   };
 }
@@ -318,48 +282,30 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
       expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
     });
   });
-  api.on('after_tool_call', async (event, hookContext) => {
-    if (event.toolName !== 'image_generate' || event.error) return;
-    const paths = generatedPaths(event.result);
-    if (!paths.length) return;
+  api.on('after_tool_call', (event, hookContext) => {
+    if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale')) return;
+    const runId = event.runId ?? hookContext.runId ?? (hookContext.sessionKey ? deliveryRuns.runIdFor(hookContext.sessionKey) : undefined);
+    if (!runId) throw new Error('image_delivery_run_missing');
     const config = configFor(api);
     const current = currentContextFor(hookContext.sessionKey);
-    const channel = text(hookContext.channelId) ?? current?.channel;
-    const conversationId = current?.conversationId ?? hookContext.sessionKey;
-    const origin: ImageAssetOrigin = {
-      ...(channel ? { channel } : {}),
-      ...(conversationId ? { conversationId } : {}),
-      ...(current?.messageId ? { messageId: current.messageId } : {}),
-      ...(current?.replyToMessageId ? { replyToMessageId: current.replyToMessageId } : {}),
-      ...(current?.sessionId ? { sessionId: current.sessionId } : {}),
-      ...(event.runId ? { runId: event.runId } : {}),
-    };
-    const assets: ImageAssetResult[] = [];
-    for (const path of paths.slice(0, 4)) {
-      try {
-        assets.push(await importImageAsset(config, path, generatedMime(event.result, path), 'generated', origin, hookContext.abortSignal));
-      } catch (error) {
-        api.logger.warn(`amadeus image asset registration failed: ${error instanceof Error ? error.message : String(error)}`);
+    const origin: ImageAssetOrigin = { ...current, runId };
+    // Enqueue the promise synchronously: the pinned after-tool hook is observed,
+    // not awaited by core. Final settlement must await registration itself.
+    const job = (async (): Promise<readonly AttachmentPart[]> => {
+      if (event.toolName === 'amadeus_image_upscale') {
+        const result = resultObject(event.result);
+        const part = result?.deliveryAttachment;
+        if (!part || typeof part !== 'object') return [];
+        return [createAttachmentPart(part as Omit<AttachmentPart, 'kind'>)];
       }
-    }
-    if (event.runId && assets.length) pendingDeliveredAssets.set(event.runId, {
-      assetIds: assets.map((asset) => asset.imageId),
-      origin,
-      expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
-    });
-  }, { matcher: ['image_generate'], timeoutMs: 60_000 });
-  api.on('message_sent', async (event) => {
-    if (!event.success || !event.messageId) return;
-    const pending = pendingForKey(event.runId) ?? pendingForKey(event.sessionKey);
-    if (!pending) return;
-    try {
-      await bindDeliveredAssets(configFor(api), pending.assetIds, event.messageId, pending.origin);
-      if (event.runId) pendingDeliveredAssets.delete(event.runId);
-      if (event.sessionKey) pendingDeliveredAssets.delete(event.sessionKey);
-    } catch (error) {
-      api.logger.warn(`amadeus image delivery correlation failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  });
+      const paths = generatedPaths(event.result);
+      const assets = await Promise.all(paths.slice(0, 4).map((path) => importImageAsset(config, path, generatedMime(event.result, path), 'generated', origin, hookContext.abortSignal)));
+      return assets.map((asset) => imageAssetAttachment(asset, 'inline'));
+    })();
+    deliveryRuns.addAssets(runId, job);
+    return job.then(() => undefined);
+  }, { matcher: ['image_generate', 'amadeus_image_upscale'], timeoutMs: 60_000 });
+
   registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Use only when the user explicitly asks to enhance or upscale an existing image; reply context is resolved before the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 

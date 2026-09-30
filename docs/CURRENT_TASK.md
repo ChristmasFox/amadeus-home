@@ -4,13 +4,30 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `PLANNED_NOT_IMPLEMENTED`.
+Status: `SOURCE_CUTOVER_COMPLETE_AWAITING_PRODUCTION_APPLY` (no production apply).
 
-The owner has explicitly selected a clean one-time cutover. The current production defects are internal structured reply JSON leaking into Kurisu-visible WhatsApp messages and upscaled image assets being delivered through WhatsApp's compressed image path instead of document/file delivery.
+The Git source implements the typed v2 contract, one structured decoder and
+one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
+integration, and no independent Amadeus auto/pending tool-media sender. Source
+checks and the scoped Git commit must pass before treating this source phase
+as complete. Production still runs the previous immutable image.
 
-The implementation must replace the split ReplyEnvelope/tool-media architecture with one typed `DeliveryEnvelope v2` settlement covering text, voice and attachments. Do not add another JSON cleanup regex, another `forceDocument` propagation hop, a legacy ReplyEnvelope compatibility translator, or a dual sender. The retired workaround paths must be deleted as part of the cutover after the new typed path is wired and tested.
+**Next authorized phase:** only after a separate explicit `--apply`, take a
+protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
+restore the pinned WhatsApp module and install the typed plan, switch CasaOS,
+run health/smoke and real owner-channel Gates A–F. Download both PNG/JPEG upscale
+documents and compare received SHA-256 and byte size with registry/host assets;
+then restart/recreate and repeat a new upscale. Do not close the Goal on local
+tests alone or weaken any rollback/secret boundary.
 
-The previous image asset/on-demand upscale Goal remains important implementation and deployment evidence, but it is no longer the live instruction pointer. Its host-native MLX upscale service, durable asset lineage, and image-resolution behavior must be preserved while delivery semantics are moved into the new contract.
+Independent 9Router maintenance on 2026-09-30 (not this Goal): CasaOS 9Router
+was upgraded to npm `0.5.91`; the version-guarded `gpt-image-2.5` account
+allowlist and Next.js Server Actions `20mb` limit are live. The permitted
+account returned `429` in a real image smoke, and `amadeus-image` used its
+existing Gemini **model** fallback rather than another Codex account. See
+`.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md` for exact
+image, preservation checks, protected rollback points and evidence. This
+maintenance does not change the DeliveryEnvelope phase or authorize its apply.
 
 ---
 

@@ -4,6 +4,9 @@ Date: 2026-09-30
 Type: runtime architecture cutover / structured reply hardening / media delivery correctness
 Canonical baseline: Git `main`; OpenClaw remains the sole Agent runtime.
 
+Historical-name references below describe retired code and audit/acceptance targets;
+they are not active implementation instructions after the source cutover.
+
 ## Operator decision
 
 This is a **one-time clean cutover**. Do not keep a compatibility layer, dual path, legacy fallback, output cleanup shim, or migration adapter for the retired reply/media protocol.
@@ -586,3 +589,55 @@ This Goal is complete only when all of the following are true:
 - Do not weaken current TTS/image asset/security invariants unrelated to this cutover.
 - Do not deploy until the `/goal` instruction explicitly permits apply; code completion and runtime apply remain distinct phases.
 - If the pinned OpenClaw API blocks a clean implementation, document the exact missing hook and implement the narrowest single typed integration boundary possible. Do not scatter edits across compiled bundles.
+
+## Source cutover evidence — 2026-09-30 (production pending)
+
+Historical mechanism names in this Goal are audit targets only. Git source phase
+replaces them; real WhatsApp Gates A–F and recipient SHA-256 remain open until
+the operator separately authorizes a protected production apply.
+
+### Phase 0 call-path map (read-only Git/live audit)
+
+- Git baseline at activation was `a0ef0c5` on `main`; the live OpenClaw image
+  observed before the source edits was healthy
+  `local/openclaw-amadeus:git-6311e21b412c-20260930044402`.
+  Subsequent independent 9Router changes were committed to `main` by another
+  user-authorized task and are not part of the delivery source cutover.
+- Old `voice-reply-prompt.ts` consulted the old parsed candidate, then
+  `reply-planner.ts` parsed a second time; on invalid structured reply it could
+  make the raw Agent string the visible text. The text/voice-only settlement
+  never owned attachments. The first defect lived at these decoder/settlement
+  boundaries, not in a missing trailing-JSON filter.
+- Normal native `image_generate` returned media paths; `image-assets.ts`
+  imported them to `imageId` but generic tool media extraction still queued the
+  paths for automatic/pending channel delivery. Upscale returned several path
+  and boolean presentation hints. The two retired scripts propagated them
+  through core tool-media extraction/merge/queue bundles and attempted to
+  strip structured JSON after it had already entered the visible payload.
+- Pinned WhatsApp `monitor-*.js` `createWhatsAppReplyPlan` deferred/flushed
+  media-only replies independently, and `deliverReply` used `media.kind` to
+  select Baileys `image` before document. The exact provider file primitive is
+  `transport.sendMedia({ document: originalBytes, mimetype, fileName })`;
+  inline uses `{ image: bytes, mimetype }`. The old boolean propagation could
+  not survive every merge/dispatch boundary. The new plan does not call the
+  native media coalescer, old extractions or MIME-first delivery branch.
+
+### Source gates / future runtime gates
+
+The source now uses one typed version-2 wire decoder (`delivery-decoder.ts`),
+run-owned tool results, one cross-channel settlement ledger, registry-backed
+asset validation, and source-owned WhatsApp/Telegram transport primitives. The
+WhatsApp 2026.9.4 integration restores its exact SHA-pinned upstream module
+and AST-replaces **one whole reply-plan function**; it rejects host/package
+version or digest drift and leaves no fallback to the old sender. Separate
+voice lease/typing/queue code remains transport-only. Existing owner outbox,
+ASR and image-service identities are unchanged.
+
+The source validation matrix comprises the focused decoder/contract/settlement,
+PNG/JPEG upscale, inline, path/symlink/hash, no duplicate tool media,
+Telegram, TTS failure and exact pinned module/primitive tests plus affected
+Amadeus build/typecheck, architecture/workflow fixtures, diff and secrets
+checks. A passing source gate is **not** a downloaded WhatsApp document proof;
+production apply and recipient-byte identity still require Gates A–F and an
+external rollback checkpoint. Never mark the whole Goal complete from source
+checks alone.

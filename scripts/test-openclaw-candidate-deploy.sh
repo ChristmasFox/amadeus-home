@@ -25,7 +25,7 @@ assert 'tar -C "$ROOT_DIR/scripts" -cf -' in s
 assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root' in s
 image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
 assert 'COPY scripts/openclaw-voice-*.mjs /tmp/' in image
-assert 'COPY scripts/patch-openclaw-tts-emotion.mjs /tmp/patch-openclaw-tts-emotion.mjs' in image
+assert 'COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary' in image
 assert '/tmp/openclaw-voice-*.mjs' in image
 assert 'Owner deployment notification remained pending after 30 seconds.' in s
 PY

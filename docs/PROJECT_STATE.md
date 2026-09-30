@@ -1,4 +1,36 @@
-# Project State — 2026-09-29
+# Project State — 2026-09-30
+
+## 9Router 0.5.91 upgrade and strict GPT Image account — deployed
+
+Independent of the pending OpenClaw DeliveryEnvelope release, CasaOS 9Router
+runs immutable image `local/9router:git-499d53576169-20260930T071137Z`
+from committed source `499d535`. `codex/gpt-image-2.5` now admits only the
+configured owner email even when other Codex connections remain enabled.
+The permitted account returned a usage-limit `429` in one authenticated live
+smoke; the router reported one permitted account locked and generated via the
+existing Gemini model fallback. No other Codex account was used. The Next.js
+standalone Server Actions body limit is `20mb`; a real >1 MB action upload has
+not yet been exercised. Sixteen account definitions, all aliases, and the
+`amadeus-image` Combo were preserved. Upgrade/policy checkpoints and rollback
+are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
+
+
+## DeliveryEnvelope v2 source cutover — production apply pending
+
+Git source now defines one v2 typed user-facing settlement across text, voice and
+registered image attachments. The retired text/voice-only contract and the two
+JSON/document workaround scripts are removed from source. The source 2026.9.4
+WhatsApp plan integration is an exact version/digest-pinned **single AST function
+boundary**, not a multi-bundle JSON sanitizer or disposition hint chain.
+
+**This is not production acceptance.** The canonical live OpenClaw remains on
+its previous immutable image and the current observed defects remain runtime
+risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A
+protected backup, checksum-pinned channel module replacement, health/smoke,
+received-file SHA-256/byte-size proof, and restart/recreate durability are all
+still outstanding. No production media or secrets were copied into Git.
+
+# Historical Project State — 2026-09-29
 
 ## 2026-09-29 Amadeus image assets and on-demand upscale — deployed; owner-channel acceptance pending
 

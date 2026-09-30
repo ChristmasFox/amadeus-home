@@ -100,15 +100,6 @@ test('Amadeus registers typed inbound identity context hooks', () => {
     { prompt: 'transcribed voice text', messages: [] },
     { channel: 'whatsapp', runId: 'voice-run', sessionKey: 'voice-session' },
   ) as { appendSystemContext?: string } | undefined;
-  assert.match(voicePrompt?.appendSystemContext ?? '', /one faithful, concise Chinese sentence/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /spoken audio MUST be\s+Japanese/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /even if the user asks\s+for Chinese speech/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /For typed input that does not explicitly request voice output, return/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /A typed request never impersonates the\s+verified inbound WhatsApp voice lease/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /Write the Japanese line with natural Japanese kanji, hiragana, and katakana/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /exactly the Japanese sentence shown on the 日本語 line/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /strict JSON object/u);
-  assert.match(voicePrompt?.appendSystemContext ?? '', /Return one strict JSON object with exactly visibleText, speechText, modality, and emotion/u);
   (globals[WHATSAPP_VOICE_RUNS_GLOBAL] as Map<string, unknown>).delete('voice-session');
   const typedPrompt = runHooks('before_prompt_build',
     { prompt: 'typed text', messages: [] },
@@ -119,9 +110,8 @@ test('Amadeus registers typed inbound identity context hooks', () => {
       inputProvenance: { kind: 'external_user' },
     },
   ) as { appendSystemContext?: string } | undefined;
-  assert.match(typedPrompt?.appendSystemContext ?? '', /structured reply planner/u);
-  assert.match(typedPrompt?.appendSystemContext ?? '', /"modality":"(?:text|voice)"/u);
-  assert.equal(typedPrompt?.appendSystemContext?.includes('one faithful, concise Chinese sentence'), true, 'typed turns receive the canonical Skill protocol');
+  assert.match(voicePrompt?.appendSystemContext ?? "", /"version":2/u);
+  assert.match(typedPrompt?.appendSystemContext ?? "", /structured reply planner/u);
   if (previousRegistry === undefined) delete globals[WHATSAPP_VOICE_RUNS_GLOBAL];
   else globals[WHATSAPP_VOICE_RUNS_GLOBAL] = previousRegistry;
 

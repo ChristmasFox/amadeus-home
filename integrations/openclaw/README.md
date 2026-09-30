@@ -72,14 +72,14 @@ capability over the existing 9Router OpenAI-compatible provider and SecretRef.
 One native `image_generate` call reaches 9Router; 9Router, not OpenClaw,
 performs ordered fallback from `cx/gpt-image-2.5` to
 `ag/gemini-3.1-flash-image`. The image Skill is provider-neutral and covers new-image
-generation only; reference-image editing parity is deferred. Native TTS uses
-`tts.auto=tagged`: a verified inbound voice note or a typed explicit voice
-request can emit the same `voice-reply` block and receive Japanese audio plus
-visible Japanese/Chinese text. Ordinary untagged typed replies stay text-only;
-`amadeus-tts`, `kurisu-v1`, MP3, the 1200-character cap, and the 120-second
-timeout remain unchanged. The inbound WhatsApp voice lease is still required
-for inbound-audio-specific prompt injection and is never synthesized by a
-typed request.
+generation only; reference-image editing parity is deferred. The source cutover disables OpenClaw generic automatic TTS (`tts.auto=off`).
+`DeliveryEnvelope v2` owns an explicit voice part and its sole `amadeus-tts`
+synthesis via the existing 9Router bridge. A verified WhatsApp inbound voice
+or a typed explicit voice request can receive Japanese audio and the explicit
+Chinese/Japanese visible text part; ordinary typed input remains text-only.
+`kurisu-v1`, MP3, the 1200-character cap, and bounded deadline remain.
+The inbound WhatsApp voice lease is a transport fact, never inferred from
+model text. Source is not live until a separately authorized apply.
 
 `workspace-seed/*.seed.md` files are Git-managed initial seeds only. Runtime
 state under `/DATA/AppData/openclaw/workspace` is authoritative: prepare/apply

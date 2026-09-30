@@ -1,10 +1,22 @@
-# Canonical context — 2026-09-29
+# Canonical context — 2026-09-30
 
 Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
-The active Goal is `docs/AMADEUS_KURISU_GPT_SOVITS_MPS_PRODUCTION_CUTOVER_GOAL.md`.
-The GPT-SoVITS MPS production apply is complete and real owner-channel
-acceptance is still required. Older Goal documents and checkpoints remain
-audit evidence, not live instructions.
+The active Goal is `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`
+per `docs/CURRENT_TASK.md`. Source cutover is in progress; production apply is
+not authorized, and owner WhatsApp Gates A–F remain open. The GPT-SoVITS MPS
+production apply below is historical runtime evidence, not a live instruction.
+Older Goal documents and checkpoints remain audit evidence.
+
+## Current Git/runtime boundary (2026-09-30)
+
+Git `main` defines the DeliveryEnvelope v2 source cutover; no production apply is
+authorized by this task. Read Git `main` and live runtime before any apply. The
+last read-only OpenClaw observation was the healthy immutable
+`local/openclaw-amadeus:git-6311e21b412c-20260930044402`, which does not yet
+contain the cutover. 9Router was upgraded under a separate explicitly
+authorized task; do not infer its live state from the older release snapshot.
+
+## Historical 2026-09-27 release snapshot (audit only)
 
 - Released product: `VERSION=1.6.5`, source release commit `fb7dd74` with
   final content/state documentation commit `6fb4926` on

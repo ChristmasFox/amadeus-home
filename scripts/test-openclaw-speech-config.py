@@ -36,8 +36,7 @@ audio = [x for x in media["models"] if "audio" in x.get("capabilities", [])]
 assert len(audio) == 1 and audio[0]["provider"] == "openai"
 assert audio[0]["model"] == "amadeus-asr" and audio[0]["baseUrl"] == provider["baseUrl"]
 assert media["audio"]["maxBytes"] <= 6 * 1024 * 1024
-# Native final-response TTS is separate from Agent-facing `tts` and
-# `message` tools. Both have produced redundant audio sends on 2026.9.4.
+# Typed delivery owns TTS; generic auto mode and Agent-facing TTS/message tools are disabled.
 assert c["tools"]["profile"] == "full"
 assert c["tools"].get("deny") == ["tts", "message"]
 assert c["tools"]["toolsBySender"]["*"].get("allow") == ["web_search", "web_fetch"]
@@ -47,8 +46,8 @@ user_seed = (ROOT / "integrations/openclaw/workspace-seed/USER.seed.md").read_te
 assert "Prefer Simplified Chinese for ordinary text replies." in user_seed
 assert "Prefer Japanese replies by default" not in user_seed
 speech = c["tts"]
-assert speech["auto"] == "tagged" and speech["mode"] == "final"
-assert speech["modelOverrides"] == {"enabled": True, "allowText": True, "allowProvider": False}
+assert speech["auto"] == "off" and speech["mode"] == "final"
+assert speech["modelOverrides"] == {"enabled": False}
 assert speech["providers"]["openai"]["baseUrl"] == provider["baseUrl"]
 assert speech["providers"]["openai"]["model"] == "amadeus-tts"
 assert speech["providers"]["openai"]["speakerVoice"] == "kurisu-v1"
@@ -67,7 +66,7 @@ for channel in ("whatsapp", "telegram"):
     ]}
 assert c["tools"]["toolsBySender"]["*"]["allow"] == ["web_search", "web_fetch"]
 voice_skill = (ROOT / "plugins/amadeus/skills/voice-reply/SKILL.md").read_text()
-assert "ReplyEnvelope" in voice_skill and '"modality": "voice"' in voice_skill
+assert "DeliveryEnvelope v2" in voice_skill and '"kind": "voice"' in voice_skill
 assert '"speechText"' in voice_skill and '"emotion"' in voice_skill
 assert "NO_REPLY" not in voice_skill and "reply-modality" not in voice_skill
 assert "verified inbound WhatsApp voice lease" in voice_skill

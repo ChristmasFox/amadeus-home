@@ -75,7 +75,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/patch-openclaw-tool-document-delivery.mjs|scripts/patch-openclaw-media-json-cleanup.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    integrations/openclaw/delivery-boundary/*|plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -283,12 +283,8 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
-  node --check scripts/patch-openclaw-tts-emotion.mjs
-  node --check scripts/patch-openclaw-tool-document-delivery.mjs
-  node --check scripts/patch-openclaw-media-json-cleanup.mjs
-  node scripts/test-patch-openclaw-tts-emotion.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
-  node scripts/test-reply-envelope-policy.mjs
+  node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
   node --check scripts/patch-openclaw-whatsapp-media-agent.mjs
@@ -322,7 +318,6 @@ PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
 MEDIA_AGENT_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-media-agent.mjs"
 VOICE_LIFECYCLE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs"
-TTS_EMOTION_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-tts-emotion.mjs"
 for source in \
   "$ROOT_DIR/infra/docker/casaos/openclaw/docker-compose.example.yml" \
   "$ROOT_DIR/infra/docker/casaos/product-radar/docker-compose.example.yml" \
@@ -334,7 +329,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$TTS_EMOTION_PATCH_RUNTIME" "$ROOT_DIR/scripts/patch-openclaw-tool-document-delivery.mjs" "$ROOT_DIR/scripts/patch-openclaw-media-json-cleanup.mjs"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
@@ -449,6 +444,17 @@ path.write_text('\n'.join(lines) + '\n')
 os.chmod(path, 0o600)
 print('MAC_CONTROL_PROFILE=installed')
 PY
+
+# One-time delivery cutover: protected checkpoint above precedes every write.
+# Restore the checksum-pinned pristine monitor, then install one typed boundary.
+# Old edits are not translated or propagated. Apply only occurs in this --apply path.
+tar -C "$ROOT_DIR/integrations/openclaw/delivery-boundary" -cf - install.mjs whatsapp-plan.js | \
+  orb -m "$MACHINE" -u root docker exec -i openclaw sh -ec '
+    tmp=$(mktemp -d /tmp/amadeus-delivery-boundary.XXXXXX)
+    trap "rm -rf $tmp" EXIT
+    tar -C "$tmp" -xf -
+    node "$tmp/install.mjs" --whatsapp-root /home/node/.openclaw/npm/projects --apply
+  '
 
 orb -m "$MACHINE" -u root docker exec -i openclaw node - \
   --whatsapp-root /home/node/.openclaw/npm/projects < "$PATCH_RUNTIME"
@@ -580,10 +586,10 @@ if config.get('tools', {}).get('sessions', {}).get('visibility') != 'self':
 if config.get('tools', {}).get('profile') != 'full':
     raise SystemExit('owner tool policy is not tools.profile=full')
 if config.get('tools', {}).get('deny') != ['tts', 'message']:
-    raise SystemExit('agent-facing TTS and generic message tools must be denied; native tagged TTS remains active')
+    raise SystemExit('agent-facing TTS and generic message tools must be denied; typed delivery owns speech')
 tts = config.get('tts', {})
-if tts.get('auto') != 'tagged' or tts.get('mode') != 'final' or tts.get('modelOverrides', {}).get('allowText') is not True:
-    raise SystemExit('native final tagged TTS must allow explicit audio-only text directives')
+if tts.get('auto') != 'off' or tts.get('modelOverrides', {}).get('enabled') is not False:
+    raise SystemExit('generic automatic TTS must be off; typed delivery owns synthesis')
 if 'allow' in config.get('tools', {}):
     raise SystemExit('strict tools.allow list would hide future native tools')
 if 'amadeus' not in config.get('plugins', {}).get('allow', []):

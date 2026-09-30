@@ -89,7 +89,7 @@ for path in "${FILES[@]-}"; do
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
     scripts/patch-openclaw-channel-identity.mjs) has_openclaw_deploy=1 ;;
-    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/test-patch-openclaw-tts-emotion.mjs|scripts/openclaw-voice-*.mjs|scripts/test-reply-envelope-policy.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs|plugins/amadeus/src/reply-envelope.ts|plugins/amadeus/src/reply-planner.ts|plugins/amadeus/src/reply-delivery.ts)
+    scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-delivery-boundary.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/test-openclaw-bilingual-voice.mjs|plugins/amadeus/src/delivery-*.ts)
       has_voice_patch=1
       ;;
     scripts/export-tts-performance-data.py|scripts/check-tts-performance-report.py|scripts/test-openclaw-docker-cache-order.py|scripts/test-openclaw-candidate-deploy.sh|scripts/test-openclaw-speech-config.py|scripts/test-openclaw-voice-image.sh|scripts/verify-voice.sh|scripts/accept-voice.sh) has_fast=1 ;;
@@ -196,8 +196,8 @@ if ((has_openclaw_deploy)); then
   bash -n scripts/test-openclaw-voice-image.sh
   printf '+ python3 scripts/test-openclaw-speech-config.py\n'
   python3 scripts/test-openclaw-speech-config.py
-  printf '+ node scripts/test-patch-openclaw-tts-emotion.mjs\n'
-  node scripts/test-patch-openclaw-tts-emotion.mjs
+  printf '+ node scripts/test-delivery-boundary.mjs\n'
+  node scripts/test-delivery-boundary.mjs
 fi
 if ((has_voice_patch)); then
   printf '+ pnpm verify:openclaw-patch\n'; pnpm verify:openclaw-patch
