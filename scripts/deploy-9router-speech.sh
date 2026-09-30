@@ -32,6 +32,8 @@ fi
 cd "$ROOT"
 [[ -z "$(git status --porcelain)" ]] || { echo 'Git must be clean for immutable image tag' >&2; exit 1; }
 node infra/docker/casaos/9router/test-asr-bridge.mjs >/dev/null
+node infra/docker/casaos/9router/test-tts-bridge.mjs >/dev/null
+node --check infra/docker/casaos/9router/tts-bridge.mjs
 node --check infra/docker/casaos/9router/start-9router.mjs
 pnpm check:secrets
 # Missing operator keys/config must fail *before* checkpoint, build or mutation.

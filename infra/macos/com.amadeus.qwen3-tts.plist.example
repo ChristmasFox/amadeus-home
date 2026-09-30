@@ -4,25 +4,15 @@
   <key>Label</key><string>com.amadeus.qwen3-tts</string>
   <key>ProgramArguments</key><array><string>__VENV_PYTHON__</string><string>__SERVICE_SCRIPT__</string></array>
   <key>EnvironmentVariables</key><dict>
-    <!-- Deliberate broad bind for OrbStack/9Router; all synthesis and inventory require Bearer auth. -->
-    <key>AMADEUS_TTS_BIND</key><string>0.0.0.0</string>
-    <key>AMADEUS_TTS_PORT</key><string>18792</string>
+    <key>AMADEUS_TTS_BIND</key><string>127.0.0.1</string>
+    <key>AMADEUS_TTS_PORT</key><string>18794</string>
     <key>AMADEUS_TTS_TOKEN_FILE</key><string>__TOKEN_FILE__</string>
     <key>AMADEUS_TTS_VOICE_DIR</key><string>__VOICE_DIR__</string>
     <key>AMADEUS_TTS_LOG_DIR</key><string>__LOG_DIR__</string>
     <key>AMADEUS_TTS_MODEL_PATH</key><string>__MODEL_PATH__</string>
     <key>AMADEUS_TTS_ENGINE</key><string>__TTS_ENGINE__</string>
     <key>AMADEUS_TTS_MLX_MODEL_PATH</key><string>__MLX_MODEL_PATH__</string>
-    <key>AMADEUS_TTS_OMINIX_MODEL_PATH</key><string>__OMINIX_MODEL_PATH__</string>
-    <key>AMADEUS_TTS_OMINIX_WORKER_PATH</key><string>__OMINIX_WORKER_PATH__</string>
-    <key>AMADEUS_TTS_STYLE_FILE</key><string>__STYLE_FILE__</string>
-    <key>AMADEUS_TTS_TUNER_ENABLED</key><string>1</string>
-    <!-- Owner-requested LAN UI endpoint; Host/Origin remain allowlisted in the tuner. -->
-    <key>AMADEUS_TTS_TUNER_BIND</key><string>0.0.0.0</string>
-    <key>AMADEUS_TTS_TUNER_ALLOWED_HOSTS</key><string>127.0.0.1,localhost,192.168.5.3</string>
-    <key>AMADEUS_TTS_TUNER_PORT</key><string>18793</string>
     <key>AMADEUS_TTS_MODEL_REVISION</key><string>e7dd0585652209fa0d7783659aad4e8a324de11c</string>
-    <key>AMADEUS_TTS_OMINIX_REVISION</key><string>4988a3fcfa48b8cb5d0780a501b92c6a41401523</string>
     <key>AMADEUS_TTS_RELEASE_VERSION</key><string>__RELEASE_VERSION__</string>
     <key>HF_HOME</key><string>__MODEL_CACHE__</string>
   </dict>

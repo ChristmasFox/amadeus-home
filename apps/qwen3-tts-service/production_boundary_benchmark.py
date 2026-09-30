@@ -160,7 +160,7 @@ def request_once(*, token: str, log_path: Path, text: str, fixture_id: str, leng
     status: int | None = None
     request_error: str | None = None
     try:
-        conn = http.client.HTTPConnection("127.0.0.1", 18792, timeout=timeout_s)
+        conn = http.client.HTTPConnection("127.0.0.1", 18794, timeout=timeout_s)
         try:
             conn.request("POST", "/v1/audio/speech", request, {
                 "Authorization": "Bearer " + token,
@@ -841,7 +841,7 @@ def concurrent_request(*, token: str, text: str, request_id: int, length: int, b
     try:
         barrier.wait(timeout=10)
         started = time.perf_counter()
-        conn = http.client.HTTPConnection("127.0.0.1", 18792, timeout=boundary.WATCHDOG_S)
+        conn = http.client.HTTPConnection("127.0.0.1", 18794, timeout=boundary.WATCHDOG_S)
         try:
             conn.request("POST", "/v1/audio/speech", body, {
                 "Authorization": "Bearer " + token, "Content-Type": "application/json", "Accept": "audio/mpeg",

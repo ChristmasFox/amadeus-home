@@ -20,7 +20,7 @@ Historical acceptance evidence is anchored around commit `c8f9261d1c093a8188db80
 Target provider order:
 
 ```text
-local Qwen3-TTS MLX :18792
+local Qwen3-TTS MLX :18794 (18792 is occupied by ImageAssets; Phase 0 collision exception)
   -> qwen-audio-3.1-tts-flash
   -> qwen-audio-3.0-tts-flash
 ```

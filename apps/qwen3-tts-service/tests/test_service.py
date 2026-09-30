@@ -28,16 +28,6 @@ class FakeEngine:
         return out.getvalue(), 24000, service.SynthesisTiming(1.0, 25.0, 2.0, 27.0)
 
 
-class EmotionEngine(FakeEngine):
-    def __init__(self):
-        super().__init__()
-        self.emotions = []
-
-    def synthesize_timed(self, text, emotion="default"):
-        self.emotions.append(emotion)
-        return super().synthesize_timed(text)
-
-
 class SpeechTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -81,20 +71,22 @@ class SpeechTest(unittest.TestCase):
             self.assertEqual(code, 400)
             self.assertEqual(json.loads(payload)["error"]["type"], expected)
 
-    def test_bounded_style_is_forwarded_and_arbitrary_style_rejected(self):
-        engine = EmotionEngine()
+    def test_local_clone_is_default_only_and_rejects_instruction_styles(self):
+        engine = FakeEngine()
         previous = self.server.engine
         self.server.engine = engine
         try:
             base = {"model": service.MODEL_ID, "voice": service.VOICE_ID, "input": "你好世界", "response_format": "wav"}
             code, _, _ = self.request("POST", "/v1/audio/speech", base | {"style": "soft"})
-            self.assertEqual(code, 200)
-            self.assertEqual(engine.emotions, ["soft"])
+            self.assertEqual(code, 400)
+            self.assertEqual(engine.calls, 0)
+            self.assertEqual(json.loads(self.request("GET", "/healthz")[2])["provider"], "qwen3-tts-mlx")
             code, _, payload = self.request("POST", "/v1/audio/speech", base | {"style": "free-form prompt"})
             self.assertEqual(code, 400)
-            self.assertEqual(json.loads(payload)["error"]["type"], "invalid_style")
+            self.assertEqual(json.loads(payload)["error"]["type"], "unsupported_style")
             alias_code, _, _ = self.request("POST", "/v1/audio/speech", base | {"model": "amadeus-tts"})
             self.assertEqual(alias_code, 200)
+            self.assertEqual(engine.calls, 1)
         finally:
             self.server.engine = previous
 

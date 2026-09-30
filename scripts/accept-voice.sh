@@ -34,7 +34,7 @@ if [[ "$ENGINE" == mlx ]]; then
   python3 "$ROOT/infra/macos/verify-qwen3-mlx-assets.py" \
     --root "$BASE/mlx-poc" --config "$ROOT/infra/macos/qwen3-tts-engine.json"
 fi
-/usr/bin/curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18792/healthz | python3 -c '
+/usr/bin/curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18794/healthz | python3 -c '
 import json,sys
 state=json.load(sys.stdin)
 if state.get("status")!="ready" or state.get("model")!="qwen3-tts-1.7b" or state.get("voice")!="kurisu-v1":raise SystemExit("TTS health/model/voice mismatch")

@@ -14,7 +14,7 @@ from typing import Any, Mapping, Sequence
 from production_boundary import parse_service_log_line
 
 LAUNCHD_LABEL = "com.amadeus.qwen3-tts"
-TTS_HEALTH_URL = "http://127.0.0.1:18792/healthz"
+TTS_HEALTH_URL = "http://127.0.0.1:18794/healthz"
 SERVICE_PATH = "/v1/audio/speech"
 GIB = 1024 ** 3
 MIB = 1024 ** 2
@@ -177,7 +177,7 @@ def appended_log_events(path: Path, start_offset: int) -> tuple[list[dict[str, A
 
 
 def check_host_route(machine: str, timeout_s: float = 20) -> bool:
-    js = ('fetch("http://host.docker.internal:18792/healthz",'
+    js = ('fetch("http://host.docker.internal:18794/healthz",'
           '{signal:AbortSignal.timeout(3000)}).then(async r=>{let x=await r.json();'
           'process.exit(r.status===200&&x.status==="ready"?0:1)}).catch(()=>process.exit(1))')
     try:
