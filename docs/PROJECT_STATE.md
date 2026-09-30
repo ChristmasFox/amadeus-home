@@ -2,9 +2,10 @@
 
 ## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed
 
-Runtime rebaseline is complete; final state documentation and push of the clean
-source are the remaining Phase 6 bookkeeping. Implementation/deployment source
-commit `0fdfdbb` and source cleanup commit `45f96a9` are local on `main`.
+Runtime rebaseline, destructive retirement cleanup, final state documentation,
+and push to canonical `main` are complete. Implementation/deployment source
+commit `0fdfdbb`, source cleanup commit `45f96a9`, and content-safe evidence
+commit `46d0b49` are pushed to `main`.
 Amadeus `VERSION=1.7.4` was not bumped.
 
 M204 now runs only the authenticated Qwen3-TTS MLX 1.7B Base / MLX 8-bit

@@ -4,7 +4,7 @@ Date: 2026-10-01 local.
 
 Active Goal: `docs/AMADEUS_QWEN3_TTS_MLX_REBASELINE_GOAL.md`.
 
-Status: `FINALIZATION_PENDING` — runtime gates A–G passed; final state documentation/source push is pending..
+Status: `COMPLETE` — runtime gates A–G passed, retired assets were removed, and clean source/evidence are pushed to canonical `main`..
 
 The owner wants the production voice path returned to the previously accepted A/MLX/Auto baseline because that configuration produced the preferred Kurisu voice quality:
 
