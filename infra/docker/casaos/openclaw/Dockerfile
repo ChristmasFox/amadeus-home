@@ -84,6 +84,9 @@ COPY plugins/pubg/README.md /app/dist/extensions/pubg/README.md
 COPY plugins/pubg/skills /app/dist/extensions/pubg/skills
 COPY plugins/amadeus/dist/index.js /app/dist/extensions/amadeus/dist/index.js
 COPY plugins/amadeus/dist/index.js.map /app/dist/extensions/amadeus/dist/index.js.map
+# A private control-host umask must not make the bundled plugin unreadable
+# by the non-root OpenClaw process. No secrets are part of these code artifacts.
+RUN chmod 0644 /app/dist/extensions/amadeus/dist/index.js /app/dist/extensions/amadeus/dist/index.js.map
 COPY plugins/amadeus/openclaw.plugin.json /app/dist/extensions/amadeus/openclaw.plugin.json
 COPY plugins/amadeus/README.md /app/dist/extensions/amadeus/README.md
 COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
