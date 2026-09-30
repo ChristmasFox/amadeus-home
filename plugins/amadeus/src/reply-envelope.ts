@@ -212,9 +212,17 @@ export function parseStructuredReply(value: unknown): {
 
 export function parseStructuredReplyJson(value: unknown): ReturnType<typeof parseStructuredReply> {
   if (typeof value !== 'string') return parseStructuredReply(value);
-  try {
-    return parseStructuredReply(JSON.parse(value));
-  } catch {
-    return null;
+  const candidates = [value.trim()];
+  const start = value.indexOf('{');
+  const end = value.lastIndexOf('}');
+  if (start >= 0 && end > start) candidates.push(value.slice(start, end + 1));
+  for (const candidate of candidates) {
+    try {
+      const parsed = parseStructuredReply(JSON.parse(candidate));
+      if (parsed) return parsed;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
