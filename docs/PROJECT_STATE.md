@@ -41,6 +41,15 @@ remains healthy. The source build/image now set code artifact permissions 0644
 and explicitly verify uid-1000 readability before a runtime write. Evidence:
 `.agent/checkpoints/2026-09-30-delivery-envelope-second-apply-failure.md`.
 
+The third candidate passed non-root readability and pinned module install but
+stopped before switch at an out-of-process CLI inspector that also fails on the
+previous healthy image. The Gateway's own startup log shows Amadeus registered
+in that baseline. Checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930081212` restored all
+staged definitions and previous WhatsApp module; the source now gates on real
+Gateway registration immediately after health. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-third-apply-failure.md`.
+
 The canonical live OpenClaw remains on
 its previous immutable image and the current observed defects remain runtime
 risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A

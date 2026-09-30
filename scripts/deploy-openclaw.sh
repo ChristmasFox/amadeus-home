@@ -561,7 +561,13 @@ else
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect amadeus --runtime --json > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
+
+# The pinned 2026.9.4 CLI inspector is a false negative for this bundled
+# extension under a mounted config even on the currently healthy old image.
+# Read the candidate image's bundled manifest as uid 1000 before switch; then
+# require real Gateway startup registration immediately after health.
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --entrypoint node openclaw -e 'const p = require(\"/app/dist/extensions/amadeus/openclaw.plugin.json\"); console.log(JSON.stringify({id:p.id,tools:p.contracts?.tools??[]}))' > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json'"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR/plugin-pubg-preflight.json" "$CHECKPOINT_DIR/plugin-amadeus-preflight.json" "$CHECKPOINT_DIR/skills-preflight.json" <<'PY'
@@ -648,6 +654,10 @@ for attempt in $(seq 1 40); do
   sleep 2
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+started_at="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.StartedAt}}')"
+registration_count="$(orb -m "$MACHINE" -u root docker logs --since "$started_at" openclaw 2>&1 | grep -F -c 'amadeus native capability plugin registered' || true)"
+[[ "$registration_count" =~ ^[0-9]+$ && "$registration_count" -ge 1 ]] || fail 'Amadeus plugin did not register in the live Gateway; restore the protected checkpoint.'
+printf 'AMADEUS_GATEWAY_REGISTRATION=passed\n'
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null
 if ((MEDIA_ADAPTER_PRESENT)); then
   orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null

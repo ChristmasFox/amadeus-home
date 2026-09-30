@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_AFTER_NONROOT_PREFLIGHT` (no successful OpenClaw switch yet).
+Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_AFTER_PINNED_CLI_DIAGNOSIS` (no successful OpenClaw switch yet).
 
 The Git source implements the typed v2 contract, one structured decoder and
 one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
@@ -28,6 +28,16 @@ config and the WhatsApp monitor; the old image is healthy and TTS config is
 again `tagged`. Source now explicitly sets plugin bundle 0644 and checks
 node-user image readability before runtime writes. See
 `.agent/checkpoints/2026-09-30-delivery-envelope-second-apply-failure.md`.
+
+A third candidate passed image readability and pinned WhatsApp installation,
+but the out-of-process Amadeus CLI inspector blocked before switch. The **same**
+CLI inspector fails on the previous healthy image, whose running Gateway logs
+show actual Amadeus registration. Third protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930081212` restored all
+staged definitions/config and the old WhatsApp module. Deployment now checks
+candidate image/manifest before switch and **real Gateway registration** after
+health; any missing registration remains a hard failure with rollback. See
+`.agent/checkpoints/2026-09-30-delivery-envelope-third-apply-failure.md`.
 
 **Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
