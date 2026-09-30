@@ -29,8 +29,10 @@ assert 'COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-bound
 assert 'RUN chmod 0644 /app/dist/extensions/amadeus/dist/index.js' in image
 assert 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed' in s
 assert 'AMADEUS_GATEWAY_REGISTRATION=passed' in s
-assert 'plugins inspect amadeus --runtime --json' not in s
-assert 'amadeus_skill_unreadable' in s
+assert 'plugins inspect amadeus --runtime --json' in s
+assert 'plugins registry --refresh --json' in s
+assert 'openclaw-state.sqlite.before' in s
+assert 'sqlite3.connect' in s
 assert '/tmp/openclaw-voice-*.mjs' in image
 assert 'Owner deployment notification remained pending after 30 seconds.' in s
 PY

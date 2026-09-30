@@ -357,6 +357,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$RADAR_ENV_FILE" product-radar.env.before \
   "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml \
   "$OPENCLAW_DATA_DIR/config/openclaw.json" openclaw-config.before.json \
+  "$OPENCLAW_DATA_DIR/config/state/openclaw.sqlite" openclaw-state.sqlite.before \
   "$OPENCLAW_DATA_DIR/openclaw.env" openclaw.env.before \
   "$OPENCLAW_DATA_DIR/secrets" openclaw-secrets.before \
   "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
@@ -368,7 +369,7 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before \
   "$OPENCLAW_DATA_DIR/config/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
-import hashlib, json, os, shutil, stat, subprocess, sys
+import hashlib, json, os, shutil, sqlite3, stat, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
 checkpoint = Path(sys.argv[1])
@@ -383,7 +384,14 @@ for i in range(0, len(args), 2):
     source, destination = Path(args[i]), checkpoint / args[i + 1]
     if not source.exists(): continue
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if source.is_dir(): shutil.copytree(source, destination, symlinks=True)
+    if source.name == 'openclaw.sqlite':
+        if source.is_symlink(): raise SystemExit('OpenClaw state SQLite path must not be a symlink')
+        live = sqlite3.connect('file:' + str(source) + '?mode=ro', uri=True, timeout=15)
+        saved = sqlite3.connect(str(destination))
+        try: live.backup(saved)
+        finally: saved.close(); live.close()
+        os.chmod(destination, 0o600)
+    elif source.is_dir(): shutil.copytree(source, destination, symlinks=True)
     else: shutil.copy2(source, destination)
 containers = {}
 for name in ['openclaw','product-radar','media-organizer-adapter','changedetection','9router']:
@@ -397,7 +405,7 @@ for i in range(0, len(args), 2):
         item['kind'] = 'directory' if source.is_dir() else 'file'
         item['mode'] = oct(source.stat().st_mode & 0o777)
         item['size'] = sum(path.stat().st_size for path in source.rglob('*') if path.is_file()) if source.is_dir() else source.stat().st_size
-        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json', 'longbridge-sdk-home'} or 'secrets' in source.parts
+        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json', 'longbridge-sdk-home', 'openclaw.sqlite'} or 'secrets' in source.parts
         if not sensitive and source.is_file():
             digest = hashlib.sha256()
             with source.open('rb') as stream:
@@ -561,14 +569,22 @@ else
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
 orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
+# Rebuild the pinned host's persisted plugin index from the candidate image
+# after a consistent state SQLite backup, but before any plugin/Skill preflight
+# or container switch. A stale index can omit a healthy Amadeus bundle.
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins registry --refresh --json > '$CHECKPOINT_DIR/plugin-registry-refresh.json' && chmod 600 '$CHECKPOINT_DIR/plugin-registry-refresh.json'"
+orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/plugin-registry-refresh.json" <<'PY'
+import json,sys
+from pathlib import Path
+result=json.loads(Path(sys.argv[1]).read_text())
+registry=result.get('registry') or {}
+if result.get('refreshed') is not True or result.get('state') != 'fresh': raise SystemExit('plugin_registry_refresh_failed')
+if not any(row.get('pluginId') == 'amadeus' for row in registry.get('plugins', [])): raise SystemExit('amadeus_missing_from_refreshed_registry')
+if any(row.get('pluginId') == 'amadeus' for row in registry.get('diagnostics', [])): raise SystemExit('amadeus_registry_diagnostic_remains')
+print('PLUGIN_REGISTRY_REFRESH=passed')
+PY
 
-# The pinned 2026.9.4 CLI inspector is a false negative for this bundled
-# extension under a mounted config even on the currently healthy old image.
-# Read the candidate image's bundled manifest and every scoped Skill as uid
-# 1000 before switch; then require real Gateway startup registration after
-# health. CLI Skill listing can share that out-of-process false negative.
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose run --rm --no-deps --entrypoint node openclaw -e 'const fs = require(\"node:fs\"); const path = require(\"node:path\"); const root = \"/app/dist/extensions/amadeus\"; const p = JSON.parse(fs.readFileSync(path.join(root,\"openclaw.plugin.json\"),\"utf8\")); const skills = (p.skills??[]).map(s=>{ const f = path.resolve(root,s,\"SKILL.md\"); if(!f.startsWith(root+\"/skills/\") || !fs.readFileSync(f,\"utf8\").trim()) throw Error(\"amadeus_skill_unreadable\"); return s; }); console.log(JSON.stringify({id:p.id,tools:p.contracts?.tools??[],skills}))' > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json'"
+orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose config >/dev/null && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js config validate --json > '$CHECKPOINT_DIR/config-validate.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect pubg --runtime --json > '$CHECKPOINT_DIR/plugin-pubg-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js plugins inspect amadeus --runtime --json > '$CHECKPOINT_DIR/plugin-amadeus-preflight.json' && docker compose run --rm --no-deps --entrypoint node openclaw dist/index.js skills list --json > '$CHECKPOINT_DIR/skills-preflight.json'"
 
 orb -m "$MACHINE" -u root python3 - \
   "$CHECKPOINT_DIR/plugin-pubg-preflight.json" "$CHECKPOINT_DIR/plugin-amadeus-preflight.json" "$CHECKPOINT_DIR/skills-preflight.json" <<'PY'
@@ -581,9 +597,8 @@ for name in ['pubg_resolve_players','pubg_search_matches','pubg_query_stats','pu
     if name not in pubg: raise SystemExit('PUBG preflight missing ' + name)
 for name in ['amadeus_product_radar','amadeus_media_organize','amadeus_nas','amadeus_homelab_status','amadeus_kook_group_members','amadeus_market_overview','amadeus_market_quote','amadeus_market_intraday','amadeus_market_session','amadeus_market_movers','amadeus_market_constituents','amadeus_macos_host_status','amadeus_macos_host_processes','amadeus_image_upscale','identity_resolve','identity_get_person','identity_bind_channel','identity_add_alias','identity_link_account','identity_list_candidates','identity_confirm_candidate','amadeus_notify_owner','amadeus_vps_service_info','amadeus_vps_live_status','amadeus_vps_usage','amadeus_vps_system_status','amadeus_vps_services']:
     if name not in amadeus: raise SystemExit('Amadeus preflight missing ' + name)
-for name in ['amadeus','voice-reply','market','macos-host','image-upscale','vps']:
-    if 'skills/' + name not in amadeus: raise SystemExit('bundled Amadeus Skill unreadable ' + name)
-if '"name": "pubg"' not in skills: raise SystemExit('bundled PUBG Skill missing')
+for name in ['pubg','amadeus','voice-reply','market','macos-host','image-upscale','vps']:
+    if '"name": "' + name + '"' not in skills: raise SystemExit('bundled Skill missing ' + name)
 print('OPENCLAW_PREFLIGHT=passed')
 PY
 

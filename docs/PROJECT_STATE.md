@@ -59,6 +59,18 @@ bundle/Skill readability before switching, then real Gateway registration and
 health immediately afterward. Evidence:
 `.agent/checkpoints/2026-09-30-delivery-envelope-fourth-apply-failure.md`.
 
+A fifth candidate briefly replaced OpenClaw but had no real Amadeus
+registration, so the previous immutable image/config/module were restored from
+checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930085757`.
+After restart, the old image also lacked Amadeus because a persisted SQLite
+plugin index contained 63 entries without it. A separately protected,
+consistent DB backup precedes the official registry refresh; the rebuilt
+64-entry index includes Amadeus with no diagnostic. The old Gateway then
+registered Amadeus twice on startup, its Skills returned, and health passed.
+Source deployment now backs up this SQLite state and refreshes the index
+before strict candidate plugin/Skill and post-switch Gateway gates. Evidence:
+`.agent/checkpoints/2026-09-30-amadeus-plugin-registry-recovery.md`.
+
 The canonical live OpenClaw remains on
 its previous immutable image and the current observed defects remain runtime
 risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A
