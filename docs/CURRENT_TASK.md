@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_UPSCALE_4X_OWNER_ACCEPTANCE_PENDING` (Goal open).
+Status: `CANDIDATE_LIVE_4X_DOCUMENT_SENT_RECIPIENT_HASH_PENDING` (Goal open).
 
 The prior candidate `git-675d5fb` was replaced by the new healthy single
 OpenClaw runtime `git-682c69a375b6-20260930110631`; Amadeus is
@@ -23,8 +23,11 @@ plugin/service boundary. A bounded explicit multiplier constraint is now deploye
 verification and a protected candidate apply. Checkpoint:
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930110631`; external
 evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930110631`.
-A fresh real owner 4x request and
-recipient file verification are required; do not claim Gate completion yet.
+A real owner 4x retest succeeded at the tool/host/sender boundary: despite
+the Agent proposing `scale:2`, the native constraint sent `scale:4`; the host
+produced 3412×7376 PNG (26,037,181 bytes), SHA-256 matching its own
+registry, and one document attachment settled as `sent`. The recipient-
+downloaded file hash remains unverified; do not claim full Gate completion.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
