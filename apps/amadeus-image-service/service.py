@@ -145,7 +145,7 @@ def validate_image_id(value: str) -> str:
 
 def validate_scale(value: Any) -> int:
     if value is None:
-        return 4
+        return 2
     if value not in {2, 4}:
         raise ServiceError("scale_must_be_2_or_4", status=422)
     return int(value)

@@ -33,6 +33,20 @@ remain historical evidence only. Do not restore `llm_input/historyMessages`
 recovery or retired pending/automatic media senders. Production is currently
 on the corrective candidate; any rollback must use the protected checkpoint.
 
+## Separate request — upscale default 2x (source committed; live apply pending)
+
+The requested default is now 2x in the Amadeus tool boundary and host image
+service source; an explicitly identified current-turn user 4x request remains
+4x. The tool ignores model-supplied scale when trusted current-turn scale
+metadata is absent, so a model-proposed 4x cannot defeat the 2x default. Focused
+DeliveryEnvelope/Amadeus tests, host service tests, typecheck/build, diff check
+and secrets scan passed. No runtime apply was requested/performed for this delta:
+the current OpenClaw immutable image and installed Mac LaunchAgent still run the
+previous 4x-default code. To make it live, deploy the new OpenClaw plugin image
+and apply the host image service source through its explicit `--apply install`
+path. Do not claim the live default changed until both runtime components are
+updated and verified.
+
 ## Earlier attempts and plugin-index recovery (historical audit only)
 
 **Authorized apply in progress:** first candidate stopped before Compose switch;
