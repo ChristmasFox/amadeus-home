@@ -33,3 +33,21 @@ Gateway registration, health/NAS and owner outbox passed. Product Radar,
 owner image generation: a new inbound request must show generation completion,
 one inline attachment and no duplicate automatic sender. Recipient hash and
 other DeliveryEnvelope Goal gates remain open.
+
+## Real owner generation gate failed (21:42–21:44 local)
+
+The owner reported no generated picture. The native `image_generate` tool was
+actually invoked at 21:42:15 and returned its background-task start receipt.
+9Router primary image generation returned 429; the configured Gemini image
+fallback succeeded at 21:43:03. The verified inter-session completion user
+turn carried one `image/jpeg` image content part (plus runtime text); no
+corresponding generated asset was imported into the Amadeus registry, and no
+inline DeliveryEnvelope was settled. The first completion Agent run ended on
+`Stream ended without finish_reason`/LLM request timeout. A subsequent run
+stopped but the plugin logged `amadeus envelope preparation failed closed`.
+The exact inner exception is not logged by the current source; it cannot be
+asserted from this evidence whether typed payload attachments were absent,
+asset import failed, or the completion route was missing. Do not claim that
+the source repair passed the real gate. The current candidate remains healthy
+for DM/upscale, but normal image generation is unaccepted. No user content,
+image bytes, personal identifiers or paths are stored here.
