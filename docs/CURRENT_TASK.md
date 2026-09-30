@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `SOURCE_CUTOVER_COMPLETE_AWAITING_PRODUCTION_APPLY` (no production apply).
+Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY` (no successful OpenClaw switch yet).
 
 The Git source implements the typed v2 contract, one structured decoder and
 one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
@@ -12,7 +12,14 @@ integration, and no independent Amadeus auto/pending tool-media sender. Source
 checks and the scoped Git commit must pass before treating this source phase
 as complete. Production still runs the previous immutable image.
 
-**Next authorized phase:** only after a separate explicit `--apply`, take a
+**Authorized apply in progress:** first candidate stopped before Compose switch;
+the old config was restored from protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930074729`, and the old
+immutable image is healthy. The pinned npm installer now invokes the existing
+Node binary directly; retry only from a new committed source, new immutable
+image and new protected checkpoint. Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
+
+**Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
 restore the pinned WhatsApp module and install the typed plan, switch CasaOS,
 run health/smoke and real owner-channel Gates A–F. Download both PNG/JPEG upscale

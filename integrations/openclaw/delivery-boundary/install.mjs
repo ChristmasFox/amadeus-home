@@ -43,7 +43,11 @@ export async function upstream(archive) {
     else {
       // npm respects the control host's declared HTTPS proxy. The archive is
       // verified before any persistent file is touched, including npm mirrors.
-      execFileSync('npm', ['pack', '@openclaw/whatsapp@2026.9.4', '--ignore-scripts', '--silent', '--pack-destination', temp], { stdio: 'pipe', timeout: 120000, maxBuffer: 65536 });
+      const npmCli = join(dirname(process.execPath), '../lib/node_modules/npm/bin/npm-cli.js');
+      // The pinned image runs Node through a private glibc loader. Invoking the
+      // npm shebang via /usr/bin/env inherits that loader and breaks system
+      // binaries; launch its JS CLI with the already-working Node executable.
+      execFileSync(process.execPath, [npmCli, 'pack', '@openclaw/whatsapp@2026.9.4', '--ignore-scripts', '--silent', '--pack-destination', temp], { stdio: 'pipe', timeout: 120000, maxBuffer: 65536 });
       const bytes = await readFile(join(temp, 'openclaw-whatsapp-2026.9.4.tgz'));
       if (bytes.length > 32 * 1024 * 1024) throw new Error('pinned_whatsapp_archive_limit');
       await writeFile(path, bytes);

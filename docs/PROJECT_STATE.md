@@ -23,7 +23,16 @@ JSON/document workaround scripts are removed from source. The source 2026.9.4
 WhatsApp plan integration is an exact version/digest-pinned **single AST function
 boundary**, not a multi-bundle JSON sanitizer or disposition hint chain.
 
-**This is not production acceptance.** The canonical live OpenClaw remains on
+**This is not production acceptance.** The first authorized candidate apply built
+a new immutable image but stopped before the Compose switch because the pinned
+container Node private-glibc environment could not execute npm via its shebang.
+The old config was restored from protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930074729`; the live
+container remains the previous healthy immutable image. The source installer
+was corrected and the next retry requires a new committed image/checkpoint.
+See `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
+
+The canonical live OpenClaw remains on
 its previous immutable image and the current observed defects remain runtime
 risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A
 protected backup, checksum-pinned channel module replacement, health/smoke,
