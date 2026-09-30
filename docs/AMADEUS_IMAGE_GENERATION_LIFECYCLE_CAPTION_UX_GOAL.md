@@ -385,7 +385,7 @@ if generation_failed -> fixed sentence B
 
 A short deterministic fallback is allowed only for failure of the semantic/persona generation boundary and must remain isolated as fallback presentation, not routing/business logic.
 
-For the success caption, favor concise natural commentary appropriate for an image caption. Do not produce long essays that obscure the image.
+For the success caption, let Kurisu choose her natural wording and length from the actual image; do not use a canned success phrase or a fixed application word-count target. The typed caption contract still enforces the native provider/channel maximum (currently 1024 characters) and rejects protocol output; this transport limit is not a Kurisu style quota.
 
 ## Telemetry
 

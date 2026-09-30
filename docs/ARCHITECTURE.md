@@ -78,7 +78,7 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 - 成功只从 OpenClaw persisted `attachments[]` 导入 asset registry。CaptionEnricher 用已注册、
   已校验的实际生成图片调用 OpenClaw multimodal image-understanding API，最多带 480 字符
   原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；其 typed
-  输出仅为 `{ caption: string }`。请求有严格 timeout，输出规范化并拒绝 JSON/protocol。
+  输出仅为 `{ caption: string }`。Kurisu 自然决定措辞/篇幅，不设置应用层字数目标；只遵守原生 caption 最大长度（1024 字符）。请求有严格 timeout，输出规范化并拒绝 JSON/protocol。
   Caption 超时、模型错误、无效结果或不可用都转成确定性安全 fallback；caption 不会阻断图片
   settlement，也不再调用第二个模型作 fallback。
 - WhatsApp inline image+caption 通过同一次 `transport.sendMedia({ image, mimetype, caption })`

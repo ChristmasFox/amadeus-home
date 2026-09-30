@@ -23,6 +23,8 @@ test('caption enrichment sees the registered generated image and bounded request
     assert.deepEqual(result, { caption:'海辺で風に髪をなびかせてるわね。' });
     assert.equal(args.filePath, f.filePath); assert.equal(args.mime, 'image/png');
     assert.ok(args.prompt.includes('Kurisu is sharp'));
+    assert.ok(args.prompt.includes('fixed word-count target'));
+    assert.ok(args.prompt.includes('Let Kurisu choose her wording and natural length'));
     assert.ok(args.prompt.length < 8_000); assert.ok(!args.prompt.includes('a'.repeat(900)));
     assert.equal(args.timeoutMs, 7_000);
   } finally { await rm(f.root, { recursive:true, force:true }); }

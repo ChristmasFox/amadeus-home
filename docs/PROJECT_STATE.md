@@ -13,8 +13,9 @@ acknowledgement.
 
 On success, only OpenClaw's persisted generated `attachments[]` are imported to the asset registry. A
 bounded multimodal CaptionEnricher receives the verified registered image path and current Kurisu
-workspace persona; it returns only `{ caption }`. Timeout/model error/invalid/unavailable captions use a
-safe deterministic fallback and never block the image. DeliveryEnvelope v2 attachment caption is bounded
+workspace persona and lets Kurisu choose natural wording without a fixed word-count target; the native
+caption limit is 1024 characters. It returns only `{ caption }`. Timeout/model error/invalid/unavailable
+captions use a safe deterministic fallback and never block the image. DeliveryEnvelope v2 attachment caption is bounded
 normalized presentation data; WhatsApp maps inline image+caption to one native
 `sendMedia({image, mimetype, caption})` call. Telegram maps through native `sendPhoto` caption.
 `document` remains a document.
