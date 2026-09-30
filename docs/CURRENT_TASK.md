@@ -7,15 +7,15 @@ Parent architecture: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
 Status: `CANDIDATE_APPLIED_REAL_OWNER_GATES_PENDING` (source committed; Goal open).
 
-The protected candidate image `local/openclaw-amadeus:git-853371376e58-20260930152245`
-was built from source commit `853371376e58b0b049265b61d4fffe16e12f30e3` and
+The protected candidate image `local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`
+was built from source commit `d7f2847d82f4f1dc15f84589a8a5907890992cae` and
 applied to the single CasaOS OpenClaw on OrbStack `nyannyan`. OpenClaw and
 Product Radar health passed; Amadeus registered at Gateway startup. The
 protected external checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930152245`; deploy
-summary/evidence is under
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930152245/deployment-summary.md`.
-No production release/version bump was performed.
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930154020`; deploy
+summary/evidence is at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930154020/deployment-summary.md`.
+No product-version release/bump was performed.
 
 The pinned OpenClaw 2026.9.4 `wakeMediaGenerationTaskCompletion(params)`
 boundary now claims successful `image_generation` structured attachments
@@ -33,19 +33,20 @@ remain historical evidence only. Do not restore `llm_input/historyMessages`
 recovery or retired pending/automatic media senders. Production is currently
 on the corrective candidate; any rollback must use the protected checkpoint.
 
-## Separate request — upscale default 2x (source committed; live apply pending)
+## Separate request — upscale default 2x (candidate applied)
 
 The requested default is now 2x in the Amadeus tool boundary and host image
 service source; an explicitly identified current-turn user 4x request remains
 4x. The tool ignores model-supplied scale when trusted current-turn scale
-metadata is absent, so a model-proposed 4x cannot defeat the 2x default. Focused
-DeliveryEnvelope/Amadeus tests, host service tests, typecheck/build, diff check
-and secrets scan passed. No runtime apply was requested/performed for this delta:
-the current OpenClaw immutable image and installed Mac LaunchAgent still run the
-previous 4x-default code. To make it live, deploy the new OpenClaw plugin image
-and apply the host image service source through its explicit `--apply install`
-path. Do not claim the live default changed until both runtime components are
-updated and verified.
+metadata is absent, so a model-proposed 4x cannot defeat the 2x default. Focused DeliveryEnvelope/Amadeus tests, host service tests, typecheck/build,
+diff check and secrets scan passed. Candidate image and Mac host LaunchAgent are
+now updated and verified. OpenClaw health and Amadeus registration passed; host
+service health is ready and the installed code returns 2 for omitted scale and
+4 for explicit 4. The image service install had a transient launchctl bootstrap
+exit 5; retry succeeded and service health recovered. No actual image was
+upscaled as a live smoke. Checkpoints: `.agent/checkpoints/2026-09-30-upscale-default2-candidate-applied.md`,
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930154020`, and
+`/Volumes/Avalon/backups/operation-skuld/image-service/amadeus-image-service-default2x-20260930T154020Z`.
 
 ## Earlier attempts and plugin-index recovery (historical audit only)
 

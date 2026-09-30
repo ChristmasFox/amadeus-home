@@ -18,13 +18,13 @@ are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 ## Amadeus image generation background completion — corrective candidate applied; owner gates pending
 
 The healthy single OpenClaw runtime uses immutable candidate image
-`local/openclaw-amadeus:git-853371376e58-20260930152245`, built from committed
-source `853371376e58b0b049265b61d4fffe16e12f30e3`. OpenClaw and Product Radar
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`, built from committed
+source `d7f2847d82f4f1dc15f84589a8a5907890992cae`. OpenClaw and Product Radar
 health passed, Amadeus registered, and the deployment's NAS read-only and owner
 outbox smokes passed. Protected checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930152245`. Deployment
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930154020`. Deployment
 evidence path:
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930152245/deployment-summary.md`.
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930154020/deployment-summary.md`.
 This is a candidate apply, not a version release or owner-channel acceptance.
 
 The corrective source is committed in `351b33e` and the exact-pinned handler
@@ -47,6 +47,17 @@ apply. Real owner WhatsApp tests for fallback success, LLM-independent delivery,
 retry behavior, subsequent upscale, document integrity and text/voice regressions
 remain required; the image-generation Goal is open until those gates have real
 evidence. See `.agent/checkpoints/2026-09-30-image-background-completion-candidate.md`.
+
+## Upscale default changed to 2x — candidate applied
+
+The requested 2x default is deployed in both runtime boundaries. OpenClaw uses
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`; the host image service
+LaunchAgent was updated from Git source and is running/healthy. Runtime code
+verification confirms omitted scale -> 2 and explicit scale 4 -> 4. The Amadeus
+plugin defaults to 2 from trusted current-turn metadata and preserves explicit
+user 4x; model-proposed 4x cannot override the default. No actual image was
+upscaled as a production smoke. Protected rollback points and evidence are in
+`.agent/checkpoints/2026-09-30-upscale-default2-candidate-applied.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
