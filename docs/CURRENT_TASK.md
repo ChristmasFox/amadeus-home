@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_IMAGE_PRELLM_OWNER_GATE_PENDING` (Goal open).
+Status: `CANDIDATE_LIVE_IMAGE_PRELLM_GATE_FAILED` (Goal open).
 
 The healthy single OpenClaw runtime now uses pre-LLM image settlement candidate
 `git-0bccf10fed16-20260930142414` (retaining default 4x); Amadeus is
@@ -56,8 +56,10 @@ waited until after a second LLM call for outbound attachment metadata; that
 call timed out or produced unusable output. Source now registers trusted
 completion image bytes and settles an attachment-only v2 envelope at the
 pre-LLM input hook. The later model reply is canceled for this completion;
-focused tests, source commit and protected candidate apply passed. Real
-WhatsApp acceptance remains pending. Evidence:
+focused tests, source commit and protected candidate apply passed, but real
+WhatsApp acceptance failed: the later completion was text-only with a native
+generated-media reference, not a typed image part. No asset was imported or
+inline image sent. Synthetic typed-image tests did not model this shape. Evidence:
 `.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient

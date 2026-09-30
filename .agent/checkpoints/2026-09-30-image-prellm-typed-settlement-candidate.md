@@ -31,3 +31,19 @@ Radar and host image service were not switched. A fresh real owner ordinary
 image-generation request is still required to prove provider completion,
 one inline settlement, no duplicate and recipient visibility. Other Goal
 gates remain open.
+
+## Real owner retry failed (22:26–22:28 local)
+
+The owner did not receive an image. Native `image_generate` was invoked and
+returned a background start receipt. The 9Router primary again returned 429,
+and the configured Gemini image fallback succeeded. The Agent then made a
+second `image_generate` call and an `exec` call; the eventual trusted
+inter-session completion persisted as text-only with a generated-media
+reference, not a typed image content part. The pre-LLM typed-image hook
+therefore had no bytes to claim, no generated Amadeus registry asset appeared,
+and no inline settlement occurred. At 22:27:22 an Amadeus run settled silent.
+The synthetic hook test used a typed image content part, which was not this
+real completion shape; it did not prove the production path. The candidate
+is healthy but fails real image generation. Do not re-enable the retired
+pending media sender as a workaround. No message bodies, generated media
+references, identifiers or secrets are retained in Git.
