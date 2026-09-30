@@ -5,13 +5,14 @@ import {registerImageAssets,explicitUpscaleScale} from '../src/image-assets.js';
 
 test('explicit multiplier is a bounded parameter constraint, not a 4K resolution guess',()=>{
  assert.equal(explicitUpscaleScale('把刚才私聊的图超分 4x'),4);
+ assert.equal(explicitUpscaleScale('不写倍率，默认超分'),undefined);
  assert.equal(explicitUpscaleScale('请做4倍超分'),4);
  assert.equal(explicitUpscaleScale('超分两倍'),2);
  assert.equal(explicitUpscaleScale('做4K长边'),undefined);
  assert.equal(explicitUpscaleScale('比较2x和4x'),undefined);
 });
 
-for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','completion']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
+for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','completion']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'delivery-runtime-'));await mkdir(join(root,'derived'));
  const bytes=mimeType==='image/png'?Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1]):Buffer.from([255,216,255,224,0,16,1,2,3,4]);
  const id=`img_${(mimeType==='image/png'?'a':'b').repeat(32)}`;const asset={imageId:id,storageKey:'derived/asset.bin',mimeType,width:1,height:1,byteSize:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'};
@@ -29,13 +30,13 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
-  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:source==='upscale2'?'请把刚才的图超分 2x':'请把刚才的图超分'}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
+  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':'请把刚才的图超分'}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
   let result:unknown;
-  if(source==='upscale'||source==='upscale2'){
+  if(source==='upscale'||source==='upscale2'||source==='upscale4'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
-    result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:source==='upscale2'?4:2,mode:'anime'},undefined);
+    result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:4,mode:'anime'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
-    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale2'?2:4, 'user multiplier or default overrides an incorrect model-supplied scale');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
+    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale4'?4:2, 'explicit 4x remains available while model-supplied 4x cannot override the 2x default');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
   }else if(source==='completion') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
   else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'tool result text is not an image authority'}]};
   const jobs=source==='completion'?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
@@ -56,12 +57,12 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
   for(const hook of hooks.get('before_agent_finalize')??[])hook({runId,lastAssistantMessage:wire},{});
   const prepared=await plan.delivery.preparePayload({text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
-  assert.deepEqual(Object.keys(prepared),['channelData']);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'||source==='upscale2'?'document':'inline');
+  assert.deepEqual(Object.keys(prepared),['channelData']);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'||source==='upscale2'||source==='upscale4'?'document':'inline');
   assert.equal(await plan.delivery.preparePayload({mediaUrls:['/native/tool/result']},{kind:'tool'}),null);
   await plan.delivery.deliver(prepared,{kind:'tool'});assert.equal(sends.length,0);
   await plan.delivery.deliver(prepared,{kind:'final'});await plan.delivery.deliver(prepared,{kind:'final'});
-  assert.deepEqual(sends.map(send=>send.kind),['text',source==='upscale'||source==='upscale2'?'document':'image']);assert.equal(sends[0]?.text,'完成。');assert.deepEqual(sends[1]?.bytes,bytes);
-  const binding=requests.find(request=>request.path==='/v1/assets/bind-delivery')!.body as any;assert.equal(binding.messageId,source==='upscale'||source==='upscale2'?'document-id':'image-id');assert.deepEqual(binding.assetIds,[id]);
+  assert.deepEqual(sends.map(send=>send.kind),['text',source==='upscale'||source==='upscale2'||source==='upscale4'?'document':'image']);assert.equal(sends[0]?.text,'完成。');assert.deepEqual(sends[1]?.bytes,bytes);
+  const binding=requests.find(request=>request.path==='/v1/assets/bind-delivery')!.body as any;assert.equal(binding.messageId,source==='upscale'||source==='upscale2'||source==='upscale4'?'document-id':'image-id');assert.deepEqual(binding.assetIds,[id]);
  }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));await rm(root,{recursive:true,force:true});}
 });
 test('Telegram native text and actual Bot API document/photo primitives preserve disposition',async()=>{

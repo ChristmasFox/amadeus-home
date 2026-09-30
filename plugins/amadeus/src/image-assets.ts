@@ -217,8 +217,8 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   const current = currentContextFor(context.sessionKey);
   const identity = identityContextFromOpenClaw(context);
   const origin = originForContext(context, current);
-  // A user turn defaults to 4x even when the model invents 2x; explicit user 2x wins.
-  const scale = current ? current.explicitScale ?? 4 : input.scale ?? 4;
+  // A user turn defaults to 2x even when the model invents 4x; explicit user 4x wins.
+  const scale = current?.explicitScale ?? 2;
   const response = await serviceJson(config, '/v1/upscale', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -334,7 +334,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     return job.then(() => undefined);
   }, { matcher: ['image_generate', 'amadeus_image_upscale'], timeoutMs: 60_000 });
 
-  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:4; an explicit user 2x/2倍 request uses scale:2. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
+  registerTool(api, 'amadeus_image_upscale', 'Upscale one existing image on the configured host service. Default to scale:2; an explicit user 4x/4倍 request uses scale:4. 4K/2K are resolution profiles, not multipliers. The current inbound turn also constrains an unambiguous explicit multiplier. Reply context wins over the current conversation’s recent image.', ImageUpscaleParameters, async (params, context, _notifier, signal) => upscaleImage(configFor(api), params, context, signal));
 }
 
 export { ImageUpscaleParameters };
