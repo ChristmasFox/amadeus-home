@@ -17,7 +17,8 @@ private glibc loader and failed on a GLIBC_PRIVATE symbol. The source installer
 was corrected to invoke npm's JS CLI with the running Node executable directly.
 A read-only live-container probe verified that direct npm CLI works, and a
 bounded pinned archive fetch from that same container verified the expected
-SHA-512. No archive, credentials, or media bytes were copied into Git.
+SHA-512. Before retry, tar extraction was also moved in-process to avoid the
+same private-glibc fault from a second system-binary subprocess. No archive, credentials, or media bytes were copied into Git.
 
 The first attempt's config preparation had written `tts.auto=off` to disk while
 the old image was still running. The config was atomically restored from that
