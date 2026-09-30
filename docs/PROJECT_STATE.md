@@ -50,6 +50,15 @@ staged definitions and previous WhatsApp module; the source now gates on real
 Gateway registration immediately after health. Evidence:
 `.agent/checkpoints/2026-09-30-delivery-envelope-third-apply-failure.md`.
 
+The fourth candidate also stopped before switch when the offline Skill CLI
+omitted Amadeus; uid-1000 inspection of that exact image verified all 14
+manifest-declared Skills and 27 tool declarations. Protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930084057` restored
+staged definitions and the previous WhatsApp module. The next candidate checks
+bundle/Skill readability before switching, then real Gateway registration and
+health immediately afterward. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-fourth-apply-failure.md`.
+
 The canonical live OpenClaw remains on
 its previous immutable image and the current observed defects remain runtime
 risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A

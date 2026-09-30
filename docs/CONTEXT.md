@@ -3,7 +3,7 @@
 Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
 The active Goal is `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`
 per `docs/CURRENT_TASK.md`. Source cutover is committed and production apply was explicitly authorized;
-the first three candidates stopped before switch and were restored. Owner WhatsApp
+the first four candidates stopped before switch and were restored. Owner WhatsApp
 Gates A–F remain open. The GPT-SoVITS MPS
 production apply below is historical runtime evidence, not a live instruction.
 Older Goal documents and checkpoints remain audit evidence.
@@ -11,7 +11,7 @@ Older Goal documents and checkpoints remain audit evidence.
 ## Current Git/runtime boundary (2026-09-30)
 
 Git `main` defines the DeliveryEnvelope v2 source cutover. A retry of the
-explicitly authorized candidate apply is in progress after three protected
+explicitly authorized candidate apply is in progress after four protected
 pre-switch rollbacks; the prior image remains healthy. Read Git `main` and live runtime before any apply. The
 last read-only OpenClaw observation was the healthy immutable
 `local/openclaw-amadeus:git-6311e21b412c-20260930044402`, which does not yet
