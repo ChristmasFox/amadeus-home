@@ -15,12 +15,12 @@ not yet been exercised. Sixteen account definitions, all aliases, and the
 are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 
 
-## DeliveryEnvelope v2 — live candidate; 4x parameter fix pending apply
+## DeliveryEnvelope v2 — new live candidate; 4x real acceptance pending
 
 The healthy single OpenClaw runtime uses immutable image
-`local/openclaw-amadeus:git-675d5fbbf974-20260930101930`, with Amadeus
+`local/openclaw-amadeus:git-682c69a375b6-20260930110631`, with Amadeus
 registered, WhatsApp connected and `tts.auto=off`. Its protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930101930`. The owner
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930110631`. The owner
 confirmed direct-message replies; group replies recovered without intervention,
 but prior group silent settlements remain unaccounted for. This is not Goal
 completion or full channel acceptance.
@@ -28,8 +28,9 @@ completion or full channel acceptance.
 The owner's explicit 4x request was actually called as `scale:2` by the Agent;
 the host asset registry independently records the resulting 2x asset. The
 service accepts 4x. Source now constrains an unambiguous current inbound
-multiplier at the native tool boundary and has focused local regression, but
-that fix is not deployed or owner-accepted yet. Gates A–F and recipient hash
+multiplier at the native tool boundary and was deployed from source commit
+`682c69a` after focused regression, pinned boundary checks, secrets scan,
+Gateway registration and health/owner-outbox smoke. It is not owner-accepted yet. Gates A–F and recipient hash
 equality still require real evidence. The earlier rollback and failed candidate
 attempts below are historical audit, not current runtime state.
 

@@ -4,23 +4,26 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_UPSCALE_4X_SOURCE_FIX_PENDING_APPLY` (Goal open).
+Status: `CANDIDATE_LIVE_UPSCALE_4X_OWNER_ACCEPTANCE_PENDING` (Goal open).
 
-The live single OpenClaw runtime is healthy on immutable candidate
-`local/openclaw-amadeus:git-675d5fbbf974-20260930101930`; Amadeus is
+The prior candidate `git-675d5fb` was replaced by the new healthy single
+OpenClaw runtime `git-682c69a375b6-20260930110631`; Amadeus is
 registered and WhatsApp connected. The owner confirmed direct-message replies
 work and later reported group replies recovered without a source/config change.
 Two group arrivals earlier settled silent, so intermittent group behavior is not
-proven resolved. Do not revert to the prior image on speculation. Protected
-checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930101930`.
+proven resolved. Do not revert to the prior image on speculation. The previous protected checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930101930`.
 Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-gate-a-fix-candidate.md`.
 
 Real 4x request diagnosis: host asset registry and authoritative OpenClaw
 transcript tool-call arguments both show `scale:2` for the owner's explicit
 4x request. The host service supports 4x; the Agent selected 2 before the
-plugin/service boundary. A bounded explicit multiplier constraint is now in
-source; focused test/typecheck/build/secrets passed locally. Commit and
-protected candidate apply are pending. A fresh real owner 4x request and
+plugin/service boundary. A bounded explicit multiplier constraint is now deployed in immutable image
+`local/openclaw-amadeus:git-682c69a375b6-20260930110631` after focused
+verification and a protected candidate apply. Checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930110631`; external
+evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930110631`.
+A fresh real owner 4x request and
 recipient file verification are required; do not claim Gate completion yet.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
