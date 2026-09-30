@@ -41,6 +41,7 @@ type ImageAttachment = {
   mimeType: string;
   name: string;
   sizeBytes?: number;
+  forceDocument?: boolean;
 };
 type CurrentImageContext = ImageAssetOrigin & { sessionKey: string; expiresAt: number };
 
@@ -210,6 +211,7 @@ function outputAttachment(config: AmadeusConfig, asset: ImageAssetResult): Image
     path,
     mimeType: asset.mimeType,
     name: asset.imageId,
+    forceDocument: true,
     ...(asset.byteSize !== undefined ? { sizeBytes: asset.byteSize } : {}),
   };
 }
@@ -260,7 +262,8 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     mediaUrls: [mediaPath],
     attachments: [attachment],
     paths: [mediaPath],
-    media: { mediaUrls: [mediaPath], attachments: [attachment] },
+    media: { mediaUrls: [mediaPath], attachments: [attachment], forceDocument: true },
+    forceDocument: true,
     contentText: `Upscaled image ${asset.imageId}.`,
     ...(identity.channel ? { channel: identity.channel } : {}),
   };

@@ -75,7 +75,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-tts-emotion.mjs|scripts/patch-openclaw-tool-document-delivery.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -284,6 +284,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
   node --check scripts/patch-openclaw-tts-emotion.mjs
+  node --check scripts/patch-openclaw-tool-document-delivery.mjs
   node scripts/test-patch-openclaw-tts-emotion.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-reply-envelope-policy.mjs
@@ -332,7 +333,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.seed.md" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md" \
-  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$TTS_EMOTION_PATCH_RUNTIME"; do
+  "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md" "$PREPARE" "$PATCH_RUNTIME" "$VOICE_PATCH_RUNTIME" "$MEDIA_AGENT_PATCH_RUNTIME" "$TTS_EMOTION_PATCH_RUNTIME" "$ROOT_DIR/scripts/patch-openclaw-tool-document-delivery.mjs"; do
   [[ -f "$source" ]] || fail "Missing deployment source: $source"
 done
 
