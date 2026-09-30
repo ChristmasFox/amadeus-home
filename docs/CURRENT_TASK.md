@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_IMAGE_GENERATION_OWNER_GATE_PENDING` (Goal open).
+Status: `CANDIDATE_LIVE_IMAGE_GENERATION_GATE_FAILED_DIAGNOSIS` (Goal open).
 
 The healthy single OpenClaw runtime now uses image-completion candidate
 `git-77ed8e60a489-20260930133806` (retaining default 4x); Amadeus is
@@ -44,8 +44,11 @@ as silent, and neither imported the completion's typed attachments nor settled
 them. Source now gives a verified image completion its own v2 run origin,
 registers typed image attachments as inline in the same envelope and cancels
 the native competing delivery after one typed settlement. Focused regression,
-build, secrets and protected candidate apply passed; real owner generation is
-pending. Evidence: `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`. No rollback to an old image and no automatic media sender.
+build, secrets and protected candidate apply passed, but the real owner
+generation gate failed: native tool was invoked and 9Router fallback generated
+an image, yet the completion Agent first timed out and then the typed envelope
+preparation failed closed. No inline attachment was settled. The exact inner
+preparation error was not logged; do not attribute it to an unobserved field. Evidence: `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`. No rollback to an old image and no automatic media sender.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open

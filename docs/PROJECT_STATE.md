@@ -49,7 +49,9 @@ start, and typed generated media appears on a later completion turn. The
 existing blanket inter-session silence discarded that completion. A source
 repair now claims verified typed image-completion attachments into the single
 DeliveryEnvelope inline settlement. Focused tests and protected candidate apply
-passed; real owner generation is pending. See
+passed, but real owner generation subsequently failed after a successful
+9Router fallback: completion Agent timeout, then envelope preparation failure
+with no inline settlement. The exact inner exception is not recorded. See
 `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
