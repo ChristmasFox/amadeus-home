@@ -1,5 +1,44 @@
 # Project State — 2026-10-01
 
+## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed
+
+Runtime rebaseline is complete; final state documentation and push of the clean
+source are the remaining Phase 6 bookkeeping. Implementation/deployment source
+commit `0fdfdbb` and source cleanup commit `45f96a9` are local on `main`.
+Amadeus `VERSION=1.7.4` was not bumped.
+
+M204 now runs only the authenticated Qwen3-TTS MLX 1.7B Base / MLX 8-bit
+`mlx-audio` 0.5.6 local engine through `com.amadeus.qwen3-tts` on loopback
+`127.0.0.1:18794`, using the unchanged 46s original A `kurisu-v1` reference
+and Auto language. Port `18792` remains the separate ImageAssets service; this
+live collision and its protected rollback evidence are documented in the active
+Goal. 9Router's single `amadeus-tts` connection points to its loopback TTS
+bridge and reports local Qwen3 MLX → Qwen Audio 3.1 → Qwen Audio 3.0. The live
+immutable 9Router image is
+`local/9router:git-0fdfdbbd91f2-20260930T211901Z`
+(`sha256:c6c2bf40c95d62a49c14cd7ec7c8188002a35352bedc7cc911397e857f1caf7b`).
+OpenClaw and Product Radar were not rebuilt or restarted for this Goal; the
+ImageAssets endpoint stayed unchanged.
+
+GPT-SoVITS and OminiX resident/runtime/model/venv/tuner/LaunchAgent/active
+source assets and legacy 9Router provider connections have been removed after
+the automated gates passed. The original Kurisu A profile remains protected
+outside Git. The sole Kurisu WAV sample from the retired package is archived
+outside Git at
+`/Volumes/Avalon/backups/operation-skuld/amadeus-kurisu-wav-archive-20261001`;
+manifest SHA-256:
+`e1362946d7d04abb4d22faa4ed65e93acbeb97045445c955992ebfd58e75a6c9`.
+
+Focused service/provision/bridge tests, Amadeus tests/typecheck/build, pinned
+MLX asset verification, direct WAV/MP3 synthesis, unauthorized-auth rejection,
+logical 9Router route, forced Qwen Audio 3.1 fallback, synthetic 3.0 ordering,
+restart/health, secrets scan, source search and `git diff --check` passed. The
+controlled local-busy test used the live cloud 3.1 endpoint; the local service
+remained healthy. Memory pressure and post-warmup footprint were recorded. The
+owner explicitly waived human listening/WhatsApp acceptance; none is claimed.
+Detailed content-safe evidence is in
+`.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
+
 ## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F accepted
 
 Source commits `1dd9dd2` (lifecycle/caption implementation) and `628703c` (Kurisu caption wording refinement)

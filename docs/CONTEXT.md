@@ -1,21 +1,47 @@
 # Canonical context — 2026-10-01
 
-Read this with `docs/CURRENT_TASK.md` and inspect current Git/live state before work. The active Goal is
-`docs/AMADEUS_IMAGE_GENERATION_LIFECYCLE_CAPTION_UX_GOAL.md`. The current worktree implements the
-accepted/success/failure typed image lifecycle, multimodal Kurisu caption and same-bubble native media
-caption on top of the existing DeliveryEnvelope v2/background-completion source.
+Read this with `docs/CURRENT_TASK.md`; it points to the Qwen3-TTS MLX
+rebaseline Goal. Runtime Gates A–G passed. At this checkpoint, source cleanup is
+committed locally and final state documentation/push is in progress; re-read
+Git/live state before any further work.
 
-## Current Git/runtime boundary (2026-10-01)
+## Current Git/runtime boundary — Qwen3-TTS MLX
 
-Lifecycle implementation commit `1dd9dd2` and Kurisu free-form caption prompt refinement commit `628703c` are
-pushed to `main`. The authorized candidate deployment now runs healthy immutable
-image `local/openclaw-amadeus:git-628703c803e7-20260930184906` (OpenClaw `2026.9.4`) on OrbStack
-`nyannyan`; Amadeus registration passed. Protected rollback is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930184906`; content-safe deployment evidence is at
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930184906/deployment-summary.md`.
-This is a candidate apply, not a product release. The owner subsequently attested that real WhatsApp Gates
-A–F passed; the deployment notification/outbox smoke itself is not Gate A. The task coordinator and delivery ledger are
-bounded process-local state, so cross-restart exactly-once is not claimed.
+The accepted voice path is Qwen3-TTS 1.7B Base through pinned `mlx-audio`
+0.5.6 / MLX 8-bit, using the unchanged operator-owned 46s A `kurisu-v1`
+reference and `lang_code=auto`. The authenticated native LaunchAgent listens
+only on `127.0.0.1:18794`; port 18792 remains owned by the separate ImageAssets
+service and is unchanged. This uses the active Goal's explicit live-collision
+exception and avoids restarting OpenClaw for an unrelated endpoint move.
+
+9Router keeps one `amadeus-tts` provider connection and routes default speech
+local MLX → Qwen Audio 3.1 → Qwen Audio 3.0. Its healthy immutable image is
+`local/9router:git-0fdfdbbd91f2-20260930T211901Z`, image ID
+`sha256:c6c2bf40c95d62a49c14cd7ec7c8188002a35352bedc7cc911397e857f1caf7b`.
+Source commits are `0fdfdbb` (rebaseline/deployed bridge) and `45f96a9`
+(retirement cleanup). Amadeus `VERSION=1.7.4` is unchanged. GPT-SoVITS and
+OminiX active runtime/source/model/venv/LaunchAgent/provider assets have been
+removed after automated acceptance.
+
+The protected archive for the retired Kurisu WAV sample is
+`/Volumes/Avalon/backups/operation-skuld/amadeus-kurisu-wav-archive-20261001`
+(manifest SHA-256
+`e1362946d7d04abb4d22faa4ed65e93acbeb97045445c955992ebfd58e75a6c9`). The
+canonical A pair, MLX weights, credentials, cloud voice IDs, and generated
+media remain outside Git. The owner waived listening/owner-channel acceptance
+for this Goal; no human voice-quality claim is made. Full evidence is in
+`.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
+
+## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
+
+The owner-accepted image lifecycle candidate continues to run immutable
+OpenClaw image
+`local/openclaw-amadeus:git-628703c803e7-20260930184906` (OpenClaw `2026.9.4`)
+on OrbStack `nyannyan`; Amadeus registration is healthy. Product Radar and the
+image-generation lifecycle/caption implementation remain unchanged. The owner
+attested that real WhatsApp Gates A–F passed; deployment notification/outbox
+smoke is not Gate A. The task coordinator and delivery ledger are bounded
+process-local state, so cross-restart exactly-once is not claimed.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
