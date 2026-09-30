@@ -6,7 +6,7 @@ ROOT_DIR="${SKULD_ROOT_DIR:-$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.
 source "$ROOT_DIR/scripts/host-profile.sh"
 amadeus_host_profile_load "$ROOT_DIR"
 MACHINE="${ORBSTACK_MACHINE:-ubuntu}"
-IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.81}"
+IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.91}"
 APPLY=0
 
 while (($#)); do
