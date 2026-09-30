@@ -32,6 +32,15 @@ container remains the previous healthy immutable image. The source installer
 was corrected and the next retry requires a new committed image/checkpoint.
 See `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
 
+A second authorized candidate built and installed the typed WhatsApp boundary,
+but non-root plugin inspection found the Amadeus image bundle unreadable (0600
+root) before Compose switch. Protected checkpoint
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930080024` restored all
+affected definitions/config and the previous WhatsApp module; the old image
+remains healthy. The source build/image now set code artifact permissions 0644
+and explicitly verify uid-1000 readability before a runtime write. Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-second-apply-failure.md`.
+
 The canonical live OpenClaw remains on
 its previous immutable image and the current observed defects remain runtime
 risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A

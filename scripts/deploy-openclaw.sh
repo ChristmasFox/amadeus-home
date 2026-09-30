@@ -300,6 +300,13 @@ if ((BUILD_OPENCLAW)); then
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
 fi
+if ((BUILD_OPENCLAW)); then
+  # Immutable-image preflight before any checkpoint-backed runtime write. The
+  # container runs as node, so root-readable-only bundles must fail here.
+  orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 --entrypoint node "$IMAGE" --check /app/dist/extensions/amadeus/dist/index.js >/dev/null \
+    || fail 'Immutable OpenClaw image has an unreadable or invalid Amadeus plugin.'
+  printf 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed\n'
+fi
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load

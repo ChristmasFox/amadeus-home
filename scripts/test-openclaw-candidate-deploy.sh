@@ -26,6 +26,8 @@ assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root'
 image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
 assert 'COPY scripts/openclaw-voice-*.mjs /tmp/' in image
 assert 'COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary' in image
+assert 'RUN chmod 0644 /app/dist/extensions/amadeus/dist/index.js' in image
+assert 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed' in s
 assert '/tmp/openclaw-voice-*.mjs' in image
 assert 'Owner deployment notification remained pending after 30 seconds.' in s
 PY

@@ -4,7 +4,7 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY` (no successful OpenClaw switch yet).
+Status: `AUTHORIZED_CANDIDATE_APPLY_RETRY_AFTER_NONROOT_PREFLIGHT` (no successful OpenClaw switch yet).
 
 The Git source implements the typed v2 contract, one structured decoder and
 one settlement ledger, tool image asset parts, a narrow pinned WhatsApp plan
@@ -18,6 +18,16 @@ the old config was restored from protected checkpoint
 immutable image is healthy. The pinned npm installer now invokes the existing
 Node binary directly and extracts the signed tar archive in-process; retry
 only from a new committed source, new immutable image and new protected checkpoint. Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
+
+A second candidate passed the pinned WhatsApp installer but was stopped in
+plugin inspection before Compose switch: the non-root runtime could not read
+`amadeus/dist/index.js` copied with a private umask. The second protected
+checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930080024`
+was used to atomically restore OpenClaw/Product Radar definitions, OpenClaw
+config and the WhatsApp monitor; the old image is healthy and TTS config is
+again `tagged`. Source now explicitly sets plugin bundle 0644 and checks
+node-user image readability before runtime writes. See
+`.agent/checkpoints/2026-09-30-delivery-envelope-second-apply-failure.md`.
 
 **Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,
