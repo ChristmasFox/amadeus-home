@@ -50,6 +50,15 @@ an image, yet the completion Agent first timed out and then the typed envelope
 preparation failed closed. No inline attachment was settled. The exact inner
 preparation error was not logged; do not attribute it to an unobserved field. Evidence: `.agent/checkpoints/2026-09-30-image-generation-completion-candidate.md`. No rollback to an old image and no automatic media sender.
 
+Follow-up diagnosis: the real completion turn contained a typed `image/jpeg`
+part whose bytes exactly matched the generated file. The previous candidate
+waited until after a second LLM call for outbound attachment metadata; that
+call timed out or produced unusable output. Source now registers trusted
+completion image bytes and settles an attachment-only v2 envelope at the
+pre-LLM input hook. The later model reply is canceled for this completion;
+focused tests pass, but the source commit/protected apply and real WhatsApp
+acceptance remain pending.
+
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
 where real evidence has not been recorded. Production apply requires the

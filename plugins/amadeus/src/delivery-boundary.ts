@@ -29,7 +29,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi): void {
       const entry = completionPorts.get(envelope.sessionKey);
       if (!entry || entry.expiresAt < Date.now()) throw new Error('image_completion_route_missing');
       await entry.send(envelope);
-      completionPorts.delete(envelope.sessionKey);
+      // Retain the bounded route so a retried completion hits the same ledger.
     },
     version: 2 as const,
     createWhatsAppPlan(port: WhatsAppDeliveryPort) {

@@ -6,7 +6,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { validateDeliveryEnvelope, type DeliveryOrigin, type DeliveryEnvelope } from './delivery-envelope.js';
 import { deliveryRuns } from './delivery-runs.js';
 import { registerDeliveryBoundary, DELIVERY_BOUNDARY_GLOBAL } from './delivery-boundary.js';
-import { enqueueGeneratedCompletionAssets } from './image-assets.js';
+import { enqueueGeneratedImageBytes } from './image-assets.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
 
 export const WHATSAPP_VOICE_RUNS_GLOBAL = '__amadeusWhatsAppVoiceRuns20260925';
@@ -28,6 +28,35 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
   const root = api.rootDir ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const skill = readFileSync(resolve(root, 'skills/voice-reply/SKILL.md'), 'utf8');
   registerDeliveryBoundary(api);
+  const completionSettlements = new Map<string, Promise<void>>();
+  api.on('llm_input', (event, context) => {
+    if (!context.runId || !context.sessionKey) return;
+    const channel = context.channel ?? context.messageProvider;
+    if (channel !== 'whatsapp' && channel !== 'telegram') return;
+    const latestUser = [...event.historyMessages].reverse().find((value) => value && typeof value === 'object' && (value as { role?: string }).role === 'user') as { provenance?: { kind?: string; sourceTool?: string; sourceSessionKey?: string }; content?: unknown } | undefined;
+    const source = latestUser?.provenance?.sourceSessionKey;
+    if (latestUser?.provenance?.kind !== 'inter_session' || latestUser.provenance.sourceTool !== 'image_generate' || !/^image_generate:[a-f0-9-]{36}$/iu.test(source ?? '') || !context.runId.startsWith(`${source}:`)) return;
+    if (completionSettlements.has(context.runId)) return;
+    const images = Array.isArray(latestUser.content) ? latestUser.content.flatMap((part: unknown) => {
+      if (!part || typeof part !== 'object') return [];
+      const row = part as { type?: string; mimeType?: unknown; data?: unknown };
+      return row.type === 'image' && typeof row.mimeType === 'string' && typeof row.data === 'string' ? [{ mimeType: row.mimeType, data: row.data }] : [];
+    }) : [];
+    if (!images.length) return;
+    deliveryRuns.start({ runId: context.runId, sessionKey: context.sessionKey, channel, origin: 'media_completion', deliveryId: `image-completion:${createHash('sha256').update(source!).digest('hex')}` });
+    const settling = (async () => {
+      enqueueGeneratedImageBytes(api, context.runId!, images);
+      const envelope = await deliveryRuns.prepareToolOnly(context.runId!);
+      if (channel === 'whatsapp') {
+        const boundary = (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] as { settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> };
+        await boundary.settleWhatsAppCompletion(envelope);
+      } else await settleTelegramDelivery(api, envelope, { ...(context.accountId ? { accountId: context.accountId } : {}), ...(context.channelId ? { conversationId: context.channelId } : {}) });
+    })();
+    completionSettlements.set(context.runId, settling);
+    if (completionSettlements.size > 1024) completionSettlements.delete(completionSettlements.keys().next().value!);
+    void settling.catch(() => api.logger.warn('amadeus typed image completion failed closed'));
+    return settling;
+  });
   api.on('before_prompt_build', (_event, context) => {
     const channel = context.channel ?? context.messageProvider;
     const origin = hasActiveWhatsAppVoiceLease(channel, context.sessionKey) ? 'inbound_voice' : originFor(context);
@@ -56,7 +85,10 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi): void {
     if (validateDeliveryEnvelope(prepared) && deliveryRuns.owns(prepared)) return { payload: { channelData: { amadeusDelivery: prepared } } };
     if (!runId) return { cancel: true, reason: 'delivery_run_missing' };
     try {
-      if (deliveryRuns.originFor(runId) === 'media_completion') enqueueGeneratedCompletionAssets(api, runId, event.payload);
+      if (deliveryRuns.originFor(runId) === 'media_completion') {
+        await completionSettlements.get(runId);
+        return { cancel: true, reason: 'delivery_completion_owned' };
+      }
       const envelope = await deliveryRuns.prepare(runId, event.payload.text);
       if (channel === 'whatsapp' && envelope.origin === 'media_completion') {
         const boundary = (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] as { settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> };

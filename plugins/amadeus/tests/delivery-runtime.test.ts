@@ -24,7 +24,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const api={rootDir:new URL('../',import.meta.url).pathname,config:{},pluginConfig:{imageAssetServiceBaseUrl:`http://127.0.0.1:${port}`,imageAssetServiceTokenFile:join(root,'token'),imageAssetContainerRoot:root},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);},registerTool(factory:any,options:{name:string}){tools.set(options.name,factory);}} as unknown as OpenClawPluginApi;
   registerVoiceReplyPrompt(api);registerImageAssets(api);
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string}>=[];
-  const sessionKey=`runtime-${source}-${mimeType}`;const runId=`run-${sessionKey}`;
+  const sessionKey=`runtime-${source}-${mimeType}`;const runId=source==='completion'?'image_generate:00000000-0000-4000-8000-000000000001:ok:agent-loop':`run-${sessionKey}`;
   const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async asset=>{sends.push({kind:'image',bytes:asset.bytes});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
@@ -38,13 +38,22 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale2'?2:4, 'user multiplier or default overrides an incorrect model-supplied scale');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
   }else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'MEDIA:/native/tool/result'}]};
   const jobs=source==='completion'?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
+  if(source==='completion'){
+    const user={role:'user',provenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'},content:[{type:'text',text:'internal completion; never present this text'},{type:'image',mimeType:'image/png',data:bytes.toString('base64')}]};
+    await (hooks.get('llm_input')??[])[0]!({runId,historyMessages:[user]}, {runId,sessionKey,channel:'whatsapp'});
+    const late=await (hooks.get('reply_payload_sending')??[])[0]!({runId,sessionKey,channel:'whatsapp',kind:'final',payload:{text:'malformed raw protocol'}},{channelId:'whatsapp'});
+    assert.equal(late.cancel,true);
+    assert.deepEqual(sends.map(x=>x.kind),['image']);
+    assert.deepEqual(sends[0]?.bytes,bytes);
+    assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);
+    return;
+  }
   const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'完成。'}]});
   for(const hook of hooks.get('before_agent_finalize')??[])hook({runId,lastAssistantMessage:wire},{});
-  const completion=source==='completion'?await (hooks.get('reply_payload_sending')??[])[0]!({runId,sessionKey,channel:'whatsapp',kind:'final',payload:{text:wire,mediaUrls:[join(root,'native-generated.bin')],attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType:'image/png'}]}},{channelId:'whatsapp'}):undefined;
-  const prepared=await plan.delivery.preparePayload(completion?.payload??{text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
-  assert.deepEqual(Object.keys(prepared),['channelData']);if(source==='completion')assert.match(prepared.channelData.amadeusDelivery.deliveryId,/^image-completion:[a-f0-9]{64}$/u);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'||source==='upscale2'?'document':'inline');
+  const prepared=await plan.delivery.preparePayload({text:'RAW JSON + MEDIA merge must be ineligible',mediaUrls:['/native/tool/result']},{kind:'final'});await Promise.all(jobs);
+  assert.deepEqual(Object.keys(prepared),['channelData']);assert.equal(prepared.channelData.amadeusDelivery.parts.at(-1).disposition,source==='upscale'||source==='upscale2'?'document':'inline');
   assert.equal(await plan.delivery.preparePayload({mediaUrls:['/native/tool/result']},{kind:'tool'}),null);
-  await plan.delivery.deliver(prepared,{kind:'tool'});assert.equal(sends.length,source==='completion'?2:0);if(source==='completion')assert.equal(completion.cancel,true);
+  await plan.delivery.deliver(prepared,{kind:'tool'});assert.equal(sends.length,0);
   await plan.delivery.deliver(prepared,{kind:'final'});await plan.delivery.deliver(prepared,{kind:'final'});
   assert.deepEqual(sends.map(send=>send.kind),['text',source==='upscale'||source==='upscale2'?'document':'image']);assert.equal(sends[0]?.text,'完成。');assert.deepEqual(sends[1]?.bytes,bytes);
   const binding=requests.find(request=>request.path==='/v1/assets/bind-delivery')!.body as any;assert.equal(binding.messageId,source==='upscale'||source==='upscale2'?'document-id':'image-id');assert.deepEqual(binding.assetIds,[id]);
