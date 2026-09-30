@@ -6,13 +6,16 @@ export class DeliveryRuns {
   private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; prepared?: DeliveryEnvelope; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[] }>();
   private sessions = new Map<string, string>();
   start(context: DeliveryContext): void {
-    if (!this.runs.has(context.runId)) this.runs.set(context.runId, { context, jobs: [] });
+    const existing = this.runs.get(context.runId);
+    if (!existing) this.runs.set(context.runId, { context, jobs: [] });
+    else if (context.origin === 'media_completion' && existing.context.sessionKey === context.sessionKey && existing.context.channel === context.channel && !existing.envelope) existing.context = context;
     this.sessions.set(context.sessionKey, context.runId);
     if (this.runs.size > 1024) this.runs.delete(this.runs.keys().next().value!);
   }
   has(runId: string): boolean { return this.runs.has(runId); }
   runIdFor(sessionKey: string): string | undefined { return this.sessions.get(sessionKey); }
   channelFor(runId: string): string | undefined { return this.runs.get(runId)?.context.channel; }
+  originFor(runId: string): DeliveryContext['origin'] | undefined { return this.runs.get(runId)?.context.origin; }
   owns(envelope: DeliveryEnvelope): boolean { return this.runs.get(envelope.runId)?.prepared === envelope; }
   addAssets(runId: string, job: Promise<readonly AttachmentPart[]>): void {
     const run = this.runs.get(runId); if (!run) throw new Error('delivery_run_missing');

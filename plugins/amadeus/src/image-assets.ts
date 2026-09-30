@@ -246,6 +246,23 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   };
 }
 
+/** Native detached image completion supplies typed image attachment facts. Consume
+ * them as assets of this run, never as a competing OpenClaw media sender. */
+export function enqueueGeneratedCompletionAssets(
+  api: OpenClawPluginApi, runId: string,
+  payload: { attachments?: readonly { type?: string; path?: string; mimeType?: string }[] },
+): void {
+  if (deliveryRuns.originFor(runId) !== 'media_completion') throw new Error('image_completion_origin_invalid');
+  const images = (payload.attachments ?? []).filter((item) => item.type === 'image' && typeof item.path === 'string' && item.path.startsWith('/')).slice(0, 4);
+  if (!images.length) throw new Error('image_completion_typed_attachments_missing');
+  const config = configFor(api);
+  deliveryRuns.addAssets(runId, Promise.all(images.map(async (item) => {
+    const path = item.path!;
+    const asset = await importImageAsset(config, path, item.mimeType ?? generatedMime({}, path), 'generated', { runId });
+    return imageAssetAttachment(asset, 'inline');
+  })));
+}
+
 export function registerImageAssets(api: OpenClawPluginApi): void {
   const importedInboundMedia = new Map<string, number>();
   api.on('message_received', async (event, hookContext) => {

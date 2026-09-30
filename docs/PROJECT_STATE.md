@@ -43,6 +43,14 @@ explicit 2x remains available. Source commit `9221fce` passed focused tests
 and protected candidate apply; real owner unspecified-multiplier acceptance
 is pending. See `.agent/checkpoints/2026-09-30-upscale-default4-candidate.md`.
 
+The latest owner report exposed ordinary image generation failure. In pinned
+OpenClaw, `image_generate` is detached: its immediate result is only a task
+start, and typed generated media appears on a later completion turn. The
+existing blanket inter-session silence discarded that completion. A source
+repair now claims verified typed image-completion attachments into the single
+DeliveryEnvelope inline settlement; focused tests passed. It is not yet
+applied or owner-accepted. The current live image above still has this bug.
+
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
 Git source now defines one v2 typed user-facing settlement across text, voice and
