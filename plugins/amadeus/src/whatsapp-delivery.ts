@@ -3,7 +3,7 @@ import type { ResolvedDeliveryAsset } from './delivery-assets.js';
 import type { DeliveryReceipt } from './delivery-settlement.js';
 
 export type WhatsAppAttachmentProvider = Readonly<{
-  sendImage(asset: ResolvedDeliveryAsset): Promise<DeliveryReceipt>;
+  sendImage(asset: ResolvedDeliveryAsset, caption?: string): Promise<DeliveryReceipt>;
   sendDocument(asset: ResolvedDeliveryAsset): Promise<DeliveryReceipt>;
 }>;
 /** Only disposition selects the primitive. Never downgrade on rejection. */
@@ -11,6 +11,6 @@ export function createWhatsAppAttachmentSender(resolveAsset: (part: AttachmentPa
   return async (part: AttachmentPart): Promise<DeliveryReceipt & { providerPrimitive: 'image' | 'document' }> => {
     const asset = await resolveAsset(part);
     if (part.disposition === 'document') return { ...await provider.sendDocument(asset), providerPrimitive: 'document' };
-    return { ...await provider.sendImage(asset), providerPrimitive: 'image' };
+    return { ...await provider.sendImage(asset, part.caption), providerPrimitive: 'image' };
   };
 }

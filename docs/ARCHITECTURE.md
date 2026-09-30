@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-09-30（DeliveryEnvelope v2 source cutover; production apply pending）
+更新时间：2026-10-01（image-generation lifecycle/caption source implementation; production apply pending）
 
 ## Worldline notification boundary
 
@@ -54,36 +54,51 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 
 `plugins/amadeus/src/delivery-envelope.ts` 定义 `version=2`、runId、deliveryId、
 sessionKey、channel、origin、silent 和有序 `text` / `voice` / `attachment` parts。
-Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，并携带
-可验证的 byteSize/SHA-256；没有路径或 platform 专属 flag。
+Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，可带
+经验证的 byteSize/SHA-256；不携带原始文件路径。Image attachment 可携带可选
+`caption`，它是规范化、最多 1024 字符的纯用户可见 presentation，只允许 inline image；
+不允许 routing/control/disposition/path 字段或 raw model/protocol JSON。
 
-- Agent 只按严格 v2 JSON wire 输出 text/voice；`delivery-decoder.ts` 单次解码，
-  raw serialization 被丢弃；缺键/多键/非法版本或状态 fail closed。用户要求的 JSON
-  是 text part 内容，不通过检测末尾 JSON 字符串来猜测。
-- `delivery-runs.ts` 在同一 run 汇合最终文本和已完成工具的语义图片结果；
-  image_generate 的 foreground result 或经验证的原生异步完成事件，其 typed image
-  数据在 LLM 完成回合之前登记到权威 registry，并由同一 envelope ledger 以 inline
-  结算；无须等待第二次 LLM 成功。显式 upscale 派生文件为 document。
-  按需超分默认 4×，当前请求明确指定 2× 时保持 2×；2K/4K 是独立的长边上限档位。
-  `delivery-assets.ts` 验证 ready registry、canonical root、无 symlink、实际文件
-  MIME、size 和 SHA-256。内部 heartbeat/cron/handoff/system runs silent。
-- `delivery-settlement.ts` 为所有 channel 使用同一 ledger，重复 deliveryId 不重复
-  发送。voice part 通过同一 9Router `amadeus-tts` bridge，110 秒上限内保留
-  GPT-SoVITS→云端 fallback；TTS 失败只用 envelope 中 typed text part。
-- Pinned WhatsApp 2026.9.4 缺少将完整 typed reply 直接交给 channel plan 的公开
-  hook。唯一 `integrations/openclaw/delivery-boundary/` version+digest-pinned AST
-  integration 将整个 `createWhatsAppReplyPlan` 函数替换为 typed adapter；先选择
-  disposition=document 的 Baileys `document` primitive，image MIME 不会覆写选择，
-  失败不尝试压缩图片。inline 图片走 native image，语音走原 Ogg/Opus 转码。
-  原 pending/自动 tool-media 的独立 sender 在 Amadeus plan 中不再执行。
-- Telegram 使用同一 settlement 和 native Telegram account/network source API；
-  inline 映射 photo，document 映射 document，不把 transport 逻辑写入 domain。
-- 入站语音 lease/typing/队列仍是 transport lifecycle，不做 planner/协议解析。
-  Owner notification 仍由唯一 outbox 拥有，与用户回复 settlement 区分。
+- Agent 只按严格 v2 JSON wire 输出 text/voice；`delivery-decoder.ts` 单次解码，raw
+  serialization 被丢弃；缺键/多键/非法版本或状态 fail closed。用户要求的 JSON 是 text
+  part 内容，不通过检测末尾 JSON 字符串来猜测。
+- `delivery-runs.ts` 汇合当前 run 的结构化工具结果；普通 `image_generate` 的 inline
+  图片和 `amadeus_image_upscale` 的 document 派生文件都经过权威 asset registry 与唯一
+  settlement。按需超分默认 2×，当前请求明确指定 4× 时为 4×；2K/4K 是独立分辨率档位。
+  `delivery-assets.ts` 验证 ready registry、canonical root、无 symlink、实际 MIME、size
+  和 SHA-256。内部 heartbeat/cron/handoff/system runs silent。
+- `ImageGenerationLifecycleCoordinator` 是 detached image task 的单一生命周期边界。
+  同一个 version/digest-pinned OpenClaw 2026.9.4 integration 在
+  `notifyMediaGenerationAsyncTaskStarted` 之后发 accepted，在
+  `wakeMediaGenerationTaskCompletion(params)` 的 authoritative `status=ok|error` 发
+  succeeded/failed；不解析 started receipt、completion prose 或 provider 错误。typed route
+  来自原 task handle。taskId 状态有界（最多 1024 项），accepted 最多一次，succeeded/failed
+  互斥；late failure 不显示，completion retry 使用 taskId 稳定的 deliveryId 和既有 ledger。
+  Accepted 提示发送错误不会取消已经调度的生成任务。
+- 成功只从 OpenClaw persisted `attachments[]` 导入 asset registry。CaptionEnricher 用已注册、
+  已校验的实际生成图片调用 OpenClaw multimodal image-understanding API，最多带 480 字符
+  原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；其 typed
+  输出仅为 `{ caption: string }`。请求有严格 timeout，输出规范化并拒绝 JSON/protocol。
+  Caption 超时、模型错误、无效结果或不可用都转成确定性安全 fallback；caption 不会阻断图片
+  settlement，也不再调用第二个模型作 fallback。
+- WhatsApp inline image+caption 通过同一次 `transport.sendMedia({ image, mimetype, caption })`
+  原生发送成为一个图片气泡；没有独立的成功 caption text send。`disposition=document`
+  仍走原 document/file primitive，不因 caption 支持降级。Telegram 复用同一个 typed caption
+  contract，由 native `sendPhoto` 的 caption field 发送；document 仍走 `sendDocument`。
+- Start/failure 的语义文本由当前 Kurisu persona 边界生成；只有该语义边界不可用时使用本地
+  确定性安全 fallback。image-generation Skill 要求 accepted interim 的普通 Agent final reply silent，
+  避免第二条 start acknowledgement。它们是有稳定 taskId key 的 typed lifecycle text notifications，不创建
+  或绑定图片 asset；generation failure 不运行 CaptionEnricher、不暴露异常/stack/provider payload。
+- `delivery-settlement.ts` 为 channel settlement 使用同一 ledger；重复 deliveryId 不重复发送。
+  语音 part 通过同一 9Router `amadeus-tts` bridge，110 秒上限内保留 GPT-SoVITS→云端
+  fallback；TTS 失败只用 envelope 中 typed text part。
 
-这是 **Git 源码** 的架构，不能当成 live runtime 已切换；真实生产 image 当前仍是
-前一 immutable 版本。生产切换需单独显式 apply、protected rollback 和 WhatsApp
-Gates A–F，下载文件与 host 派生资产 SHA-256 必须一致。
+Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
+OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。部署后若在 Gateway
+重启边界重放同一 task，需通过真实 Gates 验证；不得把当前源码测试解释为跨重启 exactly-once
+证据。当前新 source 尚未 apply；live CasaOS OpenClaw 仍是
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020`，OpenClaw 2026.9.4，healthy。
+新版本部署需要单独显式授权、protected rollback 和 owner-channel Gates A–F。
 
 ## Presentation contract 与时间语义
 

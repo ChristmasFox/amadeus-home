@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeAgentReply } from '../src/delivery-decoder.js';
-import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, type DeliveryPart } from '../src/delivery-envelope.js';
+import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, MAX_ATTACHMENT_CAPTION_LENGTH, type DeliveryPart } from '../src/delivery-envelope.js';
 import { createDeliverySettlementContext, settleDelivery, type DeliverySettlementAdapters } from '../src/delivery-settlement.js';
 import { createWhatsAppAttachmentSender } from '../src/whatsapp-delivery.js';
 import { createTelegramAttachmentSender } from '../src/telegram-delivery.js';
@@ -77,9 +77,32 @@ test('document rejection is not downgraded to inline', async () => {
   let imageCalls=0; const send=createWhatsAppAttachmentSender(async()=>asset,{sendImage:async()=>{imageCalls++;return{};},sendDocument:async()=>{throw new Error('rejected');}});
   await assert.rejects(send(attachment('image/png','document'))); assert.equal(imageCalls,0);
 });
+test('attachment caption is bounded normalized presentation only', () => {
+  const captioned = createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '  画像\r\nできたわ。  ' });
+  assert.equal(captioned.caption, '画像 できたわ。');
+  assert.equal(validateDeliveryEnvelope(createDeliveryEnvelope({ ...context, silent:false, source:'tool_result', parts:[captioned] })), true);
+  assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: 'x'.repeat(MAX_ATTACHMENT_CAPTION_LENGTH + 1) }), /caption_invalid/u);
+  assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '{"caption":"raw model JSON"}' }), /caption_protocol_rejected/u);
+  assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '"raw protocol string"' }), /caption_protocol_rejected/u);
+  assert.equal(validateDeliveryEnvelope({ ...createDeliveryEnvelope({ ...context, silent:false, source:'tool_result', parts:[captioned] }), parts:[{ ...captioned, filePath:'/tmp/private' }] }), false);
+  assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'document'), caption:'must stay a document' }), /invalid_delivery_attachment/u);
+});
+for (const mimeType of ['image/png', 'image/jpeg']) test(`${mimeType} + caption is one WhatsApp image provider send`, async () => {
+  const texts: string[] = []; const provider: Array<{ image:Buffer; mimetype:string; caption?:string }> = [];
+  const captionPart = createAttachmentPart({ ...attachment(mimeType, 'inline'), caption:'Kurisu sees the actual generated scene.' });
+  const envelope = createDeliveryEnvelope({ ...context, silent:false, source:'tool_result', parts:[captionPart] });
+  const send = createWhatsAppAttachmentSender(async () => ({ ...asset, mimeType }), {
+    sendImage: async (resolved, caption) => { provider.push({ image:resolved.bytes, mimetype:resolved.mimeType, ...(caption ? { caption } : {}) }); return {}; },
+    sendDocument: async () => { throw new Error('document primitive must not be used'); },
+  });
+  await settleDelivery(envelope, { ...adapters(texts), sendAttachment:send }, createDeliverySettlementContext());
+  assert.equal(provider.length, 1);
+  assert.deepEqual(provider[0], { image:asset.bytes, mimetype:mimeType, caption:captionPart.caption });
+  assert.deepEqual(texts, [], 'successful caption has zero independent text sends');
+});
 test('Telegram photo/document primitives obey the same disposition without voice regression', async () => {
-  const calls:string[]=[]; const send=createTelegramAttachmentSender(async()=>asset,{sendPhoto:async()=>{calls.push('photo');return{};},sendDocument:async()=>{calls.push('document');return{};}});
-  await send(attachment('image/png','document'));await send(attachment('image/png','inline'));assert.deepEqual(calls,['document','photo']);
+  const calls:string[]=[]; const send=createTelegramAttachmentSender(async()=>asset,{sendPhoto:async(_asset,caption)=>{calls.push(`photo:${caption ?? ''}`);return{};},sendDocument:async()=>{calls.push('document');return{};}});
+  await send(attachment('image/png','document'));await send(createAttachmentPart({...attachment('image/png','inline'),caption:'同じ写真の説明'}));assert.deepEqual(calls,['document','photo:同じ写真の説明']);
 });
 test('complete-envelope concurrent and repeated idempotency', async () => {
   const calls:string[]=[];const env=createDeliveryEnvelope({...context,silent:false,source:'tool_result',parts:[text,attachment('image/png','document')]});const state=createDeliverySettlementContext();

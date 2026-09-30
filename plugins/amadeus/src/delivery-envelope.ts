@@ -19,6 +19,7 @@ export type DeliverySource =
   | 'agent_structured_output'
   | 'inbound_voice_policy'
   | 'tool_result'
+  | 'image_generation_lifecycle'
   | 'system_silent';
 
 export type DeliveryEmotion =
@@ -60,6 +61,8 @@ export type AttachmentPart = Readonly<{
   disposition: AttachmentDisposition;
   byteSize?: number;
   sha256?: string;
+  /** Plain user-visible caption for native inline image delivery only. */
+  caption?: string;
 }>;
 
 export type DeliveryPart = TextPart | VoicePart | AttachmentPart;
@@ -101,11 +104,13 @@ const SOURCES = new Set<DeliverySource>([
   'agent_structured_output',
   'inbound_voice_policy',
   'tool_result',
+  'image_generation_lifecycle',
   'system_silent',
 ]);
 
 const CONTROL_TOKEN = /\[\[[^\]\r\n]+\]\]/u;
 const SHA256 = /^[a-f0-9]{64}$/iu;
+export const MAX_ATTACHMENT_CAPTION_LENGTH = 1024;
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -119,10 +124,24 @@ function containsControlToken(value: unknown): boolean {
   return typeof value === 'string' && CONTROL_TOKEN.test(value);
 }
 
+function isJsonValue(value: string): boolean {
+  try { JSON.parse(value); return true; } catch { return false; }
+}
+
 function cleanText(value: string): string {
   const text = value.trim();
   if (!text || containsControlToken(text)) throw new Error('delivery_text_contains_control_token');
   return text;
+}
+
+/** Normalize caption presentation before it enters the typed delivery contract. */
+function cleanCaption(value: string): string {
+  const caption = value.normalize('NFC').replace(/[\r\n\t]+/gu, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/gu, '').replace(/\s{2,}/gu, ' ').trim();
+  if (!caption || caption.length > MAX_ATTACHMENT_CAPTION_LENGTH || containsControlToken(caption)) throw new Error('delivery_caption_invalid');
+  // Protocol-shaped/model-serialized output is never presentation. Do not try
+  // to salvage JSON or fenced protocol by stringifying/stripping it.
+  if (/^(?:\{[\s\S]*\}|\[[\s\S]*\]|```)/u.test(caption) || /(?:"(?:caption|deliveryId|assetId|disposition)"\s*:|\bMEDIA\s*:)/iu.test(caption) || isJsonValue(caption)) throw new Error('delivery_caption_protocol_rejected');
+  return caption;
 }
 
 function sanitizedFileName(value: string): string {
@@ -138,6 +157,7 @@ function validByteSize(value: unknown): value is number {
 function validAttachment(value: unknown): value is AttachmentPart {
   if (!value || typeof value !== 'object') return false;
   const attachment = value as Record<string, unknown>;
+  if (Object.keys(attachment).some((key) => !['kind','assetId','mimeType','fileName','disposition','byteSize','sha256','caption'].includes(key))) return false;
   if (attachment.kind !== 'attachment'
     || !nonEmpty(attachment.assetId)
     || typeof attachment.mimeType !== 'string' || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/u.test(attachment.mimeType)
@@ -146,6 +166,11 @@ function validAttachment(value: unknown): value is AttachmentPart {
   try { if (sanitizedFileName(String(attachment.fileName)) !== attachment.fileName) return false; } catch { return false; }
   if (attachment.byteSize !== undefined && !validByteSize(attachment.byteSize)) return false;
   if (attachment.sha256 !== undefined && (typeof attachment.sha256 !== 'string' || !SHA256.test(attachment.sha256))) return false;
+  if (attachment.caption !== undefined) {
+    if (attachment.disposition !== 'inline' || !String(attachment.mimeType).startsWith('image/')) return false;
+    if (typeof attachment.caption !== 'string') return false;
+    try { if (cleanCaption(attachment.caption) !== attachment.caption) return false; } catch { return false; }
+  }
   return true;
 }
 
@@ -253,6 +278,7 @@ export function createAttachmentPart(input: Omit<AttachmentPart, 'kind'>): Attac
     disposition: input.disposition,
     ...(input.byteSize !== undefined ? { byteSize: input.byteSize } : {}),
     ...(input.sha256 !== undefined ? { sha256: input.sha256.toLowerCase() } : {}),
+    ...(input.caption !== undefined ? { caption: cleanCaption(input.caption) } : {}),
   });
   if (!validAttachment(attachment)) throw new Error('invalid_delivery_attachment');
   return attachment;

@@ -1,4 +1,36 @@
-# Project State — 2026-09-30
+# Project State — 2026-10-01
+
+## Image generation lifecycle + Kurisu caption UX — source validated; production apply pending
+
+The current source candidate extends the existing OpenClaw 2026.9.4 typed background-completion bridge;
+it has not been Docker-built or applied. One pinned integration module binds the accepted event to
+`notifyMediaGenerationAsyncTaskStarted` after detached scheduling and terminal success/failure to the
+structured `wakeMediaGenerationTaskCompletion(params)` state. `ImageGenerationLifecycleCoordinator`
+keeps a 1,024-task bounded taskId state, claims one terminal state, and ignores failure after success.
+Accepted/failure messages are typed and task-keyed; accepted send errors do not cancel generation. The
+image-generation Skill keeps the ordinary accepted interim Agent reply silent to avoid a duplicate
+acknowledgement.
+
+On success, only OpenClaw's persisted generated `attachments[]` are imported to the asset registry. A
+bounded multimodal CaptionEnricher receives the verified registered image path and current Kurisu
+workspace persona; it returns only `{ caption }`. Timeout/model error/invalid/unavailable captions use a
+safe deterministic fallback and never block the image. DeliveryEnvelope v2 attachment caption is bounded
+normalized presentation data; WhatsApp maps inline image+caption to one native
+`sendMedia({image, mimetype, caption})` call. Telegram maps through native `sendPhoto` caption.
+`document` remains a document.
+No `llm_input/historyMessages` recovery, media prose parsing or pending/automatic sender was restored.
+
+Source checks passed: `pnpm workflow:plan` (reports `RELEASE_BUILD_REQUIRED`; no Docker/CasaOS build/apply
+was run), `pnpm test:delivery` (66 focused tests including exact pinned source integration),
+`pnpm test:amadeus` (100 tests), `pnpm typecheck:amadeus`, `pnpm build:amadeus`, `git diff --check`, and
+`pnpm check:secrets`. The local build only produced the Amadeus plugin bundle.
+
+The read-only live runtime remains the healthy parent candidate
+`local/openclaw-amadeus:git-d7f2847d82f4-20260930154020` on OpenClaw `2026.9.4`; this source is not live.
+Task coordinator and delivery settlement idempotency are bounded in-process state, not a durable
+cross-restart journal; source tests do not prove restart/replay exactly-once. Real owner WhatsApp Gates
+A–F after a separately authorized deployment remain pending. No production apply was authorized or
+performed.
 
 ## 9Router 0.5.91 upgrade and strict GPT Image account — deployed
 
