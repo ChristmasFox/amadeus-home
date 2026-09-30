@@ -16,8 +16,8 @@ as complete. Production still runs the previous immutable image.
 the old config was restored from protected checkpoint
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930074729`, and the old
 immutable image is healthy. The pinned npm installer now invokes the existing
-Node binary directly; retry only from a new committed source, new immutable
-image and new protected checkpoint. Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
+Node binary directly and extracts the signed tar archive in-process; retry
+only from a new committed source, new immutable image and new protected checkpoint. Evidence: `.agent/checkpoints/2026-09-30-delivery-envelope-first-apply-failure.md`.
 
 **Next phase under this explicit authorization:** take a
 protected runtime checkpoint, build/tag a fresh immutable OpenClaw image,

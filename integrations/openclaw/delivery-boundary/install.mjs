@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
 import { createRequire } from 'node:module';
 import { readFile, writeFile, readdir, mkdtemp, rename, chmod, stat, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
@@ -53,7 +54,27 @@ export async function upstream(archive) {
       await writeFile(path, bytes);
     }
     if (createHash('sha512').update(await readFile(path)).digest('hex') !== PIN.archiveSha512) throw new Error('pinned_whatsapp_archive_digest_mismatch');
-    return execFileSync('tar', ['-xOf', path, `package/dist/${PIN.module}`], { encoding: 'utf8', maxBuffer: 1024 * 1024 });
+    // No system `tar` subprocess: it would inherit the private glibc loader.
+    const contents = gunzipSync(await readFile(path), { maxOutputLength: 96 * 1024 * 1024 });
+    const wanted = `package/dist/${PIN.module}`;
+    let found;
+    for (let offset = 0; offset + 512 <= contents.length;) {
+      const header = contents.subarray(offset, offset + 512);
+      const readString = (start, length) => header.subarray(start, start + length).toString('utf8').split('\0')[0];
+      const name = readString(0, 100);
+      if (!name) break;
+      const prefix = readString(345, 155);
+      const entryPath = prefix ? `${prefix}/${name}` : name;
+      const size = Number.parseInt(readString(124, 12).trim(), 8);
+      if (!Number.isSafeInteger(size) || size < 0 || size > contents.length - offset - 512) throw new Error('pinned_whatsapp_archive_invalid');
+      if (entryPath === wanted) {
+        if (found !== undefined || size > 1024 * 1024 || header[156] !== 48) throw new Error('pinned_whatsapp_module_entry_invalid');
+        found = contents.subarray(offset + 512, offset + 512 + size).toString('utf8');
+      }
+      offset += 512 + Math.ceil(size / 512) * 512;
+    }
+    if (found === undefined) throw new Error('pinned_whatsapp_module_missing');
+    return found;
   } finally { await rm(temp, { recursive: true, force: true }); }
 }
 export async function main(argv = process.argv.slice(2)) {
