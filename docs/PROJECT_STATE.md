@@ -18,9 +18,9 @@ are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 ## DeliveryEnvelope v2 — new live candidate; 4x real acceptance pending
 
 The healthy single OpenClaw runtime uses immutable image
-`local/openclaw-amadeus:git-77ed8e60a489-20260930133806`, with Amadeus
+`local/openclaw-amadeus:git-0bccf10fed16-20260930142414`, with Amadeus
 registered, WhatsApp connected and `tts.auto=off`. Its protected checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930133806`. The owner
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930142414`. The owner
 confirmed direct-message replies; group replies recovered without intervention,
 but prior group silent settlements remain unaccounted for. This is not Goal
 completion or full channel acceptance.
@@ -59,7 +59,8 @@ trusted completion turn's typed image part equal the generated file bytes.
 The old candidate incorrectly waited for the second LLM reply's media payload;
 that LLM can time out. New source imports the typed image bytes and settles an
 attachment-only envelope before that LLM call; focused tests pass. This
-follow-up source is not yet committed/applied or owner-accepted.
+follow-up source has a protected candidate apply and is not yet owner-accepted.
+See `.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
 
 ## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 

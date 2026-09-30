@@ -4,10 +4,10 @@ Date: 2026-09-30 local.
 
 Active Goal: `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`.
 
-Status: `CANDIDATE_LIVE_IMAGE_GENERATION_GATE_FAILED_DIAGNOSIS` (Goal open).
+Status: `CANDIDATE_LIVE_IMAGE_PRELLM_OWNER_GATE_PENDING` (Goal open).
 
-The healthy single OpenClaw runtime now uses image-completion candidate
-`git-77ed8e60a489-20260930133806` (retaining default 4x); Amadeus is
+The healthy single OpenClaw runtime now uses pre-LLM image settlement candidate
+`git-0bccf10fed16-20260930142414` (retaining default 4x); Amadeus is
 registered and WhatsApp connected. The owner confirmed direct-message replies
 work and later reported group replies recovered without a source/config change.
 Two group arrivals earlier settled silent, so intermittent group behavior is not
@@ -56,8 +56,9 @@ waited until after a second LLM call for outbound attachment metadata; that
 call timed out or produced unusable output. Source now registers trusted
 completion image bytes and settles an attachment-only v2 envelope at the
 pre-LLM input hook. The later model reply is canceled for this completion;
-focused tests pass, but the source commit/protected apply and real WhatsApp
-acceptance remain pending.
+focused tests, source commit and protected candidate apply passed. Real
+WhatsApp acceptance remains pending. Evidence:
+`.agent/checkpoints/2026-09-30-image-prellm-typed-settlement-candidate.md`.
 
 Gates A–F, ordinary inline generation, JPEG/4x document delivery, recipient
 SHA-256/byte-size equality, TTS fallback and restart acceptance remain open
