@@ -183,9 +183,11 @@
     "whatsapp": {
       "enabled": true,
       "defaultAccount": "secondary",
+      "pluginHooks": { "messageReceived": true },
       "accounts": {
         "secondary": {
-          "enabled": true
+          "enabled": true,
+          "pluginHooks": { "messageReceived": true }
         }
       },
       "dmPolicy": "open",
