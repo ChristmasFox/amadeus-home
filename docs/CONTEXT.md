@@ -2,22 +2,23 @@
 
 Read this with `docs/CURRENT_TASK.md` and inspect Git/live state before work.
 The active Goal is `docs/AMADEUS_DELIVERY_ENVELOPE_MEDIA_CUTOVER_GOAL.md`
-per `docs/CURRENT_TASK.md`. Source cutover is committed and production apply was explicitly authorized;
-four pre-switch candidates and a fifth briefly switched candidate were
-restored; the old Gateway subsequently recovered Amadeus through an official
-backed-up plugin registry refresh. Owner WhatsApp
-Gates A–F remain open. The GPT-SoVITS MPS
-production apply below is historical runtime evidence, not a live instruction.
+per `docs/CURRENT_TASK.md`. A DeliveryEnvelope v2 candidate is now applied
+under the operator's explicit authorization; real WhatsApp Gates A–F are
+still open. Earlier pre-switch attempts and the persisted plugin-index
+recovery are historical rollback evidence. The GPT-SoVITS MPS production
+cutover below is historical runtime evidence, not a live instruction.
 Older Goal documents and checkpoints remain audit evidence.
 
 ## Current Git/runtime boundary (2026-09-30)
 
-Git `main` defines the DeliveryEnvelope v2 source cutover. A retry of the
-explicitly authorized candidate apply is in progress after protected rollbacks and a backed-up plugin-registry recovery; the prior image remains healthy. Read Git `main` and live runtime before any apply. The
-last read-only OpenClaw observation was the healthy immutable
-`local/openclaw-amadeus:git-6311e21b412c-20260930044402`, which does not yet
-contain the cutover. 9Router was upgraded under a separate explicitly
-authorized task; do not infer its live state from the older release snapshot.
+Git `main` defines the DeliveryEnvelope v2 candidate. The one live
+OpenClaw now runs healthy immutable image
+`local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303`, with Amadeus
+registered and WhatsApp connected. Protected rollback and external evidence
+are listed in `.agent/checkpoints/2026-09-30-delivery-envelope-candidate-applied.md`.
+The owner-channel file/voice/text acceptance and recreate gates remain pending.
+9Router was upgraded under a separate task; do not infer its live state from
+the older release snapshot.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 

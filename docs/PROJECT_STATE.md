@@ -15,7 +15,24 @@ not yet been exercised. Sixteen account definitions, all aliases, and the
 are in `.agent/checkpoints/2026-09-30-9router-0.5.91-image-account.md`.
 
 
-## DeliveryEnvelope v2 source cutover — production apply pending
+## DeliveryEnvelope v2 candidate — applied; real owner gates pending
+
+Candidate source `a1df7b7` is healthy as
+`local/openclaw-amadeus:git-a1df7b7f9e76-20260930095303` on the single
+CasaOS OpenClaw runtime. The protected external checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20260930095303` with a
+consistent SQLite registry backup; post-deploy evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20260930095303`.
+The pinned typed WhatsApp boundary, registry refresh, tool/Skill preflights,
+actual Gateway registration, health/smoke, and owner outbox passed. WhatsApp
+is linked/running/connected; Amadeus upscale tool and Skills are visible.
+`tts.auto=off` is deliberate: one typed voice part owns the sole TTS request;
+a bounded direct logical `amadeus-tts` request returned valid MP3 audio.
+**Recipient WhatsApp Gates A–F and downloaded file hash equality are still
+unproven; this candidate is not a release or Goal completion.** Evidence:
+`.agent/checkpoints/2026-09-30-delivery-envelope-candidate-applied.md`.
+
+## DeliveryEnvelope v2 earlier source/rollback history (audit only)
 
 Git source now defines one v2 typed user-facing settlement across text, voice and
 registered image attachments. The retired text/voice-only contract and the two
@@ -71,12 +88,9 @@ Source deployment now backs up this SQLite state and refreshes the index
 before strict candidate plugin/Skill and post-switch Gateway gates. Evidence:
 `.agent/checkpoints/2026-09-30-amadeus-plugin-registry-recovery.md`.
 
-The canonical live OpenClaw remains on
-its previous immutable image and the current observed defects remain runtime
-risks until an explicit deploy/apply and real owner WhatsApp Gates A–F. A
-protected backup, checksum-pinned channel module replacement, health/smoke,
-received-file SHA-256/byte-size proof, and restart/recreate durability are all
-still outstanding. No production media or secrets were copied into Git.
+The previous immutable image and each failed attempt's protected runtime
+snapshot remain external rollback evidence; they are not the current
+production code path or a compatibility fallback.
 
 # Historical Project State — 2026-09-29
 
