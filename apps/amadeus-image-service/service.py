@@ -158,6 +158,25 @@ def validate_mode(value: Any) -> str:
         raise ServiceError("mode_invalid", status=422)
     return str(value)
 
+def validate_resolution(value: Any) -> str | None:
+    if value is None:
+        return None
+    if value not in {"2k", "4k"}:
+        raise ServiceError("resolution_invalid", status=422)
+    return str(value)
+
+def target_dimensions(width: int, height: int, scale: int, resolution: str | None) -> tuple[int, int]:
+    output_width = width * scale
+    output_height = height * scale
+    if resolution is None:
+        return output_width, output_height
+    max_edge = 2_560 if resolution == "2k" else 3_840
+    current_edge = max(output_width, output_height)
+    if current_edge <= max_edge:
+        return output_width, output_height
+    ratio = max_edge / current_edge
+    return max(1, round(output_width * ratio)), max(1, round(output_height * ratio))
+
 
 def parse_origin(raw: str | None) -> dict[str, str]:
     if not raw:
@@ -440,24 +459,28 @@ class AssetStore:
                 updates.append(self._asset(connection.execute("SELECT * FROM assets WHERE image_id = ?", (image_id,)).fetchone()))
         return [item for item in updates if item is not None]
 
-    def upscale(self, image_id: str | None, conversation_id: str | None, reply_message_id: str | None, scale_value: Any, mode_value: Any) -> Asset:
-        scale = validate_scale(scale_value)
+    def upscale(self, image_id: str | None, conversation_id: str | None, reply_message_id: str | None, scale_value: Any, mode_value: Any, resolution_value: Any = None) -> Asset:
+        resolution = validate_resolution(resolution_value)
+        scale = validate_scale(4 if resolution == "4k" and scale_value is None else scale_value)
         mode = validate_mode(mode_value)
         parent = self.resolve(image_id, conversation_id, reply_message_id)
-        if parent.width * scale * parent.height * scale > self.max_output_pixels:
+        intermediate_width = parent.width * scale
+        intermediate_height = parent.height * scale
+        output_width, output_height = target_dimensions(parent.width, parent.height, scale, resolution)
+        if intermediate_width * intermediate_height > self.max_output_pixels or output_width * output_height > self.max_output_pixels:
             raise ServiceError("image_output_limit_exceeded", status=413)
         selected_mode = parent.style_hint if mode == "auto" and parent.style_hint in {"realistic", "anime"} else "realistic" if mode == "auto" else mode
         image_id = f"img_{uuid.uuid4().hex}"
         created_at = utc_now()
         storage_key = f"derived/{created_at[:7].replace('-', '/')}/{image_id}.png"
         destination = self.path_for(storage_key)
-        transform = {"operation": "upscale", "scale": scale, "mode": mode, "profile": selected_mode, "engine": self.engine.name}
+        transform = {"operation": "upscale", "scale": scale, "mode": mode, "profile": selected_mode, "engine": self.engine.name, **({"resolution": resolution} if resolution else {})}
         origin = dict(parent.origin)
         if conversation_id:
             origin["conversationId"] = conversation_id
         if reply_message_id:
             origin["replyToMessageId"] = reply_message_id
-        processing = Asset(image_id, "derived", "generated", created_at, "image/png", parent.width * scale, parent.height * scale, storage_key, 0, "", parent.image_id, transform, origin, selected_mode, "processing")
+        processing = Asset(image_id, "derived", "generated", created_at, "image/png", output_width, output_height, storage_key, 0, "", parent.image_id, transform, origin, selected_mode, "processing")
         with self._connect() as connection:
             connection.execute(
                 "INSERT INTO assets(image_id, kind, source_kind, created_at, mime_type, width, height, storage_key, byte_size, sha256, parent_image_id, transform_json, origin_json, style_hint, status, error_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -477,7 +500,14 @@ class AssetStore:
                 self.engine.upscale(source, temporary_path, scale, selected_mode)
                 output = temporary_path.read_bytes()
                 mime, width, height = inspect_image(output, "image/png")
-                if (width, height) != (parent.width * scale, parent.height * scale):
+                if (width, height) != (output_width, output_height):
+                    from PIL import Image
+                    with Image.open(temporary_path) as image:
+                        resized = image.resize((output_width, output_height), Image.Resampling.LANCZOS)
+                        resized.save(temporary_path, format="PNG", optimize=False)
+                    output = temporary_path.read_bytes()
+                    mime, width, height = inspect_image(output, "image/png")
+                if (width, height) != (output_width, output_height):
                     raise ServiceError("upscale_dimensions_invalid", status=502)
                 self._atomic_write(destination, source=temporary_path)
                 digest = hashlib.sha256(output).hexdigest()
@@ -599,7 +629,7 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(raw.decode("utf-8"))
                 if not isinstance(payload, dict):
                     raise ServiceError("request_invalid", status=422)
-                asset = self.store.upscale(payload.get("imageId"), payload.get("conversationId"), payload.get("replyMessageId"), payload.get("scale"), payload.get("mode"))
+                asset = self.store.upscale(payload.get("imageId"), payload.get("conversationId"), payload.get("replyMessageId"), payload.get("scale"), payload.get("mode"), payload.get("resolution"))
                 self._json(201, {"status": "ok", "asset": asset.public()})
                 return
             if parsed.path == "/v1/assets/bind-delivery":

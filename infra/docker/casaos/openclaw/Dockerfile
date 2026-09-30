@@ -96,13 +96,15 @@ COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-wha
 COPY scripts/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-group-image-policy.mjs
 COPY scripts/patch-openclaw-tts-emotion.mjs /tmp/patch-openclaw-tts-emotion.mjs
 COPY scripts/patch-openclaw-tool-document-delivery.mjs /tmp/patch-openclaw-tool-document-delivery.mjs
+COPY scripts/patch-openclaw-media-json-cleanup.mjs /tmp/patch-openclaw-media-json-cleanup.mjs
 COPY scripts/openclaw-voice-*.mjs /tmp/
 RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-group-image-policy.mjs --core-root /app/dist --apply \
     && node /tmp/patch-openclaw-tts-emotion.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-tool-document-delivery.mjs /app/dist \
+    && node /tmp/patch-openclaw-media-json-cleanup.mjs /app/dist \
     && node --check /app/dist/worker/worker.mjs \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-tts-emotion.mjs /tmp/patch-openclaw-tool-document-delivery.mjs /tmp/openclaw-voice-*.mjs
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-tts-emotion.mjs /tmp/patch-openclaw-tool-document-delivery.mjs /tmp/patch-openclaw-media-json-cleanup.mjs /tmp/openclaw-voice-*.mjs
 
 USER node
