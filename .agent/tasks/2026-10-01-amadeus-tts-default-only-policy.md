@@ -1,7 +1,7 @@
 # Amadeus TTS default-only local-first policy follow-up
 
 Date: 2026-10-01 (Asia/Shanghai)
-Status: `IN_PROGRESS`
+Status: `COMPLETE`
 
 ## Owner request
 
@@ -36,3 +36,14 @@ but disabled in production.
 4. Dry-run, explicit 9Router `--apply`, bridge/local health and a logical
    non-default-style route smoke pass; the returned provider is local MLX.
 5. Source/state documentation is committed and pushed to `main`.
+
+## Completion evidence
+
+Commit `5013800` is deployed in 9Router image
+`local/9router:git-5013800c8de2-20261001T045604Z`
+(`sha256:816eb335fb382a3d1b2ad0e4bb62d0aa3e43cf9c318fe230ecdf78fba4ce425f`).
+Compose explicitly sets `AMADEUS_TTS_EMOTIONS_ENABLED=false`; bridge health
+reports it disabled. A valid non-default `angry` request returned local
+`qwen3-tts-mlx` audio and no cloud fallback. Bridge tests, secrets scan,
+post-apply health and `git diff --check` passed. Detailed evidence is in
+`.agent/checkpoints/2026-10-01-amadeus-tts-default-only-policy.md`.

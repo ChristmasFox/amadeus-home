@@ -40,14 +40,20 @@ owner explicitly waived human listening/WhatsApp acceptance; none is claimed.
 Detailed content-safe evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## TTS default-only local-first policy follow-up — in progress
+## TTS default-only local-first policy — deployed and verified
 
-The owner requested that all valid per-request styles/emotions normalize to
-`default`, always use local Qwen3 MLX first, and fall back to cloud only for
-operational local failure. The emotion instruction implementation remains
-behind a disabled production opt-in. This follow-up is tracked in
-`.agent/tasks/2026-10-01-amadeus-tts-default-only-policy.md`; no runtime change
-has been applied yet.
+Commit `5013800` is deployed in immutable 9Router image
+`local/9router:git-5013800c8de2-20261001T045604Z`
+(`sha256:816eb335fb382a3d1b2ad0e4bb62d0aa3e43cf9c318fe230ecdf78fba4ce425f`).
+The owner-requested behavior is active: all valid styles/emotions normalize to
+`default`, every request tries local Qwen3 MLX first, and only operational local
+failure reaches cloud Qwen Audio 3.1 → 3.0. The source preserves emotion
+instructions behind `AMADEUS_TTS_EMOTIONS_ENABLED`; the live Compose value is
+false and bridge health reports it disabled. A non-default `angry` smoke
+returned local Qwen MLX audio with no cloud fallback. ASR, OpenClaw, ImageAssets,
+model/profile, credentials and voice IDs are unchanged. The follow-up task and
+evidence are in `.agent/tasks/2026-10-01-amadeus-tts-default-only-policy.md`
+and `.agent/checkpoints/2026-10-01-amadeus-tts-default-only-policy.md`.
 
 ## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F accepted
 
