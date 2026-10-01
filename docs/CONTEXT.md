@@ -34,45 +34,45 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.7.7 deployed
+## Current Amadeus WhatsApp/image runtime — 1.7.8 deployed
 
-Source commit `79577cc` is live in immutable OpenClaw 2026.9.4 image
-`local/openclaw-amadeus:git-79577cc27dfc-20261001110629` (image ID
-`sha256:49e61f1b201cad76b1db139993260f75d7f5163269478b688556d082e5598e14`).
-Runtime `/opt/amadeus/VERSION=1.7.7`, OpenClaw health, Gateway registration and
+Source commit `9f23572` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-9f2357210a07-20261001112610` (image ID
+`sha256:c5c1b2d410e25b98bb71c7bf6212699f35b5a8714141c297d8bd0522143d624e`).
+Runtime `/opt/amadeus/VERSION=1.7.8`, OpenClaw health, Gateway registration and
 Product Radar health pass. Protected rollback checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001110629`.
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001112610`.
 
-A private WhatsApp image task was accepted, then failed on provider HTTP 400
-`invalid_request_error/bad_request`; the model had explicitly overridden the
-configured logical `openai/amadeus-image` with `openai/gpt-image-2`. 1.7.7
-removes model-authored overrides at `before_tool_call`, preserving the
-operator-configured capability/fallback. The turn's Chinese input also had
-lifecycle telemetry `request_language=unknown`; language lookup now uses an
-account-scoped conversation fallback when session keys differ. The provider did
-not expose a safe invalid-parameter field, so the report does not claim a more
-specific API rejection cause. User message and prompt text are not retained.
+An owner retry after 1.7.7 reproduced the image failure. The native tool-hook
+handler ran, but pinned host merge semantics meant an omitted model field left
+the original `openai/gpt-image-2` override intact. 1.7.8 resets it to a blank
+sentinel so the configured `openai/amadeus-image` capability/fallback is chosen.
+The same turn's original language remained unknown because a blank `body` blocked
+fallback to non-empty `content`; 1.7.8 now selects the first non-empty value.
+The exact provider rejected parameter was not present in safe logs, so only the
+model-override failure mechanism is claimed.
 
 Automated delivery/Amadeus tests, typecheck/build, architecture/version/secrets
 checks, Gateway/health, NAS read-only smoke, owner notification/outbox smoke and
 post-deploy maintenance passed. Manual owner DM/image-experience acceptance and
 a new paid image-generation transport smoke remain pending; notification/outbox
 smoke is not manual acceptance. Full evidence is in
-`.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
+`.agent/checkpoints/2026-10-01-amadeus-1.7.8-image-route-repair.md`.
 
-The prior Amadeus 1.7.6 deployment is superseded, and 1.7.5 records remain audit
-evidence rather than current runtime identity.
+The 1.7.7 interim deployment passed technical gates but failed the owner's retry;
+it was corrected in place without rollback. 1.7.6 and 1.7.5 records remain
+historical evidence rather than current runtime identity.
 
 ## OpenClaw/Product Radar boundary — current runtime
 
-OpenClaw 2026.9.4 currently runs Amadeus 1.7.7 image
-`local/openclaw-amadeus:git-79577cc27dfc-20261001110629` on OrbStack `nyannyan`;
-Product Radar reuses its unchanged healthy image. The prior 1.7.4 owner Gates
-A–F attestation is historical and does not represent manual acceptance of
-1.7.5, 1.7.6, or 1.7.7. The 1.7.7 owner WhatsApp/image-experience acceptance
-remains pending. Task coordination and delivery settlement are bounded
-process-local state, so no cross-restart exactly-once claim is made. Current
-release evidence is `.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
+OpenClaw 2026.9.4 currently runs Amadeus 1.7.8 image
+`local/openclaw-amadeus:git-9f2357210a07-20261001112610` on OrbStack `nyannyan`;
+Product Radar reuses its unchanged healthy image. Prior owner Gates A–F evidence
+is historical and does not represent manual acceptance of 1.7.5–1.7.8. The
+1.7.8 owner WhatsApp/image-experience acceptance remains pending. Task
+coordination and delivery settlement are bounded process-local state, so no
+cross-restart exactly-once claim is made. Current evidence is
+`.agent/checkpoints/2026-10-01-amadeus-1.7.8-image-route-repair.md`.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 

@@ -1,27 +1,25 @@
 # Project State — 2026-10-01
 
-## Amadeus 1.7.7 — current live image-generation repair
+## Amadeus 1.7.8 — current live image-generation repair
 
-Source commit `79577cc` is pushed to `main` and live in immutable OpenClaw 2026.9.4
-image `local/openclaw-amadeus:git-79577cc27dfc-20261001110629`, image ID
-`sha256:49e61f1b201cad76b1db139993260f75d7f5163269478b688556d082e5598e14`.
-Runtime `/opt/amadeus/VERSION=1.7.7`, container/OpenClaw health, Product Radar
+Source commit `9f23572` is pushed to `main` and live in immutable OpenClaw 2026.9.4
+image `local/openclaw-amadeus:git-9f2357210a07-20261001112610`, image ID
+`sha256:c5c1b2d410e25b98bb71c7bf6212699f35b5a8714141c297d8bd0522143d624e`.
+Runtime `/opt/amadeus/VERSION=1.7.8`, container/OpenClaw health, Product Radar
 health, and Gateway Amadeus registration pass. Protected rollback checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001110629` (directory 0700,
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001112610` (directory 0700,
 manifest 0600); content-safe evidence:
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001110629/`.
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001112610/`.
 
-A privacy-preserving audit of one private WhatsApp failure found an accepted
-`image_generate` task whose model-authored call passed `openai/gpt-image-2`,
-overriding configured logical `openai/amadeus-image`; the OpenAI-compatible
-provider returned HTTP 400 `invalid_request_error/bad_request`. The 1.7.7 native
-`before_tool_call` policy strips only model overrides on generation/edit actions,
-so OpenClaw resolves the configured image capability and its 9Router fallback.
-The same Chinese inbound turn had `request_language=unknown`; lifecycle request
-lookup now falls back to a channel/account/conversation-scoped snapshot when the
-task session key differs. The HTTP 400 did not expose a safe parameter name, so
-no more specific rejected API field is claimed. Private message/prompt/image
-contents are not retained in this record.
+After 1.7.7, the owner retried image generation and it failed again. Safe logs
+confirmed its `before_tool_call` handler fired but OpenClaw's pinned shallow
+merge preserved the omitted `model` key. 1.7.8 writes a blank sentinel, which
+the native image tool parses as no override and resolves to configured
+`openai/amadeus-image`/fallback. The same task's language stayed unknown because
+`event.body` could be present but blank, blocking fallback to non-empty
+`event.content`; 1.7.8 selects the first non-empty field. The provider response
+contained no safe parameter name, so no more specific invalid field is claimed.
+No private prompt/message/image contents are retained.
 
 Pre-apply gates passed: `pnpm test:delivery` (84 plus pinned integration),
 `pnpm test:amadeus` (121), typecheck/build, architecture/fixture checks, version,
@@ -32,17 +30,25 @@ network smoke was skipped. Host Docker default log policy remains a warning;
 managed Compose policies are bounded.
 
 No new paid image-generation transport smoke or manual owner WhatsApp acceptance
-was performed after deployment. Automated verification is not real-channel
-acceptance, and no cross-restart exactly-once claim is made. Detailed evidence:
+was performed after 1.7.8. Automated verification is not real-channel
+acceptance; no cross-restart exactly-once claim is made. Detailed evidence:
+`.agent/checkpoints/2026-10-01-amadeus-1.7.8-image-route-repair.md`.
+
+## Amadeus 1.7.7 — interim attempt, superseded after retry failed
+
+Commit `79577cc` deployed as
+`local/openclaw-amadeus:git-79577cc27dfc-20261001110629`; health and automated
+gates passed, but owner retry reproduced the generation failure because omitted
+hook params did not delete the original model field. The runtime was not rolled
+back; the blank-sentinel correction was deployed as 1.7.8. Evidence:
 `.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
 
-## Amadeus 1.7.6 — prior deployed delivery-boundary repair
+## Amadeus 1.7.6 — prior delivery-boundary repair
 
 Source commit `092b262` was deployed in image
 `local/openclaw-amadeus:git-092b262332b7-20261001102103`; its final WhatsApp
 callback re-runs strict typed preparation when OpenClaw bypasses `preparePayload`.
-It was superseded by 1.7.7. Its manual owner DM/image-experience acceptance was
-pending and was not performed. Evidence is
+It was superseded by the later image-generation fixes. Evidence:
 `.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
 
 ## Amadeus image persona 1.7.5 — prior rollout evidence, not current runtime
