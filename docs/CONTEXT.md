@@ -34,41 +34,24 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.7.9 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.0 deployed
 
-OpenClaw 2026.9.4 runs Amadeus 1.7.9 from commit `0868fb2` in immutable image
-`local/openclaw-amadeus:git-0868fb2b1c81-20261001133405` (image ID
-`sha256:02fcbce4df5914174924ac683994467b6ab6452851d16343396cc27b7e6d8`) on
-OrbStack `nyannyan`. `/opt/amadeus/VERSION=1.7.9`; OpenClaw is healthy, Amadeus
-registration is present, and Product Radar reuses its unchanged healthy image.
-The protected rollback checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001133405`; full
-content-safe trace and gates are in
-`.agent/checkpoints/2026-10-01-amadeus-1.7.9-image-route-authoritative-fix.md`.
+OpenClaw 2026.9.4 runs Amadeus 1.8.0 from commit `2244f98` in immutable image
+`local/openclaw-amadeus:git-2244f98140e0-20261001145719` (image ID
+`sha256:c418bc6397c713c401ed9bc060542d3464318c4c1f6cb9c6b1b38f14ce8c4e35`).
+`/opt/amadeus/VERSION=1.8.0`; OpenClaw is healthy, Gateway registration is
+present, and Product Radar reuses its unchanged healthy image. Protected
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001145719`.
+Evidence: `.agent/checkpoints/2026-10-01-amadeus-1.8.0-reference-route-deploy.md`.
 
-The native 2026.9.4 `image_generate` boundary now ignores model-authored
-provider/model values and resolves only configured `mediaModels.image.primary`.
-The native route guard follows the existing process-local detached task closure
-and the final OpenAI-compatible provider boundary; mismatch fails closed with
-`image_route_invariant_violation`. The Agent-facing model hint is marked ignored
-and no longer advertises concrete GPT Image backend defaults. The existing
-Amadeus hook remains defense-in-depth and emits safe routing facts.
-
-The read-only live 9Router `amadeus-image` state remains canonical:
-`kind=image`, fallback `cx/gpt-image-2.5` → `ag/gemini-3.1-flash-image`. No
-provider account, credential, Combo, TTS service, or TTS route was changed. A
-post-deploy code fixture proved `openai/amadeus-image` is accepted and concrete
-backend values are rejected without issuing HTTP. No post-deploy paid image
-transport smoke or manual owner WhatsApp image acceptance occurred; manual
-acceptance remains pending. Notification/outbox smoke is not image acceptance.
-Task coordination/delivery is still bounded process-local state; no
-cross-restart exactly-once claim is made.
-
-Follow-up: 1.7.9 reference-image requests were routed to the nonexistent 9Router
-`/images/edits` endpoint and failed; prompt-only requests succeeded. Candidate
-Amadeus 1.8.0 adapts one validated reference to the live Combo's supported JSON
-`/images/generations` input. Multi-reference requests fail closed. The candidate
-is not live; acceptance/release state is in `docs/CURRENT_TASK.md`.
+Reference-image failures were caused by the missing live 9Router `/images/edits`
+route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference
+through the existing `openai/amadeus-image` JSON generations route, preserving
+bytes as Codex `input_image` and Gemini `inlineData`. Multi-reference requests
+fail closed; no 9Router source, account, credential, or Combo changed. Live
+post-deploy fixture passed and route error projection was clean. Manual owner
+reference-image generation/delivery acceptance remains pending; no paid smoke
+was run and no cross-restart exactly-once claim is made.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
