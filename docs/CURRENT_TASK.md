@@ -5,7 +5,7 @@ Date: 2026-10-01 (Asia/Shanghai).
 Active Goal: `docs/AMADEUS_IMAGE_ROUTE_AUTHORITATIVE_FIX_GOAL.md`.
 Current live release: **Amadeus 1.8.0** (`VERSION=1.8.0`).
 Deployment: source commit `2244f98` is live; release notes validated.
-Status: `DEPLOYED_AUTOMATED_GATES_PASSED_MANUAL_OWNER_REFERENCE_IMAGE_ACCEPTANCE_PENDING`.
+Status: `DEPLOYED_AUTOMATED_GATES_PASSED_MANUAL_OWNER_REFERENCE_IMAGE_ACCEPTED`.
 
 The 1.8.0 immutable image is live:
 `local/openclaw-amadeus:git-2244f98140e0-20261001145719` (image ID
@@ -31,8 +31,8 @@ Multiple references fail closed before task admission instead of being dropped.
 Focused native request-body, MIME/size, non-target multipart, and exact live
 9Router byte-preservation fixtures pass. No paid reference-image transport request was sent during deployment. The live
 post-deploy route fixture preserves bytes and blocks multi-reference input
-without HTTP. The release image is live; real owner reference-image acceptance
-remains pending.
+without HTTP. The release image is live; the owner confirmed the reference-image path is
+working after deployment.
 
 Deployment checkpoint/evidence:
 `.agent/checkpoints/2026-10-01-amadeus-1.8.0-reference-route-deploy.md`.
