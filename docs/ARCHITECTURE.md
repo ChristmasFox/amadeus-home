@@ -102,9 +102,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
 OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。此前被接受的 1.7.4 baseline image 是
 `local/openclaw-amadeus:git-628703c803e7-20260930184906`；其 owner Gates A–F attestation 是历史证据。
-1.7.5 曾短暂自动应用，之后发现 `taskLabel` 是模型生成的 image prompt 而非原始用户输入，候选已再次回滚；
-当前生产是健康的 1.7.4。工作树正在增加 `before_dispatch` 有界原文快照及独立 requestLanguage；
-下一 1.7.5 candidate 尚未验证/部署，详见 `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`。
+1.7.5 候选曾因 `taskLabel` 是模型生成的 image prompt 而非原始用户输入而回滚。最终 source
+在 `before_dispatch` 捕获有界 inbound text、按 taskId 快照，并单独携带 runtime-derived requestLanguage；
+当前已部署 `local/openclaw-amadeus:git-5444b3a94a82-20261001073247`，自动 gate 全部通过。证据见
+`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`。
 ## Presentation contract 与时间语义
 
 `packages/presentation` 是跨能力的结构化用户输出边界，当前提供

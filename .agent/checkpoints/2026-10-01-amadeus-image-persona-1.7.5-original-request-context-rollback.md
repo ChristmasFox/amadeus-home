@@ -32,3 +32,7 @@ The correction now snapshots `before_dispatch` original text by channel/session 
 ## Full source validation after original-text capture
 
 The current boundary test injects Chinese original user text at `before_dispatch` plus a distinct English model image prompt and asserts both the bounded combined `requestContext` and `requestLanguage=chinese` reach accepted, failed and caption enrichment. Latest full gates on commits `2e60797`/`d8442d6` pass: `pnpm test:delivery` (82 tests plus pinned integration), `pnpm test:amadeus` (116 tests), `pnpm typecheck:amadeus`, `pnpm build:amadeus`, architecture, version/candidate fixtures, secrets and diff checks. Production remains 1.7.4; no corrected candidate is yet deployed.
+
+## Resolution
+
+The inbound-context correction was committed/pushed in `2e60797` and `d8442d6`, validated, and deployed in the distinct image from `5444b3a`. The runtime is now Amadeus 1.7.5 and the release gates pass. This file remains the audit record for the superseded 1.7.4 rollback interval. Final checkpoint: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
