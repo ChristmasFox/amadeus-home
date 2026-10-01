@@ -28,12 +28,14 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   registerVoiceReplyPrompt(api,{captionEnricher:async input=>{captionInputs.push(input);if(source==='caption-error')throw new Error('raw model provider error');if(source==='caption-omitted')return {};return source==='caption-malformed'?{caption:'{"caption":"raw caption protocol"}'}:{caption:`Kurisu caption for ${input.mimeType}`};},lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。';}});registerImageAssets(api);
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>;completeImageGeneration(input:any):Promise<void>;createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string;caption?:string}>=[];
   const sessionKey=`runtime-${source}-${mimeType}`;const taskId=`00000000-0000-4000-8000-${String(taskCounter++).padStart(12,'0')}`;const runId=`run-${sessionKey}`;
+  const inboundBody=source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':source.startsWith('upscale')?'请把刚才的图超分':'请用中文生成一只戴宇航员头盔的橘猫。';
   const lifecycleInput={taskId,sessionKey,requesterAgentId:'main',channel:'whatsapp',accountId:'secondary',conversationId:'chat',requestContext:'a bounded original image request'};
+  const expectedRequestContext=`Original user request: ${inboundBody} | Image prompt: ${lifecycleInput.requestContext}`;
   const plan=boundary.createWhatsAppPlan({sessionKey,accountId:'secondary',conversationId:'chat',messageId:'inbound',inboundVoice:false,start(){},stop(){},sendText:async text=>{sends.push({kind:'text',text});return{messageId:'text-id'};},sendVoice:async()=>{throw new Error('unexpected voice');},sendImage:async(asset,caption)=>{sends.push({kind:'image',bytes:asset.bytes,...(caption?{caption}:{})});return{messageId:'image-id'};},sendDocument:async asset=>{sends.push({kind:'document',bytes:asset.bytes});return{messageId:'document-id'};}});
   assert.equal(plan.delivery.observeMessageSent,true);
   plan.replyOptions.onAgentRunStart(runId);
   for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId,sessionKey,channel:'whatsapp'});
-  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':'请把刚才的图超分'}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
+  for(const hook of hooks.get('before_dispatch')??[])hook({channel:'whatsapp',sessionKey,body:inboundBody}, {channelId:'whatsapp',sessionKey,conversationId:'chat',messageId:'inbound',replyToId:'old-image'});
   let result:unknown;
   if(source==='upscale'||source==='upscale2'||source==='upscale4'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
@@ -53,15 +55,16 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     }else if(source!=='failure'){
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.acceptImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text'],'the started receipt itself is not an accepted acknowledgement');
+      assert.equal(lifecycleInputs[0]?.requestContext,expectedRequestContext);assert.equal(lifecycleInputs[0]?.requestLanguage,'chinese');
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       await boundary.failImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
-      assert.equal(sends[1]?.caption,source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:`Kurisu caption for ${mimeType}`);assert.equal(captionInputs.length,1);assert.equal(captionInputs[0]?.filePath,await realpath(join(root,'derived/asset.bin')));assert.equal(captionInputs[0]?.requestContext,lifecycleInput.requestContext);
+      assert.equal(sends[1]?.caption,source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:`Kurisu caption for ${mimeType}`);assert.equal(captionInputs.length,1);assert.equal(captionInputs[0]?.filePath,await realpath(join(root,'derived/asset.bin')));assert.equal(captionInputs[0]?.requestContext,expectedRequestContext);assert.equal(captionInputs[0]?.requestLanguage,'chinese');
       assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     }else{
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);
-      assert.deepEqual(sends.map(x=>x.kind),['text','text']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.equal(sends[1]?.text,'生成に失敗したわ。');assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext})=>({kind,taskId,agentId,sessionKey,channel,requestContext})),[{kind:'accepted',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:lifecycleInput.requestContext},{kind:'failed',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:lifecycleInput.requestContext}]);
+      assert.deepEqual(sends.map(x=>x.kind),['text','text']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.equal(sends[1]?.text,'生成に失敗したわ。');assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})=>({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})),[{kind:'accepted',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:expectedRequestContext,requestLanguage:'chinese'},{kind:'failed',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:expectedRequestContext,requestLanguage:'chinese'}]);
       assert.equal(captionInputs.length,0,'generation failure never runs caption enrichment');assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);
     }
     return;
@@ -108,13 +111,16 @@ test('Telegram native text and actual Bot API document/photo primitives preserve
 });
 
 test('Telegram accepted/failure lifecycle notices use the original native text route exactly once',async()=>{
- const gatewayCalls:any[]=[];const hooks=new Map<string,Array<(...args:any[])=>any>>();
+ const gatewayCalls:any[]=[];const lifecycleInputs:any[]=[];const hooks=new Map<string,Array<(...args:any[])=>any>>();
  const api={rootDir:new URL('../',import.meta.url).pathname,config:{channels:{telegram:{enabled:true,botToken:'123:test-only'}}},pluginConfig:{},runtime:{gateway:{request:async(method:string,params:any)=>{gatewayCalls.push({method,params});}}},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);}} as unknown as OpenClawPluginApi;
- registerVoiceReplyPrompt(api,{captionEnricher:async()=>{throw new Error('caption must not run for lifecycle text');},lifecycleMessageEnricher:async input=>input.kind==='accepted'?'生成を始めたわ。':'画像生成に失敗したわ。'});
+ registerVoiceReplyPrompt(api,{captionEnricher:async()=>{throw new Error('caption must not run for lifecycle text');},lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'画像生成に失敗したわ。';}});
  const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>};
  const input={taskId:'00000000-0000-4000-8000-000000000021',sessionKey:'telegram-owner-session',requesterAgentId:'main',channel:'telegram',accountId:'default',conversationId:'12345',threadId:42};
+ const userRequest='请用中文生成一幅樱花季京都街景。';
+ for(const hook of hooks.get('before_dispatch')??[])hook({channel:'telegram',sessionKey:input.sessionKey,body:userRequest},{channelId:'telegram',sessionKey:input.sessionKey,conversationId:input.conversationId});
  await boundary.acceptImageGeneration(input);await boundary.acceptImageGeneration(input);
  await boundary.failImageGeneration(input);await boundary.failImageGeneration(input);
  assert.deepEqual(gatewayCalls.map(call=>call.params.message),['生成を始めたわ。','画像生成に失敗したわ。']);
  assert.ok(gatewayCalls.every(call=>call.method==='send'&&call.params.threadId===42&&call.params.to==='12345'));
+ assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})=>({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})),[{kind:'accepted',taskId:input.taskId,agentId:'main',sessionKey:input.sessionKey,channel:'telegram',requestContext:userRequest,requestLanguage:'chinese'},{kind:'failed',taskId:input.taskId,agentId:'main',sessionKey:input.sessionKey,channel:'telegram',requestContext:userRequest,requestLanguage:'chinese'}]);
 });

@@ -290,6 +290,11 @@ A distinct 1.7.5 candidate from `e82f04d` passed preflight and production techni
 The latest local correction passes `pnpm test:delivery` (80 focused tests plus the exact pinned integration), `pnpm test:amadeus` (114 tests), typecheck/build, architecture, secrets, version/candidate fixtures and diff checks. The validated source and current-state docs are pending commit/push; no fresh candidate has been built or applied yet. Production remains on the healthy 1.7.4 rollback image.
 
 
-## Final execution status — 2026-10-01 complete
+## Previous candidate `4e514a3` — applied, then superseded by a later source audit
 
 The corrected source was committed/pushed as `4e514a361becb9183b9208a5c8b764d5eb70c65d` and deployed as immutable image `local/openclaw-amadeus:git-4e514a361bec-20261001064552`. Runtime identity reports Amadeus 1.7.5; OpenClaw health, real Gateway registration, focused actual-image multimodal caption smoke, controlled lifecycle/caption failure tests, all delivery/upscale/regression tests, typecheck/build, architecture and secrets gates passed. Manual owner WhatsApp/image-experience acceptance is **operator-waived, not performed**. Full gate results, checkpoint, rollback reference and deployment advisory notes are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
+
+
+## Reopened completion audit — original request source was not preserved
+
+After the `4e514a3` candidate was applied, inspection of the exact pinned OpenClaw 2026.9.4 source showed `handle.taskLabel` comes from `request.prompt` (the model-produced image prompt), not guaranteed original inbound user text. That does not prove Chinese/Japanese/English continuity even if the language guard is present. The candidate was rolled back to healthy 1.7.4 using the protected checkpoint. Source is now being corrected to snapshot bounded original WhatsApp/Telegram text from `before_dispatch` and carry its runtime-derived language separately from image prompt data through accepted, failed and caption enrichment. This correction is not yet committed or deployed; the Goal remains incomplete. Evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.

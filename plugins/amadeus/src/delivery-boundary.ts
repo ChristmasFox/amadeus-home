@@ -11,6 +11,7 @@ import { deliverySettlementState, settleDelivery, type DeliveryReceipt } from '.
 import { createDeliverySpeech } from './delivery-speech.js';
 import { createWhatsAppAttachmentSender } from './whatsapp-delivery.js';
 import type { ResolvedDeliveryAsset } from './delivery-assets.js';
+import { detectImageRequestLanguage, type ImageRequestLanguage } from './image-generation-context.js';
 
 export const DELIVERY_BOUNDARY_GLOBAL = '__amadeusDeliveryBoundaryV2_20260930';
 export type ImageGenerationLifecycleInput = Readonly<{
@@ -38,6 +39,10 @@ export type DeliveryBoundaryOptions = Readonly<{
 }>;
 const settlement = deliverySettlementState;
 const TASK_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
+const SESSION_REQUEST_CONTEXT_TTL_MS = 5 * 60_000;
+const TASK_REQUEST_CONTEXT_TTL_MS = 30 * 60_000;
+const MAX_SESSION_REQUEST_CONTEXTS = 512;
+const MAX_TASK_REQUEST_CONTEXTS = 1024;
 
 function validLifecycleInput(value: ImageGenerationLifecycleInput): boolean {
   if (!value || typeof value !== 'object') return false;
@@ -51,10 +56,33 @@ function validLifecycleInput(value: ImageGenerationLifecycleInput): boolean {
       || (typeof value.threadId === 'number' && Number.isSafeInteger(value.threadId) && value.threadId >= 0))
     && (value.requestContext === undefined || typeof value.requestContext === 'string');
 }
+function text(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined;
+}
 function boundedText(value: string | undefined, max: number): string | undefined {
   if (!value) return undefined;
   const text = value.normalize('NFC').replace(/[\u0000-\u001f\u007f-\u009f]/gu, '').trim();
   return text ? [...text].slice(0, max).join('') : undefined;
+}
+
+type TimedRequestContext = Readonly<{ value: string; language: ImageRequestLanguage; expiresAt: number }>;
+function pruneRequestContexts(contexts: Map<string, TimedRequestContext>, maxEntries: number, now: number): void {
+  for (const [key, value] of contexts) if (value.expiresAt <= now) contexts.delete(key);
+  while (contexts.size > maxEntries) contexts.delete(contexts.keys().next().value!);
+}
+function storeRequestContext(contexts: Map<string, TimedRequestContext>, key: string, value: string, language: ImageRequestLanguage, ttlMs: number, maxEntries: number, now: number): void {
+  pruneRequestContexts(contexts, maxEntries, now);
+  contexts.delete(key);
+  contexts.set(key, { value, language, expiresAt: now + ttlMs });
+  pruneRequestContexts(contexts, maxEntries, now);
+}
+function readRequestContext(contexts: Map<string, TimedRequestContext>, key: string, now: number): TimedRequestContext | undefined {
+  const value = contexts.get(key);
+  if (!value) return undefined;
+  if (value.expiresAt <= now) { contexts.delete(key); return undefined; }
+  contexts.delete(key);
+  contexts.set(key, value);
+  return value;
 }
 
 export function registerDeliveryBoundary(api: OpenClawPluginApi, options: DeliveryBoundaryOptions = {}): void {
@@ -64,14 +92,44 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
   const lifecycle = new ImageGenerationLifecycleCoordinator(1024);
   const completionPorts = new Map<string, { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
   const lifecycleMessages = new Map<string, Promise<string>>();
+  const sessionRequestContexts = new Map<string, TimedRequestContext>();
+  const taskRequestContexts = new Map<string, TimedRequestContext>();
 
-  const lifecycleSemanticInput = (input: ImageGenerationLifecycleInput, kind: ImageGenerationMessageKind): ImageLifecycleMessageInput => {
-    const requestContext = boundedText(input.requestContext, 2_000);
-    return {
-      kind, taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
-      ...(requestContext ? { requestContext } : {}),
-    };
+  // Keep only a short, bounded snapshot of the actual inbound user text. The
+  // model-produced image prompt remains separate context; neither can affect
+  // runtime-owned task identity or delivery routing.
+  api.on('before_dispatch', (event, hookContext) => {
+    const sessionKey = text(hookContext.sessionKey ?? event.sessionKey);
+    const channel = text(hookContext.channelId ?? event.channel);
+    if (!sessionKey || (channel !== 'whatsapp' && channel !== 'telegram')) return;
+    const originalRequest = boundedText(text(event.body ?? event.content), 300);
+    if (!originalRequest) return;
+    const language = detectImageRequestLanguage(originalRequest);
+    storeRequestContext(sessionRequestContexts, `${channel}:${sessionKey}`, originalRequest, language, SESSION_REQUEST_CONTEXT_TTL_MS, MAX_SESSION_REQUEST_CONTEXTS, Date.now());
+  });
+
+  const lifecycleRequestContext = (input: ImageGenerationLifecycleInput): Readonly<{ requestContext?: string; requestLanguage: ImageRequestLanguage }> => {
+    const now = Date.now();
+    const existing = readRequestContext(taskRequestContexts, input.taskId, now);
+    if (existing) return { requestContext: existing.value, requestLanguage: existing.language };
+    const originalRequest = readRequestContext(sessionRequestContexts, `${input.channel}:${input.sessionKey}`, now);
+    const imagePrompt = boundedText(input.requestContext, 120);
+    const combined = originalRequest && imagePrompt
+      ? `Original user request: ${originalRequest.value} | Image prompt: ${imagePrompt}`
+      : originalRequest?.value ?? imagePrompt;
+    const requestContext = boundedText(combined, 480);
+    // Language identity comes only from runtime-captured inbound text. A model
+    // may translate taskLabel for image quality; that prompt is context, not a
+    // reliable signal of the user's reply language.
+    const requestLanguage = originalRequest?.language ?? 'unknown';
+    if (requestContext) storeRequestContext(taskRequestContexts, input.taskId, requestContext, requestLanguage, TASK_REQUEST_CONTEXT_TTL_MS, MAX_TASK_REQUEST_CONTEXTS, now);
+    return { ...(requestContext ? { requestContext } : {}), requestLanguage };
   };
+
+  const lifecycleSemanticInput = (input: ImageGenerationLifecycleInput, kind: ImageGenerationMessageKind): ImageLifecycleMessageInput => ({
+    kind, taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
+    ...lifecycleRequestContext(input),
+  });
   const rememberLifecycleMessage = (input: ImageGenerationLifecycleInput): Promise<string> => {
     const key = `${input.taskId}:failed`;
     let pending = lifecycleMessages.get(key);
@@ -120,10 +178,11 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     },
     async failImageGeneration(input: ImageGenerationLifecycleInput): Promise<void> {
       if (!validLifecycleInput(input)) throw new Error('image_lifecycle_identity_invalid');
-      await lifecycle.failed(input.taskId, async () => {
+      const failed = await lifecycle.failed(input.taskId, async () => {
         const message = await rememberLifecycleMessage(input);
         await sendLifecycleNotice(input, 'failed', message);
       });
+      if (failed) taskRequestContexts.delete(input.taskId);
     },
     async settleWhatsAppCompletion(envelope: DeliveryEnvelope): Promise<void> {
       if (!deliveryRuns.owns(envelope) || envelope.origin !== 'media_completion' || envelope.channel !== 'whatsapp') throw new Error('image_completion_envelope_invalid');
@@ -135,10 +194,10 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       if (!validLifecycleInput(input)) throw new Error('image_completion_identity_invalid');
       const completed = await lifecycle.succeeded(input.taskId, async () => {
         const envelope = await lifecycle.artifacts(input.taskId, async () => {
-          const requestContext = boundedText(input.requestContext, 2_000);
+          const requestContext = lifecycleRequestContext(input);
           const parts = await importGeneratedCompletionAssets(api, input.attachments, {
             taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
-            ...(requestContext ? { requestContext } : {}),
+            ...requestContext,
             captionEnricher,
           });
           const runId = `image_generate:${input.taskId}:typed-completion`;
@@ -150,6 +209,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
         else await settleTelegramDelivery(api, envelope, { ...(input.accountId ? { accountId: input.accountId } : {}), conversationId: input.conversationId!, ...(input.threadId !== undefined ? { threadId: input.threadId } : {}) });
       });
       if (!completed) throw new Error('image_generation_terminal_failed');
+      taskRequestContexts.delete(input.taskId);
     },
     version: 2 as const,
     createWhatsAppPlan(port: WhatsAppDeliveryPort) {

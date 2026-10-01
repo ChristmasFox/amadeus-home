@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-10-01（Amadeus image lifecycle 1.7.5 deployed and automatically verified）
+更新时间：2026-10-01（Amadeus image lifecycle 1.7.5 original-request context correction pending; production rolled back）
 
 ## Worldline notification boundary
 
@@ -71,7 +71,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   同一个 version/digest-pinned OpenClaw 2026.9.4 integration 在
   `notifyMediaGenerationAsyncTaskStarted` 之后发 accepted，在
   `wakeMediaGenerationTaskCompletion(params)` 的 authoritative `status=ok|error` 发
-  succeeded/failed；不解析 started receipt、completion prose 或 provider 错误。typed route
+  succeeded/failed；不解析 started receipt、completion prose 或 provider 错误。`before_dispatch` 只捕获
+  有界的原始 WhatsApp/Telegram 文本（session TTL 5 分钟、最多 512 项）；accepted 时按 runtime taskId
+  快照 context（最多 1024 项、TTL 30 分钟），并与不可信的模型生成 image prompt 分字段组合。requestLanguage
+  只从原始 inbound 文本确定，不从可能被翻译的 taskLabel 推断。typed route
   来自原 task handle。taskId 状态有界（最多 1024 项），accepted 最多一次，succeeded/failed
   互斥；late failure 不显示，completion retry 使用 taskId 稳定的 deliveryId 和既有 ledger。
   Accepted 提示发送错误不会取消已经调度的生成任务。
@@ -99,10 +102,9 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
 OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。此前被接受的 1.7.4 baseline image 是
 `local/openclaw-amadeus:git-628703c803e7-20260930184906`；其 owner Gates A–F attestation 是历史证据。
-当前 Amadeus 1.7.5 runtime 使用 immutable image
-`local/openclaw-amadeus:git-4e514a361bec-20261001064552` 并已自动验收；本次 manual owner acceptance
-明确 waive、未执行。回滚和最终 gate 证据见
-`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`。
+1.7.5 曾短暂自动应用，之后发现 `taskLabel` 是模型生成的 image prompt 而非原始用户输入，候选已再次回滚；
+当前生产是健康的 1.7.4。工作树正在增加 `before_dispatch` 有界原文快照及独立 requestLanguage；
+下一 1.7.5 candidate 尚未验证/部署，详见 `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`。
 ## Presentation contract 与时间语义
 
 `packages/presentation` 是跨能力的结构化用户输出边界，当前提供
@@ -282,7 +284,3 @@ canonical runtime 是 host profile 指定的 OrbStack CasaOS machine（M204 当�
 已在生产生效的证据。当前受控声学服务仍为 9Router `amadeus-tts` bridge；
 WhatsApp ingress 的已验证 audio lease、失败 admission、typing 和 per-session queue
 保留为 transport lifecycle，交付语义由上面的 v2 typed contract 独占。
-
-
-
-The first 1.7.5 candidate was rolled back after reported wrong-language accepted text and a caption provider error. The corrected 1.7.5 image is now deployed and automatically verified; manual owner acceptance was waived and not performed. Final evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.

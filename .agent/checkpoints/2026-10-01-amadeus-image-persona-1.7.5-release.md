@@ -46,3 +46,8 @@ All passed:
 - The deploy workflow emitted a non-blocking host-wide Docker default-log-policy warning (`/etc/docker/daemon.json` absent); managed service Compose log limits remained bounded and unknown owners remained report-only. This is unrelated to the image lifecycle Goal.
 - The optional `media-organizer-adapter` network check was skipped because that external service was absent; it is outside this Goal's hard gates.
 - Task coordinator and delivery settlement remain bounded process-local state; no cross-restart exactly-once claim is added.
+
+
+## Superseded after source-truth audit
+
+This release checkpoint records the prior `4e514a3` apply. A later audit of the exact pinned OpenClaw source found that `taskLabel` is model-produced `request.prompt`, not guaranteed original inbound text. The candidate was rolled back again; production is now 1.7.4 pending a source change that captures original inbound context separately. Do not use this checkpoint as evidence that 1.7.5 remains deployed. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.

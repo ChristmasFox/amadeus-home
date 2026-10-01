@@ -1,12 +1,10 @@
 # Project State — 2026-10-01
 
-## Amadeus image persona 1.7.5 — deployed and automatically verified
+## Amadeus image persona 1.7.5 — rolled back pending original-request source correction
 
-Canonical Amadeus `VERSION=1.7.5` is deployed in immutable OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-4e514a361bec-20261001064552`, built from final source commit `4e514a361becb9183b9208a5c8b764d5eb70c65d`. Runtime `/opt/amadeus/VERSION=1.7.5`, OpenClaw health, Product Radar health and real Gateway Amadeus registration pass. Protected rollback checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001064552` (0700 directory, protected manifest 0600); content-safe evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
+A final source-truth audit after candidate `4e514a3` found pinned OpenClaw 2026.9.4 sets lifecycle `taskLabel` from `request.prompt` (model-produced image prompt), not guaranteed inbound user text. This could still make Chinese users receive English lifecycle text when that prompt was translated. The candidate was rolled back using protected checkpoint `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001064552`; failed Compose snapshot `openclaw-compose.failed-original-language-context.yml` is mode 0600. Production is healthy and registered on `local/openclaw-amadeus:git-628703c803e7-20260930184906` (source Amadeus `VERSION=1.7.4`).
 
-The final language/output guard and same-operation bounded retries were validated after a prior 1.7.5 candidate was rolled back for English accepted text and caption `model_error`. Final `pnpm test:delivery` (80 tests plus exact pinned integration), `pnpm test:amadeus` (114 tests), typecheck/build, architecture/secrets checks and actual generated-image multimodal caption smoke passed. A real generated registry image received a valid bounded caption in 5,429 ms. The user's earlier failure report was treated as technical evidence and did trigger rollback; it is not waived. Manual owner-channel acceptance of the final candidate was operator-waived and not performed. See the incident record `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
-
-The deployment workflow reported a non-blocking global Docker default log-policy warning because `/etc/docker/daemon.json` is absent; managed Compose services retain bounded per-container logs and unknown owners are report-only. The optional media-organizer-adapter network check was skipped because that external service was absent. Neither is an image-lifecycle hard gate.
+The current uncommitted source captures actual inbound WhatsApp/Telegram text from `before_dispatch`, snapshots it under runtime taskId, and passes its derived request language separately from the image prompt to accepted, failed and caption semantics. This is not deployed. Goal 1.7.5 remains incomplete until the corrected source and a distinct candidate pass every hard gate. Evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
 
 ## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed
 

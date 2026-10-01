@@ -49,3 +49,9 @@ The uncommitted language-lock/retry correction now passes `pnpm test:delivery` (
 ## Resolution
 
 Commit `4e514a361becb9183b9208a5c8b764d5eb70c65d` corrected request-language validation/retries and bounded caption transient recovery. Its distinct immutable candidate is now deployed and automatically verified; current runtime is Amadeus 1.7.5. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md` for final gate evidence and explicit manual acceptance waiver.
+
+## Subsequent original-request source audit and rollback
+
+A final audit of the exact pinned OpenClaw 2026.9.4 module showed `handle.taskLabel` is populated from `request.prompt` (the model-produced image prompt), not guaranteed original inbound user text. That explains why an English translated image prompt could still drive an English accepted reply after the `4e514a3` language guard. The `4e514a3` candidate was rolled back again to the protected pre-apply 1.7.4 Compose from the same checkpoint; the previous image tag was present, so no rebuild was required. Current health and Gateway registration passed on `local/openclaw-amadeus:git-628703c803e7-20260930184906`.
+
+The new source captures bounded `before_dispatch` inbound text in short-lived channel/session context, snapshots it per taskId, carries its derived language separately from the model image prompt, and passes both through lifecycle and caption semantic input. This source is not yet committed or deployed. Detailed evidence and the new rollback's exact Compose snapshot are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
