@@ -109,7 +109,10 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     const conversationId = text(hookContext.conversationId);
     const sessionContextKey = `${channel}:${sessionKey}`;
     const conversationContextKey = conversationId ? conversationRequestContextKey(channel, accountId, conversationId) : undefined;
-    const originalRequest = boundedText(text(event.body ?? event.content), 300);
+    // `body` can be present but blank while normalized `content` still carries
+    // the inbound user text. Choose the first non-empty string, not the first
+    // non-null field, so request-language capture remains useful for DMs.
+    const originalRequest = boundedText(text(event.body) ?? text(event.content), 300);
     if (!originalRequest) {
       sessionRequestContexts.delete(sessionContextKey);
       if (conversationContextKey) conversationRequestContexts.delete(conversationContextKey);

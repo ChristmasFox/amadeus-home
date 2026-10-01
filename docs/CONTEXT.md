@@ -34,43 +34,45 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.7.6 deployed
+## Current Amadeus WhatsApp/image runtime — 1.7.7 deployed
 
-Source commit `092b262` is live in immutable OpenClaw 2026.9.4 image
-`local/openclaw-amadeus:git-092b262332b7-20261001102103` (image ID
-`sha256:fa5ea5829b3d1e795e90b9ba8522140efc55eed502b82eb34a9168a34de3a14`).
-Runtime `/opt/amadeus/VERSION=1.7.6`, OpenClaw health, Gateway registration and
-Product Radar health pass. The protected rollback checkpoint is
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001102103`.
+Source commit `79577cc` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-79577cc27dfc-20261001110629` (image ID
+`sha256:49e61f1b201cad76b1db139993260f75d7f5163269478b688556d082e5598e14`).
+Runtime `/opt/amadeus/VERSION=1.7.7`, OpenClaw health, Gateway registration and
+Product Radar health pass. Protected rollback checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001110629`.
 
-The pre-deploy runtime was actually on the healthy 1.7.4 rollback image, despite
-the prior 1.7.5 current-state record. 1.7.6 re-runs strict typed preparation
-inside the final WhatsApp `delivery.deliver()` callback (which can bypass
-`preparePayload` on pinned OpenClaw 2026.9.4) and preserves trusted internal
-provenance to settlement. The operator's exact report was not correlated to
-content-bearing runtime logs, so its individual event route remains unproven.
+A private WhatsApp image task was accepted, then failed on provider HTTP 400
+`invalid_request_error/bad_request`; the model had explicitly overridden the
+configured logical `openai/amadeus-image` with `openai/gpt-image-2`. 1.7.7
+removes model-authored overrides at `before_tool_call`, preserving the
+operator-configured capability/fallback. The turn's Chinese input also had
+lifecycle telemetry `request_language=unknown`; language lookup now uses an
+account-scoped conversation fallback when session keys differ. The provider did
+not expose a safe invalid-parameter field, so the report does not claim a more
+specific API rejection cause. User message and prompt text are not retained.
 
 Automated delivery/Amadeus tests, typecheck/build, architecture/version/secrets
 checks, Gateway/health, NAS read-only smoke, owner notification/outbox smoke and
-post-deploy maintenance passed. Manual owner WhatsApp/image-experience
-acceptance after this deployment remains pending and is not implied by the
-notification/outbox smoke. Full evidence is in
-`.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
+post-deploy maintenance passed. Manual owner DM/image-experience acceptance and
+a new paid image-generation transport smoke remain pending; notification/outbox
+smoke is not manual acceptance. Full evidence is in
+`.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
 
-The previous Amadeus 1.7.5 release record and its automatic caption smoke remain
-audit evidence, not the current runtime identity. Its manual owner acceptance
-was waived and not performed.
+The prior Amadeus 1.7.6 deployment is superseded, and 1.7.5 records remain audit
+evidence rather than current runtime identity.
 
 ## OpenClaw/Product Radar boundary — current runtime
 
-OpenClaw 2026.9.4 currently runs Amadeus 1.7.6 image
-`local/openclaw-amadeus:git-092b262332b7-20261001102103` on OrbStack `nyannyan`;
+OpenClaw 2026.9.4 currently runs Amadeus 1.7.7 image
+`local/openclaw-amadeus:git-79577cc27dfc-20261001110629` on OrbStack `nyannyan`;
 Product Radar reuses its unchanged healthy image. The prior 1.7.4 owner Gates
 A–F attestation is historical and does not represent manual acceptance of
-1.7.5 or 1.7.6. The 1.7.6 owner WhatsApp/image-experience acceptance remains
-pending. Task coordination and delivery settlement are bounded process-local
-state, so no cross-restart exactly-once claim is made. Current release evidence
-is `.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
+1.7.5, 1.7.6, or 1.7.7. The 1.7.7 owner WhatsApp/image-experience acceptance
+remains pending. Task coordination and delivery settlement are bounded
+process-local state, so no cross-restart exactly-once claim is made. Current
+release evidence is `.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 

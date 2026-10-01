@@ -1,39 +1,48 @@
 # Project State — 2026-10-01
 
-## Amadeus 1.7.6 — current live release; automated gates passed
+## Amadeus 1.7.7 — current live image-generation repair
 
-Source commit `092b262` is pushed to `main` and runs in immutable OpenClaw 2026.9.4
-image `local/openclaw-amadeus:git-092b262332b7-20261001102103`, image ID
-`sha256:fa5ea5829b3d1e795e90b9ba8522140efc55eed502b82eb34a9168a34de3a14`.
-Runtime `/opt/amadeus/VERSION=1.7.6`, container/OpenClaw health, Product Radar
-health and Gateway Amadeus registration pass. Protected rollback checkpoint:
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001102103` (directory 0700,
-manifest 0600); content-safe deploy evidence:
-`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001102103/`.
+Source commit `79577cc` is pushed to `main` and live in immutable OpenClaw 2026.9.4
+image `local/openclaw-amadeus:git-79577cc27dfc-20261001110629`, image ID
+`sha256:49e61f1b201cad76b1db139993260f75d7f5163269478b688556d082e5598e14`.
+Runtime `/opt/amadeus/VERSION=1.7.7`, container/OpenClaw health, Product Radar
+health, and Gateway Amadeus registration pass. Protected rollback checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001110629` (directory 0700,
+manifest 0600); content-safe evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001110629/`.
 
-The pre-deploy container was actually the healthy 1.7.4 rollback image
-`local/openclaw-amadeus:git-628703c803e7-20260930184906`; the older 1.7.5 current
-state record was stale. Source review found the pinned final WhatsApp
-`delivery.deliver()` callback can bypass `preparePayload`. Amadeus now repeats
-strict typed preparation inside that final callback and updates trusted
-heartbeat/cron/internal provenance for unsettled runs. Tests cover direct final
-callback bypass, legacy marker/sentinel-shaped malformed output, internal silence,
-and valid typed delivery. No text modality protocol or additional sender was
-reintroduced. The exact user-reported outbound message was not correlated to
-content-bearing runtime logs; the per-event cause is not claimed as proven.
+A privacy-preserving audit of one private WhatsApp failure found an accepted
+`image_generate` task whose model-authored call passed `openai/gpt-image-2`,
+overriding configured logical `openai/amadeus-image`; the OpenAI-compatible
+provider returned HTTP 400 `invalid_request_error/bad_request`. The 1.7.7 native
+`before_tool_call` policy strips only model overrides on generation/edit actions,
+so OpenClaw resolves the configured image capability and its 9Router fallback.
+The same Chinese inbound turn had `request_language=unknown`; lifecycle request
+lookup now falls back to a channel/account/conversation-scoped snapshot when the
+task session key differs. The HTTP 400 did not expose a safe parameter name, so
+no more specific rejected API field is claimed. Private message/prompt/image
+contents are not retained in this record.
 
-Before the apply, `pnpm test:delivery` (83 plus pinned integration),
-`pnpm test:amadeus` (117), typecheck/build, architecture and architecture fixture
-checks, version validation, secrets scan, and `git diff --check` passed. Apply
-used `scripts/deploy-openclaw.sh --apply --build-auto`; OpenClaw/Product Radar
-health, Gateway registration, NAS read-only smoke, owner notification/outbox
-smoke, and post-deploy maintenance passed. Optional media-adapter network smoke
-was skipped because the service was absent; the host Docker log-policy warning
-was non-blocking.
+Pre-apply gates passed: `pnpm test:delivery` (84 plus pinned integration),
+`pnpm test:amadeus` (121), typecheck/build, architecture/fixture checks, version,
+secrets, and `git diff --check`. OpenClaw/Product Radar health, plugin
+registration, NAS read-only smoke, owner notification/outbox smoke, and
+post-deploy maintenance passed. The optional media adapter was absent; its
+network smoke was skipped. Host Docker default log policy remains a warning;
+managed Compose policies are bounded.
 
-Manual owner WhatsApp/image-experience acceptance after 1.7.6 deployment remains
-pending; notification/outbox smoke is not that acceptance. No cross-restart
-exactly-once claim is made. Complete evidence:
+No new paid image-generation transport smoke or manual owner WhatsApp acceptance
+was performed after deployment. Automated verification is not real-channel
+acceptance, and no cross-restart exactly-once claim is made. Detailed evidence:
+`.agent/checkpoints/2026-10-01-amadeus-1.7.7-image-route-repair.md`.
+
+## Amadeus 1.7.6 — prior deployed delivery-boundary repair
+
+Source commit `092b262` was deployed in image
+`local/openclaw-amadeus:git-092b262332b7-20261001102103`; its final WhatsApp
+callback re-runs strict typed preparation when OpenClaw bypasses `preparePayload`.
+It was superseded by 1.7.7. Its manual owner DM/image-experience acceptance was
+pending and was not performed. Evidence is
 `.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
 
 ## Amadeus image persona 1.7.5 — prior rollout evidence, not current runtime
@@ -41,9 +50,9 @@ exactly-once claim is made. Complete evidence:
 The earlier final-release record describes immutable image
 `local/openclaw-amadeus:git-5444b3a94a82-20261001073247`, original-request
 context and caption automation. It remains historical evidence only; a later
-read-only audit before 1.7.6 found production had reverted to the 1.7.4 rollback
-image. The 1.7.5 manual owner WhatsApp/image-experience acceptance was waived
-and not performed. Its checkpoint is
+read-only audit found production had reverted to the 1.7.4 rollback image. The
+1.7.5 manual owner WhatsApp/image-experience acceptance was waived and not
+performed. Evidence:
 `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
 
 ## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed

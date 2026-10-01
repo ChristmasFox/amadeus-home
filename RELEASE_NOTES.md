@@ -1,5 +1,5 @@
-# Amadeus 1.7.7
+# Amadeus 1.7.8
 
-- 生图工具现在忽略模型生成的具体 provider/model 覆盖，始终回到运维配置的 `amadeus-image` 逻辑 capability 与既有 fallback。
-- 异步生图生命周期按 account-scoped conversation 补取原始私聊语境，修复 session key 不一致时语言退化为 unknown。
-- 保留严格 WhatsApp final typed delivery 和内部任务静默边界。
+- 修正工具参数合并语义：把模型指定的生图 `model` 覆盖重置为空值，确保配置的 `amadeus-image` capability 与 fallback 真正生效。
+- 私聊原始文本 body 为空时改用非空 normalized content，保证异步任务能取得原始请求语言。
+- 保留 list/status 查询、typed final delivery 与内部任务静默行为。
