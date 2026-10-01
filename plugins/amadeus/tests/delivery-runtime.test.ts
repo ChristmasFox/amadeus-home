@@ -192,7 +192,7 @@ test('image lifecycle recovers original request language from account-scoped con
   on(name: string, handler: (...args: any[]) => any) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
  } as unknown as OpenClawPluginApi;
  registerVoiceReplyPrompt(api, { lifecycleMessageEnricher: async input => { captured.push(input); return '已开始。'; } });
- const inbound = { channel: 'whatsapp', sessionKey: 'inbound-session', body: '请生成一张竖屏插画。' };
+ const inbound = { channel: 'whatsapp', sessionKey: 'inbound-session', body: '', content: '请生成一张竖屏插画。' };
  for (const hook of hooks.get('before_dispatch') ?? []) hook(inbound, {
   channelId: 'whatsapp', sessionKey: 'inbound-session', accountId: 'secondary', conversationId: 'chat-42',
  });
@@ -204,4 +204,14 @@ test('image lifecycle recovers original request language from account-scoped con
  assert.equal(captured[0]?.requestLanguage, 'chinese');
  assert.match(captured[0]?.requestContext, /请生成一张竖屏插画/u);
  assert.match(captured[0]?.requestContext, /English model-generated image prompt/u);
+
+ const sameSessionInbound = { channel: 'whatsapp', sessionKey: 'same-session', body: '', content: '日本語で画像を作って。' };
+ for (const hook of hooks.get('before_dispatch') ?? []) hook(sameSessionInbound, {
+  channelId: 'whatsapp', sessionKey: 'same-session', accountId: 'secondary', conversationId: 'chat-43',
+ });
+ await boundary.acceptImageGeneration({
+  taskId: '00000000-0000-4000-8000-000000000778', sessionKey: 'same-session', requesterAgentId: 'main',
+  channel: 'whatsapp', accountId: 'secondary', conversationId: 'chat-43', requestContext: 'English translated prompt',
+ });
+ assert.equal(captured[1]?.requestLanguage, 'japanese');
 });
