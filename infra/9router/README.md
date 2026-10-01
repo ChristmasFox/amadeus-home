@@ -42,4 +42,4 @@ fault is not induced by these tests. The pinned helper also treats an upstream
 HTTP 400 as fallback-eligible; route-level missing-prompt validation returns
 400 before Combo dispatch. Do not claim a general no-fallback guarantee for
 upstream client errors without a separate 9Router change, which is outside
-this Goal. Reference-image editing parity is not claimed.
+this Goal. Single-reference image editing is supported through the existing `/v1/images/generations` logical Combo contract: OpenClaw sends one MIME-checked data URI; the pinned Codex adapter converts it to `input_image`, and the Gemini fallback converts the same bytes to `inlineData`. The pinned fallback adapter accepts only one reference; OpenClaw rejects multi-reference requests before task admission rather than dropping data. No `/v1/images/edits` route or 9Router source patch is used.

@@ -1,5 +1,4 @@
-# Amadeus 1.7.9
+# Amadeus 1.8.0
 
-- 在原生图像生成执行边界强制采用管理员配置的逻辑路由，模型参数不能改选具体 provider/model。
-- 跨 detached image task 与 OpenAI-compatible transport 加入安全关联诊断和路由不变量校验；不匹配时 fail closed。
-- 保持现有 `amadeus-image` GPT Image 2.5 → Gemini image fallback，不改动 9Router 账号或凭据。
+- 为 `amadeus-image` 补齐单张 PNG/JPEG/WebP 参考图编辑兼容，完整字节经同一逻辑 Combo 的主模型与 fallback 传递；不支持的多图请求 fail closed。
+- 保持管理员图像路由权威及有界传输诊断；不改动 9Router 账号、凭据或源码。

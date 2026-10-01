@@ -164,3 +164,29 @@ Git source, and live runtime remain authoritative.
   route, public tunnel, reference/x-vector editor, ASR/image change, automatic
   TTS fallback, generated media in Git, direct WhatsApp sender, or general Git
   shell authority inside the TTS HTTP process.
+
+## Planning record — single-reference image editing transport (2026-10-01)
+
+- **Intent/identity:** Preserve one explicit image reference on native
+  `image_generate`; existing owner/group admission is unchanged. No mask,
+  multi-reference parity, or pixel-exact inpainting claim. Reject unsupported
+  multi-image input before task admission; never drop references or silently
+  turn editing into prompt-only generation.
+- **Owners:** Existing Skill owns intent; pinned OpenClaw OpenAI provider overlay
+  translates only the operator logical route `openai/amadeus-image` into
+  9Router's existing `/images/generations` JSON `image` data-URI contract.
+  9Router still owns canonical Combo selection, accounts and fallback. Exact
+  0.5.91 Codex adapter accepts `image`/`images`; Antigravity adapter accepts only
+  the first reference. No second provider stack, tool, runtime or sender.
+- **Contract:** One PNG/JPEG/WebP reference, signature/MIME checked, <=10 MiB;
+  same bytes/MIME sent to both Combo attempts. Existing prompt, size, quality,
+  background, output format and image response/delivery contract retained.
+  Other providers retain native multipart edits. No new time semantics.
+- **Side effects/recovery:** Generation remains an existing paid capability;
+  no new secrets or persistent reference copies, no URL refetch in the adapter.
+  Use existing release backup and immutable-image rollback. Log only route,
+  reference count, HTTP status and correlation IDs, never bytes/data URIs.
+- **Evidence:** Focused actual outbound-body fixture, exact live 9Router adapter
+  and fallback byte-preservation fixture, normal-text/non-target-provider
+  regression, secrets/anchor checks, and an explicit-apply synthetic-reference
+  live smoke (not private user media). Real owner delivery remains distinct.

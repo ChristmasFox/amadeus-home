@@ -247,6 +247,7 @@ git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but
 if ((CANDIDATE)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
 
 python3 "$ROOT_DIR/scripts/provision-9router-image-combo.py" --verify-live --machine "$MACHINE"
+python3 "$ROOT_DIR/scripts/verify-9router-image-reference.py" --machine "$MACHINE"
 if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
 if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 

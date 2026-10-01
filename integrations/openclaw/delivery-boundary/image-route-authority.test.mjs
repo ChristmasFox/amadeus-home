@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   assertAmadeusImageTransportRouteModel,
+  buildAmadeusReferenceImagePayload,
   IMAGE_ROUTE_AUTHORITY_PIN,
   patchImageGenerationRuntimeSource,
   patchImageGenerationToolSource,
@@ -95,6 +96,7 @@ test('detached image execution captures only the authoritative route and has no 
   const bundle = installCoreCompletionSource(source, openclawRoot);
   parseModule(bundle);
   assert.match(bundle, /image_route_task_enqueued/);
+  assert.match(bundle, /log\$5\.info\(JSON\.stringify\(\{ event: "image_route_task_enqueued"/);
   assert.match(bundle, /image_route_worker_model_resolved/);
   assert.match(bundle, /amadeus_image_lifecycle_boundary_unavailable/);
 });
@@ -115,6 +117,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       const patched = patchImageGenerationRuntimeSource(source);
       parseModule(patched);
       assert.match(patched, /transportLogicalModel !== routeContext\.configuredLogicalModel/);
+      assert.match(patched, /logger\.info\(JSON\.stringify\(\{ event: "image_route_transport_model_resolved"/);
       assert.match(patched, /imageRouteContext: routeContext/);
     }),
     pinnedSource(IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule).then((source) => {
@@ -123,6 +126,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       assert.match(patched, /assertAmadeusImageTransportRouteModel\(\{ configuredLogicalModel: route\.configuredLogicalModel, provider: req\.provider, model \}\)/);
       assert.match(patched, /await assertAmadeusImageTransportRoute\(req, model\)/);
       assert.match(patched, /body\.model = model/);
+      assert.match(patched, /log\.warn\(JSON\.stringify\(\{ event: "image_route_transport_failed"/);
       assert.match(patched, /image_route_transport_failed/);
       const transportFunctionStart = patched.indexOf('async generateImage(req)');
       const finalGuard = patched.indexOf('await assertAmadeusImageTransportRoute(req, model);', transportFunctionStart);
@@ -188,4 +192,60 @@ test('pinned installer patches all three OpenClaw runtime modules as a build-tim
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+
+const referencePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=', 'base64');
+const referenceReq = () => ({ provider: 'openai', model: 'amadeus-image',
+  imageRouteContext: { configuredLogicalModel: 'openai/amadeus-image' },
+  prompt: 'synthetic fixture', inputImages: [{ buffer: referencePng, mimeType: 'image/png' }],
+  quality: 'high', background: 'opaque', outputFormat: 'png' });
+
+test('single-reference payload preserves bytes/MIME and rejects silent loss', () => {
+  const req = referenceReq();
+  const payload = buildAmadeusReferenceImagePayload(req);
+  assert.deepEqual(Buffer.from(payload.image.split(',')[1], 'base64'), referencePng);
+  assert.ok(payload.image.startsWith('data:image/png;base64,'));
+  assert.equal(buildAmadeusReferenceImagePayload({ ...req, inputImages: [] }), undefined);
+  assert.equal(buildAmadeusReferenceImagePayload({ ...req, model: 'other' }), undefined);
+  assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [req.inputImages[0], req.inputImages[0]] }), /reference_count_unsupported/);
+  assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [{ buffer: referencePng, mimeType: 'image/jpeg' }] }), /reference_mime_unsupported/);
+  assert.throws(() => buildAmadeusReferenceImagePayload({ ...req, inputImages: [{ buffer: Buffer.alloc(10*1024*1024+1), mimeType: 'image/png' }] }), /reference_size_unsupported/);
+});
+
+test('exact patched HTTP construction sends reference JSON to generations, ordinary edits remain multipart', async () => {
+  const source = patchOpenAIImageProviderSource(await pinnedSource(IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule));
+  const ast = parseModule(source);
+  const functionSource = (name) => { const node = ast.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name); assert.ok(node); return source.slice(node.start, node.end); };
+  const appendOptions = new Function(`${functionSource('resolveOpenAIImageOutputCompression')}\n${functionSource('appendOpenAIImageOptions')}\nreturn appendOpenAIImageOptions;`)();
+  const start = source.indexOf('const amadeusReferencePayload = buildAmadeusReferenceImagePayload(req);');
+  const end = source.indexOf('\n\t\t\ttry {', start);
+  assert.ok(start > 0 && end > start);
+  const snippet = source.slice(start, end);
+  const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+  const run = new AsyncFunction('env', `const { req, model, isEdit, inputImages, postJsonRequest, postMultipartRequest, appendOpenAIImageOptions, buildAmadeusReferenceImagePayload } = env;
+const isAzure=false,rawBaseUrl='http://router.invalid/v1',baseUrl=rawBaseUrl,count=1,size='1024x1536',headers={Authorization:'fixture'},timeoutMs=300000,allowPrivateNetwork=true,dispatcherPolicy=undefined;
+const bufferToBlobPart=x=>x,inferImageUploadFileName=()=> 'fixture.png';
+${snippet}`);
+  async function capture(req) {
+    let call;
+    const make = (kind) => async (value) => { call={ kind, ...value }; return { response: new Response('{}'), release:async()=>{} }; };
+    await run({ req, model:req.model, isEdit:!!req.inputImages.length, inputImages:req.inputImages,
+      postJsonRequest:make('json'),postMultipartRequest:make('multipart'),appendOpenAIImageOptions:appendOptions,buildAmadeusReferenceImagePayload });
+    return call;
+  }
+  const ref = await capture(referenceReq());
+  assert.equal(ref.url, 'http://router.invalid/v1/images/generations');
+  assert.equal(ref.kind, 'json');
+  assert.equal(ref.body.model, 'amadeus-image');
+  assert.equal(ref.body.output_format, 'png');
+  assert.equal(ref.body.quality, 'high');
+  assert.equal(ref.body.background, 'opaque');
+  assert.deepEqual(Buffer.from(ref.body.image.split(',')[1], 'base64'), referencePng);
+  const plain = await capture({ ...referenceReq(),inputImages:[] });
+  assert.equal(plain.url, ref.url); assert.equal(plain.body.image, undefined);
+  const other = await capture({ ...referenceReq(),model:'other',imageRouteContext:undefined });
+  assert.equal(other.kind, 'multipart'); assert.equal(other.url, 'http://router.invalid/v1/images/edits');
+  assert.equal(other.body.get('model'), 'other');
+  assert.deepEqual(Buffer.from(await other.body.get('image[]').arrayBuffer()),referencePng);
 });
