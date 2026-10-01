@@ -1,5 +1,5 @@
-# Amadeus 1.7.6
+# Amadeus 1.7.7
 
-- WhatsApp 最终 delivery callback 即使绕过 `preparePayload` 也会重新执行严格 typed 解码；遗留 modality-marker 前缀、原样 sentinel 等非-envelope输出 fail closed，不进入可见发送。
-- 保留 heartbeat/cron/internal run 的可信 provenance 到最终 settlement，避免内部静默 turn 被临时提升为 external user。
-- 图片生命周期 follow-up 不会因为引用先前开始/失败提示而重复生图；完成图片的请求语言继续以原始用户输入为准。
+- 生图工具现在忽略模型生成的具体 provider/model 覆盖，始终回到运维配置的 `amadeus-image` 逻辑 capability 与既有 fallback。
+- 异步生图生命周期按 account-scoped conversation 补取原始私聊语境，修复 session key 不一致时语言退化为 unknown。
+- 保留严格 WhatsApp final typed delivery 和内部任务静默边界。
