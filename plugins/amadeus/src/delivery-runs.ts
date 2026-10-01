@@ -10,6 +10,11 @@ export class DeliveryRuns {
     this.sessions.set(context.sessionKey, context.runId);
     if (this.runs.size > 1024) this.runs.delete(this.runs.keys().next().value!);
   }
+  setOrigin(runId: string, origin: DeliveryContext['origin']): void {
+    const run = this.runs.get(runId);
+    if (!run || run.envelope || run.prepared || run.preparing) return;
+    run.context = { ...run.context, origin };
+  }
   has(runId: string): boolean { return this.runs.has(runId); }
   runIdFor(sessionKey: string): string | undefined { return this.sessions.get(sessionKey); }
   channelFor(runId: string): string | undefined { return this.runs.get(runId)?.context.channel; }

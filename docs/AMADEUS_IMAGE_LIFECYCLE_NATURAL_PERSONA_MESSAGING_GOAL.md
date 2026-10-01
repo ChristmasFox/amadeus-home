@@ -306,3 +306,17 @@ The exact pinned OpenClaw audit identified that `taskLabel` is model-generated `
 Implementation commits `2e60797` and `d8442d6` plus state/documentation commit `5444b3a` are pushed. The distinct final immutable image `local/openclaw-amadeus:git-5444b3a94a82-20261001073247` is deployed; runtime `/opt/amadeus/VERSION=1.7.5`, OpenClaw health, Gateway Amadeus registration and required automated gates pass. `pnpm test:delivery` (82 tests plus exact pinned integration), `pnpm test:amadeus` (116 tests), typecheck/build, architecture/secrets/version checks and an actual generated-image caption smoke passed. The protected rollback checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001073247`.
 
 Manual owner WhatsApp/image-experience acceptance is **operator-waived and was not performed**. The prior user-reported behavior failure triggered rollback and was corrected; this waiver is not claimed as a test. Full evidence, prior failure records and deployment advisories are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md` and the linked incident checkpoints.
+
+
+The active remediation also tightens the image-generation Skill's semantic tool ordering: a prior lifecycle notice or failure quote does not itself request a new image, and the Agent must answer a status question rather than automatically re-launching generation. This preserves one call per current user request without adding keyword routing.
+
+## 2026-10-01 final-delivery regression follow-up
+
+A post-release live audit found CasaOS running the protected 1.7.4 rollback image rather than the
+1.7.5 image named in the prior completion record. The typed WhatsApp boundary also assumed every
+final `delivery.deliver()` call had first passed through `preparePayload`, and the provisional plan
+could be created before trusted internal-run provenance was available. The 1.7.6 follow-up re-runs
+typed preparation inside the final callback and preserves internal provenance for unsettled runs;
+regressions cover direct callback bypass, malformed marker/sentinel output, and valid structured text.
+The one-image-call semantic Skill guard and original-request language context are included in the same
+release. See the dated deployment checkpoint for live identity, gates, and rollback evidence.

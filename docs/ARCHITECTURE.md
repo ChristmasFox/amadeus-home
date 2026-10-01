@@ -62,6 +62,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 - Agent 只按严格 v2 JSON wire 输出 text/voice；`delivery-decoder.ts` 单次解码，raw
   serialization 被丢弃；缺键/多键/非法版本或状态 fail closed。用户要求的 JSON 是 text
   part 内容，不通过检测末尾 JSON 字符串来猜测。
+- Pinned WhatsApp final `delivery.deliver()` 即使绕过 `preparePayload`，也会在最终适配器内重走同一
+  typed preparation/ownership/route validation；malformed raw、control token 或遗留 marker/sentinel 形式不会
+  作为可见文本发送。`before_prompt_build` 的可信 heartbeat/cron/internal origin 会更新尚未 settlement
+  的 run，不能被较早创建的 provisional plan 降级成 external user。
 - `delivery-runs.ts` 汇合当前 run 的结构化工具结果；普通 `image_generate` 的 inline
   图片和 `amadeus_image_upscale` 的 document 派生文件都经过权威 asset registry 与唯一
   settlement。按需超分默认 2×，当前请求明确指定 4× 时为 4×；2K/4K 是独立分辨率档位。
@@ -92,7 +96,8 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 - Start/failure 的 typed semantic input 包含 task/session/channel 和 bounded original request context，
   context 仅为 untrusted language/subject data，不参与 runtime-owned routing、identity 或 delivery ownership。
   文本由当前 Kurisu persona 边界生成并按清晰请求语言校验；语义失败或语言仍错配时才使用本地
-  确定性安全 fallback。image-generation Skill 要求 accepted interim 的普通 Agent final reply silent，
+  确定性安全 fallback。image-generation Skill 规定同一当前用户意图最多调用一次 image_generate，
+  prior lifecycle/failure quotation 不会自动重触发生图；并要求 accepted interim 的普通 Agent final reply silent，
   避免第二条 start acknowledgement。它们是有稳定 taskId key 的 typed lifecycle text notifications，不创建
   或绑定图片 asset；generation failure 不运行 CaptionEnricher、不暴露异常/stack/provider payload。
 - `delivery-settlement.ts` 为 channel settlement 使用同一 ledger；重复 deliveryId 不重复发送。

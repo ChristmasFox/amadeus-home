@@ -124,3 +124,59 @@ test('Telegram accepted/failure lifecycle notices use the original native text r
  assert.ok(gatewayCalls.every(call=>call.method==='send'&&call.params.threadId===42&&call.params.to==='12345'));
  assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})=>({kind,taskId,agentId,sessionKey,channel,requestContext,requestLanguage})),[{kind:'accepted',taskId:input.taskId,agentId:'main',sessionKey:input.sessionKey,channel:'telegram',requestContext:userRequest,requestLanguage:'chinese'},{kind:'failed',taskId:input.taskId,agentId:'main',sessionKey:input.sessionKey,channel:'telegram',requestContext:userRequest,requestLanguage:'chinese'}]);
 });
+
+test('WhatsApp final deliver bypass re-runs typed preparation and preserves internal origin', async () => {
+ const hooks = new Map<string, Array<(...args: any[]) => any>>();
+ const api = {
+  rootDir: new URL('../', import.meta.url).pathname,
+  config: {},
+  pluginConfig: {},
+  logger: { info() {}, warn() {} },
+  on(name: string, handler: (...args: any[]) => any) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
+ } as unknown as OpenClawPluginApi;
+ registerVoiceReplyPrompt(api);
+ const boundary = (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] as { createWhatsAppPlan(port: WhatsAppDeliveryPort): any };
+ const sent: string[] = [];
+ const makePlan = (sessionKey: string) => {
+  const plan = boundary.createWhatsAppPlan({
+   sessionKey, accountId: 'secondary', conversationId: 'chat', messageId: `message-${sessionKey}`, inboundVoice: false,
+   sendText: async (text) => { sent.push(text); return { messageId: `sent-${sessionKey}` }; },
+   sendVoice: async () => ({ messageId: `voice-${sessionKey}` }),
+   sendImage: async () => ({ messageId: `image-${sessionKey}` }),
+   sendDocument: async () => ({ messageId: `document-${sessionKey}` }),
+   start() {}, stop() {},
+  });
+  return plan;
+ };
+ const rawWire = (text: string) => JSON.stringify({ version: 2, silent: false, parts: [{ kind: 'text', text }] });
+
+ const internalPlan = makePlan('delivery-bypass-heartbeat');
+ internalPlan.replyOptions.onAgentRunStart('delivery-bypass-heartbeat-run');
+ for (const hook of hooks.get('before_prompt_build') ?? []) hook({}, {
+  runId: 'delivery-bypass-heartbeat-run', sessionKey: 'delivery-bypass-heartbeat', channel: 'whatsapp', trigger: 'heartbeat',
+  inputProvenance: { kind: 'internal_system' },
+ });
+ const internal = await internalPlan.delivery.deliver({ text: '[[amadeus:reply-modality=default]]\nNO_REPLY' }, { kind: 'final' });
+ assert.deepEqual(internal, { visibleReplySent: false });
+ assert.deepEqual(sent, [], 'raw internal marker/sentinel text is never sent');
+
+ const malformedMarkerPlan = makePlan('delivery-bypass-marker');
+ malformedMarkerPlan.replyOptions.onAgentRunStart('delivery-bypass-marker-run');
+ for (const hook of hooks.get('before_prompt_build') ?? []) hook({}, {
+  runId: 'delivery-bypass-marker-run', sessionKey: 'delivery-bypass-marker', channel: 'whatsapp', inputProvenance: { kind: 'external_user' },
+ });
+ const marked = await malformedMarkerPlan.delivery.deliver({
+  text: rawWire('[[amadeus:reply-modality=default]]\nNO_REPLY'),
+ }, { kind: 'final' });
+ assert.deepEqual(marked, { visibleReplySent: false });
+ assert.deepEqual(sent, [], 'control-token content fails closed even on the direct final-delivery path');
+
+ const normalPlan = makePlan('delivery-bypass-normal');
+ normalPlan.replyOptions.onAgentRunStart('delivery-bypass-normal-run');
+ for (const hook of hooks.get('before_prompt_build') ?? []) hook({}, {
+  runId: 'delivery-bypass-normal-run', sessionKey: 'delivery-bypass-normal', channel: 'whatsapp', inputProvenance: { kind: 'external_user' },
+ });
+ const delivered = await normalPlan.delivery.deliver({ text: rawWire('正常回复。') }, { kind: 'final' });
+ assert.deepEqual(delivered, { visibleReplySent: true });
+ assert.deepEqual(sent, ['正常回复。'], 'direct final delivery still settles valid typed content');
+});

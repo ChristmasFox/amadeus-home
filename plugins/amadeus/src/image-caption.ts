@@ -3,7 +3,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { MAX_ATTACHMENT_CAPTION_LENGTH } from './delivery-envelope.js';
-import { boundedImageRequestContext, imageRequestLanguageInstruction, imageResponseMatchesRequestLanguage, type ImageRequestLanguage } from './image-generation-context.js';
+import { boundedImageRequestContext, detectImageRequestLanguage, imageRequestLanguageInstruction, imageResponseMatchesRequestLanguage, type ImageRequestLanguage } from './image-generation-context.js';
 
 export type ImageCaptionInput = Readonly<{
   taskId: string;
@@ -164,6 +164,7 @@ export function createImageCaptionEnricher(
         attempts: attemptCount,
         elapsed_ms: Math.max(0, Math.round(now() - startedAt)),
         channel: input.channel,
+        request_language: input.requestLanguage ?? detectImageRequestLanguage(requestContext),
         request_context_present: Boolean(requestContext),
       })}`); } catch { /* telemetry is best-effort; image delivery is authoritative */ }
     }

@@ -42,7 +42,7 @@ test('accepted/failed use typed task context, current Kurisu persona and scoped 
     assert.equal(f.calls[0].agentId,input.agentId);
     assert.equal(input.sessionKey,'whatsapp:owner-session');
     assert.ok(!f.calls[0].message.includes(input.taskId));
-    assert.ok(f.logs.every(line=>line.includes('"task_id"')&&line.includes('"elapsed_ms"')&&line.includes('"channel":"whatsapp"')&&line.includes('"request_context_present":true')));
+    assert.ok(f.logs.every(line=>line.includes('"task_id"')&&line.includes('"elapsed_ms"')&&line.includes('"channel":"whatsapp"')&&line.includes('"request_language":"chinese"')&&line.includes('"request_context_present":true')));
     assert.equal(IMAGE_LIFECYCLE_SEMANTIC_TIMEOUT_MS,30_000);
   }finally{await rm(f.root,{recursive:true,force:true});}
 });
@@ -180,4 +180,6 @@ test('image-generation Skill prevents a second final-reply acknowledgement for a
   assert.ok(skill.includes('Do not echo a second start'));
   assert.ok(skill.includes('Return a silent DeliveryEnvelope'));
   assert.ok(skill.includes('Never infer this lifecycle from started-receipt prose'));
+  assert.ok(skill.includes('Make at most one `image_generate` call for one current user request.'));
+  assert.ok(skill.includes('A lifecycle start/failure notification, quoted earlier status, or previous image prompt is not by itself a new image request.'));
 });

@@ -122,6 +122,7 @@ export function createImageGenerationMessageEnricher(
         ...(fallbackReason ? { semantic_fallback_reason: fallbackReason } : {}),
         elapsed_ms: Math.max(0, Math.round(now() - startedAt)),
         channel: input.channel,
+        request_language: input.requestLanguage ?? detectImageRequestLanguage(requestContext),
         request_context_present: Boolean(requestContext),
       })}`); } catch { /* telemetry must never alter lifecycle settlement */ }
     }
