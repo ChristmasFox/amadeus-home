@@ -13,7 +13,7 @@ test('explicit multiplier is a bounded parameter constraint, not a 4K resolution
 });
 
 let taskCounter=1;
-for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','completion'],['image/jpeg','provider-fallback'],['image/png','caption-fallback'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
+for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','completion'],['image/jpeg','provider-fallback'],['image/png','caption-omitted'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'delivery-runtime-'));await mkdir(join(root,'derived'));
  const bytes=mimeType==='image/png'?Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1]):Buffer.from([255,216,255,224,0,16,1,2,3,4]);
  const id=`img_${(mimeType==='image/png'?'a':'b').repeat(32)}`;const asset={imageId:id,storageKey:'derived/asset.bin',mimeType,width:1,height:1,byteSize:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'};
@@ -24,8 +24,8 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   await writeFile(join(root,'derived/asset.bin'),bytes);await writeFile(join(root,'token'),'test-only');await writeFile(join(root,'native-generated.bin'),bytes);
   const hooks=new Map<string,Array<(...args:any[])=>any>>();const tools=new Map<string,(ctx:OpenClawPluginToolContext)=>any>();
   const api={rootDir:new URL('../',import.meta.url).pathname,config:{},pluginConfig:{imageAssetServiceBaseUrl:`http://127.0.0.1:${port}`,imageAssetServiceTokenFile:join(root,'token'),imageAssetContainerRoot:root},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);},registerTool(factory:any,options:{name:string}){tools.set(options.name,factory);}} as unknown as OpenClawPluginApi;
-  const captionInputs:any[]=[];
-  registerVoiceReplyPrompt(api,{captionEnricher:async input=>{captionInputs.push(input);if(source==='caption-error')throw new Error('raw model provider error');return source==='caption-fallback'?{caption:'图已经生成了。'}:source==='caption-malformed'?{caption:'{"caption":"raw caption protocol"}'}:{caption:`Kurisu caption for ${input.mimeType}`};},lifecycleMessageEnricher:async kind=>kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。'});registerImageAssets(api);
+  const captionInputs:any[]=[];const lifecycleInputs:any[]=[];
+  registerVoiceReplyPrompt(api,{captionEnricher:async input=>{captionInputs.push(input);if(source==='caption-error')throw new Error('raw model provider error');if(source==='caption-omitted')return {};return source==='caption-malformed'?{caption:'{"caption":"raw caption protocol"}'}:{caption:`Kurisu caption for ${input.mimeType}`};},lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。';}});registerImageAssets(api);
   const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>;completeImageGeneration(input:any):Promise<void>;createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string;caption?:string}>=[];
   const sessionKey=`runtime-${source}-${mimeType}`;const taskId=`00000000-0000-4000-8000-${String(taskCounter++).padStart(12,'0')}`;const runId=`run-${sessionKey}`;
   const lifecycleInput={taskId,sessionKey,requesterAgentId:'main',channel:'whatsapp',accountId:'secondary',conversationId:'chat',requestContext:'a bounded original image request'};
@@ -40,9 +40,9 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:4,mode:'anime'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
     const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale4'?4:2, 'explicit 4x remains available while model-supplied 4x cannot override the 2x default');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
-  }else if(source==='completion'||source==='provider-fallback'||source==='caption-fallback'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
+  }else if(source==='completion'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
   else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'tool result text is not an image authority'}]};
-  const detached=source==='completion'||source==='provider-fallback'||source==='caption-fallback'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
+  const detached=source==='completion'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
   const jobs=detached?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   if(detached){
     assert.equal((result as any).details.async,true);assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);assert.equal(sends.length,0);
@@ -57,11 +57,11 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       await boundary.failImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
-      assert.equal(sends[1]?.caption,source==='caption-fallback'||source==='caption-malformed'||source==='caption-error'?'图已经生成了。':`Kurisu caption for ${mimeType}`);assert.equal(captionInputs.length,1);assert.equal(captionInputs[0]?.filePath,await realpath(join(root,'derived/asset.bin')));
+      assert.equal(sends[1]?.caption,source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:`Kurisu caption for ${mimeType}`);assert.equal(captionInputs.length,1);assert.equal(captionInputs[0]?.filePath,await realpath(join(root,'derived/asset.bin')));assert.equal(captionInputs[0]?.requestContext,lifecycleInput.requestContext);
       assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     }else{
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);
-      assert.deepEqual(sends.map(x=>x.kind),['text','text']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.equal(sends[1]?.text,'生成に失敗したわ。');
+      assert.deepEqual(sends.map(x=>x.kind),['text','text']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.equal(sends[1]?.text,'生成に失敗したわ。');assert.deepEqual(lifecycleInputs.map(({kind,taskId,agentId,sessionKey,channel,requestContext})=>({kind,taskId,agentId,sessionKey,channel,requestContext})),[{kind:'accepted',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:lifecycleInput.requestContext},{kind:'failed',taskId,agentId:'main',sessionKey,channel:'whatsapp',requestContext:lifecycleInput.requestContext}]);
       assert.equal(captionInputs.length,0,'generation failure never runs caption enrichment');assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);
     }
     return;
@@ -110,7 +110,7 @@ test('Telegram native text and actual Bot API document/photo primitives preserve
 test('Telegram accepted/failure lifecycle notices use the original native text route exactly once',async()=>{
  const gatewayCalls:any[]=[];const hooks=new Map<string,Array<(...args:any[])=>any>>();
  const api={rootDir:new URL('../',import.meta.url).pathname,config:{channels:{telegram:{enabled:true,botToken:'123:test-only'}}},pluginConfig:{},runtime:{gateway:{request:async(method:string,params:any)=>{gatewayCalls.push({method,params});}}},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);}} as unknown as OpenClawPluginApi;
- registerVoiceReplyPrompt(api,{captionEnricher:async()=>{throw new Error('caption must not run for lifecycle text');},lifecycleMessageEnricher:async kind=>kind==='accepted'?'生成を始めたわ。':'画像生成に失敗したわ。'});
+ registerVoiceReplyPrompt(api,{captionEnricher:async()=>{throw new Error('caption must not run for lifecycle text');},lifecycleMessageEnricher:async input=>input.kind==='accepted'?'生成を始めたわ。':'画像生成に失敗したわ。'});
  const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>};
  const input={taskId:'00000000-0000-4000-8000-000000000021',sessionKey:'telegram-owner-session',requesterAgentId:'main',channel:'telegram',accountId:'default',conversationId:'12345',threadId:42};
  await boundary.acceptImageGeneration(input);await boundary.acceptImageGeneration(input);

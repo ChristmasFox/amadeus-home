@@ -2,7 +2,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { configFor } from './config.js';
 import { bindImageDelivery, resolveRegisteredImageAsset, importGeneratedCompletionAssets, type GeneratedCompletionAttachment } from './image-assets.js';
 import { createImageCaptionEnricher, type ImageCaptionEnricher } from './image-caption.js';
-import { createImageGenerationMessageEnricher, type ImageGenerationMessageKind } from './image-generation-messages.js';
+import { createImageGenerationMessageEnricher, type ImageGenerationMessageEnricher, type ImageGenerationMessageKind, type ImageLifecycleMessageInput } from './image-generation-messages.js';
 import { ImageGenerationLifecycleCoordinator } from './image-generation-lifecycle.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
 import { deliveryRuns } from './delivery-runs.js';
@@ -34,7 +34,7 @@ export type WhatsAppDeliveryPort = Readonly<{
 }>;
 export type DeliveryBoundaryOptions = Readonly<{
   captionEnricher?: ImageCaptionEnricher;
-  lifecycleMessageEnricher?: (kind: ImageGenerationMessageKind, agentId: string) => Promise<string>;
+  lifecycleMessageEnricher?: ImageGenerationMessageEnricher;
 }>;
 const settlement = deliverySettlementState;
 const TASK_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
@@ -65,11 +65,18 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
   const completionPorts = new Map<string, { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
   const lifecycleMessages = new Map<string, Promise<string>>();
 
-  const rememberLifecycleMessage = (taskId: string, kind: 'failed', agentId: string): Promise<string> => {
-    const key = `${taskId}:${kind}`;
+  const lifecycleSemanticInput = (input: ImageGenerationLifecycleInput, kind: ImageGenerationMessageKind): ImageLifecycleMessageInput => {
+    const requestContext = boundedText(input.requestContext, 2_000);
+    return {
+      kind, taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
+      ...(requestContext ? { requestContext } : {}),
+    };
+  };
+  const rememberLifecycleMessage = (input: ImageGenerationLifecycleInput): Promise<string> => {
+    const key = `${input.taskId}:failed`;
     let pending = lifecycleMessages.get(key);
     if (!pending) {
-      pending = lifecycleMessageEnricher(kind, agentId);
+      pending = lifecycleMessageEnricher(lifecycleSemanticInput(input, 'failed'));
       lifecycleMessages.set(key, pending);
       if (lifecycleMessages.size > 2048) lifecycleMessages.delete(lifecycleMessages.keys().next().value!);
     }
@@ -104,7 +111,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       // already-scheduled OpenClaw background generation.
       try {
         await lifecycle.accepted(input.taskId, async () => {
-          const message = await lifecycleMessageEnricher('accepted', input.requesterAgentId);
+          const message = await lifecycleMessageEnricher(lifecycleSemanticInput(input, 'accepted'));
           await sendLifecycleNotice(input, 'accepted', message);
         });
       } catch {
@@ -114,7 +121,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     async failImageGeneration(input: ImageGenerationLifecycleInput): Promise<void> {
       if (!validLifecycleInput(input)) throw new Error('image_lifecycle_identity_invalid');
       await lifecycle.failed(input.taskId, async () => {
-        const message = await rememberLifecycleMessage(input.taskId, 'failed', input.requesterAgentId);
+        const message = await rememberLifecycleMessage(input);
         await sendLifecycleNotice(input, 'failed', message);
       });
     },

@@ -1,10 +1,5 @@
-# Amadeus 1.7.4
+# Amadeus 1.7.5
 
-- 新增 host-native durable image asset registry with opaque `imageId` identity,
-  immutable originals, derived lineage, controlled media reads, and native
-  `image_generate` result correlation.
-- 新增 explicit-only `amadeus_image_upscale` capability and Skill with
-  conversation-scoped reply precedence, bounded 2x/4x `auto|realistic|anime`
-  modes, manual `imageId` invocation, and no automatic enhancement.
-- 新增 Apple Silicon `realesrgan-mlx` launchd service installation, CasaOS
-  read-only asset mount, rollback runbook, and host acceptance evidence.
+- 图片生成开始与失败提示现在依据当前 Kurisu persona 和原始请求语境自然生成，并延续用户当前使用的语言。
+- 图片生命周期提示与实际生成图的多模态 caption 使用统一约 30 秒语义预算；caption 不可用时仍正常发送图片，不再注入固定成功文案。
+- 保留 detached 图片生成、受信附件注册、DeliveryEnvelope v2 与 WhatsApp 单条原生图片/说明交付。

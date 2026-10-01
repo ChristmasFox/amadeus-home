@@ -26,9 +26,13 @@ assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root'
 image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
 assert 'COPY scripts/openclaw-voice-*.mjs /tmp/' in image
 assert 'COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary' in image
+assert 'COPY VERSION /opt/amadeus/VERSION' in image
 assert 'RUN chmod 0644 /app/dist/extensions/amadeus/dist/index.js' in image
 assert 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed' in s
 assert 'AMADEUS_GATEWAY_REGISTRATION=passed' in s
+assert 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s' in s
+assert 'RUNTIME_AMADEUS_VERSION=%s' in s
+assert 'cat /opt/amadeus/VERSION' in s
 assert 'plugins inspect amadeus --runtime --json' in s
 assert 'plugins registry --refresh --json' in s
 assert 'openclaw-state.sqlite.before' in s

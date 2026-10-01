@@ -8,7 +8,7 @@ import { registerTool } from './shared/register-tool.js';
 import { deliveryRuns } from './delivery-runs.js';
 import { assetPath, readRegisteredAsset, type AssetMetadata } from './delivery-assets.js';
 import { createAttachmentPart, type AttachmentPart } from './delivery-envelope.js';
-import { IMAGE_CAPTION_FALLBACK, normalizeImageCaption, type ImageCaptionEnricher } from './image-caption.js';
+import { normalizeImageCaption, type ImageCaptionEnricher } from './image-caption.js';
 
 const ImageUpscaleParameters = Type.Object({
   target: Type.Optional(Type.Object({
@@ -286,8 +286,9 @@ export async function importGeneratedCompletionAssets(
   return await Promise.all(attachments.map(async (item) => {
     const asset = await importImageAsset(config, item.path!, item.mimeType!, 'generated', { runId: `image_generate:${options.taskId}` });
     const base = imageAssetAttachment(asset, 'inline');
-    let caption = IMAGE_CAPTION_FALLBACK;
+    let caption: string | undefined;
     let fallbackReason: 'timeout' | 'model_error' | 'invalid_result' | 'unsupported' | undefined;
+    const captionStartedAt = Date.now();
     if (options.captionEnricher) {
       try {
         const image = await resolveRegisteredImageCaptionInput(config, base);
@@ -297,15 +298,14 @@ export async function importGeneratedCompletionAssets(
         });
         const safeCaption = normalizeImageCaption(outcome?.caption);
         if (safeCaption) caption = safeCaption;
-        else fallbackReason = 'invalid_result';
+        else fallbackReason = outcome?.omissionReason ?? 'invalid_result';
       } catch {
         // Enrichment/registry path lookup can never make an imported image
         // ineligible for the existing DeliveryEnvelope settlement.
-        caption = IMAGE_CAPTION_FALLBACK;
-        fallbackReason = 'unsupported';
+        fallbackReason = 'model_error';
       }
     }
-    if (fallbackReason) api.logger.info(`amadeus image caption ${JSON.stringify({ task_id: options.taskId, asset_id:asset.imageId, lifecycle_stage:'captioning', caption_status:'fallback', caption_fallback_reason:fallbackReason })}`);
+    if (options.captionEnricher && fallbackReason) api.logger.info(`amadeus image caption delivery ${JSON.stringify({ task_id: options.taskId, lifecycle_stage:'captioning', semantic_status:'omitted', semantic_fallback_reason:fallbackReason, elapsed_ms:Math.max(0, Date.now() - captionStartedAt), channel:options.channel, request_context_present:Boolean(options.requestContext) })}`);
     return imageAssetAttachment(asset, 'inline', caption);
   }));
 }

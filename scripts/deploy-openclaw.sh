@@ -307,6 +307,9 @@ if ((BUILD_OPENCLAW)); then
     || fail 'Immutable OpenClaw image has an unreadable or invalid Amadeus plugin.'
   printf 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed\n'
 fi
+image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
+[[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
+printf 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s\n' "$image_amadeus_version"
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
@@ -671,6 +674,9 @@ for attempt in $(seq 1 40); do
   sleep 2
 done
 orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+runtime_amadeus_version="$(orb -m "$MACHINE" -u root docker exec openclaw cat /opt/amadeus/VERSION | tr -d '[:space:]')"
+[[ "$runtime_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Running OpenClaw reports Amadeus VERSION=$runtime_amadeus_version, expected $AMADEUS_VERSION."
+printf 'RUNTIME_AMADEUS_VERSION=%s\n' "$runtime_amadeus_version"
 started_at="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.State.StartedAt}}')"
 registration_count="$(orb -m "$MACHINE" -u root docker logs --since "$started_at" openclaw 2>&1 | grep -F -c 'amadeus native capability plugin registered' || true)"
 [[ "$registration_count" =~ ^[0-9]+$ && "$registration_count" -ge 1 ]] || fail 'Amadeus plugin did not register in the live Gateway; restore the protected checkpoint.'

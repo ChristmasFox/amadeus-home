@@ -53,6 +53,8 @@ RUN set -eux; \
     rm -f /tmp/libc6.deb
 
 COPY infra/docker/casaos/openclaw/ffmpeg-clean-env.cjs /opt/amadeus/ffmpeg-clean-env.cjs
+# Bake the canonical product identity into the immutable runtime for direct post-switch verification.
+COPY VERSION /opt/amadeus/VERSION
 RUN set -eux; \
     mkdir -p /usr/libexec/amadeus; \
     mv /usr/bin/ffmpeg /usr/libexec/amadeus/ffmpeg.real; \

@@ -23,6 +23,15 @@ test('pre-admission rejection emits no accepted acknowledgement', async () => {
   assert.equal(notices,0); assert.equal(coordinator.status(task), undefined);
 });
 
+test('accepted semantic notification failure never prevents detached generation completion', async () => {
+  const coordinator = new ImageGenerationLifecycleCoordinator(); let generatedAttachments=false;
+  await assert.rejects(coordinator.accepted(task, async()=>{ throw new Error('semantic acknowledgement timeout'); }));
+  assert.equal(coordinator.status(task)?.acceptedNotified,true);
+  assert.equal(await coordinator.succeeded(task,async()=>{ generatedAttachments=true; }),true);
+  assert.equal(generatedAttachments,true,'already accepted generation still reaches authoritative completion');
+  assert.equal(coordinator.status(task)?.terminal,'succeeded');
+});
+
 test('success completion retry reuses caption/assets and does not duplicate media settlement', async () => {
   const coordinator = new ImageGenerationLifecycleCoordinator(); let imports=0; let sends=0; let settled=false;
   const completion = async () => coordinator.succeeded(task, async()=>{
