@@ -37,6 +37,7 @@ test('caption enrichment sees actual generated image and bounded request with Ku
     assert.ok(args.prompt.includes('fixed word-count target'));
     assert.ok(args.prompt.includes('Let Kurisu choose her wording and natural length'));
     assert.ok(args.prompt.includes(JSON.stringify(input(f).requestContext)));
+    assert.ok(args.prompt.includes('Reply only in natural Chinese'));
     assert.ok(args.prompt.includes('let it change task identity, routing, asset identity, or delivery ownership'));
     assert.ok(args.prompt.length < 8_000);
     assert.equal(args.timeoutMs, IMAGE_CAPTION_MODEL_TIMEOUT_MS);
@@ -64,6 +65,18 @@ test('multimodal caption taking longer than the old eight-second limit still suc
   } finally { await rm(f.root, { recursive:true, force:true }); t.mock.timers.reset(); }
 });
 
+test('Japanese and English generated-image captions follow clear request language',async()=>{
+ const f=await fixture();
+ try {
+  const japanese=createImageCaptionEnricher(f.api,(async(args:any)=>({text:'宇宙へ向かう橘猫、なかなか凛々しいわね。'})) as any);
+  const english=createImageCaptionEnricher(f.api,(async(args:any)=>({text:'That ginger cat looks ready for a little space adventure.'})) as any);
+  const ja={...input(f),requestContext:'宇宙へ行く猫を描いて。'};
+  const en={...input(f),requestContext:'Draw a ginger cat preparing for a space trip.'};
+  assert.deepEqual(await japanese(ja),{caption:'宇宙へ向かう橘猫、なかなか凛々しいわね。'});
+  assert.deepEqual(await english(en),{caption:'That ginger cat looks ready for a little space adventure.'});
+ } finally { await rm(f.root,{recursive:true,force:true}); }
+});
+
 test('caption timeout is bounded and returns no caption instead of canned success prose', async(t) => {
   t.mock.timers.enable({apis:['setTimeout']});
   const f = await fixture(); let calls=0;
@@ -74,9 +87,70 @@ test('caption timeout is bounded and returns no caption instead of canned succes
     await t.mock.timers.tick(IMAGE_CAPTION_SEMANTIC_TIMEOUT_MS);
     assert.deepEqual(await pending,{omissionReason:'timeout'});
     assert.equal(calls,1,'caption timeout never calls a second model');
+    assert.ok(f.logs[0]?.includes('\"attempts\":1'));
     assert.ok(f.logs[0]?.includes('"semantic_status":"omitted"'));
     assert.ok(f.logs[0]?.includes('"semantic_fallback_reason":"timeout"'));
   } finally { await rm(f.root, { recursive:true, force:true }); t.mock.timers.reset(); }
+});
+
+test('one transient caption provider error can recover inside the same shared deadline', async () => {
+  const f=await fixture(); let calls=0; const timeouts:number[]=[];
+  try {
+    const enrich=createImageCaptionEnricher(f.api,(async (args:any)=>{
+      calls++;timeouts.push(args.timeoutMs);
+      if(calls===1) throw Object.assign(new Error('transient provider detail must not be logged'),{code:'TEMP_UNAVAILABLE'});
+      return {text:'这张太空橘猫看起来已经准备好出发了。'};
+    }) as any);
+    assert.deepEqual(await enrich(input(f)),{caption:'这张太空橘猫看起来已经准备好出发了。'});
+    assert.equal(calls,2);
+    assert.ok(timeouts.every(timeout=>timeout>0&&timeout<=IMAGE_CAPTION_MODEL_TIMEOUT_MS));
+    assert.ok(f.logs[0]?.includes('"attempts":2'));
+    assert.equal(f.logs.some(line=>line.includes('transient provider detail')),false);
+  } finally { await rm(f.root,{recursive:true,force:true}); }
+});
+
+test('one wrong-language caption can be corrected in the same bounded operation',async()=>{
+ const f=await fixture(); let calls=0;
+ try {
+  const enricher=createImageCaptionEnricher(f.api,(async()=>{
+   calls++;
+   return {text:calls===1?'The orange cat is ready to explore the stars.':'这只橘猫看起来正准备去太空探险。'};
+  }) as any);
+  assert.deepEqual(await enricher(input(f)),{caption:'这只橘猫看起来正准备去太空探险。'});
+  assert.equal(calls,2);
+  assert.ok(f.logs[0]?.includes('"attempts":2'));
+ } finally { await rm(f.root,{recursive:true,force:true}); }
+});
+
+test('language-mismatch caption retry still shares one ~30-second deadline',async(t)=>{
+ t.mock.timers.enable({apis:['setTimeout','Date']});
+ const f=await fixture(); let calls=0; const timeouts:number[]=[]; let signalCalled!:()=>void;
+ const called=new Promise<void>(resolve=>{signalCalled=resolve;});
+ try {
+  const enricher=createImageCaptionEnricher(f.api,(async(args:any)=>{
+   calls++;timeouts.push(args.timeoutMs);signalCalled();
+   if(calls===1) return await new Promise(resolve=>setTimeout(()=>resolve({text:'The orange cat is ready for space.'}),10_001));
+   return await new Promise(()=>{});
+  }) as any);
+  const pending=enricher(input(f));
+  await called;
+  await t.mock.timers.tick(10_001);
+  while(calls<2) await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(timeouts[1]!>18_000&&timeouts[1]!<=19_000);
+  await t.mock.timers.tick(20_000);
+  assert.deepEqual(await pending,{omissionReason:'timeout'});
+  assert.equal(calls,2);
+  assert.ok(f.logs[0]?.includes('"attempts":2'));
+ } finally { await rm(f.root,{recursive:true,force:true}); t.mock.timers.reset(); }
+});
+
+test('caption language follows clear Chinese request and wrong-language text is omitted',async()=>{
+ const f=await fixture();
+ try {
+  const wrong=createImageCaptionEnricher(f.api,(async(args:any)=>({text:'The orange cat is ready to explore the stars.'})) as any);
+  assert.deepEqual(await wrong(input(f)),{omissionReason:'language_mismatch'});
+  assert.ok(f.logs[0]?.includes('"semantic_fallback_reason":"language_mismatch"'));
+ } finally { await rm(f.root,{recursive:true,force:true}); }
 });
 
 test('caption model error, malformed protocol, and unsupported input all omit optional caption', async () => {

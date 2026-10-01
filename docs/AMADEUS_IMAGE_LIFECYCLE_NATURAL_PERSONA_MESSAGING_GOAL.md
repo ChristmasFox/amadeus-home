@@ -280,3 +280,11 @@ Do not stop at source implementation or candidate build. Under this Goal, succes
 ## Execution status — 2026-10-01 hard-gate stop
 
 Implementation and canonical version `1.7.5` were committed and pushed as `a242570`. Required source validations passed, but the immutable candidate failed its pre-switch version-identity read: `/opt/amadeus/VERSION` was mode `0600`, inaccessible to the runtime `node` user. The deployment script stopped before protected runtime checkpoint creation and production apply. Production remains healthy on 1.7.4; 1.7.5 is not deployed, and the Goal remains incomplete. Do not bypass or reuse the failed candidate; any resumed attempt must build a distinct immutable candidate from corrected committed source and pass every hard gate again. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md` and `.agent/tasks/2026-10-01-amadeus-image-persona-1.7.5-rollout-halted.md`.
+
+
+## Execution status — 2026-10-01 post-apply behavior failure and rollback
+
+A distinct 1.7.5 candidate from `e82f04d` passed preflight and production technical gates, but the operator reported English accepted text after a Chinese request and image-only success delivery. Runtime telemetry showed caption omission as `model_error` with bounded request context present. The candidate was automatically rolled back to the protected 1.7.4 source; health and Gateway Amadeus registration passed after rollback. The active source has now been corrected with explicit request-language instructions/output validation and bounded same-operation retries for language mismatch and early caption-provider errors. These corrections are not yet deployed. The Goal remains incomplete; the failed candidate must not be reused. Evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
+
+
+The latest local correction passes `pnpm test:delivery` (80 focused tests plus the exact pinned integration), `pnpm test:amadeus` (114 tests), typecheck/build, architecture, secrets, version/candidate fixtures and diff checks. The validated source and current-state docs are pending commit/push; no fresh candidate has been built or applied yet. Production remains on the healthy 1.7.4 rollback image.

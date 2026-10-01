@@ -59,7 +59,8 @@ test('Chinese, Japanese and English request context is preserved for normal sema
       assert.equal(await enrich({...input,requestContext}),acceptedReply);
       assert.equal(await enrich({...input,kind:'failed',requestContext}),failedReply);
       assert.ok(f.calls.every(call=>call.message.includes(JSON.stringify(requestContext))));
-      assert.ok(f.calls.every(call=>/current user's request\/conversation language/.test(call.message)));
+      const languageInstruction=requestContext.includes('海辺')?'自然な日本語だけ':requestContext.includes('Draw')?'Reply only in natural English':'Reply only in natural Chinese';
+      assert.ok(f.calls.every(call=>call.message.includes(languageInstruction)));
     } finally { await rm(f.root,{recursive:true,force:true}); }
   }
 });
@@ -76,6 +77,25 @@ test('lifecycle semantic work lasting beyond the old two-second limit can succee
   }finally{await rm(f.root,{recursive:true,force:true});t.mock.timers.reset();}
 });
 
+test('language-mismatch lifecycle retry still shares one ~30-second deadline',async(t)=>{
+  t.mock.timers.enable({apis:['setTimeout','Date']});
+  const f=await fixture(async()=>{
+    if(f.calls.length===1) return await new Promise(resolve=>setTimeout(()=>resolve({text:'Image generation has started.'}),10_001));
+    return await new Promise<{text:string}>(()=>{});
+  });
+  try {
+    const pending=createImageGenerationMessageEnricher(f.api)({...input,requestContext:'请画一只橘猫。'});
+    await f.called;
+    await t.mock.timers.tick(10_001);
+    while(f.calls.length<2) await new Promise(resolve=>setImmediate(resolve));
+    assert.ok(f.calls[1].timeoutMs>18_000&&f.calls[1].timeoutMs<=19_000);
+    await t.mock.timers.tick(20_000);
+    assert.equal(await pending,'图像生成已经开始了，稍等片刻。');
+    assert.equal(f.calls.length,2);
+    assert.ok(f.logs[0]?.includes('"semantic_fallback_reason":"timeout"'));
+  } finally { await rm(f.root,{recursive:true,force:true}); t.mock.timers.reset(); }
+});
+
 test('lifecycle semantic timeout falls back in request language and does not retry the model', async(t)=>{
   t.mock.timers.enable({apis:['setTimeout']});
   const f=await fixture(async()=>await new Promise<{text:string}>(()=>{}));
@@ -88,6 +108,17 @@ test('lifecycle semantic timeout falls back in request language and does not ret
     assert.ok(f.logs[0]?.includes('"semantic_status":"fallback"'));
     assert.ok(f.logs[0]?.includes('"semantic_fallback_reason":"timeout"'));
   }finally{await rm(f.root,{recursive:true,force:true});t.mock.timers.reset();}
+});
+
+test('clear Chinese request rejects English model prose and uses only a Chinese safe fallback', async()=>{
+  const f=await fixture(async()=>({text:'Image generation has started; please wait.'}));
+  try {
+    const result=await createImageGenerationMessageEnricher(f.api)({...input,requestContext:'请画一只橘猫。'});
+    assert.equal(result,'图像生成已经开始了，稍等片刻。');
+    assert.equal(f.calls.length,2,'wrong-language semantic output is retried once inside the same operation deadline');
+    assert.ok(f.logs[0]?.includes('"semantic_status":"fallback"'));
+    assert.ok(f.logs[0]?.includes('"semantic_fallback_reason":"language_mismatch"'));
+  } finally { await rm(f.root,{recursive:true,force:true}); }
 });
 
 test('failed lifecycle semantic timeout still returns one localized failure notice within the shared budget', async(t)=>{

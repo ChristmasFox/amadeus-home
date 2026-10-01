@@ -287,7 +287,7 @@ export async function importGeneratedCompletionAssets(
     const asset = await importImageAsset(config, item.path!, item.mimeType!, 'generated', { runId: `image_generate:${options.taskId}` });
     const base = imageAssetAttachment(asset, 'inline');
     let caption: string | undefined;
-    let fallbackReason: 'timeout' | 'model_error' | 'invalid_result' | 'unsupported' | undefined;
+    let fallbackReason: 'timeout' | 'model_error' | 'invalid_result' | 'unsupported' | 'language_mismatch' | undefined;
     const captionStartedAt = Date.now();
     if (options.captionEnricher) {
       try {
