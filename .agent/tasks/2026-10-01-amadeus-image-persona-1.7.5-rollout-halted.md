@@ -11,3 +11,11 @@ A later corrected candidate was applied but failed real behavior acceptance (Eng
 
 
 Resolution: corrected source commit `4e514a3` was built as a distinct immutable candidate, all hard gates passed, and Amadeus 1.7.5 is now deployed/verified. The historical rollback remains part of the audit trail. Manual owner-channel acceptance is waived, not performed. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
+
+
+Reopened: audit of the `4e514a3` candidate found its language hint could come from the model-produced `request.prompt`; that candidate was rolled back. Current production is healthy 1.7.4. Source now captures original inbound text plus derived language at `before_dispatch`; focused tests/typecheck pass, but full gates, commit and a distinct candidate remain. Latest evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
+
+Current remediation now distinguishes captured original inbound text/language from OpenClaw's model-produced `taskLabel`; focused 37 tests and Amadeus typecheck pass. Full source gates and new immutable release attempt remain pending. Production stays healthy on 1.7.4.
+
+
+Latest source now captures original inbound text at `before_dispatch`, derives the language hint from that text alone, snapshots it per taskId, and passes it separately from taskLabel-derived image prompt to accepted/failed/caption. Full current gates pass (delivery 82 + pinned integration; Amadeus 116; typecheck/build/architecture/version/secrets/diff). Still pending commit/push and a distinct new candidate; current production remains healthy 1.7.4.

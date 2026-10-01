@@ -9,6 +9,7 @@ import { deliveryRuns } from './delivery-runs.js';
 import { assetPath, readRegisteredAsset, type AssetMetadata } from './delivery-assets.js';
 import { createAttachmentPart, type AttachmentPart } from './delivery-envelope.js';
 import { normalizeImageCaption, type ImageCaptionEnricher } from './image-caption.js';
+import type { ImageRequestLanguage } from './image-generation-context.js';
 
 const ImageUpscaleParameters = Type.Object({
   target: Type.Optional(Type.Object({
@@ -258,6 +259,7 @@ export type GeneratedCompletionAssetOptions = Readonly<{
   sessionKey: string;
   channel: 'whatsapp' | 'telegram';
   requestContext?: string;
+  requestLanguage?: ImageRequestLanguage;
   captionEnricher?: ImageCaptionEnricher;
 }>;
 
@@ -295,6 +297,7 @@ export async function importGeneratedCompletionAssets(
         const outcome = await options.captionEnricher({
           ...image, taskId:options.taskId, agentId: options.agentId, sessionKey: options.sessionKey, channel: options.channel,
           ...(options.requestContext ? { requestContext: options.requestContext.slice(0, 2_000) } : {}),
+          ...(options.requestLanguage ? { requestLanguage: options.requestLanguage } : {}),
         });
         const safeCaption = normalizeImageCaption(outcome?.caption);
         if (safeCaption) caption = safeCaption;

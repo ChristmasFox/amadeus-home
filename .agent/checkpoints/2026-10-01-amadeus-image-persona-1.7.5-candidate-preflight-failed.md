@@ -40,3 +40,6 @@ Commit `431d90f` corrects the candidate permission defect: Dockerfile normalizes
 
 
 Resolution: the permission correction was followed by a separate behavior failure and rollback, then another source correction. The final distinct candidate from commit `4e514a361bec` is now deployed and passes automated gates; see `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`. This checkpoint remains only the first preflight-failure audit.
+
+
+Later resolution `4e514a3` was itself rolled back after a source-truth audit found the original user request was not guaranteed to survive as task context. Production remains healthy on 1.7.4 while the inbound-context fix is being validated. Details: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
