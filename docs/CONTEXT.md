@@ -49,9 +49,9 @@ route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference
 through the existing `openai/amadeus-image` JSON generations route, preserving
 bytes as Codex `input_image` and Gemini `inlineData`. Multi-reference requests
 fail closed; no 9Router source, account, credential, or Combo changed. Live
-post-deploy fixture passed and route error projection was clean. Manual owner
-reference-image generation/delivery acceptance remains pending; no paid smoke
-was run and no cross-restart exactly-once claim is made.
+post-deploy fixture passed and route error projection was clean. The owner
+subsequently confirmed the reference-image generation/delivery path works. No
+cross-restart exactly-once claim is made.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
