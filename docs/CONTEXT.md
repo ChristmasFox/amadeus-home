@@ -19,8 +19,9 @@ exception and avoids restarting OpenClaw for an unrelated endpoint move.
 local MLX → Qwen Audio 3.1 → Qwen Audio 3.0. Its healthy immutable image is
 `local/9router:git-0fdfdbbd91f2-20260930T211901Z`, image ID
 `sha256:c6c2bf40c95d62a49c14cd7ec7c8188002a35352bedc7cc911397e857f1caf7b`.
-Source commits are `0fdfdbb` (rebaseline/deployed bridge) and `45f96a9`
-(retirement cleanup). Amadeus `VERSION=1.7.4` is unchanged. GPT-SoVITS and
+Source commits are `0fdfdbb` (rebaseline/deployed bridge), `45f96a9`
+(retirement cleanup), and `5013800` (default-only local-first policy). The live
+bridge reports emotion controls disabled. Amadeus `VERSION=1.7.4` is unchanged. GPT-SoVITS and
 OminiX active runtime/source/model/venv/LaunchAgent/provider assets have been
 removed after automated acceptance.
 
