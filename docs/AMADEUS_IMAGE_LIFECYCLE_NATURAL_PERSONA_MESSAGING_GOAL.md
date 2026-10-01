@@ -276,3 +276,7 @@ Complete only when:
 - final docs/checkpoint explicitly record the manual owner-channel waiver.
 
 Do not stop at source implementation or candidate build. Under this Goal, successful completion means **1.7.5 is deployed and automatically verified**, unless a hard gate fails and rollback is required.
+
+## Execution status — 2026-10-01 hard-gate stop
+
+Implementation and canonical version `1.7.5` were committed and pushed as `a242570`. Required source validations passed, but the immutable candidate failed its pre-switch version-identity read: `/opt/amadeus/VERSION` was mode `0600`, inaccessible to the runtime `node` user. The deployment script stopped before protected runtime checkpoint creation and production apply. Production remains healthy on 1.7.4; 1.7.5 is not deployed, and the Goal remains incomplete. Do not bypass or reuse the failed candidate; any resumed attempt must build a distinct immutable candidate from corrected committed source and pass every hard gate again. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md` and `.agent/tasks/2026-10-01-amadeus-image-persona-1.7.5-rollout-halted.md`.
