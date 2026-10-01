@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-10-01（image lifecycle 1.7.5 source; failed candidate rolled back to 1.7.4）
+更新时间：2026-10-01（Amadeus image lifecycle 1.7.5 deployed and automatically verified）
 
 ## Worldline notification boundary
 
@@ -93,16 +93,16 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   避免第二条 start acknowledgement。它们是有稳定 taskId key 的 typed lifecycle text notifications，不创建
   或绑定图片 asset；generation failure 不运行 CaptionEnricher、不暴露异常/stack/provider payload。
 - `delivery-settlement.ts` 为 channel settlement 使用同一 ledger；重复 deliveryId 不重复发送。
-  语音 part 通过同一 9Router `amadeus-tts` bridge，110 秒上限内保留 GPT-SoVITS→云端
+  语音 part 通过同一 9Router `amadeus-tts` bridge，保留 Qwen3-TTS MLX local → Qwen Audio 3.1 → 3.0
   fallback；TTS 失败只用 envelope 中 typed text part。
 
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
-OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。此前 1.7.4 image lifecycle candidate 已应用到 healthy OpenClaw 2026.9.4 image
-`local/openclaw-amadeus:git-628703c803e7-20260930184906`；
-Owner 已于 2026-10-01 在对话中直接确认 real WhatsApp Gates A–F 全部通过；健康检查/registration
-本身不替代该 owner attestation。bounded in-process task state 仍不构成跨 Gateway restart 的持久 replay journal。
-外部回滚 checkpoint 与 gate 状态见 `.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`。
-
+OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。此前被接受的 1.7.4 baseline image 是
+`local/openclaw-amadeus:git-628703c803e7-20260930184906`；其 owner Gates A–F attestation 是历史证据。
+当前 Amadeus 1.7.5 runtime 使用 immutable image
+`local/openclaw-amadeus:git-4e514a361bec-20261001064552` 并已自动验收；本次 manual owner acceptance
+明确 waive、未执行。回滚和最终 gate 证据见
+`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`。
 ## Presentation contract 与时间语义
 
 `packages/presentation` 是跨能力的结构化用户输出边界，当前提供
@@ -284,7 +284,5 @@ WhatsApp ingress 的已验证 audio lease、失败 admission、typing 和 per-se
 保留为 transport lifecycle，交付语义由上面的 v2 typed contract 独占。
 
 
-1.7.5 was applied and then rolled back after reported language and caption failures. The current source contains further language validation/retry changes awaiting a fresh candidate; production remains 1.7.4. Behavior-failure evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
 
-
-The previously applied 1.7.5 candidate was rolled back after a real reported wrong-language accepted message and caption omission. Current production is healthy on 1.7.4 while the corrected source remains pending a fresh apply; see `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
+The first 1.7.5 candidate was rolled back after reported wrong-language accepted text and a caption provider error. The corrected 1.7.5 image is now deployed and automatically verified; manual owner acceptance was waived and not performed. Final evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.

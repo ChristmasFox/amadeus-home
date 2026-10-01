@@ -20,7 +20,8 @@ local MLX → Qwen Audio 3.1 → Qwen Audio 3.0. Its healthy immutable image is
 `sha256:c6c2bf40c95d62a49c14cd7ec7c8188002a35352bedc7cc911397e857f1caf7b`.
 Source commits are `0fdfdbb` (rebaseline/deployed bridge), `45f96a9`
 (retirement cleanup), and `5013800` (default-only local-first policy). The live
-bridge reports emotion controls disabled. Amadeus `VERSION=1.7.4` is unchanged. GPT-SoVITS and
+bridge reports emotion controls disabled. The Qwen3-TTS Goal at that time left
+Amadeus `VERSION=1.7.4` unchanged; a later image-lifecycle release bumped it to 1.7.5. GPT-SoVITS and
 OminiX active runtime/source/model/venv/LaunchAgent/provider assets have been
 removed after automated acceptance.
 
@@ -33,22 +34,22 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Amadeus image persona 1.7.5 rollout — rolled back after reported behavior failure
+## Amadeus image persona 1.7.5 — deployed and verified
 
-The `e82f04d` 1.7.5 candidate passed its version and Gateway gates and was applied, but the operator observed English accepted text for a Chinese request and image-only success delivery. Safe runtime telemetry showed caption omission as `model_error`. Per the hard-gate policy, production was rolled back using `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001060150`; the previous image was rebuilt from source commit `628703c803e7` because its local image had been pruned. Current production is healthy and registered on Amadeus `1.7.4`.
+The final source commit `4e514a361becb9183b9208a5c8b764d5eb70c65d` is deployed in immutable OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-4e514a361bec-20261001064552`; runtime Amadeus version is 1.7.5. OpenClaw health and Gateway registration pass. Language continuity is explicitly constrained/validated for lifecycle and image captions; caption enrichment uses a bounded shared semantic deadline and remains optional, so failure never removes the image. The same-bubble typed DeliveryEnvelope v2 transport remains unchanged.
 
-The active 1.7.5 source now enforces and validates the clear request language in lifecycle/caption output and can retry one language mismatch or early transient caption-provider error within the same bounded semantic operation. Those corrections are not yet deployed. The Goal remains incomplete; see `docs/CURRENT_TASK.md` and `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
+An earlier 1.7.5 candidate was rolled back after the operator reported English accepted text for Chinese and image-only success; see the rollback record in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`. The final corrected source passed all automated hard gates. Actual generated-image caption smoke passed in 5,429 ms. Manual owner WhatsApp/image-experience acceptance was operator-waived and not performed. Full release evidence and protected checkpoint are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
 
 ## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
 
-The owner-accepted image lifecycle candidate continues to run immutable
-OpenClaw image
-`local/openclaw-amadeus:git-628703c803e7-20260930184906` (OpenClaw `2026.9.4`)
-on OrbStack `nyannyan`; Amadeus registration is healthy. Product Radar and the
-image-generation lifecycle/caption implementation remain unchanged. The owner
-attested that real WhatsApp Gates A–F passed; deployment notification/outbox
-smoke is not Gate A. The task coordinator and delivery ledger are bounded
-process-local state, so cross-restart exactly-once is not claimed.
+The TTS work did not restart OpenClaw or Product Radar. Current OpenClaw 2026.9.4
+runs immutable image `local/openclaw-amadeus:git-4e514a361bec-20261001064552`
+on OrbStack `nyannyan`; Amadeus `VERSION=1.7.5`, health and Gateway registration
+are verified. The earlier 1.7.4 owner Gates A–F attestation is historical and is
+not represented as manual acceptance of 1.7.5; that final manual gate was
+operator-waived. Task coordination and delivery settlement remain bounded
+process-local state, so cross-restart exactly-once is not claimed. Final
+release evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 

@@ -44,3 +44,8 @@ The 1.7.5 candidate is rejected and must not be reused. No owner WhatsApp accept
 ## Current source remediation verification
 
 The uncommitted language-lock/retry correction now passes `pnpm test:delivery` (80 tests plus pinned integration), `pnpm test:amadeus` (114 tests), `pnpm typecheck:amadeus`, `pnpm build:amadeus`, `pnpm check:architecture`, Amadeus version and candidate-deploy fixtures, `pnpm check:secrets`, and `git diff --check`. The correction is not yet committed or deployed; this evidence does not change the rollback state above.
+
+
+## Resolution
+
+Commit `4e514a361becb9183b9208a5c8b764d5eb70c65d` corrected request-language validation/retries and bounded caption transient recovery. Its distinct immutable candidate is now deployed and automatically verified; current runtime is Amadeus 1.7.5. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md` for final gate evidence and explicit manual acceptance waiver.
