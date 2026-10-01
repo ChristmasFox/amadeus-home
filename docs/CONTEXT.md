@@ -1,14 +1,16 @@
 # Canonical context — 2026-10-01
 
-Read this with `docs/CURRENT_TASK.md`; it points to the Qwen3-TTS MLX
-rebaseline Goal. Runtime Gates A–G passed and final source/state evidence is pushed to canonical
-`main`; re-read Git/live state before any further work.
+Read this with `docs/CURRENT_TASK.md`; the Qwen3-TTS MLX rebaseline Goal is
+complete and the current follow-up disables per-request emotions while keeping
+all requests default/local-first. Re-read Git/live state before further work.
 
 ## Current Git/runtime boundary — Qwen3-TTS MLX
 
 The accepted voice path is Qwen3-TTS 1.7B Base through pinned `mlx-audio`
 0.5.6 / MLX 8-bit, using the unchanged operator-owned 46s A `kurisu-v1`
-reference and `lang_code=auto`. The authenticated native LaunchAgent listens
+reference and `lang_code=auto`. The TTS default-only policy follow-up is in
+progress; after apply, per-request emotions are disabled while preserving the
+future opt-in code. The authenticated native LaunchAgent listens
 only on `127.0.0.1:18794`; port 18792 remains owned by the separate ImageAssets
 service and is unchanged. This uses the active Goal's explicit live-collision
 exception and avoids restarting OpenClaw for an unrelated endpoint move.

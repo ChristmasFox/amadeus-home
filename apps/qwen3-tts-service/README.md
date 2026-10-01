@@ -6,7 +6,9 @@ pinned `mlx-audio` 0.5.6 with the 8-bit
 operator-owned `kurisu-v1/reference.wav` + matching `reference.txt` profile,
 `lang_code="auto"`, pure ICL cloning, one model worker, and a bounded FIFO
 queue. The local engine does not receive persona/instruction/style/speed/pitch
-controls. Non-default style requests are handled by the 9Router cloud path.
+controls. Production normalizes valid style/emotion inputs to `default`, so all
+requests try local first. Emotion code remains available behind the explicit
+9Router `AMADEUS_TTS_EMOTIONS_ENABLED=true` opt-in; production sets it false.
 
 `infra/macos/qwen3-tts-engine.json` is the declarative source for pinned source,
 model, and dependency revisions. The protected MLX assets remain under the

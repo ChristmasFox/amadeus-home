@@ -293,3 +293,15 @@ content-safe completion record is
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`. Amadeus
 `VERSION=1.7.4` was not changed. Human listening, owner-channel and WhatsApp
 gates were explicitly waived and were not performed.
+
+
+## Post-completion owner policy update — 2026-10-01
+
+The owner subsequently requested that production stop applying per-request
+emotions/styles: normalize all valid style values to `default`, always try
+local MLX first, and use cloud only after an operational local failure. The
+bridge retains its emotion instructions behind the explicit
+`AMADEUS_TTS_EMOTIONS_ENABLED=true` future opt-in, while the deployed Compose
+sets it to `false`. This supersedes the earlier local-style compatibility
+exception for current production behavior; the original goal and acceptance
+evidence above remain historical audit context.
