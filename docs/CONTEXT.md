@@ -8,9 +8,8 @@ all requests default/local-first. Re-read Git/live state before further work.
 
 The accepted voice path is Qwen3-TTS 1.7B Base through pinned `mlx-audio`
 0.5.6 / MLX 8-bit, using the unchanged operator-owned 46s A `kurisu-v1`
-reference and `lang_code=auto`. The TTS default-only policy follow-up is in
-progress; after apply, per-request emotions are disabled while preserving the
-future opt-in code. The authenticated native LaunchAgent listens
+reference and `lang_code=auto`. The TTS default-only policy follow-up is complete:
+per-request emotions are disabled while preserving future opt-in code. The authenticated native LaunchAgent listens
 only on `127.0.0.1:18794`; port 18792 remains owned by the separate ImageAssets
 service and is unchanged. This uses the active Goal's explicit live-collision
 exception and avoids restarting OpenClaw for an unrelated endpoint move.
@@ -33,6 +32,18 @@ canonical A pair, MLX weights, credentials, cloud voice IDs, and generated
 media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
+
+## Amadeus image persona 1.7.5 rollout — halted before production switch
+
+Source commit `a242570` and permission correction `431d90f` are pushed with canonical
+`VERSION=1.7.5`. The first immutable candidate failed its hard preflight because
+`/opt/amadeus/VERSION` was copied with mode 0600 and could not be read by the runtime
+`node` user. The Dockerfile and version tool now enforce mode 0644. The failed candidate
+was not applied; a fresh candidate must pass every hard gate. Production remains the
+healthy 1.7.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`;
+its Amadeus Gateway registration remains present. The rejected candidate must
+not be used. The Goal is incomplete; see the failure checkpoint and follow-up
+in `docs/CURRENT_TASK.md`.
 
 ## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
 

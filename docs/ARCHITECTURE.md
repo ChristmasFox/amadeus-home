@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-10-01（image-generation lifecycle/caption source implementation; production apply pending）
+更新时间：2026-10-01（image lifecycle 1.7.5 source; production candidate blocked before apply）
 
 ## Worldline notification boundary
 
@@ -77,10 +77,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   Accepted 提示发送错误不会取消已经调度的生成任务。
 - 成功只从 OpenClaw persisted `attachments[]` 导入 asset registry。CaptionEnricher 用已注册、
   已校验的实际生成图片调用 OpenClaw multimodal image-understanding API，最多带 480 字符
-  原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；其 typed
-  输出仅为 `{ caption: string }`。Kurisu 自然决定措辞/篇幅，不设置应用层字数目标；只遵守原生 caption 最大长度（1024 字符）。请求有严格 timeout，输出规范化并拒绝 JSON/protocol。
-  Caption 超时、模型错误、无效结果或不可用都转成确定性安全 fallback；caption 不会阻断图片
-  settlement，也不再调用第二个模型作 fallback。
+  原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；语义操作使用
+  单一约 30 秒 wall-clock deadline、较短 provider timeout 和 bounded request context。输出规范化并
+  拒绝 JSON/protocol；native caption 上限仍为 1024 字符。Caption timeout/model error/invalid result
+  返回 omission reason 而不合成 caption；caption 不会阻断图片 settlement，也不调用第二个模型。
 - WhatsApp inline image+caption 通过同一次 `transport.sendMedia({ image, mimetype, caption })`
   原生发送成为一个图片气泡；没有独立的成功 caption text send。`disposition=document`
   仍走原 document/file primitive，不因 caption 支持降级。Telegram 复用同一个 typed caption
@@ -94,8 +94,8 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   fallback；TTS 失败只用 envelope 中 typed text part。
 
 Lifecycle coordinator、route map 与现有 delivery settlement ledger 是有界进程内状态，不是跨
-OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。当前 candidate 已应用到
-healthy OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`；
+OpenClaw restart 的持久 exactly-once journal；asset registry 本身保持持久。此前 1.7.4 image lifecycle candidate 已应用到 healthy OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-628703c803e7-20260930184906`；
 Owner 已于 2026-10-01 在对话中直接确认 real WhatsApp Gates A–F 全部通过；健康检查/registration
 本身不替代该 owner attestation。bounded in-process task state 仍不构成跨 Gateway restart 的持久 replay journal。
 外部回滚 checkpoint 与 gate 状态见 `.agent/checkpoints/2026-10-01-amadeus-image-generation-lifecycle-caption-candidate-applied.md`。
@@ -279,3 +279,6 @@ canonical runtime 是 host profile 指定的 OrbStack CasaOS machine（M204 当�
 已在生产生效的证据。当前受控声学服务仍为 9Router `amadeus-tts` bridge；
 WhatsApp ingress 的已验证 audio lease、失败 admission、typing 和 per-session queue
 保留为 transport lifecycle，交付语义由上面的 v2 typed contract 独占。
+
+
+1.7.5 source is now pushed, but its immutable candidate was rejected before production apply because the canonical version marker was unreadable to the runtime user. Production remains 1.7.4; failure evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md`.

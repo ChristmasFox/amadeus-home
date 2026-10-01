@@ -1,5 +1,11 @@
 # Project State — 2026-10-01
 
+## Amadeus image persona 1.7.5 — source pushed; production apply halted at candidate gate
+
+Implementation commit `a242570` and permission correction `431d90f` are pushed; canonical source `VERSION=1.7.5`. All required local source tests/typecheck/build/architecture/secrets checks passed. The correction sets the baked version marker to mode 0644 and keeps future canonical version bumps at mode 0644. The immutable OpenClaw candidate `local/openclaw-amadeus:git-a24257068abe-20261001055126` failed pre-switch validation because `/opt/amadeus/VERSION` was mode 0600 and unreadable by the runtime `node` user. The deployment command stopped before protected checkpoint creation, Compose update, or production apply.
+
+The previous production image remains `local/openclaw-amadeus:git-628703c803e7-20260930184906` (source `VERSION=1.7.4`), OpenClaw health is healthy, and Amadeus Gateway registration remains present. No new-version technical acceptance ran; manual owner WhatsApp acceptance remains operator-waived. 1.7.5 is not deployed and the Goal is incomplete. Do not reuse the rejected candidate; any retry uses a distinct image built from `431d90f` or later after all hard gates pass. Failure evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md`; follow-up is `.agent/tasks/2026-10-01-amadeus-image-persona-1.7.5-rollout-halted.md`.
+
 ## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed
 
 Runtime rebaseline, destructive retirement cleanup, final state documentation,

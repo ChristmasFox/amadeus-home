@@ -24,3 +24,6 @@ Git and live runtime are the source of truth. Follow `AGENTS.md` for checkpoint,
 
 
 The 1.7.5 source/version commit `a242570` is pushed, but its immutable candidate failed the required pre-switch runtime-version readability check (`/opt/amadeus/VERSION` mode 0600). The deployment script stopped before checkpoint creation or Compose apply. Production remains healthy on 1.7.4; do not claim the release deployed or retry the rejected candidate. The Goal remains incomplete pending a corrected source commit and a distinct candidate that passes every hard gate. The active Goal authorization still covers apply, but never waives a failed gate or permits reuse of the rejected candidate. Failure evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md`; follow-up: `.agent/tasks/2026-10-01-amadeus-image-persona-1.7.5-rollout-halted.md`.
+
+
+Remediation is committed and pushed as `431d90f`: both the Docker image and canonical version-bump script preserve mode 0644 for `/opt/amadeus/VERSION`, with regression assertions. The rejected candidate remains forbidden; a new candidate must use the new source commit and pass all gates. Production remains 1.7.4 until then.
