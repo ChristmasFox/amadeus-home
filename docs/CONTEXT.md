@@ -34,19 +34,33 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Amadeus image persona 1.7.5 — rollback pending original-request context correction
+## Amadeus image persona 1.7.5 — deployed and automatically verified
 
-The `4e514a3` candidate was rolled back after inspection proved pinned OpenClaw derives `taskLabel` from model-produced `request.prompt`, not original inbound user text. This can lose the user's language when the image prompt is translated. Current production is healthy/Gateway-registered on Amadeus 1.7.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`.
+Final source commit `5444b3a94a8225fc8aec62a4d5abf307a0f8e6d5` runs in immutable
+OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-5444b3a94a82-20261001073247`;
+runtime Amadeus version is 1.7.5. Health and Gateway registration pass. The
+lifecycle path snapshots bounded original inbound WhatsApp/Telegram text at
+`before_dispatch`, keeps it distinct from model-produced image prompt text, and
+passes a separate request-language hint through accepted, failed and caption
+enrichment. Full automated evidence and protected rollback reference are in
+`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
 
-Source commits `2e60797` and `d8442d6` now capture bounded inbound text at `before_dispatch`, snapshot it per taskId, and carry runtime-derived requestLanguage separately from the model image prompt. Source gates pass; the commits are pushed but remain pending a fresh deployment candidate. See `docs/CURRENT_TASK.md` and `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
+An earlier 1.7.5 candidate was rolled back after the owner reported wrong-language
+accepted text and image-only success. That feedback exposed that `taskLabel` was
+not the original request; source was corrected and the final candidate passed
+automated tests plus an actual generated-image caption smoke. Manual final owner
+WhatsApp/image-experience acceptance was **waived and not performed**.
 
 ## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
 
 The TTS work did not restart OpenClaw or Product Radar. Current OpenClaw 2026.9.4
-runs `local/openclaw-amadeus:git-628703c803e7-20260930184906` on OrbStack
-`nyannyan`; Amadeus 1.7.4 health and Gateway registration pass. The earlier
-1.7.4 owner Gates A–F attestation is historical and does not claim manual
-acceptance of a future 1.7.5 candidate.
+runs `local/openclaw-amadeus:git-5444b3a94a82-20261001073247` on OrbStack
+`nyannyan`; Amadeus `VERSION=1.7.5`, health and Gateway registration pass. The
+earlier 1.7.4 owner Gates A–F attestation is historical and does not represent
+manual acceptance of 1.7.5; that acceptance was operator-waived. The task
+coordinator and delivery ledger remain bounded process-local state, so no
+cross-restart exactly-once claim is made. Final release evidence is
+`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 

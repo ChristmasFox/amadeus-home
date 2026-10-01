@@ -19,3 +19,5 @@ Current remediation now distinguishes captured original inbound text/language fr
 
 
 Latest source now captures original inbound text at `before_dispatch`, derives the language hint from that text alone, snapshots it per taskId, and passes it separately from taskLabel-derived image prompt to accepted/failed/caption. Commits `2e60797` and `d8442d6` are pushed; full gates pass (delivery 82 + pinned integration; Amadeus 116; typecheck/build/architecture/version/secrets/diff). A distinct new candidate remains pending; current production remains healthy 1.7.4.
+
+Resolution: commits `2e60797`/`d8442d6` preserve original inbound request text/language separately from model prompt. Distinct candidate from `5444b3a` is deployed as 1.7.5 with all automated gates passing. This task now serves as incident history; completion evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.

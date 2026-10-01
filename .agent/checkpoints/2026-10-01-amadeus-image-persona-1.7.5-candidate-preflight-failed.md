@@ -43,3 +43,5 @@ Resolution: the permission correction was followed by a separate behavior failur
 
 
 Later resolution `4e514a3` was itself rolled back after a source-truth audit found the original user request was not guaranteed to survive as task context. Production remains healthy on 1.7.4 while the inbound-context fix is being validated. Details: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
+
+Final resolution: after correcting both the version marker permissions and original-request language source, a distinct image from commit `5444b3a` passed all hard gates and is deployed as Amadeus 1.7.5. This checkpoint remains the record of the first preflight failure only. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.

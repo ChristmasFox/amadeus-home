@@ -55,3 +55,7 @@ Commit `4e514a361becb9183b9208a5c8b764d5eb70c65d` corrected request-language val
 A final audit of the exact pinned OpenClaw 2026.9.4 module showed `handle.taskLabel` is populated from `request.prompt` (the model-produced image prompt), not guaranteed original inbound user text. That explains why an English translated image prompt could still drive an English accepted reply after the `4e514a3` language guard. The `4e514a3` candidate was rolled back again to the protected pre-apply 1.7.4 Compose from the same checkpoint; the previous image tag was present, so no rebuild was required. Current health and Gateway registration passed on `local/openclaw-amadeus:git-628703c803e7-20260930184906`.
 
 The new source captures bounded `before_dispatch` inbound text in short-lived channel/session context, snapshots it per taskId, carries its derived language separately from the model image prompt, and passes both through lifecycle and caption semantic input. This source is not yet committed or deployed. Detailed evidence and the new rollback's exact Compose snapshot are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
+
+## Resolution after original-context correction
+
+The final source now captures original inbound text from `before_dispatch` separately from model-generated `taskLabel`. Commits `2e60797`/`d8442d6` are deployed in the final 1.7.5 candidate from `5444b3a`; all required automated gates pass. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
