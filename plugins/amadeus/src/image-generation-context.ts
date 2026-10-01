@@ -20,8 +20,8 @@ export function detectImageRequestLanguage(value: string | undefined): ImageRequ
   return 'unknown';
 }
 
-export function imageRequestLanguageInstruction(value: string | undefined): string {
-  switch (detectImageRequestLanguage(value)) {
+export function imageRequestLanguageInstruction(value: string | undefined, explicitLanguage?: ImageRequestLanguage): string {
+  switch (explicitLanguage ?? detectImageRequestLanguage(value)) {
     case 'chinese': return 'The current user request is Chinese. Reply only in natural Chinese; do not switch to English or Japanese.';
     case 'japanese': return '現在のユーザーリクエストは日本語です。自然な日本語だけで返答し、英語や中国語に切り替えないでください。';
     case 'english': return 'The current user request is English. Reply only in natural English; do not switch to Chinese or Japanese.';
@@ -30,7 +30,7 @@ export function imageRequestLanguageInstruction(value: string | undefined): stri
 }
 
 /** Fail closed on a clearly wrong language; this guards against the model's persona-default language. */
-export function imageResponseMatchesRequestLanguage(request: string | undefined, response: string): boolean {
-  const expected = detectImageRequestLanguage(request);
+export function imageResponseMatchesRequestLanguage(request: string | undefined, response: string, explicitLanguage?: ImageRequestLanguage): boolean {
+  const expected = explicitLanguage ?? detectImageRequestLanguage(request);
   return expected === 'unknown' || detectImageRequestLanguage(response) === expected;
 }

@@ -144,6 +144,16 @@ test('language-mismatch caption retry still shares one ~30-second deadline',asyn
  } finally { await rm(f.root,{recursive:true,force:true}); t.mock.timers.reset(); }
 });
 
+test('runtime-derived Chinese language wins over an English image-generation prompt',async()=>{
+ const f=await fixture(); let args:any;
+ try {
+  const requestContext='Original user request: 请画一只橘猫。 | Image prompt: a cinematic orange cat in space';
+  const enrich=createImageCaptionEnricher(f.api,(async(value:any)=>{args=value;return {text:'这只太空橘猫看起来准备好出发了。'};}) as any);
+  assert.deepEqual(await enrich({...input(f),requestContext,requestLanguage:'chinese'}),{caption:'这只太空橘猫看起来准备好出发了。'});
+  assert.ok(args.prompt.includes('Reply only in natural Chinese'));
+ } finally { await rm(f.root,{recursive:true,force:true}); }
+});
+
 test('caption language follows clear Chinese request and wrong-language text is omitted',async()=>{
  const f=await fixture();
  try {

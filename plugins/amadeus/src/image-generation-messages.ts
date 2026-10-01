@@ -10,6 +10,7 @@ export type ImageLifecycleMessageInput = Readonly<{
   sessionKey: string;
   channel: 'whatsapp' | 'telegram';
   requestContext?: string;
+  requestLanguage?: ImageRequestLanguage;
 }>;
 export type ImageGenerationMessageEnricher = (input: ImageLifecycleMessageInput) => Promise<string>;
 export type ImageGenerationMessageLimits = Readonly<{
@@ -90,14 +91,14 @@ export function createImageGenerationMessageEnricher(
           attemptCount++;
           const generated = await api.runtime.subagent.complete({
             agentId: input.agentId,
-            message: `${intent}\n${userRequest}\n${imageRequestLanguageInstruction(requestContext)} Write naturally in the current Kurisu voice, not a canned phrase. Return one brief safe user-visible sentence only. Do not mention task IDs, sessions, providers, exceptions, URLs, or internal systems.`,
+            message: `${intent}\n${userRequest}\n${imageRequestLanguageInstruction(requestContext, input.requestLanguage)} Write naturally in the current Kurisu voice, not a canned phrase. Return one brief safe user-visible sentence only. Do not mention task IDs, sessions, providers, exceptions, URLs, or internal systems.`,
             ...(persona ? { extraSystemPrompt: `Follow this current Kurisu persona guidance for style only:\n${persona}` } : {}),
             timeoutMs: providerTimeoutMs,
             signal: controller.signal,
           });
           const message = normalizeLifecycleMessage(generated?.text);
           if (!message) return { languageMismatch: false };
-          if (imageResponseMatchesRequestLanguage(requestContext, message)) return { message, languageMismatch: false };
+          if (imageResponseMatchesRequestLanguage(requestContext, message, input.requestLanguage)) return { message, languageMismatch: false };
           languageMismatch = true;
         }
         return { languageMismatch };
@@ -107,11 +108,11 @@ export function createImageGenerationMessageEnricher(
         return semanticResult.message;
       }
       fallbackReason = semanticResult.languageMismatch ? 'language_mismatch' : 'invalid_result';
-      return FALLBACKS[detectImageRequestLanguage(requestContext)][input.kind];
+      return FALLBACKS[input.requestLanguage ?? detectImageRequestLanguage(requestContext)][input.kind];
     } catch (error) {
       if (error && typeof error === 'object' && 'code' in error && error.code === 'timeout') controller.abort();
       fallbackReason = error && typeof error === 'object' && 'code' in error && error.code === 'timeout' ? 'timeout' : 'model_error';
-      return FALLBACKS[detectImageRequestLanguage(requestContext)][input.kind];
+      return FALLBACKS[input.requestLanguage ?? detectImageRequestLanguage(requestContext)][input.kind];
     } finally {
       try { api.logger.info(`amadeus image lifecycle semantic ${JSON.stringify({
         task_id: input.taskId,

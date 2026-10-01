@@ -110,6 +110,18 @@ test('lifecycle semantic timeout falls back in request language and does not ret
   }finally{await rm(f.root,{recursive:true,force:true});t.mock.timers.reset();}
 });
 
+test('runtime-derived Chinese language wins over an English image-generation prompt',async()=>{
+  const f=await fixture(async()=>({text:'太空橘猫已经开始画了，等我一下。'}));
+  const requestContext='Original user request: 请画一只橘猫。 | Image prompt: a cinematic orange cat in space';
+  try {
+    const inputWithLanguage={...input,requestContext,requestLanguage:'chinese' as const};
+    const result=await createImageGenerationMessageEnricher(f.api)(inputWithLanguage);
+    assert.equal(result,'太空橘猫已经开始画了，等我一下。');
+    assert.ok(f.calls[0].message.includes('Reply only in natural Chinese'));
+    assert.ok(f.calls[0].message.includes('a cinematic orange cat in space'));
+  } finally { await rm(f.root,{recursive:true,force:true}); }
+});
+
 test('clear Chinese request rejects English model prose and uses only a Chinese safe fallback', async()=>{
   const f=await fixture(async()=>({text:'Image generation has started; please wait.'}));
   try {
