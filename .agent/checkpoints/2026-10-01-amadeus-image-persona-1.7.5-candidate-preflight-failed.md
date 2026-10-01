@@ -37,3 +37,6 @@ Treat this release attempt as halted, not as permission to bypass or repeat a fa
 ## Remediation source (not a production apply)
 
 Commit `431d90f` corrects the candidate permission defect: Dockerfile normalizes the baked version file to 0644, and `scripts/amadeus-version.sh` now writes canonical version files as 0644; fixture assertions cover both. This remediation does not make the rejected `a242570` candidate valid. Any new candidate must be built from the corrected commit and revalidated from the beginning.
+
+
+Resolution: the permission correction was followed by a separate behavior failure and rollback, then another source correction. The final distinct candidate from commit `4e514a361bec` is now deployed and passes automated gates; see `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`. This checkpoint remains only the first preflight-failure audit.

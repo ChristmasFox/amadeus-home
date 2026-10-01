@@ -8,3 +8,6 @@ Evidence: `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-p
 
 
 A later corrected candidate was applied but failed real behavior acceptance (English accepted text for Chinese request; caption omitted with safe telemetry `model_error`). It was rolled back to 1.7.4, now healthy and registered. Current source adds language enforcement/output validation and bounded same-operation retries for language mismatch and early transient caption errors; a new candidate is required. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
+
+
+Resolution: corrected source commit `4e514a3` was built as a distinct immutable candidate, all hard gates passed, and Amadeus 1.7.5 is now deployed/verified. The historical rollback remains part of the audit trail. Manual owner-channel acceptance is waived, not performed. See `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.

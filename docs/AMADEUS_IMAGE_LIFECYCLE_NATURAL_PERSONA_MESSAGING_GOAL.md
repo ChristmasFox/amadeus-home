@@ -288,3 +288,8 @@ A distinct 1.7.5 candidate from `e82f04d` passed preflight and production techni
 
 
 The latest local correction passes `pnpm test:delivery` (80 focused tests plus the exact pinned integration), `pnpm test:amadeus` (114 tests), typecheck/build, architecture, secrets, version/candidate fixtures and diff checks. The validated source and current-state docs are pending commit/push; no fresh candidate has been built or applied yet. Production remains on the healthy 1.7.4 rollback image.
+
+
+## Final execution status — 2026-10-01 complete
+
+The corrected source was committed/pushed as `4e514a361becb9183b9208a5c8b764d5eb70c65d` and deployed as immutable image `local/openclaw-amadeus:git-4e514a361bec-20261001064552`. Runtime identity reports Amadeus 1.7.5; OpenClaw health, real Gateway registration, focused actual-image multimodal caption smoke, controlled lifecycle/caption failure tests, all delivery/upscale/regression tests, typecheck/build, architecture and secrets gates passed. Manual owner WhatsApp/image-experience acceptance is **operator-waived, not performed**. Full gate results, checkpoint, rollback reference and deployment advisory notes are in `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-release.md`.
