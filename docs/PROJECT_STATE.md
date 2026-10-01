@@ -1,8 +1,66 @@
 # Project State — 2026-10-01
 
-## Amadeus 1.7.8 — current live image-generation repair
+## Amadeus 1.7.9 — current live authoritative image route
 
-Source commit `9f23572` is pushed to `main` and live in immutable OpenClaw 2026.9.4
+Source commit `0868fb2` is pushed to `main` and live in immutable OpenClaw
+2026.9.4 image `local/openclaw-amadeus:git-0868fb2b1c81-20261001133405`, image
+ID `sha256:02fcbce4df5914174924ac683994467b6ab6452851d16343396cc27b7e6d8`.
+Runtime `/opt/amadeus/VERSION=1.7.9`; OpenClaw health, Amadeus Gateway
+registration, Product Radar health, and protected rollback checkpoint pass. The
+checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001133405`
+(directory 0700, manifests 0600). External deploy evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001133405/`.
+
+Phase 0's content-safe 1.7.8 trace showed the latest failed owner task's
+original model was already `openai/amadeus-image`; an immediately preceding
+failed call had original `openai/gpt-image-2`. The `before_tool_call` hook ran,
+returned the blank sentinel, and the pinned host shallow merge applied it.
+Pinned native source showed detached image generation uses an in-process
+microtask closure, not task serialization/deserialization. OpenClaw resolved
+and sent `openai/amadeus-image`; the request reached the canonical 9Router
+Combo but returned HTTP 500. The exact upstream error parameter was unavailable.
+Safe correlation hashes, timestamps, and the full stage-by-stage evidence are
+in `.agent/checkpoints/2026-10-01-amadeus-1.7.9-image-route-authoritative-fix.md`.
+
+Amadeus 1.7.9 adds a version/SHA-pinned native boundary that ignores
+model-authored overrides before model selection or task creation, requires
+configured `mediaModels.image.primary`, and verifies the final OpenAI-compatible
+provider/model immediately before HTTP construction. A bounded live code
+fixture inside the new container verified `openai/amadeus-image` and rejected
+concrete `openai/gpt-image-2` / `cx/gpt-image-2.5` without issuing HTTP. The
+Agent-facing image schema no longer advertises concrete backend defaults. The
+existing Amadeus hook remains defense-in-depth; no second tool/provider stack,
+model alias, or 9Router source/account change was introduced.
+
+The read-only live Combo remains `amadeus-image`, `kind=image`,
+`strategy=fallback`, canonical order `cx/gpt-image-2.5` →
+`ag/gemini-3.1-flash-image`. Tests/gates passed: build/typecheck, Amadeus tests
+(122), delivery tests (84 plus pinned contract), model-capability tests, seven
+focused route tests, architecture checks, version/secrets checks, Docker image
+build/Node preflight, health/Gateway registration, NAS smoke, owner notification
+outbox, and post-deploy maintenance. Optional media-adapter network smoke was
+skipped because service absent; host default Docker log policy remains a
+warning while managed policies are bounded.
+
+No new paid generation transport smoke or post-deploy owner WhatsApp retry
+arrived during release execution. Only manual owner image-generation and
+completion/delivery acceptance remains pending; outbox smoke is not acceptance.
+Suggested retry: `请再按刚才的要求生成一次图片。` No real-channel success or
+cross-restart exactly-once claim is made.
+
+Post-deploy reference-image failures at 21:37/21:43 +08 were traced to the
+missing 9Router 0.5.91 `/api/v1/images/edits` route. OpenClaw sent multipart edits,
+while the canonical image route accepts reference data in JSON
+`/api/v1/images/generations`; a content-free probe reproduced the Server Action
+500. The exact compiled Codex/Gemini adapters were verified to preserve one
+reference as `input_image` and `inlineData`. Amadeus 1.8.0 candidate now adapts
+one MIME-checked reference to that existing Combo and rejects multi-reference
+input rather than dropping bytes. Candidate is not deployed yet; current task:
+`docs/CURRENT_TASK.md`.
+
+## Amadeus 1.7.8 — superseded image-generation repair (historical)
+
+Source commit `9f23572` was pushed to `main` and was live in immutable OpenClaw 2026.9.4
 image `local/openclaw-amadeus:git-9f2357210a07-20261001112610`, image ID
 `sha256:c5c1b2d410e25b98bb71c7bf6212699f35b5a8714141c297d8bd0522143d624e`.
 Runtime `/opt/amadeus/VERSION=1.7.8`, container/OpenClaw health, Product Radar

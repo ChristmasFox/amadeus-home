@@ -10,7 +10,7 @@ Interpret the request semantically: when the user wants to receive a newly creat
 
 Use the current user's description as the generation prompt. Make at most one `image_generate` call for one current user request. If the user asks only for prompt-writing advice or asks a follow-up question about a prior generation/failure, answer that request with text instead. Do not substitute third-party tool suggestions for an image-generation request.
 
-Let the canonical OpenClaw image-model configuration choose the provider and model; never include the `model` field or specify a provider/model in the tool call, and do not route by style, speed, subject, or other prompt content. This Skill covers new image generation only.
+Let the canonical OpenClaw image-model configuration choose the provider and model; never include the `model` field or specify a provider/model in the tool call, and do not route by style, speed, subject, or other prompt content. This Skill covers new image generation and edits using one explicit reference image. For reference-guided work, retain the supplied `image`/`images` reference in the native call; never replace it with a text description alone. The configured route supports one PNG/JPEG/WebP reference up to 10 MiB. Multiple references and mask-based editing are not supported by the complete fallback chain: explain that limit rather than dropping inputs.
 
 Wait for the tool result. Claim completion only when the generation succeeds and the channel reply path returns the image attachment. Keep visible text concise and never expose base64, raw tool payloads, credentials, or internal service addresses.
 

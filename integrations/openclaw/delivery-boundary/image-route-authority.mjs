@@ -48,6 +48,25 @@ export function assertAmadeusImageTransportRouteModel(input) {
   return actual;
 }
 
+/** 9Router 0.5.91 JSON reference contract; its fallback supports one image. */
+export function buildAmadeusReferenceImagePayload(req) {
+  if (req.imageRouteContext?.configuredLogicalModel !== 'openai/amadeus-image' ||
+      req.provider !== 'openai' || req.model !== 'amadeus-image') return undefined;
+  const images = req.inputImages ?? [];
+  if (images.length === 0) return undefined;
+  if (images.length !== 1) throw new Error('amadeus_image_reference_count_unsupported');
+  const image = images[0];
+  if (!(image.buffer instanceof Uint8Array)) throw new Error('amadeus_image_reference_invalid');
+  const bytes = Buffer.from(image.buffer);
+  if (!bytes.length || bytes.length > 10 * 1024 * 1024) throw new Error('amadeus_image_reference_size_unsupported');
+  const mime = image.mimeType?.trim().toLowerCase();
+  const detected = bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'image/png'
+    : bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255 ? 'image/jpeg'
+    : bytes.length >= 12 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP' ? 'image/webp' : undefined;
+  if (!detected || mime !== detected) throw new Error('amadeus_image_reference_mime_unsupported');
+  return { image: 'data:' + mime + ';base64,' + bytes.toString('base64') };
+}
+
 function replaceOnce(source, find, replacement, label) {
   const count = source.split(find).length - 1;
   if (count !== 1) throw new Error(`pinned image route ${label} anchor count=${count}; refusing to patch`);
@@ -69,7 +88,7 @@ export function patchImageGenerationToolSource(original) {
         !original.includes('modelOverride: undefined') ||
         !original.includes('image_route_operator_model_selected') ||
         !original.includes('image_route_task_enqueued') ||
-        !original.includes('image_route_worker_model_resolved') || !original.includes('Ignored for image generation') || !original.includes('Action=list shows provider/model availability')) {
+        !original.includes('image_route_worker_model_resolved') || !original.includes('amadeus_image_reference_count_unsupported') || !original.includes('amadeus-image accepts exactly one') || !original.includes('up to 10 MiB') || !original.includes('Ignored for image generation') || !original.includes('Action=list shows provider/model availability')) {
       throw new Error('incomplete image route authority patch');
     }
     return original;
@@ -82,6 +101,14 @@ export function patchImageGenerationToolSource(original) {
 `model: Type.Optional(Type.String({ description: "Provider/model override, e.g. openai/gpt-image-2; transparent OpenAI: openai/gpt-image-1.5." })),`,
 `model: Type.Optional(Type.String({ description: "Ignored for image generation. The operator-configured logical image route is always used." })),`,
     'agent-visible image model hint');
+  output = replaceOnce(output,
+`image: Type.Optional(Type.String({ description: "Reference image path/URL for edit." })),`,
+`image: Type.Optional(Type.String({ description: "Reference image path/URL for edit; the amadeus-image route accepts one PNG/JPEG/WebP reference up to 10 MiB." })),`,
+    'agent-visible reference limit');
+  output = replaceOnce(output,
+`images: Type.Optional(Type.Array(Type.String(), { description: ` + "`Reference images for edit or style reference; max ${MAX_REFERENCE_IMAGE_INPUTS}.`" + ` })),`,
+`images: Type.Optional(Type.Array(Type.String(), { description: ` + "`Reference images for edit; amadeus-image accepts exactly one, maximum ${MAX_REFERENCE_IMAGE_INPUTS} applies to other configured routes.`" + ` })),`,
+    'agent-visible reference count');
   output = replaceOnce(output,
 `resolution: Type.Optional(Type.String({ description: "Resolution: 1K, 2K, 4K; useful for Google." })),`,
 `resolution: Type.Optional(Type.String({ description: "Resolution preference: 1K, 2K, 4K; normalized to the operator-configured image route capabilities." })),`,
@@ -137,6 +164,11 @@ export function patchImageGenerationToolSource(original) {
 `generationLabel: "image",\n\t\t\t\t\t\timageRouteDiagnostic: {\n\t\t\t\t\t\t\tconfiguredLogicalModel: routeAuthority.configuredLogicalModel,\n\t\t\t\t\t\t\ttoolCallId: _toolCallId\n\t\t\t\t\t\t},\n\t\t\t\t\t\tsessionKey: options?.agentSessionKey,`,
     'image task route correlation');
 
+  output = replaceOnce(output,
+'const imageInputs = normalizeReferenceImages(params);',
+'const imageInputs = normalizeReferenceImages(params);\n\t\t\t\tif (routeAuthority.configuredLogicalModel === "openai/amadeus-image" && imageInputs.length > 1) throw new ToolInputError("amadeus_image_reference_count_unsupported");',
+    'single-reference admission boundary');
+
   const tabs = (count) => '\t'.repeat(count);
   output = replaceOnce(output,
 `run: (taskHandle) => executeImageGenerationJob({\n${tabs(7)}effectiveCfg,\n${tabs(7)}prompt,`,
@@ -162,6 +194,52 @@ export function patchImageGenerationToolSource(original) {
 `\tif (params.taskHandle) imageGenerationTaskLifecycle.recordTaskProgress({\n\t\thandle: params.taskHandle,\n\t\tprogressSummary: "Generating image"\n\t});\n\tconst imageRouteDiagnostic = params.imageRouteDiagnostic;\n\tconst configuredImageModel = params.effectiveCfg?.agents?.defaults?.mediaModels?.image;\n\tconst configuredLogicalModel = typeof configuredImageModel === "string" ? configuredImageModel.trim() : configuredImageModel?.primary?.trim();\n\tif (!configuredLogicalModel || configuredLogicalModel !== imageRouteDiagnostic?.configuredLogicalModel || typeof params.model === "string" && params.model.trim()) {\n\t\tthrow new Error("image_route_invariant_violation");\n\t}\n\tconst imageRouteContext = {\n\t\tconfiguredLogicalModel,\n\t\ttaskId: params.taskHandle?.taskId,\n\t\trunId: params.taskHandle?.runId,\n\t\ttoolCallId: imageRouteDiagnostic.toolCallId\n\t};\n\tlog$5.info("image_route_worker_model_resolved", {\n\t\ttaskId: imageRouteContext.taskId,\n\t\trunId: imageRouteContext.runId,\n\t\tconfiguredLogicalModel,\n\t\ttransportLogicalModel: configuredLogicalModel,\n\t\tmodelOverrideIgnored: true,\n\t\tworker: "process_local_microtask"\n\t});\n\tconst result = await generateImage({\n\t\tcfg: params.effectiveCfg,\n\t\timageRouteContext,`,
     'worker route assertion and diagnostic');
 
+  output = replaceOnce(output,
+`log$5.info("image_route_native_input_resolved", {`,
+`log$5.info(JSON.stringify({ event: "image_route_native_input_resolved",`,
+    'native JSON route diagnostic start');
+  output = replaceOnce(output,
+`configuredLogicalModel: routeAuthority.configuredLogicalModel
+\t\t\t});
+\t\t\tconst model = routeAuthority.modelOverride;`,
+`configuredLogicalModel: routeAuthority.configuredLogicalModel
+\t\t\t}));
+\t\t\tconst model = routeAuthority.modelOverride;`,
+    'native JSON route diagnostic end');
+  output = replaceOnce(output,
+`log$5.info("image_route_operator_model_selected", {`,
+`log$5.info(JSON.stringify({ event: "image_route_operator_model_selected",`,
+    'operator route JSON diagnostic start');
+  output = replaceOnce(output,
+`transportLogicalModel: routeAuthority.configuredLogicalModel });`,
+`transportLogicalModel: routeAuthority.configuredLogicalModel }));`,
+    'operator route JSON diagnostic end');
+  output = replaceOnce(output,
+`log$5.info("image_route_task_enqueued", {`,
+`log$5.info(JSON.stringify({ event: "image_route_task_enqueued",`,
+    'enqueue JSON diagnostic start');
+  output = replaceOnce(output,
+`queue: "process_local_microtask"
+\t\t\t});
+\t\t}
+\t\tif (detachedTask)`,
+`queue: "process_local_microtask"
+\t\t\t}));
+\t\t}
+\t\tif (detachedTask)`,
+    'enqueue JSON diagnostic end');
+  output = replaceOnce(output,
+`log$5.info("image_route_worker_model_resolved", {`,
+`log$5.info(JSON.stringify({ event: "image_route_worker_model_resolved",`,
+    'worker JSON diagnostic start');
+  output = replaceOnce(output,
+`worker: "process_local_microtask"
+\t});
+\tconst result = await generateImage({`,
+`worker: "process_local_microtask"
+\t}));
+\tconst result = await generateImage({`,
+    'worker JSON diagnostic end');
   return output;
 }
 
@@ -175,18 +253,35 @@ export function patchImageGenerationRuntimeSource(original) {
   }
   const anchor = `\t\t\t\tconst result = await provider.generateImage({\n\t\t\t\t\tprovider: candidate.provider,\n\t\t\t\t\tmodel: candidate.model,`;
   const replacement = `// ${marker}\n\t\t\t\tconst routeContext = params.imageRouteContext;\n\t\t\t\tif (routeContext) {\n\t\t\t\t\tconst transportLogicalModel = \`${'${candidate.provider}/${candidate.model}'}\`;\n\t\t\t\t\tif (transportLogicalModel !== routeContext.configuredLogicalModel) throw new Error("image_route_invariant_violation");\n\t\t\t\t\tlogger.info("image_route_transport_model_resolved", {\n\t\t\t\t\t\ttaskId: routeContext.taskId,\n\t\t\t\t\t\trunId: routeContext.runId,\n\t\t\t\t\t\tconfiguredLogicalModel: routeContext.configuredLogicalModel,\n\t\t\t\t\t\ttransportLogicalModel,\n\t\t\t\t\t\tproviderStatus: "request_ready"\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t\tconst result = await provider.generateImage({\n\t\t\t\t\tprovider: candidate.provider,\n\t\t\t\t\tmodel: candidate.model,\n\t\t\t\t\t...routeContext ? { imageRouteContext: routeContext } : {},`;
-  return replaceOnce(original, anchor, replacement, 'provider transport resolution');
+  let output = replaceOnce(original, anchor, replacement, 'provider transport resolution');
+  output = replaceOnce(output,
+`logger.info("image_route_transport_model_resolved", {`,
+`logger.info(JSON.stringify({ event: "image_route_transport_model_resolved",`,
+    'runtime JSON diagnostic start');
+  output = replaceOnce(output,
+`providerStatus: "request_ready"
+\t\t\t\t\t});
+\t\t\t\t}
+\t\t\t\tconst result = await provider.generateImage({`,
+`providerStatus: "request_ready"
+\t\t\t\t\t}));
+\t\t\t\t}
+\t\t\t\tconst result = await provider.generateImage({`,
+    'runtime JSON diagnostic end');
+  return output;
 }
 
 export function patchOpenAIImageProviderSource(original) {
   const marker = `${IMAGE_ROUTE_AUTHORITY_MARKER}_OPENAI`;
   if (original.includes(marker)) {
-    if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') || !original.includes('image_route_transport_failed')) {
+    if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') ||
+        !original.includes('image_route_transport_failed') || !original.includes('buildAmadeusReferenceImagePayload') ||
+        !original.includes('amadeusReferencePayload')) {
       throw new Error('incomplete OpenAI image route patch');
     }
     return original;
   }
-  const helper = `\n// ${marker}\n${assertAmadeusImageTransportRouteModel.toString()}\nasync function assertAmadeusImageTransportRoute(req, model) {\n\tconst route = req.imageRouteContext;\n\tif (!route) return;\n\tconst { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");\n\tconst log = createSubsystemLogger("image-generation/openai");\n\tlet transportLogicalModel;\n\ttry {\n\t\ttransportLogicalModel = assertAmadeusImageTransportRouteModel({ configuredLogicalModel: route.configuredLogicalModel, provider: req.provider, model });\n\t} catch {\n\t\tlog.error("image_route_invariant_violation", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, providerStatus: "blocked" });\n\t\tthrow new Error("image_route_invariant_violation");\n\t}\n\tlog.info("image_route_transport_model_resolved", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, transportLogicalModel, providerStatus: "request_ready" });\n}
+  const helper = `\n// ${marker}\n${assertAmadeusImageTransportRouteModel.toString()}\n${buildAmadeusReferenceImagePayload.toString()}\nasync function assertAmadeusImageTransportRoute(req, model) {\n\tconst route = req.imageRouteContext;\n\tif (!route) return;\n\tconst { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");\n\tconst log = createSubsystemLogger("image-generation/openai");\n\tlet transportLogicalModel;\n\ttry {\n\t\ttransportLogicalModel = assertAmadeusImageTransportRouteModel({ configuredLogicalModel: route.configuredLogicalModel, provider: req.provider, model });\n\t} catch {\n\t\tlog.error("image_route_invariant_violation", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, providerStatus: "blocked" });\n\t\tthrow new Error("image_route_invariant_violation");\n\t}\n\tlog.info("image_route_transport_model_resolved", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, transportLogicalModel, providerStatus: "request_ready" });\n}
 async function logAmadeusImageTransportFailure(req, model, status) {\n\tconst route = req.imageRouteContext;\n\tif (!route) return;\n\tconst { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");\n\tconst log = createSubsystemLogger("image-generation/openai");\n\tlog.warn("image_route_transport_failed", {\n\t\ttaskId: route.taskId,\n\t\trunId: route.runId,\n\t\tconfiguredLogicalModel: route.configuredLogicalModel,\n\t\ttransportLogicalModel: req.provider + "/" + model,\n\t\tproviderStatus: Number.isInteger(status) && status >= 100 && status <= 599 ? status : "transport_error",\n\t\terrorCategory: "upstream_http_error"\n\t});\n}
 `;
   let output = replaceOnce(original, 'function buildOpenAIImageGenerationProvider(modelAuth) {',
@@ -217,6 +312,55 @@ async function logAmadeusImageTransportFailure(req, model, status) {\n\tconst ro
 \t\t\t\t\tthrow error;
 \t\t\t\t}`,
     'OpenAI bounded provider failure');
+  output = replaceOnce(output,
+`log.error("image_route_invariant_violation", {`,
+`log.error(JSON.stringify({ event: "image_route_invariant_violation",`,
+    'provider invariant JSON diagnostic start');
+  output = replaceOnce(output,
+`providerStatus: "blocked" });`,
+`providerStatus: "blocked" }));`,
+    'provider invariant JSON diagnostic end');
+  output = replaceOnce(output,
+`log.info("image_route_transport_model_resolved", {`,
+`log.info(JSON.stringify({ event: "image_route_transport_model_resolved",`,
+    'provider route JSON diagnostic start');
+  output = replaceOnce(output,
+`providerStatus: "request_ready" });`,
+`providerStatus: "request_ready" }));`,
+    'provider route JSON diagnostic end');
+  output = replaceOnce(output,
+`log.warn("image_route_transport_failed", {`,
+`log.warn(JSON.stringify({ event: "image_route_transport_failed",`,
+    'provider failure JSON diagnostic start');
+  output = replaceOnce(output,
+`errorCategory: "upstream_http_error"
+\t});
+}`,
+`errorCategory: "upstream_http_error"
+\t}));
+}`,
+    'provider failure JSON diagnostic end');
+  output = replaceOnce(output,
+'const url = isAzure ? buildAzureImageUrl(rawBaseUrl, model, isEdit ? "edits" : "generations") : `${baseUrl}/images/${isEdit ? "edits" : "generations"}`;',
+'const amadeusReferencePayload = buildAmadeusReferenceImagePayload(req);\n\t\t\tif (amadeusReferencePayload && isAzure) throw new Error("amadeus_image_reference_transport_unsupported");\n\t\t\tconst url = isAzure ? buildAzureImageUrl(rawBaseUrl, model, isEdit ? "edits" : "generations") : `${baseUrl}/images/${isEdit && !amadeusReferencePayload ? "edits" : "generations"}`;',
+    'logical route reference JSON endpoint');
+  output = replaceOnce(output,
+'const { response, release } = isEdit ? await (() => {',
+'const { response, release } = isEdit && !amadeusReferencePayload ? await (() => {',
+    'reference JSON versus native multipart');
+  output = replaceOnce(output,
+`const body = {
+\t\t\t\t\tprompt: req.prompt,
+\t\t\t\t\tn: count,
+\t\t\t\t\tsize
+\t\t\t\t};`,
+`const body = {
+\t\t\t\t\tprompt: req.prompt,
+\t\t\t\t\tn: count,
+\t\t\t\t\tsize,
+\t\t\t\t\t...amadeusReferencePayload
+\t\t\t\t};`,
+    'preserved inline reference in JSON body');
   return output;
 }
 
