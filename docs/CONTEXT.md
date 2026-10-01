@@ -34,33 +34,43 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Amadeus image persona 1.7.5 — deployed and automatically verified
+## Current Amadeus WhatsApp/image runtime — 1.7.6 deployed
 
-Final source commit `5444b3a94a8225fc8aec62a4d5abf307a0f8e6d5` runs in immutable
-OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-5444b3a94a82-20261001073247`;
-runtime Amadeus version is 1.7.5. Health and Gateway registration pass. The
-lifecycle path snapshots bounded original inbound WhatsApp/Telegram text at
-`before_dispatch`, keeps it distinct from model-produced image prompt text, and
-passes a separate request-language hint through accepted, failed and caption
-enrichment. Full automated evidence and protected rollback reference are in
-`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
+Source commit `092b262` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-092b262332b7-20261001102103` (image ID
+`sha256:fa5ea5829b3d1e795e90b9ba8522140efc55eed502b82eb34a9168a34de3a14`).
+Runtime `/opt/amadeus/VERSION=1.7.6`, OpenClaw health, Gateway registration and
+Product Radar health pass. The protected rollback checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001102103`.
 
-An earlier 1.7.5 candidate was rolled back after the owner reported wrong-language
-accepted text and image-only success. That feedback exposed that `taskLabel` was
-not the original request; source was corrected and the final candidate passed
-automated tests plus an actual generated-image caption smoke. Manual final owner
-WhatsApp/image-experience acceptance was **waived and not performed**.
+The pre-deploy runtime was actually on the healthy 1.7.4 rollback image, despite
+the prior 1.7.5 current-state record. 1.7.6 re-runs strict typed preparation
+inside the final WhatsApp `delivery.deliver()` callback (which can bypass
+`preparePayload` on pinned OpenClaw 2026.9.4) and preserves trusted internal
+provenance to settlement. The operator's exact report was not correlated to
+content-bearing runtime logs, so its individual event route remains unproven.
 
-## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
+Automated delivery/Amadeus tests, typecheck/build, architecture/version/secrets
+checks, Gateway/health, NAS read-only smoke, owner notification/outbox smoke and
+post-deploy maintenance passed. Manual owner WhatsApp/image-experience
+acceptance after this deployment remains pending and is not implied by the
+notification/outbox smoke. Full evidence is in
+`.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
 
-The TTS work did not restart OpenClaw or Product Radar. Current OpenClaw 2026.9.4
-runs `local/openclaw-amadeus:git-5444b3a94a82-20261001073247` on OrbStack
-`nyannyan`; Amadeus `VERSION=1.7.5`, health and Gateway registration pass. The
-earlier 1.7.4 owner Gates A–F attestation is historical and does not represent
-manual acceptance of 1.7.5; that acceptance was operator-waived. The task
-coordinator and delivery ledger remain bounded process-local state, so no
-cross-restart exactly-once claim is made. Final release evidence is
-`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
+The previous Amadeus 1.7.5 release record and its automatic caption smoke remain
+audit evidence, not the current runtime identity. Its manual owner acceptance
+was waived and not performed.
+
+## OpenClaw/Product Radar boundary — current runtime
+
+OpenClaw 2026.9.4 currently runs Amadeus 1.7.6 image
+`local/openclaw-amadeus:git-092b262332b7-20261001102103` on OrbStack `nyannyan`;
+Product Radar reuses its unchanged healthy image. The prior 1.7.4 owner Gates
+A–F attestation is historical and does not represent manual acceptance of
+1.7.5 or 1.7.6. The 1.7.6 owner WhatsApp/image-experience acceptance remains
+pending. Task coordination and delivery settlement are bounded process-local
+state, so no cross-restart exactly-once claim is made. Current release evidence
+is `.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
 
 ## Historical 2026-09-27 release snapshot (audit only)
 
