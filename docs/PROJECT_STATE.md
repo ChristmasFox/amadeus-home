@@ -1,12 +1,50 @@
 # Project State — 2026-10-01
 
-## Amadeus image persona 1.7.5 — deployed and automatically verified
+## Amadeus 1.7.6 — current live release; automated gates passed
 
-Canonical Amadeus `VERSION=1.7.5` is deployed in immutable OpenClaw 2026.9.4 image `local/openclaw-amadeus:git-5444b3a94a82-20261001073247`, built from final commit `5444b3a94a8225fc8aec62a4d5abf307a0f8e6d5`. Runtime `/opt/amadeus/VERSION=1.7.5`, OpenClaw health, Product Radar health and real Gateway Amadeus registration pass. Protected rollback checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001073247` (directory 0700, manifest 0600). Full content-safe release evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
+Source commit `092b262` is pushed to `main` and runs in immutable OpenClaw 2026.9.4
+image `local/openclaw-amadeus:git-092b262332b7-20261001102103`, image ID
+`sha256:fa5ea5829b3d1e795e90b9ba8522140efc55eed502b82eb34a9168a34de3a14`.
+Runtime `/opt/amadeus/VERSION=1.7.6`, container/OpenClaw health, Product Radar
+health and Gateway Amadeus registration pass. Protected rollback checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001102103` (directory 0700,
+manifest 0600); content-safe deploy evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261001102103/`.
 
-Final source and post-apply gates passed: `pnpm test:delivery` (82 plus pinned integration), `pnpm test:amadeus` (116), Amadeus typecheck/build, architecture/secrets/version checks, and a direct actual-generated-image caption smoke (valid bounded result, 6,683 ms). The source captures original inbound request text and derives its language separately from model-produced image prompts. The user's earlier English/image-only report caused an automatic rollback and source correction; it is recorded as incident evidence, not waived away.
+The pre-deploy container was actually the healthy 1.7.4 rollback image
+`local/openclaw-amadeus:git-628703c803e7-20260930184906`; the older 1.7.5 current
+state record was stale. Source review found the pinned final WhatsApp
+`delivery.deliver()` callback can bypass `preparePayload`. Amadeus now repeats
+strict typed preparation inside that final callback and updates trusted
+heartbeat/cron/internal provenance for unsettled runs. Tests cover direct final
+callback bypass, legacy marker/sentinel-shaped malformed output, internal silence,
+and valid typed delivery. No text modality protocol or additional sender was
+reintroduced. The exact user-reported outbound message was not correlated to
+content-bearing runtime logs; the per-event cause is not claimed as proven.
 
-Manual owner WhatsApp/image-experience acceptance for final 1.7.5 was **operator-waived and not performed**. Deployment notification/outbox smoke is not manual acceptance. A non-blocking global Docker log-policy advisory and absent optional media adapter are documented in the checkpoint; managed log limits and all Goal hard gates passed.
+Before the apply, `pnpm test:delivery` (83 plus pinned integration),
+`pnpm test:amadeus` (117), typecheck/build, architecture and architecture fixture
+checks, version validation, secrets scan, and `git diff --check` passed. Apply
+used `scripts/deploy-openclaw.sh --apply --build-auto`; OpenClaw/Product Radar
+health, Gateway registration, NAS read-only smoke, owner notification/outbox
+smoke, and post-deploy maintenance passed. Optional media-adapter network smoke
+was skipped because the service was absent; the host Docker log-policy warning
+was non-blocking.
+
+Manual owner WhatsApp/image-experience acceptance after 1.7.6 deployment remains
+pending; notification/outbox smoke is not that acceptance. No cross-restart
+exactly-once claim is made. Complete evidence:
+`.agent/checkpoints/2026-10-01-amadeus-1.7.6-whatsapp-final-delivery-release.md`.
+
+## Amadeus image persona 1.7.5 — prior rollout evidence, not current runtime
+
+The earlier final-release record describes immutable image
+`local/openclaw-amadeus:git-5444b3a94a82-20261001073247`, original-request
+context and caption automation. It remains historical evidence only; a later
+read-only audit before 1.7.6 found production had reverted to the 1.7.4 rollback
+image. The 1.7.5 manual owner WhatsApp/image-experience acceptance was waived
+and not performed. Its checkpoint is
+`.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-final-release.md`.
 
 ## Qwen3-TTS MLX production rebaseline — applied, Gate A–G passed
 
