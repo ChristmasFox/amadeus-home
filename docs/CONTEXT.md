@@ -33,17 +33,11 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Amadeus image persona 1.7.5 rollout — halted before production switch
+## Amadeus image persona 1.7.5 rollout — rolled back after reported behavior failure
 
-Source commit `a242570` and permission correction `431d90f` are pushed with canonical
-`VERSION=1.7.5`. The first immutable candidate failed its hard preflight because
-`/opt/amadeus/VERSION` was copied with mode 0600 and could not be read by the runtime
-`node` user. The Dockerfile and version tool now enforce mode 0644. The failed candidate
-was not applied; a fresh candidate must pass every hard gate. Production remains the
-healthy 1.7.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`;
-its Amadeus Gateway registration remains present. The rejected candidate must
-not be used. The Goal is incomplete; see the failure checkpoint and follow-up
-in `docs/CURRENT_TASK.md`.
+The `e82f04d` 1.7.5 candidate passed its version and Gateway gates and was applied, but the operator observed English accepted text for a Chinese request and image-only success delivery. Safe runtime telemetry showed caption omission as `model_error`. Per the hard-gate policy, production was rolled back using `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001060150`; the previous image was rebuilt from source commit `628703c803e7` because its local image had been pruned. Current production is healthy and registered on Amadeus `1.7.4`.
+
+The active 1.7.5 source now enforces and validates the clear request language in lifecycle/caption output and can retry one language mismatch or early transient caption-provider error within the same bounded semantic operation. Those corrections are not yet deployed. The Goal remains incomplete; see `docs/CURRENT_TASK.md` and `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
 
 ## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
 

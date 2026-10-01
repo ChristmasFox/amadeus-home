@@ -1,6 +1,6 @@
 # Architecture
 
-更新时间：2026-10-01（image lifecycle 1.7.5 source; production candidate blocked before apply）
+更新时间：2026-10-01（image lifecycle 1.7.5 source; failed candidate rolled back to 1.7.4）
 
 ## Worldline notification boundary
 
@@ -78,14 +78,17 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
 - 成功只从 OpenClaw persisted `attachments[]` 导入 asset registry。CaptionEnricher 用已注册、
   已校验的实际生成图片调用 OpenClaw multimodal image-understanding API，最多带 480 字符
   原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；语义操作使用
-  单一约 30 秒 wall-clock deadline、较短 provider timeout 和 bounded request context。输出规范化并
-  拒绝 JSON/protocol；native caption 上限仍为 1024 字符。Caption timeout/model error/invalid result
-  返回 omission reason 而不合成 caption；caption 不会阻断图片 settlement，也不调用第二个模型。
+  单一约 30 秒 wall-clock deadline、随剩余时间收紧的 provider timeout 和 bounded request context。
+  清晰请求语言会被显式要求并校验；在同一 deadline 内最多重试一次语言错配或早期瞬态 provider error。
+  输出规范化并拒绝 JSON/protocol；native caption 上限仍为 1024 字符。超时、模型错误、无效结果或
+  语言仍不匹配时返回 omission reason 而不合成文案；caption 不会阻断图片 settlement。
 - WhatsApp inline image+caption 通过同一次 `transport.sendMedia({ image, mimetype, caption })`
   原生发送成为一个图片气泡；没有独立的成功 caption text send。`disposition=document`
   仍走原 document/file primitive，不因 caption 支持降级。Telegram 复用同一个 typed caption
   contract，由 native `sendPhoto` 的 caption field 发送；document 仍走 `sendDocument`。
-- Start/failure 的语义文本由当前 Kurisu persona 边界生成；只有该语义边界不可用时使用本地
+- Start/failure 的 typed semantic input 包含 task/session/channel 和 bounded original request context，
+  context 仅为 untrusted language/subject data，不参与 runtime-owned routing、identity 或 delivery ownership。
+  文本由当前 Kurisu persona 边界生成并按清晰请求语言校验；语义失败或语言仍错配时才使用本地
   确定性安全 fallback。image-generation Skill 要求 accepted interim 的普通 Agent final reply silent，
   避免第二条 start acknowledgement。它们是有稳定 taskId key 的 typed lifecycle text notifications，不创建
   或绑定图片 asset；generation failure 不运行 CaptionEnricher、不暴露异常/stack/provider payload。
@@ -281,4 +284,7 @@ WhatsApp ingress 的已验证 audio lease、失败 admission、typing 和 per-se
 保留为 transport lifecycle，交付语义由上面的 v2 typed contract 独占。
 
 
-1.7.5 source is now pushed, but its immutable candidate was rejected before production apply because the canonical version marker was unreadable to the runtime user. Production remains 1.7.4; failure evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-candidate-preflight-failed.md`.
+1.7.5 was applied and then rolled back after reported language and caption failures. The current source contains further language validation/retry changes awaiting a fresh candidate; production remains 1.7.4. Behavior-failure evidence is `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
+
+
+The previously applied 1.7.5 candidate was rolled back after a real reported wrong-language accepted message and caption omission. Current production is healthy on 1.7.4 while the corrected source remains pending a fresh apply; see `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-postapply-symptom-rollback.md`.
