@@ -284,6 +284,7 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
+  pnpm test:openclaw-image-route-authority
   node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-voice-failure.mjs
