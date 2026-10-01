@@ -38,7 +38,7 @@ for this Goal; no human voice-quality claim is made. Full evidence is in
 
 The `4e514a3` candidate was rolled back after inspection proved pinned OpenClaw derives `taskLabel` from model-produced `request.prompt`, not original inbound user text. This can lose the user's language when the image prompt is translated. Current production is healthy/Gateway-registered on Amadeus 1.7.4 image `local/openclaw-amadeus:git-628703c803e7-20260930184906`.
 
-The uncommitted source now captures bounded inbound text at `before_dispatch`, snapshots it per taskId, and carries runtime-derived requestLanguage separately from the image prompt. It remains pending validation/commit and deployment. See `docs/CURRENT_TASK.md` and `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
+Source commits `2e60797` and `d8442d6` now capture bounded inbound text at `before_dispatch`, snapshot it per taskId, and carry runtime-derived requestLanguage separately from the model image prompt. Source gates pass; the commits are pushed but remain pending a fresh deployment candidate. See `docs/CURRENT_TASK.md` and `.agent/checkpoints/2026-10-01-amadeus-image-persona-1.7.5-original-request-context-rollback.md`.
 
 ## OpenClaw/Product Radar boundary — unchanged by the TTS Goal
 
