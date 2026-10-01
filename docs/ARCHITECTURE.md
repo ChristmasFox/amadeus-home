@@ -82,6 +82,10 @@ Attachment 有 `assetId`、MIME、fileName、`disposition: inline | document`，
   来自原 task handle。taskId 状态有界（最多 1024 项），accepted 最多一次，succeeded/failed
   互斥；late failure 不显示，completion retry 使用 taskId 稳定的 deliveryId 和既有 ledger。
   Accepted 提示发送错误不会取消已经调度的生成任务。
+- `image-generation-policy.ts` 在 OpenClaw `before_tool_call` 边界删除模型输出的 `image_generate.model`
+  覆盖（list/status 查询不改写），让 native tool 始终使用运维配置的 image capability 和 fallback，
+  而不是依赖 Skill 提示模型遵守。生命周期原始请求先按 session 关联，再按 channel/account/conversation
+  关联补取；用户文本只用于语言/主题语境，不改变 task 或 delivery 身份。
 - 成功只从 OpenClaw persisted `attachments[]` 导入 asset registry。CaptionEnricher 用已注册、
   已校验的实际生成图片调用 OpenClaw multimodal image-understanding API，最多带 480 字符
   原始请求上下文，并读取当前 Agent workspace 的 Kurisu `SOUL.md` 作为风格上下文；语义操作使用

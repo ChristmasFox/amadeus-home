@@ -182,4 +182,5 @@ test('image-generation Skill prevents a second final-reply acknowledgement for a
   assert.ok(skill.includes('Never infer this lifecycle from started-receipt prose'));
   assert.ok(skill.includes('Make at most one `image_generate` call for one current user request.'));
   assert.ok(skill.includes('A lifecycle start/failure notification, quoted earlier status, or previous image prompt is not by itself a new image request.'));
+  assert.ok(skill.includes('never include the `model` field'));
 });

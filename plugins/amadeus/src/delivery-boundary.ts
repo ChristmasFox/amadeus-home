@@ -93,7 +93,10 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
   const completionPorts = new Map<string, { accountId: string; conversationId: string; send: (envelope: DeliveryEnvelope) => Promise<void>; expiresAt: number }>();
   const lifecycleMessages = new Map<string, Promise<string>>();
   const sessionRequestContexts = new Map<string, TimedRequestContext>();
+  const conversationRequestContexts = new Map<string, TimedRequestContext>();
   const taskRequestContexts = new Map<string, TimedRequestContext>();
+  const conversationRequestContextKey = (channel: string, accountId: string | undefined, conversationId: string): string =>
+    `${channel}\u0000${accountId ?? ''}\u0000${conversationId}`;
 
   // Keep only a short, bounded snapshot of the actual inbound user text. The
   // model-produced image prompt remains separate context; neither can affect
@@ -102,17 +105,31 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     const sessionKey = text(hookContext.sessionKey ?? event.sessionKey);
     const channel = text(hookContext.channelId ?? event.channel);
     if (!sessionKey || (channel !== 'whatsapp' && channel !== 'telegram')) return;
+    const accountId = text(hookContext.accountId);
+    const conversationId = text(hookContext.conversationId);
+    const sessionContextKey = `${channel}:${sessionKey}`;
+    const conversationContextKey = conversationId ? conversationRequestContextKey(channel, accountId, conversationId) : undefined;
     const originalRequest = boundedText(text(event.body ?? event.content), 300);
-    if (!originalRequest) return;
+    if (!originalRequest) {
+      sessionRequestContexts.delete(sessionContextKey);
+      if (conversationContextKey) conversationRequestContexts.delete(conversationContextKey);
+      return;
+    }
     const language = detectImageRequestLanguage(originalRequest);
-    storeRequestContext(sessionRequestContexts, `${channel}:${sessionKey}`, originalRequest, language, SESSION_REQUEST_CONTEXT_TTL_MS, MAX_SESSION_REQUEST_CONTEXTS, Date.now());
+    storeRequestContext(sessionRequestContexts, sessionContextKey, originalRequest, language, SESSION_REQUEST_CONTEXT_TTL_MS, MAX_SESSION_REQUEST_CONTEXTS, Date.now());
+    if (conversationContextKey) storeRequestContext(conversationRequestContexts, conversationContextKey, originalRequest, language, SESSION_REQUEST_CONTEXT_TTL_MS, MAX_SESSION_REQUEST_CONTEXTS, Date.now());
   });
 
   const lifecycleRequestContext = (input: ImageGenerationLifecycleInput): Readonly<{ requestContext?: string; requestLanguage: ImageRequestLanguage }> => {
     const now = Date.now();
     const existing = readRequestContext(taskRequestContexts, input.taskId, now);
     if (existing) return { requestContext: existing.value, requestLanguage: existing.language };
-    const originalRequest = readRequestContext(sessionRequestContexts, `${input.channel}:${input.sessionKey}`, now);
+    const sessionRequest = readRequestContext(sessionRequestContexts, `${input.channel}:${input.sessionKey}`, now);
+    const conversationRequest = input.conversationId
+      ? readRequestContext(conversationRequestContexts, conversationRequestContextKey(input.channel, input.accountId, input.conversationId), now)
+      : undefined;
+    const originalRequest = !sessionRequest ? conversationRequest
+      : !conversationRequest || sessionRequest.expiresAt >= conversationRequest.expiresAt ? sessionRequest : conversationRequest;
     const imagePrompt = boundedText(input.requestContext, 120);
     const combined = originalRequest && imagePrompt
       ? `Original user request: ${originalRequest.value} | Image prompt: ${imagePrompt}`

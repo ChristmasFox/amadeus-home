@@ -180,3 +180,28 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  assert.deepEqual(delivered, { visibleReplySent: true });
  assert.deepEqual(sent, ['正常回复。'], 'direct final delivery still settles valid typed content');
 });
+
+test('image lifecycle recovers original request language from account-scoped conversation when task session differs', async () => {
+ const hooks = new Map<string, Array<(...args: any[]) => any>>();
+ const captured: any[] = [];
+ const api = {
+  rootDir: new URL('../', import.meta.url).pathname,
+  config: {},
+  pluginConfig: {},
+  logger: { info() {}, warn() {} },
+  on(name: string, handler: (...args: any[]) => any) { hooks.set(name, [...(hooks.get(name) ?? []), handler]); },
+ } as unknown as OpenClawPluginApi;
+ registerVoiceReplyPrompt(api, { lifecycleMessageEnricher: async input => { captured.push(input); return '已开始。'; } });
+ const inbound = { channel: 'whatsapp', sessionKey: 'inbound-session', body: '请生成一张竖屏插画。' };
+ for (const hook of hooks.get('before_dispatch') ?? []) hook(inbound, {
+  channelId: 'whatsapp', sessionKey: 'inbound-session', accountId: 'secondary', conversationId: 'chat-42',
+ });
+ const boundary = (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] as { acceptImageGeneration(input: any): Promise<void> };
+ await boundary.acceptImageGeneration({
+  taskId: '00000000-0000-4000-8000-000000000777', sessionKey: 'detached-task-session', requesterAgentId: 'main',
+  channel: 'whatsapp', accountId: 'secondary', conversationId: 'chat-42', requestContext: 'an English model-generated image prompt',
+ });
+ assert.equal(captured[0]?.requestLanguage, 'chinese');
+ assert.match(captured[0]?.requestContext, /请生成一张竖屏插画/u);
+ assert.match(captured[0]?.requestContext, /English model-generated image prompt/u);
+});
