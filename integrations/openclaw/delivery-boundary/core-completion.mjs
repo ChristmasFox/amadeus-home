@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// One version-pinned image-generation lifecycle integration: accepted, success,
-// and failure are emitted from typed OpenClaw 2026.9.4 task boundaries.
+// Version-pinned native image route authority plus accepted/success/failure
+// lifecycle integration for OpenClaw 2026.9.4 task boundaries.
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile, writeFile, rename, chmod, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installImageRouteAuthorityModules, patchImageGenerationToolSource } from './image-route-authority.mjs';
 
 export const CORE_PIN = Object.freeze({
   version: '2026.9.4', module: 'openclaw-tools-Bo9W_tg_.mjs',
@@ -74,10 +75,13 @@ export function installCoreCompletionSource(original, hostRoot) {
   const acorn = createRequire(join(resolve(hostRoot), 'package.json'))('acorn');
   const parse = (source) => acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
   const ast = parse(original);
-  const completionNode = anchoredFunction(ast, 'wakeMediaGenerationTaskCompletion');
-  const acceptedNode = anchoredFunction(ast, 'notifyMediaGenerationAsyncTaskStarted');
+  anchoredFunction(ast, 'wakeMediaGenerationTaskCompletion');
+  anchoredFunction(ast, 'notifyMediaGenerationAsyncTaskStarted');
   if (createHash('sha256').update(original).digest('hex') !== CORE_PIN.sha256) throw new Error('pinned_image_completion_digest_mismatch');
-  let output = original.slice(0, completionNode.body.start + 1) + terminal + original.slice(completionNode.body.start + 1);
+  const routePatched = patchImageGenerationToolSource(original);
+  const routeAst = parse(routePatched);
+  const completionNode = anchoredFunction(routeAst, 'wakeMediaGenerationTaskCompletion');
+  let output = routePatched.slice(0, completionNode.body.start + 1) + terminal + routePatched.slice(completionNode.body.start + 1);
   const outputAst = parse(output);
   const outputAcceptedNode = anchoredFunction(outputAst, 'notifyMediaGenerationAsyncTaskStarted');
   output = output.slice(0, outputAcceptedNode.body.start + 1) + accepted + output.slice(outputAcceptedNode.body.start + 1);
@@ -90,9 +94,10 @@ export async function main(argv = process.argv.slice(2)) {
   const path = join(root, 'dist', CORE_PIN.module);
   const output = installCoreCompletionSource(await readFile(path, 'utf8'), root);
   if (!argv.includes('--apply')) { console.log('IMAGE_GENERATION_LIFECYCLE=plan'); return; }
+  const routeModules = await installImageRouteAuthorityModules(root);
   const mode = (await stat(path)).mode & 0o777;
   const temporary = `${path}.lifecycle-tmp`;
   await writeFile(temporary, output); await chmod(temporary, mode); await rename(temporary, path);
-  console.log('IMAGE_GENERATION_LIFECYCLE=installed; host=2026.9.4; accepted=typed; terminal=typed');
+  console.log(`IMAGE_GENERATION_LIFECYCLE=installed; host=2026.9.4; accepted=typed; terminal=typed; image-route-authority=${routeModules}`);
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();

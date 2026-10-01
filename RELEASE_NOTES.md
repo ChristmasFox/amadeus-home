@@ -1,5 +1,5 @@
-# Amadeus 1.7.8
+# Amadeus 1.7.9
 
-- 修正工具参数合并语义：把模型指定的生图 `model` 覆盖重置为空值，确保配置的 `amadeus-image` capability 与 fallback 真正生效。
-- 私聊原始文本 body 为空时改用非空 normalized content，保证异步任务能取得原始请求语言。
-- 保留 list/status 查询、typed final delivery 与内部任务静默行为。
+- 在原生图像生成执行边界强制采用管理员配置的逻辑路由，模型参数不能改选具体 provider/model。
+- 跨 detached image task 与 OpenAI-compatible transport 加入安全关联诊断和路由不变量校验；不匹配时 fail closed。
+- 保持现有 `amadeus-image` GPT Image 2.5 → Gemini image fallback，不改动 9Router 账号或凭据。
