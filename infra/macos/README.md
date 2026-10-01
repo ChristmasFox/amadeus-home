@@ -66,9 +66,11 @@ and avoid restarting OpenClaw; the Goal's explicit collision exception puts
 Qwen TTS on free loopback port `18794`.
 
 The authenticated local bridge at 9Router container loopback `:20130` routes
-default requests to local MLX first and then Qwen Audio 3.1 and 3.0. Explicit
-non-default styles bypass local cloning and use the cloud instruction path.
-Configuration/auth/contract failures do not fall through. The active voice
+all production requests to local MLX first, normalizing valid styles/emotions
+to the default voice, then Qwen Audio 3.1 and 3.0 only on operational local
+failure. Future emotion handling remains behind the disabled
+`AMADEUS_TTS_EMOTIONS_ENABLED` opt-in. Configuration/auth/contract failures do
+not fall through. The active voice
 path and destructive retirement sequence are specified by
 `docs/AMADEUS_QWEN3_TTS_MLX_REBASELINE_GOAL.md`; this Goal waives new human
 listening and WhatsApp acceptance while retaining automated health,

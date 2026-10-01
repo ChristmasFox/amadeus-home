@@ -40,6 +40,15 @@ owner explicitly waived human listening/WhatsApp acceptance; none is claimed.
 Detailed content-safe evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
+## TTS default-only local-first policy follow-up — in progress
+
+The owner requested that all valid per-request styles/emotions normalize to
+`default`, always use local Qwen3 MLX first, and fall back to cloud only for
+operational local failure. The emotion instruction implementation remains
+behind a disabled production opt-in. This follow-up is tracked in
+`.agent/tasks/2026-10-01-amadeus-tts-default-only-policy.md`; no runtime change
+has been applied yet.
+
 ## Image generation lifecycle + Kurisu caption UX — candidate applied; owner Gates A–F accepted
 
 Source commits `1dd9dd2` (lifecycle/caption implementation) and `628703c` (Kurisu caption wording refinement)

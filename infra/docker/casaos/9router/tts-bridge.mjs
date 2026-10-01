@@ -207,7 +207,7 @@ export function classifyLocalFailure(error) {
   return { fallback: false, result: failure(502, 'provider_unavailable') };
 }
 
-export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceId31, cloudVoiceId30, localKey, cloudUrl, localUrl = 'http://host.docker.internal:18794/v1/audio/speech', style = DEFAULT_STYLE, fetchFn = fetch, spawnFn = spawn, cloudTimeoutMs = CLOUD_BUDGET_MS, localTimeoutMs = LOCAL_BUDGET_MS }) {
+export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceId31, cloudVoiceId30, localKey, cloudUrl, localUrl = 'http://host.docker.internal:18794/v1/audio/speech', style = DEFAULT_STYLE, emotionsEnabled = false, fetchFn = fetch, spawnFn = spawn, cloudTimeoutMs = CLOUD_BUDGET_MS, localTimeoutMs = LOCAL_BUDGET_MS }) {
   cloudVoiceId30 ||= cloudVoiceId; cloudVoiceId31 ||= cloudVoiceId;
   if (!bridgeKey || bridgeKey.length < 32 || !cloudKey || cloudKey.length < 20 || !cloudVoiceId31 || !cloudVoiceId30 || !localKey || localKey.length < 32) throw new Error('protected_tts_keys_required');
   validateCloudStyle(style); const endpoint = validCloudEndpoint(cloudUrl); const localEndpoint = new URL(localUrl);
@@ -217,7 +217,7 @@ export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceI
     const runId = String(req.headers['x-amadeus-run-id'] || 'unknown').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 96) || 'unknown';
     const sendJson = (status, body) => { const payload = Buffer.from(JSON.stringify(body)); res.writeHead(status, { 'Content-Type': 'application/json', 'Content-Length': payload.length }); res.end(payload); };
     const sendAudio = (audio, format, provider, fallback) => { res.writeHead(200, { 'Content-Type': MIME_BY_FORMAT[format], 'Content-Length': audio.length, 'X-Amadeus-TTS-Provider': provider, ...(fallback ? { 'X-Amadeus-TTS-Fallback': fallback } : {}) }); res.end(audio); };
-    if (req.url === '/healthz' && req.method === 'GET') return sendJson(200, { status: 'ready', model: 'amadeus-tts', localModel: LOCAL_MODEL, localProvider: LOCAL_PROVIDER, fallbackOrder: [LOCAL_PROVIDER, ...CLOUD_MODELS], voice: VOICE_ID, deadlineMs: DEFAULT_DEADLINE_MS });
+    if (req.url === '/healthz' && req.method === 'GET') return sendJson(200, { status: 'ready', model: 'amadeus-tts', localModel: LOCAL_MODEL, localProvider: LOCAL_PROVIDER, fallbackOrder: [LOCAL_PROVIDER, ...CLOUD_MODELS], emotionControlsEnabled: emotionsEnabled, voice: VOICE_ID, deadlineMs: DEFAULT_DEADLINE_MS });
     if (req.url !== '/v1/audio/speech' || req.method !== 'POST') return sendJson(404, failure(404, 'provider_unavailable').body);
     if (!authMatches(req.headers.authorization, bridgeKey)) return sendJson(401, failure(401, 'provider_unavailable').body);
     const size = Number(req.headers['content-length'] || 0);
@@ -227,7 +227,10 @@ export function createTtsServer({ bridgeKey, cloudKey, cloudVoiceId, cloudVoiceI
     if (data.voice !== VOICE_ID) return sendJson(400, failure(400, 'audio_invalid').body);
     if (typeof data.input !== 'string' || !data.input.trim() || data.input.length > MAX_TEXT) return sendJson(400, failure(400, 'audio_invalid').body);
     const format = data.response_format || 'mp3'; if (!CLOUD_FORMATS.has(format)) return sendJson(400, failure(400, 'audio_invalid').body);
-    const emotion = data.style === undefined || data.style === '' ? 'default' : data.style; if (typeof emotion !== 'string' || !EMOTIONS.has(emotion)) return sendJson(400, failure(400, 'audio_invalid').body);
+    const requestedEmotion = data.style === undefined || data.style === '' ? 'default' : data.style; if (typeof requestedEmotion !== 'string' || !EMOTIONS.has(requestedEmotion)) return sendJson(400, failure(400, 'audio_invalid').body);
+    // Emotion controls stay available for a future explicit opt-in, but the live
+    // production policy normalizes every request to the accepted default voice.
+    const emotion = emotionsEnabled ? requestedEmotion : 'default';
     if (data.language !== undefined && data.language !== 'ja') return sendJson(400, failure(400, 'audio_invalid').body);
     const requested = Number(req.headers['x-amadeus-deadline-ms']); const deadlineMs = Number.isFinite(requested) && requested > 0 ? Math.min(DEFAULT_DEADLINE_MS, requested) : DEFAULT_DEADLINE_MS; const deadlineAt = started + deadlineMs;
     let lastReason = 'provider_unavailable';
@@ -287,6 +290,6 @@ if (process.argv[1]?.endsWith('/tts-bridge.mjs')) {
   const fs = await import('node:fs');
   const read = (key, name, options) => { const path = process.env[key]; if (!path) throw new Error(`${name}_file_required`); const stat = fs.lstatSync(path); if (!stat.isFile() || stat.isSymbolicLink() || (stat.mode & 0o077)) throw new Error(`${name}_file_unprotected`); return readProtected(path, name, options); };
   const stylePath = process.env.AMADEUS_TTS_STYLE_FILE; const style = stylePath ? JSON.parse(fs.readFileSync(stylePath, 'utf8')) : DEFAULT_STYLE;
-  const server = createTtsServer({ bridgeKey: read('AMADEUS_TTS_BRIDGE_KEY_FILE', 'tts_bridge_key', { min: 32 }), cloudKey: read('AMADEUS_TTS_CLOUD_API_KEY_FILE', 'tts_cloud_api_key', { min: 20 }), cloudVoiceId31: read('AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE', 'tts_cloud_voice_id_31', { min: 8, max: 256 }), cloudVoiceId30: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }), localKey: read('AMADEUS_TTS_LOCAL_KEY_FILE', 'tts_local_key', { min: 32 }), cloudUrl: process.env.AMADEUS_TTS_CLOUD_URL, localUrl: process.env.AMADEUS_TTS_LOCAL_URL || 'http://host.docker.internal:18794/v1/audio/speech', style });
+  const server = createTtsServer({ bridgeKey: read('AMADEUS_TTS_BRIDGE_KEY_FILE', 'tts_bridge_key', { min: 32 }), cloudKey: read('AMADEUS_TTS_CLOUD_API_KEY_FILE', 'tts_cloud_api_key', { min: 20 }), cloudVoiceId31: read('AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE', 'tts_cloud_voice_id_31', { min: 8, max: 256 }), cloudVoiceId30: read('AMADEUS_TTS_CLOUD_VOICE_ID_FILE', 'tts_cloud_voice_id', { min: 8, max: 256 }), localKey: read('AMADEUS_TTS_LOCAL_KEY_FILE', 'tts_local_key', { min: 32 }), cloudUrl: process.env.AMADEUS_TTS_CLOUD_URL, localUrl: process.env.AMADEUS_TTS_LOCAL_URL || 'http://host.docker.internal:18794/v1/audio/speech', style, emotionsEnabled: process.env.AMADEUS_TTS_EMOTIONS_ENABLED === 'true' });
   const port = Number(process.env.AMADEUS_TTS_BRIDGE_PORT || DEFAULT_PORT); server.listen(port, '127.0.0.1', () => console.info(`tts bridge listening on container loopback port=${port}`));
 }

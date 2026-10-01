@@ -83,6 +83,12 @@ assert.equal(calls[0].url, 'http://127.0.0.1:18794/v1/audio/speech');
 assert.equal(calls[0].body.model, 'amadeus-tts');
 assert.equal(calls[0].body.style, 'default');
 assert.equal(calls[0].auth, `Bearer ${LOCAL}`);
+calls = [];
+result = await request(localSuccess, { ...base, style: 'angry' });
+assert.equal(result.status, 200);
+assert.equal(result.headers['x-amadeus-tts-provider'], LOCAL_PROVIDER);
+assert.equal(calls.length, 1, 'disabled emotion controls must still use the local-first default voice');
+assert.equal(calls[0].body.style, 'default');
 assert.equal((await request(localSuccess, base, 'bad')).status, 401);
 const health = await get(localSuccess, '/healthz');
 const healthBody = JSON.parse(health.body.toString());
@@ -90,6 +96,7 @@ assert.equal(health.status, 200);
 assert.equal(healthBody.localProvider, LOCAL_PROVIDER);
 assert.equal(healthBody.localModel, LOCAL_MODEL);
 assert.deepEqual(healthBody.fallbackOrder, [LOCAL_PROVIDER, ...CLOUD_MODELS]);
+assert.equal(healthBody.emotionControlsEnabled, false);
 await close(localSuccess);
 
 for (const status of [400, 401, 403]) {
@@ -144,16 +151,23 @@ assert.equal(calls[2].body.model, 'qwen-audio-3.0-tts-flash');
 assert.equal(calls[2].body.input.voice, VOICE30);
 await close(qwen30Fallback);
 
+const futureEmotions = ['default', 'irritated', 'embarrassed', 'angry', 'sarcastic', 'soft', 'sad'];
+const futureStyle = { cloudPersona: 'persona:', emotions: Object.fromEntries(futureEmotions.map(name => [name, { cloudInstruction: `${name}-instruction` }])) };
 calls = [];
-const styled = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
+const futureEmotionOptIn = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
   cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer',
-  fetchFn: async (url, options) => { calls.push(String(url)); return response(200, cloudPayload(mp3)); } });
-await running(styled);
-result = await request(styled, { ...base, style: 'angry' });
+  style: futureStyle, emotionsEnabled: true,
+  fetchFn: async (url, options) => { calls.push({ url: String(url), body: JSON.parse(options.body) }); return response(200, cloudPayload(mp3)); } });
+await running(futureEmotionOptIn);
+result = await request(futureEmotionOptIn, { ...base, style: 'angry' });
 assert.equal(result.status, 200);
+assert.equal(result.headers['x-amadeus-tts-provider'], 'cloud');
 assert.equal(calls.length, 1);
-assert.match(calls[0], /SpeechSynthesizer/);
-await close(styled);
+assert.match(calls[0].url, /SpeechSynthesizer/);
+assert.equal(calls[0].body.input.instruction, 'persona:angry-instruction');
+const futureHealth = JSON.parse((await get(futureEmotionOptIn, '/healthz')).body.toString());
+assert.equal(futureHealth.emotionControlsEnabled, true);
+await close(futureEmotionOptIn);
 
 const invalid = createTtsServer({ bridgeKey: BRIDGE, cloudKey: CLOUD, cloudVoiceId31: VOICE31, cloudVoiceId30: VOICE30, localKey: LOCAL,
   cloudUrl: 'https://workspace.cn-beijing.maas.aliyuncs.com/api/v1/services/audio/tts/SpeechSynthesizer', fetchFn: async () => { throw new Error('must_not_call'); } });
