@@ -103,6 +103,7 @@ PY
     temporary="$(mktemp "$ROOT_DIR/.amadeus-version.XXXXXX")"
     trap 'rm -f "$temporary"' EXIT
     printf '%s\n' "$next_version" > "$temporary"
+    chmod 0644 "$temporary"
     mv "$temporary" "$VERSION_FILE"
     trap - EXIT
     printf 'VERSION=%s\n' "$next_version"

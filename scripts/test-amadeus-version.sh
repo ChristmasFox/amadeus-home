@@ -23,6 +23,8 @@ write_fixture() {
 write_fixture '0.0.8'
 (cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
 [[ "$(<"$test_root/VERSION")" == '0.0.9' ]]
+version_mode="$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.stat(sys.argv[1]).st_mode)))' "$test_root/VERSION")"
+[[ "$version_mode" == '0o644' ]]
 
 write_fixture '0.0.9'
 (cd "$test_root" && bash scripts/amadeus-version.sh bump patch >/dev/null)
