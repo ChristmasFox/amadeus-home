@@ -261,7 +261,11 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           preparePayload: prepare,
           deliver: async (payload: unknown, info: { kind: string }) => {
             if (info.kind !== 'final') return { visibleReplySent: false };
-            const row = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
+            // OpenClaw 2026.9.4 has a final delivery callback path that may
+            // bypass preparePayload. Re-run the exact same typed preparation
+            // here rather than letting raw model text reach a native sender.
+            const candidate = await prepare(payload, info);
+            const row = candidate && typeof candidate === 'object' ? candidate as Record<string, unknown> : {};
             const envelope = (row.channelData as Record<string, unknown> | undefined)?.amadeusDelivery;
             if (!validateDeliveryEnvelope(envelope) || !deliveryRuns.owns(envelope) || envelope.sessionKey !== port.sessionKey || envelope.channel !== 'whatsapp') throw new Error('delivery_typed_payload_required');
             await settleTyped(envelope);

@@ -43,6 +43,7 @@ test('caption enrichment sees actual generated image and bounded request with Ku
     assert.equal(args.timeoutMs, IMAGE_CAPTION_MODEL_TIMEOUT_MS);
     assert.deepEqual(args.scopeContext,{sessionKey:'session',channel:'whatsapp'});
     assert.ok(f.logs[0]?.includes('"semantic_status":"generated"'));
+    assert.ok(f.logs[0]?.includes('"request_language":"chinese"'));
     assert.ok(f.logs[0]?.includes('"request_context_present":true'));
   } finally { await rm(f.root, { recursive:true, force:true }); }
 });

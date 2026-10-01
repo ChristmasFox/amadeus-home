@@ -29,7 +29,14 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
   api.on('before_prompt_build', (_event, context) => {
     const channel = context.channel ?? context.messageProvider;
     const origin = hasActiveWhatsAppVoiceLease(channel, context.sessionKey) ? 'inbound_voice' : originFor(context);
-    if (context.runId && context.sessionKey && channel) deliveryRuns.start({ runId: context.runId, sessionKey: context.sessionKey, channel, origin });
+    if (context.runId && context.sessionKey && channel) {
+      deliveryRuns.start({ runId: context.runId, sessionKey: context.sessionKey, channel, origin });
+      // The native plan may be created with a provisional external-user
+      // origin before OpenClaw exposes heartbeat/cron/internal provenance.
+      // Update the still-unsettled run so the final delivery adapter remains
+      // silent for trusted internal turns regardless of hook ordering.
+      deliveryRuns.setOrigin(context.runId, origin);
+    }
     if (origin !== 'external_user' && origin !== 'inbound_voice') return;
     return { appendSystemContext: [
       skill,
