@@ -1,6 +1,27 @@
-# Project State — 2026-10-01
+# Project State — 2026-10-02
 
-## Amadeus 1.8.0 — current live reference-image route
+## Amadeus 1.8.1 — current live structured-reply reliability release
+
+Source commit `2525d38` is pushed to `main` and live in immutable OpenClaw
+2026.9.4 image `local/openclaw-amadeus:git-2525d3892169-20261002063108`, image
+ID `sha256:6d9b88d0f53664e58504ebbce1b8e7fbe647f9bf3f42ac7876d7d20edf447e77`.
+Runtime `/opt/amadeus/VERSION=1.8.1`; OpenClaw health, Gateway registration,
+Product Radar health, NAS read-only smoke, owner outbox smoke, and protected
+rollback checkpoint pass. The checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002063108`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261002063108/`.
+
+Malformed external structured Agent replies now settle through a bounded visible
+fallback instead of being silently dropped. Literal control characters inside
+JSON strings are repaired before strict validation; malformed protocol text is
+never echoed or logged. Safe run correlation metadata is recorded, while trusted
+internal origins remain silent. The existing `nine_router/arthur-combo` route
+continues to serve the agent/tool loop; web search provider selection remains a
+separate retrieval configuration. Full evidence:
+`.agent/checkpoints/2026-10-02-amadeus-1.8.1-structured-reply-release.md`.
+
+## Amadeus 1.8.0 — superseded reference-image route release
 
 Source commit `2244f98` is pushed to `main` and live in immutable OpenClaw
 2026.9.4 image `local/openclaw-amadeus:git-2244f98140e0-20261001145719`, image
