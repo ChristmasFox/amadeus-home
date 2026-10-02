@@ -34,15 +34,15 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.5 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.6 deployed
 
-OpenClaw 2026.9.4 runs Amadeus 1.8.5 from commit `73daf48` in immutable image
-`local/openclaw-amadeus:git-73daf484ff51-20261002091330` (image ID
-`sha256:8489cc2229f04bd0a6c6a1cad6b8ba7dc3829f1dc7c5e0c0ae8df5a7ab0f0b99`).
-`/opt/amadeus/VERSION=1.8.5`; OpenClaw is healthy, Gateway registration is
+OpenClaw 2026.9.4 runs Amadeus 1.8.6 from commit `fddda4b` in immutable image
+`local/openclaw-amadeus:git-fddda4b1d870-20261002091918` (image ID
+`sha256:7130b531b6834a184e4c7c35086c30bf8418c1dcf0cfc95615a1700e07c8052f`).
+`/opt/amadeus/VERSION=1.8.6`; OpenClaw is healthy, Gateway registration is
 present, and Product Radar reuses its unchanged healthy image. Protected
-checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002091330`.
-Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.5-image-delivery-timeout.md`.
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002091918`.
+Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.6-image-task-timeout.md`.
 
 Successful ordinary image generation imports the trusted asset before native
 continuation, passes read-only image context through the durable completion
@@ -55,7 +55,8 @@ absent. The 1.8.4 completion caption lets Kurisu choose natural wording and
 length without an Amadeus character ceiling or short-caption instruction. The
 1.8.5 caption semantic deadline is 120 seconds, and native completion handoff
 deadline expiry now invokes the attachment-only fallback so generated media is
-not stranded when the Completion Agent times out.
+not stranded when the Completion Agent times out. Release 1.8.6 sets the
+native image model task timeout to 120 seconds.
 
 Reference-image failures were caused by the missing live 9Router `/images/edits`
 route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference
