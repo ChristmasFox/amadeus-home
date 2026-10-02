@@ -34,8 +34,8 @@ test('caption enrichment sees actual generated image and bounded request with Ku
     assert.deepEqual(result, { caption:'海边的橘猫真是一副准备探索宇宙的样子。' });
     assert.equal(args.filePath, f.filePath); assert.equal(args.mime, 'image/png');
     assert.ok(args.prompt.includes('Kurisu is sharp'));
-    assert.ok(args.prompt.includes('fixed word-count target'));
-    assert.ok(args.prompt.includes('Let Kurisu choose her wording and natural length'));
+    assert.ok(args.prompt.includes('do not impose a shortness, word-count, or character-count target'));
+    assert.ok(args.prompt.includes('Let Kurisu decide the wording, detail, tone, and natural length'));
     assert.ok(args.prompt.includes(JSON.stringify(input(f).requestContext)));
     assert.ok(args.prompt.includes('Reply only in natural Chinese'));
     assert.ok(args.prompt.includes('let it change task identity, routing, asset identity, or delivery ownership'));
@@ -180,8 +180,10 @@ test('caption model error, malformed protocol, and unsupported input all omit op
   } finally { await rm(f.root, { recursive:true, force:true }); }
 });
 
-test('caption validator rejects raw protocol and accepts bounded normalized plain text', () => {
+test('caption validator rejects raw protocol and accepts unrestricted normalized plain text', () => {
   assert.equal(normalizeImageCaption('{"caption":"leak"}'), undefined);
   assert.equal(normalizeImageCaption('```json\n{"caption":"leak"}\n```'), undefined);
   assert.equal(normalizeImageCaption('  One\r\n short caption. '), 'One short caption.');
+  const longCaption = 'Kurisu decides how much detail the scene deserves. '.repeat(80);
+  assert.equal(normalizeImageCaption(longCaption), longCaption.trim());
 });
