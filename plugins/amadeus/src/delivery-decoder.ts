@@ -66,6 +66,15 @@ function parseWire(raw: string): unknown {
   }
 }
 
+// A model can accidentally prepend a control token to a native silent
+// sentinel. Treat that shape as protocol silence before it reaches the
+// malformed-output fallback or a channel adapter. The sentinel is deliberately
+// recognized by shape so the decoder does not depend on a retired marker name.
+const CONTROL_SENTINEL = /^(?:\s*\[\[[^\]\r\n]+\]\]\s*)+[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*\s*$/u;
+function isControlSentinel(value: unknown): value is string {
+  return typeof value === 'string' && CONTROL_SENTINEL.test(value);
+}
+
 /** Sole Agent protocol decoder. The wire object cannot supply asset ids/paths. */
 export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentReplyDecode {
   // External turns must receive a typed response even when the model violates
@@ -81,6 +90,7 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
   });
   if (['heartbeat', 'cron', 'internal_handoff', 'system'].includes(context.origin)) return { envelope: createSilentDelivery(context), status: 'silent' };
   if (typeof raw !== 'string') return fail();
+  if (isControlSentinel(raw)) return { envelope: createSilentDelivery(context), status: 'silent' };
   let value: unknown;
   try { value = parseWire(raw); } catch { return fail(); }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
@@ -93,6 +103,11 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
     : part.kind === 'voice'
       ? Object.keys(part).some((key) => !['kind', 'speechText', 'emotion'].includes(key))
       : true)) return fail();
+  if (wire.parts.length === 1) {
+    const part = wire.parts[0] as Record<string, unknown>;
+    const text = part.kind === 'text' ? part.text : part.kind === 'voice' ? part.speechText : undefined;
+    if (isControlSentinel(text)) return { envelope: createSilentDelivery(context), status: 'silent' };
+  }
   try {
     const envelope = createDeliveryEnvelope({
       ...context, deliveryId: context.deliveryId ?? `${context.runId}:delivery`,

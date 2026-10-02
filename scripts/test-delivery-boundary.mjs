@@ -90,6 +90,7 @@ for(const mimeType of ['image/png','image/jpeg']){
 }
 await port.sendImage({bytes:Buffer.from('image'),mimeType:'image/png'},'same-bubble caption');assert.ok(provider.at(-1).image);assert.equal(provider.at(-1).caption,'same-bubble caption');assert.equal(provider.filter(item=>item.text).length,0,'no independent caption text send occurs');
 await port.sendText('typed text');assert.deepEqual(provider.at(-1),{text:'typed text'});
+await assert.rejects(port.sendText('[[control]]\nNO_REPLY'),/protocol_text_rejected/u);
 await port.sendVoice({audio:Buffer.from('audio'),mimeType:'audio/mpeg'});assert.equal(provider.at(-1).ptt,true);
 params.transport.sendMedia=async()=>{throw new Error('document rejected');};await assert.rejects(port.sendDocument({bytes:Buffer.from('document'),mimeType:'image/png',fileName:'file.png'}));
 scope.globalThis.__amadeusDeliveryBoundaryV2_20260930=undefined;assert.throws(()=>scope.globalThis.createPlan(params),/unavailable/u);

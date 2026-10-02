@@ -39,6 +39,17 @@ test('decoder repairs literal JSON control characters inside text strings', () =
   assert.equal(decoded.envelope.parts[0]?.kind, 'text');
   assert.equal((decoded.envelope.parts[0] as { text: string }).text, 'line one\nline two\twith a tab');
 });
+test('control-prefixed silent sentinels are suppressed before channel delivery', async () => {
+  const rawText = '[[amadeus:reply-modality=default]]\nNO_REPLY';
+  for (const raw of [rawText, wire([{ kind: 'text', text: rawText }])]) {
+    const decoded = decodeAgentReply(context, raw);
+    assert.equal(decoded.status, 'silent');
+    assert.equal(decoded.envelope.silent, true);
+    const calls: string[] = [];
+    await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext());
+    assert.deepEqual(calls, []);
+  }
+});
 test('decoder does not repair control characters outside JSON strings', () => {
   const malformed = `{"version":2,\u0001"silent":false,"parts":[{"kind":"text","text":"ok"}]}`;
   const decoded = decodeAgentReply(context, malformed);
