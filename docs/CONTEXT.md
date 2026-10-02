@@ -34,23 +34,24 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.2 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.3 deployed
 
-OpenClaw 2026.9.4 runs Amadeus 1.8.2 from commit `76ece67` in immutable image
-`local/openclaw-amadeus:git-76ece6705ee5-20261002065812` (image ID
-`sha256:c86e41c4d2bdddd9dfb7c70a7b31d3a261bb851efce54571737103d3efda4ea3`).
-`/opt/amadeus/VERSION=1.8.2`; OpenClaw is healthy, Gateway registration is
+OpenClaw 2026.9.4 runs Amadeus 1.8.3 from commit `6bde9f9` in immutable image
+`local/openclaw-amadeus:git-6bde9f91e5f7-20261002081707` (image ID
+`sha256:c05ec704c628bb9a735c07426450735b078aeff947447fb4289505e23d478a7b`).
+`/opt/amadeus/VERSION=1.8.3`; OpenClaw is healthy, Gateway registration is
 present, and Product Radar reuses its unchanged healthy image. Protected
-checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002065812`.
-Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.2-native-image-completion-release.md`.
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002081707`.
+Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.3-native-image-completion-caption-release.md`.
 
-Successful ordinary image generation now settles the trusted Amadeus
-attachment once, then lets native `task_completion` and Completion Agent
-continuation run with media primitives removed from that native event. The
-requester task therefore reaches native terminal state while the image cannot
-be sent a second time. The optional media adapter remains absent and its
-network smoke is skipped. Managed compose log policies pass; the host Docker
-default policy remains a warning because `/etc/docker/daemon.json` is absent.
+Successful ordinary image generation imports the trusted asset before native
+continuation, passes read-only image context through the durable completion
+handoff, and binds the Completion Agent caption to the one Amadeus-owned image
+send. A queued native handoff waits for its caption; only failure or timeout
+uses the attachment-only fallback. The optional media adapter remains absent
+and its network smoke is skipped. Managed compose log policies pass; the host
+Docker default policy remains a warning because `/etc/docker/daemon.json` is
+absent.
 
 Reference-image failures were caused by the missing live 9Router `/images/edits`
 route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference

@@ -1,6 +1,37 @@
 # Project State — 2026-10-02
 
-## Amadeus 1.8.2 — current live native image completion release
+## Amadeus 1.8.3 — current live native image completion caption release
+
+Source commits `dfcc7fa`, `66489ff`, `2ae5b6d`, `0565c44` and release commit
+`6bde9f9` are on `main`. The release is live in immutable OpenClaw 2026.9.4
+image `local/openclaw-amadeus:git-6bde9f91e5f7-20261002081707`; image ID
+`sha256:c05ec704c628bb9a735c07426450735b078aeff947447fb4289505e23d478a7b`.
+Runtime `/opt/amadeus/VERSION=1.8.3`. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002081707`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261002081707/`.
+
+The completion path now imports the trusted generated image before native
+continuation, preserves exact `image_generate:<taskId>` provenance, carries
+verified image bytes as read-only Completion Agent context through durable
+queued handoff, and waits while a handoff is `session_queued`. The native
+caption is bound to the existing inline attachment. A real owner WhatsApp
+acceptance produced `image_completion_caption_ready` with
+`caption_source=native_completion`, one image provider primitive and no
+separate completion text send. Failure/malformed/timeout fallback remains
+attachment-only and idempotent; unrelated text, voice, TTS/ASR, upscale and
+reference-image paths are unchanged.
+
+Release verification passed: 125 Amadeus tests, pinned image-route tests (10),
+build/typecheck, secrets scan, plugin/config/skill preflight, OpenClaw and
+Product Radar health, Gateway registration, NAS read-only smoke, owner
+notification/outbox smoke, and post-deploy maintenance. The optional media
+adapter was absent and its network smoke was skipped. Managed Compose log
+policies passed; host Docker default log policy remains a warning because
+`/etc/docker/daemon.json` is absent. Full evidence:
+`.agent/checkpoints/2026-10-02-amadeus-1.8.3-native-image-completion-caption-release.md`.
+
+## Amadeus 1.8.2 — superseded native image completion release
 
 Source commits `e6c31e1` (completion behavior) and `76ece67` (release gate
 fixture) are pushed to `main`; `76ece67` is live in immutable OpenClaw 2026.9.4

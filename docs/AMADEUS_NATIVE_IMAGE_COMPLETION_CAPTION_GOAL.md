@@ -258,6 +258,19 @@ Preferred priority:
 3. attachment-only image
 ```
 
+## Completion evidence
+
+Completed and released as Amadeus 1.8.3. Local gates passed, including 125
+Amadeus tests, pinned native image-route tests, typecheck/build and secrets
+scan. The release candidate was deployed and a real owner WhatsApp task
+generated one image with `image_completion_caption_ready` and
+`caption_source=native_completion`. The delivery record contained one image
+provider primitive and no separate completion text send; the Completion Agent
+returned a single v2 text part describing the generated image. The immutable
+release image, protected rollback checkpoint and detailed runtime evidence are
+recorded in
+`.agent/checkpoints/2026-10-02-amadeus-1.8.3-native-image-completion-caption-release.md`.
+
 Do not keep the current caption enricher as the normal successful primary path once native completion succeeds.
 
 ## Failure path
