@@ -49,7 +49,7 @@ export class DeliveryRuns {
       const envelope = this.decode(runId, raw);
       const assets = (await Promise.all(run.jobs)).flat();
       const unique = [...new Map(assets.map((part) => [part.assetId, part])).values()];
-      // Internal silence and malformed output never turn into raw text delivery.
+      // Internal silence and malformed output never turn into raw protocol delivery.
       const prepared = !unique.length || (envelope.silent && !envelope.fallbackReason) ? envelope
         : createDeliveryEnvelope({ ...envelope, silent: false, parts: [...envelope.parts, ...unique], source: 'tool_result' });
       run.prepared = prepared;

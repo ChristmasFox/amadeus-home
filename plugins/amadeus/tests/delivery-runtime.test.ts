@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createServer} from 'node:http';import {mkdtemp,mkdir,writeFile,rm,realpath} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/core';
-import {registerImageAssets,explicitUpscaleScale} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';
+import {registerImageAssets,explicitUpscaleScale} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';import {INVALID_STRUCTURED_OUTPUT_MESSAGE} from '../src/delivery-decoder.js';
 
 test('explicit multiplier is a bounded parameter constraint, not a 4K resolution guess',()=>{
  assert.equal(explicitUpscaleScale('把刚才私聊的图超分 4x'),4);
@@ -168,8 +168,8 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  const marked = await malformedMarkerPlan.delivery.deliver({
   text: rawWire('[[amadeus:reply-modality=default]]\nNO_REPLY'),
  }, { kind: 'final' });
- assert.deepEqual(marked, { visibleReplySent: false });
- assert.deepEqual(sent, [], 'control-token content fails closed even on the direct final-delivery path');
+ assert.deepEqual(marked, { visibleReplySent: true });
+ assert.deepEqual(sent, [INVALID_STRUCTURED_OUTPUT_MESSAGE], 'control-token content receives the bounded structured-output fallback');
 
  const normalPlan = makePlan('delivery-bypass-normal');
  normalPlan.replyOptions.onAgentRunStart('delivery-bypass-normal-run');
@@ -178,7 +178,7 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  });
  const delivered = await normalPlan.delivery.deliver({ text: rawWire('正常回复。') }, { kind: 'final' });
  assert.deepEqual(delivered, { visibleReplySent: true });
- assert.deepEqual(sent, ['正常回复。'], 'direct final delivery still settles valid typed content');
+ assert.deepEqual(sent, [INVALID_STRUCTURED_OUTPUT_MESSAGE, '正常回复。'], 'direct final delivery still settles valid typed content');
 });
 
 test('image lifecycle recovers original request language from account-scoped conversation when task session differs', async () => {

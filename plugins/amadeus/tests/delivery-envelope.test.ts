@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeAgentReply } from '../src/delivery-decoder.js';
+import { decodeAgentReply, INVALID_STRUCTURED_OUTPUT_MESSAGE } from '../src/delivery-decoder.js';
 import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, MAX_ATTACHMENT_CAPTION_LENGTH, type DeliveryPart } from '../src/delivery-envelope.js';
 import { createDeliverySettlementContext, settleDelivery, type DeliverySettlementAdapters } from '../src/delivery-settlement.js';
 import { createWhatsAppAttachmentSender } from '../src/whatsapp-delivery.js';
@@ -31,6 +31,22 @@ test('decoder accepts reordered keys and whitespace, freezes parts', () => {
   const result = decodeAgentReply(context, ` { "parts": [ {"text":"ok", "kind":"text"} ], "silent": false, "version": 2 } `);
   assert.equal(result.status, 'structured'); assert.ok(Object.isFrozen(result.envelope.parts)); assert.ok(Object.isFrozen(result.envelope.parts[0]));
 });
+test('decoder repairs literal JSON control characters inside text strings', () => {
+  const valid = wire([{ kind: 'text', text: 'line one\nline two\twith a tab' }]);
+  const malformed = valid.replace(/\\n/gu, '\n').replace(/\\t/gu, '\t');
+  const decoded = decodeAgentReply(context, malformed);
+  assert.equal(decoded.status, 'structured');
+  assert.equal(decoded.envelope.parts[0]?.kind, 'text');
+  assert.equal((decoded.envelope.parts[0] as { text: string }).text, 'line one\nline two\twith a tab');
+});
+test('decoder does not repair control characters outside JSON strings', () => {
+  const malformed = `{"version":2,\u0001"silent":false,"parts":[{"kind":"text","text":"ok"}]}`;
+  const decoded = decodeAgentReply(context, malformed);
+  assert.equal(decoded.status, 'malformed');
+  assert.equal(decoded.envelope.silent, false);
+  assert.equal(decoded.envelope.fallbackReason, 'invalid_structured_output');
+  assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: INVALID_STRUCTURED_OUTPUT_MESSAGE }]);
+});
 for (const [name, raw] of Object.entries({
   truncated: '{"version":2,"parts":', fenced: '```json\n'+wire([text])+'\n```', embedded: 'prefix\n'+wire([text]),
   extra: '{"version":2,"silent":false,"parts":[{"kind":"text","text":"ok"}],"extra":true}',
@@ -41,18 +57,24 @@ for (const [name, raw] of Object.entries({
   extraPartKey: '{"version":2,"silent":false,"parts":[{"kind":"text","text":"ok","modality":"voice"}]}',
   modelAttachment: wire([attachment('image/png','document')]),
   unstructured: 'ordinary raw answer', silenceContent: wire([text],true),
-})) test(`malformed ${name} fails closed with no raw fallback`, async () => {
+})) test(`malformed ${name} uses a bounded visible fallback`, async () => {
   const decoded = decodeAgentReply(context, raw); assert.equal(decoded.status, 'malformed');
-  const calls: string[] = []; await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext()); assert.deepEqual(calls, []);
+  assert.equal(decoded.envelope.silent, false);
+  assert.equal(decoded.envelope.fallbackReason, 'invalid_structured_output');
+  assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: INVALID_STRUCTURED_OUTPUT_MESSAGE }]);
+  assert.equal(JSON.stringify(decoded.envelope).includes(raw), false);
+  const calls: string[] = []; await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext()); assert.deepEqual(calls, [`text:${INVALID_STRUCTURED_OUTPUT_MESSAGE}`]);
 });
 test('user-requested JSON, including protocol-looking keys, is normal text inside a part', async () => {
   const requested = '{"visibleText":"user example","modality":"text"}'; const calls: string[] = [];
   const envelope = decodeAgentReply(context, wire([{ kind:'text',text:requested }])).envelope;
   await settleDelivery(envelope, adapters(calls), createDeliverySettlementContext()); assert.deepEqual(calls, [`text:${requested}`]);
 });
-test('internal origins always silence, inbound voice policy rejects text-only wire', () => {
+test('internal origins always silence, inbound voice policy uses the visible fallback', () => {
   for (const origin of ['heartbeat','cron','internal_handoff','system'] as const) assert.equal(decodeAgentReply({ ...context, origin }, wire([voice,text])).envelope.silent,true);
-  assert.equal(decodeAgentReply({ ...context, origin:'inbound_voice' }, wire([text])).status,'malformed');
+  const decoded = decodeAgentReply({ ...context, origin:'inbound_voice' }, wire([text]));
+  assert.equal(decoded.status,'malformed');
+  assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: INVALID_STRUCTURED_OUTPUT_MESSAGE }]);
 });
 test('TTS failure uses only typed text fallback, no implicit speech or raw JSON', async () => {
   const calls: string[] = []; const result = await settleDelivery(decodeAgentReply(context,wire([voice,text])).envelope, { ...adapters(calls), synthesize: async () => { throw new Error('private provider detail'); } }, createDeliverySettlementContext());

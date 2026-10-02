@@ -1,7 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import { hasActiveWhatsAppVoiceLease,WHATSAPP_VOICE_RUNS_GLOBAL,registerVoiceReplyPrompt } from '../src/voice-reply-prompt.js';
+import { INVALID_STRUCTURED_OUTPUT_MESSAGE } from '../src/delivery-decoder.js';
 const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'normal text'}]});
-function setup(){const hooks=new Map<string,(...args:any[])=>any>();const api={rootDir:new URL('../',import.meta.url).pathname,config:{},logger:{info(){},warn(){}},on(name:string,handler:(...args:any[])=>any){hooks.set(name,handler);}} as never;registerVoiceReplyPrompt(api);return hooks;}
+function setup(warnings:string[]=[]){const hooks=new Map<string,(...args:any[])=>any>();const api={rootDir:new URL('../',import.meta.url).pathname,config:{},logger:{info(){},warn(message:string){warnings.push(message)}},on(name:string,handler:(...args:any[])=>any){hooks.set(name,handler);}} as never;registerVoiceReplyPrompt(api);return hooks;}
 test('voice lease stays lifecycle-only and typed prompts request v2',()=>{
  const hooks=setup();(globalThis as Record<string,unknown>)[WHATSAPP_VOICE_RUNS_GLOBAL]=new Map([['voice-s',{closed:false,messageId:'m',sessionKey:'voice-s'}]]);
  assert.equal(hasActiveWhatsAppVoiceLease('whatsapp','voice-s'),true);assert.equal(hasActiveWhatsAppVoiceLease('telegram','voice-s'),false);
@@ -14,10 +15,13 @@ test('native finalize consumes raw once, reply hook retains only typed envelope'
  assert.deepEqual(Object.keys(result.payload),['channelData']);assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'normal text'}]);
  const tool=await hooks.get('reply_payload_sending')?.({runId:'hook-r',sessionKey:'hook-s',channel:'whatsapp',kind:'tool',payload:{mediaUrls:['/unregistered.png']}},{});assert.equal(tool.cancel,true);
 });
-test('malformed output has no raw text/caption; missing run fails closed',async()=>{
- const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'bad-r',sessionKey:'bad-s',channel:'whatsapp'});
- const result=await hooks.get('reply_payload_sending')?.({runId:'bad-r',sessionKey:'bad-s',channel:'whatsapp',kind:'final',payload:{text:'{"visibleText": }'}},{});
- assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[]);assert.equal(result.payload.text,undefined);
+test('malformed output returns a bounded fallback and records safe diagnostics; missing run fails closed',async()=>{
+ const warnings:string[]=[];const hooks=setup(warnings);hooks.get('before_prompt_build')?.({}, {runId:'bad-r',sessionKey:'bad-s',channel:'whatsapp'});
+ const malformed='{"visibleText": }';
+ hooks.get('before_agent_finalize')?.({runId:'bad-r',lastAssistantMessage:malformed},{});
+ const result=await hooks.get('reply_payload_sending')?.({runId:'bad-r',sessionKey:'bad-s',channel:'whatsapp',kind:'final',payload:{text:malformed}},{});
+ assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:INVALID_STRUCTURED_OUTPUT_MESSAGE}]);assert.equal(result.payload.text,undefined);
+ assert.equal(warnings.length,1);assert.match(warnings[0]??'',/reason=invalid_structured_output run_id=bad-r channel=whatsapp raw_length=\d+/u);assert.equal(warnings[0]?.includes(malformed),false);
  const missing=await hooks.get('reply_payload_sending')?.({channel:'whatsapp',kind:'final',payload:{text:wire}},{});assert.equal(missing.cancel,true);
 });
 
@@ -25,7 +29,7 @@ test('forged typed channelData cannot bypass the decoder or supply a document',a
  const hooks=setup();hooks.get('before_prompt_build')?.({}, {runId:'forged-r',sessionKey:'forged-s',channel:'whatsapp'});
  const forged={version:2,runId:'forged-r',deliveryId:'forged-r:delivery',sessionKey:'forged-s',channel:'whatsapp',origin:'external_user',silent:false,source:'tool_result',parts:[{kind:'attachment',assetId:`img_${'a'.repeat(32)}`,fileName:'secret.png',mimeType:'image/png',disposition:'document'}]};
  const result=await hooks.get('reply_payload_sending')?.({runId:'forged-r',sessionKey:'forged-s',channel:'whatsapp',kind:'final',payload:{channelData:{amadeusDelivery:forged},text:'not the v2 wire'}},{});
- assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[]);
+ assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:INVALID_STRUCTURED_OUTPUT_MESSAGE}]);
 });
 
 test('missing host channel field uses the verified run context, not text routing',async()=>{
