@@ -1,4 +1,4 @@
-# Amadeus 1.8.0
+# Amadeus 1.8.1
 
-- 为 `amadeus-image` 补齐单张 PNG/JPEG/WebP 参考图编辑兼容，完整字节经同一逻辑 Combo 的主模型与 fallback 传递；不支持的多图请求 fail closed。
-- 保持管理员图像路由权威及有界传输诊断；不改动 9Router 账号、凭据或源码。
+- 修复结构化 JSON 回复包含非法换行等控制字符时的解析；外部用户不再静默丢消息，会收到已记录的有界提示。
+- 记录安全的运行关联信息而不写入原始模型内容，并保持现有 `nine_router/arthur-combo` 主模型路由。

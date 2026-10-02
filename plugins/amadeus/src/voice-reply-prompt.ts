@@ -26,6 +26,14 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
   const root = api.rootDir ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const skill = readFileSync(resolve(root, 'skills/voice-reply/SKILL.md'), 'utf8');
   registerDeliveryBoundary(api, boundaryOptions);
+  const loggedInvalidRuns = new Set<string>();
+  const warnInvalidStructuredOutput = (runId: string, envelope: { fallbackReason?: string; channel: string }, raw: unknown): void => {
+    if (envelope.fallbackReason !== 'invalid_structured_output' || loggedInvalidRuns.has(runId)) return;
+    const rawLength = typeof raw === 'string' ? raw.length : 0;
+    api.logger.warn(`amadeus structured reply fallback: reason=invalid_structured_output run_id=${runId} channel=${envelope.channel} raw_length=${rawLength}`);
+    loggedInvalidRuns.add(runId);
+    if (loggedInvalidRuns.size > 1024) loggedInvalidRuns.delete(loggedInvalidRuns.values().next().value!);
+  };
   api.on('before_prompt_build', (_event, context) => {
     const channel = context.channel ?? context.messageProvider;
     const origin = hasActiveWhatsAppVoiceLease(channel, context.sessionKey) ? 'inbound_voice' : originFor(context);
@@ -40,12 +48,17 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     if (origin !== 'external_user' && origin !== 'inbound_voice') return;
     return { appendSystemContext: [
       skill,
-      'Return ONLY the DeliveryEnvelope v2 Agent wire object: {"version":2,"silent":false,"parts":[{"kind":"text","text":"<answer>"}]}. No extra keys or surrounding prose/fences. Model-authored parts may only be text or voice; tool attachments are added by settlement, never emit MEDIA paths or tool serialization. User-requested JSON belongs inside a text part. The structured reply planner chooses parts semantically; normal typed input uses text only.',
+      'Return ONLY the DeliveryEnvelope v2 Agent wire object: {"version":2,"silent":false,"parts":[{"kind":"text","text":"<answer>"}]}. No extra keys or surrounding prose/fences. Escape control characters inside JSON strings (use \\n instead of a literal line break). Model-authored parts may only be text or voice; tool attachments are added by settlement, never emit MEDIA paths or tool serialization. User-requested JSON belongs inside a text part. The structured reply planner chooses parts semantically; normal typed input uses text only.',
       ...(origin === 'inbound_voice' ? ['This verified inbound voice run requires a Japanese voice part followed by the explicit visible Chinese/Japanese text part.'] : []),
     ].join('\n\n') };
   });
   api.on('before_agent_finalize', (event) => {
-    if (event.runId && deliveryRuns.has(event.runId) && event.lastAssistantMessage !== undefined) deliveryRuns.decode(event.runId, event.lastAssistantMessage);
+    if (event.runId && deliveryRuns.has(event.runId) && event.lastAssistantMessage !== undefined) {
+      const envelope = deliveryRuns.decode(event.runId, event.lastAssistantMessage);
+      // Persist only bounded correlation metadata. The malformed model
+      // payload can contain user data or secrets and must never enter logs.
+      warnInvalidStructuredOutput(event.runId, envelope, event.lastAssistantMessage);
+    }
   });
   api.on('reply_payload_sending', async (event, context) => {
     const runId = event.runId ?? (event.sessionKey ? deliveryRuns.runIdFor(event.sessionKey) : undefined);
@@ -58,6 +71,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     if (!runId) return { cancel: true, reason: 'delivery_run_missing' };
     try {
       const envelope = await deliveryRuns.prepare(runId, event.payload.text);
+      warnInvalidStructuredOutput(runId, envelope, event.payload.text);
       if (channel === 'telegram') {
         await settleTelegramDelivery(api, envelope, { ...context, ...(event.payload.replyToId ? { replyToId: event.payload.replyToId } : {}) });
         return { cancel: true, reason: 'delivery_settled' };
