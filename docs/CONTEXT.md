@@ -1,4 +1,4 @@
-# Canonical context — 2026-10-01
+# Canonical context — 2026-10-03
 
 Read this with `docs/CURRENT_TASK.md`; the Qwen3-TTS MLX rebaseline Goal is
 complete and the current follow-up disables per-request emotions while keeping
@@ -34,15 +34,15 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.7 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.8 deployed
 
-OpenClaw 2026.9.4 runs Amadeus 1.8.7 from commit `8037979` in immutable image
-`local/openclaw-amadeus:git-8037979fe652-20261002120821` (image ID
-`sha256:93b594cf543139fbb8a0927766df65c25ba5079463c80f26ce0eb4847ad49f24`).
-`/opt/amadeus/VERSION=1.8.7`; OpenClaw is healthy, Gateway registration is
+OpenClaw 2026.9.4 runs Amadeus 1.8.8 from commit `e4e3498` in immutable image
+`local/openclaw-amadeus:git-e4e3498ba664-20261002162339` (image ID
+`sha256:2869cfc03311c84eb95e0cb383d6aa1290d454f9fc086cd055b89c1179bae856`).
+`/opt/amadeus/VERSION=1.8.8`; OpenClaw is healthy, Gateway registration is
 present, and Product Radar reuses its unchanged healthy image. Protected
-checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002120821`.
-Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.7-silent-protocol-guard.md`.
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002162339`.
+Evidence: `.agent/checkpoints/2026-10-03-amadeus-1.8.8-image-completion-fallback.md`.
 
 Successful ordinary image generation imports the trusted asset before native
 continuation, passes read-only image context through the durable completion
@@ -59,7 +59,9 @@ not stranded when the Completion Agent times out. Release 1.8.6 sets the
 native image model task timeout to 120 seconds. Release 1.8.7 suppresses
 control-token-prefixed silent sentinels at the typed decoder and rejects
 control tokens again at the WhatsApp final text adapter, closing the
-protocol-text leakage path.
+protocol-text leakage path. Release 1.8.8 keeps generated media claimable by
+an attachment-only fallback after a native continuation timeout and prevents
+that fallback from replacing the private session route.
 
 Reference-image failures were caused by the missing live 9Router `/images/edits`
 route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference
