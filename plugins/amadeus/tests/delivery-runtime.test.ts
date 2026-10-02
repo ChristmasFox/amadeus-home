@@ -63,7 +63,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       else {
       const completionRunId=`completion-${sessionKey}`;
       plan.replyOptions.onAgentRunStart(completionRunId);
-      for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId:completionRunId,sessionKey,channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:taskId}});
+      for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId:completionRunId,sessionKey,channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:`image_generate:${taskId}`}});
       const completionWire=source==='caption-omitted'?JSON.stringify({version:2,silent:true,parts:[]}):source==='caption-malformed'||source==='caption-error'?'{"version":2,"parts":}':JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'Completion Agent caption。'}]});
       for(const hook of hooks.get('before_agent_finalize')??[])hook({runId:completionRunId,lastAssistantMessage:completionWire},{});
       await plan.delivery.deliver({text:completionWire},{kind:'final'});
