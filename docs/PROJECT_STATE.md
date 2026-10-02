@@ -1,6 +1,28 @@
 # Project State — 2026-10-02
 
-## Amadeus 1.8.4 — current live unrestricted Kurisu image caption release
+## Amadeus 1.8.7 — current live silent protocol guard release
+
+Release commit `8037979` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-8037979fe652-20261002120821`; image ID
+`sha256:93b594cf543139fbb8a0927766df65c25ba5079463c80f26ce0eb4847ad49f24`.
+Runtime `/opt/amadeus/VERSION=1.8.7`. The typed DeliveryEnvelope decoder now
+silences control-token-prefixed uppercase sentinels, and the WhatsApp final
+text adapter rejects any control token before provider send. Normal typed text,
+voice and image delivery remain unchanged. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002120821`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261002120821/`.
+
+Release verification passed: 126 Amadeus tests, typed decoder and pinned
+WhatsApp boundary regressions, typecheck/build, architecture checks, secrets
+scan, OpenClaw and Product Radar health, Gateway registration, NAS read-only
+smoke, owner notification/outbox smoke, and post-deploy maintenance. The
+optional media adapter was absent and its network smoke was skipped; the host
+Docker default log policy remains a warning because `/etc/docker/daemon.json`
+is absent. Full evidence:
+`.agent/checkpoints/2026-10-02-amadeus-1.8.7-silent-protocol-guard.md`.
+
+## Amadeus 1.8.4 — superseded unrestricted Kurisu image caption release
 
 Release commit `808678c` (caption behavior implementation `f196b4d`) is on
 `main`. The release is live in immutable OpenClaw 2026.9.4 image
