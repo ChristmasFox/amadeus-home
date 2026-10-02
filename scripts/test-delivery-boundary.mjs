@@ -27,13 +27,20 @@ const functionNode=(name,source=corePatched)=>acornParse(source).body.find(node=
 const completionNode=functionNode('wakeMediaGenerationTaskCompletion');
 const acceptedNode=functionNode('notifyMediaGenerationAsyncTaskStarted');
 assert.ok(completionNode&&acceptedNode,'pinned lifecycle functions must remain uniquely anchored');
-const accepted=[];const claimed=[];const failures=[];let nativeAnnouncement=false;let callbackText;
+const accepted=[];const claimed=[];const failures=[];let nativeAnnouncements=0;let callbackText;
 const boundary={version:2,
  acceptImageGeneration:async input=>{accepted.push(input);},
  completeImageGeneration:async input=>{claimed.push(input);},
  failImageGeneration:async input=>{failures.push(input);},
 };
-const completionScope={globalThis:{__amadeusDeliveryBoundaryV2_20260930:boundary},deliverSubagentAnnouncement:async()=>{nativeAnnouncement=true;return {delivered:true};}};
+const completionScope={
+ globalThis:{__amadeusDeliveryBoundaryV2_20260930:boundary},
+ mediaUrlsFromGeneratedAttachments:attachments=>attachments.map(attachment=>attachment.url).filter(Boolean),
+ formatAgentInternalEventsForPrompt:events=>JSON.stringify(events),
+ buildMediaGenerationReplyInstruction:()=> 'process the completion update',
+ deliverSubagentAnnouncement:async()=>{nativeAnnouncements++;return {delivered:true};},
+ 'log$7':{warn(){},error(){}}
+};
 const completionHandler=vm.runInNewContext(`${corePatched.slice(completionNode.start,completionNode.end)}; wakeMediaGenerationTaskCompletion`,completionScope);
 const trustedAttachment={type:'image',path:'/tmp/openclaw-generated/image.png',mimeType:'image/png'};
 const handle={taskId:'00000000-0000-4000-8000-000000000001',runId:'run-1',requesterSessionKey:'owner-session',requesterAgentId:'main',taskLabel:'a bounded image request',requesterOrigin:{channel:'whatsapp',accountId:'secondary',to:'owner-chat',threadId:9}};
@@ -46,10 +53,10 @@ await assert.doesNotReject(failedNotification({toolName:'image_generate',handle,
 const completionResult=await completionHandler({eventSource:'image_generation',status:'ok',toolName:'image_generate',attachments:[trustedAttachment],mediaUrls:[],handle});
 assert.equal(completionResult.status,'delivered');assert.equal(claimed.length,1);assert.equal(claimed[0].attachments[0],trustedAttachment);
 assert.equal(claimed[0].sessionKey,'owner-session');assert.equal(claimed[0].requesterAgentId,'main');assert.equal(claimed[0].requestContext,'a bounded image request');assert.equal(claimed[0].threadId,9);
-assert.equal(nativeAnnouncement,false,'typed success settlement is authoritative before completion prose');
+assert.equal(nativeAnnouncements,1,'native task completion continues after typed success settlement');
 const failureResult=await completionHandler({eventSource:'image_generation',status:'error',toolName:'image_generate',result:'raw provider payload must not be forwarded',handle:{...handle,taskId:'00000000-0000-4000-8000-000000000002'}});
 assert.equal(failureResult.status,'delivered');assert.equal(failures.length,1);assert.equal(failures[0].taskId,'00000000-0000-4000-8000-000000000002');
-assert.equal('result' in failures[0],false,'raw failure payload is not forwarded');assert.equal(nativeAnnouncement,false);
+assert.equal('result' in failures[0],false,'raw failure payload is not forwarded');assert.equal(nativeAnnouncements,1,'failure settlement does not emit a second native completion');
 // A true admission failure occurs before OpenClaw invokes the accepted observer.
 const originalAst=acornParse(coreOriginal);const runnerNode=originalAst.body.find(node=>node.type==='FunctionDeclaration'&&node.id?.name==='runMediaGenerationTask');
 assert.ok(runnerNode,'pinned detached task admission boundary must remain anchored');let preAdmissionAck=0;
