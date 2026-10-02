@@ -18,6 +18,7 @@ function createWhatsAppReplyPlan(params) {
     const id = listWhatsAppSendResultMessageIds(result)[0];
     return id ? { messageId: id } : {};
   };
+  const controlToken = /\[\[[^\]\r\n]+\]\]/u;
   const plan = boundary.createWhatsAppPlan({
     sessionKey, messageId, inboundVoice,
     accountId: params.route.accountId,
@@ -28,6 +29,7 @@ function createWhatsAppReplyPlan(params) {
     },
     stop: () => { typingStop?.(); typingStop = undefined; closeAmadeusVoiceReplyLeaseForTurn(sessionKey, messageId); },
     sendText: async (text) => {
+      if (controlToken.test(text)) throw new Error('whatsapp_protocol_text_rejected');
       const chunks = markdownToWhatsAppChunks(text, params.maxMediaTextChunkLimit ?? resolveTextChunkLimit(params.cfg, 'whatsapp'), resolveMarkdownTableMode$1({ cfg: params.cfg, channel: 'whatsapp', accountId: params.route.accountId }), resolveChunkMode(params.cfg, 'whatsapp', params.route.accountId));
       let sent;
       for (const chunk of chunks) sent = receipt(await params.transport.reply(chunk, quote()));

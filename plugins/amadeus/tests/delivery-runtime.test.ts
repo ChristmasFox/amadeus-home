@@ -178,8 +178,8 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  const marked = await malformedMarkerPlan.delivery.deliver({
   text: rawWire('[[amadeus:reply-modality=default]]\nNO_REPLY'),
  }, { kind: 'final' });
- assert.deepEqual(marked, { visibleReplySent: true });
- assert.deepEqual(sent, [INVALID_STRUCTURED_OUTPUT_MESSAGE], 'control-token content receives the bounded structured-output fallback');
+ assert.deepEqual(marked, { visibleReplySent: false });
+ assert.deepEqual(sent, [], 'control-prefixed silent sentinels never reach WhatsApp');
 
  const normalPlan = makePlan('delivery-bypass-normal');
  normalPlan.replyOptions.onAgentRunStart('delivery-bypass-normal-run');
@@ -188,7 +188,7 @@ test('WhatsApp final deliver bypass re-runs typed preparation and preserves inte
  });
  const delivered = await normalPlan.delivery.deliver({ text: rawWire('正常回复。') }, { kind: 'final' });
  assert.deepEqual(delivered, { visibleReplySent: true });
- assert.deepEqual(sent, [INVALID_STRUCTURED_OUTPUT_MESSAGE, '正常回复。'], 'direct final delivery still settles valid typed content');
+ assert.deepEqual(sent, ['正常回复。'], 'direct final delivery still settles valid typed content');
 });
 
 test('image lifecycle recovers original request language from account-scoped conversation when task session differs', async () => {
