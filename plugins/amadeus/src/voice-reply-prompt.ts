@@ -28,7 +28,7 @@ function originFor(context: { trigger?: string; inputProvenance?: { kind?: strin
 export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions: DeliveryBoundaryOptions = {}): void {
   const root = api.rootDir ?? resolve(dirname(fileURLToPath(import.meta.url)), '..');
   const skill = readFileSync(resolve(root, 'skills/voice-reply/SKILL.md'), 'utf8');
-  registerDeliveryBoundary(api, boundaryOptions);
+  const boundary = registerDeliveryBoundary(api, boundaryOptions);
   const loggedInvalidRuns = new Set<string>();
   const warnInvalidStructuredOutput = (runId: string, envelope: { fallbackReason?: string; channel: string }, raw: unknown): void => {
     if (envelope.fallbackReason !== 'invalid_structured_output' || loggedInvalidRuns.has(runId)) return;
@@ -91,6 +91,13 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
         }
+        return { cancel: true, reason: 'delivery_settled' };
+      }
+      if (envelope.origin === 'media_completion') {
+        await boundary.settleWhatsAppCompletion(envelope);
+        const captionSource = deliveryRuns.captionSourceFor(envelope.runId) ?? 'none';
+        api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
+        api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
         return { cancel: true, reason: 'delivery_settled' };
       }
       return { payload: { channelData: { amadeusDelivery: envelope } } };

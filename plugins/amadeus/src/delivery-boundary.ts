@@ -85,7 +85,7 @@ function readRequestContext(contexts: Map<string, TimedRequestContext>, key: str
   return value;
 }
 
-export function registerDeliveryBoundary(api: OpenClawPluginApi, options: DeliveryBoundaryOptions = {}): void {
+export function registerDeliveryBoundary(api: OpenClawPluginApi, options: DeliveryBoundaryOptions = {}) {
   const speech = createDeliverySpeech(api);
   const captionEnricher = options.captionEnricher ?? createImageCaptionEnricher(api);
   const lifecycleMessageEnricher = options.lifecycleMessageEnricher ?? createImageGenerationMessageEnricher(api);
@@ -228,7 +228,9 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           }
           deliveryRuns.registerMediaCompletion({
             taskId: input.taskId,
-            sourceSessionKey: `image_generate:${input.taskId}`,
+            // OpenClaw's inter-session provenance carries the native taskId as
+            // sourceSessionKey for this completion handoff.
+            sourceSessionKey: input.taskId,
             parts: Promise.resolve(parts),
             expiresAt: Date.now() + 5 * 60_000,
           });
@@ -243,7 +245,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       if (!validLifecycleInput(input)) throw new Error('image_completion_identity_invalid');
       const runId = `image_generate:${input.taskId}:typed-completion`;
       if (!deliveryRuns.has(runId)) deliveryRuns.start({ runId, sessionKey: input.sessionKey, channel: input.channel, origin: 'media_completion', deliveryId: `image-completion:${input.taskId}` });
-      if (!deliveryRuns.mediaCompletionFor(runId)) deliveryRuns.claimMediaCompletion(runId, `image_generate:${input.taskId}`);
+      if (!deliveryRuns.mediaCompletionFor(runId)) deliveryRuns.claimMediaCompletion(runId, input.taskId);
       const envelope = await deliveryRuns.prepareToolOnly(runId);
       if (settlement.settled.has(envelope.deliveryId)) {
         api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_duplicate_ignored', task_id: input.taskId, delivery_id: envelope.deliveryId })}`);
@@ -294,7 +296,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           record: (event) => api.logger.info(`amadeus delivery ${JSON.stringify(event)}`),
         }, settlement);
         if (result.final_status === 'failed') throw new Error(`delivery_failed:${result.failure_stage}`);
-        if (envelope.origin === 'media_completion') {
+        if (envelope.origin === 'media_completion' && envelope.runId.startsWith('image_generate:')) {
           const captionSource = deliveryRuns.captionSourceFor(envelope.runId) ?? 'none';
           if (result.final_status === 'duplicate') api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_duplicate_ignored', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel })}`);
           api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel: envelope.channel, caption_source: captionSource, elapsed_ms: 0 })}`);
@@ -338,4 +340,5 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     },
   };
   (globalThis as Record<string, unknown>)[DELIVERY_BOUNDARY_GLOBAL] = boundary;
+  return boundary;
 }
