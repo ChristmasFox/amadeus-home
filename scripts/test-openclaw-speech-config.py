@@ -17,7 +17,7 @@ assert provider["request"] == {"allowPrivateNetwork": True}
 assert provider["apiKey"]["id"] == "OPENCLAW_9ROUTER_API_KEY"
 assert c["agents"]["defaults"]["mediaModels"]["image"] == {
     "primary": "openai/amadeus-image",
-    "timeoutMs": 180000,
+    "timeoutMs": 120000,
 }
 assert provider["models"] == [{
     "id": "amadeus-image",
