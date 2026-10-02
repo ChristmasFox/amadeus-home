@@ -110,7 +110,6 @@ const SOURCES = new Set<DeliverySource>([
 
 const CONTROL_TOKEN = /\[\[[^\]\r\n]+\]\]/u;
 const SHA256 = /^[a-f0-9]{64}$/iu;
-export const MAX_ATTACHMENT_CAPTION_LENGTH = 1024;
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
@@ -137,7 +136,7 @@ function cleanText(value: string): string {
 /** Normalize caption presentation before it enters the typed delivery contract. */
 function cleanCaption(value: string): string {
   const caption = value.normalize('NFC').replace(/[\r\n\t]+/gu, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/gu, '').replace(/\s{2,}/gu, ' ').trim();
-  if (!caption || caption.length > MAX_ATTACHMENT_CAPTION_LENGTH || containsControlToken(caption)) throw new Error('delivery_caption_invalid');
+  if (!caption || containsControlToken(caption)) throw new Error('delivery_caption_invalid');
   // Protocol-shaped/model-serialized output is never presentation. Do not try
   // to salvage JSON or fenced protocol by stringifying/stripping it.
   if (/^(?:\{[\s\S]*\}|\[[\s\S]*\]|```)/u.test(caption) || /(?:"(?:caption|deliveryId|assetId|disposition)"\s*:|\bMEDIA\s*:)/iu.test(caption) || isJsonValue(caption)) throw new Error('delivery_caption_protocol_rejected');

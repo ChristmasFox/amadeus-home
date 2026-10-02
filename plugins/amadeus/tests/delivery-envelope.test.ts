@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeAgentReply, INVALID_STRUCTURED_OUTPUT_MESSAGE } from '../src/delivery-decoder.js';
-import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, MAX_ATTACHMENT_CAPTION_LENGTH, type DeliveryPart } from '../src/delivery-envelope.js';
+import { createAttachmentPart, createDeliveryEnvelope, createSilentDelivery, validateDeliveryEnvelope, type DeliveryPart } from '../src/delivery-envelope.js';
 import { createDeliverySettlementContext, settleDelivery, type DeliverySettlementAdapters } from '../src/delivery-settlement.js';
 import { createWhatsAppAttachmentSender } from '../src/whatsapp-delivery.js';
 import { createTelegramAttachmentSender } from '../src/telegram-delivery.js';
@@ -99,11 +99,13 @@ test('document rejection is not downgraded to inline', async () => {
   let imageCalls=0; const send=createWhatsAppAttachmentSender(async()=>asset,{sendImage:async()=>{imageCalls++;return{};},sendDocument:async()=>{throw new Error('rejected');}});
   await assert.rejects(send(attachment('image/png','document'))); assert.equal(imageCalls,0);
 });
-test('attachment caption is bounded normalized presentation only', () => {
+test('attachment caption preserves Kurisu-selected length while filtering protocol', () => {
   const captioned = createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '  画像\r\nできたわ。  ' });
   assert.equal(captioned.caption, '画像 できたわ。');
   assert.equal(validateDeliveryEnvelope(createDeliveryEnvelope({ ...context, silent:false, source:'tool_result', parts:[captioned] })), true);
-  assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: 'x'.repeat(MAX_ATTACHMENT_CAPTION_LENGTH + 1) }), /caption_invalid/u);
+  const longCaption = '库瑞斯认真看完这张图后决定把细节说清楚。'.repeat(80);
+  const longCaptionPart = createAttachmentPart({ ...attachment('image/png', 'inline'), caption: longCaption });
+  assert.equal(longCaptionPart.caption, longCaption);
   assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '{"caption":"raw model JSON"}' }), /caption_protocol_rejected/u);
   assert.throws(() => createAttachmentPart({ ...attachment('image/png', 'inline'), caption: '"raw protocol string"' }), /caption_protocol_rejected/u);
   assert.equal(validateDeliveryEnvelope({ ...createDeliveryEnvelope({ ...context, silent:false, source:'tool_result', parts:[captioned] }), parts:[{ ...captioned, filePath:'/tmp/private' }] }), false);

@@ -53,7 +53,7 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
       deliveryRuns.setOrigin(context.runId, origin);
     }
     if (origin === 'media_completion') return { appendSystemContext: [
-      'This is a trusted successful native image-generation completion. Inspect the supplied generated image and write one short, natural Kurisu-style user-facing caption based on what is actually visible. Return only the DeliveryEnvelope v2 wire object with exactly one plain text part; do not emit voice, attachments, paths, MEDIA directives, JSON inside text, or a second message.',
+      'This is a trusted successful native image-generation completion. Inspect the supplied generated image and write a natural Kurisu-style user-facing caption based on what is actually visible. Let Kurisu decide the wording, detail, tone, and natural length from her personality and the scene; do not impose a shortness, word-count, or character-count target. Return only the DeliveryEnvelope v2 wire object with exactly one plain text part; do not emit voice, attachments, paths, MEDIA directives, JSON inside text, or a second message.',
       'The runtime owns the image asset and recipient. Your text is presentation only and will be bound as the existing inline image caption.',
       'Use exactly {"version":2,"silent":false,"parts":[{"kind":"text","text":"<caption>"}]} with no surrounding prose or markdown fences.',
     ].join('\n\n') };

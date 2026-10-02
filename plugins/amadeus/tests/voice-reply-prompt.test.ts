@@ -46,6 +46,7 @@ test('trusted image-generation completion owns caption presentation while unrela
  deliveryRuns.registerMediaCompletion({taskId:'00000000-0000-4000-8000-000000000001',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001',parts:Promise.resolve([createAttachmentPart({assetId:`img_${'a'.repeat(32)}`,mimeType:'image/png',fileName:'generated.png',disposition:'inline'})]),expiresAt:Date.now()+60_000});
  const completion=hooks.get('before_prompt_build')?.({}, {runId:'image-complete-r',sessionKey:'image-complete-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'}});
  assert.match(completion.appendSystemContext,/trusted successful native image-generation completion/u);
+ assert.match(completion.appendSystemContext,/do not impose a shortness, word-count, or character-count target/u);
  const other=hooks.get('before_prompt_build')?.({}, {runId:'internal-r',sessionKey:'internal-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'other'}});
  assert.equal(other,undefined);
 });
