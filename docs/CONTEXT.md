@@ -34,15 +34,15 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.4 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.5 deployed
 
-OpenClaw 2026.9.4 runs Amadeus 1.8.4 from commit `808678c` in immutable image
-`local/openclaw-amadeus:git-808678cdc952-20261002085415` (image ID
-`sha256:dc4c9461f1e1ce06db75bba2dab51bf65802bac39bce764f6f88f909580d545a`).
-`/opt/amadeus/VERSION=1.8.4`; OpenClaw is healthy, Gateway registration is
+OpenClaw 2026.9.4 runs Amadeus 1.8.5 from commit `73daf48` in immutable image
+`local/openclaw-amadeus:git-73daf484ff51-20261002091330` (image ID
+`sha256:8489cc2229f04bd0a6c6a1cad6b8ba7dc3829f1dc7c5e0c0ae8df5a7ab0f0b99`).
+`/opt/amadeus/VERSION=1.8.5`; OpenClaw is healthy, Gateway registration is
 present, and Product Radar reuses its unchanged healthy image. Protected
-checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002085415`.
-Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.4-unrestricted-kurisu-caption.md`.
+checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002091330`.
+Evidence: `.agent/checkpoints/2026-10-02-amadeus-1.8.5-image-delivery-timeout.md`.
 
 Successful ordinary image generation imports the trusted asset before native
 continuation, passes read-only image context through the durable completion
@@ -52,7 +52,10 @@ uses the attachment-only fallback. The optional media adapter remains absent
 and its network smoke is skipped. Managed compose log policies pass; the host
 Docker default policy remains a warning because `/etc/docker/daemon.json` is
 absent. The 1.8.4 completion caption lets Kurisu choose natural wording and
-length without an Amadeus character ceiling or short-caption instruction.
+length without an Amadeus character ceiling or short-caption instruction. The
+1.8.5 caption semantic deadline is 120 seconds, and native completion handoff
+deadline expiry now invokes the attachment-only fallback so generated media is
+not stranded when the Completion Agent times out.
 
 Reference-image failures were caused by the missing live 9Router `/images/edits`
 route, not model selection. 1.8.0 sends one validated PNG/JPEG/WebP reference
