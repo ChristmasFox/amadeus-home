@@ -88,7 +88,24 @@ export function installCoreCompletionSource(original, hostRoot) {
   anchoredFunction(ast, 'wakeMediaGenerationTaskCompletion');
   anchoredFunction(ast, 'notifyMediaGenerationAsyncTaskStarted');
   if (createHash('sha256').update(original).digest('hex') !== CORE_PIN.sha256) throw new Error('pinned_image_completion_digest_mismatch');
-  const routePatched = patchImageGenerationToolSource(original);
+  let routePatched = patchImageGenerationToolSource(original);
+  const handoffDeadlineThrow = `if (remainingMs <= 0) throw new Error("cron continuation did not become ready before the handoff deadline");`;
+  if (routePatched.split(handoffDeadlineThrow).length - 1 !== 1) throw new Error('pinned_image_completion_handoff_deadline_anchor_mismatch');
+  routePatched = routePatched.replace(handoffDeadlineThrow,
+    `if (remainingMs <= 0) {
+			try { await params.onTimeout?.(); } catch { /* Amadeus media fallback is best effort. */ }
+			throw new Error("cron continuation did not become ready before the handoff deadline");
+		}`);
+  const successfulCompletionRetryAnchor = `beforeRetry: recordCompletionDeliveryProgress
+			})).status`;
+  if (routePatched.split(successfulCompletionRetryAnchor).length - 1 !== 1) throw new Error('pinned_image_completion_retry_anchor_mismatch');
+  routePatched = routePatched.replace(successfulCompletionRetryAnchor,
+    `beforeRetry: recordCompletionDeliveryProgress,
+				onTimeout: async () => {
+					const fallback = globalThis.__amadeusImageCompletionFallbacks20261002?.get(params.handle?.taskId);
+					if (fallback?.run) await fallback.run();
+				}
+			})).status`);
   const completionCall = `const delivery = await deliverSubagentAnnouncement({`;
   if (routePatched.split(completionCall).length - 1 !== 1) throw new Error('pinned_image_completion_delivery_anchor_mismatch');
   let completionPatched = routePatched.replace(completionCall,
@@ -103,7 +120,26 @@ export function installCoreCompletionSource(original, hostRoot) {
   const completionReturn = `\tif (delivery.delivered) return { status: "delivered" };`;
   if (completionPatched.split(completionReturn).length - 1 !== 1) throw new Error('pinned_image_completion_result_anchor_mismatch');
   completionPatched = completionPatched.replace(completionReturn,
-    `\tif (!delivery.delivered && delivery.disposition !== "session_queued" && delivery.reason !== "completion_handoff_pending" && params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {\n\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }\n\t}\n${completionReturn}`);
+    `\tconst completionFallbacks = globalThis.__amadeusImageCompletionFallbacks20261002 ??= new Map();
+\tconst completionTaskKey = params.handle?.taskId;
+\tif (delivery.disposition === "session_queued" || delivery.reason === "completion_handoff_pending") {
+\t\tif (completionTaskKey && params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {
+\t\t\tcompletionFallbacks.set(completionTaskKey, {
+\t\t\t\trun: async () => {
+\t\t\t\t\tif (!completionFallbacks.has(completionTaskKey)) return;
+\t\t\t\t\tcompletionFallbacks.delete(completionTaskKey);
+\t\t\t\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }
+\t\t\t\t}
+\t\t\t});
+\t\t}
+\t} else if (completionTaskKey) {
+\t\tcompletionFallbacks.delete(completionTaskKey);
+\t}
+\tif (!delivery.delivered && delivery.disposition !== "session_queued" && delivery.reason !== "completion_handoff_pending" && params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {
+\t\tif (completionTaskKey) completionFallbacks.delete(completionTaskKey);
+\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }
+\t}
+${completionReturn}`);
   const routeAst = parse(completionPatched);
   const completionNode = anchoredFunction(routeAst, 'wakeMediaGenerationTaskCompletion');
   let output = completionPatched.slice(0, completionNode.body.start + 1) + terminal + completionPatched.slice(completionNode.body.start + 1);

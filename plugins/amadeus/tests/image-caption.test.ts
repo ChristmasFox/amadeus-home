@@ -62,7 +62,7 @@ test('multimodal caption taking longer than the old eight-second limit still suc
     await t.mock.timers.tick(8_101);
     assert.deepEqual(await pending,{caption:'这张太空橘猫已经准备好出发了。'});
     assert.equal(args.timeoutMs,IMAGE_CAPTION_MODEL_TIMEOUT_MS);
-    assert.equal(IMAGE_CAPTION_SEMANTIC_TIMEOUT_MS,30_000);
+    assert.equal(IMAGE_CAPTION_SEMANTIC_TIMEOUT_MS,120_000);
   } finally { await rm(f.root, { recursive:true, force:true }); t.mock.timers.reset(); }
 });
 
@@ -123,7 +123,7 @@ test('one wrong-language caption can be corrected in the same bounded operation'
  } finally { await rm(f.root,{recursive:true,force:true}); }
 });
 
-test('language-mismatch caption retry still shares one ~30-second deadline',async(t)=>{
+test('language-mismatch caption retry still shares one 120-second deadline',async(t)=>{
  t.mock.timers.enable({apis:['setTimeout','Date']});
  const f=await fixture(); let calls=0; const timeouts:number[]=[]; let signalCalled!:()=>void;
  const called=new Promise<void>(resolve=>{signalCalled=resolve;});
@@ -137,8 +137,8 @@ test('language-mismatch caption retry still shares one ~30-second deadline',asyn
   await called;
   await t.mock.timers.tick(10_001);
   while(calls<2) await new Promise(resolve=>setImmediate(resolve));
-  assert.ok(timeouts[1]!>18_000&&timeouts[1]!<=19_000);
-  await t.mock.timers.tick(20_000);
+  assert.ok(timeouts[1]!>108_000&&timeouts[1]!<=110_000);
+  await t.mock.timers.tick(110_000);
   assert.deepEqual(await pending,{omissionReason:'timeout'});
   assert.equal(calls,2);
   assert.ok(f.logs[0]?.includes('"attempts":2'));
