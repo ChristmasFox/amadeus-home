@@ -100,6 +100,9 @@ test('detached image execution captures only the authoritative route and has no 
   assert.match(bundle, /log\$5\.info\(JSON\.stringify\(\{ event: "image_route_task_enqueued"/);
   assert.match(bundle, /image_route_worker_model_resolved/);
   assert.match(bundle, /amadeus_image_lifecycle_boundary_unavailable/);
+  assert.match(bundle, /onTimeout: async \(\) =>/);
+  assert.match(bundle, /__amadeusImageCompletionFallbacks20261002/);
+  assert.match(bundle, /cron continuation did not become ready before the handoff deadline/);
 });
 
 test('successful ordinary image generation keeps native task completion after one typed attachment send', async () => {

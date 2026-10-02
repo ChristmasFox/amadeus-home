@@ -19,8 +19,8 @@ export type ImageCaptionResult = Readonly<{ caption?: string; omissionReason?: I
 export type ImageCaptionEnricher = (input: ImageCaptionInput) => Promise<ImageCaptionResult>;
 export type ImageCaptionLimits = Readonly<{ timeoutMs?: number; modelTimeoutMs?: number; maxAttempts?: number; now?: () => number }>;
 
-export const IMAGE_CAPTION_SEMANTIC_TIMEOUT_MS = 30_000;
-export const IMAGE_CAPTION_MODEL_TIMEOUT_MS = 27_000;
+export const IMAGE_CAPTION_SEMANTIC_TIMEOUT_MS = 120_000;
+export const IMAGE_CAPTION_MODEL_TIMEOUT_MS = 117_000;
 const MAX_PERSONA_BYTES = 32 * 1024;
 const SEMANTIC_MARGIN_MS = 1_000;
 const MAX_CAPTION_ATTEMPTS = 2;
