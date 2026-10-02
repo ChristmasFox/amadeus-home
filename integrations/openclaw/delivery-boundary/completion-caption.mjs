@@ -35,6 +35,11 @@ export function patchCompletionCaptionSource(original) {
     `sourceTool: params.sourceTool,\n\t\t\t\timages: params.images,\n\t\t\t\tisSourceSessionEffectsAllowed: params.isSourceSessionEffectsAllowed,`,
     'direct dispatch image input',
   );
+  output = replaceOnce(output,
+    `...expectedMedia,\n\t\t\tidempotencyKey: \`\${params.directIdempotencyKey}:agent-loop\``,
+    `...expectedMedia,\n\t\t\t...Array.isArray(params.images) && params.images.length ? { images: params.images } : {},\n\t\t\tidempotencyKey: \`\${params.directIdempotencyKey}:agent-loop\``,
+    'queued image input',
+  );
   return output;
 }
 
