@@ -18,7 +18,10 @@ export function hasActiveWhatsAppVoiceLease(channel: unknown, sessionKey: unknow
 function originFor(context: { trigger?: string; inputProvenance?: { kind?: string; sourceTool?: string; sourceSessionKey?: string } }): DeliveryOrigin {
   if (context.trigger === 'heartbeat' || context.inputProvenance?.kind === 'heartbeat') return 'heartbeat';
   if (context.trigger === 'cron' || context.inputProvenance?.kind === 'cron' || context.inputProvenance?.sourceTool === 'cron') return 'cron';
-  if (context.inputProvenance?.kind === 'inter_session') return 'internal_handoff';
+  if (context.inputProvenance?.kind === 'inter_session') {
+    if (deliveryRuns.isMediaCompletionProvenance(context.inputProvenance)) return 'media_completion';
+    return 'internal_handoff';
+  }
   if (context.inputProvenance?.kind === 'internal_system') return 'system';
   return 'external_user';
 }
@@ -39,12 +42,21 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     const origin = hasActiveWhatsAppVoiceLease(channel, context.sessionKey) ? 'inbound_voice' : originFor(context);
     if (context.runId && context.sessionKey && channel) {
       deliveryRuns.start({ runId: context.runId, sessionKey: context.sessionKey, channel, origin });
+      if (origin === 'media_completion' && context.inputProvenance?.sourceSessionKey) {
+        deliveryRuns.claimMediaCompletion(context.runId, context.inputProvenance.sourceSessionKey);
+        api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_native_continuation_started', run_id: context.runId, source_session_key_present: true, channel })}`);
+      }
       // The native plan may be created with a provisional external-user
       // origin before OpenClaw exposes heartbeat/cron/internal provenance.
       // Update the still-unsettled run so the final delivery adapter remains
       // silent for trusted internal turns regardless of hook ordering.
       deliveryRuns.setOrigin(context.runId, origin);
     }
+    if (origin === 'media_completion') return { appendSystemContext: [
+      'This is a trusted successful native image-generation completion. Inspect the supplied generated image and write one short, natural Kurisu-style user-facing caption based on what is actually visible. Return only the DeliveryEnvelope v2 wire object with exactly one plain text part; do not emit voice, attachments, paths, MEDIA directives, JSON inside text, or a second message.',
+      'The runtime owns the image asset and recipient. Your text is presentation only and will be bound as the existing inline image caption.',
+      'Use exactly {"version":2,"silent":false,"parts":[{"kind":"text","text":"<caption>"}]} with no surrounding prose or markdown fences.',
+    ].join('\n\n') };
     if (origin !== 'external_user' && origin !== 'inbound_voice') return;
     return { appendSystemContext: [
       skill,
@@ -74,6 +86,11 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
       warnInvalidStructuredOutput(runId, envelope, event.payload.text);
       if (channel === 'telegram') {
         await settleTelegramDelivery(api, envelope, { ...context, ...(event.payload.replyToId ? { replyToId: event.payload.replyToId } : {}) });
+        if (envelope.origin === 'media_completion') {
+          const captionSource = deliveryRuns.captionSourceFor(envelope.runId) ?? 'none';
+          api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
+          api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: envelope.runId, delivery_id: envelope.deliveryId, channel, caption_source: captionSource })}`);
+        }
         return { cancel: true, reason: 'delivery_settled' };
       }
       return { payload: { channelData: { amadeusDelivery: envelope } } };

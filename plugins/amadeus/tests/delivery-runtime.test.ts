@@ -13,7 +13,7 @@ test('explicit multiplier is a bounded parameter constraint, not a 4K resolution
 });
 
 let taskCounter=1;
-for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','completion'],['image/jpeg','provider-fallback'],['image/png','caption-omitted'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
+for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale'],['image/png','upscale2'],['image/png','generate'],['image/png','upscale4'],['image/png','completion'],['image/png','completion-fallback'],['image/jpeg','provider-fallback'],['image/png','caption-omitted'],['image/png','caption-malformed'],['image/png','caption-error'],['image/png','attachment-failure'],['image/png','failure']] as const) test(`real hook chain ${source} ${mimeType} -> one typed provider primitive`,async()=>{
  const root=await mkdtemp(join(tmpdir(),'delivery-runtime-'));await mkdir(join(root,'derived'));
  const bytes=mimeType==='image/png'?Buffer.from([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1]):Buffer.from([255,216,255,224,0,16,1,2,3,4]);
  const id=`img_${(mimeType==='image/png'?'a':'b').repeat(32)}`;const asset={imageId:id,storageKey:'derived/asset.bin',mimeType,width:1,height:1,byteSize:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),status:'ready'};
@@ -26,7 +26,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   const api={rootDir:new URL('../',import.meta.url).pathname,config:{},pluginConfig:{imageAssetServiceBaseUrl:`http://127.0.0.1:${port}`,imageAssetServiceTokenFile:join(root,'token'),imageAssetContainerRoot:root},logger:{info(){},warn(){}},on(name:string,fn:(...args:any[])=>any){hooks.set(name,[...(hooks.get(name)??[]),fn]);},registerTool(factory:any,options:{name:string}){tools.set(options.name,factory);}} as unknown as OpenClawPluginApi;
   const captionInputs:any[]=[];const lifecycleInputs:any[]=[];
   registerVoiceReplyPrompt(api,{captionEnricher:async input=>{captionInputs.push(input);if(source==='caption-error')throw new Error('raw model provider error');if(source==='caption-omitted')return {};return source==='caption-malformed'?{caption:'{"caption":"raw caption protocol"}'}:{caption:`Kurisu caption for ${input.mimeType}`};},lifecycleMessageEnricher:async input=>{lifecycleInputs.push(input);return input.kind==='accepted'?'生成を始めたわ。':'生成に失敗したわ。';}});registerImageAssets(api);
-  const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>;completeImageGeneration(input:any):Promise<void>;createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string;caption?:string}>=[];
+  const boundary=(globalThis as Record<string,unknown>)[DELIVERY_BOUNDARY_GLOBAL] as {acceptImageGeneration(input:any):Promise<void>;failImageGeneration(input:any):Promise<void>;completeImageGeneration(input:any):Promise<any>;finishImageGeneration(input:any):Promise<void>;createWhatsAppPlan(port:WhatsAppDeliveryPort):any};const sends:Array<{kind:string;bytes?:Buffer;text?:string;caption?:string}>=[];
   const sessionKey=`runtime-${source}-${mimeType}`;const taskId=`00000000-0000-4000-8000-${String(taskCounter++).padStart(12,'0')}`;const runId=`run-${sessionKey}`;
   const inboundBody=source==='upscale2'?'请把刚才的图超分 2x':source==='upscale4'?'请把刚才的图超分 4x':source.startsWith('upscale')?'请把刚才的图超分':'请用中文生成一只戴宇航员头盔的橘猫。';
   const lifecycleInput={taskId,sessionKey,requesterAgentId:'main',channel:'whatsapp',accountId:'secondary',conversationId:'chat',requestContext:'a bounded original image request'};
@@ -42,9 +42,9 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
     result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:4,mode:'anime'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
     const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale4'?4:2, 'explicit 4x remains available while model-supplied 4x cannot override the 2x default');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
-  }else if(source==='completion'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
+  }else if(source==='completion'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure') result={content:[{type:'text',text:'Background task started (async=true)'}],details:{async:true}};
   else result={details:{paths:[join(root,'native-generated.bin')],attachments:[{path:join(root,'native-generated.bin'),mimeType}]},content:[{type:'text',text:'tool result text is not an image authority'}]};
-  const detached=source==='completion'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
+  const detached=source==='completion'||source==='completion-fallback'||source==='provider-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'||source==='attachment-failure'||source==='failure';
   const jobs=detached?[]:(hooks.get('after_tool_call')??[]).map(hook=>hook({toolName:source==='generate'?'image_generate':'amadeus_image_upscale',runId,result},{runId,sessionKey,toolName:source,channelId:'whatsapp'}));
   if(detached){
     assert.equal((result as any).details.async,true);assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,0);assert.equal(sends.length,0);
@@ -56,11 +56,21 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.acceptImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text'],'the started receipt itself is not an accepted acknowledgement');
       assert.equal(lifecycleInputs[0]?.requestContext,expectedRequestContext);assert.equal(lifecycleInputs[0]?.requestLanguage,'chinese');
+      const completionClaim=await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
+      assert.equal(completionClaim.completionImages?.[0]?.type,'image');assert.equal(completionClaim.completionImages?.[0]?.mimeType,mimeType);assert.deepEqual(Buffer.from(completionClaim.completionImages?.[0]?.data??'','base64'),bytes);
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
-      await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
+      if(source==='completion-fallback') await boundary.finishImageGeneration(lifecycleInput);
+      else {
+      const completionRunId=`completion-${sessionKey}`;
+      plan.replyOptions.onAgentRunStart(completionRunId);
+      for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId:completionRunId,sessionKey,channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:`image_generate:${taskId}`}});
+      const completionWire=source==='caption-omitted'?JSON.stringify({version:2,silent:true,parts:[]}):source==='caption-malformed'||source==='caption-error'?'{"version":2,"parts":}':JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'Completion Agent caption。'}]});
+      for(const hook of hooks.get('before_agent_finalize')??[])hook({runId:completionRunId,lastAssistantMessage:completionWire},{});
+      await plan.delivery.deliver({text:completionWire},{kind:'final'});
+      }
       await boundary.failImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
-      assert.equal(sends[1]?.caption,source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:`Kurisu caption for ${mimeType}`);assert.equal(captionInputs.length,1);assert.equal(captionInputs[0]?.filePath,await realpath(join(root,'derived/asset.bin')));assert.equal(captionInputs[0]?.requestContext,expectedRequestContext);assert.equal(captionInputs[0]?.requestLanguage,'chinese');
+      assert.equal(sends[1]?.caption,source==='completion-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:'Completion Agent caption。');assert.equal(captionInputs.length,0);
       assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     }else{
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);

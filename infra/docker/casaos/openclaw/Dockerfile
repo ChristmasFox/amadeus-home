@@ -111,6 +111,7 @@ COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary
 RUN node /opt/amadeus/delivery-boundary/core-completion.mjs --host-root /app --apply \
     && node --check /app/dist/openclaw-tools-Bo9W_tg_.mjs \
     && node --check /app/dist/runtime-DlMtF4kc.mjs \
-    && node --check /app/dist/image-generation-provider-Dq32DoC6.mjs
+    && node --check /app/dist/image-generation-provider-Dq32DoC6.mjs \
+    && node --check /app/dist/subagent-announce-delivery-Dcn7g21F.mjs
 
 USER node

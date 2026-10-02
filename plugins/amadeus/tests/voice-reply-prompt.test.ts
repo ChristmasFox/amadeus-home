@@ -1,6 +1,8 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import { hasActiveWhatsAppVoiceLease,WHATSAPP_VOICE_RUNS_GLOBAL,registerVoiceReplyPrompt } from '../src/voice-reply-prompt.js';
 import { INVALID_STRUCTURED_OUTPUT_MESSAGE } from '../src/delivery-decoder.js';
+import { deliveryRuns } from '../src/delivery-runs.js';
+import { createAttachmentPart } from '../src/delivery-envelope.js';
 const wire=JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'normal text'}]});
 function setup(warnings:string[]=[]){const hooks=new Map<string,(...args:any[])=>any>();const api={rootDir:new URL('../',import.meta.url).pathname,config:{},logger:{info(){},warn(message:string){warnings.push(message)}},on(name:string,handler:(...args:any[])=>any){hooks.set(name,handler);}} as never;registerVoiceReplyPrompt(api);return hooks;}
 test('voice lease stays lifecycle-only and typed prompts request v2',()=>{
@@ -39,10 +41,11 @@ test('missing host channel field uses the verified run context, not text routing
  assert.deepEqual(result.payload.channelData.amadeusDelivery.parts,[{kind:'text',text:'normal text'}]);
 });
 
-test('internal image-generation completion has no LLM prompt ownership',()=>{
+test('trusted image-generation completion owns caption presentation while unrelated handoffs stay silent',()=>{
  const hooks=setup();
+ deliveryRuns.registerMediaCompletion({taskId:'00000000-0000-4000-8000-000000000001',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001',parts:Promise.resolve([createAttachmentPart({assetId:`img_${'a'.repeat(32)}`,mimeType:'image/png',fileName:'generated.png',disposition:'inline'})]),expiresAt:Date.now()+60_000});
  const completion=hooks.get('before_prompt_build')?.({}, {runId:'image-complete-r',sessionKey:'image-complete-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:'image_generate:00000000-0000-4000-8000-000000000001'}});
- assert.equal(completion,undefined);
+ assert.match(completion.appendSystemContext,/trusted successful native image-generation completion/u);
  const other=hooks.get('before_prompt_build')?.({}, {runId:'internal-r',sessionKey:'internal-s',channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'other'}});
  assert.equal(other,undefined);
 });

@@ -253,6 +253,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
 }
 
 export type GeneratedCompletionAttachment = Readonly<{ type?: string; path?: string; mimeType?: string }>;
+export type CompletionImageInput = Readonly<{ type: 'image'; data: string; mimeType: string }>;
 export type GeneratedCompletionAssetOptions = Readonly<{
   taskId: string;
   agentId: string;
@@ -273,6 +274,13 @@ export async function resolveRegisteredImageCaptionInput(config: AmadeusConfig, 
   await readRegisteredAsset(config.imageAssetContainerRoot, part, asset as AssetMetadata);
   const root = await realpath(config.imageAssetContainerRoot);
   return { filePath: assetPath(root, asset.storageKey), mimeType: asset.mimeType };
+}
+
+/** Convert only a verified registry asset into OpenClaw's read-only model image input. */
+export async function resolveRegisteredImageModelInput(config: AmadeusConfig, part: AttachmentPart): Promise<CompletionImageInput> {
+  const asset = await resolveRegisteredImageAsset(config, part);
+  if (asset.bytes.length > 10 * 1024 * 1024) throw new Error('completion_image_context_too_large');
+  return { type: 'image', data: asset.bytes.toString('base64'), mimeType: asset.mimeType };
 }
 
 /** Import only OpenClaw's persisted structured image attachments, then enrich from the registered bytes. */
