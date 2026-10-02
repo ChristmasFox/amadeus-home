@@ -1,40 +1,31 @@
-# Current Task — Amadeus 1.8.0 reference-image route completion
+# Current Task — Amadeus 1.8.1 structured reply reliability
 
-Date: 2026-10-01 (Asia/Shanghai).
+Date: 2026-10-02 (Asia/Shanghai).
 
-Active Goal: `docs/AMADEUS_IMAGE_ROUTE_AUTHORITATIVE_FIX_GOAL.md`.
-Current live release: **Amadeus 1.8.0** (`VERSION=1.8.0`).
-Deployment: source commit `2244f98` is live; release notes validated.
-Status: `DEPLOYED_AUTOMATED_GATES_PASSED_MANUAL_OWNER_REFERENCE_IMAGE_ACCEPTED`.
+Active Goal: none; the prior image-route Goal is complete.
+Current live release: **Amadeus 1.8.1** (`VERSION=1.8.1`).
+Deployment: source commit `2525d38` is live; release notes validated.
+Status: `DEPLOYED_AUTOMATED_GATES_PASSED_STRUCTURED_REPLY_FALLBACK_LIVE`.
 
-The 1.8.0 immutable image is live:
-`local/openclaw-amadeus:git-2244f98140e0-20261001145719` (image ID
-`sha256:c418bc6397c713c401ed9bc060542d3464318c4c1f6cb9c6b1b38f14ce8c4e35`).
-OpenClaw is healthy, Gateway registration is present, and the post-deploy live
-reference fixture passed. The prior 1.7.9 reference-image failures (21:37 and
-21:43 +08) returned HTTP 500; prompt-only requests succeeded.
+The 1.8.1 immutable image is live:
+`local/openclaw-amadeus:git-2525d3892169-20261002063108` (image ID
+`sha256:6d9b88d0f53664e58504ebbce1b8e7fbe647f9bf3f42ac7876d7d20edf447e77`).
+OpenClaw is healthy, Gateway registration is present, and the 1.8.0 reference
+route remains live under the new image.
 
-Root cause is now established: a reference image makes the pinned OpenClaw
-OpenAI adapter POST multipart to `/v1/images/edits`, but the live 9Router
-0.5.91 route manifest has only `/api/v1/images/generations`. A content-free
-empty multipart probe to `/v1/images/edits` reproduced HTTP 500 and the supplied
-Next.js `Failed to find Server Action` log. This is a missing edit endpoint,
-not a surviving model override or stale-browser issue. The existing 9Router
-`/images/generations` adapter already carries one `image` through Codex
-`input_image` and Gemini `inlineData` within the unchanged Combo.
+Malformed structured Agent JSON now receives a bounded visible Chinese fallback
+instead of being silently dropped. Literal control characters inside JSON
+strings are repaired safely; other malformed protocol output never reaches a
+channel sender. Safe run correlation metadata is logged without raw model text.
+External turns use the existing `nine_router/arthur-combo` model route; web search
+provider selection remains a separate retrieval configuration.
 
-Released 1.8.0 adapts one PNG/JPEG/WebP reference (bounded to 10 MiB) into the
-existing logical `openai/amadeus-image` JSON generation request, preserving the
-reference bytes through both Combo attempts. The existing primary/fallback
-order, provider accounts, credentials and 9Router source remain unchanged.
-Multiple references fail closed before task admission instead of being dropped.
-Focused native request-body, MIME/size, non-target multipart, and exact live
-9Router byte-preservation fixtures pass. No paid reference-image transport request was sent during deployment. The live
-post-deploy route fixture preserves bytes and blocks multi-reference input
-without HTTP. The release image is live; the owner confirmed the reference-image path is
-working after deployment.
+The release gates passed: 124 Amadeus tests, build/typecheck, secrets scan,
+plugin/config preflight, OpenClaw and Product Radar health, Gateway registration,
+NAS read-only smoke, owner notification/outbox smoke, and post-deploy maintenance.
+The optional media adapter was absent, so its network smoke was skipped.
 
 Deployment checkpoint/evidence:
-`.agent/checkpoints/2026-10-01-amadeus-1.8.0-reference-route-deploy.md`.
+`.agent/checkpoints/2026-10-02-amadeus-1.8.1-structured-reply-release.md`.
 
-Protected rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261001145719`.
+Protected rollback checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002063108`.
