@@ -228,9 +228,11 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           }
           deliveryRuns.registerMediaCompletion({
             taskId: input.taskId,
-            // OpenClaw's inter-session provenance carries the native taskId as
-            // sourceSessionKey for this completion handoff.
-            sourceSessionKey: input.taskId,
+            // OpenClaw's native completion handoff uses the tool-qualified
+            // child session key as provenance. Keep this exact runtime-owned
+            // identity so unrelated inter-session messages cannot claim the
+            // generated asset.
+            sourceSessionKey: `image_generate:${input.taskId}`,
             parts: Promise.resolve(parts),
             expiresAt: Date.now() + 5 * 60_000,
           });
@@ -245,7 +247,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
       if (!validLifecycleInput(input)) throw new Error('image_completion_identity_invalid');
       const runId = `image_generate:${input.taskId}:typed-completion`;
       if (!deliveryRuns.has(runId)) deliveryRuns.start({ runId, sessionKey: input.sessionKey, channel: input.channel, origin: 'media_completion', deliveryId: `image-completion:${input.taskId}` });
-      if (!deliveryRuns.mediaCompletionFor(runId)) deliveryRuns.claimMediaCompletion(runId, input.taskId);
+      if (!deliveryRuns.mediaCompletionFor(runId)) deliveryRuns.claimMediaCompletion(runId, `image_generate:${input.taskId}`);
       const envelope = await deliveryRuns.prepareToolOnly(runId);
       if (settlement.settled.has(envelope.deliveryId)) {
         api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_duplicate_ignored', task_id: input.taskId, delivery_id: envelope.deliveryId })}`);
