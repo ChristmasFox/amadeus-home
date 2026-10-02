@@ -149,6 +149,18 @@ test('run preparation decodes once, waits for registration and deduplicates exac
   runs.decode(context.runId,wire([text]));const pending=runs.prepare(context.runId,'raw serialization must not be reconsidered');resolveJob([attachment('image/png','document'),attachment('image/png','document')]);const envelope=await pending;
   assert.deepEqual(envelope.parts,[text,attachment('image/png','document')]);
 });
+test('image completion fallback reclaims unprepared assets without hijacking the session route', async () => {
+  const runs = new DeliveryRuns();
+  const completion = attachment('image/png', 'inline');
+  runs.registerMediaCompletion({ taskId: 'task-1', sourceSessionKey: 'image_generate:task-1', parts: Promise.resolve([completion]), expiresAt: Date.now() + 60_000 });
+  runs.start({ runId: 'native-completion', sessionKey: 'session-1', channel: 'whatsapp', origin: 'media_completion' });
+  assert.equal(runs.claimMediaCompletion('native-completion', 'image_generate:task-1'), true);
+  runs.start({ runId: 'typed-fallback', sessionKey: 'session-1', channel: 'whatsapp', origin: 'media_completion', deliveryId: 'image-completion:task-1' }, { bindSession: false });
+  assert.equal(runs.claimMediaCompletion('typed-fallback', 'image_generate:task-1'), true);
+  assert.equal(runs.runIdFor('session-1'), 'native-completion');
+  const envelope = await runs.prepareToolOnly('typed-fallback');
+  assert.deepEqual(envelope.parts, [completion]);
+});
 test('silent envelope cannot contain parts or accept v1 contract',()=>{
   const env=createSilentDelivery(context);assert.equal(validateDeliveryEnvelope({...env,version:1}),false);assert.throws(()=>createDeliveryEnvelope({...env,version:1} as never),/invalid_delivery_version/u);assert.equal(validateDeliveryEnvelope({...env,parts:[text]}),false);assert.equal(validateDeliveryEnvelope({...env,silent:false}),false);
 });

@@ -14,6 +14,7 @@ export class DeliveryRuns {
   private runs = new Map<string, { context: DeliveryContext; envelope?: DeliveryEnvelope; raw?: unknown; decodeStatus?: 'structured' | 'silent' | 'malformed'; prepared?: DeliveryEnvelope; preparedCaptionSource?: 'native_completion' | 'none'; preparing?: Promise<DeliveryEnvelope>; jobs: Promise<readonly AttachmentPart[]>[]; mediaCompletion?: MediaCompletion | undefined }>();
   private sessions = new Map<string, string>();
   private mediaCompletions = new Map<string, MediaCompletion>();
+  private mediaCompletionClaimants = new Map<string, string>();
   private readonly mediaCompletionTtlMs = 5 * 60_000;
 
   /** A runtime-owned image claim waiting for the native completion turn. */
@@ -22,12 +23,15 @@ export class DeliveryRuns {
     const existing = this.mediaCompletions.get(completion.sourceSessionKey);
     if (existing && existing.taskId !== completion.taskId) throw new Error('image_completion_identity_conflict');
     this.mediaCompletions.delete(completion.sourceSessionKey);
+    this.mediaCompletionClaimants.delete(completion.sourceSessionKey);
     this.mediaCompletions.set(completion.sourceSessionKey, { ...completion, expiresAt: Date.now() + this.mediaCompletionTtlMs });
   }
 
   isMediaCompletionProvenance(input: { sourceTool?: string; sourceSessionKey?: string }): boolean {
     this.pruneMediaCompletions();
-    return input.sourceTool === 'image_generate' && typeof input.sourceSessionKey === 'string' && this.mediaCompletions.has(input.sourceSessionKey);
+    if (input.sourceTool !== 'image_generate' || typeof input.sourceSessionKey !== 'string') return false;
+    const claimant = this.mediaCompletionClaimants.get(input.sourceSessionKey);
+    return this.mediaCompletions.has(input.sourceSessionKey) && !(claimant && this.runs.get(claimant)?.prepared);
   }
 
   claimMediaCompletion(runId: string, sourceSessionKey: string): boolean {
@@ -35,8 +39,14 @@ export class DeliveryRuns {
     const run = this.runs.get(runId);
     const completion = this.mediaCompletions.get(sourceSessionKey);
     if (!run || !completion || run.context.origin !== 'media_completion') return false;
+    const claimant = this.mediaCompletionClaimants.get(sourceSessionKey);
+    if (claimant && claimant !== runId) {
+      const previous = this.runs.get(claimant);
+      if (previous?.prepared) return false;
+      if (previous?.mediaCompletion?.sourceSessionKey === sourceSessionKey) previous.mediaCompletion = undefined;
+    }
     run.mediaCompletion = completion;
-    this.mediaCompletions.delete(sourceSessionKey);
+    this.mediaCompletionClaimants.set(sourceSessionKey, runId);
     return true;
   }
 
@@ -44,19 +54,31 @@ export class DeliveryRuns {
 
   releaseMediaCompletion(runId: string): void {
     const run = this.runs.get(runId);
-    if (run?.mediaCompletion) run.mediaCompletion = undefined;
+    if (run?.mediaCompletion) {
+      const sourceSessionKey = run.mediaCompletion.sourceSessionKey;
+      run.mediaCompletion = undefined;
+      if (this.mediaCompletionClaimants.get(sourceSessionKey) === runId) {
+        this.mediaCompletionClaimants.delete(sourceSessionKey);
+        this.mediaCompletions.delete(sourceSessionKey);
+      }
+    }
   }
 
   private pruneMediaCompletions(now = Date.now()): void {
-    for (const [key, value] of this.mediaCompletions) if (value.expiresAt <= now) this.mediaCompletions.delete(key);
+    for (const [key, value] of this.mediaCompletions) {
+      if (value.expiresAt <= now) {
+        this.mediaCompletions.delete(key);
+        this.mediaCompletionClaimants.delete(key);
+      }
+    }
     while (this.mediaCompletions.size > 1024) this.mediaCompletions.delete(this.mediaCompletions.keys().next().value!);
   }
 
-  start(context: DeliveryContext): void {
+  start(context: DeliveryContext, options: { bindSession?: boolean } = {}): void {
     const existing = this.runs.get(context.runId);
     if (!existing) this.runs.set(context.runId, { context, jobs: [] });
     else if (context.origin === 'media_completion' && !existing.envelope && !existing.prepared && !existing.preparing) existing.context = { ...existing.context, ...context, origin: 'media_completion' };
-    this.sessions.set(context.sessionKey, context.runId);
+    if (options.bindSession !== false) this.sessions.set(context.sessionKey, context.runId);
     if (this.runs.size > 1024) this.runs.delete(this.runs.keys().next().value!);
   }
   setOrigin(runId: string, origin: DeliveryContext['origin']): void {

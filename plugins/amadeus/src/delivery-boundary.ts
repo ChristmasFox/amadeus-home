@@ -246,7 +246,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
     async finishImageGeneration(input: ImageGenerationLifecycleInput): Promise<void> {
       if (!validLifecycleInput(input)) throw new Error('image_completion_identity_invalid');
       const runId = `image_generate:${input.taskId}:typed-completion`;
-      if (!deliveryRuns.has(runId)) deliveryRuns.start({ runId, sessionKey: input.sessionKey, channel: input.channel, origin: 'media_completion', deliveryId: `image-completion:${input.taskId}` });
+      if (!deliveryRuns.has(runId)) deliveryRuns.start({ runId, sessionKey: input.sessionKey, channel: input.channel, origin: 'media_completion', deliveryId: `image-completion:${input.taskId}` }, { bindSession: false });
       if (!deliveryRuns.mediaCompletionFor(runId)) deliveryRuns.claimMediaCompletion(runId, `image_generate:${input.taskId}`);
       const envelope = await deliveryRuns.prepareToolOnly(runId);
       if (settlement.settled.has(envelope.deliveryId)) {
