@@ -103,7 +103,7 @@ export function installCoreCompletionSource(original, hostRoot) {
   const completionReturn = `\tif (delivery.delivered) return { status: "delivered" };`;
   if (completionPatched.split(completionReturn).length - 1 !== 1) throw new Error('pinned_image_completion_result_anchor_mismatch');
   completionPatched = completionPatched.replace(completionReturn,
-    `\tif (params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {\n\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }\n\t}\n${completionReturn}`);
+    `\tif (!delivery.delivered && delivery.disposition !== "session_queued" && delivery.reason !== "completion_handoff_pending" && params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {\n\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }\n\t}\n${completionReturn}`);
   const routeAst = parse(completionPatched);
   const completionNode = anchoredFunction(routeAst, 'wakeMediaGenerationTaskCompletion');
   let output = completionPatched.slice(0, completionNode.body.start + 1) + terminal + completionPatched.slice(completionNode.body.start + 1);

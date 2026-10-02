@@ -156,7 +156,7 @@ test('successful ordinary image generation keeps native task completion after on
     assert.equal(nativeDeliveries.length, 1, 'native completion-agent continuation must run');
     assert.deepEqual(nativeDeliveries[0].images, [{ type: 'image', data: 'c2afeA==', mimeType: 'image/png' }]);
     assert.equal(nativeDeliveries[0].requireDirectDelivery, true);
-    assert.equal(finishCalls.length, 1);
+    assert.equal(finishCalls.length, 0, 'a delivered native completion must not trigger fallback media');
     assert.equal(outcome.status, 'delivered');
     const event = nativeDeliveries[0].internalEvents[0];
     assert.equal(event.type, 'task_completion');
@@ -238,6 +238,7 @@ test('all source overlays are pinned to exact OpenClaw 2026.9.4 modules', async 
   const completion = patchCompletionCaptionSource(await pinnedSource(COMPLETION_CAPTION_PIN.module));
   parseModule(completion);
   assert.match(completion, /images: params\.images/);
+  assert.match(completion, /expectedMedia[\s\S]*images: params\.images/);
   assert.match(completion, /AMADEUS_NATIVE_COMPLETION_CAPTION_20261002/);
 });
 
