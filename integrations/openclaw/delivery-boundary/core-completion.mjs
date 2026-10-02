@@ -57,7 +57,13 @@ const terminal = `
     }
     if (typeof boundary.completeImageGeneration !== "function") throw new Error("amadeus_image_completion_boundary_unavailable");
     await boundary.completeImageGeneration({ ...input, attachments: params.attachments ?? [] });
-    return { status: "delivered" };
+    // Amadeus owns the generated attachment's one and only channel send. Keep
+    // the native wake path alive for task_completion/completion-agent semantics,
+    // but remove media primitives before the native announcement so the image
+    // cannot be sent a second time. The native function still sees status,
+    // result, and completion metadata and can settle the requester task.
+    params.attachments = [];
+    params.mediaUrls = [];
   }
 `;
 

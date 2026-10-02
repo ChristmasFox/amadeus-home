@@ -101,6 +101,70 @@ test('detached image execution captures only the authoritative route and has no 
   assert.match(bundle, /amadeus_image_lifecycle_boundary_unavailable/);
 });
 
+test('successful ordinary image generation keeps native task completion after one typed attachment send', async () => {
+  const source = await pinnedSource(CORE_PIN.module);
+  const bundle = installCoreCompletionSource(source, openclawRoot);
+  const ast = parseModule(bundle);
+  const node = ast.body.find((candidate) => candidate.type === 'FunctionDeclaration' && candidate.id?.name === 'wakeMediaGenerationTaskCompletion');
+  assert.ok(node, 'patched native completion function must remain present');
+  const nativeSource = bundle.slice(node.start, node.end);
+  const completionCalls = [];
+  const nativeDeliveries = [];
+  const previousBoundary = globalThis.__amadeusDeliveryBoundaryV2_20260930;
+  globalThis.__amadeusDeliveryBoundaryV2_20260930 = {
+    version: 2,
+    completeImageGeneration: async (input) => { completionCalls.push(input); },
+  };
+  try {
+    const wake = new Function(
+      'mediaUrlsFromGeneratedAttachments',
+      'formatAgentInternalEventsForPrompt',
+      'buildMediaGenerationReplyInstruction',
+      'deliverSubagentAnnouncement',
+      'log$7',
+      `return (${nativeSource});`,
+    )(
+      (attachments) => attachments.map((attachment) => attachment.url).filter(Boolean),
+      (events) => JSON.stringify(events),
+      ({ status }) => `generation ${status}`,
+      async (delivery) => { nativeDeliveries.push(delivery); return { delivered: true }; },
+      { warn() {}, error() {} },
+    );
+    const params = {
+      eventSource: 'image_generation',
+      toolName: 'image_generate',
+      status: 'ok',
+      statusLabel: 'completed successfully',
+      completionLabel: 'image',
+      result: 'native completion result',
+      mediaUrls: ['native-media-url'],
+      attachments: [{ type: 'image', url: 'generated-media-url' }],
+      handle: {
+        taskId: 'task-completion-1',
+        runId: 'run-completion-1',
+        requesterSessionKey: 'whatsapp:session',
+        requesterAgentId: 'main',
+        taskLabel: '生成图片',
+        requesterOrigin: { channel: 'whatsapp', to: 'chat', accountId: 'secondary' },
+      },
+    };
+    const outcome = await wake(params);
+    assert.equal(completionCalls.length, 1, 'Amadeus typed completion must run once');
+    assert.equal(nativeDeliveries.length, 1, 'native completion-agent continuation must run');
+    assert.equal(outcome.status, 'delivered');
+    const event = nativeDeliveries[0].internalEvents[0];
+    assert.equal(event.type, 'task_completion');
+    assert.equal(event.status, 'ok');
+    assert.equal(event.attachments, undefined, 'native announcement must not send the image again');
+    assert.equal(event.mediaUrls, undefined, 'native announcement must not send a second media primitive');
+    assert.equal(params.attachments.length, 0);
+    assert.deepEqual(params.mediaUrls, []);
+  } finally {
+    if (previousBoundary === undefined) delete globalThis.__amadeusDeliveryBoundaryV2_20260930;
+    else globalThis.__amadeusDeliveryBoundaryV2_20260930 = previousBoundary;
+  }
+});
+
 test('final OpenAI-compatible transport accepts only configured logical model', () => {
   assert.equal(assertAmadeusImageTransportRouteModel({
     configuredLogicalModel: 'openai/amadeus-image', provider: 'openai', model: 'amadeus-image',
