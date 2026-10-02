@@ -1,6 +1,28 @@
-# Project State — 2026-10-02
+# Project State — 2026-10-03
 
-## Amadeus 1.8.7 — current live silent protocol guard release
+## Amadeus 1.8.8 — current live private image completion fallback release
+
+Release commit `e4e3498` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-e4e3498ba664-20261002162339`; image ID
+`sha256:2869cfc03311c84eb95e0cb383d6aa1290d454f9fc086cd055b89c1179bae856`.
+Runtime `/opt/amadeus/VERSION=1.8.8`. The private WhatsApp failure showed a
+successful image generation followed by a native continuation timeout. The
+fallback now transfers an unprepared media claim without hijacking the private
+session route, so the generated image remains deliverable and later follow-ups
+use their own inbound runs. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002162339`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261002162339/`.
+
+Release verification passed: 127 Amadeus tests, typecheck, architecture and
+delivery-boundary checks, build, secrets scan, OpenClaw and Product Radar
+health, Gateway registration, NAS read-only smoke, owner notification/outbox
+smoke, and post-deploy maintenance. The optional media adapter was absent and
+its network smoke was skipped; the host Docker default log policy remains a
+warning because `/etc/docker/daemon.json` is absent. Full evidence:
+`.agent/checkpoints/2026-10-03-amadeus-1.8.8-image-completion-fallback.md`.
+
+## Amadeus 1.8.7 — superseded silent protocol guard release
 
 Release commit `8037979` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-8037979fe652-20261002120821`; image ID
