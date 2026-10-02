@@ -16,6 +16,7 @@ import {
   resolveAmadeusImageRouteAuthority,
 } from './image-route-authority.mjs';
 import { installCoreCompletionSource, main as installPinnedOverlay, CORE_PIN } from './core-completion.mjs';
+import { COMPLETION_CAPTION_PIN, patchCompletionCaptionSource } from './completion-caption.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const openclawRoot = await realpath(join(repoRoot, 'plugins/amadeus/node_modules/openclaw'));
@@ -110,10 +111,12 @@ test('successful ordinary image generation keeps native task completion after on
   const nativeSource = bundle.slice(node.start, node.end);
   const completionCalls = [];
   const nativeDeliveries = [];
+  const finishCalls = [];
   const previousBoundary = globalThis.__amadeusDeliveryBoundaryV2_20260930;
   globalThis.__amadeusDeliveryBoundaryV2_20260930 = {
     version: 2,
-    completeImageGeneration: async (input) => { completionCalls.push(input); },
+    completeImageGeneration: async (input) => { completionCalls.push(input); return { completionImages: [{ type: 'image', data: 'c2afeA==', mimeType: 'image/png' }] }; },
+    finishImageGeneration: async (input) => { finishCalls.push(input); },
   };
   try {
     const wake = new Function(
@@ -151,6 +154,9 @@ test('successful ordinary image generation keeps native task completion after on
     const outcome = await wake(params);
     assert.equal(completionCalls.length, 1, 'Amadeus typed completion must run once');
     assert.equal(nativeDeliveries.length, 1, 'native completion-agent continuation must run');
+    assert.deepEqual(nativeDeliveries[0].images, [{ type: 'image', data: 'c2afeA==', mimeType: 'image/png' }]);
+    assert.equal(nativeDeliveries[0].requireDirectDelivery, true);
+    assert.equal(finishCalls.length, 1);
     assert.equal(outcome.status, 'delivered');
     const event = nativeDeliveries[0].internalEvents[0];
     assert.equal(event.type, 'task_completion');
@@ -229,16 +235,20 @@ test('all source overlays are pinned to exact OpenClaw 2026.9.4 modules', async 
   assert.equal(digest(tool), CORE_PIN.sha256);
   assert.equal(digest(runtime), IMAGE_ROUTE_AUTHORITY_PIN.runtimeSha256);
   assert.equal(digest(provider), IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderSha256);
+  const completion = patchCompletionCaptionSource(await pinnedSource(COMPLETION_CAPTION_PIN.module));
+  parseModule(completion);
+  assert.match(completion, /images: params\.images/);
+  assert.match(completion, /AMADEUS_NATIVE_COMPLETION_CAPTION_20261002/);
 });
 
 
-test('pinned installer patches all three OpenClaw runtime modules as a build-time unit', async () => {
+test('pinned installer patches all OpenClaw runtime modules as a build-time unit', async () => {
   const root = await mkdtemp(join(tmpdir(), 'amadeus-image-route-'));
   try {
     await mkdir(join(root, 'dist'), { recursive: true });
     await symlink(dirname(openclawRoot), join(root, 'node_modules'), 'dir');
     await writeFile(join(root, 'package.json'), JSON.stringify({ version: '2026.9.4', name: 'openclaw-fixture' }));
-    for (const name of [CORE_PIN.module, IMAGE_ROUTE_AUTHORITY_PIN.runtimeModule, IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule]) {
+    for (const name of [CORE_PIN.module, IMAGE_ROUTE_AUTHORITY_PIN.runtimeModule, IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule, COMPLETION_CAPTION_PIN.module]) {
       await copyFile(join(openclawDist, name), join(root, 'dist', name));
     }
 
@@ -246,13 +256,16 @@ test('pinned installer patches all three OpenClaw runtime modules as a build-tim
     const tool = await readFile(join(root, 'dist', CORE_PIN.module), 'utf8');
     const runtime = await readFile(join(root, 'dist', IMAGE_ROUTE_AUTHORITY_PIN.runtimeModule), 'utf8');
     const provider = await readFile(join(root, 'dist', IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule), 'utf8');
+    const completion = await readFile(join(root, 'dist', COMPLETION_CAPTION_PIN.module), 'utf8');
     parseModule(tool);
     parseModule(runtime);
     parseModule(provider);
+    parseModule(completion);
     assert.match(tool, /image_route_task_enqueued/);
     assert.match(runtime, /AMADEUS_IMAGE_ROUTE_AUTHORITY_20261001_RUNTIME/);
     assert.match(provider, /AMADEUS_IMAGE_ROUTE_AUTHORITY_20261001_OPENAI/);
     assert.match(provider, /image_route_transport_failed/);
+    assert.match(completion, /AMADEUS_NATIVE_COMPLETION_CAPTION_20261002/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

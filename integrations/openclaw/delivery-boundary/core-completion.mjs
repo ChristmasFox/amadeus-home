@@ -7,6 +7,7 @@ import { readFile, writeFile, rename, chmod, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { installImageRouteAuthorityModules, patchImageGenerationToolSource } from './image-route-authority.mjs';
+import { installCompletionCaptionModule } from './completion-caption.mjs';
 
 export const CORE_PIN = Object.freeze({
   version: '2026.9.4', module: 'openclaw-tools-Bo9W_tg_.mjs',
@@ -56,7 +57,10 @@ const terminal = `
       return { status: "delivered" };
     }
     if (typeof boundary.completeImageGeneration !== "function") throw new Error("amadeus_image_completion_boundary_unavailable");
-    await boundary.completeImageGeneration({ ...input, attachments: params.attachments ?? [] });
+    const completion = await boundary.completeImageGeneration({ ...input, attachments: params.attachments ?? [] });
+    if (completion && Array.isArray(completion.completionImages)) params.amadeusCompletionImages = completion.completionImages;
+    params.amadeusCompletionBoundary = boundary;
+    params.amadeusCompletionInput = input;
     // Amadeus owns the generated attachment's one and only channel send. Keep
     // the native wake path alive for task_completion/completion-agent semantics,
     // but remove media primitives before the native announcement so the image
@@ -85,9 +89,24 @@ export function installCoreCompletionSource(original, hostRoot) {
   anchoredFunction(ast, 'notifyMediaGenerationAsyncTaskStarted');
   if (createHash('sha256').update(original).digest('hex') !== CORE_PIN.sha256) throw new Error('pinned_image_completion_digest_mismatch');
   const routePatched = patchImageGenerationToolSource(original);
-  const routeAst = parse(routePatched);
+  const completionCall = `const delivery = await deliverSubagentAnnouncement({`;
+  if (routePatched.split(completionCall).length - 1 !== 1) throw new Error('pinned_image_completion_delivery_anchor_mismatch');
+  let completionPatched = routePatched.replace(completionCall,
+    `${completionCall}\n\t\timages: params.amadeusCompletionImages,\n\t\trequireDirectDelivery: params.toolName === "image_generate" && params.status === "ok",`);
+  const completionCallStart = completionPatched.indexOf('const delivery = await deliverSubagentAnnouncement({');
+  const completionCallEnd = completionPatched.indexOf('\n\t});', completionCallStart);
+  if (completionCallStart < 0 || completionCallEnd < completionCallStart) throw new Error('pinned_image_completion_delivery_close_mismatch');
+  const completionCallSource = completionPatched.slice(completionCallStart, completionCallEnd + '\n\t});'.length).replace('const delivery = await', 'delivery = await');
+  completionPatched = completionPatched.slice(0, completionCallStart)
+    + `let delivery;\n\ttry {\n\t\t${completionCallSource.replaceAll('\n', '\n\t\t')}\n\t} catch (error) {\n\t\tif (params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {\n\t\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* preserve the native error */ }\n\t\t}\n\t\tthrow error;\n\t}`
+    + completionPatched.slice(completionCallEnd + '\n\t});'.length);
+  const completionReturn = `\tif (delivery.delivered) return { status: "delivered" };`;
+  if (completionPatched.split(completionReturn).length - 1 !== 1) throw new Error('pinned_image_completion_result_anchor_mismatch');
+  completionPatched = completionPatched.replace(completionReturn,
+    `\tif (params.amadeusCompletionBoundary && params.amadeusCompletionInput && typeof params.amadeusCompletionBoundary.finishImageGeneration === "function") {\n\t\ttry { await params.amadeusCompletionBoundary.finishImageGeneration(params.amadeusCompletionInput); } catch { /* fallback delivery is best effort; native task state remains authoritative */ }\n\t}\n${completionReturn}`);
+  const routeAst = parse(completionPatched);
   const completionNode = anchoredFunction(routeAst, 'wakeMediaGenerationTaskCompletion');
-  let output = routePatched.slice(0, completionNode.body.start + 1) + terminal + routePatched.slice(completionNode.body.start + 1);
+  let output = completionPatched.slice(0, completionNode.body.start + 1) + terminal + completionPatched.slice(completionNode.body.start + 1);
   const outputAst = parse(output);
   const outputAcceptedNode = anchoredFunction(outputAst, 'notifyMediaGenerationAsyncTaskStarted');
   output = output.slice(0, outputAcceptedNode.body.start + 1) + accepted + output.slice(outputAcceptedNode.body.start + 1);
@@ -101,9 +120,10 @@ export async function main(argv = process.argv.slice(2)) {
   const output = installCoreCompletionSource(await readFile(path, 'utf8'), root);
   if (!argv.includes('--apply')) { console.log('IMAGE_GENERATION_LIFECYCLE=plan'); return; }
   const routeModules = await installImageRouteAuthorityModules(root);
+  const completionModule = await installCompletionCaptionModule(root);
   const mode = (await stat(path)).mode & 0o777;
   const temporary = `${path}.lifecycle-tmp`;
   await writeFile(temporary, output); await chmod(temporary, mode); await rename(temporary, path);
-  console.log(`IMAGE_GENERATION_LIFECYCLE=installed; host=2026.9.4; accepted=typed; terminal=typed; image-route-authority=${routeModules}`);
+  console.log(`IMAGE_GENERATION_LIFECYCLE=installed; host=2026.9.4; accepted=typed; terminal=typed; image-route-authority=${routeModules}; completion-caption=${completionModule}`);
 }
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) await main();

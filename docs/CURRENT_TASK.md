@@ -1,11 +1,13 @@
-# Current Task — Amadeus 1.8.2 native image completion semantics
+# Current Task — Amadeus native image completion caption
 
 Date: 2026-10-02 (Asia/Shanghai).
 
-Active Goal: none; Amadeus 1.8.2 is deployed and verified.
+Active Goal: `docs/AMADEUS_NATIVE_IMAGE_COMPLETION_CAPTION_GOAL.md`.
 Current live release: **Amadeus 1.8.2** (`VERSION=1.8.2`).
-Deployment: source commit `76ece67` is pushed and live; release notes validated.
-Status: `DEPLOYED_AUTOMATED_GATES_PASSED_NATIVE_IMAGE_COMPLETION_LIVE`.
+Candidate work is in progress for the native Completion Agent caption path;
+the release is not complete until one real ordinary WhatsApp image generation
+proves one image bubble with the Completion Agent caption.
+Status: `IMPLEMENTATION_LOCAL_GATES_PASSED_CANDIDATE_PENDING_REAL_ACCEPTANCE`.
 
 The 1.8.2 immutable image is live:
 `local/openclaw-amadeus:git-76ece6705ee5-20261002065812` (image ID
