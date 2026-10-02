@@ -1,5 +1,39 @@
 # Project State — 2026-10-02
 
+## Amadeus 1.8.2 — current live native image completion release
+
+Source commits `e6c31e1` (completion behavior) and `76ece67` (release gate
+fixture) are pushed to `main`; `76ece67` is live in immutable OpenClaw 2026.9.4
+image `local/openclaw-amadeus:git-76ece6705ee5-20261002065812`. The image ID is
+`sha256:c86e41c4d2bdddd9dfb7c70a7b31d3a261bb851efce54571737103d3efda4ea3` and
+runtime `/opt/amadeus/VERSION=1.8.2`. OpenClaw health, zero-restart check,
+Gateway registration, Product Radar health, NAS read-only smoke, owner outbox
+smoke, and protected rollback checkpoint pass.
+
+After a successful ordinary `image_generate`, Amadeus still owns the trusted
+generated attachment, Asset Registry, DeliveryEnvelope, 9Router route, and
+single channel image send. The completion overlay now clears only native media
+primitives and falls through to native `task_completion` / Completion Agent
+continuation, preserving native task terminal settlement and the natural
+completion reply. The pinned integration test proves one typed completion and
+one native continuation with no duplicate native attachment/media primitives.
+Voice/TTS/ASR, normal text, upscale/document, reference-image routing, and other
+DeliveryEnvelope behavior were left unchanged.
+
+Release verification passed: `pnpm test:amadeus` (124), pinned image-route
+tests (10), build/typecheck, secrets scan, plugin/config/skill preflight,
+OpenClaw and Product Radar health, Gateway registration, NAS smoke, owner
+notification/outbox smoke, and post-deploy maintenance. The optional media
+adapter was absent and its network smoke was skipped. Managed Compose log
+policies passed; the host Docker default policy remains a warning because
+`/etc/docker/daemon.json` is absent. Full evidence:
+`.agent/checkpoints/2026-10-02-amadeus-1.8.2-native-image-completion-release.md`.
+
+Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261002065812`; external
+evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261002065812/`.
+
 ## Amadeus 1.8.1 — current live structured-reply reliability release
 
 Source commit `2525d38` is pushed to `main` and live in immutable OpenClaw
