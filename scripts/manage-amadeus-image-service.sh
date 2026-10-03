@@ -117,6 +117,7 @@ install_service() {
     <key>AMADEUS_IMAGE_MAX_INPUT_BYTES</key><string>$AMADEUS_IMAGE_SERVICE_MAX_INPUT_BYTES</string>
     <key>AMADEUS_IMAGE_MAX_OUTPUT_PIXELS</key><string>$AMADEUS_IMAGE_SERVICE_MAX_OUTPUT_PIXELS</string>
     <key>AMADEUS_IMAGE_MAX_CONCURRENCY</key><string>$AMADEUS_IMAGE_SERVICE_MAX_CONCURRENCY</string>
+    <key>AMADEUS_IMAGE_TILE</key><string>$AMADEUS_IMAGE_TILE</string>
     <key>AMADEUS_IMAGE_REGISTRY_PATH</key><string>$AMADEUS_IMAGE_REGISTRY_PATH</string>
     <key>REALESRGAN_MLX_WEIGHTS_DIR</key><string>$MODEL_CACHE_DIR</string>
     <key>HF_HOME</key><string>$MODEL_CACHE_DIR/huggingface</string>

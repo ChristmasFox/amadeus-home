@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createServer} from 'node:http';import {mkdtemp,mkdir,writeFile,rm,realpath} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {createHash} from 'node:crypto';
 import type {OpenClawPluginApi,OpenClawPluginToolContext} from 'openclaw/plugin-sdk/core';
-import {registerImageAssets,explicitUpscaleScale} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';import {INVALID_STRUCTURED_OUTPUT_MESSAGE} from '../src/delivery-decoder.js';
+import {registerImageAssets,explicitUpscaleScale,explicitUpscaleResolution} from '../src/image-assets.js';import {registerVoiceReplyPrompt} from '../src/voice-reply-prompt.js';import {DELIVERY_BOUNDARY_GLOBAL,type WhatsAppDeliveryPort} from '../src/delivery-boundary.js';import {settleTelegramDelivery} from '../src/telegram-runtime.js';import {createAttachmentPart,createDeliveryEnvelope} from '../src/delivery-envelope.js';import {INVALID_STRUCTURED_OUTPUT_MESSAGE} from '../src/delivery-decoder.js';
 
 test('explicit multiplier is a bounded parameter constraint, not a 4K resolution guess',()=>{
  assert.equal(explicitUpscaleScale('把刚才私聊的图超分 4x'),4);
@@ -10,6 +10,8 @@ test('explicit multiplier is a bounded parameter constraint, not a 4K resolution
  assert.equal(explicitUpscaleScale('超分两倍'),2);
  assert.equal(explicitUpscaleScale('做4K长边'),undefined);
  assert.equal(explicitUpscaleScale('比较2x和4x'),undefined);
+ assert.equal(explicitUpscaleResolution('做4K长边'),'4k');
+ assert.equal(explicitUpscaleResolution('超分 2x'),undefined);
 });
 
 let taskCounter=1;
@@ -39,9 +41,9 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
   let result:unknown;
   if(source==='upscale'||source==='upscale2'||source==='upscale4'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
-    result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:4,mode:'anime'},undefined);
+    result=await tool.execute('tool-id',{target:{imageId:`img_${'c'.repeat(32)}`},scale:4,mode:'anime',resolution:'4k'},undefined);
     const details=(result as any).details;assert.equal(details.deliveryAttachment.disposition,'document');assert.equal(details.mediaUrls,undefined);assert.equal(details.storageKey,undefined);
-    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale4'?4:2, 'explicit 4x remains available while model-supplied 4x cannot override the 2x default');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
+    const request=requests.find(request=>request.path==='/v1/upscale')!.body as any;assert.equal(request.replyMessageId,'old-image');assert.equal(request.scale,source==='upscale4'?4:2, 'explicit 4x remains available while model-supplied 4x cannot override the 2x default');assert.equal(request.resolution,undefined, 'model-supplied resolution must not cap a plain multiplier request');assert.equal(request.imageId,`img_${'c'.repeat(32)}`);
   }else if(source==='upscale-invalid-target'){
     const tool=tools.get('amadeus_image_upscale')!({sessionKey,messageChannel:'whatsapp'} as OpenClawPluginToolContext);
     result=await tool.execute('tool-id',{target:{imageId:'/home/node/.openclaw/workspace/media/inbound/input.png'},resolution:'4k'},undefined);
