@@ -1,6 +1,34 @@
 # Project State — 2026-10-04
 
-## Amadeus 1.9.3 — current live reply envelope recovery release
+## Amadeus 1.9.4 — current live inbound image reference recovery release
+
+Release commit `5c738c9` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-5c738c9be1ff-20261003190303`; image manifest
+`sha256:c5513dc0127a074e047f701f1b9747073d95369903da4c1b25de0f600676b89b`.
+Runtime `/opt/amadeus/VERSION=1.9.4`. The affected private-chat image was
+successfully downloaded and sent in model context. The failure happened when the
+model-authored `image_generate` call reproduced the inbound temporary path with
+one separator missing, so native media loading returned `Local media file not
+found`.
+
+The plugin now stores the current inbound image path at `message_received`, binds
+it to the current image context at `before_dispatch`, and repairs only model
+parameters containing `/media/inbound/` immediately before `image_generate`.
+Durable generated-image paths are not rewritten, and no image bytes or paths are
+logged. Verification passed: the focused inbound-reference tests (2), the full
+Amadeus suite (132), `pnpm typecheck:amadeus`, `pnpm check:secrets`, and
+`git diff --check`. The BuildKit image build, Gateway registration, OpenClaw and
+Product Radar health, NAS read-only smoke, owner notification/outbox smoke, and
+post-deploy maintenance passed. The optional media adapter was absent and its
+network smoke was skipped; the host Docker default log policy remains a warning.
+Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003190303`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261003190303/`.
+Full evidence:
+`.agent/checkpoints/2026-10-04-amadeus-1.9.4-inbound-image-reference-recovery.md`.
+
+## Amadeus 1.9.3 — superseded live reply envelope recovery release
 
 Release commit `e2a94af` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-e2a94af6def4-20261003182157`; image manifest

@@ -1,10 +1,23 @@
 # Canonical context — 2026-10-04
 
-Read this with `docs/CURRENT_TASK.md`; the Qwen3-TTS MLX rebaseline Goal is
-complete and the current Amadeus upscale recovery is complete. Re-read Git/live
-state before further work.
+Read this with `docs/CURRENT_TASK.md`; the current Amadeus inbound image
+reference recovery is complete. Re-read Git/live state before further work.
 
-## Current Amadeus reply envelope runtime — 1.9.3 deployed
+## Current Amadeus inbound image reference runtime — 1.9.4 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.9.4 from commit `5c738c9` in immutable image
+`local/openclaw-amadeus:git-5c738c9be1ff-20261003190303`; image manifest
+`sha256:c5513dc0127a074e047f701f1b9747073d95369903da4c1b25de0f600676b89b`.
+The affected private-chat image was downloaded and included in model context, but
+the model then supplied an inbound staging path with a missing separator to
+`image_generate`. Release 1.9.4 remembers the current inbound canonical path and
+repairs only `/media/inbound/` references immediately before the native tool call;
+persistent generated-image paths are left untouched. The Amadeus suite (132),
+typecheck, secrets scan, BuildKit image build, Gateway registration, health and
+post-deploy maintenance passed. Evidence is in
+`.agent/checkpoints/2026-10-04-amadeus-1.9.4-inbound-image-reference-recovery.md`.
+
+## Amadeus 1.9.3 — superseded reply envelope runtime
 
 OpenClaw 2026.9.4 runs Amadeus 1.9.3 from commit `e2a94af` in immutable image
 `local/openclaw-amadeus:git-e2a94af6def4-20261003182157`; image manifest
