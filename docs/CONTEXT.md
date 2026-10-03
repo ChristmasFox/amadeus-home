@@ -34,7 +34,24 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.9 deployed
+## Current Amadeus WhatsApp/image runtime — 1.9.0 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.9.0 from commit `d43246a` in immutable image
+`local/openclaw-amadeus:git-d43246af1d21-20261003063024` (image ID
+`sha256:347056d00ce97a01b40b0335c66753229647fbbf9f2ac070b91f6b007a5f429f`).
+`/opt/amadeus/VERSION=1.9.0`; OpenClaw is healthy, Gateway registration is
+present, Product Radar is healthy, and post-deploy maintenance passed.
+Protected checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003063024`.
+Evidence: `.agent/checkpoints/2026-10-03-amadeus-1.9.0-plain-reply-recovery.md`.
+
+Release 1.9.0 recovers ordinary plain assistant text as one typed text part
+when a private external turn ignores the JSON-only DeliveryEnvelope instruction.
+Protocol-looking objects, paths, fenced payloads and control tokens remain
+fail-closed, and inbound voice/internal origins keep their stricter policies.
+This prevents a natural private reply from being replaced by the generic
+`回复格式异常，已记录，请稍后重试。` fallback.
+
+## Amadeus 1.8.9 — superseded upscale target recovery release
 
 OpenClaw 2026.9.4 runs Amadeus 1.8.9 from commit `f82fb78` in immutable image
 `local/openclaw-amadeus:git-f82fb78b712f-20261003060001` (image ID
