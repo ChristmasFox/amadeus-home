@@ -6,7 +6,7 @@ import unittest
 import zlib
 from pathlib import Path
 
-from service import AssetStore, ServiceError, inspect_image
+from service import AssetStore, ServiceError, engine_scale_for_target, inspect_image
 
 
 def png(width: int, height: int, color: bytes = b"\xff\x00\x00") -> bytes:
@@ -24,10 +24,11 @@ class FakeEngine:
     def readiness(self):
         return {"status": "ready", "engine": self.name, "accelerator": "test"}
 
-    def upscale(self, source: Path, destination: Path, scale: int, mode: str) -> None:
+    def upscale(self, source: Path, destination: Path, scale: int, mode: str, target: tuple[int, int] | None = None) -> None:
         data = source.read_bytes()
         _, width, height = inspect_image(data, "image/png")
-        destination.write_bytes(png(width * scale, height * scale, b"\x00\xff\x00" if mode == "anime" else b"\x00\x00\xff"))
+        output_width, output_height = target or (width * scale, height * scale)
+        destination.write_bytes(png(output_width, output_height, b"\x00\xff\x00" if mode == "anime" else b"\x00\x00\xff"))
 
 
 class AssetServiceTests(unittest.TestCase):
@@ -95,11 +96,16 @@ class AssetServiceTests(unittest.TestCase):
     def test_4k_resolution_profile_caps_long_edge(self):
         with tempfile.TemporaryDirectory() as directory:
             store = AssetStore(directory, engine=FakeEngine())
-            original = store.register(png(640, 960), "image/png", "generated")
+            original = store.register(png(640, 1000), "image/png", "generated")
             derived = store.upscale(original.image_id, None, None, 4, "realistic", "4k")
-            self.assertEqual((derived.width, derived.height), (2560, 3840))
+            self.assertEqual((derived.width, derived.height), (2458, 3840))
             self.assertEqual(derived.transform["scale"], 4)
             self.assertEqual(derived.transform["resolution"], "4k")
+            self.assertEqual(derived.transform["engineScale"], 2)
+
+    def test_capped_4x_uses_bounded_inference_scale_but_keeps_requested_dimensions(self):
+        self.assertEqual(engine_scale_for_target(1185, 2560, 4, (1778, 3840)), 2)
+        self.assertEqual(engine_scale_for_target(640, 960, 4, (2560, 3840)), 4)
 
     def test_bounds_and_invalid_types_fail_closed(self):
         with self.assertRaises(ServiceError):

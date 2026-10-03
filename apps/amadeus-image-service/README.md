@@ -15,10 +15,12 @@ resolved paths. Use `--apply install` only after confirming the current host
 profile. The service token, Python environment, model cache, launchd plist and
 asset registry are runtime state outside Git.
 
-An omitted multiplier defaults to 2x; an explicit 4x request remains 4x.
-The 2K/4K options cap the output long edge independently of the multiplier;
-output-pixel/resource bounds still fail closed rather than silently downscaling
-the requested multiplier.
+An omitted multiplier defaults to 2x; an explicit 4x request remains 4x. A
+plain multiplier request keeps the exact requested dimensions. The 2K/4K
+options are separate, explicit long-edge profiles; only those profiles cap the
+output size. Large capped 4x jobs use bounded tiled inference and a deterministic
+resize to the requested profile, while output-pixel/resource bounds still fail
+closed.
 
 The service never parses chat text, selects a channel, or performs automatic
 upscaling. OpenClaw owns the semantic capability and passes either a trusted

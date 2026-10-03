@@ -178,6 +178,22 @@ def target_dimensions(width: int, height: int, scale: int, resolution: str | Non
     return max(1, round(output_width * ratio)), max(1, round(output_height * ratio))
 
 
+def engine_scale_for_target(width: int, height: int, scale: int, target: tuple[int, int]) -> int:
+    """Choose a bounded inference scale when a resolution profile caps output.
+
+    A 4x model allocates the full 4x intermediate tensor before the service can
+    resize it to a 4K long-edge target. For large portrait assets that tensor
+    can exhaust unified memory even though the requested final image is within
+    the service's pixel limit. A tiled x2 pass keeps the requested final
+    dimensions after the deterministic resize while avoiding that unnecessary
+    intermediate allocation. Exact 4x requests continue to use the x4 model.
+    """
+    requested = (width * scale, height * scale)
+    if scale == 4 and target != requested:
+        return 2
+    return scale
+
+
 def parse_origin(raw: str | None) -> dict[str, str]:
     if not raw:
         return {}
@@ -252,7 +268,7 @@ class UpscaleEngine(Protocol):
 
     def readiness(self) -> dict[str, Any]: ...
 
-    def upscale(self, source: Path, destination: Path, scale: int, mode: str) -> None: ...
+    def upscale(self, source: Path, destination: Path, scale: int, mode: str, target: tuple[int, int] | None = None) -> None: ...
 
 
 class RealEsrganMlxEngine:
@@ -285,18 +301,23 @@ class RealEsrganMlxEngine:
         self._upsamplers[variant] = upsampler
         return upsampler
 
-    def upscale(self, source: Path, destination: Path, scale: int, mode: str) -> None:
+    def upscale(self, source: Path, destination: Path, scale: int, mode: str, target: tuple[int, int] | None = None) -> None:
         from PIL import Image
         from realesrgan_mlx.pipeline_mlx import upscale_image
 
+        with Image.open(source) as original:
+            original_size = (original.width, original.height)
+            requested = (original.width * scale, original.height * scale)
+        target_size = target or requested
+        inference_scale = engine_scale_for_target(*original_size, scale, target_size)
         selected_mode = mode
-        variant = "RealESRGAN_x4plus_anime_6B" if selected_mode == "anime" else "RealESRGAN_x2plus" if scale == 2 else "RealESRGAN_x4plus"
+        # The anime checkpoint is x4-only. A capped 4K result uses the general
+        # x2 checkpoint so it does not allocate the discarded x4 intermediate.
+        variant = "RealESRGAN_x4plus_anime_6B" if selected_mode == "anime" and inference_scale == 4 else "RealESRGAN_x2plus" if inference_scale == 2 else "RealESRGAN_x4plus"
         output = upscale_image(str(source), self._load(variant))
         image = Image.fromarray(output)
-        with Image.open(source) as original:
-            target = (original.width * scale, original.height * scale)
-        if image.size != target:
-            image = image.resize(target, Image.Resampling.LANCZOS)
+        if image.size != target_size:
+            image = image.resize(target_size, Image.Resampling.LANCZOS)
         image.save(destination, format="PNG", optimize=False)
 
 
@@ -474,7 +495,13 @@ class AssetStore:
         created_at = utc_now()
         storage_key = f"derived/{created_at[:7].replace('-', '/')}/{image_id}.png"
         destination = self.path_for(storage_key)
-        transform = {"operation": "upscale", "scale": scale, "mode": mode, "profile": selected_mode, "engine": self.engine.name, **({"resolution": resolution} if resolution else {})}
+        engine_scale = engine_scale_for_target(parent.width, parent.height, scale, (output_width, output_height))
+        transform = {
+            "operation": "upscale", "scale": scale, "mode": mode, "profile": selected_mode,
+            "engine": self.engine.name,
+            **({"engineScale": engine_scale} if engine_scale != scale else {}),
+            **({"resolution": resolution} if resolution else {}),
+        }
         origin = dict(parent.origin)
         if conversation_id:
             origin["conversationId"] = conversation_id
@@ -497,7 +524,7 @@ class AssetStore:
             os.close(fd)
             temporary_path = Path(temporary)
             try:
-                self.engine.upscale(source, temporary_path, scale, selected_mode)
+                self.engine.upscale(source, temporary_path, scale, selected_mode, (output_width, output_height))
                 output = temporary_path.read_bytes()
                 mime, width, height = inspect_image(output, "image/png")
                 if (width, height) != (output_width, output_height):
@@ -653,7 +680,10 @@ def main() -> None:
     debug_startup(f"root={root}")
     engine = RealEsrganMlxEngine(
         weights_dir=os.environ.get("REALESRGAN_MLX_WEIGHTS_DIR") or None,
-        tile=int(os.environ.get("AMADEUS_IMAGE_TILE", "0")),
+        # Tiled inference is required for large portrait 4x requests on Apple
+        # unified memory. Operators can still override this with 0 or another
+        # tile size through the host profile when benchmarking.
+        tile=int(os.environ.get("AMADEUS_IMAGE_TILE", "256")),
     )
     store = AssetStore(
         root,

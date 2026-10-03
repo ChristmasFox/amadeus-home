@@ -43,7 +43,12 @@ type ImageAssetResult = {
   fileName?: string;
   sha256: string;
 };
-type CurrentImageContext = ImageAssetOrigin & { sessionKey: string; explicitScale?: 2 | 4; expiresAt: number };
+type CurrentImageContext = ImageAssetOrigin & {
+  sessionKey: string;
+  explicitScale?: 2 | 4;
+  explicitResolution?: '2k' | '4k';
+  expiresAt: number;
+};
 
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const currentImageContexts = new Map<string, CurrentImageContext>();
@@ -54,6 +59,15 @@ export function explicitUpscaleScale(body: string): 2 | 4 | undefined {
   const four = /(?:\b4\s*[x×倍]|四\s*倍)/iu.test(body);
   const two = /(?:\b2\s*[x×倍]|二\s*倍|两\s*倍)/iu.test(body);
   return four === two ? undefined : four ? 4 : 2;
+}
+
+/** A resolution profile is only authoritative when it was present in the user
+ * turn. Model-authored 2K/4K fields must not silently change a plain 2x/4x
+ * request into a long-edge-capped result. */
+export function explicitUpscaleResolution(body: string): '2k' | '4k' | undefined {
+  const match = /([24])\s*k(?:\b|长边|分辨率|清晰度)/iu.exec(body);
+  const digit = match?.[1];
+  return digit ? `${digit.toLowerCase()}k` as '2k' | '4k' : undefined;
 }
 
 function text(value: unknown): string | undefined {
@@ -231,7 +245,11 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   // service and being rejected as image_id_invalid.
   const imageId = canonicalImageId(input.target?.imageId);
   // A user turn defaults to 2x even when the model invents 4x; explicit user 4x wins.
+  // Resolution is equally constrained by the user turn. This prevents the
+  // model's optional schema field from turning a plain 2x request into a 2K
+  // long-edge cap (the source of the misleading 1185x2560 result).
   const scale = current?.explicitScale ?? 2;
+  const resolution = current?.explicitResolution;
   const response = await serviceJson(config, '/v1/upscale', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -239,7 +257,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
       ...(imageId ? { imageId } : {}),
       ...(scale !== undefined ? { scale } : {}),
       ...(input.mode !== undefined ? { mode: input.mode } : {}),
-      ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
+      ...(resolution !== undefined ? { resolution } : {}),
       ...(origin.conversationId ? { conversationId: origin.conversationId } : {}),
       ...(current?.replyToMessageId ? { replyMessageId: current.replyToMessageId } : {}),
     }),
@@ -252,7 +270,7 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
     parentImageId: asset.parentImageId,
     scale: asset.transform?.scale ?? scale,
     mode: asset.transform?.mode ?? input.mode ?? 'auto',
-    ...(asset.transform?.resolution ? { resolution: asset.transform.resolution } : input.resolution ? { resolution: input.resolution } : {}),
+    ...(asset.transform?.resolution ? { resolution: asset.transform.resolution } : {}),
     mimeType: asset.mimeType,
     width: asset.width,
     height: asset.height,
@@ -369,6 +387,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const messageId = text(hookContext.messageId ?? event.messageId);
     const replyToMessageId = text(hookContext.replyToId ?? event.replyToId);
     const explicitScale = explicitUpscaleScale(event.body ?? event.content);
+    const explicitResolution = explicitUpscaleResolution(event.body ?? event.content);
     currentImageContexts.set(sessionKey, {
       sessionKey,
       ...(channel ? { channel } : {}),
@@ -376,6 +395,7 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
       ...(messageId ? { messageId } : {}),
       ...(replyToMessageId ? { replyToMessageId } : {}),
       ...(explicitScale !== undefined ? { explicitScale } : {}),
+      ...(explicitResolution !== undefined ? { explicitResolution } : {}),
       expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
     });
   });
