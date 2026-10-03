@@ -62,6 +62,11 @@ function text(value: unknown): string | undefined {
   return undefined;
 }
 
+function canonicalImageId(value: unknown): string | undefined {
+  const candidate = text(value);
+  return candidate && /^img_[a-f0-9]{32}$/u.test(candidate) ? candidate : undefined;
+}
+
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
@@ -220,13 +225,18 @@ export async function upscaleImage(config: AmadeusConfig, input: ImageUpscalePar
   const current = currentContextFor(context.sessionKey);
   const identity = identityContextFromOpenClaw(context);
   const origin = originForContext(context, current);
+  // The model sometimes copies an inbound filesystem path or filename into
+  // imageId. Only a registry ID is authoritative; invalid values must fall
+  // through to the reply/current-conversation resolver instead of reaching the
+  // service and being rejected as image_id_invalid.
+  const imageId = canonicalImageId(input.target?.imageId);
   // A user turn defaults to 2x even when the model invents 4x; explicit user 4x wins.
   const scale = current?.explicitScale ?? 2;
   const response = await serviceJson(config, '/v1/upscale', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      ...(input.target?.imageId ? { imageId: input.target.imageId } : {}),
+      ...(imageId ? { imageId } : {}),
       ...(scale !== undefined ? { scale } : {}),
       ...(input.mode !== undefined ? { mode: input.mode } : {}),
       ...(input.resolution !== undefined ? { resolution: input.resolution } : {}),
