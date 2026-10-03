@@ -1,6 +1,37 @@
-# Project State — 2026-10-03
+# Project State — 2026-10-04
 
-## Amadeus 1.9.0 — current live private reply recovery release
+## Amadeus 1.9.2 — current live upscale recovery release
+
+Release commit `8e667cf` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-8e667cf26122-20261003174442`; image manifest
+`sha256:e0a96aea78b62d2598b93f021e2dfc2e9f55411a245401272f9e06015b09c83b`.
+Runtime `/opt/amadeus/VERSION=1.9.2`. The host-native ImageAssets service is
+running with the pinned Real-ESRGAN MLX engine and default tile size 256.
+
+The observed 2x result (`853x1843 -> 1185x2560`) was a plain multiplier request
+that also carried a model-authored `2k` profile, so the service applied its
+2560px long-edge cap. A 4x request from `1185x2560` failed in untiled MLX
+inference before producing an asset. The plugin now forwards `2k`/`4k` only
+when the user explicitly names that profile; ordinary 2x/4x requests preserve
+exact multiplier dimensions. Large capped 4x jobs use a bounded x2 inference
+pass before the deterministic profile resize, and all large jobs use tiled
+inference by default.
+
+Verification produced ready assets for the prior failures: exact 2x
+`853x1843 -> 1706x3686`, exact 4x `853x1843 -> 3412x7372`, and capped 4x
+`1185x2560 -> 1778x3840` with `engineScale=2`. The source originals remained
+unchanged. Focused service tests, 129 Amadeus tests, typecheck, architecture
+and delivery-boundary checks, secrets scan, BuildKit image build, OpenClaw and
+Product Radar health, Gateway registration, NAS read-only smoke, owner
+notification/outbox smoke, and post-deploy maintenance passed.
+
+Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003174442`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261003174442/`.
+Full evidence: `.agent/checkpoints/2026-10-04-amadeus-1.9.2-upscale-recovery.md`.
+
+## Amadeus 1.9.0 — superseded private reply recovery release
 
 Release commit `d43246a` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-d43246af1d21-20261003063024`; image ID

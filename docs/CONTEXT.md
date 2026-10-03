@@ -1,8 +1,17 @@
-# Canonical context — 2026-10-03
+# Canonical context — 2026-10-04
 
 Read this with `docs/CURRENT_TASK.md`; the Qwen3-TTS MLX rebaseline Goal is
-complete and the current follow-up disables per-request emotions while keeping
-all requests default/local-first. Re-read Git/live state before further work.
+complete and the current Amadeus upscale recovery is complete. Re-read Git/live
+state before further work.
+
+## Current Amadeus image/upscale runtime — 1.9.2 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.9.2 from commit `8e667cf` in immutable image
+`local/openclaw-amadeus:git-8e667cf26122-20261003174442`; the host ImageAssets
+service is healthy on port 18792 with the pinned `realesrgan-mlx` engine.
+Plain 2x/4x requests now preserve exact multiplier dimensions, explicit 2K/4K
+profiles remain long-edge caps, and large jobs use tiled inference. Evidence is
+in `.agent/checkpoints/2026-10-04-amadeus-1.9.2-upscale-recovery.md`.
 
 ## Current Git/runtime boundary — Qwen3-TTS MLX
 
@@ -34,7 +43,7 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.9.0 deployed
+## Amadeus 1.9.0 — superseded private reply recovery release
 
 OpenClaw 2026.9.4 runs Amadeus 1.9.0 from commit `d43246a` in immutable image
 `local/openclaw-amadeus:git-d43246af1d21-20261003063024` (image ID
