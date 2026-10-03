@@ -1,6 +1,29 @@
 # Project State — 2026-10-03
 
-## Amadeus 1.8.8 — current live private image completion fallback release
+## Amadeus 1.8.9 — current live upscale target recovery release
+
+Release commit `f82fb78` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-f82fb78b712f-20261003060001`; image ID
+`sha256:9902b49c364c093b88621bde1ec9692df846dbb091087cfb64658f8539f90716`.
+Runtime `/opt/amadeus/VERSION=1.8.9`. The recent private-chat upscale failures
+were caused by model calls putting inbound staged paths or filenames in
+`target.imageId`; the service rejected them as `image_id_invalid`. The plugin
+now accepts only canonical `img_[0-9a-f]{32}` IDs and otherwise falls back to
+the reply/current-conversation image resolver. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003060001`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261003060001/`.
+
+Release verification passed: 128 Amadeus tests, focused upscale target
+regression, typecheck, architecture and delivery-boundary checks, BuildKit
+image build, secrets scan, OpenClaw and Product Radar health, Gateway
+registration, NAS read-only smoke, owner notification/outbox smoke, and
+post-deploy maintenance. The optional media adapter was absent and its network
+smoke was skipped; the host Docker default log policy remains a warning because
+`/etc/docker/daemon.json` is absent. Full evidence:
+`.agent/checkpoints/2026-10-03-amadeus-1.8.9-upscale-target.md`.
+
+## Amadeus 1.8.8 — superseded private image completion fallback release
 
 Release commit `e4e3498` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-e4e3498ba664-20261002162339`; image ID
