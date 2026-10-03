@@ -75,6 +75,26 @@ function isControlSentinel(value: unknown): value is string {
   return typeof value === 'string' && CONTROL_SENTINEL.test(value);
 }
 
+/**
+ * A normal external turn can occasionally arrive as plain assistant text when
+ * the model ignores the JSON-only instruction. Recover that text as a typed
+ * part, but keep protocol-looking output fail-closed so serialized objects,
+ * paths, and fenced payloads never become user-visible text.
+ */
+function recoverablePlainText(context: DeliveryContext, raw: string): AgentReplyDecode | undefined {
+  if (context.origin !== 'external_user') return undefined;
+  const text = raw.trim();
+  if (!text || /^(?:\s*[\[{`])/u.test(text)
+    || /(?:^|\n)\s*\[\[[^\]\r\n]+\]\]/u.test(text)
+    || /(?:^|\n)\s*MEDIA\s*:/iu.test(text)
+    || /(?:["']?(?:version|silent|parts|deliveryId|assetId|filePath|mimeType|disposition)["']?\s*[:=])/iu.test(text)) return undefined;
+  try {
+    return { envelope: createTextDelivery(context, text), status: 'structured' };
+  } catch {
+    return undefined;
+  }
+}
+
 /** Sole Agent protocol decoder. The wire object cannot supply asset ids/paths. */
 export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentReplyDecode {
   // External turns must receive a typed response even when the model violates
@@ -91,6 +111,8 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
   if (['heartbeat', 'cron', 'internal_handoff', 'system'].includes(context.origin)) return { envelope: createSilentDelivery(context), status: 'silent' };
   if (typeof raw !== 'string') return fail();
   if (isControlSentinel(raw)) return { envelope: createSilentDelivery(context), status: 'silent' };
+  const recovered = recoverablePlainText(context, raw);
+  if (recovered) return recovered;
   let value: unknown;
   try { value = parseWire(raw); } catch { return fail(); }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();

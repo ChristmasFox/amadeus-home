@@ -39,6 +39,15 @@ test('decoder repairs literal JSON control characters inside text strings', () =
   assert.equal(decoded.envelope.parts[0]?.kind, 'text');
   assert.equal((decoded.envelope.parts[0] as { text: string }).text, 'line one\nline two\twith a tab');
 });
+test('plain external assistant text recovers as one typed text part', async () => {
+  const raw = 'VPS 当前状态正常，关键服务都在运行。\n\n没有发现异常。';
+  const decoded = decodeAgentReply(context, raw);
+  assert.equal(decoded.status, 'structured');
+  assert.deepEqual(decoded.envelope.parts, [{ kind: 'text', text: raw }]);
+  const calls: string[] = [];
+  await settleDelivery(decoded.envelope, adapters(calls), createDeliverySettlementContext());
+  assert.deepEqual(calls, [`text:${raw}`]);
+});
 test('control-prefixed silent sentinels are suppressed before channel delivery', async () => {
   const rawText = '[[amadeus:reply-modality=default]]\nNO_REPLY';
   for (const raw of [rawText, wire([{ kind: 'text', text: rawText }])]) {
@@ -67,7 +76,7 @@ for (const [name, raw] of Object.entries({
   invalidSpeech: wire([{ ...voice, speechText: '中文' } as never, text]),
   extraPartKey: '{"version":2,"silent":false,"parts":[{"kind":"text","text":"ok","modality":"voice"}]}',
   modelAttachment: wire([attachment('image/png','document')]),
-  unstructured: 'ordinary raw answer', silenceContent: wire([text],true),
+  protocolShapedPlain: 'version: 2\nparts: [text]', silenceContent: wire([text],true),
 })) test(`malformed ${name} uses a bounded visible fallback`, async () => {
   const decoded = decodeAgentReply(context, raw); assert.equal(decoded.status, 'malformed');
   assert.equal(decoded.envelope.silent, false);
