@@ -45,13 +45,17 @@ type ImageAssetResult = {
 };
 type CurrentImageContext = ImageAssetOrigin & {
   sessionKey: string;
+  referenceImagePath?: string;
   explicitScale?: 2 | 4;
   explicitResolution?: '2k' | '4k';
   expiresAt: number;
 };
 
+type PendingInboundImage = Readonly<{ path: string; expiresAt: number }>;
+
 const IMAGE_CONTEXT_TTL_MS = 10 * 60 * 1000;
 const currentImageContexts = new Map<string, CurrentImageContext>();
+const pendingInboundImages = new Map<string, PendingInboundImage>();
 
 /** A bounded parameter constraint, not a capability/tool router. A bare 4K/2K is
  * a resolution profile and must never be mistaken for an upscale multiplier. */
@@ -94,6 +98,43 @@ function currentContextFor(sessionKey: string | undefined): CurrentImageContext 
     return undefined;
   }
   return current;
+}
+
+function pendingInboundImageFor(sessionKey: string | undefined): PendingInboundImage | undefined {
+  if (!sessionKey) return undefined;
+  const pending = pendingInboundImages.get(sessionKey);
+  if (!pending) return undefined;
+  if (pending.expiresAt <= Date.now()) {
+    pendingInboundImages.delete(sessionKey);
+    return undefined;
+  }
+  return pending;
+}
+
+function isInboundReferencePath(value: unknown): value is string {
+  return typeof value === 'string' && /\/media\/inbound\//u.test(value);
+}
+
+/**
+ * The model can reproduce a staged inbound path with a dropped separator or
+ * another small typo. The channel event already supplied the authoritative
+ * path for this turn, so repair only inbound-staging references and leave
+ * durable/generated paths untouched.
+ */
+export function repairInboundReferenceParams(params: Record<string, unknown>, referencePath: string): Record<string, unknown> | undefined {
+  let changed = false;
+  const output = { ...params };
+  if (isInboundReferencePath(params.image) && params.image !== referencePath) {
+    output.image = referencePath;
+    changed = true;
+  }
+  if (Array.isArray(params.images)) {
+    const originalImages = params.images as unknown[];
+    const images = originalImages.map((value) => isInboundReferencePath(value) ? referencePath : value);
+    changed = changed || images.some((value, index) => value !== originalImages[index]);
+    if (changed) output.images = [...new Set(images)];
+  }
+  return changed ? output : undefined;
 }
 
 async function serviceHeaders(config: AmadeusConfig): Promise<Headers> {
@@ -354,6 +395,8 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
   api.on('message_received', async (event, hookContext) => {
     const media = inboundMediaPaths(event);
     if (!media.length) return;
+    const sessionKey = text(hookContext.sessionKey ?? event.sessionKey);
+    if (sessionKey) pendingInboundImages.set(sessionKey, { path: media[0]!.path, expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS });
     const config = configFor(api);
     const messageId = text(event.messageId);
     const channel = text(hookContext.channelId);
@@ -388,17 +431,33 @@ export function registerImageAssets(api: OpenClawPluginApi): void {
     const replyToMessageId = text(hookContext.replyToId ?? event.replyToId);
     const explicitScale = explicitUpscaleScale(event.body ?? event.content);
     const explicitResolution = explicitUpscaleResolution(event.body ?? event.content);
+    const referenceImagePath = pendingInboundImageFor(sessionKey)?.path;
     currentImageContexts.set(sessionKey, {
       sessionKey,
       ...(channel ? { channel } : {}),
       ...(conversationId ? { conversationId } : {}),
       ...(messageId ? { messageId } : {}),
       ...(replyToMessageId ? { replyToMessageId } : {}),
+      ...(referenceImagePath ? { referenceImagePath } : {}),
       ...(explicitScale !== undefined ? { explicitScale } : {}),
       ...(explicitResolution !== undefined ? { explicitResolution } : {}),
       expiresAt: Date.now() + IMAGE_CONTEXT_TTL_MS,
     });
   });
+  api.on('before_tool_call', (event, hookContext) => {
+    if (event.toolName !== 'image_generate') return;
+    const current = currentContextFor(hookContext.sessionKey);
+    if (!current?.referenceImagePath) return;
+    const repaired = repairInboundReferenceParams(event.params, current.referenceImagePath);
+    if (!repaired) return;
+    api.logger.info(JSON.stringify({
+      event: 'image_reference_path_rebound',
+      runId: event.runId,
+      toolCallId: event.toolCallId,
+      source: 'current_inbound_media',
+    }));
+    return { params: repaired };
+  }, { matcher: ['image_generate'] });
   api.on('after_tool_call', (event, hookContext) => {
     if (event.error || (event.toolName !== 'image_generate' && event.toolName !== 'amadeus_image_upscale')) return;
     const runId = event.runId ?? hookContext.runId ?? (hookContext.sessionKey ? deliveryRuns.runIdFor(hookContext.sessionKey) : undefined);
