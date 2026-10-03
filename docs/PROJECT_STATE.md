@@ -1,6 +1,30 @@
 # Project State — 2026-10-03
 
-## Amadeus 1.8.9 — current live upscale target recovery release
+## Amadeus 1.9.0 — current live private reply recovery release
+
+Release commit `d43246a` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-d43246af1d21-20261003063024`; image ID
+`sha256:347056d00ce97a01b40b0335c66753229647fbbf9f2ac070b91f6b007a5f429f`.
+Runtime `/opt/amadeus/VERSION=1.9.0`. The 14:22 private VPS status reply was
+normal assistant text, but the strict DeliveryEnvelope boundary treated it as
+malformed JSON and sent the generic format-error response. The decoder now
+recovers safe plain external-user text as a typed text part; protocol-shaped
+objects, paths, fenced payloads, control tokens, voice runs and internal origins
+remain strict. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003063024`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261003063024/`.
+
+Release verification passed: 129 Amadeus tests, focused decoder and reply-hook
+regressions, typecheck, architecture and delivery-boundary checks, BuildKit
+image build, secrets scan, OpenClaw and Product Radar health, Gateway
+registration, NAS read-only smoke, owner notification/outbox smoke, and
+post-deploy maintenance. The optional media adapter was absent and its network
+smoke was skipped; the host Docker default log policy remains a warning because
+`/etc/docker/daemon.json` is absent. Full evidence:
+`.agent/checkpoints/2026-10-03-amadeus-1.9.0-plain-reply-recovery.md`.
+
+## Amadeus 1.8.9 — superseded upscale target recovery release
 
 Release commit `f82fb78` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-f82fb78b712f-20261003060001`; image ID
