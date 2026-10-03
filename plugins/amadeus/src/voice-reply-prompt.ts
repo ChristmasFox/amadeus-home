@@ -79,7 +79,26 @@ export function registerVoiceReplyPrompt(api: OpenClawPluginApi, boundaryOptions
     // Tool/progress/pending media never enters a sender for Amadeus replies.
     if (event.kind !== 'final') return { cancel: true, reason: 'delivery_nonfinal_suppressed' };
     const prepared = event.payload.channelData?.amadeusDelivery;
-    if (validateDeliveryEnvelope(prepared) && deliveryRuns.owns(prepared)) return { payload: { channelData: { amadeusDelivery: prepared } } };
+    if (validateDeliveryEnvelope(prepared) && deliveryRuns.owns(prepared)) {
+      // A prepared image-completion envelope may reach this hook a second
+      // time after the native dispatcher has already called preparePayload.
+      // Returning channelData alone would hand the typed-only payload to the
+      // WhatsApp adapter, which rejects it before Amadeus can settle the
+      // attachment. Keep completion ownership in the Amadeus boundary.
+      if (channel === 'whatsapp' && prepared.origin === 'media_completion') {
+        try {
+          await boundary.settleWhatsAppCompletion(prepared);
+          const captionSource = deliveryRuns.captionSourceFor(prepared.runId) ?? 'none';
+          api.logger.info(`amadeus image completion ${JSON.stringify({ event: captionSource === 'native_completion' ? 'image_completion_caption_ready' : 'image_completion_caption_fallback', run_id: prepared.runId, delivery_id: prepared.deliveryId, channel, caption_source: captionSource })}`);
+          api.logger.info(`amadeus image completion ${JSON.stringify({ event: 'image_completion_delivery_settled', run_id: prepared.runId, delivery_id: prepared.deliveryId, channel, caption_source: captionSource })}`);
+          return { cancel: true, reason: 'delivery_settled' };
+        } catch {
+          api.logger.warn('amadeus envelope preparation failed closed');
+          return { cancel: true, reason: 'delivery_preparation_failed' };
+        }
+      }
+      return { payload: { channelData: { amadeusDelivery: prepared } } };
+    }
     if (!runId) return { cancel: true, reason: 'delivery_run_missing' };
     try {
       const envelope = await deliveryRuns.prepare(runId, event.payload.text);

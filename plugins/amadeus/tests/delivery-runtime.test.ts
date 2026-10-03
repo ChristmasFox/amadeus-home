@@ -70,7 +70,12 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       for(const hook of hooks.get('before_prompt_build')??[])hook({}, {runId:completionRunId,sessionKey,channel:'whatsapp',inputProvenance:{kind:'inter_session',sourceTool:'image_generate',sourceSessionKey:`image_generate:${taskId}`}});
       const completionWire=source==='caption-omitted'?JSON.stringify({version:2,silent:true,parts:[]}):source==='caption-malformed'||source==='caption-error'?'{"version":2,"parts":}':JSON.stringify({version:2,silent:false,parts:[{kind:'text',text:'Completion Agent caption。'}]});
       for(const hook of hooks.get('before_agent_finalize')??[])hook({runId:completionRunId,lastAssistantMessage:completionWire},{});
-      await plan.delivery.deliver({text:completionWire},{kind:'final'});
+      const preparedCompletion=await plan.delivery.preparePayload({text:completionWire},{kind:'final'});
+      assert.deepEqual(Object.keys(preparedCompletion),['channelData']);
+      for(const hook of hooks.get('reply_payload_sending')??[]) {
+        const hookResult=await hook({runId:completionRunId,sessionKey,channel:'whatsapp',kind:'final',payload:preparedCompletion},{});
+        assert.deepEqual(hookResult,{cancel:true,reason:'delivery_settled'});
+      }
       }
       await boundary.failImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
