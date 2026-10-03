@@ -34,7 +34,24 @@ media remain outside Git. The owner waived listening/owner-channel acceptance
 for this Goal; no human voice-quality claim is made. Full evidence is in
 `.agent/checkpoints/2026-10-01-amadeus-qwen3-tts-mlx-rebaseline.md`.
 
-## Current Amadeus WhatsApp/image runtime — 1.8.8 deployed
+## Current Amadeus WhatsApp/image runtime — 1.8.9 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.8.9 from commit `f82fb78` in immutable image
+`local/openclaw-amadeus:git-f82fb78b712f-20261003060001` (image ID
+`sha256:9902b49c364c093b88621bde1ec9692df846dbb091087cfb64658f8539f90716`).
+`/opt/amadeus/VERSION=1.8.9`; OpenClaw is healthy, Gateway registration is
+present, Product Radar is healthy, and post-deploy maintenance passed.
+Protected checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003060001`.
+Evidence: `.agent/checkpoints/2026-10-03-amadeus-1.8.9-upscale-target.md`.
+
+Release 1.8.9 validates model-supplied upscale targets against the canonical
+`img_[0-9a-f]{32}` registry ID format. Inbound filesystem paths and filenames
+are omitted so the image service resolves the private-chat reply image or the
+most recent image in the current conversation; an explicit canonical ID remains
+authoritative. This removes the recent `image_id_invalid` failures caused by
+model calls carrying staged paths such as `input-*.png`.
+
+## Amadeus 1.8.8 — superseded private image completion fallback release
 
 OpenClaw 2026.9.4 runs Amadeus 1.8.8 from commit `e4e3498` in immutable image
 `local/openclaw-amadeus:git-e4e3498ba664-20261002162339` (image ID
