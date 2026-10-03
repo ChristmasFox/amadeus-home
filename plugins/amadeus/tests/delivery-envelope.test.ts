@@ -39,6 +39,13 @@ test('decoder repairs literal JSON control characters inside text strings', () =
   assert.equal(decoded.envelope.parts[0]?.kind, 'text');
   assert.equal((decoded.envelope.parts[0] as { text: string }).text, 'line one\nline two\twith a tab');
 });
+test('decoder ignores legacy MEDIA path prefix and keeps the typed envelope', () => {
+  const raw = `MEDIA:/var/lib/amadeus/image-assets/derived/2026/10/img_${'a'.repeat(32)}.png\n${wire([text])}`;
+  const decoded = decodeAgentReply(context, raw);
+  assert.equal(decoded.status, 'structured');
+  assert.deepEqual(decoded.envelope.parts, [text]);
+  assert.equal(JSON.stringify(decoded.envelope).includes('/var/lib/amadeus'), false);
+});
 test('plain external assistant text recovers as one typed text part', async () => {
   const raw = 'VPS 当前状态正常，关键服务都在运行。\n\n没有发现异常。';
   const decoded = decodeAgentReply(context, raw);

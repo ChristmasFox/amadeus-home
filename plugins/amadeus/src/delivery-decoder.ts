@@ -66,6 +66,18 @@ function parseWire(raw: string): unknown {
   }
 }
 
+/**
+ * Older image turns sometimes prepend the native media path before the v2
+ * envelope. The path is not an authority and must be discarded; the durable
+ * asset attachment is already owned by the run. Accept only a following JSON
+ * object so ordinary user text beginning with `MEDIA:` stays fail-closed.
+ */
+function legacyMediaPrefixedWire(raw: string): string | undefined {
+  const match = /^\s*MEDIA:[^\r\n]*\r?\n([\s\S]*)$/u.exec(raw);
+  const candidate = match?.[1]?.trimStart();
+  return candidate?.startsWith('{') ? candidate : undefined;
+}
+
 // A model can accidentally prepend a control token to a native silent
 // sentinel. Treat that shape as protocol silence before it reaches the
 // malformed-output fallback or a channel adapter. The sentinel is deliberately
@@ -111,10 +123,14 @@ export function decodeAgentReply(context: DeliveryContext, raw: unknown): AgentR
   if (['heartbeat', 'cron', 'internal_handoff', 'system'].includes(context.origin)) return { envelope: createSilentDelivery(context), status: 'silent' };
   if (typeof raw !== 'string') return fail();
   if (isControlSentinel(raw)) return { envelope: createSilentDelivery(context), status: 'silent' };
-  const recovered = recoverablePlainText(context, raw);
-  if (recovered) return recovered;
+  const legacyWire = legacyMediaPrefixedWire(raw);
+  if (legacyWire === undefined) {
+    const recovered = recoverablePlainText(context, raw);
+    if (recovered) return recovered;
+  }
+  const wireRaw: string = legacyWire ?? raw;
   let value: unknown;
-  try { value = parseWire(raw); } catch { return fail(); }
+  try { value = parseWire(wireRaw); } catch { return fail(); }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
   const wire = value as Record<string, unknown>;
   if (Object.keys(wire).some((key) => !['version', 'silent', 'parts'].includes(key))
