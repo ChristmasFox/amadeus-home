@@ -4,7 +4,19 @@ Read this with `docs/CURRENT_TASK.md`; the Qwen3-TTS MLX rebaseline Goal is
 complete and the current Amadeus upscale recovery is complete. Re-read Git/live
 state before further work.
 
-## Current Amadeus image/upscale runtime — 1.9.2 deployed
+## Current Amadeus reply envelope runtime — 1.9.3 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.9.3 from commit `e2a94af` in immutable image
+`local/openclaw-amadeus:git-e2a94af6def4-20261003182157`; image manifest
+`sha256:583f747e0b0a410e1133ea8383c1d6b2b5e95b1010592b40054c74f724a9f698`.
+The decoder accepts the legacy first-line `MEDIA:` prefix only when a valid
+DeliveryEnvelope v2 object follows. It discards that path before parsing and
+keeps runtime-owned attachments as the sole asset authority. CasaOS host
+`nyannyan` is healthy, Gateway registration passed, and post-deploy maintenance
+passed. Evidence is in
+`.agent/checkpoints/2026-10-04-amadeus-1.9.3-media-envelope-recovery.md`.
+
+## Current Amadeus image/upscale runtime — 1.9.2 superseded
 
 OpenClaw 2026.9.4 runs Amadeus 1.9.2 from commit `8e667cf` in immutable image
 `local/openclaw-amadeus:git-8e667cf26122-20261003174442`; the host ImageAssets
