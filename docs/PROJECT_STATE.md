@@ -1,6 +1,29 @@
 # Project State — 2026-10-04
 
-## Amadeus 1.9.2 — current live upscale recovery release
+## Amadeus 1.9.3 — current live reply envelope recovery release
+
+Release commit `e2a94af` is live in immutable OpenClaw 2026.9.4 image
+`local/openclaw-amadeus:git-e2a94af6def4-20261003182157`; image manifest
+`sha256:583f747e0b0a410e1133ea8383c1d6b2b5e95b1010592b40054c74f724a9f698`.
+Runtime `/opt/amadeus/VERSION=1.9.3`. A successful image completion had a
+legacy `MEDIA:/...` path prepended to a valid v2 typed reply, so the decoder
+sent the generic format-error text even though the attachment was delivered.
+The decoder now strips only that compatibility prefix, parses the typed
+envelope, and never uses the path for asset selection.
+
+Verification passed: 130 Amadeus tests, focused delivery regressions,
+typecheck, architecture and delivery-boundary checks, secrets scan, BuildKit
+image build, OpenClaw and Product Radar health, Gateway registration, NAS
+read-only smoke, owner notification/outbox smoke, and post-deploy maintenance.
+The optional media adapter was absent and its network smoke was skipped; the
+host Docker default log policy remains a warning. Protected checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261003182157`; external
+evidence is under
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261003182157/`.
+Full evidence:
+`.agent/checkpoints/2026-10-04-amadeus-1.9.3-media-envelope-recovery.md`.
+
+## Amadeus 1.9.2 — superseded live upscale recovery release
 
 Release commit `8e667cf` is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-8e667cf26122-20261003174442`; image manifest
