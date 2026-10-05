@@ -45,6 +45,7 @@ git -C "$ROOT" archive "$commit" | tar -xf - -C "$context"
   if [[ -f infra/docker/casaos/9router/test-runtime-policy.mjs ]]; then
     node infra/docker/casaos/9router/test-runtime-policy.mjs
   fi
+  node infra/docker/casaos/9router/test-image-combo-safety.mjs
   node --check infra/docker/casaos/9router/start-9router.mjs
   # The exported Git snapshot has no .git metadata; scan the real worktree.
 )

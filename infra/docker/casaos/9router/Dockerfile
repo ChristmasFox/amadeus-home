@@ -21,6 +21,8 @@ RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_
 COPY infra/9router/runtime-policy.json /opt/amadeus/runtime-policy.json
 COPY infra/docker/casaos/9router/patch-runtime-policy.mjs /opt/amadeus/patch-runtime-policy.mjs
 RUN node /opt/amadeus/patch-runtime-policy.mjs --root /usr/local/lib/node_modules/9router --policy /opt/amadeus/runtime-policy.json --apply
+COPY infra/docker/casaos/9router/patch-image-combo-safety.mjs /opt/amadeus/patch-image-combo-safety.mjs
+RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /usr/local/lib/node_modules/9router --apply
 
 # The upstream Docker image runs the packaged server directly. The npm CLI is
 # desktop-oriented and can exit after launching its tray/server child in a

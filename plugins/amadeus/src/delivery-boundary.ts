@@ -2,7 +2,7 @@ import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
 import { configFor } from './config.js';
 import { bindImageDelivery, resolveRegisteredImageAsset, resolveRegisteredImageModelInput, importGeneratedCompletionAssets, type CompletionImageInput, type GeneratedCompletionAttachment } from './image-assets.js';
 import { createImageCaptionEnricher, type ImageCaptionEnricher } from './image-caption.js';
-import { createImageGenerationMessageEnricher, type ImageGenerationMessageEnricher, type ImageGenerationMessageKind, type ImageLifecycleMessageInput } from './image-generation-messages.js';
+import { createImageGenerationMessageEnricher, type ImageGenerationFailureReason, type ImageGenerationMessageEnricher, type ImageGenerationMessageKind, type ImageLifecycleMessageInput } from './image-generation-messages.js';
 import { ImageGenerationLifecycleCoordinator } from './image-generation-lifecycle.js';
 import { settleTelegramDelivery } from './telegram-runtime.js';
 import { deliveryRuns } from './delivery-runs.js';
@@ -23,6 +23,7 @@ export type ImageGenerationLifecycleInput = Readonly<{
   conversationId?: string;
   threadId?: string | number;
   requestContext?: string;
+  failureReason?: ImageGenerationFailureReason;
 }>;
 export type WhatsAppDeliveryPort = Readonly<{
   sessionKey: string; accountId: string; conversationId: string; messageId: string;
@@ -54,7 +55,8 @@ function validLifecycleInput(value: ImageGenerationLifecycleInput): boolean {
     && typeof value.conversationId === 'string' && value.conversationId.length > 0 && value.conversationId.length <= 512
     && (value.threadId === undefined || (typeof value.threadId === 'string' && value.threadId.length <= 128)
       || (typeof value.threadId === 'number' && Number.isSafeInteger(value.threadId) && value.threadId >= 0))
-    && (value.requestContext === undefined || typeof value.requestContext === 'string');
+    && (value.requestContext === undefined || typeof value.requestContext === 'string')
+    && (value.failureReason === undefined || ['safety_refusal', 'provider_unavailable', 'account_unavailable', 'invalid_request', 'unknown'].includes(value.failureReason));
 }
 function text(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
@@ -148,6 +150,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
 
   const lifecycleSemanticInput = (input: ImageGenerationLifecycleInput, kind: ImageGenerationMessageKind): ImageLifecycleMessageInput => ({
     kind, taskId: input.taskId, agentId: input.requesterAgentId, sessionKey: input.sessionKey, channel: input.channel,
+    ...(input.failureReason ? { failureReason: input.failureReason } : {}),
     ...lifecycleRequestContext(input),
   });
   const rememberLifecycleMessage = (input: ImageGenerationLifecycleInput): Promise<string> => {

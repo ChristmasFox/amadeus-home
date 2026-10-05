@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { readFile, writeFile, rename, chmod, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { installImageRouteAuthorityModules, patchImageGenerationToolSource } from './image-route-authority.mjs';
+import { classifyImageGenerationFailure, failureText, installImageRouteAuthorityModules, patchImageGenerationToolSource } from './image-route-authority.mjs';
 import { installCompletionCaptionModule } from './completion-caption.mjs';
 
 export const CORE_PIN = Object.freeze({
@@ -36,6 +36,8 @@ const accepted = `
   }
 `;
 const terminal = `
+  ${failureText.toString()}
+  ${classifyImageGenerationFailure.toString()}
   if (params.eventSource === "image_generation" && params.toolName === "image_generate" &&
       (params.status === "ok" || params.status === "error") && params.handle &&
       (params.handle.requesterOrigin?.channel === "whatsapp" || params.handle.requesterOrigin?.channel === "telegram")) {
@@ -49,7 +51,8 @@ const terminal = `
       accountId: params.handle.requesterOrigin.accountId,
       conversationId: params.handle.requesterOrigin.to,
       threadId: params.handle.requesterOrigin.threadId,
-      requestContext: params.handle.taskLabel
+      requestContext: params.handle.taskLabel,
+      ...(params.status === "error" ? { failureReason: classifyImageGenerationFailure(params.result) } : {})
     };
     if (params.status === "error") {
       if (typeof boundary.failImageGeneration !== "function") throw new Error("amadeus_image_failure_boundary_unavailable");
