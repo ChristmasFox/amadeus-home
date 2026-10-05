@@ -44,9 +44,9 @@ async function findCandidate(root) {
   return candidates[0];
 }
 
-export async function install(root, mode = 'verify') {
+export async function install(root, mode = 'verify', { checkVersion = true } = {}) {
   const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-  if (packageJson.version !== VERSION) throw new Error(`9router_version_mismatch:${packageJson.version}`);
+  if (checkVersion && packageJson.version !== VERSION) throw new Error(`9router_version_mismatch:${packageJson.version}`);
   const candidate = await findCandidate(root);
   const output = patchImageComboSource(candidate.source);
   if (mode === 'verify') {
@@ -63,6 +63,6 @@ export async function install(root, mode = 'verify') {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = process.argv[process.argv.indexOf('--root') + 1];
   if (!root) throw new Error('usage: patch-image-combo-safety.mjs --root PATH [--apply]');
-  const path = await install(root, process.argv.includes('--apply') ? 'apply' : 'verify');
+  const path = await install(root, process.argv.includes('--apply') ? 'apply' : 'verify', { checkVersion: !process.argv.includes('--allow-version-drift') });
   console.log(`9ROUTER_IMAGE_COMBO_SAFETY=${process.argv.includes('--apply') ? 'installed' : 'verified'}:${path}`);
 }
