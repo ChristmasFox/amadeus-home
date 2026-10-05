@@ -9,11 +9,13 @@ import { fileURLToPath } from 'node:url';
 import {
   assertAmadeusImageTransportRouteModel,
   buildAmadeusReferenceImagePayload,
+  classifyImageGenerationFailure,
   IMAGE_ROUTE_AUTHORITY_PIN,
   patchImageGenerationRuntimeSource,
   patchImageGenerationToolSource,
   patchOpenAIImageProviderSource,
   resolveAmadeusImageRouteAuthority,
+  shouldRetryImageGeneration,
 } from './image-route-authority.mjs';
 import { installCoreCompletionSource, main as installPinnedOverlay, CORE_PIN } from './core-completion.mjs';
 import { COMPLETION_CAPTION_PIN, patchCompletionCaptionSource } from './completion-caption.mjs';
@@ -25,6 +27,15 @@ const requireFromOpenClaw = createRequire(join(openclawRoot, 'package.json'));
 const acorn = requireFromOpenClaw('acorn');
 const parseModule = (source) => acorn.parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
 const digest = (source) => createHash('sha256').update(source).digest('hex');
+
+test('image failures distinguish safety refusals, account locks, invalid requests and transient provider faults', () => {
+  assert.equal(classifyImageGenerationFailure({ status: 400, error: { message: 'content policy violation' } }), 'safety_refusal');
+  assert.equal(shouldRetryImageGeneration({ status: 400, error: { message: 'content policy violation' } }), false);
+  assert.equal(classifyImageGenerationFailure('Codex did not return an image. Account may not be entitled (Plus/Pro required).'), 'account_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 400, message: 'invalid prompt' }), 'invalid_request');
+  assert.equal(classifyImageGenerationFailure({ status: 502, message: 'upstream temporarily unavailable' }), 'provider_unavailable');
+  assert.equal(shouldRetryImageGeneration(new Error('request timed out')), true);
+});
 
 async function pinnedSource(name) {
   return await readFile(join(openclawDist, name), 'utf8');
@@ -91,6 +102,8 @@ test('detached image execution captures only the authoritative route and has no 
   assert.match(patched, /imageRouteDiagnostic: routeAuthority/);
   assert.match(patched, /model,\s*size,/);
   assert.match(patched, /modelOverrideIgnored: true/);
+  assert.match(patched, /executeImageGenerationJobWithRetry/);
+  assert.match(patched, /Retrying image generation/);
   assert.match(patched, /queue: "process_local_microtask"/);
   assert.doesNotMatch(patched, /postMessage\(\{\s*input:.*image_generate/s);
 

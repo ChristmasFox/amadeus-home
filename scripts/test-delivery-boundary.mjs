@@ -57,6 +57,8 @@ assert.equal(nativeAnnouncements,1,'native task completion continues after typed
 const failureResult=await completionHandler({eventSource:'image_generation',status:'error',toolName:'image_generate',result:'raw provider payload must not be forwarded',handle:{...handle,taskId:'00000000-0000-4000-8000-000000000002'}});
 assert.equal(failureResult.status,'delivered');assert.equal(failures.length,1);assert.equal(failures[0].taskId,'00000000-0000-4000-8000-000000000002');
 assert.equal('result' in failures[0],false,'raw failure payload is not forwarded');assert.equal(nativeAnnouncements,1,'failure settlement does not emit a second native completion');
+const safetyFailureResult=await completionHandler({eventSource:'image_generation',status:'error',toolName:'image_generate',result:{status:400,error:{message:'content policy violation'}},handle:{...handle,taskId:'00000000-0000-4000-8000-000000000003'}});
+assert.equal(safetyFailureResult.status,'delivered');assert.equal(failures.at(-1).failureReason,'safety_refusal');
 // A true admission failure occurs before OpenClaw invokes the accepted observer.
 const originalAst=acornParse(coreOriginal);const runnerNode=originalAst.body.find(node=>node.type==='FunctionDeclaration'&&node.id?.name==='runMediaGenerationTask');
 assert.ok(runnerNode,'pinned detached task admission boundary must remain anchored');let preAdmissionAck=0;

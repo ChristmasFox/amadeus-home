@@ -66,12 +66,16 @@ FIXTURE = r'''
   const upstream400 = await runCase((model) => model === models[0] ? failure(400, 'invalid prompt') : image.clone());
   assert.deepEqual(upstream400.calls, models);
   assert.equal(upstream400.result.status, 200);
+  const safety = await runCase((model) => model === models[0] ? failure(400, 'content policy violation') : image.clone());
+  assert.deepEqual(safety.calls, [models[0]], 'safety refusal must terminate the Combo without cross-provider retry');
+  assert.equal(safety.result.status, 400);
   const unavailable = await runCase((model) => model === models[0] ? failure(429, 'quota exceeded') : failure(503, 'capacity unavailable'));
   assert.equal(unavailable.result.ok, false);
   assert.deepEqual(unavailable.calls, models);
   assert.ok((await unavailable.result.json()).error?.message, 'both unavailable return a structured error');
   console.log('EXACT_IMAGE_COMBO_FALLBACK_PATH=passed');
-  console.log('UPSTREAM_400_CLASSIFICATION=fallback_eligible_in_pinned_9router');
+  console.log('UPSTREAM_400_CLASSIFICATION=fallback_eligible_except_safety_refusal');
+  console.log('SAFETY_REFUSAL_NO_FALLBACK=passed');
 })().catch(() => { console.error('EXACT_IMAGE_COMBO_FALLBACK_PATH=failed'); process.exitCode = 1; });
 '''
 
@@ -92,7 +96,8 @@ def main() -> None:
     )
     lines = result.stdout.strip().splitlines()
     if result.returncode or lines != ["EXACT_IMAGE_COMBO_FALLBACK_PATH=passed",
-                                     "UPSTREAM_400_CLASSIFICATION=fallback_eligible_in_pinned_9router"]:
+                                     "UPSTREAM_400_CLASSIFICATION=fallback_eligible_except_safety_refusal",
+                                     "SAFETY_REFUSAL_NO_FALLBACK=passed"]:
         raise SystemExit("exact live 9Router image Combo fixture failed (no provider/account state was changed)")
     print("\n".join(lines))
     print("LIVE_FAULT_INJECTION=not_performed; provider/account state untouched")

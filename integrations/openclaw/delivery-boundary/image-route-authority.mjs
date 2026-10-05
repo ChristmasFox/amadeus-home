@@ -16,6 +16,32 @@ export const IMAGE_ROUTE_AUTHORITY_PIN = Object.freeze({
 
 export const IMAGE_ROUTE_AUTHORITY_MARKER = 'AMADEUS_IMAGE_ROUTE_AUTHORITY_20261001';
 
+export function failureText(value) {
+  if (value instanceof Error) return `${value.name} ${value.message}`;
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (value && typeof value === 'object') {
+    const entries = [value.name, value.message, value.code, value.status,
+      value.error?.name, value.error?.message, value.error?.code, value.error?.status,
+      value.body, value.response?.status, value.response?.data?.error?.message];
+    return entries.filter((entry) => typeof entry === 'string' || typeof entry === 'number').join(' ');
+  }
+  return String(value ?? '');
+}
+
+/** Classifies provider failures without exposing raw upstream payloads to users. */
+export function classifyImageGenerationFailure(value) {
+  const text = failureText(value).toLowerCase();
+  if (/(?:safety|moderation|content\s+policy|policy\s+(?:violation|refusal)|prompt\s+(?:blocked|rejected)|unsafe|disallowed|prohibited|responsible\s+ai|violat\w*\s+(?:guideline|policy)|copyright\s+restriction)/u.test(text)) return 'safety_refusal';
+  if (/(?:not\s+entitled|plus\/pro\s+required|account\w*\s+(?:locked|unavailable)|all\s+\d+\s+accounts\s+locked|no\s+credentials|model\s+lock)/u.test(text)) return 'account_unavailable';
+  if (/(?:invalid\s+(?:prompt|request|model|parameter)|unsupported|missing\s+(?:required\s+)?field|malformed|bad\s+request|validation)/u.test(text)) return 'invalid_request';
+  if (/(?:\b(?:408|409|425|429|500|502|503|504)\b|timeout|timed\s+out|temporar(?:y|ily)|upstream|connection\s+(?:reset|closed)|network\s+error)/u.test(text)) return 'provider_unavailable';
+  return 'unknown';
+}
+
+export function shouldRetryImageGeneration(value) {
+  return classifyImageGenerationFailure(value) === 'provider_unavailable';
+}
+
 /** Shared with the exact native-tool overlay and unit tests. */
 export function resolveAmadeusImageRouteAuthority(input) {
   const configured = input?.configuredImageModel;
@@ -79,12 +105,12 @@ function assertDigest(source, expected, label) {
 }
 
 function routeAuthoritySource() {
-  return `\n// ${IMAGE_ROUTE_AUTHORITY_MARKER}\n${resolveAmadeusImageRouteAuthority.toString()}\n`;
+  return `\n// ${IMAGE_ROUTE_AUTHORITY_MARKER}\n${resolveAmadeusImageRouteAuthority.toString()}\n${failureText.toString()}\n${classifyImageGenerationFailure.toString()}\n${shouldRetryImageGeneration.toString()}\nasync function executeImageGenerationJobWithRetry(params, run) {\n\tlet attempt = 0;\n\twhile (true) {\n\t\tattempt += 1;\n\t\ttry { return await run(); }\n\t\tcatch (error) {\n\t\t\tif (attempt >= 2 || !shouldRetryImageGeneration(error)) throw error;\n\t\t\ttry { params.taskHandle && imageGenerationTaskLifecycle.recordTaskProgress({ handle: params.taskHandle, progressSummary: "Retrying image generation" }); } catch {}\n\t\t\tawait new Promise((resolve) => setTimeout(resolve, 1200));\n\t\t}\n\t}\n}\n`;
 }
 
 export function patchImageGenerationToolSource(original) {
   if (original.includes(IMAGE_ROUTE_AUTHORITY_MARKER)) {
-    if (!original.includes('image_route_native_input_resolved') ||
+    if (!original.includes('image_route_native_input_resolved') || !original.includes('executeImageGenerationJobWithRetry') || !original.includes('safety_refusal') ||
         !original.includes('modelOverride: undefined') ||
         !original.includes('image_route_operator_model_selected') ||
         !original.includes('image_route_task_enqueued') ||
@@ -96,6 +122,10 @@ export function patchImageGenerationToolSource(original) {
 
   let output = replaceOnce(original, 'function createImageGenerateTool(options) {',
     `${routeAuthoritySource()}\nfunction createImageGenerateTool(options) {`, 'native image tool function');
+
+  output = replaceOnce(output, 'async function executeImageGenerationJob(params) {',
+    `async function executeImageGenerationJob(params) {\n\treturn executeImageGenerationJobWithRetry(params, () => executeImageGenerationJobOnce(params));\n}\nasync function executeImageGenerationJobOnce(params) {`,
+    'bounded image generation retry wrapper');
 
   output = replaceOnce(output,
 `model: Type.Optional(Type.String({ description: "Provider/model override, e.g. openai/gpt-image-2; transparent OpenAI: openai/gpt-image-1.5." })),`,
