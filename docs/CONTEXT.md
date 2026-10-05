@@ -1,3 +1,52 @@
+# Canonical context — 2026-10-05
+
+Read this with `docs/CURRENT_TASK.md`; the current Amadeus image retry and
+safety-chain release is complete. Re-read Git/live state before further work.
+
+## Current Amadeus image retry and safety runtime — 1.9.5 deployed
+
+OpenClaw 2026.9.4 runs Amadeus 1.9.5 from commits `adcd431` and `0a062a1` in
+immutable image
+`local/openclaw-amadeus:git-0a062a1c2c13-20261005153543` with image manifest
+`sha256:f1723c78db0f21f4867d2b607b4407d13babb997f41eced25e5628469e9bb80c`.
+The native image task retries at most once and only for transient transport
+failures. Safety/policy refusals terminate immediately; account entitlement or
+long locks and invalid requests do not retry. The terminal lifecycle passes a
+bounded failure category to the Kurisu message enricher, which keeps raw
+provider details out of user text and suggests a safe non-sensitive rewrite for
+safety refusals.
+
+9Router runs
+`local/9router:git-0a062a1c2c13-20261005T153458Z` with image manifest
+`sha256:347a905f925d5b29ea16e950cddc1c2d56fe4cb14ca10560a160534913fdf57e`.
+Both the package standalone bundle and the live `/app` fixture bundle carry
+the safety-terminal Combo patch. The exact compiled live fixture passed:
+ordinary upstream 400 remains fallback-eligible, while a synthetic content
+policy refusal calls only the first model. No provider, credential, or account
+state was changed by the fixture.
+
+Focused image-route tests, 94 Amadeus delivery tests, the model-capability
+adapter suite, Amadeus typecheck, secrets scan, `git diff --check`, BuildKit
+image builds, Gateway registration, health checks, NAS read-only smoke, owner
+notification/outbox smoke, and post-deploy maintenance passed. The optional
+media adapter remains absent and its network smoke was skipped. No unsafe live
+prompt was submitted; safety behavior is covered by classifier, patched-bundle,
+and exact compiled-router tests.
+
+Protected checkpoints:
+`/DATA/AppData/9router/backups/router-upgrade-20261005T153458Z` and
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261005153543`.
+Full evidence:
+`.agent/checkpoints/2026-10-05-amadeus-1.9.5-image-retry-safety-chain.md`.
+
+## Amadeus 1.9.4 — superseded inbound image reference recovery release
+
+The 1.9.4 release repaired model-authored inbound staging paths before
+`image_generate`; its evidence remains in
+`.agent/checkpoints/2026-10-04-amadeus-1.9.4-inbound-image-reference-recovery.md`.
+
+## Historical release context retained below
+
 # Canonical context — 2026-10-04
 
 Read this with `docs/CURRENT_TASK.md`; the current Amadeus inbound image
