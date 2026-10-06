@@ -17,6 +17,9 @@ AUTO_BUILD=0
 NO_BUILD=0
 FULL_VERIFY=0
 CANDIDATE=0
+KREA2_IMAGE_BASE_URL="${AMADEUS_KREA2_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}"
+KREA2_IMAGE_TOKEN_HOST_FILE="${OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE:-$HOME/Library/Application Support/Amadeus/secrets/krea2-image-token}"
+KREA2_IMAGE_TOKEN_GUEST_FILE="${OPENCLAW_KREA2_IMAGE_TOKEN_GUEST_FILE:-/DATA/AppData/openclaw/secrets/krea2-image-token}"
 
 usage() {
   cat <<'USAGE'
@@ -325,6 +328,7 @@ OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
 RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
 MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
+
 PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
 VOICE_PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-voice-failure.mjs"
@@ -432,6 +436,11 @@ for name in ('backup-manifest.json', 'checkpoint.json'):
 print('CHECKPOINT=' + str(checkpoint))
 PY
 
+[[ -f "$KREA2_IMAGE_TOKEN_HOST_FILE" && "$(stat -f %Lp "$KREA2_IMAGE_TOKEN_HOST_FILE")" == 600 ]] || fail "Krea2 token must exist with mode 600: $KREA2_IMAGE_TOKEN_HOST_FILE"
+[[ "$KREA2_IMAGE_TOKEN_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] || fail 'Krea2 guest token must stay under the protected OpenClaw secrets directory.'
+orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/krea2-image-token.tmp "$1"' -- "$KREA2_IMAGE_TOKEN_GUEST_FILE" < "$KREA2_IMAGE_TOKEN_HOST_FILE"
+orb -m "$MACHINE" -u root test "$KREA2_IMAGE_TOKEN_GUEST_FILE" -f
+
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
 
@@ -495,10 +504,10 @@ tar -C "$ROOT_DIR/scripts" -cf - \
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" \
   "$OPENCLAW_APP_DIR/.env" "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" \
-  "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" <<'PY'
+  "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" "$KREA2_IMAGE_BASE_URL" "$KREA2_IMAGE_TOKEN_GUEST_FILE" <<'PY'
 import base64, os, re, sys
 from pathlib import Path
-app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file = sys.argv[1:]
+app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file, krea2_base_url, krea2_token_host_file = sys.argv[1:]
 if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
 content = base64.b64decode(encoded).decode()
 matches = list(re.finditer(r'(?m)^(\s*)image:\s*.*$', content))
@@ -520,6 +529,8 @@ def set_env(key, value):
 set_env('AMADEUS_IMAGE_SERVICE_BASE_URL', image_service_base_url)
 set_env('AMADEUS_IMAGE_ASSET_HOST_DIR', image_asset_host_dir)
 set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
+set_env('AMADEUS_KREA2_IMAGE_BASE_URL', krea2_base_url)
+set_env('OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE', krea2_token_host_file)
 set_env('AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets')
 env_path.write_text('\n'.join(env_lines) + '\n')
 os.chmod(env_path, 0o600)

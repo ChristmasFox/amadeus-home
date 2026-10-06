@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DESIRED = ROOT / "infra/9router/model-capabilities.json"
+IMAGE_TIMEOUT_SECONDS = 600
 
 SMOKE = r'''
 (async () => {
@@ -25,7 +26,7 @@ SMOKE = r'''
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'amadeus-image', prompt: 'A simple blue geometric circle on a clean white background, no text.', n: 1, size: '1024x1024' }),
-    signal: AbortSignal.timeout(180000),
+    signal: AbortSignal.timeout(600000),
   });
   if (!response.ok) throw new Error(`HTTP_${response.status}`);
   const payload = await response.json();
@@ -52,7 +53,7 @@ def main() -> None:
     parser.add_argument("--machine", default="nyannyan")
     args = parser.parse_args()
     desired = json.loads(DESIRED.read_text())["image"]
-    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.5", "ag/gemini-3.1-flash-image"]:
+    if desired["name"] != "amadeus-image" or desired["models"] != ["cx/gpt-image-2.5"]:
         raise SystemExit("desired image Combo no longer matches the pinned smoke")
     if not args.apply:
         print("MODE=dry-run; no authenticated image request")
@@ -61,7 +62,7 @@ def main() -> None:
     since = datetime.now(timezone.utc).isoformat()
     result = subprocess.run(
         ["orb", "-m", args.machine, "-u", "root", "docker", "exec", "openclaw", "node", "-e", SMOKE],
-        capture_output=True, text=True, timeout=205,
+        capture_output=True, text=True, timeout=IMAGE_TIMEOUT_SECONDS + 60,
     )
     if result.returncode:
         diagnostic = result.stderr.strip().splitlines()[-1:] or ["unknown"]
@@ -80,7 +81,7 @@ def main() -> None:
         capture_output=True, text=True, timeout=30,
     )
     output = logs.stdout + logs.stderr if logs.returncode == 0 else ""
-    first = 'Trying model 1/2: cx/gpt-image-2.5' in output
+    first = 'Trying model 1/1: cx/gpt-image-2.5' in output
     first_ok = 'Model cx/gpt-image-2.5 succeeded' in output
     print("FIRST_BACKEND_ATTEMPT=" + ("observed" if first else "unverified"))
     print("FIRST_BACKEND_SUCCESS=" + ("observed" if first_ok else "unverified"))

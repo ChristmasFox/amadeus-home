@@ -69,10 +69,11 @@ High-risk operations keep their owner/confirmation checks. The current WhatsApp 
 
 The candidate default image model is the stable `openai/amadeus-image` logical
 capability over the existing 9Router OpenAI-compatible provider and SecretRef.
-One native `image_generate` call reaches 9Router; 9Router, not OpenClaw,
-performs ordered fallback from `cx/gpt-image-2.5` to
-`ag/gemini-3.1-flash-image`. The image Skill is provider-neutral and covers new-image
-generation only; reference-image editing parity is deferred. The source cutover disables OpenClaw generic automatic TTS (`tts.auto=off`).
+One native `image_generate` call reaches 9Router's `cx/gpt-image-2.5` primary.
+After an eligible prompt-only primary transport failure, the source-managed
+OpenClaw OpenAI provider calls the loopback-protected local Wild Krea2 bridge.
+The image Skill is provider-neutral; reference-image editing remains fail-closed
+for the local fallback. The source cutover disables OpenClaw generic automatic TTS (`tts.auto=off`).
 `DeliveryEnvelope v2` owns an explicit voice part and its sole `amadeus-tts`
 synthesis via the existing 9Router bridge. A verified WhatsApp inbound voice
 or a typed explicit voice request can receive Japanese audio and the explicit

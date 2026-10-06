@@ -65,7 +65,7 @@ class ImageComboTest(unittest.TestCase):
     def test_exact_git_desired_state(self):
         self.assertEqual(self.desired, {
             "name": "amadeus-image", "kind": "image", "strategy": "fallback",
-            "models": ["cx/gpt-image-2.5", "ag/gemini-3.1-flash-image"],
+            "models": ["cx/gpt-image-2.5"],
         })
 
     def test_creation_idempotence_preserves_unrelated_state(self):
@@ -90,7 +90,7 @@ class ImageComboTest(unittest.TestCase):
         self.assertEqual(image.restore_image(api, before), ("already_absent", "existing"))
 
     def test_reconcile_order_and_strategy_then_restore_exact_original(self):
-        old_models = ["ag/gemini-3.1-flash-image", "cx/gpt-image-2.5"]
+        old_models = ["cx/gpt-image-1"]
         api = FakeDashboard(
             combos=[{"id": "existing-image", "name": "amadeus-image", "kind": "image", "models": old_models},
                     {"id": "other", "name": "other-image", "kind": "image", "models": ["other/model"]}],
