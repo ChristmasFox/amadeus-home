@@ -125,3 +125,12 @@ primary-only image. No real WhatsApp image request has yet been accepted.
 Evidence: `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
 
 Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; OPENCLAW_LOCAL_ONLY_CANDIDATE_DEPLOYED; REAL_WHATSAPP_ACCEPTANCE_PENDING; FINAL_GPT_TO_QWEN_FALLBACK_PENDING`.
+
+On 2026-10-07, commit `6b7623e` corrected the bridge's image-edit extra
+argument from ignored `denoising_strength` to the pinned engine's `strength`.
+The authorized local LaunchAgent restart is healthy and authenticated
+OpenClaw-container model discovery returns HTTP 200. The effective requested
+strength is now 0.9 instead of the engine default 0.75. A real pose edit and
+visual acceptance remain with the operator; neither the final fallback nor
+the local-only candidate status has changed. Evidence:
+`.agent/checkpoints/2026-10-07-qwen-image-edit-strength-restart.md`.
