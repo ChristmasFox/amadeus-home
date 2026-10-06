@@ -1,5 +1,44 @@
 # Project State — 2026-10-05
 
+## 2026-10-06 — Wild Krea2 local fallback candidate
+
+The local `ModdiAdam/Wild_Krea-2-turbo_NSFW` Q4_1 transformer is pinned and
+hash-verified outside Git with the pinned Metal `stable-diffusion.cpp` runtime,
+Qwen3-VL 4B Q4_K_M text encoder, and Wan2.1 VAE. Direct 1024-class generation,
+the protected loopback bridge, and OrbStack container-to-bridge requests passed;
+the bridge reports one active worker, one queued request, and a 600-second image
+deadline. The cold/warm portrait and landscape benchmark completed without OOM;
+the host remained responsive and Qwen TTS stayed healthy, although macOS swap
+was high after the large model runs.
+
+The active image desired state is one native `cx/gpt-image-2.5` primary. Gemini
+image fallback is removed. An OpenClaw-only provider fallback sends
+`local/wild-krea2-turbo-nsfw` to the authenticated loopback bridge for eligible
+429/5xx/transport failures. Reference-image requests remain fail-closed until a
+local edit path is separately proven. Candidate images are
+`local/9router:git-2290e8926b70-20261006T095859Z` and
+`local/openclaw-amadeus:git-2290e8926b70-20261006100001`; this is not yet a
+version release.
+
+The authenticated 9Router primary smoke passed (PNG, 818180 bytes), and a
+real owner WhatsApp reference-image request established the activity path but
+failed at the Codex entitlement boundary; it correctly did not degrade to
+prompt-only Krea generation. A prior synthetic-primary failure produced a valid
+local Krea image and claimed one Asset Registry attachment, but it used a CLI
+session without an active WhatsApp completion port, so it is not accepted as
+the required end-to-end WhatsApp fallback proof. The remaining gate is one
+owner WhatsApp text-to-image request while the primary is deliberately made to
+return 503, followed by proof of exactly one image primitive, native completion,
+and the natural caption.
+
+Protected checkpoints and external evidence:
+`/Volumes/Avalon/backups/operation-skuld/amadeus-model-capability/amadeus-image-preapply-20261006T095850Z-70815.json`,
+`/DATA/AppData/9router/backups/router-upgrade-20261006T095859Z`,
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261006100422`, and
+`/Volumes/Avalon/models/krea2/acceptance/`.
+
+Full candidate evidence: `.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-candidate.md`.
+
 ## Amadeus 1.9.5 — current live image retry and safety chain
 
 Release commits `adcd431` and `0a062a1` are live in immutable OpenClaw

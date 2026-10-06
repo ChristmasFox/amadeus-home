@@ -17,7 +17,12 @@ Important compatibility gate: the Wild Krea model card and upstream `stable-diff
 
 Reference-image requests must not silently degrade to prompt-only generation. Until a real local edit path is proven, a failed GPT Image reference request must terminate cleanly rather than use the text-to-image Krea fallback incorrectly.
 
-Current live release remains **Amadeus 1.8.4** (`VERSION=1.8.4`) until this Goal performs an explicit release. Existing release evidence remains:
-`.agent/checkpoints/2026-10-02-amadeus-1.8.4-unrestricted-kurisu-caption.md`.
+Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`). The Krea2 source
+changes are deployed in a candidate OpenClaw image and the active 9Router image
+Combo has one primary (`cx/gpt-image-2.5`); the local fallback is owned by the
+OpenClaw provider boundary because stock 9Router 0.5.91 cannot dispatch a
+dynamic image backend. The candidate deployment and protected rollback evidence
+are recorded in
+`.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-candidate.md`.
 
-Status: `PLANNED_NOT_APPLIED`.
+Status: `CANDIDATE_DEPLOYED_AWAITING_REAL_WHATSAPP_FALLBACK_ACCEPTANCE`.
