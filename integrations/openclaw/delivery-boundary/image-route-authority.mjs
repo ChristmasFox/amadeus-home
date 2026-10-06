@@ -306,8 +306,8 @@ export function patchOpenAIImageProviderSource(original) {
   if (original.includes(marker)) {
     if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') ||
         !original.includes('image_route_transport_failed') || !original.includes('buildAmadeusReferenceImagePayload') ||
-        !original.includes('amadeusReferencePayload') || !original.includes('requestAmadeusKrea2Fallback') ||
-        !original.includes('AMADEUS_KREA2_IMAGE_TOKEN_FILE')) {
+        !original.includes('amadeusReferencePayload') || !original.includes('requestAmadeusQwenFallback') ||
+        !original.includes('AMADEUS_QWEN_IMAGE_TOKEN_FILE') || !original.includes('AMADEUS_QWEN_IMAGE_LOCAL_ONLY')) {
       throw new Error('incomplete OpenAI image route patch');
     }
     return original;
@@ -316,59 +316,103 @@ export function patchOpenAIImageProviderSource(original) {
 // ${marker}
 ${assertAmadeusImageTransportRouteModel.toString()}
 ${buildAmadeusReferenceImagePayload.toString()}
-const AMADEUS_KREA2_IMAGE_MODEL = "local/wild-krea2-turbo-nsfw";
-function normalizeAmadeusKrea2ImageSize(value) {
-	return value === "768x1024" || value === "1024x768" || value === "1024x1024" ? value : "768x1024";
-}
-function amadeusKrea2FallbackEligible(error, status) {
-	if (status === 429 || status >= 500 && status <= 599) return true;
+const AMADEUS_QWEN_IMAGE_MODEL = "local/qwen-image-2.1-uncensored";
+function amadeusQwenFallbackEligible(error, status) {
+	if (status === 408 || status === 429 || status >= 500 && status <= 599) return true;
+	if (status !== undefined) return false;
 	const text = String(error?.name || "") + " " + String(error?.message || "") + " " + String(error?.code || "");
 	return /(?:abort|timeout|timed[ -]?out|network|fetch failed|econn(?:refused|reset)|socket|connection (?:reset|closed))/iu.test(text);
 }
-function amadeusKrea2FallbackRouteAllowed(req) {
+function amadeusQwenFallbackRouteAllowed(req) {
 	const route = req.imageRouteContext;
-	return route?.configuredLogicalModel === "openai/amadeus-image" && req.provider === "openai" && req.model === "amadeus-image" && (req.inputImages ?? []).length === 0 && resolveOpenAIImageCount(req.count) === 1;
+	const referenceCount = (req.inputImages ?? []).length;
+	return route?.configuredLogicalModel === "openai/amadeus-image" && req.provider === "openai" && req.model === "amadeus-image" && referenceCount <= 1 && resolveOpenAIImageCount(req.count) === 1;
 }
-function resolveAmadeusKrea2ImageEndpoint() {
-	const configured = process.env.AMADEUS_KREA2_IMAGE_BASE_URL || "http://host.docker.internal:18793/v1";
+function amadeusQwenLocalOnly(req) {
+	if (process.env.AMADEUS_QWEN_IMAGE_LOCAL_ONLY !== "1" || req.imageRouteContext?.configuredLogicalModel !== "openai/amadeus-image") return false;
+	if (!amadeusQwenFallbackRouteAllowed(req)) throw amadeusQwenTerminalFailure(new Error("amadeus_qwen_local_only_request_invalid"));
+	return true;
+}
+function resolveAmadeusQwenImageEndpoint() {
+	const configured = process.env.AMADEUS_QWEN_IMAGE_BASE_URL || "http://host.docker.internal:18793/v1";
 	const url = new URL(configured);
-	if (url.protocol !== "http:" || !["host.docker.internal", "localhost", "127.0.0.1"].includes(url.hostname) || url.username || url.password || url.pathname.replace(/\\/$/u, "") !== "/v1" || url.search || url.hash) throw new Error("amadeus_krea2_endpoint_invalid");
+	if (url.protocol !== "http:" || !["host.docker.internal", "localhost", "127.0.0.1"].includes(url.hostname) || url.username || url.password || url.pathname.replace(/\\/$/u, "") !== "/v1" || url.search || url.hash) throw new Error("amadeus_qwen_endpoint_invalid");
 	return url.toString().replace(/\\/$/u, "");
 }
-async function readAmadeusKrea2ImageToken() {
-	const path = process.env.AMADEUS_KREA2_IMAGE_TOKEN_FILE || "/run/secrets/krea2_image_token";
+async function readAmadeusQwenImageToken() {
+	const path = process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE || "/run/secrets/qwen_image_token";
 	const fs = await import("node:fs/promises");
-	const metadata = await fs.stat(path);
-	if ((metadata.mode & 0o077) !== 0) throw new Error("amadeus_krea2_token_permissions_invalid");
+	const metadata = await fs.lstat(path);
+	if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error("amadeus_qwen_token_file_invalid");
+	if ((metadata.mode & 0o077) !== 0) throw new Error("amadeus_qwen_token_permissions_invalid");
 	const token = (await fs.readFile(path, "utf8")).trim();
-	if (!token || token.length > 512 || /[\\r\\n]/u.test(token)) throw new Error("amadeus_krea2_token_invalid");
+	if (!token || token.length > 512 || /[\\r\\n]/u.test(token)) throw new Error("amadeus_qwen_token_invalid");
 	return token;
 }
-async function requestAmadeusKrea2Fallback(req, params) {
-	if (!amadeusKrea2FallbackRouteAllowed(req) || !amadeusKrea2FallbackEligible(params.error, params.status)) return null;
-	const endpoint = resolveAmadeusKrea2ImageEndpoint();
-	const token = await readAmadeusKrea2ImageToken();
-	const size = normalizeAmadeusKrea2ImageSize(params.size);
-	const timeoutMs = Number.isFinite(req.timeoutMs) && req.timeoutMs > 0 ? req.timeoutMs : 600000;
-	let response;
+function buildAmadeusQwenFallbackRequest(req, token, timeoutMs, FormDataConstructor = FormData) {
+	const references = req.inputImages ?? [];
+	const options = { method: "POST", headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(timeoutMs) };
+	if (references.length === 0) {
+		options.headers["Content-Type"] = "application/json";
+		options.body = JSON.stringify({ model: AMADEUS_QWEN_IMAGE_MODEL, prompt: req.prompt, n: 1, output_format: "png" });
+		return { path: "/images/generations", options };
+	}
+	const image = references[0];
+	const mime = image.mimeType?.trim().toLowerCase();
+	if (!(image.buffer instanceof Uint8Array) || !image.buffer.byteLength || image.buffer.byteLength > 10 * 1024 * 1024 || !["image/png", "image/jpeg", "image/webp"].includes(mime)) throw new Error("amadeus_qwen_reference_invalid");
+	const form = new FormDataConstructor();
+	form.set("model", AMADEUS_QWEN_IMAGE_MODEL);
+	form.set("prompt", req.prompt);
+	form.set("n", "1");
+	form.set("image[]", new Blob([Buffer.from(image.buffer)], { type: mime }), "reference." + ({ "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" })[mime]);
+	options.body = form;
+	return { path: "/images/edits", options };
+}
+function amadeusQwenTerminalFailure(error) {
+	const terminal = new Error("amadeus_qwen_fallback_failed");
+	terminal.code = "amadeus_qwen_fallback_terminal";
+	terminal.cause = error;
+	return terminal;
+}
+async function requestAmadeusQwenFallback(req, params) {
+	if (!amadeusQwenFallbackRouteAllowed(req) || !params.localOnly && !amadeusQwenFallbackEligible(params.error, params.status)) return null;
+	let endpoint;
+	let references;
+	let localRequest;
+	let Agent;
+	let localFetch;
+	let localFormData;
 	try {
-		response = await fetch(endpoint + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ model: AMADEUS_KREA2_IMAGE_MODEL, prompt: req.prompt, n: 1, size, output_format: "png" }), signal: AbortSignal.timeout(timeoutMs) });
+		endpoint = resolveAmadeusQwenImageEndpoint();
+		const token = await readAmadeusQwenImageToken();
+		({ Agent, fetch: localFetch, FormData: localFormData } = await import("undici"));
+		references = req.inputImages ?? [];
+		localRequest = buildAmadeusQwenFallbackRequest(req, token, 600000, localFormData);
 	} catch (error) {
-		const terminal = new Error("amadeus_krea2_fallback_failed");
-		terminal.code = "amadeus_krea2_fallback_terminal";
-		terminal.cause = error;
-		throw terminal;
+		throw amadeusQwenTerminalFailure(error);
 	}
-	const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
-	const log = createSubsystemLogger("image-generation/openai");
-	log.info(JSON.stringify({ event: "image_route_local_fallback", taskId: req.imageRouteContext?.taskId, runId: req.imageRouteContext?.runId, configuredLogicalModel: req.imageRouteContext?.configuredLogicalModel, transportLogicalModel: AMADEUS_KREA2_IMAGE_MODEL, providerStatus: response.status }));
+	let response;
+	let dispatcher;
+	try {
+		dispatcher = new Agent({ headersTimeout: 600000, bodyTimeout: 600000 });
+		response = await localFetch(endpoint + localRequest.path, { ...localRequest.options, dispatcher });
+	} catch (error) {
+		if (dispatcher) dispatcher.destroy();
+		throw amadeusQwenTerminalFailure(error);
+	}
+	try {
+		const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
+		const log = createSubsystemLogger("image-generation/openai");
+		log.info(JSON.stringify({ event: params.localOnly ? "image_route_local_only" : "image_route_local_fallback", taskId: req.imageRouteContext?.taskId, runId: req.imageRouteContext?.runId, configuredLogicalModel: req.imageRouteContext?.configuredLogicalModel, transportLogicalModel: AMADEUS_QWEN_IMAGE_MODEL, localMode: references.length === 1 ? "edit" : "generation", referenceCount: references.length, providerStatus: response.status }));
+	} catch (error) {
+		dispatcher.destroy();
+		throw amadeusQwenTerminalFailure(error);
+	}
 	if (!response.ok) {
-		const terminal = new Error("amadeus_krea2_fallback_failed");
-		terminal.code = "amadeus_krea2_fallback_terminal";
-		terminal.cause = new Error("amadeus_krea2_fallback_http_" + response.status);
-		throw terminal;
+		dispatcher.destroy();
+		throw amadeusQwenTerminalFailure(new Error("amadeus_qwen_fallback_http_" + response.status));
 	}
-	return { response, release: async () => {}, model: AMADEUS_KREA2_IMAGE_MODEL, size };
+	return { response, release: async () => { await dispatcher.close(); }, model: AMADEUS_QWEN_IMAGE_MODEL, size: params.size };
 }
 async function assertAmadeusImageTransportRoute(req, model) {
 	const route = req.imageRouteContext;
@@ -422,8 +466,20 @@ async function logAmadeusImageTransportFailure(req, model, status) {
     'reference JSON versus native multipart');
   output = replaceOnce(output,
 `\t\t\t})();\n\t\t\ttry {\n\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");`,
-`\t\t\t\t})();\n\t\t\t\tresponse = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t} catch (error) {\n\t\t\t\tconst fallback = await requestAmadeusKrea2Fallback(req, { error, size, status: undefined });\n\t\t\t\tif (!fallback) throw error;\n\t\t\t\tresponse = fallback.response;\n\t\t\t\trelease = fallback.release;\n\t\t\t\trequestModel = fallback.model;\n\t\t\t}\n\t\t\ttry {\n\t\t\t\ttry {\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");\n\t\t\t\t} catch (error) {\n\t\t\t\t\tconst primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();\n\t\t\t\t\trelease = async () => {};\n\t\t\t\t\tconst fallback = await requestAmadeusKrea2Fallback(req, { error, size, status: response.status });\n\t\t\t\t\tif (!fallback) throw error;\n\t\t\t\t\tresponse = fallback.response;\n\t\t\t\t\trelease = fallback.release;\n\t\t\t\t\trequestModel = fallback.model;\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, "OpenAI image generation failed");\n\t\t\t\t}`,
+`\t\t\t\t})();\n\t\t\t\tresponse = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t} catch (error) {\n\t\t\t\tconst fallback = await requestAmadeusQwenFallback(req, { error, size, status: undefined });\n\t\t\t\tif (!fallback) throw error;\n\t\t\t\tresponse = fallback.response;\n\t\t\t\trelease = fallback.release;\n\t\t\t\trequestModel = fallback.model;\n\t\t\t}\n\t\t\ttry {\n\t\t\t\ttry {\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");\n\t\t\t\t} catch (error) {\n\t\t\t\t\tconst primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();\n\t\t\t\t\trelease = async () => {};\n\t\t\t\t\tconst fallback = await requestAmadeusQwenFallback(req, { error, size, status: response.status });\n\t\t\t\t\tif (!fallback) throw error;\n\t\t\t\t\tresponse = fallback.response;\n\t\t\t\t\trelease = fallback.release;\n\t\t\t\t\trequestModel = fallback.model;\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, "OpenAI image generation failed");\n\t\t\t\t}`,
     'bounded local fallback around transport and upstream status');
+  output = replaceOnce(output,
+    'let requestModel = model;\n\t\t\ttry {\n\t\t\t\tconst transport = isEdit && !amadeusReferencePayload ? await (() => {',
+    'let requestModel = model;\n\t\t\tconst localOnly = amadeusQwenLocalOnly(req);\n\t\t\ttry {\n\t\t\t\tconst transport = localOnly ? await requestAmadeusQwenFallback(req, { localOnly: true, size }) : isEdit && !amadeusReferencePayload ? await (() => {',
+    'candidate local-only transport selection');
+  output = replaceOnce(output,
+    'response = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t} catch (error) {',
+    'response = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t\trequestModel = transport.model ?? model;\n\t\t\t} catch (error) {\n\t\t\t\tif (localOnly) throw error;',
+    'local-only model attribution and no primary recovery');
+  output = replaceOnce(output,
+    'const primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();',
+    'if (localOnly) throw amadeusQwenTerminalFailure(error);\n\t\t\t\t\tconst primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();',
+    'local-only HTTP failure is terminal');
   output = replaceOnce(output,
 `const body = {
 \t\t\t\t\tprompt: req.prompt,
