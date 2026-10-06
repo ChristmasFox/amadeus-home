@@ -318,7 +318,7 @@ ${assertAmadeusImageTransportRouteModel.toString()}
 ${buildAmadeusReferenceImagePayload.toString()}
 const AMADEUS_KREA2_IMAGE_MODEL = "local/wild-krea2-turbo-nsfw";
 function normalizeAmadeusKrea2ImageSize(value) {
-	return value === "768x1024" || value === "1024x768" || value === "1024x1024" ? value : "1024x1024";
+	return value === "768x1024" || value === "1024x768" || value === "1024x1024" ? value : "768x1024";
 }
 function amadeusKrea2FallbackEligible(error, status) {
 	if (status === 429 || status >= 500 && status <= 599) return true;
@@ -350,11 +350,24 @@ async function requestAmadeusKrea2Fallback(req, params) {
 	const token = await readAmadeusKrea2ImageToken();
 	const size = normalizeAmadeusKrea2ImageSize(params.size);
 	const timeoutMs = Number.isFinite(req.timeoutMs) && req.timeoutMs > 0 ? req.timeoutMs : 600000;
-	const response = await fetch(endpoint + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ model: AMADEUS_KREA2_IMAGE_MODEL, prompt: req.prompt, n: 1, size, output_format: "png" }), signal: AbortSignal.timeout(timeoutMs) });
+	let response;
+	try {
+		response = await fetch(endpoint + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ model: AMADEUS_KREA2_IMAGE_MODEL, prompt: req.prompt, n: 1, size, output_format: "png" }), signal: AbortSignal.timeout(timeoutMs) });
+	} catch (error) {
+		const terminal = new Error("amadeus_krea2_fallback_failed");
+		terminal.code = "amadeus_krea2_fallback_terminal";
+		terminal.cause = error;
+		throw terminal;
+	}
 	const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
 	const log = createSubsystemLogger("image-generation/openai");
 	log.info(JSON.stringify({ event: "image_route_local_fallback", taskId: req.imageRouteContext?.taskId, runId: req.imageRouteContext?.runId, configuredLogicalModel: req.imageRouteContext?.configuredLogicalModel, transportLogicalModel: AMADEUS_KREA2_IMAGE_MODEL, providerStatus: response.status }));
-	if (!response.ok) throw new Error("amadeus_krea2_fallback_http_" + response.status);
+	if (!response.ok) {
+		const terminal = new Error("amadeus_krea2_fallback_failed");
+		terminal.code = "amadeus_krea2_fallback_terminal";
+		terminal.cause = new Error("amadeus_krea2_fallback_http_" + response.status);
+		throw terminal;
+	}
 	return { response, release: async () => {}, model: AMADEUS_KREA2_IMAGE_MODEL, size };
 }
 async function assertAmadeusImageTransportRoute(req, model) {

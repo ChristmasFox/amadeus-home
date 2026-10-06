@@ -210,6 +210,10 @@ class KreaBridge:
                 except error.HTTPError as exc:
                     return 504 if exc.code in {408, 504} else 503, safe_failure(exc.code if exc.code in {400, 408, 429, 500, 502, 503, 504} else 503, "krea2_provider_unavailable")
                 except (TimeoutError, error.URLError):
+                    # A timed out native request can keep sd-server busy after the
+                    # client has gone away. Stop it so the next request can start
+                    # cleanly instead of inheriting a stale generation.
+                    self.stop()
                     return 504, safe_failure(504, "krea2_timeout")
                 try:
                     parsed = json.loads(data)

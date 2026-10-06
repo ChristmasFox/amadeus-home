@@ -229,6 +229,8 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       assert.match(patched, /AMADEUS_KREA2_IMAGE_BASE_URL/);
       assert.match(patched, /AMADEUS_KREA2_IMAGE_TOKEN_FILE/);
       assert.match(patched, /inputImages \?\? \[\]\)\.length === 0/);
+      assert.match(patched, /: "768x1024";/, 'local fallback defaults to the faster 1024-class portrait size');
+      assert.match(patched, /amadeus_krea2_fallback_terminal/, 'local fallback failures are terminal and do not start a duplicate generation');
     }),
   ]);
 });
