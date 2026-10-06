@@ -102,12 +102,26 @@ completed in about 409 seconds and returned a 537640-byte image. Built-in
 `fetch` cannot use that Agent (`UND_ERR_INVALID_ARG`). The candidate
 image-route source uses the successful client; container transport success
 does not yet prove the OpenClaw route or WhatsApp delivery.
-OpenClaw/9Router have not been switched; Amadeus 1.9.5 remains live. Service
+At that bridge-test stage, OpenClaw/9Router had not been switched and Amadeus
+1.9.5 remained live. Service
 idle shutdown was observed after about three minutes: the bridge remained
 healthy with state `idle`, port 18795 closed, and system free memory recovered
 to 81% (swap remained elevated near its pre-run level). The installed bridge
 and engine config match the current source bytes. A protected OpenClaw
-candidate checkpoint/switch remains pending.
+candidate checkpoint/switch was then performed as described below.
 Evidence: `.agent/checkpoints/2026-10-07-amadeus-qwen-image-bridge-candidate.md`.
 
-Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; TEST_A_OUTPUT_PALE; PHASE_2_BENCHMARK_COMPLETE; IMAGE_DEADLINE_CANDIDATE_600S; ASSET_PINS_VERIFIED; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; OPENCLAW_CANDIDATE_NOT_DEPLOYED; REAL_WHATSAPP_ACCEPTANCE_PENDING`.
+On 2026-10-07, the operator authorized `--apply`. Commit `e0a2217` was
+built as an immutable OpenClaw image and switched on the canonical CasaOS
+host with `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=1 --candidate --build-auto`. The
+candidate sends image generation/edit requests directly to Qwen and does not
+attempt GPT Image; this temporary test mode is not the final fallback route.
+The protected pre-switch checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261006185442`.
+Post-switch OpenClaw/Product Radar health, Gateway registration, container
+Qwen token permissions (0600), authenticated `/v1/models`, NAS read-only
+smoke, and owner outbox smoke passed. 9Router remains on its previous
+primary-only image. No real WhatsApp image request has yet been accepted.
+Evidence: `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
+
+Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; OPENCLAW_LOCAL_ONLY_CANDIDATE_DEPLOYED; REAL_WHATSAPP_ACCEPTANCE_PENDING; FINAL_GPT_TO_QWEN_FALLBACK_PENDING`.
