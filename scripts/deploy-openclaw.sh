@@ -438,7 +438,7 @@ PY
 
 [[ -f "$KREA2_IMAGE_TOKEN_HOST_FILE" && "$(stat -f %Lp "$KREA2_IMAGE_TOKEN_HOST_FILE")" == 600 ]] || fail "Krea2 token must exist with mode 600: $KREA2_IMAGE_TOKEN_HOST_FILE"
 [[ "$KREA2_IMAGE_TOKEN_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] || fail 'Krea2 guest token must stay under the protected OpenClaw secrets directory.'
-orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/krea2-image-token.tmp "$1"' bash "$KREA2_IMAGE_TOKEN_GUEST_FILE" < "$KREA2_IMAGE_TOKEN_HOST_FILE"
+orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; chown 1000:1000 /DATA/AppData/openclaw/secrets/krea2-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/krea2-image-token.tmp "$1"' bash "$KREA2_IMAGE_TOKEN_GUEST_FILE" < "$KREA2_IMAGE_TOKEN_HOST_FILE"
 orb -m "$MACHINE" -u root test -f "$KREA2_IMAGE_TOKEN_GUEST_FILE"
 
 orb -m "$MACHINE" -u root python3 - \
