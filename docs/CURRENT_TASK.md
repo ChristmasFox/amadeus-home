@@ -1,30 +1,50 @@
-# Current Task — Wild Krea-2 Turbo NSFW local image fallback
+# Current Task — Qwen-Image-2.1 Uncensored edit-first local fallback
 
 Date: 2026-10-06 (Asia/Shanghai).
 
-Active Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
+Active Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
 
-Objective:
+Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
+
+## Objective
 
 - keep `cx/gpt-image-2.5` as the primary image backend;
-- deploy `ModdiAdam/Wild_Krea-2-turbo_NSFW` using `Wild_Krea-2-turbo_NSFW-Q4_1.gguf` on the Mac mini 24GB through a pinned `stable-diffusion.cpp` Metal runtime;
-- use the local Krea2 backend as the only image fallback after acceptance;
-- remove `ag/gemini-3.1-flash-image` from active image desired state;
-- extend the image-specific generation deadline to support real local fallback latency;
-- preserve the Amadeus 1.8.4 `image_generate -> Asset Registry -> native task_completion -> Completion Agent -> one WhatsApp image+caption` lifecycle.
+- keep 9Router's active image Combo primary-only;
+- replace the paused Krea2 local fallback with `abenzerps/Qwen-Image-2.1-Uncensored-GGUF` using `qwen-image-2.1-UC-Q4_K_M.gguf`;
+- make single-reference image editing the P0 local fallback capability;
+- use Qwen3-VL-8B GGUF + verified mmproj/`--llm_vision` + `qwen_image_2.1_vae_bf16.safetensors`;
+- route eligible failed reference edits to the protected local `/v1/images/edits` path without dropping the reference image;
+- preserve the existing Asset Registry -> native task_completion -> Completion Agent -> exactly one WhatsApp image+caption lifecycle;
+- keep Gemini image generation absent;
+- retire active Krea service/env/token/source plumbing only after Qwen candidate acceptance.
 
-Important compatibility gate: the Wild Krea model card and upstream `stable-diffusion.cpp` Krea2 documentation describe different VAE/component pairings. The exact transformer + Qwen3-VL 4B + VAE combination must be proven by direct local smoke before any production route switch.
+## Current live baseline
 
-Reference-image requests must not silently degrade to prompt-only generation. Until a real local edit path is proven, a failed GPT Image reference request must terminate cleanly rather than use the text-to-image Krea fallback incorrectly.
+Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`).
 
-Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`). The operator paused
-the Krea2 rollout after the real local fallback exceeded the 600-second image
-deadline. The runtime was restored from the pre-candidate checkpoints to
-OpenClaw `local/openclaw-amadeus:git-0a062a1c2c13-20261005153543` and 9Router
-`local/9router:git-0a062a1c2c13-20261005T153458Z`; the normal 9Router/GPT route
-is active, WhatsApp is healthy, and the local Krea bridge is stopped. The
-candidate deployment and protected rollback evidence remain recorded in
-`.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-candidate.md`.
+The previous Krea2 candidate exceeded the 600-second local image deadline and was paused by the operator. Runtime was restored to the pre-candidate OpenClaw/9Router checkpoints. The normal 9Router/GPT image route is active, WhatsApp is healthy, the local Krea bridge is stopped, and `infra/9router/model-capabilities.json` currently contains only `cx/gpt-image-2.5`.
 
-Status: `PAUSED_BY_OPERATOR_AFTER_LOCAL_FALLBACK_TIMEOUT`; forced WhatsApp
-fallback acceptance and the release version bump remain undone.
+The Krea candidate and rollback evidence remain historical:
+
+```text
+.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-candidate.md
+.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-paused.md
+```
+
+## P0 acceptance boundary
+
+A prompt-only local generation is not sufficient.
+
+The new Goal must prove a real WhatsApp **single-reference edit** where:
+
+```text
+GPT Image primary -> eligible operational failure
+Qwen-Image-2.1 Uncensored local fallback -> /v1/images/edits
+reference bytes preserved -> edited image returned
+Asset Registry -> Completion Agent
+exactly one WhatsApp image + natural Kurisu caption
+```
+
+Safety/policy refusals remain terminal and must not trigger the uncensored local fallback.
+
+Status: `PLANNED_NOT_APPLIED`.
