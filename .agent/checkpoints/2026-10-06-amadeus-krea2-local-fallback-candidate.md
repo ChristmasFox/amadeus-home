@@ -47,5 +47,9 @@ primary is still required to prove the final image bubble, natural caption,
 native task completion, and exactly one image primitive. Until that evidence is
 recorded, this candidate must not be version-bumped or marked complete.
 
-Focused source tests and `pnpm check:secrets` passed before this checkpoint;
-the complete release test gate remains for the final release after acceptance.
+The focused source tests, full `pnpm test:amadeus` (134 tests), Amadeus
+typecheck/build, delivery-boundary AST/provider contract, Krea bridge tests,
+9Router Combo/reference fixtures, live fallback ownership checks, secrets scan,
+and `git diff --check` all pass. The remaining release gate is the real
+WhatsApp forced-fallback acceptance described above; after it, rerun the same
+checks against the bumped release and deploy the immutable release image.
