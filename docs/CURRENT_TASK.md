@@ -17,12 +17,14 @@ Important compatibility gate: the Wild Krea model card and upstream `stable-diff
 
 Reference-image requests must not silently degrade to prompt-only generation. Until a real local edit path is proven, a failed GPT Image reference request must terminate cleanly rather than use the text-to-image Krea fallback incorrectly.
 
-Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`). The Krea2 source
-changes are deployed in a candidate OpenClaw image and the active 9Router image
-Combo has one primary (`cx/gpt-image-2.5`); the local fallback is owned by the
-OpenClaw provider boundary because stock 9Router 0.5.91 cannot dispatch a
-dynamic image backend. The candidate deployment and protected rollback evidence
-are recorded in
+Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`). The operator paused
+the Krea2 rollout after the real local fallback exceeded the 600-second image
+deadline. The runtime was restored from the pre-candidate checkpoints to
+OpenClaw `local/openclaw-amadeus:git-0a062a1c2c13-20261005153543` and 9Router
+`local/9router:git-0a062a1c2c13-20261005T153458Z`; the normal 9Router/GPT route
+is active, WhatsApp is healthy, and the local Krea bridge is stopped. The
+candidate deployment and protected rollback evidence remain recorded in
 `.agent/checkpoints/2026-10-06-amadeus-krea2-local-fallback-candidate.md`.
 
-Status: `CANDIDATE_DEPLOYED_AWAITING_REAL_WHATSAPP_FALLBACK_ACCEPTANCE`.
+Status: `PAUSED_BY_OPERATOR_AFTER_LOCAL_FALLBACK_TIMEOUT`; forced WhatsApp
+fallback acceptance and the release version bump remain undone.

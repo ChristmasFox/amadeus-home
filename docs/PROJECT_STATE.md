@@ -1,6 +1,19 @@
 # Project State — 2026-10-05
 
-## 2026-10-06 — Wild Krea2 local fallback candidate
+## 2026-10-06 — Wild Krea2 local fallback rollout paused
+
+The operator paused the local Krea2 deployment after two real WhatsApp
+text-to-image attempts reached the local engine but exceeded the 600-second
+image deadline. The previous Amadeus 1.9.5 runtime was restored from the
+pre-candidate checkpoints: OpenClaw
+`local/openclaw-amadeus:git-0a062a1c2c13-20261005153543` and 9Router
+`local/9router:git-0a062a1c2c13-20261005T153458Z`. OpenClaw is healthy, WhatsApp
+is connected, the primary route is back on 9Router/GPT, and the Krea bridge plus
+the synthetic primary test endpoint are stopped. The candidate source and
+external model assets remain preserved for a later optimization pass; no Krea2
+release or version bump was made.
+
+## 2026-10-06 — Wild Krea2 local fallback candidate (paused)
 
 The local `ModdiAdam/Wild_Krea-2-turbo_NSFW` Q4_1 transformer is pinned and
 hash-verified outside Git with the pinned Metal `stable-diffusion.cpp` runtime,
