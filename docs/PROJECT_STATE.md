@@ -1,5 +1,21 @@
 # Project State — 2026-10-07
 
+## 2026-10-07 — Qwen local-only OpenClaw candidate deployed
+
+Operator-authorized candidate commit `e0a2217` is running on the canonical
+CasaOS host as OpenClaw image
+`local/openclaw-amadeus:git-e0a2217f302d-20261006185442`. The temporary
+`AMADEUS_QWEN_IMAGE_LOCAL_ONLY=1` switch routes image generation and edits
+directly to the authenticated local Qwen bridge; GPT Image is not attempted
+for candidate image requests. 9Router remains on the unchanged primary-only
+image, and Amadeus is still version 1.9.5, not a release. Health, Gateway
+registration, authenticated container-to-bridge reachability and protected
+token mode passed. The pre-switch checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261006185442`.
+Real WhatsApp image/caption acceptance and the final GPT-primary-to-Qwen
+fallback remain pending. Evidence:
+`.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
+
 ## 2026-10-07 — Qwen edit bridge candidate, OpenClaw not switched
 
 The Qwen-Image-2.1 Uncensored bridge is installed as a separate loopback-only

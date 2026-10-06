@@ -615,6 +615,12 @@ The candidate must not be version-bumped before real reference-edit fallback acc
 
 ## Phase 14 — mandatory real WhatsApp acceptance
 
+The 2026-10-07 temporary local-only OpenClaw candidate has been deployed for
+operator testing. Its route bypasses GPT Image deliberately; it does not
+satisfy the final forced-primary-failure fallback acceptance. The candidate
+checkpoint and smoke evidence are in
+`.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
+
 A real forced **reference edit** is required.
 
 Use an ordinary safe reference image and a simple visible edit request.
