@@ -1,3 +1,6 @@
+> Status: SUPERSEDED on 2026-10-06 by `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
+> The operator's primary requirement is reference-image editing; the Krea2 candidate was text-to-image-only and exceeded the 600-second real local fallback deadline. Do not execute this Goal as the active task.
+
 # Amadeus Wild Krea-2 Turbo NSFW Local Fallback — Goal
 
 Date: 2026-10-06
