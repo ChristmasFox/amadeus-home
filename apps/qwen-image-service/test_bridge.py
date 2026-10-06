@@ -163,7 +163,8 @@ class BridgeTests(unittest.TestCase):
         fields, files = forwarded_parts(proxied_type, proxied)
         self.assertEqual(files["image[]"], ("image/png", image))
         self.assertEqual(fields["model"], b"sd-cpp-local")
-        self.assertIn(b'"denoising_strength":0.9', fields["prompt"])
+        self.assertIn(b'<sd_cpp_extra_args>{"strength":0.9}</sd_cpp_extra_args>', fields["prompt"])
+        self.assertNotIn(b'"denoising_strength"', fields["prompt"])
         self.assertEqual(response["model"], MODEL_ID)
 
     def test_edit_scales_canvas_geometry_without_changing_reference(self):
