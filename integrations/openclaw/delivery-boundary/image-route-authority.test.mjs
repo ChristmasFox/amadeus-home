@@ -219,6 +219,16 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       const outboundModel = patched.indexOf('body.model = model', finalGuard);
       assert.ok(transportFunctionStart >= 0 && finalGuard > transportFunctionStart && outboundModel > finalGuard,
         'the final OpenAI-compatible model invariant must guard the outbound body model');
+      const fallbackNode = parseModule(patched).body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusKrea2FallbackEligible');
+      assert.ok(fallbackNode, 'local fallback classifier must be present in the pinned provider overlay');
+      const fallbackClassifier = new Function(`${patched.slice(fallbackNode.start, fallbackNode.end)}; return amadeusKrea2FallbackEligible;`)();
+      assert.equal(fallbackClassifier(new Error('request timed out'), undefined), true);
+      assert.equal(fallbackClassifier({ message: 'content policy violation' }, 400), false);
+      assert.equal(fallbackClassifier({ message: 'invalid prompt' }, 400), false);
+      assert.equal(fallbackClassifier({ message: 'quota exceeded' }, 429), true);
+      assert.match(patched, /AMADEUS_KREA2_IMAGE_BASE_URL/);
+      assert.match(patched, /AMADEUS_KREA2_IMAGE_TOKEN_FILE/);
+      assert.match(patched, /inputImages \?\? \[\]\)\.length === 0/);
     }),
   ]);
 });
@@ -313,7 +323,7 @@ test('exact patched HTTP construction sends reference JSON to generations, ordin
   const functionSource = (name) => { const node = ast.body.find(n => n.type === 'FunctionDeclaration' && n.id?.name === name); assert.ok(node); return source.slice(node.start, node.end); };
   const appendOptions = new Function(`${functionSource('resolveOpenAIImageOutputCompression')}\n${functionSource('appendOpenAIImageOptions')}\nreturn appendOpenAIImageOptions;`)();
   const start = source.indexOf('const amadeusReferencePayload = buildAmadeusReferenceImagePayload(req);');
-  const end = source.indexOf('\n\t\t\ttry {', start);
+  const end = source.indexOf('\n\t\t\ttry {\n\t\t\t\ttry {', start);
   assert.ok(start > 0 && end > start);
   const snippet = source.slice(start, end);
   const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;

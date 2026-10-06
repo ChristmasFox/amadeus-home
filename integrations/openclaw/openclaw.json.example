@@ -36,7 +36,7 @@
       "mediaModels": {
         "image": {
           "primary": "openai/amadeus-image",
-          "timeoutMs": 120000
+          "timeoutMs": 600000
         }
       },
       "userTimezone": "Asia/Shanghai",

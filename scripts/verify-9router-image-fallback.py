@@ -51,10 +51,9 @@ FIXTURE = r'''
   const first = await runCase(() => image.clone());
   assert.equal(first.result.status, 200);
   assert.deepEqual(first.calls, [models[0]], 'healthy first model must not round-robin');
-  const fallback = await runCase((model) => model === models[0] ? failure(429, 'quota exceeded') : image.clone());
-  assert.equal(fallback.result.status, 200);
-  assert.deepEqual(fallback.calls, models, 'eligible first-model failure must advance in strict order');
-  assert.equal((await fallback.result.json()).data.length, 1);
+  const primaryUnavailable = await runCase(() => failure(429, 'quota exceeded'));
+  assert.equal(primaryUnavailable.result.status, 429);
+  assert.deepEqual(primaryUnavailable.calls, models, 'native router keeps one primary; OpenClaw owns local fallback');
   const validation = routeSource.indexOf('Missing required field: prompt');
   const comboLookup = routeSource.indexOf('let r=await (0,g.d_)(n);if(r)');
   assert.ok(validation > 0 && comboLookup > validation,
@@ -63,19 +62,19 @@ FIXTURE = r'''
   // shouldFallback=true, even for a provider-sourced HTTP 400. This is not
   // misreported as a non-fallback case; only router-level validation rejects
   // the malformed request before attempting either model.
-  const upstream400 = await runCase((model) => model === models[0] ? failure(400, 'invalid prompt') : image.clone());
+  const upstream400 = await runCase(() => failure(400, 'invalid prompt'));
   assert.deepEqual(upstream400.calls, models);
-  assert.equal(upstream400.result.status, 200);
-  const safety = await runCase((model) => model === models[0] ? failure(400, 'content policy violation') : image.clone());
-  assert.deepEqual(safety.calls, [models[0]], 'safety refusal must terminate the Combo without cross-provider retry');
+  assert.equal(upstream400.result.status, 400);
+  const safety = await runCase(() => failure(400, 'content policy violation'));
+  assert.deepEqual(safety.calls, [models[0]], 'safety refusal must terminate before the OpenClaw local fallback');
   assert.equal(safety.result.status, 400);
-  const unavailable = await runCase((model) => model === models[0] ? failure(429, 'quota exceeded') : failure(503, 'capacity unavailable'));
+  const unavailable = await runCase(() => failure(503, 'capacity unavailable'));
   assert.equal(unavailable.result.ok, false);
   assert.deepEqual(unavailable.calls, models);
   assert.ok((await unavailable.result.json()).error?.message, 'both unavailable return a structured error');
-  console.log('EXACT_IMAGE_COMBO_FALLBACK_PATH=passed');
-  console.log('UPSTREAM_400_CLASSIFICATION=fallback_eligible_except_safety_refusal');
-  console.log('SAFETY_REFUSAL_NO_FALLBACK=passed');
+  console.log('NATIVE_9ROUTER_SINGLE_PRIMARY=passed');
+  console.log('OPENCLAW_LOCAL_FALLBACK_OWNER=declared');
+  console.log('SAFETY_REFUSAL_NO_LOCAL_FALLBACK=passed');
 })().catch(() => { console.error('EXACT_IMAGE_COMBO_FALLBACK_PATH=failed'); process.exitCode = 1; });
 '''
 
@@ -87,7 +86,7 @@ def main() -> None:
     desired = json.loads(DESIRED.read_text())["image"]
     if desired != {
         "name": "amadeus-image", "kind": "image", "strategy": "fallback",
-        "models": ["cx/gpt-image-2.5", "ag/gemini-3.1-flash-image"],
+        "models": ["cx/gpt-image-2.5"],
     }:
         raise SystemExit("desired image chain differs from this pinned acceptance fixture")
     result = subprocess.run(
@@ -95,9 +94,9 @@ def main() -> None:
         capture_output=True, text=True, timeout=45,
     )
     lines = result.stdout.strip().splitlines()
-    if result.returncode or lines != ["EXACT_IMAGE_COMBO_FALLBACK_PATH=passed",
-                                     "UPSTREAM_400_CLASSIFICATION=fallback_eligible_except_safety_refusal",
-                                     "SAFETY_REFUSAL_NO_FALLBACK=passed"]:
+    if result.returncode or lines != ["NATIVE_9ROUTER_SINGLE_PRIMARY=passed",
+                                     "OPENCLAW_LOCAL_FALLBACK_OWNER=declared",
+                                     "SAFETY_REFUSAL_NO_LOCAL_FALLBACK=passed"]:
         raise SystemExit("exact live 9Router image Combo fixture failed (no provider/account state was changed)")
     print("\n".join(lines))
     print("LIVE_FAULT_INJECTION=not_performed; provider/account state untouched")

@@ -306,14 +306,80 @@ export function patchOpenAIImageProviderSource(original) {
   if (original.includes(marker)) {
     if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') ||
         !original.includes('image_route_transport_failed') || !original.includes('buildAmadeusReferenceImagePayload') ||
-        !original.includes('amadeusReferencePayload')) {
+        !original.includes('amadeusReferencePayload') || !original.includes('requestAmadeusKrea2Fallback') ||
+        !original.includes('AMADEUS_KREA2_IMAGE_TOKEN_FILE')) {
       throw new Error('incomplete OpenAI image route patch');
     }
     return original;
   }
-  const helper = `\n// ${marker}\n${assertAmadeusImageTransportRouteModel.toString()}\n${buildAmadeusReferenceImagePayload.toString()}\nasync function assertAmadeusImageTransportRoute(req, model) {\n\tconst route = req.imageRouteContext;\n\tif (!route) return;\n\tconst { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");\n\tconst log = createSubsystemLogger("image-generation/openai");\n\tlet transportLogicalModel;\n\ttry {\n\t\ttransportLogicalModel = assertAmadeusImageTransportRouteModel({ configuredLogicalModel: route.configuredLogicalModel, provider: req.provider, model });\n\t} catch {\n\t\tlog.error("image_route_invariant_violation", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, providerStatus: "blocked" });\n\t\tthrow new Error("image_route_invariant_violation");\n\t}\n\tlog.info("image_route_transport_model_resolved", { taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, transportLogicalModel, providerStatus: "request_ready" });\n}
-async function logAmadeusImageTransportFailure(req, model, status) {\n\tconst route = req.imageRouteContext;\n\tif (!route) return;\n\tconst { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");\n\tconst log = createSubsystemLogger("image-generation/openai");\n\tlog.warn("image_route_transport_failed", {\n\t\ttaskId: route.taskId,\n\t\trunId: route.runId,\n\t\tconfiguredLogicalModel: route.configuredLogicalModel,\n\t\ttransportLogicalModel: req.provider + "/" + model,\n\t\tproviderStatus: Number.isInteger(status) && status >= 100 && status <= 599 ? status : "transport_error",\n\t\terrorCategory: "upstream_http_error"\n\t});\n}
+  const helper = `
+// ${marker}
+${assertAmadeusImageTransportRouteModel.toString()}
+${buildAmadeusReferenceImagePayload.toString()}
+const AMADEUS_KREA2_IMAGE_MODEL = "local/wild-krea2-turbo-nsfw";
+function normalizeAmadeusKrea2ImageSize(value) {
+	return value === "768x1024" || value === "1024x768" || value === "1024x1024" ? value : "1024x1024";
+}
+function amadeusKrea2FallbackEligible(error, status) {
+	if (status === 429 || status >= 500 && status <= 599) return true;
+	const text = String(error?.name || "") + " " + String(error?.message || "") + " " + String(error?.code || "");
+	return /(?:abort|timeout|timed[ -]?out|network|fetch failed|econn(?:refused|reset)|socket|connection (?:reset|closed))/iu.test(text);
+}
+function amadeusKrea2FallbackRouteAllowed(req) {
+	const route = req.imageRouteContext;
+	return route?.configuredLogicalModel === "openai/amadeus-image" && req.provider === "openai" && req.model === "amadeus-image" && (req.inputImages ?? []).length === 0 && resolveOpenAIImageCount(req.count) === 1;
+}
+function resolveAmadeusKrea2ImageEndpoint() {
+	const configured = process.env.AMADEUS_KREA2_IMAGE_BASE_URL || "http://host.docker.internal:18793/v1";
+	const url = new URL(configured);
+	if (url.protocol !== "http:" || !["host.docker.internal", "localhost", "127.0.0.1"].includes(url.hostname) || url.username || url.password || url.pathname.replace(/\\/$/u, "") !== "/v1" || url.search || url.hash) throw new Error("amadeus_krea2_endpoint_invalid");
+	return url.toString().replace(/\\/$/u, "");
+}
+async function readAmadeusKrea2ImageToken() {
+	const path = process.env.AMADEUS_KREA2_IMAGE_TOKEN_FILE || "/run/secrets/krea2_image_token";
+	const fs = await import("node:fs/promises");
+	const metadata = await fs.stat(path);
+	if ((metadata.mode & 0o077) !== 0) throw new Error("amadeus_krea2_token_permissions_invalid");
+	const token = (await fs.readFile(path, "utf8")).trim();
+	if (!token || token.length > 512 || /[\\r\\n]/u.test(token)) throw new Error("amadeus_krea2_token_invalid");
+	return token;
+}
+async function requestAmadeusKrea2Fallback(req, params) {
+	if (!amadeusKrea2FallbackRouteAllowed(req) || !amadeusKrea2FallbackEligible(params.error, params.status)) return null;
+	const endpoint = resolveAmadeusKrea2ImageEndpoint();
+	const token = await readAmadeusKrea2ImageToken();
+	const size = normalizeAmadeusKrea2ImageSize(params.size);
+	const timeoutMs = Number.isFinite(req.timeoutMs) && req.timeoutMs > 0 ? req.timeoutMs : 600000;
+	const response = await fetch(endpoint + "/images/generations", { method: "POST", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body: JSON.stringify({ model: AMADEUS_KREA2_IMAGE_MODEL, prompt: req.prompt, n: 1, size, output_format: "png" }), signal: AbortSignal.timeout(timeoutMs) });
+	const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
+	const log = createSubsystemLogger("image-generation/openai");
+	log.info(JSON.stringify({ event: "image_route_local_fallback", taskId: req.imageRouteContext?.taskId, runId: req.imageRouteContext?.runId, configuredLogicalModel: req.imageRouteContext?.configuredLogicalModel, transportLogicalModel: AMADEUS_KREA2_IMAGE_MODEL, providerStatus: response.status }));
+	if (!response.ok) throw new Error("amadeus_krea2_fallback_http_" + response.status);
+	return { response, release: async () => {}, model: AMADEUS_KREA2_IMAGE_MODEL, size };
+}
+async function assertAmadeusImageTransportRoute(req, model) {
+	const route = req.imageRouteContext;
+	if (!route) return;
+	const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
+	const log = createSubsystemLogger("image-generation/openai");
+	let transportLogicalModel;
+	try {
+		transportLogicalModel = assertAmadeusImageTransportRouteModel({ configuredLogicalModel: route.configuredLogicalModel, provider: req.provider, model });
+	} catch {
+		log.error(JSON.stringify({ event: "image_route_invariant_violation", taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, providerStatus: "blocked" }));
+		throw new Error("image_route_invariant_violation");
+	}
+	log.info(JSON.stringify({ event: "image_route_transport_model_resolved", taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, transportLogicalModel, providerStatus: "request_ready" }));
+}
+async function logAmadeusImageTransportFailure(req, model, status) {
+	const route = req.imageRouteContext;
+	if (!route) return;
+	const { createSubsystemLogger } = await import("./plugin-sdk/logging-core.js");
+	const log = createSubsystemLogger("image-generation/openai");
+	log.warn(JSON.stringify({ event: "image_route_transport_failed", taskId: route.taskId, runId: route.runId, configuredLogicalModel: route.configuredLogicalModel, transportLogicalModel: req.provider + "/" + model, providerStatus: Number.isInteger(status) && status >= 100 && status <= 599 ? status : "transport_error", errorCategory: "upstream_http_error" }));
+}
 `;
+
   let output = replaceOnce(original, 'function buildOpenAIImageGenerationProvider(modelAuth) {',
     `${helper}\nfunction buildOpenAIImageGenerationProvider(modelAuth) {`, 'OpenAI transport guard');
   output = replaceOnce(output,
@@ -334,50 +400,17 @@ async function logAmadeusImageTransportFailure(req, model, status) {\n\tconst ro
 \t\t\t}`,
     'Codex bounded provider failure');
   output = replaceOnce(output,
-`\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");`,
-`\t\t\t\ttry {
-\t\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");
-\t\t\t\t} catch (error) {
-\t\t\t\t\tawait logAmadeusImageTransportFailure(req, model, response.status);
-\t\t\t\t\tthrow error;
-\t\t\t\t}`,
-    'OpenAI bounded provider failure');
-  output = replaceOnce(output,
-`log.error("image_route_invariant_violation", {`,
-`log.error(JSON.stringify({ event: "image_route_invariant_violation",`,
-    'provider invariant JSON diagnostic start');
-  output = replaceOnce(output,
-`providerStatus: "blocked" });`,
-`providerStatus: "blocked" }));`,
-    'provider invariant JSON diagnostic end');
-  output = replaceOnce(output,
-`log.info("image_route_transport_model_resolved", {`,
-`log.info(JSON.stringify({ event: "image_route_transport_model_resolved",`,
-    'provider route JSON diagnostic start');
-  output = replaceOnce(output,
-`providerStatus: "request_ready" });`,
-`providerStatus: "request_ready" }));`,
-    'provider route JSON diagnostic end');
-  output = replaceOnce(output,
-`log.warn("image_route_transport_failed", {`,
-`log.warn(JSON.stringify({ event: "image_route_transport_failed",`,
-    'provider failure JSON diagnostic start');
-  output = replaceOnce(output,
-`errorCategory: "upstream_http_error"
-\t});
-}`,
-`errorCategory: "upstream_http_error"
-\t}));
-}`,
-    'provider failure JSON diagnostic end');
-  output = replaceOnce(output,
 'const url = isAzure ? buildAzureImageUrl(rawBaseUrl, model, isEdit ? "edits" : "generations") : `${baseUrl}/images/${isEdit ? "edits" : "generations"}`;',
 'const amadeusReferencePayload = buildAmadeusReferenceImagePayload(req);\n\t\t\tif (amadeusReferencePayload && isAzure) throw new Error("amadeus_image_reference_transport_unsupported");\n\t\t\tconst url = isAzure ? buildAzureImageUrl(rawBaseUrl, model, isEdit ? "edits" : "generations") : `${baseUrl}/images/${isEdit && !amadeusReferencePayload ? "edits" : "generations"}`;',
     'logical route reference JSON endpoint');
   output = replaceOnce(output,
 'const { response, release } = isEdit ? await (() => {',
-'const { response, release } = isEdit && !amadeusReferencePayload ? await (() => {',
+'let response;\n\t\t\tlet release = async () => {};\n\t\t\tlet requestModel = model;\n\t\t\ttry {\n\t\t\t\tconst transport = isEdit && !amadeusReferencePayload ? await (() => {',
     'reference JSON versus native multipart');
+  output = replaceOnce(output,
+`\t\t\t})();\n\t\t\ttry {\n\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");`,
+`\t\t\t\t})();\n\t\t\t\tresponse = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t} catch (error) {\n\t\t\t\tconst fallback = await requestAmadeusKrea2Fallback(req, { error, size, status: undefined });\n\t\t\t\tif (!fallback) throw error;\n\t\t\t\tresponse = fallback.response;\n\t\t\t\trelease = fallback.release;\n\t\t\t\trequestModel = fallback.model;\n\t\t\t}\n\t\t\ttry {\n\t\t\t\ttry {\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, isEdit ? "OpenAI image edit failed" : "OpenAI image generation failed");\n\t\t\t\t} catch (error) {\n\t\t\t\t\tconst primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();\n\t\t\t\t\trelease = async () => {};\n\t\t\t\t\tconst fallback = await requestAmadeusKrea2Fallback(req, { error, size, status: response.status });\n\t\t\t\t\tif (!fallback) throw error;\n\t\t\t\t\tresponse = fallback.response;\n\t\t\t\t\trelease = fallback.release;\n\t\t\t\t\trequestModel = fallback.model;\n\t\t\t\t\tawait assertOkOrThrowHttpError(response, "OpenAI image generation failed");\n\t\t\t\t}`,
+    'bounded local fallback around transport and upstream status');
   output = replaceOnce(output,
 `const body = {
 \t\t\t\t\tprompt: req.prompt,
@@ -391,6 +424,10 @@ async function logAmadeusImageTransportFailure(req, model, status) {\n\tconst ro
 \t\t\t\t\t...amadeusReferencePayload
 \t\t\t\t};`,
     'preserved inline reference in JSON body');
+  output = replaceOnce(output,
+`\t\t\t\treturn {\n\t\t\t\t\timages,\n\t\t\t\t\tmodel,`,
+`\t\t\t\treturn {\n\t\t\t\t\timages,\n\t\t\t\t\tmodel: requestModel,`,
+    'local fallback model attribution');
   return output;
 }
 
