@@ -1,4 +1,20 @@
-# Project State — 2026-10-05
+# Project State — 2026-10-07
+
+## 2026-10-07 — Qwen edit bridge candidate, OpenClaw not switched
+
+The Qwen-Image-2.1 Uncensored bridge is installed as a separate loopback-only
+Mac LaunchAgent with its own protected token. Complete pinned asset/runtime
+hash validation, host health, authenticated OpenClaw-container reachability,
+and one real single-reference edit through `/v1/images/edits` passed. The
+synthetic portrait's pot turned teal in one 768×768 PNG after 398.35 seconds,
+visually preserving the blue jacket and scene. The Krea LaunchAgent was absent
+at preflight. OpenClaw and 9Router are still the Amadeus 1.9.5 primary-only
+baseline; no candidate OpenClaw overlay or release has been deployed. The model
+child stopped after about three idle minutes, leaving the bridge healthy and
+host memory free at 81%; swap remained elevated near its pre-run level.
+Protected rollout, real WhatsApp fallback, and Krea source retirement remain
+open. Evidence:
+`.agent/checkpoints/2026-10-07-amadeus-qwen-image-bridge-candidate.md`.
 
 ## 2026-10-06 — Wild Krea2 local fallback rollout paused
 

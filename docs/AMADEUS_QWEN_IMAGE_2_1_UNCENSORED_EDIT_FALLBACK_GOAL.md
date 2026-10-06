@@ -51,7 +51,9 @@ Start from the actual post-Krea rollback state, not the old 1.8.4 assumptions:
 - `infra/9router/model-capabilities.json` intentionally contains only `cx/gpt-image-2.5`;
 - 9Router remains the primary image transport only;
 - **OpenClaw's source-managed OpenAI provider boundary owns the local fallback**;
-- current image-specific timeout is 600000 ms;
+- actual post-rollback OpenClaw image timeout is 120000 ms; the source example
+  `integrations/openclaw/openclaw.json.example` still says 600000 ms, so this
+  source/runtime discrepancy must be resolved from the Qwen latency evidence;
 - current reference contract admits exactly one PNG/JPEG/WebP reference up to 10 MiB;
 - current Krea local fallback is explicitly blocked whenever `req.inputImages.length > 0`.
 
@@ -130,6 +132,28 @@ Pin repository revisions, exact filenames, SHA-256 values and byte sizes before 
 
 Model files, mmproj, VAE, generated media and reference images remain outside Git.
 
+### Candidate asset pins — 2026-10-07
+
+The four existing assets were hashed from their external model directory. The
+diffusion checkpoint and VAE hashes match the upstream `SHA256SUMS` at the
+pinned uncensored-model repository revision. The Qwen3-VL model and mmproj
+repository revision metadata confirms their exact filenames and byte sizes; the
+local SHA-256 values are the startup verification pins.
+
+| Role | Repository @ revision | File | Bytes | SHA-256 |
+| --- | --- | --- | ---: | --- |
+| Diffusion | `abenzerps/Qwen-Image-2.1-Uncensored-GGUF` @ `6b34e59458d3eb7ba6a6f86a116aed5253dc02c3` | `qwen-image-2.1-UC-Q4_K_M.gguf` | 4,604,558,112 | `e79c8a009f2ecbdb6c70fd663d9aea9ee304a0d91f347e4169a756b8ad141b41` |
+| Text encoder | `Qwen/Qwen3-VL-8B-Instruct-GGUF` @ `f982a07559d4a2f6c8744d840bf6fccab30eea96` | `Qwen3VL-8B-Instruct-Q4_K_M.gguf` | 5,027,784,800 | `67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2` |
+| Vision projection | `Qwen/Qwen3-VL-8B-Instruct-GGUF` @ `f982a07559d4a2f6c8744d840bf6fccab30eea96` | `mmproj-Qwen3VL-8B-Instruct-F16.gguf` | 1,159,029,824 | `ca524100ebf825c9a870db1c580d03879e0da0ab2541697e2458e64891cf9d38` |
+| VAE | `abenzerps/Qwen-Image-2.1-Uncensored-GGUF` @ `6b34e59458d3eb7ba6a6f86a116aed5253dc02c3` | `vae/qwen_image_2.1_vae_bf16.safetensors` | 675,509,688 | `bb21f7473051e1ac368515dd3f2e15cd44d7a11748ee8823e1ddca3e4876b7c9` |
+
+The benchmark runtime is `leejet/stable-diffusion.cpp` commit
+`3f8527a46c54ecf4cb4ed6003da8e8982283c73c`; the existing external
+`sd-server` binary SHA-256 is
+`49ae85e6d0a29a94bc2176daac9e0849dbb5e0a131f0b6c0ba3046163a4779b6`.
+The installed bridge must fail closed if an asset size/hash, binary hash, or
+runtime source commit differs from these pins.
+
 ## Phase 0 — re-audit current source and runtime
 
 Before edits:
@@ -140,7 +164,8 @@ Before edits:
 4. confirm current production containers match the paused-Krea rollback checkpoint;
 5. verify Krea LaunchAgent/bridge is stopped;
 6. verify 9Router desired/live image chain is primary-only `cx/gpt-image-2.5`;
-7. verify current OpenClaw image timeout is 600000 ms;
+7. verify and record the live and source image timeouts; the read-only audit
+   found 120000 ms live versus 600000 ms in the source example;
 8. inspect the exact current `image-route-authority.mjs` Krea fallback overlay;
 9. record Mac memory pressure, swap, Qwen3-TTS health and free disk space.
 
@@ -193,7 +218,27 @@ Do not store user/private reference images or generated test media in Git.
 
 If the uncensored Q4_K_M checkpoint cannot reliably perform reference editing with the official Qwen-Image-2.1 runtime contract, **stop the Goal**. Do not silently replace it with the base model.
 
-## Phase 2 — 24GB memory and latency gate
+### Candidate result — 2026-10-06
+
+The pinned `stable-diffusion.cpp` commit `3f8527a46c54ecf4cb4ed6003da8e8982283c73c` runs the required uncensored Q4_K_M checkpoint on Metal (`MTL0`) with the pinned Qwen3-VL, mmproj and Qwen-Image-2.1 VAE. Test A produced a 768×768 image, but it was visually pale. Test B used the synthetic 768×768 `portrait-source.png` and the official multipart `/v1/images/edits` endpoint. Two initial requests using the default `strength=0.75` returned HTTP 200 with one 768×768 PNG each in 263.27 s and 263.54 s, but changed only the collar or added red shoulder outlines; they left the requested jacket body blue. Their outputs are `portrait-edit-B.png` (SHA-256 `c906252ef59ca0020e9b788ab322d1e89d4a402bc0b9f0c92c9d21ded377bd05`) and `portrait-edit-B2.png` (SHA-256 `3601a7e3fca59c0fb90aae68e6f3edeca0f71d90f5524174db359990ff8bf316`).
+
+The first edit client exited at its default 300-second response-header timeout; the server log later confirmed inference completed in 411.41 s, but no response artifact was retained. After the operator requested continuation, Phase 1 technical review resumed without changing the checkpoint. A concise instruction with supported `strength=1.0` returned HTTP 200, one 768×768 PNG, in 458.52 s; visually, it recolored the whole jacket red while preserving the person and scene. Test B passes at that setting: `portrait-edit-strength-1.png` (SHA-256 `5df536e99903d603529adcb4905768162c7e41605b18da679e1861bdc2fd3f0c`).
+
+Full-strength Test C recolored the pot as requested and preserved the portrait/composition, but also shifted the jacket hue. Full-strength Test D replaced `TEA` with `COFFEE`, with visibly broader color drift. At `strength=0.9`, Test C2 recolored the pot teal while visually preserving the blue jacket and composition; it returned one 768×768 PNG in 310.93 s, artifact `portrait-edit-C2.png` (SHA-256 `a2bba6011075ebcb487911b53b52258d881ae8924358d89e9c811dc095144188`). Test D2 returned one 768×768 PNG in 338.26 s and changed `TEA` to `COFFEE`; side-by-side inspection shows the rest of the flat illustration is substantially preserved, contrary to the initial “washed out” assessment. A rough pixel comparison against the fixtures supports locality: outside an approximate pot ROI, C2 mean absolute RGB-channel difference is 4.91/255 (95th percentile 7); outside an approximate label ROI, D2 is 5.82/255 (95th percentile 8). D2 artifact SHA-256 is `4cbf0c0428a5c88aedb668f77a30d97350f398cc2a35fcb87913299484a5fc94`. This supports accepting C2/D2 as localized edits at `strength=0.9`; the full-strength variants remain documented failure cases. All artifacts, response JSON and source fixtures stay outside Git under `/Volumes/Avalon/models/qwen-image-2.1-uncensored/acceptance/`.
+
+Test B plus the strength-0.9 C2/D2 reference edits now pass direct visual/locality review; Test A generated a recognizable 768×768 fox image but remains notably pale and needs image-quality follow-up. Candidate inference reduced reported free memory to 9–12%; at the latest post-run snapshot, swap is 26.9 GiB used of 27 GiB with about 755 MiB free. Keep the candidate loopback-only on port 18795 and do not start another expensive inference until memory/swap headroom is recovered and a bounded Phase 2 plan is in place. Production, provider code, 9Router, and Krea state remain unchanged.
+
+### Phase 2 candidate benchmark — 2026-10-07
+
+Measured on the 24GB Apple M6 host while the existing Qwen3-TTS service remained healthy. The benchmark used the pinned `3f8527a46c54ecf4cb4ed6003da8e8982283c73c` runtime, verified Qwen assets, Metal `MTL0`, 16 steps, CFG 6, 768×768, and one request at a time. The candidate listened only on loopback and was stopped after testing.
+
+- An isolated `--eager-load` startup diagnostic took about 135 s from process start to HTTP listener; the runtime reported 133.86 s across tensor-loader stages. This diagnostic sent no image request. The normal lazy-load cold reference edit returned HTTP 200, one 768×768 PNG, in 447.64 s (server generation 447.52 s; sampler 354.81 s).
+- Warm reference-edit samples at `strength=0.9` were C2 310.93 s and D2 338.26 s. Warm text-to-image returned HTTP 200, one 768×768 PNG, in 253.28 s. No prompt or output image bytes are retained in benchmark logs.
+- Ten-second process sampling observed peak RSS 14,076,032 KiB (~13.4 GiB), minimum system-wide free memory 11%, and peak swap 27,783.56 MiB of 28,672 MiB. Swap was about 26,229 MiB immediately before the cold request; memory pressure returned to 82% free after stopping the candidate. This is acceptable only for strictly serial local inference with a bounded idle shutdown; do not keep the Qwen process resident indefinitely or allow concurrent image jobs.
+
+The slowest successful cold edit was 447.64 s; adding the required 120 s margin gives 567.64 s. Apply the 600 s minimum as the **candidate image-generation deadline** (600,000 ms) when implementing the service. This does not authorize changing primary-provider, generic Agent, text, caption, TTS or ASR deadlines. Phase 2 benchmarks are complete; queue behavior and idle-memory recovery remain service-level tests before candidate rollout.
+
+## Phase 2 — 24GB memory and latency gate (benchmarked)
 
 The Krea candidate already proved that a model being loadable is not enough.
 
@@ -274,6 +319,30 @@ Do not run Krea and Qwen diffusion services concurrently.
 The old Krea source-managed service, plist, engine config and deployment env plumbing should be removed from the **active code path** once Qwen passes candidate acceptance. Historical Git commits/checkpoints remain the record.
 
 External Krea model files are not deleted automatically by this Goal.
+
+### Candidate bridge evidence — 2026-10-07
+
+The pinned Qwen service is installed on `Amadeus-M204` as a separate LaunchAgent
+with its own mode-0600 bearer token. Full runtime/asset SHA-256 verification
+passed before the loopback bridge listened. The existing OpenClaw container can
+reach its `/health` and authenticated `/v1/models`; unauthorized access returns
+401. The Krea LaunchAgent was absent and its ports were closed at preflight.
+
+One real bridge `/v1/images/edits` call using the synthetic Phase 1 portrait
+returned exactly one 768×768 PNG in 398.35 s. The small pot turned teal while
+the person, blue jacket, pose and composition remained visually recognizable.
+The output SHA-256 is
+`a0127c214a609d96d300ed41cf075cae18f109f6aa36391a54739f8680bc50f4`;
+its artifact stays outside Git under the existing acceptance directory.
+Bridge unit tests (11), OpenClaw overlay tests (11), syntax/plist checks,
+secrets scan and `git diff --check` pass. The OpenClaw runtime is unchanged;
+this does not prove a real provider fallback or WhatsApp delivery. After about
+three idle minutes the child `sd-server` stopped, port 18795 closed, the bridge
+still reported `ready/idle`, and system free memory recovered to 81% while swap
+remained elevated near its pre-run baseline. Installed bridge/config bytes
+match the source candidate.
+Full bridge checkpoint:
+`.agent/checkpoints/2026-10-07-amadeus-qwen-image-bridge-candidate.md`.
 
 ## Phase 4 — Qwen server startup contract
 

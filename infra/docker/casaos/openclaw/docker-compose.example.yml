@@ -30,6 +30,9 @@ services:
       AMADEUS_IMAGE_SERVICE_TOKEN_FILE: /run/secrets/amadeus_image_service_token
       AMADEUS_KREA2_IMAGE_BASE_URL: ${AMADEUS_KREA2_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}
       AMADEUS_KREA2_IMAGE_TOKEN_FILE: /run/secrets/krea2_image_token
+      AMADEUS_QWEN_IMAGE_BASE_URL: ${AMADEUS_QWEN_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}
+      AMADEUS_QWEN_IMAGE_TOKEN_FILE: /run/secrets/qwen_image_token
+      AMADEUS_QWEN_IMAGE_LOCAL_ONLY: ${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}
       AMADEUS_IMAGE_ASSET_CONTAINER_ROOT: ${AMADEUS_IMAGE_ASSET_CONTAINER_ROOT:-/var/lib/amadeus/image-assets}
       TZ: Asia/Shanghai
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
@@ -51,6 +54,7 @@ services:
       - ${OPENCLAW_MAC_HOST_AGENT_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
       - ${OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/amadeus-image-service-token}:/run/secrets/amadeus_image_service_token:ro
       - ${OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/krea2-image-token}:/run/secrets/krea2_image_token:ro
+      - ${OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/qwen-image-token}:/run/secrets/qwen_image_token:ro
       - ${OPENCLAW_LONGBRIDGE_CLIENT_ID_HOST_FILE:-/DATA/AppData/openclaw/secrets/longbridge-client-id}:/run/secrets/longbridge_client_id:ro
       - ${OPENCLAW_KOOK_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/kook-bot-token}:/run/secrets/kook_bot_token:ro
       - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro

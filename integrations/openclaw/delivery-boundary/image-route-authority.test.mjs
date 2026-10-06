@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { copyFile, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -206,7 +206,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       assert.match(patched, /logger\.info\(JSON\.stringify\(\{ event: "image_route_transport_model_resolved"/);
       assert.match(patched, /imageRouteContext: routeContext/);
     }),
-    pinnedSource(IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule).then((source) => {
+    pinnedSource(IMAGE_ROUTE_AUTHORITY_PIN.openaiProviderModule).then(async (source) => {
       const patched = patchOpenAIImageProviderSource(source);
       parseModule(patched);
       assert.match(patched, /assertAmadeusImageTransportRouteModel\(\{ configuredLogicalModel: route\.configuredLogicalModel, provider: req\.provider, model \}\)/);
@@ -219,18 +219,160 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       const outboundModel = patched.indexOf('body.model = model', finalGuard);
       assert.ok(transportFunctionStart >= 0 && finalGuard > transportFunctionStart && outboundModel > finalGuard,
         'the final OpenAI-compatible model invariant must guard the outbound body model');
-      const fallbackNode = parseModule(patched).body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusKrea2FallbackEligible');
+      const fallbackNode = parseModule(patched).body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenFallbackEligible');
       assert.ok(fallbackNode, 'local fallback classifier must be present in the pinned provider overlay');
-      const fallbackClassifier = new Function(`${patched.slice(fallbackNode.start, fallbackNode.end)}; return amadeusKrea2FallbackEligible;`)();
+      const fallbackClassifier = new Function(`${patched.slice(fallbackNode.start, fallbackNode.end)}; return amadeusQwenFallbackEligible;`)();
       assert.equal(fallbackClassifier(new Error('request timed out'), undefined), true);
       assert.equal(fallbackClassifier({ message: 'content policy violation' }, 400), false);
       assert.equal(fallbackClassifier({ message: 'invalid prompt' }, 400), false);
+      assert.equal(fallbackClassifier({ message: 'request timeout' }, 400), false);
+      assert.equal(fallbackClassifier({ message: 'request timeout' }, 408), true);
       assert.equal(fallbackClassifier({ message: 'quota exceeded' }, 429), true);
-      assert.match(patched, /AMADEUS_KREA2_IMAGE_BASE_URL/);
-      assert.match(patched, /AMADEUS_KREA2_IMAGE_TOKEN_FILE/);
-      assert.match(patched, /inputImages \?\? \[\]\)\.length === 0/);
-      assert.match(patched, /: "768x1024";/, 'local fallback defaults to the faster 1024-class portrait size');
-      assert.match(patched, /amadeus_krea2_fallback_terminal/, 'local fallback failures are terminal and do not start a duplicate generation');
+      assert.match(patched, /AMADEUS_QWEN_IMAGE_BASE_URL/);
+      assert.match(patched, /AMADEUS_QWEN_IMAGE_TOKEN_FILE/);
+      assert.match(patched, /AMADEUS_QWEN_IMAGE_LOCAL_ONLY/);
+      assert.match(patched, /const transport = localOnly \? await requestAmadeusQwenFallback/);
+      assert.match(patched, /referenceCount <= 1/);
+      assert.match(patched, /amadeus_qwen_fallback_terminal/, 'local fallback failures are terminal and do not start a duplicate generation');
+      assert.doesNotMatch(patched, /KREA2|krea2|wild-krea2/);
+
+      const ast = parseModule(patched);
+      const routeNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenFallbackRouteAllowed');
+      const requestNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'buildAmadeusQwenFallbackRequest');
+      const routeAllowed = new Function('resolveOpenAIImageCount', `${patched.slice(routeNode.start, routeNode.end)}; return amadeusQwenFallbackRouteAllowed;`)((count) => count ?? 1);
+      const buildRequest = new Function(`const AMADEUS_QWEN_IMAGE_MODEL = 'local/qwen-image-2.1-uncensored'; ${patched.slice(requestNode.start, requestNode.end)}; return buildAmadeusQwenFallbackRequest;`)();
+      const route = { configuredLogicalModel: 'openai/amadeus-image' };
+      const safeRequest = { imageRouteContext: route, provider: 'openai', model: 'amadeus-image', prompt: 'make the pot teal', count: 1 };
+      assert.equal(routeAllowed(safeRequest), true);
+      assert.equal(routeAllowed({ ...safeRequest, inputImages: [{}, {}] }), false);
+      assert.equal(routeAllowed({ ...safeRequest, count: 2 }), false);
+      const localOnlyNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenLocalOnly');
+      const terminalNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenTerminalFailure');
+      const localOnly = new Function('process', 'resolveOpenAIImageCount', `${patched.slice(routeNode.start, routeNode.end)}\n${patched.slice(terminalNode.start, terminalNode.end)}\n${patched.slice(localOnlyNode.start, localOnlyNode.end)}\nreturn amadeusQwenLocalOnly;`)(
+        { env: { AMADEUS_QWEN_IMAGE_LOCAL_ONLY: '1' } }, (count) => count ?? 1,
+      );
+      assert.equal(localOnly(safeRequest), true);
+      assert.throws(() => localOnly({ ...safeRequest, inputImages: [{}, {}] }), (error) => error.code === 'amadeus_qwen_fallback_terminal');
+
+      const imageBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+      const backing = Uint8Array.from([255, ...imageBytes, 255]);
+      const referenceView = new Uint8Array(backing.buffer, 1, imageBytes.length);
+      const edit = buildRequest({ ...safeRequest, inputImages: [{ buffer: referenceView, mimeType: 'image/png' }] }, 'qwen-token', 600000);
+      assert.equal(edit.path, '/images/edits');
+      assert.equal(edit.options.headers.Authorization, 'Bearer qwen-token');
+      assert.equal(edit.options.headers['Content-Type'], undefined, 'fetch must set the multipart boundary');
+      assert.equal(edit.options.body.get('prompt'), safeRequest.prompt);
+      assert.equal(edit.options.body.get('model'), 'local/qwen-image-2.1-uncensored');
+      assert.equal(edit.options.body.get('n'), '1');
+      const file = edit.options.body.get('image[]');
+      assert.equal(file.type, 'image/png');
+      assert.deepEqual(Buffer.from(await file.arrayBuffer()), Buffer.from(imageBytes));
+
+      const generation = buildRequest(safeRequest, 'qwen-token', 600000);
+      assert.equal(generation.path, '/images/generations');
+      assert.deepEqual(JSON.parse(generation.options.body), {
+        model: 'local/qwen-image-2.1-uncensored', prompt: safeRequest.prompt, n: 1, output_format: 'png',
+      });
+      assert.doesNotMatch(generation.options.body, /size/);
+
+      const requestNames = [
+        'amadeusQwenFallbackEligible', 'amadeusQwenFallbackRouteAllowed', 'resolveAmadeusQwenImageEndpoint',
+        'readAmadeusQwenImageToken', 'buildAmadeusQwenFallbackRequest', 'amadeusQwenTerminalFailure', 'requestAmadeusQwenFallback',
+      ];
+      const requestSources = requestNames.map((name) => {
+        const node = ast.body.find((entry) => entry.type === 'FunctionDeclaration' && entry.id?.name === name);
+        assert.ok(node, `${name} must exist in the pinned provider overlay`);
+        return patched.slice(node.start, node.end);
+      }).join('\n');
+      const withoutRuntimeLogger = requestSources.replace(
+        /[ \t]*const \{ createSubsystemLogger \} = await import\("\.\/plugin-sdk\/logging-core\.js"\);\n[ \t]*const log = createSubsystemLogger\("image-generation\/openai"\);\n[ \t]*log\.info\(JSON\.stringify\(\{[^\n]*\}\)\);/u,
+        'const log = { info() {} };',
+      );
+      assert.notEqual(withoutRuntimeLogger, requestSources, 'the isolated test replaces only the runtime logger');
+      class TestAgent {
+        constructor(options) { this.options = options; this.closed = false; }
+        async close() { this.closed = true; }
+        destroy() { this.closed = true; }
+      }
+      const isolatedSources = withoutRuntimeLogger.replace('await import("undici")', 'await Promise.resolve({ Agent: TestAgent, fetch: (...args) => globalThis.fetch(...args), FormData })');
+      assert.notEqual(isolatedSources, withoutRuntimeLogger);
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+      const requestQwenFallback = await new AsyncFunction('TestAgent', `
+        const AMADEUS_QWEN_IMAGE_MODEL = 'local/qwen-image-2.1-uncensored';
+        function resolveOpenAIImageCount(count) { return count ?? 1; }
+        ${isolatedSources}
+        return requestAmadeusQwenFallback;
+      `)(TestAgent);
+      const tokenDirectory = await mkdtemp(join(tmpdir(), 'amadeus-qwen-token-'));
+      const tokenPath = join(tokenDirectory, 'token');
+      const previousBase = process.env.AMADEUS_QWEN_IMAGE_BASE_URL;
+      const previousTokenPath = process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE;
+      const previousFetch = globalThis.fetch;
+      const previousSignalTimeout = AbortSignal.timeout;
+      const calls = [];
+      const timeoutValues = [];
+      try {
+        await writeFile(tokenPath, 'qwen-token\n', { mode: 0o600 });
+        await chmod(tokenPath, 0o600);
+        process.env.AMADEUS_QWEN_IMAGE_BASE_URL = 'http://127.0.0.1:18793/v1';
+        process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE = tokenPath;
+        AbortSignal.timeout = (milliseconds) => {
+          timeoutValues.push(milliseconds);
+          return previousSignalTimeout.call(AbortSignal, milliseconds);
+        };
+        globalThis.fetch = async (url, options) => {
+          calls.push({ url, options });
+          return new Response(JSON.stringify({ created: 1, data: [{ b64_json: 'cG5n' }] }), { status: 200 });
+        };
+        const editResult = await requestQwenFallback(
+          { ...safeRequest, timeoutMs: 120000, inputImages: [{ buffer: referenceView, mimeType: 'image/png' }] },
+          { error: new Error('primary request timed out') },
+        );
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, 'http://127.0.0.1:18793/v1/images/edits');
+        assert.equal(calls[0].options.signal.aborted, false);
+        assert.equal(timeoutValues[0], 600000, 'Qwen keeps its measured ten-minute deadline despite the 120-second primary timeout');
+        assert.deepEqual(calls[0].options.dispatcher.options, { headersTimeout: 600000, bodyTimeout: 600000 });
+        assert.equal(calls[0].options.body.get('prompt'), safeRequest.prompt);
+        assert.deepEqual(Buffer.from(await calls[0].options.body.get('image[]').arrayBuffer()), Buffer.from(imageBytes));
+        assert.equal(editResult.model, 'local/qwen-image-2.1-uncensored');
+        await editResult.release();
+        assert.equal(calls[0].options.dispatcher.closed, true);
+
+        calls.length = 0;
+        const generationResult = await requestQwenFallback(safeRequest, { error: new Error('upstream timeout'), status: 408 });
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].url, 'http://127.0.0.1:18793/v1/images/generations');
+        assert.deepEqual(JSON.parse(calls[0].options.body), {
+          model: 'local/qwen-image-2.1-uncensored', prompt: safeRequest.prompt, n: 1, output_format: 'png',
+        });
+        assert.equal(generationResult.model, 'local/qwen-image-2.1-uncensored');
+        await generationResult.release();
+
+        calls.length = 0;
+        const safetyResult = await requestQwenFallback(safeRequest, { error: new Error('content policy violation'), status: 400 });
+        assert.equal(safetyResult, null);
+        assert.equal(calls.length, 0, 'safety refusal remains terminal before local inference');
+
+        calls.length = 0;
+        globalThis.fetch = async (url, options) => {
+          calls.push({ url, options });
+          return new Response('unavailable', { status: 503 });
+        };
+        await assert.rejects(
+          requestQwenFallback(safeRequest, { error: new Error('primary timeout') }),
+          (error) => error.code === 'amadeus_qwen_fallback_terminal',
+        );
+        assert.equal(calls.length, 1, 'a failed local attempt is marked terminal and never retried locally');
+      } finally {
+        globalThis.fetch = previousFetch;
+        AbortSignal.timeout = previousSignalTimeout;
+        if (previousBase === undefined) delete process.env.AMADEUS_QWEN_IMAGE_BASE_URL;
+        else process.env.AMADEUS_QWEN_IMAGE_BASE_URL = previousBase;
+        if (previousTokenPath === undefined) delete process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE;
+        else process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE = previousTokenPath;
+        await rm(tokenDirectory, { recursive: true, force: true });
+      }
     }),
   ]);
 });
@@ -329,15 +471,16 @@ test('exact patched HTTP construction sends reference JSON to generations, ordin
   assert.ok(start > 0 && end > start);
   const snippet = source.slice(start, end);
   const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-  const run = new AsyncFunction('env', `const { req, model, isEdit, inputImages, postJsonRequest, postMultipartRequest, appendOpenAIImageOptions, buildAmadeusReferenceImagePayload } = env;
+  const run = new AsyncFunction('env', `const { req, model, isEdit, inputImages, postJsonRequest, postMultipartRequest, appendOpenAIImageOptions, buildAmadeusReferenceImagePayload, amadeusQwenLocalOnly, requestAmadeusQwenFallback } = env;
 const isAzure=false,rawBaseUrl='http://router.invalid/v1',baseUrl=rawBaseUrl,count=1,size='1024x1536',headers={Authorization:'fixture'},timeoutMs=300000,allowPrivateNetwork=true,dispatcherPolicy=undefined;
 const bufferToBlobPart=x=>x,inferImageUploadFileName=()=> 'fixture.png';
 ${snippet}`);
-  async function capture(req) {
+  async function capture(req, localOnly = false) {
     let call;
     const make = (kind) => async (value) => { call={ kind, ...value }; return { response: new Response('{}'), release:async()=>{} }; };
     await run({ req, model:req.model, isEdit:!!req.inputImages.length, inputImages:req.inputImages,
-      postJsonRequest:make('json'),postMultipartRequest:make('multipart'),appendOpenAIImageOptions:appendOptions,buildAmadeusReferenceImagePayload });
+      postJsonRequest:make('json'),postMultipartRequest:make('multipart'),appendOpenAIImageOptions:appendOptions,buildAmadeusReferenceImagePayload,
+      amadeusQwenLocalOnly:()=>localOnly,requestAmadeusQwenFallback:async()=>{ call={kind:'local'}; return {response:new Response('{}'),release:async()=>{},model:'local/qwen-image-2.1-uncensored'}; } });
     return call;
   }
   const ref = await capture(referenceReq());
@@ -354,4 +497,6 @@ ${snippet}`);
   assert.equal(other.kind, 'multipart'); assert.equal(other.url, 'http://router.invalid/v1/images/edits');
   assert.equal(other.body.get('model'), 'other');
   assert.deepEqual(Buffer.from(await other.body.get('image[]').arrayBuffer()),referencePng);
+  const local = await capture(referenceReq(), true);
+  assert.equal(local.kind, 'local', 'local-only candidate must never call the primary transport');
 });
