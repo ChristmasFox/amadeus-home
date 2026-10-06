@@ -1,5 +1,15 @@
 # Project State — 2026-10-07
 
+## 2026-10-07 — Qwen edit strength corrected; operator acceptance pending
+
+Commit `6b7623e` corrected the bridge's native edit parameter to
+`{"strength":0.9}`. The authorized Mac LaunchAgent restart is healthy after
+startup asset verification, and the OpenClaw container's authenticated
+`/v1/models` request returned HTTP 200. OpenClaw remains the local-only
+candidate; 9Router was not restarted. No post-fix pose result has been
+accepted yet. Protected pre-restart local copies and recovery details:
+`.agent/checkpoints/2026-10-07-qwen-image-edit-strength-restart.md`.
+
 ## 2026-10-07 — Qwen local-only OpenClaw candidate deployed
 
 Operator-authorized candidate commit `e0a2217` is running on the canonical
