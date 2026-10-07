@@ -10,34 +10,43 @@ Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
 
 ## Active acceleration objective — 2026-10-07
 
-The operator reports the Amadeus 1.9.6 Qwen-Image-2.1 Uncensored deployment and real image-edit workflow are now behaving normally in production. This planning commit does not create new runtime evidence; it treats the accepted 1.9.6 route as the baseline to preserve.
+The active Goal is now intentionally narrow: deploy a **1024-class-only** Fun-Acc/PDD 4-step local Qwen acceleration profile, then let the operator perform detailed speed and quality testing manually after deployment.
 
-Optimize only the local inference layer using the active Goal:
+Target:
 
 ```text
 Qwen-Image-2.1 Uncensored Q4_K_M
 + stable-diffusion.cpp Metal
-+ Fun-Acc / PDD 4-step
++ real Fun-Acc / PDD 4-step semantics
 + correct custom sigma schedule
 + CFG approximately 1
-+ verified Flash Attention
-+ measured prefix cache (auto/f16/q8_0)
-+ mmap candidate
++ supported Flash Attention
++ Qwen-Image-2.1 prefix cache (q8_0 first, auto fallback)
++ mmap if stable
 + Qwen3-VL-8B Q4_K_M + mmproj for edits
++ idle shutdown 900s
 ```
 
-Primary requirements:
+Production resolution in this Goal:
 
-- reference-image editing remains P0;
-- keep GPT Image as healthy primary and Qwen as the one local fallback;
-- do not emulate Fun-Acc by merely changing `steps` to 4;
-- preserve the current edit strength unless A/B testing proves a better value;
-- audit and preserve the normal cloud-primary output size/aspect classes;
-- use the current measured warm-edit 311-338 second range as the performance baseline;
-- target <=180 seconds warm edit, with <=120 seconds as a stretch goal;
-- benchmark a 900-second warm lease to avoid repeated cold starts;
-- keep 12/16-step non-distilled behavior available as the reproducible quality/rollback control;
-- no production mutation without explicit `--apply`, protected checkpoint, quality comparison and real WhatsApp reference-edit acceptance.
+```text
+T2I: 1024x1024
+Edit: preserve source aspect ratio inside a 1024-class envelope
+2K: out of scope
+```
+
+Required validation is minimal:
+
+- service/model starts;
+- one 1024 text generation works;
+- one single-reference edit works and visibly depends on the reference;
+- no OOM/crash;
+- OpenClaw can reach the protected bridge;
+- normal OpenClaw/WhatsApp service health remains green.
+
+No formal 16-step vs 4-step benchmark, detailed visual scoring, <=180s target, <=120s stretch target or 2K test is required before deployment. The operator will evaluate real-world speed and image quality after deployment.
+
+The existing 600-second image timeout stays unless the minimal smoke proves it insufficient.
 
 Status: `PLANNED_NOT_APPLIED`.
 
