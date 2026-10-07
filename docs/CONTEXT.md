@@ -1,8 +1,21 @@
 # Canonical context — 2026-10-07
 
 Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.6 cloud-primary/local-Qwen
-fallback is deployed, while mandatory WhatsApp failover acceptance remains
-open. Re-read Git/live state before further work.
+fallback and 9Router 0.5.95 are deployed, while mandatory WhatsApp failover
+acceptance remains open. Re-read Git/live state before further work.
+
+## Current 9Router runtime — 0.5.95 deployed
+
+On 2026-10-07, commit `cb223a0` was built from the protected Git snapshot and
+deployed as immutable image
+`local/9router:git-cb223a0bc9e4-20261007T065751Z` (manifest
+`sha256:2e5f966f3b063f9d5045e0b75ace38758e9e5e6867505bbb39a2a5a9a1f966e4`).
+The pinned base digest and Amadeus-managed npm package, TTS-style,
+account-policy, and Combo-safety patches are preserved. Health, expected host
+loopback auth rejection, live GPT Image Combo and policy checks passed. The
+protected rollback checkpoint is
+`/DATA/AppData/9router/backups/router-upgrade-20261007T065751Z`; full evidence
+is in `.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`.
 
 ## Current Qwen local-fallback release — Amadeus 1.9.6
 
@@ -38,7 +51,7 @@ bounded failure category to the Kurisu message enricher, which keeps raw
 provider details out of user text and suggests a safe non-sensitive rewrite for
 safety refusals.
 
-9Router runs
+At the time of this superseded Amadeus release, 9Router ran
 `local/9router:git-0a062a1c2c13-20261005T153458Z` with image manifest
 `sha256:347a905f925d5b29ea16e950cddc1c2d56fe4cb14ca10560a160534913fdf57e`.
 Both the package standalone bundle and the live `/app` fixture bundle carry

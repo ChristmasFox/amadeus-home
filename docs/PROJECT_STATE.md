@@ -1,5 +1,26 @@
 # Project State — 2026-10-07
 
+## 2026-10-07 — 9Router 0.5.95 protected runtime upgrade deployed
+
+Committed source `cb223a0bc9e4a2652acfc012797abd79aedf930c` is running on
+CasaOS machine `nyannyan` as immutable image
+`local/9router:git-cb223a0bc9e4-20261007T065751Z` (manifest
+`sha256:2e5f966f3b063f9d5045e0b75ace38758e9e5e6867505bbb39a2a5a9a1f966e4`).
+The npm package is `0.5.95`; its base remains pinned to
+`decolua/9router:0.5.75@sha256:7c893bc2c27ecea2ae337abd5eacfec9e5763091b3a3b7862fc0625b770bb156`.
+The exact package passed the TTS-style, runtime-policy, and Combo-safety source
+patches. Focused tests, secrets scan, isolated image checks, health, expected
+host-loopback auth rejection, live GPT Image Combo and runtime-policy checks
+passed. The previous image archive is outside Git and SHA-256 verified. The
+protected pre-switch backup is
+`/DATA/AppData/9router/backups/router-upgrade-20261007T065751Z`; its directory
+is mode `0700` and its files are mode `0600`. The existing
+`0.0.0.0:20128` container port binding was retained, not changed by this
+release. Rollback and evidence:
+`.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`.
+9Router remains the sole `cx/gpt-image-2.5` primary; Qwen fallback ownership
+remains in OpenClaw. Real WhatsApp fallback acceptance remains open.
+
 ## 2026-10-07 — Amadeus 1.9.6 cloud-primary/local-Qwen release deployed
 
 Release commit `e7a815c` is running on CasaOS machine `nyannyan` as

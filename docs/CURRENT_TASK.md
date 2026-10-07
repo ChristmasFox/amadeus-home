@@ -21,6 +21,21 @@ a local `0600`-protected file. Evidence:
 `.agent/checkpoints/2026-10-07-vps-subscription-old-url-revoked.md` and
 `.agent/checkpoints/2026-10-07-vps-subscription-rotation-staged.md`.
 
+## Concurrent 9Router runtime upgrade — 2026-10-07
+
+At the operator's authorization, 9Router npm `0.5.95` was built from committed
+source `cb223a0` over the existing digest-pinned `0.5.75` base and deployed to
+CasaOS machine `nyannyan` as
+`local/9router:git-cb223a0bc9e4-20261007T065751Z`. Managed TTS-style,
+runtime-policy, and image Combo safety patches were applied to the exact new
+package. Focused tests, secrets scan, isolated image checks, live health,
+expected auth rejection, GPT Image Combo, and runtime policy checks passed.
+Protected pre-switch backup:
+`/DATA/AppData/9router/backups/router-upgrade-20261007T065751Z`. Evidence and
+manual rollback instructions:
+`.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`. Qwen WhatsApp
+fallback acceptance remains pending; do not mark the active Goal complete.
+
 ## Objective
 
 - keep `cx/gpt-image-2.5` as the primary image backend;
