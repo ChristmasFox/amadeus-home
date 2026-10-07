@@ -222,12 +222,16 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       const fallbackNode = parseModule(patched).body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenFallbackEligible');
       assert.ok(fallbackNode, 'local fallback classifier must be present in the pinned provider overlay');
       const fallbackClassifier = new Function(`${patched.slice(fallbackNode.start, fallbackNode.end)}; return amadeusQwenFallbackEligible;`)();
+      const fallbackEnabledNode = parseModule(patched).body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenFallbackEnabled');
+      const fallbackEnabled = new Function('process', `${patched.slice(fallbackEnabledNode.start, fallbackEnabledNode.end)}; return amadeusQwenFallbackEnabled;`);
       assert.equal(fallbackClassifier(new Error('request timed out'), undefined), true);
       assert.equal(fallbackClassifier({ message: 'content policy violation' }, 400), false);
       assert.equal(fallbackClassifier({ message: 'invalid prompt' }, 400), false);
       assert.equal(fallbackClassifier({ message: 'request timeout' }, 400), false);
       assert.equal(fallbackClassifier({ message: 'request timeout' }, 408), true);
       assert.equal(fallbackClassifier({ message: 'quota exceeded' }, 429), true);
+      assert.equal(fallbackEnabled({ env: { AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED: '0' } })(), false);
+      assert.equal(fallbackEnabled({ env: { AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED: '1' } })(), true);
       assert.match(patched, /AMADEUS_QWEN_IMAGE_BASE_URL/);
       assert.match(patched, /AMADEUS_QWEN_IMAGE_TOKEN_FILE/);
       assert.match(patched, /AMADEUS_QWEN_IMAGE_LOCAL_ONLY/);
@@ -248,6 +252,13 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       assert.equal(routeAllowed({ ...safeRequest, count: 2 }), false);
       const localOnlyNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenLocalOnly');
       const terminalNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'amadeusQwenTerminalFailure');
+      const fallbackRequestNode = ast.body.find((node) => node.type === 'FunctionDeclaration' && node.id?.name === 'requestAmadeusQwenFallback');
+      const disabledFallbackRequest = new Function(
+        'process', 'resolveOpenAIImageCount',
+        `${patched.slice(routeNode.start, routeNode.end)}\n${patched.slice(fallbackNode.start, fallbackNode.end)}\n${patched.slice(fallbackEnabledNode.start, fallbackEnabledNode.end)}\n${patched.slice(fallbackRequestNode.start, fallbackRequestNode.end)}\nreturn requestAmadeusQwenFallback;`,
+      )({ env: { AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED: '0', AMADEUS_QWEN_IMAGE_TOKEN_FILE: '/missing/qwen-token' } }, (count) => count ?? 1);
+      assert.equal(await disabledFallbackRequest(safeRequest, { error: new Error('request timed out'), status: 408 }), null,
+        'a GPT timeout must not attempt Qwen while production fallback is disabled');
       const localOnly = new Function('process', 'resolveOpenAIImageCount', `${patched.slice(routeNode.start, routeNode.end)}\n${patched.slice(terminalNode.start, terminalNode.end)}\n${patched.slice(localOnlyNode.start, localOnlyNode.end)}\nreturn amadeusQwenLocalOnly;`)(
         { env: { AMADEUS_QWEN_IMAGE_LOCAL_ONLY: '1' } }, (count) => count ?? 1,
       );
@@ -276,7 +287,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       assert.doesNotMatch(generation.options.body, /size/);
 
       const requestNames = [
-        'amadeusQwenFallbackEligible', 'amadeusQwenFallbackRouteAllowed', 'resolveAmadeusQwenImageEndpoint',
+        'amadeusQwenFallbackEligible', 'amadeusQwenFallbackEnabled', 'amadeusQwenFallbackRouteAllowed', 'resolveAmadeusQwenImageEndpoint',
         'readAmadeusQwenImageToken', 'buildAmadeusQwenFallbackRequest', 'amadeusQwenTerminalFailure', 'requestAmadeusQwenFallback',
       ];
       const requestSources = requestNames.map((name) => {
@@ -307,6 +318,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
       const tokenPath = join(tokenDirectory, 'token');
       const previousBase = process.env.AMADEUS_QWEN_IMAGE_BASE_URL;
       const previousTokenPath = process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE;
+      const previousFallbackEnabled = process.env.AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED;
       const previousFetch = globalThis.fetch;
       const previousSignalTimeout = AbortSignal.timeout;
       const calls = [];
@@ -316,6 +328,7 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
         await chmod(tokenPath, 0o600);
         process.env.AMADEUS_QWEN_IMAGE_BASE_URL = 'http://127.0.0.1:18793/v1';
         process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE = tokenPath;
+        process.env.AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED = '1';
         AbortSignal.timeout = (milliseconds) => {
           timeoutValues.push(milliseconds);
           return previousSignalTimeout.call(AbortSignal, milliseconds);
@@ -371,6 +384,8 @@ test('final OpenAI-compatible transport accepts only configured logical model', 
         else process.env.AMADEUS_QWEN_IMAGE_BASE_URL = previousBase;
         if (previousTokenPath === undefined) delete process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE;
         else process.env.AMADEUS_QWEN_IMAGE_TOKEN_FILE = previousTokenPath;
+        if (previousFallbackEnabled === undefined) delete process.env.AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED;
+        else process.env.AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED = previousFallbackEnabled;
         await rm(tokenDirectory, { recursive: true, force: true });
       }
     }),

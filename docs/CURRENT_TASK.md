@@ -1,14 +1,28 @@
-# Current Task — Qwen-Image-2.1 Fun-Acc 4-step acceleration
+# Current Task — GPT-only image route cutover
 
 Date: 2026-10-07 (Asia/Shanghai).
 
-Active Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_FUNACC_4STEP_ACCELERATION_GOAL.md`.
+Active operation: disable the OpenClaw-owned Qwen fallback and deploy Amadeus 1.9.7 with GPT Image as the only production image route.
+
+Paused Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_FUNACC_4STEP_ACCELERATION_GOAL.md` (paused by operator; preserve candidate work without deployment).
 
 Completed/deployed baseline Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
 
 Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
 
-## Active acceleration objective — 2026-10-07
+## Active runtime operation — 2026-10-07
+
+Add an explicit production fallback gate defaulting to disabled. Keep the
+configured `openai/amadeus-image` route and 9Router's `cx/gpt-image-2.5`
+primary unchanged. `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=1` remains candidate-only and
+does not enable normal production fallback. The currently reported 9Router
+`arthur-combo` HTTP 408 is a primary-provider failure; after this cutover it
+must remain a visible failure, not trigger a Qwen request. Do not alter 9Router
+or the local Qwen bridge as part of this operation.
+
+Pre-deploy status: `ROUTE_TESTS_PASS; RELEASE_PREPARATION_IN_PROGRESS`.
+
+## Paused acceleration objective — 2026-10-07
 
 The active Goal is now intentionally narrow: deploy a **1024-class-only** Fun-Acc/PDD 4-step local Qwen acceleration profile, then let the operator perform detailed speed and quality testing manually after deployment.
 
@@ -48,7 +62,7 @@ No formal 16-step vs 4-step benchmark, detailed visual scoring, <=180s target, <
 
 The existing 600-second image timeout stays unless the minimal smoke proves it insufficient.
 
-Status: `PLANNED_NOT_APPLIED`.
+Status: `PAUSED_BY_OPERATOR; CANDIDATE_CHANGES_PRESERVED; NOT_DEPLOYED`.
 
 ## Concurrent VPS security operation — 2026-10-07
 

@@ -307,7 +307,8 @@ export function patchOpenAIImageProviderSource(original) {
     if (!original.includes('image_route_invariant_violation') || !original.includes('image_route_transport_model_resolved') ||
         !original.includes('image_route_transport_failed') || !original.includes('buildAmadeusReferenceImagePayload') ||
         !original.includes('amadeusReferencePayload') || !original.includes('requestAmadeusQwenFallback') ||
-        !original.includes('AMADEUS_QWEN_IMAGE_TOKEN_FILE') || !original.includes('AMADEUS_QWEN_IMAGE_LOCAL_ONLY')) {
+        !original.includes('AMADEUS_QWEN_IMAGE_TOKEN_FILE') || !original.includes('AMADEUS_QWEN_IMAGE_LOCAL_ONLY') ||
+        !original.includes('AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED')) {
       throw new Error('incomplete OpenAI image route patch');
     }
     return original;
@@ -322,6 +323,9 @@ function amadeusQwenFallbackEligible(error, status) {
 	if (status !== undefined) return false;
 	const text = String(error?.name || "") + " " + String(error?.message || "") + " " + String(error?.code || "");
 	return /(?:abort|timeout|timed[ -]?out|network|fetch failed|econn(?:refused|reset)|socket|connection (?:reset|closed))/iu.test(text);
+}
+function amadeusQwenFallbackEnabled() {
+	return process.env.AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED === "1";
 }
 function amadeusQwenFallbackRouteAllowed(req) {
 	const route = req.imageRouteContext;
@@ -375,7 +379,8 @@ function amadeusQwenTerminalFailure(error) {
 	return terminal;
 }
 async function requestAmadeusQwenFallback(req, params) {
-	if (!amadeusQwenFallbackRouteAllowed(req) || !params.localOnly && !amadeusQwenFallbackEligible(params.error, params.status)) return null;
+	if (!amadeusQwenFallbackRouteAllowed(req)) return null;
+	if (!params.localOnly && (!amadeusQwenFallbackEnabled() || !amadeusQwenFallbackEligible(params.error, params.status))) return null;
 	let endpoint;
 	let references;
 	let localRequest;
