@@ -1,10 +1,45 @@
-# Current Task — Qwen-Image-2.1 Uncensored edit-first local fallback
+# Current Task — Qwen-Image-2.1 Fun-Acc 4-step acceleration
 
-Date: 2026-10-06 (Asia/Shanghai).
+Date: 2026-10-07 (Asia/Shanghai).
 
-Active Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
+Active Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_FUNACC_4STEP_ACCELERATION_GOAL.md`.
+
+Completed/deployed baseline Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
 
 Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
+
+## Active acceleration objective — 2026-10-07
+
+The operator reports the Amadeus 1.9.6 Qwen-Image-2.1 Uncensored deployment and real image-edit workflow are now behaving normally in production. This planning commit does not create new runtime evidence; it treats the accepted 1.9.6 route as the baseline to preserve.
+
+Optimize only the local inference layer using the active Goal:
+
+```text
+Qwen-Image-2.1 Uncensored Q4_K_M
++ stable-diffusion.cpp Metal
++ Fun-Acc / PDD 4-step
++ correct custom sigma schedule
++ CFG approximately 1
++ verified Flash Attention
++ measured prefix cache (auto/f16/q8_0)
++ mmap candidate
++ Qwen3-VL-8B Q4_K_M + mmproj for edits
+```
+
+Primary requirements:
+
+- reference-image editing remains P0;
+- keep GPT Image as healthy primary and Qwen as the one local fallback;
+- do not emulate Fun-Acc by merely changing `steps` to 4;
+- preserve the current edit strength unless A/B testing proves a better value;
+- audit and preserve the normal cloud-primary output size/aspect classes;
+- use the current measured warm-edit 311-338 second range as the performance baseline;
+- target <=180 seconds warm edit, with <=120 seconds as a stretch goal;
+- benchmark a 900-second warm lease to avoid repeated cold starts;
+- keep 12/16-step non-distilled behavior available as the reproducible quality/rollback control;
+- no production mutation without explicit `--apply`, protected checkpoint, quality comparison and real WhatsApp reference-edit acceptance.
+
+Status: `PLANNED_NOT_APPLIED`.
 
 ## Concurrent VPS security operation — 2026-10-07
 
