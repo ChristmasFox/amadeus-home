@@ -1,5 +1,33 @@
 # Project State — 2026-10-07
 
+## 2026-10-07 — Amadeus 1.9.7 GPT-only image route deployed
+
+Release source commit `4316946bd3fe` runs on CasaOS machine `nyannyan` as
+immutable image
+`local/openclaw-amadeus:git-4316946bd3fe-20261007125707` (manifest
+`sha256:5244b1f681a33c64cba633095c6529e613dcba0dddf6637213028965a2b806ba`).
+The production environment has `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` and
+`AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED=0`; the existing route overlay is
+fail-closed for automatic Qwen fallback. 9Router remains the unchanged sole
+`cx/gpt-image-2.5` primary. The operator reported an `arthur-combo` HTTP 408;
+no live image request was issued to re-probe it, so the provider timeout remains
+unresolved and will surface directly without fallback.
+
+Protected pre-switch checkpoint:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261007125707` (mode `0700`,
+18 backup items). The saved pre-switch Compose names the prior image
+`local/openclaw-amadeus:git-e7a815c07114-20261007054830`; the previous `.env`
+and runtime state are protected in the same checkpoint. Post-deploy evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261007125707`.
+OpenClaw/Product Radar health, Gateway registration, NAS read-only smoke,
+owner notification/outbox and post-deploy maintenance passed. The optional
+media-adapter smoke was skipped because the service is absent; managed log
+policy returned `warning`. Release evidence:
+`.agent/checkpoints/2026-10-07-amadeus-1.9.7-gpt-only-image-release.md`.
+
+The Qwen bridge/token were not modified. The Fun-Acc Goal is paused and its
+uncommitted candidate work remains preserved outside the deployed commit.
+
 ## 2026-10-07 — 9Router 0.5.95 protected runtime upgrade deployed
 
 Committed source `cb223a0bc9e4a2652acfc012797abd79aedf930c` is running on

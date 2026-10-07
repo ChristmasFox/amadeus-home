@@ -2,7 +2,7 @@
 
 Date: 2026-10-07 (Asia/Shanghai).
 
-Active operation: disable the OpenClaw-owned Qwen fallback and deploy Amadeus 1.9.7 with GPT Image as the only production image route.
+Completed operation: disabled the OpenClaw-owned Qwen fallback and deployed Amadeus 1.9.7 with GPT Image as the only production image route.
 
 Paused Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_FUNACC_4STEP_ACCELERATION_GOAL.md` (paused by operator; preserve candidate work without deployment).
 
@@ -20,11 +20,11 @@ does not enable normal production fallback. The currently reported 9Router
 must remain a visible failure, not trigger a Qwen request. Do not alter 9Router
 or the local Qwen bridge as part of this operation.
 
-Pre-deploy status: `ROUTE_TESTS_PASS; RELEASE_PREPARATION_IN_PROGRESS`.
+Status: `DEPLOYED; OPENCLAW_HEALTH_PASS; FALLBACK_GATE_OFF; CANDIDATE_WORK_PRESERVED`.
 
 ## Paused acceleration objective — 2026-10-07
 
-The active Goal is now intentionally narrow: deploy a **1024-class-only** Fun-Acc/PDD 4-step local Qwen acceleration profile, then let the operator perform detailed speed and quality testing manually after deployment.
+The paused Goal was narrowed to a **1024-class-only** Fun-Acc/PDD 4-step local Qwen acceleration profile, with detailed speed and quality testing reserved for the operator after any future deployment.
 
 Target:
 
@@ -94,7 +94,7 @@ manual rollback instructions:
 `.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`. Qwen WhatsApp
 fallback acceptance remains pending; do not mark the active Goal complete.
 
-## Objective
+## Paused Qwen fallback Goal scope
 
 - keep `cx/gpt-image-2.5` as the primary image backend;
 - keep 9Router's active image Combo primary-only;
@@ -108,26 +108,22 @@ fallback acceptance remains pending; do not mark the active Goal complete.
 
 ## Current live state — 2026-10-07
 
-Amadeus **1.9.6** is deployed on the canonical CasaOS machine. OpenClaw runs
-`local/openclaw-amadeus:git-e7a815c07114-20261007054830`; 9Router remains
-primary-only on `cx/gpt-image-2.5`. `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` enables
-the OpenClaw-owned local Qwen fallback only for eligible operational primary
-failures. Safety refusals and invalid requests remain terminal. The Qwen bridge
-is loopback-only, authenticated, `ready/idle`, serial, and allows reference
-edits; in-container authenticated `/v1/models` returned HTTP 200.
+Amadeus **1.9.7** is deployed on the canonical CasaOS machine. OpenClaw runs
+`local/openclaw-amadeus:git-4316946bd3fe-20261007125707`; 9Router remains the
+sole `cx/gpt-image-2.5` primary. `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` and
+`AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED=0`; the route overlay returns the primary
+failure without issuing a Qwen request. The operator-reported
+`nine_router/arthur-combo` HTTP 408 was not re-probed with a live image request.
 
-Release health, Gateway registration, NAS read-only smoke, owner notification,
-and outbox smoke passed. The optional media-adapter smoke was skipped because
-that service is absent; managed log policy reported a warning. Krea2 LaunchAgent
-was absent before release, and active Krea source, Compose mount and deploy
-secret injection are retired. External Krea model files remain untouched.
-Rollback and verification evidence:
-`.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
+OpenClaw/Product Radar health, Gateway registration, NAS read-only smoke,
+owner notification/outbox, and post-deploy maintenance passed. The optional
+media-adapter smoke was skipped because that service is absent; managed log
+policy reported a warning. The Qwen bridge and protected token plumbing were
+not modified by this cutover. Rollback and verification evidence:
+`.agent/checkpoints/2026-10-07-amadeus-1.9.7-gpt-only-image-release.md`.
 
-The operator accepted the corrected local pose edit, but this was the local-only
-candidate path. **The real GPT-primary-failure → Qwen-reference-edit WhatsApp
-acceptance remains pending**, as does live evidence that a healthy primary
-reference edit stays on GPT without calling Qwen. Do not mark the Goal complete.
+The 1.9.6 GPT-to-Qwen WhatsApp acceptance is superseded by this request to keep
+production GPT-only; the Fun-Acc Goal remains paused and is not deployed.
 
 ### Historical pre-Qwen baseline
 
@@ -229,7 +225,7 @@ smoke, and owner outbox smoke passed. 9Router remains on its previous
 primary-only image. No real WhatsApp image request has yet been accepted.
 Evidence: `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
 
-Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; AMADEUS_1.9.6_GPT_PRIMARY_QWEN_FALLBACK_DEPLOYED; KREA_ACTIVE_SOURCE_RETIRED; REAL_FORCED_PRIMARY_FAILURE_WHATSAPP_ACCEPTANCE_PENDING; HEALTHY_PRIMARY_WHATSAPP_ACCEPTANCE_PENDING`.
+Status: `PAUSED_BY_OPERATOR; PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; AMADEUS_1.9.7_GPT_ONLY_DEPLOYED; QWEN_FALLBACK_DISABLED; KREA_ACTIVE_SOURCE_RETIRED; NOT_DEPLOYED_FUNACC`.
 
 On 2026-10-07, commit `6b7623e` corrected the bridge's image-edit extra
 argument from ignored `denoising_strength` to the pinned engine's `strength`.

@@ -1,8 +1,11 @@
 # Canonical context — 2026-10-07
 
-Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.6 cloud-primary/local-Qwen
-fallback and 9Router 0.5.95 are deployed, while mandatory WhatsApp failover
-acceptance remains open. Re-read Git/live state before further work.
+Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.7 is deployed with
+`cx/gpt-image-2.5` as the only production image route and the local Qwen
+fallback gate disabled. 9Router 0.5.95 remains deployed; the operator reported
+an `arthur-combo` HTTP 408, which is not masked by fallback. The Fun-Acc Goal
+is paused and its candidate changes are preserved. Re-read Git/live state
+before further work.
 
 ## Current 9Router runtime — 0.5.95 deployed
 
@@ -17,7 +20,26 @@ protected rollback checkpoint is
 `/DATA/AppData/9router/backups/router-upgrade-20261007T065751Z`; full evidence
 is in `.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`.
 
-## Current Qwen local-fallback release — Amadeus 1.9.6
+## Current GPT-only image release — Amadeus 1.9.7
+
+Release source commit `4316946bd3fe` runs on CasaOS machine `nyannyan` as
+immutable image
+`local/openclaw-amadeus:git-4316946bd3fe-20261007125707` (manifest
+`sha256:5244b1f681a33c64cba633095c6529e613dcba0dddf6637213028965a2b806ba`).
+`AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` and
+`AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED=0`; the route overlay remains installed
+but normal primary failures do not issue a Qwen request. 9Router remains the
+sole `cx/gpt-image-2.5` primary. The operator reported a 408 from
+`nine_router/arthur-combo`; no new live image request was issued during this
+release, so that upstream timeout remains undiagnosed.
+
+OpenClaw/Product Radar health, Gateway registration, NAS read-only smoke,
+owner notification/outbox, and post-deploy maintenance passed. The optional
+media-adapter smoke was skipped because that service is absent; managed log
+policy reported a warning. Protected rollback and full evidence:
+`.agent/checkpoints/2026-10-07-amadeus-1.9.7-gpt-only-image-release.md`.
+
+## Superseded local-Qwen fallback release — Amadeus 1.9.6
 
 Release commit `e7a815c` runs on CasaOS machine `nyannyan` as
 `local/openclaw-amadeus:git-e7a815c07114-20261007054830`. 9Router remains the
