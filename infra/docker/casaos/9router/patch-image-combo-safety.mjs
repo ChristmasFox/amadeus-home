@@ -5,8 +5,8 @@
 import { chmod, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export const MARKER = 'amadeus-image-combo-safety-terminal-0.5.91';
-const VERSION = '0.5.91';
+export const MARKER = 'amadeus-image-combo-safety-terminal-0.5.95';
+const VERSION = '0.5.95';
 const ANCHOR = 'let{shouldFallback:i,cooldownMs:j}=(0,d.hk)(b.status,f);';
 const SAFETY_PATTERN = String.raw`(?:safety|moderation|content\s+policy|policy\s+(?:violation|refusal)|prompt\s+(?:blocked|rejected)|unsafe|disallowed|prohibited|responsible\s+ai|violat\w*\s+(?:guideline|policy)|copyright\s+restriction)`;
 

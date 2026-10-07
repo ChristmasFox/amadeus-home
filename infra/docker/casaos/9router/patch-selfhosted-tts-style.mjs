@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// 9Router 0.5.91 has the stable selfhosted-TTS options hook, but drops
+// 9Router 0.5.95 has the stable selfhosted-TTS options hook, but drops
 // options.style before calling the OpenAI-compatible endpoint. Keep this
 // narrow patch pinned to that compiled bundle shape and fail closed on drift.
 import { chmod, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const MARKER = 'amadeus-9router-selfhosted-tts-style-v1';
-const VERSION = '0.5.91';
+const VERSION = '0.5.95';
 const SIGNATURE = '"selfhosted-tts"';
 
 async function filesUnder(root) {

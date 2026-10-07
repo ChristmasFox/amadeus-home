@@ -1,5 +1,5 @@
 {
-  "packageVersion": "0.5.91",
+  "packageVersion": "0.5.95",
   "imageAccount": {
     "provider": "codex",
     "model": "gpt-image-2.5",

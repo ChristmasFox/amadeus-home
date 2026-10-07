@@ -23,7 +23,7 @@ const required = patchRequiredConfig(JSON.stringify({config:{...config,distDir:'
 assert.equal(JSON.parse(required).config.experimental.serverActions.bodySizeLimit, '20mb');
 assert.equal(patchRequiredConfig(required,policy),required);
 assert.throws(() => patchRequiredConfig('{}', policy), /shape_drift/);
-assert.throws(() => validatePolicy({...policy, packageVersion:'0.5.92'}), /invalid_runtime_policy/);
+assert.throws(() => validatePolicy({...policy, packageVersion:'0.5.91'}), /invalid_runtime_policy/);
 
 // Execute the exact pinned compiled selector, not a duplicate policy helper.
 const root = process.argv[process.argv.indexOf('--root') + 1];
