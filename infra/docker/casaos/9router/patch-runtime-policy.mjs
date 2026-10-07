@@ -6,7 +6,7 @@ import { readFile, writeFile, readdir, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const MARKER = 'amadeus-image-account-policy-0.5.91';
+export const MARKER = 'amadeus-image-account-policy-0.5.95';
 const ACCOUNT_ANCHOR = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
 const CONFIG_ANCHOR = 'const nextConfig = ';
 const CONFIG_END = '\n\nprocess.env.__NEXT_PRIVATE_STANDALONE_CONFIG';
@@ -16,7 +16,7 @@ function one(source, anchor, name) {
 }
 
 export function validatePolicy(policy) {
-  if (!policy || policy.packageVersion !== '0.5.91' ||
+  if (!policy || policy.packageVersion !== '0.5.95' ||
       policy.imageAccount?.provider !== 'codex' || policy.imageAccount?.model !== 'gpt-image-2.5' ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email) ||
       policy.serverActions?.bodySizeLimit !== '20mb' ||

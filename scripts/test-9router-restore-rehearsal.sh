@@ -3,7 +3,7 @@ set -Eeuo pipefail
 ROOT_DIR="${SKULD_ROOT_DIR:-$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 MODE=fixture
 ARTIFACT=""
-IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.81}"
+IMAGE="${NINE_ROUTER_IMAGE:-local/9router:0.5.95}"
 while (($#)); do
   case "$1" in
     --fixture) MODE=fixture; shift; ARTIFACT="${1:?--fixture requires artifact}"; shift; continue ;;
