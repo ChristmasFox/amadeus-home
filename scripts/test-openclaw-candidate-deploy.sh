@@ -41,5 +41,11 @@ assert 'openclaw-state.sqlite.before' in s
 assert 'sqlite3.connect' in s
 assert '/tmp/openclaw-voice-*.mjs' in image
 assert 'Owner deployment notification remained pending after 30 seconds.' in s
+compose=Path('infra/docker/casaos/openclaw/docker-compose.example.yml').read_text()
+assert 'AMADEUS_KREA2_IMAGE_' not in compose
+assert 'OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE' not in compose
+assert "AMADEUS_KREA2_IMAGE_TOKEN_FILE=" in s
+assert 'KREA2_IMAGE_TOKEN_HOST_FILE="${' not in s
+assert 'KREA2_IMAGE_TOKEN_GUEST_FILE' not in s
 PY
 printf '%s\n' 'OPENCLAW_CANDIDATE_MODE_FIXTURE=passed'
