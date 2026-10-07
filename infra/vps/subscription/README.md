@@ -23,7 +23,8 @@ Xray/Hysteria 代理流量，也不提供 Web 管理面板。
 
 订阅 URL 是 bearer credential：知道 URL 即可读取 UUID 等客户端信息。token 只能保留在
 VPS 的 Caddyfile 和订阅文件路径中，不得提交到 Git、截图或公开聊天记录。泄露后应立即生成
-新 token、reload Caddy，再删除旧 token 目录。
+新 token 并启用新路径；若要避免客户端切换期间中断，可暂时并行保留旧路径，待 owner 明确
+确认后再撤销旧路径和目录。订阅 token 轮换不会让已经下载的配置或其中的代理凭据失效。
 
 ## 现有链接与流量响应
 
@@ -54,6 +55,20 @@ VPS 的 Caddyfile 和订阅文件路径中，不得提交到 Git、截图或公�
 
 Caddyfile 应为 `root:caddy`、`0640`；订阅文件和 token 目录应为 `caddy:caddy`，订阅文件
 权限为 `0640`，目录权限为 `0750`。默认不启用访问日志，避免 token 出现在日志中。
+
+### 分阶段 token 轮换
+
+1. 在 VPS 上生成新的随机 token，并把现有四种订阅文件复制到新的 token 目录；保持配置正文和
+   代理凭据不变。
+2. 在标准 HTTPS 和兼容 `8443` 的 Caddy subscription matcher 中同时加入新旧两组精确路径，
+   执行 `caddy validate` 后平滑 reload。
+3. 对新旧 token 的四种格式分别做 HTTPS smoke test。新链接可供客户端逐台更新，旧链接继续有效。
+4. 只有 owner 明确发出撤销信号后，才从所有 Caddy matcher 中移除旧路径、reload 并删除旧 token
+   目录。若已下载的代理凭据也疑似泄露，另行轮换 Xray/HY2 客户端凭据；仅撤销订阅 URL 不够。
+
+如需撤销已导入节点的访问权限，按 `../proxy/README.md` 的凭据轮换流程更新 Xray UUID、Hysteria 2
+密码以及全部四种订阅正文，再重启两个代理服务。现有订阅 URL token 可以保持不变；客户端必须刷新或
+重新导入才能使用新凭据。订阅恢复 `200` 不等于客户端代理握手成功，须分别用实际设备验收。
 
 ## 安装与证书
 

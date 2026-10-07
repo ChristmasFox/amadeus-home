@@ -79,3 +79,22 @@ ssh amadeus-gateway 'ss -lunp | grep ":2053 "'
 
 以上检查只能证明服务端配置、进程和 TCP 监听正常；最终 Reality 握手和实际代理效果仍需
 在 Quantumult X 中导入节点后，从手机网络发起连接验证。
+
+## 凭据泄露时轮换
+
+订阅 URL token 只控制下载配置，不能撤销已导入的 Xray UUID 或 Hysteria 2 密码。
+在 owner 明确授权后，先对 `/etc/xray/config.json`、`/etc/hysteria/config.yaml` 和当前 token 目录
+下的四个订阅文件做 root-only 外部备份；不要把备份、填充后的配置或凭据放入 Git。
+
+1. 在 VPS 上分别生成新的 VLESS UUID 和高熵 Hysteria 2 密码，保持 Reality 密钥、服务端地址、
+   TLS 证书、端口和订阅 URL token 不变。同步更新服务端配置，以及 QX 的 `qx.conf`/
+   `server.snippet`、Clash 的 `clash.yaml`、Shadowrocket 的 `shadowrocket.txt`。
+2. 先对候选 Xray 配置运行 `xray run -test -config <candidate>`，并用独立 loopback 端口验证
+   Hysteria 候选配置可启动；核对四种订阅的凭据和格式，不要打印或记录实际 secret。
+3. 停止两个代理服务以断开旧连接，原子替换六个文件，重新启动 Xray 和 Hysteria 2。确认
+   TCP/UDP 2053 监听、订阅 HTTPS 正文与新凭据一致、旧凭据已从 live 文件消失。
+4. 通知所有设备刷新或重新导入订阅，并分别做真实代理握手验收。服务端监听和订阅 `200`
+   不能替代设备端测试；不要把 root-only 备份中的旧凭据恢复到运行配置。
+
+若需要按设备归因流量，应在后续单独设计每设备凭据及服务端统计；整台 VPS 的 KiwiVM
+套餐计数和共享凭据无法证明哪台设备耗流量。
