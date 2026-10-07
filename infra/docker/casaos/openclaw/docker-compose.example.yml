@@ -28,8 +28,6 @@ services:
       OWNER_WHATSAPP_ACCOUNT_ID: ${OWNER_WHATSAPP_ACCOUNT_ID:-secondary}
       AMADEUS_IMAGE_SERVICE_BASE_URL: ${AMADEUS_IMAGE_SERVICE_BASE_URL:-http://host.docker.internal:18792}
       AMADEUS_IMAGE_SERVICE_TOKEN_FILE: /run/secrets/amadeus_image_service_token
-      AMADEUS_KREA2_IMAGE_BASE_URL: ${AMADEUS_KREA2_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}
-      AMADEUS_KREA2_IMAGE_TOKEN_FILE: /run/secrets/krea2_image_token
       AMADEUS_QWEN_IMAGE_BASE_URL: ${AMADEUS_QWEN_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}
       AMADEUS_QWEN_IMAGE_TOKEN_FILE: /run/secrets/qwen_image_token
       AMADEUS_QWEN_IMAGE_LOCAL_ONLY: ${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}
@@ -53,7 +51,6 @@ services:
       - ${OPENCLAW_MAC_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-ssh-key}:/run/secrets/mac_ssh_key:ro
       - ${OPENCLAW_MAC_HOST_AGENT_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/mac-host-agent-token}:/run/secrets/mac_host_agent_token:ro
       - ${OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/amadeus-image-service-token}:/run/secrets/amadeus_image_service_token:ro
-      - ${OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/krea2-image-token}:/run/secrets/krea2_image_token:ro
       - ${OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/qwen-image-token}:/run/secrets/qwen_image_token:ro
       - ${OPENCLAW_LONGBRIDGE_CLIENT_ID_HOST_FILE:-/DATA/AppData/openclaw/secrets/longbridge-client-id}:/run/secrets/longbridge_client_id:ro
       - ${OPENCLAW_KOOK_TOKEN_HOST_FILE:-/DATA/AppData/openclaw/secrets/kook-bot-token}:/run/secrets/kook_bot_token:ro
