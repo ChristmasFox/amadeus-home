@@ -6,6 +6,21 @@ Active Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.
 
 Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
 
+## Concurrent VPS security operation — 2026-10-07
+
+The old shared subscription URL token has been revoked. After the operator's
+explicit authorization, the Xray VLESS UUID and Hysteria 2 password were also
+rotated, the four current subscription formats were updated in place, and both
+proxy services were restarted. The current URL token is unchanged; clients must
+refresh or re-import their subscriptions to obtain the new proxy credentials.
+The old proxy credentials no longer authenticate against the running services.
+The four current public subscription links return `200`; Caddy, Xray, Hysteria,
+and the subscription responder are active. Current links remain outside Git in
+a local `0600`-protected file. Evidence:
+`.agent/checkpoints/2026-10-07-vps-proxy-credential-rotation.md`. Prior stages:
+`.agent/checkpoints/2026-10-07-vps-subscription-old-url-revoked.md` and
+`.agent/checkpoints/2026-10-07-vps-subscription-rotation-staged.md`.
+
 ## Objective
 
 - keep `cx/gpt-image-2.5` as the primary image backend;
@@ -18,23 +33,38 @@ Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
 - keep Gemini image generation absent;
 - retire active Krea service/env/token/source plumbing only after Qwen candidate acceptance.
 
-## Current live baseline
+## Current live state — 2026-10-07
 
-Current live release is **Amadeus 1.9.5** (`VERSION=1.9.5`).
+Amadeus **1.9.6** is deployed on the canonical CasaOS machine. OpenClaw runs
+`local/openclaw-amadeus:git-e7a815c07114-20261007054830`; 9Router remains
+primary-only on `cx/gpt-image-2.5`. `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` enables
+the OpenClaw-owned local Qwen fallback only for eligible operational primary
+failures. Safety refusals and invalid requests remain terminal. The Qwen bridge
+is loopback-only, authenticated, `ready/idle`, serial, and allows reference
+edits; in-container authenticated `/v1/models` returned HTTP 200.
 
-The previous Krea2 candidate exceeded the 600-second local image deadline and was paused by the operator. Runtime was restored to the pre-candidate OpenClaw/9Router checkpoints. The normal 9Router/GPT image route is active, WhatsApp is healthy, the local Krea bridge is stopped, and `infra/9router/model-capabilities.json` currently contains only `cx/gpt-image-2.5`.
+Release health, Gateway registration, NAS read-only smoke, owner notification,
+and outbox smoke passed. The optional media-adapter smoke was skipped because
+that service is absent; managed log policy reported a warning. Krea2 LaunchAgent
+was absent before release, and active Krea source, Compose mount and deploy
+secret injection are retired. External Krea model files remain untouched.
+Rollback and verification evidence:
+`.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
 
-Phase 0 read-only audit on 2026-10-06 confirmed the OpenClaw and 9Router
-containers match the rollback image tags and are healthy. The live
-`agents.defaults.mediaModels.image.timeoutMs` is **120000 ms**, not 600000 ms;
-`integrations/openclaw/openclaw.json.example` still says 600000 ms. Treat this
-as a source/runtime discrepancy and choose the final image deadline only from
-the Qwen benchmark. Krea ports 18793/18796 are closed, no Krea LaunchAgent is
-loaded, and the OpenClaw provider overlay remains text-only for Krea. The live
-9Router image fixture confirms a single `cx/gpt-image-2.5` primary and terminal
-safety refusals. Host baseline: Mac mini M6/24 GB, memory-pressure free 82%,
-swap used 27569.62 MiB of 28672 MiB, Qwen3-TTS `/healthz` ready, and 201 GiB
-free on `/Volumes/Avalon`.
+The operator accepted the corrected local pose edit, but this was the local-only
+candidate path. **The real GPT-primary-failure → Qwen-reference-edit WhatsApp
+acceptance remains pending**, as does live evidence that a healthy primary
+reference edit stays on GPT without calling Qwen. Do not mark the Goal complete.
+
+### Historical pre-Qwen baseline
+
+The previous stable release was **Amadeus 1.9.5**. The earlier Krea2 candidate
+exceeded its 600-second deadline and was paused; the old runtime was restored
+before Qwen work began. The 2026-10-06 Phase 0 read-only audit found the live
+image-task timeout at 120000 ms while the source example said 600000 ms. That
+discrepancy was resolved using Qwen benchmark evidence: only the local image
+fallback uses 600000 ms; ordinary Agent, text, caption, TTS, and ASR deadlines
+were not changed. The old Krea candidate and rollback records remain historical:
 
 The Krea candidate and rollback evidence remain historical:
 
@@ -47,7 +77,7 @@ The Krea candidate and rollback evidence remain historical:
 
 A prompt-only local generation is not sufficient.
 
-The new Goal must prove a real WhatsApp **single-reference edit** where:
+The Goal still requires a real WhatsApp **single-reference edit** where:
 
 ```text
 GPT Image primary -> eligible operational failure
@@ -58,6 +88,8 @@ exactly one WhatsApp image + natural Kurisu caption
 ```
 
 Safety/policy refusals remain terminal and must not trigger the uncensored local fallback.
+
+### Historical candidate and benchmark evidence
 
 Two initial default-strength Phase 1 edits changed only the collar/outline, not
 the jacket body. The same-checkpoint `strength=1.0` Test B recolored the full
@@ -124,13 +156,16 @@ smoke, and owner outbox smoke passed. 9Router remains on its previous
 primary-only image. No real WhatsApp image request has yet been accepted.
 Evidence: `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
 
-Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; OPENCLAW_LOCAL_ONLY_CANDIDATE_DEPLOYED; REAL_WHATSAPP_ACCEPTANCE_PENDING; FINAL_GPT_TO_QWEN_FALLBACK_PENDING`.
+Status: `PHASE_0_AUDITED; PHASE_1_TESTS_B_C_D_PASS; PHASE_2_BENCHMARK_COMPLETE; QWEN_BRIDGE_CANDIDATE_EDIT_PASS; AMADEUS_1.9.6_GPT_PRIMARY_QWEN_FALLBACK_DEPLOYED; KREA_ACTIVE_SOURCE_RETIRED; REAL_FORCED_PRIMARY_FAILURE_WHATSAPP_ACCEPTANCE_PENDING; HEALTHY_PRIMARY_WHATSAPP_ACCEPTANCE_PENDING`.
 
 On 2026-10-07, commit `6b7623e` corrected the bridge's image-edit extra
 argument from ignored `denoising_strength` to the pinned engine's `strength`.
 The authorized local LaunchAgent restart is healthy and authenticated
 OpenClaw-container model discovery returns HTTP 200. The effective requested
-strength is now 0.9 instead of the engine default 0.75. A real pose edit and
-visual acceptance remain with the operator; neither the final fallback nor
-the local-only candidate status has changed. Evidence:
+strength is now 0.9 instead of the engine default 0.75. The operator later
+confirmed the corrected local pose edit appeared acceptable. This local-only
+candidate result did not exercise the production GPT-primary fallback. Evidence:
 `.agent/checkpoints/2026-10-07-qwen-image-edit-strength-restart.md`.
+
+Formal Amadeus 1.9.6 deployment evidence:
+`.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.

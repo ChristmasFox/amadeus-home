@@ -1,9 +1,31 @@
-# Canonical context — 2026-10-05
+# Canonical context — 2026-10-07
 
-Read this with `docs/CURRENT_TASK.md`; the current Amadeus image retry and
-safety-chain release is complete. Re-read Git/live state before further work.
+Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.6 cloud-primary/local-Qwen
+fallback is deployed, while mandatory WhatsApp failover acceptance remains
+open. Re-read Git/live state before further work.
 
-## Current Amadeus image retry and safety runtime — 1.9.5 deployed
+## Current Qwen local-fallback release — Amadeus 1.9.6
+
+Release commit `e7a815c` runs on CasaOS machine `nyannyan` as
+`local/openclaw-amadeus:git-e7a815c07114-20261007054830`. 9Router remains the
+sole `cx/gpt-image-2.5` primary. Production `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0`
+enables one OpenClaw-owned local Qwen attempt after eligible operational
+failures; safety/policy refusals and invalid requests remain terminal. The
+authenticated bridge is healthy on loopback port 18793, serial, reference-edit
+enabled, and uses a 600000 ms image deadline. Authenticated container model
+discovery, 9Router reference-byte and fallback-owner checks, Gateway
+registration, service health, NAS read-only smoke, owner outbox, and post-
+deploy maintenance passed. Optional media-adapter smoke was skipped because
+the adapter is absent; log policy returned a warning.
+
+Krea2 active source and Compose secret mount were removed; the old LaunchAgent
+was absent and external model files were preserved. The real WhatsApp request
+that first fails on GPT Image and visibly succeeds through local Qwen has not
+yet been proven. Do not mark the Goal complete until that reference-edit path
+and the healthy-primary no-fallback path are accepted. Protected rollback and
+deployment evidence: `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
+
+## Superseded Amadeus image retry and safety runtime — 1.9.5
 
 OpenClaw 2026.9.4 runs Amadeus 1.9.5 from commits `adcd431` and `0a062a1` in
 immutable image

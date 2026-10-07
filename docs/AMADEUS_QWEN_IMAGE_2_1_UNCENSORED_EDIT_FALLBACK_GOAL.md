@@ -1,7 +1,7 @@
 # Amadeus Qwen-Image-2.1 Uncensored Edit-First Local Fallback — Goal
 
 Date: 2026-10-06 (Asia/Shanghai)
-Baseline: Amadeus 1.9.5 / OpenClaw 2026.9.4 / 9Router 0.5.91
+Initial baseline (historical): Amadeus 1.9.5 / OpenClaw 2026.9.4 / 9Router 0.5.91
 Target host: Mac mini Apple Silicon / 24GB unified memory
 Type: local image fallback replacement / reference-image editing priority
 Supersedes: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`
@@ -40,7 +40,28 @@ Prompt-only generation must also work, but it is P1 after reference editing.
 
 Do not deploy a local fallback that can only generate from text.
 
-## Current live facts
+## Current production rollout — 2026-10-07
+
+Operator-authorized release commit `e7a815c` advanced Amadeus to 1.9.6 and is
+deployed on CasaOS machine `nyannyan` as
+`local/openclaw-amadeus:git-e7a815c07114-20261007054830`. The active route is
+cloud-primary `cx/gpt-image-2.5` through 9Router, with `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0`
+and one OpenClaw-owned local Qwen fallback for eligible operational failures.
+Safety refusals and invalid requests remain terminal. The loopback bridge is
+authenticated, healthy, serial, reference-edit enabled and bounded to 600000 ms.
+Release health and authenticated container model discovery passed; 9Router
+checks confirm primary-only ownership, reference preservation and no local
+fallback after a safety refusal. Live provider fault injection was not
+performed. The user accepted the corrected local-only pose edit, but the real
+production GPT-failure-to-Qwen WhatsApp edit and healthy-primary no-fallback
+acceptances remain pending. Do not mark this Goal complete until they pass.
+
+Active Krea2 bridge, tests, LaunchAgent template, engine config, Compose secret
+mount and deploy token injection have been retired. The Krea LaunchAgent was
+absent at release; external model assets remain untouched. Full release and
+rollback evidence: `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
+
+## Historical pre-Qwen live facts
 
 Start from the actual post-Krea rollback state, not the old 1.8.4 assumptions:
 
@@ -611,15 +632,23 @@ Required order:
 17. release gates and version bump
 ```
 
-The candidate must not be version-bumped before real reference-edit fallback acceptance.
+The original candidate plan required real reference-edit fallback acceptance
+before version bump. At the operator's explicit request the 1.9.6 release was
+deployed after local-only edit acceptance but before the production primary-
+failure path was proven. Record this as an acceptance deviation: the release
+is live, but Phase 14 and the Goal remain open. Do not bump again merely to
+close the pending WhatsApp acceptance.
 
 ## Phase 14 — mandatory real WhatsApp acceptance
 
-The 2026-10-07 temporary local-only OpenClaw candidate has been deployed for
-operator testing. Its route bypasses GPT Image deliberately; it does not
-satisfy the final forced-primary-failure fallback acceptance. The candidate
-checkpoint and smoke evidence are in
+The 2026-10-07 temporary local-only OpenClaw candidate was deployed for
+operator testing and then superseded by the 1.9.6 production release. Its route
+bypassed GPT Image deliberately; it did not satisfy the final forced-primary-
+failure fallback acceptance. Candidate evidence is in
 `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
+
+The current 1.9.6 production route and the remaining acceptance gap are
+documented in `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
 
 A real forced **reference edit** is required.
 
@@ -648,13 +677,16 @@ Then verify a healthy primary reference edit still stays on GPT Image and does n
 
 ## Phase 15 — Krea retirement
 
-Only after the Qwen candidate passes:
+The 2026-10-07 production release completed these retirement changes after
+operator acceptance of the local-only pose edit:
 
-- stop/uninstall the Krea LaunchAgent if any definition remains;
-- remove Krea active Compose/env/token plumbing;
-- remove active Krea service source and tests that are no longer used;
-- preserve Krea historical checkpoint documents;
-- preserve external Krea model files by default for rollback/diagnosis.
+- the Krea LaunchAgent was absent;
+- active Compose/env/token injection and the Krea secret mount were removed;
+- active Krea bridge source, tests, LaunchAgent template and engine config were removed;
+- Krea historical checkpoint documents and external model files were preserved.
+
+The Qwen manager still refuses to start while a legacy Krea process is loaded,
+as a concurrency safety guard.
 
 Do not delete external model assets unless explicitly requested later.
 
@@ -733,5 +765,5 @@ This Goal is complete only when all are true:
 ## Codex execution command
 
 ```text
-/goal Execute docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md end-to-end. Treat it as authoritative and start from the current Amadeus 1.9.5 post-Krea rollback state. Replace the paused Krea2 local fallback with abenzerps/Qwen-Image-2.1-Uncensored-GGUF using qwen-image-2.1-UC-Q4_K_M.gguf on the 24GB Mac mini through a pinned stable-diffusion.cpp Metal runtime. Reference-image editing is P0: use Qwen3-VL-8B-Instruct-Q4_K_M plus the verified mmproj/--llm_vision asset and qwen_image_2.1_vae_bf16.safetensors, prove the uncensored checkpoint itself can edit a single reference before any production switch, and route an eligible failed primary reference request to the protected local /v1/images/edits endpoint without dropping or regenerating from prompt alone. Keep 9Router primary-only cx/gpt-image-2.5; OpenClaw remains the sole owner of one bounded local fallback attempt. Preserve route authority, Asset Registry, native task_completion, Completion Agent caption, exactly-one-image delivery, follow-up completion state, upscale, text, voice, TTS and ASR. Keep safety/policy refusals terminal and never reroute them to the uncensored fallback. Benchmark real 24GB cold/warm edit latency and memory before choosing the final image-specific deadline; candidate testing may use 900 seconds, production must include measured margin and must not change unrelated timeouts. Remove active Krea service/env/token/source plumbing only after Qwen real acceptance passes. Do not declare completion until a real forced-primary-failure WhatsApp single-reference edit visibly preserves the reference and returns exactly one edited image with the normal Kurisu caption.
+/goal Resume docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md from the deployed Amadeus 1.9.6 production state. Do not repeat the completed candidate rollout, Krea retirement, or version bump. The remaining work is mandatory real WhatsApp acceptance: prove a GPT-primary operational failure routes exactly once to the pinned local Qwen single-reference /v1/images/edits path, retains the original reference, returns one visible edit through Asset Registry and Completion Agent with one natural caption and no duplicate message, then prove a healthy GPT primary reference edit does not call Qwen. Preserve 9Router's primary-only cx/gpt-image-2.5, the 600000 ms local-only deadline, terminal safety refusals and current rollback boundary. Do not claim the Goal complete until those checks pass.
 ```

@@ -1,19 +1,40 @@
 # Project State — 2026-10-07
 
-## 2026-10-07 — Qwen edit strength corrected; operator acceptance pending
+## 2026-10-07 — Amadeus 1.9.6 cloud-primary/local-Qwen release deployed
+
+Release commit `e7a815c` is running on CasaOS machine `nyannyan` as
+`local/openclaw-amadeus:git-e7a815c07114-20261007054830` (image ID
+`sha256:ea225fc0ebbc8cd64a340883d16990fa538e3f94fd066ed2f67a849b4d14ec7b`).
+9Router remains the sole `cx/gpt-image-2.5` primary; production
+`AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` enables one OpenClaw-owned Qwen fallback for
+eligible operational failures. Safety refusals and invalid requests do not
+fall back. OpenClaw/Product Radar health, Gateway registration, authenticated
+Qwen model discovery, NAS read-only smoke, owner notification/outbox and
+post-deploy maintenance passed. Optional media-adapter smoke was skipped
+because the adapter is absent; log policy reported a warning. Krea active
+source, deployment env and Compose secret mount are retired; external model
+files are preserved.
+
+The user confirmed the corrected local-only pose edit looked acceptable, but
+the production GPT-failure-to-Qwen WhatsApp path and healthy-primary reference
+edit have not been proven end to end. Goal remains open. Protected rollback and
+evidence: `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
+
+## 2026-10-07 — Qwen edit strength corrected before production release
 
 Commit `6b7623e` corrected the bridge's native edit parameter to
 `{"strength":0.9}`. The authorized Mac LaunchAgent restart is healthy after
 startup asset verification, and the OpenClaw container's authenticated
-`/v1/models` request returned HTTP 200. OpenClaw remains the local-only
-candidate; 9Router was not restarted. No post-fix pose result has been
-accepted yet. Protected pre-restart local copies and recovery details:
+`/v1/models` request returned HTTP 200. The operator later reported the corrected
+local-only pose edit looked acceptable. This was candidate-path validation,
+not evidence of the production primary-failure fallback. Protected pre-restart
+local copies and recovery details:
 `.agent/checkpoints/2026-10-07-qwen-image-edit-strength-restart.md`.
 
-## 2026-10-07 — Qwen local-only OpenClaw candidate deployed
+## 2026-10-07 — Qwen local-only OpenClaw candidate before production release
 
-Operator-authorized candidate commit `e0a2217` is running on the canonical
-CasaOS host as OpenClaw image
+Operator-authorized candidate commit `e0a2217` was briefly running on the
+canonical CasaOS host as OpenClaw image
 `local/openclaw-amadeus:git-e0a2217f302d-20261006185442`. The temporary
 `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=1` switch routes image generation and edits
 directly to the authenticated local Qwen bridge; GPT Image is not attempted
@@ -23,7 +44,8 @@ registration, authenticated container-to-bridge reachability and protected
 token mode passed. The pre-switch checkpoint is
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261006185442`.
 Real WhatsApp image/caption acceptance and the final GPT-primary-to-Qwen
-fallback remain pending. Evidence:
+fallback remained pending when this candidate was superseded by the 1.9.6
+release above. Evidence:
 `.agent/checkpoints/2026-10-07-amadeus-qwen-image-local-only-candidate.md`.
 
 ## 2026-10-07 — Qwen edit bridge candidate, OpenClaw not switched
@@ -41,6 +63,45 @@ host memory free at 81%; swap remained elevated near its pre-run level.
 Protected rollout, real WhatsApp fallback, and Krea source retirement remain
 open. Evidence:
 `.agent/checkpoints/2026-10-07-amadeus-qwen-image-bridge-candidate.md`.
+
+## 2026-10-07 — VPS proxy credentials rotated
+
+At the operator's explicit authorization, the one Xray VLESS UUID and the
+Hysteria 2 password were regenerated on the VPS. The four subscription bodies
+at the existing current token URL were updated; the token and Reality keypair
+were not changed. Both proxy services were stopped before the six live files
+were atomically replaced, then started with the new credentials. The old
+credentials are absent from the live server and subscription files. Candidate
+Xray configuration and Hysteria loopback startup tests passed. Both services
+are active and listening on TCP/UDP 2053; eight local HTTPS body checks on 443
+and 8443 and four public HTTPS checks passed. This does not prove client-side
+handshakes; the owner's devices must refresh or re-import their subscription.
+Two later 20-second network samples still showed approximately 5.4–6.8 Mbps
+of aggregate interface traffic. Successful post-restart Hysteria connections
+came from one source IP matching the current SSH egress, but the traffic cannot
+be attributed to a device or protocol from these counters alone. Further
+isolation is needed if the aggregate usage keeps rising.
+The root-only protected checkpoint is
+`/root/amadeus-gateway-checkpoints/proxy-credential-rotation-20261007T014956`.
+Evidence: `.agent/checkpoints/2026-10-07-vps-proxy-credential-rotation.md`.
+
+## 2026-10-07 — VPS subscription token rotation completed
+
+A new shared random subscription token is active for Clash/Mihomo,
+Shadowrocket, and Quantumult X. After the operator's explicit revocation
+request, the old token was removed from both Caddy matchers and its subscription
+directory was deleted. All four old public links return `404`; all four new
+public links return `200`. Local checks also passed for both formats over ports
+443 and 8443. Caddy and the subscription responder remain active, and the
+Caddyfile is `root:caddy` mode `0640`. Proxy UUIDs and Xray/HY2 client
+credentials were not changed; already-imported proxy configurations may still
+connect at that stage. The proxy credential rotation above supersedes that
+intermediate state. Current URLs remain outside Git in a local `0600` file. Protected
+pre-revoke checkpoint:
+`/root/amadeus-gateway-checkpoints/subscription-old-url-revocation-20261007T003714`.
+Evidence: `.agent/checkpoints/2026-10-07-vps-subscription-old-url-revoked.md`;
+the earlier staged checkpoint remains at
+`.agent/checkpoints/2026-10-07-vps-subscription-rotation-staged.md`.
 
 ## 2026-10-06 — Wild Krea2 local fallback rollout paused
 
