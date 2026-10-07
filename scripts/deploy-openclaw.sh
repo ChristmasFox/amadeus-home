@@ -19,6 +19,7 @@ FULL_VERIFY=0
 CANDIDATE=0
 QWEN_IMAGE_BASE_URL="${AMADEUS_QWEN_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}"
 QWEN_IMAGE_LOCAL_ONLY="${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}"
+QWEN_IMAGE_FALLBACK_ENABLED="${AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED:-0}"
 QWEN_IMAGE_TOKEN_HOST_FILE="${OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE:-$HOME/Library/Application Support/Amadeus/secrets/qwen-image-token}"
 QWEN_IMAGE_TOKEN_GUEST_FILE="${OPENCLAW_QWEN_IMAGE_TOKEN_GUEST_FILE:-/DATA/AppData/openclaw/secrets/qwen-image-token}"
 
@@ -176,6 +177,7 @@ fi
 [[ "$IMAGE" != *$'\n'* && "$IMAGE" != *[[:space:]]* ]] || fail 'OpenClaw image tag contains whitespace.'
 [[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
 [[ "$QWEN_IMAGE_LOCAL_ONLY" == 0 || "$QWEN_IMAGE_LOCAL_ONLY" == 1 ]] || fail 'Qwen local-only flag must be 0 or 1.'
+[[ "$QWEN_IMAGE_FALLBACK_ENABLED" == 0 || "$QWEN_IMAGE_FALLBACK_ENABLED" == 1 ]] || fail 'Qwen fallback flag must be 0 or 1.'
 ((QWEN_IMAGE_LOCAL_ONLY == 0 || CANDIDATE == 1)) || fail 'Qwen local-only image route is candidate-only.'
 STAMP="$(date -u +%Y%m%d%H%M%S)"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
@@ -230,6 +232,7 @@ printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
 printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
 printf 'QWEN_IMAGE_LOCAL_ONLY=%s\n' "$QWEN_IMAGE_LOCAL_ONLY"
+printf 'QWEN_IMAGE_FALLBACK_ENABLED=%s\n' "$QWEN_IMAGE_FALLBACK_ENABLED"
 printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
@@ -509,10 +512,10 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_APP_DIR" "$OPENCLAW_COMPOSE_FILE" "$OPENCLAW_COMPOSE_B64" "$IMAGE" \
   "$OPENCLAW_APP_DIR/.env" "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" \
   "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" \
-  "$QWEN_IMAGE_BASE_URL" "$QWEN_IMAGE_TOKEN_GUEST_FILE" "$QWEN_IMAGE_LOCAL_ONLY" <<'PY'
+  "$QWEN_IMAGE_BASE_URL" "$QWEN_IMAGE_TOKEN_GUEST_FILE" "$QWEN_IMAGE_LOCAL_ONLY" "$QWEN_IMAGE_FALLBACK_ENABLED" <<'PY'
 import base64, os, re, sys
 from pathlib import Path
-app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file, qwen_base_url, qwen_token_host_file, qwen_local_only = sys.argv[1:]
+app_dir, compose_path, encoded, image, compose_env_path, image_service_base_url, image_asset_host_dir, image_service_token_host_file, qwen_base_url, qwen_token_host_file, qwen_local_only, qwen_fallback_enabled = sys.argv[1:]
 if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
 content = base64.b64decode(encoded).decode()
 matches = list(re.finditer(r'(?m)^(\s*)image:\s*.*$', content))
@@ -538,6 +541,7 @@ set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
 set_env('AMADEUS_QWEN_IMAGE_BASE_URL', qwen_base_url)
 set_env('OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE', qwen_token_host_file)
 set_env('AMADEUS_QWEN_IMAGE_LOCAL_ONLY', qwen_local_only)
+set_env('AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED', qwen_fallback_enabled)
 set_env('AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets')
 env_path.write_text('\n'.join(env_lines) + '\n')
 os.chmod(env_path, 0o600)
