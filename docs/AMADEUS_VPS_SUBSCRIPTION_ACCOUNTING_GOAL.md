@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Shanghai)
 
-Status: PHASE_0_AUDITED; PHASE_1_SOURCE_IMPLEMENTED; PHASE_2_APPLIED; PHASE_3_CONTROLLED_ACCOUNTING_PASS_RECONCILIATION_UNCALIBRATED; PHASE_4_SOURCE_VERIFIED_DEPLOY_PENDING; PHASE_5_ACCEPTANCE_PENDING
+Status: COMPLETE; AMADEUS_1.9.9_DEPLOYED; PHASE_5_ACCEPTANCE_PASS; RECONCILIATION_UNCALIBRATED
 
 ## Apply record — 2026-10-08
 
@@ -37,8 +37,8 @@ Reconciliation remains `uncalibrated`. Provider growth and proxy-accounted
 traffic differ materially during the observed interval, so the controlled
 payload checks establish protocol attribution and direction only; they do not
 establish a reliable provider ratio or anomaly threshold. No gap or anomaly is
-reported. Phase 4 source checks pass; OpenClaw deployment, existing Cron job
-time update, and owner-report acceptance remain pending.
+reported. Phase 4 deployment and Phase 5 real acceptance are recorded in
+section 17.
 
 ## 0. Operator decision / hard migration boundary
 
@@ -678,3 +678,51 @@ Implementation must verify the pinned runtime versions against official document
 - Xray policy user stats: https://xtls.github.io/en/config/policy.html
 - Xray statistics: https://xtls.github.io/en/config/stats.html
 - Xray API / StatsService: https://xtls.github.io/en/config/api.html
+
+## 17. Apply and real acceptance record — 2026-10-08
+
+Amadeus 1.9.9 is live in immutable image
+`local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`. OpenClaw health,
+Product Radar health, Amadeus registration, NAS read-only smoke, owner outbox,
+and both report Cron targets passed. The pre-switch checkpoint is
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549`; deployment
+evidence is kept outside Git at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261008052549`.
+
+The two existing jobs were edited in place, with IDs preserved:
+
+- morning `0a0bbe0f-43f1-4582-af45-22dbafb6cf5c`: enabled, `30 9 * * *`, `Asia/Shanghai`;
+- evening `bfc071e5-31a1-4ca5-8836-b228e0f8589a`: enabled, `30 21 * * *`, `Asia/Shanghai`.
+
+Both have `delivery.mode=none` and use the existing owner outbox. A real owner
+report was delivered during the midday acceptance run. That run initially used
+the scheduled evening idempotency key outside its schedule window. Amadeus 1.9.9
+fixes classification using the actual Cron session context and schedule window;
+the acceptance tests cover both an out-of-window manual run and the scheduled
+run. The evening prompt has a date-limited recovery key for 2026-10-08 so that
+tonight's scheduled report can still be sent once; future evenings use the
+normal daily key. The prompt correction is committed in `be53156`.
+
+After the individual Xray and Hysteria restarts, each service became active and
+the collector recorded a generation reset with nonnegative deltas and preserved
+cumulative totals. A controlled local VLESS request and HY2 request both
+returned HTTP 200 after restart. The five Labmem identities each connected
+through both intended protocols (HTTP 200 each), and subsequent healthy
+collector samples recorded nonzero traffic for all five accounts on both HY2
+and VLESS. The legacy HY2 and VLESS credentials also connected after both
+restarts. The earlier 48/48 subscription-format checks passed on both ports;
+the legacy QX response remained byte-identical. No generated credential was
+printed or included in the repo.
+
+The latest sanitized VPS snapshot at acceptance had provider, HY2 traffic and
+online, and Xray traffic and online sources all `ok`; all five accounts had
+known HY2/VLESS totals, legacy remained represented separately, and
+`proxyAccountedComplete=true`. Provider T0 remains
+`2026-10-08T04:58:07Z`. Reconciliation remains `uncalibrated`, with no gap or
+anomaly claim. The complete sanitized evidence and restore pointers are in
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`.
+
+The deploy's managed-container log policy check reported a warning because the
+OrbStack Docker daemon has no default logging policy. Every managed container
+still had bounded `local/20m x5` logging; changing the daemon policy would
+restart OrbStack and was outside this Goal.

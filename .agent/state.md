@@ -1,6 +1,13 @@
-# Agent state — 2026-10-01
+# Agent state — 2026-10-08
 
 Canonical status: `docs/PROJECT_STATE.md`. Current task pointer: `docs/CURRENT_TASK.md`.
+
+Amadeus 1.9.9 is live with VPS subscription accounting. Existing owner report
+jobs retain their IDs and run at 09:30/21:30 Asia/Shanghai. Five Labmem accounts
+passed HY2/VLESS connectivity and accounting acceptance; legacy credentials
+remain active. Xray/Hysteria counter-reset behavior passed live restart checks.
+Reconciliation remains `uncalibrated`; no anomaly is claimed. See the current
+task pointer and `docs/PROJECT_STATE.md` for checkpoints and details.
 
 Amadeus 1.7.8 is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-9f2357210a07-20261001112610` from source commit
