@@ -12,6 +12,38 @@
         "clients": [
           {
             "id": "<UUID>",
+            "email": "legacy-vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<LABMEM001_UUID>",
+            "email": "example-account-01.vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<LABMEM002_UUID>",
+            "email": "example-account-02.vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<LABMEM003_UUID>",
+            "email": "example-account-03.vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<LABMEM004_UUID>",
+            "email": "example-account-04.vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<LABMEM005_UUID>",
+            "email": "example-account-05.vless",
+            "level": 0,
             "flow": "xtls-rprx-vision"
           }
         ],
@@ -44,5 +76,20 @@
       "tag": "block",
       "protocol": "blackhole"
     }
-  ]
+  ],
+  "stats": {},
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserUplink": true,
+        "statsUserDownlink": true,
+        "statsUserOnline": true
+      }
+    }
+  },
+  "api": {
+    "tag": "api",
+    "listen": "127.0.0.1:10085",
+    "services": ["StatsService"]
+  }
 }

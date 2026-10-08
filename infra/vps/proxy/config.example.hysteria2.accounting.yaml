@@ -1,0 +1,18 @@
+# Candidate template for the accounting cutover. The existing password auth
+# block remains live until a protected apply has imported that exact secret as
+# the legacy identity and the loopback auth endpoint is healthy.
+listen: :2053
+
+tls:
+  cert: <CADDY_CERT_PATH>/<DOMAIN>.crt
+  key: <CADDY_CERT_PATH>/<DOMAIN>.key
+  sniGuard: strict
+
+auth:
+  type: http
+  http:
+    url: http://127.0.0.1:18796/auth
+
+trafficStats:
+  listen: 127.0.0.1:19999
+  secret: <GENERATE_ON_VPS_AND_STORE_OUTSIDE_GIT>

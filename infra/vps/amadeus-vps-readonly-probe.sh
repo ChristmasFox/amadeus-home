@@ -22,3 +22,136 @@ for unit in caddy.service xray.service hysteria-server.service frps.service; do
   enabled="$(systemctl is-enabled "$unit" 2>/dev/null || true)"
   printf 'SERVICE\t%s\t%s\t%s\n' "$unit" "$active" "$enabled"
 done
+
+# Read one fixed, sanitized file. The forced-command account has no database
+# access and cannot supply a path, account, SQL fragment, or shell command.
+python3 - <<'PY'
+import json
+import re
+from pathlib import Path
+
+snapshot_path = Path('/var/lib/amadeus-accounting/subscription-usage-public.json')
+account_ids = [f'Labmem{i:03d}' for i in range(1, 6)]
+protocol_ids = ('hy2', 'vless')
+source_ids = ('provider', 'hysteria_traffic', 'hysteria_online', 'xray', 'xray_online')
+
+def count(value):
+    return value if type(value) is int and value >= 0 else None
+
+def timestamp(value):
+    if isinstance(value, str) and len(value) <= 64 and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', value):
+        return value
+    return None
+
+def protocol(value):
+    if not isinstance(value, dict):
+        value = {}
+    status = value.get('status') if value.get('status') in ('ok', 'stale', 'error', 'unknown') else 'unknown'
+    return {
+        'uploadBytes': count(value.get('uploadBytes')),
+        'downloadBytes': count(value.get('downloadBytes')),
+        'totalBytes': count(value.get('totalBytes')),
+        'lastCounterSampleAt': timestamp(value.get('lastCounterSampleAt')),
+        'status': status,
+        'onlineCount': count(value.get('onlineCount')),
+        'onlineCountKind': value.get('onlineCountKind') if value.get('onlineCountKind') in ('client_instances', 'unique_source_ips') else None,
+        'onlineStatus': value.get('onlineStatus') if value.get('onlineStatus') in ('ok', 'stale', 'error', 'unknown') else 'unknown',
+        'onlineSampledAt': timestamp(value.get('onlineSampledAt')),
+        'windowBytes': count(value.get('windowBytes')),
+        'windowSampleCount': count(value.get('windowSampleCount')) or 0,
+    }
+
+def account(value, expected_id):
+    if not isinstance(value, dict) or value.get('accountId') != expected_id:
+        return None
+    protocols = value.get('protocols') if isinstance(value.get('protocols'), dict) else {}
+    return {
+        'accountId': expected_id,
+        'enabled': value.get('enabled') is True,
+        'protocols': {p: protocol(protocols.get(p)) for p in protocol_ids},
+        'totalMonitoredBytes': count(value.get('totalMonitoredBytes')),
+        'knownMonitoredBytes': count(value.get('knownMonitoredBytes')),
+        'totalsComplete': value.get('totalsComplete') is True,
+        'windowBytes': count(value.get('windowBytes')),
+        'windowComplete': value.get('windowComplete') is True,
+    }
+
+try:
+    raw = json.loads(snapshot_path.read_text(encoding='utf-8'))
+    if not isinstance(raw, dict):
+        raise ValueError
+    rows = raw.get('accounts')
+    if not isinstance(rows, list):
+        raise ValueError
+    by_id = {row.get('accountId'): row for row in rows if isinstance(row, dict)}
+    if set(by_id) != set(account_ids):
+        raise ValueError
+    accounts = [account(by_id[key], key) for key in account_ids]
+    legacy = account(raw.get('legacy'), 'legacy')
+    if legacy is None or any(item is None for item in accounts):
+        raise ValueError
+    sources_in = raw.get('sources') if isinstance(raw.get('sources'), dict) else {}
+    sources = {}
+    for name in source_ids:
+        value = sources_in.get(name) if isinstance(sources_in.get(name), dict) else {}
+        status = value.get('status') if value.get('status') in ('ok', 'stale', 'error', 'unknown') else 'unknown'
+        error_code = value.get('errorCode') if value.get('errorCode') in ('unreachable', 'invalid_response', 'timeout', 'unavailable', 'unsupported_version') else None
+        sources[name] = {
+            'status': status,
+            'checkedAt': timestamp(value.get('checkedAt')),
+            'lastSuccessfulAt': timestamp(value.get('lastSuccessfulAt')),
+            'lastErrorAt': timestamp(value.get('lastErrorAt')),
+            'errorCode': error_code,
+        }
+    provider_in = raw.get('provider') if isinstance(raw.get('provider'), dict) else {}
+    provider = {
+        'baselineCounterBytes': count(provider_in.get('baselineCounterBytes')),
+        'lastCounterBytes': count(provider_in.get('lastCounterBytes')),
+        'deltaSinceMonitoringStartBytes': count(provider_in.get('deltaSinceMonitoringStartBytes')),
+        'totalBytes': count(provider_in.get('totalBytes')),
+        'resetAt': timestamp(provider_in.get('resetAt')),
+        'sampledAt': timestamp(provider_in.get('sampledAt')),
+    }
+    window_in = raw.get('reportWindow') if isinstance(raw.get('reportWindow'), dict) else {}
+    top_in = window_in.get('topAccount') if isinstance(window_in.get('topAccount'), dict) else None
+    top = None
+    if top_in and top_in.get('accountId') in (*account_ids, 'legacy') and count(top_in.get('windowBytes')) is not None:
+        top = {'accountId': top_in['accountId'], 'windowBytes': count(top_in['windowBytes'])}
+    result = {
+        'generatedAt': timestamp(raw.get('generatedAt')),
+        'monitoringStartedAt': timestamp(raw.get('monitoringStartedAt')),
+        'accounts': accounts,
+        'legacy': legacy,
+        'protocolTotals': {
+            p: {
+                'knownBytes': count((raw.get('protocolTotals') or {}).get(p, {}).get('knownBytes')),
+                'observedAccounts': count((raw.get('protocolTotals') or {}).get(p, {}).get('observedAccounts')),
+                'complete': (raw.get('protocolTotals') or {}).get(p, {}).get('complete') is True,
+                'source': sources['hysteria_traffic' if p == 'hy2' else 'xray'],
+            } for p in protocol_ids
+        },
+        'knownProxyAccountedBytes': count(raw.get('knownProxyAccountedBytes')),
+        'proxyAccountedBytes': count(raw.get('proxyAccountedBytes')),
+        'proxyAccountedComplete': raw.get('proxyAccountedComplete') is True,
+        'sources': sources,
+        'reportWindow': {
+            'seconds': count(window_in.get('seconds')),
+            'startAt': timestamp(window_in.get('startAt')),
+            'endAt': timestamp(window_in.get('endAt')),
+            'topAccount': top,
+        },
+        'provider': provider,
+        'reconciliation': {
+            'status': 'calibrated' if isinstance(raw.get('reconciliation'), dict) and raw['reconciliation'].get('status') == 'calibrated' else 'uncalibrated',
+            'providerDeltaBytes': provider['deltaSinceMonitoringStartBytes'],
+            'proxyAccountedBytes': count(raw.get('proxyAccountedBytes')),
+            'gapBytes': count((raw.get('reconciliation') or {}).get('gapBytes')) if (raw.get('reconciliation') or {}).get('status') == 'calibrated' else None,
+        },
+    }
+    encoded = json.dumps(result, separators=(',', ':'), ensure_ascii=False)
+    if len(encoded) > 64000:
+        raise ValueError
+    print('ACCOUNTING_SNAPSHOT_JSON=' + encoded)
+except Exception:
+    print('ACCOUNTING_STATUS=unavailable')
+PY

@@ -263,6 +263,12 @@ Formal Amadeus 1.9.6 deployment evidence:
 `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
 
 
-## Concurrent VPS subscription accounting Goal — 2026-10-08
+## Active VPS subscription accounting Goal — 2026-10-08
 
-See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status: `PLANNED_NOT_APPLIED`.
+See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status:
+`PHASE_0_AUDITED; PHASE_1_SOURCE_IMPLEMENTED; PHASE_2_APPLIED; PHASE_3_CONTROLLED_ACCOUNTING_PASS_RECONCILIATION_UNCALIBRATED; PHASE_4_SOURCE_VERIFIED_DEPLOY_PENDING; PHASE_5_ACCEPTANCE_PENDING`.
+VPS accounting is live with T0 `2026-10-08T04:58:07Z`; sanitized snapshots and
+the guarded legacy VLESS T0 baseline repair are verified. Provider/proxy
+reconciliation remains uncalibrated. The existing morning/evening Cron jobs
+were verified as unique, enabled, and using Asia/Shanghai; release deployment
+will keep their IDs and set them to 09:30 and 21:30 via the owner outbox.
