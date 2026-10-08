@@ -48,6 +48,14 @@ and repeat the rejection checks before opening service to clients.
   HTTPS. The M204 VLESS Reality tunnel fetched external HTTPS successfully.
 - The M204 HY2 tunnel fetched external HTTPS successfully through the local
   VPS listener.
+- A follow-up query initially returned unavailable because the fixed
+  read-only SSH probe still expected exactly five Labmem accounts. The
+  repository probe now includes `M204-Net-Core`; it was reinstalled with
+  `scripts/provision-vps-readonly.sh --apply` (probe SHA-256
+  `6d8f6ed7c1ee191071fba32f924dad83c79f37398481e312d86084b02c6c05c4`). The
+  same probe then returned the complete sanitized snapshot at
+  `2026-10-08T12:53:02Z`, all five accounting sources `ok`, and six active
+  accounts. No proxy or accounting service was restarted.
 - OpenClaw candidate image
   `local/openclaw-amadeus:git-509639ee3a5e-20261008112407` passed OpenClaw and
   Product Radar health, Amadeus registration, NAS read-only smoke, and owner

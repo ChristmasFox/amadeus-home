@@ -31,7 +31,7 @@ import re
 from pathlib import Path
 
 snapshot_path = Path('/var/lib/amadeus-accounting/subscription-usage-public.json')
-account_ids = [f'Labmem{i:03d}' for i in range(1, 6)]
+account_ids = [f'Labmem{i:03d}' for i in range(1, 6)] + ['M204-Net-Core']
 protocol_ids = ('hy2', 'vless')
 source_ids = ('provider', 'hysteria_traffic', 'hysteria_online', 'xray', 'xray_online')
 
