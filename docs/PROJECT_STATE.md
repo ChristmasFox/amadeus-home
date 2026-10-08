@@ -34,8 +34,35 @@ subscription URLs returned HTTP 200 and matched their server files. The 21:30
 recovery-key report was still scheduled for later that day at closure, and is
 not claimed as already executed. Reconciliation remains `uncalibrated`; no
 anomaly is claimed. A prior tool result exposed a legacy bearer-token path; it
-remains a recorded residual and the token was not rotated. Full closure evidence
-is in the Goal and deployment checkpoint.
+was a recorded residual at closure. The later security operation below revoked
+the Legacy subscription and proxy credentials. Full closure evidence is in the
+Goal and deployment checkpoint.
+
+## 2026-10-08 — Legacy retired; M204-Net-Core active
+
+After the earlier accounting Goal was closed, the operator explicitly
+authorized the formal Legacy shutdown and a Mac mini-only `M204-Net-Core`
+identity. Legacy is disabled; its subscription token, HY2 secret, and VLESS
+UUID were replaced in the live account store, its subscription directory was
+removed, and its client was removed from active Xray. Xray and Hysteria were
+restarted, terminating any existing Legacy sessions. Its old four-format
+subscription URLs return 404, old HY2 authentication returns 403, and a VLESS
+tunnel attempt with its old UUID is denied. The six active accounts (five
+Labmem plus M204) have 24 working public subscription formats. M204 HY2 and
+VLESS tunnels both reached external HTTPS successfully. The public usage
+snapshot contains no credential fields and retains Legacy only as disabled
+history.
+
+The protected pre-change recovery checkpoint is
+`/root/amadeus-checkpoints/2026-10-08-m204-net-core-retirement-prechange` on
+`amadeus-gateway`, mode `0700` and owned by root. Its SQLite backup passed
+`quick_check`; it includes original Legacy keys and must not be restored without
+immediately reapplying the retirement. The previous accounting/owner report
+deployment remains Amadeus 1.9.9; candidate image
+`local/openclaw-amadeus:git-509639ee3a5e-20261008112407` is healthy and not a
+release. Report jobs remain at 09:30 and 21:30 Asia/Shanghai. Reconciliation
+remains `uncalibrated`. Evidence:
+`.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`.
 
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 

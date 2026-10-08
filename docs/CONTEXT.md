@@ -1,23 +1,31 @@
 # Canonical context — 2026-10-08
 
 Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.9 is deployed on CasaOS
-`nyannyan` as `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`.
+`nyannyan` as candidate image
+`local/openclaw-amadeus:git-509639ee3a5e-20261008112407` (the source `VERSION`
+remains 1.9.9; this is not a release).
 The active Goal is `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`; the public
 Image Lab is planned, while production image generation remains GPT-only.
 VPS subscription accounting is live from T0 `2026-10-08T04:58:07Z`; provider
-and HY2/VLESS sources are healthy, all five Labmem identities have sampled
-traffic on both protocols, and legacy credentials remain active. The existing
-owner report jobs retain their IDs at 09:30 and 21:30 Asia/Shanghai and use the
-owner outbox. Reconciliation remains `uncalibrated`.
+and HY2/VLESS sources are healthy. The five Labmem accounts and `M204-Net-Core`
+are active; Legacy is disabled and its old subscription, HY2, and VLESS
+credentials have been revoked. All 24 active subscription formats returned
+200; the four old Legacy URLs returned 404. Old HY2 authentication returned
+403, and the old VLESS UUID is absent from the active Xray configuration and
+fails a real tunnel attempt. M204 HY2 and VLESS tunnels both passed an external
+HTTPS smoke check. The original credentials remain only in the root-only VPS
+recovery checkpoint; restoring it would re-enable them and must be followed by
+the retirement procedure. The existing owner report jobs retain their IDs at
+09:30 and 21:30 Asia/Shanghai and use the owner outbox. Reconciliation remains
+`uncalibrated`.
 
 The operator **closed** the VPS accounting Goal after reporting a normal direct
-owner query and directing that the legacy token be preserved. All 24 public
-subscription links returned HTTP 200 and matched the VPS files. Both report
-Cron jobs remain enabled at 09:30/21:30 Asia/Shanghai; the 21:30 run was still
-in the future at closure. Reconciliation remains `uncalibrated`, so no gap or
-anomaly is claimed. A legacy subscription bearer-token path had previously
-appeared in a tool output; it remains a documented residual and was not
-addressed by rotation. See the Goal and deployment checkpoint for full details.
+owner query and initially directing that the legacy token be preserved. A
+later explicit security operation superseded that credential posture and
+retired Legacy. Both report Cron jobs remain enabled at 09:30/21:30
+Asia/Shanghai. Reconciliation remains `uncalibrated`, so no gap or anomaly is
+claimed. Full retirement evidence is in
+`.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`.
 
 The dated Amadeus and 9Router entries below are historical snapshots unless
 the current task pointer says otherwise. Re-read Git/live state before work.
