@@ -168,15 +168,15 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
     onlineStatus: 'unknown', onlineSampledAt: null, windowBytes: null, windowSampleCount: 0,
   };
   const account = (accountId: string) => ({
-    accountId, enabled: true, subscriptionToken: 'must-not-leak', hy2Secret: 'must-not-leak',
+    accountId, enabled: true, monitoringStartedAt: '2026-10-08T04:00:00Z', subscriptionToken: 'must-not-leak', hy2Secret: 'must-not-leak',
     protocols: { hy2: protocol, vless: protocol }, totalMonitoredBytes: null,
     knownMonitoredBytes: 0, totalsComplete: false, windowBytes: null, windowComplete: false,
   });
   const source = { status: 'ok', checkedAt: '2026-10-08T04:00:00Z', lastSuccessfulAt: '2026-10-08T04:00:00Z', lastErrorAt: null };
   const snapshot = {
     generatedAt: '2026-10-08T04:00:00Z', monitoringStartedAt: '2026-10-08T04:00:00Z',
-    accounts: ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005'].map(account),
-    legacy: account('legacy'), protocolTotals: { hy2: {}, vless: {} },
+    accounts: ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core'].map(account),
+    legacy: { ...account('legacy'), enabled: false }, protocolTotals: { hy2: {}, vless: {} },
     knownProxyAccountedBytes: 0, proxyAccountedBytes: null, proxyAccountedComplete: false,
     sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source },
     reportWindow: {}, provider: {}, reconciliation: { status: 'uncalibrated' },
@@ -186,5 +186,7 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal(parsed.data.proxyAccountedBytes, null);
   assert.equal(parsed.data.proxyAccountedComplete, false);
   assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).xray_online?.status, 'ok');
+  assert.equal((parsed.data.accounts as Array<{ accountId: string }>).at(-1)?.accountId, 'M204-Net-Core');
+  assert.equal((parsed.data.legacy as { enabled: boolean }).enabled, false);
   assert.equal(JSON.stringify(parsed).includes('must-not-leak'), false);
 });

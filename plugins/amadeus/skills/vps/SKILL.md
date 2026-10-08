@@ -21,11 +21,13 @@ endpoint, shell command, SQL, credential, channel, or recipient:
   memory, and `/` filesystem usage.
 - `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, Hysteria2, and frps.
 - `amadeus_vps_subscription_overview`: empty input; returns five Labmem
-  identities, the separate legacy aggregate, protocol totals, a 12-hour sample
-  window when known, freshness, and the accounting start time.
+  identities, the dedicated `M204-Net-Core` Mac mini identity, retired legacy
+  history, protocol totals, a 12-hour sample window when known, freshness, and
+  each account's monitoring start time.
 - `amadeus_vps_subscription_detail`: requires one `accountId` from
-  `Labmem001`–`Labmem005` or `legacy`; returns one account's monitored protocol
-  totals and known activity facts.
+  `Labmem001`–`Labmem005`, `M204-Net-Core`, or `legacy`; returns one account's
+  monitored protocol totals and known activity facts. Legacy is historical and
+  disabled after its retirement.
 
 Subscription usage is owner-private. The plugin enforces a trusted direct-owner
 context or scheduled-report context and rejects group sessions, including when
@@ -71,8 +73,9 @@ Scheduled morning/evening VPS reports must call all of
 `amadeus_vps_services`, and `amadeus_vps_subscription_overview`. Compose a
 concise Chinese report from returned facts. Include the mandatory ten-cell
 whole-plan line, used/total/remaining/reset time when known, provider growth
-since the prior successful sample, each Labmem account's monitored total from
-`monitoringStartedAt`, and the legacy total only when non-zero. Include the
+since the prior successful sample, each active account's monitored total from
+its own `monitoringStartedAt`, and the retired legacy total only when
+non-zero. Include the
 12-hour account growth window and top account only when the returned values are
 complete and comparable. Preserve unknown protocol counters as unknown; do
 not turn missing rows or stale/error sources into zero. State clearly that

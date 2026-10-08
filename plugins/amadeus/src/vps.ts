@@ -62,7 +62,7 @@ export const VPS_CRITICAL_SERVICES: readonly VpsServiceDefinition[] = [
 ] as const;
 
 const READONLY_PROBE_COMMAND = '/usr/local/sbin/amadeus-vps-readonly-probe';
-export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'legacy'] as const;
+export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core', 'legacy'] as const;
 type VpsSubscriptionAccountId = typeof VPS_SUBSCRIPTION_ACCOUNT_IDS[number];
 
 interface VpsSubscriptionProtocolUsage {
@@ -82,6 +82,7 @@ interface VpsSubscriptionProtocolUsage {
 interface VpsSubscriptionAccount {
   accountId: VpsSubscriptionAccountId;
   enabled: boolean;
+  monitoringStartedAt: string | null;
   protocols: Record<'hy2' | 'vless', VpsSubscriptionProtocolUsage>;
   totalMonitoredBytes: number | null;
   knownMonitoredBytes: number | null;
@@ -590,6 +591,7 @@ function sanitizeSubscriptionAccount(value: unknown, expectedId: VpsSubscription
   return {
     accountId: expectedId,
     enabled: item.accountId === expectedId && item.enabled === true,
+    monitoringStartedAt: safeIso(item.monitoringStartedAt),
     protocols: {
       hy2: sanitizeProtocolUsage(protocols.hy2),
       vless: sanitizeProtocolUsage(protocols.vless),
@@ -627,10 +629,9 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
     const id = safeAccountId(objectValue(row).accountId);
     if (id && id !== 'legacy') rows.set(id, row);
   }
-  const labmemIds = VPS_SUBSCRIPTION_ACCOUNT_IDS.filter((id) => id !== 'legacy');
-  if (rows.size !== labmemIds.length) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
+  const managedIds = VPS_SUBSCRIPTION_ACCOUNT_IDS.filter((id) => id !== 'legacy');
+  if (rows.size !== managedIds.length) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
   const legacy = sanitizeSubscriptionAccount(item.legacy, 'legacy');
-  if (!legacy.enabled) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
   const sourcesIn = objectValue(item.sources);
   const sources = {
     provider: sanitizeSource(sourcesIn.provider),
@@ -666,7 +667,7 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
   return {
     generatedAt: safeIso(item.generatedAt),
     monitoringStartedAt: safeIso(item.monitoringStartedAt),
-    accounts: labmemIds.map((id) => sanitizeSubscriptionAccount(rows.get(id), id)),
+    accounts: managedIds.map((id) => sanitizeSubscriptionAccount(rows.get(id), id)),
     legacy,
     protocolTotals,
     knownProxyAccountedBytes: knownProxyAccounted,
@@ -773,7 +774,7 @@ export async function getVpsSubscriptionDetail(
     source: 'ssh',
     checkedAt: overview.checkedAt,
     data: {
-      monitoringStartedAt: overview.data.monitoringStartedAt,
+      monitoringStartedAt: account?.monitoringStartedAt ?? overview.data.monitoringStartedAt,
       account,
       sources: overview.data.sources,
       reportWindow: overview.data.reportWindow,

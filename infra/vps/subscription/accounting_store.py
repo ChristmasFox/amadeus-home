@@ -23,11 +23,14 @@ from typing import Iterable, Iterator, Mapping
 
 
 LABMEM_IDS = tuple(f"Labmem{i:03d}" for i in range(1, 6))
+M204_ID = "M204-Net-Core"
+MANAGED_ACCOUNT_IDS = (*LABMEM_IDS, M204_ID)
 LEGACY_ID = "legacy"
-ACCOUNT_IDS = (*LABMEM_IDS, LEGACY_ID)
+INITIAL_ACCOUNT_IDS = (*LABMEM_IDS, LEGACY_ID)
+ACCOUNT_IDS = (*MANAGED_ACCOUNT_IDS, LEGACY_ID)
 PROTOCOLS = ("hy2", "vless")
-AUTH_IDS = {LEGACY_ID: "legacy-hy2", **{account_id: account_id for account_id in LABMEM_IDS}}
-VLESS_EMAILS = {LEGACY_ID: "legacy-vless", **{account_id: f"{account_id}.vless" for account_id in LABMEM_IDS}}
+AUTH_IDS = {LEGACY_ID: "legacy-hy2", **{account_id: account_id for account_id in MANAGED_ACCOUNT_IDS}}
+VLESS_EMAILS = {LEGACY_ID: "legacy-vless", **{account_id: f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS}}
 ACCOUNTING_SCHEMA_VERSION = 3
 
 
@@ -185,7 +188,7 @@ class AccountingStore:
             return db.execute("PRAGMA quick_check").fetchone()[0] == "ok"
 
     def initialize_accounts(self, legacy: LegacyCredentials, *, created_at: str | None = None) -> list[str]:
-        """Create legacy + exactly five Labmem identities once; never rotate on rerun."""
+        """Create the imported legacy + five Labmem identities once; never rotate on rerun."""
         if not legacy.subscription_token or not legacy.hy2_secret:
             raise ValueError("legacy credentials are incomplete")
         try:
@@ -200,7 +203,7 @@ class AccountingStore:
             rows = db.execute("SELECT account_id FROM accounts ORDER BY account_id").fetchall()
             existing = {row["account_id"] for row in rows}
             if existing:
-                if existing != set(ACCOUNT_IDS):
+                if existing not in (set(INITIAL_ACCOUNT_IDS), set(ACCOUNT_IDS)):
                     db.rollback()
                     raise RuntimeError("account store is partially initialized; refusing credential regeneration")
                 legacy_row = db.execute(
@@ -240,6 +243,70 @@ class AccountingStore:
             db.commit()
         os.chmod(self.path, 0o600)
         return list(LABMEM_IDS)
+
+    def provision_m204(self, *, created_at: str | None = None) -> bool:
+        """Create the dedicated Mac mini identity once; reruns never rotate credentials."""
+        timestamp = created_at or utc_now()
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute("SELECT account_id FROM accounts ORDER BY account_id").fetchall()
+            existing = {row["account_id"] for row in rows}
+            if existing == set(ACCOUNT_IDS):
+                account = db.execute(
+                    "SELECT enabled,is_legacy FROM accounts WHERE account_id=?", (M204_ID,),
+                ).fetchone()
+                db.rollback()
+                if not account or account["is_legacy"] != 0 or account["enabled"] != 1:
+                    raise RuntimeError("M204-Net-Core is retired or has an invalid account record")
+                return False
+            if existing != set(INITIAL_ACCOUNT_IDS):
+                db.rollback()
+                raise RuntimeError("account store is not at the expected pre-M204 state")
+            used_tokens = {row[0] for row in db.execute("SELECT subscription_token FROM accounts")}
+            used_hy2 = {row[0] for row in db.execute("SELECT hy2_secret FROM accounts")}
+            used_uuids = {str(row[0]).lower() for row in db.execute("SELECT vless_uuid FROM accounts")}
+            token = _unique_secret(used_tokens)
+            hy2_secret = _unique_secret(used_hy2)
+            client_uuid = str(uuid.uuid4())
+            while client_uuid.lower() in used_uuids:
+                client_uuid = str(uuid.uuid4())
+            db.execute(
+                "INSERT INTO accounts VALUES (?,?,?,?,?,?,?,NULL)",
+                (M204_ID, 1, token, hy2_secret, client_uuid, 0, timestamp),
+            )
+            db.commit()
+        os.chmod(self.path, 0o600)
+        return True
+
+    def disable_legacy(self, *, disabled_at: str | None = None) -> bool:
+        """Revoke and replace every live legacy secret while retaining usage history."""
+        timestamp = disabled_at or utc_now()
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute(
+                "SELECT enabled,is_legacy FROM accounts WHERE account_id=?", (LEGACY_ID,),
+            ).fetchone()
+            if not row or row["is_legacy"] != 1:
+                db.rollback()
+                raise RuntimeError("legacy identity is unavailable")
+            if row["enabled"] == 0:
+                db.rollback()
+                return False
+            used_tokens = {item[0] for item in db.execute("SELECT subscription_token FROM accounts")}
+            used_hy2 = {item[0] for item in db.execute("SELECT hy2_secret FROM accounts")}
+            used_uuids = {str(item[0]).lower() for item in db.execute("SELECT vless_uuid FROM accounts")}
+            token = _unique_secret(used_tokens)
+            hy2_secret = _unique_secret(used_hy2)
+            client_uuid = str(uuid.uuid4())
+            while client_uuid.lower() in used_uuids:
+                client_uuid = str(uuid.uuid4())
+            db.execute(
+                "UPDATE accounts SET enabled=0,subscription_token=?,hy2_secret=?,vless_uuid=?,disabled_at=? "
+                "WHERE account_id=?",
+                (token, hy2_secret, client_uuid, timestamp, LEGACY_ID),
+            )
+            db.commit()
+        return True
 
     def account_records_for_runtime(self) -> list[dict[str, str | int | None]]:
         """Internal credential-bearing records. Never serialize or log this result."""
@@ -441,6 +508,10 @@ class AccountingStore:
                 "SELECT value FROM schema_meta WHERE key='accounting_started_at'"
             ).fetchone()
             monitoring_started_at = str(started_row["value"]) if started_row else None
+            account_created_row = db.execute(
+                "SELECT created_at FROM accounts WHERE account_id=?", (M204_ID,),
+            ).fetchone()
+            m204_started_at = str(account_created_row["created_at"]) if account_created_row else None
             for account_id, values in counters.items():
                 if account_id not in ACCOUNT_IDS or not isinstance(values, tuple) or len(values) != 2:
                     continue
@@ -456,13 +527,12 @@ class AccountingStore:
                     upload_delta = download_delta = 0
                     interval_start = sampled_at
                 elif previous is None:
-                    # Labmem credentials are newly generated and are not
-                    # distributed before T0, so their first absolute counter
-                    # value is attributable from T0 even when an idle account
-                    # was omitted by the protocol API at the initial sample.
-                    # Legacy counters may include pre-T0 traffic; baseline
-                    # those at first observation and keep their total unknown.
-                    if account_id in LABMEM_IDS and monitoring_started_at:
+                    # These credentials did not exist before their start time,
+                    # so their first absolute counter value is attributable.
+                    if account_id == M204_ID and m204_started_at:
+                        upload_delta, download_delta = upload, download
+                        interval_start = m204_started_at
+                    elif account_id in LABMEM_IDS and monitoring_started_at:
                         upload_delta, download_delta = upload, download
                         interval_start = monitoring_started_at
                     else:
@@ -480,10 +550,8 @@ class AccountingStore:
                 if baseline:
                     baseline_sampled_at = sampled_at
                 elif previous is None:
-                    baseline_sampled_at = (
-                        monitoring_started_at
-                        if account_id in LABMEM_IDS and monitoring_started_at
-                        else None
+                    baseline_sampled_at = m204_started_at if account_id == M204_ID else (
+                        monitoring_started_at if account_id in LABMEM_IDS and monitoring_started_at else None
                     )
                 else:
                     baseline_sampled_at = previous["baseline_sampled_at"]
@@ -529,7 +597,8 @@ class AccountingStore:
             raise ValueError("online sample source or protocol is invalid")
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
-            for account_id in ACCOUNT_IDS:
+            account_ids = [row[0] for row in db.execute("SELECT account_id FROM accounts").fetchall()]
+            for account_id in account_ids:
                 count = values.get(account_id, 0)
                 parsed = _integer(count)
                 if parsed is None:
@@ -572,7 +641,7 @@ class AccountingStore:
         cutoff_dt = current - timedelta(seconds=max(60, window_seconds))
         cutoff = cutoff_dt.isoformat(timespec="seconds").replace("+00:00", "Z")
         with self._connect() as db:
-            accounts = db.execute("SELECT account_id,enabled,is_legacy FROM accounts ORDER BY is_legacy,account_id").fetchall()
+            accounts = db.execute("SELECT account_id,enabled,is_legacy,created_at FROM accounts ORDER BY is_legacy,account_id").fetchall()
             states = {
                 (row["account_id"], row["protocol"]): row
                 for row in db.execute("SELECT * FROM counter_state").fetchall()
@@ -593,6 +662,15 @@ class AccountingStore:
         window_by_account = {(row["account_id"], row["protocol"]): row for row in window_rows}
         started_at = meta.get("accounting_started_at")
         started_dt = _parse_time(started_at)
+        account_created_at = {str(row["account_id"]): str(row["created_at"]) for row in accounts}
+
+        def account_started_at(account_id: str) -> str | None:
+            if account_id == M204_ID:
+                return account_created_at.get(account_id)
+            return started_at
+
+        def account_started_dt(account_id: str) -> datetime | None:
+            return _parse_time(account_started_at(account_id))
 
         def source_clean_since(source: str, boundary: datetime | None) -> bool:
             state = sources.get(source)
@@ -602,37 +680,39 @@ class AccountingStore:
             return last_error is None or last_error < boundary
 
         def counter_baseline_covers(account_id: str, row: sqlite3.Row | None, boundary: datetime | None) -> bool:
-            if boundary is None or started_dt is None:
+            if boundary is None:
                 return False
             if row is None:
-                # Labmem identities were created at T0 and their URLs were not
-                # distributed beforehand, so an absent per-user counter is a
-                # known zero for that fresh identity while the source is healthy.
-                return account_id in LABMEM_IDS
+                # Fresh managed identities have no attributable traffic before
+                # their creation; a missing row is zero only while collection is healthy.
+                return account_id in MANAGED_ACCOUNT_IDS
             baseline_at = _parse_time(row["baseline_sampled_at"])
             return baseline_at is not None and baseline_at <= boundary
 
         account_results: dict[str, dict[str, object]] = {}
         protocol_totals: dict[str, dict[str, object]] = {}
         for protocol in PROTOCOLS:
-            known = [row for (account_id, p), row in states.items() if p == protocol]
+            known = [states[(account_id, protocol)] for account_id in MANAGED_ACCOUNT_IDS if (account_id, protocol) in states]
             source_name = "hysteria_traffic" if protocol == "hy2" else "xray"
             observed_accounts = sum(
-                counter_baseline_covers(account_id, states.get((account_id, protocol)), started_dt)
-                for account_id in ACCOUNT_IDS
+                counter_baseline_covers(account_id, states.get((account_id, protocol)), account_started_dt(account_id))
+                for account_id in MANAGED_ACCOUNT_IDS
             )
             baseline_complete = all(
-                counter_baseline_covers(account_id, states.get((account_id, protocol)), started_dt)
-                for account_id in ACCOUNT_IDS
+                counter_baseline_covers(account_id, states.get((account_id, protocol)), account_started_dt(account_id))
+                and source_clean_since(source_name, account_started_dt(account_id))
+                for account_id in MANAGED_ACCOUNT_IDS
             )
             protocol_totals[protocol] = {
                 "knownBytes": sum(int(row["cumulative_upload_bytes"]) + int(row["cumulative_download_bytes"]) for row in known),
                 "observedAccounts": observed_accounts,
-                "complete": baseline_complete and source_clean_since(source_name, started_dt),
+                "complete": baseline_complete,
                 "source": sources.get(source_name, {"status": "unknown"}),
             }
         for account_row in accounts:
             account_id = account_row["account_id"]
+            account_start_at = account_started_at(account_id)
+            account_start = account_started_dt(account_id)
             protocols: dict[str, object] = {}
             known_totals: list[int] = []
             complete_protocols = True
@@ -642,19 +722,19 @@ class AccountingStore:
                 counter = states.get((account_id, protocol))
                 source_name = "hysteria_traffic" if protocol == "hy2" else "xray"
                 counter_status = sources.get(source_name, {"status": "error", "checkedAt": None, "lastSuccessfulAt": None})
-                total_coverage = counter_baseline_covers(account_id, counter, started_dt)
-                total_source_clean = source_clean_since(source_name, started_dt)
+                total_coverage = counter_baseline_covers(account_id, counter, account_start)
+                total_source_clean = source_clean_since(source_name, account_start)
                 if not total_coverage or not total_source_clean:
                     complete_protocols = False
-                window_boundary = max(cutoff_dt, started_dt) if started_dt else cutoff_dt
+                window_boundary = max(cutoff_dt, account_start) if account_start else None
                 window_source_clean = source_clean_since(source_name, window_boundary)
                 window_coverage = counter_baseline_covers(account_id, counter, window_boundary)
                 if not window_coverage or not window_source_clean:
                     recent_complete = False
                 window_row = window_by_account.get((account_id, protocol))
-                if counter is None and account_id in LABMEM_IDS and total_coverage and total_source_clean:
+                if counter is None and account_id in MANAGED_ACCOUNT_IDS and total_coverage and total_source_clean:
                     upload_bytes = download_bytes = total_bytes = 0
-                    observed_at = started_at
+                    observed_at = account_start_at
                     known_totals.append(0)
                 elif counter is None or not total_coverage:
                     upload_bytes = download_bytes = total_bytes = observed_at = None
@@ -667,7 +747,7 @@ class AccountingStore:
                     total_bytes = upload_bytes + download_bytes
                     observed_at = counter["sampled_at"]
                     known_totals.append(total_bytes)
-                if window_row is None and account_id in LABMEM_IDS and window_coverage and window_source_clean:
+                if window_row is None and account_id in MANAGED_ACCOUNT_IDS and window_coverage and window_source_clean:
                     window_total = 0
                     recent_totals.append(0)
                 elif window_row is None or not window_coverage or not window_source_clean:
@@ -697,6 +777,7 @@ class AccountingStore:
             account_results[account_id] = {
                 "accountId": account_id,
                 "enabled": bool(account_row["enabled"]),
+                "monitoringStartedAt": account_start_at,
                 "protocols": protocols,
                 "totalMonitoredBytes": sum(known_totals) if complete_protocols else None,
                 "knownMonitoredBytes": sum(known_totals),
@@ -706,24 +787,23 @@ class AccountingStore:
             }
         monitored_known = sum(
             int(row["cumulative_upload_bytes"]) + int(row["cumulative_download_bytes"])
-            for row in states.values()
+            for (account_id, _), row in states.items() if account_id in MANAGED_ACCOUNT_IDS
         )
         proxy_accounted_complete = (
             all(
-                counter_baseline_covers(account_id, states.get((account_id, protocol)), started_dt)
-                for account_id in ACCOUNT_IDS for protocol in PROTOCOLS
+                counter_baseline_covers(account_id, states.get((account_id, protocol)), account_started_dt(account_id))
+                and source_clean_since("hysteria_traffic" if protocol == "hy2" else "xray", account_started_dt(account_id))
+                for account_id in MANAGED_ACCOUNT_IDS for protocol in PROTOCOLS
             )
-            and source_clean_since("hysteria_traffic", started_dt)
-            and source_clean_since("xray", started_dt)
         )
         proxy_accounted = monitored_known if proxy_accounted_complete else None
         provider_started = provider["counter_at_start"] is not None
         provider_delta = int(provider["delta_since_start"]) if provider_started else None
-        all_window_complete = all(account_results.get(account_id, {}).get("windowComplete") for account_id in ACCOUNT_IDS)
+        all_window_complete = all(account_results.get(account_id, {}).get("windowComplete") for account_id in MANAGED_ACCOUNT_IDS)
         top_account = None
         if all_window_complete:
             ranked = sorted(
-                ((int(account_results[a]["windowBytes"]), a) for a in ACCOUNT_IDS),
+                ((int(account_results[a]["windowBytes"]), a) for a in MANAGED_ACCOUNT_IDS),
                 key=lambda item: (-item[0], item[1]),
             )
             if ranked:
@@ -731,7 +811,7 @@ class AccountingStore:
         common = {
             "generatedAt": generated_at,
             "monitoringStartedAt": started_at,
-            "accounts": [account_results[a] for a in LABMEM_IDS],
+            "accounts": [account_results[a] for a in MANAGED_ACCOUNT_IDS if a in account_results],
             "legacy": account_results.get(LEGACY_ID),
             "protocolTotals": protocol_totals,
             "knownProxyAccountedBytes": monitored_known,

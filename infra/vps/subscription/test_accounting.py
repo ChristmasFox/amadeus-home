@@ -6,12 +6,14 @@ import grp
 import io
 import json
 import os
+import pwd
 import sqlite3
 import sys
 import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError
@@ -20,17 +22,23 @@ from urllib.request import Request, urlopen
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
+import accounting_cli
 from accounting_cli import (
     generate_stats_secret,
     render_hysteria_candidate,
+    render_caddy_matcher,
     render_new_accounts,
+    _retire_legacy,
     render_subscription_files,
     render_xray_candidate,
 )
 from accounting_service import AccountingHTTPServer, ServiceConfig, SourceFailure, XRAY_USER_STATS_PATTERN, _counter_integer, _request_shutdown, parse_hysteria_online, parse_hysteria_traffic, parse_xray_online, parse_xray_online_version, parse_xray_stats, xray_online_not_found_is_zero
 from accounting_store import (
     ACCOUNT_IDS,
+    INITIAL_ACCOUNT_IDS,
     LABMEM_IDS,
+    MANAGED_ACCOUNT_IDS,
+    M204_ID,
     AccountingStore,
     LegacyCredentials,
     collect_active_subscription_token,
@@ -59,7 +67,7 @@ class AccountingStoreTests(unittest.TestCase):
     def test_initialization_creates_five_unique_identities_and_never_rotates_on_rerun(self) -> None:
         self.assertEqual(self.store.initialize_accounts(LEGACY, created_at=NOW), list(LABMEM_IDS))
         first = self.store.account_records_for_runtime()
-        self.assertEqual({row["account_id"] for row in first}, set(ACCOUNT_IDS))
+        self.assertEqual({row["account_id"] for row in first}, set(INITIAL_ACCOUNT_IDS))
         self.assertEqual(sum(int(row["is_legacy"]) for row in first), 1)
         for field in ("subscription_token", "hy2_secret", "vless_uuid"):
             self.assertEqual(len({str(row[field]) for row in first}), 6)
@@ -94,6 +102,38 @@ class AccountingStoreTests(unittest.TestCase):
             version = db.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
         self.assertIn("baseline_sampled_at", columns)
         self.assertEqual(version, "3")
+
+    def test_m204_identity_is_created_once_and_legacy_hy2_auth_is_revoked(self) -> None:
+        self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.assertTrue(self.store.provision_m204(created_at="2026-10-08T04:01:00Z"))
+        first = {row["account_id"]: row for row in self.store.account_records_for_runtime()}
+        self.assertFalse(self.store.provision_m204(created_at="2026-10-09T00:00:00Z"))
+        second = {row["account_id"]: row for row in self.store.account_records_for_runtime()}
+        self.assertEqual(first[M204_ID], second[M204_ID])
+        self.assertEqual(self.store.auth_account_id(LEGACY.hy2_secret), "legacy")
+        self.assertEqual(self.store.auth_account_id(str(first[M204_ID]["hy2_secret"])), M204_ID)
+        self.assertTrue(self.store.disable_legacy(disabled_at="2026-10-08T04:02:00Z"))
+        self.assertFalse(self.store.disable_legacy(disabled_at="2026-10-08T04:03:00Z"))
+        self.assertIsNone(self.store.auth_account_id(LEGACY.hy2_secret))
+        records = {row["account_id"]: row for row in self.store.account_records_for_runtime()}
+        self.assertEqual(set(records), set(ACCOUNT_IDS))
+        for field in ("subscription_token", "hy2_secret", "vless_uuid"):
+            self.assertNotEqual(records["legacy"][field], getattr(LEGACY, field))
+
+    def test_m204_counter_attribution_starts_at_account_creation(self) -> None:
+        self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.record_provider_sample(counter_bytes=90, total_bytes=1000, reset_at=None, sampled_at=NOW)
+        m204_start = "2026-10-08T04:01:00Z"
+        self.store.provision_m204(created_at=m204_start)
+        self.store.record_counter_sample(
+            source="hysteria_traffic", protocol="hy2", counters={M204_ID: (12, 30)},
+            generation="hy2-1", sampled_at="2026-10-08T04:02:00Z",
+        )
+        snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 3, tzinfo=timezone.utc))
+        m204 = next(row for row in snapshot["accounts"] if row["accountId"] == M204_ID)
+        self.assertEqual(m204["monitoringStartedAt"], m204_start)
+        self.assertEqual(m204["protocols"]["hy2"]["totalBytes"], 42)
+        self.assertEqual(m204["protocols"]["hy2"]["windowBytes"], 42)
 
     def test_partial_store_refuses_to_generate_replacement_credentials(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
@@ -260,6 +300,7 @@ class AccountingStoreTests(unittest.TestCase):
 
     def test_fresh_labmem_absence_counts_as_zero_when_all_traffic_sources_are_healthy(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.provision_m204(created_at=NOW)
         self.store.record_provider_sample(counter_bytes=90, total_bytes=1000, reset_at=None, sampled_at=NOW)
         self.store.record_counter_sample(
             source="hysteria_traffic", protocol="hy2", counters={"legacy": (0, 0)},
@@ -341,6 +382,7 @@ class AccountingStoreTests(unittest.TestCase):
 
     def test_recovered_source_retains_gap_and_does_not_claim_complete_totals(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.provision_m204(created_at=NOW)
         self.store.record_provider_sample(counter_bytes=100, total_bytes=1000, reset_at=None, sampled_at=NOW)
         initial = {account_id: (10, 20) for account_id in ACCOUNT_IDS}
         self.store.record_counter_sample(
@@ -388,6 +430,28 @@ class ParserAndAuthTests(unittest.TestCase):
             self.assertFalse(output_path.exists())
             self.assertIn("PLAN_GENERATE_STATS_SECRET=no_changes; APPLY_REQUIRED=1", stdout.getvalue())
 
+    def test_account_retirement_cli_commands_default_to_dry_run(self) -> None:
+        common = [
+            "--db", "/tmp/m204-dry-run.sqlite",
+            "--subscription-root", "/tmp/m204-dry-run-subscriptions",
+            "--caddy-fragment", "/tmp/m204-dry-run.caddy",
+            "--xray-source", "/tmp/m204-dry-run-xray.json",
+            "--xray-output", "/tmp/m204-dry-run-candidate.json",
+        ]
+        for command in ("provision-m204", "retire-legacy"):
+            args = ["accounting_cli.py", command, *common]
+            if command == "provision-m204":
+                args.extend([
+                    "--vless-server", "vless.example.com", "--hy2-server", "hy2.example.com",
+                    "--hy2-sni", "hy2.example.com", "--reality-server-name", "www.example.com",
+                    "--reality-public-key", "public-key-placeholder", "--reality-short-id", "0011223344556677",
+                ])
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", args), patch("sys.stdout", stdout):
+                from accounting_cli import main
+                self.assertEqual(main(), 0)
+            self.assertIn("APPLY_REQUIRED=1", stdout.getvalue())
+
     def test_accounting_cli_writes_secret_only_with_apply_and_never_prints_it(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "hysteria-stats-secret"
@@ -428,8 +492,8 @@ class ParserAndAuthTests(unittest.TestCase):
 
     def test_protocol_parsers_map_direction_and_ignore_unknown_ids(self) -> None:
         self.assertEqual(XRAY_USER_STATS_PATTERN, "user>>>")
-        self.assertEqual(parse_hysteria_traffic({"legacy-hy2": {"tx": 90, "rx": 12}, "Labmem001": {"tx": 8, "rx": 3}, "other": {"tx": 100, "rx": 100}}), {
-            "legacy": (90, 12), "Labmem001": (8, 3),
+        self.assertEqual(parse_hysteria_traffic({"legacy-hy2": {"tx": 90, "rx": 12}, "Labmem001": {"tx": 8, "rx": 3}, "M204-Net-Core": {"tx": 1, "rx": 2}, "other": {"tx": 100, "rx": 100}}), {
+            "legacy": (90, 12), "Labmem001": (8, 3), M204_ID: (1, 2),
         })
         self.assertEqual(parse_hysteria_online({"Labmem001": 2, "legacy-hy2": 1, "bad": 9}), {"Labmem001": 2, "legacy": 1})
         stats = {"stat": [
@@ -437,13 +501,16 @@ class ParserAndAuthTests(unittest.TestCase):
             {"name": "user>>>legacy-vless>>>traffic>>>downlink", "value": "25"},
             {"name": "user>>>Labmem005.vless>>>traffic>>>uplink", "value": "5"},
             {"name": "user>>>Labmem005.vless>>>traffic>>>downlink", "value": "11"},
+            {"name": "user>>>M204-Net-Core.vless>>>traffic>>>uplink", "value": "2"},
+            {"name": "user>>>M204-Net-Core.vless>>>traffic>>>downlink", "value": "3"},
             {"name": "user>>>Labmem004.vless>>>traffic>>>uplink", "value": 1.5},
             {"name": "user>>>Labmem004.vless>>>traffic>>>downlink", "value": 8},
             {"name": "user>>>unknown>>>traffic>>>uplink", "value": "400"},
         ]}
-        self.assertEqual(parse_xray_stats(stats), {"legacy": (14, 25), "Labmem005": (5, 11)})
+        self.assertEqual(parse_xray_stats(stats), {"legacy": (14, 25), "Labmem005": (5, 11), M204_ID: (2, 3)})
         self.assertEqual(parse_xray_stats({"stat": [{"name": "user>>>Labmem001.vless>>>traffic>>>uplink", "value": "1"}]}), {})
         self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online", "value": 2}}, "Labmem001"), 2)
+        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>M204-Net-Core.vless>>>online", "value": 1}}, M204_ID), 1)
         self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online"}}, "Labmem001"), 0)
         self.assertEqual(parse_xray_online_version("Xray 26.6.27 (Xray, Penetrates Everything.)"), (26, 6, 27))
         self.assertEqual(parse_xray_online_version("Xray 26.9.30 (Xray, Penetrates Everything.)"), (26, 9, 30))
@@ -513,11 +580,53 @@ class ParserAndAuthTests(unittest.TestCase):
 
 
 class SubscriptionRenderingTests(unittest.TestCase):
+    def test_retire_legacy_command_removes_old_route_files_and_rotates_all_old_secrets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = AccountingStore(root / "accounts.sqlite")
+            store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
+            records = {row["account_id"]: row for row in store.account_records_for_runtime()}
+            subscriptions = root / "subscriptions"
+            old_directory = subscriptions / str(records["legacy"]["subscription_token"])
+            old_directory.mkdir(parents=True)
+            for name in ("qx.conf", "server.snippet", "clash.yaml", "shadowrocket.txt"):
+                (old_directory / name).write_text("legacy key material\n")
+            source = root / "xray.json"
+            source.write_text(json.dumps({
+                "inbounds": [{
+                    "port": 2053, "protocol": "vless",
+                    "settings": {"clients": [{"id": LEGACY.vless_uuid, "level": 0, "flow": "vision"}]},
+                }],
+                "outbounds": [{"protocol": "freedom"}],
+            }))
+            args = SimpleNamespace(
+                db=str(store.path), subscription_root=str(subscriptions),
+                caddy_fragment=str(root / "subscription.caddy"),
+                xray_source=str(source), xray_output=str(root / "retired-xray.json"),
+                xray_group="xray", caddy_group="caddy",
+                service_user=pwd.getpwuid(os.getuid()).pw_name,
+            )
+            with patch.object(accounting_cli.grp, "getgrnam", return_value=SimpleNamespace(gr_gid=os.getgid())):
+                with patch("sys.stdout", io.StringIO()):
+                    _retire_legacy(args)
+            self.assertFalse(old_directory.exists())
+            matcher = (root / "subscription.caddy").read_text()
+            self.assertNotIn(str(records["legacy"]["subscription_token"]), matcher)
+            retired_config = json.loads((root / "retired-xray.json").read_text())
+            self.assertNotIn(LEGACY.vless_uuid, json.dumps(retired_config))
+            after = {row["account_id"]: row for row in store.account_records_for_runtime()}["legacy"]
+            self.assertEqual(after["enabled"], 0)
+            self.assertIsNone(store.auth_account_id(LEGACY.hy2_secret))
+            for field in ("subscription_token", "hy2_secret", "vless_uuid"):
+                self.assertNotEqual(after[field], getattr(LEGACY, field))
+
     def test_rendered_credentials_stay_within_each_account_and_legacy_files_are_untouched(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store = AccountingStore(root / "accounts.sqlite")
             store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
             records = store.account_records_for_runtime()
             config = {
                 "vless_server": "203.0.113.10",
@@ -535,7 +644,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
             fragment = root / "subscription-accounts.caddy"
             render_new_accounts(store=store, subscription_root=root / "subscriptions", caddy_fragment=fragment, config=config)
             self.assertEqual((legacy_dir / "qx.conf").read_bytes(), legacy_before)
-            for account_id in LABMEM_IDS:
+            for account_id in MANAGED_ACCOUNT_IDS:
                 record = next(row for row in records if row["account_id"] == account_id)
                 directory_path = root / "subscriptions" / str(record["subscription_token"])
                 self.assertEqual({path.name for path in directory_path.iterdir()}, {"qx.conf", "server.snippet", "clash.yaml", "shadowrocket.txt"})
@@ -556,6 +665,11 @@ class SubscriptionRenderingTests(unittest.TestCase):
             self.assertEqual(len(path_line.split()) - 2, len(ACCOUNT_IDS) * 4)
             self.assertIn("reverse_proxy 127.0.0.1:8787", matcher)
             self.assertNotIn("file_server", matcher)
+            retired_records = [dict(row, enabled=0) if row["account_id"] == "legacy" else dict(row) for row in records]
+            retired_matcher = render_caddy_matcher(retired_records)
+            self.assertNotIn(str(legacy["subscription_token"]), retired_matcher)
+            retired_path_line = next(line for line in retired_matcher.splitlines() if line.startswith("@subscription path "))
+            self.assertEqual(len(retired_path_line.split()) - 2, len(MANAGED_ACCOUNT_IDS) * 4)
 
     def test_format_policy_keeps_qx_vless_clash_hy2_and_shadowrocket_both(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -613,6 +727,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
             root = Path(directory)
             store = AccountingStore(root / "accounts.sqlite")
             store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
             source = root / "xray.json"
             output = root / "candidate.json"
             source_config = {
@@ -635,9 +750,9 @@ class SubscriptionRenderingTests(unittest.TestCase):
             self.assertEqual(candidate["routing"], source_config["routing"])
             clients = candidate["inbounds"][0]["settings"]["clients"]
             by_email = {client["email"]: client for client in clients}
-            self.assertEqual(set(by_email), {"legacy-vless", *(f"{account_id}.vless" for account_id in LABMEM_IDS)})
+            self.assertEqual(set(by_email), {"legacy-vless", *(f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS)})
             self.assertEqual(by_email["legacy-vless"]["id"], LEGACY.vless_uuid)
-            self.assertEqual(len({client["id"] for client in clients}), 6)
+            self.assertEqual(len({client["id"] for client in clients}), 7)
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserUplink"])
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserDownlink"])
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserOnline"])
@@ -645,6 +760,11 @@ class SubscriptionRenderingTests(unittest.TestCase):
             render_xray_candidate(output, root / "candidate-rerun.json", store)
             rerun = json.loads((root / "candidate-rerun.json").read_text(encoding="utf-8"))
             self.assertEqual(rerun, candidate)
+            future_records = [dict(row, enabled=0) if row["account_id"] == "legacy" else dict(row) for row in store.account_records_for_runtime()]
+            render_xray_candidate(output, root / "candidate-retired.json", store, records=future_records)
+            retired_clients = json.loads((root / "candidate-retired.json").read_text(encoding="utf-8"))["inbounds"][0]["settings"]["clients"]
+            self.assertEqual(len(retired_clients), len(MANAGED_ACCOUNT_IDS))
+            self.assertNotIn(LEGACY.vless_uuid, json.dumps(retired_clients))
 
 
 if __name__ == "__main__":

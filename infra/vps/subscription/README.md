@@ -70,6 +70,44 @@ Caddyfile 应为 `root:caddy`、`0640`；订阅文件和 token 目录应为 `cad
 密码以及全部四种订阅正文，再重启两个代理服务。现有订阅 URL token 可以保持不变；客户端必须刷新或
 重新导入才能使用新凭据。订阅恢复 `200` 不等于客户端代理握手成功，须分别用实际设备验收。
 
+## Mac mini 专用账号与 Legacy 下线
+
+`M204-Net-Core` 是 Mac mini 专用身份，独立生成订阅 token、HY2 secret 和 VLESS UUID。每种账号的
+四个文件分别是 Quantumult X (`qx.conf` / `server.snippet`)、Clash/Mihomo (`clash.yaml`) 和
+Shadowrocket (`shadowrocket.txt`)。M204 计量起点为账号创建时间，不追溯到全局 accounting T0。
+
+账号初始化完成后，只有在 owner 明确要求正式切换时才执行 `provision-m204` 和 `retire-legacy`。
+前者只创建一次 M204 凭据、订阅文件、Caddy matcher candidate 和 Xray candidate；后者保留 legacy
+历史流量行，但禁用账号、随机替换其账本中的 token/HY2 secret/VLESS UUID、删除旧订阅目录，并输出
+不含旧 UUID 的 Xray candidate 与不含旧 token 的 Caddy matcher。重跑不会恢复 Legacy；候选配置必须
+先通过 `xray run -test` 与 `caddy validate`，再复制到运行路径并分别重启 Xray、Hysteria 和 reload
+Caddy。确认旧订阅为 404、旧 HY2 auth 为拒绝、运行 Xray 配置不含旧 UUID 后，才算完成撤销。
+
+```sh
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py provision-m204 \
+  --db /var/lib/amadeus-accounting/subscription-accounts.sqlite \
+  --subscription-root /var/lib/caddy/subscription \
+  --caddy-fragment /etc/caddy/subscription-accounts.caddy.candidate \
+  --xray-source /etc/xray/config.json \
+  --xray-output /etc/xray/config.m204-candidate.json \
+  --vless-server '<PUBLIC_VLESS_HOST>' --hy2-server '<PUBLIC_HY2_HOST>' \
+  --hy2-sni '<HY2_SNI>' --reality-server-name '<REALITY_SERVER_NAME>' \
+  --reality-public-key '<REALITY_PUBLIC_KEY>' --reality-short-id '<REALITY_SHORT_ID>' \
+  --apply
+
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py retire-legacy \
+  --db /var/lib/amadeus-accounting/subscription-accounts.sqlite \
+  --subscription-root /var/lib/caddy/subscription \
+  --caddy-fragment /etc/caddy/subscription-accounts.caddy.candidate \
+  --xray-source /etc/xray/config.json \
+  --xray-output /etc/xray/config.retired-legacy-candidate.json \
+  --apply
+```
+
+两个命令默认只输出 dry-run 状态，所有 credential 值都只写入受保护运行文件。旧密钥失效依赖账本
+auth 撤销、Xray 移除旧 UUID、服务重启终止现存会话，以及 Caddy 移除旧 URL 路由；仅撤销订阅 token
+不能让已下载的代理密钥失效。
+
 ## 安装与证书
 
 使用 [Caddy 官方安装文档](https://caddyserver.com/docs/install) 提供的签名 Ubuntu/Debian
@@ -217,16 +255,16 @@ python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render \
 ```
 
 `bootstrap` 只从当前 Caddy/Hysteria/Xray 配置导入 legacy 身份，并为五个 Labmem 账号生成独立
-token、HY2 secret 和 UUID；重跑时不会轮换凭据。`render-xray` 保留现有 2053 VLESS listener、
-Reality、routing 和旧 UUID，candidate 必须通过 `xray run -test` 后才能进入受保护的 Phase 2
-checkpoint 流程。`render-hysteria` 只生成 HTTP auth/loopback Traffic Stats candidate YAML；
-`render` 写五个新订阅目录和六个账号的 bounded Caddy matcher。CLI 的计划、成功和失败输出都不含
-凭据。不要把 candidate 文件、数据库、填充后的 env 或订阅文件复制回 Git。
+token、HY2 secret 和 UUID；重跑时不会轮换凭据。收到明确切换指令后，`provision-m204` 创建第六个
+活动身份并写入 M204 订阅，`retire-legacy` 撤销 Legacy。`render-xray` 保留现有 2053 VLESS listener、
+Reality 和 routing，只保留启用的受管身份；candidate 必须通过 `xray run -test` 后才能应用。
+`render-hysteria` 只生成 HTTP auth/loopback Traffic Stats candidate YAML；`render` 写缺失的活动账号
+订阅目录和精确 Caddy matcher。CLI 的计划、成功和失败输出都不含凭据。不要把 candidate 文件、数据库、
+填充后的 env 或订阅文件复制回 Git。
 
-五个新 token URL 在 accounting service 成功记录 provider T0 前必须保持私密、不得发给用户。当前
-T0 为 `2026-10-08T04:58:07Z`；生成链接仍保留在 VPS，并未通过聊天或 Git 分发。
-Labmem 身份是新生成的，因此首次出现的协议绝对计数可从 T0 归因；legacy 计数可能含历史流量，
-必须有 T0 基线，否则该协议总量继续显示 unknown。
+账号订阅 URL 是 bearer credential；只有 owner 明确要求时才通过受信任私聊交付。Labmem 身份从全局
+T0 归因；M204 从账号创建时间归因。Legacy 下线后保留历史累计记录，但不再计入当前活动账号和
+`proxyAccountedBytes` 总量。
 
 Snapshot 由 accounting service 原子写成 `0640`、组为
 `amadeus-accounting-snapshot`；probe 仅读取这一个固定文件。缺失账号/协议计数会保持 unknown，
