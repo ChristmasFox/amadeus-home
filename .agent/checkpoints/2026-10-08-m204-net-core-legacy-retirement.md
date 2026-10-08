@@ -39,9 +39,10 @@ and repeat the rejection checks before opening service to clients.
   configuration passed `caddy validate`.
 - `xray.service`, `hysteria-server.service`, `caddy.service`, and
   `amadeus-gateway-accounting.service` are active.
-- All four old Legacy HTTPS subscription formats returned `404`. All four
-  formats for each of the six active accounts returned `200` and contained the
-  expected account label (24 checks).
+- All four old Legacy HTTPS subscription formats returned `404` on both ports
+  443 and 8443. All four formats for each of the six active accounts returned
+  `200` on 443 and contained the expected account label (24 checks); M204's
+  four formats also returned `200` on 8443.
 - Old Legacy HY2 auth returned `403`; the M204 HY2 auth returned `200`.
 - A VLESS Reality tunnel using the old Legacy UUID failed to fetch external
   HTTPS. The M204 VLESS Reality tunnel fetched external HTTPS successfully.
