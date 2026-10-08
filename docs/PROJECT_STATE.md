@@ -1,4 +1,29 @@
-# Project State — 2026-10-07
+# Project State — 2026-10-08
+
+## 2026-10-08 — VPS subscription accounting and owner reports deployed
+
+Amadeus 1.9.9 is live on CasaOS `nyannyan` as
+`local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`. VPS subscription
+accounting is active from T0 `2026-10-08T04:58:07Z`; KiwiVM remains the whole-plan
+source and proxy reconciliation remains `uncalibrated`. The five Labmem accounts
+passed HY2 and VLESS connectivity checks and their individual traffic counters
+were observed; the legacy credentials also passed after both proxy services
+restarted. Counter generations and cumulative accounting survived Xray and
+Hysteria restarts.
+
+The existing owner report Cron jobs retain their IDs and are enabled at 09:30
+and 21:30 Asia/Shanghai, using the owner outbox. The midday report acceptance
+was delivered; a date-limited recovery event key is configured for the 2026-10-08
+evening run after the midday test used the regular key. Post-deploy checks passed
+for OpenClaw/Product Radar health, Amadeus registration, NAS read-only access,
+owner outbox and Cron definitions. Managed log policy reports a warning because
+the host daemon has no default logging configuration; existing managed
+containers have bounded logs. No daemon restart was made.
+
+Protected rollback checkpoints:
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549` and
+`/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
+Sanitized acceptance evidence: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`.
 
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 

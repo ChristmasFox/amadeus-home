@@ -1,0 +1,78 @@
+# Amadeus Gateway subscription accounting — completion checkpoint
+
+Date: 2026-10-08 (Asia/Shanghai)
+
+## Applied state
+
+- Amadeus 1.9.9 is deployed as
+  `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549` on CasaOS machine
+  `nyannyan`.
+- VPS accounting T0 is `2026-10-08T04:58:07Z`. KiwiVM remains authoritative
+  for the plan total; proxy reconciliation is `uncalibrated` and no anomaly is
+  claimed.
+- The current legacy subscription token, HY2 credential, and VLESS UUID were
+  imported unchanged and remained active. No credential values are recorded
+  here.
+- Five Labmem identities are present. Each passed HY2 and VLESS connectivity
+  checks; an updated healthy sample showed nonzero attributed usage for every
+  identity on both protocols. Legacy HY2 and VLESS also connected after the
+  service restart checks.
+- Xray and Hysteria were restarted individually. Both services returned active;
+  each source generation changed, the store recorded a reset delta, and the
+  previous cumulative totals remained nonnegative and preserved.
+- The sanitized snapshot reported provider, Hysteria traffic/online, and Xray
+  traffic/online sources as healthy, complete account coverage, and a separate
+  legacy record.
+
+## Owner report schedule
+
+The existing OpenClaw Cron jobs were edited in place; both IDs remain unique,
+enabled, and use `delivery.mode=none` so the existing owner outbox is the only
+delivery path:
+
+- `amadeus-vps-morning`: `0a0bbe0f-43f1-4582-af45-22dbafb6cf5c`, 09:30
+  Asia/Shanghai.
+- `amadeus-vps-evening`: `bfc071e5-31a1-4ca5-8836-b228e0f8589a`, 21:30
+  Asia/Shanghai.
+
+A midday manual acceptance report was delivered to the owner through the
+outbox. The deployed 1.9.9 code fixes manual-vs-scheduled event classification
+for the actual Cron session context. Because that acceptance run had already
+used the normal evening event key for 2026-10-08, the evening prompt has a
+date-limited stable recovery key for today's scheduled run. Future days use
+their normal morning/evening keys. This checkpoint confirms the scheduled
+21:30 job is configured; it does not claim that its future execution has
+already happened.
+
+## Validation and release evidence
+
+- Amadeus typecheck/build and 136 tests passed; the accounting Python tests,
+  architecture check, shell syntax/version checks, secrets scan, and
+  `git diff --check` passed.
+- OpenClaw health, Product Radar health, Amadeus registration, NAS read-only
+  smoke, owner outbox, and both Cron targets passed after deployment.
+- The existing six identities' four subscription formats returned HTTP 200 on
+  both subscription ports (48/48); legacy QX output remained byte-identical.
+- Code commits: `482e736` (accounting), `bfb0b07` (macOS Bash Cron update),
+  `b80f9a7` (manual event-key isolation), and `be53156` (one-time evening
+  recovery prompt).
+
+Protected rollback material remains outside Git:
+
+- VPS pre-change archive:
+  `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
+- OpenClaw pre-switch checkpoint:
+  `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549`.
+- OpenClaw deployment evidence:
+  `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261008052549`.
+
+## Operational note
+
+The deploy reported a Docker logging-policy warning because the OrbStack daemon
+has no default logging policy. Managed containers use bounded `local/20m x5`
+logging. The daemon was not restarted because global logging configuration is
+outside this Goal.
+
+For rollback, follow section 10 of
+`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Preserve all legacy
+credentials and the accounting database.

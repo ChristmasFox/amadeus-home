@@ -1,3 +1,28 @@
+# 当前任务指针 — VPS 订阅账户流量与报告
+
+Date: 2026-10-08 (Asia/Shanghai).
+
+Active Goal: `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` — **完成并已部署**。
+Amadeus 1.9.9 is live on CasaOS `nyannyan`; the existing VPS report Cron IDs are
+preserved and enabled at 09:30 and 21:30 Asia/Shanghai. Today's evening prompt
+uses a one-time scheduled recovery event key because the midday owner-report
+acceptance had consumed today's normal evening key before the idempotency fix.
+The owner report was delivered through the existing outbox; no direct sender
+was added. VPS provider and HY2/VLESS sources are healthy, all five Labmem
+accounts have sampled nonzero usage on both protocols, legacy credentials still
+connect, and both proxy restarts recorded counter resets without losing
+cumulative usage. Reconciliation remains `uncalibrated`; no anomaly is claimed.
+
+Rollback and deployment evidence:
+
+- VPS pre-change archive: `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
+- OpenClaw protected checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549`.
+- OpenClaw deployment evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261008052549`.
+- Sanitized completion record: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`.
+
+The dated sections below preserve prior task history; this pointer and live
+runtime checks above are the current state.
+
 # Current Task — GPT-only image route cutover
 
 Date: 2026-10-07 (Asia/Shanghai).
@@ -266,9 +291,9 @@ Formal Amadeus 1.9.6 deployment evidence:
 ## Active VPS subscription accounting Goal — 2026-10-08
 
 See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status:
-`PHASE_0_AUDITED; PHASE_1_SOURCE_IMPLEMENTED; PHASE_2_APPLIED; PHASE_3_CONTROLLED_ACCOUNTING_PASS_RECONCILIATION_UNCALIBRATED; PHASE_4_SOURCE_VERIFIED_DEPLOY_PENDING; PHASE_5_ACCEPTANCE_PENDING`.
-VPS accounting is live with T0 `2026-10-08T04:58:07Z`; sanitized snapshots and
-the guarded legacy VLESS T0 baseline repair are verified. Provider/proxy
-reconciliation remains uncalibrated. The existing morning/evening Cron jobs
-were verified as unique, enabled, and using Asia/Shanghai; release deployment
-will keep their IDs and set them to 09:30 and 21:30 via the owner outbox.
+`COMPLETE; AMADEUS_1.9.9_DEPLOYED; PHASE_5_ACCEPTANCE_PASS; RECONCILIATION_UNCALIBRATED`.
+VPS accounting is live with T0 `2026-10-08T04:58:07Z`; snapshots report all
+sources healthy and account coverage complete. The original morning/evening
+Cron IDs remain unique and enabled at 09:30 and 21:30 Asia/Shanghai. See the
+completion record linked above for real connection, restart, report, and
+rollback evidence.

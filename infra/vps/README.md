@@ -41,8 +41,12 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 
 `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005 和独立 legacy 身份。
 VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、五个 Labmem 账号订阅、固定只读 probe；
-原 legacy token/HY2/VLESS 凭据继续有效。Amadeus owner tools 已通过源码验证，待 CasaOS release
-部署后启用。Protected pre-change rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
+Amadeus 1.9.9 已部署，原 legacy token/HY2/VLESS 凭据仍有效。现有 owner 报告 Cron ID 保持不变，
+启用时间为 09:30 和 21:30 Asia/Shanghai，走既有 owner outbox。五个 Labmem 账号的 HY2/VLESS
+受控连接与计数归因均通过；Xray/Hysteria 重启计数器验证通过。Provider/proxy reconciliation
+仍为 `uncalibrated`，不输出差值异常结论。部署、验收与 rollback 记录见 Goal 和
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`；protected pre-change
+rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
 
 目标 runtime 边界：
 
