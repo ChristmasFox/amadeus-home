@@ -25,12 +25,14 @@ Protected rollback checkpoints:
 `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
 Deployment evidence: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`.
 
-Current Goal status is still active. A real owner WhatsApp direct-message query
-has not yet been verified; the headless CLI test lacked actual inbound sender
-context. The 2026-10-08 21:30 recovery-key report is still scheduled, not yet
-run. An audit tool result also exposed the legacy bearer-token path from the
-protected archive listing; the token is omitted here, no runtime credential was
-changed, and operator direction is pending under the Goal's preservation rule.
+The operator closed the Goal after reporting that a direct owner query returned
+normally and instructing that the old token remain unchanged. All 24 public
+subscription URLs returned HTTP 200 and matched their server files. The 21:30
+recovery-key report was still scheduled for later that day at closure, and is
+not claimed as already executed. Reconciliation remains `uncalibrated`; no
+anomaly is claimed. A prior tool result exposed a legacy bearer-token path; it
+remains a recorded residual and the token was not rotated. Full closure evidence
+is in the Goal and deployment checkpoint.
 
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 

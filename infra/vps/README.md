@@ -45,8 +45,10 @@ Amadeus 1.9.9 已部署，原 legacy token/HY2/VLESS 凭据仍有效。现有 ow
 启用时间为 09:30 和 21:30 Asia/Shanghai，走既有 owner outbox。五个 Labmem 账号的 HY2/VLESS
 受控连接与计数归因均通过；Xray/Hysteria 重启计数器验证通过。Provider/proxy reconciliation
 仍为 `uncalibrated`，不输出差值异常结论。部署、验收与 rollback 记录见 Goal 和
-`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`；真实 owner 直聊自然语言查询
-验收仍待完成。protected pre-change rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`。操作者报告 owner 直聊查询正常，
+并要求保留旧 token、结束 Goal；六个账号的四种公网订阅格式共 24 条均返回 HTTP 200，正文与 VPS 本地文件一致。
+21:30 Cron 在闭合时仍是当天未来任务。此前工具输出意外包含 legacy bearer-token 路径的事件保留为已知残余；
+旧 token 未轮换。protected pre-change rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
 
 目标 runtime 边界：
 
