@@ -2,6 +2,9 @@
 
 Canonical status: `docs/PROJECT_STATE.md`. Current task pointer: `docs/CURRENT_TASK.md`.
 
+The active Goal is `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`; production
+image generation remains GPT-only while the public Image Lab is planned.
+
 Amadeus 1.9.9 is live with VPS subscription accounting. Existing owner report
 jobs retain their IDs and run at 09:30/21:30 Asia/Shanghai. Five Labmem accounts
 passed HY2/VLESS connectivity and accounting acceptance; legacy credentials
