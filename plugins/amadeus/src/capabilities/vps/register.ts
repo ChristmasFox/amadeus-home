@@ -11,6 +11,7 @@ const VpsSubscriptionAccountId = Type.Union([
   Type.Literal('example-account-03'),
   Type.Literal('example-account-04'),
   Type.Literal('example-account-05'),
+  Type.Literal('example-device'),
   Type.Literal('legacy'),
 ]);
 const VpsSubscriptionDetailParameters = Type.Object({ accountId: VpsSubscriptionAccountId }, { additionalProperties: false });
@@ -21,6 +22,6 @@ export function registerVps(api: OpenClawPluginApi): void {
   registerTool(api, 'amadeus_vps_usage', 'Read KiwiVM traffic counters, quota, remaining bytes, reset time, bounded traffic history, and the persisted delta since the previous successful sample.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsUsage(configFor(api), signal));
   registerTool(api, 'amadeus_vps_system_status', 'Read VPS uptime, load average, memory, and root filesystem usage through one fixed read-only SSH probe. It never accepts a shell command.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsSystemStatus(configFor(api), signal));
   registerTool(api, 'amadeus_vps_services', 'Read the fixed critical VPS systemd services Caddy, Xray, Hysteria2, and frps through a bounded read-only SSH probe.', VpsParameters, async (_params, _context, _notifier, signal) => getVpsServices(configFor(api), signal));
-  registerTool(api, 'amadeus_vps_subscription_overview', 'Owner-only, direct-owner or scheduled-report read-only overview of example-account-01-example-account-05 and the separate legacy identity. Group sessions and non-owner DMs are denied. No subscription or proxy credential is returned.', VpsParameters, async (_params, context, _notifier, signal) => getVpsSubscriptionOverview(configFor(api), context, signal));
-  registerTool(api, 'amadeus_vps_subscription_detail', 'Owner-only, direct-owner read-only facts for one bounded Labmem or legacy account ID. Group sessions and non-owner DMs are denied; credentials are never returned.', VpsSubscriptionDetailParameters, async (params, context, _notifier, signal) => getVpsSubscriptionDetail(configFor(api), (params as { accountId: 'example-account-01' | 'example-account-02' | 'example-account-03' | 'example-account-04' | 'example-account-05' | 'legacy' }).accountId, context, signal));
+  registerTool(api, 'amadeus_vps_subscription_overview', 'Owner-only, direct-owner or scheduled-report read-only overview of example-account-01-example-account-05, example-device, and the retired legacy history. Group sessions and non-owner DMs are denied. No subscription or proxy credential is returned.', VpsParameters, async (_params, context, _notifier, signal) => getVpsSubscriptionOverview(configFor(api), context, signal));
+  registerTool(api, 'amadeus_vps_subscription_detail', 'Owner-only, direct-owner read-only facts for one bounded Labmem, example-device, or legacy history account ID. Group sessions and non-owner DMs are denied; credentials are never returned.', VpsSubscriptionDetailParameters, async (params, context, _notifier, signal) => getVpsSubscriptionDetail(configFor(api), (params as { accountId: 'example-account-01' | 'example-account-02' | 'example-account-03' | 'example-account-04' | 'example-account-05' | 'example-device' | 'legacy' }).accountId, context, signal));
 }
