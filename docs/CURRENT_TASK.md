@@ -261,3 +261,8 @@ candidate result did not exercise the production GPT-primary fallback. Evidence:
 
 Formal Amadeus 1.9.6 deployment evidence:
 `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
+
+
+## Concurrent VPS subscription accounting Goal — 2026-10-08
+
+See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status: `PLANNED_NOT_APPLIED`.
