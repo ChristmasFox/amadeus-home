@@ -94,3 +94,32 @@ was changed. The operator's explicit legacy-preservation instruction remains in
 force unless separately revised; assess any rotation only as a separately
 authorized operation with its own checkpoint. Do not claim the no-secret-in-log
 requirement is satisfied until this exposure is addressed.
+
+## Phase 3 calibration attempt — 2026-10-08
+
+Two sequential known-download trials were run from the VPS through temporary
+Labmem001 clients. Each request fetched exactly 33,554,432 bytes from the
+fixed-size Cloudflare speed endpoint and returned HTTP 200. Client configs were
+derived from the protected account record, written mode `0600` under `/run`,
+and removed when each client exited. No credentials were printed.
+
+- HY2: `2026-10-08T05:59:00Z`–`05:59:03Z`; `eth0` RX increased by
+  33,754,555 bytes and TX by 96,706 bytes.
+- VLESS: `2026-10-08T05:59:22Z`–`05:59:24Z`; `eth0` RX increased by
+  33,766,240 bytes and TX by 93,190 bytes.
+- At the next accounting snapshot (`05:59:48Z`), Labmem001 HY2 increased from
+  1,069,204 to 34,676,822 bytes (+33,607,618); VLESS increased from 1,069,225
+  to 34,677,384 bytes (+33,608,159). Each is close to one 32 MiB payload plus
+  protocol overhead.
+- KiwiVM's direct counter stayed at 980,018,432,726 bytes across both test
+  boundaries and collector samples at `05:59:46Z` and `06:00:46Z`. It had
+  already advanced by 37,313,790 bytes before the first test relative to the
+  earlier snapshot. The 60-second baseline also showed unrelated legacy and
+  interface traffic.
+
+This confirms the tested proxy paths and per-protocol account counters, but it
+does not isolate KiwiVM's delta for either payload or establish a normal
+provider/proxy ratio. Reconciliation therefore remains `uncalibrated`; no gap
+or anomaly claim is enabled. A future calibration needs a quiet interval or a
+provider sampling window that captures a known transfer without material
+background traffic.

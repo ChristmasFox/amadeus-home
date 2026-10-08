@@ -12,6 +12,10 @@ was added. VPS provider and HY2/VLESS sources are healthy, all five Labmem
 accounts have sampled nonzero usage on both protocols, legacy credentials still
 connect, and both proxy restarts recorded counter resets without losing
 cumulative usage. Reconciliation remains `uncalibrated`; no anomaly is claimed.
+Two VPS-local 32 MiB Labmem001 downloads over HY2 and VLESS returned HTTP 200
+and increased the matching account/protocol counters; KiwiVM did not show an
+isolated counter delta, so calibration remains incomplete. See the deployment
+checkpoint for measured byte deltas.
 
 Remaining acceptance: query Kurisu from the actual owner WhatsApp direct
 message and verify whole-plan/account details. A headless CLI session did not
@@ -300,7 +304,7 @@ Formal Amadeus 1.9.6 deployment evidence:
 ## Active VPS subscription accounting Goal — 2026-10-08
 
 See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status:
-`DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; RECONCILIATION_UNCALIBRATED`.
+`DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; PROTOCOL_TRIALS_RECORDED; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; RECONCILIATION_UNCALIBRATED`.
 VPS accounting is live with T0 `2026-10-08T04:58:07Z`; snapshots report all
 sources healthy and account coverage complete. The original morning/evening
 Cron IDs remain unique and enabled at 09:30 and 21:30 Asia/Shanghai. See the

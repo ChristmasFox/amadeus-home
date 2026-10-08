@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Shanghai)
 
-Status: DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; LEGACY_TOKEN_LOG_EXPOSURE_REVIEW_PENDING; RECONCILIATION_UNCALIBRATED
+Status: DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; PROTOCOL_TRIALS_RECORDED; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; LEGACY_TOKEN_LOG_EXPOSURE_REVIEW_PENDING; RECONCILIATION_UNCALIBRATED
 
 ## Apply record — 2026-10-08
 
@@ -749,6 +749,15 @@ owner sender context; the model saw no VPS tools. It is not proof that normal
 WhatsApp owner queries fail, but it cannot prove they work either. A real owner
 WhatsApp direct-message query covering the whole plan and a Labmem protocol split
 is still needed. Stale/error behavior is covered by the focused Amadeus tests.
+
+Two VPS-local Labmem001 controlled downloads were also run: one 32 MiB HY2
+transfer and one 32 MiB VLESS transfer, each HTTP 200. At the next collector
+snapshot, the corresponding Labmem001 protocol counters increased by 33,607,618
+and 33,608,159 bytes. Raw `eth0` RX/TX deltas are recorded in the deployment
+checkpoint. The direct KiwiVM counter did not advance across either test, while
+the baseline showed unrelated legacy and interface traffic; this is useful
+path/accounting evidence but not sufficient provider calibration. Reconciliation
+remains `uncalibrated`, with no gap or anomaly claim.
 
 During this audit, the member listing of the protected pre-change archive was
 accidentally printed in a tool result and included the legacy subscription
