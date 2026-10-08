@@ -1,4 +1,4 @@
-# Amadeus Gateway subscription accounting — completion checkpoint
+# Amadeus Gateway subscription accounting — deployment checkpoint
 
 Date: 2026-10-08 (Asia/Shanghai)
 
@@ -52,7 +52,9 @@ already happened.
 - OpenClaw health, Product Radar health, Amadeus registration, NAS read-only
   smoke, owner outbox, and both Cron targets passed after deployment.
 - The existing six identities' four subscription formats returned HTTP 200 on
-  both subscription ports (48/48); legacy QX output remained byte-identical.
+  both subscription ports (48/48); legacy QX output remained byte-identical. A
+  later audit repeated the 48/48 checks against the public HTTPS endpoints and
+  confirmed each body matched its local subscription file.
 - Code commits: `482e736` (accounting), `bfb0b07` (macOS Bash Cron update),
   `b80f9a7` (manual event-key isolation), and `be53156` (one-time evening
   recovery prompt).
@@ -76,3 +78,19 @@ outside this Goal.
 For rollback, follow section 10 of
 `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Preserve all legacy
 credentials and the accounting database.
+
+## Remaining acceptance and audit incident
+
+The Goal remains active. A real owner WhatsApp direct-message query that
+exercises whole-plan usage and a Labmem protocol split has not been verified.
+A headless CLI attempt did not include actual inbound sender context, so its
+response is not evidence about normal owner queries. At the latest audit, the
+2026-10-08 21:30 recovery-key run was still scheduled for the future.
+
+During that audit, a protected archive member listing was accidentally emitted
+in a tool result and contained the legacy subscription bearer-token path. The
+value is intentionally omitted from this file and Git. No runtime credential
+was changed. The operator's explicit legacy-preservation instruction remains in
+force unless separately revised; assess any rotation only as a separately
+authorized operation with its own checkpoint. Do not claim the no-secret-in-log
+requirement is satisfied until this exposure is addressed.

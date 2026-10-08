@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Shanghai)
 
-Status: COMPLETE; AMADEUS_1.9.9_DEPLOYED; PHASE_5_ACCEPTANCE_PASS; RECONCILIATION_UNCALIBRATED
+Status: DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; LEGACY_TOKEN_LOG_EXPOSURE_REVIEW_PENDING; RECONCILIATION_UNCALIBRATED
 
 ## Apply record — 2026-10-08
 
@@ -37,8 +37,9 @@ Reconciliation remains `uncalibrated`. Provider growth and proxy-accounted
 traffic differ materially during the observed interval, so the controlled
 payload checks establish protocol attribution and direction only; they do not
 establish a reliable provider ratio or anomaly threshold. No gap or anomaly is
-reported. Phase 4 deployment and Phase 5 real acceptance are recorded in
-section 17.
+reported. Phase 4 deployment and most Phase 5 runtime acceptance are recorded
+in section 17. Owner direct-message query acceptance and the 2026-10-08 21:30
+scheduled run remain pending; see section 18.
 
 ## 0. Operator decision / hard migration boundary
 
@@ -679,7 +680,7 @@ Implementation must verify the pinned runtime versions against official document
 - Xray statistics: https://xtls.github.io/en/config/stats.html
 - Xray API / StatsService: https://xtls.github.io/en/config/api.html
 
-## 17. Apply and real acceptance record — 2026-10-08
+## 17. Apply and runtime acceptance record — 2026-10-08
 
 Amadeus 1.9.9 is live in immutable image
 `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`. OpenClaw health,
@@ -719,10 +720,40 @@ online, and Xray traffic and online sources all `ok`; all five accounts had
 known HY2/VLESS totals, legacy remained represented separately, and
 `proxyAccountedComplete=true`. Provider T0 remains
 `2026-10-08T04:58:07Z`. Reconciliation remains `uncalibrated`, with no gap or
-anomaly claim. The complete sanitized evidence and restore pointers are in
-`.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`.
+anomaly claim. The deployment evidence and restore pointers are in
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`.
 
 The deploy's managed-container log policy check reported a warning because the
 OrbStack Docker daemon has no default logging policy. Every managed container
 still had bounded `local/20m x5` logging; changing the daemon policy would
 restart OrbStack and was outside this Goal.
+
+## 18. Current acceptance audit — 2026-10-08
+
+At the latest live audit, Amadeus remained 1.9.9, the Amadeus plugin was loaded,
+and its runtime registry contained all seven VPS tools. Both existing report
+jobs were unique and enabled with `lastStatus=ok`; the morning run had completed
+at 09:30 Asia/Shanghai. The evening job's latest run was the earlier manual
+acceptance at 13:18 and its next run was 21:30, so the one-time scheduled
+recovery run had not yet happened.
+
+VPS acceptance was rechecked: all six current identities had unique subscription
+tokens, HY2 secrets, and VLESS UUIDs; all 48 subscription URLs returned HTTP 200
+on both ports and response bodies matched their local files. All five Labmem
+accounts retained sampled nonzero HY2 and VLESS counters. The provider, Hysteria
+traffic/online, and Xray traffic/online sources were `ok`, and all critical
+services were active. Reconciliation remains `uncalibrated`.
+
+A non-delivered headless OpenClaw CLI attempt did not include the actual inbound
+owner sender context; the model saw no VPS tools. It is not proof that normal
+WhatsApp owner queries fail, but it cannot prove they work either. A real owner
+WhatsApp direct-message query covering the whole plan and a Labmem protocol split
+is still needed. Stale/error behavior is covered by the focused Amadeus tests.
+
+During this audit, the member listing of the protected pre-change archive was
+accidentally printed in a tool result and included the legacy subscription
+bearer-token path. The token value is deliberately omitted from this repository
+record. No runtime secret, Caddy route, or proxy credential was changed. The
+Goal's legacy-preservation rule still applies; any rotation requires a separate
+explicit operator instruction and checkpoint. Do not claim the no-secret-in-logs
+requirement is satisfied until the exposure response is resolved.
