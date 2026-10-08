@@ -79,21 +79,21 @@ For rollback, follow section 10 of
 `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Preserve all legacy
 credentials and the accounting database.
 
-## Remaining acceptance and audit incident
+## Owner acceptance and audit incident
 
-The Goal remains active. A real owner WhatsApp direct-message query that
-exercises whole-plan usage and a Labmem protocol split has not been verified.
-A headless CLI attempt did not include actual inbound sender context, so its
-response is not evidence about normal owner queries. At the latest audit, the
-2026-10-08 21:30 recovery-key run was still scheduled for the future.
+At the latest audit, a real owner WhatsApp direct-message query and the
+2026-10-08 21:30 recovery-key run were still pending. The operator later
+reported that a direct owner query returned normally and directed closure of
+the Goal while preserving the legacy token. The evening job remained scheduled
+for the future at closure; this record does not claim that execution occurred.
 
 During that audit, a protected archive member listing was accidentally emitted
 in a tool result and contained the legacy subscription bearer-token path. The
 value is intentionally omitted from this file and Git. No runtime credential
-was changed. The operator's explicit legacy-preservation instruction remains in
-force unless separately revised; assess any rotation only as a separately
-authorized operation with its own checkpoint. Do not claim the no-secret-in-log
-requirement is satisfied until this exposure is addressed.
+was changed. The operator explicitly instructed that the legacy token remain
+unchanged. The prior tool-output exposure cannot be undone and remains a
+recorded residual; no claim is made that the no-secret-in-log condition was
+satisfied.
 
 ## Phase 3 calibration attempt — 2026-10-08
 
@@ -123,3 +123,31 @@ provider/proxy ratio. Reconciliation therefore remains `uncalibrated`; no gap
 or anomaly claim is enabled. A future calibration needs a quiet interval or a
 provider sampling window that captures a known transfer without material
 background traffic.
+
+## Follow-up uploads and closure evidence — 2026-10-08
+
+Two Labmem001 upload trials used 16,777,216-byte payloads sent through the
+Cloudflare speed upload endpoint; temporary client files were mode `0600` under
+`/run` and removed after each request. Both returned HTTP 200:
+
+- HY2: `2026-10-08T06:03:07Z`–`06:03:10Z`; `eth0` RX +134,581 bytes and TX
+  +16,900,672 bytes.
+- VLESS: `2026-10-08T06:03:10Z`–`06:03:12Z`; `eth0` RX +58,953 bytes and TX
+  +16,857,067 bytes.
+- Snapshot at `06:03:48Z` showed Labmem001 HY2/VLESS cumulative totals of
+  51,481,934 / 51,482,499 bytes, each about 16.8 MB above the prior sample.
+  The provider counter remained unchanged in that snapshot; the direct KiwiVM
+  counter later advanced by 93,469,953 bytes while unrelated background traffic
+  continued, so no test-specific provider delta can be assigned.
+- The live probe at `2026-10-08T06:06:48Z` reported all sources healthy,
+  complete account coverage, and `reconciliation.status=uncalibrated`.
+
+The operator reported a normal direct owner query, directed that the existing
+legacy token be kept, and requested Goal closure. Public HTTPS checks covered
+Legacy plus Labmem001–Labmem005, each with `qx.conf`, `server.snippet`,
+`clash.yaml`, and `shadowrocket.txt`: 24/24 returned HTTP 200 and matched their
+VPS-local bodies. Subscription URLs are not stored in this checkpoint or Git.
+The morning and evening Cron IDs remain enabled at 09:30 and 21:30; the 21:30
+run was still in the future when the Goal was closed. These operator decisions
+close the Goal with reconciliation uncalibrated and the prior tool-output
+exposure acknowledged; no token rotation, anomaly claim, or alert was enabled.

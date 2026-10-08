@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Shanghai).
 
-Active Goal: `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` — deployed; final acceptance remains active.
+Closed by operator on 2026-10-08: `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`.
 Amadeus 1.9.9 is live on CasaOS `nyannyan`; the existing VPS report Cron IDs are
 preserved and enabled at 09:30 and 21:30 Asia/Shanghai. Today's evening prompt
 uses a one-time scheduled recovery event key because the midday owner-report
@@ -12,19 +12,15 @@ was added. VPS provider and HY2/VLESS sources are healthy, all five Labmem
 accounts have sampled nonzero usage on both protocols, legacy credentials still
 connect, and both proxy restarts recorded counter resets without losing
 cumulative usage. Reconciliation remains `uncalibrated`; no anomaly is claimed.
-Two VPS-local 32 MiB Labmem001 downloads over HY2 and VLESS returned HTTP 200
-and increased the matching account/protocol counters; KiwiVM did not show an
-isolated counter delta, so calibration remains incomplete. See the deployment
-checkpoint for measured byte deltas.
-
-Remaining acceptance: query Kurisu from the actual owner WhatsApp direct
-message and verify whole-plan/account details. A headless CLI session did not
-carry the real inbound sender context, so it is not acceptance evidence. The
-21:30 Cron is also still pending its one-time recovery-key execution. During
-this audit, a protected archive listing accidentally emitted the legacy
-subscription bearer-token path into task tool output. It is not repeated here;
-no runtime credentials were changed. The Goal's no-rotation boundary remains
-in force unless the operator separately directs otherwise.
+Controlled Labmem001 32 MiB downloads and 16 MiB uploads over HY2 and VLESS
+returned HTTP 200 and increased the matching account/protocol counters. KiwiVM
+did not expose an isolated counter delta, so reconciliation remains
+`uncalibrated`; no anomaly is claimed. The operator reported that a direct
+owner query returned normally, directed that the legacy token be preserved,
+and closed the Goal. All 24 public subscription links returned HTTP 200 and
+matched their local files. The 21:30 Cron is enabled and scheduled for later
+today; it had not yet run at closure. The earlier archive-listing tool-output
+exposure remains recorded and was not remediated by token rotation.
 
 Rollback and deployment evidence:
 
@@ -301,13 +297,16 @@ Formal Amadeus 1.9.6 deployment evidence:
 `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
 
 
-## Active VPS subscription accounting Goal — 2026-10-08
+## Closed VPS subscription accounting Goal — 2026-10-08
 
 See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status:
-`DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; PROTOCOL_TRIALS_RECORDED; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; RECONCILIATION_UNCALIBRATED`.
+`OPERATOR_CLOSED_WITH_ACCEPTED_RESIDUALS; OWNER_DIRECT_QUERY_REPORTED_NORMAL; SUBSCRIPTION_LINKS_24_OF_24_VERIFIED; LEGACY_TOKEN_PRESERVED; RECONCILIATION_UNCALIBRATED`.
 VPS accounting is live with T0 `2026-10-08T04:58:07Z`; snapshots report all
 sources healthy and account coverage complete. The original morning/evening
 Cron IDs remain unique and enabled at 09:30 and 21:30 Asia/Shanghai. See the
-deployment record linked above for real connection, restart, report, and
-rollback evidence. Do not mark this Goal complete until a real owner direct
-query is verified and the protected-archive exposure response is recorded.
+deployment record linked above for connection, restart, report, and rollback
+evidence. The operator reported a normal owner direct query and requested
+preservation of the old token and Goal closure. Reconciliation remains
+uncalibrated, no anomaly is claimed, today's future 21:30 execution is not
+claimed as complete, and the prior tool-output exposure remains a documented
+residual. Subscription URLs remain outside Git.

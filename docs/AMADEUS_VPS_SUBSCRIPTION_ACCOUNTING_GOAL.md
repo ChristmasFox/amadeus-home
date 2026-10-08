@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Shanghai)
 
-Status: DEPLOYED; ACCOUNTING_AND_REPORT_APPLY_PASS; PROTOCOL_TRIALS_RECORDED; OWNER_DIRECT_QUERY_PENDING; 2026-10-08_EVENING_CRON_PENDING; LEGACY_TOKEN_LOG_EXPOSURE_REVIEW_PENDING; RECONCILIATION_UNCALIBRATED
+Status: OPERATOR_CLOSED_WITH_ACCEPTED_RESIDUALS; OWNER_DIRECT_QUERY_REPORTED_NORMAL; SUBSCRIPTION_LINKS_24_OF_24_VERIFIED; LEGACY_TOKEN_PRESERVED; RECONCILIATION_UNCALIBRATED; 2026-10-08_EVENING_CRON_CONFIGURED_NOT_YET_RUN; PRIOR_TOOL_OUTPUT_EXPOSURE_RECORDED
 
 ## Apply record — 2026-10-08
 
@@ -38,8 +38,13 @@ traffic differ materially during the observed interval, so the controlled
 payload checks establish protocol attribution and direction only; they do not
 establish a reliable provider ratio or anomaly threshold. No gap or anomaly is
 reported. Phase 4 deployment and most Phase 5 runtime acceptance are recorded
-in section 17. Owner direct-message query acceptance and the 2026-10-08 21:30
-scheduled run remain pending; see section 18.
+in section 17. The operator reported that a direct owner query returned
+normally, requested preservation of the existing legacy token, and directed
+closure. All 24 public links across the six accounts and four formats were
+rechecked as HTTP 200 with bodies matching the local subscription files. The
+21:30 Cron configuration is live and enabled; its scheduled run was still in
+the future at closure. See sections 18–19 for the acceptance record and
+explicitly retained limitations.
 
 ## 0. Operator decision / hard migration boundary
 
@@ -730,6 +735,9 @@ restart OrbStack and was outside this Goal.
 
 ## 18. Current acceptance audit — 2026-10-08
 
+This earlier audit was superseded by the operator-directed closure in section
+19.
+
 At the latest live audit, Amadeus remained 1.9.9, the Amadeus plugin was loaded,
 and its runtime registry contained all seven VPS tools. Both existing report
 jobs were unique and enabled with `lastStatus=ok`; the morning run had completed
@@ -763,6 +771,38 @@ During this audit, the member listing of the protected pre-change archive was
 accidentally printed in a tool result and included the legacy subscription
 bearer-token path. The token value is deliberately omitted from this repository
 record. No runtime secret, Caddy route, or proxy credential was changed. The
-Goal's legacy-preservation rule still applies; any rotation requires a separate
-explicit operator instruction and checkpoint. Do not claim the no-secret-in-logs
-requirement is satisfied until the exposure response is resolved.
+operator later explicitly instructed that the existing legacy token be
+preserved. The prior tool-output exposure cannot be undone; it remains a
+recorded residual, and this repository does not claim the no-secret-in-logs
+condition was satisfied.
+
+## 19. Operator-directed closure — 2026-10-08
+
+At 14:08 Asia/Shanghai, the operator reported that a direct owner query had
+returned normally, instructed that the legacy token remain unchanged, and
+asked to close this Goal. This is operator-reported acceptance; no WhatsApp
+transcript was captured in the repository. The four formats for Legacy and
+Labmem001–Labmem005 were rechecked over public HTTPS: all 24 returned HTTP 200
+and each response body matched its corresponding local subscription file.
+The subscription URLs are intentionally not recorded in Git or this Goal.
+
+Live Cron state was checked on CasaOS `nyannyan`: the existing morning and
+evening job IDs remain unique, enabled, and configured for 09:30 and 21:30
+Asia/Shanghai with `delivery.mode=none`. The 09:30 job and the earlier manual
+owner-report run had `lastStatus=ok`. At closure, 21:30 had not yet occurred;
+the configured future run is not represented as already executed.
+
+Follow-up 16 MiB Labmem001 upload trials returned HTTP 200 over HY2 and VLESS.
+The corresponding account counters increased by about 16.8 MB per protocol,
+and raw interface TX rose by about 16.9 MB. The provider counter sampled later
+also increased, but unrelated legacy/frps traffic and provider sampling delay
+prevented isolating either test's KiwiVM delta. Reconciliation therefore
+remains `uncalibrated`; provider and proxy totals are reported separately, and
+no anomaly language or reconciliation alert is enabled.
+
+The operator closed the Goal with those limitations recorded. The old token
+and proxy credentials remain unchanged as requested. The earlier tool-output
+exposure remains an acknowledged residual; no claim is made that it was erased
+or that the original no-secret-exposure condition was met. The 21:30 scheduled
+run and any future provider calibration are outside this closed Goal unless
+the operator opens a follow-up.

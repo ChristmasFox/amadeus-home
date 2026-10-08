@@ -8,15 +8,14 @@ traffic on both protocols, and legacy credentials remain active. The existing
 owner report jobs retain their IDs at 09:30 and 21:30 Asia/Shanghai and use the
 owner outbox. Reconciliation remains `uncalibrated`.
 
-The VPS accounting Goal is deployed but remains **active**: a real owner
-WhatsApp direct-message query is still needed to verify natural-language tool
-selection. A headless CLI attempt did not carry the actual inbound sender
-context and is not acceptance evidence. The 2026-10-08 evening Cron has a
-one-time recovery key configured; at the last audit it had not yet reached
-21:30. A legacy subscription bearer-token path was accidentally emitted while
-listing the protected rollback archive; do not repeat it. No runtime credential
-was changed. Consult the current task pointer and Goal audit before further
-action.
+The operator **closed** the VPS accounting Goal after reporting a normal direct
+owner query and directing that the legacy token be preserved. All 24 public
+subscription links returned HTTP 200 and matched the VPS files. Both report
+Cron jobs remain enabled at 09:30/21:30 Asia/Shanghai; the 21:30 run was still
+in the future at closure. Reconciliation remains `uncalibrated`, so no gap or
+anomaly is claimed. A legacy subscription bearer-token path had previously
+appeared in a tool output; it remains a documented residual and was not
+addressed by rotation. See the Goal and deployment checkpoint for full details.
 
 The dated Amadeus and 9Router entries below are historical snapshots unless
 the current task pointer says otherwise. Re-read Git/live state before work.
