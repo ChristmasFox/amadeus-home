@@ -4,6 +4,29 @@ Date: 2026-10-07 (Asia/Shanghai).
 
 Completed operation: disabled the OpenClaw-owned Qwen fallback and deployed Amadeus 1.9.7 with GPT Image as the only production image route.
 
+## Local Qwen image debug UI — 2026-10-07
+
+The stable local Qwen bridge remains on loopback port 18793. A separate
+LaunchAgent serves the generation/edit page on port 18798 and proxies only to
+that bridge; all private/loopback clients are allowed without a UI login. The
+current LAN URLs are `http://192.168.5.3:18798` and
+`http://192.168.5.112:18798`. The user UI access code from the first version
+was removed. Successful PNG results now auto-save to
+`~/Pictures/Amadeus/QwenImage` (directory `0700`, files `0600`); the page and
+task history display saved paths and save failures. `/`, `/api/tasks`,
+unauthenticated model discovery, and both LAN URLs returned HTTP 200 after
+deployment. This does not alter the GPT-only production route, 9Router, or the
+paused Fun-Acc candidate. Status:
+`RUNNING; AUTO_SAVE_DEPLOYED; LAN_SMOKE_PASS; NO_REAL_POST_DEPLOY_GENERATION_TEST`.
+
+One image request was still in flight during the operator-directed UI restart.
+The model bridge-to-engine connection remains active, but its old UI client
+connection was closed; the new UI's in-memory task history is empty and that
+request's result cannot be confirmed or recovered from the page. Let the model
+request finish before starting another one.
+Rollback files and deployment evidence:
+`.agent/checkpoints/2026-10-07-qwen-image-debug-ui-autosave.md`.
+
 Paused Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_FUNACC_4STEP_ACCELERATION_GOAL.md` (paused by operator; preserve candidate work without deployment).
 
 Completed/deployed baseline Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_FALLBACK_GOAL.md`.

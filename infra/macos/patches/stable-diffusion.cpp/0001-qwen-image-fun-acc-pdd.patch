@@ -1,0 +1,236 @@
+--- a/src/core/ggml_runner.h
++++ b/src/core/ggml_runner.h
+@@ -47,6 +47,8 @@
+         } conv2d;
+     };
+     virtual ggml_tensor* patch_weight(ggml_context* ctx, ggml_backend_t backend, ggml_tensor* weight, const std::string& weight_name) = 0;
++    virtual bool has_auxiliary_tensor(const std::string&) const { return false; }
++    virtual ggml_tensor* get_auxiliary_tensor(ggml_context*, ggml_backend_t, const std::string&) { return nullptr; }
+     virtual ggml_tensor* forward_with_lora(ggml_context* ctx,
+                                            ggml_backend_t backend,
+                                            ggml_tensor* x,
+--- a/src/model/adapter/lora.hpp
++++ b/src/model/adapter/lora.hpp
+@@ -2,6 +2,7 @@
+ #define __SD_MODEL_ADAPTER_LORA_HPP__
+ 
+ #include <mutex>
++#include <stdexcept>
+ #include "core/ggml_extend.h"
+ #include "core/ggml_extend_backend.h"
+ #include "core/ggml_runner.h"
+@@ -1017,9 +1018,45 @@
+ public:
+     explicit MultiLoraAdapter(const std::vector<std::shared_ptr<LoraModel>>& lora_models)
+         : lora_models(lora_models) {
++    }
++
++    bool has_auxiliary_tensor(const std::string& name) const override {
++        const std::string alternate_name = starts_with(name, "lora.") ? name.substr(5) : "lora." + name;
++        for (const auto& lora_model : lora_models) {
++            if (lora_model->lora_tensors.find(name) != lora_model->lora_tensors.end() ||
++                lora_model->lora_tensors.find(alternate_name) != lora_model->lora_tensors.end()) {
++                return true;
++            }
++        }
++        return false;
+     }
+ 
++    ggml_tensor* get_auxiliary_tensor(ggml_context* ctx, ggml_backend_t backend, const std::string& name) override {
++        for (const auto& lora_model : lora_models) {
++            auto tensor = lora_model->lora_tensors.find(name);
++            std::string matched_name = name;
++            if (tensor == lora_model->lora_tensors.end()) {
++                matched_name = starts_with(name, "lora.") ? name.substr(5) : "lora." + name;
++                tensor = lora_model->lora_tensors.find(matched_name);
++            }
++            if (tensor != lora_model->lora_tensors.end()) {
++                lora_model->applied_lora_tensors.insert(matched_name);
++                return ggml_ext_cast_f32(ctx, backend, tensor->second);
++            }
++        }
++        return nullptr;
++    }
++
+     ggml_tensor* patch_weight(ggml_context* ctx, ggml_backend_t backend, ggml_tensor* weight, const std::string& weight_name, bool with_lora_and_lokr) {
++        const std::string pdd_name = "fun_acc_pdd." + weight_name;
++        if (has_auxiliary_tensor(pdd_name)) {
++            auto* replacement = get_auxiliary_tensor(ctx, backend, pdd_name);
++            if (replacement == nullptr || weight->ne[0] != replacement->ne[0] || weight->ne[1] != replacement->ne[1] ||
++                weight->ne[2] != replacement->ne[2] || weight->ne[3] != replacement->ne[3]) {
++                throw std::runtime_error("fun_acc_pdd_full_parameter_shape_mismatch");
++            }
++            return replacement;
++        }
+         for (auto& lora_model : lora_models) {
+             ggml_tensor* diff = lora_model->get_weight_diff(weight_name, backend, ctx, weight, with_lora_and_lokr);
+             if (diff == nullptr) {
+--- a/src/model/diffusion/qwen_image_2_1.hpp
++++ b/src/model/diffusion/qwen_image_2_1.hpp
+@@ -1,5 +1,10 @@
+ #ifndef __SD_MODEL_DIFFUSION_QWEN_IMAGE_2_1_H__
+ #define __SD_MODEL_DIFFUSION_QWEN_IMAGE_2_1_H__
++
++#include <array>
++#include <cmath>
++#include <limits>
++#include <stdexcept>
+ 
+ #include "model/diffusion/qwen_image.hpp"
+ 
+@@ -306,6 +311,7 @@
+ 
+     class QwenImage21Model : public GGMLBlock {
+         QwenImage21Config config;
++        bool fun_acc_pdd_enabled = false;
+ 
+     public:
+         QwenImage21Model(const QwenImage21Config& config)
+@@ -322,7 +328,11 @@
+             }
+         }
+ 
+-        ggml_tensor* forward(GGMLRunnerContext* ctx, ggml_tensor* x, ggml_tensor* timestep, ggml_tensor* context, const std::vector<ggml_tensor*>& refs, ggml_tensor* pe, const QwenImage21Layout& layout, const std::vector<ggml_tensor*>& masks, const QwenImage21PrefixCache& cache) {
++        void set_fun_acc_pdd_enabled(bool enabled) {
++            fun_acc_pdd_enabled = enabled;
++        }
++
++        ggml_tensor* forward(GGMLRunnerContext* ctx, ggml_tensor* x, ggml_tensor* timestep, ggml_tensor* context, const std::vector<ggml_tensor*>& refs, ggml_tensor* pe, const QwenImage21Layout& layout, const std::vector<ggml_tensor*>& masks, const QwenImage21PrefixCache& cache, int fun_acc_pdd_head_index) {
+             auto time = ggml_concat(ctx->ggml_ctx, timestep, ggml_ext_zeros_like(ctx->ggml_ctx, timestep), 0);
+             // Runtime flow timesteps already use the [0, 1000] scale.
+             time               = ggml_ext_timestep_embedding(ctx->ggml_ctx, time, 256, 10000, 1.f);
+@@ -364,7 +374,34 @@
+             auto scale = std::dynamic_pointer_cast<Linear>(blocks["norm_out.linear"])->forward(ctx, ggml_ext_chunk(ctx->ggml_ctx, time, 2, 1)[0]);
+             joint      = std::dynamic_pointer_cast<LayerNorm>(blocks["norm_out.norm"])->forward(ctx, joint);
+             joint      = ggml_mul(ctx->ggml_ctx, joint, ggml_scale_bias(ctx->ggml_ctx, scale, 1.f, 1.f));
+-            joint      = std::dynamic_pointer_cast<Linear>(blocks["proj_out"])->forward(ctx, joint);
++            if (fun_acc_pdd_enabled) {
++                if (ctx->weight_adapter == nullptr || fun_acc_pdd_head_index < 0 || fun_acc_pdd_head_index >= 4) {
++                    throw std::runtime_error("fun_acc_pdd_adapter_or_head_missing");
++                }
++                for (int block = 0; block < 32; ++block) {
++                    for (const char* norm : {"norm_k", "norm_q"}) {
++                        const std::string name = "fun_acc_pdd.model.diffusion_model.transformer_blocks." +
++                                                 std::to_string(block) + ".attn." + norm + ".weight";
++                        if (!ctx->weight_adapter->has_auxiliary_tensor(name)) {
++                            throw std::runtime_error("fun_acc_pdd_full_parameter_missing");
++                        }
++                    }
++                }
++                if (!ctx->weight_adapter->has_auxiliary_tensor("fun_acc_pdd.model.diffusion_model.txt_in.text_norm.weight")) {
++                    throw std::runtime_error("fun_acc_pdd_full_parameter_missing");
++                }
++                auto* heads = ctx->weight_adapter->get_auxiliary_tensor(
++                    ctx->ggml_ctx, ctx->backend, "fun_acc_pdd.model.diffusion_model.proj_out.weight");
++                if (heads == nullptr || ggml_n_dims(heads) != 3 || heads->ne[0] != config.hidden_size ||
++                    heads->ne[1] != config.out_channels || heads->ne[2] != 4) {
++                    throw std::runtime_error("fun_acc_pdd_output_head_shape_mismatch");
++                }
++                auto* head = ggml_view_2d(ctx->ggml_ctx, heads, heads->ne[0], heads->ne[1], heads->nb[1],
++                                          static_cast<size_t>(fun_acc_pdd_head_index) * heads->nb[2]);
++                joint = ggml_ext_linear(ctx->ggml_ctx, joint, head, nullptr, false, 1.f);
++            } else {
++                joint = std::dynamic_pointer_cast<Linear>(blocks["proj_out"])->forward(ctx, joint);
++            }
+             return DiT::unpatchify_and_crop(ctx->ggml_ctx, joint, x->ne[1], x->ne[0], 1, 1);
+         }
+     };
+@@ -378,6 +415,7 @@
+         bool prefix_cache_enabled   = true;
+         bool prefix_cache_disabled  = false;
+         bool prefix_cache_auto_f32  = false;
++        bool fun_acc_pdd_enabled    = false;
+ 
+         static bool supports_prefix_cache_type(ggml_type type) {
+             if (type == GGML_TYPE_F32) {
+@@ -409,7 +447,11 @@
+               config(QwenImage21Config::detect_from_weights(weights, prefix)),
+               model(config) {
+             for (const auto& [key, value] : parse_key_value_args(model_args, "model arg")) {
+-                if (key == "qwen_image_2_1_prefix_cache" && !parse_strict_bool(value, prefix_cache_enabled)) {
++                if (key == "qwen_image_2_1_fun_acc_pdd") {
++                    if (!parse_strict_bool(value, fun_acc_pdd_enabled)) {
++                        throw std::runtime_error("qwen_image_2_1_fun_acc_pdd_arg_invalid");
++                    }
++                } else if (key == "qwen_image_2_1_prefix_cache" && !parse_strict_bool(value, prefix_cache_enabled)) {
+                     LOG_WARN("ignoring invalid Qwen Image 2.1 model arg '%s=%s'", key.c_str(), value.c_str());
+                 } else if (key == "qwen_image_2_1_prefix_cache_type") {
+                     if (value == "auto") {
+@@ -430,6 +472,10 @@
+                 }
+             }
+             model.init(params_ctx, weights, prefix);
++            model.set_fun_acc_pdd_enabled(fun_acc_pdd_enabled);
++            if (fun_acc_pdd_enabled) {
++                LOG_INFO("Qwen Image 2.1 Fun-Acc PDD head selection enabled");
++            }
+         }
+ 
+         std::string get_desc() override { return "qwen_image_2_1"; }
+@@ -452,6 +498,28 @@
+             return true;
+         }
+ 
++        static int get_fun_acc_pdd_head_index(const sd::Tensor<float>& timestep) {
++            static constexpr std::array<float, 4> sigmas = {
++                1.0f, 0.9169867038726807f, 0.7861579060554504f, 0.5494909882545471f};
++            if (timestep.empty() || timestep.numel() != 1 || timestep.data() == nullptr) {
++                throw std::runtime_error("fun_acc_pdd_timestep_missing");
++            }
++            const float sigma = timestep.data()[0] / 1000.f;
++            int best_index = -1;
++            float best_distance = std::numeric_limits<float>::max();
++            for (int index = 0; index < static_cast<int>(sigmas.size()); ++index) {
++                const float distance = std::abs(sigma - sigmas[index]);
++                if (distance < best_distance) {
++                    best_distance = distance;
++                    best_index = index;
++                }
++            }
++            if (best_index < 0 || best_distance > 0.001f) {
++                throw std::runtime_error("fun_acc_pdd_timestep_outside_trained_grid");
++            }
++            return best_index;
++        }
++
+         sd::Tensor<float> compute(int n_threads, const DiffusionParams& inputs) override {
+             const auto& x       = tensor_or_empty(inputs.x);
+             const auto& context = tensor_or_empty(inputs.context);
+@@ -480,6 +548,15 @@
+                 LOG_ERROR("%s", error.what());
+                 return {};
+             }
++            int fun_acc_pdd_head_index = -1;
++            if (fun_acc_pdd_enabled) {
++                try {
++                    fun_acc_pdd_head_index = get_fun_acc_pdd_head_index(tensor_or_empty(inputs.timesteps));
++                } catch (const std::exception& error) {
++                    LOG_ERROR("%s", error.what());
++                    return {};
++                }
++            }
+             if (!runner_started()) {
+                 prefix_cache_disabled = false;
+                 prefix_cache_auto_f32 = false;
+@@ -549,7 +626,7 @@
+                     }
+                     auto ctx = get_context(graph);
+                     auto out = model.forward(&ctx, make_input(x), make_input(*inputs.timesteps), cached ? nullptr : make_input(context),
+-                                                         ref_inputs, pe, layout, masks, checked_cache);
++                                                         ref_inputs, pe, layout, masks, checked_cache, fun_acc_pdd_head_index);
+                     if (!flash_attn_used) {
+                         return static_cast<ggml_cgraph*>(nullptr);
+                     }
+--- a/src/pipeline/diffusion_engine.cpp
++++ b/src/pipeline/diffusion_engine.cpp
+@@ -1731,6 +1731,10 @@
+     }
+     if (diffusion_model) {
+         auto lora_tensor_filter = [&](const std::string& tensor_name) {
++            const std::string pdd_prefix = "lora.fun_acc_pdd.";
++            if (starts_with(tensor_name, pdd_prefix)) {
++                return is_diffusion_model_name(tensor_name.substr(pdd_prefix.size()));
++            }
+             if (is_diffusion_model_name(tensor_name)) {
+                 return true;
+             }

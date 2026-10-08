@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Qwen Image · 本地调试台</title>
+  <style>
+    :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eee9df;background:#121311;font-synthesis:none;text-rendering:optimizeLegibility;--muted:#92958d;--line:#343631;--panel:#1a1c19;--green:#b9e79c;--orange:#edb871}
+    *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0,#252b20 0,transparent 38%),#121311}button,input,textarea,select{font:inherit}button{cursor:pointer}
+    .shell{max-width:1220px;margin:auto;padding:28px 28px 48px}.top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:20px;gap:18px}.brand{display:flex;align-items:center;gap:14px}.mark{width:42px;height:42px;border-radius:13px;background:var(--green);color:#15200f;display:grid;place-items:center;font-size:19px;font-weight:800}.eyebrow,.kicker{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}h1{font-size:18px;margin:4px 0 0;letter-spacing:-.02em}.runtime{display:flex;align-items:center;gap:9px;color:#c6c8bf;font-size:12px}.dot{width:8px;height:8px;border-radius:100%;background:#8bd68b;box-shadow:0 0 12px #8bd68b77}.dot.idle{background:var(--orange);box-shadow:0 0 12px #edb87155}.dot.off{background:#e47468;box-shadow:none}
+    .main{display:grid;grid-template-columns:minmax(300px,430px) 1fr;gap:20px;margin-top:22px}.card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 18px 60px #0002}.card h2{font-size:15px;margin:5px 0 18px;letter-spacing:-.01em}.kicker{color:var(--green)}.tabs{display:flex;gap:7px;background:#121311;padding:5px;border-radius:12px;margin-bottom:20px}.tab{flex:1;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:10px 12px;font-size:13px}.tab.active{background:#2b3027;color:#eaf5df;box-shadow:inset 0 0 0 1px #59614d}.field{margin:0 0 17px}.field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#c7c8c0;margin-bottom:8px}.hint{font-size:11px;color:var(--muted)}textarea,select,input[type=password]{width:100%;background:#121411;color:#f0eee8;border:1px solid #3b3e37;border-radius:11px;padding:12px 13px;outline:none}textarea{min-height:150px;resize:vertical;line-height:1.6}textarea:focus,select:focus,input:focus{border-color:#839673;box-shadow:0 0 0 3px #b9e79c18}select{height:42px}textarea::placeholder,input::placeholder{color:#686b63}.row{display:flex;gap:12px}.row>.field{flex:1}.primary{width:100%;border:0;border-radius:11px;padding:13px 16px;background:var(--green);color:#182014;font-weight:700;transition:transform .15s,opacity .15s}.primary:hover{transform:translateY(-1px)}.primary:disabled{opacity:.55;cursor:wait;transform:none}.secondary{border:1px solid var(--line);background:#20221e;color:#deded7;border-radius:9px;padding:8px 12px;font-size:12px}.logout{color:var(--muted)}.privacy{font-size:11px;color:var(--muted);line-height:1.6;margin:14px 2px 0}.privacy strong{color:#d2d2ca;font-weight:500}.drop{display:block;border:1px dashed #53574d;border-radius:12px;min-height:95px;padding:16px;text-align:center;color:#d4d5cd;background:#141613;cursor:pointer}.drop:hover,.drop.drag{border-color:var(--green);background:#1c2119}.drop input{display:none}.drop-title{font-size:12px;margin-top:5px}.preview-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.preview-box{min-height:140px;border:1px solid var(--line);background:#131512;border-radius:12px;overflow:hidden;display:grid;place-items:center;color:#777b70;font-size:11px;text-align:center}.preview-box img{width:100%;height:190px;object-fit:contain;background:#10110f}.preview-box .placeholder{padding:16px}.result-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.result-actions a{color:var(--green);font-size:12px;text-decoration:none}.status{min-height:20px;margin-top:11px;font-size:12px;color:var(--muted);line-height:1.5}.status.error{color:#ee998d}.status.success{color:var(--green)}.canvas{min-height:540px;display:flex;flex-direction:column}.canvas-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.canvas-content{flex:1;display:grid;place-items:center;border:1px solid #2c2f2a;border-radius:14px;margin-top:16px;min-height:400px;background-color:#171916;background-image:linear-gradient(45deg,#1d201b 25%,transparent 25%),linear-gradient(-45deg,#1d201b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1d201b 75%),linear-gradient(-45deg,transparent 75%,#1d201b 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0}.canvas-content img{max-width:100%;max-height:650px;object-fit:contain;border-radius:10px}.empty{text-align:center;max-width:300px;padding:26px}.empty-mark{width:54px;height:54px;border:1px solid #40443b;border-radius:17px;margin:0 auto 17px;display:grid;place-items:center;color:var(--green);font-size:22px}.empty strong{font-size:13px;font-weight:600}.empty p{font-size:12px;line-height:1.6;color:var(--muted)}.spinner{width:24px;height:24px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
+    .login-wrap{max-width:430px;margin:12vh auto 0}.login-card{padding:30px}.login-card p{color:var(--muted);font-size:13px;line-height:1.65}.login-card .primary{margin-top:4px}.footer{display:flex;justify-content:space-between;gap:20px;color:#777a72;font-size:10px;letter-spacing:.08em;margin-top:18px}.hidden{display:none!important}
+    @media(max-width:850px){.shell{padding:18px 14px 34px}.main{grid-template-columns:1fr}.canvas{min-height:430px}.canvas-content{min-height:330px}.top{align-items:flex-start}.runtime{font-size:11px}.card{padding:18px}}
+    @media(max-width:460px){.top{flex-direction:column}.row{display:block}.row>.field{margin-bottom:14px}.preview-row{gap:7px}.preview-box img{height:150px}.canvas-head{flex-direction:column}}
+  </style>
+  <style>
+    .task-panel{margin-top:20px}.task-head,.task-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-head h2{margin:5px 0 0}.task-current{margin-top:16px;padding:15px;border:1px solid var(--line);border-radius:12px;background:#141613}.task-current.active{border-color:#647b52}.task-current-title{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:650}.task-current-meta,.task-meta{color:var(--muted);font-size:11px}.task-prompt{margin:10px 0 0;color:#d6d8d0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;white-space:pre-wrap}.task-error{margin:9px 0 0;color:#ee998d;font-size:12px;line-height:1.5}.task-list{display:grid;gap:9px;margin-top:12px}.task-row{padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:#171916}.task-row-head strong{font-size:12px;font-weight:600}.task-badge{border-radius:999px;padding:4px 8px;font-size:10px;color:#d6d8d0;background:#343631}.task-badge.running{color:#182014;background:var(--green)}.task-badge.failed{color:#ffd2cb;background:#60352f}.task-badge.succeeded{color:#d5f2bf;background:#29402a}.task-meta{margin-top:7px}.task-saved-path,.task-save-error{margin-top:8px;color:#b9e79c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.task-save-error{color:#edb871}.task-row .task-prompt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.task-empty{padding:16px 4px;color:var(--muted);font-size:12px}.task-spinner{width:13px;height:13px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}.task-error-label{font-weight:600}.task-refresh{color:var(--muted);font-size:11px}
+    @media(max-width:850px){.task-head{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div class="brand"><div class="mark">Q</div><div><div class="eyebrow">Amadeus · Local Lab</div><h1>Qwen Image 本地调试台</h1></div></div>
+      <div class="runtime"><span id="health-dot" class="dot idle"></span><span id="health-label">正在连接本地模型…</span></div>
+    </header>
+
+    <section id="app-view" class="main">
+      <div class="card controls">
+        <div class="tabs" role="tablist"><button class="tab active" data-mode="generate" role="tab">文生图</button><button class="tab" data-mode="edit" role="tab">图片编辑</button></div>
+        <form id="generate-form">
+          <div class="kicker">TEXT TO IMAGE</div><h2>描述你想生成的画面</h2>
+          <div class="field"><label for="gen-prompt">提示词 <span class="hint">最多 8,000 字符</span></label><textarea id="gen-prompt" maxlength="8000" placeholder="例如：一只戴着橙色围巾的白猫，坐在窗边看雨，柔和的胶片摄影风格…" required></textarea></div>
+          <div class="field"><label for="gen-size">输出尺寸</label><select id="gen-size"><option value="768x768">正方形 · 768 × 768</option><option value="1024x768">横向 · 1024 × 768</option><option value="768x1024">竖向 · 768 × 1024</option><option value="896x640">横向 · 896 × 640</option><option value="640x896">竖向 · 640 × 896</option></select></div>
+          <button class="primary" type="submit">生成图片</button>
+        </form>
+        <form id="edit-form" class="hidden">
+          <div class="kicker">REFERENCE EDIT</div><h2>上传参考图并描述修改</h2>
+          <div class="field"><label>参考图片 <span class="hint">PNG / JPEG / WebP · 最大 10 MB</span></label><label id="drop-zone" class="drop"><input id="edit-image" type="file" accept="image/png,image/jpeg,image/webp" required><span aria-hidden="true">＋</span><div class="drop-title" id="drop-label">点击选择或拖入一张参考图</div></label></div>
+          <div class="field"><label for="edit-prompt">编辑指令 <span class="hint">最多 8,000 字符</span></label><textarea id="edit-prompt" maxlength="8000" placeholder="例如：把外套改成深绿色，保持人物、姿势和背景不变…" required></textarea></div>
+          <button class="primary" type="submit">编辑图片</button>
+        </form>
+        <div id="action-status" class="status" role="status"></div>
+        <p class="privacy"><strong>局域网直连</strong>　无需登录，请求经本机桥接转发，浏览器不会接触模型密钥。首次请求会按需载入 Metal 模型，生成可能需要几分钟；编辑会自动保持参考图比例。</p>
+      </div>
+
+      <div class="card canvas">
+        <div class="canvas-head"><div><div class="kicker">OUTPUT</div><h2>结果预览</h2></div></div>
+        <div id="canvas-content" class="canvas-content"><div class="empty"><div class="empty-mark">✳</div><strong>等待本地生成</strong><p>生成或编辑完成后，图片会显示在这里。任务运行期间请保持页面打开。</p></div></div>
+        <div id="result-actions" class="result-actions hidden"><span id="result-caption" class="hint">PNG 图片</span><a id="download-link" download="qwen-image.png">下载图片 ↗</a></div>
+      </div>
+    </section>
+    <section class="card task-panel" aria-labelledby="task-title">
+      <div class="task-head"><div><div class="kicker">ACTIVITY</div><h2 id="task-title">本地任务</h2></div><span class="task-refresh">状态自动刷新</span></div>
+      <div id="active-task" class="task-current" aria-live="polite"><div class="task-empty">正在读取任务状态…</div></div>
+      <div id="task-history" class="task-list" aria-label="最近任务"></div>
+    </section>
+    <footer class="footer"><span>QWEN-IMAGE-2.1 · STABLE BASELINE</span><span>LOCAL NETWORK ONLY · NO CLOUD FALLBACK</span></footer>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const healthDot = $('health-dot');
+    const healthLabel = $('health-label');
+    const statusNode = $('action-status');
+    const canvas = $('canvas-content');
+    const resultActions = $('result-actions');
+    let mode = 'generate';
+    let inputPreviewUrl = '';
+    let outputUrl = '';
+    let requestInProgress = false;
+    let serverBusy = false;
+    let taskPollTimer;
+
+    function setStatus(node, message, kind = '') {
+      node.textContent = message;
+      node.className = `status ${kind}`;
+    }
+
+    async function jsonRequest(path, options = {}) {
+      const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
+      let payload = {};
+      try { payload = await response.json(); } catch {}
+      if (!response.ok) {
+        const error = payload?.error?.message || payload?.error?.type || `HTTP ${response.status}`;
+        throw new Error(error);
+      }
+      return payload;
+    }
+
+    function formatDuration(milliseconds) {
+      const seconds = Math.floor(Math.max(0, milliseconds || 0) / 1000);
+      if (seconds < 60) return `${seconds} 秒`;
+      return `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+    }
+
+    function taskKind(kind) {
+      return kind === 'edit' ? '图片编辑' : '文生图';
+    }
+
+    function taskStatus(status) {
+      return status === 'running' ? '进行中' : status === 'succeeded' ? '已完成' : '失败';
+    }
+
+    function formatTaskTime(value) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '时间未知' : date.toLocaleString();
+    }
+
+    function createTaskPrompt(prompt) {
+      const node = document.createElement('p');
+      node.className = 'task-prompt';
+      node.textContent = prompt || '（没有记录提示词）';
+      return node;
+    }
+
+    function renderActiveTask(task) {
+      const node = $('active-task');
+      node.replaceChildren();
+      if (!task) {
+        node.className = 'task-current';
+        const empty = document.createElement('div');
+        empty.className = 'task-empty';
+        empty.textContent = '当前没有正在处理的本地任务';
+        node.append(empty);
+        return;
+      }
+      node.className = 'task-current active';
+      const title = document.createElement('div');
+      title.className = 'task-current-title';
+      const spinner = document.createElement('span');
+      spinner.className = 'task-spinner';
+      const label = document.createElement('span');
+      label.textContent = `${taskKind(task.kind)} · 正在处理`;
+      title.append(spinner, label);
+      const meta = document.createElement('div');
+      meta.className = 'task-current-meta';
+      meta.textContent = `${formatTaskTime(task.startedAt)} · 已用时 ${formatDuration(task.durationMs)}${task.details ? ` · ${task.details}` : ''}`;
+      node.append(title, meta, createTaskPrompt(task.prompt));
+    }
+
+    function renderTaskHistory(tasks) {
+      const list = $('task-history');
+      list.replaceChildren();
+      const completed = tasks.filter((task) => task.status !== 'running').slice(0, 12);
+      if (!completed.length) {
+        const empty = document.createElement('div');
+        empty.className = 'task-empty';
+        empty.textContent = '完成或失败的任务会显示在这里';
+        list.append(empty);
+        return;
+      }
+      for (const task of completed) {
+        const row = document.createElement('article');
+        row.className = 'task-row';
+        const head = document.createElement('div');
+        head.className = 'task-row-head';
+        const title = document.createElement('strong');
+        title.textContent = taskKind(task.kind);
+        const badge = document.createElement('span');
+        badge.className = `task-badge ${task.status}`;
+        badge.textContent = taskStatus(task.status);
+        head.append(title, badge);
+        const meta = document.createElement('div');
+        meta.className = 'task-meta';
+        meta.textContent = `${formatTaskTime(task.startedAt)} · 用时 ${formatDuration(task.durationMs)}${task.details ? ` · ${task.details}` : ''}`;
+        row.append(head, meta, createTaskPrompt(task.prompt));
+        if (task.savedPath) {
+          const saved = document.createElement('div');
+          saved.className = 'task-saved-path';
+          saved.textContent = `自动保存：${task.savedPath}`;
+          row.append(saved);
+        } else if (task.saveError) {
+          const saveError = document.createElement('div');
+          saveError.className = 'task-save-error';
+          saveError.textContent = task.saveError;
+          row.append(saveError);
+        }
+        if (task.status === 'failed' && task.error) {
+          const error = document.createElement('p');
+          error.className = 'task-error';
+          error.textContent = `失败提示：${task.error.message || task.error.type || '请求未完成'}`;
+          row.append(error);
+        }
+        list.append(row);
+      }
+    }
+
+    function updateActionButtons() {
+      document.querySelectorAll('.primary').forEach((button) => {
+        button.disabled = requestInProgress || serverBusy;
+      });
+    }
+
+    async function refreshTasks() {
+      try {
+        const tasks = await jsonRequest('/api/tasks');
+        serverBusy = Boolean(tasks.active);
+        renderActiveTask(tasks.active);
+        renderTaskHistory(Array.isArray(tasks.history) ? tasks.history : []);
+        updateActionButtons();
+      } catch {
+        // Keep the last known task view if the status endpoint briefly fails.
+      } finally {
+        clearTimeout(taskPollTimer);
+        taskPollTimer = setTimeout(refreshTasks, serverBusy ? 1000 : 3500);
+      }
+    }
+
+    async function refreshHealth() {
+      try {
+        const health = await jsonRequest('/api/health');
+        const state = health.state === 'running' ? '模型运行中' : '模型空闲 · 按需加载';
+        healthLabel.textContent = `${state} · ${health.model || 'Qwen Image'}`;
+        healthDot.className = `dot ${health.state === 'running' ? '' : 'idle'}`;
+      } catch {
+        healthLabel.textContent = '本地模型桥接暂不可用';
+        healthDot.className = 'dot off';
+      }
+    }
+
+    function setBusy(busy, message = '') {
+      requestInProgress = busy;
+      updateActionButtons();
+      if (busy) {
+        canvas.innerHTML = '<div class="empty"><div class="spinner"></div><strong>本地模型正在处理</strong><p>模型首次载入及图片生成可能需要几分钟，请保持此页面打开。</p></div>';
+        resultActions.classList.add('hidden');
+        setStatus(statusNode, message || '请求已发送，等待本地 Metal 模型完成…');
+      }
+    }
+
+    function showResult(payload, title) {
+      const encoded = payload?.data?.[0]?.b64_json;
+      if (typeof encoded !== 'string' || !encoded) throw new Error('模型响应中没有图片数据');
+      const raw = atob(encoded);
+      const bytes = new Uint8Array(raw.length);
+      for (let index = 0; index < raw.length; index++) bytes[index] = raw.charCodeAt(index);
+      if (outputUrl) URL.revokeObjectURL(outputUrl);
+      outputUrl = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+      canvas.replaceChildren();
+      const image = document.createElement('img');
+      image.src = outputUrl;
+      image.alt = '本地模型输出图片';
+      canvas.append(image);
+      $('download-link').href = outputUrl;
+      $('download-link').download = `qwen-image-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+      $('result-caption').textContent = title;
+      resultActions.classList.remove('hidden');
+      if (payload.debug_ui?.saved_path) {
+        setStatus(statusNode, `已自动保存：${payload.debug_ui.saved_path}`, 'success');
+      } else if (payload.debug_ui?.save_error) {
+        setStatus(statusNode, `图片已生成，但${payload.debug_ui.save_error}`, 'error');
+      } else {
+        setStatus(statusNode, '图片已生成并显示在页面中。', 'success');
+      }
+      refreshHealth();
+    }
+
+    async function runRequest(path, options, title) {
+      setBusy(true);
+      try {
+        const payload = await jsonRequest(path, options);
+        showResult(payload, title);
+      } catch (error) {
+        canvas.innerHTML = '<div class="empty"><div class="empty-mark">!</div><strong>本地请求未完成</strong><p>请检查桥接服务状态或稍后重试。</p></div>';
+        setStatus(statusNode, error.message || '请求失败', 'error');
+        refreshHealth();
+      } finally {
+        setBusy(false);
+        refreshTasks();
+      }
+    }
+
+    document.querySelectorAll('.tab').forEach((tab) => tab.addEventListener('click', () => {
+      mode = tab.dataset.mode;
+      document.querySelectorAll('.tab').forEach((item) => item.classList.toggle('active', item === tab));
+      $('generate-form').classList.toggle('hidden', mode !== 'generate');
+      $('edit-form').classList.toggle('hidden', mode !== 'edit');
+      setStatus(statusNode, '');
+    }));
+
+    $('generate-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      runRequest('/api/generations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: $('gen-prompt').value, size: $('gen-size').value }),
+      }, 'Qwen Image · 文生图');
+    });
+
+    function setReferencePreview(file) {
+      if (!file) return;
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
+        $('edit-image').value = '';
+        $('drop-label').textContent = '格式不支持或文件超过 10 MB';
+        setStatus(statusNode, '请选择 PNG、JPEG 或 WebP 图片，最大 10 MB。', 'error');
+        return;
+      }
+      if (inputPreviewUrl) URL.revokeObjectURL(inputPreviewUrl);
+      inputPreviewUrl = URL.createObjectURL(file);
+      $('drop-label').textContent = `${file.name} · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+      setStatus(statusNode, '参考图已载入；图片不会上传到云端。');
+    }
+
+    $('edit-image').addEventListener('change', (event) => setReferencePreview(event.target.files[0]));
+    const dropZone = $('drop-zone');
+    dropZone.addEventListener('dragover', (event) => { event.preventDefault(); dropZone.classList.add('drag'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+    dropZone.addEventListener('drop', (event) => {
+      event.preventDefault();
+      dropZone.classList.remove('drag');
+      const file = event.dataTransfer.files[0];
+      if (!file) return;
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      $('edit-image').files = transfer.files;
+      setReferencePreview(file);
+    });
+
+    $('edit-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const file = $('edit-image').files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append('model', 'local/qwen-image-2.1-uncensored');
+      form.append('prompt', $('edit-prompt').value);
+      form.append('n', '1');
+      form.append('output_format', 'png');
+      form.append('image[]', file, file.name);
+      runRequest('/api/edits', { method: 'POST', body: form }, 'Qwen Image · 参考图编辑');
+    });
+
+    refreshHealth();
+    refreshTasks();
+  </script>
+</body>
+</html>

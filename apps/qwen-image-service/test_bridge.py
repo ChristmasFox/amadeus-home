@@ -22,6 +22,7 @@ from bridge import (
     image_dimensions,
     parse_multipart,
     private_token,
+    profile_prompt,
     verify_hash,
 )
 
@@ -84,19 +85,28 @@ class FixtureBridge(QwenBridge):
         config = {
             "servicePort": 0,
             "internalPort": internal_port,
+            "samplingProfile": "fun-acc-4step",
             "sdCppCommit": "a" * 40,
             "generationDeadlineMs": 600_000,
-            "idleShutdownSeconds": 0,
+            "idleShutdownSeconds": 900,
             "loadTimeoutMs": 1_000,
-            "steps": 16,
-            "cfgScale": 6.0,
+            "queueWaitSeconds": 5,
+            "steps": 4,
+            "cfgScale": 1.0,
+            "customSigmas": [1.0, 0.9169867038726807, 0.7861579060554504, 0.5494909882545471, 0.0],
+            "prefixCacheType": "q8_0",
+            "mmap": True,
+            "flashAttention": True,
+            "funAcc": {"adapterPath": "/tmp/fun-acc.safetensors"},
             "backend": "MTL0",
             "sdCppBinary": "/dev/null",
             "diffusionModelPath": "/dev/null",
             "llmPath": "/dev/null",
             "visionPath": "/dev/null",
             "vaePath": "/dev/null",
-            "defaultGenerationSize": "768x768",
+            "defaultGenerationSize": "1024x1024",
+            "maxOutputPixels": 1024 * 1024,
+            "maxOutputEdge": 1024,
             "logDir": "/tmp/qwen-image-test-logs",
         }
         super().__init__(config, TOKEN, Path("/tmp/qwen-test-token"))
@@ -138,20 +148,33 @@ class BridgeTests(unittest.TestCase):
         health = json.loads(self.get("/health").read())
         self.assertEqual(health["model"], MODEL_ID)
         self.assertTrue(health["referenceEdits"])
+        self.assertEqual(health["samplingProfile"], "fun-acc-4step")
+        self.assertEqual(health["customSigmas"], self.bridge.config["customSigmas"])
         with self.assertRaises(Exception):
             self.get("/v1/models")
         models = json.loads(self.get("/v1/models", {"Authorization": "Bearer " + TOKEN}).read())
         self.assertEqual(models["data"][0]["id"], MODEL_ID)
 
-    def test_generation_uses_benchmark_size_and_one_output(self):
+    def test_generation_uses_1024_profile_and_one_output(self):
         body = json.dumps({"model": MODEL_ID, "prompt": "a blue circle", "n": 1}).encode()
         response = json.loads(self.send("/v1/images/generations", body, "application/json").read())
         path, content_type, forwarded = NativeHandler.calls[-1]
         self.assertEqual(path, "/v1/images/generations")
         self.assertEqual(content_type, "application/json")
-        self.assertEqual(json.loads(forwarded)["size"], "768x768")
+        forwarded_json = json.loads(forwarded)
+        self.assertEqual(forwarded_json["size"], "1024x1024")
+        extra = forwarded_json["prompt"].split("<sd_cpp_extra_args>", 1)[1].split("</sd_cpp_extra_args>", 1)[0]
+        extra_args = json.loads(extra)
+        self.assertEqual(extra_args["sample_params"]["sample_steps"], 4)
+        self.assertEqual(extra_args["sample_params"]["custom_sigmas"], self.bridge.config["customSigmas"])
+        self.assertEqual(extra_args["lora"], [{"path": "/tmp/fun-acc.safetensors", "multiplier": 1.0}])
         self.assertEqual(response["model"], MODEL_ID)
         self.assertEqual(len(response["data"]), 1)
+
+    def test_generation_rejects_nonproduction_size(self):
+        status, _ = self.bridge.generate({"prompt": "a blue circle", "size": "768x768"})
+        self.assertEqual(status, 400)
+        self.assertEqual(NativeHandler.calls, [])
 
     def test_edit_preserves_exact_reference_bytes_and_mime(self):
         image = png(768, 768)
@@ -163,7 +186,12 @@ class BridgeTests(unittest.TestCase):
         fields, files = forwarded_parts(proxied_type, proxied)
         self.assertEqual(files["image[]"], ("image/png", image))
         self.assertEqual(fields["model"], b"sd-cpp-local")
-        self.assertIn(b'<sd_cpp_extra_args>{"strength":0.9}</sd_cpp_extra_args>', fields["prompt"])
+        self.assertEqual(fields["size"], b"768x768")
+        extra = fields["prompt"].decode().split("<sd_cpp_extra_args>", 1)[1].split("</sd_cpp_extra_args>", 1)[0]
+        extra_args = json.loads(extra)
+        self.assertEqual(extra_args["strength"], 0.9)
+        self.assertEqual(extra_args["sample_params"]["custom_sigmas"], self.bridge.config["customSigmas"])
+        self.assertEqual(extra_args["lora"][0]["path"], "/tmp/fun-acc.safetensors")
         self.assertNotIn(b'"denoising_strength"', fields["prompt"])
         self.assertEqual(response["model"], MODEL_ID)
 
@@ -203,7 +231,7 @@ class BridgeTests(unittest.TestCase):
         width, height = (int(value) for value in derived_edit_size(913, 2048).split("x"))
         self.assertEqual(width % 32, 0)
         self.assertEqual(height % 32, 0)
-        self.assertLessEqual(width * height, 768 * 1024)
+        self.assertLessEqual(width * height, 1024 * 1024)
 
     def test_hash_and_private_token_checks(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -255,7 +283,8 @@ class BridgeTests(unittest.TestCase):
         def generate():
             results.append(self.bridge.generate({"prompt": "a blue circle"})[0])
 
-        with mock.patch.object(self.bridge, "ensure_ready", side_effect=hold_ready), mock.patch("bridge.QUEUE_WAIT_SECONDS", 0.05):
+        self.bridge.config["queueWaitSeconds"] = 0.05
+        with mock.patch.object(self.bridge, "ensure_ready", side_effect=hold_ready):
             first = threading.Thread(target=generate)
             second = threading.Thread(target=generate)
             first.start()

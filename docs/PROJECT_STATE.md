@@ -1,5 +1,28 @@
 # Project State — 2026-10-07
 
+## 2026-10-07 — Qwen LAN debug UI automatic save deployed
+
+A lightweight macOS LaunchAgent serves the local generation/reference-edit
+page at `192.168.5.3:18798` and `192.168.5.112:18798`. It accepts private and
+loopback clients without a UI login, requires same-origin write requests, and
+proxies only to the authenticated loopback Qwen bridge at `127.0.0.1:18793`.
+Successful PNG results are saved to `~/Pictures/Amadeus/QwenImage` with
+directory/file modes `0700`/`0600`; saved paths and save failures appear in the
+page and task history. After `infra/macos/manage-qwen-image-debug-ui.sh
+--apply`, `/`, `/api/tasks`, model discovery, and both LAN URLs returned HTTP
+200; installed Python/HTML hashes match the repository files. No post-deploy
+generation/edit acceptance request was sent.
+
+At the user's direct deployment instruction, an earlier image request was
+still connected between the stable bridge and model engine. Restarting the UI
+closed its old client socket, while the bridge-to-engine connection remained
+active. The request's output cannot be confirmed or recovered through the new
+UI, whose in-memory task list reset on restart. Let it finish before submitting
+another image request. The production GPT-only route, 9Router, and paused
+Fun-Acc candidate are unchanged. Rollback:
+`infra/macos/manage-qwen-image-debug-ui.sh --stop --apply`; protected restore
+backup and evidence: `.agent/checkpoints/2026-10-07-qwen-image-debug-ui-autosave.md`.
+
 ## 2026-10-07 — Amadeus 1.9.7 GPT-only image route deployed
 
 Release source commit `4316946bd3fe` runs on CasaOS machine `nyannyan` as
