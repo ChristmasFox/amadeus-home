@@ -2,6 +2,8 @@
 
 Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.9 is deployed on CasaOS
 `nyannyan` as `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`.
+The active Goal is `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`; the public
+Image Lab is planned, while production image generation remains GPT-only.
 VPS subscription accounting is live from T0 `2026-10-08T04:58:07Z`; provider
 and HY2/VLESS sources are healthy, all five Labmem identities have sampled
 traffic on both protocols, and legacy credentials remain active. The existing

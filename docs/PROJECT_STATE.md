@@ -1,5 +1,8 @@
 # Project State — 2026-10-08
 
+Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`. The public Image Lab
+is planned; production image generation remains GPT-only.
+
 ## 2026-10-08 — VPS subscription accounting and owner reports deployed
 
 Amadeus 1.9.9 is live on CasaOS `nyannyan` as

@@ -1,42 +1,45 @@
-# 当前任务指针 — VPS 订阅账户流量与报告
+# Current Task — Public Qwen Image Lab deployment
 
 Date: 2026-10-08 (Asia/Shanghai).
 
-Closed by operator on 2026-10-08: `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`.
-Amadeus 1.9.9 is live on CasaOS `nyannyan`; the existing VPS report Cron IDs are
-preserved and enabled at 09:30 and 21:30 Asia/Shanghai. Today's evening prompt
-uses a one-time scheduled recovery event key because the midday owner-report
-acceptance had consumed today's normal evening key before the idempotency fix.
-The owner report was delivered through the existing outbox; no direct sender
-was added. VPS provider and HY2/VLESS sources are healthy, all five Labmem
-accounts have sampled nonzero usage on both protocols, legacy credentials still
-connect, and both proxy restarts recorded counter resets without losing
-cumulative usage. Reconciliation remains `uncalibrated`; no anomaly is claimed.
-Controlled Labmem001 32 MiB downloads and 16 MiB uploads over HY2 and VLESS
-returned HTTP 200 and increased the matching account/protocol counters. KiwiVM
-did not expose an isolated counter delta, so reconciliation remains
-`uncalibrated`; no anomaly is claimed. The operator reported that a direct
-owner query returned normally, directed that the legacy token be preserved,
-and closed the Goal. All 24 public subscription links returned HTTP 200 and
-matched their local files. The 21:30 Cron is enabled and scheduled for later
-today; it had not yet run at closure. The earlier archive-listing tool-output
-exposure remains recorded and was not remediated by token rotation.
+Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
 
-Rollback and deployment evidence:
+Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
 
-- VPS pre-change archive: `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
-- OpenClaw protected checkpoint: `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549`.
-- OpenClaw deployment evidence: `/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261008052549`.
-- Sanitized deployment record: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`.
+The operator explicitly pre-authorized the scoped Git/macOS/frpc/frps/Caddy/DNS-if-needed/runtime-secret/restart/smoke mutations in the active Goal and asked execution to continue without routine confirmation until `https://image.nyannyan.top` is deployed and usable. This authorization does not extend to SSH-auth/firewall changes, unrelated DNS/services, credential rotation, or other out-of-scope destructive operations.
 
-The dated sections below preserve prior task history; this pointer and live
-runtime checks above are the current state.
+## Active Image Lab target — 2026-10-08
 
-# Historical Task — GPT-only image route cutover
+The current LAN debug surface is being replaced by a deliberately small Image Lab:
 
-Date: 2026-10-07 (Asia/Shanghai).
+```text
+Mode:
+  Quality — base Qwen 16-step
+  Fast    — real Fun-Acc/PDD 4-step
 
-Completed operation: disabled the OpenClaw-owned Qwen fallback and deployed Amadeus 1.9.7 with GPT Image as the only production image route.
+Resolution:
+  1024x1024
+  1024x768
+  768x1024
+
+Seed:
+  -1 random
+  >=0 fixed
+```
+
+No CFG/strength/sampler/cache/FA/mmap/model controls are exposed. Reference editing remains supported through Qwen3-VL + mmproj. The Image Lab path must not inject an edit strength below 1.0. Exactly one local `sd-server` may be resident; profile changes restart that single engine rather than keeping both profiles loaded.
+
+LAN/private direct access remains no-login. The exact public host `image.nyannyan.top` requires password-only application authentication using a runtime-only verifier; the operator-provided plaintext password must never enter Git, logs, Caddy, frp configs or checkpoints.
+
+Public topology remains the existing architecture:
+
+```text
+image.nyannyan.top -> VPS Caddy -> VPS frps -> HomeLab frpc -> macOS Image Lab :18798
+```
+
+Only the UI is public. Qwen bridge/engine ports remain loopback-only.
+
+Status: `PLANNED_AUTHORIZED_FOR_CONTINUOUS_APPLY`.
 
 ## Local Qwen image debug UI — 2026-10-07
 
@@ -67,7 +70,7 @@ Completed/deployed baseline Goal: `docs/AMADEUS_QWEN_IMAGE_2_1_UNCENSORED_EDIT_F
 
 Superseded Goal: `docs/AMADEUS_KREA2_NSFW_LOCAL_FALLBACK_GOAL.md`.
 
-## Historical runtime operation — 2026-10-07
+## Active runtime operation — 2026-10-07
 
 Add an explicit production fallback gate defaulting to disabled. Keep the
 configured `openai/amadeus-image` route and 9Router's `cx/gpt-image-2.5`
@@ -163,7 +166,7 @@ fallback acceptance remains pending; do not mark the active Goal complete.
 - keep Gemini image generation absent;
 - retire active Krea service/env/token/source plumbing only after Qwen candidate acceptance.
 
-## Historical live state — 2026-10-07
+## Current live state — 2026-10-07
 
 Amadeus **1.9.7** is deployed on the canonical CasaOS machine. OpenClaw runs
 `local/openclaw-amadeus:git-4316946bd3fe-20261007125707`; 9Router remains the
@@ -297,16 +300,14 @@ Formal Amadeus 1.9.6 deployment evidence:
 `.agent/checkpoints/2026-10-07-amadeus-1.9.6-qwen-fallback-release.md`.
 
 
-## Closed VPS subscription accounting Goal — 2026-10-08
+## Concurrent VPS subscription accounting Goal — 2026-10-08
 
 See `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md`. Status:
 `OPERATOR_CLOSED_WITH_ACCEPTED_RESIDUALS; OWNER_DIRECT_QUERY_REPORTED_NORMAL; SUBSCRIPTION_LINKS_24_OF_24_VERIFIED; LEGACY_TOKEN_PRESERVED; RECONCILIATION_UNCALIBRATED`.
-VPS accounting is live with T0 `2026-10-08T04:58:07Z`; snapshots report all
-sources healthy and account coverage complete. The original morning/evening
-Cron IDs remain unique and enabled at 09:30 and 21:30 Asia/Shanghai. See the
-deployment record linked above for connection, restart, report, and rollback
-evidence. The operator reported a normal owner direct query and requested
-preservation of the old token and Goal closure. Reconciliation remains
-uncalibrated, no anomaly is claimed, today's future 21:30 execution is not
-claimed as complete, and the prior tool-output exposure remains a documented
-residual. Subscription URLs remain outside Git.
+The operator reported a normal direct owner query and requested that the
+existing token be preserved. Both report Cron jobs remain enabled at 09:30 and
+21:30 Asia/Shanghai; the 21:30 execution was still in the future at closure.
+The provider/proxy relationship remains uncalibrated, no anomaly is claimed,
+and the prior tool-output exposure remains documented. See the Goal and
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md` for
+evidence. Subscription URLs are not stored in Git.
