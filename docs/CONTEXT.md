@@ -1,11 +1,25 @@
-# Canonical context — 2026-10-07
+# Canonical context — 2026-10-08
 
-Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.7 is deployed with
-`cx/gpt-image-2.5` as the only production image route and the local Qwen
-fallback gate disabled. 9Router 0.5.95 remains deployed; the operator reported
-an `arthur-combo` HTTP 408, which is not masked by fallback. The Fun-Acc Goal
-is paused and its candidate changes are preserved. Re-read Git/live state
-before further work.
+Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.9 is deployed on CasaOS
+`nyannyan` as `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549`.
+VPS subscription accounting is live from T0 `2026-10-08T04:58:07Z`; provider
+and HY2/VLESS sources are healthy, all five Labmem identities have sampled
+traffic on both protocols, and legacy credentials remain active. The existing
+owner report jobs retain their IDs at 09:30 and 21:30 Asia/Shanghai and use the
+owner outbox. Reconciliation remains `uncalibrated`.
+
+The VPS accounting Goal is deployed but remains **active**: a real owner
+WhatsApp direct-message query is still needed to verify natural-language tool
+selection. A headless CLI attempt did not carry the actual inbound sender
+context and is not acceptance evidence. The 2026-10-08 evening Cron has a
+one-time recovery key configured; at the last audit it had not yet reached
+21:30. A legacy subscription bearer-token path was accidentally emitted while
+listing the protected rollback archive; do not repeat it. No runtime credential
+was changed. Consult the current task pointer and Goal audit before further
+action.
+
+The dated Amadeus and 9Router entries below are historical snapshots unless
+the current task pointer says otherwise. Re-read Git/live state before work.
 
 ## Current 9Router runtime — 0.5.95 deployed
 
@@ -20,7 +34,7 @@ protected rollback checkpoint is
 `/DATA/AppData/9router/backups/router-upgrade-20261007T065751Z`; full evidence
 is in `.agent/checkpoints/2026-10-07-9router-0.5.95-upgrade.md`.
 
-## Current GPT-only image release — Amadeus 1.9.7
+## Previous GPT-only image release — Amadeus 1.9.7 (superseded)
 
 Release source commit `4316946bd3fe` runs on CasaOS machine `nyannyan` as
 immutable image

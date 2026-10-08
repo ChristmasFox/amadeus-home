@@ -23,7 +23,14 @@ containers have bounded logs. No daemon restart was made.
 Protected rollback checkpoints:
 `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261008052549` and
 `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`.
-Sanitized acceptance evidence: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-complete.md`.
+Deployment evidence: `.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`.
+
+Current Goal status is still active. A real owner WhatsApp direct-message query
+has not yet been verified; the headless CLI test lacked actual inbound sender
+context. The 2026-10-08 21:30 recovery-key report is still scheduled, not yet
+run. An audit tool result also exposed the legacy bearer-token path from the
+protected archive listing; the token is omitted here, no runtime credential was
+changed, and operator direction is pending under the Goal's preservation rule.
 
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 

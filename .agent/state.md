@@ -9,6 +9,13 @@ remain active. Xray/Hysteria counter-reset behavior passed live restart checks.
 Reconciliation remains `uncalibrated`; no anomaly is claimed. See the current
 task pointer and `docs/PROJECT_STATE.md` for checkpoints and details.
 
+Do not mark the accounting Goal complete yet: real owner WhatsApp direct-query
+acceptance and the 2026-10-08 evening scheduled run remain pending. An audit
+tool result exposed the legacy bearer-token path from the protected archive;
+the value is omitted from Git and no runtime credential was changed. Follow the
+operator's explicit preservation/rotation direction before further credential
+action.
+
 Amadeus 1.7.8 is live in immutable OpenClaw 2026.9.4 image
 `local/openclaw-amadeus:git-9f2357210a07-20261001112610` from source commit
 `9f23572`. Runtime version, OpenClaw/Product Radar health, Amadeus registration,
