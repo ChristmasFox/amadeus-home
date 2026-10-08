@@ -23,15 +23,53 @@ export function isTrustedOwnerContext(context: OpenClawPluginToolContext): boole
   return context.senderIsOwner === true || sessionKey.startsWith('cron:') || sessionKey.includes(':cron:');
 }
 
-function isManualCronContext(context: OpenClawPluginToolContext): boolean {
+function hasExplicitManualCronMarker(context: OpenClawPluginToolContext): boolean {
   return /(?:^|:)run:manual:/u.test(context.sessionKey?.trim() ?? '');
 }
 
-const scheduledReportEventKeys = [
-  { prefix: 'vps-report', pattern: /^vps-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u },
-  { prefix: 'market-indices', pattern: /^market-indices:\d{4}-\d{2}-\d{2}:(open|close)$/u },
-  { prefix: 'mac-host-report', pattern: /^mac-host-report:\d{4}-\d{2}-\d{2}:(morning|evening)$/u },
-] as const;
+type ScheduledReportPeriod = 'morning' | 'evening' | 'open' | 'close';
+interface ScheduledReportEventKeyRule {
+  prefix: string;
+  pattern: RegExp;
+  timeZone: string;
+  minutesByPeriod: Partial<Record<ScheduledReportPeriod, number>>;
+}
+
+const scheduledReportEventKeys: readonly ScheduledReportEventKeyRule[] = [
+  {
+    prefix: 'vps-report', pattern: /^vps-report:(\d{4}-\d{2}-\d{2}):(morning|evening)$/u,
+    timeZone: 'Asia/Shanghai', minutesByPeriod: { morning: 9 * 60 + 30, evening: 21 * 60 + 30 },
+  },
+  {
+    prefix: 'market-indices', pattern: /^market-indices:(\d{4}-\d{2}-\d{2}):(open|close)$/u,
+    timeZone: 'America/New_York', minutesByPeriod: { open: 9 * 60 + 30, close: 16 * 60 },
+  },
+  {
+    prefix: 'mac-host-report', pattern: /^mac-host-report:(\d{4}-\d{2}-\d{2}):(morning|evening)$/u,
+    timeZone: 'Asia/Shanghai', minutesByPeriod: { morning: 9 * 60 + 30, evening: 23 * 60 },
+  },
+];
+
+function isCronSession(context: OpenClawPluginToolContext): boolean {
+  const sessionKey = context.sessionKey?.trim() ?? '';
+  return sessionKey.startsWith('cron:') || sessionKey.includes(':cron:');
+}
+
+function isWithinScheduledWindow(rule: ScheduledReportEventKeyRule, date: string, period: string, now: Date): boolean {
+  const scheduledMinute = rule.minutesByPeriod[period as ScheduledReportPeriod];
+  if (scheduledMinute === undefined) return false;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: rule.timeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  if (`${values.year}-${values.month}-${values.day}` !== date) return false;
+  const currentMinute = Number(values.hour) * 60 + Number(values.minute);
+  const offsetFromSchedule = currentMinute - scheduledMinute;
+  // Allow a short scheduling delay while preventing an off-schedule manual run
+  // from consuming the daily idempotency key.
+  return offsetFromSchedule >= -10 && offsetFromSchedule <= 45;
+}
 
 function idFor(eventKey: string): string {
   return createHash('sha256').update(eventKey).digest('hex').slice(0, 40);
@@ -289,12 +327,18 @@ export function ownerEvent(input: OwnerNotificationPresentation): OwnerEvent {
 export function ownerEventForContext(
   input: OwnerNotificationPresentation,
   context: OpenClawPluginToolContext,
+  now = new Date(),
 ): OwnerEvent {
   const event = ownerEvent(input);
-  if (!isManualCronContext(context)) return event;
   for (const scheduled of scheduledReportEventKeys) {
     const match = event.eventKey.match(scheduled.pattern);
-    if (match) return { ...event, eventKey: `${scheduled.prefix}:manual:${event.occurredAt}:${match[1]}` };
+    if (!match) continue;
+    if (
+      isCronSession(context)
+      && !hasExplicitManualCronMarker(context)
+      && isWithinScheduledWindow(scheduled, match[1]!, match[2]!, now)
+    ) return event;
+    return { ...event, eventKey: `${scheduled.prefix}:manual:${now.toISOString()}:${match[2]}` };
   }
   return event;
 }

@@ -41,10 +41,36 @@ test('manual VPS cron runs cannot consume the scheduled report event key', () =>
     summary: 'ok',
     occurredAt: '2026-09-18T20:26:17.000Z',
   });
-  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
-  assert.equal(manual.eventKey, 'vps-report:manual:2026-09-18T20:26:17.000Z:evening');
-  const scheduled = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:scheduled-run-id' } as OpenClawPluginToolContext);
+  const actualManualSession = ownerEventForContext(
+    input,
+    { sessionKey: 'agent:main:cron:job:run:e8be58d6-ec22-4cd5-85c0-6d3784ac24ea' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T04:26:17.000Z'),
+  );
+  assert.equal(actualManualSession.eventKey, 'vps-report:manual:2026-09-18T04:26:17.000Z:evening');
+  const liveManualSession = ownerEventForContext(
+    { ...input, eventKey: 'vps-report:2026-10-08:evening' },
+    { sessionKey: 'agent:main:cron:bfc071e5-31a1-4ca5-8836-b228e0f8589a:run:e8be58d6-ec22-4cd5-85c0-6d3784ac24ea' } as OpenClawPluginToolContext,
+    new Date('2026-10-08T05:18:26.000Z'),
+  );
+  assert.equal(liveManualSession.eventKey, 'vps-report:manual:2026-10-08T05:18:26.000Z:evening');
+  const markedManual = ownerEventForContext(
+    input,
+    { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T13:30:00.000Z'),
+  );
+  assert.equal(markedManual.eventKey, 'vps-report:manual:2026-09-18T13:30:00.000Z:evening');
+  const scheduled = ownerEventForContext(
+    input,
+    { sessionKey: 'agent:main:cron:job:run:scheduled-run-id' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T13:30:00.000Z'),
+  );
   assert.equal(scheduled.eventKey, input.eventKey);
+  const directOwner = ownerEventForContext(
+    input,
+    { senderIsOwner: true, sessionKey: 'agent:main:whatsapp:owner' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T13:30:00.000Z'),
+  );
+  assert.equal(directOwner.eventKey, 'vps-report:manual:2026-09-18T13:30:00.000Z:evening');
 });
 
 test('manual Mac Host cron runs cannot consume the scheduled report event key', () => {
@@ -55,7 +81,11 @@ test('manual Mac Host cron runs cannot consume the scheduled report event key', 
     summary: 'ok',
     occurredAt: '2026-09-18T01:26:17.000Z',
   });
-  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
+  const manual = ownerEventForContext(
+    input,
+    { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T01:26:17.000Z'),
+  );
   assert.equal(manual.eventKey, 'mac-host-report:manual:2026-09-18T01:26:17.000Z:morning');
 });
 
@@ -67,7 +97,11 @@ test('manual market cron runs cannot consume the scheduled observation event key
     summary: 'ok',
     occurredAt: '2026-09-18T20:26:17.000Z',
   });
-  const manual = ownerEventForContext(input, { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext);
+  const manual = ownerEventForContext(
+    input,
+    { sessionKey: 'agent:main:cron:job:run:manual:job:1789734377892:1' } as OpenClawPluginToolContext,
+    new Date('2026-09-18T20:26:17.000Z'),
+  );
   assert.equal(manual.eventKey, 'market-indices:manual:2026-09-18T20:26:17.000Z:close');
 });
 
