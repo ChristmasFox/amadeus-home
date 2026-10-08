@@ -37,6 +37,36 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
   `infra/vps/audio-sample.example.Caddyfile` 发布 `audio.nyannyan.top/reference.wav`；只在复刻
   apply 期间启用，成功后删除 frpc 映射、Caddy site 和 Cloudflare DNS 记录。
 
+## 订阅账号流量归因（已 apply，2026-10-08）
+
+`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005 和独立 legacy 身份。
+VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、五个 Labmem 账号订阅、固定只读 probe；
+原 legacy token/HY2/VLESS 凭据继续有效。Amadeus owner tools 已通过源码验证，待 CasaOS release
+部署后启用。Protected pre-change rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
+
+目标 runtime 边界：
+
+- `/var/lib/amadeus-accounting/subscription-accounts.sqlite` 由独立 `amadeus-accounting` systemd 用户拥有，
+  mode `0600`；库中含五组 token/HY2 secret/VLESS UUID 和 legacy 凭据，不能提供给 OpenClaw。
+- `/var/lib/amadeus-accounting/subscription-usage-public.json` mode `0640`，group
+  `amadeus-accounting-snapshot`。固定 `amadeus-vps-readonly-probe` 只读取这份脱敏文件；SSH probe
+  用户不属于 Caddy 或数据库读取组。
+- `/var/lib/amadeus-accounting` 是独立的 `amadeus-accounting:amadeus-accounting-snapshot`、`0750`
+  目录；现有 `/var/lib/amadeus-gateway` 和 Caddy responder 的 `usage-state.json` 所有者/权限保持不变。
+- 账号 auth endpoint 仅 `127.0.0.1:18796`；Hysteria `/traffic`、`/online` 仅
+  `127.0.0.1:19999` 且使用独立 stats secret。采样器请求 `/traffic` 时不加 `clear=1`。
+- Xray 运行官方 release 26.9.30；`StatsService` 只监听 `127.0.0.1:10085`；policy 打开用户
+  uplink/downlink/online counters，不开放公网 gRPC，也不记录目的地址。
+- Collector 每 60 秒采样，Python 标准库 + SQLite，无容器或新 Web 面板；systemd 模板限制为
+  128 MiB 和 20% CPU。它单独记录 source 健康状态，源失败不转成零。
+- per-account T0 从 provider baseline 建立。KiwiVM 仍是整机配额和进度条唯一真相；HY2/VLESS
+  controlled calibration 完成前 reconciliation 始终是 `uncalibrated`，不得声称差值异常。
+
+当前 `amadeus-accounting` 只写独立 state 目录，对 KiwiVM credential 和 HY2 stats-secret 两个
+固定文件只读；`amadeus-vps-readonly` 仅通过 snapshot 组读取脱敏快照。该 SSH 用户不属于 `caddy`
+组或数据库主组。root-only bootstrap 从当前 Caddyfile/Hysteria/Xray 文件导入 legacy，不在
+stdout/journal 中输出值；账号凭据和订阅只保留在 VPS。
+
 端口用途：
 
 | 端口 | 协议 | 用途 | 备注 |
@@ -102,6 +132,10 @@ ssh amadeus-gateway 'ss -lunp | grep ":2053 "'
 
 Clash/Mihomo 使用 `clash.yaml`，Shadowrocket 使用 `shadowrocket.txt`；Quantumult X 当前
 继续使用 `server.snippet` 中的 VLESS Reality，不能把 HY2 行直接塞进 QX 配置。
+
+账号归因模板 `proxy/config.example.hysteria2.accounting.yaml` 用 loopback HTTP auth 映射 legacy
+原 password 和五个新 secret；不得直接切到 `userpass`，旧客户端没有发送用户名。模板不含运行
+时 secret；若在重建环境中使用，必须先完成 Goal 中的受保护安装和验证流程。
 
 ### frps
 

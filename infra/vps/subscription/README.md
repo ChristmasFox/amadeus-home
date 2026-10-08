@@ -142,3 +142,95 @@ curl --noproxy '*' -fsS -D - -o /dev/null 'https://sub.example.com:8443/<RANDOM_
   不要把这两个格式直接作为 QX 资源导入。HY2 节点要求 `sub.nyannyan.top` 为灰云并可达 UDP 2053。
 - QX 导入后节点缺失：确认响应正文是一行 QX 节点配置，且没有以 `;` 开头的注释符。
 - 任何 token 泄露：保留旧配置备份，生成新 token 后 reload，再明确删除旧目录。
+
+## 账号归因与采集运行说明（已 apply，2026-10-08）
+
+`accounting_cli.py`、`accounting_store.py`、`accounting_service.py` 和
+`../systemd/amadeus-gateway-accounting.service.example` 是运行时源码。服务、账号数据库、HY2 Stats
+API secret、KiwiVM 凭据和生成的订阅文件已安装在 VPS 受保护路径；本地模板不含运行时 secret。
+
+Phase 2 的部署顺序如下，供新环境恢复时参考；不得在 live VPS 上重复创建或轮换账号。先创建专用 `amadeus-accounting` 系统用户和
+`amadeus-accounting-snapshot` 只读共享组；新建 `/var/lib/amadeus-accounting`，使用
+`amadeus-accounting:amadeus-accounting-snapshot`、`0750`。数据库由 `amadeus-accounting`
+持有并为 `0600`。不要更改现有 `/var/lib/amadeus-gateway` 的 owner/mode：Caddy responder 以
+`caddy:caddy` 身份写入其中的 `usage-state.json`。也不要更改现有 `/etc/amadeus-gateway` 的
+owner/mode：当前目录为 `root:caddy 0750`，订阅响应器以 `caddy` 身份从中读取
+`kiwivm-credentials.json`（`root:caddy 0640`）。在独立 `/etc/amadeus-accounting` 下创建
+`root:amadeus-accounting 0750` 目录；复制一份 KiwiVM 凭据到该目录供 collector 使用，原有
+`/etc/amadeus-gateway/kiwivm-credentials.json` 保持不动。accounting env、复制的 KiwiVM 凭据及
+HY2 Stats API secret 使用 `root:amadeus-accounting 0640`。systemd 的 `UMask=0077` 会保护 SQLite
+WAL/SHM 和临时文件。
+
+创建隔离配置目录并复制 KiwiVM 凭据时只复制文件，不读取或打印其内容：
+
+```sh
+install -d -o root -g amadeus-accounting -m 0750 /etc/amadeus-accounting
+install -o root -g amadeus-accounting -m 0640 \
+  /etc/amadeus-gateway/kiwivm-credentials.json \
+  /etc/amadeus-accounting/kiwivm-credentials.json
+```
+
+只读 SSH probe 账号只加入 snapshot 组；独立 state 目录允许该组读取 `0640` 脱敏快照，而数据库仍为
+`0600` 且只由 accounting 用户读取。不把 probe 用户加入数据库、accounting 主组或 `caddy` 组。
+建立状态目录后，先以 `ACCOUNTING_COLLECTOR_ENABLED=false` 启动 accounting service，让 loopback HY2 auth endpoint 在切换 Hysteria 前可用；完成 Hysteria 与 Xray 切换并确认两路统计接口健康后，再改为 `true` 并重启服务采集。这样首个 provider 样本会在两路统计都可用后建立 T0，避免把预期中的切换间隔记成 T0 后数据源故障。随后运行 `scripts/provision-vps-readonly.sh --apply` 安装固定探针。
+
+accounting CLI 默认只输出 dry-run 计划、不创建文件或数据库。下面示例中的 `--apply` 是实际
+写入的显式门槛；只可在 Phase 2 受保护备份完成后逐项执行：
+
+```sh
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py bootstrap \
+  --db /var/lib/amadeus-accounting/subscription-accounts.sqlite \
+  --caddyfile /etc/caddy/Caddyfile \
+  --subscription-root /var/lib/caddy/subscription \
+  --hysteria-config /etc/hysteria/config.yaml \
+  --xray-config /etc/xray/config.json \
+  --service-user amadeus-accounting \
+  --apply
+
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py generate-stats-secret \
+  --output /etc/amadeus-accounting/hysteria-stats-secret \
+  --service-group amadeus-accounting \
+  --apply
+
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render-hysteria \
+  --source-config /etc/hysteria/config.yaml \
+  --output /etc/hysteria/config.accounting.candidate.yaml \
+  --stats-secret-file /etc/amadeus-accounting/hysteria-stats-secret \
+  --caddy-group caddy \
+  --apply
+
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render-xray \
+  --db /var/lib/amadeus-accounting/subscription-accounts.sqlite \
+  --source-config /etc/xray/config.json \
+  --output /etc/xray/config.accounting.candidate.json \
+  --xray-group xray \
+  --apply
+
+python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render \
+  --db /var/lib/amadeus-accounting/subscription-accounts.sqlite \
+  --subscription-root /var/lib/caddy/subscription \
+  --caddy-fragment /etc/caddy/subscription-accounts.caddy.candidate \
+  --vless-server '<PUBLIC_VLESS_HOST>' --hy2-server '<PUBLIC_HY2_HOST>' \
+  --hy2-sni '<HY2_SNI>' --reality-server-name '<REALITY_SERVER_NAME>' \
+  --reality-public-key '<REALITY_PUBLIC_KEY>' --reality-short-id '<REALITY_SHORT_ID>' \
+  --apply
+```
+
+`bootstrap` 只从当前 Caddy/Hysteria/Xray 配置导入 legacy 身份，并为五个 Labmem 账号生成独立
+token、HY2 secret 和 UUID；重跑时不会轮换凭据。`render-xray` 保留现有 2053 VLESS listener、
+Reality、routing 和旧 UUID，candidate 必须通过 `xray run -test` 后才能进入受保护的 Phase 2
+checkpoint 流程。`render-hysteria` 只生成 HTTP auth/loopback Traffic Stats candidate YAML；
+`render` 写五个新订阅目录和六个账号的 bounded Caddy matcher。CLI 的计划、成功和失败输出都不含
+凭据。不要把 candidate 文件、数据库、填充后的 env 或订阅文件复制回 Git。
+
+五个新 token URL 在 accounting service 成功记录 provider T0 前必须保持私密、不得发给用户。当前
+T0 为 `2026-10-08T04:58:07Z`；生成链接仍保留在 VPS，并未通过聊天或 Git 分发。
+Labmem 身份是新生成的，因此首次出现的协议绝对计数可从 T0 归因；legacy 计数可能含历史流量，
+必须有 T0 基线，否则该协议总量继续显示 unknown。
+
+Snapshot 由 accounting service 原子写成 `0640`、组为
+`amadeus-accounting-snapshot`；probe 仅读取这一个固定文件。缺失账号/协议计数会保持 unknown，
+`knownProxyAccountedBytes` 是已观测部分；只有 `proxyAccountedComplete=true` 才能称为总量。
+HY2 在线计数表示 client instance 数；VLESS 在线计数表示 Xray 最近活动的来源 IP 数，不保存或
+暴露来源 IP，也不等同于物理设备数。未经 HY2、VLESS 各自受控流量校准，`reconciliation.status`
+保持 `uncalibrated`，不能声称流量异常。

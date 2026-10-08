@@ -1,0 +1,16 @@
+# Candidate subscription sites after the bounded matcher file is generated on
+# the VPS from the protected account store. The generated file has exact
+# token/format paths only; it never enables a filesystem or directory route.
+sub.example.com {
+    import /etc/caddy/subscription-accounts.caddy
+    handle {
+        respond 404
+    }
+}
+
+sub.example.com:8443 {
+    import /etc/caddy/subscription-accounts.caddy
+    handle {
+        respond 404
+    }
+}

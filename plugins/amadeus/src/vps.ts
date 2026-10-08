@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import type { AmadeusConfig } from './config.js';
 import { readRequiredFile } from './config.js';
 import { requestFormJson } from './http.js';
+import { isGroupContext } from './machost.js';
+import { isTrustedOwnerContext } from './owner.js';
 
 type KiwiEndpoint = 'getServiceInfo' | 'getLiveServiceInfo' | 'getRawUsageStats';
 type VpsSource = 'kiwivm' | 'ssh';
@@ -59,6 +62,48 @@ export const VPS_CRITICAL_SERVICES: readonly VpsServiceDefinition[] = [
 ] as const;
 
 const READONLY_PROBE_COMMAND = '/usr/local/sbin/amadeus-vps-readonly-probe';
+export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'legacy'] as const;
+type VpsSubscriptionAccountId = typeof VPS_SUBSCRIPTION_ACCOUNT_IDS[number];
+
+interface VpsSubscriptionProtocolUsage {
+  uploadBytes: number | null;
+  downloadBytes: number | null;
+  totalBytes: number | null;
+  lastCounterSampleAt: string | null;
+  status: 'ok' | 'stale' | 'error' | 'unknown';
+  onlineCount: number | null;
+  onlineCountKind: 'client_instances' | 'unique_source_ips' | null;
+  onlineStatus: 'ok' | 'stale' | 'error' | 'unknown';
+  onlineSampledAt: string | null;
+  windowBytes: number | null;
+  windowSampleCount: number;
+}
+
+interface VpsSubscriptionAccount {
+  accountId: VpsSubscriptionAccountId;
+  enabled: boolean;
+  protocols: Record<'hy2' | 'vless', VpsSubscriptionProtocolUsage>;
+  totalMonitoredBytes: number | null;
+  knownMonitoredBytes: number | null;
+  totalsComplete: boolean;
+  windowBytes: number | null;
+  windowComplete: boolean;
+}
+
+interface VpsSubscriptionSnapshot {
+  generatedAt: string | null;
+  monitoringStartedAt: string | null;
+  accounts: VpsSubscriptionAccount[];
+  legacy: VpsSubscriptionAccount;
+  protocolTotals: Record<'hy2' | 'vless', { knownBytes: number | null; observedAccounts: number | null; complete: boolean; source: Record<string, unknown> }>;
+  knownProxyAccountedBytes: number | null;
+  proxyAccountedBytes: number | null;
+  proxyAccountedComplete: boolean;
+  sources: Record<'provider' | 'hysteria_traffic' | 'hysteria_online' | 'xray' | 'xray_online', Record<string, unknown>>;
+  reportWindow: { seconds: number | null; startAt: string | null; endAt: string | null; topAccount: { accountId: string; windowBytes: number } | null };
+  provider: { baselineCounterBytes: number | null; lastCounterBytes: number | null; deltaSinceMonitoringStartBytes: number | null; totalBytes: number | null; resetAt: string | null; sampledAt: string | null };
+  reconciliation: { status: 'uncalibrated' | 'calibrated'; providerDeltaBytes: number | null; proxyAccountedBytes: number | null; gapBytes: number | null };
+}
 
 class VpsReadOnlyError extends Error {
   constructor(public readonly code: string, message: string) {
@@ -497,4 +542,242 @@ export async function getVpsServices(config: AmadeusConfig, signal?: AbortSignal
   } catch (error) {
     return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh') } satisfies VpsEnvelope;
   }
+}
+
+function nonnegativeInteger(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function safeIso(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length > 64) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function safeAccountId(value: unknown): VpsSubscriptionAccountId | null {
+  return typeof value === 'string' && (VPS_SUBSCRIPTION_ACCOUNT_IDS as readonly string[]).includes(value)
+    ? value as VpsSubscriptionAccountId
+    : null;
+}
+
+function sanitizeProtocolUsage(value: unknown): VpsSubscriptionProtocolUsage {
+  const item = objectValue(value);
+  const status = item.status === 'ok' || item.status === 'stale' || item.status === 'error' || item.status === 'unknown'
+    ? item.status
+    : 'unknown';
+  return {
+    uploadBytes: nonnegativeInteger(item.uploadBytes),
+    downloadBytes: nonnegativeInteger(item.downloadBytes),
+    totalBytes: nonnegativeInteger(item.totalBytes),
+    lastCounterSampleAt: safeIso(item.lastCounterSampleAt),
+    status,
+    onlineCount: nonnegativeInteger(item.onlineCount),
+    onlineCountKind: item.onlineCountKind === 'client_instances' || item.onlineCountKind === 'unique_source_ips'
+      ? item.onlineCountKind
+      : null,
+    onlineStatus: item.onlineStatus === 'ok' || item.onlineStatus === 'stale' || item.onlineStatus === 'error' || item.onlineStatus === 'unknown'
+      ? item.onlineStatus
+      : 'unknown',
+    onlineSampledAt: safeIso(item.onlineSampledAt),
+    windowBytes: nonnegativeInteger(item.windowBytes),
+    windowSampleCount: nonnegativeInteger(item.windowSampleCount) ?? 0,
+  };
+}
+
+function sanitizeSubscriptionAccount(value: unknown, expectedId: VpsSubscriptionAccountId): VpsSubscriptionAccount {
+  const item = objectValue(value);
+  const protocols = objectValue(item.protocols);
+  return {
+    accountId: expectedId,
+    enabled: item.accountId === expectedId && item.enabled === true,
+    protocols: {
+      hy2: sanitizeProtocolUsage(protocols.hy2),
+      vless: sanitizeProtocolUsage(protocols.vless),
+    },
+    totalMonitoredBytes: nonnegativeInteger(item.totalMonitoredBytes),
+    knownMonitoredBytes: nonnegativeInteger(item.knownMonitoredBytes),
+    totalsComplete: item.totalsComplete === true,
+    windowBytes: nonnegativeInteger(item.windowBytes),
+    windowComplete: item.windowComplete === true,
+  };
+}
+
+function sanitizeSource(value: unknown): Record<string, unknown> {
+  const item = objectValue(value);
+  const status = item.status === 'ok' || item.status === 'stale' || item.status === 'error' || item.status === 'unknown'
+    ? item.status
+    : 'unknown';
+  const errorCode = item.errorCode === 'unreachable' || item.errorCode === 'invalid_response' || item.errorCode === 'timeout' || item.errorCode === 'unavailable'
+    ? item.errorCode
+    : null;
+  return {
+    status,
+    checkedAt: safeIso(item.checkedAt),
+    lastSuccessfulAt: safeIso(item.lastSuccessfulAt),
+    lastErrorAt: safeIso(item.lastErrorAt),
+    errorCode,
+  };
+}
+
+function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot {
+  const item = objectValue(value);
+  if (!Array.isArray(item.accounts)) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is invalid');
+  const rows = new Map<VpsSubscriptionAccountId, unknown>();
+  for (const row of item.accounts) {
+    const id = safeAccountId(objectValue(row).accountId);
+    if (id && id !== 'legacy') rows.set(id, row);
+  }
+  const labmemIds = VPS_SUBSCRIPTION_ACCOUNT_IDS.filter((id) => id !== 'legacy');
+  if (rows.size !== labmemIds.length) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
+  const legacy = sanitizeSubscriptionAccount(item.legacy, 'legacy');
+  if (!legacy.enabled) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
+  const sourcesIn = objectValue(item.sources);
+  const sources = {
+    provider: sanitizeSource(sourcesIn.provider),
+    hysteria_traffic: sanitizeSource(sourcesIn.hysteria_traffic),
+    hysteria_online: sanitizeSource(sourcesIn.hysteria_online),
+    xray: sanitizeSource(sourcesIn.xray),
+    xray_online: sanitizeSource(sourcesIn.xray_online),
+  };
+  const totalsIn = objectValue(item.protocolTotals);
+  const protocolTotals = {
+    hy2: {
+      knownBytes: nonnegativeInteger(objectValue(totalsIn.hy2).knownBytes),
+      observedAccounts: nonnegativeInteger(objectValue(totalsIn.hy2).observedAccounts),
+      complete: objectValue(totalsIn.hy2).complete === true,
+      source: sources.hysteria_traffic,
+    },
+    vless: {
+      knownBytes: nonnegativeInteger(objectValue(totalsIn.vless).knownBytes),
+      observedAccounts: nonnegativeInteger(objectValue(totalsIn.vless).observedAccounts),
+      complete: objectValue(totalsIn.vless).complete === true,
+      source: sources.xray,
+    },
+  };
+  const providerIn = objectValue(item.provider);
+  const knownProxyAccounted = nonnegativeInteger(item.knownProxyAccountedBytes);
+  const reconciliationIn = objectValue(item.reconciliation);
+  const reconciliationStatus = reconciliationIn.status === 'calibrated' ? 'calibrated' : 'uncalibrated';
+  const providerDelta = nonnegativeInteger(providerIn.deltaSinceMonitoringStartBytes);
+  const proxyAccounted = nonnegativeInteger(item.proxyAccountedBytes);
+  const windowIn = objectValue(item.reportWindow);
+  const topIn = objectValue(windowIn.topAccount);
+  const topAccountId = safeAccountId(topIn.accountId);
+  return {
+    generatedAt: safeIso(item.generatedAt),
+    monitoringStartedAt: safeIso(item.monitoringStartedAt),
+    accounts: labmemIds.map((id) => sanitizeSubscriptionAccount(rows.get(id), id)),
+    legacy,
+    protocolTotals,
+    knownProxyAccountedBytes: knownProxyAccounted,
+    proxyAccountedBytes: proxyAccounted,
+    proxyAccountedComplete: item.proxyAccountedComplete === true,
+    sources,
+    reportWindow: {
+      seconds: nonnegativeInteger(windowIn.seconds),
+      startAt: safeIso(windowIn.startAt),
+      endAt: safeIso(windowIn.endAt),
+      topAccount: topAccountId && nonnegativeInteger(topIn.windowBytes) !== null
+        ? { accountId: topAccountId, windowBytes: nonnegativeInteger(topIn.windowBytes)! }
+        : null,
+    },
+    provider: {
+      baselineCounterBytes: nonnegativeInteger(providerIn.baselineCounterBytes),
+      lastCounterBytes: nonnegativeInteger(providerIn.lastCounterBytes),
+      deltaSinceMonitoringStartBytes: providerDelta,
+      totalBytes: nonnegativeInteger(providerIn.totalBytes),
+      resetAt: safeIso(providerIn.resetAt),
+      sampledAt: safeIso(providerIn.sampledAt),
+    },
+    reconciliation: {
+      status: reconciliationStatus,
+      providerDeltaBytes: providerDelta,
+      proxyAccountedBytes: proxyAccounted,
+      gapBytes: reconciliationStatus === 'calibrated' ? nonnegativeInteger(reconciliationIn.gapBytes) : null,
+    },
+  };
+}
+
+export function parseVpsSubscriptionProbe(raw: string, checkedAt = new Date().toISOString()): unknown {
+  const encoded = fieldsFromProbe(raw).get('ACCOUNTING_SNAPSHOT_JSON');
+  if (!encoded || encoded.length > 64_000) {
+    return {
+      status: 'stale', source: 'ssh', checkedAt,
+      error: { code: 'ACCOUNTING_SNAPSHOT_UNAVAILABLE', message: 'VPS subscription accounting snapshot is unavailable' },
+      data: null,
+    };
+  }
+  let snapshot: VpsSubscriptionSnapshot;
+  try {
+    snapshot = sanitizedSubscriptionSnapshot(JSON.parse(encoded) as unknown);
+  } catch (error) {
+    return {
+      status: 'error', source: 'ssh', checkedAt,
+      error: error instanceof VpsReadOnlyError ? { code: error.code, message: error.message } : { code: 'ACCOUNTING_INVALID_RESPONSE', message: 'VPS accounting snapshot is invalid' },
+      data: null,
+    };
+  }
+  const requiredStatuses = [
+    snapshot.sources.provider.status,
+    snapshot.sources.hysteria_traffic.status,
+    snapshot.sources.hysteria_online.status,
+    snapshot.sources.xray.status,
+    snapshot.sources.xray_online.status,
+  ];
+  const accountRows = [...snapshot.accounts, snapshot.legacy];
+  const accountingIncomplete = !snapshot.proxyAccountedComplete
+    || !snapshot.protocolTotals.hy2.complete
+    || !snapshot.protocolTotals.vless.complete
+    || accountRows.some((account) => !account.totalsComplete || !account.windowComplete);
+  const hasUsableSource = requiredStatuses.some((status) => status === 'ok' || status === 'stale');
+  const sourceStatus = !snapshot.monitoringStartedAt && snapshot.sources.provider.status !== 'ok'
+    ? 'partial'
+    : requiredStatuses.some((value) => value === 'error' || value === 'unknown')
+      ? (hasUsableSource ? 'partial' : 'error')
+      : requiredStatuses.includes('stale') ? 'stale' : 'ok';
+  const status = sourceStatus === 'ok' && accountingIncomplete ? 'partial' : sourceStatus;
+  return { status, source: 'ssh', checkedAt, data: snapshot };
+}
+
+export function assertVpsSubscriptionOwnerContext(context: OpenClawPluginToolContext): void {
+  if (!isTrustedOwnerContext(context) || isGroupContext(context)) {
+    throw new Error('VPS subscription details require a direct owner or scheduled report context');
+  }
+}
+
+export async function getVpsSubscriptionOverview(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
+  assertVpsSubscriptionOwnerContext(context);
+  const checkedAt = new Date().toISOString();
+  try {
+    return parseVpsSubscriptionProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt);
+  } catch (error) {
+    return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh'), data: null } satisfies VpsEnvelope & { data: null };
+  }
+}
+
+export async function getVpsSubscriptionDetail(
+  config: AmadeusConfig,
+  accountId: VpsSubscriptionAccountId,
+  context: OpenClawPluginToolContext,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  assertVpsSubscriptionOwnerContext(context);
+  if (!(VPS_SUBSCRIPTION_ACCOUNT_IDS as readonly string[]).includes(accountId)) {
+    return { status: 'error', source: 'ssh', checkedAt: new Date().toISOString(), error: { code: 'ACCOUNT_ID_INVALID', message: 'Account ID is not supported' } };
+  }
+  const overview = await getVpsSubscriptionOverview(config, context, signal) as { status?: string; checkedAt?: string; data?: VpsSubscriptionSnapshot | null; error?: VpsError };
+  if (!overview.data) return overview;
+  const account = accountId === 'legacy' ? overview.data.legacy : overview.data.accounts.find((entry) => entry.accountId === accountId);
+  return {
+    status: overview.status,
+    source: 'ssh',
+    checkedAt: overview.checkedAt,
+    data: {
+      monitoringStartedAt: overview.data.monitoringStartedAt,
+      account,
+      sources: overview.data.sources,
+      reportWindow: overview.data.reportWindow,
+      reconciliationStatus: overview.data.reconciliation.status,
+    },
+  };
 }

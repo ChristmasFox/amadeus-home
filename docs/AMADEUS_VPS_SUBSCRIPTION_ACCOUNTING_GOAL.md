@@ -2,7 +2,43 @@
 
 Date: 2026-10-08 (Asia/Shanghai)
 
-Status: PLANNED_NOT_APPLIED
+Status: PHASE_0_AUDITED; PHASE_1_SOURCE_IMPLEMENTED; PHASE_2_APPLIED; PHASE_3_CONTROLLED_ACCOUNTING_PASS_RECONCILIATION_UNCALIBRATED; PHASE_4_SOURCE_VERIFIED_DEPLOY_PENDING; PHASE_5_ACCEPTANCE_PENDING
+
+## Apply record — 2026-10-08
+
+Phase 2 is live on `amadeus-gateway`. A protected pre-change checkpoint is kept
+outside Git at
+`/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`;
+it includes the secret-bearing rollback archive and the pre-change Xray binary.
+The legacy token, HY2 credential, and VLESS UUID were imported unchanged. Five
+independent Labmem identities and their four-format subscriptions were created
+on the VPS and have not been distributed.
+
+The accounting service runs under its dedicated system identity. HY2 HTTP auth,
+HY2 traffic/online stats, and Xray StatsService are loopback-only. Xray was
+upgraded to official release 26.9.30 after verifying its published SHA-256.
+The six identities' four formats returned HTTP 200 on both subscription ports
+(48/48); the legacy QX body remained byte-identical. Legacy HY2 and VLESS
+connectivity checks passed. The fixed read-only probe returns a sanitized
+snapshot and the accounting database remains inaccessible to the probe user.
+
+Provider T0 is `2026-10-08T04:58:07Z`. At snapshot time
+`2026-10-08T05:10:46Z`, provider and all four traffic/online sources were
+healthy, all six account baselines were covered, and proxy-accounted totals
+were complete. Controlled Labmem001 transfers confirmed that each protocol's
+own counters increased while other Labmem accounts remained unchanged. HY2
+`tx` is recorded as client upload and `rx` as client download. A guarded,
+idempotent migration set the verified legacy VLESS raw counters (814 upload /
+4,320 download bytes) as the T0 baseline because no VLESS delta occurred after
+T0; this preserves zero monitored legacy VLESS usage without counting prior
+traffic.
+
+Reconciliation remains `uncalibrated`. Provider growth and proxy-accounted
+traffic differ materially during the observed interval, so the controlled
+payload checks establish protocol attribution and direction only; they do not
+establish a reliable provider ratio or anomaly threshold. No gap or anomaly is
+reported. Phase 4 source checks pass; OpenClaw deployment, existing Cron job
+time update, and owner-report acceptance remain pending.
 
 ## 0. Operator decision / hard migration boundary
 
@@ -106,11 +142,16 @@ Never imply that pre-cutover historical traffic can be reconstructed per Labmem 
 
 ### 4.1 Runtime-only subscription account store
 
-Add a lightweight SQLite store on the VPS:
+Add a lightweight SQLite store on the VPS, separate from the active Caddy responder state directory:
 
-/var/lib/amadeus-gateway/subscription-accounts.sqlite
+/var/lib/amadeus-accounting/subscription-accounts.sqlite
 
 Use a dedicated service identity and strict filesystem permissions. The database is runtime state and must never enter Git.
+
+Place accounting-specific environment and secret files under `/etc/amadeus-accounting` with
+`root:amadeus-accounting` permissions. Keep the existing `/etc/amadeus-gateway` permissions
+unchanged: the current Caddy subscription responder runs as `caddy` and reads its KiwiVM
+credential file there. Give the collector a separately protected copy of that KiwiVM credential.
 
 The operator explicitly requested the generated tokens and protocol credentials to be persisted. The database therefore stores the Labmem account records and their generated subscription token, HY2 secret, and VLESS UUID. This is allowed only inside the protected runtime database.
 
@@ -192,11 +233,12 @@ Assign stable non-secret emails/tags:
 - Labmem004.vless
 - Labmem005.vless
 
-Enable Xray stats, policy user uplink/downlink, and loopback StatsService only.
+Enable Xray stats, policy user uplink/downlink/online, and loopback StatsService only.
 
 Do not expose Xray gRPC StatsService publicly.
 
 The collector maps LabmemNNN.vless back to account_id LabmemNNN and persists protocol-specific deltas.
+It stores only Xray's per-user active source-IP count, not the IP list; this count is not a physical-device count.
 
 The current VLESS listener, Reality target, flow, TLS/Reality material, routing, and existing legacy client behavior remain otherwise unchanged.
 
@@ -242,6 +284,8 @@ Counter rules:
 
 - Current >= previous: delta = current - previous.
 - Current < previous or generation changed: treat as source restart/reset; delta starts from the new counter without creating a negative value.
+- Keep all five generated Labmem subscription URLs private until the provider T0 baseline is captured. Because these identities are new and unused before T0, their first observed absolute counters can be attributed from T0 if the protocol API omitted their initial zero entries.
+- Legacy counters may include pre-T0 traffic. Baseline each legacy protocol at T0; if a legacy counter is first observed without an established T0 baseline, keep that protocol total unknown rather than assigning its absolute counter to this monitoring period.
 - Never fabricate missing protocol values as zero.
 - If one source fails, persist successful sources and mark the failed source stale/error.
 - Account totals are the sum of the account's protocol deltas only for intervals that have real samples.
@@ -254,7 +298,7 @@ Do not give the HomeLab OpenClaw container direct access to the SQLite database 
 
 The VPS accounting service atomically writes a sanitized snapshot, for example:
 
-/var/lib/amadeus-gateway/subscription-usage-public.json
+/var/lib/amadeus-accounting/subscription-usage-public.json
 
 The snapshot contains only:
 
@@ -333,10 +377,14 @@ No direct WhatsApp API call and no second sender.
 
 Target schedule:
 
-- morning: 09:00 Asia/Shanghai;
-- evening: 21:00 Asia/Shanghai.
+- morning: 09:30 Asia/Shanghai;
+- evening: 21:30 Asia/Shanghai.
 
-If production already has equivalent VPS report schedules, update them rather than create duplicates.
+The 2026-10-08 read-only runtime audit found exactly one existing morning job at
+09:30 and one existing evening job at 23:00 Asia/Shanghai. Reuse those two
+named jobs and edit their existing IDs in place; the evening expression changes
+to 21:30. The source now refuses to proceed if a target name matches multiple
+jobs, so deployment cannot silently leave a duplicate behind.
 
 Each scheduled report must include:
 
@@ -428,6 +476,9 @@ No production credential is changed in this phase.
 
 Requires explicit apply.
 
+`accounting_cli.py` defaults to a no-write dry-run; each database, secret, candidate, or
+subscription-file write requires its explicit `--apply` option.
+
 Create protected backups of:
 
 - /etc/hysteria/config.yaml
@@ -444,16 +495,13 @@ Then:
 3. Generate Labmem001-Labmem005 token/HY2/VLESS credentials on the VPS.
 4. Persist the five account records in SQLite.
 5. Generate five new subscription directories.
+   Keep these URLs private and undistributed until the collector captures the provider T0 baseline.
 6. Validate all generated files without exposing credentials in command output.
-7. Enable loopback Hysteria HTTP auth + Traffic Stats while preserving the legacy credential mapping.
-8. Restart Hysteria only after config validation/checkpoint.
-9. Verify an existing legacy HY2 client still works.
-10. Add the five VLESS clients and legacy email tag/stats configuration.
-11. xray run -test before restart/reload.
-12. Verify existing legacy VLESS still works.
-13. Update/validate/reload Caddy only as needed for the new token paths.
-14. Confirm legacy links still return the same usable credentials and five new account links return 200.
-15. Start collector and capture T0 provider baseline.
+7. Start the accounting service in auth-only mode so Hysteria can use the loopback HTTP auth endpoint without sampling an incomplete source set.
+8. Enable loopback Hysteria HTTP auth + Traffic Stats while preserving the legacy credential mapping. Restart Hysteria only after config validation/checkpoint, then verify an existing legacy HY2 client still works.
+9. Add the five VLESS clients and legacy email tag/stats configuration. Run `xray run -test` before restart/reload, then verify existing legacy VLESS still works.
+10. Update/validate/reload Caddy only as needed for the new token paths. Confirm legacy links still work and the five new account links return 200.
+11. Enable the collector only after HY2 and VLESS stats sources are both healthy; its first provider sample records T0 before any Labmem URLs are distributed.
 
 Any legacy-client failure triggers rollback before proceeding.
 
@@ -483,7 +531,7 @@ Verify manual queries:
 - legacy usage;
 - stale/error behavior.
 
-Update or create the two scheduled owner reports at 09:00 and 21:00 Asia/Shanghai without creating duplicate jobs.
+Update or create the two scheduled owner reports at 09:30 and 21:30 Asia/Shanghai without creating duplicate jobs.
 
 Use the existing owner outbox and WhatsApp owner target.
 
@@ -573,7 +621,7 @@ For runtime apply additionally require:
 - real owner WhatsApp report acceptance;
 - dated protected checkpoint and rollback evidence.
 
-Do not bump version or deploy HomeLab/OpenClaw merely because this planning document exists. Actual release/apply requires the normal explicit authorization.
+Do not bump version or deploy HomeLab/OpenClaw merely because this planning document exists. Actual release/apply requires the normal explicit authorization; the operator authorized this Goal's Apply on 2026-10-08.
 
 ## 13. Definition of done
 

@@ -716,19 +716,61 @@ orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js chan
 
 ensure_cron() {
   local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
-  local existing_id
-  existing_id="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --json \
-    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print(next((x.get("id", "") for x in v.get("jobs",[]) if x.get("name")==n), ""))' "$name")"
-  if [[ -z "$existing_id" ]]; then
+  local matching_ids existing_id
+  matching_ids="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print("\n".join(str(x.get("id", "")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")))' "$name")"
+  if [[ -z "$matching_ids" ]]; then
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
       --name "$name" --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact \
       --declaration-key "amadeus-$name-v1" --json >/dev/null
   else
+    local -a matching_id_list
+    mapfile -t matching_id_list <<< "$matching_ids"
+    if ((${#matching_id_list[@]} != 1)); then
+      fail "Expected one existing OpenClaw cron job named '$name'; found ${#matching_id_list[@]}. Resolve duplicates before apply."
+    fi
+    existing_id="${matching_id_list[0]}"
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
       --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
   fi
+}
+edit_existing_cron() {
+  local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
+  local matching_ids existing_id
+  matching_ids="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print("\n".join(str(x.get("id", "")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")))' "$name")"
+  [[ -n "$matching_ids" ]] || fail "Expected existing OpenClaw cron job named '$name'; refusing to create a replacement."
+  local -a matching_id_list
+  mapfile -t matching_id_list <<< "$matching_ids"
+  if ((${#matching_id_list[@]} != 1)); then
+    fail "Expected one existing OpenClaw cron job named '$name'; found ${#matching_id_list[@]}. Resolve duplicates before apply."
+  fi
+  existing_id="${matching_id_list[0]}"
+  orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
+    --cron "$expression" --tz "$timezone" --session isolated --agent main \
+    --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
+}
+verify_cron() {
+  local name="$1" expression="$2" timezone="${3:-Asia/Shanghai}"
+  orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
+    | python3 -c '
+import json,sys
+name, expression, timezone = sys.argv[1:]
+jobs = json.load(sys.stdin).get("jobs", [])
+matches = [job for job in jobs if job.get("name") == name]
+if len(matches) != 1:
+    raise SystemExit(f"expected exactly one {name} job; found {len(matches)}")
+job = matches[0]
+schedule = job.get("schedule") or {}
+delivery = job.get("delivery") or {}
+if job.get("enabled") is not True or schedule.get("kind") != "cron" or schedule.get("expr") != expression or schedule.get("tz") != timezone:
+    raise SystemExit(f"{name} schedule or enabled state does not match the deployment target")
+if delivery.get("mode") != "none":
+    raise SystemExit(f"{name} must use the existing owner outbox instead of cron direct delivery")
+print("CRON_TARGET=passed")
+' "$name" "$expression" "$timezone"
 }
 remove_cron() {
   local name="$1" existing_id
@@ -740,8 +782,10 @@ remove_cron() {
 }
 remove_cron amadeus-briefing-morning
 remove_cron amadeus-briefing-evening
-ensure_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晨间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_morning、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:morning、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:morning，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
-ensure_cron amadeus-vps-evening '0 23 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services；根据返回事实生成简洁中文 VPS 晚间报告，流量段单独输出十格 █/░ 与 usedPercent，unknown 必须保留为未知。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_evening、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:evening、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:evening，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_notify_owner'
+edit_existing_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services、amadeus_vps_subscription_overview；根据返回事实生成简洁中文 VPS 晨间报告，流量段单独输出十格 █/░ 与 usedPercent，并包含套餐已用/总量/剩余/重置时间、provider 上次成功采样增量、Labmem001-Labmem005 自 T0 起的 monitored 总量、非零 legacy 用量、可比较时的最近 12 小时增长与用量最高账户、来源 freshness/degraded 状态。providerDelta、proxyAccounted 与整机套餐分别陈述；reconciliation=uncalibrated 时明确关系未知，不计算差值或声称异常。所有 unknown/stale/error 必须如实保留，不得补零或推测。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_morning、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:morning、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:morning，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_vps_subscription_overview amadeus_notify_owner'
+edit_existing_cron amadeus-vps-evening '30 21 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services、amadeus_vps_subscription_overview；根据返回事实生成简洁中文 VPS 晚间报告，流量段单独输出十格 █/░ 与 usedPercent，并包含套餐已用/总量/剩余/重置时间、provider 上次成功采样增量、Labmem001-Labmem005 自 T0 起的 monitored 总量、非零 legacy 用量、可比较时的最近 12 小时增长与用量最高账户、来源 freshness/degraded 状态。providerDelta、proxyAccounted 与整机套餐分别陈述；reconciliation=uncalibrated 时明确关系未知，不计算差值或声称异常。所有 unknown/stale/error 必须如实保留，不得补零或推测。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_evening、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:evening、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:evening，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_vps_subscription_overview amadeus_notify_owner'
+verify_cron amadeus-vps-morning '30 9 * * *' Asia/Shanghai
+verify_cron amadeus-vps-evening '30 21 * * *' Asia/Shanghai
 
 ensure_cron amadeus-mac-host-morning '30 9 * * *' '调用 amadeus_homelab_status，参数 notifyOwner=true、reportPeriod=morning。报告必须以 MacHostAgent 的真实 M204 macOS host 数据为准，包含当前 CPU 与当天 avg/p95/max/maxAt、Memory Pressure、Swap、功耗、Macintosh HD、Avalon 容量/挂载、异常、关键服务和独立 OpenWrt 状态；host telemetry unavailable 必须明确保留。使用正式 eventKey=mac-host-report:当天日期:morning，source=mac-host-report，固定 WhatsApp owner outbox/delivery；手动或补跑使用独立 manual key，不得发送到 Telegram、KOOK 或群聊。' 'amadeus_homelab_status'
 ensure_cron amadeus-mac-host-evening '0 23 * * *' '调用 amadeus_homelab_status，参数 notifyOwner=true、reportPeriod=evening。报告必须以 MacHostAgent 的真实 M204 macOS host 数据为准，包含当日历史聚合、Memory Pressure、Swap、功耗、Macintosh HD、Avalon 容量/挂载、异常、关键服务和独立 OpenWrt 状态；unknown/unavailable 不得写成健康。使用正式 eventKey=mac-host-report:当天日期:evening，source=mac-host-report，固定 WhatsApp owner outbox/delivery；手动或补跑使用独立 manual key，不得发送到 Telegram、KOOK 或群聊。' 'amadeus_homelab_status'

@@ -8,9 +8,8 @@ description: Use the bounded read-only KiwiVM and SSH tools for VPS facts, traff
 OpenClaw chooses these tools from the user's meaning. Do not create a keyword
 router, command parser, generic shell bridge, or control fallback.
 
-All five VPS tools are read-only and accept an empty structured object. They do
-not accept an endpoint, shell command, service name, credential, channel, or
-recipient:
+The VPS facts and account-usage tools are read-only. They do not accept an
+endpoint, shell command, SQL, credential, channel, or recipient:
 
 - `amadeus_vps_service_info`: fixed KiwiVM service/plan facts.
 - `amadeus_vps_live_status`: fixed KiwiVM live state, mapped disk facts, and CPU
@@ -21,12 +20,35 @@ recipient:
 - `amadeus_vps_system_status`: fixed SSH probe for uptime, load average,
   memory, and `/` filesystem usage.
 - `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, Hysteria2, and frps.
+- `amadeus_vps_subscription_overview`: empty input; returns five Labmem
+  identities, the separate legacy aggregate, protocol totals, a 12-hour sample
+  window when known, freshness, and the accounting start time.
+- `amadeus_vps_subscription_detail`: requires one `accountId` from
+  `Labmem001`–`Labmem005` or `legacy`; returns one account's monitored protocol
+  totals and known activity facts.
 
-Select one or combine several tools according to the request. For example,
-traffic questions use `amadeus_vps_usage`; “服务器正常吗” normally combines
-live status, system status, and services; “Xray 挂了吗” uses the services tool.
+Subscription usage is owner-private. The plugin enforces a trusted direct-owner
+context or scheduled-report context and rejects group sessions, including when
+the owner is speaking in a group. The tools are also absent from group allowlists.
+
+Select one or combine tools according to the request. Whole-plan traffic
+questions use `amadeus_vps_usage` for KiwiVM truth and its progress bar, plus
+`amadeus_vps_subscription_overview` for the T0-forward account breakdown.
+Account-specific questions use `amadeus_vps_subscription_detail`; explicit HY2
+versus VLESS questions use the same tool's protocol split. Only call the
+reported `totalMonitoredBytes` a total when `totalsComplete` is true. Otherwise
+say the complete total is unknown and label `knownMonitoredBytes` as observed
+traffic so far. Treat `knownProxyAccountedBytes` the same way when
+`proxyAccountedComplete` is false; do not present it as a complete proxy total.
+“现在谁在线” uses each protocol's overview count only when `onlineStatus` is
+`ok`. HY2 reports connected client instances; VLESS reports Xray's active
+source-IP count. Neither count proves physical-device ownership, and the
+snapshot never includes client IP addresses.
+“服务器正常吗” normally combines live
+status, system status, and services; “Xray 挂了吗” uses the services tool.
 Do not call a write action: restart, stop, start, reinstall, password reset,
-or arbitrary shell execution are outside this capability.
+or arbitrary shell execution are outside this capability. Account tools are
+not added to WhatsApp/Telegram group or non-owner DM tool profiles.
 
 Treat every result's status and source as factual. `stale`, `partial`,
 `degraded`, `error`, `unknown`, inactive services, offline/stopped state, API
@@ -46,12 +68,28 @@ below 1% (for example `░░░░░░░░░░ 0.9%`).
 
 Scheduled morning/evening VPS reports must call all of
 `amadeus_vps_live_status`, `amadeus_vps_usage`, `amadeus_vps_system_status`,
-and `amadeus_vps_services`, compose a concise Chinese report from returned
-facts, include the mandatory ten-cell traffic line, explicitly highlight every anomaly, and then call
-`amadeus_notify_owner` with a stable report event key such as
-`vps-report:2026-09-18:evening`. A manually triggered cron run must never use
-the scheduled key; use `vps-report:manual:<current ISO time>:evening` instead.
-The plugin also isolates an accidentally reused scheduled key at the tool
-boundary. That notifier has one fixed destination: the WhatsApp owner DM. Do
-not use Telegram, KOOK, a group, cron fallback delivery, or an invented
-healthy status.
+`amadeus_vps_services`, and `amadeus_vps_subscription_overview`. Compose a
+concise Chinese report from returned facts. Include the mandatory ten-cell
+whole-plan line, used/total/remaining/reset time when known, provider growth
+since the prior successful sample, each Labmem account's monitored total from
+`monitoringStartedAt`, and the legacy total only when non-zero. Include the
+12-hour account growth window and top account only when the returned values are
+complete and comparable. Preserve unknown protocol counters as unknown; do
+not turn missing rows or stale/error sources into zero. State clearly that
+per-account attribution begins at the returned T0 and does not reconstruct
+earlier current-cycle usage. A monitored total is incomplete while its source
+or account counters are missing; never infer zero from a missing row.
+
+Keep provider growth since T0, proxy-accounted totals, and KiwiVM's current
+whole-plan quota as three distinct facts. While reconciliation is
+`uncalibrated`, say its relationship is unknown and do not calculate a gap or
+claim an anomaly. Show HY2/VLESS splits in the normal report only when useful;
+include them for an explicit query or when a calibrated anomaly requires
+explanation. Highlight source staleness/degradation and report an unknown
+reset time as unavailable. Then call `amadeus_notify_owner` with the existing
+stable event key such as `vps-report:2026-09-18:evening`. A manually triggered
+cron run must never use the scheduled key; use
+`vps-report:manual:<current ISO time>:evening` instead. The plugin also
+isolates an accidentally reused scheduled key at the tool boundary. That
+notifier has one fixed destination: the WhatsApp owner DM. Do not use Telegram,
+KOOK, a group, cron fallback delivery, or an invented healthy status.

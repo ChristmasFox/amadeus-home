@@ -6,6 +6,7 @@ import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plug
 import { identityContextFromOpenClaw } from '../src/identity.js';
 import entry from '../src/index.js';
 import { macHostStatus } from '../src/machost.js';
+import { assertVpsSubscriptionOwnerContext, parseVpsSubscriptionProbe } from '../src/vps.js';
 import { isMacHostAgentHttpProbe, isMacHostShellProbe } from '../src/capabilities/macos-host/tool-guard.js';
 import { WHATSAPP_VOICE_RUNS_GLOBAL } from '../src/voice-reply-prompt.js';
 
@@ -30,6 +31,8 @@ test('Amadeus manifest exposes the native Identity contract', async () => {
     'amadeus_vps_usage',
     'amadeus_vps_system_status',
     'amadeus_vps_services',
+    'amadeus_vps_subscription_overview',
+    'amadeus_vps_subscription_detail',
   ]) assert.equal(tools.has(name), true, `missing VPS manifest tool: ${name}`);
   for (const name of ['amadeus_market_overview', 'amadeus_market_quote', 'amadeus_market_intraday', 'amadeus_market_session', 'amadeus_market_movers', 'amadeus_market_constituents', 'amadeus_macos_host_status', 'amadeus_macos_host_processes']) assert.equal(tools.has(name), true, `missing market/host manifest tool: ${name}`);
   assert.equal(tools.has('amadeus_image_upscale'), true, 'missing image upscale manifest tool');
@@ -149,4 +152,39 @@ test('host telemetry blocks guest shell and raw HTTP substitutes', () => {
   assert.equal(isMacHostShellProbe('git status --short'), false);
   assert.equal(isMacHostAgentHttpProbe('http://host.docker.internal:18791/v1/status'), true);
   assert.equal(isMacHostAgentHttpProbe('http://product-radar:5315/health'), false);
+});
+
+test('subscription accounting tools reject non-owners and every group session', () => {
+  assert.throws(() => assertVpsSubscriptionOwnerContext({ senderIsOwner: false, sessionKey: 'agent:main:whatsapp:secondary:direct:+8610000000000' } as never), /direct owner or scheduled report/u);
+  assert.throws(() => assertVpsSubscriptionOwnerContext({ senderIsOwner: true, sessionKey: 'agent:main:group:42', nativeChannelId: '42@g.us' } as never), /direct owner or scheduled report/u);
+  assert.doesNotThrow(() => assertVpsSubscriptionOwnerContext({ senderIsOwner: true, sessionKey: 'agent:main:whatsapp:secondary:direct:+8613800000000' } as never));
+  assert.doesNotThrow(() => assertVpsSubscriptionOwnerContext({ senderIsOwner: false, sessionKey: 'cron:amadeus-vps-morning' } as never));
+});
+
+test('subscription probe parsing keeps unknowns and drops credential-shaped fields', () => {
+  const protocol = {
+    uploadBytes: null, downloadBytes: null, totalBytes: null,
+    lastCounterSampleAt: null, status: 'unknown', onlineCount: null, onlineCountKind: null,
+    onlineStatus: 'unknown', onlineSampledAt: null, windowBytes: null, windowSampleCount: 0,
+  };
+  const account = (accountId: string) => ({
+    accountId, enabled: true, subscriptionToken: 'must-not-leak', hy2Secret: 'must-not-leak',
+    protocols: { hy2: protocol, vless: protocol }, totalMonitoredBytes: null,
+    knownMonitoredBytes: 0, totalsComplete: false, windowBytes: null, windowComplete: false,
+  });
+  const source = { status: 'ok', checkedAt: '2026-10-08T04:00:00Z', lastSuccessfulAt: '2026-10-08T04:00:00Z', lastErrorAt: null };
+  const snapshot = {
+    generatedAt: '2026-10-08T04:00:00Z', monitoringStartedAt: '2026-10-08T04:00:00Z',
+    accounts: ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005'].map(account),
+    legacy: account('legacy'), protocolTotals: { hy2: {}, vless: {} },
+    knownProxyAccountedBytes: 0, proxyAccountedBytes: null, proxyAccountedComplete: false,
+    sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source },
+    reportWindow: {}, provider: {}, reconciliation: { status: 'uncalibrated' },
+  };
+  const parsed = parseVpsSubscriptionProbe(`ACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(snapshot)}\n`) as { status: string; data: Record<string, unknown> };
+  assert.equal(parsed.status, 'partial');
+  assert.equal(parsed.data.proxyAccountedBytes, null);
+  assert.equal(parsed.data.proxyAccountedComplete, false);
+  assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).xray_online?.status, 'ok');
+  assert.equal(JSON.stringify(parsed).includes('must-not-leak'), false);
 });

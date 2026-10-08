@@ -1,0 +1,33 @@
+[Unit]
+Description=Amadeus Gateway subscription auth and traffic accounting
+After=network-online.target hysteria-server.service xray.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=amadeus-accounting
+Group=amadeus-accounting
+SupplementaryGroups=amadeus-accounting-snapshot
+WorkingDirectory=/usr/local/libexec/amadeus-gateway-accounting
+EnvironmentFile=/etc/amadeus-accounting/accounting.env
+ExecStart=/usr/bin/python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_service.py
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/amadeus-accounting
+ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=128M
+CPUQuota=20%
+TasksMax=16
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=multi-user.target
