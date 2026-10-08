@@ -1,8 +1,45 @@
-# Current Task — GPT-only image route cutover
+# Current Task — Public Qwen Image Lab deployment
 
-Date: 2026-10-07 (Asia/Shanghai).
+Date: 2026-10-08 (Asia/Shanghai).
 
-Completed operation: disabled the OpenClaw-owned Qwen fallback and deployed Amadeus 1.9.7 with GPT Image as the only production image route.
+Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
+
+Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
+
+The operator explicitly pre-authorized the scoped Git/macOS/frpc/frps/Caddy/DNS-if-needed/runtime-secret/restart/smoke mutations in the active Goal and asked execution to continue without routine confirmation until `https://image.nyannyan.top` is deployed and usable. This authorization does not extend to SSH-auth/firewall changes, unrelated DNS/services, credential rotation, or other out-of-scope destructive operations.
+
+## Active Image Lab target — 2026-10-08
+
+The current LAN debug surface is being replaced by a deliberately small Image Lab:
+
+```text
+Mode:
+  Quality — base Qwen 16-step
+  Fast    — real Fun-Acc/PDD 4-step
+
+Resolution:
+  1024x1024
+  1024x768
+  768x1024
+
+Seed:
+  -1 random
+  >=0 fixed
+```
+
+No CFG/strength/sampler/cache/FA/mmap/model controls are exposed. Reference editing remains supported through Qwen3-VL + mmproj. The Image Lab path must not inject an edit strength below 1.0. Exactly one local `sd-server` may be resident; profile changes restart that single engine rather than keeping both profiles loaded.
+
+LAN/private direct access remains no-login. The exact public host `image.nyannyan.top` requires password-only application authentication using a runtime-only verifier; the operator-provided plaintext password must never enter Git, logs, Caddy, frp configs or checkpoints.
+
+Public topology remains the existing architecture:
+
+```text
+image.nyannyan.top -> VPS Caddy -> VPS frps -> HomeLab frpc -> macOS Image Lab :18798
+```
+
+Only the UI is public. Qwen bridge/engine ports remain loopback-only.
+
+Status: `PLANNED_AUTHORIZED_FOR_CONTINUOUS_APPLY`.
 
 ## Local Qwen image debug UI — 2026-10-07
 
