@@ -718,19 +718,14 @@ ensure_cron() {
   local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
   local matching_ids existing_id
   matching_ids="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
-    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print("\n".join(str(x.get("id", "")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")))' "$name")"
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); ids=[str(x.get("id")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")]; len(ids)>1 and sys.exit("duplicate cron names"); print(ids[0] if ids else "")' "$name")"
   if [[ -z "$matching_ids" ]]; then
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron add \
       --name "$name" --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact \
       --declaration-key "amadeus-$name-v1" --json >/dev/null
   else
-    local -a matching_id_list
-    mapfile -t matching_id_list <<< "$matching_ids"
-    if ((${#matching_id_list[@]} != 1)); then
-      fail "Expected one existing OpenClaw cron job named '$name'; found ${#matching_id_list[@]}. Resolve duplicates before apply."
-    fi
-    existing_id="${matching_id_list[0]}"
+    existing_id="$matching_ids"
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
       --cron "$expression" --tz "$timezone" --session isolated --agent main \
       --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
@@ -740,14 +735,9 @@ edit_existing_cron() {
   local name="$1" expression="$2" message="$3" tools="$4" timezone="${5:-Asia/Shanghai}"
   local matching_ids existing_id
   matching_ids="$(orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron list --all --json \
-    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); print("\n".join(str(x.get("id", "")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")))' "$name")"
+    | python3 -c 'import json,sys; n=sys.argv[1]; v=json.load(sys.stdin); ids=[str(x.get("id")) for x in v.get("jobs",[]) if x.get("name")==n and x.get("id")]; len(ids)!=1 and sys.exit("expected exactly one existing cron job"); print(ids[0])' "$name")"
   [[ -n "$matching_ids" ]] || fail "Expected existing OpenClaw cron job named '$name'; refusing to create a replacement."
-  local -a matching_id_list
-  mapfile -t matching_id_list <<< "$matching_ids"
-  if ((${#matching_id_list[@]} != 1)); then
-    fail "Expected one existing OpenClaw cron job named '$name'; found ${#matching_id_list[@]}. Resolve duplicates before apply."
-  fi
-  existing_id="${matching_id_list[0]}"
+  existing_id="$matching_ids"
   orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron edit "$existing_id" \
     --cron "$expression" --tz "$timezone" --session isolated --agent main \
     --message "$message" --no-deliver --tools "$tools" --exact --json >/dev/null
