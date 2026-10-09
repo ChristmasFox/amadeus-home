@@ -32,7 +32,7 @@ from accounting_cli import (
     render_subscription_files,
     render_xray_candidate,
 )
-from accounting_service import AccountingHTTPServer, ServiceConfig, SourceFailure, XRAY_USER_STATS_PATTERN, _counter_integer, _request_shutdown, parse_hysteria_online, parse_hysteria_traffic, parse_xray_online, parse_xray_online_version, parse_xray_stats, xray_online_not_found_is_zero
+from accounting_service import AuthFailureTracker, AccountingHTTPServer, ServiceConfig, SourceFailure, XRAY_USER_STATS_PATTERN, _counter_integer, _request_shutdown, parse_hysteria_client_addr, parse_hysteria_online, parse_hysteria_traffic, parse_xray_fallback_stats, parse_xray_online, parse_xray_online_version, parse_xray_stats, xray_online_not_found_is_zero
 from accounting_store import (
     ACCOUNT_IDS,
     INITIAL_ACCOUNT_IDS,
@@ -101,7 +101,7 @@ class AccountingStoreTests(unittest.TestCase):
             columns = {row["name"] for row in db.execute("PRAGMA table_info(counter_state)").fetchall()}
             version = db.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
         self.assertIn("baseline_sampled_at", columns)
-        self.assertEqual(version, "3")
+        self.assertEqual(version, "4")
 
     def test_m204_identity_is_created_once_and_legacy_hy2_auth_is_revoked(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
@@ -149,6 +149,40 @@ class AccountingStoreTests(unittest.TestCase):
         self.assertEqual(self.store.auth_account_id(str(labmem["hy2_secret"])), "Labmem003")
         self.assertIsNone(self.store.auth_account_id(str(labmem["hy2_secret"]) + "x"))
         self.assertIsNone(self.store.auth_account_id(""))
+
+    def test_reality_fallback_counters_persist_safe_reset_deltas_without_account_attribution(self) -> None:
+        self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.provision_m204(created_at=NOW)
+        self.store.disable_legacy(disabled_at="2026-10-08T04:01:00Z")
+        self.store.record_reality_fallback_sample(upload=10, download=20, generation="xray-a", sampled_at=NOW)
+        self.store.record_reality_fallback_sample(
+            upload=5, download=7, generation="xray-b", sampled_at="2026-10-08T04:01:00Z",
+        )
+        with self.store._connect() as db:
+            deltas = db.execute("SELECT upload_bytes,download_bytes,counter_reset FROM reality_fallback_deltas ORDER BY id").fetchall()
+        self.assertEqual([(row["upload_bytes"], row["download_bytes"], row["counter_reset"]) for row in deltas], [(10, 20, 0), (5, 7, 1)])
+        snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 2, tzinfo=timezone.utc), window_seconds=3600)
+        fallback = snapshot["security"]["realityFallback"]
+        self.assertEqual(fallback["totalBytes"], 42)
+        self.assertEqual(fallback["windowTotalBytes"], 42)
+        self.assertEqual(fallback["status"], "ok")
+        with self.store._connect() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM traffic_deltas").fetchone()[0], 0)
+
+    def test_security_event_store_keeps_only_minute_aggregates(self) -> None:
+        self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.provision_m204(created_at=NOW)
+        self.store.record_security_event("hy2_auth_failure", "2026-10-08T04:01:39Z")
+        self.store.record_security_event("hy2_auth_failure", "2026-10-08T04:01:52Z")
+        self.store.record_security_event("hy2_auth_rate_limited", "2026-10-08T04:02:02Z")
+        snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 3, tzinfo=timezone.utc))
+        auth = snapshot["security"]["hysteriaAuth"]
+        self.assertEqual(auth["authFailuresWindow"], 2)
+        self.assertEqual(auth["authRateLimitedWindow"], 1)
+        self.assertIsNone(auth["uniqueFailureSourcesWindowApproximate"])
+        with self.store._connect() as db:
+            rows = db.execute("SELECT bucket_start,event_kind,event_count FROM security_event_buckets ORDER BY bucket_start,event_kind").fetchall()
+        self.assertEqual([(row["event_kind"], row["event_count"]) for row in rows], [("hy2_auth_failure", 2), ("hy2_auth_rate_limited", 1)])
 
     def test_provider_and_protocol_counter_resets_add_new_generation_without_negative_deltas(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
@@ -509,6 +543,17 @@ class ParserAndAuthTests(unittest.TestCase):
         ]}
         self.assertEqual(parse_xray_stats(stats), {"legacy": (14, 25), "Labmem005": (5, 11), M204_ID: (2, 3)})
         self.assertEqual(parse_xray_stats({"stat": [{"name": "user>>>Labmem001.vless>>>traffic>>>uplink", "value": "1"}]}), {})
+        self.assertEqual(parse_xray_fallback_stats({"stat": [
+            {"name": "inbound>>>reality-fallback-gate>>>traffic>>>uplink", "value": "31"},
+            {"name": "inbound>>>reality-fallback-gate>>>traffic>>>downlink", "value": 47},
+            {"name": "inbound>>>vless-reality-in>>>traffic>>>uplink", "value": 999},
+        ]}), (31, 47))
+        with self.assertRaisesRegex(SourceFailure, "unavailable"):
+            parse_xray_fallback_stats({"stat": []})
+        self.assertEqual(parse_hysteria_client_addr("203.0.113.7:44321"), "203.0.113.7")
+        self.assertEqual(parse_hysteria_client_addr("[2001:db8::1]:44321"), "2001:db8::1")
+        for malformed in ("127.0.0.1", "2001:db8::1:443", "[not-an-ip]:443", "203.0.113.1:0", "203.0.113.1:abc"):
+            self.assertIsNone(parse_hysteria_client_addr(malformed))
         self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online", "value": 2}}, "Labmem001"), 2)
         self.assertEqual(parse_xray_online({"stat": {"name": "user>>>M204-Net-Core.vless>>>online", "value": 1}}, M204_ID), 1)
         self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online"}}, "Labmem001"), 0)
@@ -550,12 +595,57 @@ class ParserAndAuthTests(unittest.TestCase):
             self.assertEqual(config.db_path, "/var/lib/amadeus-accounting/subscription-accounts.sqlite")
             self.assertEqual(config.snapshot_path, "/var/lib/amadeus-accounting/subscription-usage-public.json")
 
+    def test_security_configuration_is_explicit_bounded_and_telemetry_first(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            config = ServiceConfig.from_env()
+        self.assertEqual(config.hy2_auth_fail_mode, "telemetry")
+        self.assertEqual(config.hy2_auth_fail_window_seconds, 900)
+        self.assertEqual(config.hy2_auth_fail_threshold, 120)
+        self.assertEqual(config.hy2_auth_fail_cooldown_seconds, 300)
+        self.assertEqual(config.hy2_auth_fail_max_tracked_sources, 4096)
+        self.assertEqual(config.reality_fallback_alert_bytes, 1024)
+        with patch.dict(os.environ, {"HY2_AUTH_FAIL_MODE": "block-all"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "HY2_AUTH_FAIL_MODE"):
+                ServiceConfig.from_env()
+        with patch.dict(os.environ, {"HY2_AUTH_FAIL_THRESHOLD": "0"}, clear=True):
+            with self.assertRaisesRegex(ValueError, "HY2_AUTH_FAIL_THRESHOLD"):
+                ServiceConfig.from_env()
+
+    def test_auth_failure_tracker_bounds_sources_expires_and_enforces_only_in_enforce_mode(self) -> None:
+        clock = [100.0]
+        tracker = AuthFailureTracker(
+            window_seconds=30, threshold=2, cooldown_seconds=10, max_tracked_sources=2,
+            mode="enforce", clock=lambda: clock[0],
+        )
+        tracker.record_failure("192.0.2.1", at=NOW)
+        tracker.record_failure("192.0.2.1", at=NOW)
+        self.assertTrue(tracker.reject_rate_limited("192.0.2.1"))
+        tracker.record_failure("192.0.2.2", at=NOW)
+        tracker.record_failure("192.0.2.3", at=NOW)
+        snapshot = tracker.snapshot()
+        self.assertEqual(snapshot["authFailuresLimiterWindow"], 4)
+        self.assertEqual(snapshot["authRateLimitedLimiterWindow"], 1)
+        self.assertLessEqual(snapshot["uniqueFailureSourcesWindowApproximate"], 2)
+        self.assertTrue(snapshot["trackingCapacityReached"])
+        self.assertNotIn("192.0.2.1", json.dumps(snapshot))
+        clock[0] += 31
+        self.assertEqual(tracker.snapshot()["authFailuresLimiterWindow"], 0)
+        self.assertEqual(tracker.snapshot()["uniqueFailureSourcesWindowApproximate"], 0)
+
+        telemetry = AuthFailureTracker(window_seconds=30, threshold=1, mode="telemetry", clock=lambda: clock[0])
+        telemetry.record_failure("192.0.2.4", at=NOW)
+        self.assertFalse(telemetry.reject_rate_limited("192.0.2.4"))
+        self.assertEqual(telemetry.snapshot()["authRateLimitedLimiterWindow"], 0)
+
     def test_http_auth_endpoint_returns_stable_ids_and_does_not_echo_unknown_auth(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             store = AccountingStore(Path(directory) / "accounts.sqlite")
             store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
+            store.disable_legacy(disabled_at="2026-10-08T04:02:00Z")
             records = store.account_records_for_runtime()
             account = next(row for row in records if row["account_id"] == "Labmem004")
+            m204 = next(row for row in records if row["account_id"] == M204_ID)
             server = AccountingHTTPServer(("127.0.0.1", 0), store)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
@@ -565,14 +655,74 @@ class ParserAndAuthTests(unittest.TestCase):
                 with urlopen(request, timeout=2) as response:
                     self.assertEqual(response.status, 200)
                     self.assertEqual(json.loads(response.read()), {"ok": True, "id": "Labmem004"})
+                request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": m204["hy2_secret"], "addr": "[2001:db8::1]:2", "tx": 0}).encode(), headers={"Content-Type": "application/json"})
+                with urlopen(request, timeout=2) as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.loads(response.read()), {"ok": True, "id": "M204-Net-Core"})
                 bad_secret = "unknown-auth-never-echo-this"
-                request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": bad_secret}).encode(), headers={"Content-Type": "application/json"})
+                request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": bad_secret, "addr": "203.0.113.55:7", "tx": 1}).encode(), headers={"Content-Type": "application/json"})
                 with self.assertRaises(HTTPError) as error:
                     urlopen(request, timeout=2)
                 response_body = error.exception.read().decode()
                 self.assertEqual(error.exception.code, 403)
                 self.assertNotIn(bad_secret, response_body)
                 self.assertEqual(response_body, '{"ok":false}')
+                request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": LEGACY.hy2_secret, "addr": "203.0.113.55:7", "tx": 1}).encode(), headers={"Content-Type": "application/json"})
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(request, timeout=2)
+                self.assertEqual(error.exception.code, 403)
+                self.assertEqual(error.exception.read().decode(), response_body)
+                malformed = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": bad_secret, "addr": "not-an-ip", "tx": -1}).encode(), headers={"Content-Type": "application/json"})
+                with self.assertRaises(HTTPError) as error:
+                    urlopen(malformed, timeout=2)
+                self.assertEqual(error.exception.code, 403)
+                self.assertEqual(error.exception.read().decode(), response_body)
+                tracker_snapshot = server.auth_failure_tracker.snapshot()
+                self.assertEqual(tracker_snapshot["authFailuresLimiterWindow"], 2)
+                snapshot_text = json.dumps(store.public_snapshot(auth_security=tracker_snapshot))
+                self.assertNotIn(bad_secret, snapshot_text)
+                self.assertNotIn(LEGACY.hy2_secret, snapshot_text)
+                self.assertNotIn(str(account["hy2_secret"]), snapshot_text)
+                self.assertNotIn(str(m204["hy2_secret"]), snapshot_text)
+                self.assertNotIn("203.0.113.55", snapshot_text)
+                self.assertNotIn("2001:db8::1", snapshot_text)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
+
+    def test_http_auth_enforcement_throttles_only_the_failed_source(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            store = AccountingStore(Path(directory) / "accounts.sqlite")
+            store.initialize_accounts(LEGACY, created_at=NOW)
+            store.provision_m204(created_at=NOW)
+            store.disable_legacy(disabled_at="2026-10-08T04:02:00Z")
+            account = next(row for row in store.account_records_for_runtime() if row["account_id"] == "Labmem002")
+            tracker = AuthFailureTracker(window_seconds=60, threshold=1, cooldown_seconds=60, mode="enforce")
+            server = AccountingHTTPServer(("127.0.0.1", 0), store, auth_tracker=tracker)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            def request_auth(secret: str, address: str) -> tuple[int, str]:
+                body = json.dumps({"auth": secret, "addr": address, "tx": 1}).encode()
+                request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=body, headers={"Content-Type": "application/json"})
+                try:
+                    with urlopen(request, timeout=2) as response:
+                        return response.status, response.read().decode()
+                except HTTPError as error:
+                    return error.code, error.read().decode()
+
+            try:
+                self.assertEqual(request_auth("bad-secret", "203.0.113.21:1000"), (403, '{"ok":false}'))
+                # A correct credential from the same blocked source receives the identical generic response.
+                self.assertEqual(request_auth(str(account["hy2_secret"]), "203.0.113.21:1001"), (403, '{"ok":false}'))
+                # The same valid credential remains usable from a different source.
+                self.assertEqual(request_auth(str(account["hy2_secret"]), "203.0.113.22:1000"), (200, '{"ok":true,"id":"Labmem002"}'))
+                snapshot = tracker.snapshot()
+                self.assertEqual(snapshot["authFailuresLimiterWindow"], 1)
+                self.assertEqual(snapshot["authRateLimitedLimiterWindow"], 1)
+                self.assertEqual(snapshot["limiterMode"], "enforce")
+                self.assertNotIn("203.0.113.", json.dumps(store.public_snapshot(auth_security=snapshot)))
             finally:
                 server.shutdown()
                 server.server_close()
@@ -596,7 +746,17 @@ class SubscriptionRenderingTests(unittest.TestCase):
             source.write_text(json.dumps({
                 "inbounds": [{
                     "port": 2053, "protocol": "vless",
-                    "settings": {"clients": [{"id": LEGACY.vless_uuid, "level": 0, "flow": "vision"}]},
+                    "settings": {"clients": [
+                        {"id": LEGACY.vless_uuid, "email": "legacy-vless", "level": 0, "flow": "xtls-rprx-vision"},
+                        {"id": records["Labmem001"]["vless_uuid"], "email": "Labmem001.vless", "level": 0, "flow": "xtls-rprx-vision"},
+                    ]},
+                    "streamSettings": {
+                        "network": "tcp", "security": "reality",
+                        "realitySettings": {
+                            "dest": "www.example.com:443", "serverNames": ["www.example.com"],
+                            "privateKey": "private-placeholder", "shortIds": ["0011223344556677"],
+                        },
+                    },
                 }],
                 "outbounds": [{"protocol": "freedom"}],
             }))
@@ -706,12 +866,41 @@ class SubscriptionRenderingTests(unittest.TestCase):
             rendered = output.read_text(encoding="utf-8")
             self.assertIn("listen: :2053", rendered)
             self.assertIn("cert: /etc/caddy/domain.crt", rendered)
-            self.assertIn("url: https://example.com", rendered)
+            self.assertNotIn("https://example.com", rendered)
+            self.assertIn('type: string', rendered)
+            self.assertIn('content: "Not Found"', rendered)
+            self.assertIn("statusCode: 404", rendered)
             self.assertIn("url: http://127.0.0.1:18796/auth", rendered)
             self.assertIn('listen: "127.0.0.1:19999"', rendered)
             self.assertIn(json.dumps(secret), rendered)
+            self.assertNotIn("listenHTTP:", rendered)
+            second_output = root / "candidate-rerun.yaml"
+            render_hysteria_candidate(output, second_output, secret_file)
+            self.assertEqual(second_output.read_text(encoding="utf-8"), rendered)
             self.assertIn('password: "legacy-hy2-test-secret"', source.read_text(encoding="utf-8"))
             self.assertEqual(os.stat(output).st_mode & 0o777, 0o640)
+
+    def test_hysteria_renderer_preserves_absent_and_local_masquerade(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            secret_file = root / "stats-secret"
+            secret_file.write_text("test-stats-secret\n", encoding="utf-8")
+            base = 'listen: :2053\nauth:\n  type: password\n  password: "legacy-hy2-test-secret"\n'
+            for label, masquerade in (
+                ("absent", ""),
+                ("file", "masquerade:\n  type: file\n  file:\n    dir: /var/lib/hysteria/masquerade\n"),
+                ("string", "masquerade:\n  type: string\n  string:\n    content: local response\n"),
+            ):
+                source = root / f"{label}.yaml"
+                output = root / f"{label}-candidate.yaml"
+                source.write_text(base + masquerade, encoding="utf-8")
+                render_hysteria_candidate(source, output, secret_file)
+                rendered = output.read_text(encoding="utf-8")
+                if label == "absent":
+                    self.assertNotIn("masquerade:", rendered)
+                else:
+                    self.assertIn(masquerade, rendered)
+                self.assertNotIn("listenHTTP:", rendered)
 
     def test_stats_secret_is_created_once_with_service_group_read_permission(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -728,14 +917,19 @@ class SubscriptionRenderingTests(unittest.TestCase):
             store = AccountingStore(root / "accounts.sqlite")
             store.initialize_accounts(LEGACY, created_at=NOW)
             store.provision_m204(created_at=NOW)
+            store.disable_legacy(disabled_at="2026-10-08T04:01:00Z")
+            active = next(row for row in store.account_records_for_runtime() if row["account_id"] == "Labmem001")
             source = root / "xray.json"
             output = root / "candidate.json"
             source_config = {
                 "log": {"loglevel": "warning"},
                 "inbounds": [{
                     "listen": "0.0.0.0", "port": 2053, "protocol": "vless",
-                    "settings": {"clients": [{"id": LEGACY.vless_uuid, "level": 0, "flow": "xtls-rprx-vision"}], "decryption": "none"},
-                    "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"dest": "www.example.com:443", "privateKey": "private-placeholder"}},
+                    "settings": {"clients": [
+                        {"id": LEGACY.vless_uuid, "email": "legacy-vless", "level": 0, "flow": "xtls-rprx-vision"},
+                        {"id": active["vless_uuid"], "email": "Labmem001.vless", "level": 0, "flow": "xtls-rprx-vision"},
+                    ], "decryption": "none"},
+                    "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"target": "www.example.com:443", "dest": "www.example.com:443", "privateKey": "private-placeholder", "serverNames": ["www.example.com"], "shortIds": ["0011223344556677"]}},
                     "sniffing": {"enabled": True},
                 }],
                 "outbounds": [{"protocol": "freedom"}, {"protocol": "blackhole"}],
@@ -745,21 +939,47 @@ class SubscriptionRenderingTests(unittest.TestCase):
             render_xray_candidate(source, output, store)
             candidate = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(candidate["inbounds"][0]["listen"], "0.0.0.0")
-            self.assertEqual(candidate["inbounds"][0]["streamSettings"], source_config["inbounds"][0]["streamSettings"])
+            reality = candidate["inbounds"][0]["streamSettings"]["realitySettings"]
+            self.assertEqual(reality["target"], "127.0.0.1:24431")
+            self.assertEqual(reality["dest"], "127.0.0.1:24431")
+            self.assertEqual(reality["privateKey"], "private-placeholder")
+            self.assertEqual(reality["serverNames"], ["www.example.com"])
+            self.assertEqual(reality["shortIds"], ["0011223344556677"])
+            self.assertEqual(len(candidate["inbounds"]), 2)
+            gate = candidate["inbounds"][1]
+            self.assertEqual(gate["tag"], "reality-fallback-gate")
+            self.assertEqual(gate["listen"], "127.0.0.1")
+            self.assertEqual(gate["port"], 24431)
+            self.assertEqual(gate["protocol"], "dokodemo-door")
+            self.assertEqual(gate["settings"], {"address": "www.example.com", "port": 443, "network": "tcp"})
+            self.assertTrue(gate["sniffing"]["routeOnly"])
+            self.assertEqual(gate["sniffing"]["destOverride"], ["tls"])
             self.assertEqual(candidate["outbounds"], source_config["outbounds"])
-            self.assertEqual(candidate["routing"], source_config["routing"])
+            self.assertEqual(candidate["routing"]["rules"][:2], [
+                {"type": "field", "inboundTag": ["reality-fallback-gate"], "domain": ["full:www.example.com"], "outboundTag": "direct", "ruleTag": "reality-fallback-allow-exact-sni"},
+                {"type": "field", "inboundTag": ["reality-fallback-gate"], "outboundTag": "block", "ruleTag": "reality-fallback-block-other"},
+            ])
+            self.assertEqual(candidate["routing"]["rules"][2:], source_config["routing"]["rules"])
             clients = candidate["inbounds"][0]["settings"]["clients"]
             by_email = {client["email"]: client for client in clients}
-            self.assertEqual(set(by_email), {"legacy-vless", *(f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS)})
-            self.assertEqual(by_email["legacy-vless"]["id"], LEGACY.vless_uuid)
-            self.assertEqual(len({client["id"] for client in clients}), 7)
+            self.assertEqual(set(by_email), {f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS})
+            self.assertNotIn(LEGACY.vless_uuid, json.dumps(clients))
+            self.assertEqual(len({client["id"] for client in clients}), 6)
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserUplink"])
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserDownlink"])
             self.assertTrue(candidate["policy"]["levels"]["0"]["statsUserOnline"])
+            self.assertTrue(candidate["policy"]["system"]["statsInboundUplink"])
+            self.assertTrue(candidate["policy"]["system"]["statsInboundDownlink"])
             self.assertEqual(candidate["api"], {"tag": "api", "listen": "127.0.0.1:10085", "services": ["StatsService"]})
             render_xray_candidate(output, root / "candidate-rerun.json", store)
             rerun = json.loads((root / "candidate-rerun.json").read_text(encoding="utf-8"))
             self.assertEqual(rerun, candidate)
+            conflicting_config = json.loads(json.dumps(source_config))
+            conflicting_config["inbounds"][0]["streamSettings"]["realitySettings"]["target"] = "other.example.com:443"
+            conflicting_source = root / "xray-conflicting.json"
+            conflicting_source.write_text(json.dumps(conflicting_config), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "target and dest conflict"):
+                render_xray_candidate(conflicting_source, root / "candidate-conflicting.json", store)
             future_records = [dict(row, enabled=0) if row["account_id"] == "legacy" else dict(row) for row in store.account_records_for_runtime()]
             render_xray_candidate(output, root / "candidate-retired.json", store, records=future_records)
             retired_clients = json.loads((root / "candidate-retired.json").read_text(encoding="utf-8"))["inbounds"][0]["settings"]["clients"]

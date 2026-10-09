@@ -31,7 +31,7 @@ ACCOUNT_IDS = (*MANAGED_ACCOUNT_IDS, LEGACY_ID)
 PROTOCOLS = ("hy2", "vless")
 AUTH_IDS = {LEGACY_ID: "legacy-hy2", **{account_id: account_id for account_id in MANAGED_ACCOUNT_IDS}}
 VLESS_EMAILS = {LEGACY_ID: "legacy-vless", **{account_id: f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS}}
-ACCOUNTING_SCHEMA_VERSION = 3
+ACCOUNTING_SCHEMA_VERSION = 4
 
 
 def utc_now() -> str:
@@ -167,6 +167,34 @@ class AccountingStore:
               generation TEXT
             );
             INSERT OR IGNORE INTO provider_state(singleton) VALUES (1);
+            CREATE TABLE IF NOT EXISTS reality_fallback_state (
+              singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+              upload_raw INTEGER NOT NULL CHECK (upload_raw >= 0),
+              download_raw INTEGER NOT NULL CHECK (download_raw >= 0),
+              cumulative_upload_bytes INTEGER NOT NULL CHECK (cumulative_upload_bytes >= 0),
+              cumulative_download_bytes INTEGER NOT NULL CHECK (cumulative_download_bytes >= 0),
+              generation TEXT,
+              sampled_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS reality_fallback_deltas (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              sampled_at TEXT NOT NULL,
+              upload_bytes INTEGER NOT NULL CHECK (upload_bytes >= 0),
+              download_bytes INTEGER NOT NULL CHECK (download_bytes >= 0),
+              counter_reset INTEGER NOT NULL CHECK (counter_reset IN (0,1))
+            );
+            CREATE INDEX IF NOT EXISTS reality_fallback_deltas_sampled_at_idx
+              ON reality_fallback_deltas(sampled_at);
+            CREATE TABLE IF NOT EXISTS security_event_buckets (
+              bucket_start TEXT NOT NULL,
+              event_kind TEXT NOT NULL CHECK (event_kind IN ('hy2_auth_failure','hy2_auth_rate_limited')),
+              event_count INTEGER NOT NULL CHECK (event_count >= 0),
+              PRIMARY KEY (bucket_start,event_kind)
+            );
+            CREATE TABLE IF NOT EXISTS security_meta (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL
+            );
             INSERT OR IGNORE INTO schema_meta(key, value)
               VALUES ('schema_version', '1');
             """
@@ -182,6 +210,121 @@ class AccountingStore:
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
             (str(ACCOUNTING_SCHEMA_VERSION),),
         )
+
+    def record_reality_fallback_sample(
+        self, *, upload: int, download: int, generation: str | None, sampled_at: str,
+    ) -> None:
+        """Persist sanitized inbound totals and reset-safe deltas, never destinations."""
+        parsed_upload, parsed_download = _integer(upload), _integer(download)
+        sqlite_max = (1 << 63) - 1
+        if parsed_upload is None or parsed_download is None or parsed_upload > sqlite_max or parsed_download > sqlite_max:
+            raise ValueError("Reality fallback counters are invalid")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = db.execute("SELECT * FROM reality_fallback_state WHERE singleton=1").fetchone()
+            reset = False
+            if previous is None:
+                upload_delta, download_delta = parsed_upload, parsed_download
+            else:
+                generation_changed = bool(
+                    (generation is not None or previous["generation"] is not None)
+                    and generation != previous["generation"]
+                )
+                reset = generation_changed or parsed_upload < previous["upload_raw"] or parsed_download < previous["download_raw"]
+                upload_delta = parsed_upload if reset else parsed_upload - previous["upload_raw"]
+                download_delta = parsed_download if reset else parsed_download - previous["download_raw"]
+            cumulative_upload = (int(previous["cumulative_upload_bytes"]) if previous else 0) + upload_delta
+            cumulative_download = (int(previous["cumulative_download_bytes"]) if previous else 0) + download_delta
+            db.execute(
+                "INSERT INTO reality_fallback_state VALUES (1,?,?,?,?,?,?) "
+                "ON CONFLICT(singleton) DO UPDATE SET upload_raw=excluded.upload_raw,"
+                "download_raw=excluded.download_raw,cumulative_upload_bytes=excluded.cumulative_upload_bytes,"
+                "cumulative_download_bytes=excluded.cumulative_download_bytes,generation=excluded.generation,"
+                "sampled_at=excluded.sampled_at",
+                (parsed_upload, parsed_download, cumulative_upload, cumulative_download, generation, sampled_at),
+            )
+            db.execute(
+                "INSERT INTO reality_fallback_deltas(sampled_at,upload_bytes,download_bytes,counter_reset) "
+                "VALUES (?,?,?,?)",
+                (sampled_at, upload_delta, download_delta, int(reset)),
+            )
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            db.execute("DELETE FROM reality_fallback_deltas WHERE sampled_at < ?", (cutoff,))
+            db.execute(
+                "INSERT INTO source_state(source,status,checked_at,last_success_at,error_code,generation,last_error_at) "
+                "VALUES ('reality_fallback','ok',?,?,NULL,?,NULL) ON CONFLICT(source) DO UPDATE SET "
+                "status='ok',checked_at=excluded.checked_at,last_success_at=excluded.last_success_at,"
+                "error_code=NULL,generation=excluded.generation",
+                (sampled_at, sampled_at, generation),
+            )
+            db.commit()
+
+    def record_security_event(self, event_kind: str, sampled_at: str) -> None:
+        """Persist minute-bucket aggregates only; source addresses and auth values never enter SQLite."""
+        if event_kind not in {"hy2_auth_failure", "hy2_auth_rate_limited"}:
+            raise ValueError("security event kind is invalid")
+        parsed = _parse_time(sampled_at)
+        if parsed is None:
+            raise ValueError("security event timestamp is invalid")
+        bucket = parsed.replace(second=0, microsecond=0).isoformat(timespec="seconds").replace("+00:00", "Z")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute(
+                "INSERT INTO security_event_buckets(bucket_start,event_kind,event_count) VALUES (?,?,1) "
+                "ON CONFLICT(bucket_start,event_kind) DO UPDATE SET event_count=event_count+1",
+                (bucket, event_kind),
+            )
+            if event_kind == "hy2_auth_failure":
+                db.execute(
+                    "INSERT INTO security_meta(key,value) VALUES ('last_hy2_auth_failure_at',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (parsed.isoformat(timespec="seconds").replace("+00:00", "Z"),),
+                )
+            cutoff = (parsed - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            db.execute("DELETE FROM security_event_buckets WHERE bucket_start < ?", (cutoff,))
+            db.commit()
+
+    @staticmethod
+    def _security_signals(snapshot: dict[str, object], thresholds: Mapping[str, int]) -> list[dict[str, object]]:
+        signals: list[dict[str, object]] = []
+        security = snapshot.get("security") if isinstance(snapshot.get("security"), dict) else {}
+        auth = security.get("hysteriaAuth") if isinstance(security, dict) and isinstance(security.get("hysteriaAuth"), dict) else {}
+        failure_threshold = max(1, int(thresholds.get("hy2AuthFailThreshold", 60)))
+        failures = auth.get("authFailuresLimiterWindow") if isinstance(auth, dict) else None
+        if isinstance(failures, int) and failures >= failure_threshold:
+            signals.append({"code": "hy2_auth_failures", "value": failures, "threshold": failure_threshold})
+        limited = auth.get("authRateLimitedLimiterWindow") if isinstance(auth, dict) else None
+        if isinstance(limited, int) and limited > 0:
+            signals.append({"code": "hy2_auth_rate_limited", "value": limited, "threshold": 1})
+
+        fallback = security.get("realityFallback") if isinstance(security, dict) and isinstance(security.get("realityFallback"), dict) else {}
+        fallback_threshold = max(0, int(thresholds.get("realityFallbackAlertBytes", 1024)))
+        fallback_window = fallback.get("windowTotalBytes") if isinstance(fallback, dict) else None
+        if isinstance(fallback_window, int) and fallback_window > fallback_threshold:
+            signals.append({"code": "reality_fallback_traffic", "value": fallback_window, "threshold": fallback_threshold})
+
+        report = snapshot.get("reportWindow") if isinstance(snapshot.get("reportWindow"), dict) else {}
+        accounts = snapshot.get("accounts") if isinstance(snapshot.get("accounts"), list) else []
+        complete = bool(accounts) and all(isinstance(row, dict) and row.get("windowComplete") is True for row in accounts)
+        windows = [row.get("windowBytes") for row in accounts if isinstance(row, dict)]
+        if complete and windows and all(isinstance(value, int) and value >= 0 for value in windows):
+            total = sum(windows)
+            minimum = max(0, int(thresholds.get("accountDominantMinWindowBytes", 1 << 30)))
+            share_threshold = min(100, max(1, int(thresholds.get("accountDominantSharePercent", 85))))
+            top = report.get("topAccount") if isinstance(report, dict) and isinstance(report.get("topAccount"), dict) else None
+            if top and total >= minimum and total > 0:
+                top_bytes = top.get("windowBytes")
+                account_id = top.get("accountId")
+                share = (int(top_bytes) * 100) // total if isinstance(top_bytes, int) and account_id in MANAGED_ACCOUNT_IDS else 0
+                if share >= share_threshold:
+                    signals.append({
+                        "code": "account_dominant_window",
+                        "accountId": account_id,
+                        "sharePercent": share,
+                        "thresholdPercent": share_threshold,
+                        "windowBytes": int(top_bytes),
+                    })
+        return signals
 
     def health(self) -> bool:
         with self._connect() as db:
@@ -635,7 +778,11 @@ class AccountingStore:
             }
         return result
 
-    def public_snapshot(self, *, now: datetime | None = None, window_seconds: int = 12 * 60 * 60) -> dict[str, object]:
+    def public_snapshot(
+        self, *, now: datetime | None = None, window_seconds: int = 12 * 60 * 60,
+        auth_security: Mapping[str, object] | None = None,
+        security_thresholds: Mapping[str, int] | None = None,
+    ) -> dict[str, object]:
         current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
         generated_at = current.isoformat(timespec="seconds").replace("+00:00", "Z")
         cutoff_dt = current - timedelta(seconds=max(60, window_seconds))
@@ -653,6 +800,18 @@ class AccountingStore:
             sources = self._current_source_state(db, current)
             meta = {row["key"]: row["value"] for row in db.execute("SELECT key,value FROM schema_meta").fetchall()}
             provider = db.execute("SELECT * FROM provider_state WHERE singleton=1").fetchone()
+            fallback_state = db.execute("SELECT * FROM reality_fallback_state WHERE singleton=1").fetchone()
+            fallback_window = db.execute(
+                "SELECT SUM(upload_bytes) AS upload,SUM(download_bytes) AS download "
+                "FROM reality_fallback_deltas WHERE sampled_at >= ?",
+                (cutoff,),
+            ).fetchone()
+            security_event_rows = db.execute(
+                "SELECT event_kind,SUM(event_count) AS event_count FROM security_event_buckets "
+                "WHERE bucket_start >= ? GROUP BY event_kind",
+                (cutoff,),
+            ).fetchall()
+            security_meta = {row["key"]: row["value"] for row in db.execute("SELECT key,value FROM security_meta").fetchall()}
             window_rows = db.execute(
                 "SELECT account_id,protocol,SUM(upload_bytes+download_bytes) AS total,"
                 "SUM(upload_bytes) AS upload,SUM(download_bytes) AS download,COUNT(*) AS samples "
@@ -799,6 +958,52 @@ class AccountingStore:
         proxy_accounted = monitored_known if proxy_accounted_complete else None
         provider_started = provider["counter_at_start"] is not None
         provider_delta = int(provider["delta_since_start"]) if provider_started else None
+        fallback_source = sources.get("reality_fallback", {"status": "unknown", "checkedAt": None, "lastSuccessfulAt": None})
+        fallback_window_clean = source_clean_since("reality_fallback", cutoff_dt)
+        fallback_window_upload = int(fallback_window["upload"] or 0) if fallback_window_clean else None
+        fallback_window_download = int(fallback_window["download"] or 0) if fallback_window_clean else None
+        event_counts = {str(row["event_kind"]): int(row["event_count"] or 0) for row in security_event_rows}
+        tracker = auth_security if isinstance(auth_security, Mapping) else {}
+
+        def tracker_count(name: str) -> int | None:
+            value = tracker.get(name)
+            return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= (1 << 53) - 1 else None
+
+        limiter_mode = tracker.get("limiterMode") if tracker.get("limiterMode") in {"telemetry", "enforce"} else "unknown"
+        last_failure_at = security_meta.get("last_hy2_auth_failure_at")
+        tracker_last_failure = tracker.get("lastFailureAt")
+        if isinstance(tracker_last_failure, str) and (_parse_time(tracker_last_failure) or datetime.min.replace(tzinfo=timezone.utc)) > (_parse_time(last_failure_at) or datetime.min.replace(tzinfo=timezone.utc)):
+            last_failure_at = tracker_last_failure
+        security = {
+            "realityFallback": {
+                "uplinkBytes": int(fallback_state["cumulative_upload_bytes"]) if fallback_state else None,
+                "downlinkBytes": int(fallback_state["cumulative_download_bytes"]) if fallback_state else None,
+                "totalBytes": int(fallback_state["cumulative_upload_bytes"]) + int(fallback_state["cumulative_download_bytes"]) if fallback_state else None,
+                "windowUplinkBytes": fallback_window_upload,
+                "windowDownlinkBytes": fallback_window_download,
+                "windowTotalBytes": fallback_window_upload + fallback_window_download if fallback_window_upload is not None and fallback_window_download is not None else None,
+                "lastCounterSampleAt": fallback_state["sampled_at"] if fallback_state else None,
+                "status": fallback_source.get("status", "unknown"),
+                "checkedAt": fallback_source.get("checkedAt"),
+                "lastSuccessfulAt": fallback_source.get("lastSuccessfulAt"),
+            },
+            "hysteriaAuth": {
+                "status": "ok" if auth_security is not None else "unknown",
+                "windowSeconds": max(60, window_seconds),
+                "authFailuresWindow": event_counts.get("hy2_auth_failure", 0),
+                "authRateLimitedWindow": event_counts.get("hy2_auth_rate_limited", 0),
+                "limiterMode": limiter_mode,
+                "limiterWindowSeconds": tracker_count("limiterWindowSeconds"),
+                "limiterWindowCoverageSeconds": tracker_count("limiterWindowCoverageSeconds"),
+                "authFailuresLimiterWindow": tracker_count("authFailuresLimiterWindow"),
+                "authRateLimitedLimiterWindow": tracker_count("authRateLimitedLimiterWindow"),
+                "uniqueFailureSourcesWindowApproximate": tracker_count("uniqueFailureSourcesWindowApproximate"),
+                "uniqueFailureSourcesWindowSeconds": tracker_count("uniqueFailureSourcesWindowSeconds"),
+                "trackingCapacityReached": tracker.get("trackingCapacityReached") is True,
+                "processStartedAt": tracker.get("processStartedAt") if isinstance(tracker.get("processStartedAt"), str) else None,
+                "lastFailureAt": last_failure_at,
+            },
+        }
         all_window_complete = all(account_results.get(account_id, {}).get("windowComplete") for account_id in MANAGED_ACCOUNT_IDS)
         top_account = None
         if all_window_complete:
@@ -838,14 +1043,20 @@ class AccountingStore:
                 "proxyAccountedBytes": proxy_accounted,
                 "gapBytes": None,
             },
+            "security": security,
         }
-        # Construct only the documented usage facts; account records never include secrets.
+        # Construct only documented usage/security facts; account records never include secrets.
+        common["security"]["signals"] = self._security_signals(common, security_thresholds or {})
         return common
 
-    def write_public_snapshot(self, path: str | Path, *, group_id: int | None = None) -> dict[str, object]:
+    def write_public_snapshot(
+        self, path: str | Path, *, group_id: int | None = None,
+        auth_security: Mapping[str, object] | None = None,
+        security_thresholds: Mapping[str, int] | None = None,
+    ) -> dict[str, object]:
         target = Path(path)
         target.parent.mkdir(mode=0o750, parents=True, exist_ok=True)
-        snapshot = self.public_snapshot()
+        snapshot = self.public_snapshot(auth_security=auth_security, security_thresholds=security_thresholds)
         encoded = (json.dumps(snapshot, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
         descriptor, temporary_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
         try:

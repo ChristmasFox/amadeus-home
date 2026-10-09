@@ -178,8 +178,26 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
     accounts: ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core'].map(account),
     legacy: { ...account('legacy'), enabled: false }, protocolTotals: { hy2: {}, vless: {} },
     knownProxyAccountedBytes: 0, proxyAccountedBytes: null, proxyAccountedComplete: false,
-    sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source },
+    sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source, reality_fallback: source },
     reportWindow: {}, provider: {}, reconciliation: { status: 'uncalibrated' },
+    security: {
+      realityFallback: {
+        totalBytes: 1536, windowTotalBytes: 1536, status: 'ok', lastCounterSampleAt: '2026-10-08T04:00:00Z',
+        destination: 'must-not-leak.example',
+      },
+      hysteriaAuth: {
+        status: 'ok', windowSeconds: 43200, authFailuresWindow: 3, authRateLimitedWindow: 1,
+        limiterMode: 'telemetry', limiterWindowSeconds: 900, limiterWindowCoverageSeconds: 300, authFailuresLimiterWindow: 2,
+        authRateLimitedLimiterWindow: 0, uniqueFailureSourcesWindowApproximate: 1,
+        uniqueFailureSourcesWindowSeconds: 900, trackingCapacityReached: false,
+        sourceIp: '203.0.113.44', auth: 'must-not-leak',
+      },
+      signals: [
+        { code: 'reality_fallback_traffic', value: 1536, threshold: 1024, sourceIp: '203.0.113.44' },
+        { code: 'account_dominant_window', accountId: 'M204-Net-Core', sharePercent: 90, thresholdPercent: 85, windowBytes: 100 },
+        { code: 'credential_leaked', token: 'must-not-leak' },
+      ],
+    },
   };
   const parsed = parseVpsSubscriptionProbe(`ACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(snapshot)}\n`) as { status: string; data: Record<string, unknown> };
   assert.equal(parsed.status, 'partial');
@@ -189,4 +207,10 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal((parsed.data.accounts as Array<{ accountId: string }>).at(-1)?.accountId, 'M204-Net-Core');
   assert.equal((parsed.data.legacy as { enabled: boolean }).enabled, false);
   assert.equal(JSON.stringify(parsed).includes('must-not-leak'), false);
+  const security = parsed.data.security as { realityFallback: { totalBytes: number | null }; hysteriaAuth: { authFailuresWindow: number | null; limiterWindowCoverageSeconds: number | null }; signals: Array<{ code: string }> };
+  assert.equal(security.realityFallback.totalBytes, 1536);
+  assert.equal(security.hysteriaAuth.authFailuresWindow, 3);
+  assert.equal(security.hysteriaAuth.limiterWindowCoverageSeconds, 300);
+  assert.deepEqual(security.signals.map((signal) => signal.code), ['reality_fallback_traffic', 'account_dominant_window']);
+  assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).reality_fallback?.status, 'ok');
 });

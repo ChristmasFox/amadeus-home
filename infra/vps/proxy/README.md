@@ -19,6 +19,20 @@ Quantumult X 的字段以其官方样例为准，而不是按 sing-box 或 Clash
 - 当前官方样例没有要求手填 `fp=`；QX 使用当前 iOS Safari Reality 指纹逻辑。若 QX
   UI 显示 fingerprint 选项，使用默认/当前 iOS Safari，不要填服务端私钥。
 
+## Reality fallback 限制
+
+`infra/vps/subscription/accounting_cli.py render-xray` 生成并已应用的配置把 Reality `target` 指向
+`127.0.0.1:24431`。这个 loopback `dokodemo-door` gate 只接受 TLS sniff 得到的精确
+`www.apple.com` SNI 并转发到原目标；缺失或不匹配的 SNI 进入 block outbound。候选启用 Xray
+inbound uplink/downlink 统计，collector 通过 `reality-fallback-gate` tag 采样聚合字节数，不记录
+请求来源或目标地址。24431 不应加入公网上的监听或防火墙规则。
+
+服务端配置的 Reality 私钥、客户端 UUID 和 short ID 未改变。候选通过
+`/usr/local/bin/xray run -test -config <candidate>` 后应用；M204-Net-Core 与 Labmem001 的真实
+VLESS HTTPS smoke 及账号计数均通过。无效 SNI 探测未收到服务端证书；fallback inbound 统计源
+为 `ok`，可见聚合流量。计数为零只说明当前采样窗口没有观测到 gate 流量；统计源 unknown/stale
+时不能解释为零流量。
+
 参考：[Quantumult X 官方配置样例](https://github.com/crossutility/Quantumult-X/blob/master/sample.conf)
 和 [Quantumult X App Store 版本记录](https://apps.apple.com/id/app/quantumult-x/id1443988620)。
 
@@ -57,6 +71,16 @@ vless=<VPS_SERVER>:2053, method=none, password=<UUID>, obfs=over-tls, obfs-host=
 VPS 另运行官方 Hysteria 2 `v2.12.3`，systemd 服务为 `hysteria-server.service`，监听 UDP
 `2053`。它复用 `sub.nyannyan.top` 的 Caddy 证书，认证密码只存在 VPS 的
 `/etc/hysteria/config.yaml`。
+
+认证使用 loopback HTTP auth service。失败来源只用于 accounting 进程内存中的有界失败窗口；
+数据库保留按分钟聚合的失败与限额次数，不保存来源地址或提供可复用的失败明细。新环境模板
+默认 `telemetry`；当前 live mode 是在 M204/Labmem001 重试兼容性 smoke 通过后启用的 `enforce`，
+达到阈值的来源会在 cooldown 内得到通用认证拒绝。进程重启会重置来源窗口，security snapshot
+会显示当前窗口长度及已覆盖秒数。不要将聚合失败数解释成攻击或入侵证据。
+
+Hysteria 服务端未配置 masquerade 时，官方默认响应为 404。若候选配置中发现指向外部 URL 的
+proxy masquerade，`render-hysteria` 会将其收敛为本地静态 `Not Found` 响应；本地 string/file
+masquerade 保持不变。任何未知 proxy 形式都应让候选生成失败，不能保留外部代理跳转。
 
 Clash Meta/Mihomo 使用 `config.example.hysteria2.clash.yaml` 中的字段；Shadowrocket 使用
 `config.example.hysteria2.shadowrocket.txt` 的 `hysteria2://` URI。Quantumult X 当前官方样例

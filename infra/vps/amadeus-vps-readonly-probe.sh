@@ -33,7 +33,7 @@ from pathlib import Path
 snapshot_path = Path('/var/lib/amadeus-accounting/subscription-usage-public.json')
 account_ids = [f'Labmem{i:03d}' for i in range(1, 6)] + ['M204-Net-Core']
 protocol_ids = ('hy2', 'vless')
-source_ids = ('provider', 'hysteria_traffic', 'hysteria_online', 'xray', 'xray_online')
+source_ids = ('provider', 'hysteria_traffic', 'hysteria_online', 'xray', 'xray_online', 'reality_fallback')
 
 def count(value):
     return value if type(value) is int and value >= 0 else None
@@ -103,6 +103,63 @@ try:
             'lastErrorAt': timestamp(value.get('lastErrorAt')),
             'errorCode': error_code,
         }
+    security_in = raw.get('security') if isinstance(raw.get('security'), dict) else {}
+    fallback_in = security_in.get('realityFallback') if isinstance(security_in.get('realityFallback'), dict) else {}
+    auth_in = security_in.get('hysteriaAuth') if isinstance(security_in.get('hysteriaAuth'), dict) else {}
+    security_statuses = ('ok', 'stale', 'error', 'unknown')
+    fallback_status = fallback_in.get('status') if fallback_in.get('status') in security_statuses else 'unknown'
+    auth_status = auth_in.get('status') if auth_in.get('status') in security_statuses else 'unknown'
+    limiter_mode = auth_in.get('limiterMode') if auth_in.get('limiterMode') in ('telemetry', 'enforce') else 'unknown'
+    allowed_signal_codes = {
+        'hy2_auth_failures', 'hy2_auth_rate_limited',
+        'reality_fallback_traffic', 'account_dominant_window',
+    }
+    signals_in = security_in.get('signals') if isinstance(security_in.get('signals'), list) else []
+    signals = []
+    for signal in signals_in[:16]:
+        if not isinstance(signal, dict) or signal.get('code') not in allowed_signal_codes:
+            continue
+        clean_signal = {'code': signal['code']}
+        if signal['code'] == 'account_dominant_window' and signal.get('accountId') in account_ids:
+            clean_signal['accountId'] = signal['accountId']
+            clean_signal['sharePercent'] = count(signal.get('sharePercent'))
+            clean_signal['thresholdPercent'] = count(signal.get('thresholdPercent'))
+            clean_signal['windowBytes'] = count(signal.get('windowBytes'))
+        else:
+            clean_signal['value'] = count(signal.get('value'))
+            clean_signal['threshold'] = count(signal.get('threshold'))
+        signals.append(clean_signal)
+    security = {
+        'realityFallback': {
+            'uplinkBytes': count(fallback_in.get('uplinkBytes')),
+            'downlinkBytes': count(fallback_in.get('downlinkBytes')),
+            'totalBytes': count(fallback_in.get('totalBytes')),
+            'windowUplinkBytes': count(fallback_in.get('windowUplinkBytes')),
+            'windowDownlinkBytes': count(fallback_in.get('windowDownlinkBytes')),
+            'windowTotalBytes': count(fallback_in.get('windowTotalBytes')),
+            'lastCounterSampleAt': timestamp(fallback_in.get('lastCounterSampleAt')),
+            'status': fallback_status,
+            'checkedAt': timestamp(fallback_in.get('checkedAt')),
+            'lastSuccessfulAt': timestamp(fallback_in.get('lastSuccessfulAt')),
+        },
+        'hysteriaAuth': {
+            'status': auth_status,
+            'windowSeconds': count(auth_in.get('windowSeconds')),
+            'authFailuresWindow': count(auth_in.get('authFailuresWindow')),
+            'authRateLimitedWindow': count(auth_in.get('authRateLimitedWindow')),
+            'limiterMode': limiter_mode,
+            'limiterWindowSeconds': count(auth_in.get('limiterWindowSeconds')),
+            'limiterWindowCoverageSeconds': count(auth_in.get('limiterWindowCoverageSeconds')),
+            'authFailuresLimiterWindow': count(auth_in.get('authFailuresLimiterWindow')),
+            'authRateLimitedLimiterWindow': count(auth_in.get('authRateLimitedLimiterWindow')),
+            'uniqueFailureSourcesWindowApproximate': count(auth_in.get('uniqueFailureSourcesWindowApproximate')),
+            'uniqueFailureSourcesWindowSeconds': count(auth_in.get('uniqueFailureSourcesWindowSeconds')),
+            'trackingCapacityReached': auth_in.get('trackingCapacityReached') is True,
+            'processStartedAt': timestamp(auth_in.get('processStartedAt')),
+            'lastFailureAt': timestamp(auth_in.get('lastFailureAt')),
+        },
+        'signals': signals,
+    }
     provider_in = raw.get('provider') if isinstance(raw.get('provider'), dict) else {}
     provider = {
         'baselineCounterBytes': count(provider_in.get('baselineCounterBytes')),
@@ -147,6 +204,7 @@ try:
             'proxyAccountedBytes': count(raw.get('proxyAccountedBytes')),
             'gapBytes': count((raw.get('reconciliation') or {}).get('gapBytes')) if (raw.get('reconciliation') or {}).get('status') == 'calibrated' else None,
         },
+        'security': security,
     }
     encoded = json.dumps(result, separators=(',', ':'), ensure_ascii=False)
     if len(encoded) > 64000:

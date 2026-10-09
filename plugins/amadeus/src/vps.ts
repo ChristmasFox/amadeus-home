@@ -64,6 +64,8 @@ export const VPS_CRITICAL_SERVICES: readonly VpsServiceDefinition[] = [
 const READONLY_PROBE_COMMAND = '/usr/local/sbin/amadeus-vps-readonly-probe';
 export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core', 'legacy'] as const;
 type VpsSubscriptionAccountId = typeof VPS_SUBSCRIPTION_ACCOUNT_IDS[number];
+type VpsFactStatus = 'ok' | 'stale' | 'error' | 'unknown';
+type VpsSecuritySignalCode = 'hy2_auth_failures' | 'hy2_auth_rate_limited' | 'reality_fallback_traffic' | 'account_dominant_window';
 
 interface VpsSubscriptionProtocolUsage {
   uploadBytes: number | null;
@@ -100,10 +102,29 @@ interface VpsSubscriptionSnapshot {
   knownProxyAccountedBytes: number | null;
   proxyAccountedBytes: number | null;
   proxyAccountedComplete: boolean;
-  sources: Record<'provider' | 'hysteria_traffic' | 'hysteria_online' | 'xray' | 'xray_online', Record<string, unknown>>;
+  sources: Record<'provider' | 'hysteria_traffic' | 'hysteria_online' | 'xray' | 'xray_online' | 'reality_fallback', Record<string, unknown>>;
   reportWindow: { seconds: number | null; startAt: string | null; endAt: string | null; topAccount: { accountId: string; windowBytes: number } | null };
   provider: { baselineCounterBytes: number | null; lastCounterBytes: number | null; deltaSinceMonitoringStartBytes: number | null; totalBytes: number | null; resetAt: string | null; sampledAt: string | null };
   reconciliation: { status: 'uncalibrated' | 'calibrated'; providerDeltaBytes: number | null; proxyAccountedBytes: number | null; gapBytes: number | null };
+  security: {
+    realityFallback: {
+      uplinkBytes: number | null; downlinkBytes: number | null; totalBytes: number | null;
+      windowUplinkBytes: number | null; windowDownlinkBytes: number | null; windowTotalBytes: number | null;
+      lastCounterSampleAt: string | null; status: VpsFactStatus; checkedAt: string | null; lastSuccessfulAt: string | null;
+    };
+    hysteriaAuth: {
+      status: VpsFactStatus; windowSeconds: number | null; authFailuresWindow: number | null; authRateLimitedWindow: number | null;
+      limiterMode: 'telemetry' | 'enforce' | 'unknown'; limiterWindowSeconds: number | null; limiterWindowCoverageSeconds: number | null;
+      authFailuresLimiterWindow: number | null; authRateLimitedLimiterWindow: number | null;
+      uniqueFailureSourcesWindowApproximate: number | null; uniqueFailureSourcesWindowSeconds: number | null;
+      trackingCapacityReached: boolean; processStartedAt: string | null; lastFailureAt: string | null;
+    };
+    signals: Array<{
+      code: VpsSecuritySignalCode;
+      value?: number | null; threshold?: number | null; accountId?: Exclude<VpsSubscriptionAccountId, 'legacy'>;
+      sharePercent?: number | null; thresholdPercent?: number | null; windowBytes?: number | null;
+    }>;
+  };
 }
 
 class VpsReadOnlyError extends Error {
@@ -621,6 +642,73 @@ function sanitizeSource(value: unknown): Record<string, unknown> {
   };
 }
 
+function sanitizeSecurity(value: unknown): VpsSubscriptionSnapshot['security'] {
+  const item = objectValue(value);
+  const fallback = objectValue(item.realityFallback);
+  const auth = objectValue(item.hysteriaAuth);
+  const status = (value: unknown): VpsFactStatus => value === 'ok' || value === 'stale' || value === 'error' || value === 'unknown'
+    ? value
+    : 'unknown';
+  const signalsIn = Array.isArray(item.signals) ? item.signals : [];
+  const signalCodes: readonly VpsSecuritySignalCode[] = [
+    'hy2_auth_failures', 'hy2_auth_rate_limited', 'reality_fallback_traffic', 'account_dominant_window',
+  ];
+  const signals: VpsSubscriptionSnapshot['security']['signals'] = [];
+  for (const raw of signalsIn.slice(0, 16)) {
+    const signal = objectValue(raw);
+    if (!signalCodes.includes(signal.code as VpsSecuritySignalCode)) continue;
+    const code = signal.code as VpsSecuritySignalCode;
+    if (code === 'account_dominant_window') {
+      const accountId = safeAccountId(signal.accountId);
+      if (!accountId || accountId === 'legacy') continue;
+      signals.push({
+        code,
+        accountId,
+        sharePercent: nonnegativeInteger(signal.sharePercent),
+        thresholdPercent: nonnegativeInteger(signal.thresholdPercent),
+        windowBytes: nonnegativeInteger(signal.windowBytes),
+      });
+    } else {
+      signals.push({
+        code,
+        value: nonnegativeInteger(signal.value),
+        threshold: nonnegativeInteger(signal.threshold),
+      });
+    }
+  }
+  return {
+    realityFallback: {
+      uplinkBytes: nonnegativeInteger(fallback.uplinkBytes),
+      downlinkBytes: nonnegativeInteger(fallback.downlinkBytes),
+      totalBytes: nonnegativeInteger(fallback.totalBytes),
+      windowUplinkBytes: nonnegativeInteger(fallback.windowUplinkBytes),
+      windowDownlinkBytes: nonnegativeInteger(fallback.windowDownlinkBytes),
+      windowTotalBytes: nonnegativeInteger(fallback.windowTotalBytes),
+      lastCounterSampleAt: safeIso(fallback.lastCounterSampleAt),
+      status: status(fallback.status),
+      checkedAt: safeIso(fallback.checkedAt),
+      lastSuccessfulAt: safeIso(fallback.lastSuccessfulAt),
+    },
+    hysteriaAuth: {
+      status: status(auth.status),
+      windowSeconds: nonnegativeInteger(auth.windowSeconds),
+      authFailuresWindow: nonnegativeInteger(auth.authFailuresWindow),
+      authRateLimitedWindow: nonnegativeInteger(auth.authRateLimitedWindow),
+      limiterMode: auth.limiterMode === 'telemetry' || auth.limiterMode === 'enforce' ? auth.limiterMode : 'unknown',
+      limiterWindowSeconds: nonnegativeInteger(auth.limiterWindowSeconds),
+      limiterWindowCoverageSeconds: nonnegativeInteger(auth.limiterWindowCoverageSeconds),
+      authFailuresLimiterWindow: nonnegativeInteger(auth.authFailuresLimiterWindow),
+      authRateLimitedLimiterWindow: nonnegativeInteger(auth.authRateLimitedLimiterWindow),
+      uniqueFailureSourcesWindowApproximate: nonnegativeInteger(auth.uniqueFailureSourcesWindowApproximate),
+      uniqueFailureSourcesWindowSeconds: nonnegativeInteger(auth.uniqueFailureSourcesWindowSeconds),
+      trackingCapacityReached: auth.trackingCapacityReached === true,
+      processStartedAt: safeIso(auth.processStartedAt),
+      lastFailureAt: safeIso(auth.lastFailureAt),
+    },
+    signals,
+  };
+}
+
 function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot {
   const item = objectValue(value);
   if (!Array.isArray(item.accounts)) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is invalid');
@@ -639,6 +727,7 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
     hysteria_online: sanitizeSource(sourcesIn.hysteria_online),
     xray: sanitizeSource(sourcesIn.xray),
     xray_online: sanitizeSource(sourcesIn.xray_online),
+    reality_fallback: sanitizeSource(sourcesIn.reality_fallback),
   };
   const totalsIn = objectValue(item.protocolTotals);
   const protocolTotals = {
@@ -696,6 +785,7 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
       proxyAccountedBytes: proxyAccounted,
       gapBytes: reconciliationStatus === 'calibrated' ? nonnegativeInteger(reconciliationIn.gapBytes) : null,
     },
+    security: sanitizeSecurity(item.security),
   };
 }
 
@@ -778,6 +868,7 @@ export async function getVpsSubscriptionDetail(
       account,
       sources: overview.data.sources,
       reportWindow: overview.data.reportWindow,
+      security: overview.data.security,
       reconciliationStatus: overview.data.reconciliation.status,
     },
   };

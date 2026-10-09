@@ -11,12 +11,6 @@
       "settings": {
         "clients": [
           {
-            "id": "<UUID>",
-            "email": "legacy-vless",
-            "level": 0,
-            "flow": "xtls-rprx-vision"
-          },
-          {
             "id": "<LABMEM001_UUID>",
             "email": "Labmem001.vless",
             "level": 0,
@@ -45,6 +39,12 @@
             "email": "Labmem005.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
+          },
+          {
+            "id": "<M204_NET_CORE_UUID>",
+            "email": "M204-Net-Core.vless",
+            "level": 0,
+            "flow": "xtls-rprx-vision"
           }
         ],
         "decryption": "none"
@@ -54,7 +54,7 @@
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "target": "example.com:443",
+          "target": "127.0.0.1:24431",
           "xver": 0,
           "serverNames": [
             "example.com"
@@ -64,6 +64,22 @@
             "<16_HEX_SHORT_ID>"
           ]
         }
+      }
+    },
+    {
+      "tag": "reality-fallback-gate",
+      "listen": "127.0.0.1",
+      "port": 24431,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "www.apple.com",
+        "port": 443,
+        "network": "tcp"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["tls"],
+        "routeOnly": true
       }
     }
   ],
@@ -78,6 +94,23 @@
     }
   ],
   "stats": {},
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["reality-fallback-gate"],
+        "domain": ["full:www.apple.com"],
+        "outboundTag": "direct",
+        "ruleTag": "reality-fallback-allow-exact-sni"
+      },
+      {
+        "type": "field",
+        "inboundTag": ["reality-fallback-gate"],
+        "outboundTag": "block",
+        "ruleTag": "reality-fallback-block-other"
+      }
+    ]
+  },
   "policy": {
     "levels": {
       "0": {
@@ -85,6 +118,10 @@
         "statsUserDownlink": true,
         "statsUserOnline": true
       }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true
     }
   },
   "api": {

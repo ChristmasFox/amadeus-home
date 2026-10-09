@@ -22,8 +22,8 @@ endpoint, shell command, SQL, credential, channel, or recipient:
 - `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, Hysteria2, and frps.
 - `amadeus_vps_subscription_overview`: empty input; returns five Labmem
   identities, the dedicated `M204-Net-Core` Mac mini identity, retired legacy
-  history, protocol totals, a 12-hour sample window when known, freshness, and
-  each account's monitoring start time.
+  history, protocol totals, a 12-hour sample window when known, freshness, each
+  account's monitoring start time, and sanitized proxy-security facts.
 - `amadeus_vps_subscription_detail`: requires one `accountId` from
   `Labmem001`–`Labmem005`, `M204-Net-Core`, or `legacy`; returns one account's
   monitored protocol totals and known activity facts. Legacy is historical and
@@ -36,6 +36,11 @@ the owner is speaking in a group. The tools are also absent from group allowlist
 Select one or combine tools according to the request. Whole-plan traffic
 questions use `amadeus_vps_usage` for KiwiVM truth and its progress bar, plus
 `amadeus_vps_subscription_overview` for the T0-forward account breakdown.
+Security and suspected proxy-usage questions such as “VPS 有没有被盗用”,
+“HY2 有异常登录吗”, “Reality 有异常流量吗”, and “哪个订阅流量异常” use
+`amadeus_vps_subscription_overview`; use its typed security facts and signals,
+not model estimates. “M204-Net-Core 当前在线情况” uses
+`amadeus_vps_subscription_detail` for that account's HY2 and VLESS online facts.
 Account-specific questions use `amadeus_vps_subscription_detail`; explicit HY2
 versus VLESS questions use the same tool's protocol split. Only call the
 reported `totalMonitoredBytes` a total when `totalsComplete` is true. Otherwise
@@ -88,11 +93,24 @@ whole-plan quota as three distinct facts. While reconciliation is
 `uncalibrated`, say its relationship is unknown and do not calculate a gap or
 claim an anomaly. Show HY2/VLESS splits in the normal report only when useful;
 include them for an explicit query or when a calibrated anomaly requires
-explanation. Highlight source staleness/degradation and report an unknown
-reset time as unavailable. Then call `amadeus_notify_owner` with the existing
+explanation. When security facts are available, add a concise security line
+with the observed 12-hour HY2 failed-auth and rate-limit counts and the 12-hour
+Reality fallback byte count. If a configured security signal is present, name
+the signal and affected account/protocol when supplied. Do not print IPs,
+credentials, subscription URLs, or destination history. The unique failure
+source count is approximate and covers only the bounded limiter window; limiter
+state resets when the accounting service restarts. Highlight source
+staleness/degradation and report an unknown reset time as unavailable. Then call
+`amadeus_notify_owner` with the existing
 stable event key such as `vps-report:2026-09-18:evening`. A manually triggered
 cron run must never use the scheduled key; use
 `vps-report:manual:<current ISO time>:evening` instead. The plugin also
 isolates an accidentally reused scheduled key at the tool boundary. That
 notifier has one fixed destination: the WhatsApp owner DM. Do not use Telegram,
 KOOK, a group, cron fallback delivery, or an invented healthy status.
+
+Describe a configured threshold crossing as an “observed suspicious signal”.
+Traffic volume, one online-count sample, failed-auth counts, or fallback bytes
+alone do not prove credential theft or VPS compromise. Do not call a credential
+“leaked” or the VPS “compromised” without direct evidence. Provider/proxy
+differences remain unknown while reconciliation is `uncalibrated`.

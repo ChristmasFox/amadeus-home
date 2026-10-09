@@ -14,6 +14,7 @@ import stat
 import subprocess
 import threading
 import time
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,10 +31,13 @@ MAX_PROVIDER_BODY_BYTES = 1_000_000
 MAX_STATS_BODY_BYTES = 2_000_000
 MIN_XRAY_ONLINE_VERSION = (26, 6, 27)
 XRAY_USER_STATS_PATTERN = "user>>>"
-SOURCE_NAMES = ("provider", "hysteria_traffic", "hysteria_online", "xray", "xray_online")
+XRAY_FALLBACK_STATS_PATTERN = "inbound>>>reality-fallback-gate>>>traffic>>>"
+FALLBACK_INBOUND_TAG = "reality-fallback-gate"
+SOURCE_NAMES = ("provider", "hysteria_traffic", "hysteria_online", "xray", "xray_online", "reality_fallback")
 EMAIL_TO_ACCOUNT = {value: key for key, value in VLESS_EMAILS.items()}
 HY2_ID_TO_ACCOUNT = {"legacy-hy2": LEGACY_ID, **{account_id: account_id for account_id in ACCOUNT_IDS if account_id != LEGACY_ID}}
 COUNTER_PATTERN = re.compile(r"^user>>>([^>]+)>>>traffic>>>(uplink|downlink)$")
+FALLBACK_COUNTER_PATTERN = re.compile(r"^inbound>>>reality-fallback-gate>>>traffic>>>(uplink|downlink)$")
 
 
 class SourceFailure(RuntimeError):
@@ -174,6 +178,157 @@ def parse_xray_stats(payload: object) -> dict[str, tuple[int, int]]:
     }
 
 
+def parse_xray_fallback_stats(payload: object) -> tuple[int, int]:
+    """Return only the fixed Reality gate's byte counters; never parse destinations."""
+    if not isinstance(payload, dict) or not isinstance(payload.get("stat"), list):
+        raise SourceFailure("invalid_response")
+    counters: dict[str, int] = {}
+    for item in payload["stat"]:
+        if not isinstance(item, dict):
+            continue
+        match = FALLBACK_COUNTER_PATTERN.fullmatch(str(item.get("name", "")))
+        if not match:
+            continue
+        try:
+            value = _counter_integer(item.get("value"))
+        except SourceFailure:
+            continue
+        counters[match.group(1)] = value
+    if set(counters) != {"uplink", "downlink"}:
+        raise SourceFailure("unavailable")
+    return counters["uplink"], counters["downlink"]
+
+
+def parse_hysteria_client_addr(value: object) -> str | None:
+    """Normalize the official Hysteria addr field without retaining its source port."""
+    if not isinstance(value, str) or len(value) > 128 or "\x00" in value:
+        return None
+    if value.startswith("["):
+        close = value.find("]")
+        if close <= 1 or value[close + 1:close + 2] != ":":
+            return None
+        raw_ip, raw_port = value[1:close], value[close + 2:]
+    else:
+        raw_ip, separator, raw_port = value.rpartition(":")
+        if not separator or not raw_ip or ":" in raw_ip:
+            return None
+    if not raw_port.isascii() or not raw_port.isdigit():
+        return None
+    port = int(raw_port)
+    if not 1 <= port <= 65535 or "%" in raw_ip:
+        return None
+    try:
+        return ipaddress.ip_address(raw_ip).compressed
+    except ValueError:
+        return None
+
+
+@dataclass
+class _FailureSource:
+    attempts: deque[float]
+    last_seen: float
+    blocked_until: float = 0.0
+
+
+class AuthFailureTracker:
+    """Bounded in-memory limiter state plus sanitized rolling counters."""
+
+    def __init__(
+        self, *, window_seconds: int = 900, threshold: int = 120,
+        cooldown_seconds: int = 300, max_tracked_sources: int = 4096,
+        mode: str = "telemetry", clock=time.monotonic,
+    ) -> None:
+        if not 1 <= window_seconds <= 86400 or not 1 <= threshold <= 1_000_000:
+            raise ValueError("HY2 auth failure window or threshold is invalid")
+        if not 1 <= cooldown_seconds <= 86400 or not 1 <= max_tracked_sources <= 65536:
+            raise ValueError("HY2 auth cooldown or tracker capacity is invalid")
+        if mode not in {"telemetry", "enforce"}:
+            raise ValueError("HY2 auth limiter mode is invalid")
+        self.window_seconds = window_seconds
+        self.threshold = threshold
+        self.cooldown_seconds = cooldown_seconds
+        self.max_tracked_sources = max_tracked_sources
+        self.mode = mode
+        self._clock = clock
+        self._started = clock()
+        self._started_at = utc_now()
+        self._lock = threading.Lock()
+        self._sources: OrderedDict[str, _FailureSource] = OrderedDict()
+        self._buckets: dict[int, list[int]] = {}
+        self._last_failure_at: str | None = None
+        self._capacity_reached = False
+
+    def _purge_locked(self, now: float) -> None:
+        cutoff = now - self.window_seconds
+        for second in tuple(self._buckets):
+            if second < int(cutoff):
+                del self._buckets[second]
+        for address, state in tuple(self._sources.items()):
+            while state.attempts and state.attempts[0] <= cutoff:
+                state.attempts.popleft()
+            if not state.attempts and state.blocked_until <= now:
+                del self._sources[address]
+
+    def _bucket_locked(self, now: float) -> list[int]:
+        return self._buckets.setdefault(int(now), [0, 0])
+
+    def reject_rate_limited(self, client_ip: str) -> bool:
+        now = self._clock()
+        with self._lock:
+            self._purge_locked(now)
+            state = self._sources.get(client_ip)
+            if self.mode != "enforce" or state is None or state.blocked_until <= now:
+                return False
+            state.last_seen = now
+            self._sources.move_to_end(client_ip)
+            self._bucket_locked(now)[1] += 1
+            return True
+
+    def record_failure(self, client_ip: str, *, at: str | None = None) -> None:
+        now = self._clock()
+        with self._lock:
+            self._purge_locked(now)
+            self._bucket_locked(now)[0] += 1
+            self._last_failure_at = at or utc_now()
+            state = self._sources.get(client_ip)
+            if state is None:
+                if len(self._sources) >= self.max_tracked_sources:
+                    # LRU eviction is visible as approximate source coverage; the map stays bounded.
+                    self._sources.popitem(last=False)
+                    self._capacity_reached = True
+                state = _FailureSource(deque(maxlen=self.threshold), now)
+                self._sources[client_ip] = state
+            state.last_seen = now
+            state.attempts.append(now)
+            if self.mode == "enforce" and len(state.attempts) >= self.threshold:
+                state.blocked_until = max(state.blocked_until, now + self.cooldown_seconds)
+            self._sources.move_to_end(client_ip)
+
+    def snapshot(self) -> dict[str, object]:
+        now = self._clock()
+        with self._lock:
+            self._purge_locked(now)
+            failures = sum(values[0] for values in self._buckets.values())
+            limited = sum(values[1] for values in self._buckets.values())
+            return {
+                "limiterMode": self.mode,
+                "limiterWindowSeconds": self.window_seconds,
+                "limiterWindowCoverageSeconds": min(self.window_seconds, max(0, int(now - self._started))),
+                "authFailuresLimiterWindow": failures,
+                "authRateLimitedLimiterWindow": limited,
+                "uniqueFailureSourcesWindowApproximate": len(self._sources),
+                "uniqueFailureSourcesWindowSeconds": self.window_seconds,
+                "trackingCapacityReached": self._capacity_reached,
+                "processStartedAt": self._started_at,
+                "processUptimeSeconds": max(0, int(now - self._started)),
+                "lastFailureAt": self._last_failure_at,
+            }
+
+
+def _auth_tx_valid(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= (1 << 63) - 1
+
+
 def parse_xray_online(payload: object, account_id: str) -> int:
     """Read one Xray active-source-IP count without accepting IP-list data."""
     email = VLESS_EMAILS.get(account_id)
@@ -276,9 +431,26 @@ class ServiceConfig:
     xray_binary: str
     kiwivm_base_url: str
     kiwivm_credentials_file: str
+    hy2_auth_fail_window_seconds: int
+    hy2_auth_fail_threshold: int
+    hy2_auth_fail_cooldown_seconds: int
+    hy2_auth_fail_max_tracked_sources: int
+    hy2_auth_fail_mode: str
+    reality_fallback_alert_bytes: int
+    account_dominant_share_percent: int
+    account_dominant_min_window_bytes: int
 
     @classmethod
     def from_env(cls) -> "ServiceConfig":
+        def bounded_int(name: str, default: int, minimum: int, maximum: int) -> int:
+            try:
+                value = int(os.environ.get(name, str(default)))
+            except ValueError as error:
+                raise ValueError(f"{name} must be an integer") from error
+            if not minimum <= value <= maximum:
+                raise ValueError(f"{name} is outside its allowed range")
+            return value
+
         host = os.environ.get("ACCOUNTING_LISTEN_HOST", "127.0.0.1")
         if host not in {"127.0.0.1", "::1", "localhost"}:
             raise ValueError("accounting auth endpoint must bind loopback")
@@ -299,6 +471,9 @@ class ServiceConfig:
         xray_binary = os.environ.get("XRAY_BINARY", "/usr/local/bin/xray")
         if not Path(xray_binary).is_absolute():
             raise ValueError("Xray binary path must be absolute")
+        hy2_auth_fail_mode = os.environ.get("HY2_AUTH_FAIL_MODE", "telemetry").strip().lower()
+        if hy2_auth_fail_mode not in {"telemetry", "enforce"}:
+            raise ValueError("HY2_AUTH_FAIL_MODE must be telemetry or enforce")
         return cls(
             db_path=os.environ.get("ACCOUNTING_DB_PATH", "/var/lib/amadeus-accounting/subscription-accounts.sqlite"),
             snapshot_path=os.environ.get("ACCOUNTING_PUBLIC_SNAPSHOT_PATH", "/var/lib/amadeus-accounting/subscription-usage-public.json"),
@@ -313,13 +488,22 @@ class ServiceConfig:
             xray_binary=xray_binary,
             kiwivm_base_url=kiwivm_base_url,
             kiwivm_credentials_file=os.environ.get("KIWIVM_CREDENTIALS_FILE", "/etc/amadeus-accounting/kiwivm-credentials.json"),
+            hy2_auth_fail_window_seconds=bounded_int("HY2_AUTH_FAIL_WINDOW_SECONDS", 900, 60, 86400),
+            hy2_auth_fail_threshold=bounded_int("HY2_AUTH_FAIL_THRESHOLD", 120, 1, 1_000_000),
+            hy2_auth_fail_cooldown_seconds=bounded_int("HY2_AUTH_FAIL_COOLDOWN_SECONDS", 300, 1, 86400),
+            hy2_auth_fail_max_tracked_sources=bounded_int("HY2_AUTH_FAIL_MAX_TRACKED_SOURCES", 4096, 16, 65536),
+            hy2_auth_fail_mode=hy2_auth_fail_mode,
+            reality_fallback_alert_bytes=bounded_int("REALITY_FALLBACK_ALERT_BYTES", 1024, 0, (1 << 53) - 1),
+            account_dominant_share_percent=bounded_int("ACCOUNT_DOMINANT_SHARE_PERCENT", 85, 1, 100),
+            account_dominant_min_window_bytes=bounded_int("ACCOUNT_DOMINANT_MIN_WINDOW_BYTES", 1 << 30, 0, (1 << 53) - 1),
         )
 
 
 class AccountingCollector:
-    def __init__(self, config: ServiceConfig, store: AccountingStore) -> None:
+    def __init__(self, config: ServiceConfig, store: AccountingStore, auth_tracker: AuthFailureTracker | None = None) -> None:
         self.config = config
         self.store = store
+        self.auth_tracker = auth_tracker
         _require_protected_file(config.hy2_stats_secret_file, "Hysteria stats secret")
         self._stats_secret = Path(config.hy2_stats_secret_file).read_text(encoding="utf-8").strip()
         if not self._stats_secret or len(self._stats_secret) > 4096:
@@ -365,6 +549,25 @@ class AccountingCollector:
         except json.JSONDecodeError as error:
             raise SourceFailure("invalid_response") from error
         return parse_xray_stats(payload), generation
+
+    def _xray_fallback(self) -> tuple[tuple[int, int], str | None]:
+        try:
+            generation = self._xray_generation()
+            result = subprocess.run(
+                [self.config.xray_binary, "api", "statsquery", f"--server={self.config.xray_stats_server}", "-pattern", XRAY_FALLBACK_STATS_PATTERN],
+                check=False, capture_output=True, text=True, timeout=8,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise SourceFailure("timeout") from error
+        except OSError as error:
+            raise SourceFailure("unavailable") from error
+        if result.returncode != 0 or len(result.stdout) > MAX_STATS_BODY_BYTES:
+            raise SourceFailure("unreachable" if result.returncode else "invalid_response")
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise SourceFailure("invalid_response") from error
+        return parse_xray_fallback_stats(payload), generation
 
     def _xray_online(self) -> dict[str, int]:
         try:
@@ -462,6 +665,17 @@ class AccountingCollector:
             logging.warning("accounting source=xray status=error code=%s", code)
 
         try:
+            (upload, download), generation = self._xray_fallback()
+            self.store.record_reality_fallback_sample(
+                upload=upload, download=download, generation=generation, sampled_at=sampled_at,
+            )
+            logging.info("accounting source=reality_fallback status=ok")
+        except Exception as error:
+            code = error.code if isinstance(error, SourceFailure) else "unavailable"
+            self.store.mark_source_error("reality_fallback", sampled_at, code)
+            logging.warning("accounting source=reality_fallback status=error code=%s", code)
+
+        try:
             online = self._xray_online()
             self.store.record_online_sample(online, sampled_at, protocol="vless", source="xray_online")
             logging.info("accounting source=xray_online status=ok account_counts=%d", len(online))
@@ -472,7 +686,17 @@ class AccountingCollector:
 
         try:
             group_id = grp.getgrnam(self.config.snapshot_group).gr_gid
-            self.store.write_public_snapshot(self.config.snapshot_path, group_id=group_id)
+            self.store.write_public_snapshot(
+                self.config.snapshot_path,
+                group_id=group_id,
+                auth_security=self.auth_tracker.snapshot() if self.auth_tracker else None,
+                security_thresholds={
+                    "hy2AuthFailThreshold": self.config.hy2_auth_fail_threshold,
+                    "realityFallbackAlertBytes": self.config.reality_fallback_alert_bytes,
+                    "accountDominantSharePercent": self.config.account_dominant_share_percent,
+                    "accountDominantMinWindowBytes": self.config.account_dominant_min_window_bytes,
+                },
+            )
         except Exception as error:
             # The sanitized view is unavailable; do not expose the exception or any path.
             logging.error("accounting snapshot status=error code=%s", type(error).__name__)
@@ -488,8 +712,9 @@ class AccountingHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, address: tuple[str, int], store: AccountingStore) -> None:
+    def __init__(self, address: tuple[str, int], store: AccountingStore, auth_tracker: AuthFailureTracker | None = None) -> None:
         self.accounting_store = store
+        self.auth_failure_tracker = auth_tracker or AuthFailureTracker()
         super().__init__(address, AccountingRequestHandler)
 
 
@@ -537,7 +762,20 @@ class AccountingRequestHandler(BaseHTTPRequestHandler):
             self._reply(400, {"ok": False})
             return
         candidate = payload.get("auth") if isinstance(payload, dict) else None
+        client_ip = parse_hysteria_client_addr(payload.get("addr") if isinstance(payload, dict) else None)
+        tx = payload.get("tx") if isinstance(payload, dict) else None
+        if client_ip is None or not _auth_tx_valid(tx):
+            self._reply(403, {"ok": False})
+            return
+        if self.server.auth_failure_tracker.reject_rate_limited(client_ip):
+            try:
+                self.server.accounting_store.record_security_event("hy2_auth_rate_limited", utc_now())
+            except Exception as error:
+                logging.error("accounting security telemetry status=error code=%s", type(error).__name__)
+            self._reply(403, {"ok": False})
+            return
         if not isinstance(candidate, str):
+            self._record_auth_failure(client_ip)
             self._reply(403, {"ok": False})
             return
         try:
@@ -546,9 +784,18 @@ class AccountingRequestHandler(BaseHTTPRequestHandler):
             self._reply(503, {"ok": False})
             return
         if account_id is None:
+            self._record_auth_failure(client_ip)
             self._reply(403, {"ok": False})
             return
         self._reply(200, {"ok": True, "id": AUTH_IDS[account_id]})
+
+    def _record_auth_failure(self, client_ip: str) -> None:
+        failed_at = utc_now()
+        self.server.auth_failure_tracker.record_failure(client_ip, at=failed_at)
+        try:
+            self.server.accounting_store.record_security_event("hy2_auth_failure", failed_at)
+        except Exception as error:
+            logging.error("accounting security telemetry status=error code=%s", type(error).__name__)
 
     def _reply(self, status: int, value: dict[str, object]) -> None:
         body = json.dumps(value, separators=(",", ":")).encode("utf-8")
@@ -571,9 +818,16 @@ def run_service() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO").upper(), format="%(levelname)s %(message)s")
     config = ServiceConfig.from_env()
     store = AccountingStore(config.db_path)
-    collector = AccountingCollector(config, store)
+    auth_tracker = AuthFailureTracker(
+        window_seconds=config.hy2_auth_fail_window_seconds,
+        threshold=config.hy2_auth_fail_threshold,
+        cooldown_seconds=config.hy2_auth_fail_cooldown_seconds,
+        max_tracked_sources=config.hy2_auth_fail_max_tracked_sources,
+        mode=config.hy2_auth_fail_mode,
+    )
+    collector = AccountingCollector(config, store, auth_tracker)
     stop = threading.Event()
-    server = AccountingHTTPServer((config.listen_host, config.listen_port), store)
+    server = AccountingHTTPServer((config.listen_host, config.listen_port), store, auth_tracker)
     thread: threading.Thread | None = None
     if config.collector_enabled:
         thread = threading.Thread(target=collector.run, args=(stop,), name="accounting-collector", daemon=True)
