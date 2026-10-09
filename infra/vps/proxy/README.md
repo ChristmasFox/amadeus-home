@@ -23,7 +23,7 @@ Quantumult X 的字段以其官方样例为准，而不是按 sing-box 或 Clash
 
 `infra/vps/subscription/accounting_cli.py render-xray` 生成并已应用的配置把 Reality `target` 指向
 `127.0.0.1:24431`。这个 loopback `dokodemo-door` gate 只接受 TLS sniff 得到的精确
-`www.apple.com` SNI 并转发到原目标；缺失或不匹配的 SNI 进入 block outbound。候选启用 Xray
+`www.apple.com` SNI 并转发到原目标；缺失或不匹配的 SNI 进入 block outbound。live 配置启用 Xray
 inbound uplink/downlink 统计，collector 通过 `reality-fallback-gate` tag 采样聚合字节数，不记录
 请求来源或目标地址。24431 不应加入公网上的监听或防火墙规则。
 

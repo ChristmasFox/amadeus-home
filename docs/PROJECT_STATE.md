@@ -193,6 +193,41 @@ release. Report jobs remain at 09:30 and 21:30 Asia/Shanghai. Reconciliation
 remains `uncalibrated`. Evidence:
 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`.
 
+## 2026-10-09 — VPS proxy security hardening applied; owner-DM query pending
+
+Source commit `8434e2b4018c` adds an exact-SNI Xray Reality fallback gate,
+reset-safe fallback counters, bounded HY2 failed-auth tracking and conservative
+enforcement, sanitized security snapshots, and owner-only Amadeus presentation.
+Xray now sends Reality fallback to loopback `127.0.0.1:24431`; only exact
+`www.apple.com` SNI reaches the audited camouflage target, and other gate
+traffic is blocked. Hysteria had no masquerade configured and continues to use
+its default 404 behavior. Auth, Xray stats, HY2 stats and fallback gate remain
+loopback-only. No active account credential or client-visible node parameter
+changed.
+
+M204-Net-Core and Labmem001 passed real VLESS and HY2 HTTPS smokes; HY2 passed
+again after the limiter entered `enforce`, with TLS verification enabled. The
+owner security snapshot reports fallback/auth aggregate telemetry and the
+configured fallback traffic signal. On 2026-10-09, those counters include
+controlled hardening acceptance traffic and do not establish compromise.
+Provider/proxy reconciliation remains `uncalibrated`.
+
+OpenClaw now runs immutable image
+`local/openclaw-amadeus:git-8434e2b4018c-20261009024420` and is healthy. Only
+the image field changed in the live Compose file; container mounts, port
+bindings, restart policy and networks were preserved. The existing morning and
+evening report IDs remain enabled, no-deliver, and scheduled for 09:30/21:30
+Asia/Shanghai; their prompts include the security facts. One manual morning
+report was delivered through the existing owner outbox using a manual key. The
+required real direct owner-DM query remains pending because the Mac is locked;
+the CLI-driven turn did not expose the native VPS tool and no query message was
+sent. Do not mark the hardening Goal complete until that direct owner query is
+performed and its visible reply is verified.
+
+Protected rollback evidence: VPS `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`;
+CasaOS `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply`;
+repo `.agent/checkpoints/2026-10-09-vps-proxy-security-hardening.md`.
+
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 
 A lightweight macOS LaunchAgent serves the local generation/reference-edit

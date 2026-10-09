@@ -2,7 +2,7 @@
 
 Date: 2026-10-09 (Asia/Shanghai)
 
-Status: PLANNED_NOT_APPLIED
+Status: IN_PROGRESS — Phases 0–3 applied; OpenClaw and report changes are live and the manual report passed. A real direct owner-DM query remains pending because the Mac is locked.
 
 ## 0. Objective
 
@@ -583,3 +583,32 @@ Not part of this Goal:
   https://v2.hysteria.network/docs/advanced/Traffic-Stats-API/
 
 Implementation must follow the pinned production versions and live audited state when documentation/examples differ from the current runtime.
+
+## 19. Execution evidence — 2026-10-09
+
+### Source and validation
+
+- Hardened source is committed on `main` at `8434e2b4018c` (`feat(vps): harden proxy fallback and auth telemetry`). Qwen/Image Lab worktree changes were not included.
+- Focused Python suite: 41 passed. Amadeus suite: 136 passed. Amadeus typecheck, Python compilation, shell syntax, `pnpm check:secrets`, and `git diff --check` passed.
+- The Xray candidate passed the pinned 26.9.30 `run -test`; it preserves the six active managed identities and client-facing Reality parameters. The live Hysteria config had no masquerade, so it remains unchanged and uses the v2.12.3 default 404 response.
+
+### VPS apply and acceptance
+
+- Protected pre-apply VPS checkpoint: `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply` (root-only; Xray/Hysteria/accounting source, env, DB backup, snapshot, probe and manifest). A separate OpenClaw pre-apply checkpoint is recorded in `.agent/checkpoints/2026-10-09-vps-proxy-security-hardening.md` and stored root-only on CasaOS.
+- Xray Reality now falls back to `127.0.0.1:24431`; that loopback gate routes only exact `www.apple.com` SNI to the audited camouflage target and blocks every other gate route. Xray system inbound counters feed the `reality-fallback-gate` security snapshot.
+- A verified TLS 1.3 handshake through the allowed SNI returned the `www.apple.com` certificate. A non-allowed SNI probe received no certificate and ended with an unexpected EOF. The loopback gate counter is observable; current snapshot is 71,599 B and exceeds the configured 1,024 B observation threshold. The count includes controlled acceptance traffic and does not prove compromise.
+- Accounting auth remains loopback-only and now runs `enforce` with a 900-second window, threshold 120, 300-second cooldown and 4,096-source cap. Current post-restart limiter window reports one failed-auth sample and zero throttled requests; the 12-hour persisted aggregate reports four failures. Sources for Xray, HY2 traffic and fallback are `ok`; the 900-second limiter window is fully covered. No raw source address or auth value is persisted.
+- M204-Net-Core and Labmem001 passed VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Controlled invalid-auth probes returned the same generic 403 shape. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 and loopback-only auth/stats/gate listeners were verified. All six active accounts remain enabled; Legacy remains disabled. No active credential, client parameter, hostname, SNI or public port changed.
+
+### OpenClaw and owner report
+
+- Candidate image `local/openclaw-amadeus:git-8434e2b4018c-20261009024420` (ARM64, image ID `sha256:8a2b836f50384b04f11ffb33d87ff30454fee5fce1b32a3fcb3417222a8a3180`) is live and healthy. Only the OpenClaw Compose image reference changed; normalized Compose configuration matched after ignoring that one field, and container mounts, port bindings, restart policy and network names were unchanged. The Amadeus plugin loaded with the existing VPS overview and fixed owner notifier registered.
+- The existing morning and evening jobs remain unique, enabled and no-deliver at 09:30 and 21:30 Asia/Shanghai, with their IDs unchanged. Their messages now include sanitized Reality/HY2 security facts, explicit stale/unknown handling, and cautious signal wording.
+- A manual morning report was sent through the canonical owner outbox and verified as `.sent.json` with a `vps-report:manual:<ISO timestamp>:morning` key. It included Reality fallback 71,599 B, four 12-hour auth failures, one limiter-window failure, zero throttles, `enforce`, full 900-second coverage, and the configured fallback signal. It explicitly says 2026-10-09 includes controlled acceptance traffic. The saved report contained no IPv4 address or credential values and did not consume the scheduled idempotency key.
+- The required real direct owner-DM query is still pending. The Gateway CLI owner-targeted turn did not expose the native VPS tool; local mode could not start because the Gateway already owns that state directory. The Mac UI is locked, so the authorized WhatsApp owner conversation could not be opened. No WhatsApp query message was sent. After unlocking the Mac, run one real owner-DM query for `amadeus_vps_subscription_overview` and verify the visible reply; then the Goal can be evaluated for completion.
+
+### Rollback and cleanup
+
+- VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and Labmem001 VLESS/HY2 smokes. Hysteria config did not change.
+- OpenClaw rollback: restore the root-only pre-apply Compose backup at `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply/docker-compose.before.yml` and run `docker compose up -d --no-build openclaw`; restore the two prior report messages from `vps-report-jobs.before.json` with `cron edit`. Do not roll back or delete the accounting database or rotate credentials.
+- Temporary local client configs, the Xray candidate containing live identities, and the staged VPS source directory were removed after acceptance. Protected rollback checkpoints and the previous immutable OpenClaw image remain available.

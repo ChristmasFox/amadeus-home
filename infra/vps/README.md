@@ -76,6 +76,21 @@ Amadeus 1.9.9 已部署，原 legacy token/HY2/VLESS 凭据仍有效。现有 ow
   128 MiB 和 20% CPU。它单独记录 source 健康状态，源失败不转成零。
 - per-account T0 从 provider baseline 建立。KiwiVM 仍是整机配额和进度条唯一真相；HY2/VLESS
   controlled calibration 完成前 reconciliation 始终是 `uncalibrated`，不得声称差值异常。
+- `amadeus-vps-readonly-probe` 从脱敏 snapshot 暴露 HY2 认证失败聚合值、限额模式与窗口覆盖秒数、
+  Reality fallback 聚合计数及固定安全信号；它不输出来源 IP、认证值或 Reality 目标。
+
+### 代理安全加固（已 apply，2026-10-09）
+
+Xray Reality fallback 现在只连接监听 `127.0.0.1:24431` 的 loopback gate；gate 只允许精确 TLS
+SNI `www.apple.com` 到当前伪装目标，其余 SNI 由 block outbound 丢弃。Xray inbound uplink/downlink
+计数通过 `reality-fallback-gate` tag 采样。真实 M204 与 Labmem001 VLESS 客户端均通过 HTTPS
+验证并产生账号计数；gate 端口不对公网监听，也没有新增防火墙端口。
+
+Hysteria config 未配置 masquerade，官方默认对无效请求返回 404。accounting auth endpoint 仍只监听
+loopback；失败来源只在 accounting 进程内存中用于可配置的有界限额，SQLite 和 owner snapshot 只
+保存聚合计数。当前 live mode 为 `enforce`（900 秒窗口、120 次阈值、300 秒 cooldown、最多跟踪
+4096 个来源）；进程重启会清空逐来源限额状态，snapshot 带窗口实际覆盖秒数。M204 和 Labmem001
+在 enforcement 生效后均通过启用 TLS 校验的 HY2 HTTPS smoke。
 
 当前 `amadeus-accounting` 只写独立 state 目录，对 KiwiVM credential 和 HY2 stats-secret 两个
 固定文件只读；`amadeus-vps-readonly` 仅通过 snapshot 组读取脱敏快照。该 SSH 用户不属于 `caddy`
@@ -90,6 +105,7 @@ stdout/journal 中输出值；账号凭据和订阅只保留在 VPS。
 | 443 | TCP | Caddy HTTPS 站点（例如 Emby） | Let’s Encrypt 自动证书；不承载 Xray |
 | 2053 | TCP | 个人 VLESS + Reality | QX 节点端口；非标准端口 |
 | 2053 | UDP | 个人 Hysteria 2 | Clash Meta/Mihomo、Shadowrocket 节点端口；与 TCP 2053 不冲突 |
+| 24431 | TCP | Xray Reality fallback gate | 仅 loopback `127.0.0.1` 监听，不开放公网 |
 | 7000 | TCP | frps 控制通道 | 仅供 HomeLab frpc 连接 |
 | 8096 | TCP | Emby frp 回源端口 | Caddy `emby.nyannyan.top` |
 | 2283 | TCP | Immich frp 回源端口 | Caddy `immich.nyannyan.top` |

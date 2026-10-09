@@ -9,7 +9,7 @@ Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local
 
 ## Concurrent VPS proxy security hardening Goal — 2026-10-09
 
-Planned Goal: `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md`.
+Active concurrent Goal: `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` (explicitly selected by the operator).
 
 Current security baseline: the active proxy identities are `Labmem001`–`Labmem005`
 plus `M204-Net-Core`; Legacy is retired and its old subscription/HY2/VLESS
@@ -24,7 +24,7 @@ failed-auth telemetry and conservative optional throttling using Hysteria's
 reported client addr, plus owner-only Kurisu security visibility. Existing
 09:30/21:30 reports are updated in place only after compatibility acceptance.
 
-Status: `PLANNED_NOT_APPLIED`.
+Status: `PHASE_0_3_APPLIED; VLESS_HY2_COMPATIBILITY_PASS; OPENCLAW_AND_REPORTS_APPLIED; MANUAL_REPORT_SENT; DIRECT_OWNER_DM_QUERY_PENDING_MAC_UNLOCK`.
 
 The operator explicitly pre-authorized the scoped Git/macOS/frpc/frps/Caddy/DNS-if-needed/runtime-secret/restart/smoke mutations in the active Goal and asked execution to continue without routine confirmation until `https://image.nyannyan.top` is deployed and usable. This authorization does not extend to SSH-auth/firewall changes, unrelated DNS/services, credential rotation, or other out-of-scope destructive operations.
 
