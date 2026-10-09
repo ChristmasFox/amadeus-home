@@ -48,21 +48,21 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 
 ## 订阅账号流量归因（已 apply，2026-10-08）
 
-`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005 和独立 legacy 身份。
-VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、五个 Labmem 账号订阅、固定只读 probe；
-Amadeus 1.9.9 已部署，原 legacy token/HY2/VLESS 凭据仍有效。现有 owner 报告 Cron ID 保持不变，
+`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005、M204 和独立 legacy 身份。
+VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、六个活动账号订阅和固定只读 probe；
+Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持不变，
 启用时间为 09:30 和 21:30 Asia/Shanghai，走既有 owner outbox。五个 Labmem 账号的 HY2/VLESS
 受控连接与计数归因均通过；Xray/Hysteria 重启计数器验证通过。Provider/proxy reconciliation
 仍为 `uncalibrated`，不输出差值异常结论。部署、验收与 rollback 记录见 Goal 和
-`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`。操作者报告 owner 直聊查询正常，
-并要求保留旧 token、结束 Goal；六个账号的四种公网订阅格式共 24 条均返回 HTTP 200，正文与 VPS 本地文件一致。
-21:30 Cron 在闭合时仍是当天未来任务。此前工具输出意外包含 legacy bearer-token 路径的事件保留为已知残余；
-旧 token 未轮换。protected pre-change rollback archive 位于 Goal 记录的仓库外 checkpoint 路径。
+`.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`。六个活动账号的四种公网订阅格式共
+24 条均返回 HTTP 200，正文与 VPS 本地文件一致。Legacy 订阅 token、HY2 secret 和 VLESS UUID 已轮换，
+旧订阅路径、认证和隧道拒绝证据见 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`；
+旧凭据只保留在 VPS root-only checkpoint 中，不能恢复成 live 配置。
 
 目标 runtime 边界：
 
 - `/var/lib/amadeus-accounting/subscription-accounts.sqlite` 由独立 `amadeus-accounting` systemd 用户拥有，
-  mode `0600`；库中含五组 token/HY2 secret/VLESS UUID 和 legacy 凭据，不能提供给 OpenClaw。
+  mode `0600`；库中含六个活动账号 secret 和已撤销的 Legacy 历史凭据，不能提供给 OpenClaw。
 - `/var/lib/amadeus-accounting/subscription-usage-public.json` mode `0640`，group
   `amadeus-accounting-snapshot`。固定 `amadeus-vps-readonly-probe` 只读取这份脱敏文件；SSH probe
   用户不属于 Caddy 或数据库读取组。
