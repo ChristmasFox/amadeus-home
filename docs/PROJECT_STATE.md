@@ -22,6 +22,26 @@ against an occupied engine port and performs graceful child cleanup on
 SIGTERM. Checkpoint:
 `.agent/checkpoints/2026-10-09-qwen-image-quality-stale-fast-engine.md`.
 
+## 2026-10-09 — 9Router image diagnostics and false-lock fix deployed
+
+The operator-approved Apply rollout deployed `local/9router:git-ed872b3f3978-20261009T130134Z`
+with manifest digest `sha256:1a068329307c0a46f7699bfe05034f7375891113adddd3efb44ce7b23aa97045`.
+Only 9Router was restarted; OpenClaw remains on
+`local/openclaw-amadeus:git-a1983e9b637d-20261009090331`. The effective npm 0.5.95
+CLI bundle reports the upstream-diagnostics and runtime-policy markers, and the
+three health endpoints plus unauthenticated model boundary passed.
+
+The compiled parser now preserves valid Codex image results and emits typed
+`image_result_missing`, `sse_incomplete`, `transport_interrupted`,
+`upstream_failed`, `safety_refusal` and `account_unavailable` outcomes. The
+request-scoped 502 selector fixture returned zero cooldown and zero provider
+updates, while a genuine 429 retained a bounded native cooldown/update. The
+reference fixture preserved unchanged bytes/MIME across sunburst → flare → 2.5
+and verified the success model header. A real edit smoke produced one successful
+sunburst result; a later provider failure made exactly three bounded attempts and
+left the active Codex row active with no image locks or error state. Evidence and
+rollback: `.agent/checkpoints/2026-10-09-9router-image-diagnostics-cooldown-fix.md`.
+
 ## 2026-10-09 — Engine configs restored from origin/main
 
 The operator requested the previously published engine configuration. The two
