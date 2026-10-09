@@ -114,6 +114,25 @@ comparison; no image was generated during this config change. Evidence and
 rollback are in
 `.agent/checkpoints/2026-10-08-qwen-image-quality-cfg1-redeploy.md`.
 
+The operator reported poor image quality and requested restoration of the
+engine configs from `origin/main`. Quality/Fast JSON files now match that Git
+revision: Quality remains 16 steps / CFG 1 with implicit legacy
+`--diffusion-fa` and no configured prefix cache; Fast remains 4 Fun-Acc/PDD
+steps / CFG 1 with `--diffusion-fa`, `q8_0` and mmap. The stale-engine port
+ownership guard and SIGTERM child cleanup remain enabled. No image was
+generated during the config restoration. Deployment and rollback evidence:
+`.agent/checkpoints/2026-10-09-qwen-image-restore-origin-config.md`.
+
+The 12:23 Quality task was marked successful after 92.169 seconds, but its
+image was visibly incomplete. Investigation found an orphan Fast engine still
+holding port 18795 after a bridge restart. The bridge now checks that its
+internal port is free before starting and handles SIGTERM by stopping its own
+engine child. Evidence is in
+`.agent/checkpoints/2026-10-09-qwen-image-quality-stale-fast-engine.md`.
+
+The earlier `--fa` plus prefix-cache `auto` trial is retained as historical
+evidence in `.agent/checkpoints/2026-10-09-qwen-image-quality-fa-prefix-auto.md`.
+
 The Image Lab task history now has an authenticated, task-ID-bound image viewer.
 Seed entry uses decimal text and BigInt validation up to `9223372036854775807`;
 the server converts the decimal string to an exact integer before forwarding,

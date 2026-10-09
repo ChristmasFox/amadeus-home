@@ -18,6 +18,7 @@ from urllib import request
 from bridge import (
     ALLOWED_PROFILES,
     ALLOWED_RESOLUTIONS,
+    ConfigError,
     FUN_ACC_PROFILE,
     MODEL_ID,
     QwenBridge,
@@ -388,6 +389,7 @@ class BridgeTests(unittest.TestCase):
             processes[pid - 1].returncode = 0
 
         with tempfile.TemporaryDirectory() as directory, \
+                mock.patch("bridge.ensure_internal_port_available"), \
                 mock.patch("bridge.subprocess.Popen", side_effect=make_process), \
                 mock.patch("bridge.os.killpg", side_effect=fake_kill), \
                 mock.patch("bridge.request.urlopen", return_value=ReadyResponse()):
@@ -402,6 +404,13 @@ class BridgeTests(unittest.TestCase):
             self.assertIn("--model-args", args_seen[1])
             self.bridge.stop()
             self.assertEqual(sum(process.poll() is None for process in processes), 0)
+
+    def test_start_fails_closed_when_an_existing_engine_owns_the_port(self):
+        self.bridge.profiles["quality"]["internalPort"] = self.native.server_address[1]
+        with mock.patch("bridge.subprocess.Popen") as start_process:
+            with self.assertRaisesRegex(ConfigError, "qwen_internal_port_in_use"):
+                self.bridge.start("quality")
+        start_process.assert_not_called()
 
     def test_hash_and_private_token_checks(self):
         with tempfile.TemporaryDirectory() as directory:

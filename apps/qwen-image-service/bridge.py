@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import secrets
 import signal
+import socket
 import stat
 import subprocess
 import threading
@@ -53,6 +54,15 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 
 class ConfigError(RuntimeError):
     pass
+
+
+def ensure_internal_port_available(port: int) -> None:
+    """Fail closed instead of treating another sd-server's health as ours."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", int(port)))
+    except OSError as error:
+        raise ConfigError("qwen_internal_port_in_use") from error
 
 
 def safe_failure(status: int, kind: str) -> bytes:
@@ -101,6 +111,10 @@ def load_config(path: Path) -> dict:
     sampling_profile = data.get("samplingProfile", QUALITY_SAMPLING_PROFILE)
     if sampling_profile not in {QUALITY_SAMPLING_PROFILE, FUN_ACC_PROFILE}:
         raise ConfigError("qwen_engine_sampling_profile")
+    if data.get("flashAttentionMode") not in {None, "full", "diffusion", "off"}:
+        raise ConfigError("qwen_engine_flash_attention_mode")
+    if data.get("prefixCacheType") not in {None, "q8_0", "auto"}:
+        raise ConfigError("qwen_engine_prefix_cache_type")
     if (data["servicePort"], data["internalPort"]) != SERVICE_PORTS:
         raise ConfigError("qwen_engine_port_policy")
     if (data["generationDeadlineMs"] != GENERATION_TIMEOUT_SECONDS * 1_000 or
@@ -515,7 +529,15 @@ class QwenBridge:
                 "flashAttention": config["flashAttention"],
             })
         elif profile == "quality":
-            health.update({"samplingProfile": QUALITY_SAMPLING_PROFILE, "steps": QUALITY_STEPS, "cfgScale": QUALITY_CFG_SCALE})
+            flash_mode = config.get("flashAttentionMode")
+            flash_argument = "--fa" if flash_mode == "full" else "--diffusion-fa" if flash_mode == "diffusion" or (flash_mode is None and config.get("flashAttention", True)) else None
+            health.update({
+                "samplingProfile": QUALITY_SAMPLING_PROFILE,
+                "steps": QUALITY_STEPS,
+                "cfgScale": QUALITY_CFG_SCALE,
+                "flashAttentionArgument": flash_argument,
+                "prefixCacheType": config.get("prefixCacheType", "disabled"),
+            })
         return health
 
     def _stop_locked(self) -> None:
@@ -541,6 +563,7 @@ class QwenBridge:
             if self.child is not None and self.child.poll() is None and self.active_profile == profile:
                 return
             self._stop_locked()
+            ensure_internal_port_available(int(config["internalPort"]))
             args = [
                 config["sdCppBinary"],
                 "--diffusion-model", config["diffusionModelPath"],
@@ -553,15 +576,23 @@ class QwenBridge:
                 "--steps", str(config["steps"]),
                 "--cfg-scale", str(config["cfgScale"]),
             ]
-            if config.get("flashAttention", True):
+            flash_mode = config.get("flashAttentionMode")
+            if flash_mode == "full":
+                args.append("--fa")
+            elif flash_mode == "diffusion" or (flash_mode is None and config.get("flashAttention", True)):
                 args.append("--diffusion-fa")
             if config.get("mmap", False):
                 args.append("--mmap")
+            model_args = []
             if config.get("samplingProfile") == FUN_ACC_PROFILE:
-                args.extend([
-                    "--model-args",
-                    "qwen_image_2_1_fun_acc_pdd=true,qwen_image_2_1_prefix_cache=true,qwen_image_2_1_prefix_cache_type=" + config["prefixCacheType"],
+                model_args.append("qwen_image_2_1_fun_acc_pdd=true")
+            if config.get("prefixCacheType"):
+                model_args.extend([
+                    "qwen_image_2_1_prefix_cache=true",
+                    "qwen_image_2_1_prefix_cache_type=" + config["prefixCacheType"],
                 ])
+            if model_args:
+                args.extend(["--model-args", ",".join(model_args)])
             args.extend(["--log-level", "info" if profile == "fast" else "error"])
             log_dir = Path(config["logDir"])
             log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -833,6 +864,11 @@ def main() -> None:
     bridge = QwenBridge(profiles, token, Path(args.token_file))
     bridge.monitor.start()
     server = QwenHTTPServer(("127.0.0.1", bridge.service_port), bridge)
+
+    def stop_on_sigterm(_signum, _frame) -> None:
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
