@@ -27,6 +27,7 @@ allowPorts = [
   { single = 8080 },
   { single = 8097 },
   { single = 7575 },
+  { single = 61208 },
   { single = 18789 },
   { single = 18798 },
 ]
