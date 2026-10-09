@@ -42,7 +42,7 @@ export function classifyCodexTerminal(event, payload) {
 
 const RUNTIME_HELPERS = `/* ${MARKER} */
 function amadeusImageSafeToken(a,b=64){let c=typeof a==="string"?a.toLowerCase():"";return/^[a-z0-9_./:-]{1,160}$/u.test(c)?c.slice(0,b):""}
-function amadeusImageError(a,b={}){let c=new Error("amadeus_image_"+a),d=Object.fromEntries(["event","type","code","reason","terminalEventSeen","imageResultSeen"].filter(a=>b[a]!==void 0).map(a=>[a,amadeusImageSafeToken(String(b[a]),80)||Boolean(b[a])]));return c.code="amadeus_image_"+a,c.amadeusImageDiagnostic=d,c}
+function amadeusImageError(a,b={}){let c=new Error("amadeus_image_"+a),d=Object.fromEntries(["event","type","code","reason","terminalEventSeen","imageResultSeen"].filter(a=>b[a]!==void 0).map(a=>{let c=b[a];return[a,"boolean"==typeof c?c:amadeusImageSafeToken(String(c),80)]}));return c.code="amadeus_image_"+a,c.amadeusImageDiagnostic=d,c}
 function amadeusImageTerminalError(a,b){let c=b?.error||b?.response?.error||b?.response?.status_details?.error||b||{},d=amadeusImageSafeToken(c?.type),e=amadeusImageSafeToken(c?.code),f=amadeusImageSafeToken(c?.reason||c?.status),g=(d+" "+e+" "+f).toLowerCase(),h=/(?:safety|moderation|content[_ -]?policy|policy|copyright)/u.test(g),i=/(?:auth|permission|unauthorized|forbidden|quota|entitlement|billing)/u.test(g);return amadeusImageError(h?"safety_refusal":i?"account_unavailable":"upstream_failed",{event:a,type:d,code:e,reason:f,terminalEventSeen:!0,imageResultSeen:!1})}
 `;
 
