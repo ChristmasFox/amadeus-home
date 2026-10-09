@@ -29,5 +29,6 @@ assert.match(patched, /image_result_missing/);
 assert.match(patched, /response\.failed/);
 assert.match(patched, /statusText:a\?\.code\|\|"amadeus_image_upstream_failed"/);
 assert.match(patched, /b\?\.error\|\|b\?\.response\?\.error/);
+assert.match(patched, /"boolean"==typeof c\?c/);
 assert.equal(patchCodexRouteSource(patched), patched);
 console.log('IMAGE_UPSTREAM_DIAGNOSTICS_PATCH=passed');
