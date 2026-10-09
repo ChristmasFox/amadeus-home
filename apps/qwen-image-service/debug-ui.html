@@ -8,14 +8,19 @@
   <style>
     :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#eee9df;background:#121311;font-synthesis:none;text-rendering:optimizeLegibility;--muted:#92958d;--line:#343631;--panel:#1a1c19;--green:#b9e79c;--orange:#edb871}
     *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 80% 0,#252b20 0,transparent 38%),#121311}button,input,textarea,select{font:inherit}button{cursor:pointer}
-    .shell{max-width:1220px;margin:auto;padding:28px 28px 48px}.top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:20px;gap:18px}.brand{display:flex;align-items:center;gap:14px}.mark{width:42px;height:42px;border-radius:13px;background:var(--green);color:#15200f;display:grid;place-items:center;font-size:19px;font-weight:800}.eyebrow,.kicker{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}h1{font-size:18px;margin:4px 0 0;letter-spacing:-.02em}.runtime{display:flex;align-items:center;gap:9px;color:#c6c8bf;font-size:12px}.dot{width:8px;height:8px;border-radius:100%;background:#8bd68b;box-shadow:0 0 12px #8bd68b77}.dot.idle{background:var(--orange);box-shadow:0 0 12px #edb87155}.dot.off{background:#e47468;box-shadow:none}
-    .main{display:grid;grid-template-columns:minmax(300px,430px) 1fr;gap:20px;margin-top:22px}.card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 18px 60px #0002}.card h2{font-size:15px;margin:5px 0 18px;letter-spacing:-.01em}.kicker{color:var(--green)}.tabs{display:flex;gap:7px;background:#121311;padding:5px;border-radius:12px;margin-bottom:20px}.tab{flex:1;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:10px 12px;font-size:13px}.tab.active{background:#2b3027;color:#eaf5df;box-shadow:inset 0 0 0 1px #59614d}.field{margin:0 0 17px}.field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#c7c8c0;margin-bottom:8px}.hint{font-size:11px;color:var(--muted)}textarea,select,input[type=password]{width:100%;background:#121411;color:#f0eee8;border:1px solid #3b3e37;border-radius:11px;padding:12px 13px;outline:none}textarea{min-height:150px;resize:vertical;line-height:1.6}textarea:focus,select:focus,input:focus{border-color:#839673;box-shadow:0 0 0 3px #b9e79c18}select{height:42px}textarea::placeholder,input::placeholder{color:#686b63}.row{display:flex;gap:12px}.row>.field{flex:1}.primary{width:100%;border:0;border-radius:11px;padding:13px 16px;background:var(--green);color:#182014;font-weight:700;transition:transform .15s,opacity .15s}.primary:hover{transform:translateY(-1px)}.primary:disabled{opacity:.55;cursor:wait;transform:none}.secondary{border:1px solid var(--line);background:#20221e;color:#deded7;border-radius:9px;padding:8px 12px;font-size:12px}.logout{color:var(--muted)}.privacy{font-size:11px;color:var(--muted);line-height:1.6;margin:14px 2px 0}.privacy strong{color:#d2d2ca;font-weight:500}.drop{display:block;border:1px dashed #53574d;border-radius:12px;min-height:95px;padding:16px;text-align:center;color:#d4d5cd;background:#141613;cursor:pointer}.drop:hover,.drop.drag{border-color:var(--green);background:#1c2119}.drop input{display:none}.drop-title{font-size:12px;margin-top:5px}.preview-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.preview-box{min-height:140px;border:1px solid var(--line);background:#131512;border-radius:12px;overflow:hidden;display:grid;place-items:center;color:#777b70;font-size:11px;text-align:center}.preview-box img{width:100%;height:190px;object-fit:contain;background:#10110f}.preview-box .placeholder{padding:16px}.result-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.result-actions a{color:var(--green);font-size:12px;text-decoration:none}.status{min-height:20px;margin-top:11px;font-size:12px;color:var(--muted);line-height:1.5}.status.error{color:#ee998d}.status.success{color:var(--green)}.canvas{min-height:540px;display:flex;flex-direction:column}.canvas-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.canvas-content{flex:1;display:grid;place-items:center;border:1px solid #2c2f2a;border-radius:14px;margin-top:16px;min-height:400px;background-color:#171916;background-image:linear-gradient(45deg,#1d201b 25%,transparent 25%),linear-gradient(-45deg,#1d201b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1d201b 75%),linear-gradient(-45deg,transparent 75%,#1d201b 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0}.canvas-content img{max-width:100%;max-height:650px;object-fit:contain;border-radius:10px}.empty{text-align:center;max-width:300px;padding:26px}.empty-mark{width:54px;height:54px;border:1px solid #40443b;border-radius:17px;margin:0 auto 17px;display:grid;place-items:center;color:var(--green);font-size:22px}.empty strong{font-size:13px;font-weight:600}.empty p{font-size:12px;line-height:1.6;color:var(--muted)}.spinner{width:24px;height:24px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
+    .shell{max-width:1220px;margin:auto;padding:28px 28px 48px}.top{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:20px;gap:18px}.brand{display:flex;align-items:center;gap:14px}.mark{width:42px;height:42px;border-radius:13px;background:var(--green);color:#15200f;display:grid;place-items:center;font-size:19px;font-weight:800}.eyebrow,.kicker{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)}h1{font-size:18px;margin:4px 0 0;letter-spacing:-.02em}.runtime{display:flex;align-items:center;gap:9px;color:#c6c8bf;font-size:12px}.dot{width:8px;height:8px;border-radius:100%;background:#8bd68b;box-shadow:0 0 12px #8bd68b77}.dot.idle{background:var(--orange);box-shadow:0 0 12px #edb87155}.dot.off{background:#e47468;box-shadow:none}.top-actions{display:flex;align-items:center;gap:14px}.logout{display:none;color:var(--muted)}
+    .main{display:grid;grid-template-columns:minmax(300px,430px) 1fr;gap:20px;margin-top:22px}.card{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:0 18px 60px #0002}.card h2{font-size:15px;margin:5px 0 18px;letter-spacing:-.01em}.kicker{color:var(--green)}.tabs{display:flex;gap:7px;background:#121311;padding:5px;border-radius:12px;margin-bottom:20px}.tab{flex:1;border:0;border-radius:9px;background:transparent;color:var(--muted);padding:10px 12px;font-size:13px}.tab.active{background:#2b3027;color:#eaf5df;box-shadow:inset 0 0 0 1px #59614d}.field{margin:0 0 17px}.field label{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#c7c8c0;margin-bottom:8px}.hint{font-size:11px;color:var(--muted)}textarea,select,input[type=password],input[type=number],input[type=text]{width:100%;background:#121411;color:#f0eee8;border:1px solid #3b3e37;border-radius:11px;padding:12px 13px;outline:none}textarea{min-height:150px;resize:vertical;line-height:1.6}textarea:focus,select:focus,input:focus{border-color:#839673;box-shadow:0 0 0 3px #b9e79c18}select{height:42px}textarea::placeholder,input::placeholder{color:#686b63}.row{display:flex;gap:12px}.row>.field{flex:1}.primary{width:100%;border:0;border-radius:11px;padding:13px 16px;background:var(--green);color:#182014;font-weight:700;transition:transform .15s,opacity .15s}.primary:hover{transform:translateY(-1px)}.primary:disabled{opacity:.55;cursor:wait;transform:none}.secondary{border:1px solid var(--line);background:#20221e;color:#deded7;border-radius:9px;padding:8px 12px;font-size:12px}.logout{color:var(--muted)}.privacy{font-size:11px;color:var(--muted);line-height:1.6;margin:14px 2px 0}.privacy strong{color:#d2d2ca;font-weight:500}.drop{display:block;border:1px dashed #53574d;border-radius:12px;min-height:95px;padding:16px;text-align:center;color:#d4d5cd;background:#141613;cursor:pointer}.drop:hover,.drop.drag{border-color:var(--green);background:#1c2119}.drop input{display:none}.drop-title{font-size:12px;margin-top:5px}.preview-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0}.preview-box{min-height:140px;border:1px solid var(--line);background:#131512;border-radius:12px;overflow:hidden;display:grid;place-items:center;color:#777b70;font-size:11px;text-align:center}.preview-box img{width:100%;height:190px;object-fit:contain;background:#10110f}.preview-box .placeholder{padding:16px}.result-actions{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.result-actions a{color:var(--green);font-size:12px;text-decoration:none}.status{min-height:20px;margin-top:11px;font-size:12px;color:var(--muted);line-height:1.5}.status.error{color:#ee998d}.status.success{color:var(--green)}.canvas{min-height:540px;display:flex;flex-direction:column}.canvas-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.canvas-content{flex:1;display:grid;place-items:center;border:1px solid #2c2f2a;border-radius:14px;margin-top:16px;min-height:400px;background-color:#171916;background-image:linear-gradient(45deg,#1d201b 25%,transparent 25%),linear-gradient(-45deg,#1d201b 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1d201b 75%),linear-gradient(-45deg,transparent 75%,#1d201b 75%);background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0}.canvas-content img{max-width:100%;max-height:650px;object-fit:contain;border-radius:10px}.empty{text-align:center;max-width:300px;padding:26px}.empty-mark{width:54px;height:54px;border:1px solid #40443b;border-radius:17px;margin:0 auto 17px;display:grid;place-items:center;color:var(--green);font-size:22px}.empty strong{font-size:13px;font-weight:600}.empty p{font-size:12px;line-height:1.6;color:var(--muted)}.spinner{width:24px;height:24px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px}@keyframes spin{to{transform:rotate(360deg)}}
     .login-wrap{max-width:430px;margin:12vh auto 0}.login-card{padding:30px}.login-card p{color:var(--muted);font-size:13px;line-height:1.65}.login-card .primary{margin-top:4px}.footer{display:flex;justify-content:space-between;gap:20px;color:#777a72;font-size:10px;letter-spacing:.08em;margin-top:18px}.hidden{display:none!important}
     @media(max-width:850px){.shell{padding:18px 14px 34px}.main{grid-template-columns:1fr}.canvas{min-height:430px}.canvas-content{min-height:330px}.top{align-items:flex-start}.runtime{font-size:11px}.card{padding:18px}}
     @media(max-width:460px){.top{flex-direction:column}.row{display:block}.row>.field{margin-bottom:14px}.preview-row{gap:7px}.preview-box img{height:150px}.canvas-head{flex-direction:column}}
   </style>
   <style>
-    .task-panel{margin-top:20px}.task-head,.task-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-head h2{margin:5px 0 0}.task-current{margin-top:16px;padding:15px;border:1px solid var(--line);border-radius:12px;background:#141613}.task-current.active{border-color:#647b52}.task-current-title{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:650}.task-current-meta,.task-meta{color:var(--muted);font-size:11px}.task-prompt{margin:10px 0 0;color:#d6d8d0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;white-space:pre-wrap}.task-error{margin:9px 0 0;color:#ee998d;font-size:12px;line-height:1.5}.task-list{display:grid;gap:9px;margin-top:12px}.task-row{padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:#171916}.task-row-head strong{font-size:12px;font-weight:600}.task-badge{border-radius:999px;padding:4px 8px;font-size:10px;color:#d6d8d0;background:#343631}.task-badge.running{color:#182014;background:var(--green)}.task-badge.failed{color:#ffd2cb;background:#60352f}.task-badge.succeeded{color:#d5f2bf;background:#29402a}.task-meta{margin-top:7px}.task-saved-path,.task-save-error{margin-top:8px;color:#b9e79c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.task-save-error{color:#edb871}.task-row .task-prompt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.task-empty{padding:16px 4px;color:var(--muted);font-size:12px}.task-spinner{width:13px;height:13px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}.task-error-label{font-weight:600}.task-refresh{color:var(--muted);font-size:11px}
+    .task-panel{margin-top:20px}.task-head,.task-row-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.task-head h2{margin:5px 0 0}.task-current{margin-top:16px;padding:15px;border:1px solid var(--line);border-radius:12px;background:#141613}.task-current.active{border-color:#647b52}.task-current-title{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:650}.task-current-meta,.task-meta{color:var(--muted);font-size:11px}.task-prompt{margin:10px 0 0;color:#d6d8d0;font-size:12px;line-height:1.55;overflow-wrap:anywhere;white-space:pre-wrap}.task-error{margin:9px 0 0;color:#ee998d;font-size:12px;line-height:1.5}.task-list{display:grid;gap:9px;margin-top:12px}.task-row{padding:13px 15px;border:1px solid var(--line);border-radius:12px;background:#171916}.task-row-head strong{font-size:12px;font-weight:600}.task-badge{border-radius:999px;padding:4px 8px;font-size:10px;color:#d6d8d0;background:#343631}.task-badge.running{color:#182014;background:var(--green)}.task-badge.failed{color:#ffd2cb;background:#60352f}.task-badge.succeeded{color:#d5f2bf;background:#29402a}.task-meta{margin-top:7px}.task-saved-path,.task-save-error{margin-top:8px;color:#b9e79c;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.task-save-error{color:#edb871}.task-row .task-prompt{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.task-empty{padding:16px 4px;color:var(--muted);font-size:12px}.task-spinner{width:13px;height:13px;border:2px solid #50574a;border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}.task-error-label{font-weight:600}.task-refresh{color:var(--muted);font-size:11px}.profile-choices{display:flex;gap:8px}.profile-choices label{flex:1;display:flex;align-items:center;gap:8px;border:1px solid #3b3e37;border-radius:11px;padding:12px;background:#121411;color:#deded7;cursor:pointer;font-size:12px}.profile-choices input{accent-color:#b9e79c}.profile-choices label:has(input:checked){border-color:#839673;background:#1e241a}.settings{margin:18px 0 22px;padding:16px;border:1px solid var(--line);border-radius:13px;background:#151713}.settings .field:last-child{margin-bottom:0}
+    .task-actions{display:flex;gap:8px;margin-top:10px}.task-image-link{display:inline-flex;align-items:center;text-decoration:none}
+    .auto-resolution{margin:-5px 0 16px;padding:11px 12px;border:1px solid #343b30;border-radius:10px;background:#151913;color:var(--muted);font-size:11px;line-height:1.55}
+    .image-dialog{width:min(1100px,calc(100vw - 28px));max-width:none;max-height:calc(100dvh - 28px);padding:16px;border:1px solid #484c43;border-radius:16px;background:#171916;color:#eee9df;box-shadow:0 24px 90px #0009}
+    .image-dialog[open]{display:flex;flex-direction:column;gap:12px}.image-dialog::backdrop{background:#050605d9;backdrop-filter:blur(5px)}
+    .image-dialog-head,.image-dialog-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}.image-dialog-head h2{margin:4px 0 0;font-size:14px}.image-dialog-meta{color:var(--muted);font-size:11px;overflow-wrap:anywhere}.image-dialog-frame{min-height:0;display:grid;place-items:center;overflow:auto;border:1px solid var(--line);border-radius:11px;background:#10110f}.image-dialog-frame img{display:block;max-width:100%;max-height:76dvh;object-fit:contain}.image-dialog-actions a{color:var(--green);font-size:12px;text-decoration:none}
     @media(max-width:850px){.task-head{align-items:flex-start;flex-direction:column}}
   </style>
 </head>
@@ -23,26 +28,30 @@
   <main class="shell">
     <header class="top">
       <div class="brand"><div class="mark">Q</div><div><div class="eyebrow">Amadeus · Local Lab</div><h1>Qwen Image 本地调试台</h1></div></div>
-      <div class="runtime"><span id="health-dot" class="dot idle"></span><span id="health-label">正在连接本地模型…</span></div>
+      <div class="top-actions"><div class="runtime"><span id="health-dot" class="dot idle"></span><span id="health-label">正在连接本地模型…</span></div><button id="logout-button" class="secondary logout" type="button">退出登录</button></div>
     </header>
 
     <section id="app-view" class="main">
       <div class="card controls">
+        <section class="settings" aria-label="生成设置">
+          <div class="field"><label>模式</label><div class="profile-choices"><label><input type="radio" name="profile" value="quality" checked><span>Quality · Base 16 步</span></label><label><input type="radio" name="profile" value="fast"><span>Fast · Fun-Acc PDD 4 步</span></label></div></div>
+          <div class="row"><div id="resolution-field" class="field"><label for="resolution">输出分辨率</label><select id="resolution"><option value="1024x1024">1024 × 1024</option><option value="1024x768">1024 × 768</option><option value="768x1024">768 × 1024</option></select></div><div id="seed-field" class="field"><label for="seed">Seed <span class="hint">-1 随机</span></label><input id="seed" type="text" inputmode="numeric" pattern="-?[0-9]*" maxlength="20" value="-1" autocomplete="off"></div></div>
+        </section>
         <div class="tabs" role="tablist"><button class="tab active" data-mode="generate" role="tab">文生图</button><button class="tab" data-mode="edit" role="tab">图片编辑</button></div>
         <form id="generate-form">
           <div class="kicker">TEXT TO IMAGE</div><h2>描述你想生成的画面</h2>
           <div class="field"><label for="gen-prompt">提示词 <span class="hint">最多 8,000 字符</span></label><textarea id="gen-prompt" maxlength="8000" placeholder="例如：一只戴着橙色围巾的白猫，坐在窗边看雨，柔和的胶片摄影风格…" required></textarea></div>
-          <div class="field"><label for="gen-size">输出尺寸</label><select id="gen-size"><option value="768x768">正方形 · 768 × 768</option><option value="1024x768">横向 · 1024 × 768</option><option value="768x1024">竖向 · 768 × 1024</option><option value="896x640">横向 · 896 × 640</option><option value="640x896">竖向 · 640 × 896</option></select></div>
           <button class="primary" type="submit">生成图片</button>
         </form>
         <form id="edit-form" class="hidden">
           <div class="kicker">REFERENCE EDIT</div><h2>上传参考图并描述修改</h2>
+          <div class="auto-resolution">输出尺寸自动匹配参考图；超过模型限制时按比例缩小（最长边 1024px、总像素不超过 1MP）。</div>
           <div class="field"><label>参考图片 <span class="hint">PNG / JPEG / WebP · 最大 10 MB</span></label><label id="drop-zone" class="drop"><input id="edit-image" type="file" accept="image/png,image/jpeg,image/webp" required><span aria-hidden="true">＋</span><div class="drop-title" id="drop-label">点击选择或拖入一张参考图</div></label></div>
           <div class="field"><label for="edit-prompt">编辑指令 <span class="hint">最多 8,000 字符</span></label><textarea id="edit-prompt" maxlength="8000" placeholder="例如：把外套改成深绿色，保持人物、姿势和背景不变…" required></textarea></div>
           <button class="primary" type="submit">编辑图片</button>
         </form>
         <div id="action-status" class="status" role="status"></div>
-        <p class="privacy"><strong>局域网直连</strong>　无需登录，请求经本机桥接转发，浏览器不会接触模型密钥。首次请求会按需载入 Metal 模型，生成可能需要几分钟；编辑会自动保持参考图比例。</p>
+        <p class="privacy"><strong>本地模型实验室</strong>　浏览器只访问受保护的本地桥接，不会接触模型密钥或第三方云端。首次请求会按需载入 Metal 模型，模式切换时会重新载入模型。</p>
       </div>
 
       <div class="card canvas">
@@ -56,7 +65,12 @@
       <div id="active-task" class="task-current" aria-live="polite"><div class="task-empty">正在读取任务状态…</div></div>
       <div id="task-history" class="task-list" aria-label="最近任务"></div>
     </section>
-    <footer class="footer"><span>QWEN-IMAGE-2.1 · STABLE BASELINE</span><span>LOCAL NETWORK ONLY · NO CLOUD FALLBACK</span></footer>
+    <dialog id="task-image-dialog" class="image-dialog" aria-labelledby="task-image-title">
+      <div class="image-dialog-head"><div><div class="kicker">TASK IMAGE</div><h2 id="task-image-title">本地任务图片</h2><div id="task-image-meta" class="image-dialog-meta"></div></div><button id="task-image-close" class="secondary" type="button">关闭</button></div>
+      <div class="image-dialog-frame"><img id="task-image-preview" alt="本地任务生成图片"></div>
+      <div class="image-dialog-actions"><span class="hint">任务历史图片</span><a id="task-image-download" download="qwen-image.png">下载图片 ↗</a></div>
+    </dialog>
+    <footer class="footer"><span>QWEN-IMAGE-2.1 · PRIVATE IMAGE LAB</span><span>LOCAL MODEL · NO CLOUD FALLBACK</span></footer>
   </main>
 
   <script>
@@ -66,12 +80,19 @@
     const statusNode = $('action-status');
     const canvas = $('canvas-content');
     const resultActions = $('result-actions');
+    const publicHost = 'image.nyannyan.top';
     let mode = 'generate';
     let inputPreviewUrl = '';
     let outputUrl = '';
+    let taskImageUrl = '';
+    let taskImageRequest = 0;
     let requestInProgress = false;
     let serverBusy = false;
     let taskPollTimer;
+    let requestContext = null;
+    let recoveryTaskId = '';
+    let recoverPreviewAfterTask = false;
+    let inspectInitialActiveTask = true;
 
     function setStatus(node, message, kind = '') {
       node.textContent = message;
@@ -82,6 +103,10 @@
       const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
       let payload = {};
       try { payload = await response.json(); } catch {}
+      if (response.status === 401 && location.hostname === publicHost && path !== '/api/login') {
+        location.replace('/');
+        throw new Error('登录已过期');
+      }
       if (!response.ok) {
         const error = payload?.error?.message || payload?.error?.type || `HTTP ${response.status}`;
         throw new Error(error);
@@ -101,6 +126,34 @@
 
     function taskStatus(status) {
       return status === 'running' ? '进行中' : status === 'succeeded' ? '已完成' : '失败';
+    }
+
+    function profileLabel(profile) {
+      return profile === 'fast' ? 'Fast · PDD 4 步' : 'Quality · Base 16 步';
+    }
+
+    function selectedSeed() {
+      const raw = $('seed').value.trim();
+      if (!/^-?\d+$/.test(raw)) throw new Error('Seed 必须是整数，且不小于 -1');
+      const seed = BigInt(raw);
+      if (seed < -1n || seed > 9223372036854775807n) throw new Error('Seed 必须介于 -1 和 9223372036854775807 之间');
+      return seed.toString();
+    }
+
+    function taskParameters(task) {
+      const requested = String(task.seed) === '-1' ? '随机' : String(task.seed);
+      const effective = task.effectiveSeed !== null && task.effectiveSeed !== undefined ? ` · 实际 seed ${task.effectiveSeed}` : '';
+      return `${profileLabel(task.profile)} · ${task.resolution} · seed ${requested}${effective}`;
+    }
+
+    function taskMatchesRequest(task) {
+      if (!requestContext || !task) return false;
+      const startedAt = Date.parse(task.startedAt);
+      return task.kind === requestContext.kind && task.prompt === requestContext.prompt &&
+        task.profile === requestContext.profile && (task.resolution === requestContext.resolution ||
+          (requestContext.kind === 'edit' && requestContext.resolution === 'auto')) &&
+        String(task.seed) === requestContext.seed && !Number.isNaN(startedAt) &&
+        startedAt >= requestContext.startedAt - 5000;
     }
 
     function formatTaskTime(value) {
@@ -136,7 +189,7 @@
       title.append(spinner, label);
       const meta = document.createElement('div');
       meta.className = 'task-current-meta';
-      meta.textContent = `${formatTaskTime(task.startedAt)} · 已用时 ${formatDuration(task.durationMs)}${task.details ? ` · ${task.details}` : ''}`;
+      meta.textContent = `${formatTaskTime(task.startedAt)} · 已用时 ${formatDuration(task.durationMs)} · ${taskParameters(task)}${task.details ? ` · ${task.details}` : ''}`;
       node.append(title, meta, createTaskPrompt(task.prompt));
     }
 
@@ -164,7 +217,7 @@
         head.append(title, badge);
         const meta = document.createElement('div');
         meta.className = 'task-meta';
-        meta.textContent = `${formatTaskTime(task.startedAt)} · 用时 ${formatDuration(task.durationMs)}${task.details ? ` · ${task.details}` : ''}`;
+        meta.textContent = `${formatTaskTime(task.startedAt)} · 用时 ${formatDuration(task.durationMs)} · ${taskParameters(task)}${task.details ? ` · ${task.details}` : ''}`;
         row.append(head, meta, createTaskPrompt(task.prompt));
         if (task.savedPath) {
           const saved = document.createElement('div');
@@ -176,6 +229,19 @@
           saveError.className = 'task-save-error';
           saveError.textContent = task.saveError;
           row.append(saveError);
+        }
+        if (task.status === 'succeeded' && task.hasImage) {
+          const actions = document.createElement('div');
+          actions.className = 'task-actions';
+          const viewImage = document.createElement('button');
+          viewImage.className = 'secondary task-image-link';
+          viewImage.type = 'button';
+          viewImage.textContent = '查看图片';
+          viewImage.addEventListener('click', () => showTaskImageModal(task).catch((error) => {
+            setStatus(statusNode, error.message || '图片读取失败', 'error');
+          }));
+          actions.append(viewImage);
+          row.append(actions);
         }
         if (task.status === 'failed' && task.error) {
           const error = document.createElement('p');
@@ -196,15 +262,42 @@
     async function refreshTasks() {
       try {
         const tasks = await jsonRequest('/api/tasks');
+        const history = Array.isArray(tasks.history) ? tasks.history : [];
         serverBusy = Boolean(tasks.active);
         renderActiveTask(tasks.active);
-        renderTaskHistory(Array.isArray(tasks.history) ? tasks.history : []);
+        renderTaskHistory(history);
+
+        if (inspectInitialActiveTask) {
+          inspectInitialActiveTask = false;
+          if (tasks.active) {
+            recoveryTaskId = tasks.active.id;
+            recoverPreviewAfterTask = true;
+          }
+        }
+        if (tasks.active && taskMatchesRequest(tasks.active)) recoveryTaskId = tasks.active.id;
+        if (recoverPreviewAfterTask) {
+          const finished = history.find((task) => task.id === recoveryTaskId && task.status !== 'running') ||
+            (!tasks.active ? history.find((task) => task.status !== 'running' && taskMatchesRequest(task)) : null);
+          if (finished) {
+            recoveryTaskId = '';
+            recoverPreviewAfterTask = false;
+            requestContext = null;
+            if (finished.status === 'succeeded' && finished.hasImage) {
+              showSavedTaskImage(finished).catch((error) => setStatus(statusNode, error.message || '图片读取失败', 'error'));
+            } else if (finished.status === 'failed') {
+              canvas.innerHTML = '<div class="empty"><div class="empty-mark">!</div><strong>本地任务失败</strong><p>请查看本地任务中的失败提示。</p></div>';
+              setStatus(statusNode, finished.error?.message || '本地任务未完成', 'error');
+            }
+          } else if (tasks.active && tasks.active.id === recoveryTaskId) {
+            showWaitingForTaskResult();
+          }
+        }
         updateActionButtons();
       } catch {
         // Keep the last known task view if the status endpoint briefly fails.
       } finally {
         clearTimeout(taskPollTimer);
-        taskPollTimer = setTimeout(refreshTasks, serverBusy ? 1000 : 3500);
+        taskPollTimer = setTimeout(refreshTasks, serverBusy || requestInProgress ? 1000 : 3500);
       }
     }
 
@@ -230,6 +323,112 @@
       }
     }
 
+    function showWaitingForTaskResult() {
+      canvas.innerHTML = '<div class="empty"><div class="spinner"></div><strong>本地任务仍在处理</strong><p>页面连接已中断，任务完成后会自动恢复结果预览。</p></div>';
+      resultActions.classList.add('hidden');
+      setStatus(statusNode, '本地任务仍在运行；完成后会从已保存图片恢复预览。');
+    }
+
+    async function showSavedTaskImage(task) {
+      const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/image`, {
+        credentials: 'same-origin', cache: 'no-store',
+      });
+      if (response.status === 401 && location.hostname === publicHost) {
+        location.replace('/');
+        throw new Error('登录已过期');
+      }
+      if (!response.ok) throw new Error(`图片读取失败（HTTP ${response.status}）`);
+      const imageBlob = await response.blob();
+      if (outputUrl) URL.revokeObjectURL(outputUrl);
+      outputUrl = URL.createObjectURL(imageBlob);
+      canvas.replaceChildren();
+      const image = document.createElement('img');
+      image.src = outputUrl;
+      image.alt = '本地任务生成图片';
+      canvas.append(image);
+      $('download-link').href = outputUrl;
+      $('download-link').download = `qwen-image-${task.id}.png`;
+      const actualSeed = task.effectiveSeed ?? task.seed;
+      $('result-caption').textContent = `${taskKind(task.kind)} · ${profileLabel(task.profile)} · ${task.resolution} · seed ${actualSeed}`;
+      resultActions.classList.remove('hidden');
+      setStatus(statusNode, '已从本机保存结果恢复图片预览。', 'success');
+    }
+
+    async function showTaskImageModal(task) {
+      const requestId = ++taskImageRequest;
+      const response = await fetch(`/api/tasks/${encodeURIComponent(task.id)}/image`, {
+        credentials: 'same-origin', cache: 'no-store',
+      });
+      if (response.status === 401 && location.hostname === publicHost) {
+        location.replace('/');
+        throw new Error('登录已过期');
+      }
+      if (!response.ok) throw new Error(`图片读取失败（HTTP ${response.status}）`);
+      const imageBlob = await response.blob();
+      const nextUrl = URL.createObjectURL(imageBlob);
+      if (requestId !== taskImageRequest) {
+        URL.revokeObjectURL(nextUrl);
+        return;
+      }
+      if (taskImageUrl) URL.revokeObjectURL(taskImageUrl);
+      taskImageUrl = nextUrl;
+      $('task-image-preview').src = taskImageUrl;
+      $('task-image-meta').textContent = `${taskKind(task.kind)} · ${profileLabel(task.profile)} · ${task.resolution} · seed ${task.effectiveSeed ?? task.seed}`;
+      $('task-image-download').href = taskImageUrl;
+      $('task-image-download').download = `qwen-image-${task.id}.png`;
+      $('task-image-dialog').showModal();
+    }
+
+    $('task-image-close').addEventListener('click', () => $('task-image-dialog').close());
+    $('task-image-dialog').addEventListener('click', (event) => {
+      if (event.target === $('task-image-dialog')) $('task-image-dialog').close();
+    });
+    $('task-image-dialog').addEventListener('close', () => {
+      ++taskImageRequest;
+      if (taskImageUrl) URL.revokeObjectURL(taskImageUrl);
+      taskImageUrl = '';
+      $('task-image-preview').removeAttribute('src');
+      $('task-image-download').removeAttribute('href');
+    });
+
+    async function recoverTaskAfterRequestError() {
+      recoverPreviewAfterTask = true;
+      let tasks;
+      try {
+        tasks = await jsonRequest('/api/tasks');
+      } catch {
+        return false;
+      }
+      const history = Array.isArray(tasks.history) ? tasks.history : [];
+      serverBusy = Boolean(tasks.active);
+      renderActiveTask(tasks.active);
+      renderTaskHistory(history);
+      if (tasks.active && taskMatchesRequest(tasks.active)) {
+        recoveryTaskId = tasks.active.id;
+        showWaitingForTaskResult();
+        updateActionButtons();
+        return true;
+      }
+      const finished = history.find((task) => task.status !== 'running' && taskMatchesRequest(task));
+      if (finished?.status === 'succeeded' && finished.hasImage) {
+        recoveryTaskId = '';
+        recoverPreviewAfterTask = false;
+        requestContext = null;
+        await showSavedTaskImage(finished);
+        return true;
+      }
+      if (finished) {
+        recoveryTaskId = '';
+        recoverPreviewAfterTask = false;
+        requestContext = null;
+      } else {
+        recoverPreviewAfterTask = false;
+        requestContext = null;
+      }
+      updateActionButtons();
+      return false;
+    }
+
     function showResult(payload, title) {
       const encoded = payload?.data?.[0]?.b64_json;
       if (typeof encoded !== 'string' || !encoded) throw new Error('模型响应中没有图片数据');
@@ -245,10 +444,14 @@
       canvas.append(image);
       $('download-link').href = outputUrl;
       $('download-link').download = `qwen-image-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-      $('result-caption').textContent = title;
+      const result = payload.debug_ui || {};
+      const actualSeed = result.effective_seed ?? result.seed;
+      $('result-caption').textContent = `${title} · ${profileLabel(result.profile)} · ${result.resolution} · seed ${actualSeed}`;
       resultActions.classList.remove('hidden');
-      if (payload.debug_ui?.saved_path) {
-        setStatus(statusNode, `已自动保存：${payload.debug_ui.saved_path}`, 'success');
+      if (result.saved_path) {
+        setStatus(statusNode, `已自动保存：${result.saved_path}`, 'success');
+      } else if (result.saved) {
+        setStatus(statusNode, '图片已生成，并自动保存到本机受保护目录。', 'success');
       } else if (payload.debug_ui?.save_error) {
         setStatus(statusNode, `图片已生成，但${payload.debug_ui.save_error}`, 'error');
       } else {
@@ -257,17 +460,31 @@
       refreshHealth();
     }
 
-    async function runRequest(path, options, title) {
+    async function runRequest(path, options, title, context) {
+      requestContext = { ...context, startedAt: Date.now() };
+      recoveryTaskId = '';
+      recoverPreviewAfterTask = false;
       setBusy(true);
+      refreshTasks();
+      let succeeded = false;
       try {
         const payload = await jsonRequest(path, options);
         showResult(payload, title);
+        succeeded = true;
       } catch (error) {
-        canvas.innerHTML = '<div class="empty"><div class="empty-mark">!</div><strong>本地请求未完成</strong><p>请检查桥接服务状态或稍后重试。</p></div>';
-        setStatus(statusNode, error.message || '请求失败', 'error');
-        refreshHealth();
+        const recovered = await recoverTaskAfterRequestError();
+        if (!recovered) {
+          canvas.innerHTML = '<div class="empty"><div class="empty-mark">!</div><strong>本地请求未完成</strong><p>请检查桥接服务状态或稍后重试。</p></div>';
+          setStatus(statusNode, error.message || '请求失败', 'error');
+          refreshHealth();
+        }
       } finally {
         setBusy(false);
+        if (succeeded) {
+          requestContext = null;
+          recoveryTaskId = '';
+          recoverPreviewAfterTask = false;
+        }
         refreshTasks();
       }
     }
@@ -277,16 +494,22 @@
       document.querySelectorAll('.tab').forEach((item) => item.classList.toggle('active', item === tab));
       $('generate-form').classList.toggle('hidden', mode !== 'generate');
       $('edit-form').classList.toggle('hidden', mode !== 'edit');
+      $('resolution-field').classList.toggle('hidden', mode === 'edit');
       setStatus(statusNode, '');
     }));
 
     $('generate-form').addEventListener('submit', (event) => {
       event.preventDefault();
+      let seed;
+      try { seed = selectedSeed(); } catch (error) { setStatus(statusNode, error.message, 'error'); return; }
+      const prompt = $('gen-prompt').value.trim();
+      const profile = document.querySelector('input[name="profile"]:checked').value;
+      const resolution = $('resolution').value;
       runRequest('/api/generations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: $('gen-prompt').value, size: $('gen-size').value }),
-      }, 'Qwen Image · 文生图');
+        body: JSON.stringify({ prompt, profile, resolution, seed }),
+      }, 'Qwen Image · 文生图', { kind: 'generation', prompt, profile, resolution, seed });
     });
 
     function setReferencePreview(file) {
@@ -322,15 +545,28 @@
       event.preventDefault();
       const file = $('edit-image').files[0];
       if (!file) return;
+      let seed;
+      try { seed = selectedSeed(); } catch (error) { setStatus(statusNode, error.message, 'error'); return; }
       const form = new FormData();
       form.append('model', 'local/qwen-image-2.1-uncensored');
       form.append('prompt', $('edit-prompt').value);
       form.append('n', '1');
       form.append('output_format', 'png');
+      form.append('profile', document.querySelector('input[name="profile"]:checked').value);
+      form.append('resolution', 'auto');
+      form.append('seed', String(seed));
       form.append('image[]', file, file.name);
-      runRequest('/api/edits', { method: 'POST', body: form }, 'Qwen Image · 参考图编辑');
+      runRequest('/api/edits', { method: 'POST', body: form }, 'Qwen Image · 参考图编辑', {
+        kind: 'edit', prompt: $('edit-prompt').value.trim(),
+        profile: document.querySelector('input[name="profile"]:checked').value,
+        resolution: 'auto', seed,
+      });
     });
 
+    if (location.hostname === publicHost) $('logout-button').style.display = 'inline-block';
+    $('logout-button').addEventListener('click', async () => {
+      try { await jsonRequest('/api/logout', { method: 'POST' }); location.replace('/'); } catch (error) { setStatus(statusNode, error.message, 'error'); }
+    });
     refreshHealth();
     refreshTasks();
   </script>

@@ -36,6 +36,15 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - 临时 Qwen-Audio voice enrollment：使用 `infra/vps/frpc/audio-sample-proxy.example.toml` 和
   `infra/vps/audio-sample.example.Caddyfile` 发布 `audio.nyannyan.top/reference.wav`；只在复刻
   apply 期间启用，成功后删除 frpc 映射、Caddy site 和 Cloudflare DNS 记录。
+- Qwen Image Lab：只反代 UI `image.nyannyan.top` → frps 本机 TCP `18798` → HomeLab frpc →
+  Mac UI `192.168.5.3:18798`。模板为 `infra/vps/frpc/qwen-image-lab-proxy.example.toml`、
+  `infra/vps/image-lab.example.Caddyfile` 和 `infra/vps/frps.toml.example`。Mac 地址最近已从
+  HomeLab guest 验证可达；它依赖 LAN 地址分配，apply 前必须复核。Qwen bridge/engine 的
+  `18793/18795` 仍只监听 Mac loopback，不得加入 frpc 或公开监听。
+- Image Lab 的 VPS TCP `18798` 需要 Caddy 回源，因此 IPv4/IPv6 INPUT 均采用
+  `infra/vps/qwen-image-public-input.rules` 中唯一的非 loopback 丢弃规则；持久化由已启用的
+  `netfilter-persistent` 管理。这样 Caddy 可连 `127.0.0.1:18798`，公网不能绕过 TLS 直连。
+  apply 后必须从新 SSH 会话复核 SSH 可达性，并确认持久化规则可恢复。
 
 ## 订阅账号流量归因（已 apply，2026-10-08）
 

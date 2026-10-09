@@ -128,7 +128,7 @@ No other profile may be exposed.
 
 ### Resolution
 
-Expose only:
+For text-to-image generation, expose only:
 
 ```text
 1024x1024
@@ -142,11 +142,14 @@ Default:
 1024x1024
 ```
 
-The selected resolution applies to both generation and edit requests.
+Reference edits choose the output size automatically from the reference image:
+
+- preserve its dimensions when they meet the model's 32px geometry and size limits;
+- otherwise scale proportionally to a maximum 1024px edge and 1MP, then align
+  the output dimensions to the model's 32px geometry requirement;
+- display the actual output dimensions in the task/result view.
 
 Reference image bytes and MIME must remain unchanged.
-
-Do not silently replace the selected target size with a different UI value.
 
 ### Seed
 
@@ -167,7 +170,7 @@ Semantics:
 
 The exact seed selected in the UI must be forwarded to the engine for both generation and edit requests.
 
-The task/result view should display the profile, output resolution and effective seed so the operator can compare runs.
+The task/result view should display the profile, actual output resolution and effective seed so the operator can compare runs.
 
 ### Everything else
 
@@ -186,7 +189,7 @@ Do not expose controls for:
 
 Those remain server-owned defaults.
 
-Keep the existing prompt field, reference upload, result preview, task history and automatic PNG saving.
+Keep the existing prompt field, reference upload, result preview, task history and automatic PNG saving. Opening a saved task image must use a modal and leave the main result preview intact.
 
 ## Quality profile
 
@@ -201,7 +204,7 @@ mmproj-Qwen3VL-8B-Instruct-F16.gguf
 Qwen-Image-2.1 VAE
 Metal
 steps = 16
-CFG = 6
+CFG = 1
 Fun-Acc = disabled
 ```
 
@@ -495,10 +498,12 @@ Add/update focused tests for:
 - exactly two profiles;
 - exactly three resolutions;
 - seed validation and forwarding;
-- Quality -> 16 steps / CFG 6 / no Fun-Acc;
+- Quality -> 16 steps / CFG 1 / no Fun-Acc;
 - Fast -> real Fun-Acc 4-step / CFG 1 / custom sigmas;
 - profile switching leaves only one sd-server child;
-- generation and edit preserve the selected profile/size/seed;
+- generation preserves the selected profile/size/seed;
+- edit automatically follows reference geometry and caps oversized input;
+- task image modal leaves the main result preview unchanged;
 - reference bytes/MIME remain unchanged;
 - Image Lab does not inject `strength < 1.0`;
 - LAN direct access still works;

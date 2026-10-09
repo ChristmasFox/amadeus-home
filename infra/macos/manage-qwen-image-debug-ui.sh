@@ -10,6 +10,7 @@ LOG="$HOME/Library/Logs/Amadeus/QwenImageDebugUI"
 SECRETS="$HOME/Library/Application Support/Amadeus/secrets"
 BRIDGE_TOKEN="$SECRETS/qwen-image-token"
 LEGACY_UI_TOKEN="$SECRETS/qwen-image-debug-ui-token"
+PUBLIC_AUTH="$SECRETS/qwen-image-lab-auth.json"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PORT=18798
 ACTION=--dry-run
@@ -52,7 +53,9 @@ QWEN_DEBUG_UI_ACTION=install_or_update
 QWEN_DEBUG_UI_HOST=0.0.0.0
 QWEN_DEBUG_UI_PORT=$PORT
 QWEN_BRIDGE_TARGET=http://127.0.0.1:18793
-QWEN_DEBUG_UI_AUTH=none; all private/loopback clients allowed
+QWEN_DEBUG_UI_PRIVATE_ACCESS=no-login
+QWEN_DEBUG_UI_PUBLIC_HOST=image.nyannyan.top
+QWEN_DEBUG_UI_PUBLIC_AUTH=runtime-scrypt-verifier-required
 QWEN_DEBUG_UI_RUNTIME=lightweight Python LaunchAgent; no model process added
 QWEN_DEBUG_UI_OUTPUT_DIR=$OUTPUT
 Run with --apply to install and start the LAN-only page.
@@ -65,6 +68,7 @@ PYTHON=/opt/homebrew/opt/python@3.11/libexec/bin/python3
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"
 "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11 or newer is required' >&2; exit 1; }
 [[ -s "$BRIDGE_TOKEN" && "$(stat -f %Lp "$BRIDGE_TOKEN")" == 600 ]] || { echo 'Qwen bridge token is missing or not mode 600' >&2; exit 1; }
+[[ -s "$PUBLIC_AUTH" && "$(stat -f %Lp "$PUBLIC_AUTH")" == 600 ]] || { echo 'public Image Lab verifier is missing or not mode 600' >&2; exit 1; }
 health="$(curl -fsS --max-time 3 http://127.0.0.1:18793/health)" || { echo 'Qwen bridge is not responding on port 18793' >&2; exit 1; }
 printf '%s' "$health" | "$PYTHON" -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("status")=="ready" and d.get("model")=="local/qwen-image-2.1-uncensored" else 1)' || {
   echo 'Qwen bridge health is not ready' >&2
@@ -86,6 +90,7 @@ sed \
   -e "s|__PYTHON__|$PYTHON|g" \
   -e "s|__SCRIPT__|$BASE/debug_ui.py|g" \
   -e "s|__BRIDGE_TOKEN_FILE__|$BRIDGE_TOKEN|g" \
+  -e "s|__AUTH_FILE__|$PUBLIC_AUTH|g" \
   -e "s|__HTML_FILE__|$BASE/debug-ui.html|g" \
   -e "s|__OUTPUT_DIR__|$OUTPUT|g" \
   -e "s|__LOG_DIR__|$LOG|g" \
@@ -95,7 +100,15 @@ install -m 600 "$temporary" "$PLIST"
 rm -f "$temporary"
 trap - EXIT
 launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
-launchctl bootstrap "$TARGET" "$PLIST"
+bootstrapped=0
+for _ in {1..10}; do
+  if launchctl bootstrap "$TARGET" "$PLIST" 2>/dev/null; then
+    bootstrapped=1
+    break
+  fi
+  sleep 1
+done
+(( bootstrapped == 1 )) || { echo 'Qwen debug UI LaunchAgent could not be loaded; inspect launchd state' >&2; exit 1; }
 launchctl enable "$TARGET/$LABEL"
 
 ready=0
@@ -127,6 +140,7 @@ PY
 
 echo 'QWEN_DEBUG_UI_AGENT=installed'
 echo 'QWEN_DEBUG_UI_ACCESS=all-private-and-loopback-clients'
+echo 'QWEN_DEBUG_UI_PUBLIC_AUTH=password-only-scrypt-session'
 rm -f "$LEGACY_UI_TOKEN"
 for interface in en0 en1; do
   address="$(ipconfig getifaddr "$interface" 2>/dev/null || true)"

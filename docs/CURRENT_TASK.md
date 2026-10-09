@@ -37,10 +37,13 @@ Mode:
   Quality — base Qwen 16-step
   Fast    — real Fun-Acc/PDD 4-step
 
-Resolution:
+Generation resolution:
   1024x1024
   1024x768
   768x1024
+
+Edit resolution:
+  automatic from reference geometry, capped at 1024px / 1MP
 
 Seed:
   -1 random
@@ -59,9 +62,69 @@ image.nyannyan.top -> VPS Caddy -> VPS frps -> HomeLab frpc -> macOS Image Lab :
 
 Only the UI is public. Qwen bridge/engine ports remain loopback-only.
 
-Status: `PLANNED_AUTHORIZED_FOR_CONTINUOUS_APPLY`.
+Status: `SOURCE_AND_FOCUSED_CHECKS_PASS; MAC_UI_REDEPLOYED; PUBLIC_HTTPS_LOGIN_PAGE_LIVE; UNAUTH_APIS_BLOCKED; QUALITY_CFG1_DEPLOYED_FOR_OPERATOR_COMPARISON; TASK_MODAL_AND_AUTO_EDIT_RESOLUTION_DEPLOYED; OPERATOR_IMAGE_CHECK_PENDING`.
 
-## Local Qwen image debug UI — 2026-10-07
+Quality remains capped at 16 steps. For the operator's sampling comparison,
+the base profile now uses CFG 1 while retaining the same model, VAE, sampler,
+and schedule. The operator will submit and judge the next image; no generation
+was submitted during this configuration change. The protected pre-deploy
+snapshot and rollback details are in
+`.agent/checkpoints/2026-10-08-qwen-image-quality-cfg1-redeploy.md`.
+
+Task-history image viewing now opens a modal without replacing the main output
+preview. Reference edits automatically preserve valid source geometry or scale
+proportionally within the 1024px / 1MP cap; completed task and result metadata
+show the actual output dimensions. Reference bytes and MIME are preserved.
+Focused bridge/UI tests (35), JavaScript/Python syntax checks, secrets scan and
+`git diff --check` passed. The Mac bridge and UI LaunchAgents were applied; the
+bridge is `ready`/`idle`, the local task queue is empty, local UI returns 200,
+the public HTTPS root returns 200, and unauthenticated public tasks return 401.
+No login or image generation was performed. Protected rollback snapshot and
+details: `.agent/checkpoints/2026-10-08-qwen-image-modal-auto-resolution.md`.
+
+The exact `image.nyannyan.top` Caddy site is now deployed from
+`infra/vps/image-lab.example.Caddyfile`. The existing full Caddyfile validated
+before and after the append, Caddy reloaded successfully, DNS already resolved
+through the existing Cloudflare proxy, and Caddy obtained a valid Let's Encrypt
+certificate. The authenticated Mac UI and single frpc mapping are now live:
+`image.nyannyan.top` returns its password page over verified HTTPS. The
+runtime verifier exists only at the documented Mac secrets path with mode
+`0600`; its contents were not read. Wrong-password login and unauthenticated
+public model/task/generation requests return `401`. The HomeLab guest reaches
+the Mac UI at `192.168.5.3:18798`; frpc has exactly one additional mapping and
+reports `qwen-image-lab-tcp` start success. Persistent IPv4/IPv6 INPUT rules
+drop non-loopback TCP `18798` while permitting Caddy's loopback upstream; SSH
+was verified in a new session and all unrelated firewall rules are unchanged.
+Evidence and rollback are in `.agent/checkpoints/2026-10-08-qwen-image-public-lab-caddy-staged.md`,
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-frps-port.md`,
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-firewall.md`, and
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-frpc.md`.
+
+The new bridge reports ready and exposes only Quality/Fast. The public login
+page and unauthenticated gates are verified. The earlier local Quality
+1024x1024 fixed-seed smoke timed out at 600 seconds after reporting 15 of 16
+steps; the UI received HTTP 504. The task failed after 610003 ms and is not
+running. Generation deadlines are now 900000 ms in both profiles and the UI
+proxy waits 910 seconds; the separate model-load timeout remains 600 seconds.
+The bridge reports `deadlineMs: 900000`, and local UI/model-discovery smoke
+passed after redeployment. The operator has since authenticated to the public
+Image Lab and reports that several Fast-mode outputs look good across random
+and fixed seeds. Quality CFG 1 is now deployed at 16 steps for operator
+comparison; no image was generated during this config change. Evidence and
+rollback are in
+`.agent/checkpoints/2026-10-08-qwen-image-quality-cfg1-redeploy.md`.
+
+The Image Lab task history now has an authenticated, task-ID-bound image viewer.
+Seed entry uses decimal text and BigInt validation up to `9223372036854775807`;
+the server converts the decimal string to an exact integer before forwarding,
+and large effective seeds are serialized as strings for browser display. The
+updated Mac LaunchAgent was applied and local UI/model-discovery smoke passed.
+Public HTTPS still presents the password page and unauthenticated health,
+models, tasks and generation APIs return `401`. No authenticated public image
+request was made. Evidence and the protected pre-deploy Mac snapshot are in
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-seed-view-redeploy.md`.
+
+## Previous local Qwen image debug UI baseline — 2026-10-07
 
 The stable local Qwen bridge remains on loopback port 18793. A separate
 LaunchAgent serves the generation/edit page on port 18798 and proxies only to
@@ -76,11 +139,9 @@ deployment. This does not alter the GPT-only production route, 9Router, or the
 paused Fun-Acc candidate. Status:
 `RUNNING; AUTO_SAVE_DEPLOYED; LAN_SMOKE_PASS; NO_REAL_POST_DEPLOY_GENERATION_TEST`.
 
-One image request was still in flight during the operator-directed UI restart.
-The model bridge-to-engine connection remains active, but its old UI client
-connection was closed; the new UI's in-memory task history is empty and that
-request's result cannot be confirmed or recovered from the page. Let the model
-request finish before starting another one.
+The unconfirmed request from the 2026-10-07 UI restart is historical. Before
+the 2026-10-08 source rollout, the bridge reported `idle` and no `sd-server`
+process was running; there is no model request currently in flight.
 Rollback files and deployment evidence:
 `.agent/checkpoints/2026-10-07-qwen-image-debug-ui-autosave.md`.
 

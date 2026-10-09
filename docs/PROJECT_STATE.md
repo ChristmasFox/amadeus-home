@@ -1,7 +1,136 @@
 # Project State — 2026-10-08
 
 Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`. The public Image Lab
-is planned; production image generation remains GPT-only.
+is reachable at `https://image.nyannyan.top` with a password login page and
+valid HTTPS. The updated task-image modal, automatic edit resolution and precise
+large-seed input are deployed to the Mac UI. Quality remains capped at 16 steps;
+CFG 1 is deployed for the operator's comparison after multiple Fast-mode outputs
+looked good across random and fixed seeds. The operator's Quality image review
+remains pending. Production image generation remains GPT-only.
+
+## 2026-10-08 — Image Lab task modal and automatic edit resolution
+
+The Mac bridge and UI LaunchAgents were updated from Git source. Task-history
+image viewing now uses a separate modal and keeps the active result preview
+untouched. Edit requests send `resolution=auto`; the bridge uses valid source
+geometry or scales within the 1024px edge, 1MP and 32px alignment limits while
+preserving reference bytes and MIME. Completed task/result metadata report the
+actual PNG dimensions. Quality remains 16 steps / CFG 1 and Fast remains four
+Fun-Acc/PDD steps / CFG 1. The focused bridge/UI suite passed (35 tests), as
+did Python and JavaScript syntax, `pnpm check:secrets`, and `git diff --check`.
+Bridge health is ready and idle; local UI and public HTTPS root return 200, and
+the unauthenticated public task API returns 401. No login or generation was
+performed. Protected pre-deploy snapshot:
+`~/Library/Application Support/Amadeus/backups/qwen-image-modal-auto-before-20261008T2016+0800`.
+Rollback evidence: `.agent/checkpoints/2026-10-08-qwen-image-modal-auto-resolution.md`.
+
+## 2026-10-08 — Quality CFG 1 comparison deployed
+
+The Mac bridge and Quality engine config now use CFG 1 at 16 steps, preserving
+the same model, VAE, sampler, and base schedule. Fast remains Fun-Acc/PDD at 4
+steps and CFG 1. The focused bridge/UI suite passed (32 tests), the secrets scan
+passed, and Python/shell syntax plus `git diff --check` passed. The installed
+bridge and both profile configs match Git source; bridge health is ready, no
+task is active, and no `sd-server` process is left running. The public HTTPS
+root and local UI both return HTTP 200. No image was generated during this
+deployment; the operator will evaluate the Quality output. Protected rollback
+snapshot and evidence:
+`.agent/checkpoints/2026-10-08-qwen-image-quality-cfg1-redeploy.md`.
+
+## 2026-10-08 — Image Lab image viewer and seed precision redeployed
+
+The Mac Image Lab now exposes `查看图片` for successful tasks with saved PNGs.
+The authenticated `/api/tasks/<id>/image` route serves only that task's bounded
+PNG and never accepts a filesystem path. Seed input is decimal text validated
+with browser BigInt up to signed 64-bit maximum; the server receives an exact
+decimal string and converts it to an integer before forwarding. Values outside
+JavaScript's safe integer range are returned to the page as strings so the
+effective seed remains exact.
+
+`infra/macos/manage-qwen-image-debug-ui.sh --apply` installed and restarted the
+LaunchAgent. Its immediate `bootout`/`bootstrap` sequence encountered launchd
+error 5, so the source-managed manager now retries bootstrap up to ten times
+with a one-second interval. The managed apply and local LAN/model-discovery
+smoke then passed. Local page checks found the image-view button and large-seed
+control. `https://image.nyannyan.top/` returned the password page with valid
+TLS; unauthenticated health, models, tasks and generation requests returned
+401. The operator will perform authenticated public validation; no login or
+public image generation was performed by this deployment.
+
+Focused bridge tests (15) and debug UI tests (16), Python compilation, shell
+syntax checks, secret scan and `git diff --check` passed. Protected pre-deploy
+Mac snapshot: `~/Library/Application Support/Amadeus/backups/qwen-image-public-lab-ui-before-seed-view-20261008T082412Z`.
+Detailed rollback and evidence: `.agent/checkpoints/2026-10-08-qwen-image-public-lab-seed-view-redeploy.md`.
+
+The previous Quality smoke timed out after 600 seconds at step 15/16 and
+returned HTTP 504 after 610003 ms; it is not running. Both engine generation
+deadlines are now 900000 ms, the UI proxy deadline is 910 seconds, and engine
+load stays capped at 600 seconds. The Mac bridge reports `deadlineMs: 900000`;
+bridge/UI source files and both engine configs match the installed runtime.
+The first bridge LaunchAgent bootstrap returned macOS error 5; a source-managed
+ten-attempt retry was added and the subsequent restart passed. Local no-login
+and model-discovery smoke passed. Public HTTPS root returned 200 and protected
+unauthenticated health/models/tasks/generation requests returned 401 with the
+exact public Origin. The operator will perform login and public image checks;
+Fast smoke and Quality rerun remain open. Protected pre-deploy snapshot:
+`~/Library/Application Support/Amadeus/backups/qwen-image-timeout-before-20261008T084228Z`.
+Detailed evidence and rollback: `.agent/checkpoints/2026-10-08-qwen-image-generation-timeout-redeploy.md`.
+
+## 2026-10-08 — Image Lab Caddy TLS route staged
+
+The source-managed exact site in `infra/vps/image-lab.example.Caddyfile` is
+appended to the VPS Caddyfile. The original Caddyfile is protected at
+`/var/backups/amadeus-image-lab/20261008T073835Z/caddy/Caddyfile.pre` (directory
+`0700`, file `0600`); Caddyfile validation and reload passed. The existing
+Cloudflare-proxied DNS already resolves, and Caddy obtained a Let's Encrypt
+certificate for `image.nyannyan.top`. Public HTTPS now reaches Caddy and returns
+`502` because `127.0.0.1:18798` has no listener. No DNS or frp changes were
+made during the Caddy stage. Subsequently, frps was updated to allow the
+additional TCP `18798` port and `maxPortsPerClient` was raised from 10 to 11,
+after saving a root-only checkpoint and verifying the candidate with frps
+0.69.0. The restart passed and its complete listening-port set matched before
+and after; `18798` remains unbound until frpc is configured. At the operator's
+explicit `Apply` instruction, one persistent IPv4/IPv6 INPUT rule was added to
+drop non-loopback TCP `18798` while preserving Caddy's loopback upstream.
+A separate SSH connection succeeded after the change; the before/after rule
+comparison confirmed no other firewall changes. At the time of this Caddy-only
+stage, the runtime-only password verifier had not yet been provisioned. Evidence and rollback
+commands are in
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-caddy-staged.md` and
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-frps-port.md` and
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-firewall.md`.
+
+## 2026-10-08 — Image Lab UI and frpc route live
+
+The new one-engine bridge and two-profile configuration are installed on M204;
+the bridge health endpoint reports `ready`. The LAN UI LaunchAgent serves on
+`0.0.0.0:18798`, preserves LAN no-login behavior, and the exact public Host
+serves the password-only login page. The operator entered the password into
+the hidden native prompt; the runtime scrypt verifier is present with mode
+`0600`, and its contents remain outside Git and logs. LaunchAgent `bootstrap`
+returned macOS error 5 on its first attempt; a direct retry loaded each service
+successfully. Local LAN root and model discovery return 200; public wrong
+password, models, tasks, and unauthenticated generation return 401.
+
+HomeLab frpc config has one new `qwen-image-lab-tcp` proxy to the verified Mac
+address `192.168.5.3:18798`, remote TCP `18798`. Config validation passed before
+and after, frpc is active, and the current session log reports successful
+startup of the new proxy and all eight previous proxies. The protected pre-
+change config is at
+`/Volumes/Avalon/backups/amadeus-image-lab/frpc/20261008T075816Z/frpc.toml.pre`
+(directory `0700`, file `0600`); checkpoint:
+`.agent/checkpoints/2026-10-08-qwen-image-public-lab-frpc.md`.
+
+Public HTTPS returns 200 with certificate verification result 0. VPS frps
+listens on 18798, while persistent IPv4 and IPv6 guards block non-loopback
+access to that plaintext tunnel port; Caddy reaches it over loopback. A local
+Quality 1024x1024 fixed-seed generation smoke is in progress; Fast and public
+authenticated generation acceptance remain pending. The operator will verify
+their password session and public page directly.
+
+Production remains GPT-only: the live Amadeus container reports
+`AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` and
+`AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED=0`.
 
 ## 2026-10-08 — VPS subscription accounting and owner reports deployed
 

@@ -28,5 +28,6 @@ allowPorts = [
   { single = 8097 },
   { single = 7575 },
   { single = 18789 },
+  { single = 18798 },
 ]
-maxPortsPerClient = 10
+maxPortsPerClient = 11

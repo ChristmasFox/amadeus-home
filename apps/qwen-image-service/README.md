@@ -1,55 +1,66 @@
-# Qwen Image Service
+# Qwen Image Lab
 
-This Mac-only service is the authenticated local boundary for Qwen-Image-2.1
-generation and single-reference edits. It proxies only the two OpenAI image
-endpoints, binds both bridge and `sd-server` to loopback, validates pinned
-asset/runtime hashes before listening, permits one running generation plus
-one bounded waiter, and shuts down the Metal model after three idle minutes.
+The local bridge and `sd-server` bind only to loopback ports 18793 and 18795.
+The bridge validates the pinned model, patched stable-diffusion.cpp binary and
+Fun-Acc/PDD adapter before listening. It admits one active request and one
+bounded waiter. A request selects `quality` or `fast`; the bridge stops the
+current `sd-server` before starting the other profile, so at most one model
+process is resident.
 
-The model and runtime files remain under `/Volumes/Avalon/models` and are not
-stored in Git. Their pinned repository revisions, byte counts and SHA-256
-values live in `infra/macos/qwen-image-engine.json` and the active Goal.
+`infra/macos/qwen-image-engine.json` pins Quality: Qwen-Image-2.1 base model,
+16 steps, CFG 1 and Metal. `infra/macos/qwen-image-fast-engine.json` pins Fast:
+the real Alibaba Fun-Acc/PDD adapter, four steps, CFG 1, the trained custom
+sigma grid, q8_0 prefix caching with the runtime's auto behavior if q8_0 cannot
+initialize, mmap, Flash Attention and a 900-second idle lease. The browser
+cannot select either engine's internal parameters.
 
-Run `infra/macos/manage-qwen-image.sh --dry-run` to inspect the intended local
-setup. All LaunchAgent mutations require `--apply`; start and restart also
-require the `Amadeus-M204` host. The manager refuses to start while the Krea
-LaunchAgent is loaded. Uninstall preserves model files and the Qwen token.
+Text-to-image generation accepts `1024x1024`, `1024x768` and `768x1024`.
+Single-reference edits automatically use the reference geometry when it meets
+the model's 32px alignment, 1024px edge and 1MP limits; otherwise the bridge
+scales it proportionally to fit. Reference bytes and MIME are preserved. Seed
+`-1` becomes a server-generated seed; the result and task history display the
+effective seed and actual output dimensions. Edit strength is set internally to
+1.0, and prompt-injected engine arguments are rejected. Generation has a
+900-second bridge deadline and a 910-second UI proxy deadline; model loading
+retains its separate 600-second deadline.
 
-The bridge applies the measured 16-step/CFG-6 setup and a 600-second image
-request deadline. Edits default to strength 0.9, retain the exact uploaded
-reference bytes and MIME type, and derive safe 32-pixel-aligned canvas geometry
-from the reference rather than imposing a portrait default.
+Model assets remain under `/Volumes/Avalon/models`; their paths, revisions,
+byte counts and hashes are pinned in the two engine JSON files. Apply local
+service changes with the Mac-only manager:
 
-## LAN debug UI
+```sh
+infra/macos/manage-qwen-image.sh --dry-run
+infra/macos/manage-qwen-image.sh --restart --apply
+```
 
-`infra/macos/manage-qwen-image-debug-ui.sh` installs a lightweight Python
-LaunchAgent serving a local text-to-image and reference-edit page on TCP
-18798. It proxies only to the stable loopback bridge at 127.0.0.1:18793; the
-separately paused acceleration candidate on 18796 is not used. The model bridge
-and Metal engine remain loopback-only, and the UI does not add another model
-process.
+## LAN and public UI
 
-The UI binds the host interfaces and allows all private/loopback clients
-without a login. Same-origin writes are required, while the model bridge token
-stays server-side. Use the URL printed by the manager from any device on the
-LAN. Do not forward port 18798 from the router.
+`infra/macos/manage-qwen-image-debug-ui.sh` manages the lightweight UI on port
+18798. Private and loopback Host/client pairs keep no-login LAN access. The
+exact public Host `image.nyannyan.top` requires the password-only login and a
+server-side 12-hour session. The scrypt verifier belongs at
+`~/Library/Application Support/Amadeus/secrets/qwen-image-lab-auth.json`, mode
+`0600`; provision it with `infra/macos/provision-qwen-image-public-auth.py`
+from a protected password source on stdin. The plaintext password is never
+part of repository files, HTML, logs, checkpoints or proxy configuration.
+
+The public route is limited to the UI on TCP 18798 through HomeLab frpc,
+`amadeus-gateway` frps and VPS Caddy. The bridge and model engine are never
+forwarded. Caddy terminates TLS for `https://image.nyannyan.top`; the
+application owns password authentication, exact Host/Origin validation and
+session cookies. Arbitrary `X-Forwarded-*` headers are ignored.
 
 Run `infra/macos/manage-qwen-image-debug-ui.sh` for a dry-run, then pass
-`--apply` to install/start or update the LaunchAgent. Use `--status` to inspect,
-and `--stop --apply` to stop. The UI supports PNG, JPEG, and WebP reference
-edits up to 10 MB and single-image generation up to 1024 pixels per edge. The
-first image request may take several minutes while the existing bridge loads
-the Metal model; the model process still shuts down after its configured idle
-time.
+`--apply` to install/start or update the LaunchAgent. Use `--status` to inspect
+and `--stop --apply` to stop. Keep the public port out of router forwards; frp
+is the only remote path. Same-origin writes are required for both LAN and
+public sessions, with the public origin fixed to the exact HTTPS hostname.
 
-The page polls a LAN-readable task endpoint and shows tasks submitted through
-the debug UI: active generation/edit, elapsed time, recent completion/failure
-status, and a short failure summary. The last 30 task records live in the UI
-process memory and remain visible across page reloads until the UI service
-restarts; prompts and image bytes are not written to disk by this history
-feature.
-
-Successful PNG outputs are automatically saved to
-`~/Pictures/Amadeus/QwenImage` with mode `0600`; the directory is restricted to
-mode `0700`. The page and recent task history show each saved path. Images are
-kept across UI restarts, while in-memory task history is reset.
+The UI supports PNG, JPEG and WebP references up to 10 MB, one generation/edit
+request at a time, a prompt, profile and seed. Resolution is selectable for
+generation and automatic for edits. Task-history images open in a modal without
+replacing the current result preview. Task history shows the profile, actual
+output resolution, effective seed, elapsed time and a safe failure summary. It
+is held in UI process memory. Successful PNGs are
+automatically saved under `~/Pictures/Amadeus/QwenImage` with files mode `0600`
+and directory mode `0700`; public task responses do not disclose local paths.

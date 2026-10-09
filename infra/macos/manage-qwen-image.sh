@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 CONFIG="$ROOT/infra/macos/qwen-image-engine.json"
+FAST_CONFIG="$ROOT/infra/macos/qwen-image-fast-engine.json"
 LABEL='com.amadeus.qwen-image'
 KREA_LABEL='com.amadeus.krea2-image'
 TARGET="gui/$(id -u)"
@@ -12,6 +13,7 @@ LOG="$HOME/Library/Logs/Amadeus/QwenImage"
 TOKEN="$HOME/Library/Application Support/Amadeus/secrets/qwen-image-token"
 SCRIPT="$BASE/bridge.py"
 INSTALLED_CONFIG="$BASE/qwen-image-engine.json"
+INSTALLED_FAST_CONFIG="$BASE/qwen-image-fast-engine.json"
 PYTHON="$(command -v python3)"
 action=--dry-run
 apply=0
@@ -55,7 +57,7 @@ fi
 if [[ "$action" == --uninstall ]]; then
   launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
   rm -f -- "$PLIST"
-  rm -f -- "$SCRIPT" "$INSTALLED_CONFIG"
+  rm -f -- "$SCRIPT" "$INSTALLED_CONFIG" "$INSTALLED_FAST_CONFIG"
   echo 'QWEN_IMAGE_UNINSTALLED=yes'
   echo 'MODEL_ASSETS_PRESERVED=yes'
   echo 'TOKEN_PRESERVED=yes'
@@ -102,14 +104,23 @@ PY
   [[ "$(stat -f %Lp "$TOKEN")" == 600 ]] || { echo 'Qwen token must be mode 600' >&2; exit 1; }
   install -m 700 "$ROOT/apps/qwen-image-service/bridge.py" "$SCRIPT"
   install -m 600 "$CONFIG" "$INSTALLED_CONFIG"
+  install -m 600 "$FAST_CONFIG" "$INSTALLED_FAST_CONFIG"
   temporary="$(mktemp "$PLIST.tmp.XXXXXX")"
   trap 'rm -f "$temporary"' EXIT
-  sed -e "s|__PYTHON__|$PYTHON|g" -e "s|__SERVICE_SCRIPT__|$SCRIPT|g" -e "s|__ENGINE_CONFIG__|$INSTALLED_CONFIG|g" -e "s|__TOKEN_FILE__|$TOKEN|g" -e "s|__LOG_DIR__|$LOG|g" "$ROOT/infra/macos/com.amadeus.qwen-image.plist.example" > "$temporary"
+  sed -e "s|__PYTHON__|$PYTHON|g" -e "s|__SERVICE_SCRIPT__|$SCRIPT|g" -e "s|__QUALITY_CONFIG__|$INSTALLED_CONFIG|g" -e "s|__FAST_CONFIG__|$INSTALLED_FAST_CONFIG|g" -e "s|__TOKEN_FILE__|$TOKEN|g" -e "s|__LOG_DIR__|$LOG|g" "$ROOT/infra/macos/com.amadeus.qwen-image.plist.example" > "$temporary"
   plutil -lint "$temporary" >/dev/null
   install -m 600 "$temporary" "$PLIST"
   rm -f "$temporary"
   launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
-  launchctl bootstrap "$TARGET" "$PLIST"
+  bootstrapped=0
+  for _ in {1..10}; do
+    if launchctl bootstrap "$TARGET" "$PLIST" 2>/dev/null; then
+      bootstrapped=1
+      break
+    fi
+    sleep 1
+  done
+  ((bootstrapped == 1)) || { echo 'Qwen image bridge LaunchAgent could not be loaded; inspect launchd state' >&2; exit 1; }
   launchctl enable "$TARGET/$LABEL"
   echo 'QWEN_IMAGE_AGENT=installed'
   ready=0
