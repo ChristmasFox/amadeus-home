@@ -2,7 +2,7 @@
   "packageVersion": "0.5.95",
   "imageAccount": {
     "provider": "codex",
-    "model": "gpt-image-2.5",
+    "model": "gpt-image-2.5-sunburst",
     "email": "xc13279112887@gmail.com"
   },
   "serverActions": {

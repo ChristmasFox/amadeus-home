@@ -54,13 +54,13 @@ if (root && root !== process.argv[0]) {
   const moduleExports={}; providerModule({},moduleExports,requireId);
   const select=moduleExports.c1;
   assert.equal(typeof select,'function');
-  assert.equal((await select('codex',null,'gpt-image-2.5')).connectionId,'target','target only even when lower priority');
-  assert.equal((await select('codex',null,'gpt-image-2.5',{preferredConnectionId:'other'})).connectionId,'target','other preferred ID denied');
-  assert.equal(await select('codex',new Set(['target']),'gpt-image-2.5'),null,'other account denied on retry');
+  assert.equal((await select('codex',null,'gpt-image-2.5-sunburst')).connectionId,'target','target only even when lower priority');
+  assert.equal((await select('codex',null,'gpt-image-2.5-sunburst',{preferredConnectionId:'other'})).connectionId,'target','other preferred ID denied');
+  assert.equal(await select('codex',new Set(['target']),'gpt-image-2.5-sunburst'),null,'other account denied on retry');
   accounts=[other,{...target,isActive:false}];
-  assert.equal(await select('codex',null,'gpt-image-2.5'),null,'other account denied when target inactive');
+  assert.equal(await select('codex',null,'gpt-image-2.5-sunburst'),null,'other account denied when target inactive');
   accounts=[other,{...target,locked:true}];
-  assert.equal(await select('codex',null,'gpt-image-2.5'),null,'other account denied when target model locked');
+  assert.equal(await select('codex',null,'gpt-image-2.5-sunburst'),null,'other account denied when target model locked');
   accounts=[other,target];
   assert.equal((await select('codex',null,'gpt-6-sol')).connectionId,'other','other models unchanged');
   accounts=[{...other,provider:'antigravity'}];
