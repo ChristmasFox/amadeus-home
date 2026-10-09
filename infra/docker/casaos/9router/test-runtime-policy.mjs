@@ -4,13 +4,22 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import {
-  MARKER, patchAccountSource, patchRequiredConfig, patchStandaloneConfig,
+  MARKER, NO_LOCK_MARKER, patchAccountSource, patchRequiredConfig, patchStandaloneConfig,
   validatePolicy, verifyInstallation,
 } from './patch-runtime-policy.mjs';
 const policy = validatePolicy(JSON.parse(await readFile(new URL('../../../9router/runtime-policy.json', import.meta.url), 'utf8')));
-const base = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
+const base = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});' +
+  'async function m(a,b,c,e=null,i=null,k=null){let l,n,o;if(!a||"noauth"===a)return{shouldFallback:!1,cooldownMs:0};' +
+  'if(r?(l=!0,n=r-Date.now(),o=0):k&&k>Date.now()?(l=!0,n=3e4,o=0):{shouldFallback:l,cooldownMs:n,newBackoffLevel:o}=(0,f.hk)(b,c,q,(0,h.rs)(e)),!l)return{shouldFallback:!1,cooldownMs:0};' +
+  'j.warn("AUTH",`${v} locked ${u} for ${Math.round(n/1e3)}s [${b}]`),e&&b&&s&&console.error';
 const patched = patchAccountSource(base, policy);
 assert.match(patched, new RegExp(MARKER));
+assert.match(patched, new RegExp(NO_LOCK_MARKER));
+assert.match(patched, /amadeusImageRequestScopedFailure/);
+assert.match(patched, /image_result_missing/);
+assert.match(patched, /upstream_failed/);
+assert.doesNotMatch(patched, /not\\s\+entitled|plus\/pro/);
+assert.match(patched, /cooldownMs:0/);
 assert.equal(patchAccountSource(patched, policy), patched);
 assert.throws(() => patchAccountSource(base.replace('getProviderConnections', 'getConnections'), policy), /anchor_drift/);
 assert.throws(() => patchAccountSource(base + base, policy), /anchor_drift/);
@@ -41,9 +50,10 @@ if (root && root !== process.argv[0]) {
   const other={id:'other',provider:'codex',email:'other@example.net',priority:1,isActive:true,accessToken:'fixture'};
   const target={id:'target',provider:'codex',email:policy.imageAccount.email,priority:2,isActive:true,accessToken:'fixture'};
   let accounts=[other,target];
+  let updates=0;
   const noop=()=>{};
   const stubs={
-    89718:{getProviderConnections:async()=>accounts.filter(x=>x.isActive),mt:async()=>({fallbackStrategy:'fill-first'})},
+    89718:{getProviderConnections:async()=>accounts.filter(x=>x.isActive),updateProviderConnection:async()=>{updates++},mt:async()=>({fallbackStrategy:'fill-first'})},
     39326:{B:async()=>({})},
     12557:{Bl:(a)=>Boolean(a.locked),kJ:()=>null},
     3662:{},40615:{rs:a=>a,IS:{}},45974:{d0:()=>new Map()},
@@ -52,6 +62,9 @@ if (root && root !== process.argv[0]) {
   function requireId(id){if(!(id in stubs))throw Error(`unexpected_module_${id}`);return stubs[id];}
   requireId.d=(destination,fields)=>{for(const [key,get] of Object.entries(fields))Object.defineProperty(destination,key,{get});};
   const moduleExports={}; providerModule({},moduleExports,requireId);
+  const noLock=await moduleExports.vk('target',502,'amadeus_image_image_result_missing','codex','gpt-image-2.5');
+  assert.deepEqual(noLock,{shouldFallback:true,cooldownMs:0},'request-scoped image failure must not lock the account');
+  assert.equal(updates,0,'request-scoped image failure must not update provider state');
   const select=moduleExports.c1;
   assert.equal(typeof select,'function');
   for (const model of policy.imageAccount.models) {

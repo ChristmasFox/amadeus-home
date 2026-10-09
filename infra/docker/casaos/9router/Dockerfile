@@ -21,6 +21,8 @@ RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_
 COPY infra/9router/runtime-policy.json /opt/amadeus/runtime-policy.json
 COPY infra/docker/casaos/9router/patch-runtime-policy.mjs /opt/amadeus/patch-runtime-policy.mjs
 RUN node /opt/amadeus/patch-runtime-policy.mjs --root /usr/local/lib/node_modules/9router --policy /opt/amadeus/runtime-policy.json --apply
+COPY infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs /opt/amadeus/patch-image-upstream-diagnostics.mjs
+RUN node /opt/amadeus/patch-image-upstream-diagnostics.mjs --root /usr/local/lib/node_modules/9router --apply
 COPY infra/docker/casaos/9router/patch-image-combo-safety.mjs /opt/amadeus/patch-image-combo-safety.mjs
 RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /usr/local/lib/node_modules/9router --apply
 # The pinned base image keeps a second standalone bundle at /app for the
