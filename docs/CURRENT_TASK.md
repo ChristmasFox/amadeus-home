@@ -6,6 +6,26 @@ Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
 
 Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
 
+
+## Concurrent VPS proxy security hardening Goal — 2026-10-09
+
+Planned Goal: `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md`.
+
+Current security baseline: the active proxy identities are `Labmem001`–`Labmem005`
+plus `M204-Net-Core`; Legacy is retired and its old subscription/HY2/VLESS
+credentials are rejected. The hardening Goal must not rotate any active token,
+HY2 secret, VLESS UUID, Reality key/shortId, SNI, hostname or public proxy
+port, and must not require client re-import.
+
+Planned scope is server-side only: Xray REALITY anti-steal loopback fallback
+gate with exact SNI allowlist + blackhole, fallback inbound traffic telemetry,
+HY2 masquerade egress audit/local-only replacement when necessary, bounded
+failed-auth telemetry and conservative optional throttling using Hysteria's
+reported client addr, plus owner-only Kurisu security visibility. Existing
+09:30/21:30 reports are updated in place only after compatibility acceptance.
+
+Status: `PLANNED_NOT_APPLIED`.
+
 The operator explicitly pre-authorized the scoped Git/macOS/frpc/frps/Caddy/DNS-if-needed/runtime-secret/restart/smoke mutations in the active Goal and asked execution to continue without routine confirmation until `https://image.nyannyan.top` is deployed and usable. This authorization does not extend to SSH-auth/firewall changes, unrelated DNS/services, credential rotation, or other out-of-scope destructive operations.
 
 ## Active Image Lab target — 2026-10-08
