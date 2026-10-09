@@ -2,7 +2,7 @@
 
 Date: 2026-10-09 (Asia/Shanghai)
 Baseline: Amadeus 1.10.0 commit `a1983e9b637d29b0f731d9ad1b9ee023a35967d9`; 9Router npm `0.5.95`
-Status: IMPLEMENTATION REQUIRED; this document is a specification, **not** a deployment/acceptance report.
+Status: COMPLETE; deployed and accepted on 2026-10-09 after the final compiled-runtime fix.
 
 ## User-visible result
 
@@ -106,6 +106,47 @@ Update unit tests for both structured and legacy failures.
 10. Test the **actual** `/usr/local/lib/node_modules/9router/app/.next-cli-build/server` runtime bundle. Update `scripts/verify-9router-image-fallback.py` so it no longer tests only the obsolete base `/app/.next/server`. Keep the reference contract fixture `http_requests=0` separate from a manually authorized real edit smoke.
 
 Never update expected test strings without executing and observing the actual assertions. Run pinned source tests, image policy and authorization tests, security/secrets scan, isolated new-image smoke; a **real one-image edit smoke** is still required before calling the incident resolved. Log only bounded evidence and a private rollback checkpoint.
+
+## End-state evidence — 2026-10-09
+
+- Runtime source commit: `ed872b3f3978` (the follow-up verification-fixture correction is
+  `f74a4fc`). The operator explicitly approved `--apply`; only 9Router was rebuilt and
+  restarted. OpenClaw remained on `local/openclaw-amadeus:git-a1983e9b637d-20261009090331`.
+- Deployed image: `local/9router:git-ed872b3f3978-20261009T130134Z`, manifest digest
+  `sha256:1a068329307c0a46f7699bfe05034f7375891113adddd3efb44ce7b23aa97045`, build
+  The pre-switch old-image export was recorded with SHA-256
+  `3aae42b3a0b333e1df7b46b08e56fbbae4a4b6357e59f20fcd21e30ac4399ed9`.
+  Protected rollback checkpoint:
+  `/DATA/AppData/9router/backups/router-upgrade-20261009T130134Z`.
+- The effective npm 0.5.95 CLI bundle, not the obsolete `/app` bundle, reports
+  `9ROUTER_IMAGE_UPSTREAM_DIAGNOSTICS=verified` and `9ROUTER_POLICY=verified`.
+  The effective route SHA-256 is
+  `46a9032286fdd5688db1b668785f2f3dda6f6dcbc19c378b970ce5ab7f9bf356`.
+- Focused source tests, `pnpm test:amadeus` (137/137), secrets scan, runtime policy,
+  Combo safety, reference preservation and fallback checks passed. The live diagnostic
+  fixture passed for valid results, `image_result_missing`, `sse_incomplete`,
+  `upstream_failed`, `safety_refusal`, `account_unavailable`, partial-image terminal
+  failure, `transport_interrupted`, and boolean diagnostic types.
+- The exact compiled account selector proved request-scoped 502 (`amadeus_image_image_result_missing`)
+  returned `{shouldFallback:true,cooldownMs:0}` with zero provider-state updates. A
+  genuine 429 fixture retained `cooldownMs:420000` and performed one native state update.
+  The live active Codex row remained `testStatus=active`, `errorCode=null`,
+  `backoffLevel=0`, no `lastError`, and all three image model locks null after the
+  failed edit trace.
+- The unchanged-reference fixture passed the required `502 → 502 → success` order:
+  `cx/gpt-image-2.5-sunburst → cx/gpt-image-2.5-flare → cx/gpt-image-2.5`; it also
+  verified byte/MIME preservation and the success `x-amadeus-image-model` header.
+- Real one-image edit smoke reached the live path. A successful trace used
+  `cx/gpt-image-2.5-sunburst` with `imageResultSeen:true` and no cooldown. A later
+  naturally occurring provider failure produced one bounded terminal trace with exactly
+  the three configured attempts, all `502/upstream_failed/cooldownDecision:none`, and
+  returned the typed `amadeus_image_upstream_failed` envelope. Neither trace emitted
+  the legacy Plus/Pro entitlement text.
+- Rollback is the compose-only path in `scripts/deploy-9router.sh`: restore
+  `docker-compose.yml` from the checkpoint above and run
+  `cd /var/lib/casaos/apps/9router && docker compose up -d --no-build 9router`.
+  The checkpointed SQLite copy is retained for investigation; it is not blindly copied
+  over the live database.
 
 ## Workflow / deploy boundary
 
