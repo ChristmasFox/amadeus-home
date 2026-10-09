@@ -1,0 +1,2 @@
+# Keep Caddy's loopback upstream reachable while denying direct public HTTP.
+-A INPUT ! -i lo -p tcp -m tcp --dport 18798 -j DROP

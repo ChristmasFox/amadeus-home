@@ -8,8 +8,10 @@
 	<array>
 		<string>__PYTHON__</string>
 		<string>__SERVICE_SCRIPT__</string>
-		<string>--config</string>
-		<string>__ENGINE_CONFIG__</string>
+    <string>--quality-config</string>
+    <string>__QUALITY_CONFIG__</string>
+    <string>--fast-config</string>
+    <string>__FAST_CONFIG__</string>
 		<string>--token-file</string>
 		<string>__TOKEN_FILE__</string>
 	</array>

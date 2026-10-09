@@ -13,6 +13,7 @@ from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import re
+import secrets
 import signal
 import stat
 import subprocess
@@ -28,8 +29,11 @@ MAX_RESPONSE_BYTES = 30 * 1024 * 1024
 MAX_PROMPT_CHARS = 8_000
 MAX_OUTPUT_PIXELS = 1024 * 1024
 MAX_OUTPUT_EDGE = 1_024
-GENERATION_TIMEOUT_SECONDS = 600
+GENERATION_TIMEOUT_SECONDS = 900
 LOAD_TIMEOUT_SECONDS = 600
+QUALITY_SAMPLING_PROFILE = "baseline-16step"
+QUALITY_STEPS = 16
+QUALITY_CFG_SCALE = 1.0
 QUEUE_WAIT_SECONDS = 5
 ALLOWED_MIME = {"image/png", "image/jpeg", "image/webp"}
 MIME_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
@@ -39,8 +43,9 @@ FUN_ACC_SOURCE_REPOSITORY = "alibaba-pai/Qwen-Image-2.1-Fun-Acc-LoRAs"
 FUN_ACC_SOURCE_REVISION = "f7545234760e1847cd8e89e52bd951cb0b7e327f"
 FUN_ACC_CONVERTER_REVISION = "qwen-fun-acc-sdcpp-v1"
 FUN_ACC_FORMAT = "qwen_image_2_1_fun_acc_sdcpp_v1"
-FUN_ACC_PORTS = (18793, 18795)
-CANDIDATE_PORTS = (18796, 18797)
+SERVICE_PORTS = (18793, 18795)
+ALLOWED_PROFILES = {"quality", "fast"}
+ALLOWED_RESOLUTIONS = {"1024x1024", "1024x768", "768x1024"}
 SIZE_RE = re.compile(r"^(\d{2,5})x(\d{2,5})$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -75,7 +80,7 @@ def verify_hash(path: Path, expected: str, expected_bytes: int) -> None:
         raise ConfigError(f"qwen_asset_hash:{path.name}")
 
 
-def load_config(path: Path, candidate: bool = False) -> dict:
+def load_config(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         raise ConfigError("qwen_engine_config_missing")
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -93,13 +98,13 @@ def load_config(path: Path, candidate: bool = False) -> dict:
         raise ConfigError("qwen_engine_config_incomplete")
     if data["modelId"] != MODEL_ID or data["backend"] != "MTL0":
         raise ConfigError("qwen_engine_config_policy")
-    sampling_profile = data.get("samplingProfile", "baseline-16step")
-    if sampling_profile not in {"baseline-16step", FUN_ACC_PROFILE}:
+    sampling_profile = data.get("samplingProfile", QUALITY_SAMPLING_PROFILE)
+    if sampling_profile not in {QUALITY_SAMPLING_PROFILE, FUN_ACC_PROFILE}:
         raise ConfigError("qwen_engine_sampling_profile")
-    expected_ports = CANDIDATE_PORTS if candidate else FUN_ACC_PORTS
-    if (data["servicePort"], data["internalPort"]) != expected_ports:
+    if (data["servicePort"], data["internalPort"]) != SERVICE_PORTS:
         raise ConfigError("qwen_engine_port_policy")
-    if data["generationDeadlineMs"] != 600_000 or data["loadTimeoutMs"] != 600_000:
+    if (data["generationDeadlineMs"] != GENERATION_TIMEOUT_SECONDS * 1_000 or
+            data["loadTimeoutMs"] != LOAD_TIMEOUT_SECONDS * 1_000):
         raise ConfigError("qwen_engine_timeout_policy")
     if sampling_profile == FUN_ACC_PROFILE:
         fun_acc_required = {"customSigmas", "prefixCacheType", "mmap", "flashAttention", "funAcc", "sdCppPatch"}
@@ -143,12 +148,10 @@ def load_config(path: Path, candidate: bool = False) -> dict:
         if not isinstance(patch["bytes"], int) or patch["bytes"] < 1:
             raise ConfigError("qwen_sd_cpp_patch_size_invalid")
     else:
-        if candidate or data["steps"] != 16 or float(data["cfgScale"]) != 6.0:
+        if data["steps"] != QUALITY_STEPS or float(data["cfgScale"]) != QUALITY_CFG_SCALE:
             raise ConfigError("qwen_engine_sampling_policy")
-        if data["maxOutputPixels"] != 768 * 1024 or data["maxOutputEdge"] != MAX_OUTPUT_EDGE:
+        if data["maxOutputPixels"] != MAX_OUTPUT_PIXELS or data["maxOutputEdge"] != MAX_OUTPUT_EDGE:
             raise ConfigError("qwen_engine_geometry_policy")
-    if candidate and sampling_profile != FUN_ACC_PROFILE:
-        raise ConfigError("qwen_engine_candidate_profile_policy")
     for field in ("diffusionModelPath", "llmPath", "visionPath", "vaePath", "sdCppBinary"):
         asset_path = Path(data[field])
         if not asset_path.is_absolute() or asset_path.is_symlink() or not asset_path.is_file():
@@ -161,7 +164,7 @@ def load_config(path: Path, candidate: bool = False) -> dict:
     for field in ("diffusionModelSha256", "llmSha256", "visionSha256", "vaeSha256", "sdCppBinarySha256"):
         if not SHA256_RE.fullmatch(data[field]):
             raise ConfigError(f"qwen_hash_invalid:{field}")
-    expected_size = "1024x1024" if sampling_profile == FUN_ACC_PROFILE else "768x768"
+    expected_size = "1024x1024"
     if data["defaultGenerationSize"] != expected_size:
         raise ConfigError("qwen_default_size_policy")
     if sampling_profile == FUN_ACC_PROFILE:
@@ -175,7 +178,8 @@ def load_config(path: Path, candidate: bool = False) -> dict:
     return data
 
 
-def verify_runtime_and_assets(config: dict) -> None:
+def verify_runtime_and_assets(config: dict, verified_assets: set[tuple[str, str, int]] | None = None) -> None:
+    verified_assets = verified_assets if verified_assets is not None else set()
     for path_key, hash_key, bytes_key in (
         ("diffusionModelPath", "diffusionModelSha256", "diffusionModelBytes"),
         ("llmPath", "llmSha256", "llmBytes"),
@@ -183,7 +187,10 @@ def verify_runtime_and_assets(config: dict) -> None:
         ("vaePath", "vaeSha256", "vaeBytes"),
         ("sdCppBinary", "sdCppBinarySha256", "sdCppBinaryBytes"),
     ):
-        verify_hash(Path(config[path_key]), config[hash_key], int(config[bytes_key]))
+        marker = (config[path_key], config[hash_key], int(config[bytes_key]))
+        if marker not in verified_assets:
+            verify_hash(Path(config[path_key]), config[hash_key], int(config[bytes_key]))
+            verified_assets.add(marker)
     result = subprocess.run(
         ["git", "-C", config["sdCppSourcePath"], "rev-parse", "HEAD"],
         check=True,
@@ -202,9 +209,15 @@ def verify_runtime_and_assets(config: dict) -> None:
             ("adapterPath", "adapterSha256", "adapterBytes"),
             ("manifestPath", "manifestSha256", "manifestBytes"),
         ):
-            verify_hash(Path(fun_acc[path_key]), fun_acc[hash_key], int(fun_acc[bytes_key]))
+            marker = (fun_acc[path_key], fun_acc[hash_key], int(fun_acc[bytes_key]))
+            if marker not in verified_assets:
+                verify_hash(Path(fun_acc[path_key]), fun_acc[hash_key], int(fun_acc[bytes_key]))
+                verified_assets.add(marker)
         patch = config["sdCppPatch"]
-        verify_hash(Path(patch["path"]), patch["sha256"], int(patch["bytes"]))
+        marker = (patch["path"], patch["sha256"], int(patch["bytes"]))
+        if marker not in verified_assets:
+            verify_hash(Path(patch["path"]), patch["sha256"], int(patch["bytes"]))
+            verified_assets.add(marker)
         try:
             manifest = json.loads(Path(fun_acc["manifestPath"]).read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -318,6 +331,12 @@ def parse_size(value: str, max_pixels: int = MAX_OUTPUT_PIXELS, max_edge: int = 
     return width, height
 
 
+def parse_seed(value: object) -> int:
+    if type(value) is not int or value < -1 or value > (1 << 63) - 1:
+        raise ValueError("seed_invalid")
+    return value
+
+
 def parse_multipart(content_type: str, body: bytes, max_pixels: int = MAX_OUTPUT_PIXELS, max_edge: int = MAX_OUTPUT_EDGE) -> dict:
     if len(body) > MAX_BODY_BYTES or not content_type.lower().startswith("multipart/form-data"):
         raise ValueError("edit_body_unsupported")
@@ -344,10 +363,10 @@ def parse_multipart(content_type: str, body: bytes, max_pixels: int = MAX_OUTPUT
                 raise ValueError("edit_image_mime_invalid")
             files.append({"name": name, "filename": filename, "mime": mime, "bytes": payload})
         else:
-            if name not in {"model", "prompt", "size", "n", "output_format"}:
+            if name not in {"model", "prompt", "profile", "resolution", "seed", "n", "output_format"}:
                 raise ValueError("edit_field_unsupported")
             fields.setdefault(name, []).append(payload)
-    if any(len(values) != 1 for values in fields.values()) or len(files) != 1 or "prompt" not in fields:
+    if any(len(values) != 1 for values in fields.values()) or len(files) != 1 or not {"prompt", "profile", "resolution", "seed"}.issubset(fields):
         raise ValueError("edit_contract_invalid")
     try:
         prompt = fields["prompt"][0].decode("utf-8").strip()
@@ -356,50 +375,52 @@ def parse_multipart(content_type: str, body: bytes, max_pixels: int = MAX_OUTPUT
     if (not prompt or len(prompt) > MAX_PROMPT_CHARS or "<sd_cpp_extra_args>" in prompt or
             "</sd_cpp_extra_args>" in prompt):
         raise ValueError("edit_prompt_invalid")
+    try:
+        profile = fields["profile"][0].decode("ascii").strip()
+        resolution = fields["resolution"][0].decode("ascii").strip()
+        seed_value = int(fields["seed"][0].decode("ascii").strip())
+        seed = parse_seed(seed_value)
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ValueError("edit_profile_resolution_or_seed_invalid") from exc
+    if profile not in ALLOWED_PROFILES:
+        raise ValueError("edit_profile_unsupported")
     if "model" in fields and fields["model"][0].decode("utf-8", errors="strict").strip() not in {MODEL_ID, "sd-cpp-local"}:
         raise ValueError("edit_model_unsupported")
     if "n" in fields and fields["n"][0].strip() != b"1":
         raise ValueError("edit_count_unsupported")
     if "output_format" in fields and fields["output_format"][0].strip().lower() not in {b"png", b"jpeg"}:
         raise ValueError("edit_output_format_unsupported")
-    explicit_size = fields.get("size", [b""])[0].decode("ascii", errors="ignore").strip()
-    if explicit_size and parse_size(explicit_size, max_pixels, max_edge) is None:
-        explicit_size = ""
     image = files[0]
     dimensions = image_dimensions(image["bytes"], image["mime"])
     if dimensions is None:
         raise ValueError("edit_image_dimensions_invalid")
-    size = explicit_size or derived_edit_size(*dimensions, max_pixels=max_pixels, max_edge=max_edge)
-    if size is None:
-        size = f"{dimensions[0]}x{dimensions[1]}"
-    if size:
-        parsed_size = parse_size(size, max_pixels, max_edge)
-        if parsed_size is None:
-            raise ValueError("edit_size_unsupported")
-        if abs(parsed_size[0] / parsed_size[1] - dimensions[0] / dimensions[1]) > 0.02:
-            size = derived_edit_size(*dimensions, max_pixels=max_pixels, max_edge=max_edge) or f"{dimensions[0]}x{dimensions[1]}"
+    if resolution == "auto":
+        resolution = derived_edit_size(*dimensions, max_pixels, max_edge) or f"{dimensions[0]}x{dimensions[1]}"
+    elif resolution not in ALLOWED_RESOLUTIONS:
+        raise ValueError("edit_resolution_unsupported")
+    if parse_size(resolution, max_pixels, max_edge) is None:
+        raise ValueError("edit_resolution_unsupported")
     fields_out = [("model", b"sd-cpp-local")]
-    fields_out.extend((name, values[0]) for name, values in fields.items() if name not in {"model", "prompt", "size", "n"})
+    fields_out.extend((name, values[0]) for name, values in fields.items() if name not in {"model", "prompt", "profile", "resolution", "seed", "n"})
     fields_out.extend([("prompt", prompt.encode("utf-8")), ("n", b"1")])
-    if size:
-        fields_out.append(("size", size.encode("ascii")))
-    return {"boundary": boundary, "fields": fields_out, "image": image}
+    fields_out.extend([("size", resolution.encode("ascii"))])
+    return {"boundary": boundary, "fields": fields_out, "image": image, "profile": profile, "resolution": resolution, "seed": seed}
 
 
-def profile_prompt(prompt: str, config: dict, editing: bool = False) -> str:
-    extra: dict = {}
+def profile_prompt(prompt: str, config: dict, editing: bool = False, seed: int = -1) -> str:
+    if "<sd_cpp_extra_args>" in prompt or "</sd_cpp_extra_args>" in prompt:
+        raise ValueError("prompt_extra_args_marker_rejected")
+    extra: dict = {"seed": parse_seed(seed)}
     if config.get("samplingProfile") == FUN_ACC_PROFILE:
-        extra = {
+        extra.update({
             "lora": [{"path": config["funAcc"]["adapterPath"], "multiplier": 1.0}],
             "sample_params": {
                 "sample_steps": 4,
                 "custom_sigmas": config["customSigmas"],
             },
-        }
+        })
     if editing:
-        extra["strength"] = 0.9
-    if not extra:
-        return prompt
+        extra["strength"] = 1.0
     return prompt + " <sd_cpp_extra_args>" + json.dumps(extra, separators=(",", ":")) + "</sd_cpp_extra_args>"
 
 def build_multipart(payload: dict, prompt_override: str | None = None) -> tuple[str, bytes]:
@@ -428,8 +449,19 @@ def json_bytes(value: dict) -> bytes:
 
 
 class QwenBridge:
-    def __init__(self, config: dict, token: str, token_path: Path):
-        self.config = config
+    def __init__(self, profiles: dict[str, dict], token: str, token_path: Path):
+        if set(profiles) != ALLOWED_PROFILES:
+            raise ConfigError("qwen_profile_set_invalid")
+        if profiles["quality"].get("samplingProfile", QUALITY_SAMPLING_PROFILE) != QUALITY_SAMPLING_PROFILE:
+            raise ConfigError("qwen_quality_profile_invalid")
+        if profiles["fast"].get("samplingProfile") != FUN_ACC_PROFILE:
+            raise ConfigError("qwen_fast_profile_invalid")
+        if any((config["servicePort"], config["internalPort"]) != SERVICE_PORTS for config in profiles.values()):
+            raise ConfigError("qwen_profile_ports_mismatch")
+        self.profiles = profiles
+        self.config = profiles["quality"]
+        self.active_profile = "none"
+        self.active_config: dict | None = None
         self.token = token
         self.token_path = token_path
         self.child: subprocess.Popen[bytes] | None = None
@@ -453,67 +485,98 @@ class QwenBridge:
             running = self.child is not None and self.child.poll() is None
             if self.child is not None and not running:
                 self.child = None
+                self.active_config = None
+                self.active_profile = "none"
+            profile = self.active_profile if running else "none"
+            config = self.active_config if running else self.config
         health = {
             "status": "ready",
             "service": "amadeus-qwen-image",
             "version": SERVICE_VERSION,
             "model": MODEL_ID,
             "runtime": "stable-diffusion.cpp-metal",
-            "sdCppCommit": self.config["sdCppCommit"],
+            "sdCppCommit": config["sdCppCommit"],
             "state": "running" if running else "idle",
+            "activeProfile": profile,
+            "availableProfiles": ["quality", "fast"],
             "generationConcurrency": 1,
             "queueCapacity": 1,
-            "deadlineMs": self.config["generationDeadlineMs"],
+            "deadlineMs": config["generationDeadlineMs"],
             "referenceEdits": True,
         }
-        if self.config.get("samplingProfile") == FUN_ACC_PROFILE:
+        if profile == "fast":
             health.update({
                 "samplingProfile": FUN_ACC_PROFILE,
                 "steps": 4,
                 "cfgScale": 1.0,
-                "customSigmas": self.config["customSigmas"],
-                "prefixCacheType": self.config["prefixCacheType"],
-                "mmap": self.config["mmap"],
-                "flashAttention": self.config["flashAttention"],
+                "customSigmas": config["customSigmas"],
+                "prefixCacheType": config["prefixCacheType"],
+                "mmap": config["mmap"],
+                "flashAttention": config["flashAttention"],
             })
+        elif profile == "quality":
+            health.update({"samplingProfile": QUALITY_SAMPLING_PROFILE, "steps": QUALITY_STEPS, "cfgScale": QUALITY_CFG_SCALE})
         return health
 
-    def start(self) -> None:
+    def _stop_locked(self) -> None:
+        child = self.child
+        self.child = None
+        self.active_config = None
+        self.active_profile = "none"
+        if child is not None and child.poll() is None:
+            try:
+                os.killpg(child.pid, signal.SIGTERM)
+                child.wait(timeout=15)
+            except Exception:
+                try:
+                    os.killpg(child.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+
+    def start(self, profile: str) -> None:
+        if profile not in ALLOWED_PROFILES:
+            raise ConfigError("qwen_profile_unsupported")
+        config = self.profiles[profile]
         with self.lock:
-            if self.child is not None and self.child.poll() is None:
+            if self.child is not None and self.child.poll() is None and self.active_profile == profile:
                 return
+            self._stop_locked()
             args = [
-                self.config["sdCppBinary"],
-                "--diffusion-model", self.config["diffusionModelPath"],
-                "--llm", self.config["llmPath"],
-                "--llm_vision", self.config["visionPath"],
-                "--vae", self.config["vaePath"],
+                config["sdCppBinary"],
+                "--diffusion-model", config["diffusionModelPath"],
+                "--llm", config["llmPath"],
+                "--llm_vision", config["visionPath"],
+                "--vae", config["vaePath"],
                 "--listen-ip", "127.0.0.1",
-                "--listen-port", str(self.config["internalPort"]),
-                "--backend", self.config["backend"],
-                "--steps", str(self.config["steps"]),
-                "--cfg-scale", str(self.config["cfgScale"]),
+                "--listen-port", str(config["internalPort"]),
+                "--backend", config["backend"],
+                "--steps", str(config["steps"]),
+                "--cfg-scale", str(config["cfgScale"]),
             ]
-            if self.config.get("flashAttention", True):
+            if config.get("flashAttention", True):
                 args.append("--diffusion-fa")
-            if self.config.get("mmap", False):
+            if config.get("mmap", False):
                 args.append("--mmap")
-            if self.config.get("samplingProfile") == FUN_ACC_PROFILE:
+            if config.get("samplingProfile") == FUN_ACC_PROFILE:
                 args.extend([
                     "--model-args",
-                    "qwen_image_2_1_fun_acc_pdd=true,qwen_image_2_1_prefix_cache=true,qwen_image_2_1_prefix_cache_type=" + self.config["prefixCacheType"],
+                    "qwen_image_2_1_fun_acc_pdd=true,qwen_image_2_1_prefix_cache=true,qwen_image_2_1_prefix_cache_type=" + config["prefixCacheType"],
                 ])
-            args.extend(["--log-level", "info" if self.config.get("samplingProfile") == FUN_ACC_PROFILE else "error"])
-            log_dir = Path(self.config["logDir"])
+            args.extend(["--log-level", "info" if profile == "fast" else "error"])
+            log_dir = Path(config["logDir"])
             log_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
             log_path = log_dir / "sd-server.log"
             log_path.touch(mode=0o600, exist_ok=True)
             os.chmod(log_path, 0o600)
             with log_path.open("ab") as log:
-                self.child = subprocess.Popen(args, stdout=log, stderr=log, start_new_session=True)
-        deadline = time.monotonic() + int(self.config["loadTimeoutMs"]) / 1000
+                child = subprocess.Popen(args, stdout=log, stderr=log, start_new_session=True)
+            self.child = child
+            self.active_config = config
+            self.active_profile = profile
+        deadline = time.monotonic() + int(config["loadTimeoutMs"]) / 1000
         while time.monotonic() < deadline:
-            if self.child is None or self.child.poll() is not None:
+            if child.poll() is not None:
+                self.stop()
                 raise ConfigError("qwen_runtime_exited")
             try:
                 with request.urlopen(self.internal_url + "/v1/models", timeout=2) as response:
@@ -527,28 +590,24 @@ class QwenBridge:
 
     def stop(self) -> None:
         with self.lock:
-            child = self.child
-            self.child = None
-        if child is not None and child.poll() is None:
-            try:
-                os.killpg(child.pid, signal.SIGTERM)
-                child.wait(timeout=15)
-            except Exception:
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except Exception:
-                    pass
+            self._stop_locked()
 
     def _idle_monitor(self) -> None:
-        idle_seconds = int(self.config["idleShutdownSeconds"])
         while not self.stop_event.wait(15):
             with self.lock:
                 running = self.child is not None and self.child.poll() is None
-                expired = running and time.monotonic() - self.last_activity > idle_seconds
+                config = self.active_config
+                expired = running and config is not None and time.monotonic() - self.last_activity > int(config["idleShutdownSeconds"])
             if expired and self.active_generation.acquire(blocking=False):
                 try:
-                    if time.monotonic() - self.last_activity > idle_seconds:
-                        self.stop()
+                    with self.lock:
+                        still_expired = (
+                            self.child is not None
+                            and self.active_config is not None
+                            and time.monotonic() - self.last_activity > int(self.active_config["idleShutdownSeconds"])
+                        )
+                        if still_expired:
+                            self._stop_locked()
                 finally:
                     self.active_generation.release()
 
@@ -556,17 +615,20 @@ class QwenBridge:
         self.stop_event.set()
         self.stop()
 
-    def ensure_ready(self) -> None:
-        if self.child is None or self.child.poll() is not None:
-            self.start()
+    def ensure_ready(self, profile: str) -> None:
+        with self.lock:
+            ready = self.child is not None and self.child.poll() is None and self.active_profile == profile
+        if not ready:
+            self.start(profile)
         self.last_activity = time.monotonic()
 
-    def _request(self, path: str, body: bytes, content_type: str) -> tuple[int, bytes]:
-        if not self.slots.acquire(timeout=float(self.config.get("queueWaitSeconds", QUEUE_WAIT_SECONDS))):
+    def _request(self, path: str, body: bytes, content_type: str, profile: str, resolution: str, seed: int) -> tuple[int, bytes]:
+        config = self.profiles[profile]
+        if not self.slots.acquire(timeout=float(config.get("queueWaitSeconds", QUEUE_WAIT_SECONDS))):
             return 429, safe_failure(429, "qwen_busy")
         try:
             with self.active_generation:
-                self.ensure_ready()
+                self.ensure_ready(profile)
                 req = request.Request(
                     self.internal_url + path,
                     data=body,
@@ -574,7 +636,7 @@ class QwenBridge:
                     headers={"Content-Type": content_type},
                 )
                 try:
-                    with request.urlopen(req, timeout=int(self.config["generationDeadlineMs"]) / 1000) as response:
+                    with request.urlopen(req, timeout=int(config["generationDeadlineMs"]) / 1000) as response:
                         data = response.read(MAX_RESPONSE_BYTES + 1)
                         if len(data) > MAX_RESPONSE_BYTES or response.status != 200:
                             return 502, safe_failure(502, "qwen_output_invalid")
@@ -596,55 +658,84 @@ class QwenBridge:
                     if mime is None:
                         raise ValueError("response_image_mime")
                     dimensions = image_dimensions(image_bytes, mime)
-                    if dimensions is None or parse_size(
+                    expected_dimensions = parse_size(
+                        resolution,
+                        int(config["maxOutputPixels"]),
+                        int(config["maxOutputEdge"]),
+                    )
+                    if dimensions is None or dimensions != expected_dimensions or parse_size(
                             f"{dimensions[0]}x{dimensions[1]}",
-                            int(self.config["maxOutputPixels"]),
-                            int(self.config["maxOutputEdge"])) is None:
+                            int(config["maxOutputPixels"]),
+                            int(config["maxOutputEdge"])) is None:
                         raise ValueError("response_image_geometry")
                 except (ValueError, TypeError, KeyError, binascii.Error, json.JSONDecodeError):
                     return 502, safe_failure(502, "qwen_output_invalid")
                 self.last_activity = time.monotonic()
-                return 200, json_bytes({"created": parsed.get("created", int(time.time())), "data": [{"b64_json": items[0]["b64_json"]}], "model": MODEL_ID})
+                return 200, json_bytes({
+                    "created": parsed.get("created", int(time.time())),
+                    "data": [{"b64_json": items[0]["b64_json"]}],
+                    "model": MODEL_ID,
+                    "seed": seed,
+                })
         except (ConfigError, TimeoutError):
             self.stop()
             return 503, safe_failure(503, "qwen_runtime_unavailable")
         finally:
             self.slots.release()
 
+    @staticmethod
+    def _effective_seed(value: object) -> int:
+        seed = parse_seed(value)
+        return secrets.randbelow(1 << 63) if seed == -1 else seed
+
     def generate(self, payload: dict) -> tuple[int, bytes]:
-        if not isinstance(payload, dict) or set(payload) - {"model", "prompt", "n", "size", "output_format"}:
+        if not isinstance(payload, dict) or set(payload) - {"model", "prompt", "n", "profile", "resolution", "seed"}:
             return 400, safe_failure(400, "qwen_request_invalid")
         prompt = payload.get("prompt")
+        profile = payload.get("profile")
+        resolution = payload.get("resolution")
+        try:
+            seed = self._effective_seed(payload.get("seed"))
+        except ValueError:
+            return 400, safe_failure(400, "qwen_seed_invalid")
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
             return 400, safe_failure(400, "qwen_prompt_invalid")
+        if "<sd_cpp_extra_args>" in prompt or "</sd_cpp_extra_args>" in prompt:
+            return 400, safe_failure(400, "qwen_prompt_invalid")
+        if profile not in ALLOWED_PROFILES:
+            return 400, safe_failure(400, "qwen_profile_unsupported")
+        if not isinstance(resolution, str) or resolution not in ALLOWED_RESOLUTIONS:
+            return 400, safe_failure(400, "qwen_resolution_unsupported")
+        config = self.profiles[profile]
+        if parse_size(resolution, int(config["maxOutputPixels"]), int(config["maxOutputEdge"])) is None:
+            return 400, safe_failure(400, "qwen_resolution_unsupported")
         if payload.get("model", MODEL_ID) not in {MODEL_ID, "sd-cpp-local"} or payload.get("n", 1) != 1:
             return 400, safe_failure(400, "qwen_request_invalid")
-        size = payload.get("size", self.config["defaultGenerationSize"])
-        if not isinstance(size, str) or parse_size(
-                size, int(self.config["maxOutputPixels"]), int(self.config["maxOutputEdge"])) is None:
-            return 400, safe_failure(400, "qwen_size_unsupported")
-        if self.config.get("samplingProfile") == FUN_ACC_PROFILE and size != self.config["defaultGenerationSize"]:
-            return 400, safe_failure(400, "qwen_generation_size_policy")
-        if payload.get("output_format", "png") not in {"png", "jpeg"}:
-            return 400, safe_failure(400, "qwen_output_format_unsupported")
-        body = json_bytes({"model": "sd-cpp-local", "prompt": profile_prompt(prompt, self.config), "n": 1, "size": size, "output_format": "png"})
-        return self._request("/v1/images/generations", body, "application/json")
+        body = json_bytes({
+            "model": "sd-cpp-local",
+            "prompt": profile_prompt(prompt.strip(), config, seed=seed),
+            "n": 1,
+            "size": resolution,
+            "output_format": "png",
+        })
+        return self._request("/v1/images/generations", body, "application/json", profile, resolution, seed)
 
     def edit(self, content_type: str, body: bytes) -> tuple[int, bytes]:
         try:
-            payload = parse_multipart(
-                content_type,
-                body,
-                int(self.config["maxOutputPixels"]),
-                int(self.config["maxOutputEdge"]),
-            )
+            payload = parse_multipart(content_type, body)
+            profile = payload["profile"]
+            config = self.profiles[profile]
+            seed = self._effective_seed(payload["seed"])
             prompt = next(value.decode("utf-8") for name, value in payload["fields"] if name == "prompt")
-            proxied_type, proxied_body = build_multipart(payload, profile_prompt(prompt, self.config, editing=True))
-        except (ValueError, UnicodeError):
+            proxied_type, proxied_body = build_multipart(
+                payload,
+                profile_prompt(prompt, config, editing=True, seed=seed),
+            )
+        except (ValueError, UnicodeError, KeyError):
             return 400, safe_failure(400, "qwen_edit_request_invalid")
         if len(proxied_body) > MAX_BODY_BYTES + 4096:
             return 413, safe_failure(413, "qwen_edit_body_too_large")
-        return self._request("/v1/images/edits", proxied_body, proxied_type)
+        return self._request("/v1/images/edits", proxied_body, proxied_type, profile, payload["resolution"], seed)
 
 
 def auth_ok(handler: BaseHTTPRequestHandler, expected: str) -> bool:
@@ -727,14 +818,19 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--quality-config", required=True)
+    parser.add_argument("--fast-config", required=True)
     parser.add_argument("--token-file", required=True)
-    parser.add_argument("--candidate", action="store_true")
     args = parser.parse_args()
-    config = load_config(Path(args.config), candidate=args.candidate)
-    verify_runtime_and_assets(config)
+    profiles = {
+        "quality": load_config(Path(args.quality_config)),
+        "fast": load_config(Path(args.fast_config)),
+    }
+    verified_assets: set[tuple[str, str, int]] = set()
+    for config in profiles.values():
+        verify_runtime_and_assets(config, verified_assets)
     token = private_token(Path(args.token_file))
-    bridge = QwenBridge(config, token, Path(args.token_file))
+    bridge = QwenBridge(profiles, token, Path(args.token_file))
     bridge.monitor.start()
     server = QwenHTTPServer(("127.0.0.1", bridge.service_port), bridge)
     try:

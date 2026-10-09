@@ -16,6 +16,8 @@
     <string>http://127.0.0.1:18793</string>
     <string>--bridge-token-file</string>
     <string>__BRIDGE_TOKEN_FILE__</string>
+    <string>--auth-file</string>
+    <string>__AUTH_FILE__</string>
     <string>--static-file</string>
     <string>__HTML_FILE__</string>
     <string>--output-dir</string>

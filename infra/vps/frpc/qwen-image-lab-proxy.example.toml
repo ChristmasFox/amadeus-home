@@ -1,0 +1,9 @@
+# Append one proxy to /DATA/AppData/frpc/frpc.toml.
+# Verified from the HomeLab host to the Mac on 2026-10-08. Recheck the Mac
+# address immediately before apply because the LAN lease is not pinned here.
+[[proxies]]
+name = "qwen-image-lab-tcp"
+type = "tcp"
+localIP = "192.168.5.3"
+localPort = 18798
+remotePort = 18798
