@@ -4,7 +4,7 @@
     "kind": "image",
     "strategy": "fallback",
     "models": [
-      "cx/gpt-image-2.5"
+      "cx/gpt-image-2.5-sunburst"
     ]
   }
 }

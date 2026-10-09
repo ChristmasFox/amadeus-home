@@ -17,7 +17,7 @@ function one(source, anchor, name) {
 
 export function validatePolicy(policy) {
   if (!policy || policy.packageVersion !== '0.5.95' ||
-      policy.imageAccount?.provider !== 'codex' || policy.imageAccount?.model !== 'gpt-image-2.5' ||
+      policy.imageAccount?.provider !== 'codex' || policy.imageAccount?.model !== 'gpt-image-2.5-sunburst' ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email) ||
       policy.serverActions?.bodySizeLimit !== '20mb' ||
       Object.keys(policy).sort().join(',') !== 'imageAccount,packageVersion,serverActions') {
