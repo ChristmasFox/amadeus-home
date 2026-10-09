@@ -8,6 +8,58 @@ CFG 1 is deployed for the operator's comparison after multiple Fast-mode outputs
 looked good across random and fixed seeds. The operator's Quality image review
 remains pending. Production image generation remains GPT-only.
 
+The current Quality and Fast engine configs match `origin/main`. Quality is
+16 steps / CFG 1 with implicit legacy `--diffusion-fa` and no configured
+prefix cache. Fast is 4 Fun-Acc/PDD steps / CFG 1 with `--diffusion-fa`,
+`q8_0` and mmap. The bridge retains the stale-engine port ownership guard and
+SIGTERM child cleanup. The operator requested this config restoration after
+reviewing a visibly incomplete Quality image. Evidence:
+`.agent/checkpoints/2026-10-09-qwen-image-restore-origin-config.md`.
+
+The incomplete 92.169-second Quality task was likely served by an orphan Fast
+engine left on port 18795 after a bridge restart. The bridge refuses to start
+against an occupied engine port and performs graceful child cleanup on
+SIGTERM. Checkpoint:
+`.agent/checkpoints/2026-10-09-qwen-image-quality-stale-fast-engine.md`.
+
+## 2026-10-09 — Engine configs restored from origin/main
+
+The operator requested the previously published engine configuration. The two
+source JSON files match `origin/main`: Quality remains 16 steps / CFG 1 with
+default `--diffusion-fa` and no prefix-cache model args; Fast remains 4
+Fun-Acc/PDD steps / CFG 1 with default `--diffusion-fa`, `q8_0` and mmap. The
+bridge stale-engine guard remains installed. No generation was submitted.
+Deployment evidence: `.agent/checkpoints/2026-10-09-qwen-image-restore-origin-config.md`.
+
+## 2026-10-09 — Full Flash Attention enabled for both profiles
+
+The operator requested full `--fa` on Fast as well as Quality. Both profiles
+use `q8_0` prefix cache. Quality remains 16 steps / CFG 1; Fast remains 4
+Fun-Acc/PDD steps / CFG 1. No image generation was submitted. Deployment and
+rollback evidence: `.agent/checkpoints/2026-10-09-qwen-image-both-profiles-full-fa.md`.
+
+## 2026-10-09 — Quality Flash Attention with q8_0 prefix cache deployed
+
+The operator clarified that the Quality cache should return to 8-bit `q8_0`,
+while keeping `--fa`. The Quality source config sets `prefixCacheType: q8_0`;
+Quality remains 16 steps / CFG 1, and Fast is unchanged. No image generation
+was submitted. Deployment and rollback evidence:
+`.agent/checkpoints/2026-10-09-qwen-image-quality-fa-q8-0.md`.
+
+## 2026-10-09 — Quality Flash Attention and prefix cache comparison deployed
+
+The source-managed Quality profile now launches with `--fa` and
+`--model-args qwen_image_2_1_prefix_cache=true,qwen_image_2_1_prefix_cache_type=auto`.
+It remains the base model at 16 steps / CFG 1 without Fun-Acc/PDD arguments or
+adapter. Fast remains unchanged at 4 Fun-Acc/PDD steps / CFG 1 with its existing
+Flash Attention, q8_0 prefix cache, mmap and Fun-Acc/PDD settings. The service
+restart completed; bridge health is ready/idle, no task is active, no
+`sd-server` process is resident, installed bridge and profile configs match Git
+source, and the local and public UI roots return 200. The operator will generate
+and judge the image; no generation was submitted during this configuration
+change. Protected rollback snapshot and evidence:
+`.agent/checkpoints/2026-10-09-qwen-image-quality-fa-prefix-auto.md`.
+
 ## 2026-10-08 — Image Lab task modal and automatic edit resolution
 
 The Mac bridge and UI LaunchAgents were updated from Git source. Task-history
