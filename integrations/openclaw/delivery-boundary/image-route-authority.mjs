@@ -32,9 +32,15 @@ export function failureText(value) {
 export function classifyImageGenerationFailure(value) {
   const text = failureText(value).toLowerCase();
   if (/(?:safety|moderation|content\s+policy|policy\s+(?:violation|refusal)|prompt\s+(?:blocked|rejected)|unsafe|disallowed|prohibited|responsible\s+ai|violat\w*\s+(?:guideline|policy)|copyright\s+restriction)/u.test(text)) return 'safety_refusal';
-  if (/(?:not\s+entitled|plus\/pro\s+required|account\w*\s+(?:locked|unavailable)|all\s+\d+\s+accounts\s+locked|no\s+credentials|model\s+lock)/u.test(text)) return 'account_unavailable';
+  // The legacy Codex adapter emits "Plus/Pro required" whenever its SSE parser
+  // sees no final image; that string alone is NOT an upstream entitlement verdict.
+  const status = value && typeof value === 'object'
+    ? Number(value.status ?? value.error?.status ?? value.response?.status)
+    : NaN;
+  if ([401, 402, 403].includes(status) ||
+      /(?:account\w*\s+(?:locked|unavailable)|all\s+\d+\s+accounts\s+locked|no\s+credentials|model\s+lock|invalid\s+(?:api\s+)?key|unauthorized)/u.test(text)) return 'account_unavailable';
   if (/(?:invalid\s+(?:prompt|request|model|parameter)|unsupported|missing\s+(?:required\s+)?field|malformed|bad\s+request|validation)/u.test(text)) return 'invalid_request';
-  if (/(?:\b(?:408|409|425|429|500|502|503|504)\b|timeout|timed\s+out|temporar(?:y|ily)|upstream|connection\s+(?:reset|closed)|network\s+error)/u.test(text)) return 'provider_unavailable';
+  if (/(?:\b(?:408|409|425|429|500|502|503|504)\b|image_result_missing|sse_incomplete|transport_interrupted|upstream_failed|server_overloaded|timeout|timed\s+out|temporar(?:y|ily)|upstream|connection\s+(?:reset|closed)|network\s+error)/u.test(text)) return 'provider_unavailable';
   return 'unknown';
 }
 
