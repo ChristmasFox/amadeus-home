@@ -7,7 +7,9 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const MARKER = 'amadeus-image-account-policy-0.5.95';
+export const NO_LOCK_MARKER = 'amadeus-image-request-scoped-no-lock-0.5.95';
 const ACCOUNT_ANCHOR = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
+const MARK_ACCOUNT_ANCHOR = 'async function m(a,b,c,e=null,i=null,k=null){';
 const CONFIG_ANCHOR = 'const nextConfig = ';
 const CONFIG_END = '\n\nprocess.env.__NEXT_PRIVATE_STANDALONE_CONFIG';
 
@@ -29,7 +31,7 @@ export function validatePolicy(policy) {
 
 export function patchAccountSource(source, policy) {
   validatePolicy(policy);
-  if (source.includes(MARKER)) return source;
+  if (source.includes(MARKER) && source.includes(NO_LOCK_MARKER)) return source;
   one(source, ACCOUNT_ANCHOR, 'account_selector');
   // Run before preferredConnectionId, rotation, model locks and retry exclusion.
   // With zero allowed active accounts, fail closed; Combo may still use its
@@ -37,8 +39,17 @@ export function patchAccountSource(source, policy) {
   const condition = JSON.stringify(policy.imageAccount.provider) + '===g&&' +
     JSON.stringify(policy.imageAccount.models) + '.includes(c)';
   const email = JSON.stringify(policy.imageAccount.email.toLowerCase());
-  return source.replace(ACCOUNT_ANCHOR, ACCOUNT_ANCHOR +
-    `/* ${MARKER} */if(${condition})k=k.filter(a=>String(a.email||"").trim().toLowerCase()===${email});`);
+  let output = source;
+  if (!output.includes(MARKER)) {
+    output = output.replace(ACCOUNT_ANCHOR, ACCOUNT_ANCHOR +
+      `/* ${MARKER} */if(${condition})k=k.filter(a=>String(a.email||"").trim().toLowerCase()===${email});`);
+  }
+  if (!output.includes(NO_LOCK_MARKER)) {
+    one(output, MARK_ACCOUNT_ANCHOR, 'account_failure_handler');
+    const noLock = `/* ${NO_LOCK_MARKER} */const amadeusImageRequestScopedFailure="codex"===(0,h.rs)(e)&&typeof i==="string"&&/^gpt-image-/u.test(i)&&typeof c==="string"&&/amadeus_image_(?:image_result_missing|sse_incomplete|transport_interrupted|upstream_failed)/u.test(c);if(amadeusImageRequestScopedFailure)return{shouldFallback:!0,cooldownMs:0};`;
+    output = output.replace(MARK_ACCOUNT_ANCHOR, `${MARK_ACCOUNT_ANCHOR}${noLock}`);
+  }
+  return output;
 }
 
 export function patchStandaloneConfig(source, policy) {
@@ -98,7 +109,7 @@ export async function plan(root, policy) {
 export async function verifyInstallation(root, policy) {
   const changes = await plan(root, policy);
   if (changes.some(({ before, after }) => before !== after)) throw Error('runtime_policy_not_installed');
-  if (!changes[0].before.includes(MARKER) || !changes[1].before.includes(`${MARKER}-actions`)) {
+  if (!changes[0].before.includes(MARKER) || !changes[0].before.includes(NO_LOCK_MARKER) || !changes[1].before.includes(`${MARKER}-actions`)) {
     throw Error('runtime_policy_marker_missing');
   }
   return true;

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only synthetic faults in the exact live 9Router image Combo helper.
+"""Read-only synthetic faults in the exact live 9Router npm 0.5.95 image Combo helper.
 
 No production provider connection, Combo, quota, credential, image payload, or
-source file is mutated. This is a fixture of the compiled route path, not a
+source file is mutated. This is a fixture of the effective compiled route path, not a
 claim of a live provider failure; pair it with a real amadeus-image smoke.
 """
 from __future__ import annotations
@@ -21,13 +21,14 @@ FIXTURE = r'''
   const assert = require('node:assert/strict');
   const fs = require('node:fs');
   const models = JSON.parse(process.argv[1]);
-  const routePath = '/app/.next/server/app/api/v1/images/generations/route.js';
+  const runtimeRoot = '/usr/local/lib/node_modules/9router/app/.next-cli-build/server';
+  const routePath = runtimeRoot + '/app/api/v1/images/generations/route.js';
   const routeSource = fs.readFileSync(routePath, 'utf8');
   assert.ok(routeSource.includes('(0,l.Pr)({body:b,models:r,handleSingleModel:'), 'image route must call Combo helper');
   assert.ok(routeSource.includes('comboName:n,comboStrategy:c'), 'image route must pass per-Combo strategy');
   const route = require(routePath);
   await route.routeModule._lazyUserland.waitUntilLoaded();
-  const webpack = require('/app/.next/server/webpack-runtime.js');
+  const webpack = require(runtimeRoot + '/webpack-runtime.js');
   const runCombo = webpack(18910).Pr;
   assert.equal(typeof runCombo, 'function');
   const logicalRequest = { model: 'amadeus-image', prompt: 'synthetic fixture only' };
@@ -58,12 +59,11 @@ FIXTURE = r'''
   const comboLookup = routeSource.indexOf('let r=await (0,g.d_)(n);if(r)');
   assert.ok(validation > 0 && comboLookup > validation,
     'request-scoped missing-prompt 400 must be returned before Combo dispatch');
-  // Pinned 9Router's provider-response classifier currently defaults to
-  // shouldFallback=true, even for a provider-sourced HTTP 400. This is not
-  // misreported as a non-fallback case; only router-level validation rejects
-  // the malformed request before attempting either model.
+  // Provider-sourced HTTP 400 is request-scoped and terminates the native
+  // Combo at the first model; router-level validation rejects malformed input
+  // before dispatch as well.
   const upstream400 = await runCase(() => failure(400, 'invalid prompt'));
-  assert.deepEqual(upstream400.calls, models);
+  assert.deepEqual(upstream400.calls, [models[0]]);
   assert.equal(upstream400.result.status, 400);
   const safety = await runCase(() => failure(400, 'content policy violation'));
   assert.deepEqual(safety.calls, [models[0]], 'safety refusal must terminate before the OpenClaw local fallback');

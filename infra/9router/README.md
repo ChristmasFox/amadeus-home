@@ -16,6 +16,16 @@ loopback client in `scripts/nine_router_management.py`. Combo provisioning
 does not change 9Router source, image, provider connections, credentials,
 accounts, OAuth records, or ASR/TTS aliases.
 
+The legacy Codex adapter text `Account may not be entitled (Plus/Pro required)`
+is not treated as an entitlement verdict. The pinned 0.5.95 image adapter
+emits bounded terminal codes such as `image_result_missing`, `sse_incomplete`,
+and `transport_interrupted`; those request-scoped failures continue the native
+three-model fallback without writing `modelLock_*` or a transient cooldown.
+Only explicit upstream authentication, quota, or permission responses keep
+the existing account-scoped lock behavior. AUTH/COMBO diagnostics contain
+allowlisted status, model, outcome, and cooldown decisions, never prompts or
+upstream response bodies.
+
 ```sh
 python3 scripts/checkpoint-amadeus-model-capability.py      # no host write
 python3 scripts/provision-9router-image-combo.py              # no auth/write
