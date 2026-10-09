@@ -45,8 +45,8 @@ const FALLBACKS: Record<ImageRequestLanguage, Record<ImageGenerationMessageKind,
     failed: 'Image generation did not finish. You can try changing the request.',
   },
   unknown: {
-    accepted: 'Image generation has started. I’ll let you know when it’s ready.',
-    failed: 'Image generation did not finish. You can try changing the request.',
+    accepted: '图像生成已经开始了，稍等片刻。',
+    failed: '这次图像没有生成成功，可以换个描述再试一次。',
   },
 };
 const FAILURE_FALLBACKS: Record<ImageRequestLanguage, Partial<Record<ImageGenerationFailureReason, string>>> = {
@@ -69,10 +69,10 @@ const FAILURE_FALLBACKS: Record<ImageRequestLanguage, Partial<Record<ImageGenera
     invalid_request: 'Those image settings are not supported. Try a different size or description.',
   },
   unknown: {
-    safety_refusal: 'This request hit an image safety restriction. Try a non-sensitive description.',
-    provider_unavailable: 'The image service is temporarily unavailable. Please try again shortly.',
-    account_unavailable: 'The image service is temporarily unavailable. Please try again shortly.',
-    invalid_request: 'Those image settings are not supported. Try a different size or description.',
+    safety_refusal: '这个请求触发了图像安全限制，换成不涉及敏感内容的描述再试试。',
+    provider_unavailable: '图像服务暂时不可用，稍后再试一次。',
+    account_unavailable: '当前图像服务暂时不可用，稍后再试一次。',
+    invalid_request: '图像参数不受支持，换个尺寸或描述再试一次。',
   },
 };
 

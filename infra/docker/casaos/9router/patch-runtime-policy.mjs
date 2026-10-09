@@ -17,7 +17,8 @@ function one(source, anchor, name) {
 
 export function validatePolicy(policy) {
   if (!policy || policy.packageVersion !== '0.5.95' ||
-      policy.imageAccount?.provider !== 'codex' || policy.imageAccount?.model !== 'gpt-image-2.5-sunburst' ||
+      policy.imageAccount?.provider !== 'codex' ||
+      JSON.stringify(policy.imageAccount?.models) !== JSON.stringify(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5']) ||
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email) ||
       policy.serverActions?.bodySizeLimit !== '20mb' ||
       Object.keys(policy).sort().join(',') !== 'imageAccount,packageVersion,serverActions') {
@@ -34,7 +35,7 @@ export function patchAccountSource(source, policy) {
   // With zero allowed active accounts, fail closed; Combo may still use its
   // different next model, never a different account for this model.
   const condition = JSON.stringify(policy.imageAccount.provider) + '===g&&' +
-    JSON.stringify(policy.imageAccount.model) + '===c';
+    JSON.stringify(policy.imageAccount.models) + '.includes(c)';
   const email = JSON.stringify(policy.imageAccount.email.toLowerCase());
   return source.replace(ACCOUNT_ANCHOR, ACCOUNT_ANCHOR +
     `/* ${MARKER} */if(${condition})k=k.filter(a=>String(a.email||"").trim().toLowerCase()===${email});`);

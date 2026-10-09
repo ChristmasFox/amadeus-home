@@ -30,7 +30,7 @@ def desired_image() -> dict:
     if desired["name"] != NAME or desired["kind"] != "image" or desired["strategy"] != "fallback":
         raise RuntimeError("image_desired_state_identity_invalid")
     models = desired["models"]
-    if not isinstance(models, list) or len(models) != 1 or any(not isinstance(x, str) or not x.strip() for x in models):
+    if not isinstance(models, list) or len(models) != 3 or any(not isinstance(x, str) or not x.strip() for x in models):
         raise RuntimeError("image_desired_state_models_invalid")
     return desired
 

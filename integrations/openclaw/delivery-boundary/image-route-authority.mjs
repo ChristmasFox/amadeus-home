@@ -105,7 +105,7 @@ function assertDigest(source, expected, label) {
 }
 
 function routeAuthoritySource() {
-  return `\n// ${IMAGE_ROUTE_AUTHORITY_MARKER}\n${resolveAmadeusImageRouteAuthority.toString()}\n${failureText.toString()}\n${classifyImageGenerationFailure.toString()}\n${shouldRetryImageGeneration.toString()}\nasync function executeImageGenerationJobWithRetry(params, run) {\n\tlet attempt = 0;\n\twhile (true) {\n\t\tattempt += 1;\n\t\ttry { return await run(); }\n\t\tcatch (error) {\n\t\t\tif (attempt >= 2 || !shouldRetryImageGeneration(error)) throw error;\n\t\t\ttry { params.taskHandle && imageGenerationTaskLifecycle.recordTaskProgress({ handle: params.taskHandle, progressSummary: "Retrying image generation" }); } catch {}\n\t\t\tawait new Promise((resolve) => setTimeout(resolve, 1200));\n\t\t}\n\t}\n}\n`;
+  return `\n// ${IMAGE_ROUTE_AUTHORITY_MARKER}\n${resolveAmadeusImageRouteAuthority.toString()}\n${failureText.toString()}\n${classifyImageGenerationFailure.toString()}\n${shouldRetryImageGeneration.toString()}\nasync function executeImageGenerationJobWithRetry(params, run) {\n\tlet attempt = 0;\n\twhile (true) {\n\t\tattempt += 1;\n\t\ttry { return await run(); }\n\t\tcatch (error) {\n\t\t\tif (params.imageRouteDiagnostic?.configuredLogicalModel === "openai/amadeus-image" || attempt >= 2 || !shouldRetryImageGeneration(error)) throw error;\n\t\t\ttry { params.taskHandle && imageGenerationTaskLifecycle.recordTaskProgress({ handle: params.taskHandle, progressSummary: "Retrying image generation" }); } catch {}\n\t\t\tawait new Promise((resolve) => setTimeout(resolve, 1200));\n\t\t}\n\t}\n}\n`;
 }
 
 export function patchImageGenerationToolSource(original) {
@@ -479,7 +479,7 @@ async function logAmadeusImageTransportFailure(req, model, status) {
     'candidate local-only transport selection');
   output = replaceOnce(output,
     'response = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t} catch (error) {',
-    'response = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t\trequestModel = transport.model ?? model;\n\t\t\t} catch (error) {\n\t\t\t\tif (localOnly) throw error;',
+    'response = transport.response;\n\t\t\t\trelease = transport.release;\n\t\t\t\trequestModel = response.headers.get("x-amadeus-image-model") || transport.model || model;\n\t\t\t} catch (error) {\n\t\t\t\tif (localOnly) throw error;',
     'local-only model attribution and no primary recovery');
   output = replaceOnce(output,
     'const primaryRelease = release;\n\t\t\t\t\tawait primaryRelease();',

@@ -26,7 +26,7 @@ class ImageSmokeTest(unittest.TestCase):
 
     def test_apply_prints_only_bounded_metadata(self):
         fake_image = CompletedProcess([], 0, stdout='{"status":"passed","model":"amadeus-image","items":1,"format":"jpeg","bytes":12345}\n', stderr="")
-        private_log = "provider-private-prompt\nTrying model 1/1: cx/gpt-image-2.5-sunburst\nModel cx/gpt-image-2.5-sunburst succeeded\n"
+        private_log = "provider-private-prompt\nTrying model 1/3: cx/gpt-image-2.5-sunburst\nModel cx/gpt-image-2.5-sunburst succeeded\n"
         fake_logs = CompletedProcess([], 0, stdout="", stderr=private_log)
         with patch.object(sys, "argv", ["smoke-9router-image.py", "--apply"]), \
              patch.object(smoke.subprocess, "run", side_effect=[fake_image, fake_logs]) as run, \
