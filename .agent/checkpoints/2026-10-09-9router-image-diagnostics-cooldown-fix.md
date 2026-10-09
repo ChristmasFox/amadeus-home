@@ -36,7 +36,8 @@
   safety refusal without local fallback.
 - Exact compiled account-selector fixture: request-scoped 502 returned
   `{shouldFallback:true,cooldownMs:0}` and performed zero provider-state updates;
-  genuine 429 returned `cooldownMs:420000` and performed one native update.
+  genuine 429 with a future `resets_at` returned `cooldownMs:420000` and performed
+  one native update.
 
 ## Real edit smoke and interpretation
 
