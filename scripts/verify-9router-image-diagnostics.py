@@ -20,7 +20,7 @@ FIXTURE = r'''
   const response={body:{getReader:()=>reader}};
   try{
    const value=await codex.parseResponse(response,{log:{info:(...args)=>logs.push(args)},streamToClient:false,onRequestSuccess:async()=>{},requestBody:{},model:'gpt-image-2.5',body:{__amadeusTraceId:'fixture-'+name,__amadeusImageAttempt:1}});
-   return{name,code:'success',result:value.result||'',logs};
+   return{name,code:'success',result:value?.data?.[0]?.b64_json||value?.result||'',logs};
   }catch(error){
    const line=logs.find(args=>typeof args[1]==='string'&&args[1].includes('amadeus_cloud_image_attempt'));
    return{name,code:error.code||'unknown',diagnostic:error.amadeusImageDiagnostic||{},attemptLog:line?JSON.parse(line[1]):null};
@@ -39,7 +39,9 @@ FIXTURE = r'''
  assert.equal(missing.code,'amadeus_image_image_result_missing');assert.equal(incomplete.code,'amadeus_image_sse_incomplete');
  assert.equal(overloaded.code,'amadeus_image_upstream_failed');assert.equal(safety.code,'amadeus_image_safety_refusal');assert.equal(quota.code,'amadeus_image_account_unavailable');
  assert.equal(partial.code,'amadeus_image_upstream_failed');assert.equal(transport.code,'amadeus_image_transport_interrupted');
- for(const item of [missing,incomplete,overloaded,safety,quota,partial]){assert.equal(item.diagnostic.imageResultSeen,false);assert.equal(item.diagnostic.terminalEventSeen,true)}
+ for(const item of [missing,overloaded,safety,quota,partial]){assert.equal(item.diagnostic.imageResultSeen,false);assert.equal(item.diagnostic.terminalEventSeen,true)}
+ assert.equal(incomplete.diagnostic.imageResultSeen,false);assert.equal(incomplete.diagnostic.terminalEventSeen,false);
+ assert.equal(transport.diagnostic.imageResultSeen,false);assert.equal(transport.diagnostic.terminalEventSeen,false);
  assert.equal(overloaded.attemptLog.upstreamErrorCode,'server_overloaded');assert.equal(overloaded.attemptLog.imageResultSeen,false);
  assert.equal(safety.attemptLog.outcome,'safety_refusal');assert.equal(quota.attemptLog.outcome,'account_unavailable');
  console.log(JSON.stringify({valid:'passed',image_result_missing:'passed',sse_incomplete:'passed',upstream_failed:'passed',safety_refusal:'passed',account_unavailable:'passed',partial_terminal_not_success:'passed',transport_interrupted:'passed',diagnostics_boolean_types:'passed'}));
