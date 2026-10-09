@@ -31,7 +31,15 @@ const digest = (source) => createHash('sha256').update(source).digest('hex');
 test('image failures distinguish safety refusals, account locks, invalid requests and transient provider faults', () => {
   assert.equal(classifyImageGenerationFailure({ status: 400, error: { message: 'content policy violation' } }), 'safety_refusal');
   assert.equal(shouldRetryImageGeneration({ status: 400, error: { message: 'content policy violation' } }), false);
-  assert.equal(classifyImageGenerationFailure('Codex did not return an image. Account may not be entitled (Plus/Pro required).'), 'account_unavailable');
+  const ambiguousCodexError = 'Codex did not return an image. Account may not be entitled (Plus/Pro required).';
+  assert.equal(classifyImageGenerationFailure(ambiguousCodexError), 'unknown', 'legacy parser text alone does not prove entitlement');
+  assert.equal(classifyImageGenerationFailure({ status: 502, message: ambiguousCodexError }), 'provider_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 502, error: { code: 'image_result_missing' } }), 'provider_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 502, error: { code: 'sse_incomplete' } }), 'provider_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 502, error: { code: 'server_overloaded' } }), 'provider_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 403, message: ambiguousCodexError }), 'account_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 429, message: 'rate limit exceeded' }), 'provider_unavailable');
+  assert.equal(classifyImageGenerationFailure({ status: 502, message: 'all 1 accounts locked' }), 'account_unavailable');
   assert.equal(classifyImageGenerationFailure({ status: 400, message: 'invalid prompt' }), 'invalid_request');
   assert.equal(classifyImageGenerationFailure({ status: 502, message: 'upstream temporarily unavailable' }), 'provider_unavailable');
   assert.equal(shouldRetryImageGeneration(new Error('request timed out')), true);
