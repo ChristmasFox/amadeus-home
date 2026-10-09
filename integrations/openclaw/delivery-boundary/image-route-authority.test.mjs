@@ -37,6 +37,25 @@ test('image failures distinguish safety refusals, account locks, invalid request
   assert.equal(shouldRetryImageGeneration(new Error('request timed out')), true);
 });
 
+test('cloud Combo failure returns after one three-model fallback pass', async () => {
+  const source = await pinnedSource(IMAGE_ROUTE_AUTHORITY_PIN.toolModule);
+  const patched = patchImageGenerationToolSource(source);
+  const ast = parseModule(patched);
+  const node = ast.body.find((candidate) => candidate.type === 'FunctionDeclaration' && candidate.id?.name === 'executeImageGenerationJobWithRetry');
+  assert.ok(node, 'bounded retry wrapper must remain present for other routes');
+  const helperSource = patched.slice(node.start, node.end);
+  const run = new Function('shouldRetryImageGeneration', 'imageGenerationTaskLifecycle', `${helperSource}; return executeImageGenerationJobWithRetry;`)(
+    () => true,
+    { recordTaskProgress() {} },
+  );
+  let calls = 0;
+  await assert.rejects(run({ imageRouteDiagnostic: { configuredLogicalModel: 'openai/amadeus-image' } }, async () => {
+    calls += 1;
+    throw new Error('request timed out');
+  }), /request timed out/);
+  assert.equal(calls, 1, 'the OpenAI route must not replay the whole 9Router three-model Combo');
+});
+
 async function pinnedSource(name) {
   return await readFile(join(openclawDist, name), 'utf8');
 }

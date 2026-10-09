@@ -24,6 +24,7 @@ export type ImageGenerationLifecycleInput = Readonly<{
   threadId?: string | number;
   requestContext?: string;
   failureReason?: ImageGenerationFailureReason;
+  modelId?: string;
 }>;
 export type WhatsAppDeliveryPort = Readonly<{
   sessionKey: string; accountId: string; conversationId: string; messageId: string;
@@ -56,6 +57,7 @@ function validLifecycleInput(value: ImageGenerationLifecycleInput): boolean {
     && (value.threadId === undefined || (typeof value.threadId === 'string' && value.threadId.length <= 128)
       || (typeof value.threadId === 'number' && Number.isSafeInteger(value.threadId) && value.threadId >= 0))
     && (value.requestContext === undefined || typeof value.requestContext === 'string')
+    && (value.modelId === undefined || /^(?:[a-z0-9_.-]+)\/[a-z0-9_.:-]+$/iu.test(value.modelId) && value.modelId.length <= 160)
     && (value.failureReason === undefined || ['safety_refusal', 'provider_unavailable', 'account_unavailable', 'invalid_request', 'unknown'].includes(value.failureReason));
 }
 function text(value: unknown): string | undefined {
@@ -231,6 +233,7 @@ export function registerDeliveryBoundary(api: OpenClawPluginApi, options: Delive
           }
           deliveryRuns.registerMediaCompletion({
             taskId: input.taskId,
+            ...(input.modelId ? { modelId: input.modelId } : {}),
             // OpenClaw's native completion handoff uses the tool-qualified
             // child session key as provenance. Keep this exact runtime-owned
             // identity so unrelated inter-session messages cannot claim the

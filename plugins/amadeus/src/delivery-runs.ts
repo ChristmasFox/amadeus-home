@@ -5,6 +5,7 @@ import { normalizeImageCaption } from './image-caption.js';
 export type MediaCompletion = Readonly<{
   taskId: string;
   sourceSessionKey: string;
+  modelId?: string;
   parts: Promise<readonly AttachmentPart[]>;
   expiresAt: number;
 }>;
@@ -136,7 +137,9 @@ export class DeliveryRuns {
           : plainCaption;
         const completionParts = unique.length ? unique : (await run.mediaCompletion.parts);
         if (!completionParts.length) throw new Error('delivery_completion_assets_missing');
-        const parts = completionParts.map((part) => captionPart ? { ...part, caption: captionPart } : part);
+        const modelSuffix = run.mediaCompletion.modelId ? `（模型：${run.mediaCompletion.modelId}）` : '';
+        const finalCaption = captionPart ? `${captionPart}${modelSuffix}` : undefined;
+        const parts = completionParts.map((part) => finalCaption ? { ...part, caption: finalCaption } : part);
         run.preparedCaptionSource = captionPart ? 'native_completion' : 'none';
         run.prepared = createDeliveryEnvelope({ ...run.context, deliveryId: run.context.deliveryId ?? `${runId}:delivery`, source: 'tool_result', silent: false, parts });
         return run.prepared;

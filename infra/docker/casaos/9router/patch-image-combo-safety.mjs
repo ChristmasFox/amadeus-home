@@ -5,7 +5,7 @@
 import { chmod, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-export const MARKER = 'amadeus-image-combo-safety-terminal-0.5.95';
+export const MARKER = 'amadeus-image-combo-safety-model-id-0.5.95';
 const VERSION = '0.5.95';
 const ANCHOR = 'let{shouldFallback:i,cooldownMs:j}=(0,d.hk)(b.status,f);';
 const SAFETY_PATTERN = String.raw`(?:safety|moderation|content\s+policy|policy\s+(?:violation|refusal)|prompt\s+(?:blocked|rejected)|unsafe|disallowed|prohibited|responsible\s+ai|violat\w*\s+(?:guideline|policy)|copyright\s+restriction)`;
@@ -31,7 +31,10 @@ export function patchImageComboSource(source) {
   if (source.includes(MARKER)) return source;
   if (source.split(ANCHOR).length - 1 !== 1) throw new Error('image_combo_safety_anchor_drift');
   const guard = `/* ${MARKER} */const amadeusSafetyRefusal=/${SAFETY_PATTERN}/iu.test(f);if(amadeusSafetyRefusal){g.warn("COMBO",\`Model \${e} failed (safety refusal; no fallback)\`,{status:b.status});return b;}`;
-  return source.replace(ANCHOR, `${guard}${ANCHOR}`);
+  const success = 'if(b.ok)return g.info("COMBO",`Model ${e} succeeded`),b;';
+  const successWithModel = 'if(b.ok){g.info("COMBO",`Model ${e} succeeded`);const amadeusHeaders=new Headers(b.headers);amadeusHeaders.set("x-amadeus-image-model",e);return new Response(b.body,{status:b.status,statusText:b.statusText,headers:amadeusHeaders});}';
+  if (source.split(success).length - 1 !== 1) throw new Error('image_combo_model_header_anchor_drift');
+  return source.replace(ANCHOR, `${guard}${ANCHOR}`).replace(success, successWithModel);
 }
 
 async function findCandidate(root) {

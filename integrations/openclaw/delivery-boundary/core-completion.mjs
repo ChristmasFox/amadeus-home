@@ -52,6 +52,7 @@ const terminal = `
       conversationId: params.handle.requesterOrigin.to,
       threadId: params.handle.requesterOrigin.threadId,
       requestContext: params.handle.taskLabel,
+      ...(typeof params.result?.model === "string" && (params.result.model.startsWith("cx/") || params.result.model.startsWith("local/")) ? { modelId: params.result.model } : {}),
       ...(params.status === "error" ? { failureReason: classifyImageGenerationFailure(params.result) } : {})
     };
     if (params.status === "error") {

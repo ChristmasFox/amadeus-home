@@ -15,10 +15,10 @@ FIXTURE = r'''
  const w=require(base+'/webpack-runtime.js'), codex=w(7648).A;
  const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jC1sAAAAASUVORK5CYII=';
  const input=Object.freeze({model:'amadeus-image',prompt:'synthetic fixture',image:'data:image/png;base64,'+png});
- const models=['cx/gpt-image-2.5-sunburst'],calls=[];
+ const models=['cx/gpt-image-2.5-sunburst','cx/gpt-image-2.5-flare','cx/gpt-image-2.5'],calls=[];
  const out=await w(18910).Pr({body:input,models,comboName:'amadeus-image',comboStrategy:'fallback',log:{info(){},warn(){}},handleSingleModel:async(body,model)=>{
   assert.equal(body,input);calls.push(model);
- const upstream=codex.buildBody('gpt-image-2.5-sunburst',body);
+ const upstream=codex.buildBody(model.slice(model.indexOf('/')+1),body);
   assert.equal(upstream.tools[0].action,'edit');
   assert.equal(upstream.input[0].content.find(x=>x.type==='input_image').image_url,input.image);
   return new Response(JSON.stringify({error:{message:'synthetic unavailable'}}),{status:503});

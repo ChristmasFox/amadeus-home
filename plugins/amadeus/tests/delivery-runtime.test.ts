@@ -62,7 +62,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.acceptImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text'],'the started receipt itself is not an accepted acknowledgement');
       assert.equal(lifecycleInputs[0]?.requestContext,expectedRequestContext);assert.equal(lifecycleInputs[0]?.requestLanguage,'chinese');
-      const completionClaim=await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
+      const completionClaim=await boundary.completeImageGeneration({...lifecycleInput,...source==='completion'?{modelId:'cx/gpt-image-2.5-flare'}:{},attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       assert.equal(completionClaim.completionImages?.[0]?.type,'image');assert.equal(completionClaim.completionImages?.[0]?.mimeType,mimeType);assert.deepEqual(Buffer.from(completionClaim.completionImages?.[0]?.data??'','base64'),bytes);
       await boundary.completeImageGeneration({...lifecycleInput,attachments:[{type:'image',path:join(root,'native-generated.bin'),mimeType}]});
       if(source==='completion-fallback') await boundary.finishImageGeneration(lifecycleInput);
@@ -81,7 +81,7 @@ for(const [mimeType,source] of [['image/png','upscale'],['image/jpeg','upscale']
       }
       await boundary.failImageGeneration(lifecycleInput);
       assert.deepEqual(sends.map(x=>x.kind),['text','image']);assert.equal(sends[0]?.text,'生成を始めたわ。');assert.deepEqual(sends[1]?.bytes,bytes);
-      assert.equal(sends[1]?.caption,source==='completion-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:'Completion Agent caption。');assert.equal(captionInputs.length,0);
+      assert.equal(sends[1]?.caption,source==='completion-fallback'||source==='caption-omitted'||source==='caption-malformed'||source==='caption-error'?undefined:source==='completion'?'Completion Agent caption。（模型：cx/gpt-image-2.5-flare）':'Completion Agent caption。');assert.equal(captionInputs.length,0);
       assert.equal(requests.filter(x=>x.path==='/v1/assets/import').length,1);assert.equal(requests.filter(x=>x.path==='/v1/assets/bind-delivery').length,1);
     }else{
       await boundary.acceptImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);await boundary.failImageGeneration(lifecycleInput);

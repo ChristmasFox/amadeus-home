@@ -4,7 +4,8 @@
 
 `infra/9router/model-capabilities.json` is the Git desired state for the
 `kind=image` `amadeus-image` Combo: `strategy=fallback` with
-`cx/gpt-image-2.5-sunburst` as its only native 9Router model. OpenClaw references only
+`cx/gpt-image-2.5-sunburst`, then `cx/gpt-image-2.5-flare`, then
+`cx/gpt-image-2.5` as its ordered native 9Router fallback chain. OpenClaw references only
 `openai/amadeus-image`. OpenClaw owns the local Qwen fallback after eligible
 operational primary failures; safety refusals and invalid requests are
 terminal. Keep Qwen out of the native 9Router Combo so fallback ownership stays
