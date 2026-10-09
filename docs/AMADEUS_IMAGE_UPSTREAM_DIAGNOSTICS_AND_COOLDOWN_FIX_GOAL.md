@@ -129,7 +129,8 @@ Never update expected test strings without executing and observing the actual as
   failure, `transport_interrupted`, and boolean diagnostic types.
 - The exact compiled account selector proved request-scoped 502 (`amadeus_image_image_result_missing`)
   returned `{shouldFallback:true,cooldownMs:0}` with zero provider-state updates. A
-  genuine 429 fixture retained `cooldownMs:420000` and performed one native state update.
+  genuine 429 fixture carrying a future `resets_at` retained `cooldownMs:420000`
+  and performed one native state update.
   The live active Codex row remained `testStatus=active`, `errorCode=null`,
   `backoffLevel=0`, no `lastError`, and all three image model locks null after the
   failed edit trace.
