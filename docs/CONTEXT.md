@@ -28,13 +28,17 @@ claimed. Full retirement evidence is in
 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`.
 
 
-A concurrent VPS proxy-security Goal is planned at
-`docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` and is not yet applied.
-Its compatibility boundary is strict: keep the six active identities and all
-client-visible credentials/ports unchanged; Legacy must remain retired. The
-planned server-side changes are REALITY anti-steal fallback gating, bounded
-fallback telemetry, HY2 masquerade egress hardening when needed, HY2 failed-auth
-security telemetry/throttling, and owner-only Kurisu security reporting.
+A concurrent VPS proxy-security Goal is complete with an operator-accepted
+task-output exposure residual. Xray REALITY fallback is gated through loopback
+with an exact SNI allowlist and bounded counters; HY2 failed-auth telemetry and
+conservative enforcement are active; owner-only security reporting and the
+09:30/21:30 reports are live. All six active identities and client-visible
+credentials/ports remain unchanged; Legacy remains retired. The owner accepted
+preserving credentials after one diagnostic exposed subscription-token path
+components in task output. Values are not recorded in Git; no credential was
+rotated. Full evidence is in
+`docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` and
+`.agent/checkpoints/2026-10-09-vps-proxy-security-hardening.md`.
 
 The dated Amadeus and 9Router entries below are historical snapshots unless
 the current task pointer says otherwise. Re-read Git/live state before work.

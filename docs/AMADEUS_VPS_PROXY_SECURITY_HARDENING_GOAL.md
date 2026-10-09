@@ -2,7 +2,7 @@
 
 Date: 2026-10-09 (Asia/Shanghai)
 
-Status: IN_PROGRESS — Phases 0–3 applied; OpenClaw and report changes are live and the manual report passed. A real direct owner-DM query remains pending because the Mac is locked.
+Status: COMPLETE WITH OPERATOR-ACCEPTED RESIDUAL — Phases 0–4 are applied and accepted, including the owner-DM query. The operator chose to preserve active credentials and accept the documented task-output exposure residual; no credential was rotated.
 
 ## 0. Objective
 
@@ -548,6 +548,11 @@ This Goal is complete only when all of the following are true:
 - no credential appears in Git/logs/report output;
 - protected rollback evidence exists.
 
+Closure exception: the owner explicitly accepted preserving the credentials and
+the documented task-output exposure residual. The Phase 0 no-credential-output
+rule was violated once; this is recorded as an accepted residual, not described
+as a passing control. No credential or runtime state was changed in response.
+
 ## 17. Explicit non-goals
 
 Not part of this Goal:
@@ -605,10 +610,17 @@ Implementation must follow the pinned production versions and live audited state
 - Candidate image `local/openclaw-amadeus:git-8434e2b4018c-20261009024420` (ARM64, image ID `sha256:8a2b836f50384b04f11ffb33d87ff30454fee5fce1b32a3fcb3417222a8a3180`) is live and healthy. Only the OpenClaw Compose image reference changed; normalized Compose configuration matched after ignoring that one field, and container mounts, port bindings, restart policy and network names were unchanged. The Amadeus plugin loaded with the existing VPS overview and fixed owner notifier registered.
 - The existing morning and evening jobs remain unique, enabled and no-deliver at 09:30 and 21:30 Asia/Shanghai, with their IDs unchanged. Their messages now include sanitized Reality/HY2 security facts, explicit stale/unknown handling, and cautious signal wording.
 - A manual morning report was sent through the canonical owner outbox and verified as `.sent.json` with a `vps-report:manual:<ISO timestamp>:morning` key. It included Reality fallback 71,599 B, four 12-hour auth failures, one limiter-window failure, zero throttles, `enforce`, full 900-second coverage, and the configured fallback signal. It explicitly says 2026-10-09 includes controlled acceptance traffic. The saved report contained no IPv4 address or credential values and did not consume the scheduled idempotency key.
-- The required real direct owner-DM query is still pending. The Gateway CLI owner-targeted turn did not expose the native VPS tool; local mode could not start because the Gateway already owns that state directory. The Mac UI is locked, so the authorized WhatsApp owner conversation could not be opened. No WhatsApp query message was sent. After unlocking the Mac, run one real owner-DM query for `amadeus_vps_subscription_overview` and verify the visible reply; then the Goal can be evaluated for completion.
+- The owner completed the required query in the existing direct owner conversation. The visible result was timestamped `2026-10-09 11:08:01 +08:00`; all listed sources were `ok`. It reported HY2 limiter `enforce`, 900/900 seconds of coverage, 15 failures in the limiter window and 19 over 43,200 seconds, zero rate-limited requests, about one unique failure source, and the last failure at 11:01:09. Reality fallback remained 76,424 B (57,138 down / 19,286 up) with the configured `reality_fallback_traffic` signal at 1,024 B; reconciliation remained `uncalibrated`. The query returned sanitized security facts and did not establish compromise.
 
 ### Rollback and cleanup
 
 - VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and Labmem001 VLESS/HY2 smokes. Hysteria config did not change.
 - OpenClaw rollback: restore the root-only pre-apply Compose backup at `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply/docker-compose.before.yml` and run `docker compose up -d --no-build openclaw`; restore the two prior report messages from `vps-report-jobs.before.json` with `cron edit`. Do not roll back or delete the accounting database or rotate credentials.
 - Temporary local client configs, the Xray candidate containing live identities, and the staged VPS source directory were removed after acceptance. Protected rollback checkpoints and the previous immutable OpenClaw image remain available.
+
+### Tool-output credential exposure — 2026-10-09
+
+- During a read-only acceptance diagnostic, a directory listing printed the six active subscription bearer-token directory names in task tool output. Their values are intentionally omitted here and will not be repeated.
+- No credential value was copied into Git, a checkpoint, an owner report, or a runtime file, and no runtime or account state was changed by that listing. The task output itself may retain the original diagnostic result.
+- The operator explicitly chose to keep active credentials unchanged and accept this documented residual. No token was rotated; rotation remains an explicit non-goal and hard boundary of this Goal.
+- This violated the Phase 0 rule that credentials must not appear in stdout or task output. The owner accepted preserving the current credentials with that residual recorded. The Goal is complete with this exception; the no-output control is not represented as having passed.

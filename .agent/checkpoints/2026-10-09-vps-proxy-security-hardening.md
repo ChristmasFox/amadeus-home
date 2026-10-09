@@ -1,6 +1,6 @@
 # VPS proxy security hardening — 2026-10-09
 
-Status: Phases 0–3 applied and accepted; OpenClaw/report changes applied; a real direct owner-DM query remains pending because the Mac is locked.
+Status: Complete with operator-accepted task-output exposure residual; Phases 0–4 and owner-DM query accepted. Active credentials remain unchanged.
 
 ## Source and checks
 
@@ -29,7 +29,7 @@ Status: Phases 0–3 applied and accepted; OpenClaw/report changes applied; a re
 - Live Compose config differs only in the OpenClaw image field. Normalized config comparison passed after ignoring that field; mounts, port bindings, restart policy and network names match the pre-apply container.
 - The existing morning/evening VPS report jobs retain their IDs, enabled state, 09:30/21:30 Asia/Shanghai schedules, and no-deliver setting. Their messages now include sanitized Reality/HY2 metrics and signal wording.
 - One manual morning report completed through the canonical owner outbox. The `.sent.json` record uses a `vps-report:manual:<ISO timestamp>:morning` key, contains the security counts and 2026-10-09 controlled-test context, has no IPv4 address or credential value, and does not use the scheduled key.
-- A real owner-DM query is not yet accepted. The Gateway CLI owner-targeted agent turn did not expose the native VPS tool; local mode could not start while the Gateway owned its state directory. The Mac was locked and CUA could not open WhatsApp. No query message was delivered. Resume after the operator unlocks the Mac; ask the owner conversation to query `amadeus_vps_subscription_overview` and verify the visible response before completing the Goal.
+- The owner completed the query in the existing direct owner conversation. The visible response was timestamped `2026-10-09 11:08:01 +08:00`: all listed sources were `ok`; HY2 mode was `enforce`, limiter coverage was 900/900 seconds, failures were 15 in the limiter window and 19 over 43,200 seconds, rate-limited requests were zero, approximate unique sources were one, and the last failure was at 11:01:09. Reality fallback was 76,424 B (57,138 down / 19,286 up), with the configured 1,024 B `reality_fallback_traffic` signal. Reconciliation remained `uncalibrated`. These sanitized observations do not establish compromise.
 
 ## Rollback
 
@@ -37,3 +37,16 @@ Status: Phases 0–3 applied and accepted; OpenClaw/report changes applied; a re
 - OpenClaw: restore the saved Compose file, then run `docker compose up -d --no-build openclaw`. Restore only the two report messages from `vps-report-jobs.before.json` using `cron edit`; preserve IDs and schedules. Do not delete accounting state or rotate credentials.
 
 Temporary local client material, the secret-bearing Xray candidate and the staged VPS source directory were removed after acceptance. The protected checkpoints and previous immutable image remain available.
+
+## Tool-output credential exposure — 2026-10-09
+
+A read-only acceptance diagnostic printed six active subscription bearer-token
+directory names in task tool output. The values are deliberately not repeated
+in this checkpoint. No credential value was copied into Git, a checkpoint, an
+owner report or a runtime file, and the listing made no runtime/account change.
+The original task tool output may retain the diagnostic result. No token was
+rotated; this Goal explicitly forbids rotation. The operator explicitly chose
+to keep the credentials unchanged and accept this documented residual. This
+breaches the Phase 0 no-credential-output rule; the control is not represented
+as passing. The owner-DM acceptance is complete, and the Goal is closed with
+this exception.

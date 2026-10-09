@@ -193,7 +193,7 @@ release. Report jobs remain at 09:30 and 21:30 Asia/Shanghai. Reconciliation
 remains `uncalibrated`. Evidence:
 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`.
 
-## 2026-10-09 — VPS proxy security hardening applied; owner-DM query pending
+## 2026-10-09 — VPS proxy security hardening complete with accepted residual
 
 Source commit `8434e2b4018c` adds an exact-SNI Xray Reality fallback gate,
 reset-safe fallback counters, bounded HY2 failed-auth tracking and conservative
@@ -219,14 +219,28 @@ bindings, restart policy and networks were preserved. The existing morning and
 evening report IDs remain enabled, no-deliver, and scheduled for 09:30/21:30
 Asia/Shanghai; their prompts include the security facts. One manual morning
 report was delivered through the existing owner outbox using a manual key. The
-required real direct owner-DM query remains pending because the Mac is locked;
-the CLI-driven turn did not expose the native VPS tool and no query message was
-sent. Do not mark the hardening Goal complete until that direct owner query is
-performed and its visible reply is verified.
+owner completed the direct owner-DM security query at
+`2026-10-09T11:08:01+08:00`. The visible result reported all listed source
+statuses as `ok`. HY2 limiter mode was `enforce` with full 900-second coverage,
+15 window failures / 19 over 12 hours,
+zero limited requests, and about one failure source. Reality fallback was
+76,424 B with the configured observation signal, and reconciliation remained
+`uncalibrated`. This is sanitized observational evidence and does not establish
+compromise.
 
 Protected rollback evidence: VPS `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`;
 CasaOS `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply`;
 repo `.agent/checkpoints/2026-10-09-vps-proxy-security-hardening.md`.
+
+During a later read-only acceptance diagnostic, six active subscription
+bearer-token directory names appeared in task tool output. Their values are not
+reproduced in Git or this record. No runtime/account state changed and no token
+was rotated; the Goal explicitly forbids rotation. The operator explicitly
+chose to preserve the credentials and accept this documented residual. The
+Phase 0 no-credential-output control was violated once and is not described as
+passing. The owner-DM query passed at 2026-10-09 11:08:01 +08:00 with sanitized
+source and security facts recorded above; no compromise is inferred from the
+observation signal. The Goal is complete with this accepted exception.
 
 ## 2026-10-07 — Qwen LAN debug UI automatic save deployed
 
