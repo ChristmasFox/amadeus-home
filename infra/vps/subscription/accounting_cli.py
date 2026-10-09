@@ -15,7 +15,7 @@ import secrets
 import shutil
 import tempfile
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit
 
 from accounting_store import (
     ACCOUNT_IDS,
@@ -34,6 +34,10 @@ from accounting_store import (
 
 
 ALLOWED_FILES = ("qx.conf", "server.snippet", "clash.yaml", "shadowrocket.txt")
+REALITY_FALLBACK_GATE_TAG = "reality-fallback-gate"
+REALITY_FALLBACK_GATE_PORT = 24431
+REALITY_FALLBACK_ALLOW_RULE_TAG = "reality-fallback-allow-exact-sni"
+REALITY_FALLBACK_BLOCK_RULE_TAG = "reality-fallback-block-other"
 
 
 def _safe_text(value: str, label: str) -> str:
@@ -117,10 +121,76 @@ def replace_yaml_top_level_section(text: str, section: str, replacement: str) ->
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _yaml_scalar(value: str) -> str:
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return re.split(r"\s+#", value, maxsplit=1)[0].strip()
+
+
+def _yaml_scalar_paths(text: str) -> tuple[dict[tuple[str, ...], str], set[str]]:
+    values: dict[tuple[str, ...], str] = {}
+    stack: list[tuple[int, str]] = []
+    sections: set[str] = set()
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        match = re.match(r"^(\s*)([A-Za-z][A-Za-z0-9_-]*):(?:\s*(.*))?$", raw)
+        if not match:
+            continue
+        indent = len(match.group(1).replace("\t", "  "))
+        while stack and stack[-1][0] >= indent:
+            stack.pop()
+        key, scalar = match.group(2), (match.group(3) or "").strip()
+        if indent == 0:
+            sections.add(key)
+        stack.append((indent, key))
+        if scalar:
+            values[tuple(item[1] for item in stack)] = _yaml_scalar(scalar)
+    return values, sections
+
+
+def hysteria_masquerade_external_proxy(text: str) -> bool:
+    """Classify a simple Hysteria masquerade block without a YAML dependency."""
+    values, sections = _yaml_scalar_paths(text)
+
+    if "masquerade" not in sections:
+        return False
+    mode = values.get(("masquerade", "type"))
+    if mode in {"file", "string"}:
+        return False
+    if mode != "proxy":
+        raise ValueError("Hysteria masquerade type is unsupported")
+    proxy_url = values.get(("masquerade", "proxy", "url"))
+    if not proxy_url:
+        raise ValueError("Hysteria proxy masquerade URL is missing")
+    parsed = urlsplit(proxy_url)
+    if parsed.scheme in {"unix"} or proxy_url.startswith("/"):
+        return False
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Hysteria proxy masquerade URL cannot be classified safely")
+    try:
+        return not ipaddress.ip_address(parsed.hostname).is_loopback
+    except ValueError:
+        return parsed.hostname.lower() != "localhost"
+
+
+def hysteria_loopback_http_auth_configured(text: str) -> bool:
+    values, _ = _yaml_scalar_paths(text)
+    return (
+        values.get(("auth", "type")) == "http"
+        and values.get(("auth", "http", "url")) == "http://127.0.0.1:18796/auth"
+    )
+
+
 def render_hysteria_candidate(source: str | Path, output: str | Path, stats_secret_file: str | Path, *, caddy_group_id: int | None = None) -> None:
     source_path = Path(source)
     original = source_path.read_text(encoding="utf-8")
-    parse_hysteria_legacy_password(original)  # Require the expected compatibility baseline.
+    try:
+        parse_hysteria_legacy_password(original)
+    except ValueError:
+        if not hysteria_loopback_http_auth_configured(original):
+            raise ValueError("existing Hysteria auth configuration is unsupported")
     stats_secret = Path(stats_secret_file).read_text(encoding="utf-8").strip()
     if not stats_secret or any(char in stats_secret for char in "\r\n\x00"):
         raise ValueError("Hysteria stats secret is unavailable")
@@ -134,6 +204,12 @@ def render_hysteria_candidate(source: str | Path, output: str | Path, stats_secr
   secret: """ + json.dumps(stats_secret) + "\n"
     candidate = replace_yaml_top_level_section(original, "auth", auth)
     candidate = replace_yaml_top_level_section(candidate, "trafficStats", stats)
+    if hysteria_masquerade_external_proxy(candidate):
+        candidate = replace_yaml_top_level_section(
+            candidate,
+            "masquerade",
+            'masquerade:\n  type: string\n  string:\n    content: "Not Found"\n    statusCode: 404\n    headers:\n      content-type: text/plain\n',
+        )
     _write_atomic(Path(output), candidate, mode=0o640, group_id=caddy_group_id)
 
 
@@ -219,6 +295,116 @@ def render_xray_candidate(
     clients = unmanaged_clients + [managed_clients[account_id] for account_id in desired]
     inbound["settings"]["clients"] = clients
 
+    stream_settings = inbound.get("streamSettings")
+    reality = stream_settings.get("realitySettings") if isinstance(stream_settings, dict) else None
+    if not isinstance(reality, dict):
+        raise ValueError("existing VLESS listener has no Reality settings")
+    server_names = reality.get("serverNames")
+    if not isinstance(server_names, list) or not server_names or not all(
+        isinstance(name, str) and name.strip() == name and name and "*" not in name
+        for name in server_names
+    ):
+        raise ValueError("existing Reality serverNames are invalid")
+    target_key = "target" if "target" in reality else "dest" if "dest" in reality else "target"
+    if "target" in reality and "dest" in reality and reality["target"] != reality["dest"]:
+        raise ValueError("Reality target and dest conflict")
+    inbounds = config["inbounds"]
+    existing_gates = [row for row in inbounds if isinstance(row, dict) and row.get("tag") == REALITY_FALLBACK_GATE_TAG]
+    if len(existing_gates) > 1:
+        raise ValueError("duplicate Reality fallback gate inbounds")
+    current_target = reality.get(target_key)
+    if not isinstance(current_target, str) or not current_target.strip():
+        raise ValueError("existing Reality target is invalid")
+    if existing_gates:
+        existing_gate = existing_gates[0]
+        gate_settings = existing_gate.get("settings") if isinstance(existing_gate.get("settings"), dict) else {}
+        if (
+            existing_gate.get("listen") != "127.0.0.1"
+            or existing_gate.get("port") != REALITY_FALLBACK_GATE_PORT
+            or existing_gate.get("protocol") != "dokodemo-door"
+            or gate_settings.get("network") != "tcp"
+            or current_target.strip() != f"127.0.0.1:{REALITY_FALLBACK_GATE_PORT}"
+            or any(
+                reality.get(alias) != f"127.0.0.1:{REALITY_FALLBACK_GATE_PORT}"
+                for alias in ("target", "dest") if alias in reality
+            )
+        ):
+            raise ValueError("existing Reality fallback gate conflicts with the candidate")
+        target_host = gate_settings.get("address")
+        parsed_target_port = gate_settings.get("port")
+        if not isinstance(target_host, str) or not target_host or isinstance(parsed_target_port, bool) or not isinstance(parsed_target_port, int):
+            raise ValueError("existing Reality fallback target is invalid")
+    else:
+        target = current_target.strip()
+        if target.startswith("["):
+            close = target.find("]")
+            if close <= 1 or target[close + 1:close + 2] != ":":
+                raise ValueError("existing Reality target is invalid")
+            target_host, target_port = target[1:close], target[close + 2:]
+        else:
+            target_host, separator, target_port = target.rpartition(":")
+            if not separator or ":" in target_host:
+                raise ValueError("existing Reality target is invalid")
+        try:
+            parsed_target_port = int(target_port)
+            ipaddress.ip_address(target_host)
+        except ValueError:
+            if not target_host or any(char.isspace() for char in target_host) or "/" in target_host:
+                raise ValueError("existing Reality target is invalid")
+            try:
+                parsed_target_port = int(target_port)
+            except ValueError as error:
+                raise ValueError("existing Reality target is invalid") from error
+    if not 1 <= parsed_target_port <= 65535:
+        raise ValueError("existing Reality target is invalid")
+    reality[target_key] = f"127.0.0.1:{REALITY_FALLBACK_GATE_PORT}"
+    if "dest" in reality:
+        reality["dest"] = f"127.0.0.1:{REALITY_FALLBACK_GATE_PORT}"
+
+    gate = {
+        "tag": REALITY_FALLBACK_GATE_TAG,
+        "listen": "127.0.0.1",
+        "port": REALITY_FALLBACK_GATE_PORT,
+        "protocol": "dokodemo-door",
+        "settings": {"address": target_host, "port": parsed_target_port, "network": "tcp"},
+        "sniffing": {"enabled": True, "destOverride": ["tls"], "routeOnly": True},
+    }
+    if existing_gates:
+        if existing_gates[0] != gate:
+            raise ValueError("existing Reality fallback gate conflicts with the candidate")
+    else:
+        if any(isinstance(row, dict) and row.get("port") == REALITY_FALLBACK_GATE_PORT for row in inbounds):
+            raise ValueError("Reality fallback gate port conflicts with an existing inbound")
+        inbounds.append(gate)
+
+    routing = config.setdefault("routing", {})
+    if not isinstance(routing, dict):
+        raise ValueError("existing Xray routing configuration is invalid")
+    rules = routing.setdefault("rules", [])
+    if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+        raise ValueError("existing Xray routing rules are invalid")
+    unrelated_rules = []
+    for rule in rules:
+        inbound_tags = rule.get("inboundTag")
+        tagged_gate = isinstance(inbound_tags, list) and REALITY_FALLBACK_GATE_TAG in inbound_tags
+        generated_gate_rule = rule.get("ruleTag") in {REALITY_FALLBACK_ALLOW_RULE_TAG, REALITY_FALLBACK_BLOCK_RULE_TAG}
+        if not tagged_gate and not generated_gate_rule:
+            unrelated_rules.append(rule)
+    allowed_rule = {
+        "type": "field",
+        "inboundTag": [REALITY_FALLBACK_GATE_TAG],
+        "domain": [f"full:{name}" for name in server_names],
+        "outboundTag": "direct",
+        "ruleTag": REALITY_FALLBACK_ALLOW_RULE_TAG,
+    }
+    blocked_rule = {
+        "type": "field",
+        "inboundTag": [REALITY_FALLBACK_GATE_TAG],
+        "outboundTag": "block",
+        "ruleTag": REALITY_FALLBACK_BLOCK_RULE_TAG,
+    }
+    routing["rules"] = [allowed_rule, blocked_rule, *unrelated_rules]
+
     stats = config.setdefault("stats", {})
     if not isinstance(stats, dict):
         raise ValueError("existing Xray stats configuration is invalid")
@@ -228,6 +414,11 @@ def render_xray_candidate(
     levels = policy.setdefault("levels", {})
     if not isinstance(levels, dict):
         raise ValueError("existing Xray policy levels are invalid")
+    system_policy = policy.setdefault("system", {})
+    if not isinstance(system_policy, dict):
+        raise ValueError("existing Xray system policy is invalid")
+    system_policy["statsInboundUplink"] = True
+    system_policy["statsInboundDownlink"] = True
     managed_emails = set(VLESS_EMAILS.values())
     for client in clients:
         if client.get("email") not in managed_emails:

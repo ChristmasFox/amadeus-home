@@ -261,9 +261,12 @@ python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render \
 
 `bootstrap` 只从当前 Caddy/Hysteria/Xray 配置导入 legacy 身份，并为五个 Labmem 账号生成独立
 token、HY2 secret 和 UUID；重跑时不会轮换凭据。收到明确切换指令后，`provision-m204` 创建第六个
-活动身份并写入 M204 订阅，`retire-legacy` 撤销 Legacy。`render-xray` 保留现有 2053 VLESS listener、
-Reality 和 routing，只保留启用的受管身份；candidate 必须通过 `xray run -test` 后才能应用。
-`render-hysteria` 只生成 HTTP auth/loopback Traffic Stats candidate YAML；`render` 写缺失的活动账号
+活动身份并写入 M204 订阅，`retire-legacy` 撤销 Legacy。当前六个账号保持启用，Legacy 已禁用；
+历史恢复材料只在 VPS root-only checkpoint 中。`render-xray` 保留活动 VLESS identity 和 2053 listener，
+把 Reality `target` 改到 loopback fallback gate、添加精确 SNI allowlist 与 block catch-all，并启用
+inbound traffic stats；candidate 必须通过 `xray run -test` 和真实客户端验收后才能应用。
+`render-hysteria` 保留 HTTP auth/loopback Traffic Stats；如果发现外部 proxy masquerade，会改成静态
+404 response；本地 string/file masquerade 保持不变，未知 proxy 形式 fail closed。`render` 写缺失的活动账号
 订阅目录和精确 Caddy matcher。CLI 的计划、成功和失败输出都不含凭据。不要把 candidate 文件、数据库、
 填充后的 env 或订阅文件复制回 Git。
 
@@ -277,3 +280,8 @@ Snapshot 由 accounting service 原子写成 `0640`、组为
 HY2 在线计数表示 client instance 数；VLESS 在线计数表示 Xray 最近活动的来源 IP 数，不保存或
 暴露来源 IP，也不等同于物理设备数。未经 HY2、VLESS 各自受控流量校准，`reconciliation.status`
 保持 `uncalibrated`，不能声称流量异常。
+
+Security snapshot 只包含 Reality gate 聚合字节数、按分钟聚合的 HY2 认证失败/限额次数、
+限额模式与窗口覆盖时长，以及确定性安全信号。逐来源失败窗口只存在于 accounting 进程有界内存中，
+不跨进程重启保留；`telemetry` 不阻止请求，`enforce` 在阈值达到后对同一来源临时返回通用拒绝。
+统计源 unknown/stale 时保留 unknown/stale，不将其解释为零。安全信号仅是运维提示，不证明凭据泄露或入侵。
