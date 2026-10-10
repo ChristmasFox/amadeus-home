@@ -69,6 +69,8 @@ docker compose --env-file infra/community/.env -f infra/community/compose.yaml c
 
 Check Compose health, test a real model route, then WhatsApp text + PUBG match. Verify persistence after restart. **No fresh-host end-to-end test has yet been completed**, so this remains a preview.
 
+Before merging to a production clone, save the existing private 9Router account policy first: see [the production migration runbook](../../docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md).
+
 **Never run** `scripts/deploy-9router.sh --apply` or `scripts/deploy-openclaw.sh --apply` for community deployment; those operate on the personal production profile.
 
 ## Release boundary

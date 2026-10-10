@@ -7,6 +7,10 @@ on:
       - "scripts/init-community.mjs"
       - "scripts/test-init-community.mjs"
       - "infra/community/**"
+      - "infra/9router/runtime-policy.example.json"
+      - "infra/9router/runtime-policy.json"
+      - "scripts/deploy-9router.sh"
+      - "docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md"
       - "infra/docker/casaos/9router/patch-runtime-policy.mjs"
       - "infra/docker/casaos/9router/test-runtime-policy.mjs"
       - "scripts/test-init-pubg-team.mjs"
@@ -36,6 +40,7 @@ jobs:
           node --check scripts/check-community-fixtures.mjs
           node --check scripts/init-community.mjs
           node --check scripts/test-init-community.mjs
+          bash -n scripts/deploy-9router.sh
           node --check infra/docker/casaos/9router/patch-runtime-policy.mjs
           node --check infra/docker/casaos/9router/test-runtime-policy.mjs
       - name: Private team initializer (mocked API; no credentials)
@@ -46,6 +51,8 @@ jobs:
         run: |
           node --test scripts/test-init-community.mjs
           node infra/docker/casaos/9router/test-runtime-policy.mjs
+          test ! -e infra/9router/runtime-policy.json
+          test -f infra/9router/runtime-policy.example.json
           node scripts/init-community.mjs --model fixture-model
           docker compose --env-file infra/community/.env -f infra/community/compose.yaml --profile pubg config --quiet
           node --input-type=module -e '
