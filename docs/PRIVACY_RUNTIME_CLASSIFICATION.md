@@ -39,6 +39,31 @@ the active TTS manager is `infra/macos/manage-qwen3-tts.sh`, which requires an
 explicit operator host profile. The archival helpers are not invoked by the
 OpenClaw runtime or by this cutover.
 
+## Historical evidence and task metadata
+
+The dated files under `.agent/checkpoints/**`, `.agent/tasks/**`,
+`docs/history/**`, `docs/archive/**`, and historical goal, report, and
+migration documents are archival evidence. They are not imported by the
+OpenClaw runtime and must not be used as a source for current host, storage,
+account, or public endpoint values. Their findings remain visible to the
+informational current-snapshot audit until the exact-value history cutover is
+performed.
+
+`AGENTS.md`, `.agent/EXECUTION_PLAN.md`, `docs/CONTEXT.md`,
+`docs/CURRENT_TASK.md`, and `docs/PROJECT_STATE.md` are canonical operator and
+task records rather than deployed runtime code. They intentionally preserve
+current or historical operational facts for local execution, so they are
+explicit cutover blockers when they contain private topology identifiers. A
+future public-history rewrite must handle these records deliberately; this
+source phase does not claim them sanitized.
+
+Research and backup tooling such as the Qwen3-TTS production-boundary sample
+programs, 9Router export/restore helpers, full HomeLab backup helpers, and
+dated voice/profile checkpoint scripts are archival or operator-only tooling.
+They are not active OpenClaw capability paths and are covered by the broad
+snapshot and reachable-history audits rather than the strict active-runtime
+gate.
+
 ## Review rule
 
 Only exact private replacement rules may be used for the archival material.

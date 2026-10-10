@@ -13,6 +13,9 @@ const PROXY_URI = /(?:vless|hysteria2|hy2):\/\/(?!<|REPLACE_|EXAMPLE_)[A-Za-z0-9
 const CREDENTIAL_ASSIGNMENT = /^\s*(?:["']?)(?:password|api_key|auth_token|access_token|client_secret|private_key)\s*[:=]\s*["']?([A-Za-z0-9_+\/=-]{25,})(?:["',\s]|$)/im;
 const PUBLIC_IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 const FLAGS = ['personal_domain','personal_host_or_identity','private_key_header','inline_proxy_uri','credential_assignment','public_ipv4_candidate'];
+const CURRENT_TEXT = /\.(?:md|markdown|json|jsonc|toml|yaml|yml|conf|txt|ts|tsx|js|mjs|cjs|sh|bash|zsh|py|html|css|plist|xml|ini|cfg|properties|service|env|example|go|rs|java|swift|sql|lock)$/i;
+const CURRENT_TEXT_BASENAME = /(?:^|\/)(?:Dockerfile(?:\..*)?|Makefile|GNUmakefile|README|LICENSE|AGENTS|CODEOWNERS|VERSION)$/i;
+const isCurrentTextPath = (path) => CURRENT_TEXT.test(path) || CURRENT_TEXT_BASENAME.test(path);
 const ELIGIBLE = (p) =>
   ((p.startsWith('infra/vps/') || p.startsWith('infra/cloudflare/')) && (/\.md$|\.example(?:\.|$)/.test(p))) ||
   /^docs\/AMADEUS_VPS.*\.md$/.test(p) ||
@@ -68,7 +71,7 @@ export function analyze(text){
 export function analyzeRuntime(text, path = ''){
   // Test modules may use a public resolver address as a pure classification
   // fixture; identity, path and credential rules still apply to those files.
-  const violations = analyze(text).filter((flag) => !(flag === 'public_ipv4_candidate' && /(?:^|\/)test_[^/]+\.py$/u.test(path)));
+  const violations = analyze(text).filter((flag) => !(flag === 'public_ipv4_candidate' && /(?:^|\/)test[^/]+\.(?:py|js|mjs|ts)$/u.test(path)));
   if (/\/Users\/(?:nyannyan|blacksidev)(?:\/|\b)/i.test(text)) violations.push('private_user_path');
   if (/\/Volumes\/Avalon(?:\/|\b)/i.test(text)) violations.push('private_storage_path');
   if (/\b(?:Amadeus-M204|amadeus-m204)\b/i.test(text)) violations.push('private_host_alias');
@@ -96,11 +99,15 @@ function scan() {
   let scanned=0;
   const findings=[];
   for(const path of files) {
-    if(mode==='--strict-vps'?!ELIGIBLE(path):mode==='--strict-active'?!ACTIVE_RUNTIME(path):!/\.(?:md|json|toml|yaml|yml|conf|txt|ts|js|mjs|sh)$/.test(path))continue;
+    if(mode==='--strict-vps'?!ELIGIBLE(path):mode==='--strict-active'?!ACTIVE_RUNTIME(path):!isCurrentTextPath(path))continue;
+    // The audit tool contains deliberate personal-pattern fixtures for its
+    // self-test. It is covered by --self-test instead of scanning itself.
+    if(mode==='--audit-all' && path==='scripts/audit-public-infrastructure.mjs')continue;
     let content;
     try{content=readFileSync(resolve(path),'utf8')}catch{continue}
+    if(content.includes('\u0000'))continue;
     scanned++;
-    const flags=mode==='--strict-active' ? analyzeRuntime(content, path) : analyze(content);
+    const flags=mode==='--strict-active' || mode==='--audit-all' ? analyzeRuntime(content, path) : analyze(content);
     if(flags.length)findings.push({path,flags});
   }
   console.log('PUBLIC_INFRA_AUDIT_MODE='+mode);
