@@ -29,8 +29,12 @@ or a force push.
 - Historical migration and restore scripts are explicitly classified in
   `docs/PRIVACY_RUNTIME_CLASSIFICATION.md`; they were not bulk rewritten or
   executed as part of this source-only phase.
-- CI now has a strict active-runtime current-snapshot gate in addition to the
-  existing selected public VPS gate and the separate reachable-history audit.
+- Historical evidence, task records, canonical pointers, and operator-only
+  research/backup helpers are explicitly classified in the same document.
+- CI now has a strict active-runtime current-snapshot gate, an informational
+  broad current-snapshot inventory, and the selected public VPS gate in
+  addition to the separate reachable-history audit. The history workflow
+  fetches all accessible pull-request head/merge refs before scanning.
 
 ## Verification evidence
 
@@ -42,6 +46,8 @@ All commands below were run from the repository root on the cutover branch.
 | `node scripts/audit-public-infrastructure.mjs --self-test` | Passed. |
 | `node scripts/audit-public-infrastructure.mjs --strict-active` | 85 files scanned, 0 flagged. |
 | `node scripts/audit-public-infrastructure.mjs --strict-vps` | 78 files scanned, 0 flagged. |
+| `node scripts/audit-public-infrastructure.mjs --audit-all` | 1,148 tracked text candidates scanned, 269 classified findings; informational only. |
+| `node scripts/audit-git-history-blobs.mjs` | 12,738 reachable objects; 5,710 text blobs; 0 read errors; 503 personal-domain, 116 named-identity, 5 account-policy, 4 proxy-URI, 0 private-key, and 13 public-IPv4 candidate blobs. |
 | `pnpm check:secrets` | Passed. |
 | `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
 | `pnpm --filter @agent/amadeus-plugin test` | 140 passed, 0 failed. |
@@ -69,9 +75,12 @@ The earlier offline rehearsal retained runnable source blobs by design, so it
 is not a publishable sanitized history. The repository still contains
 historical private objects and archival references that must be handled in the
 disposable mirror workflow from the plan. The broader `--audit-all` inventory
-remains informational: the current run scanned 1,009 tracked text files and
-reported 121 classified findings, mostly in checkpoints, historical goals and
-recovery scripts. It is not evidence that reachable Git history is clean.
+remains informational: the current run scanned 1,148 tracked text candidates
+and reported 269 classified findings, mostly in checkpoints, historical goals,
+canonical task records, and recovery scripts. It is not evidence that
+reachable Git history is clean. The local mirror currently exposes one
+accessible pull-request head ref; CI fetches all head/merge refs that the
+remote makes available before its history scan.
 
 Before any remote cutover, the operator must still preserve the private bundle
 and complete ref manifest outside the repository, run the exact-value rewrite

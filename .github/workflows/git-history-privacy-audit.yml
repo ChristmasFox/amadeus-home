@@ -26,6 +26,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Fetch all accessible pull-request refs for the read-only audit
+        run: |
+          git fetch --no-tags origin \
+            '+refs/pull/*/head:refs/remotes/origin/pr/*' \
+            '+refs/pull/*/merge:refs/remotes/origin/pr-merge/*'
       - name: Validate local-only shell scripts
         run: |
           bash -n scripts/backup-git-history-before-rewrite.sh
@@ -34,7 +39,8 @@ jobs:
         run: |
           node scripts/audit-git-history-blobs.mjs
           echo "REACHABLE_COMMIT_COUNT=$(git rev-list --all --count)"
-          echo "TRACKED_REF_COUNT=$(git for-each-ref --format='%(refname)' refs/remotes/origin refs/tags | wc -l | tr -d ' ')"
+          echo "TRACKED_REF_COUNT=$(git for-each-ref --format='%(refname)' refs/heads refs/remotes/origin refs/tags | wc -l | tr -d ' ')"
+          echo "PULL_REQUEST_REF_COUNT=$(git for-each-ref --format='%(refname)' refs/remotes/origin/pr refs/remotes/origin/pr-merge | wc -l | tr -d ' ')"
       - name: Offline rewrite test using synthetic Git bundle only
         shell: bash
         run: |
