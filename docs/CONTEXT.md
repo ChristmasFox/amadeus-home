@@ -40,6 +40,17 @@ rotated. Full evidence is in
 `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` and
 `.agent/checkpoints/2026-10-09-vps-proxy-security-hardening.md`.
 
+## Concurrent planned VPS daily traffic fuse — 2026-10-10
+
+`docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md` is planning only and has not been applied. Intended behavior:
+Asia/Shanghai calendar day, one warning at 40 GB, verified shared 2 Mbps
+business-egress shaping after 50 GB of whole-VPS usage, next local midnight
+release by an independent VPS timer, plus deduplicated themed alerts via the
+existing Amadeus `worldline_notification_intent` presentation and WhatsApp
+owner outbox. Source calibration and ingress billing limitations are mandatory.
+Six managed identities stay enabled; Legacy stays retired; no token, HY2, VLESS
+or Reality credential changes and no new delivery runtime.
+
 The dated Amadeus and 9Router entries below are historical snapshots unless
 the current task pointer says otherwise. Re-read Git/live state before work.
 
