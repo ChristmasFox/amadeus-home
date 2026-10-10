@@ -1,139 +1,171 @@
-# amadeus-home
+# Amadeus Home
 
-> **Community preview (2026-10-10):** PUBG onboarding now has a private roster initializer.
-> Default recommended stack: **WhatsApp + OpenClaw + 9Router + PUBG** (Telegram optional).
-> The production CasaOS/Mac mini workflows below are **not** a public one-click installer.
-> See [Community Docker preview](infra/community/README.md) and [PUBG squad setup](docs/COMMUNITY_PUBG_SETUP.md). Do not share this repo as a privacy-audited release yet. **Production owners:** complete the [9Router private-policy migration](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md) before merging this PR. See [Privacy release gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md).
+**WhatsApp-first · Self-hosted AI assistant powered by OpenClaw + 9Router**
 
-这是一个以 Git 为唯一 source of truth 的 HomeLab monorepo。当前唯一 Agent 主链是：
+[![Community CI](https://github.com/ChristmasFox/amadeus-home/actions/workflows/community-pubg-onboarding.yml/badge.svg)](https://github.com/ChristmasFox/amadeus-home/actions/workflows/community-pubg-onboarding.yml)
 
-```text
-WhatsApp / optional Telegram / future channels
-        → OpenClaw/Kurisu
-        → native PUBG + Amadeus plugins / Skills
-        → deterministic Domain or direct external service
+> **🚧 社区预览版 / Community Preview**
+>
+> 源码已公开，PUBG 小队初始化与独立 Docker Compose 配置已加入，但尚未完成全新 Linux 主机的镜像构建、真实 WhatsApp/PUBG/9Router 端到端验收、完整历史隐私审计和许可证确认。请不要把当前版本理解为已验证的一键生产部署。
+>
+> **原生产环境维护者：** 本次更新把个人 9Router 生图账号白名单移出了 Git。更新本地仓库及下一次生产部署前，务必阅读 [私有账号策略迁移](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md)，避免因缺少本地策略文件而导致部署拒绝。
+
+## 从 PUBG 战绩机器人开始
+
+和朋友打 PUBG，最常遇到的问题就是：**谁踢了队友？伤害打了多少？这周谁最能打？**
+
+Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PUBG 官方 API 和比赛 Telemetry 获取事实，再借助 OpenClaw 和模型生成易读的战绩分析。
+
+> “查询昨天的小队战绩。”
+>
+> “这周谁的 KD 最高？谁对队友造成的伤害最多？”
+>
+> “总结上一场比赛的踢人、救援和队伍表现。”
+
+上述是功能示例，不是来自实时公开演示环境的截图。
+
+### 能做什么
+
+| 模块 | 功能 | 社区默认 |
+| --- | --- | --- |
+| **PUBG Stats** | 小队/个人战绩、KD、排行、伤害、击倒、救援、Telemetry、友伤和趣味复盘 | ✅ |
+| **WhatsApp** | 自然语言私聊/群聊查询、配对与群组访问控制 | ✅ |
+| **OpenClaw** | Agent 会话、工具调用、自然语言理解 | ✅ |
+| **9Router** | 自有模型账号及 API Key 聚合、模型组合、路由与 Fallback | ✅ |
+| Telegram | 备用聊天渠道 | 可选 |
+| **Amadeus Extensions** | HomeLab、NAS、通知、语音、生图、Product Radar 等 | 按需启用，**不包含在最小社区镜像中** |
+
+PUBG 统计由确定性 Domain 完成；AI 负责理解你的问题与组织回复。**PUBG API 不经过 9Router**，后者负责 OpenClaw 的模型调用。
+
+## 系统架构
+
+```mermaid
+flowchart TB
+  W["WhatsApp：私聊 / 群聊"] --> O["OpenClaw Agent"]
+  O -->|"模型推理"| R["9Router"]
+  R --> M["用户自行授权的模型提供商"]
+  O -->|"工具调用"| P["PUBG Plugin（10 个工具）"]
+  P --> D["PUBG Domain / Telemetry"]
+  D --> A["PUBG 官方 API"]
+  D --> DB[("SQLite 数据库")]
+  O -.-> X["可选 Amadeus / HomeLab 扩展"]
 ```
 
-OpenClaw 负责自然语言理解、会话、模型路由、调度、人格和工具循环；业务插件只做边界适配，
-确定性逻辑留在 Domain 或明确的外部服务。旧 LangBot、n8n、旧 Runtime、关键词路由和
-第二个 Agent 不再是运行依赖。
+## 快速开始：WhatsApp + 9Router + PUBG
 
-主 Agent 使用 OpenClaw `tools.profile="full"`，WhatsApp owner session 可以调用完整的
-OpenClaw 工具面和已加载 native plugins；工具自身的 owner 检查与宿主 approval gate 仍然有效。
+### 环境要求
 
-## 目录
+Docker Compose v2、Node.js 24+、你自己的 [PUBG Developer API Key](https://developer.pubg.com/)、可合法使用的模型账号或 API Key，以及用于扫码登录的 WhatsApp 账号。
 
-- `plugins/pubg/`：唯一 PUBG 原生 OpenClaw plugin，六个受限工具和 Skill。
-- `packages/pubg-domain/`：官方 PUBG API、SQLite、查询/比较、Telemetry 事实和迁移器。
-- `plugins/amadeus/`：Product Radar、媒体安全流程、NAS、HomeLab、只读 VPS、KOOK lookup、
-  NASDAQ-100/标普500市场观测、Identity 和 owner notification 的原生 OpenClaw plugin。
-- `apps/product-radar/`：独立商品监控服务；业务事件只写 channel-free owner outbox。
-- `integrations/openclaw/`：脱敏配置、workspace、Skills 和部署说明。
-- `infra/docker/casaos/`：固定版本 OpenClaw/Product Radar 的 CasaOS 模板。
-- `infra/macos/nas-control.sh`：NAS 只读状态/磁盘和 owner-only sleep 的受限 SSH 入口。
-- `docs/`、`.agent/`：架构、当前状态、目标、验收和可恢复 checkpoint。
+**无需** Mac mini、CasaOS、OrbStack、公网域名或 Meta Cloud API Webhook。推荐给机器人单独准备 WhatsApp 号码。
 
-旧 `integrations/langbot/`、`integrations/n8n/`、watchdog、旧通知 bridge 和对应
-CasaOS app 定义在本轮切换后从 Git 移除；运行时数据只留在仓库外 dated checkpoint。
+### 1. 初始化独立的社区配置
 
-## 本地验证
+```bash
+git clone https://github.com/ChristmasFox/amadeus-home.git
+cd amadeus-home
+node scripts/init-community.mjs --model YOUR_CHAT_MODEL
+```
 
-需要 Node 24.16+、pnpm 11 和 Python 3：
+将 `YOUR_CHAT_MODEL` 改为你准备在 9Router 中配置的模型或 Combo ID。脚本在 Git 忽略的本地目录生成随机网关凭据和最小权限 OpenClaw 配置，不会复制作者的生产数据，不会覆盖已有文件。
 
-```sh
-./scripts/bootstrap.sh --check
-pnpm install
-pnpm build
-pnpm typecheck
-pnpm test
+### 2. 启动 9Router
+
+```bash
+docker compose --env-file infra/community/.env \
+  -f infra/community/compose.yaml up -d --build nine-router
+```
+
+通过 **http://127.0.0.1:20128** 登录。初始密码位于你本机的 `infra/community/.env`。连接**你自己授权的**模型服务，创建第 1 步所用的模型 ID，并生成单独的 9Router API Key。
+
+把这个 Key 写入本地 `infra/community/.env` 的 `OPENCLAW_9ROUTER_API_KEY` 字段。不要把模型 Token、OAuth 凭据或这个文件提交到仓库。
+
+社区镜像**没有指定账号的生图邮箱白名单**，但这不代表绕过上游授权或允许匿名使用；建议为模型设置额度和速率限制。
+
+### 3. 输入昵称，初始化自己的 PUBG 小队
+
+用本地编辑器把 PUBG API Key 存入 `.local/pubg-api-key`，然后执行：
+
+```bash
+node scripts/init-pubg-team.mjs \
+  --players PlayerOne,PlayerTwo,PlayerThree,PlayerFour \
+  --platform steam \
+  --team-id my_squad \
+  --label "我的开黑小队" \
+  --api-key-file .local/pubg-api-key
+```
+
+程序会从官方 PUBG API 解析游戏昵称，并生成 Git 忽略的 `.local/pubg-team.json`。
+
+这里的 **`team.id` 是本地自定义 ID**，不是 PUBG 官方分配的小队 ID；每位玩家的 `players[].id` 才是官方 Account ID。WhatsApp 发送者与 PUBG 账号是另一层身份关联，“我的战绩”等第一人称查询需要单独绑定身份。
+
+### 4. 启动 OpenClaw 并连接 WhatsApp
+
+```bash
+docker compose --env-file infra/community/.env \
+  -f infra/community/compose.yaml --profile pubg up -d --build
+
+docker compose --env-file infra/community/.env \
+  -f infra/community/compose.yaml --profile pubg \
+  exec openclaw node dist/index.js channels login --channel whatsapp
+```
+
+手机扫描二维码即可开始配对。社区配置默认 **私聊 Pairing、群聊禁用、最小工具权限**。群聊需要你手动启用白名单、指定群组，并推荐要求 @机器人 后才触发。
+
+更完整的安装、配对和排障说明请阅读：
+
+- [社区 Docker 部署指南](infra/community/README.md)
+- [PUBG 小队初始化与身份绑定](docs/COMMUNITY_PUBG_SETUP.md)
+
+## 安全和隐私
+
+| 领域 | 社区发行默认值 |
+| --- | --- |
+| 管理端口 | 9Router 和 OpenClaw 均只暴露到 `127.0.0.1` |
+| WhatsApp 私聊 | 首次配对授权 |
+| WhatsApp 群聊 | 默认关闭，明确白名单后才启用 |
+| OpenClaw | 最小权限，仅额外开放 PUBG 工具 |
+| 模型与游戏密钥 | 用户自备，存储在被忽略的本地文件或独立 Docker 数据卷 |
+| 原生产账号隔离 | 独立的私有文件，社区镜像不包含个人账号信息 |
+
+**重要：Git 历史仍可能包含早期的玩家标识与个人部署拓扑。** 当前文件的脱敏不等于历史已完成审计。请勿在 Issues、日志或截图中公开 Token、手机号/JID、账号 ID、域名和私有配置信息。
+
+完整安全与发布清单：[Community Privacy & Release Gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md)。
+
+## 开发与扩展
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build:pubg
+pnpm typecheck:pubg
+pnpm test:pubg
+node --test scripts/test-init-community.mjs
+node --test scripts/test-init-pubg-team.mjs
+node infra/docker/casaos/9router/test-runtime-policy.mjs
 pnpm check:secrets
 ```
 
-开发 workflow 默认只做本地验证，不构建镜像、不重启服务：
+| 源码目录 | 用途 |
+| --- | --- |
+| [`plugins/pubg/`](plugins/pubg/) | 10 个 OpenClaw PUBG 工具 |
+| [`packages/pubg-domain/`](packages/pubg-domain/) | PUBG API、SQLite、统计与 Telemetry |
+| [`packages/identity/`](packages/identity/) | 身份与外部游戏账号绑定 |
+| [`packages/presentation/`](packages/presentation/) | 多渠道结果展示 |
+| [`infra/community/`](infra/community/) | 社区 Docker / 9Router 模型路由 / 安全默认配置 |
+| [`integrations/openclaw/`](integrations/openclaw/) | OpenClaw 集成 |
+| [`plugins/amadeus/`](plugins/amadeus/) | 个人 HomeLab 的扩展插件 |
 
-```sh
-pnpm workflow:plan
-pnpm workflow:verify
-pnpm verify:voice  # 离线 unit/fixture/typecheck，不跑模型或 Docker
-pnpm test:workflow
-```
+**生产环境维护者**：请查看 [OpenClaw 运维文档](integrations/openclaw/README.md)、[9Router 维护文档](infra/9router/README.md) 和 [私有策略迁移指南](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md)。社区用户不要执行个人生产的 `--apply` 部署脚本。
 
-## DeliveryEnvelope v2 reply and attachment boundary
+## 状态、反馈与许可
 
-Kurisu 的用户回复由 `plugins/amadeus/src/delivery-envelope.ts` 定义唯一 immutable
-`DeliveryEnvelope`：`version: 2`、run/delivery/session/channel/origin、`silent` 与有序
-`text` / `voice` / `attachment` parts。Agent 严格 JSON wire 只在
-`delivery-decoder.ts` 解码一次，raw wire 与 tools 原始 media 字段不进入发送；
-格式错误 fail closed，用户要求的 JSON 作为普通 text part 保留。
+欢迎通过 [GitHub Issues](https://github.com/ChristmasFox/amadeus-home/issues) 提交功能想法与脱敏后的错误信息。
 
-`delivery-runs.ts` 汇合当前 run 的图片登记与回答，`delivery-settlement.ts` 唯一
-`deliveryId` ledger 顺序交付。普通生图 disposition=inline，派生超分文件
-disposition=document；`assetId` 经权威 registry、根目录 realpath/no-follow 和
-MIME/size/SHA-256 核验。WhatsApp 的 pinned 单一 typed boundary 首先按 disposition
-选择 Baileys `image` 或 `document` payload，document 绝不降级为图片；语音
-通过原 TTS bridge 合成并转换为 Ogg/Opus PTT，失败只发送 typed text part。
-Telegram 以同一 settlement 映射 photo/document；owner outbox 不受改动。
+仍待完成：全新 Linux amd64/arm64 的镜像构建与实测、真实 WhatsApp + 9Router + PUBG 端到端验收、Git 历史安全检查、发行许可证以及脱敏战报截图。
 
-当前只完成 Git 源码切换，不会自动构建、部署或重启。生产仍在旧 immutable image，
-待另行显式授权部署并完成真实 WhatsApp Gates A–F。
+**License：目前尚未添加正式开源许可证。** 代码可以查看，但在正式确定并加入 LICENSE 之前，请不要假定拥有再分发或商业使用许可。
 
-## Amadeus 版本管理
+---
 
-产品版本唯一记录在根目录 `VERSION`，不要从文档推断当前版本。每次只执行 `bump patch` 并递增
-`0.0.1`；patch 位为 `0..9`，到 9 时进位到 minor（`0.9.9 -> 0.10.0`），minor 位为 `0..99`，到 99 且
-patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文来自
-`RELEASE_NOTES.md`；它是单次发布说明，不是累计 changelog，每次递增都必须替换旧正文，只保留
-本次部署的新增或修复，且使用中文。部署前会校验版本标题、正文非空和中文内容，并拒绝把运行时名称写进通知。
-
-```sh
-./scripts/amadeus-version.sh show
-./scripts/amadeus-version.sh bump patch  # 唯一递增入口：1.4.1 -> 1.4.2；patch/minor 按上面的边界进位
-./scripts/amadeus-version.sh check
-```
-
-不再使用或手工指定 `bump minor`、`bump major`。
-
-每次递增后先替换 `RELEASE_NOTES.md` 的首行版本和正文，只写本次更新内容，不重复上一版本说明。部署通知标题固定为
-`Amadeus <版本> · 世界线收束`，部署脚本会统一在正文末尾追加一次 `El Psy Kongroo.`；
-`RELEASE_NOTES.md` 不要自行重复写这句。
-
-## CasaOS 部署
-
-长期服务运行在由本地 `infra/host-profile.env` 解析的 OrbStack CasaOS machine（当前 M204 为 `nyannyan`）。OpenClaw canonical Compose
-路径是 `/var/lib/casaos/apps/openclaw/docker-compose.yml`，持久化数据是
-`/DATA/AppData/openclaw`。生产 secrets、身份、数据库和媒体数据都在仓库外。
-
-默认只预览；一次性迁移必须使用显式 apply：
-
-```sh
-./scripts/deploy-openclaw.sh --dry-run
-# 推荐：按 live image 的 Git commit 自动只构建受影响镜像
-./scripts/deploy-openclaw.sh --apply --build-auto
-# workspace/config/compose-only 改动：复用现有镜像
-./scripts/deploy-openclaw.sh --apply --no-build
-# 明确要求全量双镜像发布时才使用
-./scripts/deploy-openclaw.sh --apply --build
-./scripts/doctor.sh
-```
-
-部署脚本默认不会因为任意改动重建两个镜像：
-
-- `--build-auto` 比较当前 Git 与线上镜像 tag 中的 commit；只要 `plugins/pubg`、
-  `plugins/amadeus`、`packages/pubg-domain` 或 OpenClaw Dockerfile 变化才构建 OpenClaw，
-  只有 `apps/product-radar` 变化才构建 Product Radar。
-- `--no-build` 复用线上两个 immutable image；如果检测到业务源代码比镜像更新，会直接拒绝，
-  不会静默上线旧代码。
-- `--build-openclaw`、`--build-radar` 可只构建一个镜像；`--build` 保留为明确的全量双镜像发布。
-
-所有 apply 仍会备份外部状态、执行匹配的验证、更新 Compose 并使用
-`docker compose up -d --no-build`；不会在 macOS host Docker 部署持久服务，也不会把
-backup、token、API key 或业务数据写入 Git。
-
-媒体整理仍遵循明确单项的 `scan → preview → 同一会话显式确认 → execute`；不批量猜测、
-不覆盖、不删除现有媒体库。详见 `organize-emby-media` Skill。
-
-## 安全与恢复
-
-Bot token、API key、密码、证书、`.env` 和业务数据永不入库。切换前会建立
-`/DATA/AppData/openclaw/backups/amadeus-openclaw-<UTC>`，并在本机为 Codex hook 保留
-外部备份。恢复只依据 checkpoint 的明确路径操作，不执行回滚演练。
+*El Psy Kongroo.*
