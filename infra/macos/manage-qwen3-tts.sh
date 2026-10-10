@@ -13,6 +13,7 @@ TARGET="gui/$(id -u)"
 mode=--dry-run
 engine="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["productionEngine"])' "$CONFIG")"
 explicit_engine=0
+OPERATOR_HOSTNAME="${AMADEUS_MAC_HOSTNAME:-${MAC_HOST_NAME:-}}"
 while (($#)); do
   case "$1" in
     --dry-run|--prepare-apply|--apply|--apply-plist-only|--status|--uninstall) mode="$1" ;;
@@ -24,7 +25,7 @@ while (($#)); do
   shift
 done
 [[ "$engine" == mlx || "$engine" == mps ]] || { echo 'unsupported TTS engine' >&2; exit 2; }
-[[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
+[[ -n "$OPERATOR_HOSTNAME" && "$(hostname -s)" == "$OPERATOR_HOSTNAME" ]] || { echo 'operator host profile required' >&2; exit 1; }
 if [[ "$mode" == --status ]]; then
   ((explicit_engine == 0)) || { echo '--status does not select an engine' >&2; exit 2; }
   if [[ -f "$PLIST" ]]; then

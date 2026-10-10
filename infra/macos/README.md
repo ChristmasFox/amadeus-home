@@ -1,10 +1,10 @@
 # MacHostAgent
 
-`machostagent.py` is a fixed-surface, bearer-authenticated, read-only HTTP service for the real
-`Amadeus-M204` macOS host. It exposes only `/health`, `/v1/status`, and
+`machostagent.py` is a fixed-surface, bearer-authenticated, read-only HTTP service for the
+operator-configured macOS host. It exposes only `/health`, `/v1/status`, and
 `/v1/processes`; it has no shell, arbitrary path, or sudo endpoint. Set a
 random token outside Git and install the example launchd plist as a LaunchAgent
-or LaunchDaemon according to the existing M204 trust boundary. The OpenClaw
+or LaunchDaemon according to the operator host profile. The OpenClaw
 container only receives the two bounded telemetry tools.
 
 The base user agent reports `power.telemetry=degraded` until the optional
@@ -20,8 +20,10 @@ remain null rather than being coerced to zero. Do not infer clock state from CPU
 convert utilization into watts; whole-device input W and kWh require timestamped readings
 from an external wall meter.
 
-`install-machostagent.sh` is dry-run by default. It checks the M204 hostname and
-only an explicit `--apply` installs the collector and user-level launchd job;
+`install-machostagent.sh` is dry-run by default. It checks the configured host
+name and storage path, and only an explicit `--apply` installs the collector and user-level launchd job;
+source those values from the operator profile as `MAC_HOST_NAME` and
+`MACHOSTAGENT_STORAGE_PATH` before applying;
 the token must already exist at
 `~/Library/Application Support/Amadeus/machostagent.token` with mode 0600.
 Add `--accurate-power` to the same apply only when the logged-in user can
@@ -29,7 +31,7 @@ authorize the one-time root LaunchDaemon installation. The HTTP service and
 token remain in the user boundary; the root helper has no HTTP surface,
 request handling, shell, or caller-controlled path.
 
-Longbridge authorization is a separate operator action on M204. Use
+Longbridge authorization is a separate operator action on the configured Mac. Use
 `scripts/longbridge-oauth-authorize.mjs start`, open the printed URL, complete
 the browser approval, and save the complete callback URL outside Git. Pipe that
 callback URL to the `exchange` mode; the operator flow stores the short-lived
@@ -38,7 +40,7 @@ code. The resulting OAuth state is written with mode 0600 to the external
 `/DATA/AppData/openclaw/data` path; normal OpenClaw restarts only reuse that
 state.
 
-## M204 native Qwen3-TTS production rebaseline
+## Native Qwen3-TTS production rebaseline
 
 `infra/macos/manage-qwen3-tts.sh` defaults to dry-run and reads the selected
 engine from `infra/macos/qwen3-tts-engine.json`. Production is pinned Qwen3-TTS

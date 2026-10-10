@@ -31,6 +31,7 @@ export interface AmadeusConfig {
   longbridgeSdkTokenDir: string;
   macHostAgentBaseUrl: string;
   macHostAgentTokenFile: string;
+  macHostName: string;
   imageAssetServiceBaseUrl: string;
   imageAssetServiceTokenFile: string;
   imageAssetContainerRoot: string;
@@ -42,6 +43,7 @@ export interface AmadeusConfig {
   vpsSshKeyFile: string;
   vpsSshKnownHostsFile: string;
   vpsUsageStateFile: string;
+  vpsAccountMapFile?: string;
 }
 
 function stringValue(value: unknown, fallback: string): string {
@@ -65,6 +67,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
   const longbridgeClientSecretFile = optionalFile('longbridgeClientSecretFile', 'LONGBRIDGE_CLIENT_SECRET_FILE');
   const macHostAgentTokenFile = optionalFile('macHostAgentTokenFile', 'MAC_HOST_AGENT_TOKEN_FILE');
   const imageAssetServiceTokenFile = optionalFile('imageAssetServiceTokenFile', 'AMADEUS_IMAGE_SERVICE_TOKEN_FILE');
+  const vpsAccountMapFile = optionalFile('vpsAccountMapFile', 'VPS_ACCOUNT_MAP_FILE');
   const ownerDeliverySetting = value.ownerNotificationDeliveryEnabled ?? env('OWNER_NOTIFICATION_DELIVERY_ENABLED');
   let ownerNotificationDeliveryEnabled: boolean;
   if (ownerDeliverySetting === undefined) ownerNotificationDeliveryEnabled = true;
@@ -97,6 +100,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     longbridgeSdkTokenDir: file('longbridgeSdkTokenDir', 'LONGBRIDGE_SDK_TOKEN_DIR', '/home/node/.longbridge/openapi/tokens'),
     macHostAgentBaseUrl: file('macHostAgentBaseUrl', 'MAC_HOST_AGENT_BASE_URL', 'http://host.docker.internal:18791').replace(/\/$/u, ''),
     macHostAgentTokenFile: macHostAgentTokenFile ?? '/run/secrets/mac_host_agent_token',
+    macHostName: file('macHostName', 'MAC_HOST_NAME', 'operator-mac'),
     imageAssetServiceBaseUrl: file('imageAssetServiceBaseUrl', 'AMADEUS_IMAGE_SERVICE_BASE_URL', 'http://host.docker.internal:18792').replace(/\/$/u, ''),
     imageAssetServiceTokenFile: imageAssetServiceTokenFile ?? '/run/secrets/amadeus_image_service_token',
     imageAssetContainerRoot: file('imageAssetContainerRoot', 'AMADEUS_IMAGE_ASSET_CONTAINER_ROOT', '/var/lib/amadeus/image-assets').replace(/\/$/u, ''),
@@ -108,6 +112,7 @@ export function configFor(api: OpenClawPluginApi): AmadeusConfig {
     vpsSshKeyFile: file('vpsSshKeyFile', 'VPS_SSH_KEY_FILE', '/run/secrets/vps_ssh_key'),
     vpsSshKnownHostsFile: file('vpsSshKnownHostsFile', 'VPS_SSH_KNOWN_HOSTS_FILE', '/run/secrets/vps_ssh_known_hosts'),
     vpsUsageStateFile: file('vpsUsageStateFile', 'VPS_USAGE_STATE_FILE', '/data/vps-usage-state.json'),
+    ...(vpsAccountMapFile ? { vpsAccountMapFile } : {}),
   };
 }
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import request
@@ -429,8 +431,40 @@ class BridgeTests(unittest.TestCase):
 
     def test_load_config_pins_the_two_deployable_profiles(self):
         root = Path(__file__).resolve().parents[2]
-        quality = load_config(root / "infra/macos/qwen-image-engine.json")
-        fast = load_config(root / "infra/macos/qwen-image-fast-engine.json")
+        with tempfile.TemporaryDirectory() as directory:
+            runtime_root = Path(directory)
+            asset_root = runtime_root / "assets"
+            for relative in (
+                "diffusion/qwen-image-2.1-UC-Q4_K_M.gguf",
+                "text-encoder/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+                "text-encoder/mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+                "vae/qwen_image_2.1_vae_bf16.safetensors",
+                "fun-acc/Qwen-Image-2.1-Fun-Acc-4Step.safetensors",
+                "fun-acc/pdd_config.json",
+                "fun-acc/Qwen-Image-2.1-Fun-Acc-4Step-sdcpp.safetensors",
+                "fun-acc/Qwen-Image-2.1-Fun-Acc-4Step-sdcpp.manifest.json",
+            ):
+                target = asset_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"fixture")
+            binary = runtime_root / "bin" / "sd-server"
+            binary.parent.mkdir()
+            binary.write_bytes(b"fixture")
+            converter = runtime_root / "convert.py"
+            converter.write_bytes(b"fixture")
+            patch_file = runtime_root / "stable-diffusion.patch"
+            patch_file.write_bytes(b"fixture")
+            runtime = {
+                "QWEN_IMAGE_ASSET_ROOT": str(asset_root),
+                "QWEN_IMAGE_SD_CPP_SOURCE": str(runtime_root / "stable-diffusion.cpp"),
+                "QWEN_IMAGE_SD_CPP_BINARY": str(binary),
+                "QWEN_IMAGE_LOG_DIR": str(runtime_root / "logs"),
+                "QWEN_IMAGE_FUN_ACC_CONVERTER": str(converter),
+                "QWEN_IMAGE_SD_CPP_PATCH": str(patch_file),
+            }
+            with patch.dict(os.environ, runtime):
+                quality = load_config(root / "infra/macos/qwen-image-engine.json")
+                fast = load_config(root / "infra/macos/qwen-image-fast-engine.json")
         self.assertEqual(quality["samplingProfile"], "baseline-16step")
         self.assertEqual((quality["steps"], quality["cfgScale"]), (16, 1.0))
         self.assertEqual((quality["generationDeadlineMs"], quality["loadTimeoutMs"]), (900_000, 600_000))

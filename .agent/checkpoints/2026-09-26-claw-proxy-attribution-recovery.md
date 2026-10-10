@@ -2,9 +2,9 @@
 
 ## Symptom and diagnosis
 
-- `https://claw.nyannyan.top/` returned HTTP 403 with OpenClaw `proxy_attribution_required`; `/healthz` was HTTP 200. DNS, TLS, Cloudflare, Caddy/frp forwarding and OpenClaw health were not wholly down.
-- OpenClaw logged `observed unattributable proxy-shaped traffic from 172.20.0.1`. The container's `9router_default` network gateway was `172.20.0.1` and published port `18789/tcp` forwarded through that bridge. Live `gateway.trustedProxies` still contained the old `172.24.0.1` bridge.
-- The local Mac's `~/.ssh/config` currently has no `amadeus-gateway` host alias, so direct VPS inspection was unavailable. No VPS, firewall, frps or Caddy changes were made.
+- `https://claw.example.com/` returned HTTP 403 with OpenClaw `proxy_attribution_required`; `/healthz` was HTTP 200. DNS, TLS, Cloudflare, Caddy/frp forwarding and OpenClaw health were not wholly down.
+- OpenClaw logged `observed unattributable proxy-shaped traffic from 172.20.0.1`. The container's `9router_default` network gateway was `172.20.0.1` and published port `<SERVICE_PORT>/tcp` forwarded through that bridge. Live `gateway.trustedProxies` still contained the old `172.24.0.1` bridge.
+- The local Mac's `~/.ssh/config` currently has no `example-vps` host alias, so direct VPS inspection was unavailable. No VPS, firewall, frps or Caddy changes were made.
 
 ## Reversible repair
 

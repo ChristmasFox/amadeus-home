@@ -28,7 +28,7 @@ inbound uplink/downlink 统计，collector 通过 `reality-fallback-gate` tag �
 请求来源或目标地址。24431 不应加入公网上的监听或防火墙规则。
 
 服务端配置的 Reality 私钥、客户端 UUID 和 short ID 未改变。候选通过
-`/usr/local/bin/xray run -test -config <candidate>` 后应用；M204-Net-Core 与 Labmem001 的真实
+`/usr/local/bin/xray run -test -config <candidate>` 后应用；example-device 与 example-user-01 的真实
 VLESS HTTPS smoke 及账号计数均通过。无效 SNI 探测未收到服务端证书；fallback inbound 统计源
 为 `ok`，可见聚合流量。计数为零只说明当前采样窗口没有观测到 gate 流量；统计源 unknown/stale
 时不能解释为零流量。
@@ -69,12 +69,12 @@ vless=<VPS_SERVER>:2053, method=none, password=<UUID>, obfs=over-tls, obfs-host=
 ## Hysteria 2 备用节点
 
 VPS 另运行官方 Hysteria 2 `v2.12.3`，systemd 服务为 `hysteria-server.service`，监听 UDP
-`2053`。它复用 `sub.nyannyan.top` 的 Caddy 证书，认证密码只存在 VPS 的
+`2053`。它复用 `sub.example.com` 的 Caddy 证书，认证密码只存在 VPS 的
 `/etc/hysteria/config.yaml`。
 
 认证使用 loopback HTTP auth service。失败来源只用于 accounting 进程内存中的有界失败窗口；
 数据库保留按分钟聚合的失败与限额次数，不保存来源地址或提供可复用的失败明细。新环境模板
-默认 `telemetry`；当前 live mode 是在 M204/Labmem001 重试兼容性 smoke 通过后启用的 `enforce`，
+默认 `telemetry`；当前 live mode 是在 M204/example-user-01 重试兼容性 smoke 通过后启用的 `enforce`，
 达到阈值的来源会在 cooldown 内得到通用认证拒绝。进程重启会重置来源窗口，security snapshot
 会显示当前窗口长度及已覆盖秒数。不要将聚合失败数解释成攻击或入侵证据。
 

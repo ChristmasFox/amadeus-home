@@ -6,7 +6,7 @@ Delivery: deterministic source and focused tests are in Git and the OpenClaw own
 
 ## 0. Operator request and pinned defaults
 
-Introduce an **automatic, whole-VPS daily traffic fuse** for the personal `amadeus-gateway` VPS.
+Introduce an **automatic, whole-VPS daily traffic fuse** for the personal `example-vps` VPS.
 
 Local-day behavior (Asia/Shanghai / UTC+08:00, **calendar day**, not a sliding 24-hour window):
 
@@ -17,7 +17,7 @@ Local-day behavior (Asia/Shanghai / UTC+08:00, **calendar day**, not a sliding 2
 - The next 00:00: remove only the fuse-owned shaper, verify the normal network path, reset the new day's baseline/state, and send one recovery notification.
 - The rate is a **shared** 2,000,000 bit/s on the shaped business egress, **not 2 Mbps per Labmem account, per port, or per process**.
 - No deliberate throttling of the verified SSH recovery path and a tightly bounded control/notification channel; these exceptions mean the phrase "2 Mbps" is NOT a literal all-packets/all-directions cap.
-- Keep the six valid identities: `Labmem001`–`Labmem005` and `M204-Net-Core`. Legacy remains retired. Do not rotate tokens, HY2 passwords, UUIDs, Reality material or subscriber URLs.
+- Keep the six valid identities: `example-user-01`–`example-user-05` and `example-device`. Legacy remains retired. Do not rotate tokens, HY2 passwords, UUIDs, Reality material or subscriber URLs.
 - Both protection and restoration must notify through **Kurisu's existing Steins;Gate worldline presentation and WhatsApp owner outbox**, not via a second sender or plain custom HTTP WhatsApp client.
 
 A 2 Mbps one-direction continuous stream can still send approximately 21.6 GB over 24 hours, and inbound attack traffic may consume billed quota before Linux ingress control can act. This is a **loss-reduction fuse**, not a proof that provider-billed daily usage can never exceed 50 GB.
@@ -29,7 +29,7 @@ The latest source uses an Ubuntu 24.04 VPS with limited resources (2 vCPU / 1 Gi
 - Xray VLESS/REALITY/Vision on TCP 2053, with the completed anti-steal fallback gate;
 - Hysteria 2 on UDP 2053, with per-account loopback HTTP auth and bounded failed-auth limiter;
 - Caddy and frps exposing HomeLab services;
-- `amadeus-gateway-accounting.service`: Python + SQLite, provider/HY2/Xray sampling every 60 seconds;
+- `example-vps-accounting.service`: Python + SQLite, provider/HY2/Xray sampling every 60 seconds;
 - KiwiVM `getServiceInfo.data_counter` as the authoritative provider quota counter;
 - a sanitized read-only SSH probe for VPS facts;
 - owner-only native VPS tools in `plugins/amadeus`;
@@ -56,7 +56,7 @@ It does not claim to stop:
 - sources outside the shaped VPS physical network path;
 - provider billing semantics not yet calibrated.
 
-The trigger must represent the **whole gateway**, including Caddy/frps/non-proxy services, not only `Labmem*` and `M204-Net-Core`.
+The trigger must represent the **whole gateway**, including Caddy/frps/non-proxy services, not only `Labmem*` and `example-device`.
 
 The user-visible status distinguishes `provider_confirmed`, `local_wan_estimate`, `partial_coverage`, `stale`, and `unknown` whenever a source is incomplete; never print a fabricated exact "since 00:00" figure.
 
@@ -165,7 +165,7 @@ In high-volume inbound attack conditions, recommend/provider-side firewall or DD
 
 Preferred shape:
 
-- existing `amadeus-gateway-accounting`: authoritative provider/identity observation and sanitized factual snapshot;
+- existing `example-vps-accounting`: authoritative provider/identity observation and sanitized factual snapshot;
 - a very small fixed `amadeus-vps-traffic-fuse` controller, SQLite daily state and 5–10 second local network watcher;
 - one restricted privileged tc helper and two systemd units/timers as appropriate for periodic reconciliation and midnight rollover;
 - a fixed sanitized event/state export, consumed by the existing `amadeus-vps-readonly-probe`;
@@ -284,7 +284,7 @@ No secret, live `tc` dump containing private endpoints, filled env, database, pu
 
 ### Phase 0 — read-only audit (NO apply)
 
-- Re-read latest main/active VPS accounting deployment; verify `Labmem001`–`Labmem005` + `M204-Net-Core`, Legacy retired.
+- Re-read latest main/active VPS accounting deployment; verify `example-user-01`–`example-user-05` + `example-device`, Legacy retired.
 - Inspect provider cadence, available time-series history and billing semantics; evaluate actual Shanghai-midnight coverage.
 - Identify the real default-route WAN NIC, current `tc` qdiscs/classes/filters, counters and route/SSH connectivity; do not print secrets.
 - Check if provider-side ingress is counted and whether rate shaping on the chosen interface can affect all intended business paths.

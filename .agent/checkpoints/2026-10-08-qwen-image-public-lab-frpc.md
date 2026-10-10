@@ -21,7 +21,7 @@ Secret values are not included in this checkpoint.
 ## Apply and evidence
 
 - The pre-change config passed `frpc verify` and contained eight proxies.
-- The HomeLab guest reached the Mac UI at `192.168.5.3:18798` immediately
+- The HomeLab guest reached the Mac UI at `192.168.5.3:<SERVICE_PORT>` immediately
   before apply.
 - Exactly one proxy was appended:
 
@@ -30,8 +30,8 @@ Secret values are not included in this checkpoint.
   name = "qwen-image-lab-tcp"
   type = "tcp"
   localIP = "192.168.5.3"
-  localPort = 18798
-  remotePort = 18798
+  localPort = <SERVICE_PORT>
+  remotePort = <SERVICE_PORT>
   ```
 
 - The post-change config passed `frpc verify`, remains `0600 root:root`, and
@@ -43,18 +43,18 @@ Secret values are not included in this checkpoint.
   success`.
 - The Caddy public route returns the Image Lab password page. The public
   unauthenticated gates return 401. VPS IPv4/IPv6 INPUT guards block direct
-  non-loopback access to port 18798.
+  non-loopback access to port <SERVICE_PORT>.
 
 ## Rollback
 
 Restore only the previous frpc config, then validate and restart:
 
 ```sh
-orb -m nyannyan -u root install -m 600 \
+orb -m example-node -u root install -m 600 \
   /Volumes/Avalon/backups/amadeus-image-lab/frpc/20261008T075816Z/frpc.toml.pre \
   /DATA/AppData/frpc/frpc.toml
-orb -m nyannyan -u root /usr/local/bin/frpc verify -c /DATA/AppData/frpc/frpc.toml
-orb -m nyannyan -u root systemctl restart frpc
+orb -m example-node -u root /usr/local/bin/frpc verify -c /DATA/AppData/frpc/frpc.toml
+orb -m example-node -u root systemctl restart frpc
 ```
 
 The VPS Caddy, frps admission, and firewall checkpoints are separate and must

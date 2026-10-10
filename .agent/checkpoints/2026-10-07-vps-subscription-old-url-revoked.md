@@ -14,11 +14,11 @@ Date: 2026-10-07 (Asia/Shanghai)
 ## Applied state
 
 - Removed the previous token's four exact paths from both the standard HTTPS
-  and compatibility `8443` Caddy subscription matchers.
+  and compatibility `<SERVICE_PORT>` Caddy subscription matchers.
 - Validated `/etc/caddy/Caddyfile` and smoothly reloaded `caddy.service`.
 - Deleted only the previous token's directory under
   `/var/lib/caddy/subscription/`; the current token directory remains.
-- `caddy.service` and `amadeus-gateway-subscription.service` are active.
+- `caddy.service` and `example-vps-subscription.service` are active.
 - Xray/HY2 client credentials and proxy UUIDs were not changed. Previously
   imported configurations can still connect with those credentials.
 
@@ -26,9 +26,9 @@ Date: 2026-10-07 (Asia/Shanghai)
 
 - The previous and current token directories plus pre-revoke Caddyfile were
   copied into the root-only checkpoint:
-  `/root/amadeus-gateway-checkpoints/subscription-old-url-revocation-20261007T003714`.
+  `/root/example-vps-checkpoints/subscription-old-url-revocation-20261007T003714`.
 - Caddy validation and reload succeeded.
-- All 16 local endpoint checks passed across 443 and 8443: the four previous
+- All 16 local endpoint checks passed across 443 and <SERVICE_PORT>: the four previous
   paths return `404`; the four current paths return `200` with non-empty bodies.
 - Public HTTPS checks from the VPS passed for all four formats: previous links
   return `404` and current links return `200`.

@@ -19,7 +19,7 @@ are not part of the snapshot.
   source. Installed bridge/UI/config hashes match the corresponding source
   files. Bridge health reports `ready` with the expected model and two
   profiles.
-- The UI LaunchAgent serves port `18798`. LAN root and model discovery return
+- The UI LaunchAgent serves port `<SERVICE_PORT>`. LAN root and model discovery return
   200 without login. The exact public Host serves the login page; incorrect
   password and unauthenticated model/task/generation requests return 401.
 - The operator entered the password into the native hidden-input dialog. The

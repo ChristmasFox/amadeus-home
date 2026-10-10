@@ -1,0 +1,10 @@
+{
+  "hostName": "operator-mac",
+  "macosUser": "operator",
+  "assetRoot": "/private/operator-owned/qwen-image/assets",
+  "sdCppSourcePath": "/private/operator-owned/qwen-image/stable-diffusion.cpp",
+  "sdCppBinary": "/private/operator-owned/qwen-image/stable-diffusion.cpp/build/bin/sd-server",
+  "logDir": "/private/operator-owned/qwen-image/logs",
+  "funAccConverterPath": "/private/operator-owned/amadeus-home/infra/macos/convert-qwen-fun-acc-adapter.py",
+  "sdCppPatchPath": "/private/operator-owned/amadeus-home/infra/macos/patches/stable-diffusion.cpp/0001-qwen-image-fun-acc-pdd.patch"
+}

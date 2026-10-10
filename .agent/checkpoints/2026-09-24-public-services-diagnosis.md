@@ -3,10 +3,10 @@
 ## Observed state
 
 Public DNS/Caddy frontends are reachable, but the following HTTPS hosts return `502`: `claw`,
-`immich`, `emby`, `jellyfin`, `qb`, `aria`, and `monitor` under `nyannyan.top`. This indicates
+`immich`, `emby`, `jellyfin`, `qb`, `aria`, and `monitor` under `example.com`. This indicates
 the VPS front end is responding while the frps backends have no live HomeLab tunnel. The
-`sub.nyannyan.top` root returns `404`, which is expected for the tokenized subscription paths.
-`9router.nyannyan.top` currently has no DNS answer.
+`sub.example.com` root returns `404`, which is expected for the tokenized subscription paths.
+`9router.example.com` currently has no DNS answer.
 
 M204 has no `frpc` process, container, or CasaOS app. Its user-facing services are healthy and
 reachable on the LAN after the binding fix, but that alone does not establish the VPS tunnel.
@@ -19,7 +19,7 @@ The prior frpc configuration is preserved outside Git at:
 /Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z/frpc/frpc-config.tar.gz
 ```
 
-Its non-secret mapping inventory includes the existing frps endpoint `sub.nyannyan.top:7000` and
+Its non-secret mapping inventory includes the existing frps endpoint `sub.example.com:<SERVICE_PORT>` and
 the declared TCP mappings for Emby, Immich, AriaNG, aria2 RPC, qBittorrent, Jellyfin, Homarr,
 Glances, and OpenClaw. Credential values were not copied into this checkpoint.
 

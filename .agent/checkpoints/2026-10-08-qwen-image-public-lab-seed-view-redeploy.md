@@ -45,7 +45,7 @@ bridge token or password verifier.
 - `infra/macos/manage-qwen-image-debug-ui.sh --apply`: completed after the
   bounded bootstrap retry; LAN page and local model-discovery smoke passed.
 - Local served UI contains the viewer and large-seed control.
-- `https://image.nyannyan.top/`: valid HTTPS, password login page, HTTP 200.
+- `https://image.example.com/`: valid HTTPS, password login page, HTTP 200.
   Unauthenticated `/api/health`, `/api/models`, `/api/tasks` and
   `/api/generations` each return HTTP 401.
 - No public login, authenticated public API call or public image generation was

@@ -26,7 +26,7 @@ SHA-256 `8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed`.
   release SHA-256.
 - The six identities' four subscription formats returned HTTP 200 through both
   subscription ports. The legacy QX response body remained byte-identical.
-- Legacy HY2 and VLESS connectivity checks passed. Controlled Labmem001 HY2
+- Legacy HY2 and VLESS connectivity checks passed. Controlled example-user-01 HY2
   and VLESS transfers incremented only their matching account/protocol
   counters. HY2 directions are client perspective (`tx` upload, `rx` download).
 - Provider T0 is `2026-10-08T04:58:07Z`. At the recorded acceptance snapshot,

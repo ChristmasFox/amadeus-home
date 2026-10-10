@@ -1,0 +1,48 @@
+name: Public VPS Documentation Privacy
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/vps/**"
+      - "infra/cloudflare/**"
+      - "infra/host-profile.env.example"
+      - "infra/docker/casaos/openclaw/docker-compose.example.yml"
+      - "infra/macos/**"
+      - "docs/AMADEUS_VPS*.md"
+      - "apps/qwen-image-service/**"
+      - "plugins/amadeus/**"
+      - "scripts/deploy-openclaw.sh"
+      - "scripts/host-profile.sh"
+      - "scripts/render-qwen-image-config.py"
+      - "docs/PRIVACY_RUNTIME_CLASSIFICATION.md"
+      - "docs/PRODUCTION_SAFE_GIT_HISTORY_CUTOVER_ACCEPTANCE.md"
+      - ".agent/checkpoints/**"
+      - ".agent/tasks/**"
+      - "scripts/audit-public-infrastructure.mjs"
+      - ".github/workflows/public-vps-privacy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-redaction:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Privacy scanner self-test
+        run: node scripts/audit-public-infrastructure.mjs --self-test
+      - name: Strict active-runtime current snapshot privacy gate
+        run: node scripts/audit-public-infrastructure.mjs --strict-active
+      - name: Fail on personal VPS identities in public examples and selected runbooks
+        run: node scripts/audit-public-infrastructure.mjs --strict-vps
+      - name: Broader current-snapshot privacy inventory (informational only)
+        run: node scripts/audit-public-infrastructure.mjs --audit-all
+      - name: Existing tracked-code secrets check
+        run: bash scripts/check-secrets.sh

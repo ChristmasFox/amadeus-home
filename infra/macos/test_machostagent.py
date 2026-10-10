@@ -45,7 +45,7 @@ class MacHostAgentContractTest(unittest.TestCase):
                     "cpu": {"utilizationPercent": cpu, "load": [1.0, 2.0, 3.0]},
                     "memory": {"totalBytes": 24_000_000_000, "usedBytes": 12_000_000_000, "pressure": "normal", "swap": {"totalBytes": 1_000, "usedBytes": index}},
                     "power": {"powerWatts": 2.0}, "network": {},
-                    "disks": {"avalon": {"path": "/Volumes/Avalon", "mounted": True, "status": "ok", "totalBytes": 8_000, "usedBytes": 4_000, "freeBytes": 4_000, "freePercent": 50.0}},
+                    "disks": {"avalon": {"path": "/var/lib/amadeus-storage", "mounted": True, "status": "ok", "totalBytes": 8_000, "usedBytes": 4_000, "freeBytes": 4_000, "freePercent": 50.0}},
                     "services": {"ssh": {"ok": True}},
                 }
                 machostagent.insert_snapshot(connection, snapshot, now + index * 5)
@@ -75,7 +75,7 @@ class MacHostAgentContractTest(unittest.TestCase):
                 "cpu": {"utilizationPercent": 95.0, "load": [1.0]},
                 "memory": {"totalBytes": 24, "usedBytes": 23, "pressure": "critical", "swap": {}},
                 "power": {}, "network": {},
-                "disks": {"avalon": {"path": "/Volumes/Avalon", "mounted": False, "status": "unavailable"}},
+                "disks": {"avalon": {"path": "/var/lib/amadeus-storage", "mounted": False, "status": "unavailable"}},
                 "services": {},
             }
             first = machostagent.evaluate_anomalies(connection, snapshot, now)

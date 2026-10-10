@@ -6,7 +6,7 @@ Xray/Hysteria 代理流量，也不提供 Web 管理面板。
 
 ## 架构
 
-- DNS：在 Cloudflare 的 `nyannyan.top` zone 中创建 `A sub -> VPS IPv4`，默认使用 DNS only
+- DNS：在 Cloudflare 的 `example.com` zone 中创建 `A sub -> VPS IPv4`，默认使用 DNS only
   （灰云），不把订阅 URL 交给 Cloudflare 缓存或代理。
 - Web 服务：Caddy 官方 Ubuntu 包，systemd service 名称为 `caddy.service`。
 - 订阅响应器：本地 `amadeus-gateway-subscription.service`，仅监听 `127.0.0.1:8787`，Caddy
@@ -72,17 +72,17 @@ Caddyfile 应为 `root:caddy`、`0640`；订阅文件和 token 目录应为 `cad
 
 ## Mac mini 专用账号与 Legacy 下线
 
-`M204-Net-Core` 是 Mac mini 专用身份，独立生成订阅 token、HY2 secret 和 VLESS UUID。每种账号的
+`example-device` 是 Mac mini 专用身份，独立生成订阅 token、HY2 secret 和 VLESS UUID。每种账号的
 四个文件分别是 Quantumult X (`qx.conf` / `server.snippet`)、Clash/Mihomo (`clash.yaml`) 和
-Shadowrocket (`shadowrocket.txt`)。M204 计量起点为账号创建时间，不追溯到全局 accounting T0。
+Shadowrocket (`shadowrocket.txt`)。dedicated operator 计量起点为账号创建时间，不追溯到全局 accounting T0。
 
-2026-10-08 的正式切换已完成：五个 Labmem 账号和 M204 保持启用，Legacy 已禁用。Legacy 的订阅 token、
+2026-10-08 的正式切换已完成：五个 managed 账号和 dedicated operator 保持启用，Legacy 已禁用。Legacy 的订阅 token、
 HY2 secret 和 VLESS UUID 均已轮换；旧订阅路径、旧 HY2 认证和旧 VLESS 隧道均已验收拒绝。旧凭据只在
 VPS 的 root-only 变更前 checkpoint 中留作审计恢复材料，不得将该 checkpoint 直接恢复为运行状态。
-完整验收记录见 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`。
+完整验收记录见 `.agent/checkpoints/2026-10-08-example-device-legacy-retirement.md`。
 
 账号初始化完成后，只有在 owner 明确要求正式切换时才执行 `provision-m204` 和 `retire-legacy`。
-前者只创建一次 M204 凭据、订阅文件、Caddy matcher candidate 和 Xray candidate；后者保留 legacy
+前者只创建一次 dedicated operator 凭据、订阅文件、Caddy matcher candidate 和 Xray candidate；后者保留 legacy
 历史流量行，但禁用账号、随机替换其账本中的 token/HY2 secret/VLESS UUID、删除旧订阅目录，并输出
 不含旧 UUID 的 Xray candidate 与不含旧 token 的 Caddy matcher。重跑不会恢复 Legacy；候选配置必须
 先通过 `xray run -test` 与 `caddy validate`，再复制到运行路径并分别重启 Xray、Hysteria 和 reload
@@ -182,7 +182,7 @@ curl --noproxy '*' -fsS -D - -o /dev/null 'https://sub.example.com:8443/<RANDOM_
 - 404：检查 Caddyfile 的 token 路径与文件目录名是否完全一致。
 - TLS 失败：检查 DNS、TCP 80/8443 和 Caddy journal 的 ACME 记录。
 - HY2 订阅导入失败：Clash/Mihomo 使用 `clash.yaml`，Shadowrocket 使用 `shadowrocket.txt`；
-  不要把这两个格式直接作为 QX 资源导入。HY2 节点要求 `sub.nyannyan.top` 为灰云并可达 UDP 2053。
+  不要把这两个格式直接作为 QX 资源导入。HY2 节点要求 `sub.example.com` 为灰云并可达 UDP 2053。
 - QX 导入后节点缺失：确认响应正文是一行 QX 节点配置，且没有以 `;` 开头的注释符。
 - 任何 token 泄露：保留旧配置备份，生成新 token 后 reload，再明确删除旧目录。
 
@@ -202,7 +202,7 @@ API secret、KiwiVM 凭据和生成的订阅文件已安装在 VPS 受保护路�
 `reportWindow` 的 `startAt`/`endAt` 默认覆盖最近 12 小时，并分别给出：
 
 - `providerBytes`：KiwiVM 整机计数在该窗口的成功采样增量；
-- `subscriptionBytes`：五个 Labmem 加 `M204-Net-Core` 的活动账号归因增量；
+- `subscriptionBytes`：五个 managed 加 `example-device` 的活动账号归因增量；
 - `legacyBytes`：已退役 Legacy 仅在其窗口来源完整时给出；
 - `otherServiceBytes`：`providerBytes - subscriptionBytes` 的未校准残差，报告中必须称为“其他服务/未归因”，
   不能当作精确的 Caddy/frps/SSH 等单服务计量。
@@ -279,9 +279,9 @@ python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_cli.py render \
   --apply
 ```
 
-`bootstrap` 只从当前 Caddy/Hysteria/Xray 配置导入 legacy 身份，并为五个 Labmem 账号生成独立
+`bootstrap` 只从当前 Caddy/Hysteria/Xray 配置导入 legacy 身份，并为五个 managed 账号生成独立
 token、HY2 secret 和 UUID；重跑时不会轮换凭据。收到明确切换指令后，`provision-m204` 创建第六个
-活动身份并写入 M204 订阅，`retire-legacy` 撤销 Legacy。当前六个账号保持启用，Legacy 已禁用；
+活动身份并写入 dedicated operator 订阅，`retire-legacy` 撤销 Legacy。当前六个账号保持启用，Legacy 已禁用；
 历史恢复材料只在 VPS root-only checkpoint 中。`render-xray` 保留活动 VLESS identity 和 2053 listener，
 把 Reality `target` 改到 loopback fallback gate、添加精确 SNI allowlist 与 block catch-all，并启用
 inbound traffic stats；candidate 必须通过 `xray run -test` 和真实客户端验收后才能应用。
@@ -290,8 +290,8 @@ inbound traffic stats；candidate 必须通过 `xray run -test` 和真实客户�
 订阅目录和精确 Caddy matcher。CLI 的计划、成功和失败输出都不含凭据。不要把 candidate 文件、数据库、
 填充后的 env 或订阅文件复制回 Git。
 
-账号订阅 URL 是 bearer credential；只有 owner 明确要求时才通过受信任私聊交付。Labmem 身份从全局
-T0 归因；M204 从账号创建时间归因。Legacy 下线后保留历史累计记录，但不再计入当前活动账号和
+账号订阅 URL 是 bearer credential；只有 owner 明确要求时才通过受信任私聊交付。managed 身份从全局
+T0 归因；dedicated operator 从账号创建时间归因。Legacy 下线后保留历史累计记录，但不再计入当前活动账号和
 `proxyAccountedBytes` 总量。
 
 Snapshot 由 accounting service 原子写成 `0640`、组为

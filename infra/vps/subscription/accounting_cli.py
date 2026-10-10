@@ -589,7 +589,7 @@ def render_new_accounts(
                         for filename in ALLOWED_FILES if (target / filename).is_file()
                     }
                     if existing_files != render_subscription_files(account, config):
-                        raise FileExistsError("M204-Net-Core subscription files already exist with unexpected contents")
+                        raise FileExistsError("dedicated operator subscription files already exist with unexpected contents")
                 shutil.rmtree(directory)
             else:
                 staged_directories.append((directory, target))
@@ -768,7 +768,7 @@ def main() -> int:
     render.add_argument("--reality-public-key", required=True)
     render.add_argument("--reality-short-id", required=True)
     render.set_defaults(run=_render)
-    provision = subparsers.add_parser("provision-m204", help="create M204-Net-Core credentials and protected subscriptions once")
+    provision = subparsers.add_parser("provision-dedicated", aliases=["provision-m204"], help="create dedicated operator credentials and protected subscriptions once")
     provision.add_argument("--db", required=True)
     provision.add_argument("--subscription-root", required=True)
     provision.add_argument("--caddy-fragment", required=True)

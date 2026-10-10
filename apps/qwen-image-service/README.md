@@ -24,9 +24,14 @@ effective seed and actual output dimensions. Edit strength is set internally to
 900-second bridge deadline and a 910-second UI proxy deadline; model loading
 retains its separate 600-second deadline.
 
-Model assets remain under `/Volumes/Avalon/models`; their paths, revisions,
-byte counts and hashes are pinned in the two engine JSON files. Apply local
-service changes with the Mac-only manager:
+Model assets remain under the operator storage profile. The checked-in engine
+JSON files contain only policy and variable references. Before a start or
+restart, create a mode `0600` copy of
+`infra/macos/qwen-image-runtime.example.json` in the operator secrets
+directory and fill in the real absolute asset, source, binary, log, converter
+and patch paths. The manager renders both profiles to mode `0600` installed
+files and refuses to start when the profile is missing, unreadable, or for a
+different host. Apply local service changes with the Mac-only manager:
 
 ```sh
 infra/macos/manage-qwen-image.sh --dry-run
@@ -37,16 +42,18 @@ infra/macos/manage-qwen-image.sh --restart --apply
 
 `infra/macos/manage-qwen-image-debug-ui.sh` manages the lightweight UI on port
 18798. Private and loopback Host/client pairs keep no-login LAN access. The
-exact public Host `image.nyannyan.top` requires the password-only login and a
-server-side 12-hour session. The scrypt verifier belongs at
-`~/Library/Application Support/Amadeus/secrets/qwen-image-lab-auth.json`, mode
+public Host configured in the protected network file requires the password-only
+login and a server-side 12-hour session. The scrypt verifier belongs at
+`<operator-secrets>/qwen-image-lab-auth.json`, and the matching
+`publicHost`/`publicOrigin` JSON belongs at
+`<operator-secrets>/qwen-image-lab-network.json`; both are mode
 `0600`; provision it with `infra/macos/provision-qwen-image-public-auth.py`
 from a protected password source on stdin. The plaintext password is never
 part of repository files, HTML, logs, checkpoints or proxy configuration.
 
-The public route is limited to the UI on TCP 18798 through HomeLab frpc,
-`amadeus-gateway` frps and VPS Caddy. The bridge and model engine are never
-forwarded. Caddy terminates TLS for `https://image.nyannyan.top`; the
+The public route is limited to the UI on TCP 18798 through the operator's
+HomeLab frpc, gateway frps and VPS Caddy. The bridge and model engine are never
+forwarded. Caddy terminates TLS for the configured public HTTPS origin; the
 application owns password authentication, exact Host/Origin validation and
 session cookies. Arbitrary `X-Forwarded-*` headers are ignored.
 

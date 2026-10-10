@@ -19,12 +19,12 @@ The implementation must be based on the current runtime/accounting architecture 
 
 The authoritative current account set is:
 
-- Labmem001
-- Labmem002
-- Labmem003
-- Labmem004
-- Labmem005
-- M204-Net-Core
+- example-user-01
+- example-user-02
+- example-user-03
+- example-user-04
+- example-user-05
+- example-device
 
 Legacy is retired.
 
@@ -33,7 +33,7 @@ The existing retirement checkpoint proves:
 - old Legacy subscription paths return 404;
 - old Legacy HY2 authentication returns 403;
 - old Legacy VLESS UUID no longer exists in active Xray and a real tunnel attempt fails;
-- M204-Net-Core HY2 and VLESS both passed real external HTTPS smoke tests.
+- example-device HY2 and VLESS both passed real external HTTPS smoke tests.
 
 Current proxy/runtime topology:
 
@@ -57,7 +57,7 @@ This Goal is a server-side hardening change.
 It MUST NOT rotate or change:
 
 - any Labmem subscription token;
-- the M204-Net-Core subscription token;
+- the example-device subscription token;
 - any HY2 secret;
 - any VLESS UUID;
 - Reality private/public key pair;
@@ -303,7 +303,7 @@ Update plugins/amadeus/skills/vps/SKILL.md so queries such as:
 - HY2 有异常登录吗
 - Reality 有异常流量吗
 - 哪个订阅流量异常
-- M204-Net-Core 当前在线情况
+- example-device 当前在线情况
 
 select deterministic native tools instead of relying on model guesses.
 
@@ -364,7 +364,7 @@ Do not put live secrets, filled subscription files, live Xray/Hysteria configs, 
 
 Before any runtime mutation:
 
-1. Re-read current main and confirm M204-Net-Core + Labmem001-Labmem005 are the only enabled managed identities.
+1. Re-read current main and confirm example-device + example-user-01-example-user-05 are the only enabled managed identities.
 2. Confirm Legacy is still disabled and its old credentials remain rejected.
 3. Inspect /etc/xray/config.json through a secret-safe summary:
    - VLESS listener/tag/port;
@@ -454,7 +454,7 @@ Apply one protocol at a time.
 1. Replace Xray with validated anti-steal candidate.
 2. Restart/reload Xray.
 3. Verify service active and TCP 2053 listening.
-4. Real smoke through M204-Net-Core VLESS.
+4. Real smoke through example-device VLESS.
 5. Real smoke through at least one Labmem VLESS.
 6. Verify account counters continue incrementing correctly.
 7. Perform an intentionally invalid/non-allowed fallback probe and verify it cannot use the VPS as a generic relay.
@@ -468,7 +468,7 @@ Apply one protocol at a time.
 2. Deploy auth telemetry changes in telemetry-only mode.
 3. Restart accounting service as needed, then Hysteria only if its config changed.
 4. Verify UDP 2053 and Hysteria service health.
-5. Real smoke through M204-Net-Core HY2.
+5. Real smoke through example-device HY2.
 6. Real smoke through at least one Labmem HY2.
 7. Verify TLS remains validated by generated subscription settings.
 8. Send bounded invalid-auth probes from a controlled client and verify aggregate failure telemetry increments without credential leakage.
@@ -509,13 +509,13 @@ Provider/account reconciliation must remain excluded from hard alerts until a la
 
 ### Xray rollback
 
-Restore the exact protected pre-change Xray config, validate it, restart/reload Xray, and immediately verify M204-Net-Core plus one Labmem VLESS client.
+Restore the exact protected pre-change Xray config, validate it, restart/reload Xray, and immediately verify example-device plus one Labmem VLESS client.
 
 Rollback must not restore Legacy credentials.
 
 ### Hysteria rollback
 
-Restore the exact protected pre-change Hysteria config and accounting-service source/config, restart affected services, and verify M204-Net-Core plus one Labmem HY2 client.
+Restore the exact protected pre-change Hysteria config and accounting-service source/config, restart affected services, and verify example-device plus one Labmem HY2 client.
 
 If the pre-change Hysteria config contained an external proxy masquerade and rollback is required for availability, record that security regression explicitly and open a follow-up instead of silently calling the system hardened.
 
@@ -529,7 +529,7 @@ This Goal is complete only when all of the following are true:
 
 - main contains the hardened source and documentation;
 - Legacy remains retired;
-- exactly Labmem001-Labmem005 + M204-Net-Core remain active;
+- exactly example-user-01-example-user-05 + example-device remain active;
 - no active token, HY2 secret, VLESS UUID, Reality key, shortId, hostname, SNI, or public proxy port was rotated/changed unintentionally;
 - all existing six subscription identities remain usable without re-import;
 - M204 + at least one Labmem real VLESS smoke passes after anti-steal apply;
@@ -603,7 +603,7 @@ Implementation must follow the pinned production versions and live audited state
 - Xray Reality now falls back to `127.0.0.1:24431`; that loopback gate routes only exact `www.apple.com` SNI to the audited camouflage target and blocks every other gate route. Xray system inbound counters feed the `reality-fallback-gate` security snapshot.
 - A verified TLS 1.3 handshake through the allowed SNI returned the `www.apple.com` certificate. A non-allowed SNI probe received no certificate and ended with an unexpected EOF. The loopback gate counter is observable. The manual report snapshot was 71,599 B; the latest read-only snapshot at `2026-10-09T02:58:03Z` is 76,424 B against the configured 1,024 B observation threshold. The counter includes controlled acceptance traffic and other aggregate gate traffic; it does not prove compromise.
 - Accounting auth remains loopback-only and now runs `enforce` with a 900-second window, threshold 120, 300-second cooldown and 4,096-source cap. The latest limiter window reports zero failures and zero throttled requests with 900/900 seconds of coverage; the 12-hour persisted aggregate reports four failures. Sources for Xray, HY2 traffic and fallback are `ok`. No raw source address or auth value is persisted.
-- M204-Net-Core and Labmem001 passed VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Controlled invalid-auth probes returned the same generic 403 shape. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 and loopback-only auth/stats/gate listeners were verified. All six active accounts remain enabled; Legacy remains disabled. No active credential, client parameter, hostname, SNI or public port changed.
+- example-device and example-user-01 passed VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Controlled invalid-auth probes returned the same generic 403 shape. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 and loopback-only auth/stats/gate listeners were verified. All six active accounts remain enabled; Legacy remains disabled. No active credential, client parameter, hostname, SNI or public port changed.
 
 ### OpenClaw and owner report
 
@@ -614,7 +614,7 @@ Implementation must follow the pinned production versions and live audited state
 
 ### Rollback and cleanup
 
-- VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and Labmem001 VLESS/HY2 smokes. Hysteria config did not change.
+- VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and example-user-01 VLESS/HY2 smokes. Hysteria config did not change.
 - OpenClaw rollback: restore the root-only pre-apply Compose backup at `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply/docker-compose.before.yml` and run `docker compose up -d --no-build openclaw`; restore the two prior report messages from `vps-report-jobs.before.json` with `cron edit`. Do not roll back or delete the accounting database or rotate credentials.
 - Temporary local client configs, the Xray candidate containing live identities, and the staged VPS source directory were removed after acceptance. Protected rollback checkpoints and the previous immutable OpenClaw image remain available.
 

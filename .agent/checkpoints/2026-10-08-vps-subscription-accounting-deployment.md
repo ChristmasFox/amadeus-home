@@ -6,7 +6,7 @@ Date: 2026-10-08 (Asia/Shanghai)
 
 - Amadeus 1.9.9 is deployed as
   `local/openclaw-amadeus:git-b80f9a7882cc-20261008052549` on CasaOS machine
-  `nyannyan`.
+  `example-node`.
 - VPS accounting T0 is `2026-10-08T04:58:07Z`. KiwiVM remains authoritative
   for the plan total; proxy reconciliation is `uncalibrated` and no anomaly is
   claimed.
@@ -98,7 +98,7 @@ satisfied.
 ## Phase 3 calibration attempt — 2026-10-08
 
 Two sequential known-download trials were run from the VPS through temporary
-Labmem001 clients. Each request fetched exactly 33,554,432 bytes from the
+example-user-01 clients. Each request fetched exactly 33,554,432 bytes from the
 fixed-size Cloudflare speed endpoint and returned HTTP 200. Client configs were
 derived from the protected account record, written mode `0600` under `/run`,
 and removed when each client exited. No credentials were printed.
@@ -107,7 +107,7 @@ and removed when each client exited. No credentials were printed.
   33,754,555 bytes and TX by 96,706 bytes.
 - VLESS: `2026-10-08T05:59:22Z`–`05:59:24Z`; `eth0` RX increased by
   33,766,240 bytes and TX by 93,190 bytes.
-- At the next accounting snapshot (`05:59:48Z`), Labmem001 HY2 increased from
+- At the next accounting snapshot (`05:59:48Z`), example-user-01 HY2 increased from
   1,069,204 to 34,676,822 bytes (+33,607,618); VLESS increased from 1,069,225
   to 34,677,384 bytes (+33,608,159). Each is close to one 32 MiB payload plus
   protocol overhead.
@@ -126,7 +126,7 @@ background traffic.
 
 ## Follow-up uploads and closure evidence — 2026-10-08
 
-Two Labmem001 upload trials used 16,777,216-byte payloads sent through the
+Two example-user-01 upload trials used 16,777,216-byte payloads sent through the
 Cloudflare speed upload endpoint; temporary client files were mode `0600` under
 `/run` and removed after each request. Both returned HTTP 200:
 
@@ -134,7 +134,7 @@ Cloudflare speed upload endpoint; temporary client files were mode `0600` under
   +16,900,672 bytes.
 - VLESS: `2026-10-08T06:03:10Z`–`06:03:12Z`; `eth0` RX +58,953 bytes and TX
   +16,857,067 bytes.
-- Snapshot at `06:03:48Z` showed Labmem001 HY2/VLESS cumulative totals of
+- Snapshot at `06:03:48Z` showed example-user-01 HY2/VLESS cumulative totals of
   51,481,934 / 51,482,499 bytes, each about 16.8 MB above the prior sample.
   The provider counter remained unchanged in that snapshot; the direct KiwiVM
   counter later advanced by 93,469,953 bytes while unrelated background traffic
@@ -144,7 +144,7 @@ Cloudflare speed upload endpoint; temporary client files were mode `0600` under
 
 The operator reported a normal direct owner query, directed that the existing
 legacy token be kept, and requested Goal closure. Public HTTPS checks covered
-Legacy plus Labmem001–Labmem005, each with `qx.conf`, `server.snippet`,
+Legacy plus example-user-01–example-user-05, each with `qx.conf`, `server.snippet`,
 `clash.yaml`, and `shadowrocket.txt`: 24/24 returned HTTP 200 and matched their
 VPS-local bodies. Subscription URLs are not stored in this checkpoint or Git.
 The morning and evening Cron IDs remain enabled at 09:30 and 21:30; the 21:30
