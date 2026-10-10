@@ -23,11 +23,11 @@ Create a file outside Git containing your PUBG API key (owner-readable only). Fo
 mkdir -p .local
 # Put your actual key into .local/pubg-api-key using a secure editor; NEVER commit this file.
 chmod 600 .local/pubg-api-key
-node scripts/init-pubg-team.mjs \\
-  --players PlayerOne,PlayerTwo,PlayerThree,PlayerFour \\
-  --platform steam \\
-  --team-id my_squad \\
-  --label 'My Squad' \\
+node scripts/init-pubg-team.mjs \
+  --players PlayerOne,PlayerTwo,PlayerThree,PlayerFour \
+  --platform steam \
+  --team-id my_squad \
+  --label 'My Squad' \
   --api-key-file .local/pubg-api-key
 ```
 
