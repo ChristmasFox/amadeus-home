@@ -6,6 +6,8 @@ on:
       - ".github/workflows/git-history-privacy-audit.yml"
       - "scripts/summarize-history-scan.mjs"
       - "scripts/audit-git-history-blobs.mjs"
+      - "scripts/backup-git-history-before-rewrite.sh"
+      - "docs/GIT_HISTORY_PRIVACY_REWRITE_REVIEW.md"
   workflow_dispatch:
 
 permissions:
@@ -23,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - name: Validate safe backup script syntax (never execute in CI)
+        run: bash -n scripts/backup-git-history-before-rewrite.sh
       - name: Read-only reachable-blob privacy analysis (no values)
         run: |
           node scripts/audit-git-history-blobs.mjs
