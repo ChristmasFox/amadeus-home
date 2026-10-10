@@ -22,7 +22,7 @@ export function validatePolicy(policy) {
       !(policy.imageAccount === null || (
         policy.imageAccount?.provider === 'codex' &&
         JSON.stringify(policy.imageAccount?.models) === JSON.stringify(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5']) &&
-        /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(policy.imageAccount.email)
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email)
       )) ||
       policy.serverActions?.bodySizeLimit !== '20mb' ||
       Object.keys(policy).sort().join(',') !== 'imageAccount,packageVersion,serverActions') {
