@@ -16,6 +16,8 @@
 
 Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PUBG 官方 API 和比赛 Telemetry 获取事实，再借助 OpenClaw 和模型生成易读的战绩分析。
 
+**不必每次都重新下载整场比赛：比赛数据持久化到 SQLite，刷新时只补充新对局；Telemetry 也会复用已解析的事实缓存。** 在配置好定时任务后，还能提前同步比赛和事件数据，让后续查询尽量减少现场下载。
+
 > “查询昨天的小队战绩。”
 >
 > “这周谁的 KD 最高？谁对队友造成的伤害最多？”
@@ -28,7 +30,7 @@ Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PU
 
 | 模块 | 功能 | 社区默认 |
 | --- | --- | --- |
-| **PUBG Stats** | 小队/个人战绩、KD、排行、伤害、击倒、救援、Telemetry、友伤和趣味复盘 | ✅ |
+| **PUBG Stats** | 小队/个人战绩、KD、排行、伤害、救援、友伤与趣味复盘；**SQLite 缓存、增量拉取、Telemetry 预取** | ✅ |
 | **WhatsApp** | 自然语言私聊/群聊查询、配对与群组访问控制 | ✅ |
 | **OpenClaw** | Agent 会话、工具调用、自然语言理解 | ✅ |
 | **9Router** | 自有模型账号及 API Key 聚合、模型组合、路由与 Fallback | ✅ |
@@ -36,6 +38,59 @@ Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PU
 | **Amadeus Extensions** | HomeLab、NAS、通知、语音、生图、Product Radar 等 | 按需启用，**不包含在最小社区镜像中** |
 
 PUBG 统计由确定性 Domain 完成；AI 负责理解你的问题与组织回复。**PUBG API 不经过 9Router**，后者负责 OpenClaw 的模型调用。
+
+## PUBG 数据引擎：持久化缓存 + 增量拉取 + 定时预取
+
+**不是每收到一条 WhatsApp 消息，就重新下载所有比赛和 Telemetry。** 项目把数据采集、缓存、统计和 AI 回复分开，优先复用已经验证的本地事实，减少重复请求和等待。
+
+| 机制 | 实际工作方式 | 好处 |
+| --- | --- | --- |
+| **比赛增量同步** | 刷新玩家比赛列表后，对比 SQLite 已有的 `matchId`，只请求尚未缓存的 Match 详情 | 已看过的对局不反复下载 |
+| **Telemetry 特征缓存** | 首次获取赛事事件后，解析并持久化到 SQLite；按 **Match ID + 解析器版本 + 特征版本** 区分缓存 | 友伤、踢人、战斗复盘等重复查询可直接复用 |
+| **限量预取和失败重试** | 预取一次默认最多处理 **20 场**、**并发 2**；失败或待处理项记录到 SQLite，按退避时间重试（最长延迟 24 小时） | 避免一次请求过多，失败后能继续补齐 |
+| **定时数据同步与日报** | 支持用 OpenClaw Cron 调用预取工具，汇总前一自然日新增/命中/失败情况 | 在有人提问前准备数据，同时保留同步记录 |
+| **数据新鲜度与降级** | 查询默认先刷新比赛列表，再使用本地比赛与 Telemetry 缓存；上游失败时可返回带 **STALE / PARTIAL** 标识的已有数据 | 不把旧数据伪装成最新完整战绩 |
+
+### 一次查询的数据路径
+
+```text
+定时预取 / 用户主动查询
+        │
+        ▼
+  PUBG 玩家比赛列表
+        │  比对 SQLite 已有 matchId
+        ├── 已存在 ────────────────────────┐
+        └── 新比赛 → 获取 Match 详情 ──────┤
+                                          ▼
+                                  SQLite 比赛缓存
+                                          │
+                         如需友伤、踢人或复盘事实
+                                          ▼
+                           查询 Telemetry 特征缓存
+                         ├── HIT：直接读取解析结果
+                         └── MISS：下载 → 解析 → 写入缓存
+                                          │
+                                          ▼
+                               确定性统计 / 证据引用
+                                          │
+                                          ▼
+                             OpenClaw 组织 WhatsApp 回复
+```
+
+### 定时任务如何运行？
+
+项目已经提供 `pubg_prefetch_telemetry`（增量同步与预取）和 `pubg_telemetry_sync_report`（按日期生成同步报告）两个 OpenClaw 工具。在原有个人生产部署中，使用的调度配置为：
+
+| 任务 | Cron 表达式 | 时区 | 用途 |
+| --- | --- | --- | --- |
+| 每小时预取 | `5 * * * *` | `Asia/Shanghai` | 整点后第 5 分钟发现新对局，补齐缺失 Telemetry |
+| 每日汇总 | `0 0 * * *` | `Asia/Shanghai` | 统计前一自然日同步结果，并可交给通知流程 |
+
+**社区版说明：** 当前 `infra/community/compose.yaml` **包含预取工具及 SQLite 持久化能力，但尚未自动注册 Cron 任务，也未内置作者的通知配置**。需要自行配置调度后，才会按小时自动执行。未配置定时任务时，用户查询仍可触发按需刷新与缓存写入。
+
+同样需要区分：**5 分钟 `freshnessMs` 不是默认查询的全局 API 免请求时间**。新发起的事实查询通常仍会刷新官方比赛列表，主要节省的是已有 Match 详情及 Telemetry 数据的重复下载；只有明确选择缓存读取时才使用对应的新鲜度判断。
+
+实现参考：[PUBG Domain Service](packages/pubg-domain/src/service/pubg-domain-service.ts) · [SQLite Repository](packages/pubg-domain/src/storage/sqlite-repository.ts) · [Telemetry Worker](packages/pubg-domain/src/review/telemetry.ts) · [PUBG Skill](plugins/pubg/skills/pubg/SKILL.md)
 
 ## 系统架构
 
@@ -46,8 +101,9 @@ flowchart TB
   R --> M["用户自行授权的模型提供商"]
   O -->|"工具调用"| P["PUBG Plugin（10 个工具）"]
   P --> D["PUBG Domain / Telemetry"]
-  D --> A["PUBG 官方 API"]
-  D --> DB[("SQLite 数据库")]
+  D -->|"增量读取"| A["PUBG 官方 API"]
+  D <--> DB[("SQLite · Match / Telemetry 缓存")]
+  C["可配置的 OpenClaw Cron"] -->|"按小时预取 / 每日汇总"| P
   O -.-> X["可选 Amadeus / HomeLab 扩展"]
 ```
 
