@@ -56,6 +56,8 @@ a paid request. These tests do not induce a live primary fault.
 
 ## Source-preserving upgrades
 
+**Production policy migration:** the owner-specific account allowlist is now excluded from Git in the community release branch. Before merging or building another production image, copy the existing policy into the protected local file per [the migration runbook](../../docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md). Deployment refuses a missing, invalid or mismatched private policy before the container switch. The already-running instance is unchanged.
+
 The current candidate pins npm `9router@0.5.95` over the immutable upstream
 Docker base digest in `infra/docker/casaos/9router/Dockerfile`. Our 9Router
 modifications remain source-controlled: the image-account policy, terminal

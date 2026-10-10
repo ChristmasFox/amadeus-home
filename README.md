@@ -3,7 +3,7 @@
 > **Community preview (2026-10-10):** PUBG onboarding now has a private roster initializer.
 > Default recommended stack: **WhatsApp + OpenClaw + 9Router + PUBG** (Telegram optional).
 > The production CasaOS/Mac mini workflows below are **not** a public one-click installer.
-> See [Community Docker preview](infra/community/README.md) and [PUBG squad setup](docs/COMMUNITY_PUBG_SETUP.md). Do not share this repo as a privacy-audited release yet. See [Privacy release gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md).
+> See [Community Docker preview](infra/community/README.md) and [PUBG squad setup](docs/COMMUNITY_PUBG_SETUP.md). Do not share this repo as a privacy-audited release yet. **Production owners:** complete the [9Router private-policy migration](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md) before merging this PR. See [Privacy release gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md).
 
 这是一个以 Git 为唯一 source of truth 的 HomeLab monorepo。当前唯一 Agent 主链是：
 
