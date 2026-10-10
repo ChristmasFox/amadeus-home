@@ -1,9 +1,11 @@
-# Canonical context — 2026-10-08
+# Canonical context — 2026-10-10
 
-Read this with `docs/CURRENT_TASK.md`; Amadeus 1.9.9 is deployed on CasaOS
-`nyannyan` as candidate image
-`local/openclaw-amadeus:git-509639ee3a5e-20261008112407` (the source `VERSION`
-remains 1.9.9; this is not a release).
+Read this with `docs/CURRENT_TASK.md`; Amadeus 1.10.2 is deployed on CasaOS
+`nyannyan` as immutable image
+`local/openclaw-amadeus:git-5085b3fb0b3f-20261010010836`. The heartbeat final
+sender blocks text-only `NO_REPLY` and strips leading internal control markers
+before native delivery. Release evidence and rollback are in
+`.agent/checkpoints/2026-10-10-amadeus-heartbeat-silent-delivery-release.md`.
 The active Goal is `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`; the public
 Image Lab is planned, while production image generation remains GPT-only.
 VPS subscription accounting is live from T0 `2026-10-08T04:58:07Z`; provider

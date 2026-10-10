@@ -1,4 +1,19 @@
-# Project State — 2026-10-08
+# Project State — 2026-10-10
+
+## 2026-10-10 — Heartbeat silent delivery fix deployed
+
+Amadeus 1.10.2 is live on CasaOS `nyannyan` as
+`local/openclaw-amadeus:git-5085b3fb0b3f-20261010010836` with manifest
+`sha256:61649779f7d830db39ad2e58c180aaa0688bfad0855a007fef70d279bd0ee68a`.
+The native heartbeat final sender now suppresses text-only `NO_REPLY`, handles
+control-prefixed sentinels, and removes leading internal control markers from
+real alerts. The container is healthy, the Amadeus plugin registered, managed
+Cron targets passed, and no heartbeat-triggered send was observed after the
+switch. Protected checkpoint and evidence are recorded in
+`.agent/checkpoints/2026-10-10-amadeus-heartbeat-silent-delivery-release.md`.
+
+The active release source commit is `5085b3f`; the protected external rollback
+checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261010010836`.
 
 Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`. The public Image Lab
 is reachable at `https://image.nyannyan.top` with a password login page and

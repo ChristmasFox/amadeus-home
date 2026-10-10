@@ -1,6 +1,15 @@
 # Current Task — Public Qwen Image Lab deployment
 
-Date: 2026-10-08 (Asia/Shanghai).
+Date: 2026-10-10 (Asia/Shanghai).
+
+## Concurrent Amadeus runtime fix — 2026-10-10
+
+Amadeus 1.10.2 is deployed on CasaOS `nyannyan`. The native heartbeat sender
+now blocks text-only `NO_REPLY`, handles control-prefixed sentinels, and strips
+leading internal control markers from real alerts. This does not change the
+active Image Lab scope or its production GPT-only image invariant. Evidence and
+rollback are in
+`.agent/checkpoints/2026-10-10-amadeus-heartbeat-silent-delivery-release.md`.
 
 Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
 
