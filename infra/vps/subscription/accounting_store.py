@@ -31,7 +31,7 @@ ACCOUNT_IDS = (*MANAGED_ACCOUNT_IDS, LEGACY_ID)
 PROTOCOLS = ("hy2", "vless")
 AUTH_IDS = {LEGACY_ID: "legacy-hy2", **{account_id: account_id for account_id in MANAGED_ACCOUNT_IDS}}
 VLESS_EMAILS = {LEGACY_ID: "legacy-vless", **{account_id: f"{account_id}.vless" for account_id in MANAGED_ACCOUNT_IDS}}
-ACCOUNTING_SCHEMA_VERSION = 4
+ACCOUNTING_SCHEMA_VERSION = 5
 
 
 def utc_now() -> str:
@@ -167,6 +167,15 @@ class AccountingStore:
               generation TEXT
             );
             INSERT OR IGNORE INTO provider_state(singleton) VALUES (1);
+            CREATE TABLE IF NOT EXISTS provider_deltas (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              interval_start_at TEXT NOT NULL,
+              sampled_at TEXT NOT NULL,
+              bytes INTEGER NOT NULL CHECK (bytes >= 0),
+              counter_reset INTEGER NOT NULL CHECK (counter_reset IN (0,1))
+            );
+            CREATE INDEX IF NOT EXISTS provider_deltas_sampled_at_idx
+              ON provider_deltas(sampled_at);
             CREATE TABLE IF NOT EXISTS reality_fallback_state (
               singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
               upload_raw INTEGER NOT NULL CHECK (upload_raw >= 0),
@@ -596,6 +605,8 @@ class AccountingStore:
             db.execute("BEGIN IMMEDIATE")
             previous = db.execute("SELECT * FROM provider_state WHERE singleton=1").fetchone()
             started = previous["counter_at_start"] is None
+            reset_changed = False
+            reset_seen = False
             if started:
                 counter_at_start = counter_bytes
                 last_counter = counter_bytes
@@ -618,10 +629,15 @@ class AccountingStore:
                 reset_seen = last_counter is not None and counter_bytes < last_counter
                 delta = counter_bytes if reset_changed or reset_seen else max(counter_bytes - (last_counter or 0), 0)
                 delta_since_start = int(previous["delta_since_start"] or 0) + delta
+            interval_start = previous["last_sample_at"] if previous and previous["last_sample_at"] else sampled_at
             db.execute(
                 "UPDATE provider_state SET counter_at_start=?,last_counter=?,delta_since_start=?,total_bytes=?,"
                 "reset_at=?,last_sample_at=?,generation=? WHERE singleton=1",
                 (counter_at_start, counter_bytes, delta_since_start, total_bytes, reset_at, sampled_at, generation),
+            )
+            db.execute(
+                "INSERT INTO provider_deltas(interval_start_at,sampled_at,bytes,counter_reset) VALUES (?,?,?,?)",
+                (interval_start, sampled_at, delta, int(reset_changed or reset_seen)),
             )
             db.execute(
                 "INSERT INTO source_state(source,status,checked_at,last_success_at,error_code,generation) "
@@ -630,6 +646,8 @@ class AccountingStore:
                 "generation=excluded.generation",
                 (sampled_at, sampled_at, generation),
             )
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            db.execute("DELETE FROM provider_deltas WHERE sampled_at < ?", (cutoff,))
             db.commit()
         return started
 
@@ -800,6 +818,11 @@ class AccountingStore:
             sources = self._current_source_state(db, current)
             meta = {row["key"]: row["value"] for row in db.execute("SELECT key,value FROM schema_meta").fetchall()}
             provider = db.execute("SELECT * FROM provider_state WHERE singleton=1").fetchone()
+            provider_window = db.execute(
+                "SELECT COALESCE(SUM(bytes),0) AS bytes,COUNT(*) AS samples,MIN(interval_start_at) AS interval_start "
+                "FROM provider_deltas WHERE sampled_at >= ?",
+                (cutoff,),
+            ).fetchone()
             fallback_state = db.execute("SELECT * FROM reality_fallback_state WHERE singleton=1").fetchone()
             fallback_window = db.execute(
                 "SELECT SUM(upload_bytes) AS upload,SUM(download_bytes) AS download "
@@ -958,6 +981,32 @@ class AccountingStore:
         proxy_accounted = monitored_known if proxy_accounted_complete else None
         provider_started = provider["counter_at_start"] is not None
         provider_delta = int(provider["delta_since_start"]) if provider_started else None
+        provider_window_samples = int(provider_window["samples"] or 0)
+        provider_window_complete = bool(
+            provider_started
+            and provider_window_samples > 0
+            and _parse_time(provider_window["interval_start"]) is not None
+            and _parse_time(provider_window["interval_start"]) <= cutoff_dt
+            and source_clean_since("provider", cutoff_dt)
+        )
+        provider_window_bytes = int(provider_window["bytes"] or 0) if provider_window_complete else None
+        active_window_complete = all(
+            account_results.get(account_id, {}).get("windowComplete") is True
+            for account_id in MANAGED_ACCOUNT_IDS
+        )
+        active_window_bytes = (
+            sum(int(account_results[account_id]["windowBytes"]) for account_id in MANAGED_ACCOUNT_IDS)
+            if active_window_complete else None
+        )
+        legacy_result = account_results.get(LEGACY_ID) or {}
+        legacy_window_complete = legacy_result.get("windowComplete") is True
+        legacy_window_bytes = int(legacy_result["windowBytes"]) if legacy_window_complete and isinstance(legacy_result.get("windowBytes"), int) else None
+        other_service_window_bytes = (
+            provider_window_bytes - active_window_bytes
+            if provider_window_bytes is not None and active_window_bytes is not None and provider_window_bytes >= active_window_bytes
+            else None
+        )
+        other_service_window_status = "uncalibrated" if other_service_window_bytes is not None else "unknown"
         fallback_source = sources.get("reality_fallback", {"status": "unknown", "checkedAt": None, "lastSuccessfulAt": None})
         fallback_window_clean = source_clean_since("reality_fallback", cutoff_dt)
         fallback_window_upload = int(fallback_window["upload"] or 0) if fallback_window_clean else None
@@ -1027,6 +1076,16 @@ class AccountingStore:
                 "seconds": max(60, window_seconds),
                 "startAt": cutoff,
                 "endAt": generated_at,
+                "providerBytes": provider_window_bytes,
+                "providerComplete": provider_window_complete,
+                "providerSampleCount": provider_window_samples,
+                "subscriptionBytes": active_window_bytes,
+                "subscriptionComplete": active_window_complete,
+                "legacyBytes": legacy_window_bytes,
+                "legacyComplete": legacy_window_complete,
+                "otherServiceBytes": other_service_window_bytes,
+                "otherServiceStatus": other_service_window_status,
+                "otherServiceBasis": "provider_window_minus_active_subscription_window",
                 "topAccount": top_account,
             },
             "provider": {
