@@ -2,7 +2,7 @@
 
 ## 诊断
 
-- HomeLab `example-node` 上的 CasaOS 服务本地健康：OpenClaw `:18789/healthz=200`、Product Radar `:5315/health=200`，容器均 running/healthy。
+- HomeLab `example-node` 上的 CasaOS 服务本地健康：OpenClaw `:<SERVICE_PORT>/healthz=200`、Product Radar `:5315/health=200`，容器均 running/healthy。
 - frpc 进程仍在，但 systemd 日志持续出现 `StartWorkConn contains error: invalid NewWorkConn`；表现为 VPS Caddy/frps 的部分回源工作连接失效，导致公网域名间歇 502。
 - 未修改 SSH、防火墙、域名、Caddy 配置或任何 secret；未重建业务容器。
 
@@ -14,7 +14,7 @@
 orb -m example-node -u root systemctl restart frpc
 ```
 
-frpc 重新登录 `sub.example.com:7000` 成功，并重新注册 8 个既有映射：
+frpc 重新登录 `sub.example.com:<SERVICE_PORT>` 成功，并重新注册 8 个既有映射：
 `aria2rpc-tcp`、`ariang-tcp`、`emby-tcp`、`glances-tcp`、`immich-tcp`、`jellyfin-tcp`、`openclaw-tcp`、`qBittorrent-tcp`。
 
 ## 真实公网验收（2026-09-26）

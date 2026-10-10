@@ -14,14 +14,14 @@ Date: 2026-10-07 (Asia/Shanghai)
 ## Protected preparation
 
 - Root-only VPS checkpoint:
-  `/root/amadeus-gateway-checkpoints/proxy-credential-rotation-20261007T014956`.
+  `/root/example-vps-checkpoints/proxy-credential-rotation-20261007T014956`.
   It contains protected originals, candidate files, and a file-hash manifest.
   Treat this checkpoint as sensitive; **do not restore the old credentials**.
 - Preflight confirmed one VLESS client and Hysteria password authentication.
   The UUID appeared once in each QX subscription; the password appeared once
   in each Clash and Shadowrocket subscription.
 - `xray run -test` passed for the candidate config. A candidate Hysteria server
-  started on a temporary loopback-only UDP port without touching UDP 2053.
+  started on a temporary loopback-only UDP port without touching UDP <SERVICE_PORT>.
 
 ## Applied state and verification
 
@@ -29,9 +29,9 @@ Date: 2026-10-07 (Asia/Shanghai)
   their configs and all four current subscription files, then started both
   services with regenerated credentials.
 - The old credentials are absent from the six live files. Both services remain
-  active and listen on UDP/TCP 2053 respectively. Caddy and the subscription
+  active and listen on UDP/TCP <SERVICE_PORT> respectively. Caddy and the subscription
   responder remain active.
-- Eight local HTTPS body checks passed on ports 443 and 8443: all four formats
+- Eight local HTTPS body checks passed on ports 443 and <SERVICE_PORT>: all four formats
   returned the exact new candidate content. All four public HTTPS downloads
   returned `200` with non-empty bodies.
 - Device-side proxy handshake and the effect on monthly traffic remain to be

@@ -16,7 +16,7 @@ Date: 2026-10-07 (Asia/Shanghai)
 
 - Copied the four existing subscription files into the new token directory;
   preserved the previous token directory and its files.
-- Added the new exact paths to both the standard HTTPS and legacy `8443` Caddy
+- Added the new exact paths to both the standard HTTPS and legacy `<SERVICE_PORT>` Caddy
   matchers. The previous paths remain enabled pending the operator's signal.
 - Corrected `/etc/caddy/Caddyfile` from mode `0644` to `root:caddy` mode `0640`.
 - New links are stored outside Git in
@@ -26,12 +26,12 @@ Date: 2026-10-07 (Asia/Shanghai)
 ## Verification and recovery
 
 - Protected pre-change VPS checkpoint:
-  `/root/amadeus-gateway-checkpoints/subscription-token-staged-20261007T002059`
+  `/root/example-vps-checkpoints/subscription-token-staged-20261007T002059`
   (root-only directory and files).
 - `caddy validate` passed; `systemctl reload caddy.service` completed and Caddy
   remained active. The subscription responder remained active.
 - All 16 local endpoint checks passed: old and new tokens, four formats, on ports
-  `443` and `8443`. All four new public HTTPS `443` endpoints also returned
+  `443` and `<SERVICE_PORT>`. All four new public HTTPS `443` endpoints also returned
   `200` with non-empty bodies.
 - To roll back the staged addition, restore the protected Caddyfile checkpoint,
   remove only the new token directory, validate, and reload Caddy. Do not restore

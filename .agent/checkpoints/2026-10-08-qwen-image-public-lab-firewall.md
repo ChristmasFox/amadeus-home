@@ -8,16 +8,16 @@ At the operator's explicit `Apply` instruction, added this single INPUT rule to
 both IPv4 and IPv6:
 
 ```text
--A INPUT ! -i lo -p tcp -m tcp --dport 18798 -j DROP
+-A INPUT ! -i lo -p tcp -m tcp --dport <SERVICE_PORT> -j DROP
 ```
 
-This preserves the VPS Caddy upstream connection to `127.0.0.1:18798` and
+This preserves the VPS Caddy upstream connection to `127.0.0.1:<SERVICE_PORT>` and
 blocks non-loopback traffic from reaching the FRP TCP port directly. The rule
 was applied live and persisted with the existing enabled
 `netfilter-persistent` service. Both `iptables-restore --test` and
 `ip6tables-restore --test` passed. A new SSH connection succeeded after the
 change. Normalized active and persistent ruleset comparisons confirmed that
-only the intended rule was added. No listener on `18798` exists yet.
+only the intended rule was added. No listener on `<SERVICE_PORT>` exists yet.
 
 The source-managed rule is `infra/vps/qwen-image-public-input.rules`.
 
@@ -45,8 +45,8 @@ rules.v6.pre            a1c001f6acde8863b2c18adfbc48cbfbef8e5a2b98e19740c05096ff
 Remove only the exact rule from active IPv4/IPv6 state, then persist:
 
 ```sh
-sudo iptables -D INPUT ! -i lo -p tcp -m tcp --dport 18798 -j DROP
-sudo ip6tables -D INPUT ! -i lo -p tcp -m tcp --dport 18798 -j DROP
+sudo iptables -D INPUT ! -i lo -p tcp -m tcp --dport <SERVICE_PORT> -j DROP
+sudo ip6tables -D INPUT ! -i lo -p tcp -m tcp --dport <SERVICE_PORT> -j DROP
 sudo netfilter-persistent save
 ```
 
