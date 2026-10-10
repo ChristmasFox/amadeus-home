@@ -25,6 +25,8 @@ assert 'tar -C "$ROOT_DIR/scripts" -cf -' in s
 assert 'node "$tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs" --whatsapp-root' in s
 image=Path('infra/docker/casaos/openclaw/Dockerfile').read_text()
 assert 'COPY scripts/openclaw-voice-*.mjs /tmp/' in image
+assert 'COPY scripts/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-heartbeat-silence.mjs' in image
+assert 'node /tmp/patch-openclaw-heartbeat-silence.mjs --core-root /app/dist --apply' in image
 assert 'COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary' in image
 assert 'COPY VERSION /opt/amadeus/VERSION' in image
 assert 'RUN chmod 0644 /opt/amadeus/VERSION' in image

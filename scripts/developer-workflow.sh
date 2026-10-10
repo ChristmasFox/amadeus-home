@@ -84,11 +84,11 @@ for path in "${FILES[@]-}"; do
     scripts/deploy-9router-speech.sh|scripts/test-9router-speech-image.sh|scripts/prepare-9router-speech-secrets.sh|scripts/prepare-qwen-audio-tts-runtime.sh|scripts/provision-9router-qwen-asr.sh|scripts/provision-qwen-audio-tts-voice.py|scripts/test-provision-qwen-audio-tts-voice.py|scripts/smoke-qwen-audio-tts.py|scripts/test-smoke-qwen-audio-tts.py) has_router=1 ;;
     infra/docker/casaos/9router/*) has_router=1; has_package_meta=1 ;;
     infra/docker/homelab/9router/*) has_router=1 ;;
-    infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh|scripts/verify-9router-image-reference.py)
+    infra/docker/casaos/openclaw/*|integrations/openclaw/*|scripts/deploy-openclaw.sh|scripts/verify-9router-image-reference.py|scripts/patch-openclaw-heartbeat-silence.mjs)
       has_openclaw_deploy=1
       [[ "$path" == */Dockerfile || "$path" == Dockerfile* ]] && has_package_meta=1
       ;;
-    scripts/patch-openclaw-channel-identity.mjs) has_openclaw_deploy=1 ;;
+    scripts/patch-openclaw-channel-identity.mjs|scripts/test-patch-openclaw-heartbeat-silence.mjs) has_openclaw_deploy=1 ;;
     scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/openclaw-voice-*.mjs|scripts/test-delivery-boundary.mjs|scripts/test-openclaw-voice-module-bundle.sh|scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/test-openclaw-bilingual-voice.mjs|plugins/amadeus/src/delivery-*.ts)
       has_voice_patch=1
       ;;
