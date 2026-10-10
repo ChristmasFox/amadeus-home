@@ -4,7 +4,7 @@
 
 ## 根因
 
-Cloudflare DNS 已解析到 `amadeus-gateway`，frps/frpc 映射和 HomeLab 回源服务均正常；VPS
+Cloudflare DNS 已解析到 `example-vps`，frps/frpc 映射和 HomeLab 回源服务均正常；VPS
 生效的 `/etc/caddy/Caddyfile` 只配置了 `sub`、`emby`、`claw` 和本轮先补的 `immich`，
 因此缺少站点证书和路由的域名在 Cloudflare 端表现为 `525`。
 
@@ -12,14 +12,14 @@ Cloudflare DNS 已解析到 `amadeus-gateway`，frps/frpc 映射和 HomeLab 回�
 
 | 域名 | VPS Caddy upstream | HomeLab 服务 |
 | --- | --- | --- |
-| `emby.nyannyan.top` | `127.0.0.1:8096` | Emby |
-| `immich.nyannyan.top` | `127.0.0.1:2283` | Immich |
-| `jellyfin.nyannyan.top` | `127.0.0.1:8097` | Jellyfin |
-| `aria.nyannyan.top` | `127.0.0.1:6880` | AriaNG |
-| `qb.nyannyan.top` | `127.0.0.1:8080` | qBittorrent WebUI |
-| `monitor.nyannyan.top` | `127.0.0.1:61208` | Glances |
-| `9router.nyannyan.top` | `127.0.0.1:20128` | 9Router；`/v1/models` 无 key 返回 `401` |
-| `claw.nyannyan.top` | `127.0.0.1:18789` | OpenClaw；本轮未修改 |
+| `emby.example.com` | `127.0.0.1:<SERVICE_PORT>` | Emby |
+| `immich.example.com` | `127.0.0.1:<SERVICE_PORT>` | Immich |
+| `jellyfin.example.com` | `127.0.0.1:<SERVICE_PORT>` | Jellyfin |
+| `aria.example.com` | `127.0.0.1:<SERVICE_PORT>` | AriaNG |
+| `qb.example.com` | `127.0.0.1:<SERVICE_PORT>` | qBittorrent WebUI |
+| `monitor.example.com` | `127.0.0.1:<SERVICE_PORT>` | Glances |
+| `9router.example.com` | `127.0.0.1:<SERVICE_PORT>` | 9Router；`/v1/models` 无 key 返回 `401` |
+| `claw.example.com` | `127.0.0.1:<SERVICE_PORT>` | OpenClaw；本轮未修改 |
 
 ## 变更与回滚
 
@@ -30,7 +30,7 @@ Cloudflare DNS 已解析到 `amadeus-gateway`，frps/frpc 映射和 HomeLab 回�
 
 ## 验收
 
-- `frps.service` active，端口 `7000` 控制通道和 `2283` 等映射正常。
+- `frps.service` active，端口 `<SERVICE_PORT>` 控制通道和 `<SERVICE_PORT>` 等映射正常。
 - Immich 本地与公网 `/api/server/ping`：HTTP 200，`{"res":"pong"}`。
 - 公网：Jellyfin `302`、AriaNG `200`、qBittorrent `200`、Glances `200`、9Router `/` `307`。
 - Let’s Encrypt 为新增域名签发成功；所有本轮目标域名不再返回 Cloudflare `525`。

@@ -4,7 +4,7 @@
 
 ## 运行时变更
 
-- canonical `amadeus-gateway` 上安装了仓库内固定 probe：
+- canonical `example-vps` 上安装了仓库内固定 probe：
   `/usr/local/sbin/amadeus-vps-readonly-probe`，root 拥有、`0755`。
 - 创建了无密码专用用户 `amadeus-vps-readonly`，authorized key 使用 forced command，并禁用
   port forwarding、agent forwarding、X11 和 pty；没有修改 sshd 配置、防火墙、root key 或

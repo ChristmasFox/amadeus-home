@@ -4,12 +4,12 @@
 
 ## 已完成
 
-- 通过 `ssh amadeus-gateway` 在 Ubuntu VPS 安装官方 Hysteria 2 `v2.12.3` amd64 release binary，并用官方 `hashes.txt` 校验 SHA-256。
-- 创建 `hysteria-server.service`，以 `caddy:caddy` 低权限运行，监听 UDP `2053`；现有 Xray 继续监听 TCP `2053`，没有端口冲突。
-- HY2 使用 `sub.nyannyan.top` 现有 Caddy/Let’s Encrypt 证书，认证密码只存在 VPS 的 `/etc/hysteria/config.yaml`。
+- 通过 `ssh example-vps` 在 Ubuntu VPS 安装官方 Hysteria 2 `v2.12.3` amd64 release binary，并用官方 `hashes.txt` 校验 SHA-256。
+- 创建 `hysteria-server.service`，以 `caddy:caddy` 低权限运行，监听 UDP `<SERVICE_PORT>`；现有 Xray 继续监听 TCP `<SERVICE_PORT>`，没有端口冲突。
+- HY2 使用 `sub.example.com` 现有 Caddy/Let’s Encrypt 证书，认证密码只存在 VPS 的 `/etc/hysteria/config.yaml`。
 - 扩展现有 Caddy 精确 token 路径，新增 `clash.yaml` 和 `shadowrocket.txt`；原有 `qx.conf`/`server.snippet` 保持 QX VLESS Reality。
 - Clash/Mihomo 和 Shadowrocket 订阅端点从 VPS 返回 HTTP 200；Mac 官方 Hysteria 客户端完成 UDP/QUIC 握手，并通过 SOCKS5 访问网页返回 HTTP 200。
-- VPS 服务、订阅和端口检查通过：Caddy active、HY2 active/enabled、UDP `2053` 监听，HY2 内存约 6.4 MiB（以 systemd MemoryCurrent 为准）。
+- VPS 服务、订阅和端口检查通过：Caddy active、HY2 active/enabled、UDP `<SERVICE_PORT>` 监听，HY2 内存约 6.4 MiB（以 systemd MemoryCurrent 为准）。
 
 ## 兼容性决策
 
