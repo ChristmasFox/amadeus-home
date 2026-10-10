@@ -53,6 +53,13 @@ Kurisu alert events **must reuse** the existing `worldline_notification_intent` 
 
 Compatibility: `Labmem001`-`Labmem005` plus `M204-Net-Core` remain valid, Legacy stays retired, and existing VLESS/HY2 security hardening, ports, SSH recovery, subscriber credentials, and 09:30/21:30 jobs stay intact. Separate explicit runtime apply/checkpoint is mandatory.
 
+The owner/read-only integration was deployed as Amadeus `1.10.4` from commit
+`633dd21`; OpenClaw and Product Radar are healthy on CasaOS `nyannyan`, and
+the protected runtime checkpoint/post-deploy evidence are recorded in
+`.agent/checkpoints/2026-10-10-amadeus-1.10.4-vps-traffic-fuse-source-release.md`.
+The VPS traffic-fuse service/timers remain uninstalled and the existing foreign
+`fq` root qdisc remains unchanged.
+
 ## Concurrent VPS proxy security hardening Goal — 2026-10-09
 
 Active concurrent Goal: `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` (explicitly selected by the operator).
