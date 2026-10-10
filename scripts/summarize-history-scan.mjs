@@ -24,5 +24,13 @@ for(const f of findings){
 console.log('GITLEAKS_HISTORY_FINDINGS='+findings.length);
 console.log('GITLEAKS_HISTORY_RULE_COUNTS='+JSON.stringify(Object.fromEntries([...rules].sort())));
 console.log('GITLEAKS_HISTORY_TOP_FILE_BASENAMES='+JSON.stringify([...files].sort((a,b)=>b[1]-a[1]).slice(0,15)));
+const locations=findings.map(f=>({
+  rule:String(f.RuleID??'unknown').replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,70),
+  path:String(f.File??'unknown').replace(/nyannyan\\.top/ig,'example.com').replace(/[^A-Za-z0-9._/-]/g,'_').slice(0,220),
+  commit:/^[a-f0-9]{40}$/i.test(String(f.Commit??''))?String(f.Commit).slice(0,12):'unknown',
+  line:Number.isSafeInteger(f.StartLine)&&f.StartLine>0?f.StartLine:null,
+}));
+console.log('GITLEAKS_HISTORY_LOCATIONS_NO_VALUES='+JSON.stringify(locations.slice(0,30)));
+
 console.log('GITLEAKS_RAW_FINDINGS_REDACTED_AND_NOT_UPLOADED=true');
 console.log('GITLEAKS_MATCHES_REQUIRE_PRIVATE_MANUAL_REVIEW=true');
