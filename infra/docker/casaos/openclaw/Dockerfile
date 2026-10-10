@@ -100,12 +100,14 @@ COPY plugins/amadeus/skills /app/dist/extensions/amadeus/skills
 COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-identity.mjs
 COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
 COPY scripts/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-group-image-policy.mjs
+COPY scripts/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-heartbeat-silence.mjs
 COPY scripts/openclaw-voice-*.mjs /tmp/
 RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-group-image-policy.mjs --core-root /app/dist --apply \
+    && node /tmp/patch-openclaw-heartbeat-silence.mjs --core-root /app/dist --apply \
     && node --check /app/dist/worker/worker.mjs \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/openclaw-voice-*.mjs
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/openclaw-voice-*.mjs
 
 COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary
 RUN node /opt/amadeus/delivery-boundary/core-completion.mjs --host-root /app --apply \

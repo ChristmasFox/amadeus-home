@@ -80,7 +80,7 @@ image_source_commit() {
 }
 is_openclaw_image_path() {
   case "$1" in
-    integrations/openclaw/delivery-boundary/*|plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
+    integrations/openclaw/delivery-boundary/*|plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-heartbeat-silence.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -294,7 +294,9 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-channel-identity.mjs
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
+  node --check scripts/patch-openclaw-heartbeat-silence.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
+  node scripts/test-patch-openclaw-heartbeat-silence.mjs
   pnpm test:openclaw-image-route-authority
   node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
@@ -318,6 +320,9 @@ if ((BUILD_OPENCLAW)); then
   orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 --entrypoint node "$IMAGE" --check /app/dist/extensions/amadeus/dist/index.js >/dev/null \
     || fail 'Immutable OpenClaw image has an unreadable or invalid Amadeus plugin.'
   printf 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed\n'
+  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'codex-amadeus-heartbeat-silent-delivery-v1' /app/dist/heartbeat-runner-CPy-qxAy.mjs" \
+    || fail 'Immutable OpenClaw image is missing the heartbeat silence guard.'
+  printf 'OPENCLAW_IMAGE_HEARTBEAT_SILENCE=passed\n'
 fi
 image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
