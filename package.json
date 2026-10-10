@@ -13,9 +13,9 @@
     "test:model-capability-adapter": "python3 scripts/test-provision-9router-speech.py && python3 scripts/test-provision-9router-image-combo.py && python3 scripts/test-smoke-9router-image.py && python3 scripts/test-checkpoint-amadeus-model-capability.py && python3 scripts/test-openclaw-group-image-policy.py && python3 scripts/test-openclaw-speech-config.py && node scripts/test-patch-openclaw-group-image-policy.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node scripts/test-delivery-boundary.mjs",
     "test:openclaw-workspace": "python3 scripts/test-openclaw-workspace.py",
     "test:openclaw-image-route-authority": "node --test integrations/openclaw/delivery-boundary/image-route-authority.test.mjs",
-  "test:openclaw-continuity": "python3 scripts/test-openclaw-continuity.py",
-  "test:openclaw-migration-safe": "python3 scripts/test-openclaw-migration-safe.py",
-  "test:openclaw-runtime-gate": "python3 scripts/test-openclaw-unique-runtime-gate.py",
+    "test:openclaw-continuity": "python3 scripts/test-openclaw-continuity.py",
+    "test:openclaw-migration-safe": "python3 scripts/test-openclaw-migration-safe.py",
+    "test:openclaw-runtime-gate": "python3 scripts/test-openclaw-unique-runtime-gate.py",
     "verify:amadeus": "pnpm typecheck:amadeus && pnpm test:amadeus && git diff --check",
     "verify:openclaw-patch": "node scripts/test-delivery-boundary.mjs && bash scripts/test-openclaw-voice-module-bundle.sh && node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs && node scripts/test-patch-openclaw-voice-failure.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node scripts/test-patch-openclaw-group-image-policy.mjs && node scripts/test-patch-openclaw-heartbeat-silence.mjs && node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs && node --check scripts/patch-openclaw-group-image-policy.mjs && node --check scripts/patch-openclaw-heartbeat-silence.mjs && git diff --check",
     "verify:voice": "bash scripts/verify-voice.sh",
@@ -49,6 +49,8 @@
     "test:restore-skuld-secrets": "bash scripts/test-restore-skuld-secrets.sh",
     "test:migration-blockers": "bash scripts/test-migration-blockers.sh",
     "test:skuld-preparation-tooling": "bash scripts/test-skuld-preparation-tooling.sh",
-    "test:immich-checksum-equivalence": "bash scripts/test-immich-checksum-equivalence.sh"
+    "test:immich-checksum-equivalence": "bash scripts/test-immich-checksum-equivalence.sh",
+    "init:pubg-team": "node scripts/init-pubg-team.mjs",
+    "test:pubg-onboarding": "node --test scripts/test-init-pubg-team.mjs"
   }
 }

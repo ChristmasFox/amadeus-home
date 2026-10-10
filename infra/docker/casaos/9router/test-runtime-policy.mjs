@@ -7,7 +7,7 @@ import {
   MARKER, NO_LOCK_MARKER, patchAccountSource, patchRequiredConfig, patchStandaloneConfig,
   validatePolicy, verifyInstallation,
 } from './patch-runtime-policy.mjs';
-const policy = validatePolicy(JSON.parse(await readFile(new URL('../../../9router/runtime-policy.json', import.meta.url), 'utf8')));
+const policy = validatePolicy(JSON.parse(await readFile(new URL('../../../9router/runtime-policy.example.json', import.meta.url), 'utf8')));
 const base = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});' +
   'async function m(a,b,c,e=null,i=null,k=null){let l,n,o;if(!a||"noauth"===a)return{shouldFallback:!1,cooldownMs:0};' +
   'if(r?(l=!0,n=r-Date.now(),o=0):k&&k>Date.now()?(l=!0,n=3e4,o=0):{shouldFallback:l,cooldownMs:n,newBackoffLevel:o}=(0,f.hk)(b,c,q,(0,h.rs)(e)),!l)return{shouldFallback:!1,cooldownMs:0};' +
@@ -33,6 +33,19 @@ assert.equal(JSON.parse(required).config.experimental.serverActions.bodySizeLimi
 assert.equal(patchRequiredConfig(required,policy),required);
 assert.throws(() => patchRequiredConfig('{}', policy), /shape_drift/);
 assert.throws(() => validatePolicy({...policy, packageVersion:'0.5.91'}), /invalid_runtime_policy/);
+
+
+const publicPolicy = validatePolicy({
+  packageVersion: '0.5.95',
+  imageAccount: null,
+  serverActions: { bodySizeLimit: '20mb' },
+});
+const publicBundle = patchAccountSource(base, publicPolicy);
+assert.match(publicBundle, new RegExp(NO_LOCK_MARKER));
+assert.doesNotMatch(publicBundle, new RegExp(MARKER));
+assert.equal(patchAccountSource(publicBundle, publicPolicy), publicBundle);
+assert.throws(() => patchAccountSource(patched, publicPolicy), /community_account_policy_must_be_unrestricted/);
+assert.match(patchStandaloneConfig(standalone, publicPolicy), /20mb/);
 
 // Execute the exact pinned compiled selector, not a duplicate policy helper.
 const root = process.argv[process.argv.indexOf('--root') + 1];

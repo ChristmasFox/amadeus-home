@@ -1,0 +1,23 @@
+# Build only the reusable PUBG plugin and its TypeScript workspace dependencies.
+FROM node:24-bookworm-slim AS builder
+WORKDIR /src
+RUN npm install --global pnpm@11.19.0
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/identity ./packages/identity
+COPY packages/presentation ./packages/presentation
+COPY packages/pubg-domain ./packages/pubg-domain
+COPY plugins/pubg ./plugins/pubg
+RUN pnpm install --frozen-lockfile && pnpm build:pubg
+
+# Match the OpenClaw runtime used by the source-controlled PUBG plugin.
+FROM ghcr.io/openclaw/openclaw:2026.9.4@sha256:cc596b846506a5f4cfcee111394a2725f375f01cca2ebb492a161fd1b747f101
+USER root
+WORKDIR /app
+COPY --from=builder /src/plugins/pubg/dist/index.js /app/dist/extensions/pubg/dist/index.js
+COPY --from=builder /src/plugins/pubg/dist/index.js.map /app/dist/extensions/pubg/dist/index.js.map
+COPY plugins/pubg/openclaw.plugin.json /app/dist/extensions/pubg/openclaw.plugin.json
+COPY plugins/pubg/package.json /app/dist/extensions/pubg/package.json
+COPY plugins/pubg/skills /app/dist/extensions/pubg/skills
+RUN mkdir -p /data /home/node/.openclaw \
+    && chown -R node:node /data /home/node/.openclaw /app/dist/extensions/pubg
+USER node
