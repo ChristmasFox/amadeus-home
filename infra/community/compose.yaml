@@ -1,0 +1,86 @@
+name: amadeus-community
+
+services:
+  nine-router:
+    build:
+      context: ../..
+      dockerfile: infra/community/Dockerfile.9router
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:${NINE_ROUTER_PORT:-20128}:20128"
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "20128"
+      DATA_DIR: /app/data
+      BASE_URL: http://nine-router:20128
+      NEXT_PUBLIC_BASE_URL: http://127.0.0.1:${NINE_ROUTER_PORT:-20128}
+      INITIAL_PASSWORD: ${NINE_ROUTER_INITIAL_PASSWORD:?Run community bootstrap}
+      JWT_SECRET: ${NINE_ROUTER_JWT_SECRET:?Run community bootstrap}
+      API_KEY_SECRET: ${NINE_ROUTER_API_KEY_SECRET:?Run community bootstrap}
+      MACHINE_ID_SALT: ${NINE_ROUTER_MACHINE_ID_SALT:?Run community bootstrap}
+      REQUIRE_API_KEY: "true"
+      ENABLE_REQUEST_LOGS: "false"
+      OBSERVABILITY_ENABLED: "true"
+    volumes:
+      - nine-router-data:/app/data
+    networks: [community-backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:20128/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      retries: 5
+      start_period: 60s
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+
+  openclaw:
+    profiles: ["pubg"]
+    build:
+      context: ../..
+      dockerfile: infra/community/Dockerfile.openclaw
+    restart: unless-stopped
+    init: true
+    depends_on:
+      nine-router:
+        condition: service_healthy
+    command: ["node", "dist/index.js", "gateway", "--bind", "lan", "--port", "18789"]
+    environment:
+      HOME: /home/node
+      OPENCLAW_STATE_DIR: /home/node/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/node/.openclaw/openclaw.json
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:?Run community bootstrap}
+      OPENCLAW_9ROUTER_API_KEY: ${OPENCLAW_9ROUTER_API_KEY:-}
+      PUBG_DATABASE_PATH: /data/pubg.sqlite
+      PUBG_TEAM_CONFIG_FILE: /run/secrets/pubg_team.json
+      PUBG_API_KEY_FILE: /run/secrets/pubg_api_key
+      IDENTITY_DATABASE_PATH: /data/identity.sqlite
+      NODE_ENV: production
+      TZ: ${TIMEZONE:-UTC}
+    volumes:
+      - openclaw-state:/home/node/.openclaw
+      - ../../.local/community-openclaw.json:/home/node/.openclaw/openclaw.json:ro
+      - ../../.local/pubg-team.json:/run/secrets/pubg_team.json:ro
+      - ../../.local/pubg-api-key:/run/secrets/pubg_api_key:ro
+      - pubg-data:/data
+    ports:
+      - "127.0.0.1:${OPENCLAW_PORT:-18789}:18789"
+    networks: [community-backend]
+    cap_drop: [NET_RAW, NET_ADMIN]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 6s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  nine-router-data:
+  openclaw-state:
+  pubg-data:
+
+networks:
+  community-backend:
+    internal: false
