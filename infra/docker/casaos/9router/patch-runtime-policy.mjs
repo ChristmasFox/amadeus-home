@@ -19,9 +19,11 @@ function one(source, anchor, name) {
 
 export function validatePolicy(policy) {
   if (!policy || policy.packageVersion !== '0.5.95' ||
-      policy.imageAccount?.provider !== 'codex' ||
-      JSON.stringify(policy.imageAccount?.models) !== JSON.stringify(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5']) ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email) ||
+      !(policy.imageAccount === null || (
+        policy.imageAccount?.provider === 'codex' &&
+        JSON.stringify(policy.imageAccount?.models) === JSON.stringify(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5']) &&
+        /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(policy.imageAccount.email)
+      )) ||
       policy.serverActions?.bodySizeLimit !== '20mb' ||
       Object.keys(policy).sort().join(',') !== 'imageAccount,packageVersion,serverActions') {
     throw Error('invalid_runtime_policy');
@@ -31,16 +33,17 @@ export function validatePolicy(policy) {
 
 export function patchAccountSource(source, policy) {
   validatePolicy(policy);
-  if (source.includes(MARKER) && source.includes(NO_LOCK_MARKER)) return source;
+  if (!policy.imageAccount && source.includes(MARKER)) throw Error('community_account_policy_must_be_unrestricted');
+  if (source.includes(NO_LOCK_MARKER) && (!policy.imageAccount || source.includes(MARKER))) return source;
   one(source, ACCOUNT_ANCHOR, 'account_selector');
   // Run before preferredConnectionId, rotation, model locks and retry exclusion.
   // With zero allowed active accounts, fail closed; Combo may still use its
   // different next model, never a different account for this model.
-  const condition = JSON.stringify(policy.imageAccount.provider) + '===g&&' +
-    JSON.stringify(policy.imageAccount.models) + '.includes(c)';
-  const email = JSON.stringify(policy.imageAccount.email.toLowerCase());
+  const condition = policy.imageAccount ? JSON.stringify(policy.imageAccount.provider) + '===g&&' +
+    JSON.stringify(policy.imageAccount.models) + '.includes(c)' : null;
+  const email = policy.imageAccount ? JSON.stringify(policy.imageAccount.email.toLowerCase()) : null;
   let output = source;
-  if (!output.includes(MARKER)) {
+  if (policy.imageAccount && !output.includes(MARKER)) {
     output = output.replace(ACCOUNT_ANCHOR, ACCOUNT_ANCHOR +
       `/* ${MARKER} */if(${condition})k=k.filter(a=>String(a.email||"").trim().toLowerCase()===${email});`);
   }
@@ -109,7 +112,9 @@ export async function plan(root, policy) {
 export async function verifyInstallation(root, policy) {
   const changes = await plan(root, policy);
   if (changes.some(({ before, after }) => before !== after)) throw Error('runtime_policy_not_installed');
-  if (!changes[0].before.includes(MARKER) || !changes[0].before.includes(NO_LOCK_MARKER) || !changes[1].before.includes(`${MARKER}-actions`)) {
+  if ((policy.imageAccount && !changes[0].before.includes(MARKER)) ||
+      (!policy.imageAccount && changes[0].before.includes(MARKER)) ||
+      !changes[0].before.includes(NO_LOCK_MARKER) || !changes[1].before.includes(`${MARKER}-actions`)) {
     throw Error('runtime_policy_marker_missing');
   }
   return true;

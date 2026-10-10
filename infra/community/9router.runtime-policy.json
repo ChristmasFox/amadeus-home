@@ -1,0 +1,7 @@
+{
+  "packageVersion": "0.5.95",
+  "imageAccount": null,
+  "serverActions": {
+    "bodySizeLimit": "20mb"
+  }
+}
