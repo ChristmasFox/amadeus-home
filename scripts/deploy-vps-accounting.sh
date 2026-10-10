@@ -59,12 +59,16 @@ git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
 
-STORE_B64="$(base64 < "$STORE_SOURCE" | tr -d '\n')"
-SERVICE_B64="$(base64 < "$SERVICE_SOURCE" | tr -d '\n')"
-PROBE_B64="$(base64 < "$PROBE_SOURCE" | tr -d '\n')"
+TRANSFER_ID="$(date -u +%Y%m%d%H%M%S)"
+REMOTE_PAYLOAD="/tmp/amadeus-vps-accounting-${TRANSFER_ID}.tar"
+tar -C "$ROOT_DIR" -cf - \
+  infra/vps/subscription/accounting_store.py \
+  infra/vps/subscription/accounting_service.py \
+  infra/vps/amadeus-vps-readonly-probe.sh \
+  | ssh -o BatchMode=yes -o ConnectTimeout=8 "$HOST_ALIAS" "cat > '$REMOTE_PAYLOAD'"
 
 ssh -o BatchMode=yes -o ConnectTimeout=8 "$HOST_ALIAS" \
-  "AMADEUS_STORE_B64='$STORE_B64' AMADEUS_SERVICE_B64='$SERVICE_B64' AMADEUS_PROBE_B64='$PROBE_B64' EXPECTED_STORE_SHA='$STORE_SHA' EXPECTED_SERVICE_SHA='$SERVICE_SHA' EXPECTED_PROBE_SHA='$PROBE_SHA' bash -s" <<'REMOTE'
+  "PAYLOAD='$REMOTE_PAYLOAD' EXPECTED_STORE_SHA='$STORE_SHA' EXPECTED_SERVICE_SHA='$SERVICE_SHA' EXPECTED_PROBE_SHA='$PROBE_SHA' bash -s" <<'REMOTE'
 set -Eeuo pipefail
 
 store='/usr/local/libexec/amadeus-gateway-accounting/accounting_store.py'
@@ -76,8 +80,13 @@ snapshot='/var/lib/amadeus-accounting/subscription-usage-public.json'
 stamp="$(date -u +%Y%m%d%H%M%S)"
 backup="/root/amadeus-gateway-backups/vps-accounting-window-$stamp"
 tmp="$(mktemp -d /tmp/amadeus-vps-accounting.XXXXXX)"
-cleanup() { rm -rf -- "$tmp"; }
+cleanup() { rm -rf -- "$tmp" "$PAYLOAD"; }
 trap cleanup EXIT
+
+tar -xf "$PAYLOAD" -C "$tmp"
+store_source="$tmp/infra/vps/subscription/accounting_store.py"
+service_source="$tmp/infra/vps/subscription/accounting_service.py"
+probe_source="$tmp/infra/vps/amadeus-vps-readonly-probe.sh"
 
 install -d -o root -g root -m 0700 "$backup"
 for path in "$store" "$service" "$probe" "$unit"; do
@@ -102,13 +111,10 @@ fi
 sha256sum "$backup"/* > "$backup/SHA256SUMS" 2>/dev/null || true
 chmod 0600 "$backup"/*
 
-printf '%s' "$AMADEUS_STORE_B64" | base64 -d > "$tmp/accounting_store.py"
-printf '%s' "$AMADEUS_SERVICE_B64" | base64 -d > "$tmp/accounting_service.py"
-printf '%s' "$AMADEUS_PROBE_B64" | base64 -d > "$tmp/amadeus-vps-readonly-probe"
-python3 -m py_compile "$tmp/accounting_store.py" "$tmp/accounting_service.py"
-install -o root -g root -m 0644 "$tmp/accounting_store.py" "$store.new"
-install -o root -g root -m 0644 "$tmp/accounting_service.py" "$service.new"
-install -o root -g root -m 0755 "$tmp/amadeus-vps-readonly-probe" "$probe.new"
+python3 -m py_compile "$store_source" "$service_source"
+install -o root -g root -m 0644 "$store_source" "$store.new"
+install -o root -g root -m 0644 "$service_source" "$service.new"
+install -o root -g root -m 0755 "$probe_source" "$probe.new"
 mv -f "$store.new" "$store"
 mv -f "$service.new" "$service"
 mv -f "$probe.new" "$probe"
