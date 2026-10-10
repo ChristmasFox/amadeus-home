@@ -4,7 +4,7 @@ This is a **public repository**, but is **NOT YET** a privacy-reviewed or produc
 
 ## Completed source hardening (first patch)
 
-- Replaced \`packages/pubg-domain/config/default-team.json\` with **synthetic** player IDs and names; runtime PUBG plugin requires an external team file.
+- Replaced `packages/pubg-domain/config/default-team.json` with **synthetic** player IDs and names; runtime PUBG plugin requires an external team file.
 - Added explicit official-PUBG-API nickname -> account ID initialization, which creates a mode-0600 external file, refuses overwrites and never prints account IDs or keys.
 - Added a synthetic-only fixture regression gate and dependency-free CLI tests.
 - Documented the WhatsApp + OpenClaw + 9Router path, and the distinction between team ID, PUBG account ID and WhatsApp sender identity.
@@ -13,21 +13,21 @@ This is a **public repository**, but is **NOT YET** a privacy-reviewed or produc
 ## Blocking work before claiming the whole repo is safe to distribute
 
 - **Historical Git disclosure:** run a real full-history secret scan (e.g. Gitleaks) in a trusted local environment, review results without posting secrets, rotate affected credentials, and assess history rewrite/forks. Deleting current tracked content does NOT remove previously public snapshots.
-- **9Router account segregation:** \`infra/9router/runtime-policy.json\` currently contains an account-specific policy, and \`patch-runtime-policy.mjs\` hardcodes filtering into a pinned compiled bundle. Move owner-specific policy to an external protected production source, verify existing live account separation, then offer an unrestricted generic **community** profile. Do not remove production filtering by accident.
-- **HomeLab/VPS information exposure:** review \`infra/vps/\`, \`infra/host-profile.env.example\`, \`docs/\`, \`.agent/\` and configuration history for domains, service ports, operational paths, subscription metadata, provider identities and personal records. Publish generalized examples, not actual topology.
-- **Data and identity boundaries:** review tracked fixtures, screenshots, JSON reports and legacy docs for real PUBG account IDs, sender JIDs/phone numbers, tokens and player aliases. \`identity-presets.example.json\` is illustrative only.
-- **Installation:** create and test community-only Docker profiles or Compose manifests in a fresh Linux host; do not repurpose owner \`--apply\` scripts. Test webhook/pairing credentials and restart persistence.
+- **9Router account segregation:** `infra/9router/runtime-policy.json` currently contains an account-specific policy, and `patch-runtime-policy.mjs` hardcodes filtering into a pinned compiled bundle. Move owner-specific policy to an external protected production source, verify existing live account separation, then offer an unrestricted generic **community** profile. Do not remove production filtering by accident.
+- **HomeLab/VPS information exposure:** review `infra/vps/`, `infra/host-profile.env.example`, `docs/`, `.agent/` and configuration history for domains, service ports, operational paths, subscription metadata, provider identities and personal records. Publish generalized examples, not actual topology.
+- **Data and identity boundaries:** review tracked fixtures, screenshots, JSON reports and legacy docs for real PUBG account IDs, sender JIDs/phone numbers, tokens and player aliases. `identity-presets.example.json` is illustrative only.
+- **Installation:** create and test community-only Docker profiles or Compose manifests in a fresh Linux host; do not repurpose owner `--apply` scripts. Test webhook/pairing credentials and restart persistence.
 - **Licensing / third-party rights:** choose a LICENSE; verify compatibility with upstream 9Router, OpenClaw, game branding, voice assets and API terms.
 - **Security defaults:** bind management endpoints to loopback/private authenticated networks, use WhatsApp pairing/group allowlists/mention triggers and restrict model spending.
 
 ## Suggested checks (do not publish raw output)
 
-\`\`\`sh
+```sh
 node --test scripts/test-init-pubg-team.mjs
 node scripts/check-community-fixtures.mjs
 pnpm check:secrets
 gitleaks git --redact --log-opts='--all' .
 gitleaks dir --redact .
-\`\`\`
+```
 
 **Release gate:** Nothing here authorizes deploying to the active personal HomeLab. The community 9Router account policy and generic Compose setup remain pending until verified separately.
