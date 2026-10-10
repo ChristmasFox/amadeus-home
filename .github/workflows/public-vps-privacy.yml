@@ -31,5 +31,7 @@ jobs:
         run: node scripts/audit-public-infrastructure.mjs --self-test
       - name: Fail on personal VPS identities in public examples and selected runbooks
         run: node scripts/audit-public-infrastructure.mjs --strict-vps
+      - name: Broader current-snapshot privacy inventory (informational only)
+        run: node scripts/audit-public-infrastructure.mjs --audit-all
       - name: Existing tracked-code secrets check
         run: bash scripts/check-secrets.sh
