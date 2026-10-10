@@ -1,0 +1,11 @@
+*
+!infra/
+!infra/community/
+!infra/community/Dockerfile.9router
+!infra/community/9router.runtime-policy.json
+!infra/docker/
+!infra/docker/casaos/
+!infra/docker/casaos/9router/
+!infra/docker/casaos/9router/patch-runtime-policy.mjs
+!infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs
+!infra/docker/casaos/9router/patch-image-combo-safety.mjs

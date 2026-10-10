@@ -34,6 +34,19 @@ assert.equal(patchRequiredConfig(required,policy),required);
 assert.throws(() => patchRequiredConfig('{}', policy), /shape_drift/);
 assert.throws(() => validatePolicy({...policy, packageVersion:'0.5.91'}), /invalid_runtime_policy/);
 
+
+const publicPolicy = validatePolicy({
+  packageVersion: '0.5.95',
+  imageAccount: null,
+  serverActions: { bodySizeLimit: '20mb' },
+});
+const publicBundle = patchAccountSource(base, publicPolicy);
+assert.match(publicBundle, new RegExp(NO_LOCK_MARKER));
+assert.doesNotMatch(publicBundle, new RegExp(MARKER));
+assert.equal(patchAccountSource(publicBundle, publicPolicy), publicBundle);
+assert.throws(() => patchAccountSource(patched, publicPolicy), /community_account_policy_must_be_unrestricted/);
+assert.match(patchStandaloneConfig(standalone, publicPolicy), /20mb/);
+
 // Execute the exact pinned compiled selector, not a duplicate policy helper.
 const root = process.argv[process.argv.indexOf('--root') + 1];
 if (root && root !== process.argv[0]) {

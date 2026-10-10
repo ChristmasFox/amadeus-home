@@ -1,0 +1,21 @@
+# Community 9Router 0.5.95: image diagnostics/fallback fixes, NO owner account restrictions.
+# Never copy the production infra/9router/runtime-policy.json into this image.
+FROM decolua/9router:0.5.75@sha256:7c893bc2c27ecea2ae337abd5eacfec9e5763091b3a3b7862fc0625b770bb156
+
+RUN npm install --global 9router@0.5.95 --prefer-online \
+    && test "$(node -p 'require("/usr/local/lib/node_modules/9router/package.json").version')" = "0.5.95" \
+    && npm cache clean --force
+
+COPY infra/community/9router.runtime-policy.json /opt/amadeus/runtime-policy.json
+COPY infra/docker/casaos/9router/patch-runtime-policy.mjs /opt/amadeus/patch-runtime-policy.mjs
+RUN node /opt/amadeus/patch-runtime-policy.mjs --root /usr/local/lib/node_modules/9router --policy /opt/amadeus/runtime-policy.json --apply
+
+COPY infra/docker/casaos/9router/patch-image-upstream-diagnostics.mjs /opt/amadeus/patch-image-upstream-diagnostics.mjs
+RUN node /opt/amadeus/patch-image-upstream-diagnostics.mjs --root /usr/local/lib/node_modules/9router --apply
+COPY infra/docker/casaos/9router/patch-image-combo-safety.mjs /opt/amadeus/patch-image-combo-safety.mjs
+RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /usr/local/lib/node_modules/9router --apply \
+    && node /opt/amadeus/patch-image-combo-safety.mjs --root /app --allow-version-drift --apply
+
+ENV NODE_ENV=production PORT=20128 HOSTNAME=0.0.0.0 DATA_DIR=/app/data
+EXPOSE 20128
+CMD ["node", "/usr/local/lib/node_modules/9router/app/custom-server.js"]
