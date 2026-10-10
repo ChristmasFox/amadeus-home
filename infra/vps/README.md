@@ -1,4 +1,6 @@
-# Amadeus Gateway VPS
+# VPS reference topology (sanitized)
+
+> Community reference only. Hostnames and account names are examples; do not copy this historical operator runbook as a live deploy configuration. Real endpoint/account material belongs in ignored files on the operator's host.
 
 本目录保存 `amadeus-gateway` VPS 的可迁移架构和运维模板。真实公网地址、SSH 私钥、
 UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
@@ -9,18 +11,18 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 - 代理：官方 Xray-core 稳定版二进制，VLESS + Reality + Vision，原生 systemd 管理。
 - 当前服务：`xray.service`，监听 TCP `2053`；TCP `443` 由 Caddy 提供 HTTPS。
 - 备用代理：官方 Hysteria 2 `v2.12.3` 二进制，原生 systemd 管理，监听 UDP `2053`；
-  服务名为 `hysteria-server.service`，使用 `sub.nyannyan.top` 的 Caddy 证书。
+  服务名为 `hysteria-server.service`，使用 `sub.example.com` 的 Caddy 证书。
 - Reality 目标：`www.apple.com:443`；客户端 `serverName` 使用 `www.apple.com`。
 - Caddy 由官方包提供 `caddy.service`，在 443 提供 HTTPS 站点、在 8443 提供订阅入口；本地
   `amadeus-gateway-subscription.service` 在 `127.0.0.1:8787` 返回原订阅正文、统一文件名
   `amadeus-gateway` 和整台 VPS 的 KiwiVM 流量响应头，不参与 Xray 代理流量。
 - frps 使用与现有 frpc 匹配的官方 `0.69.0` 二进制，由 `frps.service` 管理。
 - OpenClaw Control UI：HomeLab `frpc` 的 `openclaw-tcp` 映射把 `127.0.0.1:18789`
-  送到 VPS 的 frps `18789`，Caddy 以 `claw.nyannyan.top` 终止 HTTPS 并反代到该本机端口；
+  送到 VPS 的 frps `18789`，Caddy 以 `claw.example.com` 终止 HTTPS 并反代到该本机端口；
   OpenClaw 的 `allowedOrigins` 同时允许该 HTTPS 来源。
-- HomeLab public services：Caddy 通过 frps 回源到 `immich.nyannyan.top`（2283）、
-  `jellyfin.nyannyan.top`（8097）、`aria.nyannyan.top`（6880）、`qb.nyannyan.top`（8080）和
-  `9router.nyannyan.top`（20128）。
+- HomeLab public services：Caddy 通过 frps 回源到 `immich.example.com`（2283）、
+  `jellyfin.example.com`（8097）、`aria.example.com`（6880）、`qb.example.com`（8080）和
+  `9router.example.com`（20128）。
 - 本任务不启用 Docker、Nginx 或 Web 管理面板。
 - 运行时配置：`/etc/xray/config.json`，权限应为 `root:xray`、`0640`。
 - 工作目录：`/var/lib/xray`，权限应为 `xray:xray`、`0750`。
@@ -34,9 +36,9 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
   forwarding、X11 和 pty。
 - Emby 回源：Caddy `emby.<domain>:443` → frps 本机 `127.0.0.1:8096` → HomeLab Emby。
 - 临时 Qwen-Audio voice enrollment：使用 `infra/vps/frpc/audio-sample-proxy.example.toml` 和
-  `infra/vps/audio-sample.example.Caddyfile` 发布 `audio.nyannyan.top/reference.wav`；只在复刻
+  `infra/vps/audio-sample.example.Caddyfile` 发布 `audio.example.com/reference.wav`；只在复刻
   apply 期间启用，成功后删除 frpc 映射、Caddy site 和 Cloudflare DNS 记录。
-- Qwen Image Lab：只反代 UI `image.nyannyan.top` → frps 本机 TCP `18798` → HomeLab frpc →
+- Qwen Image Lab：只反代 UI `image.example.com` → frps 本机 TCP `18798` → HomeLab frpc →
   Mac UI `192.168.5.3:18798`。模板为 `infra/vps/frpc/qwen-image-lab-proxy.example.toml`、
   `infra/vps/image-lab.example.Caddyfile` 和 `infra/vps/frps.toml.example`。Mac 地址最近已从
   HomeLab guest 验证可达；它依赖 LAN 地址分配，apply 前必须复核。Qwen bridge/engine 的
@@ -73,7 +75,7 @@ Legacy 状态、端口或报告 job。Ingress 计费仍可能在 egress shaper �
 
 ## 订阅账号流量归因（已 apply，2026-10-08）
 
-`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005、M204 和独立 legacy 身份。
+`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 example-user-01-example-user-05、M204 和独立 legacy 身份。
 VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、六个活动账号订阅和固定只读 probe；
 Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持不变，
 启用时间为 09:30 和 21:30 Asia/Shanghai，走既有 owner outbox。五个 Labmem 账号的 HY2/VLESS
@@ -108,13 +110,13 @@ Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持�
 
 Xray Reality fallback 现在只连接监听 `127.0.0.1:24431` 的 loopback gate；gate 只允许精确 TLS
 SNI `www.apple.com` 到当前伪装目标，其余 SNI 由 block outbound 丢弃。Xray inbound uplink/downlink
-计数通过 `reality-fallback-gate` tag 采样。真实 M204 与 Labmem001 VLESS 客户端均通过 HTTPS
+计数通过 `reality-fallback-gate` tag 采样。真实 M204 与 example-user-01 VLESS 客户端均通过 HTTPS
 验证并产生账号计数；gate 端口不对公网监听，也没有新增防火墙端口。
 
 Hysteria config 未配置 masquerade，官方默认对无效请求返回 404。accounting auth endpoint 仍只监听
 loopback；失败来源只在 accounting 进程内存中用于可配置的有界限额，SQLite 和 owner snapshot 只
 保存聚合计数。当前 live mode 为 `enforce`（900 秒窗口、120 次阈值、300 秒 cooldown、最多跟踪
-4096 个来源）；进程重启会清空逐来源限额状态，snapshot 带窗口实际覆盖秒数。M204 和 Labmem001
+4096 个来源）；进程重启会清空逐来源限额状态，snapshot 带窗口实际覆盖秒数。M204 和 example-user-01
 在 enforcement 生效后均通过启用 TLS 校验的 HY2 HTTPS smoke。
 
 当前 `amadeus-accounting` 只写独立 state 目录，对 KiwiVM credential 和 HY2 stats-secret 两个
@@ -132,16 +134,16 @@ stdout/journal 中输出值；账号凭据和订阅只保留在 VPS。
 | 2053 | UDP | 个人 Hysteria 2 | Clash Meta/Mihomo、Shadowrocket 节点端口；与 TCP 2053 不冲突 |
 | 24431 | TCP | Xray Reality fallback gate | 仅 loopback `127.0.0.1` 监听，不开放公网 |
 | 7000 | TCP | frps 控制通道 | 仅供 HomeLab frpc 连接 |
-| 8096 | TCP | Emby frp 回源端口 | Caddy `emby.nyannyan.top` |
-| 2283 | TCP | Immich frp 回源端口 | Caddy `immich.nyannyan.top` |
-| 8097 | TCP | Jellyfin frp 回源端口 | Caddy `jellyfin.nyannyan.top` |
-| 6880 | TCP | AriaNG frp 回源端口 | Caddy `aria.nyannyan.top` |
-| 8080 | TCP | qBittorrent WebUI frp 回源端口 | Caddy `qb.nyannyan.top` |
-| 20128 | TCP | 9Router frp 回源端口 | Caddy `9router.nyannyan.top`；API 仍要求 key |
+| 8096 | TCP | Emby frp 回源端口 | Caddy `emby.example.com` |
+| 2283 | TCP | Immich frp 回源端口 | Caddy `immich.example.com` |
+| 8097 | TCP | Jellyfin frp 回源端口 | Caddy `jellyfin.example.com` |
+| 6880 | TCP | AriaNG frp 回源端口 | Caddy `aria.example.com` |
+| 8080 | TCP | qBittorrent WebUI frp 回源端口 | Caddy `qb.example.com` |
+| 20128 | TCP | 9Router frp 回源端口 | Caddy `9router.example.com`；API 仍要求 key |
 | 6800/7575 | TCP | 其他现有 frp 映射 | 当前按 frpc 配置监听；未新增 Caddy 公网站点 |
 | 80 | TCP | Caddy ACME HTTP-01 / HTTPS 跳转 | 不承载代理流量 |
 | 8443 | TCP/UDP | Caddy HTTPS 订阅入口 | UDP 为 Caddy 默认 HTTP/3；只提供订阅文件 |
-| 18789 | TCP | OpenClaw frp 回源端口 | 由 Caddy 的 `claw.nyannyan.top` 使用；OpenClaw 仍要求 gateway token |
+| 18789 | TCP | OpenClaw frp 回源端口 | 由 Caddy 的 `claw.example.com` 使用；OpenClaw 仍要求 gateway token |
 
 ## 安装与升级原则
 
@@ -176,7 +178,7 @@ HY2 使用官方 GitHub Release `v2.12.3` 的 `hysteria-linux-amd64`，下载后
 /etc/systemd/system/hysteria-server.service
 ```
 
-服务复用 Caddy 为 `sub.nyannyan.top` 管理的公开证书；Hysteria 配置只引用证书路径，认证密码
+服务复用 Caddy 为 `sub.example.com` 管理的公开证书；Hysteria 配置只引用证书路径，认证密码
 仍保存在 VPS 的 `/etc/hysteria/config.yaml`，不写入 Git。升级或变更时先备份配置，然后执行：
 
 ```sh
@@ -286,15 +288,15 @@ Caddy 自动维护的其他数据，除非确认没有其他站点依赖。
 - `xray run -test` 失败：先检查 JSON 格式、Reality 私钥是否只存在于 VPS、`serverNames` 是否与客户端一致，再查看 journal。
 - Xray 无法启动：确认 2053 没有被其他进程占用；443 应由 Caddy 监听。非标准端口可能受到网络环境限制。
 - frps inactive：检查 `frps verify`、`systemctl status frps` 和 `journalctl -u frps`，确认 token 文件为 `root:frps`、`0640`，并与 frpc 的 token 相同。
-- frpc login 失败：确认 HomeLab frpc 的 `serverAddr` 指向 `sub.nyannyan.top`、`serverPort=7000`，再从 VPS 查看 frps 的 login 日志；不要把 token 打印到终端。
+- frpc login 失败：确认 HomeLab frpc 的 `serverAddr` 指向 `sub.example.com`、`serverPort=7000`，再从 VPS 查看 frps 的 login 日志；不要把 token 打印到终端。
 - Emby HTTPS 失败：确认 Caddy 已监听 443、`emby.<domain>` DNS 指向 VPS、80 的 ACME HTTP-01 可达，并检查 Caddy journal 的证书记录。
 - 订阅 URL 返回 404：检查 Caddyfile 中的 token 路径与 `/var/lib/caddy/subscription/<token>/qx.conf`
   是否一致，再执行 `caddy validate` 和 `systemctl reload caddy`。
 - 订阅 URL TLS 失败：确认 DNS 记录仍解析到 VPS、80/8443 可达，并查看 Caddy journal 中的 ACME
   续期状态；不要把 Cloudflare 代理开关变更和服务配置混在一起操作。
-- HY2 客户端超时：确认 `sub.nyannyan.top` 为 Cloudflare DNS only（灰云），因为普通 Cloudflare
+- HY2 客户端超时：确认 `sub.example.com` 为 Cloudflare DNS only（灰云），因为普通 Cloudflare
   代理不转发这个 UDP 端口；再检查 `hysteria-server.service`、证书 SNI 和密码是否一致。
-- HY2 证书错误：确认 Caddy 证书仍包含 `sub.nyannyan.top`，并检查 Hysteria 配置引用的
+- HY2 证书错误：确认 Caddy 证书仍包含 `sub.example.com`，并检查 Hysteria 配置引用的
   Caddy 证书路径和服务用户 `caddy` 的读取权限。
 - 客户端超时：先从本机验证 SSH alias 指向的主机 TCP 2053，再检查 VPS 上的监听和上游 Reality 目标；不要先改 SSH 或重启 VPS。
 - 防火墙：当前代理部署不要求新增规则。未来启用 UFW/nftables 时，必须先明确放行当前 SSH 端口 22，再放行代理端口，并用新的 SSH 会话验证。

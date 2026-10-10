@@ -12,37 +12,37 @@
         "clients": [
           {
             "id": "<LABMEM001_UUID>",
-            "email": "Labmem001.vless",
+            "email": "example-user-01.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM002_UUID>",
-            "email": "Labmem002.vless",
+            "email": "example-user-02.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM003_UUID>",
-            "email": "Labmem003.vless",
+            "email": "example-user-03.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM004_UUID>",
-            "email": "Labmem004.vless",
+            "email": "example-user-04.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM005_UUID>",
-            "email": "Labmem005.vless",
+            "email": "example-user-05.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<M204_NET_CORE_UUID>",
-            "email": "M204-Net-Core.vless",
+            "email": "example-device.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           }

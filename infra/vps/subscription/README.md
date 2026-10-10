@@ -6,7 +6,7 @@ Xray/Hysteria 代理流量，也不提供 Web 管理面板。
 
 ## 架构
 
-- DNS：在 Cloudflare 的 `nyannyan.top` zone 中创建 `A sub -> VPS IPv4`，默认使用 DNS only
+- DNS：在 Cloudflare 的 `example.com` zone 中创建 `A sub -> VPS IPv4`，默认使用 DNS only
   （灰云），不把订阅 URL 交给 Cloudflare 缓存或代理。
 - Web 服务：Caddy 官方 Ubuntu 包，systemd service 名称为 `caddy.service`。
 - 订阅响应器：本地 `amadeus-gateway-subscription.service`，仅监听 `127.0.0.1:8787`，Caddy
@@ -72,7 +72,7 @@ Caddyfile 应为 `root:caddy`、`0640`；订阅文件和 token 目录应为 `cad
 
 ## Mac mini 专用账号与 Legacy 下线
 
-`M204-Net-Core` 是 Mac mini 专用身份，独立生成订阅 token、HY2 secret 和 VLESS UUID。每种账号的
+`example-device` 是 Mac mini 专用身份，独立生成订阅 token、HY2 secret 和 VLESS UUID。每种账号的
 四个文件分别是 Quantumult X (`qx.conf` / `server.snippet`)、Clash/Mihomo (`clash.yaml`) 和
 Shadowrocket (`shadowrocket.txt`)。M204 计量起点为账号创建时间，不追溯到全局 accounting T0。
 
@@ -182,7 +182,7 @@ curl --noproxy '*' -fsS -D - -o /dev/null 'https://sub.example.com:8443/<RANDOM_
 - 404：检查 Caddyfile 的 token 路径与文件目录名是否完全一致。
 - TLS 失败：检查 DNS、TCP 80/8443 和 Caddy journal 的 ACME 记录。
 - HY2 订阅导入失败：Clash/Mihomo 使用 `clash.yaml`，Shadowrocket 使用 `shadowrocket.txt`；
-  不要把这两个格式直接作为 QX 资源导入。HY2 节点要求 `sub.nyannyan.top` 为灰云并可达 UDP 2053。
+  不要把这两个格式直接作为 QX 资源导入。HY2 节点要求 `sub.example.com` 为灰云并可达 UDP 2053。
 - QX 导入后节点缺失：确认响应正文是一行 QX 节点配置，且没有以 `;` 开头的注释符。
 - 任何 token 泄露：保留旧配置备份，生成新 token 后 reload，再明确删除旧目录。
 
@@ -202,7 +202,7 @@ API secret、KiwiVM 凭据和生成的订阅文件已安装在 VPS 受保护路�
 `reportWindow` 的 `startAt`/`endAt` 默认覆盖最近 12 小时，并分别给出：
 
 - `providerBytes`：KiwiVM 整机计数在该窗口的成功采样增量；
-- `subscriptionBytes`：五个 Labmem 加 `M204-Net-Core` 的活动账号归因增量；
+- `subscriptionBytes`：五个 Labmem 加 `example-device` 的活动账号归因增量；
 - `legacyBytes`：已退役 Legacy 仅在其窗口来源完整时给出；
 - `otherServiceBytes`：`providerBytes - subscriptionBytes` 的未校准残差，报告中必须称为“其他服务/未归因”，
   不能当作精确的 Caddy/frps/SSH 等单服务计量。
