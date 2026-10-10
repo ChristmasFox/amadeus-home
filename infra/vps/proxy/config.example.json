@@ -12,31 +12,31 @@
         "clients": [
           {
             "id": "<LABMEM001_UUID>",
-            "email": "example-account-01.vless",
+            "email": "example-user-01.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM002_UUID>",
-            "email": "example-account-02.vless",
+            "email": "example-user-02.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM003_UUID>",
-            "email": "example-account-03.vless",
+            "email": "example-user-03.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM004_UUID>",
-            "email": "example-account-04.vless",
+            "email": "example-user-04.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },
           {
             "id": "<LABMEM005_UUID>",
-            "email": "example-account-05.vless",
+            "email": "example-user-05.vless",
             "level": 0,
             "flow": "xtls-rprx-vision"
           },

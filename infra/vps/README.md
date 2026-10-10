@@ -1,4 +1,6 @@
-# Amadeus Gateway VPS
+# VPS reference topology (sanitized)
+
+> Community reference only. Hostnames and account names are examples; do not copy this historical operator runbook as a live deploy configuration. Real endpoint/account material belongs in ignored files on the operator's host.
 
 本目录保存 `amadeus-gateway` VPS 的可迁移架构和运维模板。真实公网地址、SSH 私钥、
 UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
@@ -73,7 +75,7 @@ Legacy 状态、端口或报告 job。Ingress 计费仍可能在 egress shaper �
 
 ## 订阅账号流量归因（已 apply，2026-10-08）
 
-`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 example-account-01-example-account-05、M204 和独立 legacy 身份。
+`docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 example-user-01-example-user-05、M204 和独立 legacy 身份。
 VPS 已运行 SQLite 账本、loopback HY2 HTTP auth/采样器、六个活动账号订阅和固定只读 probe；
 Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持不变，
 启用时间为 09:30 和 21:30 Asia/Shanghai，走既有 owner outbox。五个 Labmem 账号的 HY2/VLESS
@@ -108,13 +110,13 @@ Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持�
 
 Xray Reality fallback 现在只连接监听 `127.0.0.1:24431` 的 loopback gate；gate 只允许精确 TLS
 SNI `www.apple.com` 到当前伪装目标，其余 SNI 由 block outbound 丢弃。Xray inbound uplink/downlink
-计数通过 `reality-fallback-gate` tag 采样。真实 M204 与 example-account-01 VLESS 客户端均通过 HTTPS
+计数通过 `reality-fallback-gate` tag 采样。真实 M204 与 example-user-01 VLESS 客户端均通过 HTTPS
 验证并产生账号计数；gate 端口不对公网监听，也没有新增防火墙端口。
 
 Hysteria config 未配置 masquerade，官方默认对无效请求返回 404。accounting auth endpoint 仍只监听
 loopback；失败来源只在 accounting 进程内存中用于可配置的有界限额，SQLite 和 owner snapshot 只
 保存聚合计数。当前 live mode 为 `enforce`（900 秒窗口、120 次阈值、300 秒 cooldown、最多跟踪
-4096 个来源）；进程重启会清空逐来源限额状态，snapshot 带窗口实际覆盖秒数。M204 和 example-account-01
+4096 个来源）；进程重启会清空逐来源限额状态，snapshot 带窗口实际覆盖秒数。M204 和 example-user-01
 在 enforcement 生效后均通过启用 TLS 校验的 HY2 HTTPS smoke。
 
 当前 `amadeus-accounting` 只写独立 state 目录，对 KiwiVM credential 和 HY2 stats-secret 两个
