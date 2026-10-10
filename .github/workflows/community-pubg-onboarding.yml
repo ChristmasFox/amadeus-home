@@ -1,0 +1,35 @@
+name: Community PUBG Onboarding
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "scripts/init-pubg-team.mjs"
+      - "scripts/test-init-pubg-team.mjs"
+      - "scripts/check-community-fixtures.mjs"
+      - "packages/pubg-domain/config/default-team.json"
+      - ".github/workflows/community-pubg-onboarding.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Syntax
+        run: |
+          node --check scripts/init-pubg-team.mjs
+          node --check scripts/test-init-pubg-team.mjs
+          node --check scripts/check-community-fixtures.mjs
+      - name: Private team initializer (mocked API; no credentials)
+        run: node --test scripts/test-init-pubg-team.mjs
+      - name: Synthetic roster guard
+        run: node scripts/check-community-fixtures.mjs
