@@ -47,7 +47,7 @@ All commands below were run from the repository root on the cutover branch.
 | `node scripts/audit-public-infrastructure.mjs --strict-active` | 85 files scanned, 0 flagged. |
 | `node scripts/audit-public-infrastructure.mjs --strict-vps` | 78 files scanned, 0 flagged. |
 | `node scripts/audit-public-infrastructure.mjs --audit-all` | 1,148 tracked text candidates scanned, 269 classified findings; informational only. |
-| `node scripts/audit-git-history-blobs.mjs` | 12,738 reachable objects; 5,710 text blobs; 0 read errors; 503 personal-domain, 116 named-identity, 5 account-policy, 4 proxy-URI, 0 private-key, and 13 public-IPv4 candidate blobs. |
+| `node scripts/audit-git-history-blobs.mjs` | 12,748 reachable objects; 5,714 text blobs; 0 read errors; 504 personal-domain, 117 named-identity, 5 account-policy, 4 proxy-URI, 0 private-key, and 14 public-IPv4 candidate blobs. |
 | `pnpm check:secrets` | Passed. |
 | `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
 | `pnpm --filter @agent/amadeus-plugin test` | 140 passed, 0 failed. |
