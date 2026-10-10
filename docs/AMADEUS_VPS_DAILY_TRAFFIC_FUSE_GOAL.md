@@ -2,7 +2,7 @@
 
 Date: 2026-10-10 (Asia/Shanghai)
 Status: PHASE_0_READONLY_AUDIT_CAPTURED; PHASE_1_SOURCE_IMPLEMENTED; QDISC_AND_RECOVERY_DESIGN_PENDING; LIVE_APPLY_PENDING
-Delivery: deterministic source and focused tests are in Git; production traffic shaping still requires a separate explicit --apply authorization after the read-only VPS audit.
+Delivery: deterministic source and focused tests are in Git and the OpenClaw owner/read-only integration is deployed in Amadeus 1.10.4; production traffic shaping still requires a separate explicit --apply authorization after the read-only VPS audit.
 
 ## 0. Operator request and pinned defaults
 
