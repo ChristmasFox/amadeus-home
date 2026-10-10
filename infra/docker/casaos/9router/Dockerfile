@@ -18,6 +18,8 @@ COPY infra/docker/casaos/9router/patch-selfhosted-tts-style.mjs /opt/amadeus/pat
 RUN node /opt/amadeus/patch-selfhosted-tts-style.mjs --root /usr/local/lib/node_modules/9router
 # 9Router has no strict per-model account allowlist and the published CLI is
 # already compiled. Pin/check the exact bundle shape, fail the build on drift.
+# Production build via scripts/deploy-9router.sh injects a protected local policy into the temp context.
+# A direct build without that policy MUST fail instead of running without account segregation.
 COPY infra/9router/runtime-policy.json /opt/amadeus/runtime-policy.json
 COPY infra/docker/casaos/9router/patch-runtime-policy.mjs /opt/amadeus/patch-runtime-policy.mjs
 RUN node /opt/amadeus/patch-runtime-policy.mjs --root /usr/local/lib/node_modules/9router --policy /opt/amadeus/runtime-policy.json --apply

@@ -1,0 +1,18 @@
+# Deny by default. Build context must never transfer local secrets or personal infra.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!packages/
+!packages/identity/
+!packages/identity/**
+!packages/presentation/
+!packages/presentation/**
+!packages/pubg-domain/
+!packages/pubg-domain/**
+!plugins/
+!plugins/pubg/
+!plugins/pubg/**
+!infra/
+!infra/community/
+!infra/community/Dockerfile.openclaw

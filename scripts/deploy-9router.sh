@@ -33,10 +33,34 @@ if [[ "$MODE" == dry-run ]]; then
   exit 0
 fi
 ((BUILD == 1)) || [[ -n "$IMAGE" ]] || { echo '--apply needs --build or --image' >&2; exit 2; }
+# Production uses a local protected account policy, never a Git-tracked personal email.
+# This check runs BEFORE any backup, candidate build or service mutation.
+private_policy="${AMADEUS_9ROUTER_PRIVATE_POLICY_FILE:-$ROOT/.local/9router-production-policy.json}"
+if [[ ! -f "$private_policy" || ! -r "$private_policy" ]]; then
+  echo 'Missing private 9Router policy. Prepare .local/9router-production-policy.json; see docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md' >&2
+  exit 1
+fi
+node --input-type=module - "$private_policy" <<'JS'
+import { readFileSync } from 'node:fs';
+const policy=JSON.parse(readFileSync(process.argv[2],'utf8'));
+const models=['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2.5'];
+if (policy.packageVersion!=='0.5.95'||policy.imageAccount?.provider!=='codex'||
+    JSON.stringify(policy.imageAccount.models)!==JSON.stringify(models)||
+    typeof policy.imageAccount.email!=='string'||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(policy.imageAccount.email)||
+    policy.serverActions?.bodySizeLimit!=='20mb') {
+  throw Error('private_production_account_policy_invalid');
+}
+console.log('PRIVATE_9ROUTER_POLICY=valid (account value not printed)');
+JS
+
 context="$(mktemp -d "${TMPDIR:-/tmp}/amadeus-9router-build.XXXXXX")"
 cleanup() { rm -rf "$context"; }
 trap cleanup EXIT
 git -C "$ROOT" archive "$commit" | tar -xf - -C "$context"
+# Only the temporary build context receives the private policy; Git stays credential-free.
+cp -- "$private_policy" "$context/infra/9router/runtime-policy.json"
+chmod 0600 "$context/infra/9router/runtime-policy.json"
 (
   cd "$context"
   node infra/docker/casaos/9router/test-asr-bridge.mjs
@@ -56,6 +80,12 @@ if ((BUILD == 1)); then
   docker buildx build --platform linux/arm64 --load --progress=plain \
     --file "$context/infra/docker/casaos/9router/Dockerfile" --tag "$IMAGE" "$context"
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load >/dev/null
+fi
+# Both pre-built and built candidates must retain the exact private account allowlist.
+image_policy="$(orb -m "$MACHINE" -u root docker run --rm --network none --entrypoint cat "$IMAGE" /opt/amadeus/runtime-policy.json)"
+if [[ "$image_policy" != "$(<"$private_policy")" ]]; then
+  echo 'Candidate 9Router image has a different/missing production account policy; refusing deployment.' >&2
+  exit 1
 fi
 # Do not let the candidate touch production data until the isolated startup passes.
 "$context/scripts/test-9router-speech-image.sh" --image "$IMAGE" --apply

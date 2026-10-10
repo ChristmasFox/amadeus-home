@@ -1,13 +1,18 @@
 # amadeus-home
 
+> **Community preview (2026-10-10):** PUBG onboarding now has a private roster initializer.
+> Default recommended stack: **WhatsApp + OpenClaw + 9Router + PUBG** (Telegram optional).
+> The production CasaOS/Mac mini workflows below are **not** a public one-click installer.
+> See [Community Docker preview](infra/community/README.md) and [PUBG squad setup](docs/COMMUNITY_PUBG_SETUP.md). Do not share this repo as a privacy-audited release yet. **Production owners:** complete the [9Router private-policy migration](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md) before merging this PR. See [Privacy release gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md).
+
 这是一个以 Git 为唯一 source of truth 的 HomeLab monorepo。当前唯一 Agent 主链是：
 
-\`\`\`text
-Telegram / WhatsApp / future channels
+```text
+WhatsApp / optional Telegram / future channels
         → OpenClaw/Kurisu
         → native PUBG + Amadeus plugins / Skills
         → deterministic Domain or direct external service
-\`\`\`
+```
 
 OpenClaw 负责自然语言理解、会话、模型路由、调度、人格和工具循环；业务插件只做边界适配，
 确定性逻辑留在 Domain 或明确的外部服务。旧 LangBot、n8n、旧 Runtime、关键词路由和
@@ -18,40 +23,40 @@ OpenClaw 工具面和已加载 native plugins；工具自身的 owner 检查与�
 
 ## 目录
 
-- \`plugins/pubg/\`：唯一 PUBG 原生 OpenClaw plugin，六个受限工具和 Skill。
-- \`packages/pubg-domain/\`：官方 PUBG API、SQLite、查询/比较、Telemetry 事实和迁移器。
-- \`plugins/amadeus/\`：Product Radar、媒体安全流程、NAS、HomeLab、只读 VPS、KOOK lookup、
+- `plugins/pubg/`：唯一 PUBG 原生 OpenClaw plugin，六个受限工具和 Skill。
+- `packages/pubg-domain/`：官方 PUBG API、SQLite、查询/比较、Telemetry 事实和迁移器。
+- `plugins/amadeus/`：Product Radar、媒体安全流程、NAS、HomeLab、只读 VPS、KOOK lookup、
   NASDAQ-100/标普500市场观测、Identity 和 owner notification 的原生 OpenClaw plugin。
-- \`apps/product-radar/\`：独立商品监控服务；业务事件只写 channel-free owner outbox。
-- \`integrations/openclaw/\`：脱敏配置、workspace、Skills 和部署说明。
-- \`infra/docker/casaos/\`：固定版本 OpenClaw/Product Radar 的 CasaOS 模板。
-- \`infra/macos/nas-control.sh\`：NAS 只读状态/磁盘和 owner-only sleep 的受限 SSH 入口。
-- \`docs/\`、\`.agent/\`：架构、当前状态、目标、验收和可恢复 checkpoint。
+- `apps/product-radar/`：独立商品监控服务；业务事件只写 channel-free owner outbox。
+- `integrations/openclaw/`：脱敏配置、workspace、Skills 和部署说明。
+- `infra/docker/casaos/`：固定版本 OpenClaw/Product Radar 的 CasaOS 模板。
+- `infra/macos/nas-control.sh`：NAS 只读状态/磁盘和 owner-only sleep 的受限 SSH 入口。
+- `docs/`、`.agent/`：架构、当前状态、目标、验收和可恢复 checkpoint。
 
-旧 \`integrations/langbot/\`、\`integrations/n8n/\`、watchdog、旧通知 bridge 和对应
+旧 `integrations/langbot/`、`integrations/n8n/`、watchdog、旧通知 bridge 和对应
 CasaOS app 定义在本轮切换后从 Git 移除；运行时数据只留在仓库外 dated checkpoint。
 
 ## 本地验证
 
 需要 Node 24.16+、pnpm 11 和 Python 3：
 
-\`\`\`sh
+```sh
 ./scripts/bootstrap.sh --check
 pnpm install
 pnpm build
 pnpm typecheck
 pnpm test
 pnpm check:secrets
-\`\`\`
+```
 
 开发 workflow 默认只做本地验证，不构建镜像、不重启服务：
 
-\`\`\`sh
+```sh
 pnpm workflow:plan
 pnpm workflow:verify
 pnpm verify:voice  # 离线 unit/fixture/typecheck，不跑模型或 Docker
 pnpm test:workflow
-\`\`\`
+```
 
 ## DeliveryEnvelope v2 reply and attachment boundary
 
@@ -95,12 +100,12 @@ patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文�
 ## CasaOS 部署
 
 长期服务运行在由本地 `infra/host-profile.env` 解析的 OrbStack CasaOS machine（当前 M204 为 `nyannyan`）。OpenClaw canonical Compose
-路径是 \`/var/lib/casaos/apps/openclaw/docker-compose.yml\`，持久化数据是
-\`/DATA/AppData/openclaw\`。生产 secrets、身份、数据库和媒体数据都在仓库外。
+路径是 `/var/lib/casaos/apps/openclaw/docker-compose.yml`，持久化数据是
+`/DATA/AppData/openclaw`。生产 secrets、身份、数据库和媒体数据都在仓库外。
 
 默认只预览；一次性迁移必须使用显式 apply：
 
-\`\`\`sh
+```sh
 ./scripts/deploy-openclaw.sh --dry-run
 # 推荐：按 live image 的 Git commit 自动只构建受影响镜像
 ./scripts/deploy-openclaw.sh --apply --build-auto
@@ -109,26 +114,26 @@ patch=9 时进位到 major（`0.99.9 -> 1.0.0`）。部署完成通知的正文�
 # 明确要求全量双镜像发布时才使用
 ./scripts/deploy-openclaw.sh --apply --build
 ./scripts/doctor.sh
-\`\`\`
+```
 
 部署脚本默认不会因为任意改动重建两个镜像：
 
-- \`--build-auto\` 比较当前 Git 与线上镜像 tag 中的 commit；只要 \`plugins/pubg\`、
-  \`plugins/amadeus\`、\`packages/pubg-domain\` 或 OpenClaw Dockerfile 变化才构建 OpenClaw，
-  只有 \`apps/product-radar\` 变化才构建 Product Radar。
-- \`--no-build\` 复用线上两个 immutable image；如果检测到业务源代码比镜像更新，会直接拒绝，
+- `--build-auto` 比较当前 Git 与线上镜像 tag 中的 commit；只要 `plugins/pubg`、
+  `plugins/amadeus`、`packages/pubg-domain` 或 OpenClaw Dockerfile 变化才构建 OpenClaw，
+  只有 `apps/product-radar` 变化才构建 Product Radar。
+- `--no-build` 复用线上两个 immutable image；如果检测到业务源代码比镜像更新，会直接拒绝，
   不会静默上线旧代码。
-- \`--build-openclaw\`、\`--build-radar\` 可只构建一个镜像；\`--build\` 保留为明确的全量双镜像发布。
+- `--build-openclaw`、`--build-radar` 可只构建一个镜像；`--build` 保留为明确的全量双镜像发布。
 
 所有 apply 仍会备份外部状态、执行匹配的验证、更新 Compose 并使用
-\`docker compose up -d --no-build\`；不会在 macOS host Docker 部署持久服务，也不会把
+`docker compose up -d --no-build`；不会在 macOS host Docker 部署持久服务，也不会把
 backup、token、API key 或业务数据写入 Git。
 
-媒体整理仍遵循明确单项的 \`scan → preview → 同一会话显式确认 → execute\`；不批量猜测、
-不覆盖、不删除现有媒体库。详见 \`organize-emby-media\` Skill。
+媒体整理仍遵循明确单项的 `scan → preview → 同一会话显式确认 → execute`；不批量猜测、
+不覆盖、不删除现有媒体库。详见 `organize-emby-media` Skill。
 
 ## 安全与恢复
 
-Bot token、API key、密码、证书、\`.env\` 和业务数据永不入库。切换前会建立
-\`/DATA/AppData/openclaw/backups/amadeus-openclaw-<UTC>\`，并在本机为 Codex hook 保留
+Bot token、API key、密码、证书、`.env` 和业务数据永不入库。切换前会建立
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-<UTC>`，并在本机为 Codex hook 保留
 外部备份。恢复只依据 checkpoint 的明确路径操作，不执行回滚演练。

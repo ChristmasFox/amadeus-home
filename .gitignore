@@ -77,3 +77,6 @@ __pycache__/
 docs/reports/data/*
 !docs/reports/data/AMADEUS_TTS_PERFORMANCE_2026_09.json
 !docs/reports/data/AMADEUS_TTS_BOUNDARY_REBASELINE_V2_2026_09.json
+
+# Private production 9Router account isolation (never commit real account emails)
+infra/9router/runtime-policy.json
