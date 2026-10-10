@@ -206,7 +206,7 @@ export function checkArchitecture(root = REPO_ROOT) {
   }
 
   const worldlineSource = text(root, 'packages/presentation/src/worldline/contracts.ts');
-  for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'homelab', 'nas', 'media', 'storage']) {
+  for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'vps-traffic-fuse', 'homelab', 'nas', 'media', 'storage']) {
     if (!worldlineSource.includes(`'${producer}'`)) errors.push(`worldline producer registry lacks coverage: ${producer}`);
   }
 

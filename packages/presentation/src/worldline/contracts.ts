@@ -79,6 +79,7 @@ export const WORLDLINE_PRODUCER_REGISTRY = [
   'release',
   'codex',
   'vps',
+  'vps-traffic-fuse',
   'homelab',
   'nas',
   'media',

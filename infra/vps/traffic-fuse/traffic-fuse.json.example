@@ -1,0 +1,11 @@
+{
+  "interface": "REPLACE_WITH_AUDITED_DEFAULT_ROUTE_INTERFACE",
+  "sshPort": 22,
+  "dbPath": "/var/lib/amadeus-traffic-fuse/state.sqlite3",
+  "publicSnapshotPath": "/var/lib/amadeus-traffic-fuse/public-snapshot.json",
+  "providerSnapshotPath": "/var/lib/amadeus-accounting/subscription-usage-public.json",
+  "localCalibrated": false,
+  "calibrationVersion": null,
+  "autoApply": false,
+  "helperPath": "/usr/local/libexec/amadeus-vps-traffic-fuse/tc_helper.py"
+}

@@ -206,7 +206,7 @@ This records the capability answers for docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING
 
 ## Planning record — VPS daily traffic fuse & themed Kurisu alerts (2026-10-10)
 
-This records the required capability decisions for `docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md` (planning only).
+This records the required capability decisions for `docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md`; the deterministic Phase 1 source is implemented, while live audit/apply remains pending.
 
 - **Intent / identity:** Protect the operator-owned whole VPS on each Shanghai-local calendar day. Thresholds are 40 GB for one warning and 50 GB for automatic shared 2 Mbps business-egress shaping until next 00:00. The policy affects six active proxy identities together; it does not authenticate new users or re-enable retired Legacy. Query is owner-only; chat users cannot invoke arbitrary privileged network actions.
 - **Deterministic owner:** VPS local meter/controller holds the daily SQLite state, WAN NIC fast samples, provider counter provenance, kernel `tc` apply/status/release, and a separate midnight systemd release timer. Accounting/SQLite remains the provider/traffic fact source; privileged `CAP_NET_ADMIN` helper is fixed and narrowly scoped. No LLM or sender executes `tc`.

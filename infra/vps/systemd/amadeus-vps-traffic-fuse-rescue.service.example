@@ -1,0 +1,23 @@
+[Unit]
+Description=Emergency clear of only the Amadeus-owned traffic-fuse qdisc
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/amadeus-vps-traffic-fuse/tc_helper.py release
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadOnlyPaths=/usr/local/libexec/amadeus-vps-traffic-fuse /etc/amadeus/traffic-fuse.json
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+RestrictSUIDSGID=true
+MemoryMax=32M
+CPUQuota=10%
+TasksMax=4

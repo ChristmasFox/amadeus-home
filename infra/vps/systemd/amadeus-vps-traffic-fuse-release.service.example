@@ -1,0 +1,27 @@
+[Unit]
+Description=Release the Amadeus VPS daily traffic fuse at Shanghai midnight
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/usr/local/libexec/amadeus-vps-traffic-fuse
+ExecStart=/usr/bin/python3 /usr/local/libexec/amadeus-vps-traffic-fuse/traffic_fuse.py release --day previous
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ReadWritePaths=/var/lib/amadeus-traffic-fuse
+ReadOnlyPaths=/usr/local/libexec/amadeus-vps-traffic-fuse /etc/amadeus/traffic-fuse.json
+RestrictAddressFamilies=AF_UNIX AF_NETLINK
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+RestrictSUIDSGID=true
+MemoryMax=64M
+CPUQuota=10%
+TasksMax=8
