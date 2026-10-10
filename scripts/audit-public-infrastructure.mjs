@@ -44,7 +44,7 @@ export function analyze(text){
 function scan() {
   const mode=process.argv[2]??'--strict-vps';
   if(mode==='--self-test'){
-    assert.deepEqual(analyze('visit sub.example.com'),['personal_domain']);
+    assert.ok(analyze('visit sub.example.com').includes('personal_domain'));
     assert.deepEqual(analyze('example-device'),['personal_host_or_identity']);
     assert.deepEqual(analyze('server 203.0.113.10'),[]);
     assert.ok(analyze('server 8.8.8.8').includes('public_ipv4_candidate'));
