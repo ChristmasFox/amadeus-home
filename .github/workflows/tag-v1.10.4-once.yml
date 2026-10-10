@@ -1,0 +1,44 @@
+name: Tag current v1.10.4 (one-time)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/tag-v1.10.4-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  create-version-tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify target is the previous main HEAD and its version
+        env:
+          EXPECTED_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          TARGET_SHA=17b50cf5760b4fa5e7366fbbfb9483f98ecd0899
+          test "$EXPECTED_BEFORE" = "$TARGET_SHA"
+          test "$(git show "${TARGET_SHA}:VERSION" | tr -d '\r\n')" = '1.10.4'
+          git cat-file -e "${TARGET_SHA}^{commit}"
+      - name: Create lightweight tag without a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TARGET_SHA=17b50cf5760b4fa5e7366fbbfb9483f98ecd0899
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v1.10.4" >/dev/null 2>&1; then
+            echo 'ERROR: refs/tags/v1.10.4 already exists; refusing to change it.' >&2
+            exit 1
+          fi
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref='refs/tags/v1.10.4' \
+            -f sha="$TARGET_SHA" \
+            --jq '{ref: .ref, sha: .object.sha}'
+          echo 'Created tag v1.10.4 (no GitHub Release created)'
