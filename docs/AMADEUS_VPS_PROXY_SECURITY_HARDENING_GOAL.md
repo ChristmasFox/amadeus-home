@@ -19,11 +19,11 @@ The implementation must be based on the current runtime/accounting architecture 
 
 The authoritative current account set is:
 
-- example-account-01
-- example-account-02
-- example-account-03
-- example-account-04
-- example-account-05
+- example-user-01
+- example-user-02
+- example-user-03
+- example-user-04
+- example-user-05
 - example-device
 
 Legacy is retired.
@@ -364,7 +364,7 @@ Do not put live secrets, filled subscription files, live Xray/Hysteria configs, 
 
 Before any runtime mutation:
 
-1. Re-read current main and confirm example-device + example-account-01-example-account-05 are the only enabled managed identities.
+1. Re-read current main and confirm example-device + example-user-01-example-user-05 are the only enabled managed identities.
 2. Confirm Legacy is still disabled and its old credentials remain rejected.
 3. Inspect /etc/xray/config.json through a secret-safe summary:
    - VLESS listener/tag/port;
@@ -529,7 +529,7 @@ This Goal is complete only when all of the following are true:
 
 - main contains the hardened source and documentation;
 - Legacy remains retired;
-- exactly example-account-01-example-account-05 + example-device remain active;
+- exactly example-user-01-example-user-05 + example-device remain active;
 - no active token, HY2 secret, VLESS UUID, Reality key, shortId, hostname, SNI, or public proxy port was rotated/changed unintentionally;
 - all existing six subscription identities remain usable without re-import;
 - M204 + at least one Labmem real VLESS smoke passes after anti-steal apply;
@@ -603,7 +603,7 @@ Implementation must follow the pinned production versions and live audited state
 - Xray Reality now falls back to `127.0.0.1:24431`; that loopback gate routes only exact `www.apple.com` SNI to the audited camouflage target and blocks every other gate route. Xray system inbound counters feed the `reality-fallback-gate` security snapshot.
 - A verified TLS 1.3 handshake through the allowed SNI returned the `www.apple.com` certificate. A non-allowed SNI probe received no certificate and ended with an unexpected EOF. The loopback gate counter is observable. The manual report snapshot was 71,599 B; the latest read-only snapshot at `2026-10-09T02:58:03Z` is 76,424 B against the configured 1,024 B observation threshold. The counter includes controlled acceptance traffic and other aggregate gate traffic; it does not prove compromise.
 - Accounting auth remains loopback-only and now runs `enforce` with a 900-second window, threshold 120, 300-second cooldown and 4,096-source cap. The latest limiter window reports zero failures and zero throttled requests with 900/900 seconds of coverage; the 12-hour persisted aggregate reports four failures. Sources for Xray, HY2 traffic and fallback are `ok`. No raw source address or auth value is persisted.
-- example-device and example-account-01 passed VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Controlled invalid-auth probes returned the same generic 403 shape. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 and loopback-only auth/stats/gate listeners were verified. All six active accounts remain enabled; Legacy remains disabled. No active credential, client parameter, hostname, SNI or public port changed.
+- example-device and example-user-01 passed VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Controlled invalid-auth probes returned the same generic 403 shape. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 and loopback-only auth/stats/gate listeners were verified. All six active accounts remain enabled; Legacy remains disabled. No active credential, client parameter, hostname, SNI or public port changed.
 
 ### OpenClaw and owner report
 
@@ -614,7 +614,7 @@ Implementation must follow the pinned production versions and live audited state
 
 ### Rollback and cleanup
 
-- VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and example-account-01 VLESS/HY2 smokes. Hysteria config did not change.
+- VPS rollback: restore the exact Xray/accounting files and env from `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply`, restart affected services, then verify M204 and example-user-01 VLESS/HY2 smokes. Hysteria config did not change.
 - OpenClaw rollback: restore the root-only pre-apply Compose backup at `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply/docker-compose.before.yml` and run `docker compose up -d --no-build openclaw`; restore the two prior report messages from `vps-report-jobs.before.json` with `cron edit`. Do not roll back or delete the accounting database or rotate credentials.
 - Temporary local client configs, the Xray candidate containing live identities, and the staged VPS source directory were removed after acceptance. Protected rollback checkpoints and the previous immutable OpenClaw image remain available.
 

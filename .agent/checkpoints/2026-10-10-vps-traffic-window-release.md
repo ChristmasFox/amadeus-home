@@ -30,7 +30,7 @@ services have independent counters and calibration evidence.
 `./scripts/deploy-vps-accounting.sh --apply` created the root-only checkpoint:
 
 ```text
-/root/amadeus-gateway-backups/vps-accounting-window-20261010022302
+/root/example-vps-backups/vps-accounting-window-20261010022302
 ```
 
 The service is active, the SQLite schema is version 5, and the fixed probe was
@@ -60,6 +60,6 @@ the uncalibrated residual wording.
 
 For the VPS collector, restore the three backed-up source/probe files from the
 root-only VPS checkpoint and restart only
-`amadeus-gateway-accounting.service`. For OpenClaw, use the protected release
+`example-vps-accounting.service`. For OpenClaw, use the protected release
 checkpoint and the existing deployment rollback procedure to restore the prior
 1.10.2 immutable image. Do not restore credentials or alter SSH/firewall state.
