@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import {
   classifyCodexTerminal,
+  DETAIL_MARKER,
   MARKER,
   NO_PROMPT_MARKER,
   patchCodexRouteSource,
@@ -24,11 +25,14 @@ const source = [
 const patched = patchCodexRouteSource(source);
 assert.match(patched, new RegExp(MARKER));
 assert.match(patched, new RegExp(NO_PROMPT_MARKER));
+assert.match(patched, new RegExp(DETAIL_MARKER));
 assert.doesNotMatch(patched, /Account may not be entitled/);
 assert.match(patched, /image_result_missing/);
 assert.match(patched, /response\.failed/);
 assert.match(patched, /statusText:a\?\.code\|\|"amadeus_image_upstream_failed"/);
 assert.match(patched, /b\?\.error\|\|b\?\.response\?\.error/);
 assert.match(patched, /"boolean"==typeof c\?c/);
+assert.match(patched, /x-amadeus-image-error-type/);
+assert.match(patched, /amadeusImageDiagnosticHeaders/);
 assert.equal(patchCodexRouteSource(patched), patched);
 console.log('IMAGE_UPSTREAM_DIAGNOSTICS_PATCH=passed');

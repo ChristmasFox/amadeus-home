@@ -26,6 +26,12 @@ FIXTURE = r'''
    return{name,code:error.code||'unknown',diagnostic:error.amadeusImageDiagnostic||{},attemptLog:line?JSON.parse(line[1]):null};
   }
  };
+ const streamError=async()=>{
+  const event=frame('response.failed',{error:{type:'server_error',code:'server_overloaded',reason:'provider_busy'}});
+  const reader={read:async()=>reader.used?{done:true}:(reader.used=true,{done:false,value:Buffer.from(event)})};
+  const value=await codex.parseResponse({body:{getReader:()=>reader}},{log:{info:()=>{}},streamToClient:true,onRequestSuccess:async()=>{},requestBody:{},model:'gpt-image-2.5',body:{__amadeusTraceId:'fixture-stream',__amadeusImageAttempt:1}});
+  return {status:value.sseResponse.status,event:value.sseResponse.headers.get('x-amadeus-image-event'),type:value.sseResponse.headers.get('x-amadeus-image-error-type'),code:value.sseResponse.headers.get('x-amadeus-image-error-code'),reason:value.sseResponse.headers.get('x-amadeus-image-error-reason')};
+ };
  const frame=(event,data)=>`event: ${event}\r\ndata: ${JSON.stringify(data)}\r\n\r\n`;
  const valid=await one('valid',[frame('response.output_item.done',{item:{type:'image_generation_call',result:'c3VjY2Vzcw=='}}),frame('response.completed',{response:{status:'completed'}})]);
  const missing=await one('missing',[frame('response.completed',{response:{status:'completed'}})]);
@@ -35,6 +41,7 @@ FIXTURE = r'''
  const quota=await one('quota',[frame('response.failed',{error:{type:'rate_limit_error',code:'insufficient_quota'}})]);
  const partial=await one('partial',[frame('response.image_generation_call.partial_image',{partial_image_b64:'c2VudGluaW5n',partial_image_index:0}),frame('response.failed',{error:{type:'server_error',code:'server_overloaded'}})]);
  const transport=await one('transport',[],{abort:true});
+ const stream=await streamError();
  assert.equal(valid.code,'success');assert.equal(valid.result,'c3VjY2Vzcw==');
  assert.equal(missing.code,'amadeus_image_image_result_missing');assert.equal(incomplete.code,'amadeus_image_sse_incomplete');
  assert.equal(overloaded.code,'amadeus_image_upstream_failed');assert.equal(safety.code,'amadeus_image_safety_refusal');assert.equal(quota.code,'amadeus_image_account_unavailable');
@@ -42,9 +49,10 @@ FIXTURE = r'''
  for(const item of [missing,overloaded,safety,quota,partial]){assert.equal(item.diagnostic.imageResultSeen,false);assert.equal(item.diagnostic.terminalEventSeen,true)}
  assert.equal(incomplete.diagnostic.imageResultSeen,false);assert.equal(incomplete.diagnostic.terminalEventSeen,false);
  assert.equal(transport.diagnostic.imageResultSeen,false);assert.equal(transport.diagnostic.terminalEventSeen,false);
+ assert.deepEqual(stream,{status:502,event:'response.failed',type:'server_error',code:'server_overloaded',reason:'provider_busy'});
  assert.equal(overloaded.attemptLog.upstreamErrorCode,'server_overloaded');assert.equal(overloaded.attemptLog.imageResultSeen,false);
  assert.equal(safety.attemptLog.outcome,'safety_refusal');assert.equal(quota.attemptLog.outcome,'account_unavailable');
- console.log(JSON.stringify({valid:'passed',image_result_missing:'passed',sse_incomplete:'passed',upstream_failed:'passed',safety_refusal:'passed',account_unavailable:'passed',partial_terminal_not_success:'passed',transport_interrupted:'passed',diagnostics_boolean_types:'passed'}));
+ console.log(JSON.stringify({valid:'passed',image_result_missing:'passed',sse_incomplete:'passed',upstream_failed:'passed',safety_refusal:'passed',account_unavailable:'passed',partial_terminal_not_success:'passed',transport_interrupted:'passed',diagnostic_headers:'passed',diagnostics_boolean_types:'passed'}));
 })().catch(()=>{console.error('IMAGE_DIAGNOSTICS_FIXTURE=failed');process.exitCode=1});
 '''
 

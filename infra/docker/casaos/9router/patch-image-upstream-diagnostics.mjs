@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 
 export const MARKER = 'amadeus-image-upstream-diagnostics-0.5.95';
 export const NO_PROMPT_MARKER = 'amadeus-image-no-prompt-logs-0.5.95';
+export const DETAIL_MARKER = 'amadeus-image-upstream-diagnostic-headers-0.5.95';
 const VERSION = '0.5.95';
 const ROUTE = 'app/.next-cli-build/server/app/api/v1/images/generations/route.js';
 const CODEX_START = 'async function n(a,b,c={}){';
@@ -41,9 +42,11 @@ export function classifyCodexTerminal(event, payload) {
 }
 
 const RUNTIME_HELPERS = `/* ${MARKER} */
+/* ${DETAIL_MARKER} */
 function amadeusImageSafeToken(a,b=64){let c=typeof a==="string"?a.toLowerCase():"";return/^[a-z0-9_./:-]{1,160}$/u.test(c)?c.slice(0,b):""}
-function amadeusImageError(a,b={}){let c=new Error("amadeus_image_"+a),d=Object.fromEntries(["event","type","code","reason","terminalEventSeen","imageResultSeen"].filter(a=>b[a]!==void 0).map(a=>{let c=b[a];return[a,"boolean"==typeof c?c:amadeusImageSafeToken(String(c),80)]}));return c.code="amadeus_image_"+a,c.amadeusImageDiagnostic=d,c}
+function amadeusImageError(a,b={}){let c=new Error("amadeus_image_"+a),d=Object.fromEntries(["event","type","code","reason","terminalEventSeen","imageResultSeen"].filter(a=>b[a]!==void 0).map(a=>{let c=b[a];return[a,"boolean"==typeof c?c:amadeusImageSafeToken(String(c),80)]})),e=Object.entries(d).filter(([a])=>["event","type","code","reason"].includes(a)).map(([a,b])=>a+"="+b).join(",");return e&&(c.message+=" ["+e+"]"),c.code="amadeus_image_"+a,c.amadeusImageDiagnostic=d,c}
 function amadeusImageTerminalError(a,b){let c=b?.error||b?.response?.error||b?.response?.status_details?.error||b||{},d=amadeusImageSafeToken(c?.type),e=amadeusImageSafeToken(c?.code),f=amadeusImageSafeToken(c?.reason||c?.status),g=(d+" "+e+" "+f).toLowerCase(),h=/(?:safety|moderation|content[_ -]?policy|policy|copyright)/u.test(g),i=/(?:auth|permission|unauthorized|forbidden|quota|entitlement|billing)/u.test(g);return amadeusImageError(h?"safety_refusal":i?"account_unavailable":"upstream_failed",{event:a,type:d,code:e,reason:f,terminalEventSeen:!0,imageResultSeen:!1})}
+function amadeusImageDiagnosticHeaders(a={}){let b=new Headers({"Content-Type":"application/json"}),c={"x-amadeus-image-event":a.event,"x-amadeus-image-error-type":a.type,"x-amadeus-image-error-code":a.code,"x-amadeus-image-error-reason":a.reason};for(let[d,e]of Object.entries(c))void 0!==e&&""!==e&&b.set(d,amadeusImageSafeToken(String(e),80));return b}
 `;
 
 const CODEX_PARSER = `async function n(a,b,c={}){
@@ -55,7 +58,7 @@ if(g)return{result:g.result,diagnostic:{lastSseEvent:h,terminalEventSeen:i,image
 
 const PARSE_RESPONSE = `async parseResponse(a,{log:b,streamToClient:c,onRequestSuccess:d,model:f,body:g}){
 let h=amadeusImageSafeToken(g?.__amadeusTraceId)||"direct",i=Number.isInteger(g?.__amadeusImageAttempt)?g.__amadeusImageAttempt:1,j=Array.isArray(g?.images)||Boolean(g?.image)?"edit":"generate",k=amadeusImageSafeToken(f)||"unknown",l=(a,d={})=>{d.event="amadeus_cloud_image_attempt",d.traceId=h,d.model=k,d.attempt=i,d.operation=j,d.upstreamStatus=a,d.elapsedMs=Number.isFinite(d.elapsedMs)?d.elapsedMs:0,d.terminalEventSeen=Boolean(d.terminalEventSeen),d.imageResultSeen=Boolean(d.imageResultSeen),d.cooldownDecision=d.cooldownDecision||"none";try{b?.info?.("IMAGE",JSON.stringify(d))}catch{}};
-let m;try{m=await n(a,b,{model:f,operation:j,traceId:h})}catch(a){let d=a?.code?.replace(/^amadeus_image_/u,"")||"transport_interrupted",e=a?.amadeusImageDiagnostic||{};l(a?.status||502,{outcome:d,lastSseEvent:e.event,terminalEventSeen:e.terminalEventSeen,imageResultSeen:e.imageResultSeen,upstreamErrorType:e.type,upstreamErrorCode:e.code});if(c)return{sseResponse:new Response(JSON.stringify({error:{code:a?.code||"amadeus_image_upstream_failed",message:a?.message||"Image upstream request failed"}}),{status:502,statusText:a?.code||"amadeus_image_upstream_failed",headers:{"Content-Type":"application/json"}})};throw a}
+let m;try{m=await n(a,b,{model:f,operation:j,traceId:h})}catch(a){let d=a?.code?.replace(/^amadeus_image_/u,"")||"transport_interrupted",e=a?.amadeusImageDiagnostic||{};l(a?.status||502,{outcome:d,lastSseEvent:e.event,terminalEventSeen:e.terminalEventSeen,imageResultSeen:e.imageResultSeen,upstreamErrorType:e.type,upstreamErrorCode:e.code});if(c)return{sseResponse:new Response(JSON.stringify({error:{code:a?.code||"amadeus_image_upstream_failed",message:a?.message||"Image upstream request failed"}}),{status:502,statusText:a?.code||"amadeus_image_upstream_failed",headers:amadeusImageDiagnosticHeaders(e)})};throw a}
 `;
 
 // The stream branch is appended separately so failures can return a non-200
@@ -64,7 +67,7 @@ let m;try{m=await n(a,b,{model:f,operation:j,traceId:h})}catch(a){let d=a?.code?
 const PARSE_RESPONSE_REMAINDER = `l(200,{outcome:"success",lastSseEvent:m.diagnostic?.lastSseEvent,terminalEventSeen:m.diagnostic?.terminalEventSeen,imageResultSeen:!0,elapsedMs:m.diagnostic?.elapsedMs});let o={created:(0,e.kv)(),data:[{b64_json:m.result}]};if(c){d&&await d();return{sseResponse:new Response("event: done\\ndata: "+JSON.stringify(o)+"\\n\\n",{status:200,headers:{"Content-Type":"text/event-stream","Cache-Control":"no-cache, no-transform","Connection":"keep-alive","Access-Control-Allow-Origin":"*"}})}}return o},`;
 
 export function patchCodexRouteSource(source) {
-  if (source.includes(MARKER) && source.includes(NO_PROMPT_MARKER)) return source;
+  if (source.includes(MARKER) && source.includes(NO_PROMPT_MARKER) && source.includes(DETAIL_MARKER)) return source;
   one(source, CODEX_START, 'codex_parser_start');
   one(source, CODEX_END, 'codex_parser_end');
   one(source, PARSE_START, 'codex_parse_response');
@@ -93,7 +96,7 @@ export async function install(root, mode = 'verify') {
   const before = await readFile(path, 'utf8');
   const after = patchCodexRouteSource(before);
   if (mode === 'verify') {
-    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER)) throw Error('image_upstream_diagnostics_not_installed');
+    if (before !== after || !before.includes(MARKER) || !before.includes(NO_PROMPT_MARKER) || !before.includes(DETAIL_MARKER)) throw Error('image_upstream_diagnostics_not_installed');
     return path;
   }
   const permissions = (await stat(path)).mode & 0o777;
