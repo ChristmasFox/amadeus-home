@@ -31,3 +31,7 @@ gitleaks dir --redact .
 ```
 
 **Release gate:** Nothing here authorizes deploying to the active personal HomeLab. The community 9Router account policy and generic Compose setup remain pending until verified separately.
+
+## Isolated community Compose preview
+
+A preliminary profile now exists at `infra/community/compose.yaml` using the community-only 9Router image and the WhatsApp-first OpenClaw+PUBG plugin, with loopback ports and local non-overwriting bootstrap. This is **not** a production-approved release until clean-machine image build and real E2E verification. The 9Router production policy and deployment scripts remain separate.

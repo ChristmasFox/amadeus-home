@@ -2,10 +2,14 @@
 FROM node:24-bookworm-slim AS builder
 WORKDIR /src
 RUN npm install --global pnpm@11.19.0
-COPY . .
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/identity ./packages/identity
+COPY packages/presentation ./packages/presentation
+COPY packages/pubg-domain ./packages/pubg-domain
+COPY plugins/pubg ./plugins/pubg
 RUN pnpm install --frozen-lockfile && pnpm build:pubg
 
-# Keep community users on the same pinned OpenClaw runtime as the current plugin SDK.
+# Match the OpenClaw runtime used by the source-controlled PUBG plugin.
 FROM ghcr.io/openclaw/openclaw:2026.9.4@sha256:cc596b846506a5f4cfcee111394a2725f375f01cca2ebb492a161fd1b747f101
 USER root
 WORKDIR /app
