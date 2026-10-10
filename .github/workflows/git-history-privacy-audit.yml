@@ -1,0 +1,52 @@
+name: Read-Only Full Git History Privacy Audit
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/git-history-privacy-audit.yml"
+      - "scripts/summarize-history-scan.mjs"
+      - "scripts/audit-git-history-blobs.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Read-only reachable-blob privacy analysis (no values)
+        run: |
+          node scripts/audit-git-history-blobs.mjs
+          echo "REACHABLE_COMMIT_COUNT=$(git rev-list --all --count)"
+          echo "TRACKED_REF_COUNT=$(git for-each-ref --format='%(refname)' refs/remotes/origin refs/tags | wc -l | tr -d ' ')"
+      - name: Gitleaks full-history scan — summary ONLY
+        shell: bash
+        run: |
+          set -euo pipefail
+          # No raw report, diff, match text, or token may be printed in public CI logs.
+          set +e
+          docker run --rm --network none \
+            -v "$GITHUB_WORKSPACE:/repo" -w /repo \
+            ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:b109bc5f8f76a38196a3e413704fc5b9e3c32360bce4e4b603bd6f45b3721dbb \
+            git --redact=100 --log-opts='--all' \
+            --report-format json --report-path /repo/.private-gitleaks-history.json . \
+            > "$RUNNER_TEMP/gitleaks-hidden-output.txt" 2>&1
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            echo "GITLEAKS_AUDIT_ERROR_EXIT=$code"
+            rm -f .private-gitleaks-history.json "$RUNNER_TEMP/gitleaks-hidden-output.txt"
+            exit "$code"
+          fi
+          node scripts/summarize-history-scan.mjs .private-gitleaks-history.json
+          rm -f .private-gitleaks-history.json "$RUNNER_TEMP/gitleaks-hidden-output.txt"
+          echo "NO_HISTORY_REWRITE_OR_FORCE_PUSH_PERFORMED=true"
