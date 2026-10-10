@@ -223,3 +223,43 @@ try:
 except Exception:
     print('ACCOUNTING_STATUS=unavailable')
 PY
+
+# The traffic-fuse controller writes this already-sanitized, root-owned file.
+# Keep the probe argument-free and bounded: the SSH account cannot select a
+# path, ask for a command, or read the controller's SQLite database.
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path('/var/lib/amadeus-traffic-fuse/public-snapshot.json')
+try:
+    value = json.loads(path.read_text(encoding='utf-8'))
+    if not isinstance(value, dict):
+        raise ValueError
+    allowed = {
+        'version', 'generatedAt', 'day', 'state', 'coverage', 'sourceStatus',
+        'providerBytes', 'localWanBytes', 'effectiveBytes',
+        'warningThresholdBytes', 'capThresholdBytes', 'rateBitsPerSecond',
+        'protectionStartedAt', 'nextRecoveryAt', 'lastSampleAt',
+        'calibrationVersion', 'events',
+    }
+    result = {key: value.get(key) for key in allowed if key in value}
+    events = result.get('events')
+    if isinstance(events, list):
+        result['events'] = [
+            {key: item.get(key) for key in (
+                'eventKey', 'eventType', 'day', 'observedBytes',
+                'warningThresholdBytes', 'capThresholdBytes', 'coverage',
+                'sourceStatus', 'dataUpdatedAt', 'triggerSource',
+                'remainingHeadroomBytes', 'rateBitsPerSecond', 'nextRecoveryAt',
+                'normalEgressRestored', 'severity', 'occurredAt',
+            ) if key in item}
+            for item in events[:16]
+            if isinstance(item, dict)
+        ]
+    encoded = json.dumps(result, separators=(',', ':'), ensure_ascii=False)
+    if len(encoded) > 32000:
+        raise ValueError
+    print('TRAFFIC_FUSE_SNAPSHOT_JSON=' + encoded)
+except Exception:
+    print('TRAFFIC_FUSE_STATUS=unavailable')

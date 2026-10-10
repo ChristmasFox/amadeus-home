@@ -1,4 +1,5 @@
 import type { OpenClawPluginApi } from 'openclaw/plugin-sdk/core';
+import { adaptWorldlineNotification } from '@agent/presentation';
 import { configFor, type AmadeusConfig } from '../config.js';
 import {
   forgetTrustedInboundReply,
@@ -6,6 +7,7 @@ import {
 } from '../identity.js';
 import { ownerEvent, OwnerNotifier } from '../owner.js';
 import { macHostAnomalies } from '../machost.js';
+import { readVpsTrafficFuseSnapshotForWorker, trafficFuseWorldlineIntent, type VpsTrafficFuseEvent } from '../vps.js';
 
 export function registerIdentityLifecycle(api: OpenClawPluginApi): void {
   api.on('before_dispatch', (event, hookContext) => {
@@ -35,6 +37,7 @@ export function registerIdentityLifecycle(api: OpenClawPluginApi): void {
 export function registerOwnerNotificationWorker(api: OpenClawPluginApi, config = configFor(api)): void {
   let workerTimer: ReturnType<typeof setInterval> | undefined;
   let anomalyTimer: ReturnType<typeof setInterval> | undefined;
+  let trafficFuseTimer: ReturnType<typeof setInterval> | undefined;
   const bridgeAnomalies = async (notifier: OwnerNotifier): Promise<void> => {
     const payload = await macHostAnomalies(config);
     if (!payload || typeof payload !== 'object') return;
@@ -68,6 +71,24 @@ export function registerOwnerNotificationWorker(api: OpenClawPluginApi, config =
       }
     }
   };
+  const bridgeTrafficFuse = async (notifier: OwnerNotifier): Promise<void> => {
+    const payload = await readVpsTrafficFuseSnapshotForWorker(config);
+    if (!payload || typeof payload !== 'object') return;
+    const data = (payload as Record<string, unknown>).data;
+    if (!data || typeof data !== 'object') return;
+    const events = (data as Record<string, unknown>).events;
+    if (!Array.isArray(events)) return;
+    for (const raw of events) {
+      if (!raw || typeof raw !== 'object') continue;
+      const event = raw as VpsTrafficFuseEvent;
+      if (!event.eventKey || !event.eventType || !event.occurredAt) continue;
+      try {
+        await notifier.notify(ownerEvent(adaptWorldlineNotification(trafficFuseWorldlineIntent(event))));
+      } catch (error) {
+        api.logger.warn(`amadeus VPS traffic fuse bridge failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  };
   api.registerService({
     id: 'amadeus-owner-notification-worker',
     async start() {
@@ -78,16 +99,21 @@ export function registerOwnerNotificationWorker(api: OpenClawPluginApi, config =
       const notifier = new OwnerNotifier(api, config);
       await notifier.drain();
       await bridgeAnomalies(notifier);
+      await bridgeTrafficFuse(notifier);
       workerTimer = setInterval(() => { void notifier.drain(); }, 5_000);
       anomalyTimer = setInterval(() => { void bridgeAnomalies(notifier); }, 30_000);
+      trafficFuseTimer = setInterval(() => { void bridgeTrafficFuse(notifier); }, 60_000);
       workerTimer.unref();
       anomalyTimer.unref();
+      trafficFuseTimer.unref();
     },
     stop() {
       if (workerTimer) clearInterval(workerTimer);
       if (anomalyTimer) clearInterval(anomalyTimer);
+      if (trafficFuseTimer) clearInterval(trafficFuseTimer);
       workerTimer = undefined;
       anomalyTimer = undefined;
+      trafficFuseTimer = undefined;
     },
   });
 }

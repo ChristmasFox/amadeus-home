@@ -50,7 +50,7 @@ rotated. Full evidence is in
 
 ## Concurrent planned VPS daily traffic fuse — 2026-10-10
 
-`docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md` is planning only and has not been applied. Intended behavior:
+`docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md` now has a deterministic Phase 1 source implementation and focused tests; a sanitized read-only VPS audit is recorded, but no live traffic-control apply has been performed. Intended behavior:
 Asia/Shanghai calendar day, one warning at 40 GB, verified shared 2 Mbps
 business-egress shaping after 50 GB of whole-VPS usage, next local midnight
 release by an independent VPS timer, plus deduplicated themed alerts via the
@@ -58,6 +58,12 @@ existing Amadeus `worldline_notification_intent` presentation and WhatsApp
 owner outbox. Source calibration and ingress billing limitations are mandatory.
 Six managed identities stay enabled; Legacy stays retired; no token, HY2, VLESS
 or Reality credential changes and no new delivery runtime.
+
+The 2026-10-10 read-only audit found default WAN/SSH return interface `eth0`
+with a foreign root `fq` qdisc (`0:`), no traffic-fuse units installed, and
+60-second provider samples. The helper intentionally refuses to replace that
+qdisc; an independent timed/console recovery path and a safe composition or
+replacement strategy remain prerequisites for any explicit live apply.
 
 The dated Amadeus and 9Router entries below are historical snapshots unless
 the current task pointer says otherwise. Re-read Git/live state before work.

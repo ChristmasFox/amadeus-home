@@ -1,0 +1,11 @@
+[Unit]
+Description=One-shot timed rescue for an explicitly armed traffic-fuse apply
+
+[Timer]
+OnActiveSec=180s
+AccuracySec=1s
+Persistent=false
+Unit=amadeus-vps-traffic-fuse-rescue.service
+
+[Install]
+WantedBy=timers.target

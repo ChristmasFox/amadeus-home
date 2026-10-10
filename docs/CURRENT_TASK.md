@@ -44,8 +44,8 @@ Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local
 
 ## Concurrent VPS daily traffic fuse Goal — 2026-10-10
 
-Planned Goal: `docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md`.
-Status: `PLANNED_NOT_APPLIED`; **this document submission is not permission to modify live traffic control**.
+Goal: `docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md`.
+Status: `PHASE_0_READONLY_AUDIT_CAPTURED; PHASE_1_SOURCE_IMPLEMENTED; QDISC_AND_RECOVERY_DESIGN_PENDING; LIVE_APPLY_PENDING`; **this document submission is not permission to modify live traffic control**.
 
 Policy: Shanghai-local calendar day (00:00 to next 00:00), 40 GB one-time warning, 50 GB whole-gateway threshold, shared 2 Mbps non-management business egress shaping until next 00:00, then verified automatic release. KiwiVM remains provider quota truth; local WAN monitoring needs calibrated scope and truthful source/coverage states. A VPS-side timer must restore speed even when OpenClaw/WhatsApp is unavailable.
 

@@ -31,6 +31,10 @@ endpoint, shell command, SQL, credential, channel, or recipient:
   `Labmem001`–`Labmem005`, `M204-Net-Core`, or `legacy`; returns one account's
   monitored protocol totals and known activity facts. Legacy is historical and
   disabled after its retirement.
+- `amadeus_vps_traffic_fuse`: owner-only fixed read-only status for the
+  Shanghai-local daily fuse, including whole-VPS provider/local-WAN counters,
+  coverage and freshness, thresholds, state, verified shared rate, next
+  midnight recovery time, and bounded durable events. It cannot change `tc`.
 
 Subscription usage is owner-private. The plugin enforces a trusted direct-owner
 context or scheduled-report context and rejects group sessions, including when
@@ -39,6 +43,13 @@ the owner is speaking in a group. The tools are also absent from group allowlist
 Select one or combine tools according to the request. Whole-plan traffic
 questions use `amadeus_vps_usage` for KiwiVM truth and its progress bar, plus
 `amadeus_vps_subscription_overview` for the T0-forward account breakdown.
+Questions about today's Shanghai calendar-day usage, fuse state, why egress is
+limited, or when it recovers use `amadeus_vps_traffic_fuse`. Keep
+`provider_confirmed`, calibrated `local_wan_estimate`, `partial_coverage`,
+`stale`, and `unknown` explicit. A verified cap is only the shared business
+egress rate; it does not guarantee a 50 GB provider-billed ceiling because
+ingress may already be billed before Linux can shape it. Never infer `CAPPED`
+from a threshold alone: require the tool's verified state and rate.
 Security and suspected proxy-usage questions such as “VPS 有没有被盗用”,
 “HY2 有异常登录吗”, “Reality 有异常流量吗”, and “哪个订阅流量异常” use
 `amadeus_vps_subscription_overview`; use its typed security facts and signals,
@@ -78,7 +89,8 @@ below 1% (for example `░░░░░░░░░░ 0.9%`).
 
 Scheduled morning/evening VPS reports must call all of
 `amadeus_vps_live_status`, `amadeus_vps_usage`, `amadeus_vps_system_status`,
-`amadeus_vps_services`, and `amadeus_vps_subscription_overview`. Compose a
+`amadeus_vps_services`, `amadeus_vps_subscription_overview`, and
+`amadeus_vps_traffic_fuse`. Compose a
 concise Chinese report from returned facts. Include the mandatory ten-cell
 whole-plan line, used/total/remaining/reset time when known, provider growth
 since the prior successful sample, each active account's monitored total from
@@ -118,6 +130,13 @@ cron run must never use the scheduled key; use
 isolates an accidentally reused scheduled key at the tool boundary. That
 notifier has one fixed destination: the WhatsApp owner DM. Do not use Telegram,
 KOOK, a group, cron fallback delivery, or an invented healthy status.
+
+Add one concise Shanghai-day fuse line to both scheduled reports: observed
+whole-VPS bytes and source/coverage, state and threshold, actual shared rate
+only when verified, time in protection when known, and the exact next
+Asia/Shanghai midnight recovery when capped. Keep this separate from the
+provider billing-cycle total and the six-account breakdown. If the fuse tool is
+unavailable or degraded, say so; never imply that no cap exists.
 
 Describe a configured threshold crossing as an “observed suspicious signal”.
 Traffic volume, one online-count sample, failed-auth counts, or fallback bytes

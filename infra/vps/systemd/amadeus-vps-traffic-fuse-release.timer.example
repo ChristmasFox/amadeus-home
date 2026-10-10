@@ -1,0 +1,11 @@
+[Unit]
+Description=Independent Shanghai-midnight Amadeus VPS fuse release
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 Asia/Shanghai
+Persistent=true
+AccuracySec=1s
+Unit=amadeus-vps-traffic-fuse-release.service
+
+[Install]
+WantedBy=timers.target

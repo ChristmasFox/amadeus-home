@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
+import type { WorldlineNotificationIntent } from '@agent/presentation';
 import type { AmadeusConfig } from './config.js';
 import { readRequiredFile } from './config.js';
 import { requestFormJson } from './http.js';
@@ -578,6 +579,161 @@ export async function getVpsServices(config: AmadeusConfig, signal?: AbortSignal
     return parseVpsServicesProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt);
   } catch (error) {
     return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh') } satisfies VpsEnvelope;
+  }
+}
+
+export interface VpsTrafficFuseEvent {
+  eventKey: string;
+  eventType: 'warning' | 'engaged' | 'released' | 'apply-failed' | 'release-failed';
+  day: string;
+  observedBytes: number | null;
+  warningThresholdBytes: number | null;
+  capThresholdBytes: number | null;
+  remainingHeadroomBytes: number | null;
+  coverage: 'complete' | 'partial_coverage' | 'unknown';
+  sourceStatus: 'provider_confirmed' | 'local_wan_estimate' | 'unknown';
+  dataUpdatedAt: string | null;
+  triggerSource: string | null;
+  rateBitsPerSecond: number | null;
+  nextRecoveryAt: string | null;
+  normalEgressRestored: boolean | null;
+  severity: 'warning' | 'success' | 'error';
+  occurredAt: string | null;
+}
+
+export interface VpsTrafficFuseSnapshot {
+  version: number;
+  generatedAt: string | null;
+  day: string | null;
+  state: 'INIT' | 'DEGRADED' | 'NORMAL' | 'WARNED' | 'PROTECTING' | 'CAPPED' | 'APPLY_FAILED' | 'RELEASING' | 'RELEASE_FAILED';
+  coverage: 'complete' | 'partial_coverage' | 'unknown';
+  sourceStatus: 'provider_confirmed' | 'local_wan_estimate' | 'unknown';
+  providerBytes: number | null;
+  localWanBytes: number | null;
+  effectiveBytes: number | null;
+  warningThresholdBytes: number | null;
+  capThresholdBytes: number | null;
+  rateBitsPerSecond: number | null;
+  protectionStartedAt: string | null;
+  nextRecoveryAt: string | null;
+  lastSampleAt: string | null;
+  calibrationVersion: string | null;
+  events: VpsTrafficFuseEvent[];
+}
+
+export function trafficFuseWorldlineIntent(event: VpsTrafficFuseEvent): WorldlineNotificationIntent {
+  const isRelease = event.eventType === 'released';
+  const isFailure = event.eventType === 'apply-failed' || event.eventType === 'release-failed';
+  return {
+    type: 'worldline_notification_intent',
+    eventType: `vps_daily_fuse_${event.eventType}`,
+    kind: isRelease ? 'source_recovered' : isFailure ? 'dependency_failure' : event.eventType === 'engaged' ? 'network_degraded' : 'status_changed',
+    severity: isRelease ? 'success' : isFailure ? 'error' : 'warning',
+    significance: isFailure ? 'critical' : event.eventType === 'engaged' ? 'major' : 'notable',
+    eventKey: event.eventKey,
+    source: 'vps-traffic-fuse',
+    headline: isRelease ? 'VPS 流量保险丝已解除' : event.eventType === 'engaged' ? 'VPS 流量保险丝已启动' : isFailure ? 'VPS 流量保险丝操作失败' : 'VPS 流量保险丝预警',
+    summary: isRelease ? '已通过内核状态回读确认上一日保护规则移除，进入新的上海日历日。' : isFailure ? '流量保险丝操作尚未得到成功的内核回读，系统将按固定周期重试。' : '这是整台 VPS 的流量观测事件；来源覆盖和时间边界按事实保留。',
+    facts: [
+      { label: '上海日期', value: event.day, evidenceRefs: ['vps-traffic-fuse:day'] },
+      { label: '已观测字节', value: event.observedBytes, evidenceRefs: ['vps-traffic-fuse:meter'] },
+      { label: '距 50 GB 阈值余量', value: event.remainingHeadroomBytes, evidenceRefs: ['vps-traffic-fuse:threshold'] },
+      { label: '来源状态', value: event.sourceStatus, evidenceRefs: ['vps-traffic-fuse:source'] },
+      { label: '覆盖状态', value: event.coverage, evidenceRefs: ['vps-traffic-fuse:coverage'] },
+      ...(event.rateBitsPerSecond !== null ? [{ label: '共享出口速率 bit/s', value: event.rateBitsPerSecond, evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
+      ...(event.nextRecoveryAt ? [{ label: '下一次上海午夜恢复', value: event.nextRecoveryAt, evidenceRefs: ['vps-traffic-fuse:calendar'] }] : []),
+      ...(isRelease ? [{ label: '普通出口恢复', value: event.normalEgressRestored === true ? '已通过内核回读确认' : 'unknown', evidenceRefs: ['vps-traffic-fuse:tc-readback'] }] : []),
+    ],
+    ...(event.dataUpdatedAt ? { dataUpdatedAt: event.dataUpdatedAt } : {}),
+    occurredAt: event.occurredAt ?? new Date().toISOString(),
+    ...(isRelease ? { worldLineClosing: true } : {}),
+  };
+}
+
+function trafficFuseEvent(value: unknown): VpsTrafficFuseEvent | null {
+  const item = objectValue(value);
+  const eventType = item.eventType;
+  if (typeof item.eventKey !== 'string' || !/^vps-daily-fuse:\d{4}-\d{2}-\d{2}:/u.test(item.eventKey)
+    || typeof item.day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(item.day)
+    || !['warning', 'engaged', 'released', 'apply-failed', 'release-failed'].includes(String(eventType))) return null;
+  const coverage = item.coverage === 'complete' || item.coverage === 'partial_coverage' ? item.coverage : 'unknown';
+  const sourceStatus = item.sourceStatus === 'provider_confirmed' || item.sourceStatus === 'local_wan_estimate' ? item.sourceStatus : 'unknown';
+  const severity = item.severity === 'warning' || item.severity === 'success' || item.severity === 'error' ? item.severity : 'error';
+  return {
+    eventKey: item.eventKey,
+    eventType: eventType as VpsTrafficFuseEvent['eventType'],
+    day: item.day,
+    observedBytes: nonnegativeInteger(item.observedBytes),
+    warningThresholdBytes: nonnegativeInteger(item.warningThresholdBytes),
+    capThresholdBytes: nonnegativeInteger(item.capThresholdBytes),
+    remainingHeadroomBytes: nonnegativeInteger(item.remainingHeadroomBytes),
+    coverage,
+    sourceStatus,
+    dataUpdatedAt: safeIso(item.dataUpdatedAt),
+    triggerSource: typeof item.triggerSource === 'string' ? item.triggerSource.slice(0, 64) : null,
+    rateBitsPerSecond: nonnegativeInteger(item.rateBitsPerSecond),
+    nextRecoveryAt: safeIso(item.nextRecoveryAt),
+    normalEgressRestored: typeof item.normalEgressRestored === 'boolean' ? item.normalEgressRestored : null,
+    severity,
+    occurredAt: safeIso(item.occurredAt),
+  };
+}
+
+export function parseVpsTrafficFuseProbe(raw: string, checkedAt = new Date().toISOString()): unknown {
+  const fields = fieldsFromProbe(raw);
+  const encoded = fields.get('TRAFFIC_FUSE_SNAPSHOT_JSON');
+  if (!encoded || encoded.length > 32_000) {
+    return { status: 'stale', source: 'ssh', checkedAt, error: { code: 'TRAFFIC_FUSE_UNAVAILABLE', message: 'VPS traffic fuse snapshot is unavailable' }, data: null };
+  }
+  try {
+    const input = JSON.parse(encoded) as Record<string, unknown>;
+    const state = ['INIT', 'DEGRADED', 'NORMAL', 'WARNED', 'PROTECTING', 'CAPPED', 'APPLY_FAILED', 'RELEASING', 'RELEASE_FAILED'].includes(String(input.state)) ? input.state as VpsTrafficFuseSnapshot['state'] : 'DEGRADED';
+    const coverage = input.coverage === 'complete' || input.coverage === 'partial_coverage' ? input.coverage : 'unknown';
+    const sourceStatus = input.sourceStatus === 'provider_confirmed' || input.sourceStatus === 'local_wan_estimate' ? input.sourceStatus : 'unknown';
+    const events = Array.isArray(input.events) ? input.events.slice(0, 16).map(trafficFuseEvent).filter((event): event is VpsTrafficFuseEvent => event !== null) : [];
+    const data: VpsTrafficFuseSnapshot = {
+      version: input.version === 1 ? 1 : 1,
+      generatedAt: safeIso(input.generatedAt),
+      day: typeof input.day === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(input.day) ? input.day : null,
+      state,
+      coverage,
+      sourceStatus,
+      providerBytes: nonnegativeInteger(input.providerBytes),
+      localWanBytes: nonnegativeInteger(input.localWanBytes),
+      effectiveBytes: nonnegativeInteger(input.effectiveBytes),
+      warningThresholdBytes: nonnegativeInteger(input.warningThresholdBytes),
+      capThresholdBytes: nonnegativeInteger(input.capThresholdBytes),
+      rateBitsPerSecond: nonnegativeInteger(input.rateBitsPerSecond),
+      protectionStartedAt: safeIso(input.protectionStartedAt),
+      nextRecoveryAt: safeIso(input.nextRecoveryAt),
+      lastSampleAt: safeIso(input.lastSampleAt),
+      calibrationVersion: typeof input.calibrationVersion === 'string' ? input.calibrationVersion.slice(0, 64) : null,
+      events,
+    };
+    const status = data.state === 'DEGRADED' || data.state === 'APPLY_FAILED' || data.state === 'RELEASE_FAILED' ? 'partial' : 'ok';
+    return { status, source: 'ssh', checkedAt, data };
+  } catch {
+    return { status: 'error', source: 'ssh', checkedAt, error: { code: 'TRAFFIC_FUSE_INVALID_RESPONSE', message: 'VPS traffic fuse snapshot is invalid' }, data: null };
+  }
+}
+
+export async function getVpsTrafficFuseStatus(config: AmadeusConfig, context: OpenClawPluginToolContext, signal?: AbortSignal): Promise<unknown> {
+  assertVpsSubscriptionOwnerContext(context);
+  const checkedAt = new Date().toISOString();
+  try {
+    return parseVpsTrafficFuseProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt);
+  } catch (error) {
+    return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh'), data: null };
+  }
+}
+
+/** Internal bounded worker path; it still uses the fixed forced-command probe. */
+export async function readVpsTrafficFuseSnapshotForWorker(config: AmadeusConfig, signal?: AbortSignal): Promise<unknown> {
+  const checkedAt = new Date().toISOString();
+  try {
+    return parseVpsTrafficFuseProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt);
+  } catch (error) {
+    return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh'), data: null };
   }
 }
 

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { AmadeusConfig } from '../src/config.js';
-import { getVpsUsage, parseVpsServicesProbe, parseVpsSystemProbe } from '../src/vps.js';
+import { adaptWorldlineNotification } from '@agent/presentation';
+import { getVpsUsage, parseVpsServicesProbe, parseVpsSystemProbe, parseVpsTrafficFuseProbe, trafficFuseWorldlineIntent, type VpsTrafficFuseEvent } from '../src/vps.js';
 
 function config(directory: string): AmadeusConfig {
   return {
@@ -122,4 +123,56 @@ test('VPS SSH parsers mark missing or inactive facts instead of treating them as
   assert.equal(services.status, 'partial');
   assert.deepEqual(services.inactiveServices, ['Xray', 'frps']);
   assert.deepEqual(services.unknownServices, ['frps']);
+});
+
+test('traffic fuse probe preserves bounded source coverage and event facts', () => {
+  const parsed = parseVpsTrafficFuseProbe([
+    'VPS_PROBE_VERSION=1',
+    `TRAFFIC_FUSE_SNAPSHOT_JSON=${JSON.stringify({
+      version: 1,
+      generatedAt: '2026-10-10T01:00:00Z',
+      day: '2026-10-10',
+      state: 'CAPPED',
+      coverage: 'partial_coverage',
+      sourceStatus: 'provider_confirmed',
+      providerBytes: 50_000_000_000,
+      localWanBytes: 49_000_000_000,
+      effectiveBytes: 50_000_000_000,
+      warningThresholdBytes: 40_000_000_000,
+      capThresholdBytes: 50_000_000_000,
+      rateBitsPerSecond: 2_000_000,
+      nextRecoveryAt: '2026-10-10T16:00:00Z',
+      events: [{ eventKey: 'vps-daily-fuse:2026-10-10:engaged', eventType: 'engaged', day: '2026-10-10', observedBytes: 50_000_000_000, coverage: 'partial_coverage', sourceStatus: 'provider_confirmed', severity: 'warning', occurredAt: '2026-10-10T00:30:00Z' }],
+    })}`,
+  ].join('\n')) as { status: string; data: { state: string; events: Array<{ rateBitsPerSecond: number | null }> } };
+  assert.equal(parsed.status, 'ok');
+  assert.equal(parsed.data.state, 'CAPPED');
+  assert.equal(parsed.data.events[0]?.rateBitsPerSecond, null);
+});
+
+test('traffic fuse events reuse existing worldline themes and owner facts', () => {
+  const base: VpsTrafficFuseEvent = {
+    eventKey: 'vps-daily-fuse:2026-10-10:engaged',
+    eventType: 'engaged',
+    day: '2026-10-10',
+    observedBytes: 50_000_000_000,
+    warningThresholdBytes: 40_000_000_000,
+    capThresholdBytes: 50_000_000_000,
+    remainingHeadroomBytes: 0,
+    coverage: 'complete',
+    sourceStatus: 'provider_confirmed',
+    dataUpdatedAt: '2026-10-10T01:00:00.000Z',
+    triggerSource: 'tc-readback',
+    rateBitsPerSecond: 2_000_000,
+    nextRecoveryAt: '2026-10-10T16:00:00.000Z',
+    normalEgressRestored: null,
+    severity: 'warning',
+    occurredAt: '2026-10-10T01:00:00.000Z',
+  };
+  assert.equal(adaptWorldlineNotification(trafficFuseWorldlineIntent(base)).theme, 'worldline_divergence');
+  const released = adaptWorldlineNotification(trafficFuseWorldlineIntent({ ...base, eventKey: 'vps-daily-fuse:2026-10-10:released', eventType: 'released', severity: 'success', rateBitsPerSecond: null, normalEgressRestored: true }));
+  assert.equal(released.theme, 'worldline_convergence');
+  assert.equal(released.worldLineClosing, true);
+  const failed = adaptWorldlineNotification(trafficFuseWorldlineIntent({ ...base, eventKey: 'vps-daily-fuse:2026-10-10:apply-failed', eventType: 'apply-failed', severity: 'error' }));
+  assert.equal(failed.theme, 'ibn_5100');
 });

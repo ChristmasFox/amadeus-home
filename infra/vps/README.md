@@ -46,6 +46,31 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
   `netfilter-persistent` 管理。这样 Caddy 可连 `127.0.0.1:18798`，公网不能绕过 TLS 直连。
   apply 后必须从新 SSH 会话复核 SSH 可达性，并确认持久化规则可恢复。
 
+### Daily traffic fuse（source only; no live `tc` apply）
+
+`traffic-fuse/traffic_fuse.py` 是当前 Goal 的确定性 Phase 1 实现：它按
+`Asia/Shanghai` 日历日保存 provider 增量、可校准的 WAN 快速保护计数、覆盖状态、SQLite
+事件键和脱敏 public snapshot。阈值使用十进制 40,000,000,000 / 50,000,000,000 bytes，
+业务出口目标为共享 2,000,000 bit/s。provider 计数重置、WAN counter/interface/generation
+变化和不完整首日都会标记 `partial_coverage`，不会把未知数据当作零。
+
+`traffic-fuse/tc_helper.py` 只接受固定配置中的 `status|apply|release`，发现非本 fuse
+拥有的 root qdisc 时拒绝覆盖或删除；它不会接受 OpenClaw 传入的接口、rate、handle 或
+任意 shell，并为固定 SSH 端口同时保留 IPv4/IPv6 回程例外。`traffic-fuse.json.example`
+仍是模板，必须先完成 Phase 0 的真实默认路由、
+qdisc、SSH 恢复和 provider scope 审计，才能在 VPS 外部生成运行配置。
+
+`public-snapshot.json` 应由 root 写入、`0640`，并由现有固定 probe 组
+`amadeus-accounting-snapshot` 读取；probe 仍只读取该固定文件，不读取 traffic-fuse SQLite
+或任何 provider/account credential。安装时必须确认 probe 用户属于该组，不能把整个
+`/var/lib/amadeus-traffic-fuse` 暴露给 Caddy/frps 用户。
+
+systemd 模板 `systemd/amadeus-vps-traffic-fuse*.example` 包含 10 秒观测 tick、独立的
+`Persistent=true` 上海午夜 release timer，以及必须在未来受控 apply 前显式 arm 的 180 秒
+rescue timer。当前仓库只提供 source/test，不安装服务、不写 live `tc`、不改变现有六个身份、
+Legacy 状态、端口或报告 job。Ingress 计费仍可能在 egress shaper 生效前发生，不能把本 fuse
+描述成 provider 的绝对 50 GB 日配额限制。
+
 ## 订阅账号流量归因（已 apply，2026-10-08）
 
 `docs/AMADEUS_VPS_SUBSCRIPTION_ACCOUNTING_GOAL.md` 定义 Labmem001-Labmem005、M204 和独立 legacy 身份。
