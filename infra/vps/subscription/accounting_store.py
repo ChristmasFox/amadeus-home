@@ -11,6 +11,7 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import tempfile
@@ -22,10 +23,34 @@ from pathlib import Path
 from typing import Iterable, Iterator, Mapping
 
 
-LABMEM_IDS = tuple(f"Labmem{i:03d}" for i in range(1, 6))
-M204_ID = "M204-Net-Core"
+DEFAULT_ACTIVE_ACCOUNT_IDS = tuple(f"account-{i:03d}" for i in range(1, 6))
+DEFAULT_DEDICATED_ACCOUNT_ID = "operator-core"
+DEFAULT_LEGACY_ACCOUNT_ID = "legacy"
+
+
+def _runtime_account_ids() -> tuple[tuple[str, ...], str, str]:
+    path_value = os.environ.get("VPS_ACCOUNT_MAP_FILE", "").strip()
+    if not path_value:
+        return DEFAULT_ACTIVE_ACCOUNT_IDS, DEFAULT_DEDICATED_ACCOUNT_ID, DEFAULT_LEGACY_ACCOUNT_ID
+    try:
+        data = json.loads(Path(path_value).read_text(encoding="utf-8"))
+        active = tuple(data["activeAccountIds"])
+        dedicated = data["dedicatedAccountId"]
+        legacy = data["legacyAccountId"]
+        all_ids = (*active, dedicated, legacy)
+        if len(active) != 5 or len(set(all_ids)) != 7 or any(
+            not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", value)
+            for value in all_ids
+        ):
+            raise ValueError
+        return active, dedicated, legacy
+    except Exception as error:
+        raise RuntimeError("VPS account mapping is invalid or unavailable") from error
+
+
+_ACTIVE_ACCOUNT_IDS, M204_ID, LEGACY_ID = _runtime_account_ids()
+LABMEM_IDS = _ACTIVE_ACCOUNT_IDS
 MANAGED_ACCOUNT_IDS = (*LABMEM_IDS, M204_ID)
-LEGACY_ID = "legacy"
 INITIAL_ACCOUNT_IDS = (*LABMEM_IDS, LEGACY_ID)
 ACCOUNT_IDS = (*MANAGED_ACCOUNT_IDS, LEGACY_ID)
 PROTOCOLS = ("hy2", "vless")
@@ -409,7 +434,7 @@ class AccountingStore:
                 ).fetchone()
                 db.rollback()
                 if not account or account["is_legacy"] != 0 or account["enabled"] != 1:
-                    raise RuntimeError("M204-Net-Core is retired or has an invalid account record")
+                    raise RuntimeError("operator-core is retired or has an invalid account record")
                 return False
             if existing != set(INITIAL_ACCOUNT_IDS):
                 db.rollback()

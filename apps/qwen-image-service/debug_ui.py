@@ -34,8 +34,6 @@ MAX_PROMPT_CHARS = 8_000
 GENERATION_DEADLINE_SECONDS = 910
 ALLOWED_PROFILES = {"quality", "fast"}
 ALLOWED_RESOLUTIONS = {"1024x1024", "1024x768", "768x1024"}
-PUBLIC_HOST = "image.nyannyan.top"
-PUBLIC_ORIGIN = "https://image.nyannyan.top"
 SESSION_COOKIE = "amadeus_image_lab_session"
 SESSION_SECONDS = 12 * 60 * 60
 LOGIN_WINDOW_SECONDS = 60
@@ -257,6 +255,43 @@ def parse_bridge_url(value: str) -> tuple[str, int]:
     return parsed.hostname, parsed.port or 80
 
 
+def load_public_network_config(path: Path | None) -> tuple[str | None, str | None]:
+    """Load the optional operator-owned public host/origin contract.
+
+    A missing config deliberately disables the public scope.  This keeps a
+    community checkout LAN-only until an operator supplies the protected
+    runtime file, and avoids baking a real hostname into the application.
+    """
+    if path is None:
+        return None, None
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise ValueError("public_network_config_missing") from error
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_mode & 0o077:
+        raise ValueError("public_network_config_not_private")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("public_network_config_invalid") from error
+    if not isinstance(data, dict) or set(data) != {"publicHost", "publicOrigin"}:
+        raise ValueError("public_network_config_invalid")
+    host = data.get("publicHost")
+    origin = data.get("publicOrigin")
+    if not isinstance(host, str) or not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251})", host):
+        raise ValueError("public_network_host_invalid")
+    if host.lower() in {"localhost", "127.0.0.1", "::1"} or host_is_lan(host):
+        raise ValueError("public_network_host_must_be_public")
+    if not isinstance(origin, str):
+        raise ValueError("public_network_origin_invalid")
+    parsed = urlsplit(origin)
+    if (parsed.scheme != "https" or parsed.hostname is None or parsed.hostname.lower() != host.lower()
+            or parsed.port is not None or parsed.path not in {"", "/"} or parsed.query or parsed.fragment
+            or parsed.username is not None or parsed.password is not None):
+        raise ValueError("public_network_origin_invalid")
+    return host.lower(), f"https://{host.lower()}"
+
+
 class PublicAuth:
     def __init__(self, verifier: dict):
         self.verifier = verifier
@@ -332,12 +367,16 @@ class DebugHTTPServer(ThreadingHTTPServer):
         static_file: Path,
         output_dir: Path,
         auth_file: Path,
+        public_host: str | None = None,
+        public_origin: str | None = None,
     ):
         super().__init__(server_address, DebugHandler)
         self.bridge_host, self.bridge_port = parse_bridge_url(bridge_url)
         self.bridge_token = bridge_token
         self.static_file = static_file
         self.output_dir = output_dir
+        self.public_host = public_host
+        self.public_origin = public_origin
         self.public_auth = PublicAuth(load_password_verifier(auth_file))
         self.generation_lock = threading.Lock()
         self.task_lock = threading.Lock()
@@ -556,7 +595,7 @@ class DebugHandler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("X-Frame-Options", "DENY")
-        if self.headers.get("Host", "").lower() == PUBLIC_HOST:
+        if self.server.public_host and self.headers.get("Host", "").lower() == self.server.public_host:
             self.send_header("Strict-Transport-Security", "max-age=31536000")
         self.send_header(
             "Content-Security-Policy",
@@ -586,7 +625,7 @@ class DebugHandler(BaseHTTPRequestHandler):
 
     def _network_scope(self) -> str | None:
         host = self.headers.get("Host", "").lower()
-        if host == PUBLIC_HOST:
+        if self.server.public_host and host == self.server.public_host:
             return "public"
         if is_lan_ip(self.client_address[0]) and host_is_lan(host):
             return "lan"
@@ -595,7 +634,9 @@ class DebugHandler(BaseHTTPRequestHandler):
     def _same_origin(self, scope: str) -> bool:
         origin = self.headers.get("Origin", "")
         if scope == "public":
-            return self.headers.get("Host", "").lower() == PUBLIC_HOST and origin == PUBLIC_ORIGIN
+            return bool(self.server.public_host and self.server.public_origin
+                        and self.headers.get("Host", "").lower() == self.server.public_host
+                        and origin == self.server.public_origin)
         try:
             parsed = urlsplit(origin)
         except ValueError:
@@ -856,13 +897,21 @@ def main() -> None:
     parser.add_argument("--static-file", required=True)
     parser.add_argument("--output-dir", default="~/Pictures/Amadeus/QwenImage")
     parser.add_argument("--auth-file", required=True)
+    parser.add_argument("--public-config")
     args = parser.parse_args()
     bridge_token = read_private_secret(Path(args.bridge_token_file))
     static_file = Path(args.static_file)
     if not static_file.is_file() or not 1 <= args.port <= 65535:
         raise SystemExit("debug_ui_config_invalid")
     output_dir = Path(args.output_dir).expanduser()
-    server = DebugHTTPServer((args.host, args.port), args.bridge_url, bridge_token, static_file, output_dir, Path(args.auth_file))
+    try:
+        public_host, public_origin = load_public_network_config(Path(args.public_config) if args.public_config else None)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    server = DebugHTTPServer(
+        (args.host, args.port), args.bridge_url, bridge_token, static_file, output_dir, Path(args.auth_file),
+        public_host, public_origin,
+    )
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:

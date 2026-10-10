@@ -2,6 +2,7 @@
 set -euo pipefail
 
 requested_command="${SSH_ORIGINAL_COMMAND:-}"
+STORAGE_ROOT="${AMADEUS_STORAGE_ROOT:-/var/lib/amadeus-storage}"
 
 compact() {
   print -r -- "${1:-}" | /usr/bin/tr '\n' ' ' | /usr/bin/sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//'
@@ -117,7 +118,7 @@ case "$requested_command" in
     print "UPTIME=$(compact "$uptime_value")"
     print "USER_COUNT=$(compact "$user_count")"
     print "DISK_ROOT=$(disk_summary /)"
-    print "DISK_AVALON=$(disk_summary /Volumes/Avalon)"
+    print "DISK_AVALON=$(disk_summary "$STORAGE_ROOT")"
     print "NETWORK_INTERFACE=$(compact "$interface")"
     print "IP_ADDRESS=$(compact "$ip_address")"
     print "GATEWAY=$(compact "$gateway")"
@@ -134,7 +135,7 @@ case "$requested_command" in
     ;;
   nas.disk)
     print "系统盘：$(disk_summary /)"
-    print "Avalon：$(disk_summary /Volumes/Avalon)"
+    print "存储卷：$(disk_summary "$STORAGE_ROOT")"
     ;;
   nas.sleep)
     /usr/bin/pmset sleepnow

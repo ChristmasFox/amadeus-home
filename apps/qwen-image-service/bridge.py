@@ -56,6 +56,35 @@ class ConfigError(RuntimeError):
     pass
 
 
+def expand_runtime_references(value: object) -> object:
+    """Expand private path references when a template is loaded directly.
+
+    The Mac manager normally renders templates before installation.  Keeping
+    this fallback here makes direct operator launches explicit while an
+    unresolved public checkout fails closed.
+    """
+    if isinstance(value, dict):
+        return {key: expand_runtime_references(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [expand_runtime_references(item) for item in value]
+    if not isinstance(value, str):
+        return value
+    result = value
+    for name in (
+        "QWEN_IMAGE_ASSET_ROOT", "QWEN_IMAGE_SD_CPP_SOURCE", "QWEN_IMAGE_SD_CPP_BINARY",
+        "QWEN_IMAGE_LOG_DIR", "QWEN_IMAGE_FUN_ACC_CONVERTER", "QWEN_IMAGE_SD_CPP_PATCH",
+    ):
+        marker = "${" + name + "}"
+        if marker in result:
+            replacement = os.environ.get(name, "").strip()
+            if not replacement:
+                raise ConfigError("qwen_runtime_config_missing")
+            result = result.replace(marker, replacement)
+    if "${QWEN_IMAGE_" in result:
+        raise ConfigError("qwen_runtime_config_invalid")
+    return result
+
+
 def ensure_internal_port_available(port: int) -> None:
     """Fail closed instead of treating another sd-server's health as ours."""
     try:
@@ -93,7 +122,7 @@ def verify_hash(path: Path, expected: str, expected_bytes: int) -> None:
 def load_config(path: Path) -> dict:
     if path.is_symlink() or not path.is_file():
         raise ConfigError("qwen_engine_config_missing")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = expand_runtime_references(json.loads(path.read_text(encoding="utf-8")))
     required = {
         "modelId", "assetRoot", "diffusionModelPath", "diffusionModelSha256", "diffusionModelBytes",
         "diffusionModelRepository", "diffusionModelRevision", "llmPath", "llmSha256", "llmBytes",

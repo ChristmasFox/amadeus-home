@@ -80,7 +80,7 @@
     const statusNode = $('action-status');
     const canvas = $('canvas-content');
     const resultActions = $('result-actions');
-    const publicHost = 'image.nyannyan.top';
+    const publicHost = location.protocol === 'https:' ? location.hostname : '';
     let mode = 'generate';
     let inputPreviewUrl = '';
     let outputUrl = '';

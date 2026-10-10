@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import type { WorldlineNotificationIntent } from '@agent/presentation';
@@ -63,8 +63,8 @@ export const VPS_CRITICAL_SERVICES: readonly VpsServiceDefinition[] = [
 ] as const;
 
 const READONLY_PROBE_COMMAND = '/usr/local/sbin/amadeus-vps-readonly-probe';
-export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core', 'legacy'] as const;
-type VpsSubscriptionAccountId = typeof VPS_SUBSCRIPTION_ACCOUNT_IDS[number];
+export const VPS_SUBSCRIPTION_ACCOUNT_IDS = ['account-001', 'account-002', 'account-003', 'account-004', 'account-005', 'operator-core', 'legacy'] as const;
+type VpsSubscriptionAccountId = string;
 type VpsFactStatus = 'ok' | 'stale' | 'error' | 'unknown';
 type VpsSecuritySignalCode = 'hy2_auth_failures' | 'hy2_auth_rate_limited' | 'reality_fallback_traffic' | 'account_dominant_window';
 
@@ -747,10 +747,43 @@ function safeIso(value: unknown): string | null {
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
 }
 
-function safeAccountId(value: unknown): VpsSubscriptionAccountId | null {
-  return typeof value === 'string' && (VPS_SUBSCRIPTION_ACCOUNT_IDS as readonly string[]).includes(value)
-    ? value as VpsSubscriptionAccountId
-    : null;
+interface VpsAccountMap {
+  active: string[];
+  dedicated: string;
+  legacy: string;
+}
+
+function validAccountId(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/u.test(value);
+}
+
+function defaultVpsAccountMap(): VpsAccountMap {
+  return { active: [...VPS_SUBSCRIPTION_ACCOUNT_IDS.slice(0, 5)], dedicated: 'operator-core', legacy: 'legacy' };
+}
+
+async function readVpsAccountMap(path: string | undefined): Promise<VpsAccountMap> {
+  if (!path) throw new VpsReadOnlyError('ACCOUNT_MAP_UNAVAILABLE', 'VPS account mapping is not configured');
+  let parsed: unknown;
+  try {
+    const metadata = await lstat(path);
+    if (!metadata.isFile() || (metadata.mode & 0o077) !== 0) throw new Error('account map is not private');
+    parsed = JSON.parse(await readFile(path, 'utf8')) as unknown;
+  } catch {
+    throw new VpsReadOnlyError('ACCOUNT_MAP_UNAVAILABLE', 'VPS account mapping is unavailable');
+  }
+  const item = objectValue(parsed);
+  const active = Array.isArray(item.activeAccountIds) ? item.activeAccountIds.filter(validAccountId) : [];
+  const dedicated = item.dedicatedAccountId;
+  const legacy = item.legacyAccountId;
+  if (active.length !== 5 || !validAccountId(dedicated) || !validAccountId(legacy)
+      || new Set([...active, dedicated, legacy]).size !== 7) {
+    throw new VpsReadOnlyError('ACCOUNT_MAP_INVALID', 'VPS account mapping is invalid');
+  }
+  return { active, dedicated, legacy };
+}
+
+function safeAccountId(value: unknown, accountIds: readonly string[]): VpsSubscriptionAccountId | null {
+  return typeof value === 'string' && accountIds.includes(value) ? value : null;
 }
 
 function sanitizeProtocolUsage(value: unknown): VpsSubscriptionProtocolUsage {
@@ -813,7 +846,7 @@ function sanitizeSource(value: unknown): Record<string, unknown> {
   };
 }
 
-function sanitizeSecurity(value: unknown): VpsSubscriptionSnapshot['security'] {
+function sanitizeSecurity(value: unknown, accountMap = defaultVpsAccountMap()): VpsSubscriptionSnapshot['security'] {
   const item = objectValue(value);
   const fallback = objectValue(item.realityFallback);
   const auth = objectValue(item.hysteriaAuth);
@@ -830,8 +863,8 @@ function sanitizeSecurity(value: unknown): VpsSubscriptionSnapshot['security'] {
     if (!signalCodes.includes(signal.code as VpsSecuritySignalCode)) continue;
     const code = signal.code as VpsSecuritySignalCode;
     if (code === 'account_dominant_window') {
-      const accountId = safeAccountId(signal.accountId);
-      if (!accountId || accountId === 'legacy') continue;
+      const accountId = safeAccountId(signal.accountId, [...accountMap.active, accountMap.dedicated, accountMap.legacy]);
+      if (!accountId || accountId === accountMap.legacy) continue;
       signals.push({
         code,
         accountId,
@@ -880,17 +913,18 @@ function sanitizeSecurity(value: unknown): VpsSubscriptionSnapshot['security'] {
   };
 }
 
-function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot {
+function sanitizedSubscriptionSnapshot(value: unknown, accountMap = defaultVpsAccountMap()): VpsSubscriptionSnapshot {
   const item = objectValue(value);
   if (!Array.isArray(item.accounts)) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is invalid');
+  const managedIds = [...accountMap.active, accountMap.dedicated];
+  const allIds = [...managedIds, accountMap.legacy];
   const rows = new Map<VpsSubscriptionAccountId, unknown>();
   for (const row of item.accounts) {
-    const id = safeAccountId(objectValue(row).accountId);
-    if (id && id !== 'legacy') rows.set(id, row);
+    const id = safeAccountId(objectValue(row).accountId, allIds);
+    if (id && id !== accountMap.legacy) rows.set(id, row);
   }
-  const managedIds = VPS_SUBSCRIPTION_ACCOUNT_IDS.filter((id) => id !== 'legacy');
   if (rows.size !== managedIds.length) throw new VpsReadOnlyError('ACCOUNTING_INVALID_RESPONSE', 'VPS accounting snapshot is incomplete');
-  const legacy = sanitizeSubscriptionAccount(item.legacy, 'legacy');
+  const legacy = sanitizeSubscriptionAccount(item.legacy, accountMap.legacy);
   const sourcesIn = objectValue(item.sources);
   const sources = {
     provider: sanitizeSource(sourcesIn.provider),
@@ -923,7 +957,7 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
   const proxyAccounted = nonnegativeInteger(item.proxyAccountedBytes);
   const windowIn = objectValue(item.reportWindow);
   const topIn = objectValue(windowIn.topAccount);
-  const topAccountId = safeAccountId(topIn.accountId);
+  const topAccountId = safeAccountId(topIn.accountId, allIds);
   return {
     generatedAt: safeIso(item.generatedAt),
     monitoringStartedAt: safeIso(item.monitoringStartedAt),
@@ -968,11 +1002,15 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
       proxyAccountedBytes: proxyAccounted,
       gapBytes: reconciliationStatus === 'calibrated' ? nonnegativeInteger(reconciliationIn.gapBytes) : null,
     },
-    security: sanitizeSecurity(item.security),
+    security: sanitizeSecurity(item.security, accountMap),
   };
 }
 
-export function parseVpsSubscriptionProbe(raw: string, checkedAt = new Date().toISOString()): unknown {
+export function parseVpsSubscriptionProbe(
+  raw: string,
+  checkedAt = new Date().toISOString(),
+  accountMap = defaultVpsAccountMap(),
+): unknown {
   const encoded = fieldsFromProbe(raw).get('ACCOUNTING_SNAPSHOT_JSON');
   if (!encoded || encoded.length > 64_000) {
     return {
@@ -983,7 +1021,7 @@ export function parseVpsSubscriptionProbe(raw: string, checkedAt = new Date().to
   }
   let snapshot: VpsSubscriptionSnapshot;
   try {
-    snapshot = sanitizedSubscriptionSnapshot(JSON.parse(encoded) as unknown);
+    snapshot = sanitizedSubscriptionSnapshot(JSON.parse(encoded) as unknown, accountMap);
   } catch (error) {
     return {
       status: 'error', source: 'ssh', checkedAt,
@@ -1023,7 +1061,8 @@ export async function getVpsSubscriptionOverview(config: AmadeusConfig, context:
   assertVpsSubscriptionOwnerContext(context);
   const checkedAt = new Date().toISOString();
   try {
-    return parseVpsSubscriptionProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt);
+    const accountMap = await readVpsAccountMap(config.vpsAccountMapFile);
+    return parseVpsSubscriptionProbe(await runReadOnlySsh(config, READONLY_PROBE_COMMAND, signal), checkedAt, accountMap);
   } catch (error) {
     return { status: 'error', source: 'ssh', checkedAt, error: safeError(error, 'ssh'), data: null } satisfies VpsEnvelope & { data: null };
   }
@@ -1036,12 +1075,19 @@ export async function getVpsSubscriptionDetail(
   signal?: AbortSignal,
 ): Promise<unknown> {
   assertVpsSubscriptionOwnerContext(context);
-  if (!(VPS_SUBSCRIPTION_ACCOUNT_IDS as readonly string[]).includes(accountId)) {
+  let accountMap: VpsAccountMap;
+  try {
+    accountMap = await readVpsAccountMap(config.vpsAccountMapFile);
+  } catch (error) {
+    return { status: 'error', source: 'ssh', checkedAt: new Date().toISOString(), error: safeError(error, 'ssh') };
+  }
+  const accountIds = [...accountMap.active, accountMap.dedicated, accountMap.legacy];
+  if (!accountIds.includes(accountId)) {
     return { status: 'error', source: 'ssh', checkedAt: new Date().toISOString(), error: { code: 'ACCOUNT_ID_INVALID', message: 'Account ID is not supported' } };
   }
   const overview = await getVpsSubscriptionOverview(config, context, signal) as { status?: string; checkedAt?: string; data?: VpsSubscriptionSnapshot | null; error?: VpsError };
   if (!overview.data) return overview;
-  const account = accountId === 'legacy' ? overview.data.legacy : overview.data.accounts.find((entry) => entry.accountId === accountId);
+  const account = accountId === accountMap.legacy ? overview.data.legacy : overview.data.accounts.find((entry) => entry.accountId === accountId);
   return {
     status: overview.status,
     source: 'ssh',

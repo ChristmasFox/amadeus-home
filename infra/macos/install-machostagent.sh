@@ -13,6 +13,7 @@ POWER_LABEL='com.amadeus.machostagent.power'
 POWER_HELPER_TARGET='/Library/Application Support/Amadeus/machostagent_power.py'
 POWER_PLIST_TARGET="/Library/LaunchDaemons/$POWER_LABEL.plist"
 POWER_FILE='/var/run/amadeus-machostagent-power.json'
+EXPECTED_HOST="${MACHOSTAGENT_HOST_NAME:-${MAC_HOST_NAME:-}}"
 
 usage() { printf '%s\n' "Usage: $0 [--dry-run] [--apply] [--accurate-power]"; }
 while (($#)); do
@@ -26,7 +27,10 @@ while (($#)); do
   shift
 done
 
-[[ "$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hostname -s)" == 'Amadeus-M204' ]] || { printf '%s\n' 'MAC_HOST_AGENT=blocked (host is not Amadeus-M204)' >&2; exit 1; }
+if ((APPLY == 1)); then
+  [[ -n "$EXPECTED_HOST" ]] || { printf '%s\n' 'MACHOSTAGENT_HOST_NAME is required for apply' >&2; exit 1; }
+  [[ "$(/usr/sbin/scutil --get ComputerName 2>/dev/null || /bin/hostname -s)" == "$EXPECTED_HOST" ]] || { printf 'MAC_HOST_AGENT=blocked (host identity mismatch; expected %s)\n' "$EXPECTED_HOST" >&2; exit 1; }
+fi
 printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
 printf 'PLIST=%s\n' "$PLIST_TARGET"
 printf 'INSTALL_DIR=%s\n' "$INSTALL_DIR"
@@ -43,7 +47,9 @@ if [[ ! -s "$TOKEN_TARGET" ]]; then
   exit 1
 fi
 /bin/chmod 600 "$TOKEN_TARGET"
-/usr/bin/sed "s#/usr/local/libexec/amadeus/machostagent.py#$INSTALL_DIR/machostagent.py#; s#/Library/Application Support/Amadeus/machostagent.token#$TOKEN_TARGET#; s#/Library/Application Support/Amadeus/machostagent.sqlite3#$INSTALL_DIR/machostagent.sqlite3#; s#/var/log/amadeus-mac-host-agent.log#$LOG_DIR/host-agent.log#; s#/var/log/amadeus-mac-host-agent.err.log#$LOG_DIR/host-agent.err.log#" "$ROOT_DIR/infra/macos/com.amadeus.machostagent.plist.example" > "$PLIST_TARGET"
+STORAGE_PATH="${MACHOSTAGENT_STORAGE_PATH:-}"
+[[ -n "$STORAGE_PATH" && "$STORAGE_PATH" == /* ]] || { printf '%s\n' 'MACHOSTAGENT_STORAGE_PATH must be an absolute operator path for apply' >&2; exit 1; }
+/usr/bin/sed "s#/usr/local/libexec/amadeus/machostagent.py#$INSTALL_DIR/machostagent.py#; s#/Library/Application Support/Amadeus/machostagent.token#$TOKEN_TARGET#; s#/Library/Application Support/Amadeus/machostagent.sqlite3#$INSTALL_DIR/machostagent.sqlite3#; s#/var/log/amadeus-mac-host-agent.log#$LOG_DIR/host-agent.log#; s#/var/log/amadeus-mac-host-agent.err.log#$LOG_DIR/host-agent.err.log#; s#<key>MACHOSTAGENT_HOST_NAME</key><string>operator-mac</string>#<key>MACHOSTAGENT_HOST_NAME</key><string>$EXPECTED_HOST</string>#; s#<key>MACHOSTAGENT_STORAGE_PATH</key><string>/var/lib/amadeus-storage</string>#<key>MACHOSTAGENT_STORAGE_PATH</key><string>$STORAGE_PATH</string>#" "$ROOT_DIR/infra/macos/com.amadeus.machostagent.plist.example" > "$PLIST_TARGET"
 /usr/bin/plutil -lint "$PLIST_TARGET"
 /bin/launchctl bootout "gui/$(/usr/bin/id -u)/$LABEL" 2>/dev/null || true
 /bin/launchctl bootstrap "gui/$(/usr/bin/id -u)" "$PLIST_TARGET"

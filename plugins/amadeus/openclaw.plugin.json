@@ -31,6 +31,7 @@
       "longbridgeSdkTokenDir": { "type": "string", "maxLength": 1024 },
       "macHostAgentBaseUrl": { "type": "string", "maxLength": 512 },
       "macHostAgentTokenFile": { "type": "string", "maxLength": 1024 },
+      "macHostName": { "type": "string", "maxLength": 256 },
       "imageAssetServiceBaseUrl": { "type": "string", "maxLength": 512 },
       "imageAssetServiceTokenFile": { "type": "string", "maxLength": 1024 },
       "imageAssetContainerRoot": { "type": "string", "maxLength": 1024 },
@@ -41,7 +42,8 @@
       "vpsSshPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
       "vpsSshKeyFile": { "type": "string", "maxLength": 1024 },
       "vpsSshKnownHostsFile": { "type": "string", "maxLength": 1024 },
-      "vpsUsageStateFile": { "type": "string", "maxLength": 1024 }
+      "vpsUsageStateFile": { "type": "string", "maxLength": 1024 },
+      "vpsAccountMapFile": { "type": "string", "maxLength": 1024 }
     },
     "additionalProperties": false
   },

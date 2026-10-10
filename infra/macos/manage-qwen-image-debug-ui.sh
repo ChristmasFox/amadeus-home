@@ -11,8 +11,10 @@ SECRETS="$HOME/Library/Application Support/Amadeus/secrets"
 BRIDGE_TOKEN="$SECRETS/qwen-image-token"
 LEGACY_UI_TOKEN="$SECRETS/qwen-image-debug-ui-token"
 PUBLIC_AUTH="$SECRETS/qwen-image-lab-auth.json"
+PUBLIC_NETWORK_CONFIG="${QWEN_DEBUG_UI_PUBLIC_CONFIG:-$SECRETS/qwen-image-lab-network.json}"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 PORT=18798
+OPERATOR_HOSTNAME="${AMADEUS_MAC_HOSTNAME:-${MAC_HOST_NAME:-}}"
 ACTION=--dry-run
 APPLY=0
 
@@ -41,7 +43,7 @@ fi
 
 if [[ "$ACTION" == --stop ]]; then
   (( APPLY == 1 )) || { echo '--stop changes a LaunchAgent; pass --stop --apply' >&2; exit 2; }
-  [[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
+  [[ -n "$OPERATOR_HOSTNAME" && "$(hostname -s)" == "$OPERATOR_HOSTNAME" ]] || { echo 'operator host profile required' >&2; exit 1; }
   launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
   echo 'QWEN_DEBUG_UI_STOPPED=yes'
   exit 0
@@ -54,7 +56,7 @@ QWEN_DEBUG_UI_HOST=0.0.0.0
 QWEN_DEBUG_UI_PORT=$PORT
 QWEN_BRIDGE_TARGET=http://127.0.0.1:18793
 QWEN_DEBUG_UI_PRIVATE_ACCESS=no-login
-QWEN_DEBUG_UI_PUBLIC_HOST=image.nyannyan.top
+QWEN_DEBUG_UI_PUBLIC_CONFIG=$PUBLIC_NETWORK_CONFIG
 QWEN_DEBUG_UI_PUBLIC_AUTH=runtime-scrypt-verifier-required
 QWEN_DEBUG_UI_RUNTIME=lightweight Python LaunchAgent; no model process added
 QWEN_DEBUG_UI_OUTPUT_DIR=$OUTPUT
@@ -63,12 +65,13 @@ EOF
   exit 0
 fi
 
-[[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
+[[ -n "$OPERATOR_HOSTNAME" && "$(hostname -s)" == "$OPERATOR_HOSTNAME" ]] || { echo 'operator host profile required' >&2; exit 1; }
 PYTHON=/opt/homebrew/opt/python@3.11/libexec/bin/python3
 [[ -x "$PYTHON" ]] || PYTHON="$(command -v python3)"
 "$PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' || { echo 'Python 3.11 or newer is required' >&2; exit 1; }
 [[ -s "$BRIDGE_TOKEN" && "$(stat -f %Lp "$BRIDGE_TOKEN")" == 600 ]] || { echo 'Qwen bridge token is missing or not mode 600' >&2; exit 1; }
 [[ -s "$PUBLIC_AUTH" && "$(stat -f %Lp "$PUBLIC_AUTH")" == 600 ]] || { echo 'public Image Lab verifier is missing or not mode 600' >&2; exit 1; }
+[[ -s "$PUBLIC_NETWORK_CONFIG" && ! -L "$PUBLIC_NETWORK_CONFIG" && "$(stat -f %Lp "$PUBLIC_NETWORK_CONFIG")" == 600 ]] || { echo 'public Image Lab network config is missing or not mode 600' >&2; exit 1; }
 health="$(curl -fsS --max-time 3 http://127.0.0.1:18793/health)" || { echo 'Qwen bridge is not responding on port 18793' >&2; exit 1; }
 printf '%s' "$health" | "$PYTHON" -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("status")=="ready" and d.get("model")=="local/qwen-image-2.1-uncensored" else 1)' || {
   echo 'Qwen bridge health is not ready' >&2
@@ -91,6 +94,7 @@ sed \
   -e "s|__SCRIPT__|$BASE/debug_ui.py|g" \
   -e "s|__BRIDGE_TOKEN_FILE__|$BRIDGE_TOKEN|g" \
   -e "s|__AUTH_FILE__|$PUBLIC_AUTH|g" \
+  -e "s|__PUBLIC_CONFIG__|$PUBLIC_NETWORK_CONFIG|g" \
   -e "s|__HTML_FILE__|$BASE/debug-ui.html|g" \
   -e "s|__OUTPUT_DIR__|$OUTPUT|g" \
   -e "s|__LOG_DIR__|$LOG|g" \

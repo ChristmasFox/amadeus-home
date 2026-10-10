@@ -1,0 +1,11 @@
+{
+  "activeAccountIds": [
+    "account-001",
+    "account-002",
+    "account-003",
+    "account-004",
+    "account-005"
+  ],
+  "dedicatedAccountId": "operator-core",
+  "legacyAccountId": "legacy"
+}

@@ -103,7 +103,7 @@ export async function homelabStatus(
   const serviceText = serviceEntries.filter(([, ok]) => ok).map(([name]) => name).join('、') || '无';
   const lines = [
     '🖥 M204 状态', `结论：${conclusion}`, '', '宿主机',
-    unavailable ? '• 遥测不可用（host telemetry unavailable）' : `• Amadeus-M204｜CPU ${compactNumber(cpu.utilizationPercent)}%｜${summaryLine(cpuSummary, '%')}`,
+    unavailable ? '• 遥测不可用（host telemetry unavailable）' : `• Mac 宿主机｜CPU ${compactNumber(cpu.utilizationPercent)}%｜${summaryLine(cpuSummary, '%')}`,
     `• 内存 ${bytes(memory.used)} / ${bytes(memory.total)}｜Pressure ${String(memory.pressure ?? 'unknown')}`,
     `• Swap ${bytes(swap.used)}｜趋势 ${String(swapSummary.delta ?? '未知')}`,
     `• ${powerLine(power, powerSummary)}`,

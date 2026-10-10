@@ -20,15 +20,15 @@ endpoint, shell command, SQL, credential, channel, or recipient:
 - `amadeus_vps_system_status`: fixed SSH probe for uptime, load average,
   memory, and `/` filesystem usage.
 - `amadeus_vps_services`: fixed SSH probe for Caddy, Xray, Hysteria2, and frps.
-- `amadeus_vps_subscription_overview`: empty input; returns five Labmem
-  identities, the dedicated `M204-Net-Core` Mac mini identity, retired legacy
+- `amadeus_vps_subscription_overview`: empty input; returns the five active identities and dedicated operator identity from the
+  protected account map, plus retired legacy
   history, protocol totals, a 12-hour sample window when known, freshness, each
   account's monitoring start time, and sanitized proxy-security facts. The
   window also exposes the whole-provider bytes, active subscription-account
   bytes, legacy bytes when complete, and an explicitly uncalibrated
   other-service/unattributed residual.
-- `amadeus_vps_subscription_detail`: requires one `accountId` from
-  `Labmem001`–`Labmem005`, `M204-Net-Core`, or `legacy`; returns one account's
+- `amadeus_vps_subscription_detail`: requires one `accountId` from the protected account map (or its retired
+  legacy ID); returns one account's
   monitored protocol totals and known activity facts. Legacy is historical and
   disabled after its retirement.
 - `amadeus_vps_traffic_fuse`: owner-only fixed read-only status for the
@@ -53,7 +53,7 @@ from a threshold alone: require the tool's verified state and rate.
 Security and suspected proxy-usage questions such as “VPS 有没有被盗用”,
 “HY2 有异常登录吗”, “Reality 有异常流量吗”, and “哪个订阅流量异常” use
 `amadeus_vps_subscription_overview`; use its typed security facts and signals,
-not model estimates. “M204-Net-Core 当前在线情况” uses
+not model estimates. The dedicated operator identity's online status uses
 `amadeus_vps_subscription_detail` for that account's HY2 and VLESS online facts.
 Account-specific questions use `amadeus_vps_subscription_detail`; explicit HY2
 versus VLESS questions use the same tool's protocol split. Only call the

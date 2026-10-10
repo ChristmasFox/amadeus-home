@@ -21,6 +21,7 @@ from debug_ui import (
     extract_edit_task_details,
     host_is_lan,
     is_lan_ip,
+    load_public_network_config,
     validate_generation_payload,
 )
 
@@ -86,6 +87,11 @@ def create_verifier(path: Path, password: str) -> None:
     path.chmod(0o600)
 
 
+def create_public_network_config(path: Path, host: str = "image.example.com") -> None:
+    path.write_text(json.dumps({"publicHost": host, "publicOrigin": f"https://{host}"}))
+    path.chmod(0o600)
+
+
 def png(width: int, height: int) -> bytes:
     return b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\x0dIHDR" + width.to_bytes(4, "big") + height.to_bytes(4, "big") + b"\x08\x02\x00\x00\x00"
 
@@ -112,12 +118,16 @@ class DebugUITest(unittest.TestCase):
         root = Path(self.temp_dir.name)
         self.output_dir = root / "Amadeus" / "QwenImage"
         self.auth_file = root / "secrets" / "auth.json"
+        self.public_config = root / "secrets" / "network.json"
         self.auth_file.parent.mkdir(mode=0o700)
         create_verifier(self.auth_file, self.password)
+        create_public_network_config(self.public_config, "image.example.com")
         self.bridge = ThreadingHTTPServer(("127.0.0.1", 0), FakeBridgeHandler)
         self.bridge_thread = threading.Thread(target=self.bridge.serve_forever, daemon=True)
         self.bridge_thread.start()
         self.static_file = Path(__file__).with_name("debug-ui.html")
+        self.public_host = "image.example.com"
+        self.public_origin = "https://image.example.com"
         self.server = DebugHTTPServer(
             ("127.0.0.1", 0),
             f"http://127.0.0.1:{self.bridge.server_port}",
@@ -125,14 +135,14 @@ class DebugUITest(unittest.TestCase):
             self.static_file,
             self.output_dir,
             self.auth_file,
+            self.public_host,
+            self.public_origin,
         )
         self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.server_thread.start()
         self.port = self.server.server_port
         self.host = f"127.0.0.1:{self.port}"
         self.origin = f"http://{self.host}"
-        self.public_host = "image.nyannyan.top"
-        self.public_origin = "https://image.nyannyan.top"
         self.connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=8)
 
     def tearDown(self) -> None:
@@ -167,6 +177,15 @@ class DebugUITest(unittest.TestCase):
         self.assertFalse(is_lan_ip("8.8.8.8"))
         self.assertTrue(host_is_lan("192.168.5.3:18798"))
         self.assertFalse(host_is_lan("debug.example.com"))
+
+    def test_public_network_config_is_operator_owned_and_strict(self) -> None:
+        self.assertEqual(load_public_network_config(self.public_config), ("image.example.com", "https://image.example.com"))
+        invalid = self.public_config.with_name("invalid-network.json")
+        invalid.write_text(json.dumps({"publicHost": "192.168.1.5", "publicOrigin": "https://192.168.1.5"}))
+        invalid.chmod(0o600)
+        with self.assertRaises(ValueError):
+            load_public_network_config(invalid)
+        self.assertEqual(load_public_network_config(None), (None, None))
 
     def test_ui_contract_contains_exactly_two_profiles_and_three_resolutions(self) -> None:
         html = self.static_file.read_text()

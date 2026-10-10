@@ -6,7 +6,7 @@ import type { OpenClawPluginApi, OpenClawPluginToolContext } from 'openclaw/plug
 import { identityContextFromOpenClaw } from '../src/identity.js';
 import entry from '../src/index.js';
 import { macHostStatus } from '../src/machost.js';
-import { assertVpsSubscriptionOwnerContext, parseVpsSubscriptionProbe } from '../src/vps.js';
+import { assertVpsSubscriptionOwnerContext, getVpsSubscriptionOverview, parseVpsSubscriptionProbe } from '../src/vps.js';
 import { isMacHostAgentHttpProbe, isMacHostShellProbe } from '../src/capabilities/macos-host/tool-guard.js';
 import { WHATSAPP_VOICE_RUNS_GLOBAL } from '../src/voice-reply-prompt.js';
 
@@ -142,7 +142,7 @@ test('Amadeus registers typed inbound identity context hooks', () => {
 
 test('host telemetry permits bounded group queries but keeps direct owner checks for notifications', async () => {
   const result = await macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:group:1', nativeChannelId: 'group-1@g.us' } as never);
-  assert.deepEqual(result, { status: 'unavailable', error: 'host telemetry unavailable', host: 'Amadeus-M204' });
+  assert.deepEqual(result, { status: 'unavailable', error: 'host telemetry unavailable', host: 'operator-mac' });
   await assert.rejects(() => macHostStatus({ macHostAgentBaseUrl: 'http://127.0.0.1:1', macHostAgentTokenFile: '/missing' } as never, { senderIsOwner: false, sessionKey: 'agent:main:chat' } as never), /owner or group query authorization/u);
 });
 
@@ -152,6 +152,15 @@ test('host telemetry blocks guest shell and raw HTTP substitutes', () => {
   assert.equal(isMacHostShellProbe('git status --short'), false);
   assert.equal(isMacHostAgentHttpProbe('http://host.docker.internal:18791/v1/status'), true);
   assert.equal(isMacHostAgentHttpProbe('http://product-radar:5315/health'), false);
+});
+
+test('subscription overview fails closed when the private account map is absent', async () => {
+  const result = await getVpsSubscriptionOverview({} as never, {
+    senderIsOwner: true,
+    sessionKey: 'agent:main:whatsapp:secondary:direct:+8613800000000',
+  } as never) as { status: string; error?: { code?: string } };
+  assert.equal(result.status, 'error');
+  assert.equal(result.error?.code, 'ACCOUNT_MAP_UNAVAILABLE');
 });
 
 test('subscription accounting tools reject non-owners and every group session', () => {
@@ -175,7 +184,7 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   const source = { status: 'ok', checkedAt: '2026-10-08T04:00:00Z', lastSuccessfulAt: '2026-10-08T04:00:00Z', lastErrorAt: null };
   const snapshot = {
     generatedAt: '2026-10-08T04:00:00Z', monitoringStartedAt: '2026-10-08T04:00:00Z',
-    accounts: ['Labmem001', 'Labmem002', 'Labmem003', 'Labmem004', 'Labmem005', 'M204-Net-Core'].map(account),
+    accounts: ['account-001', 'account-002', 'account-003', 'account-004', 'account-005', 'operator-core'].map(account),
     legacy: { ...account('legacy'), enabled: false }, protocolTotals: { hy2: {}, vless: {} },
     knownProxyAccountedBytes: 0, proxyAccountedBytes: null, proxyAccountedComplete: false,
     sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source, reality_fallback: source },
@@ -200,7 +209,7 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
       },
       signals: [
         { code: 'reality_fallback_traffic', value: 1536, threshold: 1024, sourceIp: '203.0.113.44' },
-        { code: 'account_dominant_window', accountId: 'M204-Net-Core', sharePercent: 90, thresholdPercent: 85, windowBytes: 100 },
+        { code: 'account_dominant_window', accountId: 'operator-core', sharePercent: 90, thresholdPercent: 85, windowBytes: 100 },
         { code: 'credential_leaked', token: 'must-not-leak' },
       ],
     },
@@ -210,7 +219,7 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal(parsed.data.proxyAccountedBytes, null);
   assert.equal(parsed.data.proxyAccountedComplete, false);
   assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).xray_online?.status, 'ok');
-  assert.equal((parsed.data.accounts as Array<{ accountId: string }>).at(-1)?.accountId, 'M204-Net-Core');
+  assert.equal((parsed.data.accounts as Array<{ accountId: string }>).at(-1)?.accountId, 'operator-core');
   assert.equal((parsed.data.legacy as { enabled: boolean }).enabled, false);
   const reportWindow = parsed.data.reportWindow as {
     providerBytes: number | null; subscriptionBytes: number | null; otherServiceBytes: number | null;

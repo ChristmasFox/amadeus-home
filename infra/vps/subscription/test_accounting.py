@@ -138,15 +138,15 @@ class AccountingStoreTests(unittest.TestCase):
     def test_partial_store_refuses_to_generate_replacement_credentials(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
         with self.store._connect() as db:
-            db.execute("DELETE FROM accounts WHERE account_id='Labmem005'")
+            db.execute("DELETE FROM accounts WHERE account_id='account-005'")
         with self.assertRaisesRegex(RuntimeError, "partially initialized"):
             self.store.initialize_accounts(LEGACY, created_at=NOW)
 
     def test_auth_lookup_is_exact_and_unknown_secret_fails_closed(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
         records = self.store.account_records_for_runtime()
-        labmem = next(row for row in records if row["account_id"] == "Labmem003")
-        self.assertEqual(self.store.auth_account_id(str(labmem["hy2_secret"])), "Labmem003")
+        labmem = next(row for row in records if row["account_id"] == "account-003")
+        self.assertEqual(self.store.auth_account_id(str(labmem["hy2_secret"])), "account-003")
         self.assertIsNone(self.store.auth_account_id(str(labmem["hy2_secret"]) + "x"))
         self.assertIsNone(self.store.auth_account_id(""))
 
@@ -190,7 +190,7 @@ class AccountingStoreTests(unittest.TestCase):
             counter_bytes=100, total_bytes=1000, reset_at="2026-10-17T00:00:00Z", sampled_at=NOW,
         ))
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"legacy": (15, 20), "Labmem001": (4, 6)},
+            source="hysteria_traffic", protocol="hy2", counters={"legacy": (15, 20), "account-001": (4, 6)},
             generation="hy2-1", sampled_at=NOW, baseline=True,
         )
         self.store.record_counter_sample(
@@ -201,7 +201,7 @@ class AccountingStoreTests(unittest.TestCase):
             counter_bytes=130, total_bytes=1000, reset_at="2026-10-17T00:00:00Z", sampled_at="2026-10-08T04:01:00Z",
         )
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"legacy": (25, 31), "Labmem001": (14, 16)},
+            source="hysteria_traffic", protocol="hy2", counters={"legacy": (25, 31), "account-001": (14, 16)},
             generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
         )
         self.store.record_counter_sample(
@@ -244,9 +244,9 @@ class AccountingStoreTests(unittest.TestCase):
             counter_bytes=160, total_bytes=1000, reset_at=None, sampled_at="2026-10-08T04:01:00Z",
         )
         hy2 = dict(baseline)
-        hy2["Labmem001"] = (7, 8)
+        hy2["account-001"] = (7, 8)
         vless = dict(baseline)
-        vless["Labmem001"] = (3, 2)
+        vless["account-001"] = (3, 2)
         self.store.record_counter_sample(
             source="hysteria_traffic", protocol="hy2", counters=hy2,
             generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
@@ -280,22 +280,22 @@ class AccountingStoreTests(unittest.TestCase):
         )
         # These tuples reflect the old reversed tx/rx interpretation.
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"Labmem001": (12, 90)},
+            source="hysteria_traffic", protocol="hy2", counters={"account-001": (12, 90)},
             generation="hy2-1", sampled_at=NOW, baseline=True,
         )
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"Labmem001": (32, 100)},
+            source="hysteria_traffic", protocol="hy2", counters={"account-001": (32, 100)},
             generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
         )
         self.assertTrue(self.store.migrate_hysteria_direction_to_client_perspective())
         self.assertFalse(self.store.migrate_hysteria_direction_to_client_perspective())
         snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 2, tzinfo=timezone.utc))
-        account = next(row for row in snapshot["accounts"] if row["accountId"] == "Labmem001")
+        account = next(row for row in snapshot["accounts"] if row["accountId"] == "account-001")
         protocol = account["protocols"]["hy2"]
         self.assertEqual((protocol["uploadBytes"], protocol["downloadBytes"]), (10, 20))
         with self.store._connect() as db:
             row = db.execute(
-                "SELECT upload_raw,download_raw FROM counter_state WHERE account_id='Labmem001' AND protocol='hy2'"
+                "SELECT upload_raw,download_raw FROM counter_state WHERE account_id='account-001' AND protocol='hy2'"
             ).fetchone()
             delta = db.execute(
                 "SELECT upload_bytes,download_bytes FROM traffic_deltas WHERE protocol='hy2'"
@@ -355,16 +355,16 @@ class AccountingStoreTests(unittest.TestCase):
         self.store.initialize_accounts(LEGACY, created_at=NOW)
         self.store.record_provider_sample(counter_bytes=90, total_bytes=1000, reset_at=None, sampled_at=NOW)
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"Labmem002": (2, 3)},
+            source="hysteria_traffic", protocol="hy2", counters={"account-002": (2, 3)},
             generation="hy2-1", sampled_at=NOW,
         )
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"Labmem002": (7, 8)},
+            source="hysteria_traffic", protocol="hy2", counters={"account-002": (7, 8)},
             generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
         )
         records = self.store.account_records_for_runtime()
         snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 1, tzinfo=timezone.utc))
-        account = next(row for row in snapshot["accounts"] if row["accountId"] == "Labmem001")
+        account = next(row for row in snapshot["accounts"] if row["accountId"] == "account-001")
         self.assertEqual(account["protocols"]["hy2"]["totalBytes"], 0)
         self.assertEqual(account["protocols"]["hy2"]["uploadBytes"], 0)
         legacy = snapshot["legacy"]
@@ -402,10 +402,10 @@ class AccountingStoreTests(unittest.TestCase):
 
     def test_online_snapshot_distinguishes_hy2_instances_from_vless_source_ips(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
-        self.store.record_online_sample({"Labmem003": 2}, NOW, protocol="hy2", source="hysteria_online")
-        self.store.record_online_sample({"Labmem003": 1}, NOW, protocol="vless", source="xray_online")
+        self.store.record_online_sample({"account-003": 2}, NOW, protocol="hy2", source="hysteria_online")
+        self.store.record_online_sample({"account-003": 1}, NOW, protocol="vless", source="xray_online")
         snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 1, tzinfo=timezone.utc))
-        account = next(row for row in snapshot["accounts"] if row["accountId"] == "Labmem003")
+        account = next(row for row in snapshot["accounts"] if row["accountId"] == "account-003")
         self.assertEqual(account["protocols"]["hy2"]["onlineCount"], 2)
         self.assertEqual(account["protocols"]["hy2"]["onlineCountKind"], "client_instances")
         self.assertEqual(account["protocols"]["hy2"]["onlineStatus"], "ok")
@@ -435,11 +435,11 @@ class AccountingStoreTests(unittest.TestCase):
             generation="hy2-1", sampled_at=NOW,
         )
         self.store.record_counter_sample(
-            source="hysteria_traffic", protocol="hy2", counters={"Labmem001": (12, 30)},
+            source="hysteria_traffic", protocol="hy2", counters={"account-001": (12, 30)},
             generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
         )
         snapshot = self.store.public_snapshot(now=datetime(2026, 10, 8, 4, 1, tzinfo=timezone.utc))
-        labmem = next(row for row in snapshot["accounts"] if row["accountId"] == "Labmem001")
+        labmem = next(row for row in snapshot["accounts"] if row["accountId"] == "account-001")
         self.assertEqual(labmem["protocols"]["hy2"]["uploadBytes"], 12)
         self.assertEqual(labmem["protocols"]["hy2"]["downloadBytes"], 30)
         self.assertEqual(labmem["protocols"]["hy2"]["windowBytes"], 42)
@@ -574,23 +574,23 @@ class ParserAndAuthTests(unittest.TestCase):
 
     def test_protocol_parsers_map_direction_and_ignore_unknown_ids(self) -> None:
         self.assertEqual(XRAY_USER_STATS_PATTERN, "user>>>")
-        self.assertEqual(parse_hysteria_traffic({"legacy-hy2": {"tx": 90, "rx": 12}, "Labmem001": {"tx": 8, "rx": 3}, "M204-Net-Core": {"tx": 1, "rx": 2}, "other": {"tx": 100, "rx": 100}}), {
-            "legacy": (90, 12), "Labmem001": (8, 3), M204_ID: (1, 2),
+        self.assertEqual(parse_hysteria_traffic({"legacy-hy2": {"tx": 90, "rx": 12}, "account-001": {"tx": 8, "rx": 3}, "operator-core": {"tx": 1, "rx": 2}, "other": {"tx": 100, "rx": 100}}), {
+            "legacy": (90, 12), "account-001": (8, 3), M204_ID: (1, 2),
         })
-        self.assertEqual(parse_hysteria_online({"Labmem001": 2, "legacy-hy2": 1, "bad": 9}), {"Labmem001": 2, "legacy": 1})
+        self.assertEqual(parse_hysteria_online({"account-001": 2, "legacy-hy2": 1, "bad": 9}), {"account-001": 2, "legacy": 1})
         stats = {"stat": [
             {"name": "user>>>legacy-vless>>>traffic>>>uplink", "value": "14"},
             {"name": "user>>>legacy-vless>>>traffic>>>downlink", "value": "25"},
-            {"name": "user>>>Labmem005.vless>>>traffic>>>uplink", "value": "5"},
-            {"name": "user>>>Labmem005.vless>>>traffic>>>downlink", "value": "11"},
-            {"name": "user>>>M204-Net-Core.vless>>>traffic>>>uplink", "value": "2"},
-            {"name": "user>>>M204-Net-Core.vless>>>traffic>>>downlink", "value": "3"},
-            {"name": "user>>>Labmem004.vless>>>traffic>>>uplink", "value": 1.5},
-            {"name": "user>>>Labmem004.vless>>>traffic>>>downlink", "value": 8},
+            {"name": "user>>>account-005.vless>>>traffic>>>uplink", "value": "5"},
+            {"name": "user>>>account-005.vless>>>traffic>>>downlink", "value": "11"},
+            {"name": "user>>>operator-core.vless>>>traffic>>>uplink", "value": "2"},
+            {"name": "user>>>operator-core.vless>>>traffic>>>downlink", "value": "3"},
+            {"name": "user>>>account-004.vless>>>traffic>>>uplink", "value": 1.5},
+            {"name": "user>>>account-004.vless>>>traffic>>>downlink", "value": 8},
             {"name": "user>>>unknown>>>traffic>>>uplink", "value": "400"},
         ]}
-        self.assertEqual(parse_xray_stats(stats), {"legacy": (14, 25), "Labmem005": (5, 11), M204_ID: (2, 3)})
-        self.assertEqual(parse_xray_stats({"stat": [{"name": "user>>>Labmem001.vless>>>traffic>>>uplink", "value": "1"}]}), {})
+        self.assertEqual(parse_xray_stats(stats), {"legacy": (14, 25), "account-005": (5, 11), M204_ID: (2, 3)})
+        self.assertEqual(parse_xray_stats({"stat": [{"name": "user>>>account-001.vless>>>traffic>>>uplink", "value": "1"}]}), {})
         self.assertEqual(parse_xray_fallback_stats({"stat": [
             {"name": "inbound>>>reality-fallback-gate>>>traffic>>>uplink", "value": "31"},
             {"name": "inbound>>>reality-fallback-gate>>>traffic>>>downlink", "value": 47},
@@ -602,24 +602,24 @@ class ParserAndAuthTests(unittest.TestCase):
         self.assertEqual(parse_hysteria_client_addr("[2001:db8::1]:44321"), "2001:db8::1")
         for malformed in ("127.0.0.1", "2001:db8::1:443", "[not-an-ip]:443", "203.0.113.1:0", "203.0.113.1:abc"):
             self.assertIsNone(parse_hysteria_client_addr(malformed))
-        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online", "value": 2}}, "Labmem001"), 2)
-        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>M204-Net-Core.vless>>>online", "value": 1}}, M204_ID), 1)
-        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online"}}, "Labmem001"), 0)
+        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>account-001.vless>>>online", "value": 2}}, "account-001"), 2)
+        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>operator-core.vless>>>online", "value": 1}}, M204_ID), 1)
+        self.assertEqual(parse_xray_online({"stat": {"name": "user>>>account-001.vless>>>online"}}, "account-001"), 0)
         self.assertEqual(parse_xray_online_version("Xray 26.6.27 (Xray, Penetrates Everything.)"), (26, 6, 27))
         self.assertEqual(parse_xray_online_version("Xray 26.9.30 (Xray, Penetrates Everything.)"), (26, 9, 30))
         with self.assertRaisesRegex(SourceFailure, "unsupported_version"):
             parse_xray_online_version("Xray 26.3.27 (Xray, Penetrates Everything.)")
         self.assertTrue(xray_online_not_found_is_zero(
-            "failed to get stats: rpc error: code = NotFound desc = user>>>Labmem001.vless>>>online not found.",
-            "Labmem001",
+            "failed to get stats: rpc error: code = NotFound desc = user>>>account-001.vless>>>online not found.",
+            "account-001",
         ))
         self.assertFalse(xray_online_not_found_is_zero(
-            "failed to get stats: rpc error: code = Unavailable desc = offline", "Labmem001"
+            "failed to get stats: rpc error: code = Unavailable desc = offline", "account-001"
         ))
         with self.assertRaisesRegex(SourceFailure, "invalid_response"):
-            parse_xray_online({"stat": {"name": "user>>>other>>>online", "value": 99}}, "Labmem001")
+            parse_xray_online({"stat": {"name": "user>>>other>>>online", "value": 99}}, "account-001")
         with self.assertRaisesRegex(SourceFailure, "invalid_response"):
-            parse_xray_online({"stat": {"name": "user>>>Labmem001.vless>>>online", "value": 1.5}}, "Labmem001")
+            parse_xray_online({"stat": {"name": "user>>>account-001.vless>>>online", "value": 1.5}}, "account-001")
 
     def test_legacy_import_parsers_read_values_without_printing_or_changing_them(self) -> None:
         self.assertEqual(parse_hysteria_legacy_password('auth:\n  type: password\n  password: "legacy#value"\n'), "legacy#value")
@@ -692,7 +692,7 @@ class ParserAndAuthTests(unittest.TestCase):
             store.provision_m204(created_at=NOW)
             store.disable_legacy(disabled_at="2026-10-08T04:02:00Z")
             records = store.account_records_for_runtime()
-            account = next(row for row in records if row["account_id"] == "Labmem004")
+            account = next(row for row in records if row["account_id"] == "account-004")
             m204 = next(row for row in records if row["account_id"] == M204_ID)
             server = AccountingHTTPServer(("127.0.0.1", 0), store)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -702,11 +702,11 @@ class ParserAndAuthTests(unittest.TestCase):
                 request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=body, headers={"Content-Type": "application/json"})
                 with urlopen(request, timeout=2) as response:
                     self.assertEqual(response.status, 200)
-                    self.assertEqual(json.loads(response.read()), {"ok": True, "id": "Labmem004"})
+                    self.assertEqual(json.loads(response.read()), {"ok": True, "id": "account-004"})
                 request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": m204["hy2_secret"], "addr": "[2001:db8::1]:2", "tx": 0}).encode(), headers={"Content-Type": "application/json"})
                 with urlopen(request, timeout=2) as response:
                     self.assertEqual(response.status, 200)
-                    self.assertEqual(json.loads(response.read()), {"ok": True, "id": "M204-Net-Core"})
+                    self.assertEqual(json.loads(response.read()), {"ok": True, "id": "operator-core"})
                 bad_secret = "unknown-auth-never-echo-this"
                 request = Request(f"http://127.0.0.1:{server.server_port}/auth", data=json.dumps({"auth": bad_secret, "addr": "203.0.113.55:7", "tx": 1}).encode(), headers={"Content-Type": "application/json"})
                 with self.assertRaises(HTTPError) as error:
@@ -745,7 +745,7 @@ class ParserAndAuthTests(unittest.TestCase):
             store.initialize_accounts(LEGACY, created_at=NOW)
             store.provision_m204(created_at=NOW)
             store.disable_legacy(disabled_at="2026-10-08T04:02:00Z")
-            account = next(row for row in store.account_records_for_runtime() if row["account_id"] == "Labmem002")
+            account = next(row for row in store.account_records_for_runtime() if row["account_id"] == "account-002")
             tracker = AuthFailureTracker(window_seconds=60, threshold=1, cooldown_seconds=60, mode="enforce")
             server = AccountingHTTPServer(("127.0.0.1", 0), store, auth_tracker=tracker)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -765,7 +765,7 @@ class ParserAndAuthTests(unittest.TestCase):
                 # A correct credential from the same blocked source receives the identical generic response.
                 self.assertEqual(request_auth(str(account["hy2_secret"]), "203.0.113.21:1001"), (403, '{"ok":false}'))
                 # The same valid credential remains usable from a different source.
-                self.assertEqual(request_auth(str(account["hy2_secret"]), "203.0.113.22:1000"), (200, '{"ok":true,"id":"Labmem002"}'))
+                self.assertEqual(request_auth(str(account["hy2_secret"]), "203.0.113.22:1000"), (200, '{"ok":true,"id":"account-002"}'))
                 snapshot = tracker.snapshot()
                 self.assertEqual(snapshot["authFailuresLimiterWindow"], 1)
                 self.assertEqual(snapshot["authRateLimitedLimiterWindow"], 1)
@@ -796,7 +796,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
                     "port": 2053, "protocol": "vless",
                     "settings": {"clients": [
                         {"id": LEGACY.vless_uuid, "email": "legacy-vless", "level": 0, "flow": "xtls-rprx-vision"},
-                        {"id": records["Labmem001"]["vless_uuid"], "email": "Labmem001.vless", "level": 0, "flow": "xtls-rprx-vision"},
+                        {"id": records["account-001"]["vless_uuid"], "email": "account-001.vless", "level": 0, "flow": "xtls-rprx-vision"},
                     ]},
                     "streamSettings": {
                         "network": "tcp", "security": "reality",
@@ -883,7 +883,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = AccountingStore(Path(directory) / "accounts.sqlite")
             store.initialize_accounts(LEGACY, created_at=NOW)
-            record = next(row for row in store.account_records_for_runtime() if row["account_id"] == "Labmem002")
+            record = next(row for row in store.account_records_for_runtime() if row["account_id"] == "account-002")
             files = render_subscription_files(record, {
                 "vless_server": "203.0.113.10", "hy2_server": "sub.example.com", "hy2_sni": "sub.example.com",
                 "reality_server_name": "www.apple.com", "reality_public_key": "public-key-placeholder", "reality_short_id": "0011223344556677",
@@ -966,7 +966,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
             store.initialize_accounts(LEGACY, created_at=NOW)
             store.provision_m204(created_at=NOW)
             store.disable_legacy(disabled_at="2026-10-08T04:01:00Z")
-            active = next(row for row in store.account_records_for_runtime() if row["account_id"] == "Labmem001")
+            active = next(row for row in store.account_records_for_runtime() if row["account_id"] == "account-001")
             source = root / "xray.json"
             output = root / "candidate.json"
             source_config = {
@@ -975,7 +975,7 @@ class SubscriptionRenderingTests(unittest.TestCase):
                     "listen": "0.0.0.0", "port": 2053, "protocol": "vless",
                     "settings": {"clients": [
                         {"id": LEGACY.vless_uuid, "email": "legacy-vless", "level": 0, "flow": "xtls-rprx-vision"},
-                        {"id": active["vless_uuid"], "email": "Labmem001.vless", "level": 0, "flow": "xtls-rprx-vision"},
+                        {"id": active["vless_uuid"], "email": "account-001.vless", "level": 0, "flow": "xtls-rprx-vision"},
                     ], "decryption": "none"},
                     "streamSettings": {"network": "tcp", "security": "reality", "realitySettings": {"target": "www.example.com:443", "dest": "www.example.com:443", "privateKey": "private-placeholder", "serverNames": ["www.example.com"], "shortIds": ["0011223344556677"]}},
                     "sniffing": {"enabled": True},

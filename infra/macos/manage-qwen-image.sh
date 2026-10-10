@@ -11,6 +11,8 @@ BASE="$HOME/Library/Application Support/Amadeus/QwenImage"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 LOG="$HOME/Library/Logs/Amadeus/QwenImage"
 TOKEN="$HOME/Library/Application Support/Amadeus/secrets/qwen-image-token"
+RUNTIME_PROFILE="${QWEN_IMAGE_RUNTIME_PROFILE:-$HOME/Library/Application Support/Amadeus/secrets/qwen-image-runtime.json}"
+OPERATOR_HOSTNAME="${AMADEUS_MAC_HOSTNAME:-${MAC_HOST_NAME:-}}"
 SCRIPT="$BASE/bridge.py"
 INSTALLED_CONFIG="$BASE/qwen-image-engine.json"
 INSTALLED_FAST_CONFIG="$BASE/qwen-image-fast-engine.json"
@@ -34,9 +36,9 @@ if ((apply == 1 && explicit_action == 0)); then
 fi
 
 port="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["servicePort"])' "$CONFIG")"
-printf 'MODE=%s\nAPPLY=%s\nSERVICE=%s\nPORT=%s\nTOKEN_FILE=%s\nASSET_ROOT=%s\nPLIST=%s\n' \
+printf 'MODE=%s\nAPPLY=%s\nSERVICE=%s\nPORT=%s\nTOKEN_FILE=%s\nRUNTIME_PROFILE=%s\nASSET_ROOT=operator-profile\nPLIST=%s\n' \
   "$action" "$apply" "$LABEL" "$port" "$TOKEN" \
-  "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["assetRoot"])' "$CONFIG")" "$PLIST"
+  "$RUNTIME_PROFILE" "$PLIST"
 
 if [[ "$action" == --status ]]; then
   launchctl print "$TARGET/$LABEL" 2>/dev/null | grep -E 'state =|pid =|last exit code =' || true
@@ -52,7 +54,7 @@ if [[ "$action" == --dry-run ]]; then
 fi
 [[ "$action" == --uninstall || "$action" == --start || "$action" == --stop || "$action" == --restart ]] || { echo 'an action is required' >&2; exit 2; }
 ((apply == 1)) || { echo "$action changes the LaunchAgent or service files; pass --apply explicitly" >&2; exit 2; }
-[[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 host required' >&2; exit 1; }
+[[ -n "$OPERATOR_HOSTNAME" && "$(hostname -s)" == "$OPERATOR_HOSTNAME" ]] || { echo 'operator host profile required' >&2; exit 1; }
 
 if [[ "$action" == --uninstall ]]; then
   launchctl bootout "$TARGET/$LABEL" 2>/dev/null || true
@@ -71,15 +73,25 @@ if [[ "$action" == --stop ]]; then
 fi
 
 if [[ "$action" == --start || "$action" == --restart ]]; then
+  [[ -f "$RUNTIME_PROFILE" && ! -L "$RUNTIME_PROFILE" && "$(stat -f %Lp "$RUNTIME_PROFILE")" == 600 ]] || {
+    echo "Qwen runtime profile is missing or not mode 600: $RUNTIME_PROFILE" >&2
+    exit 1
+  }
+  operator_hostname="$(python3 -c 'import json,sys; value=json.load(open(sys.argv[1])).get("hostName", ""); print(value if isinstance(value,str) else "")' "$RUNTIME_PROFILE")"
+  [[ -n "$operator_hostname" && "$(hostname -s)" == "$operator_hostname" ]] || {
+    echo 'Qwen runtime profile host identity mismatch' >&2
+    exit 1
+  }
   if launchctl print "$TARGET/$KREA_LABEL" >/dev/null 2>&1; then
     echo 'refusing concurrent Krea diffusion service' >&2
     exit 1
   fi
-  asset_root="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["assetRoot"])' "$CONFIG")"
-  runtime_repo="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppSourcePath"])' "$CONFIG")"
-  expected_commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppCommit"])' "$CONFIG")"
-  runtime_binary="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppBinary"])' "$CONFIG")"
-  [[ "$asset_root" == /Volumes/Avalon/models/qwen-image-2.1-uncensored/assets ]] || { echo 'unexpected Qwen asset root' >&2; exit 1; }
+  python3 "$ROOT/scripts/render-qwen-image-config.py" "$CONFIG" "$RUNTIME_PROFILE" "$INSTALLED_CONFIG"
+  python3 "$ROOT/scripts/render-qwen-image-config.py" "$FAST_CONFIG" "$RUNTIME_PROFILE" "$INSTALLED_FAST_CONFIG"
+  asset_root="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["assetRoot"])' "$INSTALLED_CONFIG")"
+  runtime_repo="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppSourcePath"])' "$INSTALLED_CONFIG")"
+  expected_commit="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppCommit"])' "$INSTALLED_CONFIG")"
+  runtime_binary="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sdCppBinary"])' "$INSTALLED_CONFIG")"
   [[ -s "$asset_root/diffusion/qwen-image-2.1-UC-Q4_K_M.gguf" && -s "$asset_root/text-encoder/Qwen3VL-8B-Instruct-Q4_K_M.gguf" && -s "$asset_root/text-encoder/mmproj-Qwen3VL-8B-Instruct-F16.gguf" && -s "$asset_root/vae/qwen_image_2.1_vae_bf16.safetensors" ]] || { echo 'pinned Qwen assets missing' >&2; exit 1; }
   [[ -x "$runtime_binary" ]] || { echo 'pinned sd-server binary missing' >&2; exit 1; }
   [[ "$(git -C "$runtime_repo" rev-parse HEAD)" == "$expected_commit" ]] || { echo 'pinned stable-diffusion.cpp revision mismatch' >&2; exit 1; }
@@ -103,8 +115,6 @@ PY
   fi
   [[ "$(stat -f %Lp "$TOKEN")" == 600 ]] || { echo 'Qwen token must be mode 600' >&2; exit 1; }
   install -m 700 "$ROOT/apps/qwen-image-service/bridge.py" "$SCRIPT"
-  install -m 600 "$CONFIG" "$INSTALLED_CONFIG"
-  install -m 600 "$FAST_CONFIG" "$INSTALLED_FAST_CONFIG"
   temporary="$(mktemp "$PLIST.tmp.XXXXXX")"
   trap 'rm -f "$temporary"' EXIT
   sed -e "s|__PYTHON__|$PYTHON|g" -e "s|__SERVICE_SCRIPT__|$SCRIPT|g" -e "s|__QUALITY_CONFIG__|$INSTALLED_CONFIG|g" -e "s|__FAST_CONFIG__|$INSTALLED_FAST_CONFIG|g" -e "s|__TOKEN_FILE__|$TOKEN|g" -e "s|__LOG_DIR__|$LOG|g" "$ROOT/infra/macos/com.amadeus.qwen-image.plist.example" > "$temporary"
