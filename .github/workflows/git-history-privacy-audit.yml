@@ -7,6 +7,7 @@ on:
       - "scripts/summarize-history-scan.mjs"
       - "scripts/audit-git-history-blobs.mjs"
       - "scripts/backup-git-history-before-rewrite.sh"
+      - "scripts/rehearse-git-history-privacy.sh"
       - "docs/GIT_HISTORY_PRIVACY_REWRITE_REVIEW.md"
   workflow_dispatch:
 
@@ -25,13 +26,44 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - name: Validate safe backup script syntax (never execute in CI)
-        run: bash -n scripts/backup-git-history-before-rewrite.sh
+      - name: Validate local-only shell scripts
+        run: |
+          bash -n scripts/backup-git-history-before-rewrite.sh
+          bash -n scripts/rehearse-git-history-privacy.sh
       - name: Read-only reachable-blob privacy analysis (no values)
         run: |
           node scripts/audit-git-history-blobs.mjs
           echo "REACHABLE_COMMIT_COUNT=$(git rev-list --all --count)"
           echo "TRACKED_REF_COUNT=$(git for-each-ref --format='%(refname)' refs/remotes/origin refs/tags | wc -l | tr -d ' ')"
+      - name: Offline rewrite test using synthetic Git bundle only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --user --break-system-packages git-filter-repo
+          export PATH="$HOME/.local/bin:$PATH"
+          TMP="$(mktemp -d)"
+          git init -q -b main "$TMP/src"
+          git -C "$TMP/src" config user.name fixture
+          git -C "$TMP/src" config user.email fixture@example.invalid
+          mkdir -p "$TMP/src/infra/9router" "$TMP/src/scripts"
+          printf '%s\n' 'demo-host.example.private.example' > "$TMP/src/README.md"
+          printf '%s\n' 'demo-host.example.private.example' > "$TMP/src/scripts/runtime.sh"
+          printf '%s\n' '{"email":"fixture@example.invalid"}' > "$TMP/src/infra/9router/runtime-policy.json"
+          git -C "$TMP/src" add -A
+          git -C "$TMP/src" commit -qm 'synthetic private policy fixture'
+          git -C "$TMP/src" tag v1.10.4
+          git -C "$TMP/src" bundle create "$TMP/source.bundle" --all
+          printf '%s\n' 'literal:demo-host.example.private.example==>example.com' > "$TMP/rules.txt"
+          AMADEUS_REWRITE_SOURCE_REPO="$TMP/src" \
+            AMADEUS_REWRITE_OUTPUT_DIR="$TMP/out" \
+            bash scripts/rehearse-git-history-privacy.sh "$TMP/source.bundle" "$TMP/rules.txt"
+          git --git-dir="$TMP/out/rehearsal.git" show refs/heads/main:README.md | grep -Fqx example.com
+          git --git-dir="$TMP/out/rehearsal.git" show refs/heads/main:scripts/runtime.sh | grep -Fqx demo-host.example.private.example
+          if git --git-dir="$TMP/out/rehearsal.git" cat-file -e refs/heads/main:infra/9router/runtime-policy.json 2>/dev/null; then
+            echo "Historical operator policy path still exists" >&2
+            exit 1
+          fi
+          rm -rf "$TMP"
       - name: Gitleaks full-history scan — summary ONLY
         shell: bash
         run: |

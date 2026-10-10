@@ -79,3 +79,44 @@ GitHub procedure:
 https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository
 
 STATUS: Draft PR, no production changes, no force push, no credentials rotated.
+
+
+## Phase A — offline rewrite rehearsal (available; NO GitHub push)
+
+The script `scripts/rehearse-git-history-privacy.sh` performs a **real
+git-filter-repo rewrite inside a disposable mirror cloned from your verified
+private Git bundle**. It does not change the Mac mini working tree.
+
+It permanently drops `infra/9router/runtime-policy.json` from the
+*rehearsal history* and applies privately approved literal replacement
+rules **only to Markdown/text documentation and selected .example files**.
+Executable runtime source is deliberately untouched. This is not yet a
+privacy-clean publication candidate.
+
+On the Mac mini, install `brew install git-filter-repo`. Create a private
+rules file outside Git with one exact rule per line:
+
+```text
+literal:fictional-private-domain.example==>example.com
+literal:fictional-host-label==>example-device
+```
+
+Use actual operator-specific matches only **inside the private file**, not
+in this PR or GitHub logs. Run from the checked-out PR branch with paths to
+your verified bundle and private rules file:
+
+```bash
+bash scripts/rehearse-git-history-privacy.sh \
+  /path/to/amadeus-before-rewrite.bundle \
+  /path/to/exact-rules.private.txt
+```
+
+The script refuses reuse of a previous output directory, strips the clone's
+origin remote, verifies the ref set and protected code blobs (main and
+v1.10.4), runs Git fsck and asserts that historic private 9Router policy
+paths no longer exist in reachable objects. It prints a private results
+directory and rewrite counts. Nothing gets pushed.
+
+**Next blocker:** operator-specific identifiers still embedded in executable
+code and old branches cannot be removed by doc-only rewriting without
+migrating their runtime settings to protected private configuration first.
