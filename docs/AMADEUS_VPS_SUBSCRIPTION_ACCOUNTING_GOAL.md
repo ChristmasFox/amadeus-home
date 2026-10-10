@@ -6,7 +6,7 @@ Status: OPERATOR_CLOSED_WITH_ACCEPTED_RESIDUALS; OWNER_DIRECT_QUERY_REPORTED_NOR
 
 ## Apply record — 2026-10-08
 
-Phase 2 is live on `amadeus-gateway`. A protected pre-change checkpoint is kept
+Phase 2 is live on `example-vps`. A protected pre-change checkpoint is kept
 outside Git at
 `/Volumes/Avalon/backups/operation-skuld/vps-subscription-accounting/phase2-prechange-20261008T042931Z`;
 it includes the secret-bearing rollback archive and the pre-change Xray binary.
@@ -25,7 +25,7 @@ snapshot and the accounting database remains inaccessible to the probe user.
 Provider T0 is `2026-10-08T04:58:07Z`. At snapshot time
 `2026-10-08T05:10:46Z`, provider and all four traffic/online sources were
 healthy, all six account baselines were covered, and proxy-accounted totals
-were complete. Controlled Labmem001 transfers confirmed that each protocol's
+were complete. Controlled example-user-01 transfers confirmed that each protocol's
 own counters increased while other Labmem accounts remained unchanged. HY2
 `tx` is recorded as client upload and `rx` as client download. A guarded,
 idempotent migration set the verified legacy VLESS raw counters (814 upload /
@@ -66,11 +66,11 @@ If any implementation choice would make the current HY2/VLESS clients stop authe
 
 ## 1. Current verified baseline
 
-The current amadeus-gateway architecture already provides most of the VPS-wide foundation:
+The current example-vps architecture already provides most of the VPS-wide foundation:
 
 - Caddy serves subscription HTTPS on the existing domain and routes subscription requests to the local responder.
-- amadeus-gateway-subscription.service listens on 127.0.0.1:8787 and serves qx.conf, server.snippet, clash.yaml, and shadowrocket.txt from /var/lib/caddy/subscription/<token>/.
-- The subscription responder already calls KiwiVM getServiceInfo and returns Subscription-Userinfo plus X-Amadeus-Gateway-Usage for the whole VPS plan.
+- example-vps-subscription.service listens on 127.0.0.1:8787 and serves qx.conf, server.snippet, clash.yaml, and shadowrocket.txt from /var/lib/caddy/subscription/<token>/.
+- The subscription responder already calls KiwiVM getServiceInfo and returns Subscription-Userinfo plus X-example-vps-Usage for the whole VPS plan.
 - KiwiVM traffic state is persisted and stale data is explicitly represented instead of fabricated as zero.
 - Xray owns the VLESS + Reality listener on TCP 2053.
 - Official Hysteria 2 owns the HY2 listener on UDP 2053.
@@ -84,11 +84,11 @@ This Goal extends those boundaries. It does not create a second Agent, second se
 
 Create exactly five managed subscription accounts:
 
-- Labmem001
-- Labmem002
-- Labmem003
-- Labmem004
-- Labmem005
+- example-user-01
+- example-user-02
+- example-user-03
+- example-user-04
+- example-user-05
 
 Each account represents one subscription identity, not one physical device.
 
@@ -102,7 +102,7 @@ Each Labmem account receives three independently generated runtime secrets:
 
 The four subscription formats for one account share the same subscription token but contain protocol-specific credentials.
 
-The existing production token/password/UUID become one protected legacy identity. The legacy identity remains active and is reported separately from Labmem001-Labmem005.
+The existing production token/password/UUID become one protected legacy identity. The legacy identity remains active and is reported separately from example-user-01-example-user-05.
 
 ## 3. Required user-facing result
 
@@ -113,8 +113,8 @@ Kurisu must support natural-language owner queries such as:
 - 这月用了多少
 - 五个订阅分别用了多少
 - 谁用的最多
-- Labmem003 用了多少
-- Labmem003 的 HY2 和 VLESS 分别用了多少
+- example-user-03 用了多少
+- example-user-03 的 HY2 和 VLESS 分别用了多少
 - 现在谁在线
 - 旧订阅还有流量吗
 - 最近一小时流量异常吗
@@ -133,11 +133,11 @@ VPS 套餐
 已用 / 总量 / 剩余 / 重置时间
 
 本次账户监控以来:
-Labmem001  ...
-Labmem002  ...
-Labmem003  ...
-Labmem004  ...
-Labmem005  ...
+example-user-01  ...
+example-user-02  ...
+example-user-03  ...
+example-user-04  ...
+example-user-05  ...
 Legacy      ...
 
 HY2 / VLESS protocol split is shown only when useful or explicitly requested.
@@ -155,7 +155,7 @@ Add a lightweight SQLite store on the VPS, separate from the active Caddy respon
 Use a dedicated service identity and strict filesystem permissions. The database is runtime state and must never enter Git.
 
 Place accounting-specific environment and secret files under `/etc/amadeus-accounting` with
-`root:amadeus-accounting` permissions. Keep the existing `/etc/amadeus-gateway` permissions
+`root:amadeus-accounting` permissions. Keep the existing `/etc/example-vps` permissions
 unchanged: the current Caddy subscription responder runs as `caddy` and reads its KiwiVM
 credential file there. Give the collector a separately protected copy of that KiwiVM credential.
 
@@ -202,9 +202,9 @@ Instead, introduce a loopback-only deterministic HY2 auth endpoint owned by the 
 The endpoint receives the auth string from Hysteria and performs exact credential lookup:
 
 - current legacy HY2 secret -> accept and return client id legacy-hy2;
-- Labmem001 secret -> accept and return client id Labmem001;
+- example-user-01 secret -> accept and return client id example-user-01;
 - ...
-- Labmem005 secret -> accept and return client id Labmem005;
+- example-user-05 secret -> accept and return client id example-user-05;
 - anything else -> reject.
 
 This keeps the current client auth payload valid while allowing new independent identities.
@@ -233,11 +233,11 @@ Add five new VLESS clients with one unique UUID per Labmem account.
 Assign stable non-secret emails/tags:
 
 - legacy-vless
-- Labmem001.vless
-- Labmem002.vless
-- Labmem003.vless
-- Labmem004.vless
-- Labmem005.vless
+- example-user-01.vless
+- example-user-02.vless
+- example-user-03.vless
+- example-user-04.vless
+- example-user-05.vless
 
 Enable Xray stats, policy user uplink/downlink/online, and loopback StatsService only.
 
@@ -329,7 +329,7 @@ Extend the existing VPS capability instead of creating a new runtime.
 Preferred tools:
 
 - amadeus_vps_subscription_overview: empty input; returns all five Labmem accounts, legacy aggregate, protocol totals, freshness, and monitoring start.
-- amadeus_vps_subscription_detail: bounded accountId enum for Labmem001-Labmem005 plus legacy; returns one account's protocol totals and current activity facts.
+- amadeus_vps_subscription_detail: bounded accountId enum for example-user-01-example-user-05 plus legacy; returns one account's protocol totals and current activity facts.
 - optionally keep whole-plan aggregation inside the existing amadeus_vps_usage rather than duplicating KiwiVM calls.
 
 The tools are read-only and owner-only by existing tool/channel policy.
@@ -397,7 +397,7 @@ Each scheduled report must include:
 - VPS whole-plan ten-cell progress bar;
 - used / total / remaining / reset time when known;
 - traffic growth since the relevant previous report/sample;
-- Labmem001-Labmem005 monitored usage summary;
+- example-user-01-example-user-05 monitored usage summary;
 - legacy usage when non-zero;
 - top account for the report window when deterministically available;
 - source freshness/degraded state;
@@ -498,7 +498,7 @@ Then:
 
 1. Install the accounting service and database.
 2. Import the current production token/password/UUID as legacy without printing them.
-3. Generate Labmem001-Labmem005 token/HY2/VLESS credentials on the VPS.
+3. Generate example-user-01-example-user-05 token/HY2/VLESS credentials on the VPS.
 4. Persist the five account records in SQLite.
 5. Generate five new subscription directories.
    Keep these URLs private and undistributed until the collector captures the provider T0 baseline.
@@ -633,7 +633,7 @@ Do not bump version or deploy HomeLab/OpenClaw merely because this planning docu
 
 This Goal is complete only when:
 
-- five runtime subscription identities Labmem001-Labmem005 exist with independent token, HY2 credential, and VLESS UUID;
+- five runtime subscription identities example-user-01-example-user-05 exist with independent token, HY2 credential, and VLESS UUID;
 - the old production token/HY2/VLESS credentials remain active and unchanged;
 - each new account's HY2 and VLESS traffic is separately attributable and aggregatable;
 - legacy usage is visible separately;
@@ -758,9 +758,9 @@ WhatsApp owner queries fail, but it cannot prove they work either. A real owner
 WhatsApp direct-message query covering the whole plan and a Labmem protocol split
 is still needed. Stale/error behavior is covered by the focused Amadeus tests.
 
-Two VPS-local Labmem001 controlled downloads were also run: one 32 MiB HY2
+Two VPS-local example-user-01 controlled downloads were also run: one 32 MiB HY2
 transfer and one 32 MiB VLESS transfer, each HTTP 200. At the next collector
-snapshot, the corresponding Labmem001 protocol counters increased by 33,607,618
+snapshot, the corresponding example-user-01 protocol counters increased by 33,607,618
 and 33,608,159 bytes. Raw `eth0` RX/TX deltas are recorded in the deployment
 checkpoint. The direct KiwiVM counter did not advance across either test, while
 the baseline showed unrelated legacy and interface traffic; this is useful
@@ -782,17 +782,17 @@ At 14:08 Asia/Shanghai, the operator reported that a direct owner query had
 returned normally, instructed that the legacy token remain unchanged, and
 asked to close this Goal. This is operator-reported acceptance; no WhatsApp
 transcript was captured in the repository. The four formats for Legacy and
-Labmem001–Labmem005 were rechecked over public HTTPS: all 24 returned HTTP 200
+example-user-01–example-user-05 were rechecked over public HTTPS: all 24 returned HTTP 200
 and each response body matched its corresponding local subscription file.
 The subscription URLs are intentionally not recorded in Git or this Goal.
 
-Live Cron state was checked on CasaOS `nyannyan`: the existing morning and
+Live Cron state was checked on CasaOS `example-node`: the existing morning and
 evening job IDs remain unique, enabled, and configured for 09:30 and 21:30
 Asia/Shanghai with `delivery.mode=none`. The 09:30 job and the earlier manual
 owner-report run had `lastStatus=ok`. At closure, 21:30 had not yet occurred;
 the configured future run is not represented as already executed.
 
-Follow-up 16 MiB Labmem001 upload trials returned HTTP 200 over HY2 and VLESS.
+Follow-up 16 MiB example-user-01 upload trials returned HTTP 200 over HY2 and VLESS.
 The corresponding account counters increased by about 16.8 MB per protocol,
 and raw interface TX rose by about 16.9 MB. The provider counter sampled later
 also increased, but unrelated legacy/frps traffic and provider sampling delay

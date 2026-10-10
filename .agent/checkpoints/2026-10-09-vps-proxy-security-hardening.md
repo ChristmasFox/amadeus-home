@@ -10,17 +10,17 @@ Status: Complete with operator-accepted task-output exposure residual; Phases 0â
 
 ## Protected rollback points
 
-- VPS root-only pre-apply checkpoint: `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply` on `amadeus-gateway`. It contains the prior Xray/Hysteria configs, accounting source/env, SQLite backup, sanitized snapshot, probe and manifest.
-- CasaOS root-only pre-apply checkpoint: `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply` on machine `nyannyan`. Directory mode is `0700`; files are `0600`. It contains the prior Compose file, old image reference/id, sanitized container facts, and the two prior VPS report definitions.
+- VPS root-only pre-apply checkpoint: `/root/amadeus-checkpoints/2026-10-09-vps-proxy-security-hardening-preapply` on `example-vps`. It contains the prior Xray/Hysteria configs, accounting source/env, SQLite backup, sanitized snapshot, probe and manifest.
+- CasaOS root-only pre-apply checkpoint: `/root/amadeus-checkpoints/2026-10-09-openclaw-proxy-security-hardening-preapply` on machine `example-node`. Directory mode is `0700`; files are `0600`. It contains the prior Compose file, old image reference/id, sanitized container facts, and the two prior VPS report definitions.
 - Prior OpenClaw image remains available as `local/openclaw-amadeus:git-509639ee3a5e-20261008112407`.
 
 ## Applied VPS state
 
-- Xray Reality fallback now targets loopback `127.0.0.1:24431`. The gate routes only exact `www.apple.com` SNI to the audited camouflage target and sends other gate traffic to the block outbound. Xray system inbound counters are collected under `reality-fallback-gate`.
+- Xray Reality fallback now targets loopback `127.0.0.1:<SERVICE_PORT>`. The gate routes only exact `www.apple.com` SNI to the audited camouflage target and sends other gate traffic to the block outbound. Xray system inbound counters are collected under `reality-fallback-gate`.
 - A TLS 1.3 handshake with the allowlisted SNI returned the `www.apple.com` certificate with verification OK. A non-allowed SNI probe received no certificate. The gate counter source is healthy and observable.
 - Accounting auth remains loopback-only and runs in `enforce` mode with a 900-second window, 120-failure threshold, 300-second cooldown and 4,096-source tracking cap. The source tracker keeps normalized addresses only in bounded process memory; persisted security data contains aggregates only.
 - The manual report snapshot recorded Reality fallback `71,599 B`. The latest sanitized accounting snapshot at `2026-10-09T02:58:03Z` records `76,424 B` and the configured `reality_fallback_traffic` signal against 1,024 B. It records all six managed accounts enabled, Legacy disabled, HY2 limiter mode `enforce`, 900/900 seconds of limiter-window coverage, zero failures/limited requests in the current limiter window, and four persisted 12-hour auth failures. Xray, HY2 traffic and fallback sources are all `ok`. The aggregate includes controlled validation traffic and other gate traffic; it is not evidence of compromise.
-- M204-Net-Core and Labmem001 passed real VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Invalid-auth probes returned a generic 403 response. Xray, Hysteria, accounting and Caddy are active; TCP/UDP 2053 remain active; auth, stats and fallback listeners are loopback-only.
+- example-device and example-user-01 passed real VLESS HTTPS smokes with positive per-account counter deltas. Both passed HY2 HTTPS smokes after enforcement with TLS verification enabled. Invalid-auth probes returned a generic 403 response. Xray, Hysteria, accounting and Caddy are active; TCP/UDP <SERVICE_PORT> remain active; auth, stats and fallback listeners are loopback-only.
 - No active credential, client-visible node parameter, public hostname/SNI, proxy port, SSH policy, firewall rule or DNS record was changed. No Legacy identity was restored.
 
 ## OpenClaw and owner reports
@@ -33,7 +33,7 @@ Status: Complete with operator-accepted task-output exposure residual; Phases 0â
 
 ## Rollback
 
-- VPS: restore the exact prior Xray/accounting files and env from the VPS checkpoint, restart affected services, and immediately smoke M204-Net-Core plus Labmem001 VLESS and HY2. The Hysteria config did not change.
+- VPS: restore the exact prior Xray/accounting files and env from the VPS checkpoint, restart affected services, and immediately smoke example-device plus example-user-01 VLESS and HY2. The Hysteria config did not change.
 - OpenClaw: restore the saved Compose file, then run `docker compose up -d --no-build openclaw`. Restore only the two report messages from `vps-report-jobs.before.json` using `cron edit`; preserve IDs and schedules. Do not delete accounting state or rotate credentials.
 
 Temporary local client material, the secret-bearing Xray candidate and the staged VPS source directory were removed after acceptance. The protected checkpoints and previous immutable image remain available.

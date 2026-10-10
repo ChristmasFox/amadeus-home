@@ -9,13 +9,13 @@ modified. No traffic was generated for this audit.
 
 ## Observed source and calendar facts
 
-- `amadeus-gateway-accounting.service` was active.
+- `example-vps-accounting.service` was active.
 - The host timezone was `Asia/Shanghai`; the fuse still uses an explicit
   `Asia/Shanghai` `ZoneInfo` partition and UTC durable timestamps.
 - Provider sampling in the accounting SQLite delta history was 60 seconds for
   each of the seven most recent intervals.
 - The sanitized provider snapshot reported source `ok`, six enabled active
-  accounts (`Labmem001`–`Labmem005` and `M204-Net-Core`), and `legacyEnabled=false`.
+  accounts (`example-user-01`–`example-user-05` and `example-device`), and `legacyEnabled=false`.
 - The provider report window was 43,200 seconds with 241 samples at audit time;
   `providerComplete` was still false, as expected while the post-rollout window
   remains incomplete.
