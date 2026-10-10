@@ -1,5 +1,26 @@
 # Project State — 2026-10-10
 
+## 2026-10-10 — 9Router bounded upstream diagnostic headers deployed
+
+9Router is live on CasaOS `nyannyan` as
+`local/9router:git-83bb76b5e7c8-20261010T032550Z`, manifest
+`sha256:828a0c7b2c54e169c8ec4a0219f764c1ca2024efb04a79afb5db2f95a269be9a`.
+The source commit is `83bb76b5e7c8`; the protected rollback checkpoint is
+`/DATA/AppData/9router/backups/router-upgrade-20261010T032550Z`.
+
+The effective npm 0.5.95 route now exposes bounded diagnostic headers for
+allowlisted SSE event/type/code/reason fields, and Combo records them without
+logging prompts, image bytes, response bodies or credentials. The route and
+Combo markers are verified. Diagnostic-header, reference-preservation,
+fallback, health, runtime-policy and isolated speech checks passed. A real
+prompt-only smoke observed `sunburst` 502 followed by successful `flare`; the
+request-scoped failure produced no cooldown or account lock.
+
+The separate “Selected model is at capacity” message came from the Codex
+development task UI and is unrelated to WhatsApp or the 9Router image route.
+
+Detailed evidence and rollback: `.agent/checkpoints/2026-10-10-9router-upstream-diagnostics-detail-patch.md`.
+
 ## 2026-10-10 — Heartbeat silent delivery fix deployed
 
 Amadeus 1.10.2 is live on CasaOS `nyannyan` as

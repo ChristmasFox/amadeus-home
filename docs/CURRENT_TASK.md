@@ -2,6 +2,20 @@
 
 Date: 2026-10-10 (Asia/Shanghai).
 
+## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
+
+The operator-approved Apply rollout deployed
+`local/9router:git-83bb76b5e7c8-20261010T032550Z` with manifest digest
+`sha256:828a0c7b2c54e169c8ec4a0219f764c1ca2024efb04a79afb5db2f95a269be9a`.
+The effective npm 0.5.95 route and Combo bundle both report `verified`; health,
+policy, diagnostic-header, reference-preservation and fallback fixtures passed.
+The authorized real prompt-only smoke saw `sunburst` return 502, then `flare`
+succeed, with no request-scoped cooldown or account lock. Rollback and bounded
+evidence are in `.agent/checkpoints/2026-10-10-9router-upstream-diagnostics-detail-patch.md`.
+
+The “Selected model is at capacity” screenshot was a Codex development task UI
+capacity error, not a WhatsApp or 9Router provider response.
+
 ## Concurrent Amadeus runtime fix — 2026-10-10
 
 Amadeus 1.10.2 is deployed on CasaOS `nyannyan`. The native heartbeat sender

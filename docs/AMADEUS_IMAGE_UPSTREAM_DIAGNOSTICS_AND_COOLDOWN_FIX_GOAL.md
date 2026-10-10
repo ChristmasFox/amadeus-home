@@ -157,6 +157,25 @@ Never update expected test strings without executing and observing the actual as
 - Deploy/restart only after the operator explicitly asks. Until then, no claim that the 30-second mislock is fixed in production.
 - Once deployed, collect one naturally occurring failed reference-edit trace with redacted structured output; identify the **actual** upstream code/reason or state `image_result_missing` if provider emitted no reason. Do not guess a policy refusal or entitlement issue from a generic 502.
 
+## Follow-up detail patch — 2026-10-10
+
+The operator approved a follow-up immutable 9Router build at source commit
+`83bb76b5e7c8`. The effective npm 0.5.95 route now returns bounded diagnostic
+headers for allowlisted upstream SSE event/type/code/reason fields, and the
+Combo summary preserves those fields without exposing provider bodies. The
+deployed image is
+`local/9router:git-83bb76b5e7c8-20261010T032550Z` with manifest
+`sha256:828a0c7b2c54e169c8ec4a0219f764c1ca2024efb04a79afb5db2f95a269be9a`.
+
+The synthetic diagnostic-header fixture, reference-preservation fixture,
+fallback fixture and live markers passed. A real prompt-only smoke observed a
+request-scoped `sunburst` 502 followed by successful `flare`, with no cooldown
+or account lock. That naturally occurring 502 did not contain allowlisted
+upstream fields, so no typed provider reason is claimed for it. The separate
+“Selected model is at capacity” message was from the Codex development task UI,
+not the WhatsApp/9Router runtime. Full evidence and rollback are in
+`.agent/checkpoints/2026-10-10-9router-upstream-diagnostics-detail-patch.md`.
+
 ## End-state report format
 
 Provide: source commit, 9Router image digest, whether deploy occurred, 0.5.95 compiled patch verification, tests run/results, no-lock-on-request-failure proof, genuine-429-preserved proof, three-model reference-preservation proof, first safe diagnostic trace + interpretation, and exact rollback location if deployed.
