@@ -19,13 +19,13 @@ Git and are not reproduced here.
 
 - Restored `frpc` `0.69.0` to `/usr/local/bin/frpc` and enabled `/etc/systemd/system/frpc.service`.
 - Restored `/DATA/AppData/frpc/frpc.toml` from the protected archive, filtering `9router-tcp` and
-  the unavailable Homarr proxy. The frpc admin server is bound to `127.0.0.1:7500`; Glances uses
+  the unavailable Homarr proxy. The frpc admin server is bound to `127.0.0.1:<SERVICE_PORT>`; Glances uses
   `127.0.0.1` as its source.
 - Restored Emby, Jellyfin, qBittorrent, and aria2 configs from the source-freeze archives, and
   imported the matching arm64 images pulled through the Mac host Docker daemon. Rebuilt Glances
   with a read-only Docker socket and host PID view.
 - 9Router remains available only for the OpenClaw internal dependency and is bound to
-  `127.0.0.1:20128`; it is absent from frpc and has no public DNS record. Homarr remains stopped.
+  `127.0.0.1:<SERVICE_PORT>`; it is absent from frpc and has no public DNS record. Homarr remains stopped.
 - A recoverable pre-restore copy is at
   `/Volumes/Avalon/backups/operation-skuld/public-backends-before-20260924T090150Z`.
 

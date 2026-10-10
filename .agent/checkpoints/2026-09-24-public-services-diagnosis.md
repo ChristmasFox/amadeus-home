@@ -19,7 +19,7 @@ The prior frpc configuration is preserved outside Git at:
 /Volumes/Avalon/backups/operation-skuld/full-homelab-backup-source-freeze-20260923T111228Z/frpc/frpc-config.tar.gz
 ```
 
-Its non-secret mapping inventory includes the existing frps endpoint `sub.example.com:7000` and
+Its non-secret mapping inventory includes the existing frps endpoint `sub.example.com:<SERVICE_PORT>` and
 the declared TCP mappings for Emby, Immich, AriaNG, aria2 RPC, qBittorrent, Jellyfin, Homarr,
 Glances, and OpenClaw. Credential values were not copied into this checkpoint.
 

@@ -5,14 +5,14 @@
 ## 结果
 
 - Cloudflare 代理域名：`claw.example.com`。
-- VPS Caddy 新增 `claw.example.com` HTTPS 站点，反代到 `127.0.0.1:18789`。
+- VPS Caddy 新增 `claw.example.com` HTTPS 站点，反代到 `127.0.0.1:<SERVICE_PORT>`。
 - Caddy ACME HTTP-01 校验成功并取得有效证书；未写入 Cloudflare API token 或证书私钥到 Git。
 - HomeLab `/DATA/AppData/frpc/frpc.toml` 新增无密钥模板对应的 `openclaw-tcp`：
-  `127.0.0.1:18789` → VPS `18789`。
-- VPS `/etc/frp/frps.toml` 允许端口加入 `18789`，`maxPortsPerClient` 从 9 调整为 10，
+  `127.0.0.1:<SERVICE_PORT>` → VPS `<SERVICE_PORT>`。
+- VPS `/etc/frp/frps.toml` 允许端口加入 `<SERVICE_PORT>`，`maxPortsPerClient` 从 9 调整为 10，
   以保留新增 OpenClaw 映射和原有 qBittorrent 映射。
 - OpenClaw `gateway.controlUi.allowedOrigins` 增加
-  `http://192.168.5.3:18789` 和 `https://claw.example.com`；反代来源加入
+  `http://192.168.5.3:<SERVICE_PORT>` 和 `https://claw.example.com`；反代来源加入
   `gateway.trustedProxies` 的 `127.0.0.1` 和实际 Docker 网桥 `172.24.0.1`。
 
 ## 验证

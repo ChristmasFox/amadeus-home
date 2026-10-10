@@ -4,7 +4,7 @@
 
 ## 已完成
 
-- 目标主机通过既有 SSH alias `amadeus-gateway` 访问；未改 SSH 登录方式，未关闭公钥认证，
+- 目标主机通过既有 SSH alias `example-vps` 访问；未改 SSH 登录方式，未关闭公钥认证，
   未重启 VPS。
 - 已确认 Ubuntu 24.04、2 vCPU、约 1 GiB RAM、约 20 GiB SSD；现有 TCP 拥塞控制为 BBR，
   qdisc 为 fq。
@@ -14,7 +14,7 @@
 - `xray.service` 已 enable/active，配置测试通过，监听 TCP 443，运行时以 `xray` 专用用户
   启动。
 - 已通过 Caddy 官方 Ubuntu 包安装 Caddy 2.11.4；`caddy.service` 已 enable/active，在
-  TCP 80/8443 提供订阅 HTTPS 和 ACME HTTP-01，未占用 Xray 的 443。
+  TCP 80/<SERVICE_PORT> 提供订阅 HTTPS 和 ACME HTTP-01，未占用 Xray 的 443。
 - 订阅文件使用 VPS 内随机 token 路径，文件权限为 `caddy:caddy`、`0640`；真实订阅 URL 和
   token 不写入 checkpoint 或 Git。
 - Reality 目标最终采用 `www.microsoft.com:443`，客户端 `serverName` 为
