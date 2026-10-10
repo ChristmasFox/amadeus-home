@@ -34,7 +34,7 @@ umask 077
 BASE="${AMADEUS_REWRITE_OUTPUT_DIR:-$HOME/Amadeus-private-backups/history-rewrite-rehearsal-$(date +%Y%m%d-%H%M%S)}"
 [[ ! -e "$BASE" ]] || { echo 'Refusing to reuse existing private output directory.' >&2; exit 2; }
 mkdir -p -m 700 "$BASE"
-cp -- "$RULES" "$BASE/exact-replacements.private.txt"
+cp "$RULES" "$BASE/exact-replacements.private.txt"
 chmod 600 "$BASE/exact-replacements.private.txt"
 MIRROR="$BASE/rehearsal.git"
 git clone --quiet --mirror "$BUNDLE" "$MIRROR"
