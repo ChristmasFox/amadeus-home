@@ -2,7 +2,7 @@
 
 - User explicitly requested restoring old Mac container-start proxy environment on M204.
 - Old evidence: `/Volumes/Avalon/backups/operation-skuld/log-policy/20260922T120815Z/9router.before.yml` carries both cases of HTTP(S)_PROXY and NO_PROXY to `host.docker.internal:7897`.
-- New source: `infra/docker/homelab/9router/docker-compose.example.yml`; M204 live: `/var/lib/casaos/apps/9router/docker-compose.yml` on OrbStack `nyannyan`.
+- New source: `infra/docker/homelab/9router/docker-compose.example.yml`; M204 live: `/var/lib/casaos/apps/9router/docker-compose.yml` on OrbStack `example-node`.
 - Preflight: `host.docker.internal:7897` resolved/reached from the live container; candidate `docker compose config --quiet` passed; ASR fixture and `pnpm check:secrets` passed.
 - External rollback: `/DATA/AppData/9router/backups/proxy-env-20260925T043942Z` mode 0700, original Compose/candidate and SQLite API-consistent snapshot mode 0600. Restore the original Compose and run `docker compose up -d --no-build --no-deps 9router` to roll back; immutable image unchanged.
 - Applied only Compose, no build or data rewrite. Post-recreate `/api/health=200`, unauthenticated `/v1/models=401`, six proxy environment keys verified, original image retained.
