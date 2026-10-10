@@ -1,11 +1,17 @@
 # Canonical context — 2026-10-10
 
-Read this with `docs/CURRENT_TASK.md`; Amadeus 1.10.2 is deployed on CasaOS
+Read this with `docs/CURRENT_TASK.md`; Amadeus 1.10.3 is deployed on CasaOS
 `nyannyan` as immutable image
-`local/openclaw-amadeus:git-5085b3fb0b3f-20261010010836`. The heartbeat final
+`local/openclaw-amadeus:git-e1a862c1ca96-20261010022421`. The heartbeat final
 sender blocks text-only `NO_REPLY` and strips leading internal control markers
 before native delivery. Release evidence and rollback are in
 `.agent/checkpoints/2026-10-10-amadeus-heartbeat-silent-delivery-release.md`.
+The VPS accounting collector now samples every 60 seconds, keeps three days of
+bounded provider/account deltas, and exposes complete-aware 12-hour
+`reportWindow` fields. The deployment checkpoint is
+`.agent/checkpoints/2026-10-10-vps-traffic-window-release.md`; the current
+provider window is intentionally unknown until post-rollout samples cover a
+full 12 hours, while active subscription window bytes are already available.
 The active Goal is `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`; the public
 Image Lab is planned, while production image generation remains GPT-only.
 VPS subscription accounting is live from T0 `2026-10-08T04:58:07Z`; provider

@@ -219,6 +219,29 @@ Production remains GPT-only: the live Amadeus container reports
 `AMADEUS_QWEN_IMAGE_LOCAL_ONLY=0` and
 `AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED=0`.
 
+## 2026-10-10 — VPS 12-hour traffic windows deployed
+
+Amadeus 1.10.3 is live as immutable image
+`local/openclaw-amadeus:git-e1a862c1ca96-20261010022421`. The VPS accounting
+collector now samples every 60 seconds, retains three days of bounded provider
+and account deltas, and publishes complete-aware 12-hour `reportWindow` fields
+for whole-VPS bytes, active subscription bytes, retired Legacy bytes when
+complete, and the uncalibrated other-service/unattributed residual. The
+09:30/21:30 Asia/Shanghai VPS reports and owner queries use these fields while
+keeping cumulative quota, lifetime provider growth, and proxy totals separate.
+
+The first post-rollout provider window is intentionally unknown until a full
+12 hours of sample coverage exists; at `2026-10-10T02:27:06Z` the live snapshot
+had five provider samples and `subscriptionBytes=5518957198`, while
+`providerBytes` and the residual remained unknown. The accounting service is
+active and schema 5 is verified. No proxy credential, SSH, firewall, or proxy
+service was changed.
+
+Rollback checkpoints are `/root/amadeus-gateway-backups/vps-accounting-window-20261010022302`
+on `amadeus-gateway` and
+`/DATA/AppData/openclaw/backups/amadeus-openclaw-20261010022421`; full evidence
+is in `.agent/checkpoints/2026-10-10-vps-traffic-window-release.md`.
+
 ## 2026-10-08 — VPS subscription accounting and owner reports deployed
 
 Amadeus 1.9.9 is live on CasaOS `nyannyan` as

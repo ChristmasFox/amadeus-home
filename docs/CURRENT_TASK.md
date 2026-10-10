@@ -11,6 +11,18 @@ active Image Lab scope or its production GPT-only image invariant. Evidence and
 rollback are in
 `.agent/checkpoints/2026-10-10-amadeus-heartbeat-silent-delivery-release.md`.
 
+## Concurrent VPS traffic window release — 2026-10-10
+
+VPS accounting now samples the KiwiVM provider and subscription counters every
+60 seconds, retains three days of bounded deltas, and exposes complete-aware
+12-hour `reportWindow` fields for whole-VPS bytes, active subscription bytes,
+retired Legacy bytes when available, and an explicitly uncalibrated
+other-service/unattributed residual. Amadeus 1.10.3 is deployed with the
+updated owner query and 09:30/21:30 Asia/Shanghai report prompts. The first
+provider window is intentionally `unknown` until a full 12 hours of post-rollout
+sample coverage exists. Evidence and rollback are in
+`.agent/checkpoints/2026-10-10-vps-traffic-window-release.md`.
+
 Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
 
 Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
