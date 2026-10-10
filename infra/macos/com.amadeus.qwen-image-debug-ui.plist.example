@@ -18,6 +18,8 @@
     <string>__BRIDGE_TOKEN_FILE__</string>
     <string>--auth-file</string>
     <string>__AUTH_FILE__</string>
+    <string>--public-config</string>
+    <string>__PUBLIC_CONFIG__</string>
     <string>--static-file</string>
     <string>__HTML_FILE__</string>
     <string>--output-dir</string>

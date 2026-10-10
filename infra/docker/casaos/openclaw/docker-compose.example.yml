@@ -33,6 +33,7 @@ services:
       AMADEUS_QWEN_IMAGE_LOCAL_ONLY: ${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}
       AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED: ${AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED:-0}
       AMADEUS_IMAGE_ASSET_CONTAINER_ROOT: ${AMADEUS_IMAGE_ASSET_CONTAINER_ROOT:-/var/lib/amadeus/image-assets}
+      VPS_ACCOUNT_MAP_FILE: /run/secrets/vps_account_map.json
       TZ: Asia/Shanghai
       HTTP_PROXY: ${OPENCLAW_HTTP_PROXY:-http://host.docker.internal:7897}
       HTTPS_PROXY: ${OPENCLAW_HTTPS_PROXY:-http://host.docker.internal:7897}
@@ -58,8 +59,9 @@ services:
       - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro
       - ${OPENCLAW_VPS_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key}:/run/secrets/vps_ssh_key:ro
       - ${OPENCLAW_VPS_SSH_KNOWN_HOSTS_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts}:/run/secrets/vps_ssh_known_hosts:ro
+      - ${OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-account-map.json}:/run/secrets/vps_account_map.json:ro
       - ${OPENCLAW_OWNER_OUTBOX_HOST_DIR:-/DATA/AppData/openclaw/notifications}:/var/lib/openclaw/notifications
-      - ${AMADEUS_IMAGE_ASSET_HOST_DIR:-/Volumes/Avalon/amadeus/image-assets}:/var/lib/amadeus/image-assets:ro
+      - ${AMADEUS_IMAGE_ASSET_HOST_DIR:-/var/lib/amadeus-storage/amadeus/image-assets}:/var/lib/amadeus/image-assets:ro
     ports:
       - "${OPENCLAW_BIND_ADDRESS:-0.0.0.0}:${OPENCLAW_PORT:-18789}:18789"
     networks:

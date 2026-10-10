@@ -29,6 +29,7 @@ function config(directory: string): AmadeusConfig {
     longbridgeSdkTokenDir: join(directory, 'longbridge-sdk-tokens'),
     macHostAgentBaseUrl: 'http://host.docker.internal:18791',
     macHostAgentTokenFile: join(directory, 'machostagent-token'),
+    macHostName: 'operator-mac',
     imageAssetServiceBaseUrl: 'http://host.docker.internal:18792',
     imageAssetServiceTokenFile: join(directory, 'image-service-token'),
     imageAssetContainerRoot: join(directory, 'image-assets'),

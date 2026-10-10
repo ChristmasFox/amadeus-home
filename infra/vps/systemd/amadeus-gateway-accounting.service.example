@@ -10,6 +10,7 @@ Group=amadeus-accounting
 SupplementaryGroups=amadeus-accounting-snapshot
 WorkingDirectory=/usr/local/libexec/amadeus-gateway-accounting
 EnvironmentFile=/etc/amadeus-accounting/accounting.env
+Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json
 ExecStart=/usr/bin/python3 /usr/local/libexec/amadeus-gateway-accounting/accounting_service.py
 Restart=on-failure
 RestartSec=5s
@@ -22,7 +23,7 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 ReadWritePaths=/var/lib/amadeus-accounting
-ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret
+ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret /etc/amadeus-gateway/account-map.json
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 MemoryMax=128M
 CPUQuota=20%

@@ -30,8 +30,8 @@ from urllib.parse import parse_qs, urlparse
 HOST = os.environ.get("MACHOSTAGENT_BIND", "127.0.0.1")
 PORT = int(os.environ.get("MACHOSTAGENT_PORT", "18791"))
 TOKEN_FILE = os.environ.get("MACHOSTAGENT_TOKEN_FILE", "")
-AVALON_PATH = os.environ.get("MACHOSTAGENT_AVALON_PATH", "/Volumes/Avalon")
-HOST_NAME = os.environ.get("MACHOSTAGENT_HOST_NAME", "Amadeus-M204")
+AVALON_PATH = os.environ.get("MACHOSTAGENT_STORAGE_PATH", "/var/lib/amadeus-storage")
+HOST_NAME = os.environ.get("MACHOSTAGENT_HOST_NAME", "operator-mac")
 DB_PATH = os.environ.get(
     "MACHOSTAGENT_DB_PATH",
     str(Path.home() / "Library/Application Support/Amadeus/machostagent.sqlite3"),

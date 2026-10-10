@@ -3,7 +3,8 @@
 set -Eeuo pipefail
 MODE="${1:---dry-run}"
 case "$MODE" in --dry-run|--apply) ;; *) echo 'Usage: prepare-mlx-tts-poc.sh [--dry-run|--apply]' >&2; exit 2;; esac
-[[ "$(hostname -s)" == Amadeus-M204 ]] || { echo 'M204 Apple Silicon host required' >&2; exit 1; }
+OPERATOR_HOSTNAME="${AMADEUS_MAC_HOSTNAME:-${MAC_HOST_NAME:-}}"
+[[ -n "$OPERATOR_HOSTNAME" && "$(hostname -s)" == "$OPERATOR_HOSTNAME" ]] || { echo 'operator Apple Silicon host profile required' >&2; exit 1; }
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 CONFIG="$REPO/infra/macos/qwen3-tts-engine.json"
 REQUIREMENTS="$REPO/infra/macos/requirements-mlx-tts.txt"

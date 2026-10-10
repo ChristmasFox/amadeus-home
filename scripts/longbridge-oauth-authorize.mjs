@@ -40,7 +40,7 @@ if (mode === 'start') {
   await writeFile(requestFile, `${JSON.stringify(request)}\n`, { encoding: 'utf8', mode: 0o600 });
   await chmod(requestFile, 0o600);
   console.log(await oauth.authorizationUrl(redirectUri, state, pkceChallenge(codeVerifier)));
-  console.error('Open the URL on Amadeus-M204, approve read-only market access, then save the complete callback URL outside Git.');
+  console.error('Open the URL on the configured operator Mac, approve read-only market access, then save the complete callback URL outside Git.');
   process.exit(0);
 }
 let request;

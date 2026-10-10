@@ -25,7 +25,7 @@ export async function requestMacHost(config: AmadeusConfig, path: string, signal
   try {
     return await requestJson(`${config.macHostAgentBaseUrl}${path}`, { headers: await headers(config), signal, timeoutMs: 8_000, includeErrorDetail: false });
   } catch {
-    return { status: 'unavailable', error: 'host telemetry unavailable', host: 'Amadeus-M204' };
+    return { status: 'unavailable', error: 'host telemetry unavailable', host: config.macHostName ?? 'operator-mac' };
   }
 }
 
