@@ -23,7 +23,10 @@ endpoint, shell command, SQL, credential, channel, or recipient:
 - `amadeus_vps_subscription_overview`: empty input; returns five Labmem
   identities, the dedicated `M204-Net-Core` Mac mini identity, retired legacy
   history, protocol totals, a 12-hour sample window when known, freshness, each
-  account's monitoring start time, and sanitized proxy-security facts.
+  account's monitoring start time, and sanitized proxy-security facts. The
+  window also exposes the whole-provider bytes, active subscription-account
+  bytes, legacy bytes when complete, and an explicitly uncalibrated
+  other-service/unattributed residual.
 - `amadeus_vps_subscription_detail`: requires one `accountId` from
   `Labmem001`–`Labmem005`, `M204-Net-Core`, or `legacy`; returns one account's
   monitored protocol totals and known activity facts. Legacy is historical and
@@ -81,9 +84,16 @@ whole-plan line, used/total/remaining/reset time when known, provider growth
 since the prior successful sample, each active account's monitored total from
 its own `monitoringStartedAt`, and the retired legacy total only when
 non-zero. Include the
-12-hour account growth window and top account only when the returned values are
-complete and comparable. Preserve unknown protocol counters as unknown; do
-not turn missing rows or stale/error sources into zero. State clearly that
+the report window's start/end and sampling coverage. The report must include
+one separate line for the default 12-hour window: whole-provider bytes,
+active subscription-account bytes, legacy bytes when known, and
+`otherServiceBytes` as “其他服务/未归因残差（未校准）” when it is available.
+This residual is `providerBytes - active subscriptionBytes`; it is useful for
+tracking the gap but is not a precise per-service measurement while
+reconciliation is uncalibrated. Include the 12-hour account growth and top
+account only when the returned values are complete and comparable. Preserve
+unknown protocol counters as unknown; do not turn missing rows or stale/error
+sources into zero. State clearly that
 per-account attribution begins at the returned T0 and does not reconstruct
 earlier current-cycle usage. A monitored total is incomplete while its source
 or account counters are missing; never infer zero from a missing row.

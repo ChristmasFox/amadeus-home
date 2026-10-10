@@ -192,6 +192,26 @@ curl --noproxy '*' -fsS -D - -o /dev/null 'https://sub.example.com:8443/<RANDOM_
 `../systemd/amadeus-gateway-accounting.service.example` 是运行时源码。服务、账号数据库、HY2 Stats
 API secret、KiwiVM 凭据和生成的订阅文件已安装在 VPS 受保护路径；本地模板不含运行时 secret。
 
+### 12 小时流量窗口与采样周期
+
+采集器默认每 **60 秒**成功采样一次。账号方向增量、整机 provider 增量和 Reality fallback
+增量都写入受限 SQLite 明细表，并只保留最近 **3 天**；这样 09:30/21:30 报告即使延迟或补跑，
+仍能重算最近 12 小时窗口，而不必依赖上一次消息是否发送成功。原始累计计数继续保留在状态表，
+不会因为窗口清理而丢失。
+
+`reportWindow` 的 `startAt`/`endAt` 默认覆盖最近 12 小时，并分别给出：
+
+- `providerBytes`：KiwiVM 整机计数在该窗口的成功采样增量；
+- `subscriptionBytes`：五个 Labmem 加 `M204-Net-Core` 的活动账号归因增量；
+- `legacyBytes`：已退役 Legacy 仅在其窗口来源完整时给出；
+- `otherServiceBytes`：`providerBytes - subscriptionBytes` 的未校准残差，报告中必须称为“其他服务/未归因”，
+  不能当作精确的 Caddy/frps/SSH 等单服务计量。
+
+窗口来源不完整、计数器重置或出现错误时，相关字段保持 `unknown`/`null`，绝不补零。整机套餐累计
+用量仍由 `amadeus_vps_usage` 提供，和上述 12 小时增量分开显示；`reconciliation=uncalibrated`
+时不把残差解释为异常。后续如需把残差拆成 Caddy、frps、SSH、系统出站等服务，再增加各服务的
+独立计数器和对应校准证据，不修改现有账号口径。
+
 Phase 2 的部署顺序如下，供新环境恢复时参考；不得在 live VPS 上重复创建或轮换账号。先创建专用 `amadeus-accounting` 系统用户和
 `amadeus-accounting-snapshot` 只读共享组；新建 `/var/lib/amadeus-accounting`，使用
 `amadeus-accounting:amadeus-accounting-snapshot`、`0750`。数据库由 `amadeus-accounting`

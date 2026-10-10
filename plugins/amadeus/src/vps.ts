@@ -103,7 +103,22 @@ interface VpsSubscriptionSnapshot {
   proxyAccountedBytes: number | null;
   proxyAccountedComplete: boolean;
   sources: Record<'provider' | 'hysteria_traffic' | 'hysteria_online' | 'xray' | 'xray_online' | 'reality_fallback', Record<string, unknown>>;
-  reportWindow: { seconds: number | null; startAt: string | null; endAt: string | null; topAccount: { accountId: string; windowBytes: number } | null };
+  reportWindow: {
+    seconds: number | null;
+    startAt: string | null;
+    endAt: string | null;
+    providerBytes: number | null;
+    providerComplete: boolean;
+    providerSampleCount: number;
+    subscriptionBytes: number | null;
+    subscriptionComplete: boolean;
+    legacyBytes: number | null;
+    legacyComplete: boolean;
+    otherServiceBytes: number | null;
+    otherServiceStatus: 'uncalibrated' | 'unknown';
+    otherServiceBasis: 'provider_window_minus_active_subscription_window' | null;
+    topAccount: { accountId: string; windowBytes: number } | null;
+  };
   provider: { baselineCounterBytes: number | null; lastCounterBytes: number | null; deltaSinceMonitoringStartBytes: number | null; totalBytes: number | null; resetAt: string | null; sampledAt: string | null };
   reconciliation: { status: 'uncalibrated' | 'calibrated'; providerDeltaBytes: number | null; proxyAccountedBytes: number | null; gapBytes: number | null };
   security: {
@@ -767,6 +782,18 @@ function sanitizedSubscriptionSnapshot(value: unknown): VpsSubscriptionSnapshot 
       seconds: nonnegativeInteger(windowIn.seconds),
       startAt: safeIso(windowIn.startAt),
       endAt: safeIso(windowIn.endAt),
+      providerBytes: nonnegativeInteger(windowIn.providerBytes),
+      providerComplete: windowIn.providerComplete === true,
+      providerSampleCount: nonnegativeInteger(windowIn.providerSampleCount) ?? 0,
+      subscriptionBytes: nonnegativeInteger(windowIn.subscriptionBytes),
+      subscriptionComplete: windowIn.subscriptionComplete === true,
+      legacyBytes: nonnegativeInteger(windowIn.legacyBytes),
+      legacyComplete: windowIn.legacyComplete === true,
+      otherServiceBytes: nonnegativeInteger(windowIn.otherServiceBytes),
+      otherServiceStatus: windowIn.otherServiceStatus === 'uncalibrated' ? 'uncalibrated' : 'unknown',
+      otherServiceBasis: windowIn.otherServiceBasis === 'provider_window_minus_active_subscription_window'
+        ? 'provider_window_minus_active_subscription_window'
+        : null,
       topAccount: topAccountId && nonnegativeInteger(topIn.windowBytes) !== null
         ? { accountId: topAccountId, windowBytes: nonnegativeInteger(topIn.windowBytes)! }
         : null,

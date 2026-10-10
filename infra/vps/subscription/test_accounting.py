@@ -101,7 +101,7 @@ class AccountingStoreTests(unittest.TestCase):
             columns = {row["name"] for row in db.execute("PRAGMA table_info(counter_state)").fetchall()}
             version = db.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()[0]
         self.assertIn("baseline_sampled_at", columns)
-        self.assertEqual(version, "4")
+        self.assertEqual(version, "5")
 
     def test_m204_identity_is_created_once_and_legacy_hy2_auth_is_revoked(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)
@@ -224,6 +224,54 @@ class AccountingStoreTests(unittest.TestCase):
         self.assertEqual(snapshot["provider"]["deltaSinceMonitoringStartBytes"], 45)
         self.assertEqual(snapshot["reconciliation"]["status"], "uncalibrated")
         self.assertIsNone(snapshot["reconciliation"]["gapBytes"])
+
+    def test_provider_window_is_retained_and_exposes_active_subscription_residual(self) -> None:
+        self.store.initialize_accounts(LEGACY, created_at=NOW)
+        self.store.provision_m204(created_at=NOW)
+        self.store.record_provider_sample(
+            counter_bytes=100, total_bytes=1000, reset_at=None, sampled_at=NOW,
+        )
+        baseline = {account_id: (0, 0) for account_id in MANAGED_ACCOUNT_IDS}
+        self.store.record_counter_sample(
+            source="hysteria_traffic", protocol="hy2", counters=baseline,
+            generation="hy2-1", sampled_at=NOW, baseline=True,
+        )
+        self.store.record_counter_sample(
+            source="xray", protocol="vless", counters=baseline,
+            generation="xray-1", sampled_at=NOW, baseline=True,
+        )
+        self.store.record_provider_sample(
+            counter_bytes=160, total_bytes=1000, reset_at=None, sampled_at="2026-10-08T04:01:00Z",
+        )
+        hy2 = dict(baseline)
+        hy2["Labmem001"] = (7, 8)
+        vless = dict(baseline)
+        vless["Labmem001"] = (3, 2)
+        self.store.record_counter_sample(
+            source="hysteria_traffic", protocol="hy2", counters=hy2,
+            generation="hy2-1", sampled_at="2026-10-08T04:01:00Z",
+        )
+        self.store.record_counter_sample(
+            source="xray", protocol="vless", counters=vless,
+            generation="xray-1", sampled_at="2026-10-08T04:01:00Z",
+        )
+        snapshot = self.store.public_snapshot(
+            now=datetime(2026, 10, 8, 4, 2, tzinfo=timezone.utc), window_seconds=60,
+        )
+        window = snapshot["reportWindow"]
+        self.assertEqual(window["providerBytes"], 60)
+        self.assertTrue(window["providerComplete"])
+        self.assertEqual(window["providerSampleCount"], 1)
+        self.assertEqual(window["subscriptionBytes"], 20)
+        self.assertTrue(window["subscriptionComplete"])
+        self.assertIsNone(window["legacyBytes"])
+        self.assertEqual(window["otherServiceBytes"], 40)
+        self.assertEqual(window["otherServiceStatus"], "uncalibrated")
+        with self.store._connect() as db:
+            rows = db.execute(
+                "SELECT interval_start_at,sampled_at,bytes,counter_reset FROM provider_deltas ORDER BY id"
+            ).fetchall()
+        self.assertEqual([(row["bytes"], row["counter_reset"]) for row in rows], [(0, 0), (60, 0)])
 
     def test_hysteria_direction_migration_swaps_stored_totals_and_deltas_once(self) -> None:
         self.store.initialize_accounts(LEGACY, created_at=NOW)

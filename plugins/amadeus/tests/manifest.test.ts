@@ -179,7 +179,13 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
     legacy: { ...account('legacy'), enabled: false }, protocolTotals: { hy2: {}, vless: {} },
     knownProxyAccountedBytes: 0, proxyAccountedBytes: null, proxyAccountedComplete: false,
     sources: { provider: source, hysteria_traffic: source, hysteria_online: source, xray: source, xray_online: source, reality_fallback: source },
-    reportWindow: {}, provider: {}, reconciliation: { status: 'uncalibrated' },
+    reportWindow: {
+      seconds: 43200, startAt: '2026-10-07T16:00:00Z', endAt: '2026-10-08T04:00:00Z',
+      providerBytes: 100, providerComplete: true, providerSampleCount: 720,
+      subscriptionBytes: 40, subscriptionComplete: true, legacyBytes: null, legacyComplete: false,
+      otherServiceBytes: 60, otherServiceStatus: 'uncalibrated',
+      otherServiceBasis: 'provider_window_minus_active_subscription_window',
+    }, provider: {}, reconciliation: { status: 'uncalibrated' },
     security: {
       realityFallback: {
         totalBytes: 1536, windowTotalBytes: 1536, status: 'ok', lastCounterSampleAt: '2026-10-08T04:00:00Z',
@@ -206,6 +212,14 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).xray_online?.status, 'ok');
   assert.equal((parsed.data.accounts as Array<{ accountId: string }>).at(-1)?.accountId, 'M204-Net-Core');
   assert.equal((parsed.data.legacy as { enabled: boolean }).enabled, false);
+  const reportWindow = parsed.data.reportWindow as {
+    providerBytes: number | null; subscriptionBytes: number | null; otherServiceBytes: number | null;
+    otherServiceStatus: string;
+  };
+  assert.equal(reportWindow.providerBytes, 100);
+  assert.equal(reportWindow.subscriptionBytes, 40);
+  assert.equal(reportWindow.otherServiceBytes, 60);
+  assert.equal(reportWindow.otherServiceStatus, 'uncalibrated');
   assert.equal(JSON.stringify(parsed).includes('must-not-leak'), false);
   const security = parsed.data.security as { realityFallback: { totalBytes: number | null }; hysteriaAuth: { authFailuresWindow: number | null; limiterWindowCoverageSeconds: number | null }; signals: Array<{ code: string }> };
   assert.equal(security.realityFallback.totalBytes, 1536);
