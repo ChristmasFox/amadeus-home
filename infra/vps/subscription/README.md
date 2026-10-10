@@ -79,7 +79,7 @@ Shadowrocket (`shadowrocket.txt`)。M204 计量起点为账号创建时间，不
 2026-10-08 的正式切换已完成：五个 Labmem 账号和 M204 保持启用，Legacy 已禁用。Legacy 的订阅 token、
 HY2 secret 和 VLESS UUID 均已轮换；旧订阅路径、旧 HY2 认证和旧 VLESS 隧道均已验收拒绝。旧凭据只在
 VPS 的 root-only 变更前 checkpoint 中留作审计恢复材料，不得将该 checkpoint 直接恢复为运行状态。
-完整验收记录见 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`。
+完整验收记录见 `.agent/checkpoints/2026-10-08-example-device-legacy-retirement.md`。
 
 账号初始化完成后，只有在 owner 明确要求正式切换时才执行 `provision-m204` 和 `retire-legacy`。
 前者只创建一次 M204 凭据、订阅文件、Caddy matcher candidate 和 Xray candidate；后者保留 legacy

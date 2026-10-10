@@ -83,7 +83,7 @@ Amadeus 1.9.9 已部署，Legacy 已禁用。现有 owner 报告 Cron ID 保持�
 仍为 `uncalibrated`，不输出差值异常结论。部署、验收与 rollback 记录见 Goal 和
 `.agent/checkpoints/2026-10-08-vps-subscription-accounting-deployment.md`。六个活动账号的四种公网订阅格式共
 24 条均返回 HTTP 200，正文与 VPS 本地文件一致。Legacy 订阅 token、HY2 secret 和 VLESS UUID 已轮换，
-旧订阅路径、认证和隧道拒绝证据见 `.agent/checkpoints/2026-10-08-m204-net-core-legacy-retirement.md`；
+旧订阅路径、认证和隧道拒绝证据见 `.agent/checkpoints/2026-10-08-example-device-legacy-retirement.md`；
 旧凭据只保留在 VPS root-only checkpoint 中，不能恢复成 live 配置。
 
 目标 runtime 边界：
