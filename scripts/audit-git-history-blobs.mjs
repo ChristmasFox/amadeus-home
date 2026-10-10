@@ -33,7 +33,7 @@ let scanned=0,failed=0;
 for(let i=0;i<blobs.length;i+=48){
  const part=blobs.slice(i,i+48);
  const batch=spawnSync('git',['cat-file','--batch'],{
-  input:part.map(x=>x.sha).join('\n')+'\n',encoding:'buffer',maxBuffer:128*1024*1024,
+  input:part.map(x=>x.sha).join('\n')+'\n',maxBuffer:128*1024*1024,
  });
  if(batch.error||batch.status!==0){failed++;continue;}
  const output=batch.stdout;
