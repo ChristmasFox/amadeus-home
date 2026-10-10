@@ -1,0 +1,15 @@
+{
+  "packageVersion": "0.5.95",
+  "imageAccount": {
+    "provider": "codex",
+    "models": [
+      "gpt-image-2.5-sunburst",
+      "gpt-image-2.5-flare",
+      "gpt-image-2.5"
+    ],
+    "email": "fixture-owner@example.invalid"
+  },
+  "serverActions": {
+    "bodySizeLimit": "20mb"
+  }
+}
