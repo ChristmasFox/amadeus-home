@@ -41,7 +41,7 @@ All commands below were run from the repository root on the cutover branch.
 | `pnpm workflow:plan` | `CHANGE_SCOPE_LEVEL=RELEASE`; it reported `DOCKER_BUILD=forbidden`. No release action was run. |
 | `node scripts/audit-public-infrastructure.mjs --self-test` | Passed. |
 | `node scripts/audit-public-infrastructure.mjs --strict-active` | 85 files scanned, 0 flagged. |
-| `node scripts/audit-public-infrastructure.mjs --strict-vps` | 77 files scanned, 0 flagged. |
+| `node scripts/audit-public-infrastructure.mjs --strict-vps` | 78 files scanned, 0 flagged. |
 | `pnpm check:secrets` | Passed. |
 | `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
 | `pnpm --filter @agent/amadeus-plugin test` | 140 passed, 0 failed. |
