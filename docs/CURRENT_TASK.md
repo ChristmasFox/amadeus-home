@@ -7,6 +7,17 @@ Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
 Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
 
 
+## Concurrent VPS daily traffic fuse Goal — 2026-10-10
+
+Planned Goal: `docs/AMADEUS_VPS_DAILY_TRAFFIC_FUSE_GOAL.md`.
+Status: `PLANNED_NOT_APPLIED`; **this document submission is not permission to modify live traffic control**.
+
+Policy: Shanghai-local calendar day (00:00 to next 00:00), 40 GB one-time warning, 50 GB whole-gateway threshold, shared 2 Mbps non-management business egress shaping until next 00:00, then verified automatic release. KiwiVM remains provider quota truth; local WAN monitoring needs calibrated scope and truthful source/coverage states. A VPS-side timer must restore speed even when OpenClaw/WhatsApp is unavailable.
+
+Kurisu alert events **must reuse** the existing `worldline_notification_intent` -> presentation adapter -> canonical WhatsApp owner outbox. Warning/engagement are 世界线偏移, verified release is 世界线收束, scheduled VPS report remains D-Mail; operator failures use the current policy's appropriate theme. Never add a second sender or hand-built theme renderer.
+
+Compatibility: `Labmem001`-`Labmem005` plus `M204-Net-Core` remain valid, Legacy stays retired, and existing VLESS/HY2 security hardening, ports, SSH recovery, subscriber credentials, and 09:30/21:30 jobs stay intact. Separate explicit runtime apply/checkpoint is mandatory.
+
 ## Concurrent VPS proxy security hardening Goal — 2026-10-09
 
 Active concurrent Goal: `docs/AMADEUS_VPS_PROXY_SECURITY_HARDENING_GOAL.md` (explicitly selected by the operator).
