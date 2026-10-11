@@ -32,21 +32,34 @@ import re
 from pathlib import Path
 
 snapshot_path = Path('/var/lib/amadeus-accounting/subscription-usage-public.json')
-map_path = Path(os.environ.get('VPS_ACCOUNT_MAP_FILE', '/etc/amadeus-gateway/account-map.json'))
-default_active = [f'account-{i:03d}' for i in range(1, 6)]
-default_dedicated = 'operator-core'
-default_legacy = 'legacy'
+# The forced-command account must never read the credential-bearing accounting
+# map.  The deployment creates this redacted, ID-only map separately and
+# grants the probe account read access to it.
+map_path = Path(os.environ.get('VPS_ACCOUNT_PROBE_MAP_FILE', '/etc/amadeus-gateway/account-map-probe.json'))
+map_status = 'unavailable'
 try:
     mapping = json.loads(map_path.read_text(encoding='utf-8'))
+    if not isinstance(mapping, dict) or set(mapping) != {'activeAccountIds', 'dedicatedAccountId', 'legacyAccountId'}:
+        raise ValueError('probe map contains non-redacted fields')
     account_ids = list(mapping['activeAccountIds']) + [mapping['dedicatedAccountId']]
     legacy_id = mapping['legacyAccountId']
     all_ids = (*account_ids, legacy_id)
     if (len(account_ids) != 6 or any(not isinstance(item, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', item) for item in all_ids)
             or len(set(all_ids)) != 7):
         raise ValueError
+    map_status = 'ok'
+except FileNotFoundError:
+    account_ids = []
+    legacy_id = None
 except Exception:
-    account_ids = default_active + [default_dedicated]
-    legacy_id = default_legacy
+    account_ids = []
+    legacy_id = None
+    map_status = 'invalid'
+
+print('ACCOUNT_MAP_STATUS=' + map_status)
+if map_status != 'ok':
+    print('ACCOUNTING_STATUS=account-map-' + map_status)
+    raise SystemExit(0)
 protocol_ids = ('hy2', 'vless')
 source_ids = ('provider', 'hysteria_traffic', 'hysteria_online', 'xray', 'xray_online', 'reality_fallback')
 

@@ -5,6 +5,10 @@ cd "$ROOT"
 bash -n scripts/deploy-openclaw.sh
 candidate="$(scripts/deploy-openclaw.sh --dry-run --candidate --build-auto)"
 release="$(scripts/deploy-openclaw.sh --dry-run --build-auto)"
+if scripts/deploy-openclaw.sh --dry-run --lineage-bridge >/dev/null 2>&1; then
+  echo 'lineage bridge unexpectedly allowed without --apply' >&2
+  exit 1
+fi
 grep -Fxq 'DEPLOYMENT_PHASE=candidate' <<<"$candidate"
 grep -Fxq 'DEPLOYMENT_PHASE=release' <<<"$release"
 grep -Fxq 'MODE=dry-run' <<<"$candidate"
@@ -37,6 +41,14 @@ assert 'AMADEUS_GATEWAY_REGISTRATION=passed' in s
 assert 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s' in s
 assert 'RUNTIME_AMADEUS_VERSION=%s' in s
 assert 'cat /opt/amadeus/VERSION' in s
+assert 'LINEAGE_BRIDGE=validated' in s
+assert '--lineage-bridge requires an explicit OpenClaw image build' in s
+assert 'IMAGE_LINEAGE_MISSING' in s
+assert 'validate_vps_account_map_source' in s
+assert 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed' in s
+assert 'OPENCLAW_VPS_ACCOUNT_MAP_NODE_READ=passed' in s
+assert 'OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE' in s
+assert 'OPENCLAW_VPS_ACCOUNT_MAP_GUEST_FILE' in s
 assert 'plugins inspect amadeus --runtime --json' in s
 assert 'plugins registry --refresh --json' in s
 assert 'openclaw-state.sqlite.before' in s
@@ -49,5 +61,6 @@ assert 'OPENCLAW_KREA2_IMAGE_TOKEN_HOST_FILE' not in compose
 assert "AMADEUS_KREA2_IMAGE_TOKEN_FILE=" in s
 assert 'KREA2_IMAGE_TOKEN_HOST_FILE="${' not in s
 assert 'KREA2_IMAGE_TOKEN_GUEST_FILE' not in s
+assert 'vps_account_map.json' in compose
 PY
 printf '%s\n' 'OPENCLAW_CANDIDATE_MODE_FIXTURE=passed'

@@ -31,6 +31,20 @@ or a force push.
   executed as part of this source-only phase.
 - Historical evidence, task records, canonical pointers, and operator-only
   research/backup helpers are explicitly classified in the same document.
+- PR #3 P0 account-map remediation is source-complete: accounting and the
+  OpenClaw owner runtime use a private map, the forced probe uses a separate
+  ID-only map, and missing/invalid probe maps fail closed with a typed status.
+  `scripts/deploy-vps-accounting.sh` now has a read-only preflight, atomic map
+  and unit migration, root-only checkpoint, Unix-user permission assertions,
+  database/snapshot ID continuity checks, and rollback on restart or validation
+  failure. `scripts/deploy-openclaw.sh` validates the host map, proves uid
+  `node` can read the bind mount, installs the guest secret before Compose
+  config, and records a node-read preflight.
+- PR #3 P0 image ancestry remediation is source-complete: a missing rewritten
+  Git SHA marks the live image stale, and the explicit
+  `--lineage-bridge --apply --build-openclaw` path reads only the protected
+  image `VERSION` to validate a deliberate bridge release. It does not disable
+  freshness, semver, checkpoint, health, or rollback checks.
 - CI now has a strict active-runtime current-snapshot gate, an informational
   broad current-snapshot inventory, and the selected public VPS gate in
   addition to the separate reachable-history audit. The history workflow
@@ -49,6 +63,8 @@ All commands below were run from the repository root on the cutover branch.
 | `node scripts/audit-public-infrastructure.mjs --audit-all` | 1,148 tracked text candidates scanned, 269 classified findings; informational only. |
 | `node scripts/audit-git-history-blobs.mjs` | 12,748 reachable objects; 5,714 text blobs; 0 read errors; 504 personal-domain, 117 named-identity, 5 account-policy, 4 proxy-URI, 0 private-key, and 14 public-IPv4 candidate blobs. |
 | `pnpm check:secrets` | Passed. |
+| `bash scripts/test-vps-account-map-migration.sh` | Passed; schema, redacted probe status, preflight, rollback, and continuity guards present. |
+| `bash scripts/test-openclaw-candidate-deploy.sh` | Passed; lineage bridge and account-map preflight assertions present. |
 | `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
 | `pnpm --filter @agent/amadeus-plugin test` | 140 passed, 0 failed. |
 | Qwen bridge tests | 18 passed, 0 failed. |

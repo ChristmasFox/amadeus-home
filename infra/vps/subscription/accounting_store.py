@@ -34,6 +34,8 @@ def _runtime_account_ids() -> tuple[tuple[str, ...], str, str]:
         return DEFAULT_ACTIVE_ACCOUNT_IDS, DEFAULT_DEDICATED_ACCOUNT_ID, DEFAULT_LEGACY_ACCOUNT_ID
     try:
         data = json.loads(Path(path_value).read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or set(data) != {"activeAccountIds", "dedicatedAccountId", "legacyAccountId"}:
+            raise ValueError("account map contains non-contract fields")
         active = tuple(data["activeAccountIds"])
         dedicated = data["dedicatedAccountId"]
         legacy = data["legacyAccountId"]
@@ -282,7 +284,8 @@ class AccountingStore:
                 "VALUES (?,?,?,?)",
                 (sampled_at, upload_delta, download_delta, int(reset)),
             )
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            retention_anchor = _parse_time(sampled_at) or datetime.now(timezone.utc)
+            cutoff = (retention_anchor - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
             db.execute("DELETE FROM reality_fallback_deltas WHERE sampled_at < ?", (cutoff,))
             db.execute(
                 "INSERT INTO source_state(source,status,checked_at,last_success_at,error_code,generation,last_error_at) "
@@ -671,7 +674,8 @@ class AccountingStore:
                 "generation=excluded.generation",
                 (sampled_at, sampled_at, generation),
             )
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            retention_anchor = _parse_time(sampled_at) or datetime.now(timezone.utc)
+            cutoff = (retention_anchor - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
             db.execute("DELETE FROM provider_deltas WHERE sampled_at < ?", (cutoff,))
             db.commit()
         return started
@@ -771,7 +775,8 @@ class AccountingStore:
             # The user-facing report window is 12 hours. Keep three days of
             # bounded detail for retries and clock skew; lifetime totals are
             # already in counter_state and do not need old delta rows.
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
+            retention_anchor = _parse_time(sampled_at) or datetime.now(timezone.utc)
+            cutoff = (retention_anchor - timedelta(days=3)).isoformat(timespec="seconds").replace("+00:00", "Z")
             db.execute("DELETE FROM traffic_deltas WHERE sampled_at < ?", (cutoff,))
             db.commit()
 

@@ -40,7 +40,13 @@ identities and endpoints are read from operator-owned private runtime files.
    Use a private account mapping/config consumed consistently by owner-only
    skill, tool schema, probe, scheduled report and accounting. Preserve deployed
    stable identifiers through private config; ensure public community install
-   has neutral fixtures and is not silently granted owner access.
+   has neutral fixtures and is not silently granted owner access. The production
+   migration order is explicit: generate the private and redacted ID-only maps
+   outside Git, run the read-only accounting preflight, install the accounting
+   unit/maps with a root-only checkpoint and rollback, assert database and
+   public snapshot continuity, then stage the OpenClaw guest secret and
+   container-uid read test. A probe map failure is fail-closed; it never
+   synthesizes neutral production IDs.
 4. **Older workstation/migration scripts** —
    `scripts/migration-readiness.sh`,
    `scripts/openclaw-migration-safe-start.sh`,
@@ -86,6 +92,16 @@ Must be executed with staging/fixture data *before* altering main:
   configuration files are absent.
 
 ## Workstream D: history cutover ONLY AFTER code migration
+
+The first release after an approved history rewrite uses the guarded
+`scripts/deploy-openclaw.sh --apply --build-openclaw --lineage-bridge` path.
+When a live image tag points at a commit absent from the rewritten clone, the
+script treats the image as stale, requires a fresh OpenClaw build, and reads
+the live image's protected `/opt/amadeus/VERSION` only to validate the release
+version. Normal semver advancement, fresh-image checks, checkpoint creation,
+health checks and rollback remain enabled. The flag is rejected without
+`--apply` or an explicit OpenClaw build; it is not a way to bypass ancestry
+validation or reuse an old image.
 
 1. Keep verified private Git bundle (the user's earlier step) outside the
    repo and preserve a full ref manifest from every branch and tag.

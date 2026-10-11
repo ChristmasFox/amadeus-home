@@ -214,7 +214,7 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
       ],
     },
   };
-  const parsed = parseVpsSubscriptionProbe(`ACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(snapshot)}\n`) as { status: string; data: Record<string, unknown> };
+  const parsed = parseVpsSubscriptionProbe(`ACCOUNT_MAP_STATUS=ok\nACCOUNTING_SNAPSHOT_JSON=${JSON.stringify(snapshot)}\n`) as { status: string; data: Record<string, unknown> };
   assert.equal(parsed.status, 'partial');
   assert.equal(parsed.data.proxyAccountedBytes, null);
   assert.equal(parsed.data.proxyAccountedComplete, false);
@@ -236,4 +236,13 @@ test('subscription probe parsing keeps unknowns and drops credential-shaped fiel
   assert.equal(security.hysteriaAuth.limiterWindowCoverageSeconds, 300);
   assert.deepEqual(security.signals.map((signal) => signal.code), ['reality_fallback_traffic', 'account_dominant_window']);
   assert.equal((parsed.data.sources as Record<string, { status: string } | undefined>).reality_fallback?.status, 'ok');
+});
+
+test('subscription probe fails closed when the redacted probe map is unavailable or invalid', () => {
+  const unavailable = parseVpsSubscriptionProbe('ACCOUNT_MAP_STATUS=unavailable\n') as { status: string; error: { code: string } };
+  assert.equal(unavailable.status, 'stale');
+  assert.equal(unavailable.error.code, 'ACCOUNT_MAP_UNAVAILABLE');
+  const invalid = parseVpsSubscriptionProbe('ACCOUNT_MAP_STATUS=invalid\n') as { status: string; error: { code: string } };
+  assert.equal(invalid.status, 'error');
+  assert.equal(invalid.error.code, 'ACCOUNT_MAP_INVALID');
 });

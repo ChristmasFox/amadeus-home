@@ -22,6 +22,9 @@ QWEN_IMAGE_LOCAL_ONLY="${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}"
 QWEN_IMAGE_FALLBACK_ENABLED="${AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED:-0}"
 QWEN_IMAGE_TOKEN_HOST_FILE="${OPENCLAW_QWEN_IMAGE_TOKEN_HOST_FILE:-$HOME/Library/Application Support/Amadeus/secrets/qwen-image-token}"
 QWEN_IMAGE_TOKEN_GUEST_FILE="${OPENCLAW_QWEN_IMAGE_TOKEN_GUEST_FILE:-/DATA/AppData/openclaw/secrets/qwen-image-token}"
+VPS_ACCOUNT_MAP_HOST_FILE="${OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE:-$HOME/Library/Application Support/Amadeus/secrets/vps-account-map.json}"
+VPS_ACCOUNT_MAP_GUEST_FILE="${OPENCLAW_VPS_ACCOUNT_MAP_GUEST_FILE:-/DATA/AppData/openclaw/secrets/vps-account-map.json}"
+LINEAGE_BRIDGE=0
 
 usage() {
   cat <<'USAGE'
@@ -33,6 +36,7 @@ Usage:
   ./scripts/deploy-openclaw.sh --apply --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-radar
   ./scripts/deploy-openclaw.sh --apply --no-build
+  ./scripts/deploy-openclaw.sh --apply --build-openclaw --lineage-bridge
   ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
 
 Default is a dry-run. --build performs a full two-image release. --build-auto
@@ -42,11 +46,25 @@ the live images for workspace/compose/config-only updates and rejects stale
 images when plugin or service source changed. --candidate replaces the one
 runtime for real acceptance before a version bump, preserves checkpoints and
 skips release notification/maintenance; it is not a second runtime or release.
+--lineage-bridge is a one-time explicit release cutover for a live image whose
+Git source commit was removed by an approved history rewrite. It requires
+--apply plus an OpenClaw image build and reads the protected live image's
+embedded /opt/amadeus/VERSION; freshness and version checks remain active.
 USAGE
 }
 
 fail() { printf '%s\n' "$*" >&2; exit 2; }
 base64_file() { base64 < "$1" | tr -d '\n'; }
+validate_vps_account_map_source() {
+  [[ -f "$VPS_ACCOUNT_MAP_HOST_FILE" && ! -L "$VPS_ACCOUNT_MAP_HOST_FILE" ]] \
+    || fail "VPS account map must be a regular file: $VPS_ACCOUNT_MAP_HOST_FILE"
+  [[ "$(stat -f %Lp "$VPS_ACCOUNT_MAP_HOST_FILE")" == 600 ]] \
+    || fail "VPS account map must be mode 0600: $VPS_ACCOUNT_MAP_HOST_FILE"
+  python3 "$ROOT_DIR/scripts/validate-vps-account-map.py" "$VPS_ACCOUNT_MAP_HOST_FILE" --private >/dev/null \
+    || fail 'VPS account map failed the ID-only schema validation.'
+  [[ "$VPS_ACCOUNT_MAP_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] \
+    || fail 'VPS account map guest path must stay under the protected OpenClaw secrets directory.'
+}
 DOCKER_BUILD_PROXY_ARGS=()
 for proxy_name in HTTP_PROXY HTTPS_PROXY; do
   case "$proxy_name" in
@@ -93,7 +111,10 @@ is_radar_image_path() {
 image_needs_rebuild() {
   local image="$1" target="$2" source_commit path
   source_commit="$(image_source_commit "$image")" || fail "$target image tag must contain a git commit and timestamp: $image"
-  git -C "$ROOT_DIR" cat-file -e "$source_commit^{commit}" 2>/dev/null || fail "Image source commit is not available locally: $source_commit"
+  if ! git -C "$ROOT_DIR" cat-file -e "$source_commit^{commit}" 2>/dev/null; then
+    printf 'IMAGE_LINEAGE_MISSING target=%s commit=%s rebuild=required\n' "$target" "$source_commit" >&2
+    return 0
+  fi
   # Root package.json changes only require an image rebuild when dependency/runtime metadata changed;
   # script-only changes must not rebuild either image. This keeps --build-auto affected-only.
   if git -C "$ROOT_DIR" diff --unified=0 "$source_commit..HEAD" -- package.json | grep -E '^\+[^+].*"(dependencies|devDependencies|peerDependencies|optionalDependencies|engines|packageManager)"' >/dev/null; then
@@ -131,8 +152,14 @@ assert_release_version_advanced() {
   local live_image live_commit live_version
   live_image="$(resolve_live_image openclaw)" || fail 'Could not resolve the live OpenClaw image to verify release version.'
   live_commit="$(image_source_commit "$live_image")" || fail "Live OpenClaw image tag has no source commit: $live_image"
-  git -C "$ROOT_DIR" cat-file -e "$live_commit^{commit}" 2>/dev/null || fail "Live OpenClaw source commit is not available locally: $live_commit"
-  live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  if git -C "$ROOT_DIR" cat-file -e "$live_commit^{commit}" 2>/dev/null; then
+    live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  elif ((LINEAGE_BRIDGE)); then
+    live_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$live_image" /opt/amadeus/VERSION | tr -d '[:space:]')"
+    printf 'LINEAGE_BRIDGE=validated\n'
+  else
+    fail "Live OpenClaw source commit is not available locally: $live_commit; use --lineage-bridge with an explicit OpenClaw build."
+  fi
   [[ "$live_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Live OpenClaw source commit has no valid VERSION: $live_commit"
   version_is_greater "$AMADEUS_VERSION" "$live_version" || fail "Refusing apply: VERSION=$AMADEUS_VERSION must advance beyond live Amadeus version $live_version; run scripts/amadeus-version.sh bump patch."
   printf 'LIVE_AMADEUS_VERSION=%s\n' "$live_version"
@@ -142,7 +169,14 @@ assert_candidate_version_unchanged() {
   local live_image live_commit live_version
   live_image="$(resolve_live_image openclaw)" || fail 'Could not resolve live OpenClaw image for candidate.'
   live_commit="$(image_source_commit "$live_image")" || fail 'Live OpenClaw image has no Git source tag.'
-  live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  if git -C "$ROOT_DIR" cat-file -e "$live_commit^{commit}" 2>/dev/null; then
+    live_version="$(git -C "$ROOT_DIR" show "$live_commit:VERSION" 2>/dev/null | tr -d '[:space:]')"
+  elif ((LINEAGE_BRIDGE)); then
+    live_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$live_image" /opt/amadeus/VERSION | tr -d '[:space:]')"
+    printf 'LINEAGE_BRIDGE=validated\n'
+  else
+    fail "Live OpenClaw source commit is not available locally: $live_commit; use --lineage-bridge with an explicit OpenClaw build."
+  fi
   [[ "$AMADEUS_VERSION" == "$live_version" ]] || fail "Candidate apply must keep live VERSION=$live_version; found $AMADEUS_VERSION."
   printf 'LIVE_AMADEUS_VERSION=%s\n' "$live_version"
 }
@@ -152,6 +186,7 @@ while (($#)); do
     --dry-run) APPLY=0 ;;
     --apply) APPLY=1 ;;
     --candidate) CANDIDATE=1 ;;
+    --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --build) BUILD=1; BUILD_OPENCLAW=1; BUILD_RADAR=1 ;;
     --build-auto) AUTO_BUILD=1 ;;
     --build-openclaw) BUILD_OPENCLAW=1 ;;
@@ -174,6 +209,7 @@ if ((NO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || AUTO_BUILD))); then
   fail '--no-build cannot be combined with a build option.'
 fi
 ((FULL_VERIFY == 0 || APPLY == 1)) || fail '--full-verify requires --apply.'
+((LINEAGE_BRIDGE == 0 || APPLY == 1)) || fail '--lineage-bridge requires --apply.'
 [[ "$IMAGE" != *$'\n'* && "$IMAGE" != *[[:space:]]* ]] || fail 'OpenClaw image tag contains whitespace.'
 [[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
 [[ "$QWEN_IMAGE_LOCAL_ONLY" == 0 || "$QWEN_IMAGE_LOCAL_ONLY" == 1 ]] || fail 'Qwen local-only flag must be 0 or 1.'
@@ -208,6 +244,10 @@ if ((APPLY)); then
   fi
 fi
 
+if ((LINEAGE_BRIDGE)); then
+  ((BUILD_OPENCLAW == 1)) || fail '--lineage-bridge requires an explicit OpenClaw image build (--build or --build-openclaw).'
+fi
+
 if ((NO_BUILD)); then
   ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) || fail '--no-build cannot be combined with any build option.'
 fi
@@ -233,6 +273,7 @@ printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
 printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
 printf 'QWEN_IMAGE_LOCAL_ONLY=%s\n' "$QWEN_IMAGE_LOCAL_ONLY"
 printf 'QWEN_IMAGE_FALLBACK_ENABLED=%s\n' "$QWEN_IMAGE_FALLBACK_ENABLED"
+printf 'LINEAGE_BRIDGE=%s\n' "$LINEAGE_BRIDGE"
 printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
@@ -329,6 +370,17 @@ fi
 image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
 printf 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s\n' "$image_amadeus_version"
+validate_vps_account_map_source
+VPS_ACCOUNT_MAP_PREFLIGHT_PATH="/tmp/amadeus-vps-account-map-${STAMP}.json"
+orb -m "$MACHINE" -u root bash -lc 'set -Eeuo pipefail; path="$1"; install -d -o root -g root -m 0700 "$(dirname "$path")"; cat > "$path"; chmod 0600 "$path"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH" < "$VPS_ACCOUNT_MAP_HOST_FILE"
+if ! orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 \
+  --mount "type=bind,src=$VPS_ACCOUNT_MAP_PREFLIGHT_PATH,dst=/run/secrets/vps_account_map.json,readonly" \
+  --entrypoint node "$IMAGE" -e "require('fs').readFileSync('/run/secrets/vps_account_map.json','utf8');" >/dev/null; then
+  orb -m "$MACHINE" -u root bash -lc 'rm -f -- "$1"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH" 2>/dev/null || true
+  fail 'OpenClaw container uid node cannot read the VPS account map.'
+fi
+orb -m "$MACHINE" -u root bash -lc 'rm -f -- "$1"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH"
+printf 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed\n'
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
@@ -454,6 +506,10 @@ PY
 [[ "$QWEN_IMAGE_TOKEN_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] || fail 'Qwen guest token must stay under the protected OpenClaw secrets directory.'
 orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chown 1000:1000 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/qwen-image-token.tmp "$1"' bash "$QWEN_IMAGE_TOKEN_GUEST_FILE" < "$QWEN_IMAGE_TOKEN_HOST_FILE"
 orb -m "$MACHINE" -u root test -f "$QWEN_IMAGE_TOKEN_GUEST_FILE"
+orb -m "$MACHINE" -u root bash -lc 'set -Eeuo pipefail; path="$1"; install -d -o root -g root -m 0700 "$(dirname "$path")"; cat > "$path.tmp"; chown 1000:1000 "$path.tmp"; chmod 0600 "$path.tmp"; mv -f "$path.tmp" "$path"' bash "$VPS_ACCOUNT_MAP_GUEST_FILE" < "$VPS_ACCOUNT_MAP_HOST_FILE"
+orb -m "$MACHINE" -u root test -f "$VPS_ACCOUNT_MAP_GUEST_FILE"
+orb -m "$MACHINE" -u root test "$(orb -m "$MACHINE" -u root stat -c %a "$VPS_ACCOUNT_MAP_GUEST_FILE")" = 600
+printf 'OPENCLAW_VPS_ACCOUNT_MAP=installed\n'
 
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
@@ -461,11 +517,11 @@ orb -m "$MACHINE" -u root python3 - \
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/openclaw.env" "$MAC_CONTROL_HOST" "$MAC_CONTROL_USER" "$MAC_HOST_NAME" \
   "$HOME_LAB_SERVICE_BASE_URL" "$OPENWRT_BASE_URL" "$MAC_HOST_AGENT_BASE_URL" "$CONTROL_UI_LAN_ORIGIN" \
-  "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" <<'PY'
+  "$AMADEUS_IMAGE_SERVICE_BASE_URL" "$AMADEUS_IMAGE_ASSET_HOST_DIR" "$OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE" "$VPS_ACCOUNT_MAP_GUEST_FILE" <<'PY'
 import os, sys
 from pathlib import Path
 path = Path(sys.argv[1])
-host, user, mac_host_name, home_lab_service_base_url, openwrt_base_url, mac_host_agent_base_url, control_ui_lan_origin, image_service_base_url, image_asset_host_dir, image_service_token_host_file = sys.argv[2:]
+host, user, mac_host_name, home_lab_service_base_url, openwrt_base_url, mac_host_agent_base_url, control_ui_lan_origin, image_service_base_url, image_asset_host_dir, image_service_token_host_file, vps_account_map_host_file = sys.argv[2:]
 lines = path.read_text().splitlines() if path.is_file() else []
 def set_env(key, value):
     prefix = key + '='
@@ -484,10 +540,17 @@ set_env('CONTROL_UI_LAN_ORIGIN', control_ui_lan_origin)
 set_env('AMADEUS_IMAGE_SERVICE_BASE_URL', image_service_base_url)
 set_env('AMADEUS_IMAGE_ASSET_HOST_DIR', image_asset_host_dir)
 set_env('OPENCLAW_IMAGE_SERVICE_TOKEN_HOST_FILE', image_service_token_host_file)
+set_env('OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE', vps_account_map_host_file)
 path.write_text('\n'.join(lines) + '\n')
 os.chmod(path, 0o600)
 print('MAC_CONTROL_PROFILE=installed')
 PY
+
+orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 \
+  --mount "type=bind,src=$VPS_ACCOUNT_MAP_GUEST_FILE,dst=/run/secrets/vps_account_map.json,readonly" \
+  --entrypoint node "$IMAGE" -e "require('fs').readFileSync('/run/secrets/vps_account_map.json','utf8');" >/dev/null \
+  || fail 'Installed guest VPS account map is not readable by container uid node.'
+printf 'OPENCLAW_VPS_ACCOUNT_MAP_NODE_READ=passed\n'
 
 # One-time delivery cutover: protected checkpoint above precedes every write.
 # Restore the checksum-pinned pristine monitor, then install one typed boundary.

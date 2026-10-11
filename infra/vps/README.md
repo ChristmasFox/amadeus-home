@@ -7,10 +7,21 @@ UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 
 账户归因使用外部的 `/etc/amadeus-gateway/account-map.json`。可以从
 `infra/vps/account-map.example.json` 复制结构到受保护运行时，再填入当前
-operator-owned account IDs；不要把生产映射写回仓库。OpenClaw 通过
-`VPS_ACCOUNT_MAP_FILE` 读取它，缺少映射时 owner-only 账户工具会返回配置错误，
-文件必须是普通文件并设为 mode `0600`；community profile 只保留 neutral
-fixtures。
+operator-owned account IDs；不要把生产映射写回仓库。accounting service 通过
+`VPS_ACCOUNT_MAP_FILE` 读取它，文件必须是普通文件、`root:amadeus-accounting`、
+mode `0640`；OpenClaw 则使用自己的 mode `0600` 私有副本。只读 probe 不能读取这份
+映射，而是读取只含七个 ID 的 `/etc/amadeus-gateway/account-map-probe.json`，由
+`root:amadeus-vps-readonly`、mode `0640` 保护。缺少或不合法的 probe map 会输出
+`ACCOUNT_MAP_STATUS=unavailable|invalid` 并停止账号快照，不再回退到 neutral IDs。
+community profile 只保留 neutral fixtures。
+
+生产迁移顺序固定为：先在外部生成并校验两个 map，执行
+`scripts/deploy-vps-accounting.sh --preflight` 做只读检查；再用
+`--apply --account-map <private-0600-file> --probe-map <redacted-file>` 安装 map、unit、
+service 和 probe。脚本会先建立 root-only checkpoint，验证两个 Unix 用户的读权限和
+账号 ID 连续性，重启后再校验 SQLite `accounts`、public snapshot 与 map 完全一致；失败
+时恢复 checkpoint 并尝试启动旧 service。OpenClaw 部署必须先验证本地 map 为普通
+`0600` 文件和 container uid `node` 可读，再复制到 guest secret path 并写入 Compose env。
 
 ## 当前架构
 
@@ -173,6 +184,11 @@ command="/usr/local/sbin/amadeus-vps-readonly-probe",no-port-forwarding,no-agent
 
 OpenClaw 容器只挂载对应私钥和严格的 known-hosts 文件。不要复用 root 运维私钥，也不要把
 `SSH_ORIGINAL_COMMAND` 传给 shell；工具只调用固定 probe 路径。
+
+probe 运行环境的 `VPS_ACCOUNT_PROBE_MAP_FILE` 固定指向
+`/etc/amadeus-gateway/account-map-probe.json`。该文件只含脱敏 account IDs，不能包含订阅
+token、HY2 secret、UUID 或其他 credential-shaped 字段；部署脚本会在 service restart 前
+验证 `amadeus-accounting` 能读 private map、`amadeus-vps-readonly` 只能读 probe map。
 
 ### Hysteria 2
 

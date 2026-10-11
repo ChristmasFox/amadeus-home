@@ -1011,7 +1011,20 @@ export function parseVpsSubscriptionProbe(
   checkedAt = new Date().toISOString(),
   accountMap = defaultVpsAccountMap(),
 ): unknown {
-  const encoded = fieldsFromProbe(raw).get('ACCOUNTING_SNAPSHOT_JSON');
+  const fields = fieldsFromProbe(raw);
+  const accountMapStatus = fields.get('ACCOUNT_MAP_STATUS');
+  if (accountMapStatus !== 'ok') {
+    const unavailable = accountMapStatus === 'unavailable' || !accountMapStatus;
+    return {
+      status: unavailable ? 'stale' : 'error', source: 'ssh', checkedAt,
+      error: {
+        code: unavailable ? 'ACCOUNT_MAP_UNAVAILABLE' : 'ACCOUNT_MAP_INVALID',
+        message: unavailable ? 'VPS probe account mapping is unavailable' : 'VPS probe account mapping is invalid',
+      },
+      data: null,
+    };
+  }
+  const encoded = fields.get('ACCOUNTING_SNAPSHOT_JSON');
   if (!encoded || encoded.length > 64_000) {
     return {
       status: 'stale', source: 'ssh', checkedAt,

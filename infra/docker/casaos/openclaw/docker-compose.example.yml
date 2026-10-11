@@ -59,6 +59,8 @@ services:
       - ${OPENCLAW_KIWIVM_CREDENTIALS_HOST_FILE:-/DATA/AppData/openclaw/secrets/kiwivm-credentials.json}:/run/secrets/kiwivm_credentials.json:ro
       - ${OPENCLAW_VPS_SSH_KEY_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-readonly-ssh-key}:/run/secrets/vps_ssh_key:ro
       - ${OPENCLAW_VPS_SSH_KNOWN_HOSTS_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-ssh-known-hosts}:/run/secrets/vps_ssh_known_hosts:ro
+      # Required ID-only/private runtime map. deploy-openclaw.sh validates a
+      # host mode-0600 file and copies it to the guest with uid node ownership.
       - ${OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE:-/DATA/AppData/openclaw/secrets/vps-account-map.json}:/run/secrets/vps_account_map.json:ro
       - ${OPENCLAW_OWNER_OUTBOX_HOST_DIR:-/DATA/AppData/openclaw/notifications}:/var/lib/openclaw/notifications
       - ${AMADEUS_IMAGE_ASSET_HOST_DIR:-/var/lib/amadeus-storage/amadeus/image-assets}:/var/lib/amadeus/image-assets:ro
