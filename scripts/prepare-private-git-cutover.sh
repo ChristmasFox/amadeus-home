@@ -133,6 +133,24 @@ print('CUTOVER_BLOBS_SCANNED='+str(len(to_scan)))
 print('CUTOVER_OVERSIZED_BLOBS_UNSCANNED='+str(oversize))
 if found or oversize:sys.exit(1)
 PY
+# Cross-check the rewritten history with the ORIGINAL read-only heuristic
+# implementation, not its transformed copy inside the rewritten commits.
+# Only category counts are surfaced; no filenames, values or secret snippets.
+if git -C "$SOURCE" cat-file -e "$REF:scripts/audit-git-history-blobs.mjs" 2>/dev/null; then
+  command -v node >/dev/null || { echo 'CUTOVER_CANDIDATE=blocked_node_missing'; exit 1; }
+  git -C "$SOURCE" show "$REF:scripts/audit-git-history-blobs.mjs" > "$OUT/original-history-auditor.mjs"
+  (cd "$MIRROR" && node "$OUT/original-history-auditor.mjs") > "$OUT/history-category-counts.private.txt"
+  for label in PERSONAL_DOMAIN NAMED_OPERATOR_IDENTITY ACCOUNT_EMAIL_POLICY PRIVATE_KEY_HEADER; do
+    count="$(sed -n "s/^HISTORY_${label}_BLOBS=//p" "$OUT/history-category-counts.private.txt")"
+    [[ "$count" =~ ^[0-9]+$ ]] || { echo 'CUTOVER_CANDIDATE=failed_history_scan'; exit 1; }
+    echo "CUTOVER_HISTORY_${label}_BLOBS=$count"
+    if [[ "$count" != 0 ]]; then
+      echo 'CUTOVER_CANDIDATE=blocked_identity_remains'
+      echo 'CUTOVER_REMOTE_PUSH=never'
+      exit 1
+    fi
+  done
+fi
 echo 'CUTOVER_CANDIDATE=prepared'
 echo 'CUTOVER_SOURCE_RUNTIME_BLOBS=preserved'
 echo 'CUTOVER_HISTORIC_9ROUTER_POLICY=removed'
