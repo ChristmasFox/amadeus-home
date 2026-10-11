@@ -35,16 +35,20 @@ or a force push.
   OpenClaw owner runtime use a private map, the forced probe uses a separate
   ID-only map, and missing/invalid probe maps fail closed with a typed status.
   `scripts/deploy-vps-accounting.sh` now has a read-only preflight, atomic map
-  and unit migration, root-only checkpoint, Unix-user permission assertions,
-  database/snapshot ID continuity checks, and rollback on restart or validation
-  failure. `scripts/deploy-openclaw.sh` validates the host map, proves uid
-  `node` can read the bind mount, installs the guest secret before Compose
+  and unit migration, root-only checkpoint, a dedicated `0710`
+  `amadeus-account-map-traverse` parent with per-user `0640` map groups,
+  non-root permission assertions, database/snapshot ID continuity checks, and
+  rollback on restart or validation failure. `scripts/deploy-openclaw.sh`
+  validates the host map, stages a unique private `/tmp` child without
+  changing `/tmp`, sets the preflight file to uid/gid `1000:1000` mode `0600`,
+  proves uid `node` can read it, installs the guest secret before Compose
   config, and records a node-read preflight.
 - PR #3 P0 image ancestry remediation is source-complete: a missing rewritten
-  Git SHA marks the live image stale, and the explicit
-  `--lineage-bridge --apply --build-openclaw` path reads only the protected
-  image `VERSION` to validate a deliberate bridge release. It does not disable
-  freshness, semver, checkpoint, health, or rollback checks.
+  Git SHA marks each live image stale, and the explicit
+  `--lineage-bridge --apply --build` path rebuilds both OpenClaw and Product
+  Radar before reading only the protected OpenClaw image `VERSION` to validate
+  a deliberate bridge release. It does not disable freshness, semver,
+  checkpoint, health, or rollback checks.
 - CI now has a strict active-runtime current-snapshot gate, an informational
   broad current-snapshot inventory, and the selected public VPS gate in
   addition to the separate reachable-history audit. The history workflow
@@ -63,10 +67,12 @@ All commands below were run from the repository root on the cutover branch.
 | `node scripts/audit-public-infrastructure.mjs --audit-all` | 1,148 tracked text candidates scanned, 269 classified findings; informational only. |
 | `node scripts/audit-git-history-blobs.mjs` | 12,748 reachable objects; 5,714 text blobs; 0 read errors; 504 personal-domain, 117 named-identity, 5 account-policy, 4 proxy-URI, 0 private-key, and 14 public-IPv4 candidate blobs. |
 | `pnpm check:secrets` | Passed. |
-| `bash scripts/test-vps-account-map-migration.sh` | Passed; schema, redacted probe status, preflight, rollback, and continuity guards present. |
-| `bash scripts/test-openclaw-candidate-deploy.sh` | Passed; lineage bridge and account-map preflight assertions present. |
+| `bash scripts/test-vps-account-map-permissions.sh` | Passed; disposable Linux volume proved parent traversal, non-root private/probe isolation, unrelated-secret denial, uid/gid `1000:1000` read access, and unchanged `/tmp` mode. |
+| `bash scripts/test-vps-account-map-migration.sh` | Passed; schema, redacted probe status, preflight, traversal-group contract, rollback, and continuity guards present. |
+| `bash scripts/test-openclaw-lineage-compatibility.sh` | Passed; synthetic orphan rewrite pruned the old commit and both OpenClaw/Product Radar image tags were required to rebuild before lineage bridge validation. |
+| `bash scripts/test-openclaw-candidate-deploy.sh` | Passed; candidate dry-run, permission smoke, lineage bridge guard, and account-map preflight assertions present. |
 | `pnpm --filter @agent/identity build`, `@agent/presentation build`, `@agent/amadeus-plugin typecheck` | Passed. |
-| `pnpm --filter @agent/amadeus-plugin test` | 140 passed, 0 failed. |
+| `pnpm --filter @agent/amadeus-plugin test` | 141 passed, 0 failed. |
 | Qwen bridge tests | 18 passed, 0 failed. |
 | Qwen debug UI tests | 19 passed, 0 failed. |
 | MacHostAgent tests | 10 passed, 0 failed. |

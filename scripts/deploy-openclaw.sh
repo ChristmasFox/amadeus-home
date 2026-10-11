@@ -36,7 +36,7 @@ Usage:
   ./scripts/deploy-openclaw.sh --apply --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-radar
   ./scripts/deploy-openclaw.sh --apply --no-build
-  ./scripts/deploy-openclaw.sh --apply --build-openclaw --lineage-bridge
+  ./scripts/deploy-openclaw.sh --apply --build --lineage-bridge
   ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
 
 Default is a dry-run. --build performs a full two-image release. --build-auto
@@ -48,7 +48,7 @@ runtime for real acceptance before a version bump, preserves checkpoints and
 skips release notification/maintenance; it is not a second runtime or release.
 --lineage-bridge is a one-time explicit release cutover for a live image whose
 Git source commit was removed by an approved history rewrite. It requires
---apply plus an OpenClaw image build and reads the protected live image's
+--apply plus fresh builds of both images and reads the protected live image's
 embedded /opt/amadeus/VERSION; freshness and version checks remain active.
 USAGE
 }
@@ -64,6 +64,33 @@ validate_vps_account_map_source() {
     || fail 'VPS account map failed the ID-only schema validation.'
   [[ "$VPS_ACCOUNT_MAP_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] \
     || fail 'VPS account map guest path must stay under the protected OpenClaw secrets directory.'
+}
+run_vps_account_map_node_preflight() {
+  (
+    set -Eeuo pipefail
+    local preflight_dir="/tmp/amadeus-vps-account-map-${STAMP}-$$"
+    local preflight_path="$preflight_dir/vps-account-map.json"
+    cleanup_vps_account_map_preflight() {
+      orb -m "$MACHINE" -u root bash -lc 'rm -rf -- "$1"' bash "$preflight_dir" >/dev/null 2>&1 || true
+    }
+    trap cleanup_vps_account_map_preflight EXIT
+    orb -m "$MACHINE" -u root bash -lc '
+      set -Eeuo pipefail
+      dir="$1"
+      test ! -e "$dir"
+      mkdir -- "$dir"
+      chown root:root "$dir"
+      chmod 0700 "$dir"
+      cat > "$dir/vps-account-map.json"
+      chown 1000:1000 "$dir/vps-account-map.json"
+      chmod 0600 "$dir/vps-account-map.json"
+    ' bash "$preflight_dir" < "$VPS_ACCOUNT_MAP_HOST_FILE"
+    orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 \
+      --mount "type=bind,src=$preflight_path,dst=/run/secrets/vps_account_map.json,readonly" \
+      --entrypoint node "$IMAGE" -e "require('fs').readFileSync('/run/secrets/vps_account_map.json','utf8');" >/dev/null \
+      || fail 'OpenClaw container uid node cannot read the VPS account map.'
+    printf 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed\n'
+  )
 }
 DOCKER_BUILD_PROXY_ARGS=()
 for proxy_name in HTTP_PROXY HTTPS_PROXY; do
@@ -245,7 +272,7 @@ if ((APPLY)); then
 fi
 
 if ((LINEAGE_BRIDGE)); then
-  ((BUILD_OPENCLAW == 1)) || fail '--lineage-bridge requires an explicit OpenClaw image build (--build or --build-openclaw).'
+  ((BUILD_OPENCLAW == 1 && BUILD_RADAR == 1)) || fail '--lineage-bridge requires fresh OpenClaw and Product Radar builds (--build or both --build-openclaw --build-radar).'
 fi
 
 if ((NO_BUILD)); then
@@ -371,16 +398,7 @@ image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint 
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
 printf 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s\n' "$image_amadeus_version"
 validate_vps_account_map_source
-VPS_ACCOUNT_MAP_PREFLIGHT_PATH="/tmp/amadeus-vps-account-map-${STAMP}.json"
-orb -m "$MACHINE" -u root bash -lc 'set -Eeuo pipefail; path="$1"; install -d -o root -g root -m 0700 "$(dirname "$path")"; cat > "$path"; chmod 0600 "$path"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH" < "$VPS_ACCOUNT_MAP_HOST_FILE"
-if ! orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 \
-  --mount "type=bind,src=$VPS_ACCOUNT_MAP_PREFLIGHT_PATH,dst=/run/secrets/vps_account_map.json,readonly" \
-  --entrypoint node "$IMAGE" -e "require('fs').readFileSync('/run/secrets/vps_account_map.json','utf8');" >/dev/null; then
-  orb -m "$MACHINE" -u root bash -lc 'rm -f -- "$1"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH" 2>/dev/null || true
-  fail 'OpenClaw container uid node cannot read the VPS account map.'
-fi
-orb -m "$MACHINE" -u root bash -lc 'rm -f -- "$1"' bash "$VPS_ACCOUNT_MAP_PREFLIGHT_PATH"
-printf 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed\n'
+run_vps_account_map_node_preflight
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load

@@ -13,6 +13,9 @@ mode `0640`；OpenClaw 则使用自己的 mode `0600` 私有副本。只读 prob
 映射，而是读取只含七个 ID 的 `/etc/amadeus-gateway/account-map-probe.json`，由
 `root:amadeus-vps-readonly`、mode `0640` 保护。缺少或不合法的 probe map 会输出
 `ACCOUNT_MAP_STATUS=unavailable|invalid` 并停止账号快照，不再回退到 neutral IDs。
+两个非 root 用户通过专用的 `amadeus-account-map-traverse` 补充组访问父目录；
+`/etc/amadeus-gateway` 固定为 `root:amadeus-account-map-traverse`、mode `0710`，
+父目录只允许已知文件名的遍历，private/probe map 仍由各自文件组隔离。
 community profile 只保留 neutral fixtures。
 
 生产迁移顺序固定为：先在外部生成并校验两个 map，执行
@@ -22,6 +25,8 @@ service 和 probe。脚本会先建立 root-only checkpoint，验证两个 Unix 
 账号 ID 连续性，重启后再校验 SQLite `accounts`、public snapshot 与 map 完全一致；失败
 时恢复 checkpoint 并尝试启动旧 service。OpenClaw 部署必须先验证本地 map 为普通
 `0600` 文件和 container uid `node` 可读，再复制到 guest secret path 并写入 Compose env。
+OpenClaw 的 node preflight 使用 `/tmp` 下唯一的私有子目录，显式设置 map 为
+`1000:1000`、`0600`，退出时清理子目录，不会修改现有 `/tmp` 的权限。
 
 ## 当前架构
 

@@ -55,6 +55,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=8 "$HOST_ALIAS" \
 set -Eeuo pipefail
 user="$AMADEUS_USER"
 snapshot_group='amadeus-accounting-snapshot'
+traverse_group='amadeus-account-map-traverse'
 probe='/usr/local/sbin/amadeus-vps-readonly-probe'
 if ! id "$user" >/dev/null 2>&1; then
   useradd --system --user-group --no-create-home --home-dir "/var/lib/$user" --shell /bin/sh "$user"
@@ -62,7 +63,11 @@ fi
 if ! getent group "$snapshot_group" >/dev/null 2>&1; then
   groupadd --system "$snapshot_group"
 fi
+if ! getent group "$traverse_group" >/dev/null 2>&1; then
+  groupadd --system "$traverse_group"
+fi
 usermod -aG "$snapshot_group" "$user"
+usermod -aG "$traverse_group" "$user"
 usermod --shell /bin/sh "$user"
 install -d -o "$user" -g "$user" -m 0700 "/var/lib/$user/.ssh"
 printf '%s' "$AMADEUS_PROBE_B64" | base64 -d | install -o root -g root -m 0755 /dev/stdin "$probe"

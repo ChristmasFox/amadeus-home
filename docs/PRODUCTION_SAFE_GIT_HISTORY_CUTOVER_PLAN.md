@@ -94,9 +94,11 @@ Must be executed with staging/fixture data *before* altering main:
 ## Workstream D: history cutover ONLY AFTER code migration
 
 The first release after an approved history rewrite uses the guarded
-`scripts/deploy-openclaw.sh --apply --build-openclaw --lineage-bridge` path.
-When a live image tag points at a commit absent from the rewritten clone, the
-script treats the image as stale, requires a fresh OpenClaw build, and reads
+`scripts/deploy-openclaw.sh --apply --build --lineage-bridge` path. This builds
+both OpenClaw and Product Radar because either live image can retain an
+unreachable pre-rewrite commit. When a live image tag points at a commit absent
+from the rewritten clone, the script treats that image as stale, requires a
+fresh build, and reads
 the live image's protected `/opt/amadeus/VERSION` only to validate the release
 version. Normal semver advancement, fresh-image checks, checkpoint creation,
 health checks and rollback remain enabled. The flag is rejected without

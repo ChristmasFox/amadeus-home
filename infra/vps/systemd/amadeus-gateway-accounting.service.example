@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=amadeus-accounting
 Group=amadeus-accounting
-SupplementaryGroups=amadeus-accounting-snapshot
+SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse
 WorkingDirectory=/usr/local/libexec/amadeus-gateway-accounting
 EnvironmentFile=/etc/amadeus-accounting/accounting.env
 Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json

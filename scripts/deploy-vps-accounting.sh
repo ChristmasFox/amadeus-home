@@ -52,6 +52,8 @@ python3 -m py_compile "$STORE_SOURCE" "$SERVICE_SOURCE"
 bash -n "$PROBE_SOURCE"
 grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$UNIT_SOURCE" \
   || fail 'Accounting unit must declare VPS_ACCOUNT_MAP_FILE explicitly.'
+grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$UNIT_SOURCE" \
+  || fail 'Accounting unit must declare the map traversal group explicitly.'
 python3 "$ROOT_DIR/scripts/validate-vps-account-map.py" "$ACCOUNT_MAP_SOURCE" >/dev/null
 python3 "$ROOT_DIR/scripts/validate-vps-account-map.py" "$PROBE_MAP_SOURCE" >/dev/null
 if ! cmp -s <(python3 "$ROOT_DIR/scripts/validate-vps-account-map.py" "$ACCOUNT_MAP_SOURCE") <(python3 "$ROOT_DIR/scripts/validate-vps-account-map.py" "$PROBE_MAP_SOURCE"); then
@@ -77,17 +79,31 @@ set -Eeuo pipefail
 private=/etc/amadeus-gateway/account-map.json
 probe=/etc/amadeus-gateway/account-map-probe.json
 unit=/etc/systemd/system/amadeus-gateway-accounting.service
+traverse_group=amadeus-account-map-traverse
 id -u amadeus-accounting >/dev/null
 id -u amadeus-vps-readonly >/dev/null
 getent group amadeus-accounting >/dev/null
 getent group amadeus-vps-readonly >/dev/null
+if ! getent group "$traverse_group" >/dev/null 2>&1; then
+  printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=pre-migration-ready'
+  exit 0
+fi
+if [ ! -e "$private" ] && [ ! -e "$probe" ]; then
+  printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=pre-migration-ready'
+  exit 0
+fi
 test -f "$private" && test ! -L "$private"
 test -f "$probe" && test ! -L "$probe"
+test "$(stat -c '%a' /etc/amadeus-gateway)" = 710
+test "$(stat -c '%U:%G' /etc/amadeus-gateway)" = "root:$traverse_group"
 test "$(stat -c '%a' "$private")" = 640
 test "$(stat -c '%U:%G' "$private")" = 'root:amadeus-accounting'
 test "$(stat -c '%a' "$probe")" = 640
 test "$(stat -c '%U:%G' "$probe")" = 'root:amadeus-vps-readonly'
+id -Gn amadeus-accounting | tr ' ' '\n' | grep -Fxq "$traverse_group"
+id -Gn amadeus-vps-readonly | tr ' ' '\n' | grep -Fxq "$traverse_group"
 runuser -u amadeus-accounting -- test -r "$private"
+! runuser -u amadeus-accounting -- test -r "$probe"
 runuser -u amadeus-vps-readonly -- test -r "$probe"
 ! runuser -u amadeus-vps-readonly -- test -r "$private"
 python3 - "$private" "$probe" <<'PY'
@@ -106,6 +122,7 @@ if maps[0] != maps[1]:
     raise SystemExit('private/probe maps do not describe the same identities')
 PY
 grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$unit"
+grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$unit"
 grep -Fqx 'ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret /etc/amadeus-gateway/account-map.json' "$unit"
 printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=passed'
 REMOTE_PREFLIGHT
@@ -151,6 +168,7 @@ probe='/usr/local/sbin/amadeus-vps-readonly-probe'
 unit='/etc/systemd/system/amadeus-gateway-accounting.service'
 private_map='/etc/amadeus-gateway/account-map.json'
 probe_map='/etc/amadeus-gateway/account-map-probe.json'
+traverse_group='amadeus-account-map-traverse'
 db='/var/lib/amadeus-accounting/subscription-accounts.sqlite'
 snapshot='/var/lib/amadeus-accounting/subscription-usage-public.json'
 stamp="$(date -u +%Y%m%d%H%M%S)"
@@ -183,6 +201,10 @@ if maps[0] != maps[1]:
     raise SystemExit('private/probe account map continuity mismatch')
 PY
 grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$unit_source"
+grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$unit_source"
+
+parent_owner_group="$(stat -c '%U:%G' /etc/amadeus-gateway 2>/dev/null || true)"
+parent_mode="$(stat -c '%a' /etc/amadeus-gateway 2>/dev/null || true)"
 
 install -d -o root -g root -m 0700 "$backup"
 for path in "$store" "$service" "$probe" "$unit" "$private_map" "$probe_map"; do
@@ -207,6 +229,18 @@ fi
 sha256sum "$backup"/* > "$backup/SHA256SUMS" 2>/dev/null || true
 chmod 0600 "$backup"/*
 
+traverse_group_existed=0
+getent group "$traverse_group" >/dev/null 2>&1 && traverse_group_existed=1
+accounting_had_traverse=0
+readonly_had_traverse=0
+id -nG amadeus-accounting | tr ' ' '\n' | grep -Fxq "$traverse_group" && accounting_had_traverse=1 || true
+id -nG amadeus-vps-readonly | tr ' ' '\n' | grep -Fxq "$traverse_group" && readonly_had_traverse=1 || true
+if ! getent group "$traverse_group" >/dev/null 2>&1; then
+  groupadd --system "$traverse_group"
+fi
+usermod -aG "$traverse_group" amadeus-accounting
+usermod -aG "$traverse_group" amadeus-vps-readonly
+
 rollback() {
   systemctl stop amadeus-gateway-accounting.service 2>/dev/null || true
   for path in "$store" "$service" "$probe" "$unit" "$private_map" "$probe_map"; do
@@ -220,6 +254,13 @@ rollback() {
   [ ! -f "$private_map" ] || { chown root:amadeus-accounting "$private_map"; chmod 0640 "$private_map"; }
   [ ! -f "$probe_map" ] || { chown root:amadeus-vps-readonly "$probe_map"; chmod 0640 "$probe_map"; }
   [ ! -f "$probe" ] || chmod 0755 "$probe"
+  if [ -n "$parent_owner_group" ] && [ -d /etc/amadeus-gateway ]; then
+    chown "$parent_owner_group" /etc/amadeus-gateway
+    chmod "$parent_mode" /etc/amadeus-gateway
+  fi
+  if [ "$accounting_had_traverse" -eq 0 ]; then gpasswd -d amadeus-accounting "$traverse_group" >/dev/null 2>&1 || true; fi
+  if [ "$readonly_had_traverse" -eq 0 ]; then gpasswd -d amadeus-vps-readonly "$traverse_group" >/dev/null 2>&1 || true; fi
+  if [ "$traverse_group_existed" -eq 0 ]; then groupdel "$traverse_group" >/dev/null 2>&1 || true; fi
   systemctl daemon-reload
   systemctl start amadeus-gateway-accounting.service 2>/dev/null || true
   printf '%s\n' 'VPS_ACCOUNTING_ROLLBACK=attempted' >&2
@@ -231,7 +272,7 @@ python3 -m py_compile "$store_source" "$service_source"
 install -o root -g root -m 0644 "$store_source" "$store.new"
 install -o root -g root -m 0644 "$service_source" "$service.new"
 install -o root -g root -m 0755 "$probe_source" "$probe.new"
-install -d -o root -g root -m 0750 /etc/amadeus-gateway
+install -d -o root -g "$traverse_group" -m 0710 /etc/amadeus-gateway
 install -o root -g amadeus-accounting -m 0640 "$private_map_source" "$private_map.new"
 install -o root -g amadeus-vps-readonly -m 0640 "$probe_map_source" "$probe_map.new"
 install -o root -g root -m 0644 "$unit_source" "$unit.new"
@@ -242,6 +283,10 @@ mv -f "$private_map.new" "$private_map"
 mv -f "$probe_map.new" "$probe_map"
 mv -f "$unit.new" "$unit"
 runuser -u amadeus-accounting -- test -r "$private_map"
+if runuser -u amadeus-accounting -- test -r "$probe_map"; then
+  echo 'accounting user unexpectedly reads probe map' >&2
+  exit 1
+fi
 runuser -u amadeus-vps-readonly -- test -r "$probe_map"
 if runuser -u amadeus-vps-readonly -- test -r "$private_map"; then
   echo 'probe account unexpectedly reads private map' >&2

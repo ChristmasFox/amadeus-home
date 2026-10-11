@@ -3,6 +3,8 @@ set -Eeuo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$ROOT"
 bash -n scripts/deploy-openclaw.sh
+scripts/test-vps-account-map-permissions.sh
+bash scripts/test-openclaw-lineage-compatibility.sh
 candidate="$(scripts/deploy-openclaw.sh --dry-run --candidate --build-auto)"
 release="$(scripts/deploy-openclaw.sh --dry-run --build-auto)"
 if scripts/deploy-openclaw.sh --dry-run --lineage-bridge >/dev/null 2>&1; then
@@ -42,13 +44,17 @@ assert 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s' in s
 assert 'RUNTIME_AMADEUS_VERSION=%s' in s
 assert 'cat /opt/amadeus/VERSION' in s
 assert 'LINEAGE_BRIDGE=validated' in s
-assert '--lineage-bridge requires an explicit OpenClaw image build' in s
+assert '--lineage-bridge requires fresh OpenClaw and Product Radar builds' in s
 assert 'IMAGE_LINEAGE_MISSING' in s
 assert 'validate_vps_account_map_source' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_PREFLIGHT=passed' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_NODE_READ=passed' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_HOST_FILE' in s
 assert 'OPENCLAW_VPS_ACCOUNT_MAP_GUEST_FILE' in s
+assert 'run_vps_account_map_node_preflight' in s
+assert 'mkdir -- "$dir"' in s
+assert 'chown 1000:1000 "$dir/vps-account-map.json"' in s
+assert 'test ! -e "$dir"' in s
 assert 'plugins inspect amadeus --runtime --json' in s
 assert 'plugins registry --refresh --json' in s
 assert 'openclaw-state.sqlite.before' in s
