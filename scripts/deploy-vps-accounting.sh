@@ -90,6 +90,21 @@ test "$(stat -c '%U:%G' "$probe")" = 'root:amadeus-vps-readonly'
 runuser -u amadeus-accounting -- test -r "$private"
 runuser -u amadeus-vps-readonly -- test -r "$probe"
 ! runuser -u amadeus-vps-readonly -- test -r "$private"
+python3 - "$private" "$probe" <<'PY'
+import json, pathlib, re, sys
+expected = {'activeAccountIds', 'dedicatedAccountId', 'legacyAccountId'}
+maps = []
+for name in sys.argv[1:]:
+    value = json.loads(pathlib.Path(name).read_text(encoding='utf-8'))
+    if set(value) != expected or not isinstance(value['activeAccountIds'], list) or len(value['activeAccountIds']) != 5:
+        raise SystemExit('account map schema is not ID-only')
+    ids = [*value['activeAccountIds'], value['dedicatedAccountId'], value['legacyAccountId']]
+    if any(not isinstance(item, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,63}', item) for item in ids) or len(set(ids)) != 7:
+        raise SystemExit('account map IDs are invalid')
+    maps.append(value)
+if maps[0] != maps[1]:
+    raise SystemExit('private/probe maps do not describe the same identities')
+PY
 grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$unit"
 grep -Fqx 'ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret /etc/amadeus-gateway/account-map.json' "$unit"
 printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=passed'
