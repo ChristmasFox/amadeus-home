@@ -60,13 +60,14 @@ protected_tree() {
   git --git-dir="$MIRROR" ls-tree -r refs/heads/main |
     awk -F '\t' 'NF==2 {
       p=$2;
-      if (p=="infra/9router/runtime-policy.json") next;
-      if (p ~ /\.(md|markdown|txt)$/) next;
-      if (p ~ /^\.agent\/(checkpoints|tasks)\//) next;
-      if (p ~ /^infra\/(vps|cloudflare)\// && p ~ /\.example(\.|$)/) next;
-      if (p=="infra/host-profile.env.example") next;
-      if (p=="scripts/audit-public-infrastructure.mjs" || p=="scripts/audit-git-history-blobs.mjs") next;
-      print
+      # Protect active production source; archival and migration scripts
+      # must be sanitized rather than preserved with personal literals.
+      if (p ~ /^plugins\/amadeus\/src\//) print;
+      else if (p ~ /^apps\/qwen-image-service\//) print;
+      else if (p ~ /^infra\/macos\/(manage-qwen-image|machostagent|qwen-image-)/ && p !~ /\.md$/) print;
+      else if (p ~ /^infra\/vps\/subscription\/.*\.(py|sh)$/) print;
+      else if (p ~ /^infra\/docker\/casaos\/openclaw\// && p !~ /\.md$/) print;
+      else if (p=="scripts/deploy-openclaw.sh" || p=="scripts/deploy-vps-accounting.sh" || p=="scripts/host-profile.sh") print;
     }' | LC_ALL=C sort
 }
 protected_tree > "$OUT/source-before.tsv"
