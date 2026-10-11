@@ -8,6 +8,7 @@ on:
       - "scripts/audit-git-history-blobs.mjs"
       - "scripts/backup-git-history-before-rewrite.sh"
       - "scripts/rehearse-git-history-privacy.sh"
+      - "scripts/prepare-private-git-cutover.sh"
       - "docs/GIT_HISTORY_PRIVACY_REWRITE_REVIEW.md"
   workflow_dispatch:
 
@@ -35,6 +36,7 @@ jobs:
         run: |
           bash -n scripts/backup-git-history-before-rewrite.sh
           bash -n scripts/rehearse-git-history-privacy.sh
+          bash -n scripts/prepare-private-git-cutover.sh
       - name: Read-only reachable-blob privacy analysis (no values)
         run: |
           node scripts/audit-git-history-blobs.mjs
@@ -68,6 +70,36 @@ jobs:
           if git --git-dir="$TMP/out/rehearsal.git" cat-file -e refs/heads/main:infra/9router/runtime-policy.json 2>/dev/null; then
             echo "Historical operator policy path still exists" >&2
             exit 1
+          fi
+          rm -rf "$TMP"
+      - name: Full-history final cutover candidate on synthetic Git refs (never push)
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          TMP="$(mktemp -d)"
+          git init -q -b main "$TMP/src"
+          git -C "$TMP/src" config user.name fixture
+          git -C "$TMP/src" config user.email fixture@example.invalid
+          mkdir -p "$TMP/src/scripts" "$TMP/src/infra/9router"
+          printf '%s\n' 'demo-private.internal.example' > "$TMP/src/README.md"
+          printf '%s\n' 'neutral runtime source' > "$TMP/src/scripts/active.sh"
+          printf '%s\n' '{"email":"fixture@example.invalid"}' > "$TMP/src/infra/9router/runtime-policy.json"
+          git -C "$TMP/src" add -A
+          git -C "$TMP/src" commit -qm synthetic-release
+          git -C "$TMP/src" tag v1.10.4
+          printf '%s\n' 'demo-private.internal.example updated' >> "$TMP/src/README.md"
+          git -C "$TMP/src" commit -qam synthetic-pr
+          git -C "$TMP/src" update-ref refs/remotes/origin/security/vps-public-info-redaction-20261010 HEAD
+          git -C "$TMP/src" bundle create "$TMP/recent.bundle" --all
+          printf '%s\n' 'literal:demo-private.internal.example==>example.com' > "$TMP/private-rules.txt"
+          AMADEUS_CUTOVER_SOURCE_REPO="$TMP/src" \
+          AMADEUS_CUTOVER_OUTPUT_DIR="$TMP/out" \
+            bash scripts/prepare-private-git-cutover.sh "$TMP/recent.bundle" "$TMP/private-rules.txt"
+          git --git-dir="$TMP/out/candidate.git" show refs/heads/main:README.md | grep -Fq 'example.com'
+          git --git-dir="$TMP/out/candidate.git" show refs/heads/main:scripts/active.sh | grep -Fq 'neutral runtime source'
+          if git --git-dir="$TMP/out/candidate.git" cat-file -e refs/tags/v1.10.4:infra/9router/runtime-policy.json 2>/dev/null; then
+            echo 'Fixture private file remains in tag' >&2; exit 1
           fi
           rm -rf "$TMP"
       - name: Gitleaks full-history scan — summary ONLY
