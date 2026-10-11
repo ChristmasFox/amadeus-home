@@ -98,6 +98,11 @@ jobs:
             bash scripts/prepare-private-git-cutover.sh "$TMP/recent.bundle" "$TMP/private-rules.txt"
           git --git-dir="$TMP/out/candidate.git" show refs/heads/main:README.md | grep -Fq 'example.com'
           git --git-dir="$TMP/out/candidate.git" show refs/heads/main:scripts/active.sh | grep -Fq 'neutral runtime source'
+          python3 scripts/diagnose-private-git-history-remnants.py \
+            "$TMP/out/candidate.git" "$TMP/private-rules.txt" > "$TMP/remnant-report.txt"
+          grep -Fxq 'REMNANT_MATCHED_BLOBS=0' "$TMP/remnant-report.txt"
+          grep -Fxq 'REMNANT_PRIVATE_VALUES_PRINTED=false' "$TMP/remnant-report.txt"
+          grep -Fxq 'REMNANT_REMOTE_PUSH=never' "$TMP/remnant-report.txt"
           if git --git-dir="$TMP/out/candidate.git" cat-file -e refs/tags/v1.10.4:infra/9router/runtime-policy.json 2>/dev/null; then
             echo 'Fixture private file remains in tag' >&2; exit 1
           fi
