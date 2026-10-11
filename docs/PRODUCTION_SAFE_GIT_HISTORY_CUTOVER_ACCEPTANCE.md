@@ -110,3 +110,19 @@ in a disposable mirror, verify every intended branch/tag and reachable-history
 scan, coordinate open PR and tag refs, and give separate explicit authorization
 for destructive remote ref replacement. This acceptance report does not grant
 that authorization.
+
+## Release permission/rollback consolidation (October 11)
+
+The VPS account maps use an isolated `/etc/amadeus-account-maps` directory,
+never granting additional group traversal to the existing gateway secret
+directory. Each identity can read only its assigned map (0640 in a 0710 parent).
+The OpenClaw preflight uses a root:node 0710 temporary child directory and a
+node:node 0600 map file without altering OrbStack's /tmp permissions.
+
+Rollback handlers are registered before user/group changes, and a fault-injection
+test checks early-stage rollback without touching the active accounting service.
+CI tests a Linux permission scenario containing an unrelated 0644 file in the
+original root-only gateway directory to detect accidental exposure.
+
+These are source/fixture verification results only, **not production deployment
+acceptance or Git history privacy sign-off**.

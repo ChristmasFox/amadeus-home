@@ -24,6 +24,8 @@ grep -Fq -- '--preflight' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
 grep -Fq 'VPS_ACCOUNTING_ROLLBACK=attempted' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
 grep -Fq 'VPS_ACCOUNT_CONTINUITY_PREFLIGHT=passed' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
 grep -Fq 'amadeus-account-map-traverse' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
+grep -Fq "map_dir='/etc/amadeus-account-maps'" "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
+! grep -Fq 'install -d -o root -g "$traverse_group" -m 0710 /etc/amadeus-gateway' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
 grep -Fq 'chmod 0710' "$ROOT_DIR/scripts/test-vps-account-map-permissions.sh"
 grep -Fq 'expected_ids' "$ROOT_DIR/scripts/deploy-vps-accounting.sh"
 printf '%s\n' 'VPS_ACCOUNT_MAP_MIGRATION_TEST=passed'

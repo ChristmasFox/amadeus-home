@@ -262,7 +262,7 @@ runtime_touched=0
 # Install rollback BEFORE groupadd/usermod; a failure during the first
 # permission mutation must not leave a partially granted group behind.
 rollback() {
-  trap - ERR
+  trap - ERR HUP INT TERM
   set +e
   if [ "$runtime_touched" -eq 1 ]; then
     systemctl stop amadeus-gateway-accounting.service 2>/dev/null || true
@@ -296,7 +296,7 @@ rollback() {
   printf '%s\n' 'VPS_ACCOUNTING_ROLLBACK=attempted' >&2
   exit 1
 }
-trap 'rollback' ERR
+trap 'rollback' ERR HUP INT TERM
 if [ "$traverse_group_existed" -eq 0 ]; then
   groupadd --system "$traverse_group"
 fi
@@ -406,7 +406,7 @@ if ((verified != 1)); then
   rollback
   exit 1
 fi
-trap - ERR
+trap - ERR HUP INT TERM
 printf 'VPS_ACCOUNTING_CHECKPOINT=%s\n' "$backup"
 printf '%s\n' 'VPS_ACCOUNTING_SERVICE=active'
 printf '%s\n' 'VPS_ACCOUNTING_SCHEMA=5'

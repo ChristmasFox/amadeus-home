@@ -46,3 +46,21 @@ jobs:
         run: node scripts/audit-public-infrastructure.mjs --audit-all
       - name: Existing tracked-code secrets check
         run: bash scripts/check-secrets.sh
+
+  production-permission-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Behavioral Unix permissions in disposable Linux Docker volume
+        run: |
+          docker pull node:22-bookworm-slim
+          bash scripts/test-vps-account-map-permissions.sh
+      - name: Synthetic rollback fault-injection without root or VPS access
+        run: bash scripts/test-vps-account-map-rollback.sh
+      - name: Local migration and synthetic dual-image lineage checks
+        run: |
+          bash scripts/test-vps-account-map-migration.sh
+          bash scripts/test-openclaw-lineage-compatibility.sh
