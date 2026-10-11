@@ -257,38 +257,55 @@ accounting_had_traverse=0
 readonly_had_traverse=0
 id -nG amadeus-accounting | tr ' ' '\n' | grep -Fxq "$traverse_group" && accounting_had_traverse=1 || true
 id -nG amadeus-vps-readonly | tr ' ' '\n' | grep -Fxq "$traverse_group" && readonly_had_traverse=1 || true
-if ! getent group "$traverse_group" >/dev/null 2>&1; then
+runtime_touched=0
+
+# Install rollback BEFORE groupadd/usermod; a failure during the first
+# permission mutation must not leave a partially granted group behind.
+rollback() {
+  trap - ERR
+  set +e
+  if [ "$runtime_touched" -eq 1 ]; then
+    systemctl stop amadeus-gateway-accounting.service 2>/dev/null || true
+    for path in "$store" "$service" "$probe" "$unit" "$private_map" "$probe_map"; do
+      name="$(basename -- "$path")"
+      if [ -f "$backup/$name" ]; then
+        cp -p -- "$backup/$name" "$path"
+      else
+        rm -f -- "$path"
+      fi
+    done
+    systemctl daemon-reload
+    systemctl start amadeus-gateway-accounting.service 2>/dev/null || true
+  fi
+  rm -f -- "$store.new" "$service.new" "$probe.new" "$unit.new" "$private_map.new" "$probe_map.new"
+  if [ "$map_dir_existed" -eq 1 ] && [ -d "$map_dir" ]; then
+    chown "$parent_owner_group" "$map_dir"
+    chmod "$parent_mode" "$map_dir"
+  elif [ "$map_dir_existed" -eq 0 ] && [ -d "$map_dir" ]; then
+    rmdir -- "$map_dir" 2>/dev/null || true
+  fi
+  if [ "$accounting_had_traverse" -eq 0 ] && getent group "$traverse_group" >/dev/null 2>&1; then
+    gpasswd -d amadeus-accounting "$traverse_group" >/dev/null 2>&1 || true
+  fi
+  if [ "$readonly_had_traverse" -eq 0 ] && getent group "$traverse_group" >/dev/null 2>&1; then
+    gpasswd -d amadeus-vps-readonly "$traverse_group" >/dev/null 2>&1 || true
+  fi
+  if [ "$traverse_group_existed" -eq 0 ]; then
+    groupdel "$traverse_group" >/dev/null 2>&1 || true
+  fi
+  printf '%s\n' 'VPS_ACCOUNTING_ROLLBACK=attempted' >&2
+  exit 1
+}
+trap 'rollback' ERR
+if [ "$traverse_group_existed" -eq 0 ]; then
   groupadd --system "$traverse_group"
 fi
-usermod -aG "$traverse_group" amadeus-accounting
-usermod -aG "$traverse_group" amadeus-vps-readonly
-
-rollback() {
-  systemctl stop amadeus-gateway-accounting.service 2>/dev/null || true
-  for path in "$store" "$service" "$probe" "$unit" "$private_map" "$probe_map"; do
-    name="$(basename -- "$path")"
-    if [ -f "$backup/$name" ]; then
-      cp -p -- "$backup/$name" "$path"
-    else
-      rm -f -- "$path"
-    fi
-  done
-  [ ! -f "$private_map" ] || { chown root:amadeus-accounting "$private_map"; chmod 0640 "$private_map"; }
-  [ ! -f "$probe_map" ] || { chown root:amadeus-vps-readonly "$probe_map"; chmod 0640 "$probe_map"; }
-  [ ! -f "$probe" ] || chmod 0755 "$probe"
-  if [ -n "$parent_owner_group" ] && [ -d /etc/amadeus-account-maps ]; then
-    chown "$parent_owner_group" /etc/amadeus-account-maps
-    chmod "$parent_mode" /etc/amadeus-account-maps
-  fi
-  if [ "$accounting_had_traverse" -eq 0 ]; then gpasswd -d amadeus-accounting "$traverse_group" >/dev/null 2>&1 || true; fi
-  if [ "$readonly_had_traverse" -eq 0 ]; then gpasswd -d amadeus-vps-readonly "$traverse_group" >/dev/null 2>&1 || true; fi
-  if [ "$traverse_group_existed" -eq 0 ]; then groupdel "$traverse_group" >/dev/null 2>&1 || true; fi
-  systemctl daemon-reload
-  systemctl start amadeus-gateway-accounting.service 2>/dev/null || true
-  printf '%s\n' 'VPS_ACCOUNTING_ROLLBACK=attempted' >&2
-}
-rollback_on_error() { rollback; }
-trap rollback_on_error ERR
+if [ "$accounting_had_traverse" -eq 0 ]; then
+  usermod -aG "$traverse_group" amadeus-accounting
+fi
+if [ "$readonly_had_traverse" -eq 0 ]; then
+  usermod -aG "$traverse_group" amadeus-vps-readonly
+fi
 
 python3 -m py_compile "$store_source" "$service_source"
 install -o root -g root -m 0644 "$store_source" "$store.new"
@@ -298,6 +315,7 @@ install -d -o root -g "$traverse_group" -m 0710 /etc/amadeus-account-maps
 install -o root -g amadeus-accounting -m 0640 "$private_map_source" "$private_map.new"
 install -o root -g amadeus-vps-readonly -m 0640 "$probe_map_source" "$probe_map.new"
 install -o root -g root -m 0644 "$unit_source" "$unit.new"
+runtime_touched=1
 mv -f "$store.new" "$store"
 mv -f "$service.new" "$service"
 mv -f "$probe.new" "$probe"
@@ -388,6 +406,7 @@ if ((verified != 1)); then
   rollback
   exit 1
 fi
+trap - ERR
 printf 'VPS_ACCOUNTING_CHECKPOINT=%s\n' "$backup"
 printf '%s\n' 'VPS_ACCOUNTING_SERVICE=active'
 printf '%s\n' 'VPS_ACCOUNTING_SCHEMA=5'
