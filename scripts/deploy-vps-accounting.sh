@@ -50,7 +50,7 @@ for source in "$STORE_SOURCE" "$SERVICE_SOURCE" "$PROBE_SOURCE" "$UNIT_SOURCE" "
 done
 python3 -m py_compile "$STORE_SOURCE" "$SERVICE_SOURCE"
 bash -n "$PROBE_SOURCE"
-grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$UNIT_SOURCE" \
+grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-account-maps/account-map.json' "$UNIT_SOURCE" \
   || fail 'Accounting unit must declare VPS_ACCOUNT_MAP_FILE explicitly.'
 grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$UNIT_SOURCE" \
   || fail 'Accounting unit must declare the map traversal group explicitly.'
@@ -76,26 +76,32 @@ printf 'PROBE_MAP_SOURCE=%s\n' "$PROBE_MAP_SOURCE"
 if ((PREFLIGHT == 1)); then
   ssh -o BatchMode=yes -o ConnectTimeout=8 "$HOST_ALIAS" 'bash -s' <<'REMOTE_PREFLIGHT'
 set -Eeuo pipefail
-private=/etc/amadeus-gateway/account-map.json
-probe=/etc/amadeus-gateway/account-map-probe.json
+private=/etc/amadeus-account-maps/account-map.json
+probe=/etc/amadeus-account-maps/account-map-probe.json
 unit=/etc/systemd/system/amadeus-gateway-accounting.service
 traverse_group=amadeus-account-map-traverse
+map_dir=/etc/amadeus-account-maps
 id -u amadeus-accounting >/dev/null
 id -u amadeus-vps-readonly >/dev/null
 getent group amadeus-accounting >/dev/null
 getent group amadeus-vps-readonly >/dev/null
-if ! getent group "$traverse_group" >/dev/null 2>&1; then
+if [ ! -d "$map_dir" ] && [ ! -e "$map_dir" ] && [ ! -L "$map_dir" ]; then
   printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=pre-migration-ready'
   exit 0
+fi
+if ! getent group "$traverse_group" >/dev/null 2>&1; then
+  echo 'Account map directory exists without traverse group' >&2
+  exit 1
 fi
 if [ ! -e "$private" ] && [ ! -e "$probe" ]; then
   printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=pre-migration-ready'
   exit 0
 fi
+test -d "$map_dir" && test ! -L "$map_dir"
 test -f "$private" && test ! -L "$private"
 test -f "$probe" && test ! -L "$probe"
-test "$(stat -c '%a' /etc/amadeus-gateway)" = 710
-test "$(stat -c '%U:%G' /etc/amadeus-gateway)" = "root:$traverse_group"
+test "$(stat -c '%a' /etc/amadeus-account-maps)" = 710
+test "$(stat -c '%U:%G' /etc/amadeus-account-maps)" = "root:$traverse_group"
 test "$(stat -c '%a' "$private")" = 640
 test "$(stat -c '%U:%G' "$private")" = 'root:amadeus-accounting'
 test "$(stat -c '%a' "$probe")" = 640
@@ -121,9 +127,9 @@ for name in sys.argv[1:]:
 if maps[0] != maps[1]:
     raise SystemExit('private/probe maps do not describe the same identities')
 PY
-grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$unit"
+grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-account-maps/account-map.json' "$unit"
 grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$unit"
-grep -Fqx 'ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret /etc/amadeus-gateway/account-map.json' "$unit"
+grep -Fqx 'ReadOnlyPaths=/etc/amadeus-accounting/kiwivm-credentials.json /etc/amadeus-accounting/hysteria-stats-secret /etc/amadeus-account-maps/account-map.json' "$unit"
 printf '%s\n' 'VPS_ACCOUNT_MAP_PREFLIGHT=passed'
 REMOTE_PREFLIGHT
   exit 0
@@ -166,9 +172,10 @@ store='/usr/local/libexec/amadeus-gateway-accounting/accounting_store.py'
 service='/usr/local/libexec/amadeus-gateway-accounting/accounting_service.py'
 probe='/usr/local/sbin/amadeus-vps-readonly-probe'
 unit='/etc/systemd/system/amadeus-gateway-accounting.service'
-private_map='/etc/amadeus-gateway/account-map.json'
-probe_map='/etc/amadeus-gateway/account-map-probe.json'
+private_map='/etc/amadeus-account-maps/account-map.json'
+probe_map='/etc/amadeus-account-maps/account-map-probe.json'
 traverse_group='amadeus-account-map-traverse'
+map_dir='/etc/amadeus-account-maps'
 db='/var/lib/amadeus-accounting/subscription-accounts.sqlite'
 snapshot='/var/lib/amadeus-accounting/subscription-usage-public.json'
 stamp="$(date -u +%Y%m%d%H%M%S)"
@@ -200,11 +207,26 @@ for name in sys.argv[1:]:
 if maps[0] != maps[1]:
     raise SystemExit('private/probe account map continuity mismatch')
 PY
-grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-gateway/account-map.json' "$unit_source"
+grep -Fqx 'Environment=VPS_ACCOUNT_MAP_FILE=/etc/amadeus-account-maps/account-map.json' "$unit_source"
 grep -Fqx 'SupplementaryGroups=amadeus-accounting-snapshot amadeus-account-map-traverse' "$unit_source"
 
-parent_owner_group="$(stat -c '%U:%G' /etc/amadeus-gateway 2>/dev/null || true)"
-parent_mode="$(stat -c '%a' /etc/amadeus-gateway 2>/dev/null || true)"
+map_dir_existed=0
+parent_owner_group=''
+parent_mode=''
+if [ -e "$map_dir" ] || [ -L "$map_dir" ]; then
+  [ -d "$map_dir" ] && [ ! -L "$map_dir" ] || { echo 'unsafe dedicated map directory' >&2; exit 1; }
+  map_dir_existed=1
+  parent_owner_group="$(stat -c '%U:%G' "$map_dir")"
+  parent_mode="$(stat -c '%a' "$map_dir")"
+  # Refuse broadening directory traversal when unrelated files are present.
+  for entry in "$map_dir"/* "$map_dir"/.[!.]* "$map_dir"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    case "$entry" in
+      "$private_map"|"$probe_map") [ -f "$entry" ] && [ ! -L "$entry" ] || { echo 'unsafe existing map' >&2; exit 1; } ;;
+      *) echo 'unrelated entry in protected map directory' >&2; exit 1 ;;
+    esac
+  done
+fi
 
 install -d -o root -g root -m 0700 "$backup"
 for path in "$store" "$service" "$probe" "$unit" "$private_map" "$probe_map"; do
@@ -254,9 +276,9 @@ rollback() {
   [ ! -f "$private_map" ] || { chown root:amadeus-accounting "$private_map"; chmod 0640 "$private_map"; }
   [ ! -f "$probe_map" ] || { chown root:amadeus-vps-readonly "$probe_map"; chmod 0640 "$probe_map"; }
   [ ! -f "$probe" ] || chmod 0755 "$probe"
-  if [ -n "$parent_owner_group" ] && [ -d /etc/amadeus-gateway ]; then
-    chown "$parent_owner_group" /etc/amadeus-gateway
-    chmod "$parent_mode" /etc/amadeus-gateway
+  if [ -n "$parent_owner_group" ] && [ -d /etc/amadeus-account-maps ]; then
+    chown "$parent_owner_group" /etc/amadeus-account-maps
+    chmod "$parent_mode" /etc/amadeus-account-maps
   fi
   if [ "$accounting_had_traverse" -eq 0 ]; then gpasswd -d amadeus-accounting "$traverse_group" >/dev/null 2>&1 || true; fi
   if [ "$readonly_had_traverse" -eq 0 ]; then gpasswd -d amadeus-vps-readonly "$traverse_group" >/dev/null 2>&1 || true; fi
@@ -272,7 +294,7 @@ python3 -m py_compile "$store_source" "$service_source"
 install -o root -g root -m 0644 "$store_source" "$store.new"
 install -o root -g root -m 0644 "$service_source" "$service.new"
 install -o root -g root -m 0755 "$probe_source" "$probe.new"
-install -d -o root -g "$traverse_group" -m 0710 /etc/amadeus-gateway
+install -d -o root -g "$traverse_group" -m 0710 /etc/amadeus-account-maps
 install -o root -g amadeus-accounting -m 0640 "$private_map_source" "$private_map.new"
 install -o root -g amadeus-vps-readonly -m 0640 "$probe_map_source" "$probe_map.new"
 install -o root -g root -m 0644 "$unit_source" "$unit.new"
@@ -331,7 +353,7 @@ with sqlite3.connect(schema) as db:
     version = db.execute("SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()
 if not version or version[0] != '5':
     raise SystemExit(1)
-mapping = json.loads(pathlib.Path('/etc/amadeus-gateway/account-map.json').read_text(encoding='utf-8'))
+mapping = json.loads(pathlib.Path('/etc/amadeus-account-maps/account-map.json').read_text(encoding='utf-8'))
 expected_ids = set(mapping['activeAccountIds']) | {mapping['dedicatedAccountId'], mapping['legacyAccountId']}
 with sqlite3.connect(schema) as db:
     db_ids = {row[0] for row in db.execute('SELECT account_id FROM accounts')}

@@ -35,7 +35,7 @@ snapshot_path = Path('/var/lib/amadeus-accounting/subscription-usage-public.json
 # The forced-command account must never read the credential-bearing accounting
 # map.  The deployment creates this redacted, ID-only map separately and
 # grants the probe account read access to it.
-map_path = Path(os.environ.get('VPS_ACCOUNT_PROBE_MAP_FILE', '/etc/amadeus-gateway/account-map-probe.json'))
+map_path = Path(os.environ.get('VPS_ACCOUNT_PROBE_MAP_FILE', '/etc/amadeus-account-maps/account-map-probe.json'))
 map_status = 'unavailable'
 try:
     mapping = json.loads(map_path.read_text(encoding='utf-8'))

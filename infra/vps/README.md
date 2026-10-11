@@ -5,16 +5,16 @@
 本目录保存 `amadeus-gateway` VPS 的可迁移架构和运维模板。真实公网地址、SSH 私钥、
 UUID、Reality 私钥和其他凭据只保留在运行环境，不进入 Git。
 
-账户归因使用外部的 `/etc/amadeus-gateway/account-map.json`。可以从
+账户归因使用外部的 `/etc/amadeus-account-maps/account-map.json`。可以从
 `infra/vps/account-map.example.json` 复制结构到受保护运行时，再填入当前
 operator-owned account IDs；不要把生产映射写回仓库。accounting service 通过
 `VPS_ACCOUNT_MAP_FILE` 读取它，文件必须是普通文件、`root:amadeus-accounting`、
 mode `0640`；OpenClaw 则使用自己的 mode `0600` 私有副本。只读 probe 不能读取这份
-映射，而是读取只含七个 ID 的 `/etc/amadeus-gateway/account-map-probe.json`，由
+映射，而是读取只含七个 ID 的 `/etc/amadeus-account-maps/account-map-probe.json`，由
 `root:amadeus-vps-readonly`、mode `0640` 保护。缺少或不合法的 probe map 会输出
 `ACCOUNT_MAP_STATUS=unavailable|invalid` 并停止账号快照，不再回退到 neutral IDs。
-两个非 root 用户通过专用的 `amadeus-account-map-traverse` 补充组访问父目录；
-`/etc/amadeus-gateway` 固定为 `root:amadeus-account-map-traverse`、mode `0710`，
+两个非 root 用户仅通过专用的 `amadeus-account-map-traverse` 补充组访问父目录；
+`/etc/amadeus-account-maps` 独立目录固定为 `root:amadeus-account-map-traverse`、mode `0710`，
 父目录只允许已知文件名的遍历，private/probe map 仍由各自文件组隔离。
 community profile 只保留 neutral fixtures。
 
@@ -191,7 +191,7 @@ OpenClaw 容器只挂载对应私钥和严格的 known-hosts 文件。不要复�
 `SSH_ORIGINAL_COMMAND` 传给 shell；工具只调用固定 probe 路径。
 
 probe 运行环境的 `VPS_ACCOUNT_PROBE_MAP_FILE` 固定指向
-`/etc/amadeus-gateway/account-map-probe.json`。该文件只含脱敏 account IDs，不能包含订阅
+`/etc/amadeus-account-maps/account-map-probe.json`。该文件只含脱敏 account IDs，不能包含订阅
 token、HY2 secret、UUID 或其他 credential-shaped 字段；部署脚本会在 service restart 前
 验证 `amadeus-accounting` 能读 private map、`amadeus-vps-readonly` 只能读 probe map。
 

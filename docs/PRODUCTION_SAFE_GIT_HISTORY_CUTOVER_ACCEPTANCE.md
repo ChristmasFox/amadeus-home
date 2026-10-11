@@ -36,7 +36,7 @@ or a force push.
   ID-only map, and missing/invalid probe maps fail closed with a typed status.
   `scripts/deploy-vps-accounting.sh` now has a read-only preflight, atomic map
   and unit migration, root-only checkpoint, a dedicated `0710`
-  `amadeus-account-map-traverse` parent with per-user `0640` map groups,
+  `/etc/amadeus-account-maps` parent (not the shared gateway config directory) with per-user `0640` map groups,
   non-root permission assertions, database/snapshot ID continuity checks, and
   rollback on restart or validation failure. `scripts/deploy-openclaw.sh`
   validates the host map, stages a unique private `/tmp` child without
