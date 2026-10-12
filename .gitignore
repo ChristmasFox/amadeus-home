@@ -80,3 +80,6 @@ docs/reports/data/*
 
 # Private production 9Router account isolation (never commit real account emails)
 infra/9router/runtime-policy.json
+
+# Local-only privacy scanner lists (real domains/ids, never commit)
+/.privacy/
