@@ -1,6 +1,6 @@
 # Community quick start: WhatsApp + OpenClaw + 9Router + PUBG
 
-**Preview implementation (Draft PR):** isolated Docker Compose starter; no real-user end-to-end validation yet. The **personal CasaOS/Mac mini services are NOT changed**.
+**Community preview (public main):** isolated Docker Compose starter; no independent clean-host WhatsApp/PUBG/9Router end-to-end validation yet. This guide does **not** deploy or modify the maintainer's personal CasaOS/Mac mini services.
 
 The community stack uses the existing PUBG plugin bundle, a separate 9Router 0.5.95 image, and pinned OpenClaw 2026.9.4. The 9Router community policy contains **no account email allowlist**. It retains the image diagnostic and false-30-second-cooldown fixes, without your owner-only TTS/ASR bridge. Model accounts must be your own authorized accounts.
 
@@ -77,5 +77,5 @@ Before merging to a production clone, save the existing private 9Router account 
 
 - Secret files are generated in Git-ignored paths and Docker named volumes. Treat Compose `config` output, logs and local `.env` as sensitive.
 - Community 9Router has no per-account whitelist, but maintains authentication and distinct keys. It does not make any account shared or free.
-- Public Git **history still needs a complete secret/privacy audit**. Old player identifiers and personal infrastructure details may remain. The current Draft PR does **not** rewrite history.
-- See [Community privacy release gate](../../docs/COMMUNITY_PRIVACY_RELEASE_GATE.md) before public announcement.
+- Public branch and tag history was rewritten on 2026-10-12, but GitHub's old PR refs and cached objects can remain accessible pending a Support review. Do not treat history rewriting as proof no credential was ever exposed.
+- See the [Community privacy and release status](../../docs/COMMUNITY_PRIVACY_RELEASE_GATE.md) before production deployment. The original project files are [MIT-licensed](../../LICENSE); third-party components retain their respective terms.

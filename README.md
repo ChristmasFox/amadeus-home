@@ -6,7 +6,7 @@
 
 > **🚧 社区预览版 / Community Preview**
 >
-> 源码已公开，PUBG 小队初始化与独立 Docker Compose 配置已加入，但尚未完成全新 Linux 主机的镜像构建、真实 WhatsApp/PUBG/9Router 端到端验收、完整历史隐私审计和许可证确认。请不要把当前版本理解为已验证的一键生产部署。
+> 已公开源码、PUBG 小队初始化和独立 Docker Compose 配置，并采用 [MIT License](LICENSE)。2026-10-12 已完成公开分支与 Tag 的敏感信息历史改写；GitHub 旧 PR 引用及缓存仍可能保留历史对象，相关清理已申请 Support 审查。**尚未完成全新 Linux 主机上的真实 WhatsApp/PUBG/9Router 端到端验收**，请勿将此预览版视为已验证的一键生产部署。
 >
 > **原生产环境维护者：** 本次更新把个人 9Router 生图账号白名单移出了 Git。更新本地仓库及下一次生产部署前，务必阅读 [私有账号策略迁移](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md)，避免因缺少本地策略文件而导致部署拒绝。
 
@@ -184,7 +184,7 @@ docker compose --env-file infra/community/.env \
 | 模型与游戏密钥 | 用户自备，存储在被忽略的本地文件或独立 Docker 数据卷 |
 | 原生产账号隔离 | 独立的私有文件，社区镜像不包含个人账号信息 |
 
-**重要：Git 历史仍可能包含早期的玩家标识与个人部署拓扑。** 当前文件的脱敏不等于历史已完成审计。请勿在 Issues、日志或截图中公开 Token、手机号/JID、账号 ID、域名和私有配置信息。
+**历史与安全边界：** 2026-10-12 已重写 8 个公开分支和 2 个 Tag，并对已知私人账号策略及标识进行脱敏。但旧 PR 引用（如 PR #1、#2）、直接 SHA 链接及 GitHub 缓存仍可能保留旧对象；已向 GitHub Support 申请审查，不能保证这些历史副本已消失。公开源码不等于安全审计认证。请勿在 Issues、日志或截图中公开 Token、私钥、手机号/JID、真实 PUBG Account ID 或其他仍有效的个人认证信息；是否公开自己的域名与主机名由部署者自行决定。
 
 完整安全与发布清单：[Community Privacy & Release Gate](docs/COMMUNITY_PRIVACY_RELEASE_GATE.md)。
 
@@ -218,9 +218,9 @@ pnpm check:secrets
 
 欢迎通过 [GitHub Issues](https://github.com/ChristmasFox/amadeus-home/issues) 提交功能想法与脱敏后的错误信息。
 
-仍待完成：全新 Linux amd64/arm64 的镜像构建与实测、真实 WhatsApp + 9Router + PUBG 端到端验收、Git 历史安全检查、发行许可证以及脱敏战报截图。
+仍待完成：全新 Linux amd64/arm64 的镜像构建与实测、真实 WhatsApp + 9Router + PUBG 端到端验收、对旧 PR 历史引用的 Support 清理结果，以及适合公开的脱敏战报截图。
 
-**License：目前尚未添加正式开源许可证。** 代码可以查看，但在正式确定并加入 LICENSE 之前，请不要假定拥有再分发或商业使用许可。
+**许可证：[MIT License](LICENSE)**（项目原创源码与文档）。允许按 MIT 条款使用、修改、再分发和商用；请保留原版权及许可声明。OpenClaw、9Router、PUBG API、依赖库及第三方模型/素材仍分别受其自身许可证、服务条款或商标权约束，本仓库的 MIT 许可证不授予其额外权利。
 
 ---
 

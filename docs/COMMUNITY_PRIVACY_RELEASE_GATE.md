@@ -1,37 +1,38 @@
-# Community release privacy & safety gate
+# Community privacy and release status
 
-This is a **public repository**, but is **NOT YET** a privacy-reviewed or production-ready open-source distribution. Changes on the community onboarding branch do not rewrite git history or revoke previously disclosed credentials.
+**Status: public source code under [MIT License](../LICENSE); community deployment remains a preview, not a verified one-click production release.**
 
-## Completed source hardening (first patch)
+This document describes the repository as of 2026-10-12 and should not be read as an audit certificate.
 
-- Replaced `packages/pubg-domain/config/default-team.json` with **synthetic** player IDs and names; runtime PUBG plugin requires an external team file.
-- Added explicit official-PUBG-API nickname -> account ID initialization, which creates a mode-0600 external file, refuses overwrites and never prints account IDs or keys.
-- Added a synthetic-only fixture regression gate and dependency-free CLI tests.
-- Documented the WhatsApp + OpenClaw + 9Router path, and the distinction between team ID, PUBG account ID and WhatsApp sender identity.
-- No current Mac mini/VPS/CasaOS deployment script or live secret was changed.
+## Completed
 
-## Blocking work before claiming the whole repo is safe to distribute
+- Public Git history was rewritten for all **8 advertised branches and 2 tags** on 2026-10-12. The production 9Router image-account policy was removed from the published branch/tag history and current community image. Private owner configuration is deliberately kept outside Git.
+- All known exact private-value rewrite rules were reported clear in the operator's private cutover candidate; Git integrity validation passed. This does **not** cover GitHub-hosted old PR refs, cached Git objects, clones, or unknown secrets.
+- The community bootstrap creates private, ignored credentials and neutral PUBG player/team fixtures; it does not copy the maintainer's 9Router provider accounts or production secrets.
+- A strict active-source privacy gate, selected VPS documentation gate, secret-shape check and isolated Unix-permissions tests were added. Prior GitHub PR #4 privacy checks passed after the history-rewrite scanner fix.
+- A root [MIT License](../LICENSE) is provided for original repository code and documentation. Upstream services, third-party models, media and branded assets remain governed by their own terms.
 
-- **Historical Git disclosure:** run a real full-history secret scan (e.g. Gitleaks) in a trusted local environment, review results without posting secrets, rotate affected credentials, and assess history rewrite/forks. Deleting current tracked content does NOT remove previously public snapshots.
-- **9Router account segregation:** the **branch** now removes the Git-tracked production account policy; it uses a private local policy at release time (fail-closed) and an unrestricted, separately built **community** image. **Before any merge or new production build**, migrate the existing production policy to `.local/9router-production-policy.json` using [the manual runbook](PRODUCTION_9ROUTER_POLICY_MIGRATION.md). Verify the running owner image and old Git history separately.
-- **HomeLab/VPS information exposure:** review `infra/vps/`, `infra/host-profile.env.example`, `docs/`, `.agent/` and configuration history for domains, service ports, operational paths, subscription metadata, provider identities and personal records. Publish generalized examples, not actual topology.
-- **Data and identity boundaries:** review tracked fixtures, screenshots, JSON reports and legacy docs for real PUBG account IDs, sender JIDs/phone numbers, tokens and player aliases. `identity-presets.example.json` is illustrative only.
-- **Installation:** create and test community-only Docker profiles or Compose manifests in a fresh Linux host; do not repurpose owner `--apply` scripts. Test webhook/pairing credentials and restart persistence.
-- **Licensing / third-party rights:** choose a LICENSE; verify compatibility with upstream 9Router, OpenClaw, game branding, voice assets and API terms.
-- **Security defaults:** bind management endpoints to loopback/private authenticated networks, use WhatsApp pairing/group allowlists/mention triggers and restrict model spending.
+## Open risks / verification still needed
 
-## Suggested checks (do not publish raw output)
+- **GitHub historical refs:** `refs/pull/1/head` and `refs/pull/2/head`, old commit URL lookups and caches may still expose earlier content. A GitHub Support request has been submitted to review eligible removal. Do not repush or merge commits from old clones.
+- **Full historic credentials:** historical heuristic scans can flag mock auth headers, SHA-256 digests and fixed configuration keys; there has been **no confirmation of an active production credential** from those findings, but this is not proof all history is secret-free. Rotate or revoke credentials immediately if new evidence identifies an actual exposure.
+- **Community deployment:** clean Linux amd64/arm64 Docker builds, real WhatsApp pairing, 9Router model authorization, PUBG API queries, telemetry cache persistence and restart recovery still need an independent end-to-end test.
+- **Third-party rights:** comply with OpenClaw and 9Router upstream licensing, official PUBG API terms and any model, character, voice and image licensing. MIT here does not relicense external components.
+- **Operational defaults:** use loopback-bound management endpoints, pairing/group allowlists, explicit tools, rate and spending limits. **Never run production `--apply` scripts to deploy community mode.**
+- **Operator configuration:** a maintainer's VPS topology or hostnames might remain identifiable. Disclosure of a hostname does not imply authorization to access it; do not copy production endpoints into your own install.
 
-```sh
+## Suggested local safety checks
+
+```bash
+node --test scripts/test-init-community.mjs
 node --test scripts/test-init-pubg-team.mjs
-node scripts/check-community-fixtures.mjs
+node infra/docker/casaos/9router/test-runtime-policy.mjs
 pnpm check:secrets
-gitleaks git --redact --log-opts='--all' .
-gitleaks dir --redact .
+node scripts/audit-public-infrastructure.mjs --self-test
+node scripts/audit-public-infrastructure.mjs --strict-active
+node scripts/audit-public-infrastructure.mjs --strict-vps
 ```
 
-**Release gate:** Nothing here authorizes deploying to the active personal HomeLab. The community 9Router account policy and generic Compose setup remain pending until verified separately.
+For real deployment instructions, start at [Community Compose quick start](../infra/community/README.md). Keep local `.env`, OAuth data, model provider credentials, phone numbers/JIDs and private runtime profiles out of Git, logs and issue attachments.
 
-## Isolated community Compose preview
-
-A preliminary profile now exists at `infra/community/compose.yaml` using the community-only 9Router image and the WhatsApp-first OpenClaw+PUBG plugin, with loopback ports and local non-overwriting bootstrap. This is **not** a production-approved release until clean-machine image build and real E2E verification. The 9Router production policy and deployment scripts remain separate.
+For owner-only 9Router upgrades, follow [Private 9Router account policy migration](PRODUCTION_9ROUTER_POLICY_MIGRATION.md) instead of using community mode.
