@@ -2,12 +2,38 @@
 // Read-only audit of current tracked plaintext. Intentionally NEVER prints values.
 // This is NOT a history scan and cannot prove that old Git objects are private.
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
-const PUBLIC_DOMAIN = /(?:^|[^\w.-])(?:[\w-]+\.)*example-node\.top(?=$|[^\w.-])/i;
-const PERSONAL_ID = /\b(?:example-device|Labmem\d{2,4}|example-node)\b/i;
+// Real personal domains / host identities are NEVER committed. They are loaded
+// at runtime from env (comma/newline separated) or an untracked local file:
+//   PRIVACY_PERSONAL_DOMAINS / .privacy/personal-domains.txt
+//   PRIVACY_PERSONAL_IDS     / .privacy/personal-ids.txt
+// The history rewrite replaced the real values with public placeholders
+// (example.com, example-node.top, example-device, example-node). Placeholders
+// are SAFE by definition and must not be flagged, so no built-in entries.
+const BUILTIN_DOMAINS = [];
+const BUILTIN_IDS = [];
+const escapeRe = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function loadList(envName, file) {
+  const raw = [process.env[envName] ?? ''];
+  const f = resolve(file);
+  if (existsSync(f)) { try { raw.push(readFileSync(f, 'utf8')); } catch {} }
+  return raw.join('\n').split(/[\s,]+/).map((v) => v.trim().replace(/^\*?\./, '')).filter((v) => v && !v.startsWith('#'));
+}
+export function buildPatterns({ domains = [], ids = [] } = {}) {
+  const d = [...new Set([...BUILTIN_DOMAINS, ...domains].map((v) => v.toLowerCase()))].map(escapeRe);
+  const i = [...new Set([...BUILTIN_IDS, ...ids])].map(escapeRe);
+  return {
+    domain: d.length ? new RegExp('(?:^|[^\\w.-])(?:[\\w-]+\\.)*(?:' + d.join('|') + ')(?=$|[^\\w.-])', 'i') : /(?!)/,
+    id: new RegExp('\\b(?:Labmem\\d{2,4}' + i.map((v) => '|' + v).join('') + ')\\b', 'i'),
+  };
+}
+const DEFAULT_PATTERNS = buildPatterns({
+  domains: loadList('PRIVACY_PERSONAL_DOMAINS', '.privacy/personal-domains.txt'),
+  ids: loadList('PRIVACY_PERSONAL_IDS', '.privacy/personal-ids.txt'),
+});
 const PRIVATE_KEY = /-----BEGIN (?:RSA |OPENSSH |EC )?PRIVATE KEY-----/;
 const PROXY_URI = /(?:vless|hysteria2|hy2):\/\/(?!<|REPLACE_|EXAMPLE_)[A-Za-z0-9_-]{16,}(?::[A-Za-z0-9_-]{8,})?@/i;
 const CREDENTIAL_ASSIGNMENT = /^\s*(?:["']?)(?:password|api_key|auth_token|access_token|client_secret|private_key)\s*[:=]\s*["']?([A-Za-z0-9_+\/=-]{25,})(?:["',\s]|$)/im;
@@ -58,10 +84,10 @@ function isPublicIPv4(address) {
   if (a[0]===203&&a[1]===0&&a[2]===113) return false; // TEST-NET-3
   return true;
 }
-export function analyze(text){
+export function analyze(text, patterns = DEFAULT_PATTERNS){
   const violations=[];
-  if (PUBLIC_DOMAIN.test(text)) violations.push('personal_domain');
-  if (PERSONAL_ID.test(text)) violations.push('personal_host_or_identity');
+  if (patterns.domain.test(text)) violations.push('personal_domain');
+  if (patterns.id.test(text)) violations.push('personal_host_or_identity');
   if (PRIVATE_KEY.test(text)) violations.push('private_key_header');
   if (PROXY_URI.test(text)) violations.push('inline_proxy_uri');
   if (CREDENTIAL_ASSIGNMENT.test(text)) violations.push('credential_assignment');
@@ -80,11 +106,18 @@ export function analyzeRuntime(text, path = ''){
 function scan() {
   const mode=process.argv[2]??'--strict-vps';
   if(mode==='--self-test'){
-    assert.ok(analyze('visit sub.example.com').includes('personal_domain'));
-    assert.deepEqual(analyze('example-device'),['personal_host_or_identity']);
+    // Synthetic fixtures only: reserved .test / .invalid TLDs, never real domains.
+    const fx = buildPatterns({ domains: ['personal-fixture.test'], ids: ['fixture-host-01'] });
+    assert.ok(analyze('visit sub.personal-fixture.test', fx).includes('personal_domain'));
+    assert.ok(analyze('visit personal-fixture.test/path', fx).includes('personal_domain'));
+    assert.deepEqual(analyze('visit notpersonal-fixture.test', fx), []);
+    assert.deepEqual(analyze('fixture-host-01', fx), ['personal_host_or_identity']);
+    assert.deepEqual(analyze('Labmem004'),['personal_host_or_identity']);
+    // Redaction placeholders must stay clean.
+    assert.deepEqual(analyze('sub.example-node.top example-device example-node', fx), []);
     assert.deepEqual(analyze('server 203.0.113.10'),[]);
     assert.ok(analyze('server 8.8.8.8').includes('public_ipv4_candidate'));
-    assert.deepEqual(analyze('sub.example.com and example-device'),[]);
+    assert.deepEqual(analyze('sub.example.com and example-device', fx),[]);
     assert.ok(analyzeRuntime('/Users/example-node/agent-monorepo').includes('private_user_path'));
     assert.ok(analyzeRuntime('/Volumes/Avalon/models').includes('private_storage_path'));
     assert.deepEqual(analyzeRuntime('8.8.8.8', 'apps/qwen-image-service/test_debug_ui.py'), []);

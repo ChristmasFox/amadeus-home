@@ -29,6 +29,11 @@ jobs:
   docs-redaction:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      # Optional repo secrets with the real personal domains / host ids
+      # (comma separated). Never printed by the scanner. Empty when unset.
+      PRIVACY_PERSONAL_DOMAINS: ${{ secrets.PRIVACY_PERSONAL_DOMAINS }}
+      PRIVACY_PERSONAL_IDS: ${{ secrets.PRIVACY_PERSONAL_IDS }}
     steps:
       - uses: actions/checkout@v4
         with:
