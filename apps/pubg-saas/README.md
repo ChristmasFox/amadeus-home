@@ -220,6 +220,9 @@ oldest due age, and process RSS/heap bytes. Queue telemetry contains no tenant
 or team identifiers. A queue-snapshot read failure is marked in the event and
 does not discard the completed cycle. These logs provide scrapeable signals;
 host alert rules and measured M204 resource limits remain deployment work.
+The worker also serves `GET /healthz` on container loopback only, and Compose
+marks it unhealthy if the process stops responding. The health response has no
+database, queue, tenant or team details and is not published to the host.
 
 `/pubg` or `/pubg help` shows guidance buttons. Guidance is read-only; state
 changes use one-use confirmations. Names/labels retain case; quote those with spaces.

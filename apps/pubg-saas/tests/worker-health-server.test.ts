@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { startWorkerHealthServer, stopWorkerHealthServer } from '../src/infrastructure/worker-health-server.js';
+
+test('worker health endpoint binds loopback and returns a non-cacheable liveness response', async () => {
+  const server = await startWorkerHealthServer(0);
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    assert.equal(address.address, '127.0.0.1');
+    const response = await fetch(`http://127.0.0.1:${address.port}/healthz`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.equal(await response.text(), 'ok\n');
+  } finally {
+    await stopWorkerHealthServer(server);
+  }
+});
+
+test('worker health endpoint exposes no other path or method', async () => {
+  const server = await startWorkerHealthServer(0);
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    const base = `http://127.0.0.1:${address.port}`;
+    assert.equal((await fetch(`${base}/metrics`)).status, 404);
+    assert.equal((await fetch(`${base}/healthz`, { method: 'POST' })).status, 404);
+  } finally {
+    await stopWorkerHealthServer(server);
+  }
+});

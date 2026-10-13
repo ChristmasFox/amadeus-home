@@ -499,3 +499,21 @@ canonical `example-node` headroom, a quota-feasibility result, or an SLO. The
 benchmark schema was cleaned up, and no Compose or private runtime was changed.
 The Goal stays open for native clean-Linux/cloud independence, installed backup
 scheduling, live platform eligibility, and human-actor KOOK acceptance.
+
+## Worker liveness health signal — source acceptance
+
+Added a loopback-only `GET /healthz` to the independent public sync Worker and
+a Compose healthcheck that marks the Worker unhealthy when its local process
+stops responding. The endpoint returns only `ok`, disables caching, rejects
+other paths/methods, and publishes no port. The readiness/configuration and
+queue telemetry remain separate; host alert routing is still not installed.
+
+Targeted health-server tests passed 2/2. The updated full SaaS/PostgreSQL suite
+passed 94/94 with no skips; private Kurisu regression passed 68/68. Both
+typecheck groups, architecture check, 21 backup/restore and Compose adapter
+tests, secret scan and diff check passed. Ruby's YAML parser accepted the
+updated Compose file. `pnpm workflow:plan` selected RUNTIME, but classified
+Compose as unknown and prohibited Docker build/Compose execution for this
+change, so the new in-container healthcheck has not yet been exercised in a
+built image. No provider credentials or live calls were used and no service or
+private runtime was changed.

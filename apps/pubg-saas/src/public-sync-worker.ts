@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { PublicSyncWorker } from './application/public-sync-worker.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { configurePublicEgress } from './infrastructure/public-egress.js';
+import { startWorkerHealthServer, stopWorkerHealthServer } from './infrastructure/worker-health-server.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 
@@ -50,12 +51,14 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   const leaseMs = positiveInteger(env.PUBLIC_SYNC_LEASE_MS, 120_000, 15 * 60_000);
   const pool = new Pool({ connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 30_000 });
   const stop = new AbortController();
+  let healthServer: Awaited<ReturnType<typeof startWorkerHealthServer>> | undefined;
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
     const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0011_kook_daily_message_budget.sql'");
     if (!ready.rowCount) throw new Error('pubg_saas_schema_upgrade_required');
+    healthServer = await startWorkerHealthServer();
     const worker = new PublicSyncWorker(pool, {
       apiKey,
       admission: new PostgresPublicPubgAdmission(pool, requestsPerMinute, 30_000),
@@ -95,7 +98,11 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
     stop.abort();
     process.removeListener('SIGINT', onStop);
     process.removeListener('SIGTERM', onStop);
-    await pool.end();
+    try {
+      if (healthServer) await stopWorkerHealthServer(healthServer);
+    } finally {
+      await pool.end();
+    }
   }
 }
 

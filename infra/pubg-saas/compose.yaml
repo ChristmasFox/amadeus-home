@@ -144,6 +144,12 @@ services:
       - postgres_private
       - egress_internal
     stop_grace_period: 45s
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
