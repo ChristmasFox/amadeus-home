@@ -272,6 +272,15 @@ The reusable isolated PG fixture remains running, private OpenClaw remained
 healthy, and 9Router remained running. No image push/deploy or real provider
 credential use occurred. Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+The existing synthetic 200-team benchmark now reports in-process RSS/heap
+peaks (10 ms samples). A targeted run passed 200/200 authorized tasks and
+worker team runs, with 0 failures, pool 16/20 and no waiters; query P95/P99
+79.83/110.50 ms, worker P95/P99 62.37/103.50 ms, Node RSS 169.8 MiB peak and
+heap 54.2 MiB peak. A separate coarse local sample saw 24 GiB host RAM and
+74% free before/min/after, and PG fixture memory 58.5→112.2 MiB (four samples).
+These are local Mac/fixture observations, not `example-node` headroom or an SLO;
+canonical-host and actual container-service resource gates remain open.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed

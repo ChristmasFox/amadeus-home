@@ -105,6 +105,15 @@ result is not native clean-Linux acceptance. Read-only post-stop checks showed
 OpenClaw healthy and 9Router running; no private runtime was modified. No image
 was pushed or deployed. Full evidence is in the dated rehearsal checkpoint.
 
+The 200-team benchmark now includes in-process RSS/heap peak sampling. Its
+targeted local run passed with 0 failures and 200/200 worker team runs; pool
+peaked at 16/20 with no waiters. Authorized-query P95/P99 were 79.83/110.50 ms,
+worker-read P95/P99 were 62.37/103.50 ms, process RSS peaked at 169.8 MiB and
+heap at 54.2 MiB. A separate coarse sample measured the 24 GiB Mac host at 74%
+free memory before/min/after and the isolated PG fixture at 58.5→112.2 MiB in
+four samples. This does not measure gateway/worker container peaks or canonical
+`example-node` capacity; no SLO or production headroom claim is made.
+
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
 The operator selected `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree.

@@ -450,3 +450,29 @@ synthetic volumes. Afterwards the only container in the local Docker engine
 was the reusable `pubg-saas-pg18` test fixture; read-only checks showed private
 OpenClaw healthy and 9Router running, without restart or configuration change.
 No image was pushed or deployed, and no KOOK/PUBG/model credential was used.
+
+## Synthetic 200-team local resource observation — 2026-10-14
+
+Extended `apps/pubg-saas/tests/m2-200-team-load.benchmark.ts` to sample its
+own RSS, heap, external and ArrayBuffer peaks every 10 ms during fixture seed,
+authorized queries and worker reads. The SaaS package typecheck passed, and
+the targeted benchmark passed against the existing isolated local
+`pubg-saas-pg18` fixture with no skips or failures. It seeded 200 tenants and
+teams, 800 users/roster accounts, 400 matches and 1,600 match-player rows.
+
+This run completed all 200 authorized tasks and 200/200 worker team runs.
+Authorized-query P95/P99 were 79.83/110.50 ms; worker-read P95/P99 were
+62.37/103.50 ms. The worker phase executed 7,356 SQL statements. Pool use
+peaked at 16/20 connections with no waiters. The benchmark Node process RSS was
+93.1 MiB at sampling start and 169.8 MiB peak; peak heap was 54.2 MiB.
+
+A separate coarse host/container sample during the same local synthetic load
+observed 24 GiB host physical memory and system free memory at 74% before,
+minimum sampled and after. The PostgreSQL test container was 58.5 MiB at
+baseline and reached 112.2 MiB in four `docker stats` samples. Four samples are
+too sparse for a reliable CPU peak; the printed CPU percentage is not used as a
+capacity result. The benchmark runs on the Mac host against the isolated PG
+fixture; the Node RSS is not gateway/worker container memory. The canonical
+OrbStack host-profile machine `example-node` remains unavailable, so this
+evidence does not establish its headroom or an SLO. No services or private
+runtime were changed by the measurement.

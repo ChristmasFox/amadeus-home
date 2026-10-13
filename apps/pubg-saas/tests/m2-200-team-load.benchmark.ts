@@ -165,6 +165,46 @@ function collectPoolPeaks(pool: Pool): { stop: () => Record<string, number> } {
   };
 }
 
+function collectProcessMemoryPeaks(): {
+  stop: () => {
+    sampleIntervalMs: number;
+    baselineRssBytes: number;
+    peakRssBytes: number;
+    peakHeapUsedBytes: number;
+    peakExternalBytes: number;
+    peakArrayBuffersBytes: number;
+  };
+} {
+  const baseline = process.memoryUsage();
+  let peakRssBytes = baseline.rss;
+  let peakHeapUsedBytes = baseline.heapUsed;
+  let peakExternalBytes = baseline.external;
+  let peakArrayBuffersBytes = baseline.arrayBuffers;
+  const sample = () => {
+    const memory = process.memoryUsage();
+    peakRssBytes = Math.max(peakRssBytes, memory.rss);
+    peakHeapUsedBytes = Math.max(peakHeapUsedBytes, memory.heapUsed);
+    peakExternalBytes = Math.max(peakExternalBytes, memory.external);
+    peakArrayBuffersBytes = Math.max(peakArrayBuffersBytes, memory.arrayBuffers);
+  };
+  const timer = setInterval(sample, 10);
+  timer.unref();
+  return {
+    stop: () => {
+      clearInterval(timer);
+      sample();
+      return {
+        sampleIntervalMs: 10,
+        baselineRssBytes: baseline.rss,
+        peakRssBytes,
+        peakHeapUsedBytes,
+        peakExternalBytes,
+        peakArrayBuffersBytes,
+      };
+    },
+  };
+}
+
 async function seedSyntheticFixture(pool: Pool, suffix: string) {
   const tenants: string[] = [];
   const guilds: string[] = [];
@@ -291,6 +331,7 @@ async function main(): Promise<void> {
   const admin = new Pool({ connectionString: TEST_DATABASE_URL, max: 1 });
   let pool: Pool | undefined;
   let sampler: ReturnType<typeof collectPoolPeaks> | undefined;
+  let processMemorySampler: ReturnType<typeof collectProcessMemoryPeaks> | undefined;
   const samples: QuerySample[] = [];
   let phase = 'idle';
 
@@ -298,6 +339,7 @@ async function main(): Promise<void> {
     await admin.query(`CREATE SCHEMA "${schema}"`);
     pool = new Pool({ connectionString: TEST_DATABASE_URL, options: `-c search_path=${schema}`, max: Math.min(32, CONCURRENCY * 2 + 4) });
     await migratePublicDatabase(pool);
+    processMemorySampler = collectProcessMemoryPeaks();
     const fixture = await seedSyntheticFixture(pool, randomUUID().replaceAll('-', '').slice(0, 12));
 
     const measuredPool = instrumentPool(pool, samples, () => phase);
@@ -372,6 +414,8 @@ async function main(): Promise<void> {
     const workerPhase = summarize(samples, 'worker_reads', workerElapsedMs);
     const peakConnections = sampler.stop();
     sampler = undefined;
+    const processMemoryObservation = processMemorySampler.stop();
+    processMemorySampler = undefined;
 
     const totalExpectedWorkerTeamRuns = TEAM_COUNT;
     const totalAttemptedWorkerTeamRuns = workerResults.reduce((sum, result) => sum + (result?.teamsAttempted ?? 0), 0);
@@ -402,6 +446,7 @@ async function main(): Promise<void> {
         failureCodes: countCodes(workerFailures.map(item => item.code)),
       },
       poolObservation: peakConnections,
+      processMemoryObservation,
       totalFailures: allFailures,
       caveat: 'A bounded local synthetic benchmark; results do not establish production capacity or service-level objectives.',
     };
@@ -410,6 +455,7 @@ async function main(): Promise<void> {
       || totalCompletedWorkerTeamRuns !== totalExpectedWorkerTeamRuns) process.exitCode = 1;
   } finally {
     sampler?.stop();
+    processMemorySampler?.stop();
     try {
       await pool?.end();
     } finally {
