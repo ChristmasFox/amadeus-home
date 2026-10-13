@@ -15,6 +15,9 @@ RUN node /opt/amadeus/patch-image-upstream-diagnostics.mjs --root /usr/local/lib
 COPY infra/docker/casaos/9router/patch-image-combo-safety.mjs /opt/amadeus/patch-image-combo-safety.mjs
 RUN node /opt/amadeus/patch-image-combo-safety.mjs --root /usr/local/lib/node_modules/9router --apply \
     && node /opt/amadeus/patch-image-combo-safety.mjs --root /app --allow-version-drift --apply
+COPY infra/docker/casaos/9router/patch-combo-location-fallback.mjs /opt/amadeus/patch-combo-location-fallback.mjs
+RUN node /opt/amadeus/patch-combo-location-fallback.mjs --root /usr/local/lib/node_modules/9router --apply \
+    && node /opt/amadeus/patch-combo-location-fallback.mjs --root /app --allow-version-drift --apply
 
 ENV NODE_ENV=production PORT=20128 HOSTNAME=0.0.0.0 DATA_DIR=/app/data
 EXPOSE 20128
