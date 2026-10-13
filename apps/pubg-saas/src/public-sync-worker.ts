@@ -57,7 +57,7 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0011_kook_daily_message_budget.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'");
     if (!ready.rowCount) throw new Error('pubg_saas_schema_upgrade_required');
     healthServer = await startWorkerHealthServer();
     const worker = new PublicSyncWorker(pool, {

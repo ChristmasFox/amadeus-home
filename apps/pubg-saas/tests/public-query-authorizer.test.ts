@@ -38,6 +38,7 @@ async function fixture() {
     const job = await admit(data), result = await auth.authorize(job, selection); assert.equal(result.kind, 'authorized'); if (result.kind !== 'authorized') throw new Error('fixture_authorization_failed'); await queue.complete(job, null); return result.query;
   }
   async function cleanup() {
+    await pool.query('DELETE FROM usage_records WHERE bot_account_id=$1', [bot]);
     for (const table of ['session_contexts', 'result_sets', 'kook_ingress_events', 'message_outbox', 'channel_binding_versions', 'channel_identities', 'tenants']) await pool.query(`DELETE FROM ${table} WHERE bot_account_id=$1`, [bot]);
     await pool.end();
   }
@@ -126,6 +127,14 @@ test('roster, aliases, expiry and same-team rebind invalidate prior public follo
     await f.pool.query("INSERT INTO team_aliases(tenant_id,team_id,alias_key,pubg_account_id,display_alias) VALUES ($1,$2,'captain',$3,'Captain')", [f.a.tenantId, f.a.teamId, player]);
     await assert.rejects(roster.repository.countMatches(), /public_query_session_unavailable/u);
     const alias = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.deepEqual(alias.teamContext.team.players[0]?.aliases, ['Captain']);
+    await alias.repository.setContext(emptyContext(alias.conversation.sessionId));
+    await alias.repository.setResultSet({ id: 'expired-result', sessionId: alias.conversation.sessionId, expiresAt: new Date(Date.now() + 60000).toISOString() } as ResultSetRecord);
+    await f.pool.query("UPDATE session_contexts SET expires_at=now()-interval '1 second' WHERE bot_account_id=$1 AND session_id=$2", [f.bot, alias.conversation.sessionId]);
+    await f.pool.query("UPDATE result_sets SET expires_at=now()-interval '1 second' WHERE bot_account_id=$1 AND session_id=$2", [f.bot, alias.conversation.sessionId]);
+    const oldUsageRequest = `privacy-old-${f.bot}`, recentUsageRequest = `privacy-recent-${f.bot}`;
+    await f.pool.query(`INSERT INTO usage_records(tenant_id,team_id,platform,bot_account_id,user_id,request_id,recorded_at)
+      VALUES ($1,$2,'kook',$3,$4,$5,now()-interval '31 days'),($1,$2,'kook',$3,$4,$6,now()-interval '29 days')`,
+    [f.a.tenantId, f.a.teamId, f.bot, f.user, oldUsageRequest, recentUsageRequest]);
     await f.pool.query('UPDATE public_query_sessions SET expires_at=now()-interval \'1 second\' WHERE session_id=$1', [alias.conversation.sessionId]);
     await assert.rejects(alias.repository.countMatches(), /public_query_session_unavailable/u);
     const afterExpiry = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.notEqual(afterExpiry.conversation.sessionId, alias.conversation.sessionId);
@@ -137,6 +146,9 @@ test('roster, aliases, expiry and same-team rebind invalidate prior public follo
     const rebound = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.notEqual(rebound.conversation.sessionId, afterExpiry.conversation.sessionId);
     await f.auth.prune();
     assert.equal((await f.pool.query('SELECT 1 FROM session_contexts WHERE bot_account_id=$1 AND session_id=$2', [f.bot, alias.conversation.sessionId])).rowCount, 0);
+    assert.equal((await f.pool.query('SELECT 1 FROM result_sets WHERE bot_account_id=$1 AND session_id=$2', [f.bot, alias.conversation.sessionId])).rowCount, 0);
+    assert.equal((await f.pool.query('SELECT 1 FROM usage_records WHERE bot_account_id=$1 AND request_id=$2', [f.bot, oldUsageRequest])).rowCount, 0);
+    assert.equal((await f.pool.query('SELECT 1 FROM usage_records WHERE bot_account_id=$1 AND request_id=$2', [f.bot, recentUsageRequest])).rowCount, 1);
     f.permissions.fail = true;
     const failed = await f.admit(group(f.bot, f.guild, f.channel, f.user)); await assert.rejects(f.auth.authorize(failed), /fixture_permission_unavailable/u); await f.queue.complete(failed, null);
   } finally { await f.cleanup(); }
@@ -175,6 +187,6 @@ test('query authorization migration never backfills queued group authority from 
     await migratePublicDatabase(pool); await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query("SELECT status,event_json,last_error_code FROM kook_ingress_events WHERE event_id='old-group'")).rows[0], { status: 'dead', event_json: null, last_error_code: 'kook_ingress_binding_revision_unknown' });
     assert.equal((await pool.query("SELECT status FROM kook_ingress_events WHERE event_id='old-dm'")).rows[0]?.status, 'pending');
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 11);
+    assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'")).rowCount, 1);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
 });

@@ -2,8 +2,45 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { AccountClaimService, createKookManagementHandler, KookIngressQueue, migratePublicDatabase, parseTrustedKookDirectMessage, parseTrustedKookGroupMessage, TeamAdminService } from '../src/index.js';
+import { AccountClaimService, createKookManagementHandler, KOOK_PUBLIC_PRIVACY_NOTICE, KookIngressQueue, migratePublicDatabase, parseTrustedKookDirectMessage, parseTrustedKookGroupMessage, TeamAdminService } from '../src/index.js';
+import { parseKookRequest } from '../src/channels/kook/request-event.js';
+import { parseKookManagementCommand } from '../src/channels/kook/management-command.js';
+import type { KookIngressJob, KookOnboardingServices } from '../src/index.js';
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
+
+test('privacy help is available in DMs and unbound groups without database or model calls', async () => {
+  assert.deepEqual(parseKookManagementCommand('/pubg privacy'), { kind: 'privacy' });
+  const handler = createKookManagementHandler({} as unknown as KookOnboardingServices);
+  const bot = 'privacy-bot';
+  for (const kind of ['direct', 'group'] as const) {
+    const event = {
+      type: 1,
+      channel_type: kind === 'direct' ? 'PERSON' : 'GROUP',
+      target_id: kind === 'direct' ? bot : 'privacy-channel',
+      author_id: 'privacy-actor',
+      content: '/pubg privacy',
+      msg_id: `privacy-${kind}`,
+      msg_timestamp: Date.now(),
+      ...(kind === 'group' ? { extra: { guild_id: 'privacy-guild', channel_type: 1, author: { id: 'privacy-actor', bot: false } } } : {}),
+    };
+    const parsed = parseKookRequest(event, bot);
+    assert.ok(parsed);
+    const job: KookIngressJob = {
+      botAccountId: bot,
+      eventId: parsed.eventId,
+      leaseToken: 'fixture-lease',
+      attemptCount: 1,
+      request: parsed.request,
+      bindingRevision: null,
+      boundTeam: null,
+    };
+    assert.deepEqual(await handler(job, new AbortController().signal), {
+      type: 'text',
+      content: KOOK_PUBLIC_PRIVACY_NOTICE,
+    });
+  }
+});
+
 test('management confirms unbind/unclaim once and recovers receipts after a crash before reply completion', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 6 });
   const suffix = randomUUID();

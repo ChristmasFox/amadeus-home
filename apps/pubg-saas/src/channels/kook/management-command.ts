@@ -1,5 +1,5 @@
 export type KookManagementCommand =
-  | { kind: 'help' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' }
+  | { kind: 'help' | 'privacy' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' }
   | { kind: 'create'; shard: string; label: string; names: string[] }
   | { kind: 'bind'; teamId: string }
   | { kind: 'add' | 'roster'; names: string[] }
@@ -28,7 +28,7 @@ export function parseKookManagementCommand(content: string): KookManagementComma
   if (tokens.length > 8 || tokens.some(token => !token || token.length > 100)) return { kind: 'invalid' };
   const kind = tokens[0]?.toLowerCase() ?? 'help';
   const args = tokens.slice(1);
-  if (['help', 'teams', 'status', 'unbind', 'disband', 'account', 'unclaim'].includes(kind) && !args.length) return { kind: kind as 'help' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' };
+  if (['help', 'privacy', 'teams', 'status', 'unbind', 'disband', 'account', 'unclaim'].includes(kind) && !args.length) return { kind: kind as 'help' | 'privacy' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' };
   if (kind === 'create' && args.length >= 3 && args.length <= 6) return { kind, shard: args[0]!.toLowerCase(), label: args[1]!, names: args.slice(2) };
   if (kind === 'bind' && args.length === 1) return { kind, teamId: args[0]! };
   if ((kind === 'add' || kind === 'roster') && args.length >= 1 && args.length <= 4) return { kind, names: args };

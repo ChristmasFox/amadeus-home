@@ -87,7 +87,7 @@ test('shard migration backfills match facts and team-scoped telemetry migration 
     assert.equal((await pool.query('SELECT 1 FROM telemetry_features')).rowCount, 0);
     assert.equal((await pool.query('SELECT 1 FROM telemetry_prefetch_attempts')).rowCount, 0);
     assert.equal((await pool.query('SELECT 1 FROM telemetry_team_features')).rowCount, 0);
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 11);
+    assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'")).rowCount, 1);
   } finally { await cleanupLegacy(state); }
 });
 

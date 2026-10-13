@@ -200,7 +200,7 @@ test('additive migrations upgrade an applied schema and preserve existing outbox
     await migratePublicDatabase(pool);
     await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id FROM message_outbox')).rows[0], { target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null });
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 11);
+    assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'")).rowCount, 1);
     assert.equal((await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='kook_message_daily_reservations' AND column_name='reservation_hash'")).rowCount, 1);
   }
   finally {

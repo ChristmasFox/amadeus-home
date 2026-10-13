@@ -46,7 +46,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0011_kook_daily_message_budget.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const permissions = new KookPermissionClient({ token });
@@ -72,6 +72,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     };
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler, ingressLimits, dailyMessageBudget,
+      maintenance: () => authorizer.prune(),
       onError: code => process.stderr.write(`${code}\n`),
     });
     await runtime.run(stop.signal);

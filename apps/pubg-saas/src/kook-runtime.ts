@@ -15,6 +15,7 @@ export interface KookApplicationRuntimeOptions {
   ingressLimits?: Omit<KookIngressQueueOptions, 'botAccountId'>;
   pollMs?: number;
   dailyMessageBudget?: number;
+  maintenance?: () => Promise<void>;
   onError?: (code: string) => void;
 }
 function delay(ms: number, signal: AbortSignal): Promise<void> {
@@ -88,6 +89,11 @@ export class KookApplicationRuntime {
         if (Date.now() - lastPrune >= 60000) {
           await this.ingress.prune(new Date(Date.now() - 24 * 60 * 60000));
           lastPrune = Date.now();
+          try {
+            await this.options.maintenance?.();
+          } catch {
+            this.options.onError?.('kook_runtime_data_retention_failed');
+          }
         }
         const result = await this.ingress.processOne(this.options.handler, signal,this.welcome);
         if (result === 'empty' || result === 'retry')

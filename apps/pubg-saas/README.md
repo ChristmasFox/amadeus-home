@@ -170,6 +170,21 @@ Lookup/admission follows the official [PUBG request filters](https://documentati
 and [rate limits](https://documentation.pubg.com/en/rate-limits.html). Live key
 eligibility and quota feasibility remain preflight work.
 
+## Privacy and retention
+
+Users can send `/pubg privacy` in a DM or group, including an unbound group, to
+see the current data-use statement. The public gateway clears processed ingress
+content immediately and runs the bounded retention sweep on the 60-second
+ingress-maintenance cadence. Query sessions/results expire after 12 hours;
+usage records expire after 30 days; terminal message-inbox/outbox records
+expire after 7 days. Team roster and PUBG public-fact cache are retained to
+serve an active team; `/pubg unclaim` removes only the user's PUBG account
+claim, while an administrator can replace a roster, unbind a channel, or
+disband a team. The statement also discloses that natural-language text and its
+prior structured plan are sent to the configured public inference provider.
+Retention delivery requires the public gateway runtime to be running; it has
+not been installed on a production host.
+
 ## Source entry points
 
 After `pnpm build:pubg-saas`, these entry points are side-effect-free without

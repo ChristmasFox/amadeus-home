@@ -33,6 +33,7 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
   const suffix = randomUUID(), bot = `runtime-${suffix}`, tenant = `tenant-${suffix}`, team = `team-${suffix}`, guild = `guild-${suffix}`, channel = `channel-${suffix}`, user = `actor-${suffix}`;
   const socket = new FixtureSocket();
   let connected = false;
+  let maintenanceRuns = 0;
   let handled = 0;
   let unblock: () => void = () => { };
   const blocked = new Promise<void>(resolve => { unblock = resolve; });
@@ -50,6 +51,7 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     await pool.query("INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id) VALUES ($1,'kook',$2,$3,$4,$5)", [tenant, bot, channel, team, user]);
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: bot, token: 'fixture-only', pollMs: 5, dailyMessageBudget: 3, onError: code => errors.push(code),
+      maintenance: async () => { maintenanceRuns += 1; },
       socketFactory: () => { connected = true; return socket; },
       fetcher: async (input, init) => {
         const url = new URL(String(input));
@@ -72,6 +74,7 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     run = runtime.run(abort.signal);
     await assert.rejects(runtime.run(abort.signal), /kook_runtime_already_running/u);
     await waitFor(() => connected, 'fixture socket');
+    await waitFor(() => maintenanceRuns > 0, 'scheduled public query retention sweep');
     socket.open();
     socket.frame({ s: 1, d: { code: 0, session_id: `session-${suffix}` } });
     const group = { type: 1, channel_type: 'GROUP', target_id: channel, author_id: user, content: '/pubg status', msg_id: `group-${suffix}`, msg_timestamp: Date.now(), extra: { guild_id: guild, channel_type: 1, author: { id: user, bot: false } } };
@@ -100,6 +103,7 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     }, 'outbox defers when the durable daily send budget is exhausted');
     assert.equal(Number((await pool.query('SELECT used_count FROM kook_message_daily_usage WHERE bot_account_id=$1', [bot])).rows[0]?.used_count), 3);
     assert.equal(requests.length, 3);
+    assert.ok(maintenanceRuns > 0);
     abort.abort();
     await run;
     assert.equal(handled, 4);

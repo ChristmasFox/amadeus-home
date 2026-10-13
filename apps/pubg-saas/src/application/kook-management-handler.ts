@@ -3,8 +3,9 @@ import type { KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import { handleKookOnboardingRequest, type KookOnboardingServices } from './kook-onboarding-handler.js';
 function message(content: string): KookTextPayload { return { type: 'text', content }; }
-const groupHelp = '队伍管理：/pubg help 建队与绑定入口；/pubg teams 列出服务器队伍；/pubg status 状态；/pubg add <游戏名…> 添加队员；/pubg roster <游戏名…> 替换完整名单；/pubg unbind 解绑频道；/pubg disband 解散队伍。变更需管理员确认。';
-const directHelp = '账号管理：/pubg claim <平台> <游戏名> 声明关联自己的账号；/pubg account 查看自己的关联；/pubg unclaim 申请解除关联。关联不证明 PUBG 账号所有权。';
+const groupHelp = '队伍管理：/pubg help 建队与绑定入口；/pubg teams 列出服务器队伍；/pubg status 状态；/pubg add <游戏名…> 添加队员；/pubg roster <游戏名…> 替换完整名单；/pubg unbind 解绑频道；/pubg disband 解散队伍；/pubg privacy 查看数据说明。变更需管理员确认。';
+const directHelp = '账号管理：/pubg claim <平台> <游戏名> 声明关联自己的账号；/pubg account 查看自己的关联；/pubg unclaim 申请解除关联；/pubg privacy 查看数据说明。关联不证明 PUBG 账号所有权。';
+export const KOOK_PUBLIC_PRIVACY_NOTICE = '隐私与数据说明：本服务保存 KOOK 账号/频道标识、已授权队伍名单与 PUBG 公开比赛/遥测数据，用于队伍查询；不读取私人 Kurisu 的 SQLite、凭据或聊天记录。已处理的入站消息正文会立即清除，未完成请求最多保留 1 小时用于重试；追问上下文和查询结果最多保留 12 小时；模型用量（用户/请求关联、模型与 token 数）最多保留 30 天；收发事件标识及已结束的投递记录最多保留 7 天。自然语言查询文本和必要的上一轮结构化查询计划会发送给配置的公共模型提供方；不会发送 tenant、队伍权限或 KOOK 用户标识，提供方自身的数据规则另行适用。私信 /pubg unclaim 可解除本人 PUBG 账号声明；服务器管理员可用 /pubg roster 更新名单、/pubg unbind 解绑频道或 /pubg disband 删除队伍关联数据。解除账号声明不会删除团队名单中的 PUBG 账号；已发送消息无法由本服务撤回。';
 const publicErrors: Record<string, string> = {
   guild_admin_required: '需要当前服务器的拥有者或管理员权限。',
   channel_not_bound: '当前频道尚未绑定队伍。',
@@ -51,6 +52,7 @@ export function createKookManagementHandler(services: KookOnboardingServices): K
         return message(result.kind === 'unclaim' ? '你的 PUBG 账号声明关联已解除。' : '账号声明关联已保存（未经所有权验证）。');
       }
       const command = request.event.content.trim().replace(/^[!/]pubg(?:\s+|$)/iu, '').trim().toLowerCase();
+      if (command === 'privacy') return message(KOOK_PUBLIC_PRIVACY_NOTICE);
       if (request.kind === 'group') {
         if (!job.boundTeam)
           return message('当前频道尚未绑定队伍，暂时无法处理此请求。');

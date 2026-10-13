@@ -54,7 +54,10 @@ free-text queries use a bounded AI SDK QueryPlan and a deterministic executor.
 A separate worker loads persisted SaaS rosters, syncs public matches and
 team-scoped telemetry into PostgreSQL. Same-match overlapping tenants merge
 public player facts while repository reads expose only the current registered
-roster; roster changes invalidate scoped sync state.
+roster; roster changes invalidate scoped sync state. Migration `0012` indexes
+per-bot expiry cleanup; gateway maintenance now sweeps expired query context,
+result sets and 30-day usage records, and `/pubg privacy` exposes the verified
+retention and model-provider data flow.
 
 M1 source/offline acceptance was re-audited and passed on 2026-10-13:
 `pnpm test:pubg-saas` passed 75 tests with isolated PostgreSQL 18 and no skips;

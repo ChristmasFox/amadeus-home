@@ -193,17 +193,31 @@ export class PublicQueryAuthorizer {
   }
 
   /** Removes expired metadata and unreachable result/context rows, scoped to
-   * this public bot. No user content is retained in the authorization ledger. */
+   * this public bot. Usage details are retained for at most 30 days. */
   async prune(): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query(`WITH expired AS (
+        SELECT ctid FROM public_query_sessions
+        WHERE bot_account_id=$1 AND expires_at<=now()
+        ORDER BY expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+      ) DELETE FROM public_query_sessions session USING expired WHERE session.ctid=expired.ctid`, [this.botId]);
       for (const table of ['session_contexts', 'result_sets']) {
-        await client.query(`DELETE FROM ${table} saved WHERE saved.platform='kook' AND saved.bot_account_id=$1
-          AND NOT EXISTS (SELECT 1 FROM public_query_sessions session WHERE session.session_id=saved.session_id
-            AND session.bot_account_id=saved.bot_account_id AND session.expires_at>now())`, [this.botId]);
+        await client.query(`WITH expired AS (
+          SELECT saved.ctid FROM ${table} saved
+          WHERE saved.platform='kook' AND saved.bot_account_id=$1
+            AND (saved.expires_at<=now() OR NOT EXISTS (
+              SELECT 1 FROM public_query_sessions session WHERE session.session_id=saved.session_id
+                AND session.bot_account_id=saved.bot_account_id AND session.expires_at>now()))
+          ORDER BY saved.expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+        ) DELETE FROM ${table} saved USING expired WHERE saved.ctid=expired.ctid`, [this.botId]);
       }
-      await client.query('DELETE FROM public_query_sessions WHERE bot_account_id=$1 AND expires_at<=now()', [this.botId]);
+      await client.query(`WITH expired AS (
+        SELECT usage_id FROM usage_records
+        WHERE platform='kook' AND bot_account_id=$1 AND recorded_at<=now()-interval '30 days'
+        ORDER BY recorded_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+      ) DELETE FROM usage_records usage USING expired WHERE usage.usage_id=expired.usage_id`, [this.botId]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; }
     finally { client.release(); }
