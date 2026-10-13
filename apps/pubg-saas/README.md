@@ -40,9 +40,10 @@ progress. The service is not deployed, and live buttons remain unverified.
   pending group events whose generation was not recorded, retaining their audit
   identity while removing payloads. It never invents historical authority.
 - The authorizer is an application module for the upcoming query handler. It
-  is not yet wired to the management-only executable handler. Resolved player
-  name persistence and reply-thread correlation remain pending; for now its
-  `TeamContext` uses stable account IDs as names plus scoped confirmed aliases.
+  is not yet wired to the management-only executable handler. Reply-thread
+  correlation remains pending. Its `TeamContext` uses official names from the
+  shared PUBG account directory when available, stable account IDs as fallback,
+  and scoped confirmed aliases.
   Query executors must authorize each request rather than cache an authorized
   object for later events. Live KOOK membership/filter semantics need real-guild
   acceptance. Official endpoint references: [guild/member APIs](https://developer.kookapp.cn/doc/http/guild)
@@ -170,7 +171,7 @@ The separately authorized public runtime phase must supply its independent
 `DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
 outside Git. Appending
 `--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0007_team_scoped_telemetry_features.sql`
+before gateway startup; the gateway checks migration `0008_public_account_names.sql`
 and never migrates automatically. The PG connection pool is bounded and has
 connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
 before closing the pool.

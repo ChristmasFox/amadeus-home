@@ -137,18 +137,20 @@ export class PublicQueryAuthorizer {
       const scope = [selectedTarget.tenantId, selectedTarget.teamId, this.botId, event.userId, channel, kind];
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [JSON.stringify(['public-query-session', ...scope])]);
       const members = await client.query(
-        `SELECT member.pubg_account_id,COALESCE(array_agg(alias.display_alias ORDER BY alias.alias_key)
+        `SELECT member.pubg_account_id,account.display_name AS official_name,COALESCE(array_agg(alias.display_alias ORDER BY alias.alias_key)
          FILTER (WHERE alias.alias_key IS NOT NULL),'{}') AS aliases
-         FROM team_members member LEFT JOIN team_aliases alias ON alias.tenant_id=member.tenant_id
+         FROM team_members member JOIN teams team ON team.tenant_id=member.tenant_id AND team.team_id=member.team_id
+         LEFT JOIN pubg_accounts account ON account.shard=team.pubg_shard AND account.account_id=member.pubg_account_id
+         LEFT JOIN team_aliases alias ON alias.tenant_id=member.tenant_id
            AND alias.team_id=member.team_id AND alias.pubg_account_id=member.pubg_account_id
-         WHERE member.tenant_id=$1 AND member.team_id=$2 GROUP BY member.pubg_account_id ORDER BY member.pubg_account_id`, scope.slice(0, 2),
+         WHERE member.tenant_id=$1 AND member.team_id=$2 GROUP BY member.pubg_account_id,account.display_name ORDER BY member.pubg_account_id`, scope.slice(0, 2),
       );
       if (!members.rowCount || members.rowCount > 4) throw new Error('public_query_roster_unavailable');
       const teamContext = createTeamContext(selectedTarget.tenantId, {
         id: selectedTarget.teamId, label: String(target.label), platform: String(target.pubg_shard),
-        // Until the resolved-name directory is wired, use stable account IDs;
-        // never import the private default roster or invent official names.
-        players: members.rows.map(member => ({ id: String(member.pubg_account_id), name: String(member.pubg_account_id), aliases: member.aliases.map(String) })),
+        // Fall back to the stable account ID until a public official name has
+        // been persisted; never import the private default roster.
+        players: members.rows.map(member => ({ id: String(member.pubg_account_id), name: String(member.official_name ?? member.pubg_account_id), aliases: member.aliases.map(String) })),
       });
       const revision = String(target.query_revision), bindingRevision = kind === 'bound_channel' ? current.bindingRevision : null;
       const previous = await client.query(

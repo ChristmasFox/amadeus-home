@@ -58,6 +58,13 @@ apiKey: 'public-fixture', admission: { async acquire() { }, async observe() { } 
     await pool.query('UPDATE kook_ingress_events SET next_attempt_at=now() WHERE bot_account_id=$1 AND event_id=$2', [bot, originalClick.msg_id]);
     assert.equal(await queue.processOne(handler, signal), 'done');
     assert.equal((await pool.query('SELECT 1 FROM teams WHERE tenant_id=$1', [squadA.tenant_id])).rowCount, 1);
+    assert.deepEqual((await pool.query(
+      "SELECT account_id,display_name FROM pubg_accounts WHERE shard='steam' AND account_id=ANY($1::text[]) ORDER BY account_id",
+      [[`account.alice_${suffix.replaceAll('-', '')}`, `account.bob_${suffix.replaceAll('-', '')}`]],
+    )).rows, [
+      { account_id: `account.alice_${suffix.replaceAll('-', '')}`, display_name: 'Alice' },
+      { account_id: `account.bob_${suffix.replaceAll('-', '')}`, display_name: 'Bob' },
+    ]);
     assert.match((await send(click(channelA, actorA, setupToken))).content, /失效/u);
 
     const otherPrepared = await send(group(guildB, channelB, actorB, '/pubg create steam "Same Label" Alice Bob'));
@@ -72,6 +79,7 @@ apiKey: 'public-fixture', admission: { async acquire() { }, async observe() { } 
     assert.equal((await pool.query('SELECT 1 FROM channel_bindings WHERE tenant_id=$1', [squadA.tenant_id])).rowCount, 2);
     const add = await send(group(guildA, channelA2, actorA, '/pubg add Charlie')); await send(click(channelA2, actorA, token(add)));
     assert.equal((await pool.query('SELECT 1 FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenant_id, squadA.team_id])).rowCount, 3);
+    assert.equal((await pool.query("SELECT display_name FROM pubg_accounts WHERE shard='steam' AND account_id=$1", [`account.charlie_${suffix.replaceAll('-', '')}`])).rows[0]?.display_name, 'Charlie');
     const replace = await send(group(guildA, channelA2, actorA, '/pubg roster Bob')); await send(click(channelA2, actorA, token(replace)));
     assert.deepEqual((await pool.query('SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenant_id, squadA.team_id])).rows, [{ pubg_account_id: `account.bob_${suffix.replaceAll('-', '')}` }]);
 

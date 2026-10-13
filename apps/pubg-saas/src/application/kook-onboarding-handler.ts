@@ -61,7 +61,9 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
       await services.teams.assertGuildAdmin(event);
       const resolved = await resolve(services, command.shard, command.names, signal);
       if ('reply' in resolved) return resolved.reply;
-      const pending = await services.teams.prepareSquadCreation(event, { label: command.label, pubgShard: command.shard, pubgAccountIds: resolved.players.map(player => player.accountId) });
+      const pending = await services.teams.prepareSquadCreation(event, { label: command.label, pubgShard: command.shard,
+        pubgAccountIds: resolved.players.map(player => player.accountId),
+        resolvedPlayers: resolved.players.map(player => ({ accountId: player.accountId, displayName: player.name })) });
       return createConfirmationCard({ title: '确认创建队伍', detail: `队伍：${command.label}\n平台：${command.shard}\n玩家：${resolved.players.map(player => player.name).join('、')}\n确认后将创建队伍并绑定当前频道。仅本次操作者可确认。`, confirmText: '创建并绑定', confirmationToken: pending.confirmationToken, actionScope: 'setup' });
     }
     if (command.kind === 'bind') {
@@ -75,7 +77,9 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
       if (current.teamId !== job.boundTeam.teamId || current.tenantId !== job.boundTeam.tenantId) throw new Error('team_action_scope_changed');
       const resolved = await resolve(services, current.pubgShard, command.names, signal);
       if ('reply' in resolved) return resolved.reply;
-      const pending = await services.teams.prepareTeamAction(event, { kind: command.kind === 'add' ? 'add_members' : 'replace_roster', pubgAccountIds: resolved.players.map(player => player.accountId) }, job.boundTeam);
+      const pending = await services.teams.prepareTeamAction(event, { kind: command.kind === 'add' ? 'add_members' : 'replace_roster',
+        pubgAccountIds: resolved.players.map(player => player.accountId),
+        resolvedPlayers: resolved.players.map(player => ({ accountId: player.accountId, displayName: player.name })) }, job.boundTeam);
       return createConfirmationCard({ title: command.kind === 'add' ? '确认添加队员' : '确认替换队员名单', detail: `队伍：${current.label}\n平台：${current.pubgShard}\n${command.kind === 'add' ? '添加玩家' : '新的完整名单'}：${resolved.players.map(player => player.name).join('、')}\n仅本次操作者可确认。`, confirmText: '确认名单', confirmationToken: pending.confirmationToken, actionScope: 'team' });
     }
     if (command.kind === 'claim') return text('个人账号声明关联请在 bot 私信中发送 /pubg claim <平台> <游戏名>。');

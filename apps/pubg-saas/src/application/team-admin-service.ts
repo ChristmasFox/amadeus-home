@@ -14,7 +14,11 @@ export interface CreateSquadInput {
   pubgShard: string;
   /** Durable account IDs returned by PUBG API resolution and confirmed by the admin. */
   pubgAccountIds: string[];
+  /** Official display names returned with the same resolved account IDs. */
+  resolvedPlayers?: ResolvedPubgAccount[];
 }
+
+export interface ResolvedPubgAccount { accountId: string; displayName: string }
 
 export interface TeamReference {
   tenantId: string;
@@ -36,8 +40,8 @@ export interface GuildTeamSummary extends TeamReference {
 }
 
 export type PendingTeamAction =
-  | { kind: 'add_members'; pubgAccountIds: string[] }
-  | { kind: 'replace_roster'; pubgAccountIds: string[] }
+  | { kind: 'add_members'; pubgAccountIds: string[]; resolvedPlayers?: ResolvedPubgAccount[] }
+  | { kind: 'replace_roster'; pubgAccountIds: string[]; resolvedPlayers?: ResolvedPubgAccount[] }
   | { kind: 'unbind_channel' }
   | { kind: 'disband_team' };
 
@@ -78,13 +82,43 @@ function normalizedAccountIds(values: string[]): string[] {
   return unique;
 }
 
+function normalizedResolvedPlayers(value: unknown, accountIds: string[]): ResolvedPubgAccount[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length !== accountIds.length) throw new Error('invalid_resolved_pubg_players');
+  const names = new Map<string, string>();
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('invalid_resolved_pubg_players');
+    const candidate = item as Record<string, unknown>;
+    if (typeof candidate.accountId !== 'string' || typeof candidate.displayName !== 'string') throw new Error('invalid_resolved_pubg_players');
+    const accountId = requiredText(candidate.accountId, 'pubg_account_id');
+    const displayName = requiredText(candidate.displayName, 'pubg_display_name', 100);
+    if (!accountIds.includes(accountId) || names.has(accountId) || /[\u0000-\u001f]/u.test(displayName)) throw new Error('invalid_resolved_pubg_players');
+    names.set(accountId, displayName);
+  }
+  if (names.size !== accountIds.length) throw new Error('invalid_resolved_pubg_players');
+  return accountIds.map(accountId => ({ accountId, displayName: names.get(accountId)! }));
+}
+
+function normalizedSquadInput(value: CreateSquadInput): CreateSquadInput {
+  if (!value || typeof value !== 'object') throw new Error('invalid_squad_setup');
+  const label = requiredText(value.label, 'team_label', 80), pubgShard = requiredText(value.pubgShard, 'pubg_shard', 32);
+  if (!/^[a-z0-9_-]+$/u.test(pubgShard)) throw new Error('invalid_pubg_shard');
+  const pubgAccountIds = normalizedAccountIds(value.pubgAccountIds);
+  const resolvedPlayers = normalizedResolvedPlayers(value.resolvedPlayers, pubgAccountIds);
+  return { label, pubgShard, pubgAccountIds, ...(resolvedPlayers ? { resolvedPlayers } : {}) };
+}
+
 function parsePendingAction(value: unknown): PendingTeamAction {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('team_action_invalid');
   const action = value as Record<string, unknown>;
   switch (action.kind) {
     case 'add_members':
-    case 'replace_roster':
-      return { kind: action.kind, pubgAccountIds: normalizedAccountIds(action.pubgAccountIds as string[]) };
+    case 'replace_roster': {
+      const pubgAccountIds = normalizedAccountIds(action.pubgAccountIds as string[]);
+      const resolvedPlayers = normalizedResolvedPlayers(action.resolvedPlayers, pubgAccountIds);
+      if (action.kind === 'add_members') return { kind: 'add_members', pubgAccountIds, ...(resolvedPlayers ? { resolvedPlayers } : {}) };
+      return { kind: 'replace_roster', pubgAccountIds, ...(resolvedPlayers ? { resolvedPlayers } : {}) };
+    }
     case 'unbind_channel':
     case 'disband_team':
       return { kind: action.kind };
@@ -178,6 +212,17 @@ export class TeamAdminService {
     );
   }
 
+  private async persistResolvedPlayers(client: PoolClient, shard: string, players: ResolvedPubgAccount[] | undefined): Promise<void> {
+    for (const player of players ?? []) {
+      await client.query(
+        `INSERT INTO pubg_accounts(shard,account_id,display_name,last_resolved_at)
+         VALUES ($1,$2,$3,now()) ON CONFLICT (shard,account_id) DO UPDATE
+         SET display_name=EXCLUDED.display_name,last_resolved_at=now()`,
+        [shard, player.accountId, player.displayName],
+      );
+    }
+  }
+
   private async bindChannel(
     client: PoolClient,
     event: TeamConfirmationActor,
@@ -203,14 +248,11 @@ export class TeamAdminService {
 
   async createSquad(event: TrustedKookGroupMessage, input: CreateSquadInput): Promise<TeamReference> {
     await this.requireFreshGuildAdmin(event);
-    const label = requiredText(input.label, 'team_label', 80);
-    const pubgShard = requiredText(input.pubgShard, 'pubg_shard', 32);
-    if (!/^[a-z0-9_-]+$/u.test(pubgShard)) throw new Error('invalid_pubg_shard');
-    const accountIds = normalizedAccountIds(input.pubgAccountIds);
+    const normalized = normalizedSquadInput(input);
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const team = await this.insertSquad(client, event, { label, pubgShard, pubgAccountIds: accountIds }, randomUUID());
+      const team = await this.insertSquad(client, event, normalized, randomUUID());
       await client.query('COMMIT');
       return team;
     } catch (error) {
@@ -229,6 +271,7 @@ export class TeamAdminService {
     for (const accountId of input.pubgAccountIds) {
       await client.query('INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id) VALUES ($1,$2,$3,$4)', [tenantId, teamId, accountId, event.userId]);
     }
+    await this.persistResolvedPlayers(client, input.pubgShard, input.resolvedPlayers);
     await this.bindChannel(client, event, tenantId, teamId);
     await this.grantTeamAccess(client, event, tenantId, teamId, 'admin');
     return { tenantId, teamId };
@@ -253,9 +296,7 @@ export class TeamAdminService {
 
   async prepareSquadCreation(event: TrustedKookGroupMessage, input: CreateSquadInput): Promise<PreparedSquadSetup> {
     await this.requireFreshGuildAdmin(event);
-    const label = requiredText(input.label, 'team_label', 80), pubgShard = requiredText(input.pubgShard, 'pubg_shard', 32);
-    if (!/^[a-z0-9_-]+$/u.test(pubgShard)) throw new Error('invalid_pubg_shard');
-    return this.prepareSquadSetup(event, 'create', randomUUID(), { label, pubgShard, pubgAccountIds: normalizedAccountIds(input.pubgAccountIds) });
+    return this.prepareSquadSetup(event, 'create', randomUUID(), normalizedSquadInput(input));
   }
 
   async prepareSquadBinding(event: TrustedKookGroupMessage, teamIdInput: string): Promise<PreparedSquadSetup> {
@@ -323,8 +364,8 @@ export class TeamAdminService {
       if (existingBinding.rowCount) throw new Error('channel_binding_conflict');
       let team: TeamReference;
       if (row.action === 'create') {
-        const input = row.payload_json as CreateSquadInput;
-        team = await this.insertSquad(client, actor, { label: requiredText(input.label, 'team_label', 80), pubgShard: requiredText(input.pubgShard, 'pubg_shard', 32), pubgAccountIds: normalizedAccountIds(input.pubgAccountIds) }, row.team_id);
+        const input = normalizedSquadInput(row.payload_json as CreateSquadInput);
+        team = await this.insertSquad(client, actor, input, row.team_id);
       } else {
         const available = await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [tenantId, row.team_id]);
         if (!available.rowCount) throw new Error('team_unavailable_in_guild');
@@ -516,7 +557,7 @@ export class TeamAdminService {
         [team.tenantId, team.teamId, event.botAccountId, event.channelId],
       );
       if (!binding.rowCount) throw new Error('team_action_confirmation_unavailable');
-      const lockedTeam = await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [team.tenantId, team.teamId]);
+      const lockedTeam = await client.query('SELECT pubg_shard FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [team.tenantId, team.teamId]);
       if (!lockedTeam.rowCount) throw new Error('team_action_confirmation_unavailable');
       await this.touchActor(client, event, team.tenantId);
       await this.grantTeamAccess(client, event, team.tenantId, team.teamId, 'admin');
@@ -539,6 +580,7 @@ export class TeamAdminService {
               [team.tenantId, team.teamId, accountId, event.userId],
             );
           }
+          await this.persistResolvedPlayers(client, String(lockedTeam.rows[0]!.pubg_shard), action.resolvedPlayers);
           break;
         }
         case 'replace_roster': {
@@ -553,6 +595,7 @@ export class TeamAdminService {
               [team.tenantId, team.teamId, accountId, event.userId],
             );
           }
+          await this.persistResolvedPlayers(client, String(lockedTeam.rows[0]!.pubg_shard), action.resolvedPlayers);
           break;
         }
         case 'unbind_channel': {

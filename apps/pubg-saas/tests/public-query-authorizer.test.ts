@@ -28,8 +28,9 @@ async function fixture() {
   await migratePublicDatabase(pool);
   const teams = new TeamAdminService(pool, { isGuildAdmin: async () => true });
   const event = (g = guild, c = channel, u = user) => parseTrustedKookGroupMessage({ s: 0, d: group(bot, g, c, u) }, bot)!;
-  const a = await teams.createSquad(event(), { label: 'Same squad name', pubgShard: 'steam', pubgAccountIds: [`player-${suffix}`] });
-  const b = await teams.createSquad(event(guildB, channelB, other), { label: 'Same squad name', pubgShard: 'kakao', pubgAccountIds: [`player-${suffix}`] });
+  const accountId = `account.player_${suffix.replaceAll('-', '')}`;
+  const a = await teams.createSquad(event(), { label: 'Same squad name', pubgShard: 'steam', pubgAccountIds: [accountId] });
+  const b = await teams.createSquad(event(guildB, channelB, other), { label: 'Same squad name', pubgShard: 'kakao', pubgAccountIds: [accountId] });
   const queue = new KookIngressQueue(pool, { botAccountId: bot, maxPendingPerUser: 100 });
   const auth = new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot });
   async function admit(data: unknown): Promise<KookIngressJob> { assert.equal(await queue.ingestGatewayEvent(data), 'accepted'); const job = await queue.claimNext(); assert.ok(job); return job; }
@@ -59,6 +60,9 @@ test('public query context comes from a live stored ingress and isolates guild, 
     for (const replay of replays) { assert.equal(replay.kind, 'authorized'); if (replay.kind === 'authorized') assert.equal(replay.query.conversation.sessionId, a.conversation.sessionId); }
     assert.equal((await f.pool.query('SELECT 1 FROM public_query_sessions WHERE bot_account_id=$1', [f.bot])).rowCount, 1);
     await f.queue.complete(job, null);
+    await f.pool.query("INSERT INTO pubg_accounts(shard,account_id,display_name) VALUES ('steam',$1,'Official Alice')", [a.teamContext.team.players[0]!.id]);
+    const named = await f.authorized(group(f.bot, f.guild, f.channel, f.other));
+    assert.equal(named.teamContext.team.players[0]?.name, 'Official Alice');
     const next = await f.authorized(group(f.bot, f.guild, f.channel, f.other)); assert.equal(next.conversation.sessionId, a.conversation.sessionId);
     assert.ok(await next.repository.getContext(next.conversation.sessionId));
     const otherActor = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.notEqual(otherActor.conversation.sessionId, a.conversation.sessionId); assert.equal(await otherActor.repository.getContext(otherActor.conversation.sessionId), null);
@@ -171,6 +175,6 @@ test('query authorization migration never backfills queued group authority from 
     await migratePublicDatabase(pool); await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query("SELECT status,event_json,last_error_code FROM kook_ingress_events WHERE event_id='old-group'")).rows[0], { status: 'dead', event_json: null, last_error_code: 'kook_ingress_binding_revision_unknown' });
     assert.equal((await pool.query("SELECT status FROM kook_ingress_events WHERE event_id='old-dm'")).rows[0]?.status, 'pending');
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 7);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 8);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
 });

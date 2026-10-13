@@ -43,7 +43,7 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0007`
+Additive migrations through `0008`
 upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
 PostgreSQL 18 (47 SaaS tests), including private PUBG regression checks. This is
 source and offline-fixture progress; package build, both entry-point dry-runs,
@@ -64,10 +64,12 @@ from active durable ingress, current binding/revision and fresh KOOK membership;
 DMs require explicit actor grants and selection when several teams are authorized.
 Opaque TTL sessions isolate requester/channel/team, reuse exact-event retries,
 and invalidate old state after roster/alias changes, revoke/regrant or rebind.
-Legacy queued group authority is never guessed during migration. This module is
-tested but not yet wired to the executable's statistical handler. Resolved player
-name persistence, quote/thread correlation and query/AI/worker integration
-remain next work.
+Legacy queued group authority is never guessed during migration. Official PUBG
+names from the name-based onboarding flow are persisted in a global shard/account
+directory and loaded into each newly authorized team context, with account-ID
+fallback and private aliases kept scoped. This authorization module is tested
+but not yet wired to the executable's statistical handler. Quote/thread
+correlation and query/AI/worker integration remain next work.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

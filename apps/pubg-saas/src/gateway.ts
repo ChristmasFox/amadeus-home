@@ -34,7 +34,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0007_team_scoped_telemetry_features.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0008_public_account_names.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const teams = new TeamAdminService(pool, new KookPermissionClient({ token }));
