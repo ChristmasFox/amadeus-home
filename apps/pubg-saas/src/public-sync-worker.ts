@@ -4,6 +4,7 @@ import { PublicSyncWorker } from './application/public-sync-worker.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { configurePublicEgress } from './infrastructure/public-egress.js';
 import { startWorkerHealthServer, stopWorkerHealthServer } from './infrastructure/worker-health-server.js';
+import { createPublicSyncCycleLog } from './application/worker-alerts.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 
@@ -80,17 +81,14 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
         // print database details into collected worker logs.
       }
       const memory = process.memoryUsage();
-      process.stdout.write(`${JSON.stringify({
-        event: 'pubg_saas_sync_cycle',
+      process.stdout.write(`${JSON.stringify(createPublicSyncCycleLog({
         observedAt: new Date().toISOString(),
-        cycle: {
-          ...result,
-          durationMs: Math.round((performance.now() - cycleStartedAt) * 10) / 10,
-        },
+        cycle: result,
+        durationMs: Math.round((performance.now() - cycleStartedAt) * 10) / 10,
         queue,
-        queueSnapshotError: queue === null,
-        process: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed },
-      })}\n`);
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+      }))}\n`);
       if (once || stop.signal.aborted) break;
       await wait(intervalMs, stop.signal);
     } while (!stop.signal.aborted);

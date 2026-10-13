@@ -27,6 +27,16 @@ application default route, direct metadata denial, proxy denial for
 the proxy. Clean Linux/cloud repetition and M204 resource measurement remain
 open.
 
+## Worker alert signals
+
+Each structured `pubg_saas_sync_cycle` log includes identifier-free alert codes
+for unavailable queue telemetry, a due-job age of at least 15 minutes, expired
+leases, failed team syncs, and worker RSS at or above 80% of its 2 GiB Compose
+memory limit. These are early-warning signals, not SLOs or automatic admission
+controls. Docker health checks cover worker liveness and PostgreSQL readiness.
+Host log collection, alert delivery and canonical-host thresholds are not
+installed or verified; configure a host-owned log/alert route before launch.
+
 ## Build an immutable local image
 
 Build from the Git checkout and tag the image with its full source commit. The

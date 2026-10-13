@@ -93,8 +93,11 @@ Current source map: `docs/PROJECT_MAP.md`.
 
 M2 source commits `2271a4b` and `27523ae` add PostgreSQL-backed per-team worker
 leases/fencing/retry, bounded worker concurrency and graceful drain. Worker
-cycle logs now add aggregate due/lease/backoff counts, oldest due age and
-process RSS/heap without tenant/team IDs; alert rules remain uninstalled. The
+cycle logs add aggregate due/lease/backoff counts, oldest due age and process
+RSS/heap without tenant/team IDs. They now also derive identifier-free alert
+codes for unavailable queue telemetry, 15-minute due-job lag, expired leases,
+team sync failures and RSS at 80% of the Compose cap. Alert delivery and
+canonical-host thresholds remain uninstalled/unverified. The
 default minute windows are 10 requests/user, 60/channel, 120/tenant and
 300/bot. KOOK REST rate headers now pause the affected route/global bucket, and
 429 retry deadlines survive outbox retries. The isolated 200-team benchmark completed
