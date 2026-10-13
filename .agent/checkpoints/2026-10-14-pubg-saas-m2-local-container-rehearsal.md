@@ -235,3 +235,42 @@ capacity or canonical M204 host headroom. After SaaS shutdown, private
 OpenClaw remained healthy, 9Router remained running, and `pnpm test:pubg`
 passed 68/68. The local image used the available OrbStack ARM64 builder; the
 host-profile `example-node` remained unavailable.
+
+## amd64 image smoke and build-context secret exclusion — 2026-10-14
+
+The Goal asks for amd64 validation where feasible. An initial local Buildx OCI
+build completed, but inspection found that the Docker ignore rules omitted
+`.env.local`. That file was not loaded into a container environment and the
+image was not pushed; however, it could have been part of the local BuildKit
+context/cache. I added `*.env.local` and `**/.env.local` to `.dockerignore` in
+commit `f70d29b`, ran `pnpm check:secrets` and `git diff --check`, and pruned
+SaaS-specific private BuildKit cache records (820 MiB). A follow-up cache
+inspection found only shared final runtime/entrypoint cache records, not
+workspace-source cache records.
+
+Built commit `f70d29b` as a temporary local `linux/amd64` image using Buildx;
+the image index digest was
+`sha256:329b330f43cdd84861dde5072109467306d894886c60ecff49b52633e01c18e4`.
+Reproduce the build and offline architecture probe with:
+
+```sh
+docker buildx build --platform linux/amd64 --load \
+  -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-f70d29b-amd64-probe .
+docker image inspect local/pubg-saas:git-f70d29b-amd64-probe \
+  --format '{{.Os}}/{{.Architecture}}'
+docker run --rm --platform linux/amd64 --network none --read-only \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node \
+  local/pubg-saas:git-f70d29b-amd64-probe -e \
+  "if (require('node:fs').existsSync('/app/apps/pubg-saas/.env.local')) process.exit(2); process.stdout.write(process.arch)"
+docker image rm local/pubg-saas:git-f70d29b-amd64-probe
+```
+
+`docker image inspect` reported `linux/amd64`. A no-network, read-only,
+capability-dropped container probe ran Node and returned `x64`; it also verified
+that `/app/apps/pubg-saas/.env.local` is absent from the final image. The
+temporary image tag was removed after the probe. This is an emulated local
+image/runtime check, not a clean amd64 Linux host or Compose restore rehearsal.
+No Compose service was started, no application process loaded credentials, and
+no provider request was sent. No production resource or private runtime was
+changed.

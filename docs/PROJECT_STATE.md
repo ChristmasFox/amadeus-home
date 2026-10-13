@@ -51,6 +51,18 @@ healthy and 9Router running. Idle PG/proxy memory was 28.58/13.22 MiB under
 1 GiB/128 MiB limits; this is not a capacity result. The configured
 `example-node` host profile is still unavailable.
 
+An amd64 build exposed a Docker context omission: `.env.local` was not ignored
+before the first local cross-architecture build. The file was not loaded by an
+application process and no image was pushed. SaaS-specific private BuildKit
+cache records were pruned (820 MiB); commit `f70d29b` now excludes
+`*.env.local`. A rebuilt local `linux/amd64` image from that commit had
+manifest-list digest
+`sha256:329b330f43cdd84861dde5072109467306d894886c60ecff49b52633e01c18e4`;
+an offline read-only runtime probe returned Node `x64` and confirmed the env
+file is absent from the final image. This does not establish clean amd64 Linux
+Compose/restore or M204 capacity. No production, 9Router or private OpenClaw
+runtime was modified.
+
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
 The operator selected `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree.

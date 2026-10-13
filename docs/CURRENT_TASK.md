@@ -204,6 +204,22 @@ status showed OpenClaw healthy and 9Router running. Idle PG/proxy memory was
 The proxy restricts addresses, not public hostnames; clean Linux/cloud checks,
 schedule installation and host resource headroom still remain.
 
+## M2 amd64 image and build-context hardening — 2026-10-14
+
+Committed `.dockerignore` fix `f70d29b` excludes `*.env.local`. A first local
+amd64 Buildx build occurred before that rule; the credential file was not loaded
+by an application process and no image was pushed, but it may have entered the
+local BuildKit context/cache. SaaS-specific private cache records were pruned
+(820 MiB); remaining matching records are shared final runtime/entrypoint
+layers. Rebuilt commit `f70d29b` as `linux/amd64`, manifest-list digest
+`sha256:329b330f43cdd84861dde5072109467306d894886c60ecff49b52633e01c18e4`.
+The offline read-only container probe returned Node `x64` and confirmed the
+local env file is absent from the final image; its temporary tag was removed.
+This remains a local emulated image smoke, not clean amd64 Linux Compose or
+restore acceptance. `pnpm check:secrets` and `git diff --check` passed.
+Evidence is recorded in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed
