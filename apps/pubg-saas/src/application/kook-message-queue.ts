@@ -29,6 +29,7 @@ export interface KookOutboxJob {
   channelId: string | null;
   targetKind: 'channel' | 'direct';
   targetId: string;
+  welcomeGuildId: string | null;
   sourceEventId: string | null;
   outboxId: string;
   idempotencyKey: string;
@@ -42,6 +43,7 @@ export type OutboxDeliveryResult = 'empty' | 'sent' | 'retry' | 'dead';
 export interface KookGroupMessageSender {
   send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
   sendDirect?(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
+  verifyWelcomeTarget?(guildId:string,channelId:string):Promise<boolean>;
 }
 
 export interface KookMessageQueueOptions {
@@ -240,7 +242,7 @@ export class KookMessageQueue {
        WHERE message.outbox_id=candidate.outbox_id
        RETURNING message.outbox_id,message.idempotency_key,message.tenant_id,message.team_id,
                  message.bot_account_id,message.channel_id,message.target_kind,message.target_id,
-                 message.source_event_id,message.attempt_count,message.payload_json`,
+                 message.source_event_id,message.attempt_count,message.payload_json,message.welcome_guild_id`,
       [leaseToken, this.leaseMs, this.botAccountId],
     );
     const row = result.rows[0];
@@ -254,6 +256,7 @@ export class KookMessageQueue {
       channelId: typeof row.channel_id === 'string' ? row.channel_id : null,
       targetKind: row.target_kind === 'direct' ? 'direct' : 'channel',
       targetId: typeof row.target_id === 'string' && row.target_id ? row.target_id : String(row.channel_id),
+      welcomeGuildId:typeof row.welcome_guild_id==='string'?row.welcome_guild_id:null,
       sourceEventId: typeof row.source_event_id === 'string' ? row.source_event_id : null,
       leaseToken,
       attemptCount: Number(row.attempt_count),
@@ -310,6 +313,13 @@ export class KookMessageQueue {
     const job = await this.claimNextOutbox();
     if (!job) return 'empty';
     try {
+      if(job.welcomeGuildId){
+        if(!sender.verifyWelcomeTarget)throw Object.assign(new Error('kook_welcome_verifier_unavailable'),{code:'kook_welcome_verifier_unavailable'});
+        if(!await sender.verifyWelcomeTarget(job.welcomeGuildId,job.targetId)){
+          await this.pool.query("UPDATE message_outbox SET status='dead',payload_json='{}'::jsonb,lease_token=NULL,lease_until=NULL,last_error_code='kook_welcome_target_invalid' WHERE outbox_id=$1 AND lease_token=$2",[job.outboxId,job.leaseToken]);
+          return 'dead';
+        }
+      }
       if (job.targetKind === 'channel' && job.tenantId && job.teamId) {
         const current = await this.pool.query(
           `SELECT 1 FROM channel_bindings WHERE tenant_id=$1 AND team_id=$2

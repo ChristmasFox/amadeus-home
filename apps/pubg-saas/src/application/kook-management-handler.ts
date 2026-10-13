@@ -1,4 +1,4 @@
-import { createConfirmationCard } from '../channels/kook/confirmation-card.js';
+import { createConfirmationCard,createOnboardingCard } from '../channels/kook/confirmation-card.js';
 import type { KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import { handleKookOnboardingRequest, type KookOnboardingServices } from './kook-onboarding-handler.js';
@@ -36,6 +36,7 @@ export function createKookManagementHandler(services: KookOnboardingServices): K
       const onboardingReply = await handleKookOnboardingRequest(job, services, signal);
       if (onboardingReply !== undefined) return onboardingReply;
       const request = job.request;
+      if(request.kind==='guild_join')return createOnboardingCard();
       if (request.kind === 'button') {
         const match = /^(team|claim):([A-Za-z0-9_-]{43})$/u.exec(request.event.value);
         if (!match || !request.event.eventId)

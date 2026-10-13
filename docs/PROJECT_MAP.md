@@ -63,7 +63,9 @@ private self-claim handlers reuse the shared PUBG API client with independent
 public credentials and PostgreSQL request admission/header backoff. Setup
 tokens pin channel revisions. Actor-bound `return-val` callbacks recheck
 guild admin and recover exact-event mutation receipts after a crash while
-rejecting a new click. Automatic guild-invite welcome, live test-guild acceptance,
+rejecting a new click. Bot guild-join events now drive verified-channel welcome
+cards through the same durable ingress/outbox without privileged setup.
+Live test-guild acceptance,
 edge-case parity, query/AI/worker integration and deployment remain
 implementation work. See the Goal's phase gates before describing the public
 service as ready.

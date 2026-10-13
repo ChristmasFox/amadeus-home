@@ -264,6 +264,11 @@ authoritative; this record is not a runtime registry.
   and confirmation. A single confirmation transaction creates/binds and keeps
   an exact-event recovery receipt. Self claims remain user-scoped and
   self-declared. No LLM or private runtime dependency is introduced.
+- **Automatic welcome:** A bot-addressed KOOK system join event is durably
+  staged before network lookup. Official guild/channel APIs verify and pin its
+  public welcome/default text channel; the canonical outbox rechecks it before
+  sending one static guidance card. This cannot create a tenant/team/grant,
+  and unavailable or foreign destinations cannot fall back to another sender.
 - **Validation and acceptance:** Focused domain, public repository and tenant
   isolation tests; fixture parity through SQLite/PostgreSQL; migration and
   transaction tests; architecture checks preventing public imports of private

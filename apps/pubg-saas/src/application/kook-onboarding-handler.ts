@@ -38,6 +38,7 @@ async function resolve(services: KookOnboardingServices, shard: string, names: s
  * mutations use opaque one-use setup/team/claim tokens after name resolution. */
 export async function handleKookOnboardingRequest(job: KookIngressJob, services: KookOnboardingServices, signal: AbortSignal): Promise<KookTextPayload | undefined> {
   const request = job.request;
+  if(request.kind==='guild_join')return createOnboardingCard();
   if (request.kind === 'button') {
     if (Object.hasOwn(guidance, request.event.value)) return text(guidance[request.event.value]!);
     const match = /^setup:([A-Za-z0-9_-]{43})$/u.exec(request.event.value);

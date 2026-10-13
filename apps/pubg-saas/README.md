@@ -9,8 +9,9 @@ gateway, durable ingress, processing loop and channel/direct-message outbox
 are wired into an executable source entry point. Name-based commands/cards
 cover create/bind/list/roster changes, status/unbind/disband, and private
 self-claim/status/unclaim. Public lookup reuses the shared API client with
-independent PostgreSQL request admission. Automatic guild-invite welcome,
-query handling, ingestion worker, AI SDK and deployment images remain in
+independent PostgreSQL request admission. Automatic guild-invite welcome now
+uses durable system-event intake plus verified guild/channel metadata. Query
+handling, ingestion worker, AI SDK and deployment images remain in
 progress. The service is not deployed, and live buttons remain unverified.
 
 ## Trust boundaries
@@ -56,10 +57,16 @@ progress. The service is not deployed, and live buttons remain unverified.
   are bounded; shutdown drains in-flight durable writes. Coverage remains offline.
 - `KookIngressQueue` is the runtime's sole gateway ingress. It persists only
   explicit `/pubg`/`!pubg` commands, messages mentioning this bot, DMs addressed
-  to it and documented button callbacks. Stored fields exclude display names,
+  to it, documented button callbacks and bot-addressed guild-join events. Stored fields exclude display names,
   cached roles, attachments and verification tokens. Existing group bindings
   are pinned at reception and rechecked before processing/reply completion;
   unbound requests cannot inherit a newly bound team's context.
+- `self_joined_guild` is committed before welcome target lookup. Fixed official
+  guild/channel APIs select the configured welcome channel or default text
+  channel and check its guild/type. Completion pins the target in the same
+  outbox, and sending revalidates it. Welcome processing bypasses business/AI
+  handlers and creates no tenant/team/access grant. Missing or foreign/voice/
+  category destinations cannot redirect to another channel or a DM fallback.
 - Admission defaults to 1000 pending requests per bot and 20 per actor; these
   are configurable limits, not a capacity benchmark. Processing uses leases,
   bounded retry, per-actor/channel ordering and expiry. Request payload TTL
@@ -99,6 +106,9 @@ sender follows the [channel message API](https://developer.kookapp.cn/doc/http/m
 and [direct-message API](https://developer.kookapp.cn/doc/http/direct-message).
 Visible reply quotation uses `quote`; `reply_msg_id` separately associates a
 reply for KOOK's quota calculation.
+Automatic welcome follows [KOOK's guild-join event](https://developer.kookapp.cn/doc/event/user)
+and the [guild](https://developer.kookapp.cn/doc/http/guild)/[channel](https://developer.kookapp.cn/doc/http/channel)
+read APIs. These lookup requests also require live endpoint-quota preflight.
 Lookup/admission follows the official [PUBG request filters](https://documentation.pubg.com/en/making-requests.html)
 and [rate limits](https://documentation.pubg.com/en/rate-limits.html). Live key
 eligibility and quota feasibility remain preflight work.
@@ -117,7 +127,7 @@ The separately authorized public runtime phase must supply its independent
 `DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
 outside Git. Appending
 `--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0003_onboarding.sql`
+before gateway startup; the gateway checks migration `0004_guild_welcome.sql`
 and never migrates automatically. The PG connection pool is bounded and has
 connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
 before closing the pool.
@@ -136,8 +146,8 @@ changes use one-use confirmations. Names/labels retain case; quote those with sp
 
 Guild management requires fresh owner/Administrator permission. Player shards
 are `steam`, `kakao`, `psn` and `xbox`; these paths never invoke an LLM. The initial
-welcome card currently requires `/pubg`. Automatic invite welcome, statistical
-queries, and real KOOK acceptance remain Goal requirements.
+welcome card is sent on a verified bot guild-join event; `/pubg` remains the
+manual entrance. Statistical queries and real KOOK acceptance remain Goal requirements.
 
 ## Local verification
 
@@ -145,7 +155,7 @@ Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
 runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
 database; it applies migrations and removes its synthetic rows. Do not point it
-at a live or shared database. The 31-test SaaS suite passed on ephemeral
+at a live or shared database. The 35-test SaaS suite passed on ephemeral
 PostgreSQL 18 together with the workflow-selected private PUBG checks. It covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
@@ -154,3 +164,7 @@ revoked permission, cross-guild binding denial, roster edits/self-claim
 conflicts, channel revisions and rebind during lookup. PUBG HTTP is mocked;
 admission/header behavior uses real ephemeral PostgreSQL. No real KOOK/PUBG
 credential or guild was used.
+Welcome fixtures cover restart/retry, replay, independent guild backlog,
+absent/foreign/non-text targets, fresh pre-send target validation and gateway
+acknowledgement before slow target lookup. This proves the source protocol path,
+not real KOOK onboarding or 200-guild eligibility.

@@ -17,3 +17,4 @@ export * from './application/kook-onboarding-handler.js';
 export * from './channels/kook/management-command.js';
 export * from './infrastructure/pubg/player-resolver.js';
 export * from './infrastructure/pubg/request-limiter.js';
+export * from './channels/kook/guild-welcome.js';

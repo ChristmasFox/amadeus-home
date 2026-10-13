@@ -1,5 +1,6 @@
 import { parseTrustedKookButtonClick, type TrustedKookButtonClick } from './trusted-button-event.js';
 import { parseTrustedKookDirectMessage, parseTrustedKookGroupMessage, type TrustedKookDirectMessage, type TrustedKookGroupMessage } from './trusted-group-event.js';
+import {parseTrustedKookGuildJoin,type TrustedKookGuildJoin} from './guild-welcome.js';
 export type KookRequestEvent = {
   kind: 'group';
   event: TrustedKookGroupMessage;
@@ -9,6 +10,9 @@ export type KookRequestEvent = {
 } | {
   kind: 'button';
   event: TrustedKookButtonClick;
+} | {
+  kind:'guild_join';
+  event:TrustedKookGuildJoin;
 };
 export interface ParsedKookRequest {
   request: KookRequestEvent;
@@ -27,6 +31,12 @@ export interface ParsedKookRequest {
  * user mentions this bot or starts an explicit /pubg or !pubg command. */
 export function parseKookRequest(data: unknown, botAccountId: string): ParsedKookRequest | null {
   const envelope = { s: 0, d: data };
+  const joined=parseTrustedKookGuildJoin(data,botAccountId);
+  if(joined)return {
+    request:{kind:'guild_join',event:joined},eventId:joined.messageId,userId:botAccountId,
+    guildId:joined.guildId,channelId:null,targetKind:'direct',targetId:botAccountId,replyToMessageId:null,timestamp:joined.timestamp,
+    envelope:{s:0,d:{type:255,channel_type:'PERSON',target_id:botAccountId,author_id:'1',msg_id:joined.messageId,msg_timestamp:joined.timestamp,extra:{type:'self_joined_guild',body:{guild_id:joined.guildId}}}},
+  };
   const group = parseTrustedKookGroupMessage(envelope, botAccountId);
   if (group) {
     const extra = (data as {

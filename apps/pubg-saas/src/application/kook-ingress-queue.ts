@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
 import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
+import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
+import {createOnboardingCard} from '../channels/kook/confirmation-card.js';
 export interface KookIngressJob {
   botAccountId: string;
   eventId: string;
@@ -115,6 +117,7 @@ export class KookIngressQueue {
            AND NOT EXISTS (
              SELECT 1 FROM kook_ingress_events earlier WHERE earlier.bot_account_id=current.bot_account_id
                AND earlier.user_id=current.user_id AND earlier.channel_id IS NOT DISTINCT FROM current.channel_id
+               AND earlier.guild_id IS NOT DISTINCT FROM current.guild_id
                AND earlier.status IN ('pending','processing','retry') AND earlier.expires_at>now()
                AND (earlier.received_at,earlier.event_id)<(current.received_at,current.event_id)
            )
@@ -148,7 +151,7 @@ export class KookIngressQueue {
       throw Object.assign(new Error('kook_ingress_binding_changed'), { code: 'kook_ingress_binding_changed' });
     }
   }
-  async complete(job: KookIngressJob, reply: KookTextPayload | null): Promise<void> {
+  async complete(job: KookIngressJob, reply: KookTextPayload | null,welcomeTarget?:VerifiedKookWelcomeTarget): Promise<void> {
     if (job.botAccountId !== this.botId)
       throw new Error('kook_bot_scope_mismatch');
     const payload = reply === null ? null : validateKookMessagePayload(reply);
@@ -169,11 +172,17 @@ export class KookIngressQueue {
         boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
       });
       if (payload) {
+        const isWelcome=parsed.request.kind==='guild_join';
+        if(isWelcome && (!isVerifiedKookWelcomeTarget(welcomeTarget)||welcomeTarget.botAccountId!==this.botId || welcomeTarget.guildId!==parsed.guildId)){
+          throw Object.assign(new Error('kook_welcome_target_invalid'),{code:'kook_welcome_target_invalid'});
+        }
+        if(!isWelcome && welcomeTarget)throw new Error('kook_reply_destination_override');
+        const targetKind=isWelcome?'channel':row.target_kind,targetId=isWelcome?welcomeTarget!.channelId:row.target_id;
         const key = createHash('sha256').update(`kook\0${this.botId}\0${job.eventId}\0reply`).digest('hex');
         await client.query(`INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,
-           channel_id,target_kind,target_id,source_event_id,payload_json,status)
-           VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'pending') ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), key, this.botId, row.tenant_id, row.team_id, row.target_kind === 'channel' ? row.channel_id : null,
-        row.target_kind, row.target_id, row.reply_to_message_id, JSON.stringify(payload)]);
+           channel_id,target_kind,target_id,source_event_id,payload_json,status,welcome_guild_id)
+           VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'pending',$11) ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), key, this.botId, row.tenant_id, row.team_id,targetKind==='channel'?targetId:null,
+        targetKind,targetId,row.reply_to_message_id,JSON.stringify(payload),isWelcome?parsed.guildId:null]);
       }
       await client.query(`UPDATE kook_ingress_events SET status='done',event_json=NULL,lease_token=NULL,lease_until=NULL,
          next_attempt_at=NULL,last_error_code=NULL,finished_at=now() WHERE bot_account_id=$1 AND event_id=$2`, [this.botId, job.eventId]);
@@ -189,7 +198,8 @@ export class KookIngressQueue {
       const row = result.rows[0];
       if (!row)
         throw new Error('kook_ingress_lease_lost');
-      const dead = Number(row.attempt_count) >= this.maxAttempts || new Date(row.expires_at).getTime() <= Date.now() || code === 'kook_ingress_binding_changed';
+      const dead = Number(row.attempt_count) >= this.maxAttempts || new Date(row.expires_at).getTime() <= Date.now()
+        || ['kook_ingress_binding_changed','kook_welcome_target_invalid','kook_welcome_channel_unconfigured'].includes(code);
       const retryMs = Math.min(60000, this.baseRetryMs * 2 ** Math.min(Number(row.attempt_count) - 1, 20));
       await client.query(`UPDATE kook_ingress_events SET status=$4,lease_token=NULL,lease_until=NULL,last_error_code=$5,
          next_attempt_at=CASE WHEN $4='retry' THEN now()+($6::BIGINT*interval '1 millisecond') ELSE NULL END,
@@ -198,7 +208,7 @@ export class KookIngressQueue {
       return dead ? 'dead' : 'retry';
     });
   }
-  async processOne(handler: KookRequestHandler, signal: AbortSignal): Promise<KookIngressProcessResult> {
+  async processOne(handler: KookRequestHandler, signal: AbortSignal,welcomeResolver?:KookGuildWelcomeResolver): Promise<KookIngressProcessResult> {
     if (signal.aborted)
       return 'empty';
     const job = await this.claimNext();
@@ -222,10 +232,16 @@ export class KookIngressQueue {
     }, Math.max(100, Math.floor(this.leaseMs / 3)));
     try {
       await this.requireCurrentBinding(this.pool, job);
-      const reply = await handler(job, abort.signal);
+      let reply:KookTextPayload|null,welcomeTarget:VerifiedKookWelcomeTarget|undefined;
+      if(job.request.kind==='guild_join'){
+        if(!welcomeResolver)throw new Error('kook_welcome_resolver_unavailable');
+        const target=await welcomeResolver.resolve(job.request.event,abort.signal);
+        if(!target)throw Object.assign(new Error('kook_welcome_channel_unconfigured'),{code:'kook_welcome_channel_unconfigured'});
+        welcomeTarget=target;reply=createOnboardingCard();
+      }else{reply=await handler(job,abort.signal);}
       if (abort.signal.aborted)
         throw new Error('kook_ingress_processing_aborted');
-      await this.complete(job, reply);
+      await this.complete(job, reply,welcomeTarget);
       return 'done';
     }
     catch (error) {

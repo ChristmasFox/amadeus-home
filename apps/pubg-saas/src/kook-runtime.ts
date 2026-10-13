@@ -3,6 +3,7 @@ import { KookIngressQueue, type KookIngressQueueOptions, type KookRequestHandler
 import { KookMessageQueue } from './application/kook-message-queue.js';
 import { createNodeWebSocketFactory, KookGatewayApiClient, KookGatewayClient, PostgresKookGatewayStateStore, type KookGatewaySocketFactory } from './channels/kook/gateway.js';
 import { KookMessageApiClient } from './channels/kook/message-client.js';
+import {KookGuildWelcomeApiClient} from './channels/kook/guild-welcome.js';
 export interface KookApplicationRuntimeOptions {
   pool: Pool;
   botAccountId: string;
@@ -33,6 +34,7 @@ export class KookApplicationRuntime {
   private readonly outbox: KookMessageQueue;
   private readonly sender: KookMessageApiClient;
   private readonly gateway: KookGatewayClient;
+  private readonly welcome:KookGuildWelcomeApiClient;
   private readonly pollMs: number;
   private running = false;
   constructor(private readonly options: KookApplicationRuntimeOptions) {
@@ -44,6 +46,7 @@ export class KookApplicationRuntime {
     this.ingress = new KookIngressQueue(options.pool, { ...options.ingressLimits, botAccountId: options.botAccountId });
     this.outbox = new KookMessageQueue(options.pool, { botAccountId: options.botAccountId });
     this.sender = new KookMessageApiClient({ token: options.token, ...(options.fetcher ? { fetcher: options.fetcher } : {}) });
+    this.welcome=new KookGuildWelcomeApiClient({token:options.token,botAccountId:options.botAccountId,...(options.fetcher?{fetcher:options.fetcher}:{})});
     this.gateway = new KookGatewayClient({
       botAccountId: options.botAccountId,
       gatewayUrlProvider: new KookGatewayApiClient({ token: options.token, ...(options.fetcher ? { fetcher: options.fetcher } : {}) }),
@@ -83,7 +86,7 @@ export class KookApplicationRuntime {
           await this.ingress.prune(new Date(Date.now() - 24 * 60 * 60000));
           lastPrune = Date.now();
         }
-        const result = await this.ingress.processOne(this.options.handler, signal);
+        const result = await this.ingress.processOne(this.options.handler, signal,this.welcome);
         if (result === 'empty' || result === 'retry')
           await delay(this.pollMs, signal);
       }
@@ -101,7 +104,7 @@ export class KookApplicationRuntime {
           await this.outbox.pruneRetainedRecords(new Date(Date.now() - 7 * 24 * 60 * 60000));
           lastPrune = Date.now();
         }
-        await this.outbox.deliverOne(this.sender);
+        await this.outbox.deliverOne({send:(...args)=>this.sender.send(...args),sendDirect:(...args)=>this.sender.sendDirect(...args),verifyWelcomeTarget:(guild,channel)=>this.welcome.verifyTarget(guild,channel)});
       }
       catch {
         this.options.onError?.('kook_runtime_outbox_failed');

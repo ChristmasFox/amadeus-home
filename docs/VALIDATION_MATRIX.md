@@ -54,5 +54,6 @@ no service and apply no schema changes. SaaS integration coverage includes
 durable ingress/restart, actor ordering/admission bounds, callback mutation
 receipt recovery, name-based onboarding/roster/self-claim, channel revision and
 scope-change rejection, public API admission/header backoff, prior-schema upgrades and fixture gateway-to-channel/DM
-delivery. Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
+delivery including system-join welcome metadata validation and replay.
+Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
 backup/restore or 200-squad acceptance.
