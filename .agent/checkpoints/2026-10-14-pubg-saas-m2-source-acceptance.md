@@ -97,6 +97,16 @@ instructions remain in
 - The isolated-schema queue/snapshot integration test passed 2/2; the affected
   package and shared Domain builds passed. No full SaaS or private Kurisu suite
   was repeated for this aggregate-only worker telemetry change.
+- P3 live test-server smoke used the owner-only, gitignored
+  `apps/pubg-saas/.env.local` file (mode 0600); no credential values were
+  printed or committed. The official read-only API confirmed one guild and one
+  text channel, without retaining their IDs. Against a temporary isolated
+  PostgreSQL schema, the real gateway completed WSS HELLO and persisted its
+  session. The real application outbox sent one explicitly labeled P3 smoke
+  message; KOOK delivered a gateway event at sequence 1. After a graceful
+  process restart, the same KOOK session resumed at sequence 1. The temporary
+  schema was dropped, the local gateway processes stopped, and the configured
+  placeholder PUBG key was never used for a PUBG request.
 
 An initial full SaaS run had one fixture failure: the onboarding test sends
 more than the production default of 10 requests per user in a minute. That
@@ -130,9 +140,15 @@ was removed or relaxed.
   remaining developer-account usage and eligibility for 200 guilds are
   unverified. See [KOOK rate-limit headers](https://developer.kookapp.cn/doc/rate-limit)
   and [KOOK message quota](https://developer.kookapp.cn/doc/http/message).
+- P3's live smoke proves gateway authentication, outbox delivery and session
+  resume only. The guild exposes one text channel and no human test actor was
+  available, so real user-command dedupe, cross-channel routing, management
+  callbacks, rebind and unauthorized-user denial remain unverified live; their
+  isolated protocol/database tests remain the current evidence.
 - P4's deidentified prompt-accuracy run, live API/model accuracy and latency,
   official PUBG quota feasibility, resource headroom and formal pre-release
-  go/no-go remain open. No provider credentials or real guild were configured.
+  go/no-go remain open. No test model/provider or PUBG API credentials were
+  configured.
 
 No production database, Docker service, CasaOS service, private OpenClaw,
 9Router, or external cloud was changed. No deployment occurred.

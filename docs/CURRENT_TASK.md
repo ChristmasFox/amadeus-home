@@ -70,11 +70,14 @@ process RSS/heap without tenant IDs. The local synthetic 200-team simulation
 passed; independent worker capacity, alert rules, quota/resource measurements,
 backup/restore, clean-host recovery and private/public independence drills
 remain. P3 real
-test-guild and KOOK eligibility acceptance, and P4's deidentified prompt
-benchmark, also remain external acceptance gates. No live provider accuracy,
-latency or capacity is claimed. Query sessions still derive from durable
-ingress, fresh KOOK membership and DB ownership, with explicit DM grants and no
-fallback to the private team.
+test-server smoke now proves gateway authentication, one labeled outbox
+delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
+cross-channel routing, management callbacks and unauthorized denial) and KOOK
+eligibility remain unverified; the available guild has one text channel and no
+test actor was available. P4's deidentified prompt benchmark also remains open.
+No live provider accuracy, latency or capacity is claimed. Query sessions still
+derive from durable ingress, fresh KOOK membership and DB ownership, with
+explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## M2 source and recovery evidence — 2026-10-14
