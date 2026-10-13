@@ -13,6 +13,11 @@
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js",
       "default": "./dist/src/index.js"
+    },
+    "./core": {
+      "types": "./dist/src/core.d.ts",
+      "import": "./dist/src/core.js",
+      "default": "./dist/src/core.js"
     }
   },
   "dependencies": {

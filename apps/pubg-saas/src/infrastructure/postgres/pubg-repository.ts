@@ -13,8 +13,8 @@ import type {
   SyncState,
   UpsertMatchesResult,
   MatchWriteMetadata,
-} from '@agent/pubg-domain';
-import { normalizeRecords, parseTeamContext } from '@agent/pubg-domain';
+} from '@agent/pubg-domain/core';
+import { normalizeRecords, parseTeamContext } from '@agent/pubg-domain/core';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
 
@@ -199,8 +199,8 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     } : null;
   }
 
-  private async assertTeamScope(): Promise<void> {
-    const result = await this.pool.query(
+  private async assertTeamScope(client: PoolClient): Promise<void> {
+    const result = await client.query(
       `SELECT team.pubg_shard,COALESCE(array_agg(member.pubg_account_id ORDER BY member.pubg_account_id)
        FILTER (WHERE member.pubg_account_id IS NOT NULL),'{}') AS accounts
        FROM teams team LEFT JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
@@ -211,42 +211,43 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       || row.accounts.length !== this.accountIds.length || row.accounts.some((account: unknown) => !this.accountIds.includes(String(account)))) throw new Error('repository_team_scope_mismatch');
   }
 
-  private async assertReadScope(): Promise<void> {
-    if (this.conversation) await this.assertConversation(this.conversation.sessionId);
-    else await this.assertTeamScope();
+  private async assertReadScope(client: PoolClient): Promise<void> {
+    await this.assertTeamScope(client);
+    if (this.conversation) await this.assertConversation(this.conversation.sessionId, client);
   }
 
-  private async assertConversation(sessionId: string): Promise<TrustedConversationScope> {
-    await this.assertTeamScope();
+  private async assertConversation(sessionId: string, client: PoolClient): Promise<TrustedConversationScope> {
+    await this.assertTeamScope(client);
     const trusted = this.conversation;
     if (!trusted) throw new Error('conversation_scope_required');
     if (sessionId !== trusted.sessionId) throw new Error('conversation_scope_mismatch');
     if (this.options.requireManagedSession) {
-      const session = await this.pool.query(
+      const session = await client.query(
         `SELECT 1 FROM public_query_sessions session JOIN teams team
          ON team.tenant_id=session.tenant_id AND team.team_id=session.team_id
          WHERE session.tenant_id=$1 AND session.team_id=$2 AND session.platform=$3 AND session.bot_account_id=$4
            AND session.user_id=$5 AND session.channel_id=$6 AND session.session_id=$7 AND session.kind=$8
            AND session.expires_at>now() AND session.team_revision=team.query_revision
            AND (session.kind='direct_team' OR session.binding_revision=COALESCE(
-             (SELECT revision FROM channel_binding_versions WHERE bot_account_id=$4 AND channel_id=$6),0))`,
+             (SELECT revision FROM channel_binding_versions WHERE bot_account_id=$4 AND channel_id=$6),0))
+         FOR SHARE OF session`,
         [this.scope.tenantId, this.scope.teamId, trusted.platform, trusted.botAccountId, trusted.userId, trusted.channelId, sessionId, trusted.kind],
       );
       if (!session.rowCount) throw new Error('public_query_session_unavailable');
     }
     if (trusted.kind === 'bound_channel') {
-      const binding = await this.pool.query(
+      const binding = await client.query(
         `SELECT 1 FROM channel_bindings
          WHERE tenant_id = $1 AND team_id = $2 AND platform = $3
-           AND bot_account_id = $4 AND channel_id = $5`,
+           AND bot_account_id = $4 AND channel_id = $5 FOR SHARE`,
         [this.scope.tenantId, this.scope.teamId, trusted.platform, trusted.botAccountId, trusted.channelId],
       );
       if (!binding.rowCount) throw new Error('conversation_channel_not_bound');
     } else {
-      const grant = await this.pool.query(
+      const grant = await client.query(
         `SELECT 1 FROM team_user_access
          WHERE tenant_id = $1 AND team_id = $2 AND platform = $3
-           AND bot_account_id = $4 AND user_id = $5`,
+           AND bot_account_id = $4 AND user_id = $5 FOR SHARE`,
         [this.scope.tenantId, this.scope.teamId, trusted.platform, trusted.botAccountId, trusted.userId],
       );
       if (!grant.rowCount) throw new Error('direct_team_access_denied');
@@ -254,73 +255,112 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     return trusted;
   }
 
-  async countMatches(): Promise<number> {
-    await this.assertReadScope();
-    const result = await this.pool.query(
-      `SELECT COUNT(*)::bigint AS count FROM matches AS match
-       WHERE match.shard=$2 AND EXISTS (
-         SELECT 1 FROM match_players AS member
-         WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[])
-       )`,
-      [this.accountIds, this.shard],
+  /** Lock the team revision and conversation authority until the bounded read
+   * finishes. Roster/admin triggers update teams.query_revision, so a revoke
+   * either commits before this read (and is rejected) or after it completes. */
+  private async withReadScope<T>(action: (client: PoolClient) => Promise<T>): Promise<T> {
+    return withTransaction(this.pool, async client => {
+      const team = await client.query(
+        'SELECT query_revision FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR SHARE',
+        [this.scope.tenantId, this.scope.teamId],
+      );
+      if (!team.rowCount) throw new Error('repository_team_scope_mismatch');
+      await this.assertReadScope(client);
+      return action(client);
+    });
+  }
+
+  private async verifyScope(): Promise<void> {
+    await this.withReadScope(async () => undefined);
+  }
+
+  private async withConversationScope<T>(
+    sessionId: string,
+    action: (client: PoolClient, conversation: TrustedConversationScope) => Promise<T>,
+  ): Promise<T> {
+    return this.withReadScope(async client => action(client, await this.assertConversation(sessionId, client)));
+  }
+
+  private async matchVisible(client: PoolClient, matchId: string): Promise<boolean> {
+    const result = await client.query(
+      `SELECT 1 FROM matches AS match WHERE match.match_id=$1 AND match.shard=$3 AND EXISTS (
+         SELECT 1 FROM match_players AS member WHERE member.shard=match.shard AND member.match_id=match.match_id
+           AND member.account_id=ANY($2::TEXT[])
+       )`, [matchId, this.accountIds, this.shard],
     );
-    return number(result.rows[0]?.count);
+    return result.rowCount === 1;
+  }
+
+  async countMatches(): Promise<number> {
+    return this.withReadScope(async client => {
+      const result = await client.query(
+        `SELECT COUNT(*)::bigint AS count FROM matches AS match
+         WHERE match.shard=$2 AND EXISTS (
+           SELECT 1 FROM match_players AS member
+           WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[])
+         )`,
+        [this.accountIds, this.shard],
+      );
+      return number(result.rows[0]?.count);
+    });
   }
 
   async getMatch(matchId: string): Promise<NormalizedMatch | null> {
-    await this.assertReadScope();
-    const result = await this.pool.query(
-      `SELECT match.* FROM matches AS match
-       WHERE match.match_id = $1 AND match.shard=$3 AND EXISTS (
-         SELECT 1 FROM match_players AS member
-         WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($2::text[])
-       )`,
-      [matchId, this.accountIds, this.shard],
-    );
-    const row = result.rows[0];
-    if (!row) return null;
-    const players = await this.pool.query(
-      'SELECT * FROM match_players WHERE match_id = $1 AND shard=$2 AND account_id=ANY($3::text[]) ORDER BY account_id',
-      [matchId, this.shard, this.accountIds],
-    );
-    return rowToMatch(row, players.rows.map(rowToPlayer));
+    return this.withReadScope(async client => {
+      const result = await client.query(
+        `SELECT match.* FROM matches AS match
+         WHERE match.match_id = $1 AND match.shard=$3 AND EXISTS (
+           SELECT 1 FROM match_players AS member
+           WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($2::text[])
+         )`,
+        [matchId, this.accountIds, this.shard],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const players = await client.query(
+        'SELECT * FROM match_players WHERE match_id = $1 AND shard=$2 AND account_id=ANY($3::text[]) ORDER BY account_id',
+        [matchId, this.shard, this.accountIds],
+      );
+      return rowToMatch(row, players.rows.map(rowToPlayer));
+    });
   }
 
   async listMatches(options: { fromMs?: number; toMs?: number; limit?: number } = {}): Promise<NormalizedMatch[]> {
-    await this.assertReadScope();
-    const clauses = ['match.shard=$2', 'EXISTS (SELECT 1 FROM match_players AS member WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[]))'];
-    const values: unknown[] = [this.accountIds, this.shard];
-    if (options.fromMs !== undefined) { values.push(options.fromMs); clauses.push(`match.timestamp_ms >= $${values.length}`); }
-    if (options.toMs !== undefined) { values.push(options.toMs); clauses.push(`match.timestamp_ms < $${values.length}`); }
-    const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10000), 1), 10000);
-    values.push(limit);
-    const selected = await this.pool.query(
-      `SELECT match.* FROM matches AS match WHERE ${clauses.join(' AND ')}
-       ORDER BY match.timestamp_ms ASC, match.match_id ASC LIMIT $${values.length}`,
-      values,
-    );
-    if (!selected.rowCount) return [];
-    const matchIds = selected.rows.map((row) => String(row.match_id));
-    const players = await this.pool.query(
-      `SELECT player.*, selected.timestamp_ms AS selected_timestamp
-       FROM unnest($1::text[]) AS chosen(match_id)
-       JOIN matches AS selected ON selected.match_id = chosen.match_id AND selected.shard=$2
-       JOIN match_players AS player ON player.match_id = selected.match_id AND player.shard=selected.shard AND player.account_id=ANY($3::text[])
-       ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC`,
-      [matchIds, this.shard, this.accountIds],
-    );
-    const byMatch = new Map<string, NormalizedPlayer[]>();
-    for (const player of players.rows) {
-      const id = String(player.match_id);
-      const group = byMatch.get(id) ?? [];
-      group.push(rowToPlayer(player));
-      byMatch.set(id, group);
-    }
-    return selected.rows.map((row) => rowToMatch(row, byMatch.get(String(row.match_id)) ?? []));
+    return this.withReadScope(async client => {
+      const clauses = ['match.shard=$2', 'EXISTS (SELECT 1 FROM match_players AS member WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[]))'];
+      const values: unknown[] = [this.accountIds, this.shard];
+      if (options.fromMs !== undefined) { values.push(options.fromMs); clauses.push(`match.timestamp_ms >= $${values.length}`); }
+      if (options.toMs !== undefined) { values.push(options.toMs); clauses.push(`match.timestamp_ms < $${values.length}`); }
+      const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10000), 1), 10000);
+      values.push(limit);
+      const selected = await client.query(
+        `SELECT match.* FROM matches AS match WHERE ${clauses.join(' AND ')}
+         ORDER BY match.timestamp_ms ASC, match.match_id ASC LIMIT $${values.length}`,
+        values,
+      );
+      if (!selected.rowCount) return [];
+      const matchIds = selected.rows.map((row) => String(row.match_id));
+      const players = await client.query(
+        `SELECT player.*, selected.timestamp_ms AS selected_timestamp
+         FROM unnest($1::text[]) AS chosen(match_id)
+         JOIN matches AS selected ON selected.match_id = chosen.match_id AND selected.shard=$2
+         JOIN match_players AS player ON player.match_id = selected.match_id AND player.shard=selected.shard AND player.account_id=ANY($3::text[])
+         ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC`,
+        [matchIds, this.shard, this.accountIds],
+      );
+      const byMatch = new Map<string, NormalizedPlayer[]>();
+      for (const player of players.rows) {
+        const id = String(player.match_id);
+        const group = byMatch.get(id) ?? [];
+        group.push(rowToPlayer(player));
+        byMatch.set(id, group);
+      }
+      return selected.rows.map((row) => rowToMatch(row, byMatch.get(String(row.match_id)) ?? []));
+    });
   }
 
   async upsertMatches(input: unknown[], metadata: MatchWriteMetadata = {}): Promise<UpsertMatchesResult> {
-    await this.assertReadScope();
+    await this.verifyScope();
     const individuallyNormalized = input.flatMap((item) => normalizeRecords([item]));
     if (individuallyNormalized.some(match => match.shard !== this.shard)) throw new Error('repository_shard_mismatch');
     const records = normalizeRecords(input).filter((match) => match.matchId && Number.isFinite(match.timestamp));
@@ -377,96 +417,104 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async setSyncState(state: SyncState): Promise<void> {
-    await this.assertReadScope();
-    await this.pool.query(
+    await this.withReadScope(async client => client.query(
       `INSERT INTO sync_state(tenant_id, team_id, state_key, checked_at, state_json)
        VALUES ($1,$2,$3,$4,$5::jsonb)
        ON CONFLICT (tenant_id, team_id, state_key) DO UPDATE
        SET checked_at=EXCLUDED.checked_at, state_json=EXCLUDED.state_json`,
       [this.scope.tenantId, this.scope.teamId, state.key, state.checkedAt, JSON.stringify(state)],
-    );
+    ).then(() => undefined));
   }
 
   async getSyncState(key: string): Promise<SyncState | null> {
-    await this.assertReadScope();
-    const result = await this.pool.query(
-      'SELECT state_json FROM sync_state WHERE tenant_id=$1 AND team_id=$2 AND state_key=$3',
-      [this.scope.tenantId, this.scope.teamId, key],
-    );
-    return result.rows[0] ? objectValue<SyncState | null>(result.rows[0].state_json, null) : null;
+    return this.withReadScope(async client => {
+      const result = await client.query(
+        'SELECT state_json FROM sync_state WHERE tenant_id=$1 AND team_id=$2 AND state_key=$3',
+        [this.scope.tenantId, this.scope.teamId, key],
+      );
+      return result.rows[0] ? objectValue<SyncState | null>(result.rows[0].state_json, null) : null;
+    });
   }
 
   async get(key: TelemetryFeatureKey): Promise<TelemetryFeatureRecord | null> {
-    if (!await this.getMatch(key.matchId)) return null;
-    const result = await this.pool.query(
-      `SELECT facts_json, created_at FROM telemetry_team_features
-       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
-         AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
-      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
-    );
-    const row = result.rows[0];
-    if (!row) return null;
-    const facts = objectValue<unknown>(row.facts_json, null);
-    if (!facts || typeof facts !== 'object') return null;
-    return { ...key, facts: facts as TelemetryFeatureRecord['facts'], createdAt: new Date(row.created_at).toISOString() };
+    return this.withReadScope(async client => {
+      if (!await this.matchVisible(client, key.matchId)) return null;
+      const result = await client.query(
+        `SELECT facts_json, created_at FROM telemetry_team_features
+         WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
+           AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
+        [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      const facts = objectValue<unknown>(row.facts_json, null);
+      if (!facts || typeof facts !== 'object') return null;
+      return { ...key, facts: facts as TelemetryFeatureRecord['facts'], createdAt: new Date(row.created_at).toISOString() };
+    });
   }
 
   async set(record: TelemetryFeatureRecord): Promise<void> {
-    if (!await this.getMatch(record.matchId)) throw new Error('telemetry_match_not_in_team');
-    await this.pool.query(
-      `INSERT INTO telemetry_team_features(tenant_id,team_id,team_config_hash,match_id,parser_version,feature_version,facts_json,created_at,shard)
-       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
-       ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE
-       SET facts_json=EXCLUDED.facts_json, created_at=EXCLUDED.created_at`,
-      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt, this.shard],
-    );
+    await this.withReadScope(async client => {
+      if (!await this.matchVisible(client, record.matchId)) throw new Error('telemetry_match_not_in_team');
+      await client.query(
+        `INSERT INTO telemetry_team_features(tenant_id,team_id,team_config_hash,match_id,parser_version,feature_version,facts_json,created_at,shard)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
+         ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE
+         SET facts_json=EXCLUDED.facts_json, created_at=EXCLUDED.created_at`,
+        [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt, this.shard],
+      );
+    });
   }
 
   async getTelemetryPrefetchAttempt(key: TelemetryFeatureKey): Promise<TelemetryPrefetchAttempt | null> {
-    if (!await this.getMatch(key.matchId)) return null;
-    const result = await this.pool.query(
-      `SELECT * FROM telemetry_team_prefetch_attempts
-       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
-         AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
-      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
-    );
-    return result.rows[0] ? attemptFromRow(result.rows[0]) : null;
+    return this.withReadScope(async client => {
+      if (!await this.matchVisible(client, key.matchId)) return null;
+      const result = await client.query(
+        `SELECT * FROM telemetry_team_prefetch_attempts
+         WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
+           AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
+        [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
+      );
+      return result.rows[0] ? attemptFromRow(result.rows[0]) : null;
+    });
   }
 
   async listDueTelemetryPrefetchAttempts(parserVersion: string, featureVersion: string, now: Date, limit = 100): Promise<TelemetryPrefetchAttempt[]> {
-    await this.assertReadScope();
-    const bounded = Math.min(Math.max(Math.trunc(limit), 1), 1000);
-    const result = await this.pool.query(
-      `SELECT attempt.* FROM telemetry_team_prefetch_attempts attempt
-       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND parser_version=$4 AND feature_version=$5 AND attempt.shard=$8
-         AND EXISTS (SELECT 1 FROM match_players member WHERE member.shard=attempt.shard AND member.match_id=attempt.match_id AND member.account_id=ANY($7::TEXT[]))
-         AND status IN ('PENDING','UNAVAILABLE') AND (next_retry_at IS NULL OR next_retry_at <= $9)
-       ORDER BY COALESCE(next_retry_at, '-infinity'::timestamptz), updated_at, match_id
-       LIMIT $6`,
-      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, parserVersion, featureVersion, bounded, this.accountIds, this.shard, now],
-    );
-    return result.rows.map(attemptFromRow);
+    return this.withReadScope(async client => {
+      const bounded = Math.min(Math.max(Math.trunc(limit), 1), 1000);
+      const result = await client.query(
+        `SELECT attempt.* FROM telemetry_team_prefetch_attempts attempt
+         WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND parser_version=$4 AND feature_version=$5 AND attempt.shard=$8
+           AND EXISTS (SELECT 1 FROM match_players member WHERE member.shard=attempt.shard AND member.match_id=attempt.match_id AND member.account_id=ANY($7::TEXT[]))
+           AND status IN ('PENDING','UNAVAILABLE') AND (next_retry_at IS NULL OR next_retry_at <= $9)
+         ORDER BY COALESCE(next_retry_at, '-infinity'::timestamptz), updated_at, match_id
+         LIMIT $6`,
+        [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, parserVersion, featureVersion, bounded, this.accountIds, this.shard, now],
+      );
+      return result.rows.map(attemptFromRow);
+    });
   }
 
   async setTelemetryPrefetchAttempt(attempt: TelemetryPrefetchAttempt): Promise<void> {
-    if (!await this.getMatch(attempt.matchId)) throw new Error('telemetry_match_not_in_team');
-    await this.pool.query(
-      `INSERT INTO telemetry_team_prefetch_attempts(
-         tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version,status,attempt_count,
-         last_attempted_at, next_retry_at, error, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE SET
-         status=EXCLUDED.status, attempt_count=EXCLUDED.attempt_count,
-         last_attempted_at=EXCLUDED.last_attempted_at, next_retry_at=EXCLUDED.next_retry_at,
-         error=EXCLUDED.error, updated_at=EXCLUDED.updated_at`,
-      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, this.shard, attempt.matchId, attempt.parserVersion, attempt.featureVersion, attempt.status,
-      attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt],
-    );
+    await this.withReadScope(async client => {
+      if (!await this.matchVisible(client, attempt.matchId)) throw new Error('telemetry_match_not_in_team');
+      await client.query(
+        `INSERT INTO telemetry_team_prefetch_attempts(
+           tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version,status,attempt_count,
+           last_attempted_at, next_retry_at, error, updated_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE SET
+           status=EXCLUDED.status, attempt_count=EXCLUDED.attempt_count,
+           last_attempted_at=EXCLUDED.last_attempted_at, next_retry_at=EXCLUDED.next_retry_at,
+           error=EXCLUDED.error, updated_at=EXCLUDED.updated_at`,
+        [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, this.shard, attempt.matchId, attempt.parserVersion, attempt.featureVersion, attempt.status,
+        attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt],
+      );
+    });
   }
 
   async recordTelemetryPrefetchRun(run: TelemetryPrefetchRun): Promise<void> {
-    await this.assertReadScope();
-    await this.pool.query(
+    await this.withReadScope(async client => client.query(
       `INSERT INTO telemetry_prefetch_runs(
          tenant_id, team_id, run_id, report_date, started_at, finished_at, trigger,
          discovered_match_count, new_match_count, candidate_match_count, fetched_count,
@@ -483,22 +531,22 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       run.trigger, run.discoveredMatchCount, run.newMatchCount, run.candidateMatchCount,
       run.fetchedCount, run.cacheHitCount, run.unavailableCount, run.pendingCount,
       JSON.stringify([...new Set(run.failedMatchIds)])],
-    );
+    ).then(() => undefined));
   }
 
   async listTelemetryPrefetchRuns(reportDate: string): Promise<TelemetryPrefetchRun[]> {
-    await this.assertReadScope();
-    const result = await this.pool.query(
-      `SELECT * FROM telemetry_prefetch_runs
-       WHERE tenant_id=$1 AND team_id=$2 AND report_date=$3 ORDER BY started_at, run_id`,
-      [this.scope.tenantId, this.scope.teamId, reportDate],
-    );
-    return result.rows.map(runFromRow);
+    return this.withReadScope(async client => {
+      const result = await client.query(
+        `SELECT * FROM telemetry_prefetch_runs
+         WHERE tenant_id=$1 AND team_id=$2 AND report_date=$3 ORDER BY started_at, run_id`,
+        [this.scope.tenantId, this.scope.teamId, reportDate],
+      );
+      return result.rows.map(runFromRow);
+    });
   }
 
   async setResultSet(record: ResultSetRecord): Promise<void> {
-    const conversation = await this.assertConversation(record.sessionId);
-    await this.pool.query(
+    await this.withConversationScope(record.sessionId, async (client, conversation) => client.query(
       `INSERT INTO result_sets(
          tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id,
          result_set_id, expires_at, result_json
@@ -508,24 +556,24 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
       conversation.userId, conversation.channelId, conversation.sessionId, record.id,
       record.expiresAt, JSON.stringify(record)],
-    );
+    ).then(() => undefined));
   }
 
   async getResultSet(sessionId: string, resultSetId: string, now = new Date()): Promise<ResultSetRecord | null> {
-    const conversation = await this.assertConversation(sessionId);
-    const result = await this.pool.query(
-      `SELECT result_json FROM result_sets
-       WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
-         AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND result_set_id=$8 AND expires_at>$9`,
-      [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-      conversation.userId, conversation.channelId, conversation.sessionId, resultSetId, now],
-    );
-    return result.rows[0] ? objectValue<ResultSetRecord | null>(result.rows[0].result_json, null) : null;
+    return this.withConversationScope(sessionId, async (client, conversation) => {
+      const result = await client.query(
+        `SELECT result_json FROM result_sets
+         WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
+           AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND result_set_id=$8 AND expires_at>$9`,
+        [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
+        conversation.userId, conversation.channelId, conversation.sessionId, resultSetId, now],
+      );
+      return result.rows[0] ? objectValue<ResultSetRecord | null>(result.rows[0].result_json, null) : null;
+    });
   }
 
   async setContext(context: SessionContextRecord): Promise<void> {
-    const conversation = await this.assertConversation(context.sessionId);
-    await this.pool.query(
+    await this.withConversationScope(context.sessionId, async (client, conversation) => client.query(
       `INSERT INTO session_contexts(
          tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id,
          expires_at, context_json
@@ -535,40 +583,41 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
       conversation.userId, conversation.channelId, conversation.sessionId,
       context.expiresAt, JSON.stringify(context)],
-    );
+    ).then(() => undefined));
   }
 
   async getContext(sessionId: string, now = new Date()): Promise<SessionContextRecord | null> {
-    const conversation = await this.assertConversation(sessionId);
-    const result = await this.pool.query(
-      `SELECT context_json FROM session_contexts
-       WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
-         AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND expires_at>$8`,
-      [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-      conversation.userId, conversation.channelId, conversation.sessionId, now],
-    );
-    return result.rows[0] ? objectValue<SessionContextRecord | null>(result.rows[0].context_json, null) : null;
+    return this.withConversationScope(sessionId, async (client, conversation) => {
+      const result = await client.query(
+        `SELECT context_json FROM session_contexts
+         WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
+           AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND expires_at>$8`,
+        [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
+        conversation.userId, conversation.channelId, conversation.sessionId, now],
+      );
+      return result.rows[0] ? objectValue<SessionContextRecord | null>(result.rows[0].context_json, null) : null;
+    });
   }
 
   async recordModelUsage(sessionId: string, usage: PublicModelUsageRecord): Promise<void> {
-    const conversation = await this.assertConversation(sessionId);
     const requestId = requiredText(usage.requestId, 'request_id');
     const provider = requiredText(usage.provider, 'model_provider');
     const modelId = requiredText(usage.modelId, 'model_id');
     if (requestId.length > 256 || provider.length > 100 || modelId.length > 200) throw new Error('model_usage_record_invalid');
     const tokens = (value: number | null): number | null => value !== null && Number.isSafeInteger(value)
       && value >= 0 && value <= 2_147_483_647 ? value : null;
-    await this.pool.query(
+    await this.withConversationScope(sessionId, async (client, conversation) => client.query(
       `INSERT INTO usage_records(tenant_id,team_id,platform,bot_account_id,user_id,request_id,provider,model_id,input_tokens,output_tokens)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (tenant_id,request_id) DO NOTHING`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId, conversation.userId,
         requestId, provider, modelId, tokens(usage.inputTokens), tokens(usage.outputTokens)],
-    );
+    ).then(() => undefined));
   }
 
   async cleanupExpired(now = new Date()): Promise<void> {
-    await this.assertReadScope();
-    await this.pool.query('DELETE FROM result_sets WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
-    await this.pool.query('DELETE FROM session_contexts WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
+    await this.withReadScope(async client => {
+      await client.query('DELETE FROM result_sets WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
+      await client.query('DELETE FROM session_contexts WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
+    });
   }
 }

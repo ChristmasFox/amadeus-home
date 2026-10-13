@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
+import { TelemetryWorker } from '@agent/pubg-domain/core';
 import {
   AccountClaimService,
   KookIngressQueue,
@@ -181,9 +182,35 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.match(leaderboard.content, /击杀榜/u);
     assert.ok(leaderboard.content.indexOf('Alice') < leaderboard.content.indexOf('Bob'));
 
+    const uncachedDamage = await send(group(bot, guild, channel, admin, '/pubg team damage today'));
+    assert.match(uncachedDamage.content, /资料不可用或覆盖不完整/u);
+    assert.doesNotMatch(uncachedDamage.content, /伤害 0/u);
+
+    const persistedTelemetry = new TelemetryWorker({
+      team: teamContext.team,
+      store: repository,
+      downloader: {
+        async download() {
+          return { events: [{
+            _T: 'LogPlayerTakeDamage',
+            attacker: { accountId: alice },
+            victim: { accountId: bob },
+            damage: 37,
+            damageTypeCategory: 'Damage_Bullet',
+            damageCauserName: 'WeapAK47_C',
+            timeSeconds: 120,
+            common: { isGame: true },
+          }] };
+        },
+      },
+    });
+    const match = (await repository.listMatches())[0];
+    assert.ok(match);
+    assert.equal((await persistedTelemetry.ensure(match)).status, 'FETCHED');
+
     const teamDamage = await send(group(bot, guild, channel, admin, '/pubg team damage today'));
-    assert.match(teamDamage.content, /资料不可用或覆盖不完整/u);
-    assert.doesNotMatch(teamDamage.content, /伤害 0/u);
+    assert.match(teamDamage.content, /今日队友伤害/u);
+    assert.match(teamDamage.content, /Alice → Bob：37 伤害 \/ 1 次/u);
 
     await pool.query(
       "INSERT INTO account_claims(platform,bot_account_id,user_id,pubg_shard,pubg_account_id,claim_status) VALUES ('kook',$1,$2,'steam',$3,'self_declared')",

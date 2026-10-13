@@ -1,4 +1,4 @@
-import { PubgApiClient, PubgApiError } from '@agent/pubg-domain';
+import { PubgApiClient, PubgApiError } from '@agent/pubg-domain/core';
 import type { PublicPubgAdmission } from './request-limiter.js';
 
 export interface ResolvedPubgPlayer { accountId: string; name: string; }

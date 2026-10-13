@@ -7,7 +7,7 @@ import {
   type TeamConfig,
   type TeamContext,
   type TelemetryDownloader,
-} from '@agent/pubg-domain';
+} from '@agent/pubg-domain/core';
 import type { Pool, QueryResultRow } from 'pg';
 import type { PublicPubgAdmission } from '../infrastructure/pubg/request-limiter.js';
 import { PostgresPubgRepository } from '../infrastructure/postgres/pubg-repository.js';

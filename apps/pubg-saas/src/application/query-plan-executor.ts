@@ -2,14 +2,14 @@ import {
   PubgDomainService,
   resolveSelector,
   type Metric,
-} from '@agent/pubg-domain';
+} from '@agent/pubg-domain/core';
 import type {
   GetPeriodReviewInput,
   SearchMatchesInput,
   StatsToolInput,
   TeamDamageQueryInput,
   ToolEnvelope,
-} from '@agent/pubg-domain';
+} from '@agent/pubg-domain/core';
 import type { AuthorizedPublicQuery } from './public-query-authorizer.js';
 import { QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
 

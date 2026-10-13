@@ -222,6 +222,79 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
 
     const migrationRows = await pool.query('SELECT migration_id FROM schema_migrations');
     assert.equal(migrationRows.rows.filter((row) => row.migration_id === '0001_public_schema.sql').length, 1);
+
+    let signalLock!: () => void;
+    let releaseReader!: () => void;
+    const teamReadLocked = new Promise<void>(resolve => { signalLock = resolve; });
+    const readerMayContinue = new Promise<void>(resolve => { releaseReader = resolve; });
+    let intercepted = false;
+    const gatedPool = new Proxy(pool, {
+      get(target, property, receiver) {
+        if (property !== 'connect') return Reflect.get(target, property, receiver);
+        return async () => {
+          const client = await target.connect();
+          const originalQuery = client.query.bind(client);
+          const wrappedClient = new Proxy(client, {
+            get(clientTarget, clientProperty, clientReceiver) {
+              if (clientProperty !== 'query') return Reflect.get(clientTarget, clientProperty, clientReceiver);
+              return async (...args: Parameters<typeof client.query>) => {
+                const result = await originalQuery(...args);
+                const sql = typeof args[0] === 'string' ? args[0] : '';
+                if (!intercepted && sql.includes('SELECT query_revision FROM teams') && sql.includes('FOR SHARE')) {
+                  intercepted = true;
+                  signalLock();
+                  await readerMayContinue;
+                }
+                return result;
+              };
+            },
+          });
+          return wrappedClient;
+        };
+      },
+    });
+    const racedRepo = new PostgresPubgRepository(gatedPool, contextA, conversationA);
+    const racedRead = racedRepo.listMatches();
+    const readerLockTimeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('team_read_lock_not_acquired')), 2_000));
+    await Promise.race([teamReadLocked, readerLockTimeout]);
+    const rosterWriter = await pool.connect();
+    const writerApplication = `roster-revoke-${suffix}`;
+    let rosterDelete: Promise<unknown> | undefined;
+    try {
+      await rosterWriter.query('BEGIN');
+      await rosterWriter.query("SELECT set_config('application_name',$1,false)", [writerApplication]);
+      rosterDelete = rosterWriter.query(
+        'DELETE FROM team_members WHERE tenant_id=$1 AND team_id=$2 AND pubg_account_id=$3',
+        [tenantA, teamA, accountA],
+      );
+      let waitingForTeamLock = false;
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const activity = await pool.query(
+          `SELECT 1 FROM pg_stat_activity WHERE application_name=$1 AND wait_event_type='Lock'`,
+          [writerApplication],
+        );
+        if (activity.rowCount) {
+          waitingForTeamLock = true;
+          break;
+        }
+        const writerFinished = await Promise.race([rosterDelete.then(() => true), new Promise<boolean>(resolve => setTimeout(() => resolve(false), 10))]);
+        if (writerFinished) break;
+      }
+      assert.equal(waitingForTeamLock, true, 'roster revocation waits for the bounded authorized read');
+    } finally {
+      releaseReader();
+      try {
+        if (rosterDelete) await rosterDelete;
+        await rosterWriter.query('COMMIT');
+      } catch (error) {
+        await rosterWriter.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        rosterWriter.release();
+      }
+    }
+    assert.deepEqual((await racedRead).map(match => match.matchId), [`match-a-${suffix}`]);
+    await assert.rejects(repoA.listMatches(), /repository_team_scope_mismatch/u);
   } finally {
     await pool.query('DELETE FROM tenants WHERE tenant_id = ANY($1::text[])', [[tenantA, tenantB]]).catch(() => undefined);
     await pool.query('DELETE FROM matches WHERE match_id = ANY($1::text[])', [[`match-a-${suffix}`, `match-b-${suffix}`, ...golden.matches.map((record) => `${suffix}-${String(record.matchId)}`)]]).catch(() => undefined);

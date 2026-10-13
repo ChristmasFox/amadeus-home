@@ -4,7 +4,7 @@ import {
   type Metric,
   type SyncState,
   type ToolEnvelope,
-} from '@agent/pubg-domain';
+} from '@agent/pubg-domain/core';
 import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
@@ -275,9 +275,10 @@ function statsText(envelope: ToolEnvelope, period: string, freshness: string, su
 }
 
 function leaderboardText(envelope: ToolEnvelope, period: string, metric: string, freshness: string): string {
+  const periodLabel = period === 'today' ? '今日' : '昨日';
   const data = object(envelope.data), rows = Array.isArray(data?.rows) ? data.rows.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
   const coverage = envelope.coverage;
-  if (envelope.status === 'no_matches' && coverage.complete) return `${period}排行榜：该时段没有已覆盖的队伍对局。\n${freshness}`;
+  if (envelope.status === 'no_matches' && coverage.complete) return `${periodLabel}排行榜：该时段没有已覆盖的队伍对局。\n${freshness}`;
   if (!rows.length) return `排行榜数据覆盖不完整，当前无法可靠排序。\n${freshness}`;
   const valueKey = metric;
   const lines = rows.slice(0, 4).map((row, index) => {
@@ -285,12 +286,13 @@ function leaderboardText(envelope: ToolEnvelope, period: string, metric: string,
     return `${index + 1}. ${safeLabel(row.label ?? row.key)} — ${metricLabels[metric] ?? metric} ${numberText(metrics[valueKey])}`;
   });
   const status = envelope.status === 'partial' || !coverage.complete ? '部分覆盖，名次可能变化' : '按已覆盖数据排序';
-  return `${period}${metricLabels[metric] ?? metric}榜（${status}）\n${lines.join('\n')}\n${freshness}`;
+  return `${periodLabel}${metricLabels[metric] ?? metric}榜（${status}）\n${lines.join('\n')}\n${freshness}`;
 }
 
 function teamDamageText(envelope: ToolEnvelope, period: string, freshness: string): string {
+  const periodLabel = period === 'today' ? '今日' : '昨日';
   const data = object(envelope.data), coverage = envelope.coverage;
-  if (envelope.status === 'no_matches' && coverage.complete) return `${period}队友伤害：该时段没有已覆盖的队伍对局。\n${freshness}`;
+  if (envelope.status === 'no_matches' && coverage.complete) return `${periodLabel}队友伤害：该时段没有已覆盖的队伍对局。\n${freshness}`;
   const directions = Array.isArray(data?.directions) ? data.directions.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
   if (!directions.length) return `队友伤害资料不可用或覆盖不完整，不能据此认定为 0。\n${freshness}`;
   const lines = directions.slice(0, 8).map(row => {
@@ -300,7 +302,7 @@ function teamDamageText(envelope: ToolEnvelope, period: string, freshness: strin
     const count = complete ? row.hitCount : row.knownHitCount;
     return `${actor} → ${victim}：${complete ? '' : '已知至少 '}${numberText(amount)} 伤害 / ${numberText(count)} 次`;
   });
-  return `${period}队友伤害${envelope.status === 'partial' ? '（资料不完整）' : ''}\n${lines.join('\n')}\n${freshness}`;
+  return `${periodLabel}队友伤害${envelope.status === 'partial' ? '（资料不完整）' : ''}\n${lines.join('\n')}\n${freshness}`;
 }
 
 function reviewText(envelope: ToolEnvelope, period: string, freshness: string): string {

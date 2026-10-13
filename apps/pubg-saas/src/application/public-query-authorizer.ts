@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { createTeamContext, type TeamContext } from '@agent/pubg-domain';
+import { createTeamContext, type TeamContext } from '@agent/pubg-domain/core';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { parseKookRequest } from '../channels/kook/request-event.js';
 import type { TrustedKookDirectMessage, TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
