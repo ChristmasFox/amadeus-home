@@ -16,6 +16,8 @@ coverage
 *.log
 .env
 **/.env
+*.env.local
+**/.env.local
 **/secrets
 *.lbpkg
 *.tar
