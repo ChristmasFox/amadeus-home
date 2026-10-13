@@ -80,11 +80,17 @@ isolate requester/channel/team and pin roster/alias and binding generations;
 revocation/regrant and same-team rebind cannot revive old context. The
 executable handler now serves deterministic and AI-planned queries through one
 validated executor. A separate PostgreSQL-backed worker ingests official match
-data and team-scoped telemetry through the shared Domain. Shared match rows
+data and team-scoped telemetry through the shared Domain. Its durable queue uses
+team-scoped leases, fencing tokens, bounded retries and concurrency. KOOK ingress
+has per-user/channel/tenant/bot request windows; the outbound client honors
+response bucket/global limits and persists 429 retry deadlines. Shared match rows
 merge participant facts while repository reads return only current team
-members. M1 source and offline acceptance passed on 2026-10-13; the app remains
-undeployed. Real test-guild acceptance, the deidentified prompt benchmark, the
-200-team/resource tests, and P6 restore/cloud-independence drills remain open.
+members. The synthetic 200-team benchmark passes with bounded local pool use.
+M1 source/offline acceptance and M2 source gates passed on 2026-10-14; the app
+remains undeployed. Backup/restore tooling passes synthetic safety checks, but
+there is no Compose/image template and no real clean-host restore or
+public/private independence drill. Real test-guild acceptance, the deidentified
+prompt benchmark, and measured M204 resource/quota feasibility remain open.
 
 ## Request paths and guardrails
 

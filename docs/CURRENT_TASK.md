@@ -1,6 +1,6 @@
 # Current Task — PUBG KOOK SaaS V0.1 source implementation
 
-Date: 2026-10-13 (Asia/Shanghai).
+Date: 2026-10-14 (Asia/Shanghai).
 
 ## Operator-selected source implementation Goal — 2026-10-13
 
@@ -43,7 +43,8 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0008` upgrade public schema/outbox rows. The
+Additive migrations through `0010` upgrade public schema/outbox rows, add
+durable worker sync jobs and indexed KOOK ingress-rate windows. The
 statistical handler is now wired to the public executable: deterministic stats,
 leaderboard, self-stats, review and team damage use authorized Domain facts;
 free-text queries use a bounded AI SDK QueryPlan and a deterministic executor.
@@ -72,6 +73,29 @@ external acceptance gates. No live provider accuracy, latency or capacity is
 claimed. Query sessions still derive from durable ingress, fresh KOOK membership
 and DB ownership, with explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
+
+## M2 source acceptance — 2026-10-14
+
+M2 source commits `2271a4b` and `27523ae` add PostgreSQL-backed per-team worker
+leases/fencing/retry, bounded worker concurrency and graceful drain; default
+minute windows are 10 requests/user, 60/channel, 120/tenant and 300/bot. KOOK
+REST rate headers now pause the affected route/global bucket, and 429 retry
+deadlines survive outbox retries. The isolated 200-team benchmark completed
+200/200 team runs with 0 failures; the worker phase ran 7,356 SQL statements in
+3,105 ms (p95 62 ms), peaking at 16/20 pool connections with no waiters. This
+is a local synthetic measurement, not M204 resource headroom or a capacity/SLO
+claim.
+
+The public-schema-only age backup/restore utility and runbook pass 8 synthetic
+safety tests. A real encrypted backup, fresh-host restore, cloud independence
+drill and stop-public/private-Kurisu drill remain unverified: `age` and
+PostgreSQL client utilities were unavailable here. `infra/pubg-saas` still has
+no Compose/deploy template, and no Docker image build or runtime was attempted.
+KOOK 200-guild eligibility, developer-account-wide daily send quota, live API
+quota feasibility, P4 prompt accuracy/P95, and M204/container RSS headroom also
+remain open pre-release gates. No private runtime, production database, 9Router
+or deployment was touched. Full M2 evidence is in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-source-acceptance.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
