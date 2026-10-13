@@ -109,6 +109,16 @@ owner-only external-file exporter, and a mock runner test; the real model
 benchmark still awaits protected provider credentials. Query sessions still
 derive from durable ingress, fresh KOOK membership and DB ownership, with
 explicit DM grants and no fallback to the private team.
+
+Official quota source audit on 2026-10-14: KOOK's message reference states a
+10,000/day developer-account aggregate across bots, with a 12:00 Asia/Shanghai
+reset; its published developer policy also lists 200/day per bot and one
+bot/one self-created server for unverified accounts, versus 10,000 servers and
+240 API calls/minute for verified developers. The app's local 200-send bot
+budget is conservative but does not observe sibling-bot usage. PUBG documents
+10 requests/minute for testing/development only; launch requires an approved
+higher limit. Official-account eligibility, shared quota allocation and the
+PUBG launch-key limit remain unverified; no provider credentials were used.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ### M204 current-host Compose and recovery acceptance — 2026-10-14

@@ -67,6 +67,22 @@ the Gateway was not started. This is separate-host restore/Worker startup
 evidence, not full cloud independence, live API/model behavior or RPO/RTO
 measurement. The test Compose project was stopped without deleting its volume.
 
+## 2026-10-14 — KOOK and PUBG quota source audit
+
+The official KOOK message reference describes a 10,000-message daily
+developer-account aggregate across bots, resetting at 12:00 Asia/Shanghai. Its
+developer policy additionally lists 200 messages/day per bot, one bot and one
+self-created server for unverified accounts; verified accounts are listed at
+up to 10,000 servers and 240 API calls/minute. The local 200-send bot budget
+is conservative, but the SaaS cannot observe messages sent by sibling bots.
+Live developer verification and account-share allocation remain unverified.
+
+PUBG's official FAQ describes 10 requests/minute as a testing/development
+default, with a higher limit requested for launch. The synthetic worker and
+200-team test did not contact PUBG, so neither live API headers nor launch-key
+rate compliance has been established. Official sources and operational notes
+are in `infra/pubg-saas/README.md`.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as

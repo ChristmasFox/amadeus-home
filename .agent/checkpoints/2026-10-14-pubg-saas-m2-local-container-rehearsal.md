@@ -1528,3 +1528,27 @@ orb -m pubg-saas-m2-clean -u root docker compose \
   --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
   -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml down
 ```
+
+## Official KOOK and PUBG quota review — 2026-10-14
+
+Read the official KOOK message endpoint page, developer privacy policy and
+rate-limit page. The message page states a 10,000-send/day aggregate across a
+developer account's bots, reset at 12:00 Asia/Shanghai. The privacy policy
+additionally lists unverified eligibility at one bot, one self-created server,
+200 messages per bot/day and 60 API calls/minute; verified eligibility is
+listed at up to 10,000 servers and 240 API calls/minute. The message page also
+excludes failed sends and temporary messages from the daily count and applies
+a discount to the first reply to a user's message within five minutes. The
+SaaS's per-bot 200 default is conservative; it cannot observe sibling-bot
+traffic, so public onboarding beyond one test server requires verification of
+the actual developer account and an allocated share of its aggregate quota.
+The policy page shows update date 2024-01-29 and must be rechecked at release.
+
+PUBG's official FAQ states its 10-requests/minute default is for
+testing/development and says a higher rate should be requested before launch.
+The M204/VM load runs used a synthetic fetch adapter and did not contact PUBG;
+no key eligibility, live headers or launch rate compliance is claimed. The
+sources are [KOOK message quotas](https://developer.kookapp.cn/doc/http/message),
+[KOOK developer policy](https://developer.kookapp.cn/doc/privacy),
+[KOOK rate-limit headers](https://developer.kookapp.cn/doc/rate-limit), and
+[PUBG Developer FAQ](https://developer.pubg.com/faq).

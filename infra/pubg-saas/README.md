@@ -204,3 +204,23 @@ verified. See [message quota](https://developer.kookapp.cn/doc/http/message)
 and [developer policy eligibility](https://developer.kookapp.cn/doc/privacy).
 The live account's eligibility and remaining shared quota still require
 operator verification before public capacity is claimed.
+
+The published developer policy also lists these eligibility ceilings:
+unverified accounts can create one bot, invite it to one server they created,
+and make 60 API calls per minute; verified accounts can create unlimited bots,
+invite a bot to up to 10,000 servers, and make 240 API calls per minute. The
+message endpoint reference describes the separate 10,000-message daily
+developer-account aggregate (all bots), reset at 12:00 Asia/Shanghai. Failed
+sends do not count, temporary messages are excluded, and a first reply within
+five minutes receives a quota discount. The SaaS reserves a full local slot
+for every send, which is conservative for that discount, but cannot see
+traffic from sibling bots. Before serving more than one test guild or raising
+the 200-send default, verify the developer account's real-name status, server
+eligibility, rate threshold, other bot traffic, and the share allocated to this
+SaaS bot. The policy page displays an update date of 2024-01-29, so confirm it
+again during release review.
+
+PUBG's developer FAQ currently describes 10 requests/minute as a
+testing/development default only. A launch key needs an approved higher limit
+based on the documented use; no live API-rate compliance or launch quota is
+claimed by the synthetic benchmark. See the [PUBG Developer FAQ](https://developer.pubg.com/faq).
