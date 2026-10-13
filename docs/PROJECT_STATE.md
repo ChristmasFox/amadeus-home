@@ -42,6 +42,14 @@ fixture, the full SaaS suite passed 92/92 with no skips; private tests passed
 68/68 and both affected typecheck groups passed. No provider credentials were
 used and no KOOK message was sent. Clean Linux/cloud, schedule installation,
 host resource headroom and cloud independence remain open.
+Source commit `8316f4e` was built as ARM64 image
+`local/pubg-saas:git-8316f4e` with manifest digest
+`sha256:1e94dfc77c0ad6d07928d3138e789e18ad19e17286f14647a1b50709f05e5b77`.
+After the committed-image Compose project was stopped with plain `down`,
+Kurisu tests passed 68/68 again and read-only checks showed private OpenClaw
+healthy and 9Router running. Idle PG/proxy memory was 28.58/13.22 MiB under
+1 GiB/128 MiB limits; this is not a capacity result. The configured
+`example-node` host profile is still unavailable.
 
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 

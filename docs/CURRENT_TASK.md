@@ -195,8 +195,14 @@ credential-free public HTTPS through the proxy. With the shared isolated PG
 fixture explicitly supplied, `pnpm test:pubg-saas` passed 92/92 with no skips;
 without that env var the suite skips PostgreSQL tests and is not accepted.
 Private source regression remained 68/68 with affected typechecks passing.
-The proxy restricts addresses, not public hostnames; clean Linux/cloud checks
-and resource headroom still remain.
+Commit `8316f4e` builds as ARM64 image `local/pubg-saas:git-8316f4e`, digest
+`sha256:1e94dfc77c0ad6d07928d3138e789e18ad19e17286f14647a1b50709f05e5b77`.
+The committed-image migration/worker/dry-run/egress repetition passed; after
+plain Compose `down`, Kurisu tests again passed 68/68 and read-only OrbStack
+status showed OpenClaw healthy and 9Router running. Idle PG/proxy memory was
+28.58/13.22 MiB under 1 GiB/128 MiB caps; this is not loaded M204 headroom.
+The proxy restricts addresses, not public hostnames; clean Linux/cloud checks,
+schedule installation and host resource headroom still remain.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

@@ -198,3 +198,40 @@ available `nyannyan` machine; neither service was restarted or changed and no
 private PUBG tool query was run. The configured `example-node` OrbStack machine
 was absent from the current machine inventory. The KOOK test credential file
 was not read or used in this local rehearsal.
+
+## Egress change committed-image repetition — 2026-10-14
+
+The egress source is commit `8316f4e`. Built its ARM64 local image as
+`local/pubg-saas:git-8316f4e`, manifest digest
+`sha256:1e94dfc77c0ad6d07928d3138e789e18ad19e17286f14647a1b50709f05e5b77`.
+The reproducible build and local Compose sequence is:
+
+```sh
+docker buildx build --platform linux/arm64 --load \
+  -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-8316f4e .
+docker compose --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" config --quiet
+docker compose --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+docker compose --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" --profile ops run --rm migrate
+docker compose --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" run --rm --no-deps worker \
+  node dist/src/public-sync-worker.js --apply --once
+docker compose --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" down
+```
+
+`$STACK` is an owner-only disposable directory prepared per
+`infra/pubg-saas/README.md`, with random local passwords and provider
+placeholders. No real provider credential is needed for these commands. The
+committed-image rerun repeated migration, worker startup, gateway dry-run,
+no-default-route check, metadata/host-private denials, and public HTTPS proxy
+smoke. It ended with plain `down`; the named PG volume was preserved and no
+image was pushed. A quiescent container snapshot was PostgreSQL 28.58 MiB / 1
+GiB and egress proxy 13.22 MiB / 128 MiB. This is an idle sample, not worker-load
+capacity or canonical M204 host headroom. After SaaS shutdown, private
+OpenClaw remained healthy, 9Router remained running, and `pnpm test:pubg`
+passed 68/68. The local image used the available OrbStack ARM64 builder; the
+host-profile `example-node` remained unavailable.
