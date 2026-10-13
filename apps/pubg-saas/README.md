@@ -224,8 +224,9 @@ Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. Set `PUBG_SAAS_TEST_DATABASE_URL` to
 a dedicated isolated test database before `pnpm test:pubg-saas`; tests create
 synthetic schemas/rows and clean them up. Never point it at a live or shared
-database. On 2026-10-13, all 74 SaaS tests passed with isolated PostgreSQL 18,
-`pnpm typecheck:pubg` passed, and `pnpm test:pubg` passed all 68 private
+database. On 2026-10-13, all 75 SaaS tests passed with isolated PostgreSQL 18
+and no skips; `pnpm typecheck:pubg` and `pnpm typecheck:pubg-saas` passed, and
+`pnpm test:pubg` passed all 68 private
 identity/presentation/Domain/plugin tests. The suite covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
@@ -253,7 +254,10 @@ nine independently checked golden cases, including KD, revives, squad rank,
 fixtures compare complete tool envelopes for kicks/punches/melee, retain derived
 evidence event references, distinguish partial unavailable telemetry from known
 zero, and serve versioned cache facts after reopening the separate stores.
-The private Domain's 36 tests run without public PostgreSQL. These synthetic
+The repository acceptance also proves roster revocation waits for a bounded
+authorized read, persisted telemetry renders through the KOOK team-damage
+response, and `@agent/pubg-domain/core` does not load `node:sqlite` or the
+legacy importer. The private Domain's 36 tests run without public PostgreSQL. These synthetic
 parity gates do not replace the Goal's P4 deidentified prompt benchmark, P5
 200-team resource/latency tests, P6 restore/independence drills or real KOOK
 test-guild acceptance. Worker integration uses fake PUBG API and telemetry CDN

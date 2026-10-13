@@ -28,10 +28,17 @@ M2 is still in progress.
 ## Acceptance evidence
 
 - `PUBG_SAAS_TEST_DATABASE_URL=<dedicated isolated PostgreSQL URL> pnpm test:pubg-saas`
-  — 74/74 passed, PostgreSQL 18. Includes same-match overlapping-account
-  tenants, roster-only match reads, persisted sync state and friendly-damage
-  facts fetched by the worker using fake PUBG API/CDN responses.
+  — 75/75 passed with no skips on the reused PostgreSQL 18 test instance.
+  Includes same-match overlapping-account tenants, roster-only match reads,
+  persisted sync state and friendly-damage facts fetched by the worker using
+  fake PUBG API/CDN responses. A repository race test proves roster revocation
+  waits for an in-flight bounded authorized read, then stale scopes are denied.
+  A KOOK-to-PostgreSQL telemetry fixture verifies stored 37-point teammate
+  damage reaches the user-facing response without claiming unavailable data is
+  zero. A clean Node process imports `@agent/pubg-domain/core` without loading
+  private `node:sqlite` modules.
 - `pnpm typecheck:pubg` — passed.
+- `pnpm typecheck:pubg-saas` — passed.
 - `pnpm test:pubg` — 68/68 private identity, presentation, Domain and PUBG
   plugin tests passed; no private runtime was started.
 - `pnpm build:pubg-saas` — passed.
@@ -59,25 +66,36 @@ drills. No capacity claim is made from this M1 fixture.
 
 ## Previous bottleneck record
 
-The previous test blockage was a fixture/assertion mismatch and an outdated
-expected clarification code after follow-up semantics changed. Fixtures and
-expectations were corrected without deleting coverage or weakening security
-assertions. A worker integration retry also initially loaded a stale built
-Domain artifact; rebuilding `@agent/pubg-domain` made the test use current source.
-The earlier default-registry pnpm install retries hit metadata `ECONNRESET`;
-their individual durations were not recorded. A frozen mirror install passed
-the release-age policy, installed the pinned older AI SDK dependency set, and
-was recorded at about 0.9 seconds. No release-age exception or security-policy
-bypass was added.
+The re-audit's first KOOK integration attempt failed its new localized title
+assertion: output contained the correct persisted `Alice → Bob：37 伤害 / 1 次`
+facts but prefixed them with `today`. The handler was corrected to render
+Chinese day labels; the targeted and full SaaS suites then passed. No tests were
+removed and no security assertions were weakened. Earlier history includes a
+fixture/assertion mismatch, an outdated follow-up expectation and one stale
+built Domain artifact, all resolved by updating the fixture or rebuilding the
+affected package. The most repeated/highest-cost command observed was
+`pnpm install` against the default registry, which retried metadata requests
+across about 460 lockfile entries and hit `ECONNRESET`; individual wall times
+were not captured. A frozen mirror install passed age rules in about 0.9
+seconds. No release-age exception or security-policy bypass was added.
 
 ## Reproduction and rollback
 
 M1 functional source commit: `7f4735d` (`feat(pubg-saas): add AI queries and
-scoped sync worker`).
+scoped sync worker`). Re-audit remediation: `f16d6c1` (`fix(pubg-saas): close
+M1 authorization and runtime boundaries`).
 
-Build locally with `pnpm build:pubg-saas`; worker/gateway/migration commands
-without arguments remain dry-run. Before PostgreSQL tests, provide
-`PUBG_SAAS_TEST_DATABASE_URL` for a dedicated disposable/test-only database; do
-not use a production/shared URL. Roll back this source unit with
-`git revert 7f4735d`. No runtime rollback is needed because nothing was deployed
-or applied outside isolated test schemas.
+Build with `pnpm build:pubg-saas`. For local startup, provide independent
+`DATABASE_URL`, `PUBLIC_PUBG_API_KEY`, `KOOK_BOT_ACCOUNT_ID` and
+`KOOK_BOT_TOKEN`; set `MODEL_BASE_URL`, `MODEL_ID` and `MODEL_API_KEY` together
+to enable natural-language planning. Apply schema with
+`node apps/pubg-saas/dist/src/migrate-database.js --apply`, then run
+`node apps/pubg-saas/dist/src/gateway.js --apply` and
+`node apps/pubg-saas/dist/src/public-sync-worker.js --apply` as separate
+processes. These are documented reproduction steps and were not run with live
+credentials. For tests, set `PUBG_SAAS_TEST_DATABASE_URL` to a dedicated
+isolated PostgreSQL URL and run `pnpm test:pubg-saas`; `pnpm test:pubg` exercises
+private Kurisu without public PostgreSQL. Never use production/shared database
+URLs. Roll back the re-audit with `git revert f16d6c1`; a full M1 source rollback
+also reverts `7f4735d`. No runtime rollback is needed because nothing was
+deployed or applied outside isolated test schemas.

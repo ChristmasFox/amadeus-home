@@ -52,14 +52,17 @@ team-scoped telemetry into PostgreSQL. Same-match overlapping tenants merge
 public player facts while repository reads expose only the current registered
 roster; roster changes invalidate scoped sync state.
 
-M1 source/offline acceptance passed on 2026-10-13: `pnpm test:pubg-saas`
-passed 74 tests with isolated PostgreSQL 18; `pnpm typecheck:pubg` passed;
-`pnpm test:pubg` passed 68 private identity/presentation/Domain/plugin tests;
+M1 source/offline acceptance was re-audited and passed on 2026-10-13:
+`pnpm test:pubg-saas` passed 75 tests with isolated PostgreSQL 18 and no skips;
+`pnpm typecheck:pubg` and `pnpm typecheck:pubg-saas` passed; `pnpm test:pubg`
+passed 68 private identity/presentation/Domain/plugin tests;
 `pnpm build:pubg-saas`, worker/gateway/migration dry-runs, `pnpm check:secrets`
-and `git diff --check` passed. Tests use a fake PUBG API/model provider; no
-runtime credential, real guild, production database, Docker service or external
-deployment was touched. The worker dry-run requires explicit `--apply` to
-connect or write.
+and `git diff --check` passed. The new checks prove a roster revocation waits
+for an already authorized PG read, persisted telemetry renders as KOOK teammate
+damage, and the public Domain subpath does not load `node:sqlite`. Tests use a
+fake PUBG API/model provider; no runtime credential, real guild, production
+database, Docker service or external deployment was touched. The worker
+dry-run requires explicit `--apply` to connect or write.
 
 M2 is active: independent worker capacity/observability, 200-team simulated
 load, quota/resource measurements, backup/restore, clean-host recovery and
