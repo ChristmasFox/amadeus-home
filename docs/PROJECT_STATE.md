@@ -36,8 +36,17 @@ time; 9Router also kept the same ID/start time and restart count 0. Neither was
 modified or restarted. No real KOOK/PUBG/model credentials, image push,
 production database, or deployment was used. Canonical CasaOS resource/alert
 acceptance, scheduled backup, live provider/human P3 checks, and the public-only
-cloud isolation drill remain open. Detailed reproduction commands and the
-guest-native build limitation are in
+cloud isolation drill remain open.
+
+The current image was then built natively in the same isolated Ubuntu 24.04
+ARM64 VM with VFS storage. Clearing the inherited host proxy variables let the
+build complete: `local/pubg-saas:git-6313ef7`, image ID
+`sha256:e144276b8061d2362d2abcd9ecdd26421b5bed049541bfe90b268210e601afc8`.
+Compose render, Gateway/Worker no-credential dry-runs and the two-service egress
+smoke passed on that Linux-built image. No provider credentials were used and
+the Compose project was stopped afterward. The earlier guest-native build
+attempts failed due overlayfs and stale proxy environment; both conditions are
+resolved in this isolated VM. Detailed reproduction commands are in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
 ## 2026-10-14 — PUBG SaaS current-source M1 and local recovery acceptance

@@ -919,3 +919,47 @@ systemd-analyze calendar '*-*-* 00,06,12,18:00:00 UTC'
 # Use systemd-analyze verify on a temporary rendered copy of both example
 # units, replacing only their environment-file, user/group and ExecStart paths.
 ```
+
+## Native Linux ARM64 image build and Compose smoke — 2026-10-14
+
+To close the remaining local Linux-build check, a Git archive containing only
+`.dockerignore`, the root/package manifests, `apps/pubg-saas`, shared Domain /
+presentation packages, and the container entrypoint was extracted into the
+isolated Ubuntu 24.04 ARM64 VM. It contained no ignored `.env.local` or runtime
+secrets. The first guest build attempted to use the shell-inherited host proxy
+and failed before pulling the pinned Node base image (`proxyconnect ...:7897:
+connection refused`). This was a guest environment issue; the Docker daemon has
+no proxy configured. The isolated VM's Docker daemon uses VFS storage because
+nested overlayfs was unavailable. Clearing proxy variables only for the
+guest-local build command allowed the normal BuildKit build to complete:
+
+```sh
+cd /var/tmp/pubg-saas-m2-clean/build-src
+env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy \
+  docker build --progress=plain -f apps/pubg-saas/Dockerfile \
+    -t local/pubg-saas:git-6313ef7 .
+```
+
+The frozen pnpm install, presentation/Domain/SaaS TypeScript builds, and
+production image packaging passed. The resulting image was
+`local/pubg-saas:git-6313ef7`, ARM64 image ID
+`sha256:e144276b8061d2362d2abcd9ecdd26421b5bed049541bfe90b268210e601afc8`.
+It remained inside the isolated local VM; no image was pushed. The temporary
+source Compose `.env` was pointed at this image, and `docker compose config
+--quiet` passed. Gateway and Worker entrypoints each completed their no-arg
+dry-run, requiring no database/provider connection. The checked-in
+`scripts/tests/pubg-saas-egress-smoke.mjs` then passed in both service network
+namespaces with the same result:
+
+```text
+PUBG_SAAS_EGRESS_SMOKE=passed direct_public=blocked:ENETUNREACH direct_metadata=blocked:ENETUNREACH metadata_proxy=403 private_host_proxy=403 public_https=200
+```
+
+The proxy was healthy, and plain `docker compose down` left no running test
+containers. This proves a native clean-Linux ARM64 image build and local
+Compose/egress runtime with no real KOOK, PUBG, model, OpenClaw or 9Router
+credential. It does not prove canonical CasaOS capacity, scheduled backup
+installation, cloud independence, or clean Linux amd64 runtime. The earlier
+proxy and overlayfs failures are resolved in this disposable VM only; no
+private or production environment was changed.

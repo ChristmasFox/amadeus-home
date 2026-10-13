@@ -177,6 +177,27 @@ temporary rendered service path; no system user or timer was installed/enabled.
 The initial direct invocation failed with `Permission denied` before this fix;
 the complete rerun passed. Details and test evidence are in the checkpoint.
 
+## Native clean Linux image build and Compose smoke — 2026-10-14
+
+Built the current source natively in the isolated Ubuntu 24.04 ARM64 VM after
+switching that VM's Docker storage to VFS and clearing only the inherited,
+unreachable proxy variables from the build command. The first unfiltered
+attempt failed before base-image resolution because `HTTP_PROXY` pointed at the
+VM-inaccessible host proxy; with the variables unset, the full frozen install,
+TypeScript builds and image packaging completed. Image
+`local/pubg-saas:git-6313ef7` is `linux/arm64`, ID
+`sha256:e144276b8061d2362d2abcd9ecdd26421b5bed049541bfe90b268210e601afc8`.
+
+The isolated Compose source project rendered against that image; Gateway and
+Worker dry-runs passed without `--apply`, then the checked-in egress smoke passed
+in both Compose network namespaces. Each had no default route, direct public
+and metadata TCP returned `ENETUNREACH`, the proxy returned 403 for metadata
+and `host.docker.internal`, and public HTTPS through the proxy returned 200.
+The test project was stopped afterward. No real credentials, private host,
+registry push or deployment was involved. This closes the native Linux ARM64
+build gate; canonical host capacity and public-only cloud operation remain
+open.
+
 ## KOOK test-server connection check — 2026-10-14
 
 Using the protected, ignored `.env.local` only for the authorized P3 test
