@@ -54,6 +54,19 @@ test project was stopped without deleting its named volume. Private OpenClaw
 and 9Router remained at the same IDs/start times, restart count 0. Full
 evidence is in the M2 rehearsal checkpoint.
 
+## 2026-10-14 — Separate-host SaaS restore and Worker startup
+
+Transferred `local/pubg-saas:git-87543bc` locally from M204 to the isolated
+Ubuntu 24.04 ARM64 VM without a registry. A new Compose project and PG volume
+restored an age-encrypted synthetic snapshot: 37/37 table counts, 14
+migrations, tenant/team/job 1/1/1, and app/backup permission probes passed.
+The current Worker, PostgreSQL and egress proxy became healthy on the restored
+database. Its only sync job was delayed, so the Worker attempted zero teams
+and made no PUBG request. The proxy returned 403 for the M204 private target;
+the Gateway was not started. This is separate-host restore/Worker startup
+evidence, not full cloud independence, live API/model behavior or RPO/RTO
+measurement. The test Compose project was stopped without deleting its volume.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as

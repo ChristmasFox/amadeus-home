@@ -1392,3 +1392,139 @@ orb -m nyannyan -u root docker compose --project-name pubg-saas-m2-canonical-ben
 The benchmark report and sampled host/PG/runner counters are retained outside
 Git at `/var/tmp/pubg-saas-m2-canonical-benchmark-20261014/`; no test rows
 remain in its database.
+
+## Fresh Linux-host restore and restored Worker startup — 2026-10-14
+
+The current M204 image `local/pubg-saas:git-87543bc` was transferred to the
+separate Ubuntu 24.04 ARM64 `pubg-saas-m2-clean` VM with `docker save | docker
+load`; no registry was involved. A new Compose project and named PG volume
+were created on that VM, independent of M204's SaaS and private runtime. The
+age-encrypted synthetic artifact
+`pubg-saas-20261013T224246Z-56fc04f8.dump.age` (SHA-256
+`61c722c07a22e20fa68ea00060a6d360c8ddab398e3974952e2d5666ca23cace`) restored
+to `pubg_saas_disposable_independent_20261014`. The restore utility reported
+37/37 table-count matches; probes confirmed 14 migrations and 1 tenant, 1 team
+and 1 sync-job row. App DML-with-rollback and sequence use succeeded; app DDL,
+backup DML and backup `nextval` were denied; backup reads succeeded.
+
+The test-only Worker database URL was pointed at the restored database. Its
+one synthetic sync job was delayed by one day before startup, preventing any
+provider call. Current-image Worker, PostgreSQL and egress proxy all reached
+healthy. The first worker cycle discovered one team, attempted zero teams,
+reported zero failures, and saw zero due jobs. The worker network had no
+default route (the existing clean-VM egress check); its proxy returned 403 for
+the M204 private-address target. Gateway was not started. This demonstrates
+restored database and Worker startup on another local Linux host with M204
+private egress blocked; it does not prove live KOOK/PUBG/model operation,
+current-snapshot RPO, RTO, or full cloud independence.
+
+The dedicated project was stopped with ordinary `docker compose down` (no
+`-v`); its PG volume and owner-only test files remain on the isolated VM. No
+production DB, image push, 9Router change, or private OpenClaw restart occurred.
+
+Reproduction commands, using the existing owner-only isolated-VM fixture and
+backup files:
+
+```sh
+# Copy the locally built image between OrbStack VMs; this is not a registry push.
+set -o pipefail
+orb -m nyannyan -u root docker save local/pubg-saas:git-87543bc \
+  | orb -m pubg-saas-m2-clean -u root docker load
+
+orb -m pubg-saas-m2-clean -u root bash -lc '
+  set -euo pipefail
+  base=/var/tmp/pubg-saas-m2-clean
+  stack=$base/independent-20261014
+  cp -a "$base/current-restore-6313ef7" "$stack"
+  sed -i "s/^PUBG_SAAS_COMPOSE_PROJECT=.*/PUBG_SAAS_COMPOSE_PROJECT=pubg-saas-m2-independent-20261014/" "$stack/.env"
+  sed -i "s|^PUBG_SAAS_IMAGE=.*|PUBG_SAAS_IMAGE=local/pubg-saas:git-87543bc|" "$stack/.env"
+  sed -i "s/^PUBG_SAAS_BACKUP_PG_PORT=.*/PUBG_SAAS_BACKUP_PG_PORT=55439/" "$stack/.env"
+  sed -i "s|/pubg_saas?sslmode=disable|/pubg_saas_disposable_independent_20261014?sslmode=disable|" "$stack/secrets/worker.env"
+  chmod 700 "$stack"
+  chmod 600 "$stack/.env" "$stack/secrets/worker.env"
+'
+
+orb -m pubg-saas-m2-clean -u root docker compose \
+  --project-name pubg-saas-m2-independent-20261014 \
+  --project-directory /var/tmp/pubg-saas-m2-clean/independent-20261014 \
+  --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
+  -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml \
+  up -d --wait postgres egress-proxy
+
+orb -m pubg-saas-m2-clean -u root bash -lc '
+  set -euo pipefail
+  base=/var/tmp/pubg-saas-m2-clean
+  stack=$base/independent-20261014
+  export PATH=$base/tooling/bin:$PATH
+  export PUBG_SAAS_PG_EXEC_PROJECT=pubg-saas-m2-independent-20261014
+  export PUBG_SAAS_PG_EXEC_COMPOSE_FILE=$stack/compose.yaml
+  export PUBG_SAAS_PG_EXEC_ENV_FILE=$stack/.env
+  export PUBG_SAAS_BOOTSTRAP_PASSWORD="$(< "$stack/secrets/postgres-superuser-password")"
+  export PUBG_SAAS_RESTORE_ADMIN_URL="postgresql://pubg_bootstrap:${PUBG_SAAS_BOOTSTRAP_PASSWORD}@postgres:5432/postgres"
+  target=pubg_saas_disposable_independent_20261014
+  python3 "$base/tooling/scripts/pubg-saas-backup-restore.py" restore \
+    --artifact "$base/artifacts/pubg-saas-20261013T224246Z-56fc04f8.dump.age" \
+    --manifest "$base/artifacts/pubg-saas-20261013T224246Z-56fc04f8.manifest.json" \
+    --identity-file "$base/age/identity.txt" \
+    --target-database "$target" --confirm-disposable-target "$target" --apply
+'
+
+# Adapt and run the existing role probe against the new project.
+orb -m pubg-saas-m2-clean -u root bash -lc '
+  set -euo pipefail
+  base=/var/tmp/pubg-saas-m2-clean
+  script=$base/independent-restored-role-probes.sh
+  sed \
+    -e "s/current-restore-6313ef7/independent-20261014/g" \
+    -e "s/pubg-saas-m2-current-restore-6313ef7/pubg-saas-m2-independent-20261014/g" \
+    -e "s/pubg_saas_disposable_current_6313ef7/pubg_saas_disposable_independent_20261014/g" \
+    "$base/current-restored-role-probes.sh" > "$script"
+  chmod 700 "$script"
+  "$script"
+'
+
+# Delay the one synthetic job using the app role so startup makes no provider
+# request. Then start Worker and check its JSON cycle log and health.
+orb -m pubg-saas-m2-clean -u root bash -lc '
+  set -euo pipefail
+  base=/var/tmp/pubg-saas-m2-clean
+  stack=$base/independent-20261014
+  export PATH=$base/tooling/bin:$PATH
+  export PUBG_SAAS_PG_EXEC_PROJECT=pubg-saas-m2-independent-20261014
+  export PUBG_SAAS_PG_EXEC_COMPOSE_FILE=$stack/compose.yaml
+  export PUBG_SAAS_PG_EXEC_ENV_FILE=$stack/.env
+  PGHOST=postgres PGPORT=5432 PGDATABASE=pubg_saas_disposable_independent_20261014 \
+    PGUSER=pubg_app PGPASSWORD="$(< "$stack/secrets/app-password")" \
+    psql -X -v ON_ERROR_STOP=1 --command \
+      "UPDATE public_sync_jobs SET next_attempt_at=now()+interval '\''1 day'\'', lease_token=NULL, lease_until=NULL WHERE tenant_id='\''m2-current-fixture'\'' AND team_id='\''m2-current-team'\'';"
+'
+
+orb -m pubg-saas-m2-clean -u root docker compose \
+  --project-name pubg-saas-m2-independent-20261014 \
+  --project-directory /var/tmp/pubg-saas-m2-clean/independent-20261014 \
+  --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
+  -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml \
+  up -d --wait worker
+orb -m pubg-saas-m2-clean -u root docker compose \
+  --project-name pubg-saas-m2-independent-20261014 \
+  --project-directory /var/tmp/pubg-saas-m2-clean/independent-20261014 \
+  --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
+  -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml \
+  ps
+orb -m pubg-saas-m2-clean -u root docker compose \
+  --project-name pubg-saas-m2-independent-20261014 \
+  --project-directory /var/tmp/pubg-saas-m2-clean/independent-20261014 \
+  --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
+  -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml \
+  logs --no-color --tail=5 worker
+
+# The earlier reusable egress smoke proves host.docker.internal is denied.
+# This exercise also confirmed the configured M204 private target returns 403.
+
+# Stop test containers while preserving the isolated PG volume.
+orb -m pubg-saas-m2-clean -u root docker compose \
+  --project-name pubg-saas-m2-independent-20261014 \
+  --project-directory /var/tmp/pubg-saas-m2-clean/independent-20261014 \
+  --env-file /var/tmp/pubg-saas-m2-clean/independent-20261014/.env \
+  -f /var/tmp/pubg-saas-m2-clean/independent-20261014/compose.yaml down
+```

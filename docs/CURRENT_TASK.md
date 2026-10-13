@@ -87,8 +87,11 @@ runtime. Local Compose build/start, encrypted backup/restore with table-count
 and role-boundary probes, and the public-stop/private-Kurisu source regression
 are verified. The current M204 host-profile mapping resolves to OrbStack
 machine `nyannyan`; its local Compose/recovery and one bounded 200-team host
-measurement are recorded below. Sustained production-shaped capacity and
-alert delivery, cloud recovery, scheduled backup installation,
+measurement are recorded below. A separate clean Linux VM also restored the
+public archive into a new PG volume and started the current Worker healthy;
+its proxy denied private M204 egress. This is a database/Worker startup drill,
+not full public-service independence. Sustained production-shaped capacity and
+alert delivery, release RPO/RTO, scheduled backup installation,
 quota/eligibility and full independent-runtime drills remain. The clean Linux ARM64 guest now passes
 Compose recovery, application egress isolation, and the combined encrypted
 backup/prune job. The six-hour timer passed an ephemeral systemd integration
@@ -151,6 +154,20 @@ after. These are one bounded synthetic run with mocked provider fetches, not a
 live PUBG rate-limit check or production capacity/SLO. Private OpenClaw and
 9Router IDs/start times stayed unchanged, with restart counts 0. Evidence and
 reproduction details are in the dated M2 rehearsal checkpoint.
+
+### Restored Worker on a separate Linux VM — 2026-10-14
+
+Transferred the current local ARM64 image from M204 to the isolated Ubuntu
+24.04 ARM64 VM with `docker save | docker load` (no push). In a new Compose
+project and fresh PG volume, the age-encrypted synthetic artifact restored
+37/37 table counts, 14 migrations and tenant/team/job 1/1/1. App/backup
+permission probes passed. The restored Worker, PG and egress proxy reached
+healthy; its delayed synthetic job was not attempted, and its proxy denied the
+M204 private target with 403. The Gateway and real providers were not started.
+This adds separate-host recovery and Worker-start evidence, not proof of live
+KOOK/PUBG/model behavior or measured release RPO/RTO. The test containers were
+stopped without deleting the isolated PG volume; full commands are in the M2
+rehearsal checkpoint.
 
 ## Current M1/M2 acceptance follow-up — 2026-10-14
 
