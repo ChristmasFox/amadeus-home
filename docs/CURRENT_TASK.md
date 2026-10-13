@@ -38,18 +38,21 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0004`
+Additive migrations through `0005`
 upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (35 SaaS tests), including private PUBG regression checks. This is
+PostgreSQL 18 (38 SaaS tests), including private PUBG regression checks. This is
 source and offline-fixture progress; package build, both entry-point dry-runs,
 secrets scan and `git diff --check` also passed. P3 acceptance still requires
 an isolated real test guild and current endpoint/guild eligibility preflight.
 SQLite/Postgres edge-case parity, ingestion worker/AI SDK, Compose deployment
 and independent restore drills also remain incomplete. No runtime or production
 credentials were touched.
-Before exposing public queries, fix the inspected P1/P2 gap: public match and
-telemetry cache keys are still match-ID-only and must use shard + match ID;
-then finish authorization/conversation construction and Domain edge-case parity.
+The inspected P1/P2 shard-cache gap is now corrected: match/player/telemetry/
+prefetch keys include shard, reads enforce registered roster/shard and any
+conversation authority, and foreign telemetry cannot bypass match membership.
+Legacy child shards are backfilled from parent facts; unresolved rows abort
+migration atomically and remain intact. Public authorization/conversation
+construction and complete Domain edge-case parity remain next work.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

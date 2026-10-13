@@ -56,6 +56,7 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
     assert.throws(() => new PostgresPubgRepository(pool, undefined as never), /invalid_team_context/u);
     await pool.query('INSERT INTO tenants(tenant_id, platform, bot_account_id, guild_id) VALUES ($1,$2,$3,$4),($5,$2,$3,$6)', [tenantA, 'kook', 'test-bot', `guild-a-${suffix}`, tenantB, `guild-b-${suffix}`]);
     await pool.query('INSERT INTO teams(tenant_id, team_id, label, pubg_shard) VALUES ($1,$2,$3,$7),($4,$5,$6,$7)', [tenantA, teamA, 'Squad A', tenantB, teamB, 'Squad B', 'steam']);
+    await pool.query('INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id) VALUES ($1,$2,$3,\'fixture\'),($4,$5,$6,\'fixture\')', [tenantA, teamA, accountA, tenantB, teamB, accountB]);
     await pool.query(
       `INSERT INTO channel_bindings(tenant_id, platform, bot_account_id, channel_id, team_id, bound_by_user_id)
        VALUES ($1,'kook','test-bot',$2,$3,'admin-a'),($4,'kook','test-bot',$5,$6,'admin-b')`,
@@ -186,8 +187,11 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
     const persistedServiceResult = await repoA.getResultSet(sharedSession, serviceResult.resultSetId!, new Date(matchAt + 3_000));
     assert.equal(persistedServiceResult?.source.store, 'postgres');
 
+    const goldenTeam = `golden-${teamA}`;
+    await pool.query("INSERT INTO teams(tenant_id,team_id,label,pubg_shard) VALUES ($1,$2,'Golden Team','steam')", [tenantA, goldenTeam]);
+    await pool.query("INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id) VALUES ($1,$2,'p1','fixture'),($1,$2,'p2','fixture')", [tenantA, goldenTeam]);
     const goldenContext = createTeamContext(tenantA, {
-      id: teamA,
+      id: goldenTeam,
       label: 'Golden Team',
       platform: 'steam',
       players: [{ id: 'p1', name: 'Alice', aliases: [] }, { id: 'p2', name: 'Bob', aliases: [] }],

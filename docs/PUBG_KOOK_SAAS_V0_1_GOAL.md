@@ -1,6 +1,6 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain/private SQLite and early P2 public persistence/auth are implemented. P3 source includes verified-channel automatic welcome, durable ingress/outbox, name-based management/self-claim cards and confirmation recovery. Its 35-test offline suite passes with ephemeral PostgreSQL 18. Public shard/cache-key correction, Domain parity, query authorization/AI/worker integration, packaging, real test guild/quota and restore acceptance remain incomplete. Not deployed or accepted.
+> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain/private SQLite and early P2 public persistence/auth are implemented. Public match/telemetry keys now include shard with registered-roster/conversation guards and fail-closed legacy backfill. P3 source includes automatic welcome, durable ingress/outbox and management/self-claim cards. Its 38-test offline suite passes with ephemeral PostgreSQL 18. Complete Domain parity, query authorization/AI/worker integration, packaging, real test guild/quota and restore acceptance remain incomplete. Not deployed or accepted.
 >
 > **Date:** 2026-10-13 (Asia/Shanghai)
 >

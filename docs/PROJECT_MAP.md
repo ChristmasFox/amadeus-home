@@ -46,8 +46,10 @@ private worker, private credentials or household-only service endpoints.
 The initial P0 inventory found that neither `apps/pubg-saas` nor
 `infra/pubg-saas` existed. P1 added a generic async `PubgRepositoryPort` and a
 scope-pinned SQLite adapter for private use. Early P2 source now contains a
-Postgres schema/migration and an adapter with roster-filtered match selection
-and tenant/team/bot/user/channel/session scoped conversation storage. One
+Postgres schema/migration and an adapter with registered-roster/shard-filtered match selection
+and tenant/team/bot/user/channel/session scoped conversation storage. Match and
+telemetry cache keys include shard + match ID, with membership-constrained
+telemetry access and fail-closed legacy shard backfill. One
 synthetic stat golden now passes through both SQLite and Postgres repositories;
 trusted KOOK group/direct-message parsing, fresh guild owner/Administrator
 checks, and transactional squad/channel/roster management with actor-bound

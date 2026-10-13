@@ -146,6 +146,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   readonly scope: TeamContext;
   readonly conversation: TrustedConversationScope | null;
   private readonly accountIds: string[];
+  private readonly shard: string;
 
   constructor(
     private readonly pool: Pool,
@@ -153,6 +154,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     conversation: TrustedConversationScope | null = null,
   ) {
     this.scope = parseTeamContext(scope);
+    this.shard = this.scope.team.platform;
     this.accountIds = this.scope.team.players.map((player) => player.id);
     if (conversation && conversation.kind !== 'bound_channel' && conversation.kind !== 'direct_team') {
       throw new Error('invalid_conversation_scope');
@@ -167,7 +169,25 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     } : null;
   }
 
+  private async assertTeamScope(): Promise<void> {
+    const result = await this.pool.query(
+      `SELECT team.pubg_shard,COALESCE(array_agg(member.pubg_account_id ORDER BY member.pubg_account_id)
+       FILTER (WHERE member.pubg_account_id IS NOT NULL),'{}') AS accounts
+       FROM teams team LEFT JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
+       WHERE team.tenant_id=$1 AND team.team_id=$2 GROUP BY team.pubg_shard`, [this.scope.tenantId, this.scope.teamId],
+    );
+    const row = result.rows[0];
+    if (!row || row.pubg_shard !== this.shard || !Array.isArray(row.accounts)
+      || row.accounts.length !== this.accountIds.length || row.accounts.some((account: unknown) => !this.accountIds.includes(String(account)))) throw new Error('repository_team_scope_mismatch');
+  }
+
+  private async assertReadScope(): Promise<void> {
+    if (this.conversation) await this.assertConversation(this.conversation.sessionId);
+    else await this.assertTeamScope();
+  }
+
   private async assertConversation(sessionId: string): Promise<TrustedConversationScope> {
+    await this.assertTeamScope();
     const trusted = this.conversation;
     if (!trusted) throw new Error('conversation_scope_required');
     if (sessionId !== trusted.sessionId) throw new Error('conversation_scope_mismatch');
@@ -192,35 +212,38 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async countMatches(): Promise<number> {
+    await this.assertReadScope();
     const result = await this.pool.query(
       `SELECT COUNT(*)::bigint AS count FROM matches AS match
-       WHERE EXISTS (
+       WHERE match.shard=$2 AND EXISTS (
          SELECT 1 FROM match_players AS member
-         WHERE member.match_id = match.match_id AND member.account_id = ANY($1::text[])
+         WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[])
        )`,
-      [this.accountIds],
+      [this.accountIds, this.shard],
     );
     return number(result.rows[0]?.count);
   }
 
   async getMatch(matchId: string): Promise<NormalizedMatch | null> {
+    await this.assertReadScope();
     const result = await this.pool.query(
       `SELECT match.* FROM matches AS match
-       WHERE match.match_id = $1 AND EXISTS (
+       WHERE match.match_id = $1 AND match.shard=$3 AND EXISTS (
          SELECT 1 FROM match_players AS member
-         WHERE member.match_id = match.match_id AND member.account_id = ANY($2::text[])
+         WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($2::text[])
        )`,
-      [matchId, this.accountIds],
+      [matchId, this.accountIds, this.shard],
     );
     const row = result.rows[0];
     if (!row) return null;
-    const players = await this.pool.query('SELECT * FROM match_players WHERE match_id = $1 ORDER BY account_id', [matchId]);
+    const players = await this.pool.query('SELECT * FROM match_players WHERE match_id = $1 AND shard=$2 ORDER BY account_id', [matchId, this.shard]);
     return rowToMatch(row, players.rows.map(rowToPlayer));
   }
 
   async listMatches(options: { fromMs?: number; toMs?: number; limit?: number } = {}): Promise<NormalizedMatch[]> {
-    const clauses = ['EXISTS (SELECT 1 FROM match_players AS member WHERE member.match_id = match.match_id AND member.account_id = ANY($1::text[]))'];
-    const values: unknown[] = [this.accountIds];
+    await this.assertReadScope();
+    const clauses = ['match.shard=$2', 'EXISTS (SELECT 1 FROM match_players AS member WHERE member.shard=match.shard AND member.match_id = match.match_id AND member.account_id = ANY($1::text[]))'];
+    const values: unknown[] = [this.accountIds, this.shard];
     if (options.fromMs !== undefined) { values.push(options.fromMs); clauses.push(`match.timestamp_ms >= $${values.length}`); }
     if (options.toMs !== undefined) { values.push(options.toMs); clauses.push(`match.timestamp_ms < $${values.length}`); }
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10000), 1), 10000);
@@ -235,10 +258,10 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     const players = await this.pool.query(
       `SELECT player.*, selected.timestamp_ms AS selected_timestamp
        FROM unnest($1::text[]) AS chosen(match_id)
-       JOIN matches AS selected ON selected.match_id = chosen.match_id
-       JOIN match_players AS player ON player.match_id = selected.match_id
+       JOIN matches AS selected ON selected.match_id = chosen.match_id AND selected.shard=$2
+       JOIN match_players AS player ON player.match_id = selected.match_id AND player.shard=selected.shard
        ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC`,
-      [matchIds],
+      [matchIds, this.shard],
     );
     const byMatch = new Map<string, NormalizedPlayer[]>();
     for (const player of players.rows) {
@@ -251,7 +274,9 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async upsertMatches(input: unknown[], metadata: MatchWriteMetadata = {}): Promise<UpsertMatchesResult> {
+    await this.assertReadScope();
     const individuallyNormalized = input.flatMap((item) => normalizeRecords([item]));
+    if (individuallyNormalized.some(match => match.shard !== this.shard)) throw new Error('repository_shard_mismatch');
     const records = normalizeRecords(input).filter((match) => match.matchId && Number.isFinite(match.timestamp));
     const duplicateInputs = Math.max(0, individuallyNormalized.length - records.length);
     const invalidInputs = Math.max(0, input.length - individuallyNormalized.length);
@@ -260,14 +285,14 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     let updated = 0;
     await withTransaction(this.pool, async (client) => {
       for (const match of records) {
-        const prior = await client.query('SELECT 1 FROM matches WHERE match_id = $1', [match.matchId]);
+        const prior = await client.query('SELECT 1 FROM matches WHERE match_id = $1 AND shard=$2', [match.matchId, this.shard]);
         await client.query(
           `INSERT INTO matches (
              match_id, shard, created_at, timestamp_ms, match_type, game_mode, is_competitive,
              map_name, duration, patch_version, telemetry_url, schema_version, parser_version,
              fetched_at, source, checked_player_ids_json, raw_json
            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,$17::jsonb)
-           ON CONFLICT (match_id) DO UPDATE SET
+           ON CONFLICT (shard,match_id) DO UPDATE SET
              shard=EXCLUDED.shard, created_at=EXCLUDED.created_at, timestamp_ms=EXCLUDED.timestamp_ms,
              match_type=EXCLUDED.match_type, game_mode=EXCLUDED.game_mode,
              is_competitive=EXCLUDED.is_competitive, map_name=EXCLUDED.map_name,
@@ -277,21 +302,21 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
              source=EXCLUDED.source, checked_player_ids_json=EXCLUDED.checked_player_ids_json,
              raw_json=EXCLUDED.raw_json`,
           [match.matchId, match.shard, match.createdAt, match.timestamp, match.matchType, match.gameMode,
-            match.isCompetitive, match.mapName, match.duration, match.patchVersion, match.telemetryUrl ?? null,
-            match.schemaVersion, metadata.parserVersion ?? null, fetchedAt, metadata.source ?? 'unknown',
-            JSON.stringify(metadata.checkedPlayerIds ?? match.players.map((player) => player.accountId)),
-            metadata.rawJson === undefined ? null : JSON.stringify(metadata.rawJson)],
+          match.isCompetitive, match.mapName, match.duration, match.patchVersion, match.telemetryUrl ?? null,
+          match.schemaVersion, metadata.parserVersion ?? null, fetchedAt, metadata.source ?? 'unknown',
+          JSON.stringify(metadata.checkedPlayerIds ?? match.players.map((player) => player.accountId)),
+          metadata.rawJson === undefined ? null : JSON.stringify(metadata.rawJson)],
         );
-        await client.query('DELETE FROM match_players WHERE match_id = $1', [match.matchId]);
+        await client.query('DELETE FROM match_players WHERE match_id = $1 AND shard=$2', [match.matchId, this.shard]);
         for (const player of match.players) {
           await client.query(
             `INSERT INTO match_players (
               match_id, account_id, player_name, display_name, rank, kills, assists, damage,
-              dbnos, revives, headshot_kills, survival_time, longest_kill, deaths, death_semantics
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+              dbnos, revives, headshot_kills, survival_time, longest_kill, deaths, death_semantics,shard
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
             [match.matchId, player.accountId, player.playerName, player.displayName, player.rank,
-              player.kills, player.assists, player.damage, player.dbnos, player.revives,
-              player.headshotKills, player.survivalTime, player.longestKill, player.deaths, player.deathSemantics],
+            player.kills, player.assists, player.damage, player.dbnos, player.revives,
+            player.headshotKills, player.survivalTime, player.longestKill, player.deaths, player.deathSemantics, this.shard],
           );
         }
         if (prior.rowCount) updated += 1;
@@ -302,6 +327,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async setSyncState(state: SyncState): Promise<void> {
+    await this.assertReadScope();
     await this.pool.query(
       `INSERT INTO sync_state(tenant_id, team_id, state_key, checked_at, state_json)
        VALUES ($1,$2,$3,$4,$5::jsonb)
@@ -312,6 +338,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async getSyncState(key: string): Promise<SyncState | null> {
+    await this.assertReadScope();
     const result = await this.pool.query(
       'SELECT state_json FROM sync_state WHERE tenant_id=$1 AND team_id=$2 AND state_key=$3',
       [this.scope.tenantId, this.scope.teamId, key],
@@ -320,10 +347,11 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async get(key: TelemetryFeatureKey): Promise<TelemetryFeatureRecord | null> {
+    if (!await this.getMatch(key.matchId)) return null;
     const result = await this.pool.query(
       `SELECT facts_json, created_at FROM telemetry_features
-       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3`,
-      [key.matchId, key.parserVersion, key.featureVersion],
+       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3 AND shard=$4`,
+      [key.matchId, key.parserVersion, key.featureVersion, this.shard],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -333,53 +361,59 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   }
 
   async set(record: TelemetryFeatureRecord): Promise<void> {
+    if (!await this.getMatch(record.matchId)) throw new Error('telemetry_match_not_in_team');
     await this.pool.query(
-      `INSERT INTO telemetry_features(match_id, parser_version, feature_version, facts_json, created_at)
-       VALUES ($1,$2,$3,$4::jsonb,$5)
-       ON CONFLICT (match_id, parser_version, feature_version) DO UPDATE
+      `INSERT INTO telemetry_features(match_id, parser_version, feature_version, facts_json, created_at,shard)
+       VALUES ($1,$2,$3,$4::jsonb,$5,$6)
+       ON CONFLICT (shard,match_id, parser_version, feature_version) DO UPDATE
        SET facts_json=EXCLUDED.facts_json, created_at=EXCLUDED.created_at`,
-      [record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt],
+      [record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt, this.shard],
     );
   }
 
   async getTelemetryPrefetchAttempt(key: TelemetryFeatureKey): Promise<TelemetryPrefetchAttempt | null> {
+    if (!await this.getMatch(key.matchId)) return null;
     const result = await this.pool.query(
       `SELECT * FROM telemetry_prefetch_attempts
-       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3`,
-      [key.matchId, key.parserVersion, key.featureVersion],
+       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3 AND shard=$4`,
+      [key.matchId, key.parserVersion, key.featureVersion, this.shard],
     );
     return result.rows[0] ? attemptFromRow(result.rows[0]) : null;
   }
 
   async listDueTelemetryPrefetchAttempts(parserVersion: string, featureVersion: string, now: Date, limit = 100): Promise<TelemetryPrefetchAttempt[]> {
+    await this.assertReadScope();
     const bounded = Math.min(Math.max(Math.trunc(limit), 1), 1000);
     const result = await this.pool.query(
-      `SELECT * FROM telemetry_prefetch_attempts
-       WHERE parser_version=$1 AND feature_version=$2
+      `SELECT attempt.* FROM telemetry_prefetch_attempts attempt
+       WHERE parser_version=$1 AND feature_version=$2 AND attempt.shard=$5
+         AND EXISTS (SELECT 1 FROM match_players member WHERE member.shard=attempt.shard AND member.match_id=attempt.match_id AND member.account_id=ANY($6::TEXT[]))
          AND status IN ('PENDING','UNAVAILABLE') AND (next_retry_at IS NULL OR next_retry_at <= $3)
        ORDER BY COALESCE(next_retry_at, '-infinity'::timestamptz), updated_at, match_id
        LIMIT $4`,
-      [parserVersion, featureVersion, now, bounded],
+      [parserVersion, featureVersion, now, bounded, this.shard, this.accountIds],
     );
     return result.rows.map(attemptFromRow);
   }
 
   async setTelemetryPrefetchAttempt(attempt: TelemetryPrefetchAttempt): Promise<void> {
+    if (!await this.getMatch(attempt.matchId)) throw new Error('telemetry_match_not_in_team');
     await this.pool.query(
       `INSERT INTO telemetry_prefetch_attempts(
          match_id, parser_version, feature_version, status, attempt_count,
-         last_attempted_at, next_retry_at, error, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (match_id, parser_version, feature_version) DO UPDATE SET
+         last_attempted_at, next_retry_at, error, updated_at,shard
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+       ON CONFLICT (shard,match_id, parser_version, feature_version) DO UPDATE SET
          status=EXCLUDED.status, attempt_count=EXCLUDED.attempt_count,
          last_attempted_at=EXCLUDED.last_attempted_at, next_retry_at=EXCLUDED.next_retry_at,
          error=EXCLUDED.error, updated_at=EXCLUDED.updated_at`,
       [attempt.matchId, attempt.parserVersion, attempt.featureVersion, attempt.status,
-        attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt],
+      attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt, this.shard],
     );
   }
 
   async recordTelemetryPrefetchRun(run: TelemetryPrefetchRun): Promise<void> {
+    await this.assertReadScope();
     await this.pool.query(
       `INSERT INTO telemetry_prefetch_runs(
          tenant_id, team_id, run_id, report_date, started_at, finished_at, trigger,
@@ -394,13 +428,14 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
          cache_hit_count=EXCLUDED.cache_hit_count, unavailable_count=EXCLUDED.unavailable_count,
          pending_count=EXCLUDED.pending_count, failed_match_ids_json=EXCLUDED.failed_match_ids_json`,
       [this.scope.tenantId, this.scope.teamId, run.runId, run.reportDate, run.startedAt, run.finishedAt,
-        run.trigger, run.discoveredMatchCount, run.newMatchCount, run.candidateMatchCount,
-        run.fetchedCount, run.cacheHitCount, run.unavailableCount, run.pendingCount,
-        JSON.stringify([...new Set(run.failedMatchIds)])],
+      run.trigger, run.discoveredMatchCount, run.newMatchCount, run.candidateMatchCount,
+      run.fetchedCount, run.cacheHitCount, run.unavailableCount, run.pendingCount,
+      JSON.stringify([...new Set(run.failedMatchIds)])],
     );
   }
 
   async listTelemetryPrefetchRuns(reportDate: string): Promise<TelemetryPrefetchRun[]> {
+    await this.assertReadScope();
     const result = await this.pool.query(
       `SELECT * FROM telemetry_prefetch_runs
        WHERE tenant_id=$1 AND team_id=$2 AND report_date=$3 ORDER BY started_at, run_id`,
@@ -419,8 +454,8 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
        ON CONFLICT (tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id, result_set_id)
        DO UPDATE SET expires_at=EXCLUDED.expires_at, result_json=EXCLUDED.result_json`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-        conversation.userId, conversation.channelId, conversation.sessionId, record.id,
-        record.expiresAt, JSON.stringify(record)],
+      conversation.userId, conversation.channelId, conversation.sessionId, record.id,
+      record.expiresAt, JSON.stringify(record)],
     );
   }
 
@@ -431,7 +466,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
        WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
          AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND result_set_id=$8 AND expires_at>$9`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-        conversation.userId, conversation.channelId, conversation.sessionId, resultSetId, now],
+      conversation.userId, conversation.channelId, conversation.sessionId, resultSetId, now],
     );
     return result.rows[0] ? objectValue<ResultSetRecord | null>(result.rows[0].result_json, null) : null;
   }
@@ -446,8 +481,8 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
        ON CONFLICT (tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id)
        DO UPDATE SET expires_at=EXCLUDED.expires_at, context_json=EXCLUDED.context_json`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-        conversation.userId, conversation.channelId, conversation.sessionId,
-        context.expiresAt, JSON.stringify(context)],
+      conversation.userId, conversation.channelId, conversation.sessionId,
+      context.expiresAt, JSON.stringify(context)],
     );
   }
 
@@ -458,12 +493,13 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
        WHERE tenant_id=$1 AND team_id=$2 AND platform=$3 AND bot_account_id=$4
          AND user_id=$5 AND channel_id=$6 AND session_id=$7 AND expires_at>$8`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
-        conversation.userId, conversation.channelId, conversation.sessionId, now],
+      conversation.userId, conversation.channelId, conversation.sessionId, now],
     );
     return result.rows[0] ? objectValue<SessionContextRecord | null>(result.rows[0].context_json, null) : null;
   }
 
   async cleanupExpired(now = new Date()): Promise<void> {
+    await this.assertReadScope();
     await this.pool.query('DELETE FROM result_sets WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
     await this.pool.query('DELETE FROM session_contexts WHERE tenant_id=$1 AND team_id=$2 AND expires_at <= $3', [this.scope.tenantId, this.scope.teamId, now]);
   }

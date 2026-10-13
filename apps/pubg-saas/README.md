@@ -25,7 +25,19 @@ progress. The service is not deployed, and live buttons remain unverified.
   tenant/team, or that a direct message has a `team_user_access` grant for the
   selected team. Session state is keyed by tenant, team, bot, user, channel and
   session. Match and telemetry facts are shared inside the public database;
-  match selection is constrained by the trusted team's PUBG account IDs.
+  match selection is constrained by the trusted team's PUBG account IDs and
+  shard. The adapter checks the registered team shard/roster before data access;
+  conversation grants/bindings also guard match and telemetry reads, not just
+  conversation storage. Forged or outdated team configurations fail closed.
+- Public matches, player rows, telemetry features and prefetch attempts use
+  shard + match ID keys. Same-ID records in different shards cannot overwrite
+  or join each other. Telemetry reads/writes and due-attempt lists require a
+  match containing an authorized team account.
+- Migration `0005` backfills child shards only from the known legacy parent
+  match, with composite keys/FKs and scoped indexes. Unmatched historical
+  telemetry stops the transaction with `public_match_shard_backfill_unresolved`;
+  it is retained for an operator to resolve from evidence before a protected
+  live apply. The migration does not guess a shard or silently delete it.
 - `TeamAdminService` accepts parser-produced trusted group/button events and calls
   `KookPermissionClient` on every management action before beginning a DB
   transaction. Roster replacement/addition, channel unbinding and disbanding
@@ -127,7 +139,7 @@ The separately authorized public runtime phase must supply its independent
 `DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
 outside Git. Appending
 `--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0004_guild_welcome.sql`
+before gateway startup; the gateway checks migration `0005_sharded_match_cache.sql`
 and never migrates automatically. The PG connection pool is bounded and has
 connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
 before closing the pool.
@@ -155,7 +167,7 @@ Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
 runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
 database; it applies migrations and removes its synthetic rows. Do not point it
-at a live or shared database. The 35-test SaaS suite passed on ephemeral
+at a live or shared database. The 38-test SaaS suite passed on ephemeral
 PostgreSQL 18 together with the workflow-selected private PUBG checks. It covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
@@ -168,3 +180,6 @@ Welcome fixtures cover restart/retry, replay, independent guild backlog,
 absent/foreign/non-text targets, fresh pre-send target validation and gateway
 acknowledgement before slow target lookup. This proves the source protocol path,
 not real KOOK onboarding or 200-guild eligibility.
+Repository fixtures deliberately collide match/account IDs across Steam/Kakao,
+check foreign telemetry/queue denial and forged/stale roster/DM access, and
+verify valid legacy backfill plus atomic rollback on an unresolved shard.

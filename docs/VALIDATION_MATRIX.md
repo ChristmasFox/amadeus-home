@@ -55,5 +55,7 @@ durable ingress/restart, actor ordering/admission bounds, callback mutation
 receipt recovery, name-based onboarding/roster/self-claim, channel revision and
 scope-change rejection, public API admission/header backoff, prior-schema upgrades and fixture gateway-to-channel/DM
 delivery including system-join welcome metadata validation and replay.
+Public repository fixtures include cross-shard ID collisions, registered-roster
+and DM access checks, foreign telemetry denial and atomic legacy shard migration.
 Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
 backup/restore or 200-squad acceptance.
