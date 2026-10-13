@@ -84,6 +84,54 @@ host backup job; it does not expose the database to the LAN. `docker compose dow
 stops this Compose project and preserves its PostgreSQL volume. Never use
 `down -v` for a database that contains data.
 
+## Public AI planner benchmark
+
+`apps/pubg-saas/tests/nl-query-provider.benchmark.ts` runs the configured AI SDK
+planner against 100–200 benchmark cases sequentially. The JSON file must be
+outside the repository, owner-only (`0600`), and contain only deidentified
+prompts with reference plans based on the shared Domain/Kurisu query behavior.
+It accepts this case shape:
+
+```json
+{
+  "version": 1,
+  "cases": [
+    {
+      "caseId": "team-today-kills-01",
+      "message": "今天队伍一共淘汰多少人？",
+      "expectedPlan": {
+        "version": 1,
+        "intent": "team_stats",
+        "subject": "team",
+        "playerName": null,
+        "actorName": null,
+        "victimName": null,
+        "metric": "kills",
+        "period": "today",
+        "comparePeriod": null,
+        "matchCount": null,
+        "needsClarification": false
+      }
+    }
+  ]
+}
+```
+
+Set `PUBG_SAAS_PROMPT_BENCHMARK_FILE` and
+`PUBG_SAAS_PROMPT_BENCHMARK_REPORT` to separate protected files outside Git,
+then load `MODEL_BASE_URL`, `MODEL_ID`, and `MODEL_API_KEY` from the public
+inference provider's test credentials and run:
+
+```sh
+pnpm --filter @agent/pubg-saas exec tsx tests/nl-query-provider.benchmark.ts
+```
+
+Each request has a 45-second abort timeout, one invocation and no retry. The
+mode-0600 report records exact/field accuracy, fallback count, latency P50/P95,
+and token use without writing raw prompts or extracted player names. This
+planner-only benchmark does not replace Domain/executor, database authorization,
+or full KOOK acceptance. No live provider benchmark has been run.
+
 ## Backup and independent restore
 
 The backup tool and its public-schema-only scope are documented in

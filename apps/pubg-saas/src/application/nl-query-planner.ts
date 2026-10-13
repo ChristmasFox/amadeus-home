@@ -91,6 +91,8 @@ export interface QueryPlannerInput {
   message: string;
   /** A prior validated plan may help resolve references such as “那他呢”. */
   previousPlan?: QueryPlan | null;
+  /** Allows callers to bound provider latency without retrying the request. */
+  signal?: AbortSignal;
 }
 
 export interface QueryPlanUsage {
@@ -192,6 +194,7 @@ export class NaturalLanguageQueryPlanner {
         maxOutputTokens: QUERY_PLANNER_LIMITS.maxOutputTokens,
         maxRetries: QUERY_PLANNER_LIMITS.maxRetries,
         temperature: 0,
+        ...(input.signal ? { abortSignal: input.signal } : {}),
       });
 
       const parsed = QueryPlanSchema.safeParse(result.output);

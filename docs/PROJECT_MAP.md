@@ -98,7 +98,10 @@ source are present but uninstalled; its one-shot job passed against the isolated
 PostgreSQL fixture. Image build, clean Linux/cloud recovery, scheduled operation,
 tested egress restrictions and public/private stop-isolation remain open. Real
 test-guild acceptance, the deidentified prompt benchmark, and measured M204
-resource/quota feasibility also remain open.
+resource/quota feasibility also remain open. The P4 benchmark runner is in
+`apps/pubg-saas/tests/nl-query-provider.benchmark.ts`; it needs an external
+owner-only 100–200-case prompt file and test-provider credentials before it can
+produce accuracy/token/P50/P95 evidence.
 
 ## Request paths and guardrails
 

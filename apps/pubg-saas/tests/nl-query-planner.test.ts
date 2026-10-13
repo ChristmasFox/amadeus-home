@@ -167,3 +167,29 @@ test('contains provider failures without exposing provider details', async () =>
   assert.equal(JSON.stringify(result).includes('private provider detail'), false);
   assert.equal(model.doGenerateCalls.length, 1);
 });
+
+test('passes a caller abort signal into the provider invocation', async () => {
+  let providerSignal: AbortSignal | undefined;
+  const model = new MockLanguageModelV4({
+    doGenerate: async options => {
+      providerSignal = options.abortSignal;
+      return {
+        content: [{ type: 'text', text: JSON.stringify(validPlan) }],
+        finishReason: { unified: 'stop', raw: 'stop' },
+        usage,
+        warnings: [],
+      };
+    },
+  });
+  const planner = new NaturalLanguageQueryPlanner(model);
+  const controller = new AbortController();
+
+  const result = await planner.plan({
+    authorizationContext,
+    message: '查今天队伍战绩',
+    signal: controller.signal,
+  });
+
+  assert.equal(result.source, 'model');
+  assert.equal(providerSignal, controller.signal);
+});

@@ -106,9 +106,11 @@ Clean Linux/cloud restore, scheduled retention, tested egress restrictions and
 the M204-public-stop/private-Kurisu and isolated-cloud independence drills
 remain unverified. The ordinary Docker bridge does not restrict app egress.
 KOOK 200-guild eligibility, developer-account-wide daily send quota, live API
-quota feasibility, P4 prompt accuracy/P95, and M204/container RSS headroom also
-remain open pre-release gates. No private runtime, production database, 9Router
-or deployment was touched. Full M2 evidence is in
+quota feasibility, live model accuracy/P95, and M204/container RSS headroom also
+remain open pre-release gates. The P4 benchmark runner now requires a protected
+external 100–200-case dataset and test-provider credentials; no live benchmark
+has run. No private runtime, production database, 9Router or deployment was
+touched. Full M2 evidence is in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-source-acceptance.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

@@ -39,6 +39,12 @@ instructions remain in
   match. Retention cannot be set below seven days and removes only complete,
   matching encrypted artifact/manifest pairs. The timer has not been installed
   or allowed to run on M204.
+- The P4 follow-up adds an AI SDK benchmark runner for 100–200 deidentified
+  external prompt cases, exact/field accuracy, fallback rate, token totals, and
+  sequential P50/P95. Input/report files must be outside Git and owner-only;
+  reports omit prompt text and extracted player names. It applies a 45-second
+  per-case abort signal. The runner has only fixture/mock verification so far;
+  no live model accuracy is claimed.
 - The first real restore reproduction failed with PostgreSQL's
   `schema "public" already exists`: the archived TOC creates `public`, which a
   newly created database already has. The restore tool now omits exactly that
@@ -78,6 +84,11 @@ instructions remain in
   URL entrypoint and PostgreSQL role bootstrap, the entrypoint password URL
   encoding probe, architecture scan, secrets scan and diff check passed. No
   image build or container start was attempted.
+- The targeted AI planner/benchmark tests passed 9/9 and
+  `pnpm typecheck:pubg-saas` passed with the provider abort signal and benchmark
+  file included. The report-writing and live 100–200 prompt call have not been
+  run because no external deidentified corpus or public test-provider
+  credentials were configured.
 
 An initial full SaaS run had one fixture failure: the onboarding test sends
 more than the production default of 10 requests per user in a minute. That
@@ -109,10 +120,9 @@ was removed or relaxed.
   remaining developer-account usage and eligibility for 200 guilds are
   unverified. See [KOOK rate-limit headers](https://developer.kookapp.cn/doc/rate-limit)
   and [KOOK message quota](https://developer.kookapp.cn/doc/http/message).
-- P4's deidentified prompt-accuracy benchmark, live API/model accuracy and
-  latency, official PUBG quota feasibility, resource headroom and formal
-  pre-release go/no-go remain open. No provider credentials or real guild were
-  configured.
+- P4's deidentified prompt-accuracy run, live API/model accuracy and latency,
+  official PUBG quota feasibility, resource headroom and formal pre-release
+  go/no-go remain open. No provider credentials or real guild were configured.
 
 No production database, Docker service, CasaOS service, private OpenClaw,
 9Router, or external cloud was changed. No deployment occurred.
