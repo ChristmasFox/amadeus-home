@@ -86,8 +86,9 @@ including concurrent budget admission, outbox deferral and the integrated
 runtime. Local Compose build/start, migration 0012, encrypted backup/restore
 with table-count and role-boundary probes, and the public-stop/private-Kurisu
 source regression are verified. Canonical-host resource/alert routing,
-clean-Linux/cloud recovery, scheduled backup installation, quota/eligibility
-and full independent-runtime drills remain. P3 real
+cloud recovery, scheduled backup installation, quota/eligibility and full
+independent-runtime drills remain. The clean Linux ARM64 guest now passes
+Compose recovery and application egress isolation. P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
 cross-channel routing, management callbacks and unauthorized denial) and KOOK
@@ -154,6 +155,14 @@ isolated Linux Compose/recovery evidence, but does not prove canonical
 CasaOS-host capacity, scheduled backup, or cloud operation with M204 isolated.
 No real KOOK/PUBG/model credential was used; those acceptance gates remain
 open. Full commands and artifact checksum are in the dated M2 checkpoint.
+
+The checked-in `scripts/tests/pubg-saas-egress-smoke.mjs` makes the clean Linux
+container network check reproducible. On the same guest, its Compose runs
+passed independently for Gateway and Worker: both had no default route, direct
+public and metadata connections returned `ENETUNREACH`, the proxy returned 403
+for metadata and `host.docker.internal`, and a public HTTPS HEAD through the
+proxy returned 200. The proxy-only Compose project was stopped afterward; no
+PG or application process remained running.
 
 ## KOOK test-server connection check — 2026-10-14
 

@@ -15,6 +15,12 @@ use passed on both databases. The exact-marker disposable restore database was
 cleaned; Compose projects were stopped with plain `down`, preserving isolated
 volumes.
 
+The checked-in `scripts/tests/pubg-saas-egress-smoke.mjs` also passed inside both
+Gateway and Worker Compose network namespaces on this clean Linux guest: no
+default route, direct public/metadata TCP denied, proxy CONNECT to metadata and
+`host.docker.internal` returned 403, and credential-free public HTTPS via proxy
+returned 200. The proxy-only project was stopped after the smoke.
+
 With public Compose down, `pnpm test:pubg` passed 68/68. Read-only checks show
 private OpenClaw healthy with restart count 0 and unchanged container ID/start
 time; 9Router also kept the same ID/start time and restart count 0. Neither was

@@ -813,3 +813,46 @@ Linux-native image build acceptance, or live PUBG/model provider acceptance.
 The authenticated KOOK gateway run recorded elsewhere proves test-bot
 authentication only; human message/callback/permission flows and KOOK quota
 eligibility remain open. No production deploy was authorized or attempted.
+
+## Clean Linux Gateway/Worker egress boundary smoke — 2026-10-14
+
+Added `scripts/tests/pubg-saas-egress-smoke.mjs` as a credential-free Compose
+acceptance probe. It checks the current container's route table, direct TCP to
+a public address and the metadata address, proxy CONNECT handling for metadata
+and `host.docker.internal`, then sends a HEAD request to `example.com` through
+the app's `undici` `ProxyAgent`. It prints only status categories/codes.
+
+The first mounted-script attempt stopped before networking because an ES module
+under `/tmp` resolved `undici` relative to `/tmp` instead of the image's
+`/app/node_modules`. This was a probe packaging issue; the checked-in script
+resolves the installed dependency from the Compose service working directory.
+The script then passed separately in both Gateway and Worker networks on the
+clean Ubuntu 24.04 ARM64 VM:
+
+```text
+PUBG_SAAS_EGRESS_SMOKE=passed direct_public=blocked:ENETUNREACH direct_metadata=blocked:ENETUNREACH metadata_proxy=403 private_host_proxy=403 public_https=200
+```
+
+Compose render succeeded, the proxy health check passed, and both app
+containers had no default route. The proxy-only source Compose project was
+stopped with plain `down` after each run; the final container list was empty.
+No PostgreSQL, provider key, KOOK token, production endpoint, private OpenClaw
+or 9Router state was involved. This verifies the clean Linux application
+egress boundary with public HTTPS available only through the proxy; it does
+not verify canonical CasaOS host headroom or public cloud operation while M204
+is unavailable.
+
+Reproduction from the isolated VM with the current image and protected local
+Compose files:
+
+```sh
+cd /var/tmp/pubg-saas-m2-clean/src
+docker compose --env-file .env config --quiet
+docker compose --env-file .env up -d --wait egress-proxy
+for service in gateway worker; do
+  docker compose --env-file .env run --rm --no-deps \
+    --volume /var/tmp/pubg-saas-m2-clean/tooling/scripts/tests/pubg-saas-egress-smoke.mjs:/tmp/pubg-saas-egress-smoke.mjs:ro \
+    --entrypoint node "$service" /tmp/pubg-saas-egress-smoke.mjs
+done
+docker compose --env-file .env down
+```
