@@ -214,3 +214,57 @@ This records the required capability decisions for `docs/AMADEUS_VPS_DAILY_TRAFF
 - **Notification:** Persist sanitized durable event keys for warning/engaged/released/failure, with retries and de-duplication. A bounded deterministic Amadeus worker adapts events with the **existing** `worldline_notification_intent` contract and `adaptWorldlineNotification`, then uses the canonical `OwnerNotifier` WhatsApp outbox. Kind `status_changed`/`network_degraded` yields 世界线偏移; `source_recovered` with success yields 世界线收束; scheduled reports use D-Mail. The renderer owns character/style/closing; no second sender or new persona text.
 - **Safety / recovery:** Maintain SSH management reachability, never overwrite a foreign root qdisc, checkpoint/verify active `tc` state, arm timed rescue, and release only fuse-owned rules. A reported cap/release must match actual kernel verification. Existing six tokens/proxy secrets, REALITY fallback hardening, HY2 security, scheduled report job IDs and Legacy retirement remain unchanged.
 - **Proof:** Fake-clock day/midnight tests, provider reset and source-staleness tests, NIC counter rollover, simulated high-speed trigger, isolated 2 Mbps aggregate-shaping proof, existing-qdisc preservation, SSH/reboot/rescue, outbox retry/idempotence, themed WhatsApp proof, focused test/typecheck, secrets scan and protected runtime checkpoint. Phase 0/1 are source-only; actual runtime apply requires explicit owner authorization.
+
+## Planning record — PUBG KOOK SaaS V0.1 (2026-10-13)
+
+This records the capability decisions for `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`.
+The Goal, repository source, and separate private/public deployment state remain
+authoritative; this record is not a runtime registry.
+
+- **Intent and identity:** Public users can associate their KOOK identity with
+  PUBG accounts, join one or more squads, and request their own or authorized
+  squad PUBG statistics, match reviews, comparisons, and bounded follow-ups.
+  Guild administrators may create squads and bind channels after current KOOK
+  permissions are verified. Public identity is `(platform, botAccount, userId)`;
+  tenant, team, channel, sender, and request scope come from a verified gateway
+  event plus database ownership. LLM tool arguments cannot supply authority.
+  Account claims stay self-declared unless a validated ownership proof exists.
+  No public WhatsApp/Telegram channel, web console, payments, or automatic
+  long-term chat memory is in scope.
+- **Architecture ownership:** `packages/pubg-domain` owns deterministic PUBG
+  facts, query schemas, math, evidence and coverage semantics. The private
+  `plugins/pubg` remains OpenClaw + SQLite with its existing protected single
+  team configuration. A separate `apps/pubg-saas` owns KOOK event validation,
+  trusted authorization, AI SDK planning, presentation, and workers; public
+  PostgreSQL adapters and migrations own public persistence. KOOK, AI SDK,
+  PostgreSQL and deployment details remain outside PUBG Domain. Existing
+  structured presentation and result contracts are preserved.
+- **Evidence, unknowns, and time:** Every answer keeps `ToolEnvelope`, evidence
+  references, `asOf`, metric version, query resolution, and honest partial,
+  unavailable, unknown and no-match states. The existing Asia/Shanghai timezone
+  and 06:00 business-day boundary apply. Model-generated numeric claims must be
+  supported by scoped Domain evidence; ambiguous follow-ups ask for clarification.
+- **Side effects and recovery:** Public state includes tenant/guild and team
+  ownership, channel bindings, membership and account claims, compact
+  conversation/result-set state, match facts, telemetry/cache, sync scheduling,
+  message inbox/outbox dedupe, and bounded usage records. Public secrets are
+  runtime-only environment/secret-store values; `.env.example` contains
+  placeholders only. Public Postgres, worker and app have independent backup,
+  restore and migration procedures. No production KOOK token, PUBG API key,
+  model credential, private SQLite data, private worker, OpenClaw runtime, or
+  9Router admin interface is accessed by this source phase. Production writes,
+  public exposure, cloud provisioning, private runtime changes and real bot
+  onboarding remain separately authorized release actions.
+- **Validation and acceptance:** Focused domain, public repository and tenant
+  isolation tests; fixture parity through SQLite/PostgreSQL; migration and
+  transaction tests; architecture checks preventing public imports of private
+  OpenClaw/Amadeus; affected typecheck/build; `pnpm check:secrets`; and
+  `git diff --check`. Later phases require KOOK mock/replay tests, AI prompt
+  evaluation, measured 200-squad workload, backup/restore and public/private
+  independence drills. Live KOOK and external policy/quota validation require
+  operator-provided isolated credentials and separately approved acceptance;
+  they are not claimed by mocks.
+- **Remaining work:** P1 is still in progress; P2+ app, Postgres, authorization,
+  ingress, AI, ingestion, measured load, restore, policy review and release
+  evidence are tracked in the active Goal. No additional TODO tracker is
+  created until a concrete operator-only or externally blocked action remains.

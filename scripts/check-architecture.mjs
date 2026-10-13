@@ -205,6 +205,14 @@ export function checkArchitecture(root = REPO_ROOT) {
     if (!/(?:classification):\s*['"](?:user-facing|intermediate|scheduled)['"]/u.test(entry)) errors.push(`PUBG presentation registry entry lacks classification: ${name}`);
   }
 
+  checkForbiddenImports(
+    root,
+    'apps/pubg-saas/src',
+    /(?:from\s*|import\s*\()['"](?:@agent\/amadeus-plugin|plugins\/amadeus\/|openclaw|@openclaw\/)/u,
+    'Public PUBG SaaS imports the private Amadeus/OpenClaw runtime',
+    errors,
+  );
+
   const worldlineSource = text(root, 'packages/presentation/src/worldline/contracts.ts');
   for (const producer of ['product-radar', 'market', 'pubg-sync', 'release', 'codex', 'vps', 'vps-traffic-fuse', 'homelab', 'nas', 'media', 'storage']) {
     if (!worldlineSource.includes(`'${producer}'`)) errors.push(`worldline producer registry lacks coverage: ${producer}`);

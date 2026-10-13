@@ -12,13 +12,20 @@ or 9Router administration.
 
 P0 is complete: the baseline was clean at `3f4cac2`; the initial workflow plan
 selected FAST; the public/private dependency map and synthetic stat golden are
-recorded; no runtime was changed. P1 is in progress: the query engine now
+recorded; no runtime was changed. P1 remains in progress: the query engine
 requires explicit `TeamContext`; the async `PubgRepositoryPort` is implemented
 with a scope-pinned SQLite adapter; `listMatches` limits player-row reads to
-the selected match window. `pnpm build:pubg`, `pnpm typecheck:pubg` and
-`pnpm test:pubg` pass (59 tests). Public app/Compose/Postgres/KOOK components,
-Postgres scope tests and independent-deployment drills remain unimplemented.
-Current source map: `docs/PROJECT_MAP.md`.
+the selected match window. Early P2 adds the `apps/pubg-saas` Postgres schema,
+migrations and roster/conversation-scoped adapter. A temporary PostgreSQL 18
+integration run passed two-guild/team and conversation/result-set isolation,
+duplicate display names, migration idempotence, and one SQLite/Postgres shared
+stat golden. Final source gates pass: `pnpm build:pubg`,
+`pnpm build:pubg-saas`, `pnpm workflow:verify` with ephemeral PostgreSQL 18,
+`pnpm test:workflow`, `pnpm test:architecture`, `pnpm check:secrets` and
+`git diff --check`. KOOK authorization and transport, full SQLite/Postgres
+edge-case parity, Compose/app runtime,
+and independent deployment/restore drills remain incomplete. Current source
+map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

@@ -19,6 +19,7 @@ const copies = [
   'packages/presentation/src', 'packages/presentation/package.json',
   'plugins/pubg/src',
   'packages/pubg-domain/src',
+  'apps/pubg-saas/src',
 ];
 try {
   for (const relative of copies) cpSync(join(root, relative), join(fixture, relative), { recursive: true });
@@ -60,6 +61,12 @@ try {
   writeFileSync(domainPath, 'export const leaked = "SERN";\n');
   const vocabularyErrors = checkArchitecture(fixture);
   assert.ok(vocabularyErrors.some((error) => error.includes('contains worldline presentation vocabulary')));
+
+  const privateRuntimeImport = join(fixture, 'apps/pubg-saas/src/private-runtime-import.ts');
+  writeFileSync(privateRuntimeImport, "import runtime from '@agent/amadeus-plugin';\n");
+  const publicBoundaryErrors = checkArchitecture(fixture);
+  assert.ok(publicBoundaryErrors.some((error) => error.includes('Public PUBG SaaS imports the private Amadeus/OpenClaw runtime')));
+  rmSync(privateRuntimeImport, { force: true });
 
   const storageSource = join(fixture, 'scripts/storage-maintenance.sh');
   writeFileSync(storageSource, 'docker volume prune\n');

@@ -66,6 +66,8 @@ export interface TelemetryPrefetchRun {
 export interface PubgRepositoryPort extends TelemetryFeatureStore {
   /** Scope is resolved by the application and fixed when the adapter is created. */
   readonly scope: TeamContext;
+  /** Storage provenance used when no upstream synchronization state exists. */
+  readonly store: string;
   countMatches(): Promise<number>;
   getMatch(matchId: string): Promise<NormalizedMatch | null>;
   listMatches(options?: { fromMs?: number; toMs?: number; limit?: number }): Promise<NormalizedMatch[]>;

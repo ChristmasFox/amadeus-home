@@ -19,8 +19,17 @@ assert_line "$pubg" 'CHANGE_SCOPE_LEVEL=RUNTIME'
 assert_line "$pubg" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
 assert_line "$pubg" 'DOCKER_BUILD=forbidden'
 
+pubg_golden_fixture="$(scope packages/pubg-domain/tests/fixtures/shared-domain-golden.json apps/pubg-saas/src/infrastructure/postgres/pubg-repository.ts)"
+assert_line "$pubg_golden_fixture" 'DOCKER_IMAGE_SET=pubg-saas'
+
 plugin="$(scope plugins/pubg/src/index.ts)"
 assert_line "$plugin" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
+
+pubg_saas="$(scope apps/pubg-saas/src/infrastructure/postgres/pubg-repository.ts)"
+assert_line "$pubg_saas" 'CHANGE_SCOPE_LEVEL=RUNTIME'
+assert_line "$pubg_saas" 'CHANGE_SCOPE_WORKFLOW=PUBG_SAAS'
+assert_line "$pubg_saas" 'DOCKER_BUILD=forbidden'
+assert_line "$pubg_saas" 'DOCKER_IMAGE_SET=pubg-saas'
 
 identity="$(scope packages/identity/src/index.ts)"
 assert_line "$identity" 'CHANGE_SCOPE_LEVEL=RUNTIME'

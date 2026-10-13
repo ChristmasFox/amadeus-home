@@ -25,22 +25,26 @@ This matrix is the default for 1.4.5 development. It preserves the release gates
 
 ## PUBG KOOK SaaS source implementation
 
-The active source Goal is `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`. During P1 changes
-to `packages/pubg-domain/**` and `plugins/pubg/**`, use the PUBG workflow:
+The active source Goal is `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`. During domain,
+private plugin, or public app changes, use the PUBG workflow:
 
 ```sh
 pnpm workflow:plan
 pnpm build:pubg
 pnpm typecheck:pubg
 pnpm test:pubg
+pnpm build:pubg-saas
+pnpm typecheck:pubg-saas
+PUBG_SAAS_TEST_DATABASE_URL=postgresql://localhost:5432/pubg_saas_test pnpm test:pubg-saas
 pnpm check:architecture
 pnpm check:secrets
 git diff --check
 ```
 
 `pnpm build:pubg` is needed when the plugin consumes a newly exported Domain
-symbol. Docker builds, Compose changes, runtime restarts, KOOK credentials and
-external exposure remain outside source-phase validation. Future
-`apps/pubg-saas` changes need app-local build/typecheck/test/smoke scripts plus
-the existing PUBG regression gates; the app must not claim live KOOK, quota,
-model-provider, backup/restore or 200-squad acceptance from fixture tests.
+symbol. Public Postgres integration tests use an isolated database selected by
+`PUBG_SAAS_TEST_DATABASE_URL`; they never create or alter a non-test server by
+default. Docker builds, Compose changes, runtime restarts, KOOK credentials and
+external exposure remain outside source-phase validation. Fixture and local
+Postgres results do not establish live KOOK, quota, model-provider,
+backup/restore or 200-squad acceptance.

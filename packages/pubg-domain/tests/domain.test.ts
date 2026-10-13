@@ -24,6 +24,7 @@ import {
   scopeMatchReviewFacts,
   type Coverage,
   type NormalizedMatch,
+  type SourceInfo,
   type TeamConfig,
 } from '../src/index.js';
 
@@ -46,20 +47,16 @@ const TEAM: TeamConfig = {
 };
 const TEAM_CONTEXT = createTeamContext('test-tenant', TEAM);
 
-const SOURCE = { store: 'fixture', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: 3 };
-const COVERAGE: Coverage = {
-  status: 'OK',
-  complete: true,
-  coverageStart: '2026-09-15T00:00:00.000Z',
-  coverageEnd: '2026-09-17T00:00:00.000Z',
-  checkedAt: '2026-09-17T00:00:00.000Z',
-  failedMatchIds: [],
-  sourceUnavailable: false,
-  freshness: 'fresh',
-  queryCovered: true,
-  requiredMatchCount: 3,
-  availableMatchCount: 3,
+const SHARED_DOMAIN_GOLDEN = JSON.parse(readFileSync(new URL('./fixtures/shared-domain-golden.json', import.meta.url), 'utf8')) as {
+  contract: string;
+  matches: Array<Record<string, unknown>>;
+  source: SourceInfo;
+  coverage: Coverage;
+  syntheticMatchIdsInRange: string[];
+  expectedPlayers: Array<Record<string, string | number | null>>;
 };
+const SOURCE = SHARED_DOMAIN_GOLDEN.source;
+const COVERAGE = SHARED_DOMAIN_GOLDEN.coverage;
 
 function rawMatch(
   matchId: string,
@@ -83,19 +80,7 @@ function rawMatch(
   };
 }
 
-const RAW_RECORDS = [
-  rawMatch('m1', '2026-09-15T16:00:00.000Z', [
-    { accountId: 'p1', playerName: 'Alice', kills: 4, deaths: 2, assists: 1, damage: 100, rank: 3 },
-    { accountId: 'p2', playerName: 'Bob', kills: 3, deaths: 0, damage: 50, rank: 1 },
-  ]),
-  rawMatch('m2', '2026-09-16T12:00:00.000Z', [
-    { accountId: 'p1', playerName: 'Alice', kills: 2, deaths: 1, assists: 2, damage: 80, rank: 5 },
-    { accountId: 'p2', playerName: 'Bob', kills: 1, deaths: 0, assists: 0, damage: 10, rank: 2 },
-  ], { mapName: 'Taego', gameMode: 'duo-fpp' }),
-  rawMatch('m3', '2026-09-17T00:00:00.000Z', [
-    { accountId: 'p1', playerName: 'Alice', kills: 99, deaths: 1, rank: 1 },
-  ]),
-];
+const RAW_RECORDS = SHARED_DOMAIN_GOLDEN.matches;
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -210,11 +195,7 @@ test('query engine uses half-open time ranges, zero-safe KD, missing assists, an
 });
 
 test('shared domain golden preserves synthetic private/public stat parity', () => {
-  const golden = JSON.parse(readFileSync(new URL('./fixtures/shared-domain-golden.json', import.meta.url), 'utf8')) as {
-    contract: string;
-    syntheticMatchIdsInRange: string[];
-    expectedPlayers: Array<Record<string, string | number | null>>;
-  };
+  const golden = SHARED_DOMAIN_GOLDEN;
   assert.equal(golden.contract, 'pubg-query-v1');
   const result = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, now: new Date('2026-09-17T00:00:00.000Z') })
     .execute(query(), RAW_RECORDS, COVERAGE, SOURCE);

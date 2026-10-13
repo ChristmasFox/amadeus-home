@@ -1,0 +1,21 @@
+{
+  "name": "@agent/pubg-saas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && mkdir -p dist/src/infrastructure/postgres/migrations && cp src/infrastructure/postgres/migrations/*.sql dist/src/infrastructure/postgres/migrations/",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test tests/**/*.test.ts"
+  },
+  "dependencies": {
+    "@agent/pubg-domain": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.6",
+    "@types/pg": "^8.15.5",
+    "tsx": "4.23.13",
+    "typescript": "5.9.2"
+  }
+}

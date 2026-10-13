@@ -54,6 +54,8 @@ is_env_path() {
 }
 
 has_pubg=0
+has_pubg_private=0
+has_pubg_saas=0
 has_identity=0
 has_amadeus=0
 has_presentation=0
@@ -74,7 +76,9 @@ for path in "${FILES[@]-}"; do
   [[ -n "$path" ]] || continue
   if is_env_path "$path"; then env_count=$((env_count + 1)); continue; fi
   case "$path" in
-    packages/pubg-domain/*|plugins/pubg/*) has_pubg=1 ;;
+    packages/pubg-domain/src/*|plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
+    packages/pubg-domain/*) has_pubg=1 ;;
+    apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1 ;;
     packages/presentation/*) has_presentation=1 ;;
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
@@ -100,7 +104,7 @@ for path in "${FILES[@]-}"; do
     docs/OPERATION_SKULD_*|docs/SERVICE_AWARE_BACKUP_REGISTRY.json|docs/VALIDATION_MATRIX.md)
       has_skuld_docs=1
       ;;
-    package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.dockerignore|*/Dockerfile|Dockerfile|Dockerfile.*|*/Dockerfile.*) has_package_meta=1 ;;
+    package.json|*/package.json|pnpm-lock.yaml|pnpm-workspace.yaml|.dockerignore|*/Dockerfile|Dockerfile|Dockerfile.*|*/Dockerfile.*) has_package_meta=1 ;;
     docs/*|.agent/*|.gitignore|README.md|AGENTS.md|VERSION|RELEASE_NOTES.md|scripts/check-architecture.mjs|scripts/test-check-architecture.mjs|scripts/developer-workflow.sh|scripts/test-developer-workflow.sh|scripts/notify-owner.sh|*.md|*/tests/*|*/test/*|*.test.ts|*.spec.ts) has_fast=1 ;;
     *) unknown+=("$path") ;;
   esac
@@ -129,6 +133,7 @@ elif ((has_router)); then
 elif ((has_pubg || has_identity || has_amadeus)); then
   LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
   if ((has_identity || has_amadeus)) && ((has_pubg == 0)); then WORKFLOW=AMADEUS_IDENTITY; fi
+  if ((has_pubg_saas)); then WORKFLOW=PUBG_SAAS; fi
 elif ((has_storage || has_backup)); then
   LEVEL=FAST; WORKFLOW=STORAGE_RUNTIME
   COMPOSE_MODE='none'
@@ -161,6 +166,15 @@ if ((has_router)); then
     DOCKER_IMAGE_SET=9router
   fi
 fi
+if ((has_pubg_saas)); then
+  if ((has_pubg_private)); then
+    DOCKER_IMAGE_SET='openclaw+pubg-saas'
+  elif ((has_product)); then
+    DOCKER_IMAGE_SET='product-radar+pubg-saas'
+  else
+    DOCKER_IMAGE_SET='pubg-saas'
+  fi
+fi
 printf 'DOCKER_IMAGE_SET=%s\n' "$DOCKER_IMAGE_SET"
 printf 'CHANGED_PATHS=%s\n' "${#FILES[@]}"
 for path in "${FILES[@]-}"; do printf 'PATH=%s\n' "$path"; done
@@ -169,6 +183,7 @@ if ((${#unknown[@]})); then printf 'UNKNOWN_PATHS=%s\n' "${unknown[*]}"; fi
 case "$WORKFLOW" in
   FAST) printf '%s\n' 'VERIFY=targeted local tests, affected typecheck, git diff --check; Docker/Compose/deploy are prohibited by default.' ;;
   PUBG_DOMAIN_PLUGIN) printf '%s\n' 'VERIFY=pnpm typecheck:pubg, pnpm test:pubg, git diff --check; deployment remains explicit.' ;;
+  PUBG_SAAS) printf '%s\n' 'VERIFY=pnpm typecheck:pubg, pnpm test:pubg, pnpm typecheck:pubg-saas, pnpm test:pubg-saas, git diff --check; deployment remains explicit.' ;;
   AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
@@ -213,6 +228,10 @@ fi
 if ((has_pubg)); then
   printf '+ pnpm typecheck:pubg\n'; pnpm typecheck:pubg
   printf '+ pnpm test:pubg\n'; pnpm test:pubg
+fi
+if ((has_pubg_saas)); then
+  printf '+ pnpm typecheck:pubg-saas\n'; pnpm typecheck:pubg-saas
+  printf '+ pnpm test:pubg-saas\n'; pnpm test:pubg-saas
 fi
 if ((has_identity || has_amadeus)); then
   printf '+ pnpm typecheck:amadeus\n'; pnpm typecheck:amadeus

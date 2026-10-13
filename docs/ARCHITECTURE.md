@@ -62,6 +62,10 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 服务、数据库、会话、worker 或凭证。公共实现以该 Goal 的 phase gate 为准；组件在源码和运行时
 得到验证前不视为已交付。当前责任路径索引见 [`PROJECT_MAP.md`](PROJECT_MAP.md)。
 
+当前公共源码已有 PostgreSQL schema/migration 与 scope-pinned Domain repository；临时
+PostgreSQL 18 测试通过了两 guild/team 隔离、重复显示名、会话/结果集边界和一组 SQLite/Postgres
+合成统计 golden parity。KOOK 身份授权、应用入口、其他边界 case 的全量 parity 与运行部署仍未交付。
+
 ## DeliveryEnvelope v2 — 唯一用户交付合同
 
 `plugins/amadeus/src/delivery-envelope.ts` 定义 `version=2`、runId、deliveryId、

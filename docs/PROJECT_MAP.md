@@ -7,6 +7,7 @@
 | `plugins/pubg` | PUBG 原生 plugin、确定性工具、bundled Skill | 私有 OpenClaw 进程内 |
 | `plugins/amadeus` | Amadeus 原生工具、VPS 通知、owner outbox worker | OpenClaw 进程内 |
 | `packages/pubg-domain` | PUBG API、确定性统计/查询/Telemetry domain | 被独立 plugin/app 构建并调用 |
+| `apps/pubg-saas` | Public Postgres schema/migrations and scoped Domain repository | Public app source; not deployed |
 | `apps/product-radar` | 商品监控、匹配、watch scheduler 和事件 outbox | 独立 CasaOS app |
 | `integrations/openclaw` | 脱敏 config、workspace、Codex hook | CasaOS OpenClaw |
 | `infra/docker/casaos/openclaw` | 固定镜像和 OpenClaw Compose 模板 | OrbStack CasaOS |
@@ -43,11 +44,14 @@ not call the private plugin, OpenClaw, private SQLite, private identity store,
 private worker, private credentials or household-only service endpoints.
 
 The initial P0 inventory found that neither `apps/pubg-saas` nor
-`infra/pubg-saas` existed. P1 has since added a generic async
-`PubgRepositoryPort` and a scope-pinned SQLite adapter for private use. The
-public deployment, Postgres schema/adapter and KOOK adapter remain
-implementation work. See the Goal's phase gates before describing any of them
-as ready.
+`infra/pubg-saas` existed. P1 added a generic async `PubgRepositoryPort` and a
+scope-pinned SQLite adapter for private use. Early P2 source now contains a
+Postgres schema/migration and an adapter with roster-filtered match selection
+and tenant/team/bot/user/channel/session scoped conversation storage. One
+synthetic stat golden now passes through both SQLite and Postgres repositories;
+full edge-case parity, public authorization, KOOK transport and deployment
+remain implementation work. See the Goal's phase gates before describing any
+of them as ready.
 
 ## Request paths and guardrails
 

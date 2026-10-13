@@ -1,0 +1,30 @@
+# PUBG KOOK SaaS source
+
+This package currently contains the first public persistence slice from
+`docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
+`PubgRepositoryPort` adapter. The KOOK gateway, authorization application,
+worker, AI SDK integration and deployment image are still in progress. This
+package is not a runnable or deployed service yet.
+
+## Trust boundaries
+
+- Callers construct `TeamContext` only after resolving a verified KOOK event
+  and tenant/team ownership in server code.
+- Result sets and conversation state require a `TrustedConversationScope`
+  created from the verified bot, user, channel and an opaque server-generated
+  session ID. Model/tool arguments never define that scope.
+- The adapter checks that the trusted channel remains bound to the selected
+  tenant/team, or that a direct message has a `team_user_access` grant for the
+  selected team. Session state is keyed by tenant, team, bot, user, channel and
+  session. Match and telemetry facts are shared inside the public database;
+  match selection is constrained by the trusted team's PUBG account IDs.
+- Public credentials and `DATABASE_URL` are runtime-only. No real credential
+  is needed for local repository tests.
+
+## Local verification
+
+Build the shared dependencies and package with `pnpm build:pubg-saas`, then
+typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
+runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
+database; it applies migrations and removes its synthetic rows. Do not point it
+at a live or shared database.

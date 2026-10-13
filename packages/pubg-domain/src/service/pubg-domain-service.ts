@@ -200,10 +200,10 @@ function asFiniteDate(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sourceForLocal(records: NormalizedMatch[], now: Date, state: SyncState | null): SourceInfo {
+function sourceForLocal(records: NormalizedMatch[], now: Date, state: SyncState | null, store: string): SourceInfo {
   if (state) return { ...state.source, localMatchCount: records.length };
   return {
-    store: 'sqlite',
+    store,
     syncInvoked: false,
     playerApiCalls: 0,
     matchApiCalls: 0,
@@ -550,9 +550,9 @@ export class PubgDomainService {
     const state = await this.repository.getSyncState('team:' + this.team.id);
     const stateChecked = state ? Date.parse(state.checkedAt) : Number.NaN;
     if (!refresh && state && Number.isFinite(stateChecked) && now.getTime() - stateChecked < this.freshnessMs) {
-      return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'fresh_cache' }, newMatchIds: [] };
+      return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state, this.repository.store), diagnostics: { refreshed: false, reason: 'fresh_cache' }, newMatchIds: [] };
     }
-    if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'api_not_configured' }, newMatchIds: [] };
+    if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state, this.repository.store), diagnostics: { refreshed: false, reason: 'api_not_configured' }, newMatchIds: [] };
     const synced = await this.apiClient.syncTeam(this.team, {
       maxMatches,
       knownMatchIds: existing.map((record) => record.matchId),
@@ -979,7 +979,7 @@ export class PubgDomainService {
       this.repository.listMatches(),
       this.repository.getSyncState('team:' + this.team.id),
     ]);
-    let source: SourceInfo = { store: 'sqlite', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: initialCount };
+    let source: SourceInfo = { store: this.repository.store, syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: initialCount };
     let coverage = coverageForLocal(initialMatches, this.now(), initialState);
     if (!match && input.refresh !== false && this.apiClient) {
       try {

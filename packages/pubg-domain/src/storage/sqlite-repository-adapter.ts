@@ -5,6 +5,7 @@ import { SqlitePubgRepository } from './sqlite-repository.js';
 
 /** Async domain port adapter over the existing private SQLite repository. */
 export class SqlitePubgRepositoryAdapter implements PubgRepositoryPort {
+  readonly store = 'sqlite';
   readonly scope: TeamContext;
 
   constructor(readonly sqlite: SqlitePubgRepository, scope: TeamContext) {

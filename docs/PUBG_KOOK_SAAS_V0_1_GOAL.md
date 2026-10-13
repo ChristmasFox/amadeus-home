@@ -1,6 +1,6 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain ports and tenant scope are in progress. Not deployed or accepted.
+> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain and private SQLite adapter are in place; early P2 PostgreSQL schema/repository work is in progress. Not deployed or accepted.
 >
 > **Date:** 2026-10-13 (Asia/Shanghai)
 >
