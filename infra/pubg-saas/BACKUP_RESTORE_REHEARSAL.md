@@ -19,17 +19,20 @@ or more `age1...` public recipients.
   the server where possible, and never older than the server.
 - A source PostgreSQL role able to read every SaaS table in `public`.
 - A separate restore PostgreSQL instance and role that can create and drop
-  databases. Do not point restore at a production server. Restore creates a
-  new database and refuses any existing target.
+  databases and assume `pubg_migrator`. The target cluster must already have
+  `pubg_migrator`, `pubg_app`, and `pubg_backup` roles from its independent
+  public-service secret/bootstrap bundle. Do not point restore at a production
+  server. Restore creates a new database and refuses any existing target.
 - `PUBG_SAAS_DATABASE_URL` and `PUBG_SAAS_RESTORE_ADMIN_URL` supplied by an
   external secret store or protected shell environment. These values are not
   accepted as command-line arguments and are never printed by the tool.
 
 The URLs must be explicit `postgresql://` URIs with a host, port, user, and
 database. The restore admin URL names its maintenance database, commonly
-`postgres`. TLS options such as `sslmode` may be supplied in the URL. The source
-backup role must be able to read all public base tables; the restore role must
-be able to create a database and become its owner.
+`postgres`. It must use a PostgreSQL superuser or equivalent role that can
+create a database and `SET ROLE pubg_migrator`. TLS options such as `sslmode`
+may be supplied in the URL. The source backup role must be able to read all
+public base tables.
 
 ## Create and verify an encrypted backup
 
@@ -94,11 +97,15 @@ python3 scripts/pubg-saas-backup-restore.py restore \
 ```
 
 Restore decrypts into an owner-only temporary directory, checks the custom
-archive, creates a fresh database, restores only the archived `public` schema,
-and compares every public base-table row count with the manifest. The new
-database receives a specific disposable marker. If a restore fails after the
-database was created, the marked database is left in place for diagnosis; it is
-never automatically overwritten or dropped.
+archive, and creates a fresh `template0` database owned by `pubg_migrator`. It
+omits the archive's `CREATE SCHEMA public` TOC entry because PostgreSQL creates
+that schema in a new database already, then restores the public tables and data
+as `pubg_migrator`. It grants runtime DML and backup read access and records
+matching default privileges for future migrations. It compares every public
+base-table row count with the manifest. The new database receives a specific
+disposable marker. If a restore fails after the database was created, the
+marked database is left in place for diagnosis; it is never automatically
+overwritten or dropped.
 
 When the rehearsal is complete, remove only the marked disposable database.
 This has a separate exact-name confirmation and explicit `--apply` guard:

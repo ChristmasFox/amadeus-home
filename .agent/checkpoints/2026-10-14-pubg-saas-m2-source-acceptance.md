@@ -1,9 +1,10 @@
 # PUBG KOOK SaaS M2 source acceptance — 2026-10-14
 
-This records source and isolated synthetic validation only. It does not approve
-deployment, public exposure, use of live KOOK/PUBG/model credentials, a real
-backup/restore, or changes to private Kurisu/9Router. M1 evidence and reproducible
-startup instructions remain in
+This records source, isolated synthetic validation, and a disposable local
+PostgreSQL recovery exercise only. It does not approve deployment, public
+exposure, use of live KOOK/PUBG/model credentials, clean-host/cloud recovery, or
+changes to private Kurisu/9Router. M1 evidence and reproducible startup
+instructions remain in
 `.agent/checkpoints/2026-10-13-pubg-saas-m1-source-acceptance.md`.
 
 ## M2 source delivered
@@ -26,8 +27,18 @@ startup instructions remain in
   connections and 0 waiters. This is not a production capacity or SLO claim.
 - `27523ae` adds an `age`-encrypted public-PostgreSQL-schema backup utility,
   checksum/table-count manifest verification, and restore/cleanup guards that
-  create only explicitly named disposable databases. Synthetic safety tests
-  cover manifest, checksum, secret URI handling, path and target guards.
+  create only explicitly named disposable databases.
+- The M2 P6 source follow-up adds a pinned-base multi-stage SaaS Dockerfile,
+  Compose with separate internal PostgreSQL and outbound app networks, resource
+  and process caps, no published ports, file-backed Compose secrets, and
+  separate bootstrap, migrator, app and backup roles. The migration service is
+  an explicit one-shot; `compose up` does not build an image. The rendered
+  config check passed with placeholder-only files.
+- The first real restore reproduction failed with PostgreSQL's
+  `schema "public" already exists`: the archived TOC creates `public`, which a
+  newly created database already has. The restore tool now omits exactly that
+  TOC entry, creates the target from `template0`, restores as `pubg_migrator`,
+  and reapplies app DML, backup SELECT and future migration default grants.
 
 ## Verification
 
@@ -41,9 +52,23 @@ startup instructions remain in
 - The 200-team benchmark command is:
   `PUBG_SAAS_TEST_DATABASE_URL='postgresql://pubg_test:fixture_only@127.0.0.1:55432/pubg_test' pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts`.
 - `python3 -m unittest discover -s scripts/tests -p 'test_pubg_saas_backup_restore.py' -v`
-  passed 8/8. Python compilation, backup CLI help, migration/gateway/worker
+  passed 11/11 after adding TOC/schema and restore-grant safety tests. Python
+  compilation, backup CLI help, migration/gateway/worker
   side-effect-free dry-runs, `pnpm check:architecture`, `pnpm check:secrets`
   and `git diff --check` passed.
+- A real `age` + PostgreSQL 18 fixture rehearsal passed: created an ephemeral
+  age identity, backed up the reused isolated `pubg_test` database, verified
+  checksum/decryptability/archive structure, restored into a new disposable
+  database, and matched all 35 public base-table counts. App DML succeeded but
+  app DDL was denied; backup SELECT succeeded but backup writes were denied;
+  migrator DDL and default app/backup grants succeeded. The restore took 0.43s
+  on this local fixture. The disposable database and temporary roles were
+  removed with guarded cleanup; temp keys/artifacts were outside Git and
+  deleted. This does not measure an independent host RTO.
+- `docker compose --env-file .env config --quiet`, shell syntax checks for the
+  URL entrypoint and PostgreSQL role bootstrap, the entrypoint password URL
+  encoding probe, architecture scan, secrets scan and diff check passed. No
+  image build or container start was attempted.
 
 An initial full SaaS run had one fixture failure: the onboarding test sends
 more than the production default of 10 requests per user in a minute. That
@@ -53,14 +78,18 @@ was removed or relaxed.
 
 ## Open acceptance gates
 
-- No `age`, `pg_dump`, `pg_restore`, `psql`, or PostgreSQL command-line client
-  was available for a real encrypted backup/restore rehearsal. The recovery
-  tooling has not been exercised against even a disposable live database.
-- `infra/pubg-saas` still lacks a Compose deployment template and the SaaS has
-  no built/pinned independent image. Therefore clean Linux/ARM64/amd64 recovery,
-  M204-offline/cloud-restored operation, and stop-public/private-Kurisu
-  independence have not been performed. Docker build/up/down and deploy were
-  not run.
+- Dockerfile and Compose syntax were not validated by building or starting
+  containers. The image tag still needs to be built from a reviewed immutable
+  Git commit for actual clean Linux/ARM64/amd64 execution.
+- The real restore used the same dedicated PostgreSQL 18 test service, not a
+  fresh Linux/cloud host. Scheduled backup frequency/7-day retention and
+  independent-storage recovery are not implemented or proven yet.
+- Compose's normal outbound bridge is not an egress policy. Private/LAN/link-
+  local/metadata denial and approved endpoint allowlisting must be enforced and
+  tested externally before real credentials are installed.
+- M204-offline/cloud-restored operation and stop-public/private-Kurisu
+  independence have not been performed. No Docker build/up/down or deploy was
+  run.
 - 200-team data/query/worker simulation ran only on the local isolated
   PostgreSQL fixture. It does not measure M204 memory/swap/RSS, production
   network egress, or an SLO.

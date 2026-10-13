@@ -86,11 +86,17 @@ has per-user/channel/tenant/bot request windows; the outbound client honors
 response bucket/global limits and persists 429 retry deadlines. Shared match rows
 merge participant facts while repository reads return only current team
 members. The synthetic 200-team benchmark passes with bounded local pool use.
-M1 source/offline acceptance and M2 source gates passed on 2026-10-14; the app
-remains undeployed. Backup/restore tooling passes synthetic safety checks, but
-there is no Compose/image template and no real clean-host restore or
-public/private independence drill. Real test-guild acceptance, the deidentified
-prompt benchmark, and measured M204 resource/quota feasibility remain open.
+M1 source/offline acceptance remains passed and the app is undeployed. The
+independent Compose/Image source unit is under `infra/pubg-saas/`; its pinned
+base manifests, private database network, per-process caps, least-privilege
+Postgres roles and secret-file URL entrypoint passed rendered-config checks.
+Encrypted backup/decrypt/restore was exercised against the isolated PostgreSQL
+18 fixture: 35 public tables matched, restored role boundaries passed, and the
+disposable database/roles were cleaned. The `public` schema TOC restore defect
+was fixed. Image build, clean Linux/cloud recovery, scheduled retention, tested
+egress restrictions and public/private stop-isolation remain open. Real
+test-guild acceptance, the deidentified prompt benchmark, and measured M204
+resource/quota feasibility also remain open.
 
 ## Request paths and guardrails
 

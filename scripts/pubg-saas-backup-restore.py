@@ -330,6 +330,39 @@ def decrypt_and_validate(artifact: Path, identity_file: Path, temp_dump: Path) -
         fail("decrypted file is not a PostgreSQL custom archive")
 
 
+def restore_list_without_public_schema(toc: str) -> str:
+    lines = toc.splitlines(keepends=True)
+    public_schema_entries = [
+        index for index, line in enumerate(lines)
+        if re.match(r"^\s*\d+;\s+\d+\s+\d+\s+SCHEMA\s+-\s+public(?:\s|$)", line)
+    ]
+    if len(public_schema_entries) != 1:
+        fail("PostgreSQL archive must contain exactly one public schema entry")
+    del lines[public_schema_entries[0]]
+    return "".join(lines)
+
+
+def recovery_access_sql(database: str) -> str:
+    # validate_disposable_target restricts this identifier to lowercase ASCII
+    # letters, digits and underscores before it reaches this function.
+    quoted_database = f'"{database}"'
+    return f"""
+REVOKE CONNECT ON DATABASE {quoted_database} FROM PUBLIC;
+GRANT CONNECT ON DATABASE {quoted_database} TO pubg_migrator, pubg_app, pubg_backup;
+GRANT USAGE, CREATE ON SCHEMA public TO pubg_migrator;
+GRANT USAGE ON SCHEMA public TO pubg_app, pubg_backup;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO pubg_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO pubg_app;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO pubg_backup;
+ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO pubg_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator IN SCHEMA public
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO pubg_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator IN SCHEMA public
+  GRANT SELECT ON TABLES TO pubg_backup;
+"""
+
+
 def command_backup(args: argparse.Namespace) -> None:
     source_env, source_database = pg_environment(required_env("PUBG_SAAS_DATABASE_URL"))
     if any(part in source_database.lower() for part in PRIVATE_NAME_PARTS):
@@ -486,15 +519,23 @@ def command_restore(args: argparse.Namespace) -> None:
     os.chmod(temp_root, 0o700)
     try:
         plain_dump = temp_root / "public.dump"
+        restore_list = temp_root / "restore.list"
         decrypt_and_validate(artifact, identity, plain_dump)
-        run_tool(["createdb", args.target_database], env=admin_env)
+        toc = run_tool(["pg_restore", "--list", str(plain_dump)], env=minimal_environment()).stdout
+        restore_list.write_text(restore_list_without_public_schema(toc), encoding="utf-8")
+        os.chmod(restore_list, 0o600)
+        run_tool(["createdb", "--template=template0", "--owner=pubg_migrator", args.target_database], env=admin_env)
         run_tool(
             ["psql", "-X", "-v", "ON_ERROR_STOP=1", "--command", f"COMMENT ON DATABASE {args.target_database} IS '{DISPOSABLE_MARKER}'"],
             env={**admin_env, "PGDATABASE": args.target_database},
         )
         target_env = {**admin_env, "PGDATABASE": args.target_database}
         run_tool(
-            ["pg_restore", "--no-owner", "--no-acl", "--exit-on-error", "--dbname", args.target_database, str(plain_dump)],
+            ["pg_restore", "--use-list", str(restore_list), "--role=pubg_migrator", "--no-owner", "--no-acl", "--exit-on-error", "--dbname", args.target_database, str(plain_dump)],
+            env=target_env,
+        )
+        run_tool(
+            ["psql", "-X", "-v", "ON_ERROR_STOP=1", "--command", recovery_access_sql(args.target_database)],
             env=target_env,
         )
         restored_counts = table_counts(target_env, args.target_database)

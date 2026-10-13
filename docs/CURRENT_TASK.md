@@ -74,7 +74,7 @@ claimed. Query sessions still derive from durable ingress, fresh KOOK membership
 and DB ownership, with explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
 
-## M2 source acceptance — 2026-10-14
+## M2 source and recovery evidence — 2026-10-14
 
 M2 source commits `2271a4b` and `27523ae` add PostgreSQL-backed per-team worker
 leases/fencing/retry, bounded worker concurrency and graceful drain; default
@@ -86,11 +86,22 @@ deadlines survive outbox retries. The isolated 200-team benchmark completed
 is a local synthetic measurement, not M204 resource headroom or a capacity/SLO
 claim.
 
-The public-schema-only age backup/restore utility and runbook pass 8 synthetic
-safety tests. A real encrypted backup, fresh-host restore, cloud independence
-drill and stop-public/private-Kurisu drill remain unverified: `age` and
-PostgreSQL client utilities were unavailable here. `infra/pubg-saas` still has
-no Compose/deploy template, and no Docker image build or runtime was attempted.
+The public-schema-only age backup/restore utility has 11 safety tests. A real
+encrypted backup, decryption/archive verification, and 35-table restore passed
+on the reused isolated PostgreSQL 18 fixture. The restore creates a disposable
+database owned by the migration role and reapplies app/backup grants; tests
+proved app DML without DDL, backup SELECT without writes, and future migration
+default grants. The disposable database and temporary cluster roles were
+removed through guarded cleanup. `infra/pubg-saas` now contains a Compose/Image
+source unit with pinned multi-platform base image manifests, an internal
+PostgreSQL network, no published ports, read-only runtime filesystems, and
+separate bootstrap/migrator/app/backup roles. Rendered Compose config and
+secret-file connection URL checks pass. The Docker image was not built and no
+service was started.
+
+Clean Linux/cloud restore, scheduled retention, tested egress restrictions and
+the M204-public-stop/private-Kurisu and isolated-cloud independence drills
+remain unverified. The ordinary Docker bridge does not restrict app egress.
 KOOK 200-guild eligibility, developer-account-wide daily send quota, live API
 quota feasibility, P4 prompt accuracy/P95, and M204/container RSS headroom also
 remain open pre-release gates. No private runtime, production database, 9Router

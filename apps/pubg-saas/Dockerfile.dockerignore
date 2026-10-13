@@ -1,0 +1,8 @@
+.git
+.agent
+.codex-instructions
+docs
+**/node_modules
+**/dist
+**/.env
+**/.env.*

@@ -107,6 +107,33 @@ class BackupRestoreSafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(OPS.OpsError, "pass --apply"):
             OPS.command_restore(args)
 
+    def test_restore_toc_omits_only_the_preexisting_public_schema_creation(self):
+        toc = (
+            "; PostgreSQL archive TOC\n"
+            "4; 2615 2200 SCHEMA - public pg_database_owner\n"
+            "42; 1259 9001 TABLE public teams pubg_migrator\n"
+            "43; 0 0 COMMENT - SCHEMA public pg_database_owner\n"
+        )
+        restored = OPS.restore_list_without_public_schema(toc)
+        self.assertNotIn("SCHEMA - public", restored)
+        self.assertIn("TABLE public teams", restored)
+        self.assertIn("COMMENT - SCHEMA public", restored)
+
+    def test_restore_toc_rejects_missing_or_duplicate_public_schema_entry(self):
+        for toc in (
+            "; no schema creation\n42; 1259 9001 TABLE public teams pubg_migrator\n",
+            "4; 2615 2200 SCHEMA - public owner\n5; 2615 2200 SCHEMA - public owner\n",
+        ):
+            with self.subTest(toc=toc), self.assertRaisesRegex(OPS.OpsError, "exactly one public schema"):
+                OPS.restore_list_without_public_schema(toc)
+
+    def test_restored_roles_keep_runtime_dml_and_migration_boundaries(self):
+        sql = OPS.recovery_access_sql("pubg_saas_disposable_clean_host_01")
+        self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES", sql)
+        self.assertIn("TO pubg_app", sql)
+        self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator", sql)
+        self.assertNotIn("GRANT CREATE ON SCHEMA public TO pubg_app", sql)
+
     def test_repository_paths_are_rejected_for_backup_artifacts(self):
         with self.assertRaisesRegex(OPS.OpsError, "outside the Git repository"):
             OPS.outside_repo(OPS.REPO_ROOT / "private-fixture.age", "encrypted backup")
