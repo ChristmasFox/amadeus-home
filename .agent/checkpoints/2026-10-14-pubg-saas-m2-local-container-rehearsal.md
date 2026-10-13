@@ -476,3 +476,26 @@ fixture; the Node RSS is not gateway/worker container memory. The canonical
 OrbStack host-profile machine `example-node` remains unavailable, so this
 evidence does not establish its headroom or an SLO. No services or private
 runtime were changed by the measurement.
+
+## Final local source gate — 2026-10-14
+
+On commit `7ff2d6d`, the final local source gate passed against the reusable
+loopback-only `pubg-saas-pg18` fixture: SaaS/PostgreSQL tests 92/92, private
+Kurisu regression 68/68, and backup/restore plus Compose PostgreSQL adapter
+unit tests 21/21. Public and private typecheck groups, architecture check,
+secrets scan, and `git diff --check` also passed. `pnpm workflow:plan` selected
+FAST for the clean worktree (zero changed paths); no Docker build, Compose
+start, image push, live provider call, or production operation was part of this
+gate.
+
+The final 200-team run completed all 200 authorized query tasks and 200/200
+worker team runs with zero failures. Query P95/P99 were 81.67/112.12 ms;
+worker-read P95/P99 were 60.43/105.31 ms across 7,356 SQL statements. The pool
+peaked at 16/20 with no waiters. The host-run Node process sampled baseline RSS
+80,740,352 bytes, peak RSS 160,727,040 bytes, peak heap 51,750,304 bytes,
+external memory 8,963,837 bytes, and ArrayBuffers 4,794,044 bytes. These are
+local fixture measurements only; they do not establish Compose worker memory,
+canonical `example-node` headroom, a quota-feasibility result, or an SLO. The
+benchmark schema was cleaned up, and no Compose or private runtime was changed.
+The Goal stays open for native clean-Linux/cloud independence, installed backup
+scheduling, live platform eligibility, and human-actor KOOK acceptance.

@@ -281,6 +281,14 @@ heap 54.2 MiB peak. A separate coarse local sample saw 24 GiB host RAM and
 These are local Mac/fixture observations, not `example-node` headroom or an SLO;
 canonical-host and actual container-service resource gates remain open.
 
+Final local source gate on `7ff2d6d` passed: SaaS/PostgreSQL 92/92, Kurisu
+68/68, backup/restore plus Compose PG adapter 21/21, both typecheck groups,
+architecture/secrets checks and diff check. The final benchmark completed
+200/200 authorized tasks and worker runs without failures; details and exact
+resource counters are in the dated M2 rehearsal checkpoint. Native
+clean-Linux/cloud independence, installed backup scheduling and live
+eligibility/human-actor gates remain open.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed
