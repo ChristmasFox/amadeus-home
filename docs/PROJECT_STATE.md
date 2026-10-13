@@ -1,4 +1,22 @@
-# Project State — 2026-10-10
+# Project State — 2026-10-13
+
+## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
+
+The operator selected `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree.
+M1 source/offline acceptance passed: the KOOK query handler, bounded AI SDK
+planner and deterministic query executor are wired; an independent public
+worker writes match and team-scoped telemetry facts to PostgreSQL. Overlapping
+teams merge shared match-player facts while scoped reads return only each
+registered roster. Validation passed with 74/74 SaaS tests on isolated
+PostgreSQL 18, all 68 private PUBG-related tests, `pnpm typecheck:pubg`,
+`pnpm build:pubg-saas`, dry-runs, and the secrets scan. Full evidence and
+reproduction commands: `.agent/checkpoints/2026-10-13-pubg-saas-m1-source-acceptance.md`.
+
+This is source acceptance only. No SaaS service, real KOOK guild, external
+model provider, production database, OpenClaw, 9Router or container was changed.
+M2's 200-team load/resource work, backup/restore and public/private independence
+drills remain open; P3 live guild acceptance and P4 prompt benchmark remain
+external acceptance gates.
 
 ## 2026-10-10 — 9Router bounded upstream diagnostic headers deployed
 
@@ -36,7 +54,7 @@ switch. Protected checkpoint and evidence are recorded in
 The active release source commit is `5085b3f`; the protected external rollback
 checkpoint is `/DATA/AppData/openclaw/backups/amadeus-openclaw-20261010010836`.
 
-Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`. The public Image Lab
+Active Goal: `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree. The public Image Lab
 is reachable at `https://image.example.com` with a password login page and
 valid HTTPS. The updated task-image modal, automatic edit resolution and precise
 large-seed input are deployed to the Mac UI. Quality remains capped at 16 steps;

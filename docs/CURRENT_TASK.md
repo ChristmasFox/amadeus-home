@@ -43,33 +43,31 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0008`
-upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (47 SaaS tests), including private PUBG regression checks. This is
-source and offline-fixture progress; package build, both entry-point dry-runs,
-secrets scan and `git diff --check` also passed. P3 acceptance still requires
-an isolated real test guild and current endpoint/guild eligibility preflight.
-Ingestion worker/AI SDK, Compose deployment and independent restore drills also
-remain incomplete. No runtime or production
-credentials were touched.
-The inspected P1/P2 cache gap is corrected for normalized match/player facts,
-which use shard + match ID. Derived telemetry and prefetch records are scoped
-by tenant/team and a digest of the active team configuration as well as
-shard/match/parser/feature versions; same-match teams cannot overwrite or reuse
-each other's roster-derived facts, and alias changes miss the prior cache.
-Unowned legacy shared telemetry rows are evicted because their team/config
-provenance cannot be recovered. Legacy child shards are backfilled from parent
-facts; unresolved rows abort migration atomically and remain intact. P2 now also builds public query context
-from active durable ingress, current binding/revision and fresh KOOK membership;
-DMs require explicit actor grants and selection when several teams are authorized.
-Opaque TTL sessions isolate requester/channel/team, reuse exact-event retries,
-and invalidate old state after roster/alias changes, revoke/regrant or rebind.
-Legacy queued group authority is never guessed during migration. Official PUBG
-names from the name-based onboarding flow are persisted in a global shard/account
-directory and loaded into each newly authorized team context, with account-ID
-fallback and private aliases kept scoped. This authorization module is tested
-but not yet wired to the executable's statistical handler. Quote/thread
-correlation and query/AI/worker integration remain next work.
+Additive migrations through `0008` upgrade public schema/outbox rows. The
+statistical handler is now wired to the public executable: deterministic stats,
+leaderboard, self-stats, review and team damage use authorized Domain facts;
+free-text queries use a bounded AI SDK QueryPlan and a deterministic executor.
+A separate worker loads persisted SaaS rosters, syncs public matches and
+team-scoped telemetry into PostgreSQL. Same-match overlapping tenants merge
+public player facts while repository reads expose only the current registered
+roster; roster changes invalidate scoped sync state.
+
+M1 source/offline acceptance passed on 2026-10-13: `pnpm test:pubg-saas`
+passed 74 tests with isolated PostgreSQL 18; `pnpm typecheck:pubg` passed;
+`pnpm test:pubg` passed 68 private identity/presentation/Domain/plugin tests;
+`pnpm build:pubg-saas`, worker/gateway/migration dry-runs, `pnpm check:secrets`
+and `git diff --check` passed. Tests use a fake PUBG API/model provider; no
+runtime credential, real guild, production database, Docker service or external
+deployment was touched. The worker dry-run requires explicit `--apply` to
+connect or write.
+
+M2 is active: independent worker capacity/observability, 200-team simulated
+load, quota/resource measurements, backup/restore, clean-host recovery and
+private/public independence drills remain. P3 real test-guild and KOOK
+eligibility acceptance, and P4's deidentified prompt benchmark, also remain
+external acceptance gates. No live provider accuracy, latency or capacity is
+claimed. Query sessions still derive from durable ingress, fresh KOOK membership
+and DB ownership, with explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
@@ -107,7 +105,7 @@ provider window is intentionally `unknown` until a full 12 hours of post-rollout
 sample coverage exists. Evidence and rollback are in
 `.agent/checkpoints/2026-10-10-vps-traffic-window-release.md`.
 
-Active Goal: `docs/AMADEUS_QWEN_IMAGE_PUBLIC_LAB_GOAL.md`.
+Active Goal: `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` (operator-selected for this worktree).
 
 Production invariant: Amadeus 1.9.7 remains GPT-only for image generation; local Qwen stays outside the production route and is used only by the Image Lab.
 

@@ -7,7 +7,7 @@
 | `plugins/pubg` | PUBG 原生 plugin、确定性工具、bundled Skill | 私有 OpenClaw 进程内 |
 | `plugins/amadeus` | Amadeus 原生工具、VPS 通知、owner outbox worker | OpenClaw 进程内 |
 | `packages/pubg-domain` | PUBG API、确定性统计/查询/Telemetry domain | 被独立 plugin/app 构建并调用 |
-| `apps/pubg-saas` | Public Postgres schema/migrations and scoped Domain repository | Public app source; not deployed |
+| `apps/pubg-saas` | Public Postgres schema, KOOK SaaS query app and independent sync worker | Public app source; not deployed |
 | `apps/product-radar` | 商品监控、匹配、watch scheduler 和事件 outbox | 独立 CasaOS app |
 | `integrations/openclaw` | 脱敏 config、workspace、Codex hook | CasaOS OpenClaw |
 | `infra/docker/casaos/openclaw` | 固定镜像和 OpenClaw Compose 模板 | OrbStack CasaOS |
@@ -73,17 +73,18 @@ tokens pin channel revisions. Actor-bound `return-val` callbacks recheck
 guild admin and recover exact-event mutation receipts after a crash while
 rejecting a new click. Bot guild-join events now drive verified-channel welcome
 cards through the same durable ingress/outbox without privileged setup.
-The tested public query authorizer now derives context from an active stored
-ingress lease, fresh channel/guild membership and database ownership. DM grants
-remain explicit; ambiguous teams require selection. Server-created TTL sessions
+The public query authorizer derives context from an active stored ingress
+lease, fresh channel/guild membership and database ownership. DM grants remain
+explicit; ambiguous teams require selection. Server-created TTL sessions
 isolate requester/channel/team and pin roster/alias and binding generations;
-revocation/regrant and same-team rebind cannot revive old context. This module
-is not yet attached to the executable statistical handler; resolved names and
-reply-thread correlation remain pending.
-Live test-guild acceptance,
-query/AI/worker integration and deployment remain
-implementation work. See the Goal's phase gates before describing the public
-service as ready.
+revocation/regrant and same-team rebind cannot revive old context. The
+executable handler now serves deterministic and AI-planned queries through one
+validated executor. A separate PostgreSQL-backed worker ingests official match
+data and team-scoped telemetry through the shared Domain. Shared match rows
+merge participant facts while repository reads return only current team
+members. M1 source and offline acceptance passed on 2026-10-13; the app remains
+undeployed. Real test-guild acceptance, the deidentified prompt benchmark, the
+200-team/resource tests, and P6 restore/cloud-independence drills remain open.
 
 ## Request paths and guardrails
 
@@ -108,10 +109,11 @@ planner 处理。两边通过结构化应用调用共享 Domain；Domain 不读�
   `shared-edge-cases.json` and their private/public tests. They lock deterministic
   stat/coverage/time and damage/cache evidence; live deployment independence
   remains unproven until the P6 deployment/restore drills pass.
-- The shared service now awaits its repository operations. The existing private
-  OpenClaw tool contracts continue to pass through the SQLite adapter; a
-  PostgreSQL-backed implementation and multi-tenant authorization tests are
-  pending.
+- The shared service awaits repository operations. Private OpenClaw tool
+  contracts pass through the SQLite adapter and private PUBG regression suite;
+  the PostgreSQL adapter and multi-tenant authorization tests pass on an
+  isolated test database. Runtime/deployment independence remains unproven
+  until the P6 drills pass.
 - The P0 source inventory was taken from `main` at `3f4cac2` on 2026-10-13.
   The bounded `listMatches` child-row query and its SQLite plan regression test
   were added during P0/P1 execution; they do not change or inspect live data.
