@@ -93,8 +93,10 @@ Postgres roles and secret-file URL entrypoint passed rendered-config checks.
 Encrypted backup/decrypt/restore was exercised against the isolated PostgreSQL
 18 fixture: 35 public tables matched, restored role boundaries passed, and the
 disposable database/roles were cleaned. The `public` schema TOC restore defect
-was fixed. Image build, clean Linux/cloud recovery, scheduled retention, tested
-egress restrictions and public/private stop-isolation remain open. Real
+was fixed. A six-hour UTC systemd backup job and guarded seven-day retention
+source are present but uninstalled; its one-shot job passed against the isolated
+PostgreSQL fixture. Image build, clean Linux/cloud recovery, scheduled operation,
+tested egress restrictions and public/private stop-isolation remain open. Real
 test-guild acceptance, the deidentified prompt benchmark, and measured M204
 resource/quota feasibility also remain open.
 

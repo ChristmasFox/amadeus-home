@@ -1,0 +1,23 @@
+[Unit]
+Description=Encrypted public PUBG SaaS PostgreSQL backup and retention
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=pubg-saas-backup
+Group=pubg-saas-backup
+EnvironmentFile=/etc/pubg-saas/backup.env
+# Replace with the checked-out Git source path on this host profile.
+ExecStart=/path/to/amadeus-home/scripts/pubg-saas-backup-job.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

@@ -94,10 +94,13 @@ proved app DML without DDL, backup SELECT without writes, and future migration
 default grants. The disposable database and temporary cluster roles were
 removed through guarded cleanup. `infra/pubg-saas` now contains a Compose/Image
 source unit with pinned multi-platform base image manifests, an internal
-PostgreSQL network, no published ports, read-only runtime filesystems, and
-separate bootstrap/migrator/app/backup roles. Rendered Compose config and
-secret-file connection URL checks pass. The Docker image was not built and no
-service was started.
+PostgreSQL network, only a host-loopback database port for its read-only backup
+role, read-only runtime filesystems, and separate bootstrap/migrator/app/backup
+roles. Rendered Compose config and secret-file connection URL checks pass. A
+six-hour UTC systemd job and guarded minimum-seven-day retention command are
+source-complete but uninstalled; the one-shot backup job passed against the
+isolated PostgreSQL fixture. The Docker image was not built and no service was
+started.
 
 Clean Linux/cloud restore, scheduled retention, tested egress restrictions and
 the M204-public-stop/private-Kurisu and isolated-cloud independence drills

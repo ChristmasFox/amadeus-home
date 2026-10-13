@@ -2,8 +2,10 @@
 
 This folder is the independently movable public KOOK SaaS deployment unit. It
 contains no private Kurisu/OpenClaw mount, secret, network, or runtime
-dependency. PostgreSQL has no published port and sits on an internal network;
-only the gateway and public sync worker join the separate outbound bridge.
+dependency. PostgreSQL sits on an internal network and has one host-loopback
+port for the read-only scheduled backup role; only the gateway and public sync
+worker join the separate outbound bridge. The database port binds to
+`127.0.0.1` and is not reachable from the LAN.
 
 The outbound bridge is **not** an egress firewall. Before real credentials are
 installed, the host/cloud network policy must deny loopback, RFC1918, link-local
@@ -76,9 +78,11 @@ does not retrofit an existing database volume. Do not delete an existing volume
 to make initialization rerun; use a separately reviewed migration for existing
 data.
 
-The stack publishes no inbound port. KOOK connectivity is an outbound WebSocket
-connection. `docker compose down` stops this Compose project and preserves its
-PostgreSQL volume. Never use `down -v` for a database that contains data.
+No service publishes a LAN/public port. KOOK connectivity is an outbound
+WebSocket connection. PostgreSQL's loopback-only port exists for the read-only
+host backup job; it does not expose the database to the LAN. `docker compose down`
+stops this Compose project and preserves its PostgreSQL volume. Never use
+`down -v` for a database that contains data.
 
 ## Backup and independent restore
 
@@ -89,6 +93,21 @@ the `pubg_backup` read-only role for `PUBG_SAAS_DATABASE_URL`. Keep encrypted
 archives and age identities outside Git and outside the public Compose volume.
 Restore only to a clean, isolated PostgreSQL instance with the disposable target
 guard. Record RPO/RTO and public/private independence evidence before launch.
+
+The source includes a six-hour UTC `systemd` timer and job script. For an
+operator-approved host setup, copy
+[`backup.env.example`](backup.env.example) to `/etc/pubg-saas/backup.env`, set
+its database URL with a URL-encoded `pubg_backup` password, point the output to
+an independent encrypted-storage mount, and install the service/timer examples
+from `systemd/` after replacing the service's `ExecStart` placeholder with this
+checkout's source path. Create the `pubg-saas-backup` system user/group and make
+the encrypted-storage directory owner-only and writable by it; keep
+`/etc/pubg-saas/backup.env` root-owned with mode `0600`. Enable the timer only
+as part of an approved host apply. The job creates an encrypted snapshot and
+prunes only complete, matching backup/manifest pairs older than at least seven
+days; pruning requires the exact output-directory guard. The env file and
+recipient file stay outside Git. This source has not been installed or
+scheduled on M204.
 
 The Compose source and local rendered-config check do not prove a real
 encrypted backup, clean-host restore, egress policy, cloud independence, KOOK

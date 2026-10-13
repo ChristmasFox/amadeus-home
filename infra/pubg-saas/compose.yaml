@@ -16,6 +16,8 @@ services:
     volumes:
       - pubg_saas_postgres_data:/var/lib/postgresql
       - ./postgres-init/10-pubg-roles.sh:/docker-entrypoint-initdb.d/10-pubg-roles.sh:ro
+    ports:
+      - "127.0.0.1:${PUBG_SAAS_BACKUP_PG_PORT:-55433}:5432"
     networks:
       - postgres_private
     healthcheck:

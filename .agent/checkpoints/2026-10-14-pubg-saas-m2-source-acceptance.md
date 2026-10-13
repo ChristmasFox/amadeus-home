@@ -30,10 +30,15 @@ instructions remain in
   create only explicitly named disposable databases.
 - The M2 P6 source follow-up adds a pinned-base multi-stage SaaS Dockerfile,
   Compose with separate internal PostgreSQL and outbound app networks, resource
-  and process caps, no published ports, file-backed Compose secrets, and
-  separate bootstrap, migrator, app and backup roles. The migration service is
-  an explicit one-shot; `compose up` does not build an image. The rendered
-  config check passed with placeholder-only files.
+  and process caps, a loopback-only PostgreSQL backup port, file-backed Compose
+  secrets, and separate bootstrap, migrator, app and backup roles. The migration
+  service is an explicit one-shot; `compose up` does not build an image. The
+  rendered config check passed with placeholder-only files.
+- The backup follow-up adds a six-hour UTC `systemd` timer, a one-shot backup
+  job, and a retention command that requires `--apply` plus an exact output-dir
+  match. Retention cannot be set below seven days and removes only complete,
+  matching encrypted artifact/manifest pairs. The timer has not been installed
+  or allowed to run on M204.
 - The first real restore reproduction failed with PostgreSQL's
   `schema "public" already exists`: the archived TOC creates `public`, which a
   newly created database already has. The restore tool now omits exactly that
@@ -52,7 +57,11 @@ instructions remain in
 - The 200-team benchmark command is:
   `PUBG_SAAS_TEST_DATABASE_URL='postgresql://pubg_test:fixture_only@127.0.0.1:55432/pubg_test' pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts`.
 - `python3 -m unittest discover -s scripts/tests -p 'test_pubg_saas_backup_restore.py' -v`
-  passed 11/11 after adding TOC/schema and restore-grant safety tests. Python
+  passed 14/14 after adding TOC/schema, restore-grant, retention, checksum and
+  deletion-guard tests. The backup job passed `bash -n`. A one-shot run of
+  `scripts/pubg-saas-backup-job.sh` created an encrypted artifact/manifest pair
+  and completed the seven-day retention scan against the isolated PostgreSQL
+  fixture; all temp keys and artifacts were removed. Python
   compilation, backup CLI help, migration/gateway/worker
   side-effect-free dry-runs, `pnpm check:architecture`, `pnpm check:secrets`
   and `git diff --check` passed.
@@ -81,9 +90,10 @@ was removed or relaxed.
 - Dockerfile and Compose syntax were not validated by building or starting
   containers. The image tag still needs to be built from a reviewed immutable
   Git commit for actual clean Linux/ARM64/amd64 execution.
-- The real restore used the same dedicated PostgreSQL 18 test service, not a
-  fresh Linux/cloud host. Scheduled backup frequency/7-day retention and
-  independent-storage recovery are not implemented or proven yet.
+- The real restore and one-shot scheduled job used the same dedicated
+  PostgreSQL 18 test service, not a fresh Linux/cloud host. The six-hour timer
+  has not been installed or observed over time; independent-storage recovery is
+  not proven yet.
 - Compose's normal outbound bridge is not an egress policy. Private/LAN/link-
   local/metadata denial and approved endpoint allowlisting must be enforced and
   tested externally before real credentials are installed.

@@ -1,9 +1,13 @@
 import hashlib
 import importlib.util
+import io
 import json
+import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from argparse import Namespace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -48,6 +52,37 @@ class BackupRestoreSafetyTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        return artifact, manifest
+
+    def write_prune_pair(self, *, created_at, basename):
+        artifact = self.root / f"{basename}.dump.age"
+        payload = f"synthetic encrypted bytes: {basename}".encode()
+        artifact.write_bytes(payload)
+        manifest = self.root / f"{basename}.manifest.json"
+        manifest.write_text(
+            json.dumps(
+                {
+                    "schema": OPS.MANIFEST_SCHEMA,
+                    "createdAtUtc": created_at.isoformat(),
+                    "sourceDatabase": "pubg_saas_test",
+                    "scope": "postgres-public-schema-only",
+                    "encryption": "age",
+                    "artifact": artifact.name,
+                    "artifactSha256": hashlib.sha256(payload).hexdigest(),
+                    "artifactBytes": len(payload),
+                    "publicTableCounts": {
+                        "public.schema_migrations": 10,
+                        "public.tenants": 2,
+                        "public.teams": 3,
+                        "public.matches": 11,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        timestamp = created_at.timestamp()
+        os.utime(artifact, (timestamp, timestamp))
+        os.utime(manifest, (timestamp, timestamp))
         return artifact, manifest
 
     def test_connection_uri_is_moved_to_libpq_environment_not_arguments(self):
@@ -133,6 +168,64 @@ class BackupRestoreSafetyTests(unittest.TestCase):
         self.assertIn("TO pubg_app", sql)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator", sql)
         self.assertNotIn("GRANT CREATE ON SCHEMA public TO pubg_app", sql)
+
+    def test_retention_removes_expired_matching_pairs_and_keeps_recent_backups(self):
+        now = datetime.now(timezone.utc)
+        expired = self.write_prune_pair(
+            created_at=now - timedelta(days=8),
+            basename="pubg-saas-20261006T120000Z-0123abcd",
+        )
+        recent = self.write_prune_pair(
+            created_at=now - timedelta(days=2),
+            basename="pubg-saas-20261012T120000Z-fedcba98",
+        )
+        args = Namespace(
+            output_dir=str(self.root),
+            confirm_output_dir=str(self.root),
+            retention_days=7,
+            apply=True,
+        )
+        output = io.StringIO()
+        with redirect_stdout(output):
+            OPS.command_prune(args)
+        self.assertIn("REMOVED_PAIRS=1", output.getvalue())
+        self.assertFalse(expired[0].exists())
+        self.assertFalse(expired[1].exists())
+        self.assertTrue(recent[0].exists())
+        self.assertTrue(recent[1].exists())
+
+    def test_retention_requires_apply_exact_directory_and_at_least_seven_days(self):
+        base = {
+            "output_dir": str(self.root),
+            "confirm_output_dir": str(self.root),
+            "retention_days": 7,
+            "apply": False,
+        }
+        with self.assertRaisesRegex(OPS.OpsError, "pass --apply"):
+            OPS.command_prune(Namespace(**base))
+        with self.assertRaisesRegex(OPS.OpsError, "between 7 and"):
+            OPS.command_prune(Namespace(**{**base, "apply": True, "retention_days": 6}))
+        with self.assertRaisesRegex(OPS.OpsError, "exactly match"):
+            OPS.command_prune(Namespace(**{**base, "apply": True, "confirm_output_dir": str(self.root / "other")}))
+
+    def test_retention_preserves_expired_artifact_with_invalid_checksum(self):
+        old = datetime.now(timezone.utc) - timedelta(days=8)
+        pair = self.write_prune_pair(
+            created_at=old,
+            basename="pubg-saas-20261006T120000Z-bad0cafe",
+        )
+        pair[0].write_bytes(b"corrupted encrypted archive")
+        os.utime(pair[0], (old.timestamp(), old.timestamp()))
+        args = Namespace(
+            output_dir=str(self.root),
+            confirm_output_dir=str(self.root),
+            retention_days=7,
+            apply=True,
+        )
+        with self.assertRaisesRegex(OPS.OpsError, "checksum"):
+            OPS.command_prune(args)
+        self.assertTrue(pair[0].exists())
+        self.assertTrue(pair[1].exists())
 
     def test_repository_paths_are_rejected_for_backup_artifacts(self):
         with self.assertRaisesRegex(OPS.OpsError, "outside the Git repository"):

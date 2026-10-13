@@ -19,7 +19,7 @@ import stat
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_SCHEMA = "pubg-saas-backup/v1"
 DISPOSABLE_PREFIX = "pubg_saas_disposable_"
 DISPOSABLE_MARKER = "pubg-saas-disposable-backup-restore-rehearsal/v1"
+BACKUP_ARTIFACT_NAME = re.compile(r"pubg-saas-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}\.dump\.age\Z")
 CORE_TABLES = {
     "public.schema_migrations",
     "public.tenants",
@@ -581,6 +582,62 @@ def command_cleanup(args: argparse.Namespace) -> None:
     print(f"PUBG_SAAS_DISPOSABLE_CLEANUP=passed\nTARGET_DATABASE={args.target_database}")
 
 
+def command_prune(args: argparse.Namespace) -> None:
+    if not args.apply:
+        fail("backup retention is destructive; pass --apply and the exact output-directory guard")
+    if args.retention_days < 7 or args.retention_days > 3650:
+        fail("backup retention must be between 7 and 3650 days")
+    output_input = Path(args.output_dir).expanduser()
+    if output_input.is_symlink():
+        fail("backup output directory must not be a symlink")
+    output_dir = outside_repo(output_input, "backup output directory")
+    if not output_dir.is_dir() or output_dir.is_symlink():
+        fail("backup output directory must already exist")
+    if stat.S_IMODE(output_dir.stat().st_mode) & 0o077:
+        fail("backup output directory must have owner-only permissions (mode 0700)")
+    confirmed_dir = Path(args.confirm_output_dir).expanduser().resolve(strict=False)
+    if confirmed_dir != output_dir:
+        fail("explicit --confirm-output-dir must exactly match the backup output directory")
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=args.retention_days)
+    pairs: list[tuple[Path, Path]] = []
+    for manifest_path in sorted(output_dir.glob("pubg-saas-*.manifest.json")):
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            fail("backup retention found a non-regular manifest; refusing cleanup")
+        manifest = read_manifest(manifest_path)
+        artifact_name = manifest["artifact"]
+        if not BACKUP_ARTIFACT_NAME.fullmatch(artifact_name):
+            fail("backup retention found an unexpected artifact name; refusing cleanup")
+        expected_manifest = artifact_name.removesuffix(".dump.age") + ".manifest.json"
+        if manifest_path.name != expected_manifest:
+            fail("backup retention found a mismatched artifact/manifest pair; refusing cleanup")
+        artifact_path = output_dir / artifact_name
+        if artifact_path.is_symlink() or not artifact_path.is_file():
+            fail("backup retention found a missing or non-regular artifact; refusing cleanup")
+        try:
+            created_at = datetime.fromisoformat(str(manifest["createdAtUtc"]).replace("Z", "+00:00"))
+        except (KeyError, TypeError, ValueError):
+            fail("backup retention found an invalid manifest timestamp; refusing cleanup")
+        if created_at.tzinfo is None:
+            fail("backup retention found a timezone-free manifest timestamp; refusing cleanup")
+        artifact_stat = artifact_path.stat()
+        manifest_stat = manifest_path.stat()
+        if (
+            created_at.astimezone(timezone.utc) < cutoff
+            and artifact_stat.st_mtime < cutoff.timestamp()
+            and manifest_stat.st_mtime < cutoff.timestamp()
+        ):
+            validate_archive(str(artifact_path), str(manifest_path))
+            pairs.append((artifact_path, manifest_path))
+
+    removed_bytes = 0
+    for artifact_path, manifest_path in pairs:
+        removed_bytes += artifact_path.stat().st_size + manifest_path.stat().st_size
+        artifact_path.unlink()
+        manifest_path.unlink()
+    print(f"PUBG_SAAS_BACKUP_PRUNE=passed REMOVED_PAIRS={len(pairs)} REMOVED_BYTES={removed_bytes}")
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     commands = root.add_subparsers(dest="command", required=True)
@@ -606,6 +663,12 @@ def parser() -> argparse.ArgumentParser:
     cleanup.add_argument("--confirm-disposable-target", required=True)
     cleanup.add_argument("--apply", action="store_true", help="required acknowledgement for disposable database deletion")
     cleanup.set_defaults(handler=command_cleanup)
+    prune = commands.add_parser("prune", help="remove only expired encrypted backup/manifest pairs")
+    prune.add_argument("--output-dir", required=True, help="owner-only external encrypted backup directory")
+    prune.add_argument("--confirm-output-dir", required=True, help="must exactly match the resolved output directory")
+    prune.add_argument("--retention-days", type=int, default=7)
+    prune.add_argument("--apply", action="store_true", help="required acknowledgement for backup deletion")
+    prune.set_defaults(handler=command_prune)
     return root
 
 
