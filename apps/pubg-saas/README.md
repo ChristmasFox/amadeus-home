@@ -6,9 +6,10 @@ slices from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
 permission checks, transactional squad/channel/roster management with one-use
 confirmations, and direct-message scoped self-declared account claims. The KOOK
 fixture-driven gateway session and inbox/outbox queue are also implemented.
-The concrete WebSocket runtime adapter, message REST sender, card callbacks,
-PUBG account lookup, worker, AI SDK integration and deployment image are still
-in progress. This package is not a runnable or deployed service yet.
+The Node 22 built-in WebSocket factory and fixed KOOK group-message REST client
+are implemented. The service process wiring, card callbacks, PUBG account
+lookup, worker, AI SDK integration and deployment image are still in progress.
+This package is not a runnable or deployed service yet.
 
 ## Trust boundaries
 
@@ -39,8 +40,11 @@ in progress. This package is not a runnable or deployed service yet.
 - `KookMessageQueue` deduplicates bound group events and enqueues replies only
   to the original bound channel. Outbox claims use expiring leases and
   `SKIP LOCKED`; delivery errors are reduced to bounded codes with retry
-  backoff. Payloads are cleared after success/dead-letter, and retention
-  pruning is exposed for a future worker.
+  backoff. Replies carry the original message ID and a local idempotency nonce.
+  KOOK documents that it does not process the nonce for deduplication, so a
+  lost send response can still cause an at-least-once duplicate. Payloads are
+  cleared after success/dead-letter, and retention pruning is exposed for a
+  future worker.
 - Public credentials and `DATABASE_URL` are runtime-only. No real credential
   is needed for local repository tests.
 
@@ -55,7 +59,8 @@ follow the [KOOK HTTP API reference](https://developer.kookapp.cn/doc/reference)
 [group message event format](https://developer.kookapp.cn/doc/event/message).
 Gateway framing, heartbeat, sequence, resume and reconnect handling follows
 the [KOOK WebSocket protocol](https://developer.kookapp.cn/doc/websocket) and
-[gateway URL API](https://developer.kookapp.cn/doc/http/gateway).
+[gateway URL API](https://developer.kookapp.cn/doc/http/gateway). The REST
+sender follows the [channel message API](https://developer.kookapp.cn/doc/http/message).
 
 ## Local verification
 

@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import {
   KookGatewayApiClient,
   KookGatewayClient,
+  createNodeWebSocketFactory,
   migratePublicDatabase,
   PostgresKookGatewayStateStore,
   type KookGatewaySessionState,
@@ -90,6 +91,17 @@ test('gateway API uses the official fixed URL and requests uncompressed WSS fram
     fetcher: async () => new Response(JSON.stringify({ code: 0, data: { url: 'https://example.com/gateway' } }), { status: 200 }),
   });
   await assert.rejects(invalid.getGatewayUrl(), /kook_gateway_url_invalid/u);
+});
+
+test('Node WebSocket factory forwards only the validated gateway URL', () => {
+  class ConstructedSocket extends FakeSocket {
+    constructor(readonly url: string) { super(); }
+  }
+  const factory = createNodeWebSocketFactory(ConstructedSocket);
+  const socket = factory('wss://gateway.kookapp.cn/gateway?compress=0');
+  assert.ok(socket instanceof ConstructedSocket);
+  assert.equal((socket as ConstructedSocket).url, 'wss://gateway.kookapp.cn/gateway?compress=0');
+  assert.throws(() => createNodeWebSocketFactory(null), /node_websocket_unavailable/u);
 });
 
 test('gateway processes events in sn order and resumes from the last durably handled sequence', async () => {

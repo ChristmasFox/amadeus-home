@@ -312,6 +312,7 @@ CREATE TABLE IF NOT EXISTS message_outbox (
   tenant_id TEXT NOT NULL,
   team_id TEXT NOT NULL,
   channel_id TEXT NOT NULL,
+  source_event_id TEXT,
   payload_json JSONB NOT NULL,
   status TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 0,

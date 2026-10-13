@@ -27,6 +27,7 @@ export interface KookOutboxJob {
   teamId: string;
   botAccountId: string;
   channelId: string;
+  sourceEventId: string | null;
   outboxId: string;
   idempotencyKey: string;
   leaseToken: string;
@@ -37,7 +38,7 @@ export interface KookOutboxJob {
 export type OutboxDeliveryResult = 'empty' | 'sent' | 'retry' | 'dead';
 
 export interface KookGroupMessageSender {
-  send(channelId: string, payload: KookTextPayload): Promise<void>;
+  send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
 }
 
 export interface KookMessageQueueOptions {
@@ -189,12 +190,12 @@ export class KookMessageQueue {
       );
       if (!binding.rowCount) throw new Error('kook_reply_destination_unbound');
       const inserted = await client.query(
-        `INSERT INTO message_outbox(
-           outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,payload_json,status
-         ) VALUES ($1,$2,'kook',$3,$4,$5,$6,$7::jsonb,'pending')
+         `INSERT INTO message_outbox(
+           outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,source_event_id,payload_json,status
+         ) VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8::jsonb,'pending')
          ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING outbox_id`,
-        [randomUUID(), key, event.botAccountId, row.tenant_id, row.team_id, row.channel_id, JSON.stringify(payload)],
+        [randomUUID(), key, event.botAccountId, row.tenant_id, row.team_id, row.channel_id, event.messageId, JSON.stringify(payload)],
       );
       const existing = inserted.rows[0]?.outbox_id
         ? String(inserted.rows[0].outbox_id)
@@ -228,7 +229,7 @@ export class KookMessageQueue {
        FROM candidate
        WHERE message.outbox_id=candidate.outbox_id
        RETURNING message.outbox_id,message.idempotency_key,message.tenant_id,message.team_id,
-                 message.bot_account_id,message.channel_id,message.attempt_count,message.payload_json`,
+                 message.bot_account_id,message.channel_id,message.source_event_id,message.attempt_count,message.payload_json`,
       [leaseToken, this.leaseMs, this.botAccountId],
     );
     const row = result.rows[0];
@@ -240,6 +241,7 @@ export class KookMessageQueue {
       teamId: String(row.team_id),
       botAccountId: String(row.bot_account_id),
       channelId: String(row.channel_id),
+      sourceEventId: typeof row.source_event_id === 'string' ? row.source_event_id : null,
       leaseToken,
       attemptCount: Number(row.attempt_count),
       payload: parseJobPayload(row.payload_json),
@@ -295,7 +297,7 @@ export class KookMessageQueue {
     const job = await this.claimNextOutbox();
     if (!job) return 'empty';
     try {
-      await sender.send(job.channelId, job.payload);
+      await sender.send(job.channelId, job.payload, job.idempotencyKey, job.sourceEventId);
       await this.markSent(job);
       return 'sent';
     } catch (error) {

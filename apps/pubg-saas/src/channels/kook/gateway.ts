@@ -40,6 +40,20 @@ export interface KookGatewaySocket {
 
 export type KookGatewaySocketFactory = (url: string) => KookGatewaySocket;
 
+export interface KookWebSocketConstructor {
+  new (url: string): KookGatewaySocket;
+}
+
+/** Uses Node 22's built-in WebSocket without adding a runtime package. Tests
+ * can pass a constructor explicitly; runtime startup should fail closed when
+ * the supported global is unavailable. */
+export function createNodeWebSocketFactory(
+  WebSocketConstructor: KookWebSocketConstructor | null = (globalThis as typeof globalThis & { WebSocket?: KookWebSocketConstructor }).WebSocket,
+): KookGatewaySocketFactory {
+  if (!WebSocketConstructor) throw new Error('node_websocket_unavailable');
+  return (url) => new WebSocketConstructor(url);
+}
+
 export interface KookGatewayClientOptions {
   botAccountId: string;
   gatewayUrlProvider: KookGatewayUrlProvider;

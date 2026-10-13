@@ -55,10 +55,10 @@ one-use confirmations are also implemented. Direct-message account claims are
 stored as self-declared and protected by user-scoped uniqueness and unclaim
 confirmation. P3 source includes a fixture-driven gateway session core with
 durable sequence/resume state and a bound-channel inbox/outbox queue with
-lease-based retry. The concrete socket runtime, message REST sender, card
-callbacks and test guild, plus full edge-case parity, PUBG account lookup and
-deployment, remain implementation work. See the Goal's phase gates before
-describing any of them as ready.
+lease-based retry, plus the Node WebSocket factory and fixed KOOK group-message
+REST client. Service process wiring, card callbacks and test guild, plus full
+edge-case parity, PUBG account lookup and deployment, remain implementation
+work. See the Goal's phase gates before describing any of them as ready.
 
 ## Request paths and guardrails
 

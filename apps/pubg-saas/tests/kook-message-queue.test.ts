@@ -68,10 +68,12 @@ test('KOOK inbox dedupes events and outbox pins destinations, retries and leases
 
     let sends = 0;
     const firstAttempt = await queue.deliverOne({
-      async send(destination, payload) {
+      async send(destination, payload, nonce, replyToMessageId) {
         sends += 1;
         assert.equal(destination, channelId);
         assert.deepEqual(payload, { type: 'text', content: 'squad stats' });
+        assert.equal(nonce, first.idempotencyKey);
+        assert.equal(replyToMessageId, event.messageId);
         const error = new Error('provider detail must not be persisted');
         Object.assign(error, { code: 'temporarily_unavailable' });
         throw error;
@@ -93,6 +95,7 @@ test('KOOK inbox dedupes events and outbox pins destinations, retries and leases
     assert.ok(job);
     assert.equal(claims.filter(Boolean).length, 1);
     assert.equal(job.channelId, channelId);
+    assert.equal(job.sourceEventId, event.messageId);
     assert.equal(job.attemptCount, 2);
     await queue.markSent(job);
     await assert.rejects(queue.markSent(job), /kook_outbox_lease_lost/u);

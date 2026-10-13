@@ -6,3 +6,4 @@ export * from './application/team-admin-service.js';
 export * from './application/account-claim-service.js';
 export * from './application/kook-message-queue.js';
 export * from './channels/kook/gateway.js';
+export * from './channels/kook/message-client.js';
