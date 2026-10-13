@@ -14,6 +14,16 @@ export interface PublicSyncQueueOptions {
   maxRetryMs?: number;
 }
 
+export interface PublicSyncQueueSnapshot {
+  totalJobs: number;
+  dueJobs: number;
+  delayedJobs: number;
+  activeLeases: number;
+  expiredLeases: number;
+  retryingJobs: number;
+  oldestDueAgeSeconds: number | null;
+}
+
 interface CandidateRow extends QueryResultRow {
   tenant_id: string;
   team_id: string;
@@ -64,6 +74,39 @@ export class PublicSyncQueue {
       const result = await client.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM teams');
       return Number(result.rows[0]?.count ?? 0);
     });
+  }
+
+  /** Returns deployment-wide counts only; tenant and team identifiers never
+   * leave PostgreSQL through worker telemetry. */
+  async getSnapshot(): Promise<PublicSyncQueueSnapshot> {
+    const result = await this.pool.query<{
+      total_jobs: string;
+      due_jobs: string;
+      delayed_jobs: string;
+      active_leases: string;
+      expired_leases: string;
+      retrying_jobs: string;
+      oldest_due_age_seconds: number | null;
+    }>(`SELECT COUNT(*)::text AS total_jobs,
+        COUNT(*) FILTER (WHERE lease_token IS NULL AND next_attempt_at<=now())::text AS due_jobs,
+        COUNT(*) FILTER (WHERE lease_token IS NULL AND next_attempt_at>now())::text AS delayed_jobs,
+        COUNT(*) FILTER (WHERE lease_token IS NOT NULL AND lease_until>now())::text AS active_leases,
+        COUNT(*) FILTER (WHERE lease_token IS NOT NULL AND lease_until<=now())::text AS expired_leases,
+        COUNT(*) FILTER (WHERE last_error_code IS NOT NULL)::text AS retrying_jobs,
+        EXTRACT(EPOCH FROM (now() - MIN(next_attempt_at)
+          FILTER (WHERE lease_token IS NULL AND next_attempt_at<=now())))::double precision AS oldest_due_age_seconds
+      FROM public_sync_jobs`);
+    const row = result.rows[0];
+    if (!row) throw new Error('public_sync_queue_snapshot_unavailable');
+    return {
+      totalJobs: Number(row.total_jobs),
+      dueJobs: Number(row.due_jobs),
+      delayedJobs: Number(row.delayed_jobs),
+      activeLeases: Number(row.active_leases),
+      expiredLeases: Number(row.expired_leases),
+      retryingJobs: Number(row.retrying_jobs),
+      oldestDueAgeSeconds: row.oldest_due_age_seconds,
+    };
   }
 
   /** Claims at most `limit` due teams atomically across all worker processes. */

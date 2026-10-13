@@ -25,6 +25,11 @@ instructions remain in
   ms); 7,356 worker-phase SQL statements in 3,105 ms (p50/p95/p99
   0.93/62.05/100.31 ms); 200/200 runs completed, 0 failures, pool peak 16/20
   connections and 0 waiters. This is not a production capacity or SLO claim.
+- The P5 observability follow-up emits a JSON event after each public sync cycle
+  with cycle duration/counters, deployment-wide due/delayed/active/expired job
+  counts, oldest due age and process RSS/heap. Queue events include no tenant
+  or team identifiers. Alert rules and M204 resource thresholds are not
+  configured or measured.
 - `27523ae` adds an `age`-encrypted public-PostgreSQL-schema backup utility,
   checksum/table-count manifest verification, and restore/cleanup guards that
   create only explicitly named disposable databases.
@@ -89,6 +94,9 @@ instructions remain in
   file included. The report-writing and live 100–200 prompt call have not been
   run because no external deidentified corpus or public test-provider
   credentials were configured.
+- The isolated-schema queue/snapshot integration test passed 2/2; the affected
+  package and shared Domain builds passed. No full SaaS or private Kurisu suite
+  was repeated for this aggregate-only worker telemetry change.
 
 An initial full SaaS run had one fixture failure: the onboarding test sends
 more than the production default of 10 requests per user in a minute. That
@@ -114,6 +122,8 @@ was removed or relaxed.
 - 200-team data/query/worker simulation ran only on the local isolated
   PostgreSQL fixture. It does not measure M204 memory/swap/RSS, production
   network egress, or an SLO.
+- Worker JSON log events are scrapeable but no host exporter/alert thresholds
+  are installed; actual M204 RSS/swap/headroom remains unmeasured.
 - The live KOOK bot developer-account quota is 10,000 messages/day across all
   bots and resets at 12:00 Beijing. KOOK documents a large discount for a first
   reply within five minutes, but not an account aggregate visible to this bot;

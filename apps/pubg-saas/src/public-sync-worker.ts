@@ -65,8 +65,27 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
       onTeamError: code => process.stderr.write(`${code}\n`),
     });
     do {
+      const cycleStartedAt = performance.now();
       const result = await worker.runOnce(stop.signal);
-      process.stdout.write(`PUBG_SAAS_SYNC_WORKER teams=${result.teamsDiscovered} completed=${result.teamsCompleted} failed=${result.teamsFailed} matches=${result.matchesDiscovered} telemetry_fetched=${result.telemetryFetched} telemetry_unavailable=${result.telemetryUnavailable}\n`);
+      let queue: Awaited<ReturnType<PublicSyncWorker['getQueueSnapshot']>> | null = null;
+      try {
+        queue = await worker.getQueueSnapshot();
+      } catch {
+        // A telemetry read failure must not discard a completed sync cycle or
+        // print database details into collected worker logs.
+      }
+      const memory = process.memoryUsage();
+      process.stdout.write(`${JSON.stringify({
+        event: 'pubg_saas_sync_cycle',
+        observedAt: new Date().toISOString(),
+        cycle: {
+          ...result,
+          durationMs: Math.round((performance.now() - cycleStartedAt) * 10) / 10,
+        },
+        queue,
+        queueSnapshotError: queue === null,
+        process: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed },
+      })}\n`);
       if (once || stop.signal.aborted) break;
       await wait(intervalMs, stop.signal);
     } while (!stop.signal.aborted);

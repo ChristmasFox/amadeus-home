@@ -25,6 +25,10 @@ test('public sync queue uses tenant-team keys, disjoint leases, fencing tokens, 
     const first = new PublicSyncQueue(pool, { leaseMs: 60_000, baseRetryMs: 500, maxRetryMs: 2_000 });
     const second = new PublicSyncQueue(pool, { leaseMs: 60_000, baseRetryMs: 500, maxRetryMs: 2_000 });
     assert.equal(await first.ensureTeams(), 2);
+    const initialSnapshot = await first.getSnapshot();
+    assert.equal(initialSnapshot.totalJobs, 2);
+    assert.equal(initialSnapshot.dueJobs, 2);
+    assert.equal(initialSnapshot.oldestDueAgeSeconds !== null && initialSnapshot.oldestDueAgeSeconds >= 0, true);
 
     const [claimedA, claimedB] = await Promise.all([first.claimDue(1), second.claimDue(1)]);
     assert.equal(claimedA.length, 1);
@@ -35,10 +39,16 @@ test('public sync queue uses tenant-team keys, disjoint leases, fencing tokens, 
       'parallel worker processes must not lease the same tenant/team job',
     );
     assert.notEqual(claimedA[0]?.leaseToken, claimedB[0]?.leaseToken);
+    const leasedSnapshot = await first.getSnapshot();
+    assert.equal(leasedSnapshot.activeLeases, 2);
+    assert.equal(leasedSnapshot.oldestDueAgeSeconds, null);
 
     const expired = claimedA[0]!;
     await pool.query(`UPDATE public_sync_jobs SET lease_until=now()-interval '1 second'
       WHERE tenant_id=$1 AND team_id=$2`, [expired.tenantId, expired.teamId]);
+    const expiredSnapshot = await first.getSnapshot();
+    assert.equal(expiredSnapshot.expiredLeases, 1);
+    assert.equal(expiredSnapshot.activeLeases, 1);
     const reclaimed = await second.claimDue(1);
     assert.equal(reclaimed.length, 1);
     assert.deepEqual([reclaimed[0]?.tenantId, reclaimed[0]?.teamId], [expired.tenantId, expired.teamId]);
@@ -53,6 +63,10 @@ test('public sync queue uses tenant-team keys, disjoint leases, fencing tokens, 
     assert.equal(retryRow.rows[0]?.last_error_code, 'provider_unavailable');
     assert.equal(retryRow.rows[0]?.delayed, true);
     assert.equal((await second.claimDue(1)).length, 0, 'backoff must keep the failed job out of the immediate queue');
+    const retrySnapshot = await first.getSnapshot();
+    assert.equal(retrySnapshot.delayedJobs, 1);
+    assert.equal(retrySnapshot.retryingJobs, 1);
+    assert.equal(retrySnapshot.activeLeases, 1);
 
     await pool.query(`UPDATE public_sync_jobs SET next_attempt_at=now()-interval '1 second'
       WHERE tenant_id=$1 AND team_id=$2`, [retryJob.tenantId, retryJob.teamId]);

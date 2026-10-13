@@ -206,6 +206,13 @@ and 20 telemetry fetches per team per cycle. These are operating defaults, not
 a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry
 concurrency are bounded. SIGINT/SIGTERM stop intake and close pools.
 
+Each completed sync cycle writes one JSON log event with duration, teams and
+telemetry counters, aggregate due/delayed/leased/expired queue counts, the
+oldest due age, and process RSS/heap bytes. Queue telemetry contains no tenant
+or team identifiers. A queue-snapshot read failure is marked in the event and
+does not discard the completed cycle. These logs provide scrapeable signals;
+host alert rules and measured M204 resource limits remain deployment work.
+
 `/pubg` or `/pubg help` shows guidance buttons. Guidance is read-only; state
 changes use one-use confirmations. Names/labels retain case; quote those with spaces.
 

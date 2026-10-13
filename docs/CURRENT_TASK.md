@@ -65,22 +65,27 @@ fake PUBG API/model provider; no runtime credential, real guild, production
 database, Docker service or external deployment was touched. The worker
 dry-run requires explicit `--apply` to connect or write.
 
-M2 is active: independent worker capacity/observability, 200-team simulated
-load, quota/resource measurements, backup/restore, clean-host recovery and
-private/public independence drills remain. P3 real test-guild and KOOK
-eligibility acceptance, and P4's deidentified prompt benchmark, also remain
-external acceptance gates. No live provider accuracy, latency or capacity is
-claimed. Query sessions still derive from durable ingress, fresh KOOK membership
-and DB ownership, with explicit DM grants and no fallback to the private team.
+M2 is active: worker cycle logs now expose aggregate queue age/state and
+process RSS/heap without tenant IDs. The local synthetic 200-team simulation
+passed; independent worker capacity, alert rules, quota/resource measurements,
+backup/restore, clean-host recovery and private/public independence drills
+remain. P3 real
+test-guild and KOOK eligibility acceptance, and P4's deidentified prompt
+benchmark, also remain external acceptance gates. No live provider accuracy,
+latency or capacity is claimed. Query sessions still derive from durable
+ingress, fresh KOOK membership and DB ownership, with explicit DM grants and no
+fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## M2 source and recovery evidence — 2026-10-14
 
 M2 source commits `2271a4b` and `27523ae` add PostgreSQL-backed per-team worker
-leases/fencing/retry, bounded worker concurrency and graceful drain; default
-minute windows are 10 requests/user, 60/channel, 120/tenant and 300/bot. KOOK
-REST rate headers now pause the affected route/global bucket, and 429 retry
-deadlines survive outbox retries. The isolated 200-team benchmark completed
+leases/fencing/retry, bounded worker concurrency and graceful drain. Worker
+cycle logs now add aggregate due/lease/backoff counts, oldest due age and
+process RSS/heap without tenant/team IDs; alert rules remain uninstalled. The
+default minute windows are 10 requests/user, 60/channel, 120/tenant and
+300/bot. KOOK REST rate headers now pause the affected route/global bucket, and
+429 retry deadlines survive outbox retries. The isolated 200-team benchmark completed
 200/200 team runs with 0 failures; the worker phase ran 7,356 SQL statements in
 3,105 ms (p95 62 ms), peaking at 16/20 pool connections with no waiters. This
 is a local synthetic measurement, not M204 resource headroom or a capacity/SLO

@@ -102,6 +102,9 @@ resource/quota feasibility also remain open. The P4 benchmark runner is in
 `apps/pubg-saas/tests/nl-query-provider.benchmark.ts`; it needs an external
 owner-only 100–200-case prompt file and test-provider credentials before it can
 produce accuracy/token/P50/P95 evidence.
+The worker also emits aggregate queue state/age and process RSS/heap in each
+cycle log without tenant identifiers; host alert rules and M204 thresholds are
+still open.
 
 ## Request paths and guardrails
 

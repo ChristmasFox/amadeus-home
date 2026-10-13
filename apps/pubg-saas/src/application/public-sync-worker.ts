@@ -12,7 +12,7 @@ import type { Pool, QueryResultRow } from 'pg';
 import type { PublicPubgAdmission } from '../infrastructure/pubg/request-limiter.js';
 import { PostgresPubgRepository } from '../infrastructure/postgres/pubg-repository.js';
 import { validatePublicPubgShard } from '../infrastructure/pubg/player-resolver.js';
-import { PublicSyncQueue, type PublicSyncJob } from './public-sync-queue.js';
+import { PublicSyncQueue, type PublicSyncJob, type PublicSyncQueueSnapshot } from './public-sync-queue.js';
 
 const API_ORIGIN = 'https://api.pubg.com';
 const TELEMETRY_HOSTS = new Set(['telemetry-cdn.pubg.com', 'telemetry-cdn.playbattlegrounds.com']);
@@ -269,6 +269,10 @@ export class PublicSyncWorker {
       }
     }
     return summary;
+  }
+
+  getQueueSnapshot(): Promise<PublicSyncQueueSnapshot> {
+    return this.queue.getSnapshot();
   }
 
   private async processJob(job: PublicSyncJob): Promise<
