@@ -301,6 +301,17 @@ healthy and 9Router remained running. No image was pushed. Host alert routing,
 canonical-host capacity, and native cloud recovery remain open. Evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+Official KOOK policy was rechecked: an unverified developer is limited to one
+bot/one developer-owned guild, 200 sends/day and 60 requests/min; verified
+eligibility lists up to 10,000 guilds and 240 requests/min, while proactive
+messages share a 10,000/day account-wide ceiling resetting at 12:00 Beijing.
+At the Goal's 30 queries/team/day planning baseline, 200 teams would mean
+6,000 ordinary one-reply sends/day (60% of that shared cap) before other bots
+or operational messages; two counted replies/query would exceed the cap. This
+is planning arithmetic only. The one-guild/one-channel test inventory does not
+prove verification, written capacity approval or remaining quota. Do not raise
+the 200/day runtime budget or claim capacity before those facts are confirmed.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed

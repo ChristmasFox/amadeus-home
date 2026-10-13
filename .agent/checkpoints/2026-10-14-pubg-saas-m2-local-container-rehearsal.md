@@ -500,6 +500,29 @@ benchmark schema was cleaned up, and no Compose or private runtime was changed.
 The Goal stays open for native clean-Linux/cloud independence, installed backup
 scheduling, live platform eligibility, and human-actor KOOK acceptance.
 
+## KOOK eligibility and quota feasibility review — 2026-10-14
+
+Read the current official [developer eligibility policy](https://developer.kookapp.cn/doc/privacy)
+and [message quota documentation](https://developer.kookapp.cn/doc/http/message).
+The policy lists unverified developers at one bot, one developer-owned guild,
+200 bot messages/day and 60 API requests/minute; verified developers may create
+unlimited bots, invite each bot to 10,000 guilds, and use 240 API requests/minute.
+The message API separately documents a shared ceiling of 10,000 proactive sends
+per developer account across its bots, resetting at 12:00 Asia/Shanghai. Failed
+requests do not count; temporary replies are excluded and certain first replies
+within five minutes receive a quota discount. The implementation's 200/day
+default remains conservative and does not assume those discounts.
+
+At the Goal's planning baseline of 30 queries per team per day, 200 teams imply
+6,000 outbound answer messages/day if every query gets one ordinary response.
+That is 60% of the verified account-wide 10,000 cap before welcomes, other
+SaaS traffic, or the developer's other bots; two counted replies per query
+would be 12,000 and exceed it. This is planning arithmetic, not measured usage
+or a feasibility pass. The test bot's read-only inventory showed one guild and
+one text channel; it cannot establish developer verification status, written
+capacity approval, or remaining account quota. Do not raise the runtime budget
+or claim 200-guild eligibility until those operator-side facts are confirmed.
+
 ## Worker liveness health signal — source acceptance
 
 Added a loopback-only `GET /healthz` to the independent public sync Worker and
