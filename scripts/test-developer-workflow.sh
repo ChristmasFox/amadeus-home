@@ -116,6 +116,16 @@ assert_line "$storage" 'DOCKER_BUILD=forbidden'
 assert_line "$storage" 'DOCKER_IMAGE_SET=none'
 backup="$(scope scripts/service-aware-backup.sh docs/SERVICE_AWARE_BACKUP_REGISTRY.json)"
 assert_line "$backup" 'CHANGE_SCOPE_WORKFLOW=STORAGE_RUNTIME'
+pubg_saas_backup="$(scope scripts/pubg-saas-backup-job.sh)"
+assert_line "$pubg_saas_backup" 'CHANGE_SCOPE_WORKFLOW=STORAGE_RUNTIME'
+if grep -Fq 'UNKNOWN_PATHS=' <<<"$pubg_saas_backup"; then
+  printf '%s\n' 'PUBG SaaS backup job must have a classified validation workflow.' >&2
+  exit 1
+fi
+if [[ ! -x scripts/pubg-saas-backup-job.sh ]]; then
+  printf '%s\n' 'PUBG SaaS systemd backup job must remain executable.' >&2
+  exit 1
+fi
 manifest="$(scope docs/OPERATION_SKULD_MIGRATION_MANIFEST.json docs/OPERATION_SKULD_MAC_MINI_MIGRATION_RUNBOOK.md)"
 assert_line "$manifest" 'CHANGE_SCOPE_WORKFLOW=SKULD_CONSISTENCY'
 pubg_with_validation_matrix="$(scope packages/pubg-domain/src/index.ts docs/VALIDATION_MATRIX.md)"

@@ -88,7 +88,9 @@ with table-count and role-boundary probes, and the public-stop/private-Kurisu
 source regression are verified. Canonical-host resource/alert routing,
 cloud recovery, scheduled backup installation, quota/eligibility and full
 independent-runtime drills remain. The clean Linux ARM64 guest now passes
-Compose recovery and application egress isolation. P3 real
+Compose recovery, application egress isolation, and the combined encrypted
+backup/prune job. The six-hour timer is syntax-verified but not installed.
+P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
 cross-channel routing, management callbacks and unauthorized denial) and KOOK
@@ -163,6 +165,17 @@ public and metadata connections returned `ENETUNREACH`, the proxy returned 403
 for metadata and `host.docker.internal`, and a public HTTPS HEAD through the
 proxy returned 200. The proxy-only Compose project was stopped afterward; no
 PG or application process remained running.
+
+The systemd backup job exposed a Git mode defect: its shebang script was
+`100644` although the service template invokes it as `ExecStart`. The tracked
+mode is now `100755`, and the workflow classifier covers this SaaS backup job.
+The executable job completed against the isolated synthetic PG: it created an
+age-encrypted 37-table backup, pruned retention, and the artifact verified.
+An expired synthetic copy was then removed while recent backups remained.
+`systemd-analyze calendar/verify` accepted the six-hour UTC timer and a
+temporary rendered service path; no system user or timer was installed/enabled.
+The initial direct invocation failed with `Permission denied` before this fix;
+the complete rerun passed. Details and test evidence are in the checkpoint.
 
 ## KOOK test-server connection check — 2026-10-14
 

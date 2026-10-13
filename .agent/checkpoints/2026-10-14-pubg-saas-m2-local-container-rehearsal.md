@@ -856,3 +856,66 @@ for service in gateway worker; do
 done
 docker compose --env-file .env down
 ```
+
+## Backup timer and executable job rehearsal — 2026-10-14
+
+Inspection found `scripts/pubg-saas-backup-job.sh` was tracked as mode `100644`,
+but `infra/pubg-saas/systemd/pubg-saas-backup.service.example` invokes it
+directly through `ExecStart`. A direct run on the isolated test host failed
+with `Permission denied` before doing any backup work. The repository mode is
+now `100755`; the script's contents and backup semantics were not weakened.
+`scripts/developer-workflow.sh` now classifies the PUBG SaaS backup scripts as
+`STORAGE_RUNTIME`, and `scripts/test-developer-workflow.sh` guards against both
+an unknown validation path and a future lost executable bit.
+
+The six-hour UTC timer expression parsed as
+`*-*-* 00,06,12,18:00:00 UTC`; `Persistent=true` remains set. A temporary copy
+of the service unit used root, `/dev/null`, and the actual executable path to
+validate syntax and `ExecStart` resolution with `systemd-analyze verify`. The
+unit and timer were not installed or enabled, and the dedicated system user was
+not created. This does not satisfy scheduled backup installation on a host.
+
+After correcting the executable bit, the actual job ran against the isolated
+synthetic PG18.1 source database using the local Compose adapter and protected
+test role files. It created
+`pubg-saas-20261013T223335Z-ae0f4cfe.dump.age` with SHA-256
+`046268a9895c09933fc5ca1a1f5a0f75c07057568a91006c3862f24f420786cd`, ran
+seven-day retention (`REMOVED_PAIRS=0`), then archive verification passed with
+37 public tables. A separately copied age artifact/manifest pair dated eight
+days old was passed to the real guarded `prune --apply`; exactly that expired
+synthetic pair was removed, while the two recent verified backups remained.
+No production backup directory was used.
+
+Focused validation passed: `pnpm test:workflow`,
+`pnpm test:storage-runtime`, `pnpm test:migration-readiness`,
+`pnpm test:service-aware-backup`, and the backup/restore safety suite (14/14).
+`pnpm check:architecture`, shell syntax, `systemd-analyze verify`, and
+`git diff --check` passed. The service/timer remains a template only; actual
+host installation awaits an authorized apply and protected independent
+storage/secret setup.
+
+Reproduction of the isolated job run, with credentials read only from the
+owner-only test secret files and never printed:
+
+```sh
+cd /var/tmp/pubg-saas-m2-clean/src
+docker compose --env-file .env up -d --wait postgres
+export PATH=/var/tmp/pubg-saas-m2-clean/tooling/bin:$PATH
+export PUBG_SAAS_PG_EXEC_PROJECT=pubg-saas-m2-clean-src-516371e
+export PUBG_SAAS_PG_EXEC_COMPOSE_FILE=/var/tmp/pubg-saas-m2-clean/src/compose.yaml
+export PUBG_SAAS_PG_EXEC_ENV_FILE=/var/tmp/pubg-saas-m2-clean/src/.env
+backup_pw="$(< /var/tmp/pubg-saas-m2-clean/src/secrets/backup-password)"
+export PUBG_SAAS_DATABASE_URL="postgresql://pubg_backup:${backup_pw}@postgres:5432/pubg_saas"
+export PUBG_SAAS_BACKUP_RECIPIENTS_FILE=/var/tmp/pubg-saas-m2-clean/age/recipients.txt
+export PUBG_SAAS_BACKUP_OUTPUT_DIR=/var/tmp/pubg-saas-m2-clean/artifacts
+export PUBG_SAAS_BACKUP_RETENTION_DAYS=7
+/var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-job.sh
+```
+
+For a timer check without installing it:
+
+```sh
+systemd-analyze calendar '*-*-* 00,06,12,18:00:00 UTC'
+# Use systemd-analyze verify on a temporary rendered copy of both example
+# units, replacing only their environment-file, user/group and ExecStart paths.
+```

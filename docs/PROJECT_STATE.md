@@ -21,6 +21,15 @@ default route, direct public/metadata TCP denied, proxy CONNECT to metadata and
 `host.docker.internal` returned 403, and credential-free public HTTPS via proxy
 returned 200. The proxy-only project was stopped after the smoke.
 
+The six-hour UTC systemd timer and service template passed `systemd-analyze`
+calendar/unit checks using temporary validation copies, without installation.
+The backup job was initially not executable (`100644`) despite being used as
+`ExecStart`; the repository mode is now `100755`. Its actual run against the
+synthetic isolated PG created and verified an encrypted 37-table backup, ran
+retention, and a separate stale-fixture prune removed exactly one expired pair
+while preserving recent artifacts. The timer remains uninstalled pending an
+authorized host apply.
+
 With public Compose down, `pnpm test:pubg` passed 68/68. Read-only checks show
 private OpenClaw healthy with restart count 0 and unchanged container ID/start
 time; 9Router also kept the same ID/start time and restart count 0. Neither was
