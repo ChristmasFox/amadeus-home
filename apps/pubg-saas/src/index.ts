@@ -24,6 +24,8 @@ export * from './channels/kook/guild-welcome.js';
 export * from './application/public-query-authorizer.js';
 export * from './application/kook-public-query-handler.js';
 export * from './application/nl-query-planner.js';
+export * from './contracts/team-preferences.js';
+export * from './contracts/team-aliases.js';
 export * from './application/query-plan-executor.js';
 export * from './application/public-sync-worker.js';
 export * from './infrastructure/ai/model-config.js';

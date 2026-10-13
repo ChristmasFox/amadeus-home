@@ -51,7 +51,7 @@ export function createOnboardingCard(): KookTextPayload {
 type: 'card', content: JSON.stringify([{
       type: 'card', theme: 'info', size: 'sm', modules: [
         { type: 'header', text: { type: 'plain-text', content: 'PUBG 队伍助手' } },
-        { type: 'section', text: { type: 'plain-text', content: '服务器管理员可创建队伍或将当前频道绑定到已有队伍。玩家可在私信中声明关联自己的 PUBG 账号。' } },
+        { type: 'section', text: { type: 'plain-text', content: '服务器管理员可创建队伍、将当前频道绑定到已有队伍，设置默认排行榜或管理队员查询别名。玩家可在私信中声明关联自己的 PUBG 账号。所有队伍变更都需本人确认。' } },
         {
 type: 'action-group', elements: [
             { type: 'button', theme: 'primary', click: 'return-val', value: 'ui:create', text: { type: 'plain-text', content: '创建队伍' } },

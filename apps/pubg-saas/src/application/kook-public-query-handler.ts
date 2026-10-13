@@ -15,13 +15,12 @@ import type {
   PublicQueryAuthorizer,
   PublicQueryTeamSelection,
 } from './public-query-authorizer.js';
-
-type LeaderboardMetric = 'damage' | 'kills' | 'kd' | 'matches' | 'avg_damage';
+import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
   | { kind: 'my_stats'; period: 'today' | 'yesterday' }
-  | { kind: 'leaderboard'; period: 'today' | 'yesterday'; metric: LeaderboardMetric }
+  | { kind: 'leaderboard'; period: 'today' | 'yesterday'; metric: TeamLeaderboardMetric | null }
   | { kind: 'team_damage'; period: 'today' | 'yesterday' }
   | { kind: 'review'; period: 'today' | 'yesterday' };
 
@@ -166,15 +165,8 @@ function parsePeriod(token: string | undefined): 'today' | 'yesterday' | null {
   return null;
 }
 
-function parseMetric(token: string | undefined): LeaderboardMetric | null {
-  if (!token) return 'damage';
-  const normalized = token.toLowerCase();
-  if (['damage', '伤害'].includes(normalized)) return 'damage';
-  if (['kills', 'kill', '击杀'].includes(normalized)) return 'kills';
-  if (['kd'].includes(normalized)) return 'kd';
-  if (['matches', 'match', '场次'].includes(normalized)) return 'matches';
-  if (['avg_damage', '场均伤害'].includes(normalized)) return 'avg_damage';
-  return null;
+function parseMetric(token: string | undefined): TeamLeaderboardMetric | null {
+  return token ? parseTeamLeaderboardMetric(token) : null;
 }
 
 /** A deliberately small deterministic command surface. Unrecognized text is
@@ -203,7 +195,7 @@ export function parseKookPublicQuery(content: string): ParsedPublicQuery | null 
     if (args.length <= 1 && period) intent = { kind: 'my_stats', period };
   } else if (first === 'leaderboard' || first === 'rank' || first === '排行榜') {
     const args = tokens.slice(1), firstMetric = parseMetric(args[0]), firstPeriod = parsePeriod(args[0]);
-    const metric = firstMetric ?? 'damage';
+    const metric = firstMetric;
     const period = firstMetric ? parsePeriod(args[1]) : firstPeriod ?? parsePeriod(args[1]);
     const valid = args.length === 0 || args.length === 1 && Boolean(firstMetric || firstPeriod)
       || args.length === 2 && Boolean(firstMetric) && Boolean(parsePeriod(args[1]));
@@ -383,9 +375,12 @@ async function naturalLanguageReply(
     if (claim.claimStatus !== 'verified') selfWarning = '本人账号为自我声明，所有权未经验证。\n';
   }
 
+  const effectivePlan = result.plan.intent === 'leaderboard' && result.plan.metric === null
+    ? { ...result.plan, metric: await query.repository.getLeaderboardMetricPreference() ?? 'damage' }
+    : result.plan;
   const execution = await (services.executor ?? new QueryPlanExecutor()).execute({
     authorizedQuery: query,
-    plan: result.plan,
+    plan: effectivePlan,
     ...(previousPlan ? { previousPlan } : {}),
     ...(selfPlayerId ? { selfPlayerId } : {}),
     signal,
@@ -406,8 +401,8 @@ async function naturalLanguageReply(
   } else if (execution.plan.intent === 'comparison') {
     reply = comparisonText(execution.envelope, period, freshness);
   } else if (execution.plan.intent === 'leaderboard') {
-    const metric = (execution.plan.metric ?? 'damage') as LeaderboardMetric;
-    reply = leaderboardText(execution.envelope, period, metric, freshness);
+    const metric = (execution.plan.metric ?? 'damage') as TeamLeaderboardMetric;
+    reply = leaderboardText(execution.envelope, execution.plan.period ?? 'today', metric, freshness);
   } else {
     const subjectLabel = execution.plan.intent === 'my_stats' ? '本人'
       : execution.plan.intent === 'player_stats' ? '队员' : '队伍';
@@ -456,12 +451,13 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
       const freshness = freshnessNote(state, now);
       const domain = new PubgDomainService({ teamContext: query.teamContext, repository: query.repository, now: () => now });
       if (parsed.intent.kind === 'leaderboard') {
+        const metric = parsed.intent.metric ?? await query.repository.getLeaderboardMetricPreference() ?? 'damage';
         const envelope = await domain.queryStats({
           sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period },
-          metrics: [parsed.intent.metric as Metric], operation: 'rank', groupBy: 'player', orderBy: { metric: parsed.intent.metric, direction: 'desc' },
+          metrics: [metric as Metric], operation: 'rank', groupBy: 'player', orderBy: { metric, direction: 'desc' },
           limit: 4, refresh: false, signal,
         });
-        return message(leaderboardText(envelope, parsed.intent.period, parsed.intent.metric, freshness));
+        return message(leaderboardText(envelope, parsed.intent.period, metric, freshness));
       }
       if (parsed.intent.kind === 'team_damage') {
         const envelope = await domain.queryTeamDamage({ sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period }, refresh: false, signal });

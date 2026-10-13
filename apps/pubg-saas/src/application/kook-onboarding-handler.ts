@@ -5,6 +5,7 @@ import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import type { TeamAdminService } from './team-admin-service.js';
+import { teamLeaderboardMetricLabel } from '../contracts/team-preferences.js';
 
 export interface KookOnboardingServices {
   teams: TeamAdminService;
@@ -13,6 +14,9 @@ export interface KookOnboardingServices {
 }
 
 function text(content: string): KookTextPayload { return { type: 'text', content }; }
+function safeAliasText(value: string): string {
+  return value.replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/@/gu, '＠').replace(/[`*_~>|]/gu, ' ').trim().slice(0, 100);
+}
 const guidance: Record<string, string> = {
   'ui:create': '请在要绑定的服务器频道发送：/pubg create steam "队伍名称" PlayerA PlayerB（1–4 名玩家）。平台支持 steam/kakao/psn/xbox；含空格的名称用引号包裹。查询后需确认；服务器拥有者或管理员才能执行。',
   'ui:bind': '请在目标服务器频道发送 /pubg teams 查看该服务器的队伍，再发送 /pubg bind <队伍ID>。绑定前需确认，且当前频道必须未绑定队伍。',
@@ -56,6 +60,49 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
       const teams = await services.teams.listGuildTeams(event);
       return text(teams.length ? `本服务器的队伍（最多显示 50 个）：\n${teams.map(team => `${team.label} · ${team.pubgShard} · ${team.memberCount} 人\n${team.teamId}`).join('\n\n')}` : '本服务器尚未创建队伍。发送 /pubg help 查看建队入口。');
     }
+    if (command.kind === 'preference' || command.kind === 'preference_set' || command.kind === 'preference_delete') {
+      if (!job.boundTeam) throw new Error('channel_not_bound');
+      if (command.kind === 'preference') {
+        const metric = await services.teams.getLeaderboardMetricPreference(event, job.boundTeam);
+        return text(metric
+          ? `队伍默认排行榜：${teamLeaderboardMetricLabel(metric)}（${metric}）。管理员可用 /pubg preference <metric> 修改，或用 /pubg preference delete 删除。`
+          : '队伍尚未选择默认排行榜指标，当前使用伤害榜。管理员可用 /pubg preference <metric> 设置。');
+      }
+      const pending = command.kind === 'preference_set'
+        ? await services.teams.prepareTeamAction(event, { kind: 'set_leaderboard_metric', metric: command.metric }, job.boundTeam)
+        : await services.teams.prepareTeamAction(event, { kind: 'delete_leaderboard_metric' }, job.boundTeam);
+      const detail = command.kind === 'preference_set'
+        ? `队伍默认排行榜将设为${teamLeaderboardMetricLabel(command.metric)}（${command.metric}）。确认后会用于未指定指标的排行榜查询；明确指定指标的查询不受影响。`
+        : '确认后删除队伍默认排行榜设置；未指定指标的查询将恢复使用伤害榜。';
+      return createConfirmationCard({
+        title: command.kind === 'preference_set' ? '确认设置队伍排行榜偏好' : '确认删除队伍排行榜偏好',
+        detail: `${detail}\n此操作仅限本次操作者确认。`,
+        confirmText: command.kind === 'preference_set' ? '确认设置' : '确认删除',
+        confirmationToken: pending.confirmationToken,
+        actionScope: 'team',
+      });
+    }
+    if (command.kind === 'alias_list' || command.kind === 'alias_set' || command.kind === 'alias_delete') {
+      if (!job.boundTeam) throw new Error('channel_not_bound');
+      if (command.kind === 'alias_list') {
+        const aliases = await services.teams.listTeamAliases(event, job.boundTeam);
+        return text(aliases.length
+          ? `本队伍的查询别名：\n${aliases.map(entry => `${safeAliasText(entry.playerName)}：${safeAliasText(entry.alias)}`).join('\n')}`
+          : '本队伍还没有设置查询别名。管理员可用 /pubg alias set <游戏名> <别名> 添加。');
+      }
+      const action = command.kind === 'alias_set'
+        ? await services.teams.resolveTeamAliasTarget(event, command.playerName, job.boundTeam).then(target => ({ kind: 'set_team_alias' as const, pubgAccountId: target.pubgAccountId, alias: command.alias, playerName: target.playerName }))
+        : { kind: 'delete_team_alias' as const, alias: command.alias, playerName: '' };
+      const pending = action.kind === 'set_team_alias'
+        ? await services.teams.prepareTeamAction(event, { kind: action.kind, pubgAccountId: action.pubgAccountId, alias: action.alias }, job.boundTeam)
+        : await services.teams.prepareTeamAction(event, { kind: action.kind, alias: action.alias }, job.boundTeam);
+      const detail = action.kind === 'set_team_alias'
+        ? `将为队员 ${safeAliasText(action.playerName)} 添加查询别名“${safeAliasText(action.alias)}”。确认后，此别名仅用于本队伍内的确定性名称解析。`
+        : `将删除查询别名“${safeAliasText(action.alias)}”。`;
+      return createConfirmationCard({ title: action.kind === 'set_team_alias' ? '确认添加队员别名' : '确认删除队员别名',
+        detail: `${detail}\n此操作仅限本次操作者确认。`, confirmText: action.kind === 'set_team_alias' ? '确认添加' : '确认删除',
+        confirmationToken: pending.confirmationToken, actionScope: 'team' });
+    }
     if (command.kind === 'create') {
       if (job.boundTeam) throw new Error('channel_binding_conflict');
       await services.teams.assertGuildAdmin(event);
@@ -93,6 +140,6 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
     const pending = await services.claims.prepareClaim(request.event, { pubgShard: command.shard, pubgAccountId: player.accountId });
     return createConfirmationCard({ title: '确认声明关联我的账号', detail: `平台：${command.shard}\n游戏名：${player.name}\n这只是你本人的声明关联，未经账号所有权验证。仅本次操作者可确认。`, confirmText: '确认声明关联', confirmationToken: pending.confirmationToken, actionScope: 'claim' });
   }
-  if (['create', 'bind', 'teams', 'add', 'roster'].includes(command.kind)) return text('队伍管理需要在明确的服务器频道中发起。请到目标频道发送 /pubg help。');
+  if (['create', 'bind', 'teams', 'add', 'roster', 'preference', 'preference_set', 'preference_delete', 'alias_list', 'alias_set', 'alias_delete'].includes(command.kind)) return text('队伍管理需要在明确的服务器频道中发起。请到目标频道发送 /pubg help。');
   return undefined;
 }

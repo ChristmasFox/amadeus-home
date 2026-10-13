@@ -58,6 +58,9 @@ test('public query parser accepts only explicit bounded PUBG commands', () => {
   assert.deepEqual(parseKookPublicQuery('!pubg leaderboard 击杀 昨天')?.intent, {
     kind: 'leaderboard', period: 'yesterday', metric: 'kills',
   });
+  assert.deepEqual(parseKookPublicQuery('/pubg leaderboard today')?.intent, {
+    kind: 'leaderboard', period: 'today', metric: null,
+  });
   assert.deepEqual(parseKookPublicQuery('/pubg team damage today')?.intent, {
     kind: 'team_damage', period: 'today',
   });
@@ -89,12 +92,13 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
       plan: async (input: QueryPlannerInput) => {
         plannerInputs.push(input);
         const followUp = Boolean(input.previousPlan);
+        const defaultLeaderboard = input.message === '默认排行榜';
         return {
           plan: {
-            version: 1 as const, intent: followUp ? 'follow_up' as const : 'team_stats' as const,
+            version: 1 as const, intent: defaultLeaderboard ? 'leaderboard' as const : followUp ? 'follow_up' as const : 'team_stats' as const,
             subject: 'unspecified' as const,
-            playerName: null, actorName: null, victimName: null, metric: followUp ? 'kills' as const : null,
-            period: followUp ? null : 'today' as const,
+            playerName: null, actorName: null, victimName: null, metric: defaultLeaderboard ? null : followUp ? 'kills' as const : null,
+            period: followUp && !defaultLeaderboard ? null : 'today' as const,
             comparePeriod: null, matchCount: null, needsClarification: false,
           },
           source: 'model' as const, failure: null,
@@ -155,6 +159,9 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
       source: { store: 'pubg-api', syncInvoked: true, playerApiCalls: 1, matchApiCalls: 1, localMatchCount: 1 },
       discoveredMatchIds: [matchId], failedMatchIds: [],
     });
+    const pendingPreference = await teams.prepareTeamAction(trusted, { kind: 'set_leaderboard_metric', metric: 'kills' }, team);
+    assert.deepEqual(await teams.confirmTeamAction(trusted, pendingPreference.confirmationToken), { kind: 'set_leaderboard_metric', team });
+    assert.equal(await repository.getLeaderboardMetricPreference(), 'kills');
 
     const stats = await send(group(bot, guild, channel, admin, '/pubg today'));
     assert.match(stats.content, /今日队伍战绩/u);
@@ -178,9 +185,22 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.ok(recordedUsage.rows.every(row => row.provider === 'fixture-provider' && row.model_id === 'fixture-model'
       && row.input_tokens === 12 && row.output_tokens === 6));
 
+    const naturalLeaderboard = await send(direct(bot, admin, '默认排行榜'));
+    assert.match(naturalLeaderboard.content, /今日击杀榜/u);
+    assert.equal(plannerInputs[2]?.message, '默认排行榜');
+
     const leaderboard = await send(group(bot, guild, channel, admin, '/pubg leaderboard kills today'));
     assert.match(leaderboard.content, /击杀榜/u);
     assert.ok(leaderboard.content.indexOf('Alice') < leaderboard.content.indexOf('Bob'));
+    const preferredLeaderboard = await send(group(bot, guild, channel, `pref-default-${suffix}`, '/pubg leaderboard today'));
+    assert.match(preferredLeaderboard.content, /今日击杀榜/u);
+    const explicitLeaderboard = await send(group(bot, guild, channel, `pref-explicit-${suffix}`, '/pubg leaderboard damage today'));
+    assert.match(explicitLeaderboard.content, /今日伤害榜/u);
+    const deletePreference = await teams.prepareTeamAction(trusted, { kind: 'delete_leaderboard_metric' }, team);
+    assert.deepEqual(await teams.confirmTeamAction(trusted, deletePreference.confirmationToken), { kind: 'delete_leaderboard_metric', team });
+    assert.equal(await repository.getLeaderboardMetricPreference(), null);
+    const defaultAfterDelete = await send(group(bot, guild, channel, `pref-deleted-${suffix}`, '/pubg leaderboard today'));
+    assert.match(defaultAfterDelete.content, /今日伤害榜/u);
 
     const uncachedDamage = await send(group(bot, guild, channel, admin, '/pubg team damage today'));
     assert.match(uncachedDamage.content, /资料不可用或覆盖不完整/u);
@@ -227,7 +247,7 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
 
     const deniedNatural = await send(direct(bot, stranger, '查询 Alice 今天伤害'));
     assert.match(deniedNatural.content, /没有这支队伍的查询权限/u);
-    assert.equal(plannerInputs.length, 2, 'authorization must finish before AI planning');
+    assert.equal(plannerInputs.length, 3, 'authorization must finish before AI planning');
     assert.doesNotMatch(deniedNatural.content, /Alice|Bob|420|160/u);
   } finally {
     await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);

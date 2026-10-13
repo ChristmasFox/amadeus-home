@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { TrustedKookButtonClick } from '../channels/kook/trusted-button-event.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import { parseStoredTeamLeaderboardMetric, parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
+import { normalizeTeamAlias, normalizeTeamMemberLookup } from '../contracts/team-aliases.js';
 
 type TeamConfirmationActor = Pick<TrustedKookGroupMessage, 'platform' | 'botAccountId' | 'guildId' | 'userId' | 'channelId'>;
 
@@ -42,6 +44,10 @@ export interface GuildTeamSummary extends TeamReference {
 export type PendingTeamAction =
   | { kind: 'add_members'; pubgAccountIds: string[]; resolvedPlayers?: ResolvedPubgAccount[] }
   | { kind: 'replace_roster'; pubgAccountIds: string[]; resolvedPlayers?: ResolvedPubgAccount[] }
+  | { kind: 'set_team_alias'; pubgAccountId: string; alias: string }
+  | { kind: 'delete_team_alias'; alias: string }
+  | { kind: 'set_leaderboard_metric'; metric: TeamLeaderboardMetric }
+  | { kind: 'delete_leaderboard_metric' }
   | { kind: 'unbind_channel' }
   | { kind: 'disband_team' };
 
@@ -58,8 +64,14 @@ export interface BoundTeamStatus extends TeamReference {
   boundChannelCount: number;
 }
 
+export interface TeamAliasEntry {
+  pubgAccountId: string;
+  playerName: string;
+  alias: string;
+}
+
 export type ConfirmedTeamAction =
-  | { kind: 'add_members' | 'replace_roster' | 'unbind_channel'; team: TeamReference }
+  | { kind: 'add_members' | 'replace_roster' | 'set_team_alias' | 'delete_team_alias' | 'set_leaderboard_metric' | 'delete_leaderboard_metric' | 'unbind_channel'; team: TeamReference }
   | { kind: 'disband_team'; team: TeamReference };
 
 export interface TeamAdminServiceOptions {
@@ -122,6 +134,18 @@ function parsePendingAction(value: unknown): PendingTeamAction {
     case 'unbind_channel':
     case 'disband_team':
       return { kind: action.kind };
+    case 'set_leaderboard_metric': {
+      const metric = parseTeamLeaderboardMetric(action.metric);
+      if (!metric) throw new Error('team_preference_metric_invalid');
+      return { kind: action.kind, metric };
+    }
+    case 'delete_leaderboard_metric':
+      return { kind: action.kind };
+    case 'set_team_alias':
+      if (typeof action.pubgAccountId !== 'string') throw new Error('team_action_invalid');
+      return { kind: action.kind, pubgAccountId: requiredText(action.pubgAccountId, 'pubg_account_id'), alias: normalizeTeamAlias(action.alias).displayAlias };
+    case 'delete_team_alias':
+      return { kind: action.kind, alias: normalizeTeamAlias(action.alias).displayAlias };
     default:
       throw new Error('team_action_invalid');
   }
@@ -436,6 +460,87 @@ export class TeamAdminService {
     };
   }
 
+  async getLeaderboardMetricPreference(event: TrustedKookGroupMessage, expectedTeam?: TeamReference): Promise<TeamLeaderboardMetric | null> {
+    const result = await this.pool.query(
+      `SELECT binding.tenant_id,binding.team_id,preference.preference_json
+       FROM tenants tenant
+       JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
+         AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+       LEFT JOIN team_preferences preference ON preference.tenant_id=binding.tenant_id
+         AND preference.team_id=binding.team_id AND preference.preference_key='leaderboard_metric'
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
+         AND binding.channel_id=$3`,
+      [event.botAccountId, event.guildId, event.channelId],
+    );
+    const row = result.rows[0];
+    if (!row || typeof row.tenant_id !== 'string' || typeof row.team_id !== 'string') throw new Error('channel_not_bound');
+    if (expectedTeam && (row.tenant_id !== expectedTeam.tenantId || row.team_id !== expectedTeam.teamId)) throw new Error('team_action_scope_changed');
+    return parseStoredTeamLeaderboardMetric(row.preference_json);
+  }
+
+  async resolveTeamAliasTarget(
+    event: TrustedKookGroupMessage,
+    playerName: string,
+    expectedTeam?: TeamReference,
+  ): Promise<{ pubgAccountId: string; playerName: string }> {
+    await this.requireFreshGuildAdmin(event);
+    const result = await this.pool.query(
+      `SELECT binding.tenant_id,binding.team_id,member.pubg_account_id,
+              COALESCE(account.display_name,member.pubg_account_id) AS player_name,alias.display_alias
+       FROM tenants tenant
+       JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
+         AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+       JOIN teams team ON team.tenant_id=binding.tenant_id AND team.team_id=binding.team_id
+       JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
+       LEFT JOIN pubg_accounts account ON account.shard=team.pubg_shard AND account.account_id=member.pubg_account_id
+       LEFT JOIN team_aliases alias ON alias.tenant_id=member.tenant_id AND alias.team_id=member.team_id
+         AND alias.pubg_account_id=member.pubg_account_id
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
+         AND binding.channel_id=$3 ORDER BY member.pubg_account_id,alias.alias_key`,
+      [event.botAccountId, event.guildId, event.channelId],
+    );
+    const first = result.rows[0];
+    if (!first) throw new Error('channel_not_bound');
+    if (expectedTeam && (first.tenant_id !== expectedTeam.tenantId || first.team_id !== expectedTeam.teamId)) throw new Error('team_action_scope_changed');
+    const target = normalizeTeamMemberLookup(requiredText(playerName, 'player_name', 100));
+    const candidates = new Map<string, string>();
+    for (const row of result.rows) {
+      const accountId = String(row.pubg_account_id);
+      if ([accountId, String(row.player_name), ...(row.display_alias ? [String(row.display_alias)] : [])]
+        .some(candidate => normalizeTeamMemberLookup(candidate) === target)) {
+        candidates.set(accountId, String(row.player_name));
+      }
+    }
+    if (!candidates.size) throw new Error('team_alias_member_not_found');
+    if (candidates.size > 1) throw new Error('team_alias_member_ambiguous');
+    const [pubgAccountId, resolvedName] = [...candidates.entries()][0]!;
+    return { pubgAccountId, playerName: resolvedName };
+  }
+
+  async listTeamAliases(event: TrustedKookGroupMessage, expectedTeam?: TeamReference): Promise<TeamAliasEntry[]> {
+    const result = await this.pool.query(
+      `SELECT binding.tenant_id,binding.team_id,member.pubg_account_id,
+              COALESCE(account.display_name,member.pubg_account_id) AS player_name,
+              alias.alias_key,alias.display_alias
+       FROM tenants tenant
+       JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
+         AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+       JOIN teams team ON team.tenant_id=binding.tenant_id AND team.team_id=binding.team_id
+       LEFT JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
+       LEFT JOIN pubg_accounts account ON account.shard=team.pubg_shard AND account.account_id=member.pubg_account_id
+       LEFT JOIN team_aliases alias ON alias.tenant_id=member.tenant_id AND alias.team_id=member.team_id
+         AND alias.pubg_account_id=member.pubg_account_id
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
+         AND binding.channel_id=$3 ORDER BY member.pubg_account_id,alias.alias_key`,
+      [event.botAccountId, event.guildId, event.channelId],
+    );
+    const first = result.rows[0];
+    if (!first || typeof first.tenant_id !== 'string' || typeof first.team_id !== 'string') throw new Error('channel_not_bound');
+    if (expectedTeam && (first.tenant_id !== expectedTeam.tenantId || first.team_id !== expectedTeam.teamId)) throw new Error('team_action_scope_changed');
+    return result.rows.filter(row => typeof row.alias_key === 'string' && typeof row.display_alias === 'string')
+      .map(row => ({ pubgAccountId: String(row.pubg_account_id), playerName: String(row.player_name), alias: String(row.display_alias) }));
+  }
+
   async prepareTeamAction(event: TrustedKookGroupMessage, actionInput: PendingTeamAction, expectedTeam?: TeamReference): Promise<PreparedTeamAction> {
     await this.requireFreshGuildAdmin(event);
     const action = parsePendingAction(actionInput);
@@ -543,7 +648,7 @@ export class TeamAdminService {
       }
       const team: TeamReference = { tenantId: row.tenant_id, teamId: row.team_id };
       if (row.consumed_at) {
-        if (!['add_members', 'replace_roster', 'unbind_channel', 'disband_team'].includes(row.action)) throw new Error('team_action_confirmation_unavailable');
+        if (!['add_members', 'replace_roster', 'set_team_alias', 'delete_team_alias', 'set_leaderboard_metric', 'delete_leaderboard_metric', 'unbind_channel', 'disband_team'].includes(row.action)) throw new Error('team_action_confirmation_unavailable');
         await client.query('COMMIT');
         return { kind: row.action as ConfirmedTeamAction['kind'], team };
       }
@@ -598,6 +703,57 @@ export class TeamAdminService {
           }
           await this.persistResolvedPlayers(client, String(lockedTeam.rows[0]!.pubg_shard), action.resolvedPlayers);
           await client.query('DELETE FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [team.tenantId, team.teamId]);
+          break;
+        }
+        case 'set_team_alias': {
+          const alias = normalizeTeamAlias(action.alias);
+          const members = await client.query(
+            `SELECT member.pubg_account_id,COALESCE(account.display_name,member.pubg_account_id) AS player_name,
+                    existing.alias_key,existing.pubg_account_id AS alias_owner
+             FROM team_members member JOIN teams team ON team.tenant_id=member.tenant_id AND team.team_id=member.team_id
+             LEFT JOIN pubg_accounts account ON account.shard=team.pubg_shard AND account.account_id=member.pubg_account_id
+             LEFT JOIN team_aliases existing ON existing.tenant_id=member.tenant_id AND existing.team_id=member.team_id
+               AND existing.pubg_account_id=member.pubg_account_id
+             WHERE member.tenant_id=$1 AND member.team_id=$2`,
+            [team.tenantId, team.teamId],
+          );
+          if (!members.rows.some(row => row.pubg_account_id === action.pubgAccountId)) throw new Error('team_alias_member_not_found');
+          for (const member of members.rows) {
+            const accountId = String(member.pubg_account_id);
+            const nameCollision = [accountId, String(member.player_name)].some(value => normalizeTeamMemberLookup(value) === alias.key);
+            if (accountId !== action.pubgAccountId && (nameCollision || member.alias_key === alias.key)) throw new Error('team_alias_conflict');
+          }
+          const saved = await client.query(
+            `INSERT INTO team_aliases(tenant_id,team_id,alias_key,pubg_account_id,display_alias)
+             VALUES ($1,$2,$3,$4,$5)
+             ON CONFLICT (tenant_id,team_id,alias_key) DO UPDATE
+             SET display_alias=EXCLUDED.display_alias
+             WHERE team_aliases.pubg_account_id=EXCLUDED.pubg_account_id`,
+            [team.tenantId, team.teamId, alias.key, action.pubgAccountId, alias.displayAlias],
+          );
+          if (saved.rowCount !== 1) throw new Error('team_alias_conflict');
+          break;
+        }
+        case 'delete_team_alias': {
+          const alias = normalizeTeamAlias(action.alias);
+          await client.query('DELETE FROM team_aliases WHERE tenant_id=$1 AND team_id=$2 AND alias_key=$3', [team.tenantId, team.teamId, alias.key]);
+          break;
+        }
+        case 'set_leaderboard_metric': {
+          await client.query(
+            `INSERT INTO team_preferences(tenant_id,team_id,preference_key,preference_json,updated_by_user_id)
+             VALUES ($1,$2,'leaderboard_metric',jsonb_build_object('metric',$3::text),$4)
+             ON CONFLICT (tenant_id,team_id,preference_key) DO UPDATE
+             SET preference_json=EXCLUDED.preference_json,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=now()`,
+            [team.tenantId, team.teamId, action.metric, event.userId],
+          );
+          break;
+        }
+        case 'delete_leaderboard_metric': {
+          await client.query(
+            `DELETE FROM team_preferences WHERE tenant_id=$1 AND team_id=$2 AND preference_key='leaderboard_metric'`,
+            [team.tenantId, team.teamId],
+          );
           break;
         }
         case 'unbind_channel': {

@@ -81,6 +81,30 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     assert.deepEqual(await service.bindExistingSquad(eventA2, squadA.teamId), squadA);
     await assert.rejects(service.bindExistingSquad(eventB, squadA.teamId), /team_unavailable_in_guild/u);
 
+    const setPreference = await service.prepareTeamAction(eventA, { kind: 'set_leaderboard_metric', metric: 'kills' }, squadA);
+    assert.equal((await pool.query("SELECT 1 FROM team_preferences WHERE tenant_id=$1 AND team_id=$2 AND preference_key='leaderboard_metric'", [squadA.tenantId, squadA.teamId])).rowCount, 0);
+    await assert.rejects(service.confirmTeamAction(eventA2, setPreference.confirmationToken), /team_action_confirmation_unavailable/u);
+    await assert.rejects(service.confirmTeamAction(eventB, setPreference.confirmationToken), /team_action_confirmation_unavailable/u);
+    assert.deepEqual(await service.confirmTeamAction(eventA, setPreference.confirmationToken), { kind: 'set_leaderboard_metric', team: squadA });
+    assert.equal(await service.getLeaderboardMetricPreference(eventA, squadA), 'kills');
+    await assert.rejects(service.confirmTeamAction(eventA, setPreference.confirmationToken), /team_action_confirmation_unavailable/u);
+    const deletePreference = await service.prepareTeamAction(eventA, { kind: 'delete_leaderboard_metric' }, squadA);
+    assert.equal(await service.getLeaderboardMetricPreference(eventA, squadA), 'kills');
+    assert.deepEqual(await service.confirmTeamAction(eventA, deletePreference.confirmationToken), { kind: 'delete_leaderboard_metric', team: squadA });
+    assert.equal(await service.getLeaderboardMetricPreference(eventA, squadA), null);
+    await assert.rejects(service.confirmTeamAction(eventA, deletePreference.confirmationToken), /team_action_confirmation_unavailable/u);
+    const setAlias = await service.prepareTeamAction(eventA, { kind: 'set_team_alias', pubgAccountId: `p1-${suffix}`, alias: 'Captain' }, squadA);
+    assert.equal((await pool.query('SELECT 1 FROM team_aliases WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rowCount, 0);
+    assert.deepEqual(await service.confirmTeamAction(eventA, setAlias.confirmationToken), { kind: 'set_team_alias', team: squadA });
+    assert.deepEqual(await service.listTeamAliases(eventA, squadA), [{ pubgAccountId: `p1-${suffix}`, playerName: `p1-${suffix}`, alias: 'Captain' }]);
+    assert.deepEqual(await service.resolveTeamAliasTarget(eventA, 'captain', squadA), { pubgAccountId: `p1-${suffix}`, playerName: `p1-${suffix}` });
+    const conflictingAlias = await service.prepareTeamAction(eventA, { kind: 'set_team_alias', pubgAccountId: `p1-${suffix}`, alias: `p2-${suffix}` }, squadA);
+    await assert.rejects(service.confirmTeamAction(eventA, conflictingAlias.confirmationToken), /team_alias_conflict/u);
+    assert.deepEqual(await service.listTeamAliases(eventA, squadA), [{ pubgAccountId: `p1-${suffix}`, playerName: `p1-${suffix}`, alias: 'Captain' }]);
+    const deleteAlias = await service.prepareTeamAction(eventA, { kind: 'delete_team_alias', alias: 'CAPTAIN' }, squadA);
+    assert.deepEqual(await service.confirmTeamAction(eventA, deleteAlias.confirmationToken), { kind: 'delete_team_alias', team: squadA });
+    assert.deepEqual(await service.listTeamAliases(eventA, squadA), []);
+
     await pool.query(
       'INSERT INTO sync_state(tenant_id,team_id,state_key,checked_at,state_json) VALUES ($1,$2,$3,now(),\'{}\'::jsonb)',
       [squadA.tenantId, squadA.teamId, `team:${squadA.teamId}`],
@@ -220,7 +244,14 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     });
     assert.notEqual(squadA.tenantId, squadB.tenantId);
     assert.equal((await pool.query('SELECT COUNT(*) AS count FROM teams WHERE label=$1', ['Same Name'])).rows[0]?.count, '2');
-    assert.equal(permissionChecks, 29);
+    const isolatedPreference = await service.prepareTeamAction(eventA, { kind: 'set_leaderboard_metric', metric: 'kd' }, squadA);
+    await service.confirmTeamAction(eventA, isolatedPreference.confirmationToken);
+    assert.equal(await service.getLeaderboardMetricPreference(eventA, squadA), 'kd');
+    assert.equal(await service.getLeaderboardMetricPreference(eventB, squadB), null);
+    assert.deepEqual(await service.listTeamAliases(eventB, squadB), []);
+    const deleteIsolatedPreference = await service.prepareTeamAction(eventA, { kind: 'delete_leaderboard_metric' }, squadA);
+    await service.confirmTeamAction(eventA, deleteIsolatedPreference.confirmationToken);
+    assert.equal(permissionChecks, 48);
   } finally {
     await pool.query('DELETE FROM tenants WHERE guild_id = ANY($1::text[])', [[guildA, guildB]]).catch(() => undefined);
     await pool.query('DELETE FROM channel_identities WHERE platform=$1 AND bot_account_id=$2 AND user_id = ANY($3::text[])', ['kook', botId, [userA, userB]]).catch(() => undefined);

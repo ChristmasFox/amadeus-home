@@ -185,6 +185,21 @@ prior structured plan are sent to the configured public inference provider.
 Retention delivery requires the public gateway runtime to be running; it has
 not been installed on a production host.
 
+Each team can opt in to a default leaderboard metric with `/pubg preference
+kills` (supported values: `damage`, `kills`, `kd`, `matches`, `avg_damage`). A
+fresh server administrator check and one-use confirmation are required. The
+setting applies only when a leaderboard query omits its metric; explicit query
+metrics take precedence. `/pubg preference` shows the setting and
+`/pubg preference delete` removes it. The stored value and updater's KOOK user
+identifier remain until deleted or the team is disbanded.
+
+Team-scoped query aliases use `/pubg alias set "Player Name" Captain` and
+`/pubg alias delete Captain`; `/pubg alias list` shows the active aliases.
+Alias changes require a fresh server administrator check and one-use
+confirmation. Alias matching remains deterministic inside the authorized team
+roster. Aliases are removed when their member leaves the roster or when the
+team is disbanded; unbinding a channel leaves them intact.
+
 ## Source entry points
 
 After `pnpm build:pubg-saas`, these entry points are side-effect-free without

@@ -17,6 +17,7 @@ import type {
 import { normalizeRecords, parseTeamContext } from '@agent/pubg-domain/core';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { createHash } from 'node:crypto';
+import { parseStoredTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../../contracts/team-preferences.js';
 
 export interface TrustedConversationScope {
   platform: 'kook';
@@ -272,6 +273,17 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
 
   private async verifyScope(): Promise<void> {
     await this.withReadScope(async () => undefined);
+  }
+
+  async getLeaderboardMetricPreference(): Promise<TeamLeaderboardMetric | null> {
+    return this.withReadScope(async client => {
+      const result = await client.query(
+        `SELECT preference_json FROM team_preferences
+         WHERE tenant_id=$1 AND team_id=$2 AND preference_key='leaderboard_metric'`,
+        [this.scope.tenantId, this.scope.team.id],
+      );
+      return parseStoredTeamLeaderboardMetric(result.rows[0]?.preference_json);
+    });
   }
 
   private async withConversationScope<T>(
