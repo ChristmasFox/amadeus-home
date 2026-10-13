@@ -229,6 +229,15 @@ render, and a no-push amd64/arm64 OCI build. All Actions are SHA-pinned; the
 workflow has read-only repository permissions and uses only synthetic values.
 It has not run on GitHub because the branch is not pushed.
 
+Its source/database steps then passed locally against the reusable isolated
+PostgreSQL fixture: `pnpm check:secrets`, `pnpm check:architecture`, SaaS PG
+tests (92/92), Kurisu tests (68/68), both typecheck groups, backup/restore
+tests (21/21), and the 200-team benchmark. The fresh benchmark completed
+200/200 worker runs without failures; query p95 was 81.67 ms, worker read p95
+61.25 ms, and pool use peaked at 16/20 with no waiters. This is test-fixture
+data, not canonical M204 capacity. The GitHub workflow itself remains
+unexecuted.
+
 A local Buildx OCI build from the same runtime source verified both amd64 and
 arm64; manifest-list digest is
 `sha256:cf6fb5cbb1e1771845b86bdb40cc649ac14a496e47311ce6bf3155935d941d3a`.
@@ -237,6 +246,20 @@ render passed with synthetic placeholders and started no services. Clean Linux
 host/restore, installed backup scheduling, measured canonical-host resources,
 cloud independence, live provider acceptance, KOOK quota eligibility and
 human-actor P3 flows remain open.
+
+The current source commit `91bb60f` was then built locally for ARM64 as
+`local/pubg-saas:git-91bb60f` (manifest digest
+`sha256:ce344830bab21504e5f1ca13690eba539f989d09f9ce2d413ced48ffe2ed0682`).
+Fresh source and restore PG18.1 Compose projects passed migration 0011,
+gateway dry-run, and an empty/delayed-queue worker startup without real
+credentials. Encrypted age backup verification and restore matched all 37/37
+public tables; source and restored app/backup permissions passed, with the
+synthetic tenant/team/job counts at 1:1:1. After plain `down` on both projects,
+`pnpm test:pubg` passed 68/68 while OpenClaw remained healthy and 9Router
+remained running. The first two failures were harness context-label/env
+omissions; targeted reruns passed without source changes. Evidence and exact
+commands are in `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+Real KOOK/PUBG/model acceptance remains skipped for lack of test credentials.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

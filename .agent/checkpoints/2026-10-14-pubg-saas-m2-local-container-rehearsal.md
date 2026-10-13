@@ -303,3 +303,109 @@ passed `docker compose config --quiet`; it started no service. The temporary
 OCI artifact was removed. `pnpm check:secrets`, `git diff --check`, and Ruby
 YAML syntax parsing passed. `actionlint` is not installed locally, and the
 workflow has not yet been executed by GitHub Actions.
+
+## CI-equivalent local acceptance — 2026-10-14
+
+Executed the workflow's source/database steps against the existing isolated
+`pubg-saas-pg18` fixture without printing its connection URL: secrets and
+architecture checks, the 92-test PostgreSQL SaaS suite, 68 private Kurisu
+tests, both typecheck groups, backup/restore safety tests (21/21), and the
+synthetic 200-team benchmark all completed successfully. Compose rendering and
+the no-push multi-architecture OCI build/verifier had already passed locally.
+This confirms the workflow's local commands and environment shape, but does
+not substitute for a GitHub Actions run.
+
+The fresh benchmark used 200 tenants/teams, 800 users, 400 matches and 1,600
+match-player rows. It completed 200/200 worker team runs with zero failures;
+authorized query p95 was 81.67 ms, worker read p95 was 61.25 ms, and the PG
+pool peaked at 16/20 connections with zero waiters. These are measurements of
+the local isolated test fixture only, not M204 host capacity or an SLO.
+
+## Current-commit Compose and encrypted recovery rehearsal — 2026-10-14
+
+Rebuilt the current source commit `91bb60f` in the local OrbStack Buildx
+context (`orbstack`) as `local/pubg-saas:git-91bb60f` for `linux/arm64`,
+loaded locally and did not push it. Image manifest digest:
+`sha256:ce344830bab21504e5f1ca13690eba539f989d09f9ce2d413ced48ffe2ed0682`.
+The Docker build context was 12.36 KB. Buildx reused the existing incremental
+image layers. Reproduce with:
+
+```sh
+docker buildx build --platform linux/arm64 --load \
+  -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-91bb60f .
+docker image inspect local/pubg-saas:git-91bb60f \
+  --format '{{.Id}} {{.Os}}/{{.Architecture}}'
+```
+
+Started new source and restore Compose projects named
+`pubg-saas-m2-local-20261014-source` and
+`pubg-saas-m2-local-20261014-restore`, each with its own fresh pinned PG18.1
+container and project-owned volume. The source project started PostgreSQL and
+the egress proxy healthy, applied migrations through `0011`, ran the gateway
+dry-run and started the worker with one synthetic delayed queue row. The
+worker discovered one team, attempted zero syncs and made no provider calls.
+All values in Compose env files were local placeholders and generated
+passwords; `.env.local`, KOOK, PUBG, model and 9Router credentials were not
+read or loaded. The gateway was not started with `--apply`.
+
+The protected source fixture contained one synthetic tenant, team and delayed
+sync job plus a sequence created under `pubg_migrator`. Encrypted age backup and
+archive verification passed. Restore into the separate fresh PG18.1 container
+matched all 37/37 public base-table counts; tenant/team/sync-job counts were
+`1:1:1`. On both source and restored databases, `pubg_app` DML passed inside a
+rolled-back transaction, DDL was denied, `pubg_backup` table and sequence
+SELECT succeeded while INSERT and `nextval` were denied, and `pubg_app`
+sequence usage succeeded. The restored disposable database was removed only
+with the exact-name and marker-guarded cleanup command.
+
+Two harness setup errors were corrected without source changes. The first
+archive verification subprocess omitted `PUBG_SAAS_PG_EXEC_*`, so the local PG
+adapter correctly refused to run without its explicitly selected isolated
+project; a minimal direct `pg_restore --list` reproduction succeeded once the
+source project context was supplied. A first restored-database permission
+probe used the label `restored` instead of the Compose project name `restore`,
+and the adapter refused the mismatched project. Rerunning only verification
+and the affected permission probe with the correct project contexts passed.
+Neither failure was a backup/archive, application, database-permission or
+product defect.
+
+Reproduce the source stack startup with an owner-only temporary `$STACK`
+prepared from `infra/pubg-saas/compose.yaml`, the PostgreSQL init script, and
+synthetic local secrets/password files:
+
+```sh
+docker compose --project-name pubg-saas-m2-local-20261014-source \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+docker compose --project-name pubg-saas-m2-local-20261014-source \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" --profile ops run --rm migrate
+docker compose --project-name pubg-saas-m2-local-20261014-source \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" up -d worker
+docker compose --project-name pubg-saas-m2-local-20261014-source \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  --file "$STACK/compose.yaml" run --rm --no-deps \
+  --entrypoint node gateway dist/src/gateway.js
+```
+
+For backup/restore, use the exact commands and permission probes in
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`, with the source and restore
+`PUBG_SAAS_PG_EXEC_*` settings pointing at those separate project files, the
+encrypted archive/identity/recipient and passwords outside Git, and a guarded
+`pubg_saas_disposable_*` target. This rehearsal used the checked-in
+`scripts/pubg-saas-compose-pg-tool.py` adapter. Compose requested a
+loopback-only PG mapping, but OrbStack did not activate it, so all PostgreSQL
+client operations used `docker compose exec` on the internal network; no
+non-local database was contacted.
+
+Both Compose projects were stopped with plain `docker compose down`, preserving
+their named synthetic data volumes. With the public Compose services down,
+`pnpm test:pubg` passed 68/68. Read-only checks on OrbStack machine `nyannyan`
+showed OpenClaw healthy and 9Router running before and after the stop; neither
+was restarted or changed. The existing isolated `pubg-saas-pg18` test fixture
+was left running. No live private PUBG query, real KOOK/PUBG/model request,
+production operation, image push or deployment was performed. Real provider
+acceptance, clean-Linux/cloud recovery and independence, scheduled backup
+installation, and canonical-host capacity measurements remain open.

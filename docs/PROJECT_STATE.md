@@ -63,6 +63,14 @@ file is absent from the final image. This does not establish clean amd64 Linux
 Compose/restore or M204 capacity. No production, 9Router or private OpenClaw
 runtime was modified.
 
+The workflow's local equivalent passed the isolated SaaS/PostgreSQL suite
+(92/92), Kurisu regression (68/68), both typecheck groups, backup/restore
+safety suite (21/21), architecture/secrets gates and synthetic 200-team
+benchmark. That run completed 200/200 worker team runs with zero failures;
+authorized query p95 was 81.67 ms, worker read p95 61.25 ms, and pool peak was
+16/20 with no waiters. These measurements are limited to the local PG fixture;
+GitHub Actions has not run and no M204 capacity claim is made.
+
 Added an SHA-pinned, read-only `.github/workflows/pubg-saas.yml` to run isolated
 PG-backed public tests, private Kurisu regression, typechecks, backup safety,
 the 200-team synthetic benchmark, Compose render, and a no-push multiarch image
@@ -71,6 +79,21 @@ reported `linux/amd64` and `linux/arm64` (index digest
 `sha256:cf6fb5cbb1e1771845b86bdb40cc649ac14a496e47311ce6bf3155935d941d3a`).
 `scripts/verify-pubg-saas-oci.py` validates both platforms. GitHub Actions has
 not run because no push was performed; this is source/local acceptance only.
+
+On 2026-10-14, rebuilt current commit `91bb60f` locally as an ARM64 image
+(`local/pubg-saas:git-91bb60f`, manifest digest
+`sha256:ce344830bab21504e5f1ca13690eba539f989d09f9ce2d413ced48ffe2ed0682`).
+Fresh isolated source and restore PG18.1 Compose projects completed migration,
+gateway dry-run and delayed-queue worker startup. Encrypted backup/verify and
+fresh-container restore matched 37/37 public tables. App DML/DDL and backup
+read/write/sequence boundaries passed on both databases; synthetic
+tenant/team/job row counts matched 1:1:1. With both public Compose projects
+stopped via plain `down`, Kurisu tests passed 68/68, OpenClaw remained healthy
+and 9Router remained running. Only local placeholders were used; no image was
+pushed, no deploy occurred, and no private runtime or 9Router config changed.
+Real provider checks, clean Linux/cloud recovery and independence, schedule
+installation and canonical M204 headroom remain open. Details and the corrected
+harness configuration are recorded in the dated rehearsal checkpoint.
 
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
