@@ -60,6 +60,15 @@ count 0. The disposable restore DB was removed by exact marker/name; Compose
 used plain `down` with no volume deletion. No real provider credentials,
 production DB, deployment, push, 9Router change or private OpenClaw restart.
 
+The systemd backup service and six-hour timer were then integration-tested as
+temporary `/run` units in the dedicated Linux VM. The actual oneshot completed
+under a temporary service identity; the age artifact verified against 37
+public tables, and systemd reported the next timer event. The Compose adapter's
+owner-only `.env` requirement caught a group-readable staging fixture; the
+fixture was corrected without weakening that check. Units, service identity,
+group access and staging were removed afterward. This does not count as
+persistent M204/canonical-host scheduling.
+
 ## 2026-10-14 — PUBG SaaS current-source M1 and local recovery acceptance
 
 Commit `880a5cf` completes confirmed team leaderboard preferences and

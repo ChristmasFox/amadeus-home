@@ -89,7 +89,9 @@ source regression are verified. Canonical-host resource/alert routing,
 cloud recovery, scheduled backup installation, quota/eligibility and full
 independent-runtime drills remain. The clean Linux ARM64 guest now passes
 Compose recovery, application egress isolation, and the combined encrypted
-backup/prune job. The six-hour timer is syntax-verified but not installed.
+backup/prune job. The six-hour timer passed an ephemeral systemd integration
+in the isolated Linux VM; it is not persistently installed on M204 or the
+canonical host.
 P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
@@ -213,6 +215,15 @@ times unchanged with restart count 0. No provider credentials, production DB,
 image push, deployment, private runtime write or OpenClaw restart was involved.
 Full evidence and representative commands are in the dated M2 checkpoint and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
+
+An additional ephemeral systemd integration test loaded the repository backup
+service/timer into `/run` in `pubg-saas-m2-clean`. The real oneshot ran under a
+dedicated temporary identity, returned `Result=success`/exit 0, and produced a
+verified encrypted 37-table artifact. The six-hour calendar timer showed its
+next scheduled event. A staging `.env` permission mismatch was corrected to
+owner-only mode, preserving the adapter's guard. Temporary unit files, test
+identity/group membership and staging were removed; the timer is not installed
+on M204 or the canonical host. Full evidence is in the dated checkpoint.
 
 ## KOOK test-server connection check — 2026-10-14
 

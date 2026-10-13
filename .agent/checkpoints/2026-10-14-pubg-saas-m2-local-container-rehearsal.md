@@ -1039,3 +1039,45 @@ python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py 
 # then guarded cleanup, ordinary Compose down (no -v), and the private regression:
 pnpm test:pubg
 ```
+
+## Ephemeral systemd backup service/timer integration — 2026-10-14
+
+Loaded the checked-in service and timer templates as temporary units under
+`/run/systemd/system` inside the dedicated `pubg-saas-m2-clean` VM. The test
+service used a throwaway `pubg-saas-backup` identity and Docker supplementary
+group only because this local rehearsal uses the Compose PG adapter; the
+identity, group membership, staged source copy, env file, and units were
+removed by the cleanup trap. The VM's system manager reports one unrelated
+failed `sys-kernel-debug.mount`; the backup service and timer themselves passed
+`systemd-analyze verify` and executed normally.
+
+The first service run exposed a test-fixture permission mismatch: the Compose
+`.env` was group-readable, while the checked-in PG adapter correctly requires
+it to be owner-only. Assigning the staged `.env` to the test service user with
+mode `0600` fixed the fixture without changing the adapter or its guard. The
+actual systemd oneshot then returned `Result=success`, `ExecMainStatus=0`; the
+encrypted 37-table backup verified with SHA-256
+`ba338d8eabf884aabe628989b16bf8dcb4f9919daa324d0c08a67ff7400dea23`. Starting
+the timer produced the expected next six-hour UTC calendar event. The timer was
+stopped and its `/run` unit files removed after checking it; this was a
+temporary integration test, not persistent M204/canonical-host installation.
+
+The artifact and manifest remain owner-only under
+`/srv/pubg-saas-m2-systemd-test-v1/backups` inside the isolated VM. The source
+Compose project was stopped with plain `down`; no test containers remain
+running. No provider, production, private OpenClaw, or 9Router resource was
+used or changed.
+
+Representative unit commands while the temporary units were loaded:
+
+```sh
+systemd-analyze verify /run/systemd/system/pubg-saas-backup.service \
+  /run/systemd/system/pubg-saas-backup.timer
+systemctl daemon-reload
+systemctl start pubg-saas-backup.service
+systemctl show pubg-saas-backup.service \
+  --property=Result,ExecMainStatus
+systemctl start pubg-saas-backup.timer
+systemctl list-timers pubg-saas-backup.timer --no-pager
+systemctl stop pubg-saas-backup.timer
+```
