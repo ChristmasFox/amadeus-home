@@ -244,5 +244,6 @@ export class KookIngressQueue {
     await this.pool.query("DELETE FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('done','dead') AND finished_at<$2", [this.botId, before]);
     await this.pool.query("DELETE FROM pending_team_actions WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
     await this.pool.query("DELETE FROM pending_account_claims WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
+    await this.pool.query("DELETE FROM pending_squad_setups WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
   }
 }

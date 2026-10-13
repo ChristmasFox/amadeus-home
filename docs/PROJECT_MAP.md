@@ -58,11 +58,13 @@ durable sequence/resume state and a bound-channel inbox/outbox queue with
 lease-based retry, plus the Node WebSocket factory and fixed KOOK group-message
 REST client. The executable source runtime uses durable, bounded addressed
 ingress before sequence acknowledgement, serial leased processing, and one
-channel/DM reply outbox. Management handlers cover team status/unbind/disband
-and private account status/unclaim. Actor-bound `return-val` callbacks recheck
+channel/DM reply outbox. Name-based create/bind/list/roster changes, status and
+private self-claim handlers reuse the shared PUBG API client with independent
+public credentials and PostgreSQL request admission/header backoff. Setup
+tokens pin channel revisions. Actor-bound `return-val` callbacks recheck
 guild admin and recover exact-event mutation receipts after a crash while
-rejecting a new click. Full onboarding UI, live test-guild acceptance, edge-case
-parity, PUBG account lookup, query/AI/worker integration and deployment remain
+rejecting a new click. Automatic guild-invite welcome, live test-guild acceptance,
+edge-case parity, query/AI/worker integration and deployment remain
 implementation work. See the Goal's phase gates before describing the public
 service as ready.
 

@@ -116,7 +116,7 @@ test('ingress bounds admission and preserves actor order while rejecting a chang
     await cleanup(pool, f.bot);
   }
 });
-test('0002 upgrades an already applied schema and preserves existing outbox destinations', { skip: !databaseUrl }, async () => {
+test('additive migrations upgrade an applied schema and preserve existing outbox destinations', { skip: !databaseUrl }, async () => {
   const admin = new Pool({ connectionString: databaseUrl, max: 1 });
   const schema = `migration_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
@@ -129,7 +129,7 @@ test('0002 upgrades an already applied schema and preserves existing outbox dest
     await migratePublicDatabase(pool);
     await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id FROM message_outbox')).rows[0], { target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null });
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 2);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 3);
   }
   finally {
     await pool.end();

@@ -5,7 +5,7 @@ export interface ConfirmationCardInput {
   detail: string;
   confirmText: string;
   confirmationToken: string;
-  actionScope?: 'team' | 'claim';
+  actionScope?: 'team' | 'claim' | 'setup';
 }
 
 function requiredText(value: string, key: string, maxLength: number): string {
@@ -43,4 +43,24 @@ export function createConfirmationCard(input: ConfirmationCardInput): KookTextPa
     ],
   }];
   return { type: 'card', content: JSON.stringify(card) };
+}
+
+/** Public help controls carry no mutation token or tenant authority. */
+export function createOnboardingCard(): KookTextPayload {
+  return {
+type: 'card', content: JSON.stringify([{
+      type: 'card', theme: 'info', size: 'sm', modules: [
+        { type: 'header', text: { type: 'plain-text', content: 'PUBG 队伍助手' } },
+        { type: 'section', text: { type: 'plain-text', content: '服务器管理员可创建队伍或将当前频道绑定到已有队伍。玩家可在私信中声明关联自己的 PUBG 账号。' } },
+        {
+type: 'action-group', elements: [
+            { type: 'button', theme: 'primary', click: 'return-val', value: 'ui:create', text: { type: 'plain-text', content: '创建队伍' } },
+            { type: 'button', theme: 'secondary', click: 'return-val', value: 'ui:bind', text: { type: 'plain-text', content: '绑定已有队伍' } },
+            { type: 'button', theme: 'info', click: 'return-val', value: 'ui:claim', text: { type: 'plain-text', content: '关联我的账号' } },
+          ]
+},
+        { type: 'context', elements: [{ type: 'plain-text', content: '输入 /pubg help 查看命令；所有变更均需确认，账号关联不证明所有权。' }] },
+      ],
+    }])
+};
 }

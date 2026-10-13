@@ -6,11 +6,12 @@ transport slice from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations a
 permission checks, transactional squad/channel/roster management with one-use
 confirmations, and direct-message scoped self-declared account claims. The KOOK
 gateway, durable ingress, processing loop and channel/direct-message outbox
-are wired into an executable source entry point. Current management commands
-cover team status, unbind/disband confirmation, and private account status and
-unclaim. Full onboarding/create/roster UI, PUBG name lookup, query handling,
-ingestion worker, AI SDK and deployment images remain in progress. The service
-is not deployed, and live button behavior has not been checked in a test guild.
+are wired into an executable source entry point. Name-based commands/cards
+cover create/bind/list/roster changes, status/unbind/disband, and private
+self-claim/status/unclaim. Public lookup reuses the shared API client with
+independent PostgreSQL request admission. Automatic guild-invite welcome,
+query handling, ingestion worker, AI SDK and deployment images remain in
+progress. The service is not deployed, and live buttons remain unverified.
 
 ## Trust boundaries
 
@@ -24,12 +25,26 @@ is not deployed, and live button behavior has not been checked in a test guild.
   selected team. Session state is keyed by tenant, team, bot, user, channel and
   session. Match and telemetry facts are shared inside the public database;
   match selection is constrained by the trusted team's PUBG account IDs.
-- `TeamAdminService` accepts a parser-produced trusted group event and calls
+- `TeamAdminService` accepts parser-produced trusted group/button events and calls
   `KookPermissionClient` on every management action before beginning a DB
   transaction. Roster replacement/addition, channel unbinding and disbanding
   use hashed, one-use confirmation tokens bound to actor, guild, bot and
   channel. The parser drops the gateway's role list; the permission client
   reads current KOOK state. Team rows keep the selected PUBG shard.
+- Create/bind setup first stores a hashed token scoped to bot, guild, channel
+  and actor; confirmation atomically creates/binds and saves a recovery receipt.
+  A channel revision invalidates old setup cards after another bind/unbind
+  cycle. Roster preparation checks the source request's selected team again
+  after player lookup.
+- `PublicPubgPlayerResolver` batches 1–4 names through the shared API client
+  at the fixed official endpoint, with redirects and hidden retries disabled.
+  It preserves case, previews canonical API names, and cannot prepare a roster
+  from missing/ambiguous/invalid results. It reads no private configuration.
+- `PostgresPublicPubgAdmission` spaces requests globally across public
+  connections (default 10 RPM), with bounded waits and provider exhaustion/reset
+  and lower-limit header handling. `PUBLIC_PUBG_REQUESTS_PER_MINUTE` is controlled
+  configuration; increases require verified provider approval/headers. A
+  distinct key does not prove independent provider/account quotas.
 - `AccountClaimService` accepts parser-produced direct messages or button callbacks, limits a
   claim to the KOOK user, and labels it `self_declared`. Confirmation is
   one-use; unique constraints prevent a second user from claiming the same
@@ -84,6 +99,9 @@ sender follows the [channel message API](https://developer.kookapp.cn/doc/http/m
 and [direct-message API](https://developer.kookapp.cn/doc/http/direct-message).
 Visible reply quotation uses `quote`; `reply_msg_id` separately associates a
 reply for KOOK's quota calculation.
+Lookup/admission follows the official [PUBG request filters](https://documentation.pubg.com/en/making-requests.html)
+and [rate limits](https://documentation.pubg.com/en/rate-limits.html). Live key
+eligibility and quota feasibility remain preflight work.
 
 ## Source entry points
 
@@ -96,19 +114,30 @@ node apps/pubg-saas/dist/src/gateway.js
 ```
 
 The separately authorized public runtime phase must supply its independent
-`DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID` and `KOOK_BOT_TOKEN` outside Git. Appending
+`DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
+outside Git. Appending
 `--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0002_kook_ingress.sql`
+before gateway startup; the gateway checks migration `0003_onboarding.sql`
 and never migrates automatically. The PG connection pool is bounded and has
 connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
 before closing the pool.
 
-Supported deterministic commands are `/pubg status`, `/pubg unbind` and
-`/pubg disband` in bound channels (fresh guild admin required); private DMs use
-`/pubg account` and `/pubg unclaim`. State changes require an actor-bound card
-confirmation. This handler does not invoke an LLM. Complete onboarding and the
-query planner are still required by the Goal; these commands are an implementation
-slice rather than V0.1 acceptance.
+`/pubg` or `/pubg help` shows guidance buttons. Guidance is read-only; state
+changes use one-use confirmations. Names/labels retain case; quote those with spaces.
+
+| Context | Command | Result |
+| --- | --- | --- |
+| Unbound guild channel | `/pubg create steam "Squad Name" Alice Bob` | Resolve 1–4 names, confirm creation and binding |
+| Guild channel | `/pubg teams` | List only this guild's teams (up to 50) |
+| Unbound guild channel | `/pubg bind <team-id>` | Confirm binding a team from this guild |
+| Bound guild channel | `/pubg add Charlie` / `/pubg roster Alice Bob` | Confirm adding/replacing roster |
+| Bound guild channel | `/pubg status` / `/pubg unbind` / `/pubg disband` | Status or confirmed removal |
+| Bot DM | `/pubg claim steam Alice` / `/pubg account` / `/pubg unclaim` | Own self-declared association, status or removal |
+
+Guild management requires fresh owner/Administrator permission. Player shards
+are `steam`, `kakao`, `psn` and `xbox`; these paths never invoke an LLM. The initial
+welcome card currently requires `/pubg`. Automatic invite welcome, statistical
+queries, and real KOOK acceptance remain Goal requirements.
 
 ## Local verification
 
@@ -116,8 +145,12 @@ Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
 runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
 database; it applies migrations and removes its synthetic rows. Do not point it
-at a live or shared database. The 26-test SaaS suite passed on ephemeral
+at a live or shared database. The 31-test SaaS suite passed on ephemeral
 PostgreSQL 18 together with the workflow-selected private PUBG checks. It covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
-channel/DM HTTP delivery. No real KOOK token or guild was used.
+channel/DM HTTP delivery. It also covers two-guild name-based onboarding,
+revoked permission, cross-guild binding denial, roster edits/self-claim
+conflicts, channel revisions and rebind during lookup. PUBG HTTP is mocked;
+admission/header behavior uses real ephemeral PostgreSQL. No real KOOK/PUBG
+credential or guild was used.

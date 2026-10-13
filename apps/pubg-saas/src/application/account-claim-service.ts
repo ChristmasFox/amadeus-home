@@ -119,7 +119,7 @@ export class AccountClaimService {
         );
         if (!existing.rowCount) throw new Error('account_claim_not_found');
       }
-      await client.query("DELETE FROM pending_account_claims WHERE (consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day'");
+      await client.query("DELETE FROM pending_account_claims WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day')", [event.botAccountId]);
       const count = await client.query(
         `SELECT COUNT(*)::INTEGER AS count FROM pending_account_claims
          WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2 AND consumed_at IS NULL AND expires_at > now()`,

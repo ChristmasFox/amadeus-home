@@ -1,11 +1,10 @@
 import { createConfirmationCard } from '../channels/kook/confirmation-card.js';
-import type { AccountClaimService } from './account-claim-service.js';
 import type { KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
-import type { TeamAdminService } from './team-admin-service.js';
+import { handleKookOnboardingRequest, type KookOnboardingServices } from './kook-onboarding-handler.js';
 function message(content: string): KookTextPayload { return { type: 'text', content }; }
-const groupHelp = '队伍管理：/pubg status 查看状态；/pubg unbind 申请解绑当前频道；/pubg disband 申请解散队伍。变更需由服务器管理员确认。';
-const directHelp = '账号管理：/pubg account 查看自己的关联；/pubg unclaim 申请解除关联。账号关联仅为本人声明，不能证明 PUBG 账号所有权。';
+const groupHelp = '队伍管理：/pubg help 建队与绑定入口；/pubg teams 列出服务器队伍；/pubg status 状态；/pubg add <游戏名…> 添加队员；/pubg roster <游戏名…> 替换完整名单；/pubg unbind 解绑频道；/pubg disband 解散队伍。变更需管理员确认。';
+const directHelp = '账号管理：/pubg claim <平台> <游戏名> 声明关联自己的账号；/pubg account 查看自己的关联；/pubg unclaim 申请解除关联。关联不证明 PUBG 账号所有权。';
 const publicErrors: Record<string, string> = {
   guild_admin_required: '需要当前服务器的拥有者或管理员权限。',
   channel_not_bound: '当前频道尚未绑定队伍。',
@@ -13,17 +12,29 @@ const publicErrors: Record<string, string> = {
   account_claim_confirmation_unavailable: '此账号确认已失效或不属于当前操作者，请重新发起操作。',
   account_claim_not_found: '你尚未关联 PUBG 账号。',
   account_claim_conflict: '该账号已有其他用户的声明关联，请联系服务器管理员处理。',
+  account_claim_already_bound: '你已声明关联一个 PUBG 账号，请先确认解除关联后再关联其他账号。',
+  channel_binding_conflict: '当前频道已经绑定队伍，请先确认解绑后再发起建队或绑定。',
+  squad_setup_confirmation_unavailable: '此建队/绑定确认已失效或不属于当前操作者和频道，请重新发起。',
+  team_unavailable_in_guild: '无法在当前服务器选择此队伍，请通过 /pubg teams 重新选择。',
+  team_action_scope_changed: '频道绑定已变化，请重新发起本次操作。',
+  team_roster_limit_exceeded: '队伍最多保留 4 名玩家，请核对名单后重新提交。',
+  too_many_pending_team_actions: '你有较多尚未确认的操作，请先完成或等待它们过期。',
+  public_pubg_shard_invalid: '平台仅支持 steam/kakao/psn/xbox，请核对后重新提交。',
+  public_pubg_names_invalid: '请提供 1–4 个不重复的游戏名；名称不能包含逗号或控制字符。',
+  public_pubg_lookup_rate_limited: 'PUBG 账号查询当前繁忙，请稍后重试。',
+  public_pubg_lookup_unavailable: 'PUBG 账号查询当前不可用，请稍后重试。',
+  public_pubg_lookup_invalid_response: 'PUBG 返回的账号信息无法可靠识别，请稍后重试。',
+  invalid_team_label: '队伍名称需为 1–80 个字符。',
 };
-/** Deterministic management paths only. Query planning, lookup and onboarding
- * creation will be attached separately; these paths never invoke an LLM. */
-export function createKookManagementHandler(services: {
-  teams: TeamAdminService;
-  claims: AccountClaimService;
-}): KookRequestHandler {
+/** Deterministic management/onboarding paths. Query planning is attached
+ * separately; these paths never invoke an LLM. */
+export function createKookManagementHandler(services: KookOnboardingServices): KookRequestHandler {
   return async (job, signal) => {
     if (signal.aborted)
       throw new Error('kook_request_aborted');
     try {
+      const onboardingReply = await handleKookOnboardingRequest(job, services, signal);
+      if (onboardingReply !== undefined) return onboardingReply;
       const request = job.request;
       if (request.kind === 'button') {
         const match = /^(team|claim):([A-Za-z0-9_-]{43})$/u.exec(request.event.value);
@@ -48,7 +59,7 @@ export function createKookManagementHandler(services: {
         }
         if (command === 'unbind' || command === 'disband') {
           const action = command === 'unbind' ? 'unbind_channel' : 'disband_team';
-          const pending = await services.teams.prepareTeamAction(request.event, { kind: action });
+          const pending = await services.teams.prepareTeamAction(request.event, { kind: action }, job.boundTeam);
           return createConfirmationCard({
             title: command === 'unbind' ? '确认解绑频道' : '确认解散队伍',
             detail: command === 'unbind' ? '只解绑当前频道，队伍将保留。此按钮仅限本次操作者；过期后请重新发起。' : '将移除队伍、频道绑定和队伍上下文。此按钮仅限本次操作者；过期后请重新发起。',

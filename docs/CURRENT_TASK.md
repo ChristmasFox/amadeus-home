@@ -28,15 +28,18 @@ server reconnect reset), a Node WebSocket factory, bound-channel inbox dedupe
 and leased outbox retry, and fixed KOOK channel/direct-message REST senders with
 visible quote and quota reply correlation. The executable source runtime now
 persists minimal addressed ingress before gateway acknowledgement, then runs
-leased business processing and outbox delivery. Team status/unbind/disband and
-private account status/unclaim are wired to deterministic handlers. One-use
+leased business processing and outbox delivery. Name-based create/bind/list and
+roster changes, status/unbind/disband and private self-claim/status/unclaim now
+use deterministic handlers/cards. Lookup reuses the shared PUBG client with an
+independent public key and PG admission/provider-header backoff. Missing or
+ambiguous names cannot save a roster; setup tokens pin a channel revision. One-use
 callbacks recheck authority and recover an exact event's committed receipt
-after a crash; new clicks cannot reuse it. Additive migration `0002` upgrades
-existing public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (26 SaaS tests), including private PUBG regression checks. This is
+after a crash; new clicks cannot reuse it. Additive migrations through `0003`
+upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
+PostgreSQL 18 (31 SaaS tests), including private PUBG regression checks. This is
 source and offline-fixture progress; package build, both entry-point dry-runs,
 secrets scan and `git diff --check` also passed. P3 acceptance still requires
-full onboarding UI, PUBG account lookup and an isolated real test guild.
+automatic guild-invite welcome delivery and an isolated real test guild.
 SQLite/Postgres edge-case parity, ingestion worker/AI SDK, Compose deployment
 and independent restore drills also remain incomplete. No runtime or production
 credentials were touched.

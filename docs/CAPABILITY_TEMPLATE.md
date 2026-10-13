@@ -255,6 +255,15 @@ authoritative; this record is not a runtime registry.
   9Router admin interface is accessed by this source phase. Production writes,
   public exposure, cloud provisioning, private runtime changes and real bot
   onboarding remain separately authorized release actions.
+- **Onboarding implementation:** Explicit KOOK commands preserve player-name
+  case and batch 1–4 names through the shared `PubgApiClient` at the fixed
+  official endpoint. Public PostgreSQL owns global request admission/header
+  backoff, independently of the private API client. Missing/ambiguous names
+  cannot create a roster. Create/bind setup tokens pin bot, guild, channel,
+  actor and resolved accounts; fresh admin checks precede lookup/preparation
+  and confirmation. A single confirmation transaction creates/binds and keeps
+  an exact-event recovery receipt. Self claims remain user-scoped and
+  self-declared. No LLM or private runtime dependency is introduced.
 - **Validation and acceptance:** Focused domain, public repository and tenant
   isolation tests; fixture parity through SQLite/PostgreSQL; migration and
   transaction tests; architecture checks preventing public imports of private

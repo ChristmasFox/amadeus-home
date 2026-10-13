@@ -21,6 +21,20 @@ export interface TeamReference {
   teamId: string;
 }
 
+export interface PreparedSquadSetup {
+  confirmationToken: string;
+  expiresAt: string;
+  label: string;
+  pubgShard: string;
+  memberCount: number;
+}
+
+export interface GuildTeamSummary extends TeamReference {
+  label: string;
+  pubgShard: string;
+  memberCount: number;
+}
+
 export type PendingTeamAction =
   | { kind: 'add_members'; pubgAccountIds: string[] }
   | { kind: 'replace_roster'; pubgAccountIds: string[] }
@@ -114,7 +128,7 @@ export class TeamAdminService {
     if (!allowed) throw new Error('guild_admin_required');
   }
 
-  private async getOrCreateTenant(client: PoolClient, event: TrustedKookGroupMessage): Promise<string> {
+  private async getOrCreateTenant(client: PoolClient, event: TeamConfirmationActor): Promise<string> {
     await client.query(
       `INSERT INTO tenants(tenant_id, platform, bot_account_id, guild_id)
        VALUES ($1,'kook',$2,$3)
@@ -166,11 +180,13 @@ export class TeamAdminService {
 
   private async bindChannel(
     client: PoolClient,
-    event: TrustedKookGroupMessage,
+    event: TeamConfirmationActor,
     tenantId: string,
     teamId: string,
   ): Promise<void> {
-    await client.query(
+    await client.query('INSERT INTO channel_binding_versions(bot_account_id,channel_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [event.botAccountId, event.channelId]);
+    await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2 FOR UPDATE', [event.botAccountId, event.channelId]);
+    const inserted = await client.query(
       `INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id)
        VALUES ($1,'kook',$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
       [tenantId, event.botAccountId, event.channelId, teamId, event.userId],
@@ -182,6 +198,7 @@ export class TeamAdminService {
     );
     const row = binding.rows[0];
     if (!row || row.tenant_id !== tenantId || row.team_id !== teamId) throw new Error('channel_binding_conflict');
+    if (inserted.rowCount) await client.query('UPDATE channel_binding_versions SET revision=revision+1 WHERE bot_account_id=$1 AND channel_id=$2', [event.botAccountId, event.channelId]);
   }
 
   async createSquad(event: TrustedKookGroupMessage, input: CreateSquadInput): Promise<TeamReference> {
@@ -193,21 +210,9 @@ export class TeamAdminService {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const tenantId = await this.getOrCreateTenant(client, event);
-      await this.touchActor(client, event, tenantId);
-      const teamId = randomUUID();
-      await client.query('INSERT INTO teams(tenant_id,team_id,label,pubg_shard) VALUES ($1,$2,$3,$4)', [tenantId, teamId, label, pubgShard]);
-      for (const accountId of accountIds) {
-        await client.query(
-          `INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id)
-           VALUES ($1,$2,$3,$4)`,
-          [tenantId, teamId, accountId, event.userId],
-        );
-      }
-      await this.bindChannel(client, event, tenantId, teamId);
-      await this.grantTeamAccess(client, event, tenantId, teamId, 'admin');
+      const team = await this.insertSquad(client, event, { label, pubgShard, pubgAccountIds: accountIds }, randomUUID());
       await client.query('COMMIT');
-      return { tenantId, teamId };
+      return team;
     } catch (error) {
       await rollbackQuietly(client);
       if (isUniqueViolation(error)) throw new Error('channel_binding_conflict');
@@ -215,6 +220,122 @@ export class TeamAdminService {
     } finally {
       client.release();
     }
+  }
+
+  private async insertSquad(client: PoolClient, event: TeamConfirmationActor, input: CreateSquadInput, teamId: string): Promise<TeamReference> {
+    const tenantId = await this.getOrCreateTenant(client, event);
+    await this.touchActor(client, event, tenantId);
+    await client.query('INSERT INTO teams(tenant_id,team_id,label,pubg_shard) VALUES ($1,$2,$3,$4)', [tenantId, teamId, input.label, input.pubgShard]);
+    for (const accountId of input.pubgAccountIds) {
+      await client.query('INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id) VALUES ($1,$2,$3,$4)', [tenantId, teamId, accountId, event.userId]);
+    }
+    await this.bindChannel(client, event, tenantId, teamId);
+    await this.grantTeamAccess(client, event, tenantId, teamId, 'admin');
+    return { tenantId, teamId };
+  }
+
+  async assertGuildAdmin(event: TrustedKookGroupMessage): Promise<void> {
+    await this.requireFreshGuildAdmin(event);
+  }
+
+  async listGuildTeams(event: TrustedKookGroupMessage): Promise<GuildTeamSummary[]> {
+    await this.requireFreshGuildAdmin(event);
+    const result = await this.pool.query(
+      `SELECT tenant.tenant_id,team.team_id,team.label,team.pubg_shard,COUNT(member.pubg_account_id)::INTEGER AS member_count
+       FROM tenants tenant JOIN teams team ON team.tenant_id=tenant.tenant_id
+       LEFT JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
+       GROUP BY tenant.tenant_id,team.team_id,team.label,team.pubg_shard,team.created_at ORDER BY team.created_at,team.team_id LIMIT 50`,
+      [event.botAccountId, event.guildId],
+    );
+    return result.rows.map(row => ({ tenantId: row.tenant_id, teamId: row.team_id, label: row.label, pubgShard: row.pubg_shard, memberCount: Number(row.member_count) }));
+  }
+
+  async prepareSquadCreation(event: TrustedKookGroupMessage, input: CreateSquadInput): Promise<PreparedSquadSetup> {
+    await this.requireFreshGuildAdmin(event);
+    const label = requiredText(input.label, 'team_label', 80), pubgShard = requiredText(input.pubgShard, 'pubg_shard', 32);
+    if (!/^[a-z0-9_-]+$/u.test(pubgShard)) throw new Error('invalid_pubg_shard');
+    return this.prepareSquadSetup(event, 'create', randomUUID(), { label, pubgShard, pubgAccountIds: normalizedAccountIds(input.pubgAccountIds) });
+  }
+
+  async prepareSquadBinding(event: TrustedKookGroupMessage, teamIdInput: string): Promise<PreparedSquadSetup> {
+    await this.requireFreshGuildAdmin(event);
+    return this.prepareSquadSetup(event, 'bind', requiredText(teamIdInput, 'team_id'), null);
+  }
+
+  private async prepareSquadSetup(event: TrustedKookGroupMessage, action: 'create' | 'bind', teamId: string, input: CreateSquadInput | null): Promise<PreparedSquadSetup> {
+    const token = randomBytes(32).toString('base64url'), expiresAt = new Date(Date.now() + this.confirmationTtlMs);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`squad-setup:${event.botAccountId}:${event.guildId}:${event.userId}`]);
+      const bound = await client.query("SELECT 1 FROM channel_bindings WHERE platform='kook' AND bot_account_id=$1 AND channel_id=$2", [event.botAccountId, event.channelId]);
+      if (bound.rowCount) throw new Error('channel_binding_conflict');
+      await client.query('INSERT INTO channel_binding_versions(bot_account_id,channel_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [event.botAccountId, event.channelId]);
+      const revision = await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2 FOR SHARE', [event.botAccountId, event.channelId]);
+      let summary = input ? { label: input.label, pubgShard: input.pubgShard, memberCount: input.pubgAccountIds.length } : null;
+      if (action === 'bind') {
+        const existing = await client.query(
+          `SELECT team.label,team.pubg_shard,COUNT(member.pubg_account_id)::INTEGER AS member_count
+           FROM tenants tenant JOIN teams team ON team.tenant_id=tenant.tenant_id
+           LEFT JOIN team_members member ON member.tenant_id=team.tenant_id AND member.team_id=team.team_id
+           WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND team.team_id=$3
+           GROUP BY team.label,team.pubg_shard`, [event.botAccountId, event.guildId, teamId],
+        );
+        const row = existing.rows[0]; if (!row) throw new Error('team_unavailable_in_guild');
+        summary = { label: row.label, pubgShard: row.pubg_shard, memberCount: Number(row.member_count) };
+      }
+      await client.query("DELETE FROM pending_squad_setups WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [event.botAccountId]);
+      const pending = await client.query('SELECT COUNT(*)::INTEGER AS count FROM pending_squad_setups WHERE bot_account_id=$1 AND guild_id=$2 AND actor_user_id=$3 AND consumed_at IS NULL AND expires_at>now()', [event.botAccountId, event.guildId, event.userId]);
+      if (Number(pending.rows[0]?.count) >= 10) throw new Error('too_many_pending_team_actions');
+      await client.query(
+        `INSERT INTO pending_squad_setups(token_hash,platform,bot_account_id,guild_id,channel_id,actor_user_id,action,team_id,payload_json,expires_at,expected_channel_revision)
+         VALUES ($1,'kook',$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)`,
+        [tokenDigest(token), event.botAccountId, event.guildId, event.channelId, event.userId, action, teamId, JSON.stringify(input ?? {}), expiresAt, revision.rows[0]?.revision],
+      );
+      await client.query('COMMIT');
+      return { confirmationToken: token, expiresAt: expiresAt.toISOString(), ...summary! };
+    } catch (error) { await rollbackQuietly(client); throw error; } finally { client.release(); }
+  }
+
+  async confirmSquadSetupFromButton(click: TrustedKookButtonClick): Promise<{ kind: 'create' | 'bind'; team: TeamReference }> {
+    if (!click.sourceTargetId || !click.eventId || !/^[A-Za-z0-9_-]{43}$/u.test(click.value)) throw new Error('squad_setup_confirmation_unavailable');
+    const scope = await this.pool.query('SELECT guild_id FROM pending_squad_setups WHERE token_hash=$1 AND bot_account_id=$2 AND channel_id=$3', [tokenDigest(click.value), click.botAccountId, click.sourceTargetId]);
+    const guildId = scope.rows[0]?.guild_id; if (typeof guildId !== 'string') throw new Error('squad_setup_confirmation_unavailable');
+    const actor: TeamConfirmationActor = { platform: 'kook', botAccountId: click.botAccountId, guildId, channelId: click.sourceTargetId, userId: click.userId };
+    await this.requireFreshGuildAdmin(actor);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const pending = await client.query(
+        `SELECT * FROM pending_squad_setups WHERE token_hash=$1 AND bot_account_id=$2 AND guild_id=$3 AND channel_id=$4 AND actor_user_id=$5
+         AND ((consumed_at IS NULL AND expires_at>now()) OR (consumed_event_id=$6 AND consumed_at>now()-interval '1 day')) FOR UPDATE`,
+        [tokenDigest(click.value), click.botAccountId, guildId, click.sourceTargetId, click.userId, click.eventId],
+      );
+      const row = pending.rows[0]; if (!row) throw new Error('squad_setup_confirmation_unavailable');
+      if (row.consumed_at) {
+        await client.query('COMMIT'); return { kind: row.action, team: { tenantId: row.result_tenant_id, teamId: row.team_id } };
+      }
+      const tenantId = await this.getOrCreateTenant(client, actor);
+      const revision = await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2 FOR UPDATE', [click.botAccountId, click.sourceTargetId]);
+      if (!revision.rowCount || String(revision.rows[0]?.revision) !== String(row.expected_channel_revision)) throw new Error('squad_setup_confirmation_unavailable');
+      const existingBinding = await client.query("SELECT 1 FROM channel_bindings WHERE platform='kook' AND bot_account_id=$1 AND channel_id=$2", [click.botAccountId, click.sourceTargetId]);
+      if (existingBinding.rowCount) throw new Error('channel_binding_conflict');
+      let team: TeamReference;
+      if (row.action === 'create') {
+        const input = row.payload_json as CreateSquadInput;
+        team = await this.insertSquad(client, actor, { label: requiredText(input.label, 'team_label', 80), pubgShard: requiredText(input.pubgShard, 'pubg_shard', 32), pubgAccountIds: normalizedAccountIds(input.pubgAccountIds) }, row.team_id);
+      } else {
+        const available = await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [tenantId, row.team_id]);
+        if (!available.rowCount) throw new Error('team_unavailable_in_guild');
+        await this.touchActor(client, actor, tenantId);
+        await this.bindChannel(client, actor, tenantId, row.team_id);
+        await this.grantTeamAccess(client, actor, tenantId, row.team_id, 'admin');
+        team = { tenantId, teamId: row.team_id };
+      }
+      await client.query("UPDATE pending_squad_setups SET consumed_at=now(),consumed_event_id=$2,result_tenant_id=$3,payload_json='{}'::jsonb WHERE token_hash=$1", [tokenDigest(click.value), click.eventId, team.tenantId]);
+      await client.query('COMMIT'); return { kind: row.action, team };
+    } catch (error) { await rollbackQuietly(client); if (isUniqueViolation(error)) throw new Error('channel_binding_conflict'); throw error; } finally { client.release(); }
   }
 
   async bindExistingSquad(event: TrustedKookGroupMessage, teamIdInput: string): Promise<TeamReference> {
@@ -274,7 +395,7 @@ export class TeamAdminService {
     };
   }
 
-  async prepareTeamAction(event: TrustedKookGroupMessage, actionInput: PendingTeamAction): Promise<PreparedTeamAction> {
+  async prepareTeamAction(event: TrustedKookGroupMessage, actionInput: PendingTeamAction, expectedTeam?: TeamReference): Promise<PreparedTeamAction> {
     await this.requireFreshGuildAdmin(event);
     const action = parsePendingAction(actionInput);
     const confirmationToken = randomBytes(32).toString('base64url');
@@ -297,6 +418,7 @@ export class TeamAdminService {
       const tenantId = scope.rows[0]?.tenant_id;
       const teamId = scope.rows[0]?.team_id;
       if (typeof tenantId !== 'string' || typeof teamId !== 'string') throw new Error('channel_not_bound');
+      if (expectedTeam && (tenantId !== expectedTeam.tenantId || teamId !== expectedTeam.teamId)) throw new Error('team_action_scope_changed');
       const team = await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [tenantId, teamId]);
       if (!team.rowCount) throw new Error('channel_not_bound');
       if (action.kind === 'add_members') {
@@ -304,7 +426,7 @@ export class TeamAdminService {
         const roster = new Set<string>([...members.rows.map((row) => String(row.pubg_account_id)), ...action.pubgAccountIds]);
         if (roster.size > 4) throw new Error('team_roster_limit_exceeded');
       }
-      await client.query("DELETE FROM pending_team_actions WHERE (consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day'");
+      await client.query("DELETE FROM pending_team_actions WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day')", [event.botAccountId]);
       const pendingCount = await client.query(
         `SELECT COUNT(*)::INTEGER AS count FROM pending_team_actions
          WHERE tenant_id=$1 AND team_id=$2 AND actor_user_id=$3 AND consumed_at IS NULL AND expires_at > now()`,
@@ -460,6 +582,7 @@ export class TeamAdminService {
             [team.tenantId, event.botAccountId, event.channelId, team.teamId],
           );
           if (unbound.rowCount !== 1) throw new Error('team_action_confirmation_unavailable');
+          await client.query('INSERT INTO channel_binding_versions(bot_account_id,channel_id,revision) VALUES ($1,$2,1) ON CONFLICT (bot_account_id,channel_id) DO UPDATE SET revision=channel_binding_versions.revision+1', [event.botAccountId, event.channelId]);
           await client.query(
             `DELETE FROM pending_team_actions
              WHERE tenant_id=$1 AND team_id=$2 AND bot_account_id=$3 AND channel_id=$4 AND token_hash<>$5 AND consumed_at IS NULL`,
@@ -468,6 +591,10 @@ export class TeamAdminService {
           break;
         }
         case 'disband_team': {
+          const boundChannels = await client.query("SELECT bot_account_id,channel_id FROM channel_bindings WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE", [team.tenantId, team.teamId]);
+          for (const channel of boundChannels.rows) {
+            await client.query('INSERT INTO channel_binding_versions(bot_account_id,channel_id,revision) VALUES ($1,$2,1) ON CONFLICT (bot_account_id,channel_id) DO UPDATE SET revision=channel_binding_versions.revision+1', [channel.bot_account_id, channel.channel_id]);
+          }
           await client.query(
             `DELETE FROM message_outbox WHERE tenant_id=$1 AND team_id=$2`,
             [team.tenantId, team.teamId],

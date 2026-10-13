@@ -5,17 +5,19 @@ import { createKookManagementHandler } from './application/kook-management-handl
 import { TeamAdminService } from './application/team-admin-service.js';
 import { KookPermissionClient } from './channels/kook/permission-client.js';
 import { KookApplicationRuntime } from './kook-runtime.js';
+import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
+import { PublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
 /** Explicit source startup target. Without --apply it reads no runtime secret,
  * connects to no service and applies no database migration. */
 export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<void> {
   if (args.length === 0) {
-    process.stdout.write('PUBG_SAAS_GATEWAY=dry-run; startup requires --apply and public DATABASE_URL, KOOK_BOT_ACCOUNT_ID, KOOK_BOT_TOKEN. Apply schema migrations separately.\n');
+    process.stdout.write('PUBG_SAAS_GATEWAY=dry-run; startup requires --apply and public DATABASE_URL, KOOK_BOT_ACCOUNT_ID, KOOK_BOT_TOKEN, PUBLIC_PUBG_API_KEY. Apply schema migrations separately.\n');
     return;
   }
   if (args.length !== 1 || args[0] !== '--apply')
     throw new Error('pubg_saas_gateway_arguments_invalid');
-  const databaseUrl = env.DATABASE_URL, botId = env.KOOK_BOT_ACCOUNT_ID, token = env.KOOK_BOT_TOKEN;
-  if (!databaseUrl || !botId || !token)
+  const databaseUrl = env.DATABASE_URL, botId = env.KOOK_BOT_ACCOUNT_ID, token = env.KOOK_BOT_TOKEN, apiKey = env.PUBLIC_PUBG_API_KEY;
+  if (!databaseUrl || !botId || !token || !apiKey)
     throw new Error('pubg_saas_gateway_config_missing');
   let parsed: URL;
   try {
@@ -32,12 +34,14 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0002_kook_ingress.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0003_onboarding.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const teams = new TeamAdminService(pool, new KookPermissionClient({ token }));
     const claims = new AccountClaimService(pool);
-    const runtime = new KookApplicationRuntime({ pool, botAccountId: botId, token, handler: createKookManagementHandler({ teams, claims }), onError: code => process.stderr.write(`${code}\n`) });
+    const admission = new PostgresPublicPubgAdmission(pool, env.PUBLIC_PUBG_REQUESTS_PER_MINUTE ? Number(env.PUBLIC_PUBG_REQUESTS_PER_MINUTE) : 10);
+    const players = new PublicPubgPlayerResolver({ apiKey, admission });
+    const runtime = new KookApplicationRuntime({ pool, botAccountId: botId, token, handler: createKookManagementHandler({ teams, claims, players }), onError: code => process.stderr.write(`${code}\n`) });
     await runtime.run(stop.signal);
   }
   finally {
