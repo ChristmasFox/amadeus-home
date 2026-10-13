@@ -2,6 +2,9 @@ import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { AccountClaimService } from './application/account-claim-service.js';
 import { createKookManagementHandler } from './application/kook-management-handler.js';
+import { composeKookRequestHandlers, createKookPublicQueryHandler } from './application/kook-public-query-handler.js';
+import { createPublicQueryPlanner } from './infrastructure/ai/public-model.js';
+import { PublicQueryAuthorizer } from './application/public-query-authorizer.js';
 import { TeamAdminService } from './application/team-admin-service.js';
 import { KookPermissionClient } from './channels/kook/permission-client.js';
 import { KookApplicationRuntime } from './kook-runtime.js';
@@ -28,6 +31,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   }
   if (!['postgres:', 'postgresql:'].includes(parsed.protocol))
     throw new Error('pubg_saas_database_url_invalid');
+  const planner = createPublicQueryPlanner(env);
   const pool = new Pool({ connectionString: databaseUrl, max: 8, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 5000 });
   const stop = new AbortController();
   const onStop = () => stop.abort();
@@ -37,11 +41,17 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0008_public_account_names.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
-    const teams = new TeamAdminService(pool, new KookPermissionClient({ token }));
+    const permissions = new KookPermissionClient({ token });
+    const teams = new TeamAdminService(pool, permissions);
     const claims = new AccountClaimService(pool);
     const admission = new PostgresPublicPubgAdmission(pool, env.PUBLIC_PUBG_REQUESTS_PER_MINUTE ? Number(env.PUBLIC_PUBG_REQUESTS_PER_MINUTE) : 10);
     const players = new PublicPubgPlayerResolver({ apiKey, admission });
-    const runtime = new KookApplicationRuntime({ pool, botAccountId: botId, token, handler: createKookManagementHandler({ teams, claims, players }), onError: code => process.stderr.write(`${code}\n`) });
+    const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
+    const handler = composeKookRequestHandlers(
+      createKookPublicQueryHandler({ authorizer, claims, planner }),
+      createKookManagementHandler({ teams, claims, players }),
+    );
+    const runtime = new KookApplicationRuntime({ pool, botAccountId: botId, token, handler, onError: code => process.stderr.write(`${code}\n`) });
     await runtime.run(stop.signal);
   }
   finally {

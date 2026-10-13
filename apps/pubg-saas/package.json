@@ -6,11 +6,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && mkdir -p dist/src/infrastructure/postgres/migrations && cp src/infrastructure/postgres/migrations/*.sql dist/src/infrastructure/postgres/migrations/",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test tests/**/*.test.ts",
+    "worker": "node dist/src/public-sync-worker.js"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.67",
     "@agent/pubg-domain": "workspace:*",
-    "pg": "^8.23.1"
+    "ai": "7.0.137",
+    "pg": "^8.23.1",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

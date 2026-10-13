@@ -81,11 +81,16 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     assert.deepEqual(await service.bindExistingSquad(eventA2, squadA.teamId), squadA);
     await assert.rejects(service.bindExistingSquad(eventB, squadA.teamId), /team_unavailable_in_guild/u);
 
+    await pool.query(
+      'INSERT INTO sync_state(tenant_id,team_id,state_key,checked_at,state_json) VALUES ($1,$2,$3,now(),\'{}\'::jsonb)',
+      [squadA.tenantId, squadA.teamId, `team:${squadA.teamId}`],
+    );
     const addP3 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p3-${suffix}`] });
     assert.equal(Number((await pool.query('SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rows[0]?.count), 2);
     await assert.rejects(service.confirmTeamAction(eventA2, addP3.confirmationToken), /team_action_confirmation_unavailable/u);
     await assert.rejects(service.confirmTeamAction(eventB, addP3.confirmationToken), /team_action_confirmation_unavailable/u);
     assert.deepEqual(await service.confirmTeamAction(eventA, addP3.confirmationToken), { kind: 'add_members', team: squadA });
+    assert.equal((await pool.query('SELECT 1 FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rowCount, 0);
     await assert.rejects(service.confirmTeamAction(eventA, addP3.confirmationToken), /team_action_confirmation_unavailable/u);
 
     const addP4 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p4-${suffix}`] });
@@ -94,8 +99,13 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     await assert.rejects(service.confirmTeamAction(eventA, addP5.confirmationToken), /team_roster_limit_exceeded/u);
     assert.equal(Number((await pool.query('SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rows[0]?.count), 4);
 
+    await pool.query(
+      'INSERT INTO sync_state(tenant_id,team_id,state_key,checked_at,state_json) VALUES ($1,$2,$3,now(),\'{}\'::jsonb)',
+      [squadA.tenantId, squadA.teamId, `team:${squadA.teamId}`],
+    );
     const replace = await service.prepareTeamAction(eventA, { kind: 'replace_roster', pubgAccountIds: [`p1-${suffix}`, `p3-${suffix}`] });
     await service.confirmTeamAction(eventA, replace.confirmationToken);
+    assert.equal((await pool.query('SELECT 1 FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rowCount, 0);
     const replacedRoster = await pool.query('SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2 ORDER BY pubg_account_id', [squadA.tenantId, squadA.teamId]);
     assert.deepEqual(replacedRoster.rows.map((row) => row.pubg_account_id), [`p1-${suffix}`, `p3-${suffix}`]);
 

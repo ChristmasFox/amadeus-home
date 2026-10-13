@@ -116,7 +116,7 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
     assert.equal(await repoB.countMatches(), 1);
     assert.deepEqual((await repoA.listMatches()).map((match) => match.matchId), [`match-a-${suffix}`]);
     assert.equal((await repoA.getMatch(`match-b-${suffix}`)), null);
-    assert.equal((await repoA.getMatch(`match-a-${suffix}`))?.players.length, 2);
+    assert.deepEqual((await repoA.getMatch(`match-a-${suffix}`))?.players.map((player) => player.accountId), [accountA]);
 
     const state = {
       key: 'team-sync',

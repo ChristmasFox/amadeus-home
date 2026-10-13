@@ -581,6 +581,7 @@ export class TeamAdminService {
             );
           }
           await this.persistResolvedPlayers(client, String(lockedTeam.rows[0]!.pubg_shard), action.resolvedPlayers);
+          await client.query('DELETE FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [team.tenantId, team.teamId]);
           break;
         }
         case 'replace_roster': {
@@ -596,6 +597,7 @@ export class TeamAdminService {
             );
           }
           await this.persistResolvedPlayers(client, String(lockedTeam.rows[0]!.pubg_shard), action.resolvedPlayers);
+          await client.query('DELETE FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [team.tenantId, team.teamId]);
           break;
         }
         case 'unbind_channel': {

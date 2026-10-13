@@ -33,6 +33,14 @@ export interface PostgresPubgRepositoryOptions {
   requireManagedSession?: boolean;
 }
 
+export interface PublicModelUsageRecord {
+  requestId: string;
+  provider: string;
+  modelId: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
 function requiredText(value: string, name: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`invalid_${name}`);
@@ -271,7 +279,10 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     );
     const row = result.rows[0];
     if (!row) return null;
-    const players = await this.pool.query('SELECT * FROM match_players WHERE match_id = $1 AND shard=$2 ORDER BY account_id', [matchId, this.shard]);
+    const players = await this.pool.query(
+      'SELECT * FROM match_players WHERE match_id = $1 AND shard=$2 AND account_id=ANY($3::text[]) ORDER BY account_id',
+      [matchId, this.shard, this.accountIds],
+    );
     return rowToMatch(row, players.rows.map(rowToPlayer));
   }
 
@@ -294,9 +305,9 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       `SELECT player.*, selected.timestamp_ms AS selected_timestamp
        FROM unnest($1::text[]) AS chosen(match_id)
        JOIN matches AS selected ON selected.match_id = chosen.match_id AND selected.shard=$2
-       JOIN match_players AS player ON player.match_id = selected.match_id AND player.shard=selected.shard
+       JOIN match_players AS player ON player.match_id = selected.match_id AND player.shard=selected.shard AND player.account_id=ANY($3::text[])
        ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC`,
-      [matchIds, this.shard],
+      [matchIds, this.shard, this.accountIds],
     );
     const byMatch = new Map<string, NormalizedPlayer[]>();
     for (const player of players.rows) {
@@ -342,13 +353,17 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
           JSON.stringify(metadata.checkedPlayerIds ?? match.players.map((player) => player.accountId)),
           metadata.rawJson === undefined ? null : JSON.stringify(metadata.rawJson)],
         );
-        await client.query('DELETE FROM match_players WHERE match_id = $1 AND shard=$2', [match.matchId, this.shard]);
         for (const player of match.players) {
           await client.query(
             `INSERT INTO match_players (
               match_id, account_id, player_name, display_name, rank, kills, assists, damage,
               dbnos, revives, headshot_kills, survival_time, longest_kill, deaths, death_semantics,shard
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+            ON CONFLICT (shard,match_id,account_id) DO UPDATE SET
+              player_name=EXCLUDED.player_name, display_name=EXCLUDED.display_name, rank=EXCLUDED.rank,
+              kills=EXCLUDED.kills, assists=EXCLUDED.assists, damage=EXCLUDED.damage, dbnos=EXCLUDED.dbnos,
+              revives=EXCLUDED.revives, headshot_kills=EXCLUDED.headshot_kills, survival_time=EXCLUDED.survival_time,
+              longest_kill=EXCLUDED.longest_kill, deaths=EXCLUDED.deaths, death_semantics=EXCLUDED.death_semantics`,
             [match.matchId, player.accountId, player.playerName, player.displayName, player.rank,
             player.kills, player.assists, player.damage, player.dbnos, player.revives,
             player.headshotKills, player.survivalTime, player.longestKill, player.deaths, player.deathSemantics, this.shard],
@@ -533,6 +548,22 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
       conversation.userId, conversation.channelId, conversation.sessionId, now],
     );
     return result.rows[0] ? objectValue<SessionContextRecord | null>(result.rows[0].context_json, null) : null;
+  }
+
+  async recordModelUsage(sessionId: string, usage: PublicModelUsageRecord): Promise<void> {
+    const conversation = await this.assertConversation(sessionId);
+    const requestId = requiredText(usage.requestId, 'request_id');
+    const provider = requiredText(usage.provider, 'model_provider');
+    const modelId = requiredText(usage.modelId, 'model_id');
+    if (requestId.length > 256 || provider.length > 100 || modelId.length > 200) throw new Error('model_usage_record_invalid');
+    const tokens = (value: number | null): number | null => value !== null && Number.isSafeInteger(value)
+      && value >= 0 && value <= 2_147_483_647 ? value : null;
+    await this.pool.query(
+      `INSERT INTO usage_records(tenant_id,team_id,platform,bot_account_id,user_id,request_id,provider,model_id,input_tokens,output_tokens)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (tenant_id,request_id) DO NOTHING`,
+      [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId, conversation.userId,
+        requestId, provider, modelId, tokens(usage.inputTokens), tokens(usage.outputTokens)],
+    );
   }
 
   async cleanupExpired(now = new Date()): Promise<void> {

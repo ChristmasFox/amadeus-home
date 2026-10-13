@@ -553,9 +553,15 @@ export class PubgDomainService {
       return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state, this.repository.store), diagnostics: { refreshed: false, reason: 'fresh_cache' }, newMatchIds: [] };
     }
     if (!this.apiClient) return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state, this.repository.store), diagnostics: { refreshed: false, reason: 'api_not_configured' }, newMatchIds: [] };
+    const knownIds = state?.coverage.status !== 'SOURCE_UNAVAILABLE' && Array.isArray(state?.discoveredMatchIds)
+      ? new Set(state.discoveredMatchIds)
+      : new Set<string>();
     const synced = await this.apiClient.syncTeam(this.team, {
       maxMatches,
-      knownMatchIds: existing.map((record) => record.matchId),
+      // Match rows are shared public cache entries in PostgreSQL. Only the
+      // team-scoped sync ledger proves this roster has already expanded each
+      // discovered match into its own authorized player subset.
+      knownMatchIds: existing.map((record) => record.matchId).filter((matchId) => knownIds.has(matchId)),
       ...(signal ? { signal } : {}),
     });
     if (synced.records.length) {

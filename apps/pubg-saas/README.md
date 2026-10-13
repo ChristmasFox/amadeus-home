@@ -1,19 +1,21 @@
 # PUBG KOOK SaaS source
 
 This package implements public persistence, authorization and the current KOOK
-transport slice from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
-`PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild
+transport slice from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations
+and a `PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild
 permission checks, transactional squad/channel/roster management with one-use
 confirmations, and direct-message scoped self-declared account claims. The KOOK
 gateway, durable ingress, processing loop and channel/direct-message outbox
 are wired into an executable source entry point. Name-based commands/cards
 cover create/bind/list/roster changes, status/unbind/disband, and private
 self-claim/status/unclaim. Public lookup reuses the shared API client with
-independent PostgreSQL request admission. Automatic guild-invite welcome now
-uses durable system-event intake plus verified guild/channel metadata. Public
-query authorization/session construction is implemented as a tested application
-module; query handling, ingestion worker, AI SDK and deployment images remain in
-progress. The service is not deployed, and live buttons remain unverified.
+independent PostgreSQL request admission. Automatic guild-invite welcome uses
+durable system-event intake plus verified guild/channel metadata. The public
+query handler authorizes each request, runs a bounded AI SDK planner when
+configured, and executes only validated plans through deterministic Domain
+queries. A separate PostgreSQL-backed worker syncs registered rosters and
+prefetches versioned telemetry. This is source-only; no SaaS service is
+deployed, and live KOOK buttons/guild eligibility remain unverified.
 
 ## Trust boundaries
 
@@ -39,13 +41,16 @@ progress. The service is not deployed, and live buttons remain unverified.
   cannot receive an old queued request. Migration `0006` terminates legacy
   pending group events whose generation was not recorded, retaining their audit
   identity while removing payloads. It never invents historical authority.
-- The authorizer is an application module for the upcoming query handler. It
-  is not yet wired to the management-only executable handler. Reply-thread
-  correlation remains pending. Its `TeamContext` uses official names from the
+- `PublicQueryAuthorizer` is wired to the statistical query handler and runs
+  before free-text planning. The planner receives only `{scopeValidated:true}`
+  as authorization context, never tenant/team/user IDs; the executor resolves
+  aliases only inside the authorized roster and renders deterministic Domain
+  facts. Unsupported teammate-kill claims remain unavailable. Model usage is
+  persisted under tenant/team/user/request scope. Its `TeamContext` uses official names from the
   shared PUBG account directory when available, stable account IDs as fallback,
   and scoped confirmed aliases.
-  Query executors must authorize each request rather than cache an authorized
-  object for later events. Live KOOK membership/filter semantics need real-guild
+  Every event is authorized independently; session follow-up reuses only its
+  validated plan context. Live KOOK membership/filter semantics need real-guild
   acceptance. Official endpoint references: [guild/member APIs](https://developer.kookapp.cn/doc/http/guild)
   and [channel APIs](https://developer.kookapp.cn/doc/http/channel).
 - The adapter checks that the trusted channel remains bound to the selected
@@ -70,6 +75,13 @@ progress. The service is not deployed, and live buttons remain unverified.
 - Migration `0007` creates team-config-scoped telemetry tables and evicts old
   unscoped derived cache rows whose originating roster/aliases cannot be
   established. Match/player rows remain reusable across teams.
+- Shared match rows merge account facts instead of replacing another team's
+  rows, and each repository returns only accounts in its registered roster.
+  Sync discovery state remains team-scoped; a roster change clears it so the
+  new roster resolves already-cached match details. The worker persists
+  team-config-scoped telemetry, shares player lookup admission with the
+  gateway, caps response bodies, rejects redirects and arbitrary hosts, and
+  never sends the PUBG key to the telemetry CDN.
 - `TeamAdminService` accepts parser-produced trusted group/button events and calls
   `KookPermissionClient` on every management action before beginning a DB
   transaction. Roster replacement/addition, channel unbinding and disbanding
@@ -159,22 +171,33 @@ eligibility and quota feasibility remain preflight work.
 
 ## Source entry points
 
-After `pnpm build:pubg-saas`, both commands below are dry-run and open no network
-connection:
+After `pnpm build:pubg-saas`, these entry points are side-effect-free without
+arguments and open no network connection:
 
 ```sh
 node apps/pubg-saas/dist/src/migrate-database.js
 node apps/pubg-saas/dist/src/gateway.js
+node apps/pubg-saas/dist/src/public-sync-worker.js
 ```
 
-The separately authorized public runtime phase must supply its independent
-`DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
-outside Git. Appending
-`--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0008_public_account_names.sql`
-and never migrates automatically. The PG connection pool is bounded and has
-connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
-before closing the pool.
+The public runtime requires its independent `DATABASE_URL`,
+`PUBLIC_PUBG_API_KEY`, and, for KOOK ingress, `KOOK_BOT_ACCOUNT_ID` plus
+`KOOK_BOT_TOKEN`, all outside Git. Optional AI planning uses
+`MODEL_BASE_URL`, `MODEL_ID` and `MODEL_API_KEY`; all three must be configured
+together. Fixed commands still work when AI is unconfigured. Append `--apply`
+to start an entry point. The worker also accepts `--once` for a bounded single
+cycle:
+
+```sh
+pnpm --filter @agent/pubg-saas worker -- --apply --once
+```
+
+Apply schema migrations separately before starting either runtime; the gateway
+and worker require migration `0008_public_account_names.sql` and never migrate
+automatically. The worker defaults to 5-minute cycles, 500 discovered matches
+and 20 telemetry fetches per team per cycle. These are operating defaults, not
+a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry
+concurrency are bounded. SIGINT/SIGTERM stop intake and close pools.
 
 `/pubg` or `/pubg help` shows guidance buttons. Guidance is read-only; state
 changes use one-use confirmations. Names/labels retain case; quote those with spaces.
@@ -189,18 +212,21 @@ changes use one-use confirmations. Names/labels retain case; quote those with sp
 | Bot DM | `/pubg claim steam Alice` / `/pubg account` / `/pubg unclaim` | Own self-declared association, status or removal |
 
 Guild management requires fresh owner/Administrator permission. Player shards
-are `steam`, `kakao`, `psn` and `xbox`; these paths never invoke an LLM. The initial
-welcome card is sent on a verified bot guild-join event; `/pubg` remains the
-manual entrance. Statistical queries and real KOOK acceptance remain Goal requirements.
+are `steam`, `kakao`, `psn` and `xbox`; management paths never invoke an LLM.
+The initial welcome card is sent on a verified bot guild-join event; `/pubg`
+remains the manual entrance. Stats, leaderboard, self-stats, friendly-fire,
+review and natural-language follow-up queries are implemented. Real KOOK
+acceptance, prompt benchmark and scale/restore gates remain Goal requirements.
 
 ## Local verification
 
 Build the shared dependencies and package with `pnpm build:pubg-saas`, then
-typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
-runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
-database; it applies migrations and removes its synthetic rows. Do not point it
-at a live or shared database. The 47-test SaaS suite passed on ephemeral
-PostgreSQL 18 together with the workflow-selected private PUBG checks. It covers
+typecheck with `pnpm typecheck:pubg-saas`. Set `PUBG_SAAS_TEST_DATABASE_URL` to
+a dedicated isolated test database before `pnpm test:pubg-saas`; tests create
+synthetic schemas/rows and clean them up. Never point it at a live or shared
+database. On 2026-10-13, all 74 SaaS tests passed with isolated PostgreSQL 18,
+`pnpm typecheck:pubg` passed, and `pnpm test:pubg` passed all 68 private
+identity/presentation/Domain/plugin tests. The suite covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
 channel/DM HTTP delivery. It also covers two-guild name-based onboarding,
@@ -228,4 +254,7 @@ fixtures compare complete tool envelopes for kicks/punches/melee, retain derived
 evidence event references, distinguish partial unavailable telemetry from known
 zero, and serve versioned cache facts after reopening the separate stores.
 The private Domain's 36 tests run without public PostgreSQL. These synthetic
-parity gates do not replace the Goal's P6 deployment/restore independence drills.
+parity gates do not replace the Goal's P4 deidentified prompt benchmark, P5
+200-team resource/latency tests, P6 restore/independence drills or real KOOK
+test-guild acceptance. Worker integration uses fake PUBG API and telemetry CDN
+responses; no provider key or live guild was used.

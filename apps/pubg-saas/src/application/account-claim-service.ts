@@ -73,10 +73,14 @@ export class AccountClaimService {
   }
 
   async getMyClaim(event: TrustedKookDirectMessage): Promise<AccountClaimRecord | null> {
+    return this.getClaimForActor(event.botAccountId, event.userId);
+  }
+
+  async getClaimForActor(botAccountId: string, userId: string): Promise<AccountClaimRecord | null> {
     const result = await this.pool.query(
       `SELECT pubg_shard, pubg_account_id, claim_status
        FROM account_claims WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2`,
-      [event.botAccountId, event.userId],
+      [requiredText(botAccountId, 'bot_account_id', 128), requiredText(userId, 'user_id', 256)],
     );
     const row = result.rows[0];
     if (!row) return null;
