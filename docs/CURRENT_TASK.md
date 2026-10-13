@@ -83,11 +83,13 @@ local synthetic 200-team simulation completed 200/200 authorized query tasks
 and worker runs. The KOOK sender reserves daily quota in PostgreSQL across
 restarts. The current SaaS/Postgres suite passes 100/100 with no skips,
 including concurrent budget admission, outbox deferral and the integrated
-runtime. Local Compose build/start, migration 0012, encrypted backup/restore
-with table-count and role-boundary probes, and the public-stop/private-Kurisu
-source regression are verified. Canonical-host resource/alert routing,
-cloud recovery, scheduled backup installation, quota/eligibility and full
-independent-runtime drills remain. The clean Linux ARM64 guest now passes
+runtime. Local Compose build/start, encrypted backup/restore with table-count
+and role-boundary probes, and the public-stop/private-Kurisu source regression
+are verified. The current M204 host-profile mapping resolves to OrbStack
+machine `nyannyan`; its local Compose and recovery follow-up is recorded below.
+Sustained capacity and alert routing under load, cloud recovery, scheduled
+backup installation, quota/eligibility and full independent-runtime drills
+remain. The clean Linux ARM64 guest now passes
 Compose recovery, application egress isolation, and the combined encrypted
 backup/prune job. The six-hour timer passed an ephemeral systemd integration
 in the isolated Linux VM; it is not persistently installed on M204 or the
@@ -105,6 +107,33 @@ benchmark still awaits protected provider credentials. Query sessions still
 derive from durable ingress, fresh KOOK membership and DB ownership, with
 explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
+
+### M204 current-host Compose and recovery acceptance — 2026-10-14
+
+On the canonical host-profile machine `nyannyan`, current Git commit `87543bc`
+built local ARM64 image `local/pubg-saas:git-87543bc` (image ID
+`sha256:75c6984f8256c782062fa6ae786c5cdd33028f30df445b27b930040d9f50d4c2`).
+An isolated Compose PG18.1 source project applied migrations through `0014`;
+the Worker reached healthy with an empty queue and made zero provider requests.
+Gateway live connectivity was not started. The source project was seeded only
+with one synthetic tenant/team/delayed sync job and a migrator-owned sequence.
+Age backup and verification passed (SHA-256
+`86b3f57bd632a0da6a01f83c872f39d9acaaadeed32379c31f3d9198907b50b9`); restore
+to a separate fresh PG18.1 container matched all 37/37 public-table counts,
+14 migrations and fixture counts 1/1/1. Source and restore app DML rollback,
+app DDL denial, backup SELECT/no-DML/no-`nextval`, app sequence use and
+restored default sequence grants all passed.
+
+Both named test projects were stopped with ordinary `docker compose down` (no
+`-v`), retaining their isolated volumes. Then `pnpm test:pubg` passed 68/68.
+OpenClaw stayed healthy and 9Router stayed running; both container IDs and
+start times were unchanged and restart counts remained 0. A local helper image
+was used for direct PostgreSQL/age tooling because an interactive `psql`
+snapshot through the `orb` command wrapper buffers output; the repository
+backup tool and its snapshot checks were unchanged. The image was not pushed,
+and no provider credential, production database, 9Router setting or private
+OpenClaw runtime was used or changed. Full steps and evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
 ## Current M1/M2 acceptance follow-up — 2026-10-14
 

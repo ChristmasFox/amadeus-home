@@ -1081,3 +1081,164 @@ systemctl start pubg-saas-backup.timer
 systemctl list-timers pubg-saas-backup.timer --no-pager
 systemctl stop pubg-saas-backup.timer
 ```
+
+## Canonical M204 local Compose and fresh-PG recovery rehearsal — 2026-10-14
+
+The local host profile resolves to OrbStack machine `nyannyan`. Earlier status
+notes searched for the literal machine name `example-node` and incorrectly
+inferred that the canonical host was unavailable. This follow-up ran only a
+local isolated test on `nyannyan`; it did not change CasaOS applications or
+deploy anything.
+
+From clean Git commit `87543bc`, a selective Git archive (excluding all ignored
+files and credentials) was built natively on `nyannyan` as local image
+`local/pubg-saas:git-87543bc`, image ID
+`sha256:75c6984f8256c782062fa6ae786c5cdd33028f30df445b27b930040d9f50d4c2`,
+`linux/arm64`, 382,406,562 bytes. It was not pushed. The source Compose
+project used an isolated PG18.1 container/volume, synthetic-only random
+passwords and a placeholder Worker API key. All 14 migrations applied. The
+Worker reached healthy with zero tenants, teams attempted, sync tasks or
+provider requests; its cycle log RSS was 88,207,360 bytes and the container's
+sampled cgroup usage was 36.16 MiB. The Gateway was not connected to KOOK.
+
+The fixture added one synthetic tenant, team, delayed `public_sync_jobs` row
+and a `pubg_migrator`-owned sequence. The normal repository
+`scripts/pubg-saas-backup-restore.py` produced an age-encrypted public-schema
+backup, and `verify` passed. A separate fresh PG18.1 Compose container applied
+its bootstrap role setup; the guarded restore created
+`pubg_saas_disposable_m2_host_20261014_01` there. All 37/37 public table counts
+and 14 migration rows matched; tenant/team/job rows were 1/1/1. Source and
+restore both passed app DML in rollback, app DDL denial, backup SELECT,
+backup DML and `nextval` denial, and app sequence use. The restore also passed
+backup reads and app usage on a new migrator-owned sequence, proving default
+sequence grants survived recovery. Artifact SHA-256:
+`86b3f57bd632a0da6a01f83c872f39d9acaaadeed32379c31f3d9198907b50b9`.
+
+### M204 reproduction
+
+The host profile/build and Compose service commands were:
+
+```sh
+source scripts/host-profile.sh
+orb -m "$ORBSTACK_MACHINE" -u root bash -lc '
+  set -euo pipefail
+  BUILD=/var/tmp/pubg-saas-host-build-87543bc
+  mkdir -m 700 -p "$BUILD"
+  cd /Users/nyannyan/amadeus-home
+  git archive --format=tar HEAD .dockerignore package.json pnpm-lock.yaml \
+    pnpm-workspace.yaml apps/pubg-saas packages/pubg-domain \
+    packages/presentation infra/pubg-saas/container-entrypoint.sh \
+    | tar -xf - -C "$BUILD"
+  docker buildx build --progress=plain --load \
+    --resource memory=4g --resource cpu-quota=400000 \
+    -f "$BUILD/apps/pubg-saas/Dockerfile" \
+    -t local/pubg-saas:git-87543bc "$BUILD"
+'
+
+STACK=/var/tmp/pubg-saas-m2-canonical-87543bc
+PROJECT=pubg-saas-m2-canonical-87543bc
+orb -m nyannyan -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" config --quiet
+orb -m nyannyan -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+orb -m nyannyan -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" --profile ops run --rm migrate
+orb -m nyannyan -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait worker
+```
+
+`STACK/.env` and its file-backed secrets were created outside Git from the
+checked-in examples, with owner-only environment files and random test-only
+passwords. The worker API key was a fake placeholder; the Gateway was never
+started. For the backup rehearsal, the PG/age client was a temporary local
+image based on the pinned PG18.1 image with `age` and Python 3 installed. It
+ran on each Compose project's **internal PostgreSQL network**, was capped at
+512 MiB and 0.5 CPU, and mounted the repository backup script read-only.
+Protected password files were read inside that ephemeral container and never
+printed or placed in command arguments. The protected local helper context was
+`~/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling`; its Dockerfile and
+build command were:
+
+```dockerfile
+FROM postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a
+USER root
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends age python3 ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+```
+
+```sh
+orb -m nyannyan -u root docker buildx build --progress=plain --load \
+  --resource memory=2g --resource cpu-quota=100000 \
+  -f "$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling/Dockerfile" \
+  -t local/pubg-saas-rehearsal-tools:git-87543bc \
+  "$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling"
+
+# For source, attach to pubg-saas-m2-canonical-87543bc_postgres_private;
+# for restore, use pubg-saas-m2-canonical-restore-87543bc_postgres_private.
+# Mount the scripts directory at /opt/pubg-saas/scripts:ro, the age directory
+# at /age:ro, artifacts at /artifacts (source) or /archive:ro (restore), and
+# only the needed password files under /run/test-secrets/:ro. Use --read-only,
+# --tmpfs /tmp:rw,noexec,nosuid,size=64m, --cap-drop=ALL, and
+# --security-opt no-new-privileges.
+```
+
+The procedure inside those containers used:
+
+```sh
+# In the temporary source-network helper container, with only the synthetic
+# backup password mounted at /run/test-secrets/backup-password:
+bk="$(cat /run/test-secrets/backup-password)"
+export PUBG_SAAS_DATABASE_URL="postgresql://pubg_backup:${bk}@postgres:5432/pubg_saas"
+unset bk
+python3 /opt/pubg-saas/scripts/pubg-saas-backup-restore.py backup \
+  --recipients-file /age/recipients.txt --output-dir /artifacts
+python3 /opt/pubg-saas/scripts/pubg-saas-backup-restore.py verify \
+  --artifact /artifacts/<exact-name>.dump.age \
+  --manifest /artifacts/<exact-name>.manifest.json \
+  --identity-file /age/identity.txt
+
+# In a second helper attached only to the fresh restore PG network, with that
+# project's bootstrap password mounted at /run/test-secrets/bootstrap-password:
+bootstrap="$(cat /run/test-secrets/bootstrap-password)"
+export PUBG_SAAS_RESTORE_ADMIN_URL="postgresql://pubg_bootstrap:${bootstrap}@postgres:5432/postgres"
+unset bootstrap
+python3 /opt/pubg-saas/scripts/pubg-saas-backup-restore.py restore \
+  --artifact /archive/<exact-name>.dump.age \
+  --manifest /archive/<exact-name>.manifest.json \
+  --identity-file /age/identity.txt \
+  --target-database pubg_saas_disposable_m2_host_20261014_01 \
+  --confirm-disposable-target pubg_saas_disposable_m2_host_20261014_01 --apply
+```
+
+Use the source/restore permission SQL in
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`. The original attempt to run the
+backup CLI on macOS through `scripts/pubg-saas-compose-pg-tool.py` timed out at
+the exported-snapshot step: one-shot queries succeeded, but the `orb` wrapper
+buffers output from a kept-open interactive `psql` session. A five-second
+minimal reproduction confirmed that transport behavior. Running the unchanged
+backup/restore utility with PostgreSQL 18 clients in the isolated helper
+container preserved the exported-snapshot procedure and passed; no product
+code, guard or assertion was changed.
+
+Both named Compose projects were stopped with ordinary `down` (no `-v`); zero
+test containers remained and both isolated PG volumes were retained. With the
+SaaS test Compose stopped, `pnpm test:pubg` passed 68/68. Before/after
+read-only inspection matched:
+
+| Service | Container ID | Started at (UTC) | Status | Restarts |
+| --- | --- | --- | --- | ---: |
+| OpenClaw | `2a4399acb9eb61f4d31bdbe696752db83f944e35637120d538ac3dc152041061` | `2026-10-13T14:58:41.715316534Z` | healthy/running | 0 |
+| 9Router | `f09c2c7dbf06f36bc5c789ccfbed3d3eda70960fcc0fb55a248f33cfe0f75af1` | `2026-10-13T13:59:57.747817194Z` | running | 0 |
+
+This verifies local Compose shutdown did not interrupt the private Kurisu
+runtime. No KOOK, PUBG or model credential was loaded; live human KOOK flows
+and real provider benchmarks remain skipped. Cloud restore/independence,
+scheduled backup installation, sustained capacity/alert measurements, and
+live KOOK quota/eligibility still remain M2 work. No image push, deployment,
+production DB access, 9Router configuration change or private OpenClaw restart
+occurred.

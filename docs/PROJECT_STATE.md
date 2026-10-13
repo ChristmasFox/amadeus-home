@@ -1,5 +1,37 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Canonical M204 local SaaS Compose and recovery rehearsal
+
+The current host profile resolves to OrbStack machine `nyannyan`; earlier
+notes that `example-node` was absent mistook the profile's machine alias. On
+`nyannyan`, current commit `87543bc` built local ARM64 image
+`local/pubg-saas:git-87543bc` (`sha256:75c6984f8256c782062fa6ae786c5cdd33028f30df445b27b930040d9f50d4c2`).
+Isolated PG18.1 Compose applied migrations through `0014`; the Worker reached
+healthy on an empty queue with zero teams attempted and zero provider calls.
+No Gateway live session or provider credential was used.
+
+The source DB held only synthetic test rows: one tenant, team and delayed sync
+job, plus a migrator-owned sequence. Encrypted age backup/verification and
+restore to a separate fresh PG18.1 container passed. The artifact SHA-256 was
+`86b3f57bd632a0da6a01f83c872f39d9acaaadeed32379c31f3d9198907b50b9`;
+37/37 public-table row counts, all 14 migrations and fixture counts 1/1/1
+matched. Source and restored databases passed app DML-with-rollback, app DDL
+denial, backup table/sequence reads, backup DML and `nextval` denial, app
+sequence use, and restored default sequence grants.
+
+Both test projects were stopped with ordinary `docker compose down`, retaining
+their volumes. With the SaaS test containers stopped, `pnpm test:pubg` passed
+68/68. Private OpenClaw remained healthy and 9Router remained running; IDs and
+start times did not change and restart counts remained 0. The only attempted
+backup failure was the Mac-side `orb` streaming adapter: its kept-open `psql`
+snapshot output was buffered and timed out. A minimal reproduction confirmed
+ordinary one-shot queries work; running the unchanged backup utility and PG18
+tools in a temporary resource-limited container on the isolated DB networks
+passed. No source test, security assertion or database safety guard was
+weakened. No image push, deployment, production DB, 9Router change or private
+OpenClaw restart occurred. Detailed commands:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as
