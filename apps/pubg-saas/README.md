@@ -1,10 +1,12 @@
 # PUBG KOOK SaaS source
 
-This package currently contains the first public persistence slice from
-`docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
-`PubgRepositoryPort` adapter. The KOOK gateway, authorization application,
-worker, AI SDK integration and deployment image are still in progress. This
-package is not a runnable or deployed service yet.
+This package currently contains the early public persistence and authorization
+slices from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
+`PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild
+permission checks, and transactional squad/channel/member setup. The KOOK
+WebSocket lifecycle, full interaction onboarding, account claims, worker, AI
+SDK integration and deployment image are still in progress. This package is
+not a runnable or deployed service yet.
 
 ## Trust boundaries
 
@@ -18,8 +20,22 @@ package is not a runnable or deployed service yet.
   selected team. Session state is keyed by tenant, team, bot, user, channel and
   session. Match and telemetry facts are shared inside the public database;
   match selection is constrained by the trusted team's PUBG account IDs.
+- `TeamAdminService` accepts a parser-produced trusted group event and calls
+  `KookPermissionClient` on every management action before beginning a DB
+  transaction. The parser drops the gateway's role list; the permission client
+  reads current KOOK state.
 - Public credentials and `DATABASE_URL` are runtime-only. No real credential
   is needed for local repository tests.
+
+The current permission check reads guild ownership from `guild/view`, the
+current member roles from `guild/user-list?filter_user_id=...`, and role
+permission bits from `guild-role/list`. It treats only guild ownership or the
+Administrator bit as sufficient for guild-management actions. The gateway
+event's embedded role list is not used as current authority. These contracts
+follow the [KOOK HTTP API reference](https://developer.kookapp.cn/doc/reference),
+[guild API](https://developer.kookapp.cn/doc/http/guild),
+[guild-role API](https://developer.kookapp.cn/doc/http/guild-role) and
+[group message event format](https://developer.kookapp.cn/doc/event/message).
 
 ## Local verification
 

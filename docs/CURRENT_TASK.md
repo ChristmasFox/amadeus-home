@@ -19,13 +19,15 @@ the selected match window. Early P2 adds the `apps/pubg-saas` Postgres schema,
 migrations and roster/conversation-scoped adapter. A temporary PostgreSQL 18
 integration run passed two-guild/team and conversation/result-set isolation,
 duplicate display names, migration idempotence, and one SQLite/Postgres shared
-stat golden. Final source gates pass: `pnpm build:pubg`,
-`pnpm build:pubg-saas`, `pnpm workflow:verify` with ephemeral PostgreSQL 18,
+stat golden. The current P2 slice adds trusted group-event parsing, uncached
+KOOK owner/Administrator checks, and transactional squad creation, channel
+binding, and roster updates. `pnpm workflow:verify` passed with ephemeral
+PostgreSQL 18 (including 7 SaaS tests); `pnpm build:pubg-saas`,
 `pnpm test:workflow`, `pnpm test:architecture`, `pnpm check:secrets` and
-`git diff --check`. KOOK authorization and transport, full SQLite/Postgres
-edge-case parity, Compose/app runtime,
-and independent deployment/restore drills remain incomplete. Current source
-map: `docs/PROJECT_MAP.md`.
+`git diff --check` also pass. Full KOOK transport and interactions, account
+claims, full SQLite/Postgres edge-case parity, Compose/app runtime, and
+independent deployment/restore drills remain incomplete. No runtime or
+production credentials were touched. Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

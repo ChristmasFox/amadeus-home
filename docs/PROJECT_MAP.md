@@ -49,9 +49,12 @@ scope-pinned SQLite adapter for private use. Early P2 source now contains a
 Postgres schema/migration and an adapter with roster-filtered match selection
 and tenant/team/bot/user/channel/session scoped conversation storage. One
 synthetic stat golden now passes through both SQLite and Postgres repositories;
-full edge-case parity, public authorization, KOOK transport and deployment
-remain implementation work. See the Goal's phase gates before describing any
-of them as ready.
+trusted KOOK group-event parsing, fresh guild owner/Administrator checks, and
+transactional squad creation/channel binding/roster update are also implemented
+with isolated PostgreSQL and permission-client tests. Full edge-case parity,
+account claims, complete KOOK transport/interactions and deployment remain
+implementation work. See the Goal's phase gates before describing any of them
+as ready.
 
 ## Request paths and guardrails
 
