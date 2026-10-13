@@ -1,5 +1,30 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Isolated Linux SaaS image and recovery drill
+
+Built the current tree locally in OrbStack as
+`local/pubg-saas:git-516371e6e73f`, ARM64 manifest
+`sha256:2590b6d7f0fea5783620ed20ed3bbe4212fba0c49ac29aa9945a2fbd338b758e`.
+The image was copied locally (no registry) into a fresh network-isolated
+Ubuntu 24.04 ARM64 VM, where fresh source and restore Compose projects used
+separate PG18.1 containers/volumes and applied migrations through `0014`.
+Age backup verification and restore matched 37/37 public base-table counts and
+14 migration rows; synthetic tenant/team/job rows matched 1/1/1. App DML with
+rollback, app DDL denial, backup read-only/no-`nextval`, and app future-sequence
+use passed on both databases. The exact-marker disposable restore database was
+cleaned; Compose projects were stopped with plain `down`, preserving isolated
+volumes.
+
+With public Compose down, `pnpm test:pubg` passed 68/68. Read-only checks show
+private OpenClaw healthy with restart count 0 and unchanged container ID/start
+time; 9Router also kept the same ID/start time and restart count 0. Neither was
+modified or restarted. No real KOOK/PUBG/model credentials, image push,
+production database, or deployment was used. Canonical CasaOS resource/alert
+acceptance, scheduled backup, live provider/human P3 checks, and the public-only
+cloud isolation drill remain open. Detailed reproduction commands and the
+guest-native build limitation are in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## 2026-10-14 — PUBG SaaS current-source M1 and local recovery acceptance
 
 Commit `880a5cf` completes confirmed team leaderboard preferences and

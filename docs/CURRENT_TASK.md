@@ -127,6 +127,34 @@ production deployment or database was touched. Reproduction details are in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md` and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
+## Isolated Linux M2 image and recovery rehearsal — 2026-10-14
+
+Built the current tree locally in the OrbStack Docker context as ARM64 image
+`local/pubg-saas:git-516371e6e73f` (manifest digest
+`sha256:2590b6d7f0fea5783620ed20ed3bbe4212fba0c49ac29aa9945a2fbd338b758e`).
+The exact image was copied with local `docker save`/`docker load` into a new,
+network-isolated Ubuntu 24.04 ARM64 VM; rootfs layer IDs matched. This was a
+local transfer, not a registry push. Guest-native Docker build could not use
+overlayfs in the isolated VM, so Compose used the host-built image.
+
+Two fresh PG18.1 Compose projects applied all 14 migrations. Gateway and Worker
+no-credential dry-runs passed. A synthetic tenant/team/job fixture was backed
+up with age, decrypted/archive-verified, and restored into the second fresh PG
+container: all 37/37 public-table counts and 14 migration rows matched; fixture
+counts were 1/1/1. App DML/no-DDL, backup read-only/no-`nextval`, and app
+sequence-use probes passed on source and restore. The restore database was
+removed by the exact-marker cleanup command. Both projects were stopped with
+plain `down`, preserving their isolated volumes.
+
+After shutdown `pnpm test:pubg` passed 68/68. Read-only checks before/after show
+the private OpenClaw container ID and start time unchanged, `healthy`, and
+restart count 0; 9Router ID/start time also remained unchanged with restart
+count 0. No private runtime or 9Router configuration was modified. This adds
+isolated Linux Compose/recovery evidence, but does not prove canonical
+CasaOS-host capacity, scheduled backup, or cloud operation with M204 isolated.
+No real KOOK/PUBG/model credential was used; those acceptance gates remain
+open. Full commands and artifact checksum are in the dated M2 checkpoint.
+
 ## KOOK test-server connection check — 2026-10-14
 
 Using the protected, ignored `.env.local` only for the authorized P3 test

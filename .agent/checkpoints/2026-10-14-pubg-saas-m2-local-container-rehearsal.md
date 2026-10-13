@@ -681,3 +681,135 @@ To resume P3, recreate the isolated project and connect its test Gateway, then
 have a human test-server member send `/pubg help` and click the read-only
 `创建队伍` guidance button. Verify the scoped inbox/outbox and daily budget by
 counts only; never log the command payload, user/channel IDs or bot token.
+
+## Clean isolated Linux image / backup / restore rehearsal — 2026-10-14
+
+### Build and isolated Compose runtime
+
+Built the current tree locally on the Mac OrbStack Docker context:
+
+```sh
+docker build --progress=plain -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-516371e6e73f .
+```
+
+The ARM64 manifest digest was
+`sha256:2590b6d7f0fea5783620ed20ed3bbe4212fba0c49ac29aa9945a2fbd338b758e`.
+The image's eight rootfs layer IDs matched after a local `docker save`/`docker
+load` transfer into a newly created network-isolated Ubuntu 24.04 ARM64 VM
+named `pubg-saas-m2-clean`; there was no registry push. The VM ran Docker
+Compose 2.40.3, `age` 1.1.1, and pinned PG18.1. The clean guest's Docker
+overlayfs mount failed with `operation not permitted`; BuildKit bootstrap also
+hit a registry manifest EOF. Rather than alter the daemon's security boundary,
+the exact host-built ARM64 image was loaded locally into the guest, and the
+guest's disposable Docker daemon used VFS storage. This validates Linux Compose
+and database recovery with the ARM64 image, not a guest-native image build.
+
+The source project was
+`pubg-saas-m2-clean-src-516371e`; restore was
+`pubg-saas-m2-clean-restore-516371e`. Both used new PG18.1 containers and
+project-owned volumes. The source applied all 14 migrations. Gateway and Worker
+container dry-runs emitted their no-credential preview messages. No `--apply`
+gateway/worker process was started, so no KOOK, PUBG or model request was made.
+The fixture was wholly synthetic: one tenant, one team and one delayed sync
+job, plus a migration-owned sequence. Source app DML succeeded only inside a
+rolled-back transaction and app DDL failed; the backup role could SELECT the
+fixture/sequence but INSERT and `nextval` failed; app `nextval` succeeded.
+
+### Encrypted recovery and restored permissions
+
+An age identity/recipient was generated inside the isolated VM, outside Git,
+with mode `0600`; the artifact directory was mode `0700`. The checked-in
+Compose PG adapter selected only those named internal projects and transferred
+passwords to short-lived mode-0600 pgpass files in the PG container's tmpfs.
+The encrypted artifact was
+`pubg-saas-20261013T222028Z-99b078aa.dump.age`, with SHA-256
+`608b1c3d99e628016947ce44b5d437285688929254d302a9dcbed2e5238b2f7a`. The
+backup verification passed; restore to fresh PG18.1 database
+`pubg_saas_disposable_m2_20261014_01` matched all 37/37 public base-table
+counts and 14 migration rows. The synthetic tenant/team/job each restored as
+one row. On the restored database, app DML/rollback and app DDL denial passed;
+backup SELECT passed while DML and `nextval` were denied; app access to a new
+migrator-owned sequence succeeded. The restore DB was removed with the
+exact-name, exact-marker `cleanup --apply` command. No private SQLite or
+OpenClaw state was read or included in backup.
+
+### Stop and private-Kurisu regression
+
+Both public Compose projects were stopped with ordinary `docker compose down`
+after the guarded restore cleanup; no `-v` was used, and isolated named volumes
+were preserved. With public services stopped, `pnpm test:pubg` passed 68/68.
+Read-only machine inspection before and after showed the private `openclaw`
+container stayed `healthy`, ID and start time unchanged, restart count 0. The
+`9router` container ID/start time also stayed unchanged, restart count 0. No
+private runtime, real 9Router configuration, or production database was
+modified. The test-server `.env.local` was not read for this rehearsal, and no
+real provider credentials were loaded. No image was pushed or deployed.
+
+Representative reproducible commands (see
+`infra/pubg-saas/README.md` and
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md` for the full guarded procedure):
+
+```sh
+# In the isolated VM, with its generated owner-only .env/secrets:
+cd /var/tmp/pubg-saas-m2-clean/src
+docker compose --env-file .env config --quiet
+docker compose --env-file .env up -d --wait postgres egress-proxy
+docker compose --env-file .env --profile ops run --rm migrate
+docker compose --env-file .env run --rm --no-deps \
+  --entrypoint node gateway dist/src/gateway.js
+docker compose --env-file .env run --rm --no-deps \
+  --entrypoint node worker dist/src/public-sync-worker.js
+
+# Set local adapter paths and load the backup password from its protected file;
+# expansion assigns it to the environment and does not print it.
+export PATH=/var/tmp/pubg-saas-m2-clean/tooling/bin:$PATH
+export PUBG_SAAS_PG_EXEC_PROJECT=pubg-saas-m2-clean-src-516371e
+export PUBG_SAAS_PG_EXEC_COMPOSE_FILE=/var/tmp/pubg-saas-m2-clean/src/compose.yaml
+export PUBG_SAAS_PG_EXEC_ENV_FILE=/var/tmp/pubg-saas-m2-clean/src/.env
+backup_pw="$(< /var/tmp/pubg-saas-m2-clean/src/secrets/backup-password)"
+export PUBG_SAAS_DATABASE_URL="postgresql://pubg_backup:${backup_pw}@postgres:5432/pubg_saas"
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  backup --recipients-file /var/tmp/pubg-saas-m2-clean/age/recipients.txt \
+  --output-dir /var/tmp/pubg-saas-m2-clean/artifacts
+
+# Verify the artifact with the external age identity.
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  verify --artifact /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T222028Z-99b078aa.dump.age \
+  --manifest /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T222028Z-99b078aa.manifest.json \
+  --identity-file /var/tmp/pubg-saas-m2-clean/age/identity.txt
+
+# Restore through the separate fresh PG project. Its password remains out of
+# command output and process arguments.
+cd /var/tmp/pubg-saas-m2-clean/restore
+export PUBG_SAAS_PG_EXEC_PROJECT=pubg-saas-m2-clean-restore-516371e
+export PUBG_SAAS_PG_EXEC_COMPOSE_FILE=/var/tmp/pubg-saas-m2-clean/restore/compose.yaml
+export PUBG_SAAS_PG_EXEC_ENV_FILE=/var/tmp/pubg-saas-m2-clean/restore/.env
+bootstrap_pw="$(< /var/tmp/pubg-saas-m2-clean/restore/secrets/postgres-superuser-password)"
+export PUBG_SAAS_RESTORE_ADMIN_URL="postgresql://pubg_bootstrap:${bootstrap_pw}@postgres:5432/pubg_saas"
+target=pubg_saas_disposable_m2_20261014_01
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  restore --artifact /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T222028Z-99b078aa.dump.age \
+  --manifest /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T222028Z-99b078aa.manifest.json \
+  --identity-file /var/tmp/pubg-saas-m2-clean/age/identity.txt \
+  --target-database "$target" --confirm-disposable-target "$target" --apply
+
+# After the source and restored-database role probes in
+# infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md, clean only the marked target,
+# then stop these local projects (without -v).
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  cleanup --target-database "$target" --confirm-disposable-target "$target" --apply
+cd /var/tmp/pubg-saas-m2-clean/src && docker compose --env-file .env down
+cd /var/tmp/pubg-saas-m2-clean/restore && docker compose --env-file .env down
+pnpm test:pubg
+```
+
+### Remaining gates
+
+This is a successful clean isolated Linux ARM64 Compose/backup/restore drill.
+It is not canonical CasaOS `example-node` resource/alert acceptance, a scheduled
+backup installation, clean-cloud/public-only operation with M204 unavailable,
+Linux-native image build acceptance, or live PUBG/model provider acceptance.
+The authenticated KOOK gateway run recorded elsewhere proves test-bot
+authentication only; human message/callback/permission flows and KOOK quota
+eligibility remain open. No production deploy was authorized or attempted.
