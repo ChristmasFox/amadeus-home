@@ -196,6 +196,21 @@ Reproduction commands and artifact handling are recorded in
 the repository procedures remain in `infra/pubg-saas/README.md` and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
+Post-0012 local acceptance is now committed as `a04224a`. The local ARM64 image
+`local/pubg-saas:git-a04224a` was Compose-started against fresh isolated PG18.1
+source and restore containers. Migration 0012, gateway dry-run, encrypted age
+backup, new-container restore and all 37/37 public table counts passed; the
+restore manifest contained 12 migrations and synthetic tenant/team/job counts
+of 1:1:1. App DML/no-DDL, backup read-only/no-nextval and app sequence-use
+probes passed before and after restore. With both temporary public projects
+stopped, Kurisu tests passed 68/68; private OpenClaw remained healthy and
+9Router remained running, with neither restarted or changed. Current source
+gate: SaaS/PostgreSQL 100/100, private 68/68, affected typechecks, backup
+safety 14/14, secret scan and diff check passed. No real provider credential
+was used, and no image push, deployment, production DB, 9Router or private
+runtime change occurred. Full evidence and reproduction references are in the
+dated M2 local rehearsal checkpoint.
+
 The local egress source adds a dedicated HTTPS CONNECT proxy and removes the
 gateway/worker from the public bridge. Focused tests pass 6/6, including
 private/metadata resolution denial and WSS dispatch. Local Compose confirmed

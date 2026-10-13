@@ -550,3 +550,55 @@ reusable PG fixture remained in the local engine; read-only checks showed
 private OpenClaw healthy and 9Router running. No image was pushed and no
 provider credential or private runtime was used or changed. Host alert routing
 and canonical-host resource headroom remain open.
+
+## Post-0012 ARM64 Compose, encrypted restore and offline Kurisu check — 2026-10-14
+
+Commit `a04224aa3e8f77aaa15c32108cf07c789f8069b8` adds migration `0012`,
+bounded query/session/usage retention and `/pubg privacy`. The image was built
+locally in the `orbstack` context for `linux/arm64` as
+`local/pubg-saas:git-a04224a`; its Buildx manifest-list digest is
+`sha256:9920ad368398723be3703e49c8543ffaec6c3984994aa0f937d957c7e894bdf1`.
+No image was pushed.
+
+Two unique Compose projects, `pubg-saas-m2-a04224a-src` and
+`pubg-saas-m2-a04224a-restore`, used fresh PostgreSQL 18.1 containers and
+separate volumes. Compose render, source PostgreSQL readiness, migration
+through `0012`, a credential-free gateway dry-run and Worker startup passed.
+The first Worker cycle logged zero teams/jobs and no provider attempt; the
+Worker was stopped before another cycle after the synthetic fixture was seeded.
+The source contained one synthetic tenant, team, sync job and future sequence.
+All random database passwords, age identity/recipient, encrypted artifact and
+manifest were in owner-only paths outside Git. No KOOK/PUBG/model credential
+was loaded or used.
+
+Encrypted backup and decrypt/archive verification passed. Restore into the
+other fresh PG container passed with 37/37 public table counts matching; the
+manifest recorded 12 migration rows and tenant/team/job counts of 1:1:1.
+On both source and restored databases, `pubg_app` INSERT/UPDATE/DELETE passed
+inside a rolled-back transaction and DDL was denied. `pubg_backup` could read
+table and sequence state but could not INSERT or call `nextval`; `pubg_app`
+retained sequence use, including a sequence created by `pubg_migrator` after
+restore. The disposable restore database was removed with the exact-marker
+guarded cleanup command. Both Compose projects were stopped with ordinary
+`down`; isolated named volumes were preserved. The only remaining local
+container was the pre-existing `pubg-saas-pg18` fixture.
+
+The affected source/database tests passed 15/15; the full SaaS/PostgreSQL suite
+passed 100/100 with no skips. SaaS and private typechecks passed; the private
+Kurisu regression passed 68/68 while SaaS Compose was down; backup utility
+safety tests passed 14/14; secret scan and `git diff --check` passed. Read-only
+OrbStack checks before and after the stop showed private OpenClaw
+`running/healthy` and 9Router `running`; neither was restarted or modified.
+This is source-suite and process-health independence evidence, not a live
+private PUBG API query or clean Linux/cloud isolation test.
+
+Two corrected harness assumptions are recorded: a pre-fix migration test
+expected 11 rows and failed after `0012`; it now asserts the `0012` migration
+ID and passes. The first restored-role probe omitted `PGHOST=postgres` from the
+local Compose adapter environment; adding it made the same probe pass without
+repeating restore. Reproduce the build/start/migrate flow using
+`infra/pubg-saas/README.md`, and backup/restore/permission commands using
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`, with the image tag above and
+fresh `pubg-saas-m2-*` names. Host scheduling, clean Linux/cloud recovery,
+canonical-host capacity, live provider acceptance and full human-user P3
+acceptance remain open.

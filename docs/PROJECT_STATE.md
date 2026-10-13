@@ -1,5 +1,24 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS post-0012 local acceptance
+
+Commit `a04224a` adds migration 0012, bounded per-bot retention and the
+`/pubg privacy` statement. The locally loaded ARM64 image
+`local/pubg-saas:git-a04224a` (manifest digest
+`sha256:9920ad368398723be3703e49c8543ffaec6c3984994aa0f937d957c7e894bdf1`)
+passed isolated Compose startup and migration. An encrypted age backup
+restored to a separate fresh PG18.1 container; all 37 public table counts
+matched, including 12 migration rows and synthetic tenant/team/job counts
+1:1:1. App DML/no-DDL and backup read-only/no-nextval permissions passed on
+source and restore. The private Kurisu suite passed 68/68 with public Compose
+stopped; read-only checks showed OpenClaw healthy and 9Router running, with no
+restart or config change. SaaS/PostgreSQL tests passed 100/100, both typecheck
+groups and backup safety 14/14 passed. No provider credentials, image push,
+deployment, production DB or private runtime changes were used. Clean Linux and
+cloud recovery, backup schedule installation, canonical-host capacity, live
+provider and human P3 gates remain open. Detailed evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## 2026-10-14 — PUBG SaaS local M2 container rehearsal
 
 The local ARM64 image `local/pubg-saas:git-f0aa16b` was built with digest
