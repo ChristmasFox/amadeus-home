@@ -50,6 +50,18 @@ OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facad
 第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界；统计、权限、预览确认、
 状态转换和排序保持 deterministic。
 
+### 独立的公共 KOOK PUBG 应用
+
+私有 Agent runtime 仍由 OpenClaw 唯一承载。`docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` 定义了独立面向
+外部用户的 KOOK PUBG Node.js 应用；它可在应用边界使用 AI SDK 做受限的自然语言规划，不管理
+私有 Kurisu session 或 worker。授权、租户隔离、领域计算、结果校验和消息目的地仍由确定性应用代码控制。
+
+公共与私有部署从同一 `packages/pubg-domain` 源码分别构建、测试和发布：私有端保留
+`plugins/pubg`、SQLite、私有队伍/API 凭证和 OpenClaw lifecycle；公共端拥有 KOOK transport、
+多租户授权、PostgreSQL、独立 worker、Bot/API/model 凭证及 Compose 生命周期。两者不共享运行中
+服务、数据库、会话、worker 或凭证。公共实现以该 Goal 的 phase gate 为准；组件在源码和运行时
+得到验证前不视为已交付。当前责任路径索引见 [`PROJECT_MAP.md`](PROJECT_MAP.md)。
+
 ## DeliveryEnvelope v2 — 唯一用户交付合同
 
 `plugins/amadeus/src/delivery-envelope.ts` 定义 `version=2`、runId、deliveryId、

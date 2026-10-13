@@ -1,10 +1,17 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createRequire } from 'node:module';
-import type { Coverage, SourceInfo } from '../schema/status.js';
 import type { NormalizedMatch, NormalizedPlayer, ResultSetRecord, SessionContextRecord } from '../data/model.js';
 import { normalizeRecords } from '../data/model.js';
 import type { TelemetryFeatureKey, TelemetryFeatureRecord, TelemetryFeatureStore } from '../review/telemetry.js';
+import type {
+  MatchWriteMetadata,
+  SyncState,
+  TelemetryPrefetchAttempt,
+  TelemetryPrefetchAttemptStatus,
+  TelemetryPrefetchRun,
+  UpsertMatchesResult,
+} from './repository-port.js';
 
 interface SqliteStatement {
   run(...params: unknown[]): { changes: number | bigint; lastInsertRowid?: number | bigint };
@@ -20,61 +27,6 @@ interface SqliteDatabase {
 
 const require = createRequire(import.meta.url);
 const { DatabaseSync } = require('node:sqlite') as { DatabaseSync: new (path: string) => SqliteDatabase };
-
-export interface MatchWriteMetadata {
-  fetchedAt?: string;
-  source?: string;
-  parserVersion?: string;
-  rawJson?: unknown;
-  checkedPlayerIds?: string[];
-}
-
-export interface UpsertMatchesResult {
-  inserted: number;
-  updated: number;
-  duplicateInputs: number;
-  invalidInputs: number;
-}
-
-export interface SyncState {
-  key: string;
-  checkedAt: string;
-  coverage: Coverage;
-  source: SourceInfo;
-  discoveredMatchIds: string[];
-  failedMatchIds: string[];
-  error?: string;
-}
-
-export type TelemetryPrefetchAttemptStatus = 'PENDING' | 'FETCHED' | 'HIT' | 'UNAVAILABLE';
-
-export interface TelemetryPrefetchAttempt {
-  matchId: string;
-  parserVersion: string;
-  featureVersion: string;
-  status: TelemetryPrefetchAttemptStatus;
-  attemptCount: number;
-  lastAttemptedAt: string | null;
-  nextRetryAt: string | null;
-  error?: string;
-  updatedAt: string;
-}
-
-export interface TelemetryPrefetchRun {
-  runId: string;
-  reportDate: string;
-  startedAt: string;
-  finishedAt: string;
-  trigger: 'hourly' | 'manual';
-  discoveredMatchCount: number;
-  newMatchCount: number;
-  candidateMatchCount: number;
-  fetchedCount: number;
-  cacheHitCount: number;
-  unavailableCount: number;
-  pendingCount: number;
-  failedMatchIds: string[];
-}
 
 function numeric(value: unknown, fallback = 0): number {
   const result = Number(value);
@@ -296,10 +248,21 @@ export class SqlitePubgRepository implements TelemetryFeatureStore {
       params.push(options.toMs);
     }
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? 10000), 1), 10000);
-    params.push(limit);
     const where = clauses.length ? ' WHERE ' + clauses.join(' AND ') : '';
-    const rows = this.db.prepare('SELECT * FROM matches' + where + ' ORDER BY timestamp_ms ASC, match_id ASC LIMIT ?').all(...params);
-    const players = this.db.prepare('SELECT * FROM match_players').all();
+    const selectedMatchesSql = `
+      SELECT match_id, timestamp_ms
+      FROM matches${where}
+      ORDER BY timestamp_ms ASC, match_id ASC
+      LIMIT ?
+    `;
+    const rows = this.db.prepare('SELECT * FROM matches' + where + ' ORDER BY timestamp_ms ASC, match_id ASC LIMIT ?').all(...params, limit);
+    const players = this.db.prepare(`
+      WITH selected_matches AS (${selectedMatchesSql})
+      SELECT player.*
+      FROM selected_matches AS selected
+      JOIN match_players AS player ON player.match_id = selected.match_id
+      ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC
+    `).all(...params, limit);
     const byMatch = new Map<string, NormalizedPlayer[]>();
     for (const player of players) {
       const id = String(player.match_id);

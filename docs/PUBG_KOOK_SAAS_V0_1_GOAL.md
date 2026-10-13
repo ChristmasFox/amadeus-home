@@ -1,6 +1,6 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Status:** APPROVED_FOR_CODEX_IMPLEMENTATION_PLAN_ONLY (not deployed, not accepted)
+> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain ports and tenant scope are in progress. Not deployed or accepted.
 >
 > **Date:** 2026-10-13 (Asia/Shanghai)
 >
@@ -40,9 +40,10 @@ Read `AGENTS.md`, `docs/CONTEXT.md`, `docs/CURRENT_TASK.md`, `docs/DEVELOPER_WOR
 
 Current code anchors (recheck at execution):
 
-- `packages/pubg-domain/src/service/pubg-domain-service.ts`: `PubgDomainServiceOptions.repository: SqlitePubgRepository`, construction-time fixed `team: TeamConfig`, sync in `refresh()`, and `TelemetryWorker` composition.
-- `packages/pubg-domain/src/engine/query-engine.ts`: `DeterministicQueryEngine.execute(..., options)` already accepts contextual `team`; preserve stat math, evidence, time semantics and unknown/partial contracts.
-- `packages/pubg-domain/src/storage/sqlite-repository.ts`: `listMatches` currently selects all `match_players` rather than joining only selected matches; address separately with regression and query-plan tests.
+- `packages/pubg-domain/src/service/pubg-domain-service.ts`: now consumes async `PubgRepositoryPort` and a validated `TeamContext`; the private plugin creates its single `private` scope from external configuration.
+- `packages/pubg-domain/src/engine/query-engine.ts`: `DeterministicQueryEngine` requires a valid `teamContext` and returns `INVALID_QUERY` when it is missing or malformed; preserve stat math, evidence, time semantics and unknown/partial contracts.
+- `packages/pubg-domain/src/storage/sqlite-repository-adapter.ts`: adapts the existing private SQLite implementation to the async port and pins the adapter to its tenant/team scope. A public Postgres implementation is still pending.
+- `packages/pubg-domain/src/storage/sqlite-repository.ts`: `listMatches` now selects player rows only for its selected matches; `SQLite listMatches loads players only for the selected match window` checks output and the query plan.
 - `plugins/pubg/src/index.ts`: `serviceFor` loads one external `PUBG_TEAM_CONFIG_FILE`, stores `pubg.sqlite`, uses `identity.sqlite`; these remain the *private* adapter, not the public tenant registry.
 - `plugins/pubg/src/adapters/openclaw.ts`: channels/trusted message context; DO NOT trust an arbitrary `sessionId` supplied in model tool args as the public auth/session boundary.
 - `packages/identity/src/index.ts`: global `display_name_key UNIQUE` suits current owner/friends, not 800 public users with duplicate display names; do not break private identity binding to solve public use.

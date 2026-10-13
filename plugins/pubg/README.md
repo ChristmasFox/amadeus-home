@@ -21,3 +21,8 @@ Runtime credentials and team identity are external. Set `PUBG_TEAM_CONFIG_FILE`,
 `PUBG_DATABASE_PATH`, and `PUBG_API_KEY_FILE` (or configure the corresponding
 non-secret plugin paths). The plugin never stores the API key in OpenClaw
 configuration or in the repository.
+
+At bootstrap the private adapter creates the sole `private` `TeamContext` from
+the protected team config and pairs it with a scope-pinned SQLite repository
+adapter. The async Domain service does not use the public SaaS database or
+infer a team from model-supplied arguments.

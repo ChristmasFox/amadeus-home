@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import type { OpenClawPluginToolContext } from 'openclaw/plugin-sdk/core';
 import { IdentityStore } from '@agent/identity';
-import { PubgDomainService, SqlitePubgRepository, type TeamConfig } from '@agent/pubg-domain';
+import { createTeamContext, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter, type TeamConfig } from '@agent/pubg-domain';
 import { prepareIdentitySubject, type PluginConfig } from '../src/index.js';
 
 const TEAM: TeamConfig = {
@@ -25,6 +25,8 @@ const TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES: TeamConfig = {
     { id: 'p2', name: 'Other', aliases: [] },
   ],
 };
+const TEAM_CONTEXT = createTeamContext('private-test', TEAM);
+const ALIASED_TEAM_CONTEXT = createTeamContext('private-test', TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES);
 
 function toolContext(senderId = 'telegram-user-1'): OpenClawPluginToolContext {
   return {
@@ -42,7 +44,7 @@ test('PUBG boundary maps canonical Person to PUBG account and never falls back t
   const presetsPath = join(directory, 'presets.json');
   await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'wang', displayName: '小王', externalAccounts: [{ provider: 'pubg', externalId: 'p1' }] }] }));
   const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
-  const service = new PubgDomainService({ team: TEAM, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  const service = new PubgDomainService({ teamContext: TEAM_CONTEXT, repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(join(directory, 'pubg.sqlite')), TEAM_CONTEXT) });
   try {
     const beforeBinding = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-turn');
     assert.equal('status' in beforeBinding && beforeBinding.status, 'error');
@@ -75,7 +77,7 @@ test('PUBG boundary maps canonical Person to PUBG account and never falls back t
       playerIds: ['p1', 'p2'],
     });
   } finally {
-    service.repository.db.close();
+    (service.repository as SqlitePubgRepositoryAdapter).sqlite.db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -86,7 +88,7 @@ test('PUBG boundary refreshes presets after its cached IdentityStore was created
   const presetsPath = join(directory, 'presets.json');
   await writeFile(presetsPath, JSON.stringify({ persons: [] }));
   const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
-  const service = new PubgDomainService({ team: TEAM, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  const service = new PubgDomainService({ teamContext: TEAM_CONTEXT, repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(join(directory, 'pubg.sqlite')), TEAM_CONTEXT) });
   try {
     const beforePreset = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-refresh-turn');
     assert.equal('status' in beforePreset && beforePreset.status, 'error');
@@ -104,7 +106,7 @@ test('PUBG boundary refreshes presets after its cached IdentityStore was created
     const afterPreset = await prepareIdentitySubject(service, config, {}, toolContext(), 'telegram-refresh-turn');
     assert.deepEqual(afterPreset, { playerIds: ['p1'] });
   } finally {
-    service.repository.db.close();
+    (service.repository as SqlitePubgRepositoryAdapter).sqlite.db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -118,7 +120,7 @@ test('PUBG boundary maps multiple canonical Persons to explicit compare subjects
     { personId: 'other', displayName: '另一位', externalAccounts: [{ provider: 'pubg', externalId: 'p2' }] },
   ] }));
   const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
-  const service = new PubgDomainService({ team: TEAM, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  const service = new PubgDomainService({ teamContext: TEAM_CONTEXT, repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(join(directory, 'pubg.sqlite')), TEAM_CONTEXT) });
   try {
     const prepared = await prepareIdentitySubject(
       service,
@@ -129,7 +131,7 @@ test('PUBG boundary maps multiple canonical Persons to explicit compare subjects
     );
     assert.deepEqual(prepared, { playerIds: ['p1', 'p2'] });
   } finally {
-    service.repository.db.close();
+    (service.repository as SqlitePubgRepositoryAdapter).sqlite.db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -140,12 +142,12 @@ test('PUBG boundary maps the corrected confirmed external account to the configu
   const presetsPath = join(directory, 'presets.json');
   await writeFile(presetsPath, JSON.stringify({ persons: [{ personId: 'jiao', displayName: '胶', externalAccounts: [{ provider: 'pubg', externalId: 'SG_LabmemNo008' }] }] }));
   const config = { identityDatabasePath: identityPath, identityPresetsFile: presetsPath } as PluginConfig;
-  const service = new PubgDomainService({ team: TEAM_WITH_USER_PROVIDED_ACCOUNT_ALIASES, repository: new SqlitePubgRepository(join(directory, 'pubg.sqlite')) });
+  const service = new PubgDomainService({ teamContext: ALIASED_TEAM_CONTEXT, repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(join(directory, 'pubg.sqlite')), ALIASED_TEAM_CONTEXT) });
   try {
     const prepared = await prepareIdentitySubject(service, config, { personIds: ['jiao'] }, toolContext(), 'telegram-account-alias-turn');
     assert.deepEqual(prepared, { playerIds: ['p1'] });
   } finally {
-    service.repository.db.close();
+    (service.repository as SqlitePubgRepositoryAdapter).sqlite.db.close();
     await rm(directory, { recursive: true, force: true });
   }
 });

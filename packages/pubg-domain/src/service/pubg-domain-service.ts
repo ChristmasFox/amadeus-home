@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { TeamConfig, TeamPlayer } from '../config/team.js';
+import { parseTeamContext, type TeamContext } from '../context/team-context.js';
 import type { Coverage, DataStatus, Evidence, SourceInfo } from '../schema/status.js';
 import type { CanonicalQuery, GroupBy, Metric, Selector } from '../schema/query.js';
 import { CanonicalQuerySchema } from '../schema/query.js';
 import type { NormalizedMatch, QueryRow, ResultSetRecord, StructuredResult } from '../data/model.js';
 import { DeterministicQueryEngine, resultSetFromResult } from '../engine/query-engine.js';
 import { PubgApiClient, PubgApiError } from '../data/pubg-api-client.js';
-import { SqlitePubgRepository, type TelemetryPrefetchRun } from '../storage/sqlite-repository.js';
+import type { PubgRepositoryPort, SyncState, TelemetryPrefetchRun } from '../storage/repository-port.js';
 import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry.js';
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
@@ -199,7 +200,7 @@ function asFiniteDate(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function sourceForLocal(records: NormalizedMatch[], now: Date, state: ReturnType<SqlitePubgRepository['getSyncState']>): SourceInfo {
+function sourceForLocal(records: NormalizedMatch[], now: Date, state: SyncState | null): SourceInfo {
   if (state) return { ...state.source, localMatchCount: records.length };
   return {
     store: 'sqlite',
@@ -210,7 +211,7 @@ function sourceForLocal(records: NormalizedMatch[], now: Date, state: ReturnType
   };
 }
 
-function coverageForLocal(records: NormalizedMatch[], now: Date, state: ReturnType<SqlitePubgRepository['getSyncState']>): Coverage {
+function coverageForLocal(records: NormalizedMatch[], now: Date, state: SyncState | null): Coverage {
   if (state) {
     const coverage = { ...state.coverage, checkedAt: state.checkedAt, availableMatchCount: records.length };
     return coverage.status === 'SOURCE_UNAVAILABLE' && records.length > 0
@@ -489,8 +490,8 @@ function resultEnvelope(result: StructuredResult, query: CanonicalQuery, resultS
 }
 
 export interface PubgDomainServiceOptions {
-  team: TeamConfig;
-  repository: SqlitePubgRepository;
+  teamContext: TeamContext;
+  repository: PubgRepositoryPort;
   apiClient?: PubgApiClient;
   telemetryWorker?: TelemetryWorker;
   timezone?: string;
@@ -501,8 +502,8 @@ export interface PubgDomainServiceOptions {
 }
 
 export class PubgDomainService {
-  readonly team: TeamConfig;
-  readonly repository: SqlitePubgRepository;
+  readonly teamContext: TeamContext;
+  readonly repository: PubgRepositoryPort;
   private readonly apiClient: PubgApiClient | undefined;
   private readonly telemetryWorker: TelemetryWorker;
   private readonly timezone: string;
@@ -514,7 +515,10 @@ export class PubgDomainService {
   private prefetchInFlight: Promise<ToolEnvelope> | undefined;
 
   constructor(options: PubgDomainServiceOptions) {
-    this.team = options.team;
+    this.teamContext = parseTeamContext(options.teamContext);
+    if (options.repository.scope.tenantId !== this.teamContext.tenantId || options.repository.scope.teamId !== this.teamContext.teamId) {
+      throw new Error('repository_scope_mismatch');
+    }
     this.repository = options.repository;
     const apiClient = options.apiClient;
     this.apiClient = apiClient;
@@ -529,17 +533,21 @@ export class PubgDomainService {
       ...(apiClient ? { downloader: new PubgApiTelemetryDownloader({ apiKey: apiClient.apiKey, baseUrl: apiClient.baseUrl }) } : {}),
     });
     this.queryEngine = new DeterministicQueryEngine({
-      team: this.team,
+      teamContext: this.teamContext,
       timezone: this.timezone,
       businessDayStart: this.businessDayStart,
       now: this.now(),
     });
   }
 
+  get team(): TeamConfig {
+    return this.teamContext.team;
+  }
+
   private async refresh(refresh = true, maxMatches = 500, signal?: AbortSignal): Promise<{ records: NormalizedMatch[]; coverage: Coverage; source: SourceInfo; diagnostics: Record<string, unknown>; newMatchIds: string[] }> {
     const now = this.now();
-    const existing = this.repository.listMatches();
-    const state = this.repository.getSyncState('team:' + this.team.id);
+    const existing = await this.repository.listMatches();
+    const state = await this.repository.getSyncState('team:' + this.team.id);
     const stateChecked = state ? Date.parse(state.checkedAt) : Number.NaN;
     if (!refresh && state && Number.isFinite(stateChecked) && now.getTime() - stateChecked < this.freshnessMs) {
       return { records: existing, coverage: coverageForLocal(existing, now, state), source: sourceForLocal(existing, now, state), diagnostics: { refreshed: false, reason: 'fresh_cache' }, newMatchIds: [] };
@@ -551,9 +559,9 @@ export class PubgDomainService {
       ...(signal ? { signal } : {}),
     });
     if (synced.records.length) {
-      this.repository.upsertMatches(synced.records, { source: 'pubg-api', fetchedAt: now.toISOString(), checkedPlayerIds: this.team.players.map((player) => player.id) });
+      await this.repository.upsertMatches(synced.records, { source: 'pubg-api', fetchedAt: now.toISOString(), checkedPlayerIds: this.team.players.map((player) => player.id) });
     }
-    const merged = this.repository.listMatches();
+    const merged = await this.repository.listMatches();
     const coverage = synced.coverage.status === 'SOURCE_UNAVAILABLE' && merged.length > 0
       ? staleCoverage(state?.coverage ?? synced.coverage, merged, now, synced.coverage.failedMatchIds)
       : coverageWithRecords(synced.coverage, merged, now);
@@ -566,7 +574,7 @@ export class PubgDomainService {
       failedMatchIds: coverage.failedMatchIds,
       ...(synced.source.error ? { error: synced.source.error } : {}),
     };
-    this.repository.setSyncState(stateValue);
+    await this.repository.setSyncState(stateValue);
     return {
       records: merged,
       coverage: stateValue.coverage,
@@ -648,18 +656,18 @@ export class PubgDomainService {
     const source = await this.refresh(input.refresh !== false || input.selector.type === 'last_n_matches', this.maxMatches, input.signal);
     let resultSetMatchIds: string[] | undefined;
     if (input.selector.type === 'result_set') {
-      const resultSet = this.repository.getResultSet(input.sessionId, input.selector.resultSetId, this.now());
+      const resultSet = await this.repository.getResultSet(input.sessionId, input.selector.resultSetId, this.now());
       if (!resultSet) return this.errorEnvelope('result_set_not_found_or_session_mismatch', false, 'result set is missing, expired, or belongs to another session');
       resultSetMatchIds = resultSet.matchIds;
     }
     const query = queryForStats(input, subject.ids, this.timezone, this.businessDayStart);
     const result = this.queryEngine.execute(query, source.records, source.coverage, source.source, {
-      team: this.team,
+      teamContext: this.teamContext,
       now: this.now(),
       ...(resultSetMatchIds ? { resultSetMatchIds } : {}),
     });
     const resultSet = resultSetFromResult(result, query, input.sessionId, PUBG_RESULT_SET_TTL_MS);
-    this.repository.setResultSet(resultSet);
+    await this.repository.setResultSet(resultSet);
     return resultEnvelope(result, query, resultSet.id);
   }
 
@@ -668,9 +676,9 @@ export class PubgDomainService {
     if (subject.error) return this.errorEnvelope(subject.error.code, subject.error.retryable, subject.error.reason);
     const source = await this.refresh(input.refresh !== false, this.maxMatches, input.signal);
     const query = queryForCompare(input, subject.ids, this.timezone, this.businessDayStart);
-    const result = this.queryEngine.execute(query, source.records, source.coverage, source.source, { team: this.team, now: this.now() });
+    const result = this.queryEngine.execute(query, source.records, source.coverage, source.source, { teamContext: this.teamContext, now: this.now() });
     const resultSet = resultSetFromResult(result, query, input.sessionId, PUBG_RESULT_SET_TTL_MS);
-    this.repository.setResultSet(resultSet);
+    await this.repository.setResultSet(resultSet);
     return resultEnvelope(result, query, resultSet.id);
   }
 
@@ -771,7 +779,7 @@ export class PubgDomainService {
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + PUBG_RESULT_SET_TTL_MS).toISOString(),
     };
-    this.repository.setResultSet(resultSet);
+    await this.repository.setResultSet(resultSet);
     const usableCachedCoverage = ['STALE', 'PARTIAL', 'COVERAGE_GAP'].includes(source.coverage.status);
     const status: ToolStatus = rows.length
       ? (source.coverage.status === 'OK' ? 'ok' : 'partial')
@@ -811,20 +819,21 @@ export class PubgDomainService {
       parserVersion: this.telemetryWorker.parserVersion,
       featureVersion: this.telemetryWorker.featureVersion,
     };
-    const retryCandidates = this.repository.listDueTelemetryPrefetchAttempts(key.parserVersion, key.featureVersion, started, 1000);
+    const retryCandidates = await this.repository.listDueTelemetryPrefetchAttempts(key.parserVersion, key.featureVersion, started, 1000);
     const candidateIds = [...new Set([
       ...source.newMatchIds,
       ...retryCandidates.map((attempt) => attempt.matchId),
     ])];
-    const candidateMatches = candidateIds.flatMap((matchId) => {
-      const match = this.repository.getMatch(matchId);
-      return match ? [match] : [];
-    });
+    const candidateMatches: NormalizedMatch[] = [];
+    for (const matchId of candidateIds) {
+      const match = await this.repository.getMatch(matchId);
+      if (match) candidateMatches.push(match);
+    }
     const selected = candidateMatches.slice(0, maxFetches);
     const deferred = candidateMatches.slice(maxFetches);
     for (const match of deferred) {
-      const previous = this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: match.matchId });
-      this.repository.setTelemetryPrefetchAttempt({
+      const previous = await this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: match.matchId });
+      await this.repository.setTelemetryPrefetchAttempt({
         matchId: match.matchId,
         ...key,
         status: 'PENDING',
@@ -844,7 +853,7 @@ export class PubgDomainService {
     let unavailableCount = 0;
     const unavailableIds: string[] = [];
     for (const outcome of outcomes) {
-      const previous = this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: outcome.matchId });
+      const previous = await this.repository.getTelemetryPrefetchAttempt({ ...key, matchId: outcome.matchId });
       const result = outcome.result;
       if (result.status === 'FETCHED') fetchedCount += 1;
       else if (result.status === 'HIT') cacheHitCount += 1;
@@ -855,7 +864,7 @@ export class PubgDomainService {
       const attemptCount = result.status === 'UNAVAILABLE'
         ? (previous?.attemptCount ?? 0) + 1
         : (previous?.attemptCount ?? 0);
-      this.repository.setTelemetryPrefetchAttempt({
+      await this.repository.setTelemetryPrefetchAttempt({
         matchId: outcome.matchId,
         ...key,
         status: result.status === 'FETCHED' ? 'FETCHED' : result.status,
@@ -886,7 +895,7 @@ export class PubgDomainService {
       pendingCount: deferred.length + unavailableCount,
       failedMatchIds,
     };
-    this.repository.recordTelemetryPrefetchRun(run);
+    await this.repository.recordTelemetryPrefetchRun(run);
     const status: ToolStatus = source.coverage.status === 'SOURCE_UNAVAILABLE' || run.unavailableCount > 0 || run.pendingCount > 0
       ? 'partial'
       : 'ok';
@@ -931,17 +940,21 @@ export class PubgDomainService {
     if (!/^\d{4}-\d{2}-\d{2}$/u.test(reportDate) || !Number.isFinite(Date.parse(`${reportDate}T00:00:00Z`))) {
       return this.errorEnvelope('invalid_report_date', false, 'reportDate must be YYYY-MM-DD');
     }
-    const runs = this.repository.listTelemetryPrefetchRuns(reportDate);
+    const runs = await this.repository.listTelemetryPrefetchRuns(reportDate);
     const summary = summarizePrefetchRuns(reportDate, this.timezone, runs);
     const asOf = summary.lastRunAt ?? now.toISOString();
     const status: ToolStatus = summary.unavailableCount || summary.pendingCount || summary.failedMatchIds.length ? 'partial' : 'ok';
+    const [matches, syncState] = await Promise.all([
+      this.repository.listMatches(),
+      this.repository.getSyncState('team:' + this.team.id),
+    ]);
     return {
       status,
       data: {
         summary,
         runs,
       },
-      coverage: coverageForLocal(this.repository.listMatches(), now, this.repository.getSyncState('team:' + this.team.id)),
+      coverage: coverageForLocal(matches, now, syncState),
       asOf,
       metricVersion: PUBGMETRIC_VERSION,
       queryResolved: {
@@ -960,16 +973,22 @@ export class PubgDomainService {
   }
 
   async getMatch(input: GetMatchInput): Promise<ToolEnvelope> {
-    let match = this.repository.getMatch(input.matchId);
-    let source: SourceInfo = { store: 'sqlite', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: this.repository.countMatches() };
-    let coverage = coverageForLocal(this.repository.listMatches(), this.now(), this.repository.getSyncState('team:' + this.team.id));
+    let match = await this.repository.getMatch(input.matchId);
+    const [initialCount, initialMatches, initialState] = await Promise.all([
+      this.repository.countMatches(),
+      this.repository.listMatches(),
+      this.repository.getSyncState('team:' + this.team.id),
+    ]);
+    let source: SourceInfo = { store: 'sqlite', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: initialCount };
+    let coverage = coverageForLocal(initialMatches, this.now(), initialState);
     if (!match && input.refresh !== false && this.apiClient) {
       try {
         const fetched = await this.apiClient.getMatch(this.team.platform, input.matchId, this.team, input.signal);
-        this.repository.upsertMatches([fetched], { source: 'pubg-api', fetchedAt: this.now().toISOString(), checkedPlayerIds: this.team.players.map((player) => player.id) });
+        await this.repository.upsertMatches([fetched], { source: 'pubg-api', fetchedAt: this.now().toISOString(), checkedPlayerIds: this.team.players.map((player) => player.id) });
         match = fetched;
-        source = { store: 'pubg-api', syncInvoked: true, playerApiCalls: 0, matchApiCalls: 1, localMatchCount: this.repository.countMatches() };
-        coverage = coverageForLocal(this.repository.listMatches(), this.now(), null);
+        const [matchCount, matches] = await Promise.all([this.repository.countMatches(), this.repository.listMatches()]);
+        source = { store: 'pubg-api', syncInvoked: true, playerApiCalls: 0, matchApiCalls: 1, localMatchCount: matchCount };
+        coverage = coverageForLocal(matches, this.now(), null);
       } catch (error) {
         const apiError = error instanceof PubgApiError;
         return this.errorEnvelope(apiError ? error.code : 'match_fetch_failed', apiError ? error.retryable : true, error instanceof Error ? error.message : 'match fetch failed');
@@ -1019,7 +1038,7 @@ export class PubgDomainService {
   }
 
   async getReviewFacts(input: GetReviewFactsInput): Promise<ToolEnvelope> {
-    const searchResultSet = this.repository.getResultSet(input.sessionId, input.searchResultSetId, this.now());
+    const searchResultSet = await this.repository.getResultSet(input.sessionId, input.searchResultSetId, this.now());
     const searchCreatedAt = searchResultSet ? Date.parse(searchResultSet.createdAt) : Number.NaN;
     const searchAge = Number.isFinite(searchCreatedAt) ? this.now().getTime() - searchCreatedAt : Number.POSITIVE_INFINITY;
     if (!searchResultSet || !searchResultSet.source.syncInvoked || searchAge < 0 || searchAge > PUBG_REVIEW_SEARCH_MAX_AGE_MS) {
@@ -1032,7 +1051,7 @@ export class PubgDomainService {
     if (!searchResultSet.matchIds.includes(input.matchId)) {
       return this.errorEnvelope('match_not_in_search_result', false, input.matchId);
     }
-    const match = this.repository.getMatch(input.matchId);
+    const match = await this.repository.getMatch(input.matchId);
     if (!match) {
       const result = await this.getMatch({
         sessionId: input.sessionId,
@@ -1042,7 +1061,7 @@ export class PubgDomainService {
       });
       if (result.status === 'error') return result;
     }
-    const target = this.repository.getMatch(input.matchId);
+    const target = await this.repository.getMatch(input.matchId);
     if (!target) return this.errorEnvelope('match_not_found', false, input.matchId);
     const telemetry = await this.telemetryWorker.ensure(target, 1, input.signal);
     const fullFacts = input.playerIds?.length
@@ -1067,10 +1086,14 @@ export class PubgDomainService {
     };
     const status: ToolStatus = telemetry.status === 'UNAVAILABLE' ? 'partial' : facts.fightIntegrity.pass ? 'ok' : 'partial';
     const sourceRange = searchResultSet ? sourceRangeFromSelector(searchResultSet.resolvedSelector) : null;
+    const [allMatches, syncState] = await Promise.all([
+      this.repository.listMatches(),
+      this.repository.getSyncState('team:' + this.team.id),
+    ]);
     const result: ToolEnvelope = {
       status,
       data: { facts: sanitize(facts), telemetry: sanitize(review.telemetry), derivedAnalysis: sanitize(analysis) },
-      coverage: coverageForLocal(this.repository.listMatches(), this.now(), this.repository.getSyncState('team:' + this.team.id)),
+      coverage: coverageForLocal(allMatches, this.now(), syncState),
       asOf: this.now().toISOString(),
       metricVersion: PUBGMETRIC_VERSION,
       queryResolved: {
@@ -1089,7 +1112,7 @@ export class PubgDomainService {
 
   async getPeriodReview(input: GetPeriodReviewInput): Promise<ToolEnvelope> {
     const now = this.now();
-    const searchResultSet = this.repository.getResultSet(input.sessionId, input.searchResultSetId, now);
+    const searchResultSet = await this.repository.getResultSet(input.sessionId, input.searchResultSetId, now);
     const searchCreatedAt = searchResultSet ? Date.parse(searchResultSet.createdAt) : Number.NaN;
     const searchAge = Number.isFinite(searchCreatedAt) ? now.getTime() - searchCreatedAt : Number.POSITIVE_INFINITY;
     if (!searchResultSet || !searchResultSet.source.syncInvoked || searchAge < 0 || searchAge > PUBG_REVIEW_SEARCH_MAX_AGE_MS) {
@@ -1103,6 +1126,7 @@ export class PubgDomainService {
     const sourceRange = sourceRangeFromSelector(searchResultSet.resolvedSelector);
     const orderedMatchIds = [...searchResultSet.matchIds];
     const reviews: Array<Record<string, unknown>> = [];
+    const selectedMatches = new Map<string, NormalizedMatch>();
     for (const matchId of orderedMatchIds) {
       const review = await this.getReviewFacts({
         sessionId: input.sessionId,
@@ -1112,7 +1136,8 @@ export class PubgDomainService {
         ...(input.categories?.length ? { categories: input.categories } : {}),
         ...(input.signal ? { signal: input.signal } : {}),
       });
-      const match = this.repository.getMatch(matchId);
+      const match = await this.repository.getMatch(matchId);
+      if (match) selectedMatches.set(matchId, match);
       reviews.push({
         matchId,
         status: review.status,
@@ -1142,7 +1167,7 @@ export class PubgDomainService {
         },
         reviews,
         matches: orderedMatchIds.map((matchId) => {
-          const match = this.repository.getMatch(matchId);
+          const match = selectedMatches.get(matchId);
           return match ? {
             matchId,
             startedAt: match.createdAt,

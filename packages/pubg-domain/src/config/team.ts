@@ -14,7 +14,7 @@ export interface TeamConfig {
   players: TeamPlayer[];
 }
 
-function assertTeamConfig(value: unknown): TeamConfig {
+export function assertTeamConfig(value: unknown): TeamConfig {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid_team_config');
   const candidate = value as Record<string, unknown>;
   const players = Array.isArray(candidate.players) ? candidate.players : [];

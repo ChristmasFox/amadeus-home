@@ -4,21 +4,80 @@
 
 | 路径 | 责任 | 运行边界 |
 | --- | --- | --- |
-| `plugins/pubg` | PUBG 原生 plugin、六个工具、bundled Skill | OpenClaw 进程内 |
+| `plugins/pubg` | PUBG 原生 plugin、确定性工具、bundled Skill | 私有 OpenClaw 进程内 |
 | `plugins/amadeus` | Amadeus 原生工具、VPS 通知、owner outbox worker | OpenClaw 进程内 |
-| `packages/pubg-domain` | PUBG API、SQLite、查询/比较和 Telemetry facts | 被 PUBG plugin 直接调用 |
+| `packages/pubg-domain` | PUBG API、确定性统计/查询/Telemetry domain | 被独立 plugin/app 构建并调用 |
 | `apps/product-radar` | 商品监控、匹配、watch scheduler 和事件 outbox | 独立 CasaOS app |
 | `integrations/openclaw` | 脱敏 config、workspace、Codex hook | CasaOS OpenClaw |
-| `infra/docker/casaos/openclaw` | 固定镜像和 OpenClaw Compose 模板 | OrbStack `ubuntu` |
-| `infra/docker/casaos/product-radar` | Product Radar Compose 模板 | OrbStack `ubuntu` |
+| `infra/docker/casaos/openclaw` | 固定镜像和 OpenClaw Compose 模板 | OrbStack CasaOS |
+| `infra/docker/casaos/product-radar` | Product Radar Compose 模板 | OrbStack CasaOS |
 | `infra/macos` | NAS 宿主机命令 | macOS SSH target |
-| `scripts/deploy-openclaw.sh` | 预检、备份、选择性构建、切换和验收 | `--apply --build-auto`；全量才用 `--build` |
+| `scripts/deploy-openclaw.sh` | 预检、备份、选择性构建、切换和验收 | 显式 `--apply` |
 
-## 请求路径
+## Existing private PUBG request path
 
-自然语言只由 OpenClaw 规划。plugin 通过结构化 tool 调用 Domain 或明确的外部服务；
-Domain 不读取聊天、不做关键词路由、不生成平台消息。Telegram/WhatsApp 是入口，主动
-通知只通过 WhatsApp owner outbox。
+```text
+OpenClaw native channel event
+  -> plugins/pubg (trusted channel/identity adapter and native tool schemas)
+  -> packages/identity (private canonical Person/account bindings)
+  -> packages/pubg-domain (PUBG API client, deterministic query/review logic)
+  -> private SQLite match, telemetry-feature, sync, result-set and context data
+  -> packages/presentation (validated contracts/renderers)
+```
+
+The private plugin owns OpenClaw integration, external team/API-key path
+resolution, and the one configured private PUBG team. The Domain owns
+platform-neutral match normalization, query/stat calculations, PUBG time
+selectors, telemetry analysis, evidence references and coverage/unknown states.
+The SQLite repository owns private persistence. `packages/identity` has its own
+private SQLite store and is not a public SaaS user registry.
+
+## Public KOOK PUBG target boundary
+
+The selected Goal adds a separate `apps/pubg-saas` application and
+`infra/pubg-saas` deployment unit. KOOK transport and verified event metadata,
+tenant/team authorization, public identity, AI planning, public PostgreSQL and
+the public ingestion worker belong to that application/deployment. The public
+application may depend on a built `packages/pubg-domain` artifact, but it must
+not call the private plugin, OpenClaw, private SQLite, private identity store,
+private worker, private credentials or household-only service endpoints.
+
+The initial P0 inventory found that neither `apps/pubg-saas` nor
+`infra/pubg-saas` existed. P1 has since added a generic async
+`PubgRepositoryPort` and a scope-pinned SQLite adapter for private use. The
+public deployment, Postgres schema/adapter and KOOK adapter remain
+implementation work. See the Goal's phase gates before describing any of them
+as ready.
+
+## Request paths and guardrails
+
+自然语言只由 OpenClaw 为私有 runtime 规划；公共应用的自然语言入口由其 AI SDK
+planner 处理。两边通过结构化应用调用共享 Domain；Domain 不读取聊天、不做关键词路由、
+不生成平台消息。私有主动通知只通过 WhatsApp owner outbox。
+
+- Public requests need a trusted scope resolved by the KOOK application from a
+  verified gateway event and persisted ownership. LLM output and caller-supplied
+  tenant/team IDs are not authorization.
+- `TeamContext` carries tenant ID, team ID and the validated team roster.
+  `PubgDomainService` checks that its repository adapter is pinned to the same
+  scope. Public callers still need the KOOK application to derive this context
+  after authorization; the Domain does not authenticate platform users.
+- The private plugin continues to resolve its one protected team and
+  `@agent/identity` accounts at its own boundary. It must not gain a public DB
+  or depend on a public service.
+- Both deployment images embed their own pinned build of the shared Domain;
+  source reuse does not imply shared runtime state or synchronized releases.
+- Synthetic parity evidence lives in
+  `packages/pubg-domain/tests/fixtures/shared-domain-golden.json` and its test.
+  It locks a deterministic query result; public-adapter parity remains unproven
+  until a public adapter exists and passes the same fixture.
+- The shared service now awaits its repository operations. The existing private
+  OpenClaw tool contracts continue to pass through the SQLite adapter; a
+  PostgreSQL-backed implementation and multi-tenant authorization tests are
+  pending.
+- The P0 source inventory was taken from `main` at `3f4cac2` on 2026-10-13.
+  The bounded `listMatches` child-row query and its SQLite plan regression test
+  were added during P0/P1 execution; they do not change or inspect live data.
 
 ## 修改映射
 

@@ -7,10 +7,13 @@ import test from 'node:test';
 import {
   DeterministicQueryEngine,
   BUSINESS_DAY_START,
+  createTeamContext,
+  parseTeamContext,
   PubgApiClient,
   PubgApiError,
   PubgDomainService,
   SqlitePubgRepository,
+  SqlitePubgRepositoryAdapter,
   TelemetryWorker,
   businessDayLabel,
   extractMatchReviewFacts,
@@ -41,6 +44,7 @@ const TEAM: TeamConfig = {
     { id: 'p2', name: 'Bob', aliases: ['b'] },
   ],
 };
+const TEAM_CONTEXT = createTeamContext('test-tenant', TEAM);
 
 const SOURCE = { store: 'fixture', syncInvoked: false, playerApiCalls: 0, matchApiCalls: 0, localMatchCount: 3 };
 const COVERAGE: Coverage = {
@@ -187,7 +191,7 @@ test('normalization deduplicates match IDs and preserves unknown death semantics
 });
 
 test('query engine uses half-open time ranges, zero-safe KD, missing assists, and category grouping', () => {
-  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const engine = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, now: new Date('2026-09-17T00:00:00.000Z') });
   const result = engine.execute(query(), RAW_RECORDS, COVERAGE, SOURCE);
   assert.equal(result.status, 'OK');
   assert.equal(result.evidence.matchIds.includes('m3'), false);
@@ -203,6 +207,37 @@ test('query engine uses half-open time ranges, zero-safe KD, missing assists, an
   assert.deepEqual(mapResult.data.rows.map((row) => row.label), ['Erangel', 'Taego']);
   const modeResult = engine.execute(query({ groupBy: 'mode' }), RAW_RECORDS, COVERAGE, SOURCE);
   assert.deepEqual(modeResult.data.rows.map((row) => row.label), ['squad-fpp', 'duo-fpp']);
+});
+
+test('shared domain golden preserves synthetic private/public stat parity', () => {
+  const golden = JSON.parse(readFileSync(new URL('./fixtures/shared-domain-golden.json', import.meta.url), 'utf8')) as {
+    contract: string;
+    syntheticMatchIdsInRange: string[];
+    expectedPlayers: Array<Record<string, string | number | null>>;
+  };
+  assert.equal(golden.contract, 'pubg-query-v1');
+  const result = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, now: new Date('2026-09-17T00:00:00.000Z') })
+    .execute(query(), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.equal(result.status, 'OK');
+  assert.deepEqual(result.evidence.matchIds, golden.syntheticMatchIdsInRange);
+  assert.deepEqual(result.data.rows.map((row) => {
+    const expected = golden.expectedPlayers.find((item) => item.key === row.key)!;
+    return Object.fromEntries(Object.keys(expected).filter((key) => key !== 'key').map((key) => [key, row.metrics[key] ?? null]).concat([['key', row.key]]));
+  }), golden.expectedPlayers);
+});
+
+test('query engine requires an explicit scoped team context', () => {
+  const result = new DeterministicQueryEngine().execute(query(), RAW_RECORDS, COVERAGE, SOURCE);
+  assert.equal(result.status, 'INVALID_QUERY');
+  assert.deepEqual(result.diagnostics.errors, ['TEAM_CONTEXT_REQUIRED']);
+  assert.deepEqual(result.evidence.playerIds, []);
+  assert.throws(() => parseTeamContext({ tenantId: 'tenant-a', teamId: 'other-team', team: TEAM }), /invalid_team_context/);
+});
+
+test('domain service rejects a repository bound to another tenant scope', () => {
+  const repository = new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(), createTeamContext('other-tenant', TEAM));
+  assert.throws(() => new PubgDomainService({ teamContext: TEAM_CONTEXT, repository }), /repository_scope_mismatch/);
+  repository.sqlite.close();
 });
 
 test('business-day labels handle cross-midnight boundaries in Asia/Shanghai', () => {
@@ -249,7 +284,7 @@ test('day grouping honors the selector business-day boundary', () => {
   const records = normalizeRecords([rawMatch('boundary', '2026-09-18T21:00:00.000Z', [
     { accountId: 'p1', playerName: 'Alice', kills: 1, deaths: 1, damage: 10, rank: 5 },
   ])]);
-  const engine = new DeterministicQueryEngine({ team: TEAM, timezone: 'Asia/Shanghai', businessDayStart: '00:00' });
+  const engine = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, timezone: 'Asia/Shanghai', businessDayStart: '00:00' });
   const result = engine.execute(query({
     subject: { type: 'player', ids: ['p1'] },
     selector: {
@@ -265,7 +300,7 @@ test('day grouping honors the selector business-day boundary', () => {
 });
 
 test('unknown metrics stay out of ranking and performance scoring', () => {
-  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const engine = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, now: new Date('2026-09-17T00:00:00.000Z') });
   const ranked = engine.execute(query({ operation: 'rank', orderBy: { metric: 'kd', direction: 'desc' } }), RAW_RECORDS, COVERAGE, SOURCE);
   const bob = ranked.data.rows.find((row) => row.key === 'p2')!;
   assert.equal(bob.metrics.kd, null);
@@ -275,7 +310,7 @@ test('unknown metrics stay out of ranking and performance scoring', () => {
 });
 
 test('compare emits null ratios when a denominator is zero and never serializes Infinity or NaN', () => {
-  const engine = new DeterministicQueryEngine({ team: TEAM, now: new Date('2026-09-17T00:00:00.000Z') });
+  const engine = new DeterministicQueryEngine({ teamContext: TEAM_CONTEXT, now: new Date('2026-09-17T00:00:00.000Z') });
   const compared = engine.execute(query({
     operation: 'compare',
     segments: [
@@ -384,8 +419,8 @@ test('recent PUBG searches force fresh discovery and reuse cached details when n
     });
     const repository = new SqlitePubgRepository(dbPath);
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       now: () => new Date('2026-09-19T00:00:00.000Z'),
     });
@@ -430,8 +465,8 @@ test('period searches default to chronological order while recent searches stay 
       },
     });
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       now: () => new Date('2026-09-19T00:30:00.000Z'),
     });
@@ -483,8 +518,8 @@ test('relative-period match search uses the 06:00 business day and review requir
       downloader: { async download() { return { events: [] }; } },
     });
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       telemetryWorker: worker,
       now: () => currentNow,
@@ -563,8 +598,8 @@ test('period review consumes the fresh search result set in Domain order and pre
       },
     });
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       telemetryWorker: worker,
       now: () => new Date('2026-09-19T00:30:00.000Z'),
@@ -644,8 +679,8 @@ test('period team-damage query resolves aliases, aggregates every Telemetry matc
   });
   try {
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       telemetryWorker: worker,
       now: () => new Date('2026-09-19T00:30:00.000Z'),
     });
@@ -706,8 +741,8 @@ test('period team-damage query resolves aliases, aggregates every Telemetry matc
 
     const unavailableWorker = new TelemetryWorker({ team: TEAM, store: repository, featureVersion: 'unavailable-team-damage-test' });
     const unavailableService = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       telemetryWorker: unavailableWorker,
       now: () => new Date('2026-09-19T00:30:00.000Z'),
     });
@@ -788,8 +823,8 @@ test('hourly telemetry prefetch only fetches new matches, persists retry state, 
       downloader: { async download() { return { events: [] }; } },
     });
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       telemetryWorker: worker,
       now: () => currentNow,
@@ -833,8 +868,8 @@ test('cached PUBG records become stale partial data when discovery is unavailabl
       fetchImpl: async () => { throw new Error('offline'); },
     });
     const service = new PubgDomainService({
-      team: TEAM,
-      repository,
+      teamContext: TEAM_CONTEXT,
+      repository: new SqlitePubgRepositoryAdapter(repository, TEAM_CONTEXT),
       apiClient: client,
       now: () => new Date('2026-09-19T00:00:00.000Z'),
     });
@@ -880,6 +915,39 @@ test('SQLite repository survives restart, counts duplicate inputs, and isolates 
     second.close();
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SQLite listMatches loads players only for the selected match window', () => {
+  const repository = new SqlitePubgRepository();
+  try {
+    repository.upsertMatches(Array.from({ length: 40 }, (_, index) => rawMatch(
+      `perf-${index}`,
+      new Date(Date.UTC(2026, 8, 1, 0, index)).toISOString(),
+      ['a', 'b', 'c'].map((player) => ({ accountId: `${player}-${index}`, kills: index })),
+    )));
+
+    const selected = repository.listMatches({ fromMs: Date.parse('2026-09-01T00:10:00.000Z'), toMs: Date.parse('2026-09-01T00:11:00.000Z'), limit: 5 });
+    assert.equal(selected.length, 1);
+    assert.equal(selected[0]?.matchId, 'perf-10');
+    assert.deepEqual(selected[0]?.players.map((player) => player.accountId), ['a-10', 'b-10', 'c-10']);
+
+    const plan = repository.db.prepare(`
+      EXPLAIN QUERY PLAN
+      WITH selected_matches AS (
+        SELECT match_id, timestamp_ms FROM matches
+        WHERE timestamp_ms >= ? AND timestamp_ms < ?
+        ORDER BY timestamp_ms ASC, match_id ASC LIMIT ?
+      )
+      SELECT player.* FROM selected_matches AS selected
+      JOIN match_players AS player ON player.match_id = selected.match_id
+      ORDER BY selected.timestamp_ms ASC, selected.match_id ASC, player.account_id ASC
+    `).all(Date.parse('2026-09-01T00:10:00.000Z'), Date.parse('2026-09-01T00:11:00.000Z'), 5);
+    const details = plan.map((row) => String(row.detail ?? '')).join('\n');
+    assert.match(details, /SEARCH player USING/);
+    assert.doesNotMatch(details, /SCAN player/);
+  } finally {
+    repository.close();
   }
 });
 

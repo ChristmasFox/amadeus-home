@@ -1,0 +1,29 @@
+{
+  "contract": "pubg-query-v1",
+  "syntheticMatchIdsInRange": ["m1", "m2"],
+  "expectedPlayers": [
+    {
+      "key": "p1",
+      "matches": 2,
+      "kills": 6,
+      "assists": 3,
+      "damage": 180,
+      "deaths": 3,
+      "kd": 2,
+      "wins": 0,
+      "top10": 2
+    },
+    {
+      "key": "p2",
+      "matches": 2,
+      "kills": 4,
+      "assists": 0,
+      "damage": 60,
+      "deaths": 0,
+      "kd": null,
+      "denominatorZero": 1,
+      "wins": 1,
+      "top10": 2
+    }
+  ]
+}

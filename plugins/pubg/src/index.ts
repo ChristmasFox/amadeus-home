@@ -19,6 +19,8 @@ import {
   PubgApiError,
   PubgDomainService,
   SqlitePubgRepository,
+  SqlitePubgRepositoryAdapter,
+  createTeamContext,
   loadTeamConfig,
   type CompareToolInput,
   type GetMatchInput,
@@ -365,9 +367,10 @@ function makeService(config: PluginConfig): PubgDomainService {
   const apiClient = apiKey
     ? new PubgApiClient({ apiKey, ...(apiBaseUrl ? { baseUrl: apiBaseUrl } : {}) })
     : undefined;
+  const teamContext = createTeamContext('private', team);
   return new PubgDomainService({
-    team,
-    repository: new SqlitePubgRepository(databasePath),
+    teamContext,
+    repository: new SqlitePubgRepositoryAdapter(new SqlitePubgRepository(databasePath), teamContext),
     ...(apiClient ? { apiClient } : {}),
     ...(configString(config, 'timezone', 'PUBG_TIMEZONE') ? { timezone: configString(config, 'timezone', 'PUBG_TIMEZONE') } : {}),
     ...(configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') ? { businessDayStart: configString(config, 'businessDayStart', 'PUBG_BUSINESS_DAY_START') } : {}),

@@ -1,6 +1,24 @@
-# Current Task — Public Qwen Image Lab deployment
+# Current Task — PUBG KOOK SaaS V0.1 source implementation
 
-Date: 2026-10-10 (Asia/Shanghai).
+Date: 2026-10-13 (Asia/Shanghai).
+
+## Operator-selected source implementation Goal — 2026-10-13
+
+The operator explicitly activated `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this
+worktree. Continue its phases while preserving the separate Image Lab/runtime
+work recorded below; this activation does not authorize deploy, external
+exposure, cloud provisioning, production credentials, private OpenClaw restart,
+or 9Router administration.
+
+P0 is complete: the baseline was clean at `3f4cac2`; the initial workflow plan
+selected FAST; the public/private dependency map and synthetic stat golden are
+recorded; no runtime was changed. P1 is in progress: the query engine now
+requires explicit `TeamContext`; the async `PubgRepositoryPort` is implemented
+with a scope-pinned SQLite adapter; `listMatches` limits player-row reads to
+the selected match window. `pnpm build:pubg`, `pnpm typecheck:pubg` and
+`pnpm test:pubg` pass (59 tests). Public app/Compose/Postgres/KOOK components,
+Postgres scope tests and independent-deployment drills remain unimplemented.
+Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

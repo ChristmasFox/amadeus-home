@@ -126,15 +126,15 @@ elif ((has_openclaw_deploy)); then
 elif ((has_router)); then
   LEVEL=RELEASE; WORKFLOW=ROUTER_RELEASE_CONFIG
   COMPOSE_MODE='explicit --apply: 9Router compose up -d --no-build after checkpoint'
+elif ((has_pubg || has_identity || has_amadeus)); then
+  LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
+  if ((has_identity || has_amadeus)) && ((has_pubg == 0)); then WORKFLOW=AMADEUS_IDENTITY; fi
 elif ((has_storage || has_backup)); then
   LEVEL=FAST; WORKFLOW=STORAGE_RUNTIME
   COMPOSE_MODE='none'
 elif ((has_skuld_docs)); then
   LEVEL=FAST; WORKFLOW=SKULD_CONSISTENCY
   COMPOSE_MODE='none'
-elif ((has_pubg || has_identity || has_amadeus)); then
-  LEVEL=RUNTIME; WORKFLOW=PUBG_DOMAIN_PLUGIN
-  if ((has_identity || has_amadeus)) && ((has_pubg == 0)); then WORKFLOW=AMADEUS_IDENTITY; fi
 elif ((has_presentation)); then
   LEVEL=RUNTIME; WORKFLOW=PRESENTATION
 elif ((has_product)); then

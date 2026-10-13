@@ -12,3 +12,17 @@ node --test scripts/test-init-pubg-team.mjs
 ```
 
 详见 [Community PUBG Setup](../../docs/COMMUNITY_PUBG_SETUP.md)。API key、WhatsApp pairing 数据、真实队伍 ID 和其他凭据不得进入 Git。旧 Python V2 和 Runtime 只在 Git 历史中保留，不继续维护第二套实现。
+
+## Tenant scope and repository ports
+
+Query execution requires an explicit `TeamContext` containing the tenant ID,
+team ID, and validated roster. The caller must resolve that scope before
+entering the Domain; missing or mismatched scope fails closed. Public
+authorization remains the application's responsibility.
+
+`PubgDomainService` depends on the asynchronous `PubgRepositoryPort`. The
+private OpenClaw adapter wraps its existing SQLite repository in
+`SqlitePubgRepositoryAdapter`, pinned to the configured private scope. Public
+PostgreSQL persistence is a separate adapter and is not implemented yet.
+Both adapters must preserve the same `ToolEnvelope`, evidence, coverage,
+partial/unknown and temporal contracts.

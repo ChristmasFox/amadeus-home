@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TeamConfig } from '../config/team.js';
-import { DEFAULT_TEAM } from '../config/team.js';
+import { parseTeamContext, type TeamContext } from '../context/team-context.js';
 import type { CanonicalQuery, GroupBy, Metric, Selector } from '../schema/query.js';
 import { CanonicalQuerySchema } from '../schema/query.js';
 import type { Coverage, DataStatus, Evidence, SourceInfo } from '../schema/status.js';
@@ -10,7 +10,7 @@ import { CHICKEN_INDEX_WEIGHTS, normalizeChickenIndexWeights, type ChickenIndexW
 import { BUSINESS_DAY_START, DEFAULT_TIMEZONE, businessDayLabel, describeRange, resolveQuerySelectors, resolveSelector, type ResolverOptions } from '../time/selector-resolver.js';
 
 export interface QueryEngineOptions extends ResolverOptions {
-  team?: TeamConfig;
+  teamContext?: TeamContext;
   resultSetMatchIds?: string[];
   chickenIndexWeights?: Partial<ChickenIndexWeights>;
 }
@@ -430,7 +430,14 @@ export class DeterministicQueryEngine {
     if (query.reference.unsupportedCapability) return this.invalid(query.queryId, sessionId, 'UNSUPPORTED_CAPABILITY', [query.reference.unsupportedCapability], coverage, source);
     const mergedOptions = { ...this.defaults, ...options };
     const resolved = resolveQuerySelectors(query, mergedOptions);
-    const team = mergedOptions.team ?? DEFAULT_TEAM;
+    if (!mergedOptions.teamContext) return this.invalid(query.queryId, sessionId, 'INVALID_QUERY', ['TEAM_CONTEXT_REQUIRED'], coverage, source);
+    let teamContext: TeamContext;
+    try {
+      teamContext = parseTeamContext(mergedOptions.teamContext);
+    } catch {
+      return this.invalid(query.queryId, sessionId, 'INVALID_QUERY', ['TEAM_CONTEXT_INVALID'], coverage, source);
+    }
+    const team = teamContext.team;
     const ids = playerIdsForSubject(resolved, team);
     const knownIds = new Set(team.players.map((player) => player.id));
     const unknown = resolved.subject.type !== 'team' ? ids.filter((id) => !knownIds.has(id)) : [];
