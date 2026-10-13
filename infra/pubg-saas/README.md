@@ -224,3 +224,14 @@ PUBG's developer FAQ currently describes 10 requests/minute as a
 testing/development default only. A launch key needs an approved higher limit
 based on the documented use; no live API-rate compliance or launch quota is
 claimed by the synthetic benchmark. See the [PUBG Developer FAQ](https://developer.pubg.com/faq).
+
+At the Goal's optional baseline of 200 teams × 30 user queries/team/day, one
+reply per query would require up to 6,000 locally reserved sends/day. The
+current 200-send default and the published unverified per-bot allowance cannot
+support that workload. Verified-account eligibility and an allocated share
+under the published 10,000/day account aggregate are required; sibling bots,
+management replies and other outbound events consume that same share. KOOK's
+first-reply discount may reduce the platform's actual debit, but the SaaS
+intentionally reserves a full local slot and does not rely on that discount.
+This is quota arithmetic from the stated workload, not a live eligibility or
+API-capacity result.

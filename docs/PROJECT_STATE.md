@@ -83,6 +83,13 @@ default, with a higher limit requested for launch. The synthetic worker and
 rate compliance has been established. Official sources and operational notes
 are in `infra/pubg-saas/README.md`.
 
+At the optional 200-team × 30-query/day workload, one bot response per query
+means up to 6,000 reserved sends/day before management traffic. This exceeds
+the current 200-send default and unverified bot allowance. A verified account
+would need to allocate this bot a safe share of the published 10,000/day
+developer-account total; other bots and events reduce the available share.
+The reservation logic does not assume KOOK's first-reply discount.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as

@@ -119,6 +119,11 @@ budget is conservative but does not observe sibling-bot usage. PUBG documents
 10 requests/minute for testing/development only; launch requires an approved
 higher limit. Official-account eligibility, shared quota allocation and the
 PUBG launch-key limit remain unverified; no provider credentials were used.
+At the optional 200 teams × 30 queries/team/day baseline, one response per
+query is up to 6,000 local send reservations/day. That exceeds the 200 default
+and the published unverified per-bot allowance; a verified account and a
+reserved share of the 10,000/day developer-account total are needed, subject
+to sibling-bot use and KOOK's first-reply discount. This is arithmetic only.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ### M204 current-host Compose and recovery acceptance — 2026-10-14

@@ -1548,6 +1548,13 @@ PUBG's official FAQ states its 10-requests/minute default is for
 testing/development and says a higher rate should be requested before launch.
 The M204/VM load runs used a synthetic fetch adapter and did not contact PUBG;
 no key eligibility, live headers or launch rate compliance is claimed. The
+Goal's optional 200 teams × 30 queries/team/day would produce up to 6,000
+locally reserved sends/day if each query receives one reply, before management
+traffic. This exceeds the current 200 default and published unverified bot
+allowance. A verified account must reserve a safe share of the 10,000/day
+developer-account aggregate; sibling-bot traffic reduces that share. The
+application reserves a full slot per send rather than relying on the KOOK
+first-reply discount. This is scenario arithmetic, not an account acceptance.
 sources are [KOOK message quotas](https://developer.kookapp.cn/doc/http/message),
 [KOOK developer policy](https://developer.kookapp.cn/doc/privacy),
 [KOOK rate-limit headers](https://developer.kookapp.cn/doc/rate-limit), and
