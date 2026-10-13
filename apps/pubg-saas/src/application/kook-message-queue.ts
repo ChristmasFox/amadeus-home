@@ -23,10 +23,12 @@ export interface QueuedReply {
 }
 
 export interface KookOutboxJob {
-  tenantId: string;
-  teamId: string;
+  tenantId: string | null;
+  teamId: string | null;
   botAccountId: string;
-  channelId: string;
+  channelId: string | null;
+  targetKind: 'channel' | 'direct';
+  targetId: string;
   sourceEventId: string | null;
   outboxId: string;
   idempotencyKey: string;
@@ -39,6 +41,7 @@ export type OutboxDeliveryResult = 'empty' | 'sent' | 'retry' | 'dead';
 
 export interface KookGroupMessageSender {
   send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
+  sendDirect?(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
 }
 
 export interface KookMessageQueueOptions {
@@ -50,7 +53,7 @@ export interface KookMessageQueueOptions {
   random?: () => number;
 }
 
-interface TransactionClient extends PoolClient {}
+interface TransactionClient extends PoolClient { }
 
 async function inTransaction<T>(pool: Pool, work: (client: TransactionClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
@@ -74,11 +77,11 @@ function requiredText(value: string, key: string, maxLength = 256): string {
   return normalized;
 }
 
-function payloadValue(value: unknown): KookTextPayload {
+export function validateKookMessagePayload(value: unknown): KookTextPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('kook_payload_invalid');
   const payload = value as Record<string, unknown>;
   if ((payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card') || typeof payload.content !== 'string'
-    || !payload.content.trim() || payload.content.length > 8192) {
+    || !payload.content.trim() || payload.content.length > 8000) {
     throw new Error('kook_payload_invalid');
   }
   if (payload.type === 'card') {
@@ -107,9 +110,9 @@ function safeErrorCode(error: unknown): string {
 
 function parseJobPayload(value: unknown): KookTextPayload {
   if (typeof value === 'string') {
-    try { return payloadValue(JSON.parse(value)); } catch { throw new Error('kook_outbox_payload_invalid'); }
+    try { return validateKookMessagePayload(JSON.parse(value)); } catch { throw new Error('kook_outbox_payload_invalid'); }
   }
-  try { return payloadValue(value); } catch { throw new Error('kook_outbox_payload_invalid'); }
+  try { return validateKookMessagePayload(value); } catch { throw new Error('kook_outbox_payload_invalid'); }
 }
 
 /** Durable, tenant-scoped inbox dedupe and at-least-once group reply delivery.
@@ -174,7 +177,7 @@ export class KookMessageQueue {
 
   async enqueueReply(event: TrustedKookGroupMessage, payloadInput: unknown, part = 0): Promise<QueuedReply> {
     if (event.botAccountId !== this.botAccountId) throw new Error('kook_bot_scope_mismatch');
-    const payload = payloadValue(payloadInput);
+    const payload = validateKookMessagePayload(payloadInput);
     if (!Number.isSafeInteger(part) || part < 0 || part > 9) throw new Error('kook_reply_part_invalid');
     const key = idempotencyKey(event, part);
     const result = await inTransaction(this.pool, async (client) => {
@@ -197,9 +200,9 @@ export class KookMessageQueue {
       );
       if (!binding.rowCount) throw new Error('kook_reply_destination_unbound');
       const inserted = await client.query(
-         `INSERT INTO message_outbox(
-           outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,source_event_id,payload_json,status
-         ) VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8::jsonb,'pending')
+        `INSERT INTO message_outbox(
+           outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,target_id,source_event_id,payload_json,status
+         ) VALUES ($1,$2,'kook',$3,$4,$5,$6,$6,$7,$8::jsonb,'pending')
          ON CONFLICT (idempotency_key) DO NOTHING
          RETURNING outbox_id`,
         [randomUUID(), key, event.botAccountId, row.tenant_id, row.team_id, row.channel_id, event.messageId, JSON.stringify(payload)],
@@ -236,7 +239,8 @@ export class KookMessageQueue {
        FROM candidate
        WHERE message.outbox_id=candidate.outbox_id
        RETURNING message.outbox_id,message.idempotency_key,message.tenant_id,message.team_id,
-                 message.bot_account_id,message.channel_id,message.source_event_id,message.attempt_count,message.payload_json`,
+                 message.bot_account_id,message.channel_id,message.target_kind,message.target_id,
+                 message.source_event_id,message.attempt_count,message.payload_json`,
       [leaseToken, this.leaseMs, this.botAccountId],
     );
     const row = result.rows[0];
@@ -244,10 +248,12 @@ export class KookMessageQueue {
     return {
       outboxId: String(row.outbox_id),
       idempotencyKey: String(row.idempotency_key),
-      tenantId: String(row.tenant_id),
-      teamId: String(row.team_id),
+      tenantId: typeof row.tenant_id === 'string' ? row.tenant_id : null,
+      teamId: typeof row.team_id === 'string' ? row.team_id : null,
       botAccountId: String(row.bot_account_id),
-      channelId: String(row.channel_id),
+      channelId: typeof row.channel_id === 'string' ? row.channel_id : null,
+      targetKind: row.target_kind === 'direct' ? 'direct' : 'channel',
+      targetId: typeof row.target_id === 'string' && row.target_id ? row.target_id : String(row.channel_id),
       sourceEventId: typeof row.source_event_id === 'string' ? row.source_event_id : null,
       leaseToken,
       attemptCount: Number(row.attempt_count),
@@ -304,7 +310,27 @@ export class KookMessageQueue {
     const job = await this.claimNextOutbox();
     if (!job) return 'empty';
     try {
-      await sender.send(job.channelId, job.payload, job.idempotencyKey, job.sourceEventId);
+      if (job.targetKind === 'channel' && job.tenantId && job.teamId) {
+        const current = await this.pool.query(
+          `SELECT 1 FROM channel_bindings WHERE tenant_id=$1 AND team_id=$2
+           AND platform='kook' AND bot_account_id=$3 AND channel_id=$4`,
+          [job.tenantId, job.teamId, job.botAccountId, job.targetId],
+        );
+        if (!current.rowCount) {
+          await this.pool.query(
+            `UPDATE message_outbox SET status='dead',payload_json='{}'::jsonb,
+             lease_token=NULL,lease_until=NULL,last_error_code='destination_unbound'
+             WHERE outbox_id=$1 AND lease_token=$2`, [job.outboxId, job.leaseToken],
+          );
+          return 'dead';
+        }
+      }
+      if (job.targetKind === 'direct') {
+        if (!sender.sendDirect) throw Object.assign(new Error('direct_sender_unavailable'), { code: 'direct_sender_unavailable' });
+        await sender.sendDirect(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+      } else {
+        await sender.send(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+      }
       await this.markSent(job);
       return 'sent';
     } catch (error) {
@@ -315,10 +341,10 @@ export class KookMessageQueue {
   async pruneRetainedRecords(before: Date): Promise<{ inboxDeleted: number; outboxDeleted: number }> {
     if (!(before instanceof Date) || !Number.isFinite(before.getTime())) throw new Error('kook_retention_cutoff_invalid');
     return inTransaction(this.pool, async (client) => {
-      const inbox = await client.query('DELETE FROM message_inbox WHERE received_at < $1', [before]);
+      const inbox = await client.query('DELETE FROM message_inbox WHERE received_at < $1 AND bot_account_id=$2', [before, this.botAccountId]);
       const outbox = await client.query(
-        `DELETE FROM message_outbox WHERE created_at < $1 AND status IN ('sent','dead')`,
-        [before],
+        `DELETE FROM message_outbox WHERE created_at < $1 AND status IN ('sent','dead') AND bot_account_id=$2`,
+        [before, this.botAccountId],
       );
       return { inboxDeleted: inbox.rowCount ?? 0, outboxDeleted: outbox.rowCount ?? 0 };
     });

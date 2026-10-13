@@ -156,6 +156,28 @@ test('gateway processes events in sn order and resumes from the last durably han
   await run;
 });
 
+test('gateway bounds queued frames and waits for the in-flight durable write during shutdown', async () => {
+  const state = new MemoryGatewayStateStore(); const socket = new FakeSocket();
+  let unblock: () => void = () => { }; let entered = false; let finished = false;
+  const blocked = new Promise<void>(resolve => { unblock = resolve; });
+  const errors: string[] = []; const abort = new AbortController();
+  const client = new KookGatewayClient({
+    botAccountId: 'fixture-bot', gatewayUrlProvider: { async getGatewayUrl() { return 'wss://gateway.kookapp.cn/gateway?compress=0'; } },
+    stateStore: state, socketFactory: () => socket, maxBufferedEvents: 2, reconnectBaseMs: 10_000,
+    async handleEvent() { entered = true; await blocked; }, onError: code => errors.push(code),
+  });
+  const run = client.run(abort.signal).then(() => { finished = true; });
+  await new Promise(resolve => setTimeout(resolve, 1));
+  socket.open(); socket.frame({ s: 1, d: { code: 0, session_id: 'bounded-session' } });
+  await waitFor(() => state.state?.sessionId === 'bounded-session', 'hello');
+  socket.frame({ s: 0, sn: 1, d: { content: 'one' } });
+  await waitFor(() => entered, 'blocked durable handler');
+  socket.frame({ s: 0, sn: 2, d: { content: 'two' } }); socket.frame({ s: 0, sn: 3, d: { content: 'three' } });
+  await waitFor(() => errors.includes('kook_gateway_frame_queue_overflow'), 'bounded frame queue');
+  abort.abort(); await new Promise(resolve => setTimeout(resolve, 10)); assert.equal(finished, false);
+  unblock(); await run; assert.equal(state.state?.lastSn, 1);
+});
+
 test('gateway heartbeat waits for pong and reconnect signal discards only session sequence state', async () => {
   const stateStore = new MemoryGatewayStateStore();
   const sockets: FakeSocket[] = [];
@@ -167,7 +189,7 @@ test('gateway heartbeat waits for pong and reconnect signal discards only sessio
     },
     stateStore,
     socketFactory(url) { urls.push(url); const socket = new FakeSocket(); sockets.push(socket); return socket; },
-    async handleEvent() {},
+    async handleEvent() { },
     heartbeatIntervalMs: 10,
     heartbeatJitterMs: 0,
     pongTimeoutMs: 100,

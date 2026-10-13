@@ -9,3 +9,7 @@ export * from './channels/kook/gateway.js';
 export * from './channels/kook/message-client.js';
 export * from './channels/kook/trusted-button-event.js';
 export * from './channels/kook/confirmation-card.js';
+export * from './channels/kook/request-event.js';
+export * from './application/kook-ingress-queue.js';
+export * from './kook-runtime.js';
+export * from './application/kook-management-handler.js';

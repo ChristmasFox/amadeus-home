@@ -41,7 +41,7 @@ export interface KookGatewaySocket {
 export type KookGatewaySocketFactory = (url: string) => KookGatewaySocket;
 
 export interface KookWebSocketConstructor {
-  new (url: string): KookGatewaySocket;
+  new(url: string): KookGatewaySocket;
 }
 
 /** Uses Node 22's built-in WebSocket without adding a runtime package. Tests
@@ -105,7 +105,7 @@ function gatewayUrl(value: unknown): URL {
 }
 
 function parseFrame(value: unknown): GatewayFrame {
-  if (typeof value !== 'string') throw new Error('kook_gateway_frame_invalid');
+  if (typeof value !== 'string' || value.length > 64 * 1024) throw new Error('kook_gateway_frame_invalid');
   let parsed: unknown;
   try { parsed = JSON.parse(value); } catch { throw new Error('kook_gateway_frame_invalid'); }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('kook_gateway_frame_invalid');
@@ -192,7 +192,7 @@ export class KookGatewayApiClient implements KookGatewayUrlProvider {
 
 /** Durable resume sequence state, scoped to the configured KOOK bot identity. */
 export class PostgresKookGatewayStateStore implements KookGatewayStateStore {
-  constructor(private readonly pool: Pool) {}
+  constructor(private readonly pool: Pool) { }
 
   async load(botAccountId: string): Promise<KookGatewaySessionState | null> {
     const result = await this.pool.query('SELECT session_id,last_sn FROM kook_gateway_state WHERE bot_account_id=$1', [requiredText(botAccountId, 'bot_account_id', 128)]);
@@ -287,6 +287,7 @@ export class KookGatewayClient {
       let lastSn = priorState.lastSn;
       let resumeRequestedForSn: number | null = null;
       let messageChain = Promise.resolve();
+      let queuedFrames = 0;
       const pending = new Map<number, unknown>();
       let helloTimer: ReturnType<typeof setTimeout> | undefined;
       let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
@@ -302,9 +303,10 @@ export class KookGatewayClient {
         settled = true;
         clearTimers();
         signal?.removeEventListener('abort', onAbort);
-        if (code) this.options.onError?.(code);
+        if (code) { try { this.options.onError?.(code); } catch { /* observation cannot block shutdown */ } }
         try { socket.close(); } catch { /* no further transport action */ }
-        resolve(exit);
+        // Drain any in-flight durable state write before the process closes PG.
+        void messageChain.finally(() => resolve(exit));
       };
       const onAbort = () => finish('aborted');
       const scheduleHeartbeat = () => {
@@ -402,11 +404,17 @@ export class KookGatewayClient {
         helloTimer = setTimeout(() => finish('closed', 'kook_gateway_hello_timeout'), this.helloTimeoutMs);
       });
       socket.addEventListener('message', (event) => {
-        messageChain = messageChain.then(() => handleFrame(event.data)).catch(() => finish('closed', 'kook_gateway_frame_processing_failed'));
+        if (settled) return;
+        if (queuedFrames >= this.maxBufferedEvents) { finish('closed', 'kook_gateway_frame_queue_overflow'); return; }
+        queuedFrames += 1;
+        messageChain = messageChain.then(() => handleFrame(event.data))
+          .catch(() => finish('closed', 'kook_gateway_frame_processing_failed'))
+          .finally(() => { queuedFrames -= 1; });
       });
       socket.addEventListener('error', () => finish('closed', 'kook_gateway_socket_error'));
       socket.addEventListener('close', () => finish(signal?.aborted ? 'aborted' : 'closed'));
       signal?.addEventListener('abort', onAbort, { once: true });
+      helloTimer = setTimeout(() => finish('closed', 'kook_gateway_connect_timeout'), this.helloTimeoutMs);
       if (signal?.aborted) onAbort();
     });
   }

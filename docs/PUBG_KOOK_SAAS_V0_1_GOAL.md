@@ -1,6 +1,6 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain and private SQLite adapter are in place; early P2 PostgreSQL persistence, trusted KOOK group/direct-message parsing, fresh guild-admin checks, transactional squad/channel/roster management, and self-declared account claims are implemented. P3 now has a fixture-driven gateway session core, Node WebSocket factory, bound-channel inbox/outbox queue, KOOK message REST client, and offline-tested one-use `return-val` confirmation cards/callbacks. Gateway process wiring, PUBG account lookup, parity, runtime packaging, real test guild and restore acceptance remain incomplete. Not deployed or accepted.
+> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain/private SQLite and early P2 PostgreSQL authorization/persistence are implemented. P3 has an executable source gateway with durable bounded ingress, leased processing, channel/DM outbox, management status/unbind/disband/unclaim handlers and exact-event confirmation recovery. Its 26-test offline suite passes with ephemeral PostgreSQL 18. Full onboarding UI, PUBG account lookup, Domain edge-case parity, AI/query/worker integration, runtime packaging, real test guild and restore acceptance remain incomplete. Not deployed or accepted.
 >
 > **Date:** 2026-10-13 (Asia/Shanghai)
 >
@@ -42,7 +42,7 @@ Current code anchors (recheck at execution):
 
 - `packages/pubg-domain/src/service/pubg-domain-service.ts`: now consumes async `PubgRepositoryPort` and a validated `TeamContext`; the private plugin creates its single `private` scope from external configuration.
 - `packages/pubg-domain/src/engine/query-engine.ts`: `DeterministicQueryEngine` requires a valid `teamContext` and returns `INVALID_QUERY` when it is missing or malformed; preserve stat math, evidence, time semantics and unknown/partial contracts.
-- `packages/pubg-domain/src/storage/sqlite-repository-adapter.ts`: adapts the existing private SQLite implementation to the async port and pins the adapter to its tenant/team scope. A public Postgres implementation is still pending.
+- `packages/pubg-domain/src/storage/sqlite-repository-adapter.ts`: adapts the existing private SQLite implementation to the async port and pins the adapter to its tenant/team scope. The public adapter is `apps/pubg-saas/src/infrastructure/postgres/pubg-repository.ts`; complete edge-case parity remains pending.
 - `packages/pubg-domain/src/storage/sqlite-repository.ts`: `listMatches` now selects player rows only for its selected matches; `SQLite listMatches loads players only for the selected match window` checks output and the query plan.
 - `plugins/pubg/src/index.ts`: `serviceFor` loads one external `PUBG_TEAM_CONFIG_FILE`, stores `pubg.sqlite`, uses `identity.sqlite`; these remain the *private* adapter, not the public tenant registry.
 - `plugins/pubg/src/adapters/openclaw.ts`: channels/trusted message context; DO NOT trust an arbitrary `sessionId` supplied in model tool args as the public auth/session boundary.

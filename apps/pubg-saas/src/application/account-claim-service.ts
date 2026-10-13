@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { TrustedKookButtonClick } from '../channels/kook/trusted-button-event.js';
 import type { TrustedKookDirectMessage } from '../channels/kook/trusted-group-event.js';
 
 export interface AccountClaimInput {
@@ -118,7 +119,7 @@ export class AccountClaimService {
         );
         if (!existing.rowCount) throw new Error('account_claim_not_found');
       }
-      await client.query("DELETE FROM pending_account_claims WHERE expires_at <= now() OR consumed_at < now() - interval '1 day'");
+      await client.query("DELETE FROM pending_account_claims WHERE (consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day'");
       const count = await client.query(
         `SELECT COUNT(*)::INTEGER AS count FROM pending_account_claims
          WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2 AND consumed_at IS NULL AND expires_at > now()`,
@@ -143,21 +144,45 @@ export class AccountClaimService {
   }
 
   async confirm(event: TrustedKookDirectMessage, tokenInput: string): Promise<ConfirmedAccountClaim> {
+    return this.confirmForActor(event, tokenInput, null);
+  }
+
+  async confirmFromButton(click: TrustedKookButtonClick): Promise<ConfirmedAccountClaim> {
+    return this.confirmForActor(click, click.value, click.eventId);
+  }
+
+  private async confirmForActor(event: { botAccountId: string; userId: string }, tokenInput: string, receiptEventId: string | null): Promise<ConfirmedAccountClaim> {
     const token = requiredText(tokenInput, 'confirmation_token', 64);
     if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error('account_claim_confirmation_unavailable');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const pending = await client.query(
-        `SELECT action,pubg_shard,pubg_account_id
+        `SELECT action,pubg_shard,pubg_account_id,consumed_at,consumed_event_id
          FROM pending_account_claims
          WHERE token_hash=$1 AND platform='kook' AND bot_account_id=$2 AND user_id=$3
-           AND expires_at > now() AND consumed_at IS NULL
+           AND ((expires_at > now() AND consumed_at IS NULL)
+             OR ($4::TEXT IS NOT NULL AND consumed_event_id=$4 AND consumed_at>now()-interval '1 day'))
          FOR UPDATE`,
-        [digest(token), event.botAccountId, event.userId],
+        [digest(token), event.botAccountId, event.userId, receiptEventId],
       );
       const row = pending.rows[0];
       if (!row) throw new Error('account_claim_confirmation_unavailable');
+
+      if (row.consumed_at) {
+        const result: ConfirmedAccountClaim = row.action === 'unclaim'
+          ? { kind: 'unclaim', removed: true }
+          : {
+            kind: 'claim',
+            claim: {
+              pubgShard: requiredText(row.pubg_shard, 'pubg_shard', 32),
+              pubgAccountId: requiredText(row.pubg_account_id, 'pubg_account_id'),
+              claimStatus: 'self_declared',
+            },
+          };
+        await client.query('COMMIT');
+        return result;
+      }
 
       let result: ConfirmedAccountClaim;
       if (row.action === 'claim') {
@@ -202,10 +227,10 @@ export class AccountClaimService {
 
       await client.query(
         `DELETE FROM pending_account_claims
-         WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2 AND token_hash<>$3`,
+         WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2 AND token_hash<>$3 AND consumed_at IS NULL`,
         [event.botAccountId, event.userId, digest(token)],
       );
-      await client.query('UPDATE pending_account_claims SET consumed_at=now() WHERE token_hash=$1', [digest(token)]);
+      await client.query('UPDATE pending_account_claims SET consumed_at=now(),consumed_event_id=$2 WHERE token_hash=$1', [digest(token), receiptEventId]);
       await client.query('COMMIT');
       return result;
     } catch (error) {

@@ -29,7 +29,26 @@ test('sends only group message fields to the fixed KOOK create endpoint', async 
   assert.equal(request.body.get('content'), 'hello squad');
   assert.equal(request.body.get('nonce'), 'a'.repeat(64));
   assert.equal(request.body.get('reply_msg_id'), 'source-message');
+  assert.equal(request.body.get('quote'), 'source-message');
   assert.equal(request.body.has('guild_id'), false);
+});
+
+test('private replies use only the fixed direct-message endpoint and the source actor', async () => {
+  let request: { url: string; body: URLSearchParams } | null = null;
+  const client = new KookMessageApiClient({
+    token: 'fixture-token', fetcher: async (url, init) => {
+      request = { url: String(url), body: init?.body as URLSearchParams };
+      return success({ msg_id: 'private-response' });
+    }
+  });
+  await client.sendDirect('source-actor', { type: 'text', content: 'account state' }, 'd'.repeat(64), 'source-dm');
+  assert.ok(request);
+  const captured = request as { url: string; body: URLSearchParams };
+  assert.equal(captured.url, 'https://www.kookapp.cn/api/v3/direct-message/create');
+  assert.equal(captured.body.get('target_id'), 'source-actor');
+  assert.equal(captured.body.get('quote'), 'source-dm');
+  assert.equal(captured.body.get('reply_msg_id'), 'source-dm');
+  assert.equal(captured.body.has('chat_code'), false);
 });
 
 test('maps KMarkdown and fails closed without exposing the bot token', async () => {

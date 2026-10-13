@@ -5,6 +5,7 @@ export interface TrustedKookButtonClick {
   platform: 'kook';
   botAccountId: string;
   userId: string;
+  eventId: string | null;
   sourceMessageId: string;
   sourceTargetId: string | null;
   value: string;
@@ -43,6 +44,7 @@ export function parseTrustedKookButtonClick(value: unknown, botAccountIdInput: s
     platform: 'kook',
     botAccountId,
     userId,
+    eventId: text(data.msg_id, 256),
     sourceMessageId,
     sourceTargetId,
     value: valueToken,

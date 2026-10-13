@@ -25,16 +25,21 @@ management with actor-bound one-use confirmations, and self-declared account
 claims with conflict-safe unclaim. Current P3 source includes a fixture-driven
 gateway session core (durable `session_id/sn`, ordering, heartbeat, resume and
 server reconnect reset), a Node WebSocket factory, bound-channel inbox dedupe
-and leased outbox retry, and a fixed KOOK group-message REST sender with reply
-correlation. One-use confirmation cards now use KOOK `return-val`; the callback
-parser resolves channel scope from the current binding, rechecks live guild
-admin, and rejects consumed or stale-channel actions. `pnpm test:pubg-saas`
-passed with ephemeral PostgreSQL 18 (19 SaaS tests), and
-`pnpm typecheck:pubg-saas` passed. This is source and offline-fixture progress,
-not P3 acceptance: gateway process/application wiring, an isolated test guild,
-PUBG account lookup, SQLite/Postgres edge-case parity,
-Compose/app runtime, and independent deployment/restore drills remain
-incomplete. No runtime or production credentials were touched.
+and leased outbox retry, and fixed KOOK channel/direct-message REST senders with
+visible quote and quota reply correlation. The executable source runtime now
+persists minimal addressed ingress before gateway acknowledgement, then runs
+leased business processing and outbox delivery. Team status/unbind/disband and
+private account status/unclaim are wired to deterministic handlers. One-use
+callbacks recheck authority and recover an exact event's committed receipt
+after a crash; new clicks cannot reuse it. Additive migration `0002` upgrades
+existing public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
+PostgreSQL 18 (26 SaaS tests), including private PUBG regression checks. This is
+source and offline-fixture progress; package build, both entry-point dry-runs,
+secrets scan and `git diff --check` also passed. P3 acceptance still requires
+full onboarding UI, PUBG account lookup and an isolated real test guild.
+SQLite/Postgres edge-case parity, ingestion worker/AI SDK, Compose deployment
+and independent restore drills also remain incomplete. No runtime or production
+credentials were touched.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

@@ -5,6 +5,7 @@ export interface ConfirmationCardInput {
   detail: string;
   confirmText: string;
   confirmationToken: string;
+  actionScope?: 'team' | 'claim';
 }
 
 function requiredText(value: string, key: string, maxLength: number): string {
@@ -36,7 +37,7 @@ export function createConfirmationCard(input: ConfirmationCardInput): KookTextPa
           theme: 'danger',
           text: { type: 'plain-text', content: confirmText },
           click: 'return-val',
-          value: token,
+          value: input.actionScope ? `${input.actionScope}:${token}` : token,
         }],
       },
     ],

@@ -304,7 +304,7 @@ export class TeamAdminService {
         const roster = new Set<string>([...members.rows.map((row) => String(row.pubg_account_id)), ...action.pubgAccountIds]);
         if (roster.size > 4) throw new Error('team_roster_limit_exceeded');
       }
-      await client.query("DELETE FROM pending_team_actions WHERE expires_at <= now() OR consumed_at < now() - interval '1 day'");
+      await client.query("DELETE FROM pending_team_actions WHERE (consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day'");
       const pendingCount = await client.query(
         `SELECT COUNT(*)::INTEGER AS count FROM pending_team_actions
          WHERE tenant_id=$1 AND team_id=$2 AND actor_user_id=$3 AND consumed_at IS NULL AND expires_at > now()`,
@@ -334,19 +334,16 @@ export class TeamAdminService {
     return this.confirmTeamActionForActor(event, tokenInput);
   }
 
-  /** Resolves the callback's source channel back to a currently bound guild,
-   * then rechecks live guild admin before consuming the same one-use token. */
+  /** Resolves the token's actor/channel scope and rechecks live guild admin.
+   * Exact event redeliveries recover receipts, including after unbind/disband. */
   async confirmTeamActionFromButton(click: TrustedKookButtonClick): Promise<ConfirmedTeamAction> {
     const channelId = click.sourceTargetId;
     if (!channelId) throw new Error('team_action_confirmation_unavailable');
+    if (!/^[A-Za-z0-9_-]{43}$/u.test(click.value)) throw new Error('team_action_confirmation_unavailable');
     const result = await this.pool.query(
-      `SELECT tenant.guild_id
-       FROM tenants tenant
-       JOIN channel_bindings binding
-         ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform
-        AND binding.bot_account_id=tenant.bot_account_id
-       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND binding.channel_id=$2`,
-      [click.botAccountId, channelId],
+      `SELECT guild_id FROM pending_team_actions WHERE platform='kook' AND bot_account_id=$1
+       AND channel_id=$2 AND token_hash=$3`,
+      [click.botAccountId, channelId, tokenDigest(click.value)],
     );
     const guildId = result.rows[0]?.guild_id;
     if (typeof guildId !== 'string' || !guildId) throw new Error('team_action_confirmation_unavailable');
@@ -358,37 +355,45 @@ export class TeamAdminService {
       channelId,
     };
     await this.requireFreshGuildAdmin(actor);
-    return this.confirmTeamActionForActor(actor, click.value);
+    return this.confirmTeamActionForActor(actor, click.value, click.eventId);
   }
 
-  private async confirmTeamActionForActor(event: TeamConfirmationActor, tokenInput: string): Promise<ConfirmedTeamAction> {
+  private async confirmTeamActionForActor(event: TeamConfirmationActor, tokenInput: string, receiptEventId: string | null = null): Promise<ConfirmedTeamAction> {
     const token = requiredText(tokenInput, 'confirmation_token', 64);
     if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error('team_action_confirmation_unavailable');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const pending = await client.query(
-        `SELECT pending.action, pending.payload_json, pending.tenant_id, pending.team_id
+        `SELECT pending.action, pending.payload_json, pending.tenant_id, pending.team_id,pending.consumed_at,pending.consumed_event_id
          FROM pending_team_actions pending
-         JOIN channel_bindings binding
-           ON binding.tenant_id=pending.tenant_id AND binding.team_id=pending.team_id
-          AND binding.platform=pending.platform AND binding.bot_account_id=pending.bot_account_id
-          AND binding.channel_id=pending.channel_id
          WHERE pending.token_hash=$1 AND pending.platform='kook' AND pending.bot_account_id=$2 AND pending.guild_id=$3
            AND pending.actor_user_id=$4 AND pending.channel_id=$5
-           AND pending.expires_at > now() AND pending.consumed_at IS NULL
+           AND ((pending.expires_at > now() AND pending.consumed_at IS NULL)
+             OR ($6::TEXT IS NOT NULL AND pending.consumed_event_id=$6 AND pending.consumed_at>now()-interval '1 day'))
          FOR UPDATE OF pending`,
-        [tokenDigest(token), event.botAccountId, event.guildId, event.userId, event.channelId],
+        [tokenDigest(token), event.botAccountId, event.guildId, event.userId, event.channelId, receiptEventId],
       );
       const row = pending.rows[0];
       if (!row || typeof row.tenant_id !== 'string' || typeof row.team_id !== 'string') {
         throw new Error('team_action_confirmation_unavailable');
       }
       const team: TeamReference = { tenantId: row.tenant_id, teamId: row.team_id };
+      if (row.consumed_at) {
+        if (!['add_members', 'replace_roster', 'unbind_channel', 'disband_team'].includes(row.action)) throw new Error('team_action_confirmation_unavailable');
+        await client.query('COMMIT');
+        return { kind: row.action as ConfirmedTeamAction['kind'], team };
+      }
       const action = parsePendingAction({
         ...(row.payload_json as Record<string, unknown>),
         kind: row.action,
       });
+      const binding = await client.query(
+        `SELECT 1 FROM channel_bindings WHERE tenant_id=$1 AND team_id=$2 AND platform='kook'
+         AND bot_account_id=$3 AND channel_id=$4 FOR SHARE`,
+        [team.tenantId, team.teamId, event.botAccountId, event.channelId],
+      );
+      if (!binding.rowCount) throw new Error('team_action_confirmation_unavailable');
       const lockedTeam = await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [team.tenantId, team.teamId]);
       if (!lockedTeam.rowCount) throw new Error('team_action_confirmation_unavailable');
       await this.touchActor(client, event, team.tenantId);
@@ -457,7 +462,7 @@ export class TeamAdminService {
           if (unbound.rowCount !== 1) throw new Error('team_action_confirmation_unavailable');
           await client.query(
             `DELETE FROM pending_team_actions
-             WHERE tenant_id=$1 AND team_id=$2 AND bot_account_id=$3 AND channel_id=$4 AND token_hash<>$5`,
+             WHERE tenant_id=$1 AND team_id=$2 AND bot_account_id=$3 AND channel_id=$4 AND token_hash<>$5 AND consumed_at IS NULL`,
             [team.tenantId, team.teamId, event.botAccountId, event.channelId, tokenDigest(token)],
           );
           break;
@@ -477,7 +482,7 @@ export class TeamAdminService {
           await client.query('DELETE FROM telemetry_prefetch_runs WHERE tenant_id=$1 AND team_id=$2', [team.tenantId, team.teamId]);
           await client.query(
             `DELETE FROM pending_team_actions
-             WHERE tenant_id=$1 AND team_id=$2 AND token_hash<>$3`,
+             WHERE tenant_id=$1 AND team_id=$2 AND token_hash<>$3 AND consumed_at IS NULL`,
             [team.tenantId, team.teamId, tokenDigest(token)],
           );
           const disbanded = await client.query('DELETE FROM teams WHERE tenant_id=$1 AND team_id=$2', [team.tenantId, team.teamId]);
@@ -486,7 +491,7 @@ export class TeamAdminService {
         }
       }
 
-      await client.query('UPDATE pending_team_actions SET consumed_at=now() WHERE token_hash=$1', [tokenDigest(token)]);
+      await client.query("UPDATE pending_team_actions SET consumed_at=now(),consumed_event_id=$2,payload_json='{}'::jsonb WHERE token_hash=$1", [tokenDigest(token), receiptEventId]);
       await client.query('COMMIT');
       return { kind: action.kind, team };
     } catch (error) {

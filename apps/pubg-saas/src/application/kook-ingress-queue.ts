@@ -1,0 +1,248 @@
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
+import { parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
+import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
+export interface KookIngressJob {
+  botAccountId: string;
+  eventId: string;
+  leaseToken: string;
+  attemptCount: number;
+  request: KookRequestEvent;
+  boundTeam: {
+    tenantId: string;
+    teamId: string;
+  } | null;
+}
+export interface KookIngressQueueOptions {
+  botAccountId: string;
+  maxPending?: number;
+  maxPendingPerUser?: number;
+  payloadTtlMs?: number;
+  leaseMs?: number;
+  maxAttempts?: number;
+  baseRetryMs?: number;
+}
+export type KookIngressResult = 'ignored' | 'accepted' | 'duplicate';
+export type KookIngressProcessResult = 'empty' | 'done' | 'retry' | 'dead';
+export type KookRequestHandler = (job: KookIngressJob, signal: AbortSignal) => Promise<KookTextPayload | null>;
+async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  }
+  catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  }
+  finally {
+    client.release();
+  }
+}
+function errorCode(error: unknown): string {
+  if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+    && /^[a-z0-9_]{1,64}$/u.test(error.code))
+    return error.code;
+  return 'request_processing_failed';
+}
+/** The sole durable gateway ingress. It stages only addressed requests, pins
+ * any existing team binding, and atomically commits a reply plus completion.
+ * Business handlers must make their own state changes idempotent across retries. */
+export class KookIngressQueue {
+  private readonly botId: string;
+  private readonly maxPending: number;
+  private readonly maxPerUser: number;
+  private readonly ttlMs: number;
+  private readonly leaseMs: number;
+  private readonly maxAttempts: number;
+  private readonly baseRetryMs: number;
+  constructor(private readonly pool: Pool, options: KookIngressQueueOptions) {
+    this.botId = options.botAccountId.trim();
+    this.maxPending = options.maxPending ?? 1000;
+    this.maxPerUser = options.maxPendingPerUser ?? 20;
+    this.ttlMs = options.payloadTtlMs ?? 60 * 60000;
+    this.leaseMs = options.leaseMs ?? 30000;
+    this.maxAttempts = options.maxAttempts ?? 5;
+    this.baseRetryMs = options.baseRetryMs ?? 1000;
+    if (!this.botId || this.botId.length > 128 || !Number.isSafeInteger(this.maxPending) || this.maxPending < 1 || this.maxPending > 10000
+      || !Number.isSafeInteger(this.maxPerUser) || this.maxPerUser < 1 || this.maxPerUser > this.maxPending
+      || !Number.isSafeInteger(this.ttlMs) || this.ttlMs < 1000 || this.ttlMs > 24 * 60 * 60000
+      || !Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000 || this.leaseMs > 5 * 60000
+      || !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
+      || !Number.isSafeInteger(this.baseRetryMs) || this.baseRetryMs < 1 || this.baseRetryMs > 60000)
+      throw new Error('kook_ingress_limits_invalid');
+  }
+  async ingestGatewayEvent(data: unknown): Promise<KookIngressResult> {
+    const parsed = parseKookRequest(data, this.botId);
+    if (!parsed || parsed.timestamp < Date.now() - this.ttlMs || parsed.timestamp > Date.now() + 5 * 60000)
+      return 'ignored';
+    const serialized = JSON.stringify(parsed.envelope);
+    const fingerprint = createHash('sha256').update(serialized).digest('hex');
+    return transaction(this.pool, async (client) => {
+      // Serialize admission counts across all connections for this bot.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kook-ingress:${this.botId}`]);
+      const duplicate = await client.query('SELECT fingerprint FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2', [this.botId, parsed.eventId]);
+      if (duplicate.rowCount) {
+        if (duplicate.rows[0]?.fingerprint !== fingerprint)
+          throw new Error('kook_ingress_event_conflict');
+        return 'duplicate';
+      }
+      const count = await client.query(`SELECT COUNT(*)::INTEGER AS total, COUNT(*) FILTER (WHERE user_id=$2)::INTEGER AS actor
+         FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('pending','processing','retry') AND expires_at>now()`, [this.botId, parsed.userId]);
+      if (Number(count.rows[0]?.total) >= this.maxPending || Number(count.rows[0]?.actor) >= this.maxPerUser) {
+        throw new Error('kook_ingress_capacity_exceeded');
+      }
+      const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
+         ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+         WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
+      await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
+         tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'))`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
+      binding?.rows[0]?.tenant_id ?? null, binding?.rows[0]?.team_id ?? null, parsed.targetKind, parsed.targetId,
+      parsed.replyToMessageId, fingerprint, serialized, this.ttlMs]);
+      return 'accepted';
+    });
+  }
+  async claimNext(): Promise<KookIngressJob | null> {
+    const leaseToken = randomBytes(24).toString('base64url');
+    const result = await this.pool.query(`WITH candidate AS (
+         SELECT current.event_id FROM kook_ingress_events current
+         WHERE current.bot_account_id=$1 AND current.status IN ('pending','processing','retry') AND current.expires_at>now()
+           AND (current.next_attempt_at IS NULL OR current.next_attempt_at<=now())
+           AND (current.status<>'processing' OR current.lease_until<=now())
+           AND NOT EXISTS (
+             SELECT 1 FROM kook_ingress_events earlier WHERE earlier.bot_account_id=current.bot_account_id
+               AND earlier.user_id=current.user_id AND earlier.channel_id IS NOT DISTINCT FROM current.channel_id
+               AND earlier.status IN ('pending','processing','retry') AND earlier.expires_at>now()
+               AND (earlier.received_at,earlier.event_id)<(current.received_at,current.event_id)
+           )
+         ORDER BY current.received_at,current.event_id FOR UPDATE OF current SKIP LOCKED LIMIT 1
+       ) UPDATE kook_ingress_events event SET status='processing',lease_token=$2,
+         lease_until=now()+($3::BIGINT*interval '1 millisecond'),attempt_count=event.attempt_count+1
+       FROM candidate WHERE event.bot_account_id=$1 AND event.event_id=candidate.event_id RETURNING event.*`, [this.botId, leaseToken, this.leaseMs]);
+    const row = result.rows[0];
+    if (!row)
+      return null;
+    const stored = row.event_json as {
+      d?: unknown;
+    } | null;
+    const parsed = parseKookRequest(stored?.d, this.botId);
+    if (!parsed || parsed.eventId !== row.event_id || parsed.request.kind !== row.event_kind)
+      throw new Error('kook_ingress_payload_invalid');
+    return {
+      botAccountId: this.botId, eventId: String(row.event_id), leaseToken, attemptCount: Number(row.attempt_count), request: parsed.request,
+      boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
+    };
+  }
+  private async requireCurrentBinding(client: Pool | PoolClient, job: KookIngressJob): Promise<void> {
+    if (job.request.kind !== 'group')
+      return;
+    const event = job.request.event;
+    const current = await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
+       ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [job.botAccountId, event.guildId, event.channelId]);
+    const row = current.rows[0];
+    if (job.boundTeam ? row?.tenant_id !== job.boundTeam.tenantId || row?.team_id !== job.boundTeam.teamId : Boolean(row)) {
+      throw Object.assign(new Error('kook_ingress_binding_changed'), { code: 'kook_ingress_binding_changed' });
+    }
+  }
+  async complete(job: KookIngressJob, reply: KookTextPayload | null): Promise<void> {
+    if (job.botAccountId !== this.botId)
+      throw new Error('kook_bot_scope_mismatch');
+    const payload = reply === null ? null : validateKookMessagePayload(reply);
+    await transaction(this.pool, async (client) => {
+      const result = await client.query(`SELECT * FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2
+         AND status='processing' AND lease_token=$3 AND lease_until>now() AND expires_at>now() FOR UPDATE`, [this.botId, job.eventId, job.leaseToken]);
+      const row = result.rows[0];
+      if (!row)
+        throw new Error('kook_ingress_lease_lost');
+      const stored = row.event_json as {
+        d?: unknown;
+      };
+      const parsed = parseKookRequest(stored.d, this.botId);
+      if (!parsed)
+        throw new Error('kook_ingress_payload_invalid');
+      await this.requireCurrentBinding(client, {
+        ...job, request: parsed.request,
+        boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
+      });
+      if (payload) {
+        const key = createHash('sha256').update(`kook\0${this.botId}\0${job.eventId}\0reply`).digest('hex');
+        await client.query(`INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,
+           channel_id,target_kind,target_id,source_event_id,payload_json,status)
+           VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'pending') ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), key, this.botId, row.tenant_id, row.team_id, row.target_kind === 'channel' ? row.channel_id : null,
+        row.target_kind, row.target_id, row.reply_to_message_id, JSON.stringify(payload)]);
+      }
+      await client.query(`UPDATE kook_ingress_events SET status='done',event_json=NULL,lease_token=NULL,lease_until=NULL,
+         next_attempt_at=NULL,last_error_code=NULL,finished_at=now() WHERE bot_account_id=$1 AND event_id=$2`, [this.botId, job.eventId]);
+    });
+  }
+  async fail(job: KookIngressJob, error: unknown): Promise<'retry' | 'dead'> {
+    if (job.botAccountId !== this.botId)
+      throw new Error('kook_bot_scope_mismatch');
+    const code = errorCode(error);
+    return transaction(this.pool, async (client) => {
+      const result = await client.query(`SELECT attempt_count,expires_at FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2
+         AND status='processing' AND lease_token=$3 FOR UPDATE`, [this.botId, job.eventId, job.leaseToken]);
+      const row = result.rows[0];
+      if (!row)
+        throw new Error('kook_ingress_lease_lost');
+      const dead = Number(row.attempt_count) >= this.maxAttempts || new Date(row.expires_at).getTime() <= Date.now() || code === 'kook_ingress_binding_changed';
+      const retryMs = Math.min(60000, this.baseRetryMs * 2 ** Math.min(Number(row.attempt_count) - 1, 20));
+      await client.query(`UPDATE kook_ingress_events SET status=$4,lease_token=NULL,lease_until=NULL,last_error_code=$5,
+         next_attempt_at=CASE WHEN $4='retry' THEN now()+($6::BIGINT*interval '1 millisecond') ELSE NULL END,
+         event_json=CASE WHEN $4='dead' THEN NULL ELSE event_json END,
+         finished_at=CASE WHEN $4='dead' THEN now() ELSE NULL END WHERE bot_account_id=$1 AND event_id=$2 AND lease_token=$3`, [this.botId, job.eventId, job.leaseToken, dead ? 'dead' : 'retry', code, retryMs]);
+      return dead ? 'dead' : 'retry';
+    });
+  }
+  async processOne(handler: KookRequestHandler, signal: AbortSignal): Promise<KookIngressProcessResult> {
+    if (signal.aborted)
+      return 'empty';
+    const job = await this.claimNext();
+    if (!job)
+      return 'empty';
+    const abort = new AbortController();
+    const onAbort = () => abort.abort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    if (signal.aborted)
+      abort.abort();
+    let renewalPending = false;
+    const renewal = setInterval(() => {
+      if (renewalPending)
+        return;
+      renewalPending = true;
+      void this.pool.query(`UPDATE kook_ingress_events SET lease_until=now()+($4::BIGINT*interval '1 millisecond')
+         WHERE bot_account_id=$1 AND event_id=$2 AND lease_token=$3 AND status='processing' AND lease_until>now() AND expires_at>now()`, [this.botId, job.eventId, job.leaseToken, this.leaseMs]).then(result => {
+        if (!result.rowCount)
+          abort.abort();
+      }).catch(() => abort.abort()).finally(() => { renewalPending = false; });
+    }, Math.max(100, Math.floor(this.leaseMs / 3)));
+    try {
+      await this.requireCurrentBinding(this.pool, job);
+      const reply = await handler(job, abort.signal);
+      if (abort.signal.aborted)
+        throw new Error('kook_ingress_processing_aborted');
+      await this.complete(job, reply);
+      return 'done';
+    }
+    catch (error) {
+      return this.fail(job, error);
+    }
+    finally {
+      clearInterval(renewal);
+      signal.removeEventListener('abort', onAbort);
+    }
+  }
+  async prune(before: Date): Promise<void> {
+    if (!Number.isFinite(before.getTime()))
+      throw new Error('kook_retention_cutoff_invalid');
+    await this.pool.query(`UPDATE kook_ingress_events SET status='dead',event_json=NULL,lease_token=NULL,lease_until=NULL,
+       last_error_code='request_expired',finished_at=now() WHERE bot_account_id=$1 AND expires_at<=now() AND status IN ('pending','processing','retry')`, [this.botId]);
+    await this.pool.query("DELETE FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('done','dead') AND finished_at<$2", [this.botId, before]);
+    await this.pool.query("DELETE FROM pending_team_actions WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
+    await this.pool.query("DELETE FROM pending_account_claims WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
+  }
+}

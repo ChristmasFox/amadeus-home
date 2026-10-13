@@ -36,6 +36,8 @@ pnpm test:pubg
 pnpm build:pubg-saas
 pnpm typecheck:pubg-saas
 PUBG_SAAS_TEST_DATABASE_URL=postgresql://localhost:5432/pubg_saas_test pnpm test:pubg-saas
+node apps/pubg-saas/dist/src/gateway.js
+node apps/pubg-saas/dist/src/migrate-database.js
 pnpm check:architecture
 pnpm check:secrets
 git diff --check
@@ -45,6 +47,11 @@ git diff --check
 symbol. Public Postgres integration tests use an isolated database selected by
 `PUBG_SAAS_TEST_DATABASE_URL`; they never create or alter a non-test server by
 default. Docker builds, Compose changes, runtime restarts, KOOK credentials and
-external exposure remain outside source-phase validation. Fixture and local
-Postgres results do not establish live KOOK, quota, model-provider,
+external exposure remain outside source-phase validation.
+
+The two built entry-point smoke commands run without `--apply`: they connect to
+no service and apply no schema changes. SaaS integration coverage includes
+durable ingress/restart, actor ordering/admission bounds, callback mutation
+receipt recovery, prior-schema upgrades and fixture gateway-to-channel/DM
+delivery. Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
 backup/restore or 200-squad acceptance.

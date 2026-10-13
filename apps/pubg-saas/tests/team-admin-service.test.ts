@@ -134,8 +134,8 @@ test('team administration checks fresh privilege and scopes one-use confirmation
       [botId, `inbox-${suffix}`, disposable.tenantId, disposable.teamId, channelA3],
     );
     await pool.query(
-      `INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,payload_json,status)
-       VALUES ($1,$2,'kook',$3,$4,$5,$6,'{"content":"synthetic"}'::jsonb,'pending')`,
+      `INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,target_id,payload_json,status)
+       VALUES ($1,$2,'kook',$3,$4,$5,$6,$6,'{"content":"synthetic"}'::jsonb,'pending')`,
       [`outbox-${suffix}`, `outbox-key-${suffix}`, botId, disposable.tenantId, disposable.teamId, channelA3],
     );
     await pool.query(
@@ -180,8 +180,8 @@ test('team administration checks fresh privilege and scopes one-use confirmation
       [botId, `inbox-unbind-${suffix}`, unbindOnly.tenantId, unbindOnly.teamId, channelA4],
     );
     await pool.query(
-      `INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,payload_json,status)
-       VALUES ($1,$2,'kook',$3,$4,$5,$6,'{"content":"synthetic"}'::jsonb,'pending')`,
+      `INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,target_id,payload_json,status)
+       VALUES ($1,$2,'kook',$3,$4,$5,$6,$6,'{"content":"synthetic"}'::jsonb,'pending')`,
       [`outbox-unbind-${suffix}`, `outbox-unbind-key-${suffix}`, botId, unbindOnly.tenantId, unbindOnly.teamId, channelA4],
     );
     await pool.query(

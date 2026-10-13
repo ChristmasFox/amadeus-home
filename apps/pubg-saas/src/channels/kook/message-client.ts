@@ -1,4 +1,4 @@
-import type { KookGroupMessageSender, KookTextPayload } from '../../application/kook-message-queue.js';
+import { validateKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
 
 interface KookApiEnvelope {
   code: number;
@@ -29,13 +29,12 @@ function parseEnvelope(value: unknown): KookApiEnvelope {
   return { code: 0, ...(candidate.data !== undefined ? { data: candidate.data } : {}) };
 }
 
-/** Fixed official KOOK group-message endpoint. The caller supplies the
+/** Fixed official KOOK channel/direct-message endpoints. The caller supplies the
  * destination from the durable, trusted inbox row; payloads cannot choose it. */
 export class KookMessageApiClient implements KookGroupMessageSender {
   private readonly token: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
-  private readonly endpoint = 'https://www.kookapp.cn/api/v3/message/create';
 
   constructor(options: KookMessageApiClientOptions) {
     this.token = requiredText(options.token, 'token', 4096);
@@ -45,22 +44,32 @@ export class KookMessageApiClient implements KookGroupMessageSender {
   }
 
   async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
-    const channelId = requiredText(channelIdInput, 'channel_id', 128);
+    return this.sendTo('message', channelIdInput, payload, nonceInput, replyToMessageId);
+  }
+
+  async sendDirect(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void> {
+    return this.sendTo('direct-message', userId, payload, nonce, replyToMessageId);
+  }
+
+  private async sendTo(kind: 'message' | 'direct-message', targetIdInput: string, payloadInput: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
+    const targetId = requiredText(targetIdInput, 'target_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
-    if (!payload || (payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card')
-      || typeof payload.content !== 'string' || !payload.content.trim() || payload.content.length > 8000) {
-      throw codedError('kook_message_payload_invalid');
-    }
+    let payload: KookTextPayload;
+    try { payload = validateKookMessagePayload(payloadInput); } catch { throw codedError('kook_message_payload_invalid'); }
     const body = new URLSearchParams({
-      target_id: channelId,
+      target_id: targetId,
       type: payload.type === 'text' ? '1' : payload.type === 'kmarkdown' ? '9' : '10',
       content: payload.content,
       nonce,
     });
-    if (replyToMessageId) body.set('reply_msg_id', requiredText(replyToMessageId, 'reply_message_id', 256));
+    if (replyToMessageId) {
+      const messageId = requiredText(replyToMessageId, 'reply_message_id', 256);
+      body.set('quote', messageId);
+      body.set('reply_msg_id', messageId);
+    }
     let response: Response;
     try {
-      response = await this.fetcher(this.endpoint, {
+      response = await this.fetcher(`https://www.kookapp.cn/api/v3/${kind}/create`, {
         method: 'POST',
         headers: {
           Authorization: `Bot ${this.token}`,
