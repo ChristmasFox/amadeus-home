@@ -43,7 +43,7 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0012` upgrade public schema/outbox rows, add
+Additive migrations through `0014` upgrade public schema/outbox rows, add
 durable worker sync jobs, indexed KOOK ingress-rate windows, and a PostgreSQL
 daily outbound-message budget that resets at 12:00 Asia/Shanghai. The default
 budget is 200 sends per SaaS bot; configuring more requires verified developer
@@ -58,6 +58,12 @@ roster; roster changes invalidate scoped sync state. Migration `0012` indexes
 per-bot expiry cleanup; gateway maintenance now sweeps expired query context,
 result sets and 30-day usage records, and `/pubg privacy` exposes the verified
 retention and model-provider data flow.
+
+Commit `880a5cf` adds confirmed team leaderboard preferences and team-scoped
+player aliases in migrations `0013` and `0014`. Preference/alias changes
+require fresh team-admin authority and actor/channel-bound one-use confirmation;
+an omitted leaderboard metric uses the stored preference while an explicit
+metric takes precedence.
 
 M1 source/offline acceptance was re-audited and passed on 2026-10-13:
 `pnpm test:pubg-saas` passed 75 tests with isolated PostgreSQL 18 and no skips;
@@ -94,6 +100,32 @@ benchmark still awaits protected provider credentials. Query sessions still
 derive from durable ingress, fresh KOOK membership and DB ownership, with
 explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.
+
+## Current M1/M2 acceptance follow-up — 2026-10-14
+
+M1 is accepted at source/offline scope on `880a5cf`: `pnpm test:pubg-saas`
+100/100 (no skips), `pnpm test:pubg` 68/68, both affected typecheck groups,
+and the SaaS build pass. The preference and alias flows retain team scope,
+fresh authorization and confirmed mutation boundaries.
+
+Built current ARM64 image `local/pubg-saas:git-880a5cf`
+(`sha256:6dd0afafea5fc7d33c1ed3eed34e7834b0bed911dbf8f31da373671acf8d142f`)
+in the local OrbStack Docker context. Two fresh isolated PG18.1 Compose
+projects applied all 14 migrations. Encrypted backup/verify/restore matched
+37/37 public table counts and 14 migration rows; tenant/team/job, preference,
+alias and sequence state survived. App DML/no-DDL, backup read-only/no-
+`nextval`, and app sequence-use checks passed on source and restored PG.
+SaaS Compose was stopped with plain `down`, preserving isolated volumes; then
+Kurisu regression passed 68/68 and read-only machine checks showed private
+OpenClaw healthy and 9Router running. Neither was restarted or modified.
+
+This is local OrbStack Docker evidence. The canonical CasaOS host-profile
+machine `example-node` was absent from the current OrbStack inventory, so
+canonical-host Compose/resource acceptance remains open. No real KOOK/PUBG/
+model credentials were loaded for this run, no image was pushed, and no
+production deployment or database was touched. Reproduction details are in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md` and
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
 ## M2 source and recovery evidence — 2026-10-14
 

@@ -602,3 +602,57 @@ repeating restore. Reproduce the build/start/migrate flow using
 fresh `pubg-saas-m2-*` names. Host scheduling, clean Linux/cloud recovery,
 canonical-host capacity, live provider acceptance and full human-user P3
 acceptance remain open.
+
+## Current-source repeat — 2026-10-14, commit `880a5cf`
+
+The M1 follow-up added team leaderboard preferences and team-scoped aliases
+with fresh admin authorization and actor/channel-bound one-use confirmations.
+The current-source SaaS/PostgreSQL suite passed 100/100 without skips, private
+Kurisu regression passed 68/68, both typecheck groups and the image build
+passed. Migrations `0013` and `0014` are part of the restored schema.
+
+Built the current ARM64 image locally:
+
+```sh
+docker buildx build --platform linux/arm64 --load \
+  -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-880a5cf .
+```
+
+Image manifest digest: `sha256:6dd0afafea5fc7d33c1ed3eed34e7834b0bed911dbf8f31da373671acf8d142f`.
+The source and restore Compose projects each used a fresh, separately named
+PG18.1 service/volume, rendered with `config --quiet`, started local Postgres
+and the egress proxy, and ran the migration service through `0014`. The source
+worker started against an empty queue; gateway ran only its no-credential
+dry-run. A synthetic team fixture then included one tenant/team/job, a
+`kills` preference, one alias and sequence state. The worker was stopped
+before another scheduled cycle.
+
+Using the local Compose PostgreSQL client adapter and an external age identity
+and recipient, backup and archive verification passed; restore to the fresh
+PG container matched 37/37 public base-table counts and 14 migration rows.
+The synthetic tenant/team/job, preference, alias and sequence state matched.
+On source and restore, app DML passed inside rollback and app DDL was denied;
+backup SELECT worked while writes and `nextval` were denied; app sequence use
+worked. Exact permission commands are in
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`. The disposable restore DB was
+removed with the exact-target marker guard. Both Compose projects were stopped
+with plain `down`, retaining their isolated named volumes.
+
+After shutdown, `pnpm test:pubg` passed 68/68. Read-only checks showed private
+OpenClaw healthy and 9Router running; neither was restarted or changed. The
+local Docker context was OrbStack on the Mac. The canonical CasaOS machine
+`example-node` was absent from the OrbStack inventory, so this rehearsal does
+not claim canonical-host acceptance or measured M204 headroom. No real KOOK,
+PUBG or model credential was loaded, no image was pushed, and no production
+database/configuration/deployment was touched.
+
+Corrected local harness invocation: the first backup verify shell omitted the
+temporary adapter directory from `PATH`; adding that generated directory
+allowed the same encrypted artifact to verify successfully. The first
+read-only OrbStack container query omitted `-u root` and hit Docker socket
+permission denial; the root-scoped read-only query then confirmed private
+service health. Neither was an application/test failure. Remaining gates are
+canonical-host Compose/resource/alert routing, scheduled backup installation,
+clean-Linux/cloud restore and isolation, live human-actor KOOK/quota checks,
+and real PUBG/model acceptance.

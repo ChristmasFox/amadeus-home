@@ -1,5 +1,31 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS current-source M1 and local recovery acceptance
+
+Commit `880a5cf` completes confirmed team leaderboard preferences and
+team-scoped aliases in migrations `0013` and `0014`. Both mutations recheck
+team-admin authority and require an actor/channel-bound one-use confirmation.
+The SaaS/PostgreSQL suite passes 100/100 with no skips, private Kurisu
+regression passes 68/68, and both typecheck groups and the SaaS build pass.
+
+Built local ARM64 image `local/pubg-saas:git-880a5cf` with manifest digest
+`sha256:6dd0afafea5fc7d33c1ed3eed34e7834b0bed911dbf8f31da373671acf8d142f`.
+Separate fresh PG18.1 Compose projects applied all 14 migrations. The
+encrypted age backup restored to a fresh PG container with 37/37 public table
+counts and all 14 migration rows matching; tenant/team/job, preference, alias
+and sequence state survived. DML/DDL and app/backup role boundaries passed
+before and after restore. With the SaaS projects stopped, Kurisu regression
+passed 68/68; read-only checks showed OpenClaw healthy and 9Router running.
+No private service was restarted or changed, and no provider credentials,
+production DB, image push or deployment was used.
+
+The image and rehearsal used the local OrbStack Docker context. The canonical
+CasaOS machine `example-node` was absent from the available machine inventory;
+canonical-host Compose/resource validation remains open. Full evidence and
+reproduction references:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md` and
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
+
 ## 2026-10-14 — PUBG SaaS post-0012 local acceptance
 
 Commit `a04224a` adds migration 0012, bounded per-bot retention and the
