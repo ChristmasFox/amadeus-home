@@ -293,9 +293,12 @@ M2 source follow-up adds Worker `GET /healthz`, bound to container loopback,
 and a Compose healthcheck with no published port or tenant data. Targeted tests
 passed 2/2; full SaaS/PostgreSQL tests now pass 94/94, Kurisu remains 68/68,
 and both typecheck groups plus all 21 backup/Compose-PG safety tests pass. Ruby
-YAML syntax parsing passed. Container healthcheck execution awaits the next
-explicit local image/Compose validation; host alert routing, canonical-host
-capacity, and native cloud recovery remain open. Evidence:
+YAML syntax parsing passed. A fresh local ARM64 image and isolated Compose stack
+then applied migration 0011 and reached `WORKER_HEALTH=healthy` with an empty
+queue; no provider calls or gateway startup occurred. The project was stopped
+with plain `down`, preserving its empty named volume; private OpenClaw remained
+healthy and 9Router remained running. No image was pushed. Host alert routing,
+canonical-host capacity, and native cloud recovery remain open. Evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

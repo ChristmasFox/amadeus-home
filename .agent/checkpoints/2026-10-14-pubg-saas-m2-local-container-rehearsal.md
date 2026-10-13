@@ -512,8 +512,18 @@ Targeted health-server tests passed 2/2. The updated full SaaS/PostgreSQL suite
 passed 94/94 with no skips; private Kurisu regression passed 68/68. Both
 typecheck groups, architecture check, 21 backup/restore and Compose adapter
 tests, secret scan and diff check passed. Ruby's YAML parser accepted the
-updated Compose file. `pnpm workflow:plan` selected RUNTIME, but classified
-Compose as unknown and prohibited Docker build/Compose execution for this
-change, so the new in-container healthcheck has not yet been exercised in a
-built image. No provider credentials or live calls were used and no service or
-private runtime was changed.
+updated Compose file. `pnpm workflow:plan` selected RUNTIME and prohibited
+Docker build/Compose execution by default; the earlier explicit local-only
+build/Compose authorization was used for this integration check. Built
+`local/pubg-saas:git-c0b0774` for ARM64 (local image ID/manifest
+`sha256:3e897e398a57a9134081e6206a7e4559bdf012f979c09abecafa39318223a821`),
+then started a fresh isolated Compose project with generated placeholder
+secrets, applied migration `0011`, and waited for PostgreSQL, egress proxy and
+Worker health. Compose reported `WORKER_HEALTH=healthy`; the Worker log showed
+zero teams and zero sync jobs, so no provider request was attempted. The
+gateway was not started. Plain `docker compose down` stopped the test project
+and preserved its project-owned empty database volume. Afterwards only the
+reusable PG fixture remained in the local engine; read-only checks showed
+private OpenClaw healthy and 9Router running. No image was pushed and no
+provider credential or private runtime was used or changed. Host alert routing
+and canonical-host resource headroom remain open.
