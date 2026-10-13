@@ -24,6 +24,8 @@ async function fixture(pool: Pool, suffix: string) {
 }
 async function cleanup(pool: Pool, bot: string) {
   await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);
+  await pool.query('DELETE FROM kook_message_daily_reservations WHERE bot_account_id=$1', [bot]);
+  await pool.query('DELETE FROM kook_message_daily_usage WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM message_inbox WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);
@@ -94,6 +96,21 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     assert.equal(delayed?.status, 'retry');
     assert.equal(delayed?.last_error_code, 'kook_message_api_rate_limited');
     assert.ok(Number(delayed?.wait_ms) >= 119_000);
+    const exhaustedEvent = group(f.bot, `budget-limited-${suffix}`, f.guild, f.channel, f.user);
+    assert.equal(await restarted.ingestGatewayEvent(exhaustedEvent), 'accepted');
+    assert.equal(await restarted.processOne(async () => ({ type: 'text', content: 'daily quota reply' }), new AbortController().signal), 'done');
+    const exhaustedQueue = new KookMessageQueue(pool, { botAccountId: f.bot, maxAttempts: 1 });
+    const quotaError = Object.assign(new Error('kook_message_daily_budget_exhausted'), {
+      code: 'kook_message_daily_budget_exhausted', retryAfterMs: 12 * 60 * 60_000,
+    });
+    assert.equal(await exhaustedQueue.deliverOne({ async send() { throw quotaError; } }), 'retry');
+    const quotaDeferred = (await pool.query(
+      `SELECT status,last_error_code,EXTRACT(EPOCH FROM (next_attempt_at-now()))*1000 AS wait_ms
+       FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2`, [f.bot, exhaustedEvent.msg_id],
+    )).rows[0];
+    assert.equal(quotaDeferred?.status, 'retry');
+    assert.equal(quotaDeferred?.last_error_code, 'kook_message_daily_budget_exhausted');
+    assert.ok(Number(quotaDeferred?.wait_ms) > 0);
     await pool.query('UPDATE message_outbox SET next_attempt_at=now() WHERE bot_account_id=$1 AND source_event_id=$2', [f.bot, limitedEvent.msg_id]);
     assert.equal(await oneAttemptQueue.deliverOne({ async send() {} }), 'sent');
   }
@@ -183,7 +200,8 @@ test('additive migrations upgrade an applied schema and preserve existing outbox
     await migratePublicDatabase(pool);
     await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id FROM message_outbox')).rows[0], { target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null });
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 10);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 11);
+    assert.equal((await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='kook_message_daily_reservations' AND column_name='reservation_hash'")).rowCount, 1);
   }
   finally {
     await pool.end();

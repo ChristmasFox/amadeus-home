@@ -287,7 +287,8 @@ export class KookMessageQueue {
       const providerDelay = error && typeof error === 'object' && 'retryAfterMs' in error
         && typeof (error as { retryAfterMs?: unknown }).retryAfterMs === 'number'
         ? (error as { retryAfterMs: number }).retryAfterMs : null;
-      const providerRateLimited = errorCode === 'kook_message_api_rate_limited';
+      const providerRateLimited = errorCode === 'kook_message_api_rate_limited'
+        || errorCode === 'kook_message_daily_budget_exhausted';
       if (attempts >= this.maxAttempts && !providerRateLimited) {
         await client.query(
           `UPDATE message_outbox

@@ -2,8 +2,10 @@
 
 This records source, isolated synthetic validation, and a disposable local
 PostgreSQL recovery exercise only. It does not approve deployment, public
-exposure, use of live KOOK/PUBG/model credentials, clean-host/cloud recovery, or
-changes to private Kurisu/9Router. M1 evidence and reproducible startup
+exposure, live PUBG/model credentials, clean-host/cloud recovery, or changes to
+private Kurisu/9Router. The operator separately authorized the P3 KOOK
+test-server smoke recorded below; that narrow test authorization does not
+authorize deployment. M1 evidence and reproducible startup
 instructions remain in
 `.agent/checkpoints/2026-10-13-pubg-saas-m1-source-acceptance.md`.
 
@@ -17,7 +19,14 @@ instructions remain in
   10/user, 60/channel, 120/tenant, 300/bot; environment-configurable), indexed
   through migration `0010_kook_ingress_rate_limits.sql`. KOOK outbound sends
   honor response route/global bucket headers and persist 429 retry deadlines in
-  the durable outbox. PUBG API admission remains shared through PostgreSQL.
+  the durable outbox. The 2026-10-14 follow-up adds migration
+  `0011_kook_daily_message_budget.sql`: channel and DM sends reserve a daily
+  PostgreSQL slot, defaulting to 200 per SaaS bot with the documented noon
+  Asia/Shanghai reset. Each HTTP attempt reserves a slot under a unique hashed
+  attempt ID, serialized across processes; definite API rejections release the
+  slot, while ambiguous network failures retain it. Reusing an outbox nonce
+  after a timeout cannot reuse the previous attempt's slot. PUBG API admission
+  remains shared through PostgreSQL.
 - An isolated-schema benchmark seeds 200 tenants/teams, 800 users/accounts,
   400 matches and 1,600 match-player rows. It runs 200 authorization tasks and
   200 worker team runs with no external provider calls. Final run: 4,400
@@ -97,6 +106,15 @@ instructions remain in
 - The isolated-schema queue/snapshot integration test passed 2/2; the affected
   package and shared Domain builds passed. No full SaaS or private Kurisu suite
   was repeated for this aggregate-only worker telemetry change.
+- The daily outbound quota follow-up passed its focused KOOK budget/client/
+  runtime/ingress integration tests and the full PostgreSQL-backed SaaS suite
+  (86/86, no skips), typecheck, build, architecture check and backup/restore
+  safety suite (14/14). The full suite proves concurrent quota reservations
+  cannot exceed the configured bot share and the running gateway defers sends
+  after that share is exhausted. The independent DB currently has 37 public
+  tables and applies migration `0011` idempotently. The full encrypted restore
+  rehearsal recorded below used the earlier 35-table schema; rerun it after this
+  migration before treating current-schema recovery as accepted.
 - P3 live test-server smoke used the owner-only, gitignored
   `apps/pubg-saas/.env.local` file (mode 0600); no credential values were
   printed or committed. The official read-only API confirmed one guild and one

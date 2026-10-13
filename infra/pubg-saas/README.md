@@ -161,3 +161,22 @@ The Compose source and local rendered-config check do not prove a real
 encrypted backup, clean-host restore, egress policy, cloud independence, KOOK
 quota eligibility, or M204 capacity. Those remain explicit M2/P6 acceptance
 gates.
+
+### KOOK outbound message quota
+
+The gateway reserves one durable daily send slot in PostgreSQL before each
+channel or direct-message API call. The window resets at 12:00
+Asia/Shanghai, matching KOOK's documented quota reset. The default
+`KOOK_DAILY_MESSAGE_BUDGET=200` is a conservative per-SaaS-bot ceiling; raise
+it only after verifying bot eligibility and allocating a safe share of the
+developer-account-wide quota. The application cannot observe sends made by
+other bots outside this database. Explicit KOOK rejections and 429 responses
+release the reservation; ambiguous network failures retain it until the
+window rolls over so retries cannot exceed the local budget.
+
+KOOK currently documents a 10,000-message daily cap across a developer
+account's bots, with a lower 200-message bot limit for accounts that are not
+verified. See [message quota](https://developer.kookapp.cn/doc/http/message)
+and [developer policy eligibility](https://developer.kookapp.cn/doc/privacy).
+The live account's eligibility and remaining shared quota still require
+operator verification before public capacity is claimed.

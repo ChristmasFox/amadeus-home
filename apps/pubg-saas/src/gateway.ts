@@ -44,7 +44,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0010_kook_ingress_rate_limits.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0011_kook_daily_message_budget.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const permissions = new KookPermissionClient({ token });
@@ -61,6 +61,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const channelRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE');
     const tenantRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE');
     const botRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE');
+    const dailyMessageBudget = optionalNumber(env, 'KOOK_DAILY_MESSAGE_BUDGET') ?? 200;
     const ingressLimits = {
       ...(userRate !== undefined ? { maxRequestsPerUserPerMinute: userRate } : {}),
       ...(channelRate !== undefined ? { maxRequestsPerChannelPerMinute: channelRate } : {}),
@@ -68,7 +69,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       ...(botRate !== undefined ? { maxRequestsPerBotPerMinute: botRate } : {}),
     };
     const runtime = new KookApplicationRuntime({
-      pool, botAccountId: botId, token, handler, ingressLimits,
+      pool, botAccountId: botId, token, handler, ingressLimits, dailyMessageBudget,
       onError: code => process.stderr.write(`${code}\n`),
     });
     await runtime.run(stop.signal);

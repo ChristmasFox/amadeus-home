@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { validateKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
+import type { KookDailyMessageBudget } from '../../application/kook-daily-message-budget.js';
 import { KookRateLimitGate } from './rate-limit-gate.js';
 
 interface KookApiEnvelope {
@@ -11,6 +13,7 @@ export interface KookMessageApiClientOptions {
   fetcher?: typeof fetch;
   timeoutMs?: number;
   rateLimitGate?: KookRateLimitGate;
+  dailyBudget?: KookDailyMessageBudget;
 }
 
 function requiredText(value: string, key: string, maxLength = 256): string {
@@ -45,6 +48,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
   private readonly rateLimitGate: KookRateLimitGate;
+  private readonly dailyBudget: KookDailyMessageBudget | undefined;
 
   constructor(options: KookMessageApiClientOptions) {
     this.token = requiredText(options.token, 'token', 4096);
@@ -52,6 +56,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     this.timeoutMs = options.timeoutMs ?? 5000;
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error('kook_message_timeout_invalid');
     this.rateLimitGate = options.rateLimitGate ?? new KookRateLimitGate();
+    this.dailyBudget = options.dailyBudget;
   }
 
   async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
@@ -60,6 +65,10 @@ export class KookMessageApiClient implements KookGroupMessageSender {
 
   async sendDirect(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void> {
     return this.sendTo('direct-message', userId, payload, nonce, replyToMessageId);
+  }
+
+  async pruneDailyBudgetReservations(): Promise<void> {
+    await this.dailyBudget?.prune();
   }
 
   private async sendTo(kind: 'message' | 'direct-message', targetIdInput: string, payloadInput: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
@@ -81,6 +90,8 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     }
     const localWait = this.rateLimitGate.waitMs(route);
     if (localWait > 0) throw rateLimitedError(localWait);
+    const budgetReservationId = this.dailyBudget ? randomUUID() : null;
+    if (budgetReservationId) await this.dailyBudget!.reserve(budgetReservationId);
     let response: Response;
     try {
       response = await this.fetcher(`https://www.kookapp.cn${route}`, {
@@ -96,13 +107,32 @@ export class KookMessageApiClient implements KookGroupMessageSender {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch {
+      // A timeout can happen after KOOK accepted the send, so keep the
+      // reservation until the quota window rolls over.
       throw codedError('kook_message_api_unavailable');
     }
     const retryAfterMs = this.rateLimitGate.observe(route, response.headers, response.status);
-    if (response.status === 429) throw rateLimitedError(retryAfterMs ?? 60_000);
-    if (!response.ok) throw codedError(`kook_message_api_http_${response.status}`);
+    if (response.status === 429) {
+      if (budgetReservationId) await this.releaseKnownFailure(budgetReservationId);
+      throw rateLimitedError(retryAfterMs ?? 60_000);
+    }
+    if (!response.ok) {
+      if (response.status < 500 && budgetReservationId) await this.releaseKnownFailure(budgetReservationId);
+      throw codedError(`kook_message_api_http_${response.status}`);
+    }
     let result: unknown;
     try { result = await response.json(); } catch { throw codedError('kook_message_response_invalid'); }
-    parseEnvelope(result);
+    try { parseEnvelope(result); }
+    catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === 'kook_message_api_rejected')
+        if (budgetReservationId) await this.releaseKnownFailure(budgetReservationId);
+      throw error;
+    }
+    if (budgetReservationId) await this.dailyBudget!.markSent(budgetReservationId);
+  }
+
+  private async releaseKnownFailure(reservationId: string): Promise<void> {
+    try { await this.dailyBudget?.release(reservationId); }
+    catch { /* retain the reservation if its release cannot be recorded */ }
   }
 }

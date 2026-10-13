@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { Pool, type PoolClient } from 'pg';
 
-const migrationIds = ['0001_public_schema.sql', '0002_kook_ingress.sql', '0003_onboarding.sql', '0004_guild_welcome.sql', '0005_sharded_match_cache.sql', '0006_query_authorization.sql', '0007_team_scoped_telemetry_features.sql', '0008_public_account_names.sql', '0009_public_sync_jobs.sql', '0010_kook_ingress_rate_limits.sql'] as const;
+const migrationIds = ['0001_public_schema.sql', '0002_kook_ingress.sql', '0003_onboarding.sql', '0004_guild_welcome.sql', '0005_sharded_match_cache.sql', '0006_query_authorization.sql', '0007_team_scoped_telemetry_features.sql', '0008_public_account_names.sql', '0009_public_sync_jobs.sql', '0010_kook_ingress_rate_limits.sql', '0011_kook_daily_message_budget.sql'] as const;
 
 export async function migratePublicDatabase(pool: Pool): Promise<void> {
   const client = await pool.connect();

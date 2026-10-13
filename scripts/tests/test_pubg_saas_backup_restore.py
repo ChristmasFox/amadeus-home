@@ -32,7 +32,7 @@ class BackupRestoreSafetyTests(unittest.TestCase):
         artifact.write_bytes(payload)
         manifest = self.root / "fixture.manifest.json"
         table_counts = counts or {
-            "public.schema_migrations": 10,
+            "public.schema_migrations": 11,
             "public.tenants": 2,
             "public.teams": 3,
             "public.matches": 11,
@@ -71,7 +71,7 @@ class BackupRestoreSafetyTests(unittest.TestCase):
                     "artifactSha256": hashlib.sha256(payload).hexdigest(),
                     "artifactBytes": len(payload),
                     "publicTableCounts": {
-                        "public.schema_migrations": 10,
+                        "public.schema_migrations": 11,
                         "public.tenants": 2,
                         "public.teams": 3,
                         "public.matches": 11,
@@ -114,7 +114,7 @@ class BackupRestoreSafetyTests(unittest.TestCase):
     def test_manifest_rejects_private_runtime_schema_names(self):
         artifact, manifest = self.write_archive_and_manifest(
             counts={
-                "public.schema_migrations": 10,
+                "public.schema_migrations": 11,
                 "public.tenants": 2,
                 "public.teams": 3,
                 "public.matches": 11,

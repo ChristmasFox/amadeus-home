@@ -43,8 +43,11 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0010` upgrade public schema/outbox rows, add
-durable worker sync jobs and indexed KOOK ingress-rate windows. The
+Additive migrations through `0011` upgrade public schema/outbox rows, add
+durable worker sync jobs, indexed KOOK ingress-rate windows, and a PostgreSQL
+daily outbound-message budget that resets at 12:00 Asia/Shanghai. The default
+budget is 200 sends per SaaS bot; configuring more requires verified developer
+eligibility and an account-wide quota allocation. The
 statistical handler is now wired to the public executable: deterministic stats,
 leaderboard, self-stats, review and team damage use authorized Domain facts;
 free-text queries use a bounded AI SDK QueryPlan and a deterministic executor.
@@ -67,7 +70,10 @@ dry-run requires explicit `--apply` to connect or write.
 
 M2 is active: worker cycle logs now expose aggregate queue age/state and
 process RSS/heap without tenant IDs. The local synthetic 200-team simulation
-passed; independent worker capacity, alert rules, quota/resource measurements,
+passed. The KOOK sender now reserves daily quota in PostgreSQL across restarts;
+the full SaaS/Postgres suite passes 86/86 with no skips, including concurrent
+budget admission, outbox deferral and the integrated runtime. Independent
+worker capacity, alert rules, quota/resource measurements,
 backup/restore, clean-host recovery and private/public independence drills
 remain. P3 real
 test-server smoke now proves gateway authentication, one labeled outbox

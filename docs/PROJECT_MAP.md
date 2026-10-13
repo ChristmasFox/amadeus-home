@@ -82,10 +82,12 @@ executable handler now serves deterministic and AI-planned queries through one
 validated executor. A separate PostgreSQL-backed worker ingests official match
 data and team-scoped telemetry through the shared Domain. Its durable queue uses
 team-scoped leases, fencing tokens, bounded retries and concurrency. KOOK ingress
-has per-user/channel/tenant/bot request windows; the outbound client honors
-response bucket/global limits and persists 429 retry deadlines. Shared match rows
-merge participant facts while repository reads return only current team
-members. The synthetic 200-team benchmark passes with bounded local pool use.
+has per-user/channel/tenant/bot request windows; outbound sends honor response
+bucket/global limits, persist 429 deadlines, and reserve a daily PostgreSQL
+budget that resets at noon Asia/Shanghai (default 200 messages per SaaS bot).
+Shared match rows merge participant facts while repository reads return only
+current team members. The synthetic 200-team benchmark passes with bounded local
+pool use.
 M1 source/offline acceptance remains passed and the app is undeployed. The
 independent Compose/Image source unit is under `infra/pubg-saas/`; its pinned
 base manifests, private database network, per-process caps, least-privilege
@@ -98,7 +100,9 @@ source are present but uninstalled; its one-shot job passed against the isolated
 PostgreSQL fixture. Image build, clean Linux/cloud recovery, scheduled operation,
 tested egress restrictions and public/private stop-isolation remain open. A P3
 live smoke passed KOOK gateway auth, one labeled outbox delivery and sequence-1
-resume; full human-user flows need a test actor and a second channel. The
+resume; full human-user flows need a test actor and a second channel. The daily
+budget integration suite passes, but developer-account eligibility and other
+bots' quota use remain unverified. The
 deidentified prompt benchmark and measured M204 resource/quota feasibility
 remain open. The P4 benchmark runner is in
 `apps/pubg-saas/tests/nl-query-provider.benchmark.ts`; it needs an external

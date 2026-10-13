@@ -143,3 +143,29 @@ test('429 returns a durable retry delay and later sends defer without another AP
   now += 7_000;
   assert.equal(rateLimitGate.waitMs('/api/v3/message/create'), 0);
 });
+
+test('daily message budget is settled only on definitive KOOK outcomes', async () => {
+  const budgetCalls: string[] = [];
+  const reservationIds: string[] = [];
+  const dailyBudget = {
+    async reserve(reservationId: string) { reservationIds.push(reservationId); budgetCalls.push('reserve'); },
+    async markSent(reservationId: string) { assert.equal(reservationId, reservationIds.at(-1)); budgetCalls.push('sent'); },
+    async release(reservationId: string) { assert.equal(reservationId, reservationIds.at(-1)); budgetCalls.push('release'); },
+    async prune() { return 0; },
+  };
+  const accepted = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => success({ msg_id: 'sent' }) });
+  await accepted.send('bound-channel', { type: 'text', content: 'hello' }, 'daily-accepted');
+  assert.deepEqual(budgetCalls, ['reserve', 'sent']);
+
+  budgetCalls.length = 0;
+  const rejected = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => new Response('{"code":400}', { status: 200 }) });
+  await assert.rejects(rejected.send('bound-channel', { type: 'text', content: 'no' }, 'daily-rejected'));
+  assert.deepEqual(budgetCalls, ['reserve', 'release']);
+
+  budgetCalls.length = 0;
+  const unknown = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => { throw new Error('connection ended after request write'); } });
+  await assert.rejects(unknown.send('bound-channel', { type: 'text', content: 'uncertain' }, 'daily-unknown'));
+  assert.deepEqual(budgetCalls, ['reserve']);
+  assert.equal(new Set(reservationIds).size, 3);
+  assert.ok(reservationIds.every(reservationId => !['daily-accepted', 'daily-rejected', 'daily-unknown'].includes(reservationId)));
+});

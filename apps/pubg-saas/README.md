@@ -15,7 +15,8 @@ query handler authorizes each request, runs a bounded AI SDK planner when
 configured, and executes only validated plans through deterministic Domain
 queries. A separate PostgreSQL-backed worker syncs registered rosters and
 prefetches versioned telemetry. This is source-only; no SaaS service is
-deployed, and live KOOK buttons/guild eligibility remain unverified.
+deployed. Live human-actor button flows and developer-account quota eligibility
+remain unverified.
 
 ## Trust boundaries
 
@@ -193,7 +194,7 @@ pnpm --filter @agent/pubg-saas worker -- --apply --once
 ```
 
 Apply schema migrations separately before starting either runtime; the gateway
-and worker require migration `0010_kook_ingress_rate_limits.sql` and never migrate
+and worker require migration `0011_kook_daily_message_budget.sql` and never migrate
 automatically. Ingress defaults are 10 requests/user/minute, 60/channel/minute,
 120/tenant/minute and 300/bot/minute; set `KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE`,
 `KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE`, `KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE`
@@ -201,7 +202,14 @@ and `KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE` to tune them. KOOK REST sends pause
 on documented route/global rate headers and defer 429s through durable outbox
 retry. Its separate daily message allowance is developer-account-wide and must
 be verified with other bots' usage during live preflight; this single bot cannot
-observe that aggregate. The worker defaults to 5-minute cycles, 500 discovered matches
+observe that aggregate. Outbound channel and DM sends reserve a durable daily
+message slot in PostgreSQL before calling KOOK. `KOOK_DAILY_MESSAGE_BUDGET`
+defaults to 200 per SaaS bot and resets at noon Asia/Shanghai. Raise it only
+after checking developer-account eligibility and leaving capacity for other
+bots under the same account. Explicit API rejections release the reservation;
+ambiguous transport failures retain it until the next quota window. See
+[KOOK's daily message quota](https://developer.kookapp.cn/doc/http/message).
+The worker defaults to 5-minute cycles, 500 discovered matches
 and 20 telemetry fetches per team per cycle. These are operating defaults, not
 a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry
 concurrency are bounded. SIGINT/SIGTERM stop intake and close pools.
