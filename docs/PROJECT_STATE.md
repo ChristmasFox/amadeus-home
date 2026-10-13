@@ -32,6 +32,28 @@ weakened. No image push, deployment, production DB, 9Router change or private
 OpenClaw restart occurred. Detailed commands:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+## 2026-10-14 — M204 bounded synthetic 200-team measurement
+
+The existing M2 benchmark ran against a fresh internal-only PG18.1 test
+container on host-profile machine `nyannyan`. It used a 1 GiB/1 CPU PostgreSQL
+cap and a 512 MiB/1 CPU benchmark runner sharing only the database's internal
+network namespace. Fixture: 200 tenants/teams, 800 users and roster accounts,
+400 matches and 1,600 match-player rows, all under a temporary schema that the
+benchmark removed. No live PUBG, KOOK or model requests occurred.
+
+With concurrency 8, all 200 authorized query tasks and all 200 worker team
+reads passed with 0 failures. Query phase: 32.42 s, P95/P99 86.95/207.99 ms.
+Worker read phase: 522 ms, P95/P99 2.09/21.78 ms. The 20-connection pool
+peaked at 16 active, 0 waiting. Node process RSS peaked at 93,360,128 bytes;
+sampled cgroup usage peaked at 114.5 MiB for the runner and 80.08 MiB for PG.
+The PG reached its configured 1 CPU cap during query work. Host MemAvailable
+was 6.63 GiB at baseline, at least 6.54 GiB during samples, and 6.66 GiB after.
+This closes the missing M204 synthetic host measurement but does not establish
+production capacity, continuous load, API-rate compliance or alert SLOs. The
+test project was stopped without deleting its named volume. Private OpenClaw
+and 9Router remained at the same IDs/start times, restart count 0. Full
+evidence is in the M2 rehearsal checkpoint.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as

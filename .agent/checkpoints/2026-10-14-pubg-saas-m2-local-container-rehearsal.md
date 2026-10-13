@@ -1242,3 +1242,153 @@ scheduled backup installation, sustained capacity/alert measurements, and
 live KOOK quota/eligibility still remain M2 work. No image push, deployment,
 production DB access, 9Router configuration change or private OpenClaw restart
 occurred.
+
+## M204 synthetic 200-team host load and resource measurement — 2026-10-14
+
+This closes the prior gap where 200-team results existed only on a developer
+PG fixture. The current Git source benchmark was compiled with
+`pnpm --filter @agent/pubg-saas build` and run in the production image's Node
+runtime on host-profile machine `nyannyan`. A temporary Compose project used
+the pinned PG18.1 image, database `pubg_test`, an internal-only network, a
+1 GiB/1 CPU PG cap and a project-owned volume. The benchmark runner shared the
+PG container's network namespace, so it could reach only the PG loopback; its
+limit was 512 MiB/1 CPU. The benchmark's `fetchImpl` returned synthetic data;
+no live PUBG, KOOK or model calls were possible from that network.
+
+The test seeded 200 tenants and teams, 800 users/roster accounts, 400 matches
+and 1,600 match-player rows in a unique schema. It removed that schema in its
+`finally` block; verification found zero `m2_bench_*` schemas and zero public
+base tables afterward. Benchmark exit was 0, with 200/200 authorized query
+tasks and 200/200 worker team reads, 0 failures. At concurrency 8:
+
+| Measurement | Result |
+| --- | ---: |
+| Authorized query phase | 32,420.58 ms |
+| Query P50 / P95 / P99 | 0.60 / 86.95 / 207.99 ms |
+| Query throughput | 135.72 SQL/s; 6.17 tasks/s |
+| Worker fixture-read phase | 522.33 ms |
+| Worker read P50 / P95 / P99 | 0.24 / 2.09 / 21.78 ms |
+| Worker team throughput | 382.90 team runs/s |
+| Worker SQL statements | 7,356 |
+| Pool peak | 16/20 total and active; 0 waiting |
+| Node RSS / heap peak | 93,360,128 / 21,614,808 bytes |
+
+The process cgroup sample peaked at 114.5 MiB for the runner; PG sampled at
+80.08 MiB and consumed about 1 CPU (its configured cap) during the query phase.
+Host MemAvailable was 6,958,892 KiB before, no lower than 6,862,336 KiB during
+the sample, and 6,986,660 KiB afterward. These measurements show the bounded
+synthetic case runs within the configured limits, while the single-core PG cap
+is fully used during concurrent query work. They do not prove production
+capacity, model P95, PUBG API-rate compliance, or a sustained SLO.
+
+The project was stopped with ordinary `docker compose down`, no `-v`; its
+named volume was retained and zero test containers remained. OpenClaw stayed
+healthy and 9Router running; container IDs, start times and restart count 0
+were unchanged. The exact runner target was `127.0.0.1/pubg_test`, satisfying
+the benchmark's local-database guard; the test container used the current SaaS
+image and mounted only the compiled test bundle plus protected synthetic PG
+password file.
+
+Reproduction outline:
+
+```sh
+pnpm --filter @agent/pubg-saas build
+
+# On M204, create an owner-only test password file without printing it.
+orb -m nyannyan -u root bash -lc '
+  set -euo pipefail
+  install -d -m 700 /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/secrets
+  umask 077
+  openssl rand -hex 32 > /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/secrets/pg-password
+  chmod 600 /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/secrets/pg-password
+'
+
+# Write the Compose definition on M204. It creates only an internal PG network
+# and a dedicated named test volume.
+orb -m nyannyan -u root bash -lc '
+  set -euo pipefail
+  cat > /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/compose.yaml << "COMPOSE"
+services:
+  postgres:
+    image: postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a
+    restart: "no"
+    environment:
+      POSTGRES_DB: pubg_test
+      POSTGRES_USER: pubg_bootstrap
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+    secrets: [pg_password]
+    volumes: [pubg_saas_benchmark_data:/var/lib/postgresql]
+    networks: [postgres_private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pubg_bootstrap -d pubg_test"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /var/run/postgresql:rw,noexec,nosuid,size=16m
+    security_opt: [no-new-privileges:true]
+    mem_limit: 1g
+    cpus: 1.0
+    pids_limit: 128
+    logging:
+      driver: local
+      options: { max-size: 10m, max-file: "2" }
+networks:
+  postgres_private: { internal: true }
+volumes:
+  pubg_saas_benchmark_data:
+secrets:
+  pg_password:
+    file: ./secrets/pg-password
+COMPOSE
+  chmod 600 /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/compose.yaml
+'
+
+orb -m nyannyan -u root docker compose --project-name pubg-saas-m2-canonical-benchmark \
+  --project-directory /var/tmp/pubg-saas-m2-canonical-benchmark-20261014 \
+  -f /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/compose.yaml \
+  up -d --wait postgres
+
+# Start the isolated PG container above, then run the benchmark bundle from
+# local/pubg-saas:git-87543bc. The runner shares only that PG network namespace.
+
+# Run the already-built benchmark bundle in local/pubg-saas:git-87543bc with:
+# --network container:<PG container ID>, --memory=512m, --cpus=1,
+# --read-only, --cap-drop=ALL, no-new-privileges, mount only
+# apps/pubg-saas/dist at /app/dist:ro, and mount the random PG password file
+# at /run/test-secrets/pg-password:ro. The entrypoint reads that file without
+# printing it and sets the guarded URL to 127.0.0.1:5432/pubg_test.
+mkdir -p "$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling"
+cat > "$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling/benchmark-runner.mjs" <<'EOF'
+import { readFileSync } from 'node:fs';
+const password = readFileSync('/run/test-secrets/pg-password', 'utf8').trim();
+process.env.PUBG_SAAS_TEST_DATABASE_URL = `postgresql://pubg_bootstrap:${encodeURIComponent(password)}@127.0.0.1:5432/pubg_test`;
+await import('/app/dist/tests/m2-200-team-load.benchmark.js');
+EOF
+chmod 600 "$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling/benchmark-runner.mjs"
+PG_ID=$(orb -m nyannyan -u root docker compose \
+  --project-name pubg-saas-m2-canonical-benchmark \
+  --project-directory /var/tmp/pubg-saas-m2-canonical-benchmark-20261014 \
+  -f /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/compose.yaml \
+  ps -q postgres)
+orb -m nyannyan -u root docker run --rm --init \
+  --network "container:$PG_ID" --memory=512m --cpus=1 --pids-limit=128 \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --security-opt no-new-privileges --cap-drop=ALL \
+  --mount type=bind,source=/Users/nyannyan/amadeus-home/apps/pubg-saas/dist,target=/app/dist,readonly \
+  --mount type=bind,source="$HOME/Library/Caches/pubg-saas-m2-canonical-87543bc/tooling/benchmark-runner.mjs",target=/tmp/benchmark-runner.mjs,readonly \
+  --mount type=bind,source=/var/tmp/pubg-saas-m2-canonical-benchmark-20261014/secrets/pg-password,target=/run/test-secrets/pg-password,readonly \
+  --entrypoint node local/pubg-saas:git-87543bc /tmp/benchmark-runner.mjs
+
+# Keep this project stopped between runs without deleting its test volume.
+orb -m nyannyan -u root docker compose --project-name pubg-saas-m2-canonical-benchmark \
+  --project-directory /var/tmp/pubg-saas-m2-canonical-benchmark-20261014 \
+  -f /var/tmp/pubg-saas-m2-canonical-benchmark-20261014/compose.yaml down
+```
+
+The benchmark report and sampled host/PG/runner counters are retained outside
+Git at `/var/tmp/pubg-saas-m2-canonical-benchmark-20261014/`; no test rows
+remain in its database.

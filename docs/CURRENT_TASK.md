@@ -86,10 +86,10 @@ including concurrent budget admission, outbox deferral and the integrated
 runtime. Local Compose build/start, encrypted backup/restore with table-count
 and role-boundary probes, and the public-stop/private-Kurisu source regression
 are verified. The current M204 host-profile mapping resolves to OrbStack
-machine `nyannyan`; its local Compose and recovery follow-up is recorded below.
-Sustained capacity and alert routing under load, cloud recovery, scheduled
-backup installation, quota/eligibility and full independent-runtime drills
-remain. The clean Linux ARM64 guest now passes
+machine `nyannyan`; its local Compose/recovery and one bounded 200-team host
+measurement are recorded below. Sustained production-shaped capacity and
+alert delivery, cloud recovery, scheduled backup installation,
+quota/eligibility and full independent-runtime drills remain. The clean Linux ARM64 guest now passes
 Compose recovery, application egress isolation, and the combined encrypted
 backup/prune job. The six-hour timer passed an ephemeral systemd integration
 in the isolated Linux VM; it is not persistently installed on M204 or the
@@ -134,6 +134,23 @@ backup tool and its snapshot checks were unchanged. The image was not pushed,
 and no provider credential, production database, 9Router setting or private
 OpenClaw runtime was used or changed. Full steps and evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
+### M204 bounded 200-team host measurement — 2026-10-14
+
+The existing synthetic benchmark ran once against an internal-only PG18.1
+container on `nyannyan` (PG cap 1 GiB/1 CPU; runner cap 512 MiB/1 CPU). It
+seeded 200 tenants/teams, 800 users and roster accounts, 400 matches and 1,600
+match-player rows in a unique schema, then dropped that schema. At concurrency
+8, authorized queries passed 200/200 in 32.42 s with P95/P99 86.95/207.99 ms;
+worker fixture reads completed 200/200 with 0 failures and P95/P99 2.09/21.78
+ms. The 20-connection pool peaked at 16 active with no waiters. Node process
+RSS peaked at 93,360,128 bytes; sampled runner cgroup usage peaked at 114.5
+MiB and PG at 80.08 MiB. PG reached its 1 CPU cap during the query phase.
+Host MemAvailable was 6.63 GiB before, at least 6.54 GiB during, and 6.66 GiB
+after. These are one bounded synthetic run with mocked provider fetches, not a
+live PUBG rate-limit check or production capacity/SLO. Private OpenClaw and
+9Router IDs/start times stayed unchanged, with restart counts 0. Evidence and
+reproduction details are in the dated M2 rehearsal checkpoint.
 
 ## Current M1/M2 acceptance follow-up — 2026-10-14
 
