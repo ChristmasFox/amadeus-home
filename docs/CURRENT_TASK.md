@@ -81,7 +81,10 @@ delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
 cross-channel routing, management callbacks and unauthorized denial) and KOOK
 eligibility remain unverified; the available guild has one text channel and no
 test actor was available. P4's deidentified prompt benchmark also remains open.
-No live provider accuracy, latency or capacity is claimed. Query sessions still
+No live provider accuracy, latency or capacity is claimed. P4 now has a
+de-identified 100-case synthetic corpus across ten query families, an
+owner-only external-file exporter, and a mock runner test; the real model
+benchmark still awaits protected provider credentials. Query sessions still
 derive from durable ingress, fresh KOOK membership and DB ownership, with
 explicit DM grants and no fallback to the private team.
 Current source map: `docs/PROJECT_MAP.md`.

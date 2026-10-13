@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict';
+import { chmod, mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { MockLanguageModelV4 } from 'ai/test';
 import {
   NaturalLanguageQueryPlanner,
   type QueryPlan,
 } from '../src/application/nl-query-planner.js';
+import { createSyntheticPromptBenchmarkDataset } from './fixtures/nl-query-synthetic-corpus.js';
+import { exportSyntheticPromptBenchmarkDataset } from './export-synthetic-nl-query-benchmark.js';
 import {
   compareQueryPlans,
   parsePromptBenchmarkDataset,
@@ -26,26 +32,59 @@ const plan: QueryPlan = {
   needsClarification: false,
 };
 
-function fixtureDataset(count: number) {
+function mockResult(output: QueryPlan) {
   return {
-    version: 1 as const,
-    cases: Array.from({ length: count }, (_, index) => ({
-      caseId: `synthetic-${String(index).padStart(3, '0')}`,
-      message: `查今天队伍击杀，第 ${index} 个合成用例`,
-      expectedPlan: plan,
-      ...(index > 0 ? { previousPlan: plan } : {}),
-    })),
+    content: [{ type: 'text' as const, text: JSON.stringify(output) }],
+    finishReason: { unified: 'stop' as const, raw: 'stop' },
+    usage: {
+      inputTokens: { total: 31, noCache: 31, cacheRead: undefined, cacheWrite: undefined },
+      outputTokens: { total: 12, text: 12, reasoning: undefined },
+    },
+    warnings: [],
   };
 }
 
-test('benchmark schema requires 100–200 synthetic/de-identified cases', () => {
-  assert.equal(PromptBenchmarkDatasetSchema.parse(fixtureDataset(100)).cases.length, 100);
-  assert.equal(PromptBenchmarkDatasetSchema.parse(fixtureDataset(200)).cases.length, 200);
-  assert.throws(() => PromptBenchmarkDatasetSchema.parse(fixtureDataset(99)));
-  assert.throws(() => PromptBenchmarkDatasetSchema.parse(fixtureDataset(201)));
-  const duplicateIds = fixtureDataset(100);
+test('synthetic corpus has 100 unique, schema-valid cases across ten intent families', () => {
+  const dataset = createSyntheticPromptBenchmarkDataset();
+  assert.equal(PromptBenchmarkDatasetSchema.parse(dataset).cases.length, 100);
+  assert.equal(new Set(dataset.cases.map(item => item.caseId)).size, 100);
+  assert.equal(new Set(dataset.cases.map(item => item.message)).size, 100);
+  const familyCounts = new Map<string, number>();
+  for (const item of dataset.cases) {
+    const family = item.caseId.split('-').slice(0, -1).join('-');
+    familyCounts.set(family, (familyCounts.get(family) ?? 0) + 1);
+  }
+  assert.equal(familyCounts.size, 10);
+  assert.ok([...familyCounts.values()].every(count => count === 10));
+
+  const short = { ...dataset, cases: dataset.cases.slice(0, 99) };
+  const long = { ...dataset, cases: [...dataset.cases, ...dataset.cases, dataset.cases[0]!] };
+  assert.throws(() => PromptBenchmarkDatasetSchema.parse(short));
+  assert.throws(() => PromptBenchmarkDatasetSchema.parse(long));
+  const duplicateIds = structuredClone(dataset);
   duplicateIds.cases[1]!.caseId = duplicateIds.cases[0]!.caseId;
   assert.throws(() => parsePromptBenchmarkDataset(duplicateIds), { message: 'benchmark_case_ids_must_be_unique' });
+});
+
+test('synthetic corpus exports only to a new owner-only file outside the repository', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pubg-saas-benchmark-'));
+  await chmod(directory, 0o700);
+  const output = join(directory, 'prompts.json');
+  try {
+    await exportSyntheticPromptBenchmarkDataset(output);
+    const info = await stat(output);
+    assert.equal(info.mode & 0o777, 0o600);
+    assert.equal(parsePromptBenchmarkDataset(JSON.parse(await readFile(output, 'utf8'))).cases.length, 100);
+    await assert.rejects(exportSyntheticPromptBenchmarkDataset(output), { code: 'EEXIST' });
+
+    const repositoryRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
+    await assert.rejects(
+      exportSyntheticPromptBenchmarkDataset(join(repositoryRoot, 'apps/pubg-saas/tests/prompts.json')),
+      { message: 'synthetic_benchmark_output_directory_must_be_owner_only_external' },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('plan comparison measures exact and field accuracy without returning prompt text', async () => {
@@ -58,16 +97,8 @@ test('plan comparison measures exact and field accuracy without returning prompt
   });
   assert.equal(compareQueryPlans({ ...plan, period: 'yesterday' }, plan).exact, false);
 
-  const model = new MockLanguageModelV4({ doGenerate: {
-    content: [{ type: 'text', text: JSON.stringify(plan) }],
-    finishReason: { unified: 'stop', raw: 'stop' },
-    usage: {
-      inputTokens: { total: 31, noCache: 31, cacheRead: undefined, cacheWrite: undefined },
-      outputTokens: { total: 12, text: 12, reasoning: undefined },
-    },
-    warnings: [],
-  } });
-  const dataset = fixtureDataset(100);
+  const dataset = createSyntheticPromptBenchmarkDataset();
+  const model = new MockLanguageModelV4({ doGenerate: dataset.cases.map(item => mockResult(item.expectedPlan)) });
   const planner = new NaturalLanguageQueryPlanner(model);
   let clock = 0;
   const report = await runPromptBenchmark(dataset, planner, 'fixture-model', () => (clock += 4));
@@ -79,5 +110,7 @@ test('plan comparison measures exact and field accuracy without returning prompt
   assert.equal(report.p95LatencyMs, 4);
   assert.equal(report.totalTokens, 4_300);
   assert.equal(model.doGenerateCalls.length, 100);
-  assert.equal(JSON.stringify(report).includes('合成用例'), false);
+  const serializedReport = JSON.stringify(report);
+  assert.equal(serializedReport.includes(dataset.cases[0]!.message), false);
+  assert.equal(serializedReport.includes(dataset.cases[99]!.message), false);
 });
