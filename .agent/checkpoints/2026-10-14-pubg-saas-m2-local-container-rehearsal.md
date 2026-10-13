@@ -963,3 +963,79 @@ credential. It does not prove canonical CasaOS capacity, scheduled backup
 installation, cloud independence, or clean Linux amd64 runtime. The earlier
 proxy and overlayfs failures are resolved in this disposable VM only; no
 private or production environment was changed.
+
+## Latest-image PostgreSQL encrypted recovery — 2026-10-14
+
+The complete database loop was repeated against the just-built image
+`local/pubg-saas:git-6313ef7` (`sha256:e144276b8061d2362d2abcd9ecdd26421b5bed049541bfe90b268210e601afc8`),
+so recovery evidence no longer depends on the earlier `git-516371e` image. Two
+new Compose project names and fresh named volumes were used in the isolated
+Linux VM: `pubg-saas-m2-current-src-6313ef7` and
+`pubg-saas-m2-current-restore-6313ef7`. Both configs rendered; source PG and
+egress proxy became healthy, all 14 migrations applied, and the current image's
+Gateway and Worker no-credential dry-runs passed.
+
+The source DB contained one synthetic tenant, team and sync job plus a
+migrator-owned sequence. Source authorization probes passed: app DML in a
+rolled-back transaction succeeded, app DDL was denied, backup reads succeeded,
+backup DML and `nextval` were denied, and app `nextval` succeeded. The normal
+encrypted backup tool produced artifact
+`pubg-saas-20261013T224246Z-56fc04f8.dump.age` with SHA-256
+`61c722c07a22e20fa68ea00060a6d360c8ddab398e3974952e2d5666ca23cace`; `verify`
+passed. Restore created the exact guarded target
+`pubg_saas_disposable_current_6313ef7` inside the fresh restore PG container.
+All 37/37 public table counts matched, all 14 migration rows matched, and the
+tenant/team/job fixture each restored as one row. The same app and backup
+permission probes passed on the restored DB, including default grants on a
+new migrator-owned sequence.
+
+The exact target was removed only with the matching disposable marker and
+`cleanup --apply`. Both Compose projects then used ordinary `down` without
+`-v`; no test containers remained running. With the public SaaS stopped,
+`pnpm test:pubg` passed 68/68. Read-only inspection showed the private
+OpenClaw and 9Router container IDs and start times unchanged, both restart
+counts 0; no private runtime or real 9Router config was modified. No real
+provider credential, production DB, registry push, cloud deployment or private
+OpenClaw restart was used.
+
+Representative commands, run in the isolated VM after preparing its protected
+`.env` and file-backed test secrets as described above:
+
+```sh
+cd /var/tmp/pubg-saas-m2-clean/build-src
+env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy \
+  docker build --progress=plain -f apps/pubg-saas/Dockerfile \
+    -t local/pubg-saas:git-6313ef7 .
+
+# The separate source and restore directories have protected .env/secrets.
+docker compose --project-name pubg-saas-m2-current-src-6313ef7 \
+  --env-file /var/tmp/pubg-saas-m2-clean/current-src-6313ef7/.env \
+  -f /var/tmp/pubg-saas-m2-clean/current-src-6313ef7/compose.yaml \
+  up -d --wait postgres egress-proxy
+docker compose --project-name pubg-saas-m2-current-src-6313ef7 \
+  --env-file /var/tmp/pubg-saas-m2-clean/current-src-6313ef7/.env \
+  -f /var/tmp/pubg-saas-m2-clean/current-src-6313ef7/compose.yaml \
+  --profile ops run --rm migrate
+
+# With the protected Compose PG adapter and backup URL loaded into the shell:
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  backup --recipients-file /var/tmp/pubg-saas-m2-clean/age/recipients.txt \
+  --output-dir /var/tmp/pubg-saas-m2-clean/artifacts
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  verify --artifact /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T224246Z-56fc04f8.dump.age \
+  --manifest /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T224246Z-56fc04f8.manifest.json \
+  --identity-file /var/tmp/pubg-saas-m2-clean/age/identity.txt
+
+# After starting the separate restore PG project and loading its protected admin URL:
+python3 /var/tmp/pubg-saas-m2-clean/tooling/scripts/pubg-saas-backup-restore.py \
+  restore --artifact /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T224246Z-56fc04f8.dump.age \
+  --manifest /var/tmp/pubg-saas-m2-clean/artifacts/pubg-saas-20261013T224246Z-56fc04f8.manifest.json \
+  --identity-file /var/tmp/pubg-saas-m2-clean/age/identity.txt \
+  --target-database pubg_saas_disposable_current_6313ef7 \
+  --confirm-disposable-target pubg_saas_disposable_current_6313ef7 --apply
+
+# Run source/restore role probes from infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md,
+# then guarded cleanup, ordinary Compose down (no -v), and the private regression:
+pnpm test:pubg
+```

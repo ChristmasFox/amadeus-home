@@ -198,6 +198,22 @@ registry push or deployment was involved. This closes the native Linux ARM64
 build gate; canonical host capacity and public-only cloud operation remain
 open.
 
+## Latest-image encrypted PostgreSQL recovery — 2026-10-14
+
+Repeated the complete isolated PG workflow on `local/pubg-saas:git-6313ef7`
+using fresh source/restore Compose project names and volumes. Current image
+migrations and Gateway/Worker dry-runs passed. Age backup/verify/restore
+completed into the new PG container; all 37/37 public table counts and 14
+migration rows matched, with the synthetic tenant/team/job each restored as
+one row. Source and restored app/backup role probes passed, including app DML
+rollback, DDL denial, backup read-only/no-`nextval`, and app sequence use.
+After guarded target cleanup and ordinary Compose `down`, `pnpm test:pubg`
+passed 68/68; read-only checks showed private OpenClaw and 9Router IDs/start
+times unchanged with restart count 0. No provider credentials, production DB,
+image push, deployment, private runtime write or OpenClaw restart was involved.
+Full evidence and representative commands are in the dated M2 checkpoint and
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
+
 ## KOOK test-server connection check — 2026-10-14
 
 Using the protected, ignored `.env.local` only for the authorized P3 test

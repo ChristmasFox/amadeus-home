@@ -49,6 +49,17 @@ attempts failed due overlayfs and stale proxy environment; both conditions are
 resolved in this isolated VM. Detailed reproduction commands are in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+The same latest image then completed a fresh source-to-restore database
+rehearsal using new Compose project names/volumes. Encrypted backup verification
+and restore passed: 37/37 public table counts and 14 migration rows matched;
+synthetic tenant/team/job counts were 1/1/1. App rollback DML/DDL denial,
+backup read-only/no-`nextval`, and app sequence-use probes passed on both
+databases. After stopping the public projects, Kurisu regression passed 68/68;
+private OpenClaw and 9Router IDs/start times stayed unchanged with restart
+count 0. The disposable restore DB was removed by exact marker/name; Compose
+used plain `down` with no volume deletion. No real provider credentials,
+production DB, deployment, push, 9Router change or private OpenClaw restart.
+
 ## 2026-10-14 — PUBG SaaS current-source M1 and local recovery acceptance
 
 Commit `880a5cf` completes confirmed team leaderboard preferences and
