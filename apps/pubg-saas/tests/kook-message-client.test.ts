@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { KookMessageApiClient } from '../src/index.js';
+import { KookMessageApiClient, KookRateLimitGate } from '../src/index.js';
 
 function success(data: unknown): Response {
   return new Response(JSON.stringify({ code: 0, data }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -72,4 +72,74 @@ test('maps KMarkdown and fails closed without exposing the bot token', async () 
     assert.equal(error.message.includes('secret-fixture'), false);
     return true;
   });
+});
+
+test('uses KOOK response bucket and global reset headers to defer later sends', () => {
+  let now = 1_000;
+  const gate = new KookRateLimitGate(() => now);
+  gate.observe('/api/v3/message/create', new Headers({
+    'x-rate-limit-bucket': 'message-create-shared',
+    'x-rate-limit-remaining': '4',
+    'x-rate-limit-reset': '5',
+  }), 200);
+  gate.observe('/api/v3/direct-message/create', new Headers({
+    'x-rate-limit-bucket': 'message-create-shared',
+    'x-rate-limit-remaining': '0',
+    'x-rate-limit-reset': '5',
+  }), 200);
+  assert.equal(gate.waitMs('/api/v3/message/create'), 5_000);
+  now += 5_000;
+  assert.equal(gate.waitMs('/api/v3/message/create'), 0);
+
+  gate.observe('/api/v3/message/create', new Headers({
+    'x-rate-limit-global': '',
+    'x-rate-limit-remaining': '2',
+    'x-rate-limit-reset': '3',
+  }), 200);
+  assert.equal(gate.waitMs('/api/v3/direct-message/create'), 3_000);
+
+  const global429 = new KookRateLimitGate(() => now);
+  global429.observe('/api/v3/message/create', new Headers({
+    'x-rate-limit-global': '',
+    'x-rate-limit-bucket': 'message-create-shared',
+    'x-rate-limit-remaining': '0',
+    'x-rate-limit-reset': '2',
+    'retry-after': '7',
+  }), 429);
+  assert.equal(global429.waitMs('/api/v3/direct-message/create'), 7_000);
+});
+
+test('429 returns a durable retry delay and later sends defer without another API request', async () => {
+  let now = 1_000;
+  let calls = 0;
+  const rateLimitGate = new KookRateLimitGate(() => now);
+  const client = new KookMessageApiClient({
+    token: 'fixture-token',
+    rateLimitGate,
+    fetcher: async () => {
+      calls += 1;
+      return new Response('{"code":429}', {
+        status: 429,
+        headers: {
+          'x-rate-limit-bucket': 'group-send',
+          'x-rate-limit-remaining': '0',
+          'x-rate-limit-reset': '2',
+          'retry-after': '7',
+        },
+      });
+    },
+  });
+  await assert.rejects(client.send('bound-channel', { type: 'text', content: 'hello' }, 'c'.repeat(64)), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal((error as Error & { code?: string }).code, 'kook_message_api_rate_limited');
+    assert.equal((error as Error & { retryAfterMs?: number }).retryAfterMs, 7_000);
+    return true;
+  });
+  await assert.rejects(client.send('bound-channel', { type: 'text', content: 'later' }, 'd'.repeat(64)), (error: unknown) => {
+    assert.equal((error as Error & { retryAfterMs?: number }).retryAfterMs, 7_000);
+    return true;
+  });
+  assert.equal(calls, 1);
+  now += 7_000;
+  assert.equal(rateLimitGate.waitMs('/api/v3/message/create'), 0);
 });

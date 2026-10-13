@@ -78,6 +78,24 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     assert.equal(await outbox.deliverOne(sender), 'sent');
     assert.equal(await outbox.deliverOne(sender), 'sent');
     assert.deepEqual(destinations, [`channel:${f.channel}`, `actor:${f.user}`]);
+
+    const limitedEvent = group(f.bot, `limited-${suffix}`, f.guild, f.channel, f.user);
+    assert.equal(await restarted.ingestGatewayEvent(limitedEvent), 'accepted');
+    assert.equal(await restarted.processOne(async () => ({ type: 'text', content: 'rate limited reply' }), new AbortController().signal), 'done');
+    const oneAttemptQueue = new KookMessageQueue(pool, { botAccountId: f.bot, maxAttempts: 1 });
+    const rateLimitError = Object.assign(new Error('kook_message_api_rate_limited'), {
+      code: 'kook_message_api_rate_limited', retryAfterMs: 120_000,
+    });
+    assert.equal(await oneAttemptQueue.deliverOne({ async send() { throw rateLimitError; } }), 'retry');
+    const delayed = (await pool.query(
+      'SELECT status,last_error_code,EXTRACT(EPOCH FROM (next_attempt_at-now()))*1000 AS wait_ms FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2',
+      [f.bot, limitedEvent.msg_id],
+    )).rows[0];
+    assert.equal(delayed?.status, 'retry');
+    assert.equal(delayed?.last_error_code, 'kook_message_api_rate_limited');
+    assert.ok(Number(delayed?.wait_ms) >= 119_000);
+    await pool.query('UPDATE message_outbox SET next_attempt_at=now() WHERE bot_account_id=$1 AND source_event_id=$2', [f.bot, limitedEvent.msg_id]);
+    assert.equal(await oneAttemptQueue.deliverOne({ async send() {} }), 'sent');
   }
   finally {
     await cleanup(pool, f.bot);
@@ -116,6 +134,42 @@ test('ingress bounds admission and preserves actor order while rejecting a chang
     await cleanup(pool, f.bot);
   }
 });
+test('ingress enforces per-user, channel, tenant and bot request windows', { skip: !databaseUrl }, async () => {
+  const cases = [
+    { name: 'user', options: { maxRequestsPerUserPerMinute: 1 }, firstChannel: 0, secondChannel: 0, firstUser: 0, secondUser: 0, expected: 'kook_ingress_rate_limited_user' },
+    { name: 'channel', options: { maxRequestsPerChannelPerMinute: 1 }, firstChannel: 0, secondChannel: 0, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_channel' },
+    { name: 'tenant', options: { maxRequestsPerTenantPerMinute: 1 }, firstChannel: 0, secondChannel: 1, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_tenant' },
+    { name: 'bot', options: { maxRequestsPerBotPerMinute: 1 }, firstChannel: 0, secondChannel: 1, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_bot' },
+  ] as const;
+  for (const item of cases) {
+    const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+    const suffix = randomUUID();
+    const f = await fixture(pool, suffix);
+    const otherChannel = `channel-extra-${suffix}`;
+    await pool.query(
+      "INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id) VALUES ($1,'kook',$2,$3,$4,$5)",
+      [f.tenant, f.bot, otherChannel, f.team, f.user],
+    );
+    const queue = new KookIngressQueue(pool, {
+      botAccountId: f.bot,
+      maxRequestsPerUserPerMinute: 10,
+      maxRequestsPerChannelPerMinute: 10,
+      maxRequestsPerTenantPerMinute: 10,
+      maxRequestsPerBotPerMinute: 10,
+      ...item.options,
+    });
+    const channels = [f.channel, otherChannel] as const;
+    const users = [f.user, `other-actor-${suffix}`] as const;
+    try {
+      assert.equal(await queue.ingestGatewayEvent(group(f.bot, `first-${item.name}-${suffix}`, f.guild, channels[item.firstChannel]!, users[item.firstUser]!)), 'accepted');
+      await assert.rejects(
+        queue.ingestGatewayEvent(group(f.bot, `second-${item.name}-${suffix}`, f.guild, channels[item.secondChannel]!, users[item.secondUser]!)),
+        new RegExp(item.expected, 'u'),
+      );
+    }
+    finally { await cleanup(pool, f.bot); }
+  }
+});
 test('additive migrations upgrade an applied schema and preserve existing outbox destinations', { skip: !databaseUrl }, async () => {
   const admin = new Pool({ connectionString: databaseUrl, max: 1 });
   const schema = `migration_${randomUUID().replaceAll('-', '')}`;
@@ -129,7 +183,7 @@ test('additive migrations upgrade an applied schema and preserve existing outbox
     await migratePublicDatabase(pool);
     await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id FROM message_outbox')).rows[0], { target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null });
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 8);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 10);
   }
   finally {
     await pool.end();

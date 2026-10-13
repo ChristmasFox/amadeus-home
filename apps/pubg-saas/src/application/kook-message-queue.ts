@@ -284,7 +284,11 @@ export class KookMessageQueue {
       if (!locked.rowCount) throw new Error('kook_outbox_lease_lost');
       const attempts = Number(locked.rows[0]?.attempt_count);
       const errorCode = safeErrorCode(error);
-      if (attempts >= this.maxAttempts) {
+      const providerDelay = error && typeof error === 'object' && 'retryAfterMs' in error
+        && typeof (error as { retryAfterMs?: unknown }).retryAfterMs === 'number'
+        ? (error as { retryAfterMs: number }).retryAfterMs : null;
+      const providerRateLimited = errorCode === 'kook_message_api_rate_limited';
+      if (attempts >= this.maxAttempts && !providerRateLimited) {
         await client.query(
           `UPDATE message_outbox
            SET status='dead',payload_json='{}'::jsonb,next_attempt_at=NULL,lease_token=NULL,lease_until=NULL,last_error_code=$3
@@ -297,7 +301,9 @@ export class KookMessageQueue {
       const backoff = Math.min(this.maxRetryMs, this.baseRetryMs * 2 ** exponent);
       const randomValue = this.random();
       const random = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 1) : 0.5;
-      const delay = Math.min(this.maxRetryMs, Math.max(1, Math.round(backoff * (0.8 + 0.4 * random))));
+      const delay = providerRateLimited && providerDelay !== null && Number.isFinite(providerDelay)
+        ? Math.min(24 * 60 * 60_000, Math.max(1, Math.ceil(providerDelay)))
+        : Math.min(this.maxRetryMs, Math.max(1, Math.round(backoff * (0.8 + 0.4 * random))));
       await client.query(
         `UPDATE message_outbox
          SET status='retry',next_attempt_at=now() + ($3::BIGINT * interval '1 millisecond'),

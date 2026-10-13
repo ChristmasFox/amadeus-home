@@ -14,7 +14,16 @@ function token(payload: KookTextPayload): string {
 test('name-based onboarding creates two isolated squads, binds channels, confirms roster edits and self claims', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 8 }); const suffix = randomUUID();
   const bot = `bot-${suffix}`, guildA = `guildA-${suffix}`, guildB = `guildB-${suffix}`, actorA = `actorA-${suffix}`, actorB = `actorB-${suffix}`, regular = `regular-${suffix}`, channelA = `channelA-${suffix}`, channelB = `channelB-${suffix}`, channelA2 = `channelA2-${suffix}`;
-  const queue = new KookIngressQueue(pool, { botAccountId: bot, baseRetryMs: 1 });
+  // This management-flow fixture intentionally issues many requests from the
+  // same actor inside one minute; dedicated queue tests cover production caps.
+  const queue = new KookIngressQueue(pool, {
+    botAccountId: bot,
+    baseRetryMs: 1,
+    maxRequestsPerUserPerMinute: 100,
+    maxRequestsPerChannelPerMinute: 250,
+    maxRequestsPerTenantPerMinute: 500,
+    maxRequestsPerBotPerMinute: 1000,
+  });
   let lookups = 0, ownerAAllowed = true;
   let duringLookup: (() => Promise<void>) | null = null;
   const players = new PublicPubgPlayerResolver({

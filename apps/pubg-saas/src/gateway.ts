@@ -10,6 +10,12 @@ import { KookPermissionClient } from './channels/kook/permission-client.js';
 import { KookApplicationRuntime } from './kook-runtime.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { PublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
+
+function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
+  const value = env[key];
+  if (value === undefined || value.trim() === '') return undefined;
+  return Number(value);
+}
 /** Explicit source startup target. Without --apply it reads no runtime secret,
  * connects to no service and applies no database migration. */
 export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = process.env): Promise<void> {
@@ -38,7 +44,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0008_public_account_names.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0010_kook_ingress_rate_limits.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const permissions = new KookPermissionClient({ token });
@@ -51,7 +57,20 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookPublicQueryHandler({ authorizer, claims, planner }),
       createKookManagementHandler({ teams, claims, players }),
     );
-    const runtime = new KookApplicationRuntime({ pool, botAccountId: botId, token, handler, onError: code => process.stderr.write(`${code}\n`) });
+    const userRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE');
+    const channelRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE');
+    const tenantRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE');
+    const botRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE');
+    const ingressLimits = {
+      ...(userRate !== undefined ? { maxRequestsPerUserPerMinute: userRate } : {}),
+      ...(channelRate !== undefined ? { maxRequestsPerChannelPerMinute: channelRate } : {}),
+      ...(tenantRate !== undefined ? { maxRequestsPerTenantPerMinute: tenantRate } : {}),
+      ...(botRate !== undefined ? { maxRequestsPerBotPerMinute: botRate } : {}),
+    };
+    const runtime = new KookApplicationRuntime({
+      pool, botAccountId: botId, token, handler, ingressLimits,
+      onError: code => process.stderr.write(`${code}\n`),
+    });
     await runtime.run(stop.signal);
   }
   finally {

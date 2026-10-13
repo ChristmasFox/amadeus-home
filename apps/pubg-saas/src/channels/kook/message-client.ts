@@ -1,4 +1,5 @@
 import { validateKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
+import { KookRateLimitGate } from './rate-limit-gate.js';
 
 interface KookApiEnvelope {
   code: number;
@@ -9,6 +10,7 @@ export interface KookMessageApiClientOptions {
   token: string;
   fetcher?: typeof fetch;
   timeoutMs?: number;
+  rateLimitGate?: KookRateLimitGate;
 }
 
 function requiredText(value: string, key: string, maxLength = 256): string {
@@ -20,6 +22,13 @@ function requiredText(value: string, key: string, maxLength = 256): string {
 
 function codedError(code: string): Error & { code: string } {
   return Object.assign(new Error(code), { code });
+}
+
+function rateLimitedError(retryAfterMs: number): Error & { code: string; retryAfterMs: number } {
+  return Object.assign(new Error('kook_message_api_rate_limited'), {
+    code: 'kook_message_api_rate_limited',
+    retryAfterMs,
+  });
 }
 
 function parseEnvelope(value: unknown): KookApiEnvelope {
@@ -35,12 +44,14 @@ export class KookMessageApiClient implements KookGroupMessageSender {
   private readonly token: string;
   private readonly fetcher: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly rateLimitGate: KookRateLimitGate;
 
   constructor(options: KookMessageApiClientOptions) {
     this.token = requiredText(options.token, 'token', 4096);
     this.fetcher = options.fetcher ?? fetch;
     this.timeoutMs = options.timeoutMs ?? 5000;
     if (!Number.isSafeInteger(this.timeoutMs) || this.timeoutMs < 1) throw new Error('kook_message_timeout_invalid');
+    this.rateLimitGate = options.rateLimitGate ?? new KookRateLimitGate();
   }
 
   async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
@@ -52,6 +63,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
   }
 
   private async sendTo(kind: 'message' | 'direct-message', targetIdInput: string, payloadInput: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
+    const route = `/api/v3/${kind}/create`;
     const targetId = requiredText(targetIdInput, 'target_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
     let payload: KookTextPayload;
@@ -67,9 +79,11 @@ export class KookMessageApiClient implements KookGroupMessageSender {
       body.set('quote', messageId);
       body.set('reply_msg_id', messageId);
     }
+    const localWait = this.rateLimitGate.waitMs(route);
+    if (localWait > 0) throw rateLimitedError(localWait);
     let response: Response;
     try {
-      response = await this.fetcher(`https://www.kookapp.cn/api/v3/${kind}/create`, {
+      response = await this.fetcher(`https://www.kookapp.cn${route}`, {
         method: 'POST',
         headers: {
           Authorization: `Bot ${this.token}`,
@@ -84,6 +98,8 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     } catch {
       throw codedError('kook_message_api_unavailable');
     }
+    const retryAfterMs = this.rateLimitGate.observe(route, response.headers, response.status);
+    if (response.status === 429) throw rateLimitedError(retryAfterMs ?? 60_000);
     if (!response.ok) throw codedError(`kook_message_api_http_${response.status}`);
     let result: unknown;
     try { result = await response.json(); } catch { throw codedError('kook_message_response_invalid'); }

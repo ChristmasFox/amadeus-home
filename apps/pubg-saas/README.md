@@ -193,8 +193,15 @@ pnpm --filter @agent/pubg-saas worker -- --apply --once
 ```
 
 Apply schema migrations separately before starting either runtime; the gateway
-and worker require migration `0008_public_account_names.sql` and never migrate
-automatically. The worker defaults to 5-minute cycles, 500 discovered matches
+and worker require migration `0010_kook_ingress_rate_limits.sql` and never migrate
+automatically. Ingress defaults are 10 requests/user/minute, 60/channel/minute,
+120/tenant/minute and 300/bot/minute; set `KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE`,
+`KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE`, `KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE`
+and `KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE` to tune them. KOOK REST sends pause
+on documented route/global rate headers and defer 429s through durable outbox
+retry. Its separate daily message allowance is developer-account-wide and must
+be verified with other bots' usage during live preflight; this single bot cannot
+observe that aggregate. The worker defaults to 5-minute cycles, 500 discovered matches
 and 20 telemetry fetches per team per cycle. These are operating defaults, not
 a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry
 concurrency are bounded. SIGINT/SIGTERM stop intake and close pools.

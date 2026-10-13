@@ -21,6 +21,10 @@ export interface KookIngressQueueOptions {
   botAccountId: string;
   maxPending?: number;
   maxPendingPerUser?: number;
+  maxRequestsPerUserPerMinute?: number;
+  maxRequestsPerChannelPerMinute?: number;
+  maxRequestsPerTenantPerMinute?: number;
+  maxRequestsPerBotPerMinute?: number;
   payloadTtlMs?: number;
   leaseMs?: number;
   maxAttempts?: number;
@@ -58,6 +62,10 @@ export class KookIngressQueue {
   private readonly botId: string;
   private readonly maxPending: number;
   private readonly maxPerUser: number;
+  private readonly maxRequestsPerUserPerMinute: number;
+  private readonly maxRequestsPerChannelPerMinute: number;
+  private readonly maxRequestsPerTenantPerMinute: number;
+  private readonly maxRequestsPerBotPerMinute: number;
   private readonly ttlMs: number;
   private readonly leaseMs: number;
   private readonly maxAttempts: number;
@@ -66,12 +74,20 @@ export class KookIngressQueue {
     this.botId = options.botAccountId.trim();
     this.maxPending = options.maxPending ?? 1000;
     this.maxPerUser = options.maxPendingPerUser ?? 20;
+    this.maxRequestsPerUserPerMinute = options.maxRequestsPerUserPerMinute ?? 10;
+    this.maxRequestsPerChannelPerMinute = options.maxRequestsPerChannelPerMinute ?? 60;
+    this.maxRequestsPerTenantPerMinute = options.maxRequestsPerTenantPerMinute ?? 120;
+    this.maxRequestsPerBotPerMinute = options.maxRequestsPerBotPerMinute ?? 300;
     this.ttlMs = options.payloadTtlMs ?? 60 * 60000;
     this.leaseMs = options.leaseMs ?? 30000;
     this.maxAttempts = options.maxAttempts ?? 5;
     this.baseRetryMs = options.baseRetryMs ?? 1000;
     if (!this.botId || this.botId.length > 128 || !Number.isSafeInteger(this.maxPending) || this.maxPending < 1 || this.maxPending > 10000
       || !Number.isSafeInteger(this.maxPerUser) || this.maxPerUser < 1 || this.maxPerUser > this.maxPending
+      || !Number.isSafeInteger(this.maxRequestsPerUserPerMinute) || this.maxRequestsPerUserPerMinute < 1 || this.maxRequestsPerUserPerMinute > 10000
+      || !Number.isSafeInteger(this.maxRequestsPerChannelPerMinute) || this.maxRequestsPerChannelPerMinute < 1 || this.maxRequestsPerChannelPerMinute > 100000
+      || !Number.isSafeInteger(this.maxRequestsPerTenantPerMinute) || this.maxRequestsPerTenantPerMinute < 1 || this.maxRequestsPerTenantPerMinute > 100000
+      || !Number.isSafeInteger(this.maxRequestsPerBotPerMinute) || this.maxRequestsPerBotPerMinute < 1 || this.maxRequestsPerBotPerMinute > 100000
       || !Number.isSafeInteger(this.ttlMs) || this.ttlMs < 1000 || this.ttlMs > 24 * 60 * 60000
       || !Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000 || this.leaseMs > 5 * 60000
       || !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
@@ -101,6 +117,19 @@ export class KookIngressQueue {
       const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
          ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
          WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
+      const tenantId = typeof binding?.rows[0]?.tenant_id === 'string' ? binding.rows[0].tenant_id : null;
+      const channelId = parsed.request.kind === 'group' ? parsed.channelId : null;
+      const recent = await client.query(`SELECT
+        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS bot,
+        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND user_id=$2 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS actor,
+        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND channel_id=$3 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS channel,
+        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND tenant_id=$4 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS tenant`,
+      [this.botId, parsed.userId, channelId, tenantId]);
+      const recentCounts = recent.rows[0];
+      if (Number(recentCounts?.bot ?? 0) >= this.maxRequestsPerBotPerMinute) throw new Error('kook_ingress_rate_limited_bot');
+      if (Number(recentCounts?.tenant ?? 0) >= this.maxRequestsPerTenantPerMinute) throw new Error('kook_ingress_rate_limited_tenant');
+      if (Number(recentCounts?.channel ?? 0) >= this.maxRequestsPerChannelPerMinute) throw new Error('kook_ingress_rate_limited_channel');
+      if (Number(recentCounts?.actor ?? 0) >= this.maxRequestsPerUserPerMinute) throw new Error('kook_ingress_rate_limited_user');
       const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
       await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
          tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)

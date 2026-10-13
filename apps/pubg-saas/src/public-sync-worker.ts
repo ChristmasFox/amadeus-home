@@ -44,19 +44,24 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   const intervalMs = positiveInteger(env.PUBLIC_SYNC_INTERVAL_MS, DEFAULT_INTERVAL_MS, 24 * 60 * 60_000);
   const maxMatches = positiveInteger(env.PUBLIC_SYNC_MAX_MATCHES, 500, 1000);
   const maxTelemetryFetches = positiveInteger(env.PUBLIC_SYNC_MAX_TELEMETRY_FETCHES, 20, 50);
+  const teamConcurrency = positiveInteger(env.PUBLIC_SYNC_TEAM_CONCURRENCY, 2, 16);
+  const leaseMs = positiveInteger(env.PUBLIC_SYNC_LEASE_MS, 120_000, 15 * 60_000);
   const pool = new Pool({ connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 30_000 });
   const stop = new AbortController();
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0008_public_account_names.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0010_kook_ingress_rate_limits.sql'");
     if (!ready.rowCount) throw new Error('pubg_saas_schema_upgrade_required');
     const worker = new PublicSyncWorker(pool, {
       apiKey,
       admission: new PostgresPublicPubgAdmission(pool, requestsPerMinute, 30_000),
       maxMatches,
       maxTelemetryFetches,
+      teamConcurrency,
+      syncIntervalMs: intervalMs,
+      leaseMs,
       onTeamError: code => process.stderr.write(`${code}\n`),
     });
     do {

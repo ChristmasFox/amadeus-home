@@ -12,6 +12,7 @@ import type { Pool, QueryResultRow } from 'pg';
 import type { PublicPubgAdmission } from '../infrastructure/pubg/request-limiter.js';
 import { PostgresPubgRepository } from '../infrastructure/postgres/pubg-repository.js';
 import { validatePublicPubgShard } from '../infrastructure/pubg/player-resolver.js';
+import { PublicSyncQueue, type PublicSyncJob } from './public-sync-queue.js';
 
 const API_ORIGIN = 'https://api.pubg.com';
 const TELEMETRY_HOSTS = new Set(['telemetry-cdn.pubg.com', 'telemetry-cdn.playbattlegrounds.com']);
@@ -20,6 +21,8 @@ const MAX_TELEMETRY_RESPONSE_BYTES = 96 * 1024 * 1024;
 const DEFAULT_MAX_MATCHES = 500;
 const DEFAULT_MAX_TELEMETRY_FETCHES = 20;
 const DEFAULT_TELEMETRY_CONCURRENCY = 2;
+const DEFAULT_TEAM_CONCURRENCY = 2;
+const DEFAULT_SYNC_INTERVAL_MS = 5 * 60_000;
 const ACCOUNT_ID = /^account\.[A-Za-z0-9_-]{1,128}$/u;
 const MATCH_ID = /^[A-Za-z0-9_.-]{1,128}$/u;
 
@@ -41,6 +44,9 @@ export interface PublicSyncWorkerOptions {
   maxMatches?: number;
   maxTelemetryFetches?: number;
   telemetryConcurrency?: number;
+  teamConcurrency?: number;
+  syncIntervalMs?: number;
+  leaseMs?: number;
   onTeamError?: (code: 'public_sync_team_invalid' | 'public_sync_team_failed') => void;
 }
 
@@ -52,14 +58,6 @@ interface TeamRow extends QueryResultRow {
   pubg_account_id: string | null;
   official_name: string | null;
   display_alias: string | null;
-}
-
-interface TeamBuilder {
-  tenantId: string;
-  id: string;
-  label: string;
-  shard: string;
-  players: Map<string, { id: string; name: string; aliases: string[] }>;
 }
 
 function boundedInteger(value: number, fallback: number, minimum: number, maximum: number): number {
@@ -134,7 +132,11 @@ export function createPublicSyncFetch(
   };
 }
 
-async function registeredTeams(pool: Pool): Promise<{ teams: TeamContext[]; invalid: number }> {
+class InvalidTeamError extends Error {
+  constructor() { super('public_sync_team_invalid'); }
+}
+
+async function registeredTeam(pool: Pool, tenantId: string, teamId: string): Promise<TeamContext> {
   const result = await pool.query<TeamRow>(
     `SELECT team.tenant_id,team.team_id,team.label,team.pubg_shard,member.pubg_account_id,
        COALESCE(account.display_name,member.pubg_account_id) AS official_name,alias.display_alias
@@ -143,52 +145,40 @@ async function registeredTeams(pool: Pool): Promise<{ teams: TeamContext[]; inva
      LEFT JOIN pubg_accounts account ON account.shard=team.pubg_shard AND account.account_id=member.pubg_account_id
      LEFT JOIN team_aliases alias ON alias.tenant_id=member.tenant_id AND alias.team_id=member.team_id
        AND alias.pubg_account_id=member.pubg_account_id
-     ORDER BY team.tenant_id,team.team_id,member.pubg_account_id,alias.alias_key`,
+     WHERE team.tenant_id=$1 AND team.team_id=$2
+     ORDER BY member.pubg_account_id,alias.alias_key`,
+    [tenantId, teamId],
   );
-  const builders = new Map<string, TeamBuilder>();
+  if (!result.rows.length) throw new InvalidTeamError();
+  const first = result.rows[0]!;
+  const players = new Map<string, { id: string; name: string; aliases: string[] }>();
   for (const row of result.rows) {
-    const key = JSON.stringify([row.tenant_id, row.team_id]);
-    let builder = builders.get(key);
-    if (!builder) {
-      builder = {
-        tenantId: row.tenant_id,
-        id: row.team_id,
-        label: row.label,
-        shard: row.pubg_shard,
-        players: new Map(),
-      };
-      builders.set(key, builder);
-    }
     if (!row.pubg_account_id) continue;
-    let player = builder.players.get(row.pubg_account_id);
+    let player = players.get(row.pubg_account_id);
     if (!player) {
       player = { id: row.pubg_account_id, name: row.official_name?.trim() || row.pubg_account_id, aliases: [] };
-      builder.players.set(row.pubg_account_id, player);
+      players.set(row.pubg_account_id, player);
     }
     if (row.display_alias?.trim() && !player.aliases.includes(row.display_alias.trim())) player.aliases.push(row.display_alias.trim());
   }
-  const teams: TeamContext[] = [];
-  let invalid = 0;
-  for (const builder of builders.values()) {
-    try {
-      validatePublicPubgShard(builder.shard);
-      const team: TeamConfig = {
-        id: builder.id,
-        label: builder.label,
-        platform: builder.shard,
-        players: [...builder.players.values()],
-      };
-      if (team.players.length < 1 || team.players.length > 4
-        || team.players.some((player) => !ACCOUNT_ID.test(player.id) || player.name.length > 100
-          || player.aliases.some((alias) => alias.length > 100 || /[\u0000-\u001f]/u.test(alias)))) {
-        throw new Error('public_sync_roster_invalid');
-      }
-      teams.push(createTeamContext(builder.tenantId, team));
-    } catch {
-      invalid += 1;
+  try {
+    validatePublicPubgShard(first.pubg_shard);
+    const team: TeamConfig = {
+      id: first.team_id,
+      label: first.label,
+      platform: first.pubg_shard,
+      players: [...players.values()],
+    };
+    if (team.players.length < 1 || team.players.length > 4
+      || team.players.some((player) => !ACCOUNT_ID.test(player.id) || player.name.length > 100
+        || player.aliases.some((alias) => alias.length > 100 || /[\u0000-\u001f]/u.test(alias)))) {
+      throw new InvalidTeamError();
     }
+    return createTeamContext(first.tenant_id, team);
+  } catch (error) {
+    if (error instanceof InvalidTeamError) throw error;
+    throw new InvalidTeamError();
   }
-  return { teams, invalid };
 }
 
 function numberFrom(value: unknown): number {
@@ -219,12 +209,20 @@ export class PublicSyncWorker {
   private readonly maxMatches: number;
   private readonly maxTelemetryFetches: number;
   private readonly telemetryConcurrency: number;
+  private readonly teamConcurrency: number;
+  private readonly syncIntervalMs: number;
+  private readonly leaseMs: number;
+  private readonly queue: PublicSyncQueue;
 
   constructor(private readonly pool: Pool, options: PublicSyncWorkerOptions) {
     if (!options.apiKey.trim()) throw new Error('public_pubg_api_key_missing');
     this.maxMatches = boundedInteger(options.maxMatches ?? DEFAULT_MAX_MATCHES, DEFAULT_MAX_MATCHES, 1, 1000);
     this.maxTelemetryFetches = boundedInteger(options.maxTelemetryFetches ?? DEFAULT_MAX_TELEMETRY_FETCHES, DEFAULT_MAX_TELEMETRY_FETCHES, 1, 50);
     this.telemetryConcurrency = boundedInteger(options.telemetryConcurrency ?? DEFAULT_TELEMETRY_CONCURRENCY, DEFAULT_TELEMETRY_CONCURRENCY, 1, 4);
+    this.teamConcurrency = boundedInteger(options.teamConcurrency ?? DEFAULT_TEAM_CONCURRENCY, DEFAULT_TEAM_CONCURRENCY, 1, 16);
+    this.syncIntervalMs = boundedInteger(options.syncIntervalMs ?? DEFAULT_SYNC_INTERVAL_MS, DEFAULT_SYNC_INTERVAL_MS, 1_000, 24 * 60 * 60_000);
+    this.leaseMs = boundedInteger(options.leaseMs ?? 120_000, 120_000, 1_000, 15 * 60_000);
+    this.queue = new PublicSyncQueue(pool, { leaseMs: this.leaseMs });
     this.now = options.now ?? (() => new Date());
     const fetchImpl = createPublicSyncFetch(options.admission, options.fetchImpl);
     this.client = new PubgApiClient({ apiKey: options.apiKey, baseUrl: API_ORIGIN, maxRetries: 0, concurrency: 2, timeoutMs: 15_000, fetchImpl });
@@ -240,52 +238,87 @@ export class PublicSyncWorker {
   private readonly onTeamError: (code: 'public_sync_team_invalid' | 'public_sync_team_failed') => void;
 
   async runOnce(signal?: AbortSignal): Promise<PublicSyncCycleResult> {
-    const { teams, invalid } = await registeredTeams(this.pool);
+    const teamsDiscovered = await this.queue.ensureTeams();
     const summary: PublicSyncCycleResult = {
-      teamsDiscovered: teams.length + invalid,
+      teamsDiscovered,
       teamsAttempted: 0,
       teamsCompleted: 0,
-      teamsFailed: invalid,
+      teamsFailed: 0,
       matchesDiscovered: 0,
       telemetryFetched: 0,
       telemetryUnavailable: 0,
     };
-    for (let index = 0; index < invalid; index += 1) this.onTeamError('public_sync_team_invalid');
-    for (const teamContext of teams) {
-      if (signal?.aborted) break;
-      summary.teamsAttempted += 1;
-      try {
-        const repository = new PostgresPubgRepository(this.pool, teamContext);
-        const telemetryWorker = new TelemetryWorker({
-          team: teamContext.team,
-          store: repository,
-          downloader: this.telemetryDownloader,
-        });
-        const service = new PubgDomainService({
-          teamContext,
-          repository,
-          apiClient: this.client,
-          telemetryWorker,
-          maxMatches: this.maxMatches,
-          now: this.now,
-        });
-        const result = await service.prefetchTelemetry({
-          maxMatches: this.maxMatches,
-          maxFetches: this.maxTelemetryFetches,
-          concurrency: this.telemetryConcurrency,
-          trigger: 'hourly',
-          ...(signal ? { signal } : {}),
-        });
-        const telemetry = telemetryRun(result.data);
+    // A stop request prevents new claims. Jobs already leased finish and are
+    // checkpointed before the caller closes the PG pool, which gives shutdown
+    // a bounded, recoverable boundary without dropping in-flight work.
+    while (!signal?.aborted) {
+      const jobs = await this.queue.claimDue(this.teamConcurrency);
+      if (jobs.length === 0) break;
+      summary.teamsAttempted += jobs.length;
+      const results = await Promise.all(jobs.map((job) => this.processJob(job)));
+      for (const result of results) {
+        if (!result.ok) {
+          summary.teamsFailed += 1;
+          this.onTeamError(result.invalid ? 'public_sync_team_invalid' : 'public_sync_team_failed');
+          continue;
+        }
         summary.teamsCompleted += 1;
-        summary.matchesDiscovered += telemetry.discovered;
-        summary.telemetryFetched += telemetry.fetched;
-        summary.telemetryUnavailable += telemetry.unavailable;
-      } catch {
-        summary.teamsFailed += 1;
-        this.onTeamError('public_sync_team_failed');
+        summary.matchesDiscovered += result.telemetry.discovered;
+        summary.telemetryFetched += result.telemetry.fetched;
+        summary.telemetryUnavailable += result.telemetry.unavailable;
       }
     }
     return summary;
   }
+
+  private async processJob(job: PublicSyncJob): Promise<
+    | { ok: true; telemetry: { discovered: number; fetched: number; unavailable: number } }
+    | { ok: false; invalid: boolean }
+  > {
+    const stopIfLeaseLost = new AbortController();
+    let renewalInFlight = false;
+    const heartbeat = setInterval(() => {
+      if (renewalInFlight) return;
+      renewalInFlight = true;
+      void this.queue.renew(job).then((renewed) => {
+        if (!renewed) stopIfLeaseLost.abort();
+      }).catch(() => stopIfLeaseLost.abort()).finally(() => { renewalInFlight = false; });
+    }, Math.max(250, Math.floor(this.leaseMs / 3)));
+    heartbeat.unref?.();
+    try {
+      const teamContext = await registeredTeam(this.pool, job.tenantId, job.teamId);
+      const repository = new PostgresPubgRepository(this.pool, teamContext);
+      const telemetryWorker = new TelemetryWorker({
+        team: teamContext.team,
+        store: repository,
+        downloader: this.telemetryDownloader,
+      });
+      const service = new PubgDomainService({
+        teamContext,
+        repository,
+        apiClient: this.client,
+        telemetryWorker,
+        maxMatches: this.maxMatches,
+        now: this.now,
+      });
+      const result = await service.prefetchTelemetry({
+        maxMatches: this.maxMatches,
+        maxFetches: this.maxTelemetryFetches,
+        concurrency: this.telemetryConcurrency,
+        trigger: 'hourly',
+        signal: stopIfLeaseLost.signal,
+      });
+      if (stopIfLeaseLost.signal.aborted || !await this.queue.complete(job, this.syncIntervalMs)) {
+        return { ok: false, invalid: false };
+      }
+      return { ok: true, telemetry: telemetryRun(result.data) };
+    } catch (error) {
+      const invalid = error instanceof InvalidTeamError;
+      await this.queue.fail(job, invalid ? 'public_sync_team_invalid' : 'public_sync_team_failed').catch(() => false);
+      return { ok: false, invalid };
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
 }
