@@ -5,9 +5,10 @@ slices from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
 `PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild
 permission checks, transactional squad/channel/roster management with one-use
 confirmations, and direct-message scoped self-declared account claims. The KOOK
-WebSocket lifecycle, card callbacks, PUBG account lookup, worker, AI SDK
-integration and deployment image are still in progress. This package is not a
-runnable or deployed service yet.
+fixture-driven gateway session and inbox/outbox queue are also implemented.
+The concrete WebSocket runtime adapter, message REST sender, card callbacks,
+PUBG account lookup, worker, AI SDK integration and deployment image are still
+in progress. This package is not a runnable or deployed service yet.
 
 ## Trust boundaries
 
@@ -31,6 +32,15 @@ runnable or deployed service yet.
   claim to the KOOK user, and labels it `self_declared`. Confirmation is
   one-use; unique constraints prevent a second user from claiming the same
   shard/account pair. This is not proof of game-account ownership.
+- `KookGatewayClient` persists the session ID and last successfully handled
+  sequence, buffers out-of-order frames, sends heartbeat/resume signals, and
+  clears session sequence state on the server's reconnect signal. Its socket
+  factory is injected and it has offline fixture coverage only so far.
+- `KookMessageQueue` deduplicates bound group events and enqueues replies only
+  to the original bound channel. Outbox claims use expiring leases and
+  `SKIP LOCKED`; delivery errors are reduced to bounded codes with retry
+  backoff. Payloads are cleared after success/dead-letter, and retention
+  pruning is exposed for a future worker.
 - Public credentials and `DATABASE_URL` are runtime-only. No real credential
   is needed for local repository tests.
 
@@ -43,6 +53,9 @@ follow the [KOOK HTTP API reference](https://developer.kookapp.cn/doc/reference)
 [guild API](https://developer.kookapp.cn/doc/http/guild),
 [guild-role API](https://developer.kookapp.cn/doc/http/guild-role) and
 [group message event format](https://developer.kookapp.cn/doc/event/message).
+Gateway framing, heartbeat, sequence, resume and reconnect handling follows
+the [KOOK WebSocket protocol](https://developer.kookapp.cn/doc/websocket) and
+[gateway URL API](https://developer.kookapp.cn/doc/http/gateway).
 
 ## Local verification
 

@@ -23,11 +23,15 @@ stat golden. The current P2 source adds trusted group/direct-message parsing,
 uncached KOOK owner/Administrator checks, transactional squad/channel/roster
 management with actor-bound one-use confirmations, and self-declared account
 claims with conflict-safe unclaim. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (9 SaaS tests); `pnpm build:pubg-saas`, `pnpm test:workflow`,
+PostgreSQL 18 (14 SaaS tests); `pnpm build:pubg-saas`, `pnpm test:workflow`,
 `pnpm test:architecture`, `pnpm check:secrets` and `git diff --check` pass.
-Full KOOK transport/card callbacks, PUBG account lookup, SQLite/Postgres
-edge-case parity, Compose/app runtime, and independent deployment/restore
-drills remain incomplete. No runtime or production credentials were touched.
+The current P3 source also includes a fixture-
+driven gateway session core (durable `session_id/sn`, ordering, heartbeat,
+resume and server reconnect reset) plus bound-channel inbox dedupe and leased
+outbox retry. Full KOOK socket runtime, message REST sender, card
+callbacks, test guild, PUBG account lookup, SQLite/Postgres edge-case parity,
+Compose/app runtime, and independent deployment/restore drills remain
+incomplete. No runtime or production credentials were touched.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

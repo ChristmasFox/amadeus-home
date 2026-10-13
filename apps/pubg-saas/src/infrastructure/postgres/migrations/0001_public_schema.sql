@@ -297,6 +297,13 @@ CREATE TABLE IF NOT EXISTS message_inbox (
   PRIMARY KEY (platform, bot_account_id, source_event_id)
 );
 
+CREATE TABLE IF NOT EXISTS kook_gateway_state (
+  bot_account_id TEXT PRIMARY KEY,
+  session_id TEXT,
+  last_sn BIGINT NOT NULL DEFAULT 0 CHECK (last_sn >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS message_outbox (
   outbox_id TEXT PRIMARY KEY,
   idempotency_key TEXT NOT NULL UNIQUE,
@@ -309,9 +316,12 @@ CREATE TABLE IF NOT EXISTS message_outbox (
   status TEXT NOT NULL,
   attempt_count INTEGER NOT NULL DEFAULT 0,
   next_attempt_at TIMESTAMPTZ,
+  lease_token TEXT,
+  lease_until TIMESTAMPTZ,
+  last_error_code TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_message_outbox_due ON message_outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_message_outbox_due ON message_outbox(status, next_attempt_at, lease_until, created_at);
 
 CREATE TABLE IF NOT EXISTS usage_records (
   usage_id BIGSERIAL PRIMARY KEY,

@@ -53,9 +53,12 @@ trusted KOOK group/direct-message parsing, fresh guild owner/Administrator
 checks, and transactional squad/channel/roster management with actor-bound
 one-use confirmations are also implemented. Direct-message account claims are
 stored as self-declared and protected by user-scoped uniqueness and unclaim
-confirmation. Full edge-case parity, PUBG account lookup, complete KOOK
-transport/card interactions and deployment remain implementation work. See
-the Goal's phase gates before describing any of them as ready.
+confirmation. P3 source includes a fixture-driven gateway session core with
+durable sequence/resume state and a bound-channel inbox/outbox queue with
+lease-based retry. The concrete socket runtime, message REST sender, card
+callbacks and test guild, plus full edge-case parity, PUBG account lookup and
+deployment, remain implementation work. See the Goal's phase gates before
+describing any of them as ready.
 
 ## Request paths and guardrails
 
