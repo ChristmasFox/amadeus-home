@@ -38,9 +38,9 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0005`
+Additive migrations through `0006`
 upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (38 SaaS tests), including private PUBG regression checks. This is
+PostgreSQL 18 (45 SaaS tests), including private PUBG regression checks. This is
 source and offline-fixture progress; package build, both entry-point dry-runs,
 secrets scan and `git diff --check` also passed. P3 acceptance still requires
 an isolated real test guild and current endpoint/guild eligibility preflight.
@@ -51,8 +51,15 @@ The inspected P1/P2 shard-cache gap is now corrected: match/player/telemetry/
 prefetch keys include shard, reads enforce registered roster/shard and any
 conversation authority, and foreign telemetry cannot bypass match membership.
 Legacy child shards are backfilled from parent facts; unresolved rows abort
-migration atomically and remain intact. Public authorization/conversation
-construction and complete Domain edge-case parity remain next work.
+migration atomically and remain intact. P2 now also builds public query context
+from active durable ingress, current binding/revision and fresh KOOK membership;
+DMs require explicit actor grants and selection when several teams are authorized.
+Opaque TTL sessions isolate requester/channel/team, reuse exact-event retries,
+and invalidate old state after roster/alias changes, revoke/regrant or rebind.
+Legacy queued group authority is never guessed during migration. This module is
+tested but not yet wired to the executable's statistical handler. Resolved player
+name persistence, quote/thread correlation, complete Domain edge-case parity
+and query/AI/worker integration remain next work.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

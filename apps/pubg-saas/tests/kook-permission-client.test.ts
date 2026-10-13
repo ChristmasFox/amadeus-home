@@ -6,6 +6,33 @@ function response(data: unknown): Response {
   return new Response(JSON.stringify({ code: 0, data }), { status: 200, headers: { 'content-type': 'application/json' } });
 }
 
+test('fresh query checks verify the guild and text channel, filter by user and do not cache membership', async () => {
+  const calls: URL[] = []; let present = true;
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(String(input)); calls.push(url);
+    assert.equal(init?.cache, 'no-store'); assert.equal(init?.redirect, 'error');
+    if (url.pathname.endsWith('/guild/view')) return response({ id: 'guild' });
+    if (url.pathname.endsWith('/channel/view')) return response({ id: 'channel', guild_id: 'guild', type: 1, is_category: false });
+    assert.equal(url.searchParams.get('filter_user_id'), 'user');
+    return response({ items: present ? [{ id: 'user' }] : [] });
+  };
+  const client = new KookPermissionClient({ token: 'fixture', fetcher });
+  assert.equal(await client.isTextChannelMember('guild', 'channel', 'user'), true);
+  assert.equal(calls[1]?.searchParams.get('channel_id'), 'channel'); present = false;
+  assert.equal(await client.isTextChannelMember('guild', 'channel', 'user'), false);
+  assert.equal(await client.isGuildMember('guild', 'user'), false);
+  assert.equal(calls[5]?.searchParams.has('channel_id'), false);
+});
+
+test('query membership checks fail closed on a foreign/non-text channel and an unfiltered member response', async () => {
+  const foreign = new KookPermissionClient({ token: 'fixture', fetcher: async () => response({ id: 'channel', guild_id: 'other', type: 1, is_category: false }) });
+  await assert.rejects(foreign.isTextChannelMember('guild', 'channel', 'user'), /kook_permission_channel_invalid/u);
+  const voice = new KookPermissionClient({ token: 'fixture', fetcher: async () => response({ id: 'channel', guild_id: 'guild', type: 2, is_category: false }) });
+  await assert.rejects(voice.isTextChannelMember('guild', 'channel', 'user'), /kook_permission_channel_invalid/u);
+  const unfiltered = new KookPermissionClient({ token: 'fixture', fetcher: async (input) => new URL(String(input)).pathname.endsWith('/guild/view') ? response({ id: 'guild' }) : response({ items: [{ id: 'another-user' }] }) });
+  await assert.rejects(unfiltered.isGuildMember('guild', 'user'), /kook_permission_member_invalid/u);
+});
+
 test('checks live guild owner and admin role through fresh KOOK API data', async () => {
   const calls: Array<{ url: URL; authorization: string | null }> = [];
   const fetcher: typeof fetch = async (input, init) => {

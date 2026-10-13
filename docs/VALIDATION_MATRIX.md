@@ -57,5 +57,13 @@ scope-change rejection, public API admission/header backoff, prior-schema upgrad
 delivery including system-join welcome metadata validation and replay.
 Public repository fixtures include cross-shard ID collisions, registered-roster
 and DM access checks, foreign telemetry denial and atomic legacy shard migration.
+Public query fixtures derive authority from an active stored ingress lease and
+fresh KOOK channel/guild membership; they cover explicit DM grant/selection,
+concurrent retry/session reuse, actor/channel/team isolation, roster/alias TTL,
+grant revoke/regrant, permission-check races and same-team rebind invalidation.
+Legacy queued group events without a binding generation fail closed on upgrade.
+The 45-test suite uses fixture HTTP and ephemeral PostgreSQL 18; statistical
+handler wiring, player-name persistence, reply threads and real KOOK acceptance
+are still pending.
 Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
 backup/restore or 200-squad acceptance.

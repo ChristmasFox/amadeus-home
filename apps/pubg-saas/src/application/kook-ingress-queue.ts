@@ -9,6 +9,8 @@ export interface KookIngressJob {
   eventId: string;
   leaseToken: string;
   attemptCount: number;
+  /** Admission-time generation; same-team unbind/rebind still invalidates it. */
+  bindingRevision: string | null;
   request: KookRequestEvent;
   boundTeam: {
     tenantId: string;
@@ -99,11 +101,12 @@ export class KookIngressQueue {
       const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
          ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
          WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
+      const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
       await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
-         tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'))`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
+         tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'),$15)`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
       binding?.rows[0]?.tenant_id ?? null, binding?.rows[0]?.team_id ?? null, parsed.targetKind, parsed.targetId,
-      parsed.replyToMessageId, fingerprint, serialized, this.ttlMs]);
+      parsed.replyToMessageId, fingerprint, serialized, this.ttlMs, parsed.request.kind === 'group' ? String(version?.rows[0]?.revision ?? 0) : null]);
       return 'accepted';
     });
   }
@@ -136,6 +139,7 @@ export class KookIngressQueue {
       throw new Error('kook_ingress_payload_invalid');
     return {
       botAccountId: this.botId, eventId: String(row.event_id), leaseToken, attemptCount: Number(row.attempt_count), request: parsed.request,
+      bindingRevision: row.binding_revision === null ? null : String(row.binding_revision),
       boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
     };
   }
@@ -147,7 +151,8 @@ export class KookIngressQueue {
        ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
        WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [job.botAccountId, event.guildId, event.channelId]);
     const row = current.rows[0];
-    if (job.boundTeam ? row?.tenant_id !== job.boundTeam.tenantId || row?.team_id !== job.boundTeam.teamId : Boolean(row)) {
+    const version = await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, event.channelId]);
+    if (job.bindingRevision !== String(version.rows[0]?.revision ?? 0) || (job.boundTeam ? row?.tenant_id !== job.boundTeam.tenantId || row?.team_id !== job.boundTeam.teamId : Boolean(row))) {
       throw Object.assign(new Error('kook_ingress_binding_changed'), { code: 'kook_ingress_binding_changed' });
     }
   }
@@ -169,6 +174,7 @@ export class KookIngressQueue {
         throw new Error('kook_ingress_payload_invalid');
       await this.requireCurrentBinding(client, {
         ...job, request: parsed.request,
+        bindingRevision: row.binding_revision === null ? null : String(row.binding_revision),
         boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
       });
       if (payload) {

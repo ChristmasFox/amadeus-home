@@ -10,8 +10,9 @@ are wired into an executable source entry point. Name-based commands/cards
 cover create/bind/list/roster changes, status/unbind/disband, and private
 self-claim/status/unclaim. Public lookup reuses the shared API client with
 independent PostgreSQL request admission. Automatic guild-invite welcome now
-uses durable system-event intake plus verified guild/channel metadata. Query
-handling, ingestion worker, AI SDK and deployment images remain in
+uses durable system-event intake plus verified guild/channel metadata. Public
+query authorization/session construction is implemented as a tested application
+module; query handling, ingestion worker, AI SDK and deployment images remain in
 progress. The service is not deployed, and live buttons remain unverified.
 
 ## Trust boundaries
@@ -21,6 +22,31 @@ progress. The service is not deployed, and live buttons remain unverified.
 - Result sets and conversation state require a `TrustedConversationScope`
   created from the verified bot, user, channel and an opaque server-generated
   session ID. Model/tool arguments never define that scope.
+- `PublicQueryAuthorizer` re-reads an active durable ingress lease and its
+  sanitized event/fingerprint. It derives group scope from the admission-time
+  binding and revision, then checks fresh official channel/member data. It
+  ignores a caller's event/roster/team overrides. Group queries do not create
+  privileged setup or persistent DM grants. DM queries require an actor's
+  explicit `team_user_access` grant and fresh guild membership; multiple
+  authorized teams produce a selection response. A self-declared PUBG account
+  claim never supplies this grant. Removed membership/API failure denies access.
+- Query sessions have opaque server-created IDs, requester/channel/team keys
+  and at most 24 hours of inactivity (default 12 hours). A request ledger makes
+  ingress retries reuse the exact session without storing message text. Roster,
+  alias/shard changes, expired sessions, revoked/regranted DM access and channel
+  binding generations invalidate old state at the managed repository boundary.
+  Ingress also pins its binding generation; the same team unbound and rebound
+  cannot receive an old queued request. Migration `0006` terminates legacy
+  pending group events whose generation was not recorded, retaining their audit
+  identity while removing payloads. It never invents historical authority.
+- The authorizer is an application module for the upcoming query handler. It
+  is not yet wired to the management-only executable handler. Resolved player
+  name persistence and reply-thread correlation remain pending; for now its
+  `TeamContext` uses stable account IDs as names plus scoped confirmed aliases.
+  Query executors must authorize each request rather than cache an authorized
+  object for later events. Live KOOK membership/filter semantics need real-guild
+  acceptance. Official endpoint references: [guild/member APIs](https://developer.kookapp.cn/doc/http/guild)
+  and [channel APIs](https://developer.kookapp.cn/doc/http/channel).
 - The adapter checks that the trusted channel remains bound to the selected
   tenant/team, or that a direct message has a `team_user_access` grant for the
   selected team. Session state is keyed by tenant, team, bot, user, channel and
@@ -139,7 +165,7 @@ The separately authorized public runtime phase must supply its independent
 `DATABASE_URL`, `KOOK_BOT_ACCOUNT_ID`, `KOOK_BOT_TOKEN` and `PUBLIC_PUBG_API_KEY`
 outside Git. Appending
 `--apply` runs the selected entry point. Apply schema migrations separately
-before gateway startup; the gateway checks migration `0005_sharded_match_cache.sql`
+before gateway startup; the gateway checks migration `0006_query_authorization.sql`
 and never migrates automatically. The PG connection pool is bounded and has
 connection/statement timeouts. SIGINT/SIGTERM stop intake and drain processing
 before closing the pool.
@@ -167,7 +193,7 @@ Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. The PostgreSQL integration test only
 runs when `PUBG_SAAS_TEST_DATABASE_URL` points to a dedicated ephemeral test
 database; it applies migrations and removes its synthetic rows. Do not point it
-at a live or shared database. The 38-test SaaS suite passed on ephemeral
+at a live or shared database. The 45-test SaaS suite passed on ephemeral
 PostgreSQL 18 together with the workflow-selected private PUBG checks. It covers
 restart/retry, admission bounds, destination pinning, callback mutation-receipt
 recovery, a previously applied schema upgrade, and fixture WebSocket -> PG ->
@@ -183,3 +209,9 @@ not real KOOK onboarding or 200-guild eligibility.
 Repository fixtures deliberately collide match/account IDs across Steam/Kakao,
 check foreign telemetry/queue denial and forged/stale roster/DM access, and
 verify valid legacy backfill plus atomic rollback on an unresolved shard.
+Query authorization fixtures cover active-lease/fingerprint scope, concurrent
+retry/session reuse, two guilds and multiple squads/channels in one guild,
+duplicate labels, requester isolation, explicit DM selection, forged scope,
+claim-versus-grant separation, removed membership, permission-check races,
+roster/alias changes, TTL, grant revoke/regrant, same-team unbind/rebind and
+fail-closed migration of legacy queued group events.

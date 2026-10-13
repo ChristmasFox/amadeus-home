@@ -67,6 +67,13 @@ tokens pin channel revisions. Actor-bound `return-val` callbacks recheck
 guild admin and recover exact-event mutation receipts after a crash while
 rejecting a new click. Bot guild-join events now drive verified-channel welcome
 cards through the same durable ingress/outbox without privileged setup.
+The tested public query authorizer now derives context from an active stored
+ingress lease, fresh channel/guild membership and database ownership. DM grants
+remain explicit; ambiguous teams require selection. Server-created TTL sessions
+isolate requester/channel/team and pin roster/alias and binding generations;
+revocation/regrant and same-team rebind cannot revive old context. This module
+is not yet attached to the executable statistical handler; resolved names and
+reply-thread correlation remain pending.
 Live test-guild acceptance,
 edge-case parity, query/AI/worker integration and deployment remain
 implementation work. See the Goal's phase gates before describing the public

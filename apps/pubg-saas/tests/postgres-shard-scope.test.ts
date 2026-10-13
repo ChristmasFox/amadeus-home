@@ -74,7 +74,7 @@ test('shard migration backfills game facts from the known legacy parent match wi
     assert.deepEqual((await pool.query('SELECT shard,kills FROM match_players')).rows, [{ shard: 'kakao', kills: 2 }]);
     assert.deepEqual((await pool.query('SELECT shard,facts_json FROM telemetry_features')).rows, [{ shard: 'kakao', facts_json: { marker: 'retained' } }]);
     assert.equal((await pool.query('SELECT shard FROM telemetry_prefetch_attempts')).rows[0]?.shard, 'kakao');
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 5);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 6);
   } finally { await cleanupLegacy(state); }
 });
 

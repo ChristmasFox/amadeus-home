@@ -27,6 +27,11 @@ export interface TrustedConversationScope {
   sessionId: string;
 }
 
+export interface PostgresPubgRepositoryOptions {
+  /** Public query runtime must use a live, server-created session ledger row. */
+  requireManagedSession?: boolean;
+}
+
 function requiredText(value: string, name: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`invalid_${name}`);
@@ -152,7 +157,9 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     private readonly pool: Pool,
     scope: TeamContext,
     conversation: TrustedConversationScope | null = null,
+    private readonly options: PostgresPubgRepositoryOptions = {},
   ) {
+    if (options.requireManagedSession && !conversation) throw new Error('conversation_scope_required');
     this.scope = parseTeamContext(scope);
     this.shard = this.scope.team.platform;
     this.accountIds = this.scope.team.players.map((player) => player.id);
@@ -191,6 +198,19 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     const trusted = this.conversation;
     if (!trusted) throw new Error('conversation_scope_required');
     if (sessionId !== trusted.sessionId) throw new Error('conversation_scope_mismatch');
+    if (this.options.requireManagedSession) {
+      const session = await this.pool.query(
+        `SELECT 1 FROM public_query_sessions session JOIN teams team
+         ON team.tenant_id=session.tenant_id AND team.team_id=session.team_id
+         WHERE session.tenant_id=$1 AND session.team_id=$2 AND session.platform=$3 AND session.bot_account_id=$4
+           AND session.user_id=$5 AND session.channel_id=$6 AND session.session_id=$7 AND session.kind=$8
+           AND session.expires_at>now() AND session.team_revision=team.query_revision
+           AND (session.kind='direct_team' OR session.binding_revision=COALESCE(
+             (SELECT revision FROM channel_binding_versions WHERE bot_account_id=$4 AND channel_id=$6),0))`,
+        [this.scope.tenantId, this.scope.teamId, trusted.platform, trusted.botAccountId, trusted.userId, trusted.channelId, sessionId, trusted.kind],
+      );
+      if (!session.rowCount) throw new Error('public_query_session_unavailable');
+    }
     if (trusted.kind === 'bound_channel') {
       const binding = await this.pool.query(
         `SELECT 1 FROM channel_bindings

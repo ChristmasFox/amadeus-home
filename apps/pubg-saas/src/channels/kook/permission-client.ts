@@ -103,7 +103,7 @@ export class KookPermissionClient {
   private async getRolePermissions(guildId: string): Promise<Map<string, bigint>> {
     const permissions = new Map<string, bigint>();
     let pageTotal = 1;
-    for (let page = 1; page <= pageTotal; page += 1) {
+    for (let page = 1;page <= pageTotal;page += 1) {
       if (page > this.maxRolePages) throw new Error('kook_permission_roles_unbounded');
       const data = await this.get<PagedData<GuildRole>>('guild-role/list', {
         guild_id: guildId,
@@ -125,6 +125,38 @@ export class KookPermissionClient {
       }
     }
     return permissions;
+  }
+
+  /** Fresh membership checks for query authorization. Group queries also
+   * filter the official member endpoint by their verified text channel. */
+  async isGuildMember(guildIdInput: string, userIdInput: string): Promise<boolean> {
+    const guildId = requiredId(guildIdInput, 'guild_id');
+    const userId = requiredId(userIdInput, 'user_id');
+    const guild = await this.get<GuildView>('guild/view', { guild_id: guildId });
+    if (parseId(guild.id) !== guildId) throw new Error('kook_permission_guild_invalid');
+    return this.hasMember(guildId, userId);
+  }
+
+  async isTextChannelMember(guildIdInput: string, channelIdInput: string, userIdInput: string): Promise<boolean> {
+    const guildId = requiredId(guildIdInput, 'guild_id');
+    const channelId = requiredId(channelIdInput, 'channel_id');
+    const userId = requiredId(userIdInput, 'user_id');
+    const channel = await this.get<{ id?: unknown; guild_id?: unknown; type?: unknown; is_category?: unknown }>('channel/view', { target_id: channelId });
+    if (parseId(channel.id) !== channelId || parseId(channel.guild_id) !== guildId || channel.type !== 1 || channel.is_category !== false) {
+      throw new Error('kook_permission_channel_invalid');
+    }
+    return this.hasMember(guildId, userId, channelId);
+  }
+
+  private async hasMember(guildId: string, userId: string, channelId?: string): Promise<boolean> {
+    const data = await this.get<PagedData<GuildMember>>('guild/user-list', {
+      guild_id: guildId, filter_user_id: userId, page: '1', page_size: '1',
+      ...(channelId ? { channel_id: channelId } : {}),
+    });
+    if (!Array.isArray(data.items) || data.items.length > 1 || data.items.some(item => parseId(item.id) !== userId)) {
+      throw new Error('kook_permission_member_invalid');
+    }
+    return data.items.length === 1;
   }
 
   /** Returns true only for the current guild owner or a user with the KOOK
