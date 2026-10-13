@@ -41,6 +41,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      undici:
+        specifier: 8.10.2
+        version: 8.10.2
       zod:
         specifier: 4.5.4
         version: 4.5.4

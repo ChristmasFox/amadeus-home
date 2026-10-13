@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { PublicSyncWorker } from './application/public-sync-worker.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
+import { configurePublicEgress } from './infrastructure/public-egress.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 
@@ -35,6 +36,7 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   const databaseUrl = env.DATABASE_URL;
   const apiKey = env.PUBLIC_PUBG_API_KEY;
   if (!databaseUrl || !apiKey?.trim()) throw new Error('pubg_saas_worker_config_missing');
+  configurePublicEgress(env);
   let parsed: URL;
   try { parsed = new URL(databaseUrl); }
   catch { throw new Error('pubg_saas_database_url_invalid'); }

@@ -108,6 +108,55 @@ egress policy, measured M204 resource headroom, isolated-cloud independence,
 live KOOK eligibility/quota and full human-user P3 flows, and real PUBG/model
 provider accuracy and latency. No deployment was performed.
 
+## Restored-database worker and KOOK inventory follow-up — 2026-10-14
+
+The encrypted artifact was restored again to a newly created disposable
+database in the isolated restore PG18.1 project. All 37/37 public table counts
+matched. The one-shot public worker then connected to that restored database
+with placeholder provider configuration while its provider network was forced
+internal. It discovered the single synthetic team and its delayed sync job,
+attempted zero syncs, and exited successfully; no PUBG/model API call was
+possible. The exact-marker disposable database was removed and the restore
+Compose project was stopped without deleting its volume.
+
+Separately, the mode-0600 test-server KOOK credential file was used only for
+read-only guild/channel inventory. The authenticated API returned one guild
+and one text channel. No identifiers or names were recorded, no message was
+sent, and no actor was available for the outstanding human-command P3 cases.
+This does not expand the previously proven gateway-auth/outbox/resume smoke.
+
+## Application egress boundary and full database suite — 2026-10-14
+
+The Compose gateway and worker now join only the private PostgreSQL network and
+an internal proxy network; neither has a default route. The dedicated
+`egress-proxy` is the sole service on the outbound bridge. It accepts HTTPS
+CONNECT on port 443, resolves the requested hostname itself, rejects all
+answers if any resolve to loopback, private, link-local, reserved, metadata,
+or other non-global addresses, then dials a vetted resolved address directly.
+The application installs Undici's global dispatcher for fetch and WSS; direct
+provider access fails closed if Compose does not configure the proxy. The
+proxy is not a hostname allowlist; it permits public HTTPS destinations.
+
+Focused proxy unit tests pass 6/6, including DNS-rebinding/mixed-answer denial
+and the Node WSS dispatcher path. The local ARM64 Compose rehearsal passed
+rendered-config validation and started PostgreSQL plus the proxy healthy. Its
+one-shot SaaS worker connected to the migrated isolated database with an empty
+queue. From an app-network test container, `/proc/net/route` had no default
+route, direct metadata access returned `ENETUNREACH`, proxy CONNECT to the
+metadata address returned 403, and proxy CONNECT to `host.docker.internal`
+returned 403. A credential-free HTTPS HEAD to `example.com` through the app's
+global dispatcher returned 200. No KOOK, PUBG, model or 9Router credential was
+used in these network tests, and no message was sent.
+
+With the existing isolated `pubg-saas-pg18` fixture provided through
+`PUBG_SAAS_TEST_DATABASE_URL`, `pnpm test:pubg-saas` passed 92/92 with no skips;
+the earlier no-URL invocation skipped 30 PostgreSQL tests and is not counted as
+acceptance. `pnpm typecheck:pubg-saas`, `pnpm test:pubg` (68/68) and
+`pnpm typecheck:pubg` also passed. This verifies source and the local OrbStack
+network boundary only. Clean Linux/cloud egress/restore, scheduled retention,
+measured canonical-host resource headroom, cloud independence, provider/model
+acceptance, KOOK eligibility/quota and human-actor P3 cases remain open.
+
 ## Follow-up rerun with checked-in internal-network adapter — 2026-10-14
 
 Rebuilt the ARM64 SaaS image from commit `f0aa16b` as

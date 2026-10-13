@@ -3,20 +3,29 @@
 This folder is the independently movable public KOOK SaaS deployment unit. It
 contains no private Kurisu/OpenClaw mount, secret, network, or runtime
 dependency. PostgreSQL sits on an internal network; Compose requests a
-host-loopback port for the read-only scheduled backup role, while only the
-gateway and public sync worker join the separate outbound bridge. The database
-port binds to `127.0.0.1` where the host runtime supports publishing a port on
-an internal network. OrbStack may leave that mapping inactive; local rehearsals
-should use the `docker compose exec` adapter in
+host-loopback port for the read-only scheduled backup role. The gateway and
+worker join only the internal PostgreSQL and proxy networks. A dedicated
+`egress-proxy` is the sole service attached to the outbound bridge; its
+HTTPS-only CONNECT handler resolves each target itself and denies loopback,
+private, link-local, reserved and known metadata address ranges. Node's global
+Undici dispatcher sends both HTTPS requests and WSS connections through it.
+The database port binds to `127.0.0.1` where the host runtime supports
+publishing a port on an internal network. OrbStack may leave that mapping
+inactive; local rehearsals should use the `docker compose exec` adapter in
 [`BACKUP_RESTORE_REHEARSAL.md`](BACKUP_RESTORE_REHEARSAL.md) instead of
 weakening the database network boundary. The database is never bound to a LAN
 address.
 
-The outbound bridge is **not** an egress firewall. Before real credentials are
-installed, the host/cloud network policy must deny loopback, RFC1918, link-local
-and cloud metadata destinations and allow only the required KOOK, PUBG and
-approved inference endpoints. Docker's default bridge does not prove that
-boundary. The M2 egress test and real M204 resource measurement are still open.
+The outbound bridge is **not** an egress firewall; only the proxy can reach it.
+Application containers have no default route, and the proxy rejects CONNECTs
+to non-public addresses before opening an upstream socket. The proxy permits
+public HTTPS destinations rather than enforcing a hostname allowlist, so the
+configured model URL and application endpoint validation remain part of the
+boundary. The available local OrbStack ARM64 Compose rehearsal verified no
+application default route, direct metadata denial, proxy denial for
+`host.docker.internal` and metadata, and an unauthenticated HTTPS HEAD through
+the proxy. Clean Linux/cloud repetition and M204 resource measurement remain
+open.
 
 ## Build an immutable local image
 

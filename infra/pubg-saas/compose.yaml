@@ -66,21 +66,51 @@ services:
     pids_limit: 64
     logging: *bounded_logs
 
+  egress-proxy:
+    image: ${PUBG_SAAS_IMAGE:?Set an immutable image tag built from this Git checkout}
+    restart: unless-stopped
+    entrypoint: ["node"]
+    command: ["dist/src/infrastructure/egress-proxy.js"]
+    networks:
+      - egress_internal
+      - public_egress
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const s=require('node:net').connect(8080,'127.0.0.1');s.once('connect',()=>{s.destroy();process.exit(0)});s.once('error',()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 2s
+      retries: 6
+      start_period: 3s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+    logging: *bounded_logs
+
   gateway:
     image: ${PUBG_SAAS_IMAGE:?Set an immutable image tag built from this Git checkout}
     restart: unless-stopped
     init: true
     env_file:
       - ./secrets/gateway.env
+    environment:
+      PUBG_SAAS_EGRESS_PROXY: http://egress-proxy:8080
+      PUBG_SAAS_EGRESS_PROXY_REQUIRED: "1"
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/gateway.js", "--apply"]
     depends_on:
       postgres:
         condition: service_healthy
+      egress-proxy:
+        condition: service_healthy
     networks:
       - postgres_private
-      - public_egress
+      - egress_internal
     stop_grace_period: 30s
     read_only: true
     tmpfs:
@@ -99,15 +129,20 @@ services:
     init: true
     env_file:
       - ./secrets/worker.env
+    environment:
+      PUBG_SAAS_EGRESS_PROXY: http://egress-proxy:8080
+      PUBG_SAAS_EGRESS_PROXY_REQUIRED: "1"
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/public-sync-worker.js", "--apply"]
     depends_on:
       postgres:
         condition: service_healthy
+      egress-proxy:
+        condition: service_healthy
     networks:
       - postgres_private
-      - public_egress
+      - egress_internal
     stop_grace_period: 45s
     read_only: true
     tmpfs:
@@ -122,6 +157,8 @@ services:
 
 networks:
   postgres_private:
+    internal: true
+  egress_internal:
     internal: true
   public_egress:
     driver: bridge

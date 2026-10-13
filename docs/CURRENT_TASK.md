@@ -169,13 +169,34 @@ The KOOK test-server credentials in `apps/pubg-saas/.env.local` were not read
 or used for this M2 local run; the previously recorded P3 smoke remains limited
 to gateway auth, one labeled outbox delivery and sequence-1 resume. Human-user
 P3 flows and real PUBG/model provider acceptance remain open. Clean Linux host
-backup, scheduled retention, egress policy, measured M204 resource headroom and
-isolated-cloud recovery also remain open.
+backup, scheduled retention, clean-host egress verification, measured M204
+resource headroom and isolated-cloud recovery also remain open.
+
+A later read-only KOOK inventory used the mode-0600 test credential and found
+one guild with one text channel; no identifiers/names were retained and no
+message was sent. This does not satisfy the human-user P3 cases; no test actor
+was available. A fresh restore-PG run also started the actual one-shot SaaS
+worker with an internal-only provider network: it discovered one synthetic
+team and one delayed job, attempted zero syncs, and exited successfully. The
+guarded disposable database was removed and its Compose project stopped while
+preserving its volume. No PUBG/model provider call was possible. Full detail is
+in `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
 Reproduction commands and artifact handling are recorded in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`;
 the repository procedures remain in `infra/pubg-saas/README.md` and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
+
+The local egress source adds a dedicated HTTPS CONNECT proxy and removes the
+gateway/worker from the public bridge. Focused tests pass 6/6, including
+private/metadata resolution denial and WSS dispatch. Local Compose confirmed
+no app default route, metadata denial, `host.docker.internal` denial, and
+credential-free public HTTPS through the proxy. With the shared isolated PG
+fixture explicitly supplied, `pnpm test:pubg-saas` passed 92/92 with no skips;
+without that env var the suite skips PostgreSQL tests and is not accepted.
+Private source regression remained 68/68 with affected typechecks passing.
+The proxy restricts addresses, not public hostnames; clean Linux/cloud checks
+and resource headroom still remain.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

@@ -10,6 +10,7 @@ import { KookPermissionClient } from './channels/kook/permission-client.js';
 import { KookApplicationRuntime } from './kook-runtime.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { PublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
+import { configurePublicEgress } from './infrastructure/public-egress.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -28,6 +29,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   const databaseUrl = env.DATABASE_URL, botId = env.KOOK_BOT_ACCOUNT_ID, token = env.KOOK_BOT_TOKEN, apiKey = env.PUBLIC_PUBG_API_KEY;
   if (!databaseUrl || !botId || !token || !apiKey)
     throw new Error('pubg_saas_gateway_config_missing');
+  configurePublicEgress(env);
   let parsed: URL;
   try {
     parsed = new URL(databaseUrl);

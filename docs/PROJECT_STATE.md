@@ -21,9 +21,27 @@ The source, restore and prior temporary SaaS projects were stopped with
 was restarted or modified, and no private PUBG tool query was made. The
 test-server KOOK credential file was not used for this local drill. Human P3
 flows, real PUBG/model provider acceptance, clean Linux/cloud restore, retention,
-egress-policy proof, measured host headroom and isolated-cloud independence
-remain open. No production database or deployment was touched. Evidence:
+clean-host egress verification, measured host headroom and isolated-cloud
+independence remain open. No production database or deployment was touched. Evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
+Follow-up: a separate read-only KOOK inventory (one guild, one text channel;
+no identifiers retained, no message sent) confirmed only the test bot's current
+inventory. A fresh restore-PG worker one-shot discovered one synthetic team
+and one delayed job, attempted zero provider syncs, and exited successfully on
+an internal-only network. The disposable database was guarded-cleaned. Human
+P3 actor flows remain unverified.
+
+The M2 application egress boundary now keeps gateway/worker on internal
+networks and sends fetch/WSS through an HTTPS CONNECT proxy that refuses
+non-public DNS answers. Focused tests pass 6/6; local Compose verified no app
+default route, direct metadata denial (`ENETUNREACH`), proxy denial to metadata
+and `host.docker.internal` (403 each), and a credential-free HTTPS HEAD via the
+proxy (200). With `PUBG_SAAS_TEST_DATABASE_URL` set to the reusable isolated PG
+fixture, the full SaaS suite passed 92/92 with no skips; private tests passed
+68/68 and both affected typecheck groups passed. No provider credentials were
+used and no KOOK message was sent. Clean Linux/cloud, schedule installation,
+host resource headroom and cloud independence remain open.
 
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
