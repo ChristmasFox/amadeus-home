@@ -26,6 +26,19 @@ reproduction references:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md` and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
+## 2026-10-14 — KOOK test-server Gateway authentication check
+
+An isolated PG18.1 test project on current image `880a5cf` applied through
+migration `0014`; the Gateway used the protected test bot credential, a local
+placeholder PUBG key, no model configuration and a five-message daily limit.
+Read-only KOOK inventory found one test guild and one text channel without
+retaining identifiers. The authenticated Gateway session was persisted in
+`kook_gateway_state` (`last_sn=0`). No human event arrived, so no inbox/outbox
+delivery or command/button flow was exercised. The test stack was stopped with
+plain `down`, its named PG volume retained, and the temporary credential copy
+removed. This is authentication evidence only; human P3 acceptance remains
+open. No message, PUBG/model request, production change or deployment occurred.
+
 ## 2026-10-14 — PUBG SaaS post-0012 local acceptance
 
 Commit `a04224a` adds migration 0012, bounded per-bot retention and the

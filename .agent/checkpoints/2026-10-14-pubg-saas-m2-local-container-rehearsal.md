@@ -656,3 +656,28 @@ service health. Neither was an application/test failure. Remaining gates are
 canonical-host Compose/resource/alert routing, scheduled backup installation,
 clean-Linux/cloud restore and isolation, live human-actor KOOK/quota checks,
 and real PUBG/model acceptance.
+
+## KOOK test-server authentication check — 2026-10-14
+
+The protected, ignored `apps/pubg-saas/.env.local` was used only for the
+previously authorized KOOK test server. Read-only official API inventory found
+one guild and one text channel; identifiers and names were not recorded. A
+separate fresh PG18.1 Compose project applied migrations through `0014` and
+received one synthetic local-only tenant/team/player/channel fixture. Its
+current-image Gateway used a local nonfunctional PUBG API placeholder, no
+model configuration and `KOOK_DAILY_MESSAGE_BUDGET=5`. KOOK Gateway
+authentication succeeded and persisted one session row with `last_sn=0`.
+
+No human event arrived. The isolated database still had zero inbox/outbox,
+preference and alias rows, so this run proves authentication only; it does not
+prove message ingestion, permission behavior, card callbacks or delivery. The
+desktop automation surface could not bind Chrome, so no human actor action was
+available. The Gateway, proxy and PG containers were stopped with plain
+`docker compose down`; the isolated volume was preserved and the temporary
+credential copy was removed. No KOOK message was sent; no PUBG/model request,
+production mutation, 9Router change or private OpenClaw restart occurred.
+
+To resume P3, recreate the isolated project and connect its test Gateway, then
+have a human test-server member send `/pubg help` and click the read-only
+`创建队伍` guidance button. Verify the scoped inbox/outbox and daily budget by
+counts only; never log the command payload, user/channel IDs or bot token.

@@ -127,6 +127,28 @@ production deployment or database was touched. Reproduction details are in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md` and
 `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
+## KOOK test-server connection check — 2026-10-14
+
+Using the protected, ignored `.env.local` only for the authorized P3 test
+server, a read-only inventory confirmed one guild and one text channel; no
+identifiers or names were retained. A fresh isolated PG18.1 project applied
+all migrations through `0014`, seeded only a synthetic team/account fixture,
+and ran the current local image's Gateway with a local nonfunctional PUBG key,
+no model configuration and a five-message daily cap. KOOK authentication
+completed and `kook_gateway_state` held one non-null session; sequence remained
+zero. No human event arrived, so inbox/outbox, preference and alias counts
+remained zero. This proves test-bot authentication only, not P3 message, button,
+permission or send acceptance. The Gateway, PG and proxy containers were
+stopped with plain `down`; the isolated named volume was preserved and the
+temporary credential copy was removed. No message was sent, no PUBG/model
+request was possible, and production resources were untouched.
+
+The desktop automation surface could not bind the open Chrome window, and no
+human actor action was available in this run. Resume live P3 by restarting the
+isolated stack and having a test-server actor send `/pubg help` then click a
+read-only guidance button. Do not count protocol fixtures or the successful
+WebSocket handshake as that acceptance.
+
 ## M2 source and recovery evidence — 2026-10-14
 
 M2 source commits `2271a4b` and `27523ae` add PostgreSQL-backed per-team worker
