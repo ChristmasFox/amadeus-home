@@ -67,6 +67,18 @@ the Gateway was not started. This is separate-host restore/Worker startup
 evidence, not full cloud independence, live API/model behavior or RPO/RTO
 measurement. The test Compose project was stopped without deleting its volume.
 
+## 2026-10-14 — Current-image KOOK test-bot authentication on restored VM
+
+The operator-authorized KOOK test credential was streamed into an owner-only
+env file on the isolated Linux VM, used by the current Gateway, then removed;
+the file was reset to placeholders. Gateway session state was persisted in the
+separately restored PG. Gateway and Worker ran together, Worker was healthy,
+and SQL probes showed no ingress event, outbox row, or due sync job. No KOOK
+message was sent and no PUBG/model request occurred. The Gateway/Worker/PG/proxy
+containers were stopped without deleting the PG volume. This proves current
+image test-bot authentication with an independently restored database, but
+leaves human-user flows and real provider behavior unverified.
+
 ## 2026-10-14 — KOOK and PUBG quota source audit
 
 The official KOOK message reference describes a 10,000-message daily

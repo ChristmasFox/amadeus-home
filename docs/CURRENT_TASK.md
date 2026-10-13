@@ -110,6 +110,15 @@ benchmark still awaits protected provider credentials. Query sessions still
 derive from durable ingress, fresh KOOK membership and DB ownership, with
 explicit DM grants and no fallback to the private team.
 
+Current-image P3 follow-up: on the restored independent Linux VM, the
+operator-authorized test bot authenticated the Gateway and a non-null session
+state persisted in restored PG. Gateway and Worker ran together; Worker was
+healthy with its synthetic sync job delayed. Database checks found zero
+ingress events and outbox rows, so no user-facing test message was sent and no
+PUBG/model call occurred. The test credential was removed from the VM after
+the run. Human-user inbound/callback/authorization flows still lack a test
+actor.
+
 Official quota source audit on 2026-10-14: KOOK's message reference states a
 10,000/day developer-account aggregate across bots, with a 12:00 Asia/Shanghai
 reset; its published developer policy also lists 200/day per bot and one
@@ -118,7 +127,8 @@ bot/one self-created server for unverified accounts, versus 10,000 servers and
 budget is conservative but does not observe sibling-bot usage. PUBG documents
 10 requests/minute for testing/development only; launch requires an approved
 higher limit. Official-account eligibility, shared quota allocation and the
-PUBG launch-key limit remain unverified; no provider credentials were used.
+PUBG launch-key limit remain unverified. The KOOK test credential was used
+only for Gateway authentication; no PUBG/model credentials were used.
 At the optional 200 teams × 30 queries/team/day baseline, one response per
 query is up to 6,000 local send reservations/day. That exceeds the 200 default
 and the published unverified per-bot allowance; a verified account and a

@@ -1559,3 +1559,30 @@ sources are [KOOK message quotas](https://developer.kookapp.cn/doc/http/message)
 [KOOK developer policy](https://developer.kookapp.cn/doc/privacy),
 [KOOK rate-limit headers](https://developer.kookapp.cn/doc/rate-limit), and
 [PUBG Developer FAQ](https://developer.pubg.com/faq).
+
+## Current-image Gateway authentication on the independent restore — 2026-10-14
+
+Using the operator-authorized test-bot credential from the owner-only
+`apps/pubg-saas/.env.local`, the current image's Gateway was started against
+the separately restored PG on `pubg-saas-m2-clean`. The credential was
+streamed through stdin into the isolated VM's mode-0600 Gateway env file; it
+was not printed or placed in a command argument. The Gateway established a
+KOOK session and persisted non-null session state in the restored database.
+Gateway and Worker ran together; both processes stayed up, Worker was healthy,
+and its delayed synthetic sync row remained not due. Read-only DB checks showed
+0 ingress events, 0 outbox rows, 0 due sync jobs and 1 saved Gateway session.
+Thus the test bot authenticated but did not send a message or trigger a
+PUBG/model call. The proxy returned 403 for the M204 private egress target.
+The project was stopped with plain `down`; its PG volume was retained. The
+Gateway env was reset to placeholders and temporary credential files were
+removed. Because retained VM fixtures also had Gateway env files whose
+contents were not assumed, all five test-stack Gateway env files under
+`/var/tmp/pubg-saas-m2-clean` were reset to known placeholders and verified
+without printing their values. A read-only check confirmed there were no
+project containers. M204 OpenClaw and 9Router IDs, start times and restart
+counts remained unchanged.
+
+This improves P3 real-server and independent-host evidence to current-image
+Gateway authentication plus restored Worker startup. It does not prove
+human-user inbound, callback authorization, full public query behavior, live
+PUBG/model service, or RPO/RTO. The test credential remains outside Git.
