@@ -2,10 +2,15 @@
 
 This folder is the independently movable public KOOK SaaS deployment unit. It
 contains no private Kurisu/OpenClaw mount, secret, network, or runtime
-dependency. PostgreSQL sits on an internal network and has one host-loopback
-port for the read-only scheduled backup role; only the gateway and public sync
-worker join the separate outbound bridge. The database port binds to
-`127.0.0.1` and is not reachable from the LAN.
+dependency. PostgreSQL sits on an internal network; Compose requests a
+host-loopback port for the read-only scheduled backup role, while only the
+gateway and public sync worker join the separate outbound bridge. The database
+port binds to `127.0.0.1` where the host runtime supports publishing a port on
+an internal network. OrbStack may leave that mapping inactive; local rehearsals
+should use the `docker compose exec` adapter in
+[`BACKUP_RESTORE_REHEARSAL.md`](BACKUP_RESTORE_REHEARSAL.md) instead of
+weakening the database network boundary. The database is never bound to a LAN
+address.
 
 The outbound bridge is **not** an egress firewall. Before real credentials are
 installed, the host/cloud network policy must deny loopback, RFC1918, link-local

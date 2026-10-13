@@ -131,34 +131,46 @@ touched. Full M2 evidence is in
 
 ## M2 local Compose and recovery drill — 2026-10-14
 
-Built local ARM64 image `local/pubg-saas:git-66941c2`
-(`sha256:bdce2f6f5cdce21d07ee87d7787987ee93da37666e6793e2bb3ab36541cdbaf7`).
-Two uniquely named Compose projects used fresh, isolated PostgreSQL 18.1
-containers and volumes. The source project applied migration `0011`, ran the
-worker with an empty queue, and ran the gateway container in its side-effect-free
-dry-run mode. No real KOOK, PUBG or model credentials were loaded; local
-placeholder values were supplied for the no-call startup. Real provider
-acceptance remains skipped.
+Built local ARM64 image `local/pubg-saas:git-f0aa16b`
+(`sha256:f6985df9ea17bde1d7f5b60826e7fb336047ad5e74d93f896f5e16a52dc5f21c`).
+Fresh source and restore Compose projects used separate PostgreSQL 18.1
+containers and volumes. The source applied migration `0011`, the worker started
+with an empty queue, and the gateway completed side-effect-free dry-run. No
+real KOOK, PUBG or model credential was loaded into this local drill; provider
+calls and production deployment were not performed.
 
-The encrypted age backup and archive verification passed. Restore into the
-second fresh PostgreSQL container passed with all 37/37 public base-table row
-counts matching, including 11 migration records and one synthetic tenant, team
-and sync job. App insert/update/delete worked inside a rolled-back probe while
-DDL was denied. The backup role could read tables and sequence state but could
-not write; a future sequence probe confirmed backup SELECT-only and app
-sequence usage. The drill exposed missing `pubg_backup` sequence SELECT grants,
-which caused an empty BIGSERIAL to be dumped as invalid `setval(..., 0, false)`.
-Bootstrap and restore grants now include current and default sequence SELECT;
-the focused backup/restore suite passes 14/14.
+OrbStack did not activate the requested loopback host port for PostgreSQL on
+the `internal: true` network. A checked-in local-only client adapter now runs
+the existing backup/restore utility through `docker compose exec`, verifying
+the pinned PostgreSQL image, internal project-owned networks, loopback-only
+port bindings and project-owned volume before each command. Credentials travel
+to a temporary mode-0600 passfile in the container's tmpfs, not Docker argv.
+Encrypted age backup and decryption/archive verification passed. Restore into
+the separate fresh PG container passed with all 37/37 public base-table counts
+matching: 11 migration rows and one synthetic tenant, team and sync job.
+App insert/update/delete passed in a rolled-back transaction while app DDL was
+denied. The backup role could read tables and current/future sequence state but
+could not write or call `nextval`; the app retained future sequence usage. The
+restored disposable database passed the same permission probes and was removed
+through exact-marker guarded cleanup. The focused backup/restore and adapter
+unit tests pass 21/21.
 
-Both local Compose projects were stopped with `down` (their synthetic volumes
-were preserved). With those SaaS containers stopped, `pnpm test:pubg` passed
-68/68. This is an offline private-source regression, not a live OpenClaw test;
-private OpenClaw, production databases, 9Router and deployment were untouched.
-On this OrbStack run, the PG host-loopback binding on the internal Compose
-network did not become an active runtime port, so the host backup tool used
-temporary container-side PostgreSQL clients and mode-0600 passfiles. Clean
-Linux host/cloud restore and host-port behavior remain open.
+Both new Compose projects and the previous temporary source project were
+stopped with ordinary `docker compose down`; their isolated named volumes were
+preserved. The pre-existing `pubg-saas-pg18` integration-test fixture remains
+running and is not part of the public application stack. During the SaaS stop,
+`pnpm test:pubg` passed 68/68, and read-only checks showed private OpenClaw
+still `running/healthy` and 9Router still `running` on the available OrbStack
+machine. Neither runtime was stopped, restarted or modified. This proves the
+offline private regression and process-health independence; no private PUBG
+tool query was issued.
+
+The KOOK test-server credentials in `apps/pubg-saas/.env.local` were not read
+or used for this M2 local run; the previously recorded P3 smoke remains limited
+to gateway auth, one labeled outbox delivery and sequence-1 resume. Human-user
+P3 flows and real PUBG/model provider acceptance remain open. Clean Linux host
+backup, scheduled retention, egress policy, measured M204 resource headroom and
+isolated-cloud recovery also remain open.
 
 Reproduction commands and artifact handling are recorded in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`;

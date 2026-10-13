@@ -78,11 +78,23 @@ def outside_repo(path: Path, label: str) -> Path:
 
 
 def minimal_environment() -> dict[str, str]:
-    return {
+    env = {
         key: value
         for key, value in os.environ.items()
         if key in {"PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE"}
     }
+    # Optional local rehearsal transport. The tool paths still default to the
+    # operator host for scheduled production backups; these non-secret values
+    # let the same safety-checked backup utility reach an isolated Compose PG
+    # over `docker compose exec` without publishing PostgreSQL.
+    for key in (
+        "PUBG_SAAS_PG_EXEC_PROJECT",
+        "PUBG_SAAS_PG_EXEC_COMPOSE_FILE",
+        "PUBG_SAAS_PG_EXEC_ENV_FILE",
+    ):
+        if key in os.environ:
+            env[key] = os.environ[key]
+    return env
 
 
 def require_regular_external_file(value: str, label: str, *, private: bool = False) -> Path:

@@ -107,3 +107,45 @@ Still open: clean Linux/ARM64 and amd64 recovery, scheduled retention, tested
 egress policy, measured M204 resource headroom, isolated-cloud independence,
 live KOOK eligibility/quota and full human-user P3 flows, and real PUBG/model
 provider accuracy and latency. No deployment was performed.
+
+## Follow-up rerun with checked-in internal-network adapter — 2026-10-14
+
+Rebuilt the ARM64 SaaS image from commit `f0aa16b` as
+`local/pubg-saas:git-f0aa16b`; image manifest digest:
+`sha256:f6985df9ea17bde1d7f5b60826e7fb336047ad5e74d93f896f5e16a52dc5f21c`.
+Fresh projects `pubg-saas-m2-local-src-20261014b` and
+`pubg-saas-m2-local-restore-20261014b` each used a new PG18.1 container and
+project-owned volume. Migration `0011`, empty-queue worker startup and gateway
+dry-run passed with placeholders and no KOOK/PUBG/model credential loaded.
+
+Added `scripts/pubg-saas-compose-pg-tool.py` as the local-only PostgreSQL client
+transport documented in `infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`. It
+rejects non-local project names, non-pinned PG images, external networks,
+non-loopback port bindings and non-project volumes. It transfers pgpass through
+stdin into a mode-0600 file under the PostgreSQL container's `/tmp` tmpfs and
+removes it after each invocation. The existing host-native backup/recovery
+mode remains unchanged.
+
+The initial follow-up verify failed because PostgreSQL 18 `pg_restore --list -`
+interprets `-` as a literal filename. A direct minimal reproduction showed
+`could not open input file "-"`; the adapter now omits the archive filename and
+streams it through stdin. The focused 21-test backup/adapter suite passed after
+the fix. The encrypted backup artifact
+`pubg-saas-20261013T183114Z-07d216e6.dump.age` verified with SHA-256
+`d34e3973f5dfdb4b5df2169255837787836e8f4d5e02a7f941e61a12ac1255c0`. Restore
+into the fresh restore project passed with 37/37 public table counts matched;
+the manifest held 11 migrations and one synthetic tenant/team/sync job. Source
+and restored permission probes both passed: app DML within rollback, no app
+DDL, backup SELECT including future sequence state, no backup writes or
+`nextval`, and app sequence usage. The disposable restore DB was removed only
+through the exact-name/marker cleanup command.
+
+Stopped the source, restore and previous temporary Compose projects with plain
+`docker compose down`, preserving their named volumes. The separate pre-existing
+`pubg-saas-pg18` integration-test fixture remains running. While the SaaS
+projects were down, `pnpm test:pubg` passed 68/68. Read-only health checks before
+and after showed `openclaw` running/healthy and `9router` running on OrbStack's
+available `nyannyan` machine; neither service was restarted or changed and no
+private PUBG tool query was run. The configured `example-node` OrbStack machine
+was absent from the current machine inventory. The KOOK test credential file
+was not read or used in this local rehearsal.

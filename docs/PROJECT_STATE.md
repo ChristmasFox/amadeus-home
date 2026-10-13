@@ -2,21 +2,28 @@
 
 ## 2026-10-14 — PUBG SaaS local M2 container rehearsal
 
-The `pubg-saas` ARM64 image was built locally and two isolated Compose
-PostgreSQL 18.1 projects were started; migration `0011`, worker startup and
-gateway dry-run passed without real KOOK, PUBG or model credentials; local
-placeholders were used for the no-call startup. Encrypted
-backup verification and restore into a fresh PG container passed with all
-37/37 table counts matching. App DML/no-DDL, backup read-only access, and
-future sequence grants were verified. The rehearsal found and fixed missing
-sequence SELECT grants for `pubg_backup`; focused safety tests pass 14/14.
-After stopping both isolated Compose projects, private PUBG source regression
-passed 68/68. This did not stop or restart live OpenClaw. On OrbStack, the
-internal-network loopback binding was configured but not active, so the host
-backup client used a temporary container-side adapter. Clean Linux/cloud
-restore, egress-policy proof, measured M204 headroom, live provider acceptance
-and isolated-cloud independence remain open. No production database, 9Router
-or deployment was touched. Evidence: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+The local ARM64 image `local/pubg-saas:git-f0aa16b` was built with digest
+`sha256:f6985df9ea17bde1d7f5b60826e7fb336047ad5e74d93f896f5e16a52dc5f21c`.
+Fresh source/restore Compose projects used isolated PostgreSQL 18.1 volumes;
+migration `0011`, empty-queue worker start and gateway dry-run passed without
+real provider credentials. A local-only `docker compose exec` adapter now keeps
+the DB on its internal network and checks container, network, port and volume
+ownership before invoking PostgreSQL tools. Encrypted backup, decrypt/archive
+verification and fresh-container restore passed; all 37/37 public table counts
+matched. App DML/no-DDL and backup read-only/table/sequence boundaries passed
+before and after restore. Focused adapter/backup unit tests pass 21/21.
+
+The source, restore and prior temporary SaaS projects were stopped with
+`docker compose down` and their synthetic volumes preserved. The pre-existing
+`pubg-saas-pg18` test fixture remains available. With the SaaS projects stopped,
+`pnpm test:pubg` passed 68/68; private OpenClaw remained running/healthy and
+9Router remained running on the available OrbStack machine. Neither service
+was restarted or modified, and no private PUBG tool query was made. The
+test-server KOOK credential file was not used for this local drill. Human P3
+flows, real PUBG/model provider acceptance, clean Linux/cloud restore, retention,
+egress-policy proof, measured host headroom and isolated-cloud independence
+remain open. No production database or deployment was touched. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
