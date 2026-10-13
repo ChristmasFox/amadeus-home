@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseTrustedKookGroupMessage } from '../src/index.js';
+import { parseTrustedKookDirectMessage, parseTrustedKookGroupMessage } from '../src/index.js';
 
 const event = {
   s: 0,
@@ -44,4 +44,35 @@ test('rejects direct messages, spoofed actor identity, bots, malformed metadata,
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, extra: { ...event.d.extra, channel_type: 2 } } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, content: 'x'.repeat(8193) } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage(event, ' '), null);
+});
+
+test('parses only direct text messages addressed to the configured bot for user-scoped actions', () => {
+  const direct = {
+    s: 0,
+    d: {
+      channel_type: 'PERSON',
+      type: 1,
+      target_id: 'configured-bot',
+      author_id: 'user-1',
+      content: 'confirm account claim',
+      msg_id: 'direct-message-1',
+      msg_timestamp: 1_760_000_000_000,
+      extra: { author: { id: 'user-1', bot: false } },
+    },
+  };
+  const parsed = parseTrustedKookDirectMessage(direct, 'configured-bot');
+  assert.deepEqual(parsed, {
+    platform: 'kook',
+    botAccountId: 'configured-bot',
+    userId: 'user-1',
+    messageId: 'direct-message-1',
+    timestamp: 1_760_000_000_000,
+    content: 'confirm account claim',
+    [Object.getOwnPropertySymbols(parsed ?? {})[0]!]: true,
+  });
+  assert.equal(parseTrustedKookDirectMessage({ ...direct, d: { ...direct.d, channel_type: 'GROUP' } }, 'configured-bot'), null);
+  assert.equal(parseTrustedKookDirectMessage({ ...direct, d: { ...direct.d, target_id: 'other-bot' } }, 'configured-bot'), null);
+  assert.equal(parseTrustedKookDirectMessage({ ...direct, d: { ...direct.d, author_id: 'other-user' } }, 'configured-bot'), null);
+  assert.equal(parseTrustedKookDirectMessage({ ...direct, d: { ...direct.d, extra: { author: { id: 'other-user' } } } }, 'configured-bot'), null);
+  assert.equal(parseTrustedKookDirectMessage({ ...direct, d: { ...direct.d, extra: { author: { id: 'user-1', bot: true } } } }, 'configured-bot'), null);
 });

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS teams (
   tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
   team_id TEXT NOT NULL,
   label TEXT NOT NULL,
+  pubg_shard TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (tenant_id, team_id)
 );
@@ -83,18 +84,58 @@ CREATE TABLE IF NOT EXISTS team_user_access (
 CREATE INDEX IF NOT EXISTS idx_team_user_access_actor
   ON team_user_access(platform, bot_account_id, user_id, tenant_id, team_id);
 
+-- No team FK: a disband confirmation is consumed in the same transaction that
+-- deletes its team; confirmTeamAction also checks the team still exists.
+CREATE TABLE IF NOT EXISTS pending_team_actions (
+  confirmation_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  tenant_id TEXT NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+  team_id TEXT NOT NULL,
+  platform TEXT NOT NULL CHECK (platform = 'kook'),
+  bot_account_id TEXT NOT NULL,
+  guild_id TEXT NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('add_members','replace_roster','unbind_channel','disband_team')),
+  payload_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_pending_team_actions_expiry
+  ON pending_team_actions(expires_at) WHERE consumed_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS account_claims (
   platform TEXT NOT NULL CHECK (platform = 'kook'),
   bot_account_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
+  pubg_shard TEXT NOT NULL,
   pubg_account_id TEXT NOT NULL,
   claim_status TEXT NOT NULL CHECK (claim_status IN ('self_declared', 'verified')),
   claimed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (platform, bot_account_id, user_id),
-  UNIQUE (platform, bot_account_id, pubg_account_id),
+  UNIQUE (platform, bot_account_id, pubg_shard, pubg_account_id),
   FOREIGN KEY (platform, bot_account_id, user_id)
     REFERENCES channel_identities(platform, bot_account_id, user_id) ON DELETE CASCADE
 );
+
+-- Pending claims do not create channel identities until the user confirms.
+CREATE TABLE IF NOT EXISTS pending_account_claims (
+  confirmation_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL CHECK (platform = 'kook'),
+  bot_account_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('claim','unclaim')),
+  pubg_shard TEXT,
+  pubg_account_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  CHECK (pubg_shard IS NOT NULL AND pubg_account_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_account_claims_expiry
+  ON pending_account_claims(expires_at) WHERE consumed_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS team_aliases (
   tenant_id TEXT NOT NULL,

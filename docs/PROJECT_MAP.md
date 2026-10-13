@@ -49,12 +49,13 @@ scope-pinned SQLite adapter for private use. Early P2 source now contains a
 Postgres schema/migration and an adapter with roster-filtered match selection
 and tenant/team/bot/user/channel/session scoped conversation storage. One
 synthetic stat golden now passes through both SQLite and Postgres repositories;
-trusted KOOK group-event parsing, fresh guild owner/Administrator checks, and
-transactional squad creation/channel binding/roster update are also implemented
-with isolated PostgreSQL and permission-client tests. Full edge-case parity,
-account claims, complete KOOK transport/interactions and deployment remain
-implementation work. See the Goal's phase gates before describing any of them
-as ready.
+trusted KOOK group/direct-message parsing, fresh guild owner/Administrator
+checks, and transactional squad/channel/roster management with actor-bound
+one-use confirmations are also implemented. Direct-message account claims are
+stored as self-declared and protected by user-scoped uniqueness and unclaim
+confirmation. Full edge-case parity, PUBG account lookup, complete KOOK
+transport/card interactions and deployment remain implementation work. See
+the Goal's phase gates before describing any of them as ready.
 
 ## Request paths and guardrails
 

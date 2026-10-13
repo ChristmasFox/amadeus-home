@@ -1,6 +1,6 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain and private SQLite adapter are in place; early P2 PostgreSQL persistence, trusted KOOK group parsing, fresh guild-admin checks, and transactional squad/channel/member setup are implemented. Full KOOK transport/interactions, account claims, parity, runtime packaging, and restore acceptance remain incomplete. Not deployed or accepted.
+> **Status:** IMPLEMENTATION_IN_PROGRESS — P0 audit/golden baseline complete; P1 shared Domain and private SQLite adapter are in place; early P2 PostgreSQL persistence, trusted KOOK group/direct-message parsing, fresh guild-admin checks, transactional squad/channel/roster management, and self-declared account claims are implemented. Full KOOK transport/card interactions, PUBG account lookup, parity, runtime packaging, and restore acceptance remain incomplete. Not deployed or accepted.
 >
 > **Date:** 2026-10-13 (Asia/Shanghai)
 >

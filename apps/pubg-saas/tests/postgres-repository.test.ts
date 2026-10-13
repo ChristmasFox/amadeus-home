@@ -55,7 +55,7 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
     await migratePublicDatabase(pool);
     assert.throws(() => new PostgresPubgRepository(pool, undefined as never), /invalid_team_context/u);
     await pool.query('INSERT INTO tenants(tenant_id, platform, bot_account_id, guild_id) VALUES ($1,$2,$3,$4),($5,$2,$3,$6)', [tenantA, 'kook', 'test-bot', `guild-a-${suffix}`, tenantB, `guild-b-${suffix}`]);
-    await pool.query('INSERT INTO teams(tenant_id, team_id, label) VALUES ($1,$2,$3),($4,$5,$6)', [tenantA, teamA, 'Squad A', tenantB, teamB, 'Squad B']);
+    await pool.query('INSERT INTO teams(tenant_id, team_id, label, pubg_shard) VALUES ($1,$2,$3,$7),($4,$5,$6,$7)', [tenantA, teamA, 'Squad A', tenantB, teamB, 'Squad B', 'steam']);
     await pool.query(
       `INSERT INTO channel_bindings(tenant_id, platform, bot_account_id, channel_id, team_id, bound_by_user_id)
        VALUES ($1,'kook','test-bot',$2,$3,'admin-a'),($4,'kook','test-bot',$5,$6,'admin-b')`,

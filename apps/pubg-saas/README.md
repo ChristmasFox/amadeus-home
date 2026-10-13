@@ -3,10 +3,11 @@
 This package currently contains the early public persistence and authorization
 slices from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations and a
 `PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild
-permission checks, and transactional squad/channel/member setup. The KOOK
-WebSocket lifecycle, full interaction onboarding, account claims, worker, AI
-SDK integration and deployment image are still in progress. This package is
-not a runnable or deployed service yet.
+permission checks, transactional squad/channel/roster management with one-use
+confirmations, and direct-message scoped self-declared account claims. The KOOK
+WebSocket lifecycle, card callbacks, PUBG account lookup, worker, AI SDK
+integration and deployment image are still in progress. This package is not a
+runnable or deployed service yet.
 
 ## Trust boundaries
 
@@ -22,8 +23,14 @@ not a runnable or deployed service yet.
   match selection is constrained by the trusted team's PUBG account IDs.
 - `TeamAdminService` accepts a parser-produced trusted group event and calls
   `KookPermissionClient` on every management action before beginning a DB
-  transaction. The parser drops the gateway's role list; the permission client
-  reads current KOOK state.
+  transaction. Roster replacement/addition, channel unbinding and disbanding
+  use hashed, one-use confirmation tokens bound to actor, guild, bot and
+  channel. The parser drops the gateway's role list; the permission client
+  reads current KOOK state. Team rows keep the selected PUBG shard.
+- `AccountClaimService` accepts only parser-produced direct messages, limits a
+  claim to the KOOK user, and labels it `self_declared`. Confirmation is
+  one-use; unique constraints prevent a second user from claiming the same
+  shard/account pair. This is not proof of game-account ownership.
 - Public credentials and `DATABASE_URL` are runtime-only. No real credential
   is needed for local repository tests.
 
