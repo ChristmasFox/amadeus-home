@@ -409,3 +409,44 @@ was left running. No live private PUBG query, real KOOK/PUBG/model request,
 production operation, image push or deployment was performed. Real provider
 acceptance, clean-Linux/cloud recovery and independence, scheduled backup
 installation, and canonical-host capacity measurements remain open.
+
+## AMD64 Compose and recovery simulation; clean VM provisioning limit — 2026-10-14
+
+Built current commit `91bb60f` locally as
+`local/pubg-saas:git-91bb60f-amd64` for `linux/amd64` (loaded only into the
+local `orbstack` Docker engine; Buildx manifest digest
+`sha256:82bff06affbf9a21baf7133bce0f1e977432830942b8b495ece1ed2a21df4b53`).
+The same 12.36 KB Docker context was used. A fresh temporary Compose project
+explicitly selected `linux/amd64` for each service and used separate fresh
+PG18.1 source and restore containers. PostgreSQL and the app image ran as
+`x86_64`/`x64` under OrbStack emulation. Migration `0011`, gateway dry-run and
+an empty-queue worker one-shot passed with placeholders only.
+
+The AMD64 source database received one synthetic tenant, team and delayed sync
+job plus a migration-role-owned future sequence. An encrypted `age` backup,
+archive verification and restore into the fresh AMD64 PG18.1 container passed;
+all 37/37 public table counts matched and tenant/team/job counts were `1:1:1`.
+The source and restored databases both passed app DML-with-rollback, app DDL
+denial, backup table/sequence SELECT, backup INSERT/`nextval` denial and app
+sequence use. The disposable target was removed through exact-name/marker
+cleanup. Temporary age identity and archive were deleted after verification.
+
+An attempt to create a fresh Ubuntu 24.04 AMD64 VM for a native clean-host
+rehearsal failed during OrbStack provisioning: `orbctl create` timed out after
+two minutes because the guest did not receive an IP. This occurred with
+`--isolated --isolate-network`, with `--isolated`, and with ordinary network
+integration. OrbStack removed the failed provisioning records; the existing
+`nyannyan` private-services machine stayed running. I stopped further VM
+retries and used the local AMD64 container emulation instead. This is useful
+architecture/Compose/restore evidence but does not satisfy a native clean
+Linux host or cloud independence rehearsal.
+
+The first temporary AMD64 Compose file also had a service-platform override
+inserted beneath a nested `depends_on` key and failed YAML parsing. Correcting
+the temporary file at service scope made `docker compose config --quiet` and
+the run pass; no repository Compose source was edited. Both AMD64 Compose
+projects were stopped with plain `docker compose down`, preserving their
+synthetic volumes. Afterwards the only container in the local Docker engine
+was the reusable `pubg-saas-pg18` test fixture; read-only checks showed private
+OpenClaw healthy and 9Router running, without restart or configuration change.
+No image was pushed or deployed, and no KOOK/PUBG/model credential was used.

@@ -261,6 +261,17 @@ omissions; targeted reruns passed without source changes. Evidence and exact
 commands are in `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 Real KOOK/PUBG/model acceptance remains skipped for lack of test credentials.
 
+Current `91bb60f` also passed an emulated AMD64 Compose path: fresh PG18.1
+source/restore containers, migration 0011, gateway dry-run, worker startup,
+encrypted backup and fresh-container restore (37/37 tables), and source/restore
+permission probes. The restored disposable DB was guarded-cleaned, and both
+Compose projects were stopped with volumes preserved. A fresh Ubuntu VM could
+not provision under OrbStack in three network modes (no guest IP after two
+minutes); AMD64 emulation is not recorded as native clean-Linux acceptance.
+The reusable isolated PG fixture remains running, private OpenClaw remained
+healthy, and 9Router remained running. No image push/deploy or real provider
+credential use occurred. Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed

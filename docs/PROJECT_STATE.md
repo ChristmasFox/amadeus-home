@@ -95,6 +95,16 @@ Real provider checks, clean Linux/cloud recovery and independence, schedule
 installation and canonical M204 headroom remain open. Details and the corrected
 harness configuration are recorded in the dated rehearsal checkpoint.
 
+The same current commit also passed a local `linux/amd64` Compose simulation
+with fresh AMD64 PG18.1 source and restore containers, migration 0011,
+gateway/worker smoke, encrypted backup and restore (37/37 public tables), and
+app/backup role probes on both databases. The projects were stopped with
+volumes preserved. OrbStack could not provision a clean Ubuntu VM in three
+network configurations because the guest never received an IP, so this emulated
+result is not native clean-Linux acceptance. Read-only post-stop checks showed
+OpenClaw healthy and 9Router running; no private runtime was modified. No image
+was pushed or deployed. Full evidence is in the dated rehearsal checkpoint.
+
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
 The operator selected `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree.
