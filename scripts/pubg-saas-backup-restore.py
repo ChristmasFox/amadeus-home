@@ -308,6 +308,20 @@ def read_manifest(path: Path) -> dict[str, Any]:
             fail("manifest contains a non-public SaaS table name")
         if isinstance(count, bool) or not isinstance(count, int) or count < 0:
             fail("manifest contains an invalid table count")
+    if "snapshotRequestedAtUtc" in manifest:
+        snapshot_requested = manifest.get("snapshotRequestedAtUtc")
+        created_at_utc = manifest.get("createdAtUtc")
+        if not isinstance(snapshot_requested, str) or not isinstance(created_at_utc, str):
+            fail("manifest snapshot timestamp is invalid")
+        try:
+            snapshot_time = datetime.fromisoformat(snapshot_requested.replace("Z", "+00:00"))
+            created_time = datetime.fromisoformat(created_at_utc.replace("Z", "+00:00"))
+        except ValueError:
+            fail("manifest snapshot timestamp is invalid")
+        if snapshot_time.tzinfo is None or created_time.tzinfo is None:
+            fail("manifest snapshot timestamps must include a timezone")
+        if snapshot_time.astimezone(timezone.utc) > created_time.astimezone(timezone.utc):
+            fail("manifest snapshot timestamp is after backup completion")
     return manifest
 
 
@@ -412,6 +426,9 @@ def command_backup(args: argparse.Namespace) -> None:
     manifest_created = False
     backup_complete = False
     try:
+        # This precedes PostgreSQL's exported-snapshot request and therefore
+        # gives operators a conservative upper bound for backup-point age.
+        snapshot_requested_at = datetime.now(timezone.utc)
         snapshot_session, snapshot = start_exported_snapshot(source_env, source_database)
         snapshot_ok = False
         try:
@@ -445,7 +462,8 @@ def command_backup(args: argparse.Namespace) -> None:
         digest = sha256_file(encrypted_dump)
         manifest = {
             "schema": MANIFEST_SCHEMA,
-            "createdAtUtc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "createdAtUtc": datetime.now(timezone.utc).isoformat(timespec="microseconds"),
+            "snapshotRequestedAtUtc": snapshot_requested_at.isoformat(timespec="microseconds"),
             "sourceDatabase": source_database,
             "scope": "postgres-public-schema-only",
             "snapshot": "shared-pg-exported-snapshot",

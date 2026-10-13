@@ -91,12 +91,25 @@ measurement are recorded below. A separate clean Linux VM also restored the
 public archive into a new PG volume and started the current Worker healthy;
 its proxy denied private M204 egress. This is a database/Worker startup drill,
 not full public-service independence. Sustained production-shaped capacity and
-alert delivery, release RPO/RTO, scheduled backup installation,
-quota/eligibility and full independent-runtime drills remain. The clean Linux ARM64 guest now passes
-Compose recovery, application egress isolation, and the combined encrypted
+alert delivery, release-grade RPO/RTO, scheduled backup installation,
+quota/eligibility and full independent-runtime drills remain. The clean Linux
+ARM64 guest now passes Compose recovery, application egress isolation, and the combined encrypted
 backup/prune job. The six-hour timer passed an ephemeral systemd integration
 in the isolated Linux VM; it is not persistently installed on M204 or the
 canonical host.
+
+Latest isolated RPO/RTO drill: the age backup completed in 641 ms and verified
+in 135 ms. The new manifest `snapshotRequestedAtUtc` measured 0.624 s to the
+simulated failure; restore into a fresh PG18.1 container matched 37/37 tables
+in 1.558 s, and the restored Worker was healthy 14.619 s after failure. Its
+synthetic queue had one delayed job, zero attempts and zero failures. App
+rollback DML/DDL denial and backup sequence-read/no-`nextval` probes passed.
+This is recovery-mechanics evidence for one synthetic tenant/team/job; the
+six-hour timer is still not installed and release-scale RPO/RTO remains open.
+The first attempt's `createdAtUtc`-based figure was discarded because that
+timestamp follows snapshot and encryption. The backup utility now records and
+validates a conservative snapshot-request timestamp. Evidence and commands:
+`.agent/checkpoints/2026-10-14-pubg-saas-rpo-rto-rehearsal.md`.
 P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,

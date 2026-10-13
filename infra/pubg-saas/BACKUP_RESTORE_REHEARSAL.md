@@ -187,6 +187,25 @@ disposable marker. If a restore fails after the database was created, the
 marked database is left in place for diagnosis; it is never automatically
 overwritten or dropped.
 
+## Record a synthetic RPO/RTO
+
+The manifest records `snapshotRequestedAtUtc` immediately before opening the
+exported PostgreSQL snapshot. It is a conservative timestamp for the recovery
+point; `createdAtUtc` records when encryption and manifest creation completed.
+For a rehearsal, record the simulated failure time immediately before restore
+starts and subtract `snapshotRequestedAtUtc`. The result is the snapshot age at
+that failure point. Do not use `createdAtUtc` for RPO; it is later than the
+database snapshot.
+
+Measure database restore time from the start of the guarded `restore` command
+until its table-count comparison succeeds. Also measure end-to-end recovery
+time from the simulated failure point until the restored Worker passes its
+Compose health check (`docker compose up -d --wait worker`). State whether the
+Gateway and real KOOK/PUBG/model providers were included. A small synthetic
+fixture measures recovery mechanics only; it does not establish a production
+RPO/RTO or capacity target. The snapshot request time is optional when reading
+older v1 manifests, which predate this field.
+
 When the rehearsal is complete, remove only the marked disposable database.
 This has a separate exact-name confirmation and explicit `--apply` guard:
 

@@ -102,6 +102,21 @@ would need to allocate this bot a safe share of the published 10,000/day
 developer-account total; other bots and events reduce the available share.
 The reservation logic does not assume KOOK's first-reply discount.
 
+## 2026-10-14 — Synthetic SaaS RPO/RTO restore timing
+
+In the isolated Ubuntu 24.04 ARM64 VM, an encrypted 37-table synthetic PG18.1
+backup completed in 641 ms and verified in 135 ms. The backup manifest now
+records `snapshotRequestedAtUtc` before PostgreSQL snapshot export; the
+measured upper-bound snapshot age at simulated failure was 0.624 s. Restore and
+all 37/37 table counts took 1.558 s; the restored Worker reached healthy 14.619
+s after simulated failure. It discovered one delayed synthetic job and made
+zero provider attempts. App rollback DML, app DDL denial, backup sequence read
+and backup `nextval` denial passed. This is a small-fixture recovery sample,
+not a production SLO or proof of the uninstalled six-hour timer. The disposable
+database was removed with exact-marker cleanup and both test Compose projects
+were stopped without deleting their volumes. Details:
+`.agent/checkpoints/2026-10-14-pubg-saas-rpo-rto-rehearsal.md`.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as

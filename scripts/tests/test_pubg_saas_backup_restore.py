@@ -105,6 +105,34 @@ class BackupRestoreSafetyTests(unittest.TestCase):
         self.assertEqual(resolved_manifest, manifest.resolve())
         self.assertEqual(values["publicTableCounts"]["public.teams"], 3)
 
+    def test_archive_accepts_timezone_aware_snapshot_request_timestamp(self):
+        artifact, manifest = self.write_archive_and_manifest()
+        completed = datetime.now(timezone.utc)
+        snapshot_requested = completed - timedelta(seconds=1)
+        values = json.loads(manifest.read_text(encoding="utf-8"))
+        values["createdAtUtc"] = completed.isoformat()
+        values["snapshotRequestedAtUtc"] = snapshot_requested.isoformat()
+        manifest.write_text(json.dumps(values), encoding="utf-8")
+
+        _, _, validated = OPS.validate_archive(str(artifact), str(manifest))
+        self.assertEqual(validated["snapshotRequestedAtUtc"], snapshot_requested.isoformat())
+
+    def test_archive_rejects_invalid_snapshot_request_timestamp(self):
+        cases = (
+            (None, "invalid"),
+            ("2026-10-14T00:00:00", "timezone"),
+            ("2026-10-14T00:00:01+00:00", "after backup completion"),
+        )
+        for snapshot_requested, error in cases:
+            with self.subTest(snapshot_requested=snapshot_requested):
+                artifact, manifest = self.write_archive_and_manifest()
+                values = json.loads(manifest.read_text(encoding="utf-8"))
+                values["createdAtUtc"] = "2026-10-14T00:00:00+00:00"
+                values["snapshotRequestedAtUtc"] = snapshot_requested
+                manifest.write_text(json.dumps(values), encoding="utf-8")
+                with self.assertRaisesRegex(OPS.OpsError, error):
+                    OPS.validate_archive(str(artifact), str(manifest))
+
     def test_modified_archive_is_rejected_by_checksum(self):
         artifact, manifest = self.write_archive_and_manifest()
         artifact.write_bytes(b"tampered synthetic bytes")
