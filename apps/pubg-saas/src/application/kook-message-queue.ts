@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 
-export type KookTextPayload = { type: 'text' | 'kmarkdown'; content: string };
+export type KookTextPayload = { type: 'text' | 'kmarkdown' | 'card'; content: string };
 
 export interface AcceptedGroupEvent {
   tenantId: string;
@@ -77,9 +77,16 @@ function requiredText(value: string, key: string, maxLength = 256): string {
 function payloadValue(value: unknown): KookTextPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('kook_payload_invalid');
   const payload = value as Record<string, unknown>;
-  if ((payload.type !== 'text' && payload.type !== 'kmarkdown') || typeof payload.content !== 'string'
+  if ((payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card') || typeof payload.content !== 'string'
     || !payload.content.trim() || payload.content.length > 8192) {
     throw new Error('kook_payload_invalid');
+  }
+  if (payload.type === 'card') {
+    let cards: unknown;
+    try { cards = JSON.parse(payload.content); } catch { throw new Error('kook_payload_invalid'); }
+    if (!Array.isArray(cards) || cards.length < 1 || cards.length > 5
+      || cards.some((card) => !card || typeof card !== 'object' || (card as Record<string, unknown>).type !== 'card'
+        || !Array.isArray((card as Record<string, unknown>).modules))) throw new Error('kook_payload_invalid');
   }
   return { type: payload.type, content: payload.content };
 }

@@ -1,6 +1,9 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { TrustedKookButtonClick } from '../channels/kook/trusted-button-event.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+
+type TeamConfirmationActor = Pick<TrustedKookGroupMessage, 'platform' | 'botAccountId' | 'guildId' | 'userId' | 'channelId'>;
 
 export interface GuildAdminPermissionChecker {
   isGuildAdmin(guildId: string, userId: string): Promise<boolean>;
@@ -105,7 +108,7 @@ export class TeamAdminService {
     }
   }
 
-  private async requireFreshGuildAdmin(event: TrustedKookGroupMessage): Promise<void> {
+  private async requireFreshGuildAdmin(event: Pick<TeamConfirmationActor, 'platform' | 'botAccountId' | 'guildId' | 'userId'>): Promise<void> {
     if (event.platform !== 'kook') throw new Error('unsupported_platform');
     const allowed = await this.permissions.isGuildAdmin(event.guildId, event.userId);
     if (!allowed) throw new Error('guild_admin_required');
@@ -128,7 +131,11 @@ export class TeamAdminService {
     return tenantId;
   }
 
-  private async touchActor(client: PoolClient, event: TrustedKookGroupMessage, tenantId: string): Promise<void> {
+  private async touchActor(
+    client: PoolClient,
+    event: Pick<TeamConfirmationActor, 'botAccountId' | 'userId'>,
+    tenantId: string,
+  ): Promise<void> {
     await client.query(
       `INSERT INTO channel_identities(platform,bot_account_id,user_id)
        VALUES ('kook',$1,$2) ON CONFLICT (platform,bot_account_id,user_id) DO NOTHING`,
@@ -143,7 +150,7 @@ export class TeamAdminService {
 
   private async grantTeamAccess(
     client: PoolClient,
-    event: TrustedKookGroupMessage,
+    event: Pick<TeamConfirmationActor, 'botAccountId' | 'userId'>,
     tenantId: string,
     teamId: string,
     role: 'requester' | 'member' | 'admin',
@@ -324,17 +331,53 @@ export class TeamAdminService {
 
   async confirmTeamAction(event: TrustedKookGroupMessage, tokenInput: string): Promise<ConfirmedTeamAction> {
     await this.requireFreshGuildAdmin(event);
+    return this.confirmTeamActionForActor(event, tokenInput);
+  }
+
+  /** Resolves the callback's source channel back to a currently bound guild,
+   * then rechecks live guild admin before consuming the same one-use token. */
+  async confirmTeamActionFromButton(click: TrustedKookButtonClick): Promise<ConfirmedTeamAction> {
+    const channelId = click.sourceTargetId;
+    if (!channelId) throw new Error('team_action_confirmation_unavailable');
+    const result = await this.pool.query(
+      `SELECT tenant.guild_id
+       FROM tenants tenant
+       JOIN channel_bindings binding
+         ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform
+        AND binding.bot_account_id=tenant.bot_account_id
+       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND binding.channel_id=$2`,
+      [click.botAccountId, channelId],
+    );
+    const guildId = result.rows[0]?.guild_id;
+    if (typeof guildId !== 'string' || !guildId) throw new Error('team_action_confirmation_unavailable');
+    const actor: TeamConfirmationActor = {
+      platform: 'kook',
+      botAccountId: click.botAccountId,
+      guildId,
+      userId: click.userId,
+      channelId,
+    };
+    await this.requireFreshGuildAdmin(actor);
+    return this.confirmTeamActionForActor(actor, click.value);
+  }
+
+  private async confirmTeamActionForActor(event: TeamConfirmationActor, tokenInput: string): Promise<ConfirmedTeamAction> {
     const token = requiredText(tokenInput, 'confirmation_token', 64);
     if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error('team_action_confirmation_unavailable');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       const pending = await client.query(
-        `SELECT action, payload_json, tenant_id, team_id
-         FROM pending_team_actions
-         WHERE token_hash=$1 AND platform='kook' AND bot_account_id=$2 AND guild_id=$3
-           AND actor_user_id=$4 AND channel_id=$5 AND expires_at > now() AND consumed_at IS NULL
-         FOR UPDATE`,
+        `SELECT pending.action, pending.payload_json, pending.tenant_id, pending.team_id
+         FROM pending_team_actions pending
+         JOIN channel_bindings binding
+           ON binding.tenant_id=pending.tenant_id AND binding.team_id=pending.team_id
+          AND binding.platform=pending.platform AND binding.bot_account_id=pending.bot_account_id
+          AND binding.channel_id=pending.channel_id
+         WHERE pending.token_hash=$1 AND pending.platform='kook' AND pending.bot_account_id=$2 AND pending.guild_id=$3
+           AND pending.actor_user_id=$4 AND pending.channel_id=$5
+           AND pending.expires_at > now() AND pending.consumed_at IS NULL
+         FOR UPDATE OF pending`,
         [tokenDigest(token), event.botAccountId, event.guildId, event.userId, event.channelId],
       );
       const row = pending.rows[0];

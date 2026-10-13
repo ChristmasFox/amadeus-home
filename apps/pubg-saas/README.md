@@ -7,8 +7,11 @@ permission checks, transactional squad/channel/roster management with one-use
 confirmations, and direct-message scoped self-declared account claims. The KOOK
 fixture-driven gateway session and inbox/outbox queue are also implemented.
 The Node 22 built-in WebSocket factory and fixed KOOK group-message REST client
-are implemented. The service process wiring, card callbacks, PUBG account
-lookup, worker, AI SDK integration and deployment image are still in progress.
+are implemented. One-use `return-val` confirmation cards are parsed and
+authorized against the current guild/channel/actor binding. Gateway process
+wiring, PUBG account lookup, worker, AI SDK integration and deployment image
+are still in progress; live button behavior has not been checked in a test
+guild.
 This package is not a runnable or deployed service yet.
 
 ## Trust boundaries

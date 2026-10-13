@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { migratePublicDatabase, parseTrustedKookGroupMessage, TeamAdminService } from '../src/index.js';
+import { migratePublicDatabase, parseTrustedKookButtonClick, parseTrustedKookGroupMessage, TeamAdminService } from '../src/index.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 
@@ -99,6 +99,23 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     const replacedRoster = await pool.query('SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2 ORDER BY pubg_account_id', [squadA.tenantId, squadA.teamId]);
     assert.deepEqual(replacedRoster.rows.map((row) => row.pubg_account_id), [`p1-${suffix}`, `p3-${suffix}`]);
 
+    const buttonAction = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p6-${suffix}`] });
+    const buttonEvent = (userId: string) => parseTrustedKookButtonClick({
+      s: 0,
+      d: {
+        type: 255,
+        channel_type: 'PERSON',
+        msg_timestamp: Date.now(),
+        extra: {
+          type: 'message_btn_click',
+          body: { msg_id: `card-${suffix}`, user_id: userId, value: buttonAction.confirmationToken, target_id: channelA },
+        },
+      },
+    }, botId)!;
+    await assert.rejects(service.confirmTeamActionFromButton(buttonEvent(userB)), /guild_admin_required/u);
+    assert.deepEqual(await service.confirmTeamActionFromButton(buttonEvent(userA)), { kind: 'add_members', team: squadA });
+    await assert.rejects(service.confirmTeamActionFromButton(buttonEvent(userA)), /team_action_confirmation_unavailable/u);
+
     await assert.rejects(
       service.createSquad(eventA, { label: 'Rollback', pubgShard: 'steam', pubgAccountIds: [`p9-${suffix}`] }),
       /channel_binding_conflict/u,
@@ -193,7 +210,7 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     });
     assert.notEqual(squadA.tenantId, squadB.tenantId);
     assert.equal((await pool.query('SELECT COUNT(*) AS count FROM teams WHERE label=$1', ['Same Name'])).rows[0]?.count, '2');
-    assert.equal(permissionChecks, 25);
+    assert.equal(permissionChecks, 29);
   } finally {
     await pool.query('DELETE FROM tenants WHERE guild_id = ANY($1::text[])', [[guildA, guildB]]).catch(() => undefined);
     await pool.query('DELETE FROM channel_identities WHERE platform=$1 AND bot_account_id=$2 AND user_id = ANY($3::text[])', ['kook', botId, [userA, userB]]).catch(() => undefined);

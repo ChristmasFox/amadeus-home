@@ -47,13 +47,13 @@ export class KookMessageApiClient implements KookGroupMessageSender {
   async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
     const channelId = requiredText(channelIdInput, 'channel_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
-    if (!payload || (payload.type !== 'text' && payload.type !== 'kmarkdown')
+    if (!payload || (payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card')
       || typeof payload.content !== 'string' || !payload.content.trim() || payload.content.length > 8000) {
       throw codedError('kook_message_payload_invalid');
     }
     const body = new URLSearchParams({
       target_id: channelId,
-      type: payload.type === 'text' ? '1' : '9',
+      type: payload.type === 'text' ? '1' : payload.type === 'kmarkdown' ? '9' : '10',
       content: payload.content,
       nonce,
     });

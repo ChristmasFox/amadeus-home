@@ -7,3 +7,5 @@ export * from './application/account-claim-service.js';
 export * from './application/kook-message-queue.js';
 export * from './channels/kook/gateway.js';
 export * from './channels/kook/message-client.js';
+export * from './channels/kook/trusted-button-event.js';
+export * from './channels/kook/confirmation-card.js';

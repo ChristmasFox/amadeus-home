@@ -26,12 +26,13 @@ claims with conflict-safe unclaim. Current P3 source includes a fixture-driven
 gateway session core (durable `session_id/sn`, ordering, heartbeat, resume and
 server reconnect reset), a Node WebSocket factory, bound-channel inbox dedupe
 and leased outbox retry, and a fixed KOOK group-message REST sender with reply
-correlation. `pnpm workflow:verify` passed with ephemeral PostgreSQL 18 (17
-SaaS tests); `pnpm build:pubg-saas`, `pnpm test:workflow`,
-`pnpm test:architecture`, `pnpm check:secrets`, `git diff --check` and the
-workflow-selected private PUBG checks pass. This is source and offline-fixture
-progress, not P3 acceptance: application process wiring, card callbacks, an
-isolated test guild, PUBG account lookup, SQLite/Postgres edge-case parity,
+correlation. One-use confirmation cards now use KOOK `return-val`; the callback
+parser resolves channel scope from the current binding, rechecks live guild
+admin, and rejects consumed or stale-channel actions. `pnpm test:pubg-saas`
+passed with ephemeral PostgreSQL 18 (19 SaaS tests), and
+`pnpm typecheck:pubg-saas` passed. This is source and offline-fixture progress,
+not P3 acceptance: gateway process/application wiring, an isolated test guild,
+PUBG account lookup, SQLite/Postgres edge-case parity,
 Compose/app runtime, and independent deployment/restore drills remain
 incomplete. No runtime or production credentials were touched.
 Current source map: `docs/PROJECT_MAP.md`.

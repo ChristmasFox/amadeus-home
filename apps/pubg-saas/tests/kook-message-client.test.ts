@@ -43,6 +43,8 @@ test('maps KMarkdown and fails closed without exposing the bot token', async () 
   });
   await client.send('bound-channel', { type: 'kmarkdown', content: '**hello**' }, 'b'.repeat(64));
   assert.equal(bodies[0]?.get('type'), '9');
+  await client.send('bound-channel', { type: 'card', content: '[{"type":"card","modules":[]}]' }, 'b'.repeat(64));
+  assert.equal(bodies[1]?.get('type'), '10');
 
   const unavailable = new KookMessageApiClient({ token: 'secret-fixture', fetcher: async () => new Response('unavailable', { status: 503 }) });
   await assert.rejects(unavailable.send('bound-channel', { type: 'text', content: 'hello' }, 'c'.repeat(64)), (error: unknown) => {
