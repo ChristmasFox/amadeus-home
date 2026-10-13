@@ -113,12 +113,14 @@ role, read-only runtime filesystems, and separate bootstrap/migrator/app/backup
 roles. Rendered Compose config and secret-file connection URL checks pass. A
 six-hour UTC systemd job and guarded minimum-seven-day retention command are
 source-complete but uninstalled; the one-shot backup job passed against the
-isolated PostgreSQL fixture. The Docker image was not built and no service was
-started.
+isolated PostgreSQL fixture. At the time of this source-only checkpoint, the
+Docker image had not been built and no service was started.
 
-Clean Linux/cloud restore, scheduled retention, tested egress restrictions and
-the M204-public-stop/private-Kurisu and isolated-cloud independence drills
-remain unverified. The ordinary Docker bridge does not restrict app egress.
+At that source checkpoint, clean Linux/cloud restore, scheduled retention,
+tested egress restrictions and public/private stop-isolation remained open. A
+local M204 Compose stop/private-source regression was completed later and is
+recorded below; live OpenClaw and isolated-cloud independence remain open. The
+ordinary Docker bridge does not restrict app egress.
 KOOK 200-guild eligibility, developer-account-wide daily send quota, live API
 quota feasibility, live model accuracy/P95, and M204/container RSS headroom also
 remain open pre-release gates. The P4 benchmark runner now requires a protected
@@ -126,6 +128,42 @@ external 100–200-case dataset and test-provider credentials; no live benchmark
 has run. No private runtime, production database, 9Router or deployment was
 touched. Full M2 evidence is in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-source-acceptance.md`.
+
+## M2 local Compose and recovery drill — 2026-10-14
+
+Built local ARM64 image `local/pubg-saas:git-66941c2`
+(`sha256:bdce2f6f5cdce21d07ee87d7787987ee93da37666e6793e2bb3ab36541cdbaf7`).
+Two uniquely named Compose projects used fresh, isolated PostgreSQL 18.1
+containers and volumes. The source project applied migration `0011`, ran the
+worker with an empty queue, and ran the gateway container in its side-effect-free
+dry-run mode. No real KOOK, PUBG or model credentials were loaded; local
+placeholder values were supplied for the no-call startup. Real provider
+acceptance remains skipped.
+
+The encrypted age backup and archive verification passed. Restore into the
+second fresh PostgreSQL container passed with all 37/37 public base-table row
+counts matching, including 11 migration records and one synthetic tenant, team
+and sync job. App insert/update/delete worked inside a rolled-back probe while
+DDL was denied. The backup role could read tables and sequence state but could
+not write; a future sequence probe confirmed backup SELECT-only and app
+sequence usage. The drill exposed missing `pubg_backup` sequence SELECT grants,
+which caused an empty BIGSERIAL to be dumped as invalid `setval(..., 0, false)`.
+Bootstrap and restore grants now include current and default sequence SELECT;
+the focused backup/restore suite passes 14/14.
+
+Both local Compose projects were stopped with `down` (their synthetic volumes
+were preserved). With those SaaS containers stopped, `pnpm test:pubg` passed
+68/68. This is an offline private-source regression, not a live OpenClaw test;
+private OpenClaw, production databases, 9Router and deployment were untouched.
+On this OrbStack run, the PG host-loopback binding on the internal Compose
+network did not become an active runtime port, so the host backup tool used
+temporary container-side PostgreSQL clients and mode-0600 passfiles. Clean
+Linux host/cloud restore and host-port behavior remain open.
+
+Reproduction commands and artifact handling are recorded in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`;
+the repository procedures remain in `infra/pubg-saas/README.md` and
+`infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 

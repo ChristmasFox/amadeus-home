@@ -165,8 +165,10 @@ class BackupRestoreSafetyTests(unittest.TestCase):
     def test_restored_roles_keep_runtime_dml_and_migration_boundaries(self):
         sql = OPS.recovery_access_sql("pubg_saas_disposable_clean_host_01")
         self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES", sql)
+        self.assertIn("GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO pubg_backup", sql)
         self.assertIn("TO pubg_app", sql)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pubg_migrator", sql)
+        self.assertIn("GRANT SELECT ON SEQUENCES TO pubg_backup", sql)
         self.assertNotIn("GRANT CREATE ON SCHEMA public TO pubg_app", sql)
 
     def test_retention_removes_expired_matching_pairs_and_keeps_recent_backups(self):
