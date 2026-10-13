@@ -220,6 +220,24 @@ restore acceptance. `pnpm check:secrets` and `git diff --check` passed.
 Evidence is recorded in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+## M2 CI and combined multi-architecture build — 2026-10-14
+
+Added `.github/workflows/pubg-saas.yml` with ephemeral PostgreSQL integration,
+private Kurisu regression, public/private typechecks, architecture/secrets
+gates, backup safety tests, the synthetic 200-team benchmark, Compose config
+render, and a no-push amd64/arm64 OCI build. All Actions are SHA-pinned; the
+workflow has read-only repository permissions and uses only synthetic values.
+It has not run on GitHub because the branch is not pushed.
+
+A local Buildx OCI build from the same runtime source verified both amd64 and
+arm64; manifest-list digest is
+`sha256:cf6fb5cbb1e1771845b86bdb40cc649ac14a496e47311ce6bf3155935d941d3a`.
+`python3 scripts/verify-pubg-saas-oci.py` checks the generated archive. Compose
+render passed with synthetic placeholders and started no services. Clean Linux
+host/restore, installed backup scheduling, measured canonical-host resources,
+cloud independence, live provider acceptance, KOOK quota eligibility and
+human-actor P3 flows remain open.
+
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10
 
 The operator-approved Apply rollout deployed

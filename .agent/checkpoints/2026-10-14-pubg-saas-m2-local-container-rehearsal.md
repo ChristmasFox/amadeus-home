@@ -274,3 +274,32 @@ image/runtime check, not a clean amd64 Linux host or Compose restore rehearsal.
 No Compose service was started, no application process loaded credentials, and
 no provider request was sent. No production resource or private runtime was
 changed.
+
+## M2 CI source and combined multi-architecture build — 2026-10-14
+
+Added `.github/workflows/pubg-saas.yml` to cover the PostgreSQL-backed SaaS
+suite, private Kurisu tests, both typecheck groups, architecture/secrets gates,
+backup/restore safety tests, the synthetic 200-team benchmark, Compose render,
+and a no-push Linux amd64/arm64 OCI build. All Actions are pinned by commit
+SHA; CI uses only an ephemeral PostgreSQL service and synthetic placeholders.
+The workflow has read-only repository permissions. It has not run on GitHub
+because this branch has not been pushed.
+
+The equivalent local multi-architecture Buildx command completed without
+pushing or loading an image into the service runtime:
+
+```sh
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --output type=oci,dest=/tmp/pubg-saas-multiarch.oci.tar \
+  --file apps/pubg-saas/Dockerfile .
+python3 scripts/verify-pubg-saas-oci.py /tmp/pubg-saas-multiarch.oci.tar
+```
+
+The OCI index digest was
+`sha256:cf6fb5cbb1e1771845b86bdb40cc649ac14a496e47311ce6bf3155935d941d3a`;
+the verifier reported both `linux/amd64` and `linux/arm64`. A Compose render
+using a temporary project directory and synthetic env/password placeholders
+passed `docker compose config --quiet`; it started no service. The temporary
+OCI artifact was removed. `pnpm check:secrets`, `git diff --check`, and Ruby
+YAML syntax parsing passed. `actionlint` is not installed locally, and the
+workflow has not yet been executed by GitHub Actions.

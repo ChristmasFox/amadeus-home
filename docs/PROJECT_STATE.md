@@ -63,6 +63,15 @@ file is absent from the final image. This does not establish clean amd64 Linux
 Compose/restore or M204 capacity. No production, 9Router or private OpenClaw
 runtime was modified.
 
+Added an SHA-pinned, read-only `.github/workflows/pubg-saas.yml` to run isolated
+PG-backed public tests, private Kurisu regression, typechecks, backup safety,
+the 200-team synthetic benchmark, Compose render, and a no-push multiarch image
+build. Local Compose render passed with placeholders. A combined local OCI build
+reported `linux/amd64` and `linux/arm64` (index digest
+`sha256:cf6fb5cbb1e1771845b86bdb40cc649ac14a496e47311ce6bf3155935d941d3a`).
+`scripts/verify-pubg-saas-oci.py` validates both platforms. GitHub Actions has
+not run because no push was performed; this is source/local acceptance only.
+
 ## 2026-10-13 — PUBG KOOK SaaS M1 source acceptance; M2 active
 
 The operator selected `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this worktree.
