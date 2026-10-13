@@ -12,14 +12,19 @@ or 9Router administration.
 
 P0 is complete: the baseline was clean at `3f4cac2`; the initial workflow plan
 selected FAST; the public/private dependency map and synthetic stat golden are
-recorded; no runtime was changed. P1 remains in progress: the query engine
+recorded; no runtime was changed. P1 source gates now pass: the query engine
 requires explicit `TeamContext`; the async `PubgRepositoryPort` is implemented
 with a scope-pinned SQLite adapter; `listMatches` limits player-row reads to
 the selected match window. Early P2 adds the `apps/pubg-saas` Postgres schema,
 migrations and roster/conversation-scoped adapter. A temporary PostgreSQL 18
 integration run passed two-guild/team and conversation/result-set isolation,
 duplicate display names, migration idempotence, and one SQLite/Postgres shared
-stat golden. The current P2 source adds trusted group/direct-message parsing,
+stat golden, plus a shared nine-case edge golden for KD/revives/squad rank,
+relative 06:00 time/half-open boundaries, zero matches, partial/unknown coverage
+and comparison ratios. Team-damage/kick/punch/melee envelopes, evidence, versioned
+telemetry and cache-only reopening also match across the independent stores.
+The private Domain suite has 36 passing tests without the public database.
+The current P2 source adds trusted group/direct-message parsing,
 uncached KOOK owner/Administrator checks, transactional squad/channel/roster
 management with actor-bound one-use confirmations, and self-declared account
 claims with conflict-safe unclaim. Current P3 source includes a fixture-driven
@@ -38,28 +43,31 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0006`
+Additive migrations through `0007`
 upgrade public schema/outbox rows. `pnpm workflow:verify` passed with ephemeral
-PostgreSQL 18 (45 SaaS tests), including private PUBG regression checks. This is
+PostgreSQL 18 (47 SaaS tests), including private PUBG regression checks. This is
 source and offline-fixture progress; package build, both entry-point dry-runs,
 secrets scan and `git diff --check` also passed. P3 acceptance still requires
 an isolated real test guild and current endpoint/guild eligibility preflight.
-SQLite/Postgres edge-case parity, ingestion worker/AI SDK, Compose deployment
-and independent restore drills also remain incomplete. No runtime or production
+Ingestion worker/AI SDK, Compose deployment and independent restore drills also
+remain incomplete. No runtime or production
 credentials were touched.
-The inspected P1/P2 shard-cache gap is now corrected: match/player/telemetry/
-prefetch keys include shard, reads enforce registered roster/shard and any
-conversation authority, and foreign telemetry cannot bypass match membership.
-Legacy child shards are backfilled from parent facts; unresolved rows abort
-migration atomically and remain intact. P2 now also builds public query context
+The inspected P1/P2 cache gap is corrected for normalized match/player facts,
+which use shard + match ID. Derived telemetry and prefetch records are scoped
+by tenant/team and a digest of the active team configuration as well as
+shard/match/parser/feature versions; same-match teams cannot overwrite or reuse
+each other's roster-derived facts, and alias changes miss the prior cache.
+Unowned legacy shared telemetry rows are evicted because their team/config
+provenance cannot be recovered. Legacy child shards are backfilled from parent
+facts; unresolved rows abort migration atomically and remain intact. P2 now also builds public query context
 from active durable ingress, current binding/revision and fresh KOOK membership;
 DMs require explicit actor grants and selection when several teams are authorized.
 Opaque TTL sessions isolate requester/channel/team, reuse exact-event retries,
 and invalidate old state after roster/alias changes, revoke/regrant or rebind.
 Legacy queued group authority is never guessed during migration. This module is
 tested but not yet wired to the executable's statistical handler. Resolved player
-name persistence, quote/thread correlation, complete Domain edge-case parity
-and query/AI/worker integration remain next work.
+name persistence, quote/thread correlation and query/AI/worker integration
+remain next work.
 Current source map: `docs/PROJECT_MAP.md`.
 
 ## Concurrent 9Router upstream diagnostic detail patch — 2026-10-10

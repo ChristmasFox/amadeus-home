@@ -23,6 +23,17 @@ authorization remains the application's responsibility.
 `PubgDomainService` depends on the asynchronous `PubgRepositoryPort`. The
 private OpenClaw adapter wraps its existing SQLite repository in
 `SqlitePubgRepositoryAdapter`, pinned to the configured private scope. Public
-PostgreSQL persistence is a separate adapter and is not implemented yet.
+PostgreSQL persistence is a separate adapter in `apps/pubg-saas`; it uses the
+public database and application authorization, independently of private SQLite.
 Both adapters must preserve the same `ToolEnvelope`, evidence, coverage,
 partial/unknown and temporal contracts.
+
+`tests/fixtures/shared-edge-cases.json` locks nine independent synthetic stat
+expectations: KD/zero denominator, revives, squad rank, relative 06:00 periods,
+day grouping, no matches, partial/unknown coverage and comparison ratios. Private
+Domain tests run these without PostgreSQL or the public app. The public suite
+then reads the same fixture through both adapters and compares whole deterministic
+results. It also compares team damage/kick/punch/melee, derived evidence and
+parser/feature cache versions, partial unavailable telemetry, successful zero,
+and cache-only reads after reopening each independent store. These are offline
+fixtures, not live independent deployment or restore acceptance.

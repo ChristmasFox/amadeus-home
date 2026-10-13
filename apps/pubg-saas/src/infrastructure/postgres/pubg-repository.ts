@@ -16,6 +16,7 @@ import type {
 } from '@agent/pubg-domain';
 import { normalizeRecords, parseTeamContext } from '@agent/pubg-domain';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
+import { createHash } from 'node:crypto';
 
 export interface TrustedConversationScope {
   platform: 'kook';
@@ -36,6 +37,18 @@ function requiredText(value: string, name: string): string {
   const normalized = value.trim();
   if (!normalized) throw new Error(`invalid_${name}`);
   return normalized;
+}
+
+function teamConfigHash(team: TeamContext['team']): string {
+  const canonical = {
+    id: team.id,
+    label: team.label,
+    platform: team.platform,
+    players: [...team.players]
+      .map(player => ({ id: player.id, name: player.name, aliases: [...player.aliases].sort() }))
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
 function number(value: unknown, fallback = 0): number {
@@ -152,6 +165,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   readonly conversation: TrustedConversationScope | null;
   private readonly accountIds: string[];
   private readonly shard: string;
+  private readonly teamConfigHash: string;
 
   constructor(
     private readonly pool: Pool,
@@ -163,6 +177,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     this.scope = parseTeamContext(scope);
     this.shard = this.scope.team.platform;
     this.accountIds = this.scope.team.players.map((player) => player.id);
+    this.teamConfigHash = teamConfigHash(this.scope.team);
     if (conversation && conversation.kind !== 'bound_channel' && conversation.kind !== 'direct_team') {
       throw new Error('invalid_conversation_scope');
     }
@@ -369,9 +384,10 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   async get(key: TelemetryFeatureKey): Promise<TelemetryFeatureRecord | null> {
     if (!await this.getMatch(key.matchId)) return null;
     const result = await this.pool.query(
-      `SELECT facts_json, created_at FROM telemetry_features
-       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3 AND shard=$4`,
-      [key.matchId, key.parserVersion, key.featureVersion, this.shard],
+      `SELECT facts_json, created_at FROM telemetry_team_features
+       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
+         AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
+      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
     );
     const row = result.rows[0];
     if (!row) return null;
@@ -383,20 +399,21 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   async set(record: TelemetryFeatureRecord): Promise<void> {
     if (!await this.getMatch(record.matchId)) throw new Error('telemetry_match_not_in_team');
     await this.pool.query(
-      `INSERT INTO telemetry_features(match_id, parser_version, feature_version, facts_json, created_at,shard)
-       VALUES ($1,$2,$3,$4::jsonb,$5,$6)
-       ON CONFLICT (shard,match_id, parser_version, feature_version) DO UPDATE
+      `INSERT INTO telemetry_team_features(tenant_id,team_id,team_config_hash,match_id,parser_version,feature_version,facts_json,created_at,shard)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)
+       ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE
        SET facts_json=EXCLUDED.facts_json, created_at=EXCLUDED.created_at`,
-      [record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt, this.shard],
+      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, record.matchId, record.parserVersion, record.featureVersion, JSON.stringify(record.facts), record.createdAt, this.shard],
     );
   }
 
   async getTelemetryPrefetchAttempt(key: TelemetryFeatureKey): Promise<TelemetryPrefetchAttempt | null> {
     if (!await this.getMatch(key.matchId)) return null;
     const result = await this.pool.query(
-      `SELECT * FROM telemetry_prefetch_attempts
-       WHERE match_id=$1 AND parser_version=$2 AND feature_version=$3 AND shard=$4`,
-      [key.matchId, key.parserVersion, key.featureVersion, this.shard],
+      `SELECT * FROM telemetry_team_prefetch_attempts
+       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND match_id=$4
+         AND parser_version=$5 AND feature_version=$6 AND shard=$7`,
+      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, key.matchId, key.parserVersion, key.featureVersion, this.shard],
     );
     return result.rows[0] ? attemptFromRow(result.rows[0]) : null;
   }
@@ -405,13 +422,13 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
     await this.assertReadScope();
     const bounded = Math.min(Math.max(Math.trunc(limit), 1), 1000);
     const result = await this.pool.query(
-      `SELECT attempt.* FROM telemetry_prefetch_attempts attempt
-       WHERE parser_version=$1 AND feature_version=$2 AND attempt.shard=$5
-         AND EXISTS (SELECT 1 FROM match_players member WHERE member.shard=attempt.shard AND member.match_id=attempt.match_id AND member.account_id=ANY($6::TEXT[]))
-         AND status IN ('PENDING','UNAVAILABLE') AND (next_retry_at IS NULL OR next_retry_at <= $3)
+      `SELECT attempt.* FROM telemetry_team_prefetch_attempts attempt
+       WHERE tenant_id=$1 AND team_id=$2 AND team_config_hash=$3 AND parser_version=$4 AND feature_version=$5 AND attempt.shard=$8
+         AND EXISTS (SELECT 1 FROM match_players member WHERE member.shard=attempt.shard AND member.match_id=attempt.match_id AND member.account_id=ANY($7::TEXT[]))
+         AND status IN ('PENDING','UNAVAILABLE') AND (next_retry_at IS NULL OR next_retry_at <= $9)
        ORDER BY COALESCE(next_retry_at, '-infinity'::timestamptz), updated_at, match_id
-       LIMIT $4`,
-      [parserVersion, featureVersion, now, bounded, this.shard, this.accountIds],
+       LIMIT $6`,
+      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, parserVersion, featureVersion, bounded, this.accountIds, this.shard, now],
     );
     return result.rows.map(attemptFromRow);
   }
@@ -419,16 +436,16 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
   async setTelemetryPrefetchAttempt(attempt: TelemetryPrefetchAttempt): Promise<void> {
     if (!await this.getMatch(attempt.matchId)) throw new Error('telemetry_match_not_in_team');
     await this.pool.query(
-      `INSERT INTO telemetry_prefetch_attempts(
-         match_id, parser_version, feature_version, status, attempt_count,
-         last_attempted_at, next_retry_at, error, updated_at,shard
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT (shard,match_id, parser_version, feature_version) DO UPDATE SET
+      `INSERT INTO telemetry_team_prefetch_attempts(
+         tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version,status,attempt_count,
+         last_attempted_at, next_retry_at, error, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       ON CONFLICT (tenant_id,team_id,team_config_hash,shard,match_id,parser_version,feature_version) DO UPDATE SET
          status=EXCLUDED.status, attempt_count=EXCLUDED.attempt_count,
          last_attempted_at=EXCLUDED.last_attempted_at, next_retry_at=EXCLUDED.next_retry_at,
          error=EXCLUDED.error, updated_at=EXCLUDED.updated_at`,
-      [attempt.matchId, attempt.parserVersion, attempt.featureVersion, attempt.status,
-      attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt, this.shard],
+      [this.scope.tenantId, this.scope.teamId, this.teamConfigHash, this.shard, attempt.matchId, attempt.parserVersion, attempt.featureVersion, attempt.status,
+      attempt.attemptCount, attempt.lastAttemptedAt, attempt.nextRetryAt, attempt.error ?? null, attempt.updatedAt],
     );
   }
 

@@ -171,6 +171,6 @@ test('query authorization migration never backfills queued group authority from 
     await migratePublicDatabase(pool); await migratePublicDatabase(pool);
     assert.deepEqual((await pool.query("SELECT status,event_json,last_error_code FROM kook_ingress_events WHERE event_id='old-group'")).rows[0], { status: 'dead', event_json: null, last_error_code: 'kook_ingress_binding_revision_unknown' });
     assert.equal((await pool.query("SELECT status FROM kook_ingress_events WHERE event_id='old-dm'")).rows[0]?.status, 'pending');
-    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 6);
+    assert.equal((await pool.query('SELECT 1 FROM schema_migrations')).rowCount, 7);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
 });

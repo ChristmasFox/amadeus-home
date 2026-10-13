@@ -47,10 +47,16 @@ The initial P0 inventory found that neither `apps/pubg-saas` nor
 `infra/pubg-saas` existed. P1 added a generic async `PubgRepositoryPort` and a
 scope-pinned SQLite adapter for private use. Early P2 source now contains a
 Postgres schema/migration and an adapter with registered-roster/shard-filtered match selection
-and tenant/team/bot/user/channel/session scoped conversation storage. Match and
-telemetry cache keys include shard + match ID, with membership-constrained
-telemetry access and fail-closed legacy shard backfill. One
-synthetic stat golden now passes through both SQLite and Postgres repositories;
+and tenant/team/bot/user/channel/session scoped conversation storage. Match
+facts use official shard + match ID; derived telemetry and prefetch state use
+tenant/team + team-config digest + shard/match/parser/feature scope, with
+membership-constrained reads and fail-closed legacy shard backfill. A migration
+evicts unowned historical shared telemetry cache rows because their source team
+and configuration cannot be established. One
+synthetic stat golden and nine independent edge cases now pass through both
+SQLite and Postgres repositories, covering KD/revives/squad rank, 06:00 periods,
+zero/partial/unknown and comparison ratios. Damage/kick/punch/melee envelopes,
+derived evidence and versioned facts also survive independent store reopening;
 trusted KOOK group/direct-message parsing, fresh guild owner/Administrator
 checks, and transactional squad/channel/roster management with actor-bound
 one-use confirmations are also implemented. Direct-message account claims are
@@ -75,7 +81,7 @@ revocation/regrant and same-team rebind cannot revive old context. This module
 is not yet attached to the executable statistical handler; resolved names and
 reply-thread correlation remain pending.
 Live test-guild acceptance,
-edge-case parity, query/AI/worker integration and deployment remain
+query/AI/worker integration and deployment remain
 implementation work. See the Goal's phase gates before describing the public
 service as ready.
 
@@ -98,9 +104,10 @@ planner 处理。两边通过结构化应用调用共享 Domain；Domain 不读�
 - Both deployment images embed their own pinned build of the shared Domain;
   source reuse does not imply shared runtime state or synchronized releases.
 - Synthetic parity evidence lives in
-  `packages/pubg-domain/tests/fixtures/shared-domain-golden.json` and its test.
-  It locks a deterministic query result; public-adapter parity remains unproven
-  until a public adapter exists and passes the same fixture.
+  `packages/pubg-domain/tests/fixtures/shared-domain-golden.json`,
+  `shared-edge-cases.json` and their private/public tests. They lock deterministic
+  stat/coverage/time and damage/cache evidence; live deployment independence
+  remains unproven until the P6 deployment/restore drills pass.
 - The shared service now awaits its repository operations. The existing private
   OpenClaw tool contracts continue to pass through the SQLite adapter; a
   PostgreSQL-backed implementation and multi-tenant authorization tests are

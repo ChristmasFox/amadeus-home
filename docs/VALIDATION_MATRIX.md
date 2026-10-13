@@ -62,8 +62,13 @@ fresh KOOK channel/guild membership; they cover explicit DM grant/selection,
 concurrent retry/session reuse, actor/channel/team isolation, roster/alias TTL,
 grant revoke/regrant, permission-check races and same-team rebind invalidation.
 Legacy queued group events without a binding generation fail closed on upgrade.
-The 45-test suite uses fixture HTTP and ephemeral PostgreSQL 18; statistical
+The 47-test suite uses fixture HTTP and ephemeral PostgreSQL 18; statistical
 handler wiring, player-name persistence, reply threads and real KOOK acceptance
 are still pending.
+The private Domain has 36 passing tests, including nine shared edge golden
+cases. Public/private adapter parity compares whole stat results and damage
+tool envelopes, evidence references, versioned telemetry, partial/unknown versus
+known-zero facts, and cache-only reads after reopening each store. P6 live
+deployment and restore independence remain separate acceptance gates.
 Fixture and local Postgres results do not establish live KOOK, quota, model-provider,
 backup/restore or 200-squad acceptance.
