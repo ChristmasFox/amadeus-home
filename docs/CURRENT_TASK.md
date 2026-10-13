@@ -43,7 +43,7 @@ after a crash; new clicks cannot reuse it. Automatic guild-join welcome now
 stages a strict bot-addressed system event before official guild/channel API
 lookup, pins a verified text channel in the canonical outbox, and rechecks it
 before sending. Welcome cannot create a tenant/team/grant or invoke a model.
-Additive migrations through `0011` upgrade public schema/outbox rows, add
+Additive migrations through `0012` upgrade public schema/outbox rows, add
 durable worker sync jobs, indexed KOOK ingress-rate windows, and a PostgreSQL
 daily outbound-message budget that resets at 12:00 Asia/Shanghai. The default
 budget is 200 sends per SaaS bot; configuring more requires verified developer
@@ -71,14 +71,17 @@ fake PUBG API/model provider; no runtime credential, real guild, production
 database, Docker service or external deployment was touched. The worker
 dry-run requires explicit `--apply` to connect or write.
 
-M2 is active: worker cycle logs now expose aggregate queue age/state and
-process RSS/heap without tenant IDs. The local synthetic 200-team simulation
-passed. The KOOK sender now reserves daily quota in PostgreSQL across restarts;
-the full SaaS/Postgres suite passes 86/86 with no skips, including concurrent
-budget admission, outbox deferral and the integrated runtime. Independent
-worker capacity, alert rules, quota/resource measurements,
-backup/restore, clean-host recovery and private/public independence drills
-remain. P3 real
+M2 is active: worker cycle logs expose aggregate queue age/state and process
+RSS/heap without tenant IDs, and now emit identifier-free alert codes. The
+local synthetic 200-team simulation completed 200/200 authorized query tasks
+and worker runs. The KOOK sender reserves daily quota in PostgreSQL across
+restarts. The current SaaS/Postgres suite passes 100/100 with no skips,
+including concurrent budget admission, outbox deferral and the integrated
+runtime. Local Compose build/start, migration 0012, encrypted backup/restore
+with table-count and role-boundary probes, and the public-stop/private-Kurisu
+source regression are verified. Canonical-host resource/alert routing,
+clean-Linux/cloud recovery, scheduled backup installation, quota/eligibility
+and full independent-runtime drills remain. P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
 cross-channel routing, management callbacks and unauthorized denial) and KOOK
@@ -109,7 +112,7 @@ default minute windows are 10 requests/user, 60/channel, 120/tenant and
 is a local synthetic measurement, not M204 resource headroom or a capacity/SLO
 claim.
 
-The public-schema-only age backup/restore utility has 11 safety tests. A real
+The public-schema-only age backup/restore utility has 14 safety tests. A real
 encrypted backup, decryption/archive verification, and 35-table restore passed
 on the reused isolated PostgreSQL 18 fixture. The restore creates a disposable
 database owned by the migration role and reapplies app/backup grants; tests
