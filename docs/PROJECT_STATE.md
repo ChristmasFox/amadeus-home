@@ -37,6 +37,17 @@ and host metrics returned 200. The isolated volume was reused and retained;
 private OpenClaw/9Router remained running and unchanged. This does not replace
 a native x86_64 Linux runtime test.
 
+The current native ARM64 image also passed a full fresh-PG recovery repeat in
+two new M204 Compose projects. All 14 migrations applied; Worker/egress health
+and the loopback metrics relay passed. An age-encrypted backup restored into a
+separate fresh PG18.1 container with 37/37 public-table counts, 14 migrations
+and synthetic tenant/team/job rows of 1/1/1. App/backup role probes passed
+before and after restore, including future-sequence grants. After guarded
+target cleanup and ordinary `down`, Kurisu passed 68/68 and private
+OpenClaw/9Router IDs, start times and restart counts remained unchanged. No
+Gateway, PUBG/model call, image push or deploy occurred. Evidence and
+reproduction: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 
 At current source commit `20b06da` (documentation-only `5409671` follows), the

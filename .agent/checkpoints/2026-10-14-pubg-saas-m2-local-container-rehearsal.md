@@ -1586,3 +1586,67 @@ This improves P3 real-server and independent-host evidence to current-image
 Gateway authentication plus restored Worker startup. It does not prove
 human-user inbound, callback authorization, full public query behavior, live
 PUBG/model service, or RPO/RTO. The test credential remains outside Git.
+
+## Current-source `7f3b95b` M204 fresh-PG recovery repeat — 2026-10-14
+
+Repeated the complete local loop with the current M204 ARM64 image
+`local/pubg-saas:git-7f3b95b` (`sha256:e52c734edc432eb5f9d84af9aa2c8086467f38146ec9dade75e26fe6b4c00d47`).
+Two new Compose projects used separate fresh PG18.1 volumes. The source
+project applied all 14 migrations; its egress proxy and Worker became healthy.
+The Worker reported one synthetic team, zero attempts, one delayed job and
+zero due jobs. The host-loopback metrics relay returned 200 with
+`pubg_saas_worker_up 1`. Gateway was not started.
+
+The source database held one synthetic tenant, team and delayed sync job plus
+a migrator-owned sequence. The current backup utility produced and verified
+an age-encrypted artifact with SHA-256
+`df2e2d940d3dca8e77a568fa4070c03495a4e0c981e90d07c4b3a3fa2b0c6f5e`. Restore
+to a separate fresh PG18.1 container matched all 37/37 public-table counts
+and all 14 migration rows; tenant/team/job counts were 1/1/1. Source and
+restore probes passed: app DML only in a rolled-back transaction, app DDL
+denied, backup table and sequence reads allowed, backup DML and `nextval`
+denied, app sequence usage allowed, and default sequence grants preserved
+after restore. The disposable target was removed only through the exact-name
+and marker guard.
+
+Both projects were stopped with ordinary `down` (no `-v`), preserving their
+isolated volumes and owner-only synthetic fixtures. With the public test
+containers stopped, `pnpm test:pubg` passed 68/68. Before/after read-only
+inspection showed OpenClaw ID
+`2a4399acb9eb61f4d31bdbe696752db83f944e35637120d538ac3dc152041061` and
+9Router ID `f09c2c7dbf06f36bc5c789ccfbed3d3eda70960fcc0fb55a248f33cfe0f75af1`
+unchanged, both running with restart count 0 and unchanged start times. No
+KOOK Gateway, PUBG API or model request ran; no real provider credential,
+production database, image push, deploy, 9Router setting or private runtime
+change was involved. The encrypted artifact and age identity remain outside
+Git under `/var/tmp/pubg-saas-m2-current-7f3b95b` with owner-only directory
+permissions.
+
+Reproduction with the retained isolated M204 fixture (its `.env` and test
+password files are outside Git):
+
+```sh
+source scripts/host-profile.sh
+BASE=/var/tmp/pubg-saas-m2-current-7f3b95b
+STACK=$BASE/source
+PROJECT=pubg-saas-m2-current-src-7f3b95b
+orb -m "$ORBSTACK_MACHINE" -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" config --quiet
+orb -m "$ORBSTACK_MACHINE" -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+orb -m "$ORBSTACK_MACHINE" -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" --profile ops run --rm migrate
+orb -m "$ORBSTACK_MACHINE" -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait worker
+orb -m "$ORBSTACK_MACHINE" -u root curl -fsS http://127.0.0.1:29464/metrics
+
+# Encrypted backup, verification, restoration and role probes use the guarded
+# helper-container procedure in infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md.
+# It reads the retained owner-only age/password files outside Git. Clean only
+# the marked disposable database, then use plain Compose down (no -v).
+pnpm test:pubg
+```

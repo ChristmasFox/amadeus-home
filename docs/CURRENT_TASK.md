@@ -237,6 +237,17 @@ rehearsal is in the current-image checkpoint above; this relay-only change
 does not touch PostgreSQL schema, backup tooling or role grants. Detailed
 commands: `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
 
+### Current-source M204 recovery repeat — 2026-10-14
+
+The native ARM64 `7f3b95b` image passed the full local loop in two new Compose
+projects: 14 migrations, healthy Worker/metrics relay, age backup verification,
+fresh-container restore with 37/37 tables and 14 migrations, and 1/1/1
+synthetic fixture rows. Source and restored app/backup role-boundary probes
+passed. After guarded restore cleanup and plain `down`, Kurisu passed 68/68;
+OpenClaw and 9Router IDs/start times/restart counts were unchanged. No Gateway
+or provider credential was used. Detailed commands and artifact hash:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ### Current-source M2 source/OCI gates — 2026-10-14
 
 The full `pnpm test:pubg-saas` suite passed 104/104 with no skips against the
