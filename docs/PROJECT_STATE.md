@@ -1,5 +1,24 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS shared Domain and presentation rollout
+
+Commit `ac628dd` is deployed on OrbStack VM `pubg-saas-m2-clean` as immutable
+ARM64 image
+`local/pubg-saas:git-ac628dde9ad46d824603d387446f9e1a95eeaa28`
+(`sha256:7d05776e3b9232b2ac67653378ad4e66015ba62c3ccc67b00b9383ff61f46293`).
+Only Gateway and Worker were recreated with Compose `--no-deps`; no image was
+pushed and no migration was run. Worker is healthy, both new containers have
+zero restarts, the KOOK session probe returned `connected=true` at
+`2026-10-14T11:44:08.669Z`, and the post-startup error-level log match count
+was zero for both. PostgreSQL, egress-proxy and SaaS 9Router IDs did not change.
+
+The mode-0600 pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ac628dd-pre-switch.txt`;
+full result and rollback steps are in
+`.agent/checkpoints/2026-10-14-pubg-saas-ac628dd-deployment.md`. No human
+message, model request or PUBG API call was made. Arthur's real KOOK acceptance
+is pending; M2 is not complete.
+
 ## 2026-10-14 — Agent tool-loop recovery and eight-player roster rollout
 
 Commit `d936f79` was fast-forward pushed to `origin/main`. It raises the public

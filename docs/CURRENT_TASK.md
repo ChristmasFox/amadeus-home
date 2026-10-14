@@ -4,7 +4,21 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
 
-Source commit `d936f79` is pushed to `origin/main`. The Vercel AI SDK
+Source commit `ac628dd` is pushed to `origin/main` and deployed to
+`pubg-saas-m2-clean` as
+`local/pubg-saas:git-ac628dde9ad46d824603d387446f9e1a95eeaa28` (ARM64 image
+`sha256:7d05776e3b9232b2ac67653378ad4e66015ba62c3ccc67b00b9383ff61f46293`).
+Only Gateway and Worker were replaced. Worker is healthy; Gateway is running
+with zero restarts, and the read-only PostgreSQL KOOK session probe reports
+`connected=true`, `last_sn=43`, updated at `2026-10-14T11:44:08.669Z`. Both
+containers had zero error-level log matches after startup. PostgreSQL,
+egress-proxy and SaaS 9Router container IDs are unchanged. The protected
+pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ac628dd-pre-switch.txt`.
+Deployment evidence and rollback steps:
+`.agent/checkpoints/2026-10-14-pubg-saas-ac628dd-deployment.md`.
+
+The Vercel AI SDK
 `ToolLoopAgent` now has a 300-second overall budget, 120-second step timeout,
 and a 128-step runaway guard without forcing normal turns to stop calling
 tools. If a timeout/provider failure or guard occurs after a Domain result,
@@ -21,20 +35,11 @@ and verified `linux/amd64` and `linux/arm64`. An age-encrypted backup restored
 into a new isolated PG18.1 instance; 39/39 table counts and app/backup role and
 sequence boundaries passed.
 
-Under Arthur's authorization, m2-clean now runs
-`local/pubg-saas:git-d936f79`. Gateway and Worker were replaced once; both
-started, Worker is healthy, and the read-only KOOK probe reports a connected
-session. The already-current migration `0016` was verified before the switch.
-PostgreSQL, egress-proxy and the SaaS 9Router retained their original container
-IDs. A mode-0600 rollback record is at
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-d936f79-pre-switch.txt`.
-
-The single real `昨日小队战绩` Agent invocation remains pending: the bot cannot
-create a trusted human event, and desktop/browser automation is disallowed.
-Arthur was asked to send the phrase in the target group. Verify only that
-single live result, then stop for Arthur. M2 is not complete until that real
-model/tool/outbox path succeeds and Arthur accepts the experience. Full
-evidence and reproduction: `.agent/checkpoints/2026-10-14-pubg-saas-agent-loop-recovery-rollout.md`.
+The live `昨日小队战绩` Agent invocation and the remaining human KOOK
+acceptance are still pending. Do not synthesize a production event or use
+desktop/browser automation. M2 remains open until Arthur completes and accepts
+the real model/tool/outbox path. Earlier Agent-loop rollout evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-agent-loop-recovery-rollout.md`.
 
 ## Previous public runtime authorization — historical baseline (2026-10-14)
 
