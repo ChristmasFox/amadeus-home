@@ -330,8 +330,14 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     const generalDamageEvent = group(bot, guild, channel, admin, '我打了他多少伤害');
     const generalDamage = await send(generalDamageEvent, generalDamageHandler);
     assert.match(generalDamage.content, /42 点友伤，共 2 次/u);
-    assert.match(JSON.stringify(generalDamageModel.doGenerateCalls[1]?.prompt), /filtersApplied/u);
-    assert.match(JSON.stringify(generalDamageModel.doGenerateCalls[1]?.prompt), /"meleeKind":"ALL"/u);
+    const agentToolContext = JSON.stringify(generalDamageModel.doGenerateCalls[1]?.prompt);
+    assert.match(agentToolContext, /filtersApplied/u);
+    assert.match(agentToolContext, /"meleeKind":"ALL"/u);
+    assert.match(agentToolContext, /"bySource"/u);
+    assert.match(agentToolContext, /"directions"/u);
+    assert.match(agentToolContext, /"matchCount":1/u);
+    assert.doesNotMatch(agentToolContext, new RegExp(`${alice}|${bob}|${matchId}`, 'u'));
+    assert.doesNotMatch(agentToolContext, /evidenceRefs|matchIds|playerId|evidenceIds|cacheLookup|"phase"/u);
     const safeFilterTrace = JSON.stringify(generalDamageDiagnostics);
     assert.match(safeFilterTrace, /pubg_team_damage_filters_period_today_direction_pair_source_all_melee_all/u);
     assert.doesNotMatch(safeFilterTrace, new RegExp(`${alice}|${bob}|${generalDamageEvent.msg_id}`, 'u'),

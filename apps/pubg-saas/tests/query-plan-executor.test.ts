@@ -116,7 +116,7 @@ function setup(syncState?: SyncState | null) {
   return { calls, query, executor };
 }
 
-test('team stats uses the authorized session, bounded selector, no refresh, and preserves partial data', async () => {
+test('team stats uses the authorized session, refreshes match discovery, and preserves partial data', async () => {
   const { calls, query, executor } = setup();
   const result = await executor.execute({ authorizedQuery: query, plan: makePlan() });
 
@@ -130,12 +130,12 @@ test('team stats uses the authorized session, bounded selector, no refresh, and 
     input: {
       sessionId: 'session-1',
       selector: { type: 'relative_period', value: 'today' },
-      metrics: ['matches', 'kills', 'assists', 'damage', 'kd'],
+      metrics: ['matches', 'kills', 'dbnos', 'assists', 'revives', 'wins', 'top10', 'headshot_kills', 'longest_kill', 'survival_time', 'damage', 'kd', 'deaths', 'rank'],
       operation: 'report',
       groupBy: 'player',
       orderBy: { metric: 'matches', direction: 'desc' },
       limit: 8,
-      refresh: false,
+      refresh: true,
     },
   }]);
 });
@@ -177,7 +177,7 @@ test('self queries require a handler-prevalidated self player in the authorized 
   assert.equal(calls.length, 0);
 });
 
-test('last seven days passes an explicit half-open range to friendly damage query without refresh', async () => {
+test('last seven days passes an explicit half-open range to friendly damage query with fresh discovery', async () => {
   const { calls, query, executor } = setup();
   const result = await executor.execute({
     authorizedQuery: query,
@@ -189,7 +189,7 @@ test('last seven days passes an explicit half-open range to friendly damage quer
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'last_7_days' },
-    refresh: false,
+    refresh: true,
   });
 });
 
@@ -204,7 +204,7 @@ test('kick query passes the exact melee category to the shared Domain telemetry 
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'yesterday' },
-    refresh: false,
+    refresh: true,
     meleeKind: 'KICK',
   });
 });
@@ -224,7 +224,7 @@ test('clears model-invented OTHER melee filter when current wording asks general
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'yesterday' },
-    refresh: false,
+    refresh: true,
     actorPlayer: 'player-1',
     victimPlayer: 'player-2',
   }, 'the ungrounded OTHER value is removed so Domain includes all damage sources, including KICK');
@@ -272,7 +272,7 @@ test('friendly fire resolves both named directions only inside the authorized ro
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'yesterday' },
-    refresh: false,
+    refresh: true,
     actorPlayer: 'player-1',
     victimPlayer: 'player-2',
   });
@@ -296,7 +296,7 @@ test('friendly fire can rank the authorized actor without asking Domain to trust
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'today' },
-    refresh: false,
+    refresh: true,
   });
 });
 
@@ -315,7 +315,7 @@ test('friendly fire follow-up inherits the prior authorized player and period', 
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     selector: { type: 'relative_period', value: 'yesterday' },
-    refresh: false,
+    refresh: true,
   });
 });
 
@@ -344,7 +344,7 @@ test('comparison uses two explicit supported segments and deterministic metric o
   assert.equal(calls[0]?.method, 'compareStats');
   const input = calls[0]?.input as { sessionId: string; segments: Array<{ selector: { type: string; value?: string } }>; refresh: boolean };
   assert.equal(input.sessionId, 'session-1');
-  assert.equal(input.refresh, false);
+  assert.equal(input.refresh, true);
   assert.deepEqual(input.segments.map((segment) => segment.selector), [
     { type: 'relative_period', value: 'today' },
     { type: 'relative_period', value: 'yesterday' },
@@ -392,7 +392,7 @@ test('previous period comparison sends Domain selectors for prior time windows a
   ]);
 });
 
-test('period review uses explicit from/to, refresh false, and the Domain result-set handle', async () => {
+test('period review refreshes match discovery and uses the Domain result-set handle', async () => {
   const { calls, query, executor } = setup();
   const result = await executor.execute({
     authorizedQuery: query,
@@ -405,7 +405,7 @@ test('period review uses explicit from/to, refresh false, and the Domain result-
     page: 0,
     pageSize: 4,
     sort: 'desc',
-    refresh: false,
+    refresh: true,
     selector: { type: 'relative_period', value: 'yesterday' },
   });
   assert.deepEqual(calls[1]?.input, { sessionId: 'session-1', searchResultSetId: 'review-set-1' });

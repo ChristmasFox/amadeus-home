@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DataStatusSchema } from './status.js';
+import { BUSINESS_DAY_START, DEFAULT_TIMEZONE } from '../time/selector-resolver.js';
 
 export const QUERY_SCHEMA_VERSION = 3;
 
@@ -16,8 +17,8 @@ const TimeRangeSelectorSchema = z.object({
   start: z.string().min(1),
   end: z.string().min(1),
   label: z.string().optional(),
-  timezone: z.string().default('Asia/Shanghai'),
-  businessDayStart: z.string().default('06:00'),
+  timezone: z.string().default(DEFAULT_TIMEZONE),
+  businessDayStart: z.string().default(BUSINESS_DAY_START),
 });
 
 const RelativePeriodSelectorSchema = z.object({

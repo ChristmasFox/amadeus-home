@@ -1,5 +1,7 @@
 import {
   PubgDomainService,
+  BUSINESS_DAY_START,
+  DEFAULT_TIMEZONE,
   resolvePreviousPeriodSelector,
   type Selector,
   type Metric,
@@ -20,9 +22,10 @@ import {
 } from './nl-query-planner.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
-const DEFAULT_TIMEZONE = 'Asia/Shanghai';
-const DEFAULT_BUSINESS_DAY_START = '06:00';
-const DEFAULT_STATS_METRICS: Metric[] = ['matches', 'kills', 'assists', 'damage', 'kd'];
+const DEFAULT_STATS_METRICS: Metric[] = [
+  'matches', 'kills', 'dbnos', 'assists', 'revives', 'wins', 'top10', 'headshot_kills',
+  'longest_kill', 'survival_time', 'damage', 'kd', 'deaths', 'rank',
+];
 const DOMAIN_METRICS = new Set<Metric>([
   'matches', 'kills', 'assists', 'damage', 'avg_damage', 'kd', 'deaths', 'wins', 'top10', 'rank',
   'dbnos', 'revives', 'headshot_kills', 'survival_time', 'longest_kill', 'performance_score', 'chicken_index',
@@ -85,7 +88,7 @@ function canonicalSelector(period: PeriodSelection): Selector {
   return {
     type: 'time_range', start: selector.from, end: selector.to,
     timezone: selector.timezone ?? DEFAULT_TIMEZONE,
-    businessDayStart: selector.businessDayStart ?? DEFAULT_BUSINESS_DAY_START,
+    businessDayStart: selector.businessDayStart ?? BUSINESS_DAY_START,
   };
 }
 
@@ -166,7 +169,7 @@ function selectionForSelector(selector: Selector): PeriodSelection | null {
   if (selector.type === 'time_range') return { kind: 'time_period', selector: {
     type: 'time_range', from: selector.start, to: selector.end,
     timezone: selector.timezone ?? DEFAULT_TIMEZONE,
-    businessDayStart: selector.businessDayStart ?? DEFAULT_BUSINESS_DAY_START,
+    businessDayStart: selector.businessDayStart ?? BUSINESS_DAY_START,
   } };
   return null;
 }
@@ -254,7 +257,7 @@ export class QueryPlanExecutor {
   constructor(options: QueryPlanExecutorOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
-    this.businessDayStart = options.businessDayStart ?? DEFAULT_BUSINESS_DAY_START;
+    this.businessDayStart = options.businessDayStart ?? BUSINESS_DAY_START;
     this.createDomain = options.createDomain ?? ((query) => new PubgDomainService({
       teamContext: query.teamContext,
       repository: query.repository,
@@ -357,7 +360,7 @@ export class QueryPlanExecutor {
           groupBy: 'player',
           orderBy: { metric, direction: 'desc' },
           limit: MAX_TEAM_ROSTER_SIZE,
-          refresh: false,
+          refresh: true,
           ...(signal ? { signal } : {}),
         });
         return { kind: 'executed', plan, envelope };
@@ -378,7 +381,7 @@ export class QueryPlanExecutor {
         groupBy: 'player',
         orderBy: { metric: metrics[0]!, direction: 'desc' },
         limit: playerSelection.kind === 'player' ? 1 : MAX_TEAM_ROSTER_SIZE,
-        refresh: false,
+        refresh: true,
         ...(playerSelection.kind === 'player' ? { playerIds: [playerSelection.id] } : {}),
         ...(signal ? { signal } : {}),
       });
@@ -390,7 +393,7 @@ export class QueryPlanExecutor {
       const envelope = await domain.queryTeamDamage({
         sessionId,
         selector: currentPeriod.selector,
-        refresh: false,
+        refresh: true,
         ...(damageActor.kind === 'found' && damageVictim.kind === 'found'
           ? { actorPlayer: damageActor.id, victimPlayer: damageVictim.id }
           : {}),
@@ -438,7 +441,7 @@ export class QueryPlanExecutor {
         groupBy: 'player',
         orderBy: { metric: metrics[0]!, direction: 'desc' },
         limit: playerIds ? 1 : MAX_TEAM_ROSTER_SIZE,
-        refresh: false,
+        refresh: true,
         ...(playerIds ? { playerIds } : {}),
         ...(signal ? { signal } : {}),
       });
@@ -453,7 +456,7 @@ export class QueryPlanExecutor {
         page: 0,
         pageSize: 4,
         sort: 'desc',
-        refresh: false,
+        refresh: true,
         ...(playerIds ? { playerIds } : {}),
         ...(signal ? { signal } : {}),
         ...(currentPeriod.kind === 'time_period'

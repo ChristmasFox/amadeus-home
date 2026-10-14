@@ -3,6 +3,7 @@ import { tool, type LanguageModel, type ModelMessage } from 'ai';
 import { z } from 'zod';
 import {
   PubgDomainService,
+  DEFAULT_TIMEZONE,
   emptyContext,
   type Metric,
   type ToolEnvelope,
@@ -23,6 +24,7 @@ import type {
 import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
+import { buildPublicAgentCoverage, buildPublicAgentFacts } from './public-agent-facts.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -224,7 +226,7 @@ function renderEnvelope(
   teamDamage?: { aggregateByActor?: boolean; actorPlayerId?: string; victimPlayerId?: string },
 ): string {
   return buildPubgToolPresentation(toolName, presentationInput(envelope, toolName, teamDamage), {
-    timezone: 'Asia/Shanghai', now, includeCoverage: true, localizedMetrics: true,
+    timezone: DEFAULT_TIMEZONE, now, includeCoverage: true, localizedMetrics: true,
   }).displayText;
 }
 
@@ -235,9 +237,12 @@ async function statsReply(services: KookPublicQueryServices, query: AuthorizedPu
   const domain = new PubgDomainService({ teamContext: query.teamContext, repository: query.repository, now: () => now });
   const envelope = await domain.queryStats({
     sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: period },
-    metrics: ['matches', 'kills', 'assists', 'damage', 'kd'], operation: 'report', groupBy: 'player',
+    metrics: [
+      'matches', 'kills', 'dbnos', 'assists', 'revives', 'wins', 'top10', 'headshot_kills',
+      'longest_kill', 'survival_time', 'damage', 'kd', 'deaths', 'rank',
+    ], operation: 'report', groupBy: 'player',
     orderBy: { metric: 'damage', direction: 'desc' }, limit: playerIds ? 1 : MAX_TEAM_ROSTER_SIZE,
-    refresh: false, signal, ...(playerIds ? { playerIds } : {}),
+    refresh: true, signal, ...(playerIds ? { playerIds } : {}),
   });
   const warning = selfDeclared ? '本人账号为自我声明，所有权未经验证。\n' : '';
   return message(warning + renderEnvelope(envelope, 'pubg_query_stats', now));
@@ -328,7 +333,7 @@ async function naturalLanguageReply(
   };
 
   const queryTool = tool({
-    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘。一般友伤查询不要传 meleeKind；只有当前原文明确提到踢/脚才传 KICK，明确提到拳才传 PUNCH；OTHER 只用于明确要求踢和拳以外的近战，绝不表示默认的其他伤害。不确定时传 null。姓名槽里的 none/self 等占位词视为未指定。参数仅是查询槽位。一次返回包含共享战报 presentation、证据、覆盖、新鲜度和实际过滤条件；相同参数不得重复查询，应直接使用已有结果回答。',
+    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘。一般友伤查询不要传 meleeKind；只有当前原文明确提到踢/脚才传 KICK，明确提到拳才传 PUNCH；OTHER 只用于明确要求踢和拳以外的近战，绝不表示默认的其他伤害。不确定时传 null。姓名槽里的 none/self 等占位词视为未指定。参数仅是查询槽位。结果包含 presentation 摘要、脱敏且有上限的 Domain facts、覆盖、新鲜度、规范时间范围和实际过滤条件；不会提供内部 ID 或 Telemetry evidence。友伤 facts 至多列 8 名队员、10 场对局；数字和场次数须按完整性及截断标记解释。相同参数不得重复查询，应直接使用已有结果回答。',
     inputSchema: QueryPlanSchema,
     execute: async planInput => {
       const parsedPlan = QueryPlanSchema.safeParse(planInput);
@@ -397,35 +402,32 @@ async function naturalLanguageReply(
           }
           : undefined;
         const presented = buildPubgToolPresentation(toolName, presentationInput(execution.envelope, toolName, teamDamage), {
-          timezone: 'Asia/Shanghai', now, includeCoverage: true, localizedMetrics: true,
+          timezone: DEFAULT_TIMEZONE, now, includeCoverage: true, localizedMetrics: true,
         });
-        const evidence = execution.envelope.evidenceRefs as unknown as Record<string, unknown>;
         const queryResolved = execution.envelope.queryResolved;
-        const direction = execution.plan.intent === 'team_damage'
-          ? typeof (execution.envelope.data as Record<string, unknown>).direction === 'string'
-            ? (execution.envelope.data as Record<string, unknown>).direction as string
-            : '方向未指定'
-          : undefined;
+        const facts = buildPublicAgentFacts({
+          intent: execution.plan.intent,
+          data: execution.envelope.data,
+          queryResolved,
+          roster: query.teamContext.team.players,
+          now,
+        });
+        const factsRange = object(facts?.sourceRange);
         const teamDamageFilters = execution.plan.intent === 'team_damage' ? {
-          sourceRange: queryResolved.sourceRange ?? null,
-          direction,
-          source: queryResolved.source ?? 'ALL',
-          meleeKind: queryResolved.meleeKind ?? 'ALL',
+          sourceRange: factsRange,
+          direction: execution.plan.actorName && execution.plan.victimName
+            ? `${safeLabel(execution.plan.actorName)} → ${safeLabel(execution.plan.victimName)}` : 'all directions',
+          source: ['MELEE', 'GUN', 'VEHICLE', 'EXPLOSIVE'].includes(String(queryResolved.source)) ? queryResolved.source : 'ALL',
+          meleeKind: ['KICK', 'PUNCH', 'OTHER'].includes(String(queryResolved.meleeKind)) ? queryResolved.meleeKind : 'ALL',
         } : undefined;
         const toolResult = {
           status: execution.envelope.status,
           summary: `${selfWarning}${presented.displayText}`,
-          presentation: presented.presentation,
+          ...(facts ? { facts } : {}),
           ...(teamDamageFilters ? { filtersApplied: teamDamageFilters } : {}),
-          coverage: presented.presentation.coverage,
+          coverage: buildPublicAgentCoverage(execution.envelope.coverage, now),
           asOf: execution.envelope.asOf,
-          metricVersion: execution.envelope.metricVersion,
-          evidenceRefs: {
-            matchIds: Array.isArray(evidence.matchIds) ? evidence.matchIds.slice(0, 8) : [],
-            playerIds: Array.isArray(evidence.playerIds) ? evidence.playerIds.slice(0, MAX_TEAM_ROSTER_SIZE) : [],
-            fields: Array.isArray(evidence.fields) ? evidence.fields.slice(0, 24) : [],
-            calculation: typeof evidence.calculation === 'string' ? evidence.calculation : null,
-          },
+          ...(factsRange ? { sourceRange: factsRange } : {}),
         };
         const resultStatus = ['ok', 'partial', 'no_matches', 'error'].includes(toolResult.status)
           ? toolResult.status : 'other';
@@ -588,16 +590,16 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
         const envelope = await domain.queryStats({
           sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period },
           metrics: [metric as Metric], operation: 'rank', groupBy: 'player', orderBy: { metric, direction: 'desc' },
-          limit: MAX_TEAM_ROSTER_SIZE, refresh: false, signal,
+          limit: MAX_TEAM_ROSTER_SIZE, refresh: true, signal,
         });
         return message(renderEnvelope(envelope, 'pubg_query_stats', now));
       }
       if (parsed.intent.kind === 'team_damage') {
-        const envelope = await domain.queryTeamDamage({ sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period }, refresh: false, signal });
+        const envelope = await domain.queryTeamDamage({ sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period }, refresh: true, signal });
         return message(renderEnvelope(envelope, 'pubg_query_team_damage', now, { aggregateByActor: true }));
       }
       const search = await domain.searchMatches({ sessionId: query.conversation.sessionId,
-        selector: { type: 'relative_period', value: parsed.intent.period }, page: 0, pageSize: 4, refresh: false, signal });
+        selector: { type: 'relative_period', value: parsed.intent.period }, page: 0, pageSize: 4, refresh: true, signal });
       if (!search.resultSetId) return message(renderEnvelope(search, 'pubg_search_matches', now));
       const envelope = await domain.getPeriodReview({ sessionId: query.conversation.sessionId, searchResultSetId: search.resultSetId, signal });
       return message(renderEnvelope(envelope, 'pubg_get_period_review', now));

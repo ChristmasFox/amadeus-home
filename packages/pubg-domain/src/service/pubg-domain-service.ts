@@ -12,7 +12,7 @@ import { TelemetryWorker, PubgApiTelemetryDownloader } from '../review/telemetry
 import { emptyMatchReviewFacts, scopeMatchReviewFacts, selectMatchReviewFactCategories } from '../review/review-facts.js';
 import { analyzeMatchReview } from '../review/review-analyzer.js';
 import type { MatchReviewResult, TeamDamageFact, TeamDamageSource } from '../review/types.js';
-import { BUSINESS_DAY_START, localDateLabel, resolveSelector } from '../time/selector-resolver.js';
+import { BUSINESS_DAY_START, DEFAULT_TIMEZONE, localDateLabel, resolveSelector } from '../time/selector-resolver.js';
 
 export const PUBGMETRIC_VERSION = 'pubg-metrics-v1';
 export const PUBG_QUERY_VERSION = 'pubg-query-v1';
@@ -535,7 +535,7 @@ export class PubgDomainService {
     this.repository = options.repository;
     const apiClient = options.apiClient;
     this.apiClient = apiClient;
-    this.timezone = options.timezone ?? 'Asia/Shanghai';
+    this.timezone = options.timezone ?? DEFAULT_TIMEZONE;
     this.businessDayStart = options.businessDayStart ?? BUSINESS_DAY_START;
     this.maxMatches = Math.min(Math.max(1, Math.trunc(options.maxMatches ?? 500)), 1000);
     this.now = options.now ?? (() => new Date());
