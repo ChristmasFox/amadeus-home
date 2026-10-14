@@ -126,9 +126,9 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     now: () => now,
   });
   const signal = new AbortController().signal;
-  async function send(event: unknown): Promise<KookTextPayload> {
+  async function send(event: unknown, selectedHandler = handler): Promise<KookTextPayload> {
     assert.equal(await queue.ingestGatewayEvent(event), 'accepted');
-    assert.equal(await queue.processOne(async (job, abortSignal) => (await handler(job, abortSignal)) ?? null, signal), 'done');
+    assert.equal(await queue.processOne(async (job, abortSignal) => (await selectedHandler(job, abortSignal)) ?? null, signal), 'done');
     const row = await pool.query('SELECT payload_json FROM message_outbox WHERE bot_account_id=$1 ORDER BY created_at DESC LIMIT 1', [bot]);
     assert.ok(row.rows[0]);
     return textPayload(row.rows[0].payload_json);
@@ -311,6 +311,31 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     const teamDamage = await send(group(bot, guild, channel, admin, '/pubg team damage today'));
     assert.match(teamDamage.content, /今日队友伤害/u);
     assert.match(teamDamage.content, /Alice → Bob：42 伤害 \/ 2 次/u);
+
+    const generalDamageModel = new MockLanguageModelV4({ doGenerate: [
+      toolCall(plan('team_damage', {
+        subject: 'team', actorName: 'Alice', victimName: 'Bob', metric: 'teammate_damage',
+        period: 'today', meleeKind: 'OTHER',
+      })),
+      finalText('Alice 对 Bob 造成 42 点友伤，共 2 次；这次包含不同伤害来源。'),
+    ] });
+    const generalDamageDiagnostics: unknown[] = [];
+    const generalDamageHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot }),
+      claims,
+      agent: { model: generalDamageModel, provider: 'fixture-provider', modelId: 'fixture-model' },
+      onAgentDiagnostic: event => generalDamageDiagnostics.push(event),
+      now: () => now,
+    });
+    const generalDamageEvent = group(bot, guild, channel, admin, '我打了他多少伤害');
+    const generalDamage = await send(generalDamageEvent, generalDamageHandler);
+    assert.match(generalDamage.content, /42 点友伤，共 2 次/u);
+    assert.match(JSON.stringify(generalDamageModel.doGenerateCalls[1]?.prompt), /filtersApplied/u);
+    assert.match(JSON.stringify(generalDamageModel.doGenerateCalls[1]?.prompt), /"meleeKind":"ALL"/u);
+    const safeFilterTrace = JSON.stringify(generalDamageDiagnostics);
+    assert.match(safeFilterTrace, /pubg_team_damage_filters_period_today_direction_pair_source_all_melee_all/u);
+    assert.doesNotMatch(safeFilterTrace, new RegExp(`${alice}|${bob}|${generalDamageEvent.msg_id}`, 'u'),
+      'filter diagnostics contain only safe enum labels, not player/account or event identifiers');
 
     await pool.query(
       "INSERT INTO account_claims(platform,bot_account_id,user_id,pubg_shard,pubg_account_id,claim_status) VALUES ('kook',$1,$2,'steam',$3,'self_declared')",

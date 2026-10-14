@@ -198,6 +198,7 @@ test('kick query passes the exact melee category to the shared Domain telemetry 
   const result = await executor.execute({
     authorizedQuery: query,
     plan: makePlan({ intent: 'team_damage', period: 'yesterday', meleeKind: 'KICK' }),
+    sourceMessage: '昨天我踢了他多少伤害？',
   });
   assert.equal(result.kind, 'executed');
   assert.deepEqual(calls[0]?.input, {
@@ -206,6 +207,59 @@ test('kick query passes the exact melee category to the shared Domain telemetry 
     refresh: false,
     meleeKind: 'KICK',
   });
+});
+
+test('clears model-invented OTHER melee filter when current wording asks general friendly damage', async () => {
+  const { calls, query, executor } = setup();
+  const result = await executor.execute({
+    authorizedQuery: query,
+    plan: makePlan({
+      intent: 'team_damage', subject: 'team', actorName: 'Alpha', victimName: 'Bravo',
+      period: 'yesterday', metric: 'teammate_damage', meleeKind: 'OTHER',
+    }),
+    sourceMessage: '我打了他多少伤害',
+  });
+
+  assert.equal(result.kind, 'executed');
+  assert.deepEqual(calls[0]?.input, {
+    sessionId: 'session-1',
+    selector: { type: 'relative_period', value: 'yesterday' },
+    refresh: false,
+    actorPlayer: 'player-1',
+    victimPlayer: 'player-2',
+  }, 'the ungrounded OTHER value is removed so Domain includes all damage sources, including KICK');
+});
+
+test('does not carry a melee filter into a new general query, but preserves verified context for a follow-up', async () => {
+  const fresh = setup();
+  const priorKick = makePlan({
+    intent: 'team_damage', subject: 'team', actorName: 'Alpha', victimName: 'Bravo',
+    period: 'yesterday', metric: 'teammate_damage', meleeKind: 'KICK',
+  });
+  const newQuery = await fresh.executor.execute({
+    authorizedQuery: fresh.query,
+    previousPlan: priorKick,
+    plan: makePlan({
+      intent: 'team_damage', subject: 'team', actorName: 'Alpha', victimName: 'Bravo',
+      period: 'yesterday', metric: 'teammate_damage', meleeKind: null,
+    }),
+    sourceMessage: '一般友伤多少？',
+  });
+  assert.equal(newQuery.kind, 'executed');
+  assert.equal('meleeKind' in (fresh.calls[0]?.input as object), false);
+
+  const followUp = setup();
+  const continuation = await followUp.executor.execute({
+    authorizedQuery: followUp.query,
+    previousPlan: priorKick,
+    plan: makePlan({
+      intent: 'follow_up', subject: 'previous_player', actorName: null, victimName: null,
+      playerName: null, metric: 'teammate_damage', period: null,
+    }),
+    sourceMessage: '那这个情况呢？',
+  });
+  assert.equal(continuation.kind, 'executed');
+  assert.equal((followUp.calls[0]?.input as { meleeKind?: string }).meleeKind, 'KICK');
 });
 
 test('friendly fire resolves both named directions only inside the authorized roster', async () => {

@@ -11,7 +11,7 @@ import { buildPubgToolPresentation, type PubgSourceRange, type PubgToolName } fr
 import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
-import { QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
+import { normalizeQueryPlanForMessage, QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
 import { QueryPlanExecutor } from './query-plan-executor.js';
 import { runPublicKookAgent } from './kook-conversation-agent.js';
 import type { KookNaturalWriteIntent, KookNaturalWriteResult } from './kook-group-binding-handler.js';
@@ -265,6 +265,7 @@ async function naturalLanguageReply(
   job: KookIngressJob,
   signal: AbortSignal,
 ): Promise<KookTextPayload> {
+  const currentMessage = naturalMessage(job);
   const configured = services.agent;
   const fallbackText = '我这边刚遇到一点技术问题，暂时没能给出可靠回复。你可以稍后再问一次。';
   const requestKey = createHash('sha256').update(`${job.botAccountId}\0${job.eventId}`).digest('hex').slice(0, 16);
@@ -327,14 +328,15 @@ async function naturalLanguageReply(
   };
 
   const queryTool = tool({
-    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘；team_damage 的 meleeKind 可选 KICK/PUNCH/OTHER。参数仅是查询槽位。一次返回包含共享战报 presentation、证据、覆盖和新鲜度事实；相同参数不得重复查询，应直接使用已有结果回答。',
+    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘。一般友伤查询不要传 meleeKind；只有当前原文明确提到踢/脚才传 KICK，明确提到拳才传 PUNCH；OTHER 只用于明确要求踢和拳以外的近战，绝不表示默认的其他伤害。不确定时传 null。姓名槽里的 none/self 等占位词视为未指定。参数仅是查询槽位。一次返回包含共享战报 presentation、证据、覆盖、新鲜度和实际过滤条件；相同参数不得重复查询，应直接使用已有结果回答。',
     inputSchema: QueryPlanSchema,
     execute: async planInput => {
       const parsedPlan = QueryPlanSchema.safeParse(planInput);
       if (!parsedPlan.success || parsedPlan.data.intent === 'unsupported') {
         return { status: 'clarification', message: '我还没弄清要查的内容，请补充队员、指标或时间范围。' };
       }
-      const queryKey = JSON.stringify(parsedPlan.data);
+      const normalizedPlan = normalizeQueryPlanForMessage(parsedPlan.data, currentMessage);
+      const queryKey = JSON.stringify(normalizedPlan);
       if (executedPubgQueries.has(queryKey)) {
         reportToolTrace('pubg_query_repeated_arguments');
         return completedPubgQueries.get(queryKey)
@@ -353,7 +355,7 @@ async function naturalLanguageReply(
         const previousPlan = previousPlanFromContext(context?.references);
         let selfPlayerId: string | undefined;
         let selfWarning = '';
-        if (parsedPlan.data.intent === 'my_stats' || parsedPlan.data.subject === 'self') {
+        if (normalizedPlan.intent === 'my_stats' || normalizedPlan.subject === 'self') {
           const claim = await services.claims.getClaimForActor(query.conversation.botAccountId, query.conversation.userId);
           if (!claim) return { status: 'clarification', message: '这位成员尚未绑定 PUBG 账号。可在群里说“我的 PUBG 账号是 游戏名”进行验证绑定。' };
           if (claim.pubgShard !== query.teamContext.team.platform) return { status: 'clarification', message: '已声明的平台与当前队伍平台不一致，无法查询本人战绩。' };
@@ -361,13 +363,14 @@ async function naturalLanguageReply(
           selfPlayerId = claim.pubgAccountId;
           if (claim.claimStatus !== 'verified') selfWarning = '本人账号为自我声明，所有权未经验证。\n';
         }
-        const effectivePlan = parsedPlan.data.intent === 'leaderboard' && parsedPlan.data.metric === null
-          ? { ...parsedPlan.data, metric: await query.repository.getLeaderboardMetricPreference() ?? 'damage' }
-          : parsedPlan.data;
+        const effectivePlan = normalizedPlan.intent === 'leaderboard' && normalizedPlan.metric === null
+          ? { ...normalizedPlan, metric: await query.repository.getLeaderboardMetricPreference() ?? 'damage' }
+          : normalizedPlan;
         const execution = await (services.executor ?? new QueryPlanExecutor()).execute({
           authorizedQuery: query,
           plan: effectivePlan,
           ...(previousPlan ? { previousPlan } : {}),
+          sourceMessage: currentMessage,
           ...(selfPlayerId ? { selfPlayerId } : {}),
           signal,
         });
@@ -397,10 +400,23 @@ async function naturalLanguageReply(
           timezone: 'Asia/Shanghai', now, includeCoverage: true, localizedMetrics: true,
         });
         const evidence = execution.envelope.evidenceRefs as unknown as Record<string, unknown>;
+        const queryResolved = execution.envelope.queryResolved;
+        const direction = execution.plan.intent === 'team_damage'
+          ? typeof (execution.envelope.data as Record<string, unknown>).direction === 'string'
+            ? (execution.envelope.data as Record<string, unknown>).direction as string
+            : '方向未指定'
+          : undefined;
+        const teamDamageFilters = execution.plan.intent === 'team_damage' ? {
+          sourceRange: queryResolved.sourceRange ?? null,
+          direction,
+          source: queryResolved.source ?? 'ALL',
+          meleeKind: queryResolved.meleeKind ?? 'ALL',
+        } : undefined;
         const toolResult = {
           status: execution.envelope.status,
           summary: `${selfWarning}${presented.displayText}`,
           presentation: presented.presentation,
+          ...(teamDamageFilters ? { filtersApplied: teamDamageFilters } : {}),
           coverage: presented.presentation.coverage,
           asOf: execution.envelope.asOf,
           metricVersion: execution.envelope.metricVersion,
@@ -414,6 +430,14 @@ async function naturalLanguageReply(
         const resultStatus = ['ok', 'partial', 'no_matches', 'error'].includes(toolResult.status)
           ? toolResult.status : 'other';
         reportToolTrace(`pubg_query_result_${resultStatus}`);
+        if (execution.plan.intent === 'team_damage') {
+          const resolvedDirection = queryResolved.direction ? 'pair' : 'all';
+          const resolvedSource = ['MELEE', 'GUN', 'VEHICLE', 'EXPLOSIVE'].includes(String(queryResolved.source))
+            ? String(queryResolved.source).toLocaleLowerCase('en-US') : 'all';
+          const resolvedMeleeKind = ['KICK', 'PUNCH', 'OTHER'].includes(String(queryResolved.meleeKind))
+            ? String(queryResolved.meleeKind).toLocaleLowerCase('en-US') : 'all';
+          reportToolTrace(`pubg_team_damage_filters_period_${execution.plan.period ?? 'unspecified'}_direction_${resolvedDirection}_source_${resolvedSource}_melee_${resolvedMeleeKind}`);
+        }
         completedPubgQueries.set(queryKey, toolResult);
         return toolResult;
       } catch (error) {
@@ -491,13 +515,12 @@ async function naturalLanguageReply(
 
   try {
     const window = await services.authorizer.loadAgentConversation(job);
-    const current = naturalMessage(job);
     const currentContext = window.currentQuoteContext ? `${window.currentQuoteContext}\n` : '';
     const messages: ModelMessage[] = [
       ...window.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),
-      { role: 'user', content: `[${window.currentSpeakerLabel}] ${currentContext}${current}` },
+      { role: 'user', content: `[${window.currentSpeakerLabel}] ${currentContext}${currentMessage}` },
     ];
-    const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage: current });
+    const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage });
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
     if (result.recoveryCode) {
       services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: result.recoveryCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });

@@ -70,6 +70,34 @@ test('plans a bounded PUBG intent and accounts for mock-provider usage', async (
   assert.equal(model.doGenerateCalls[0]?.tools?.[0]?.name, 'submit_query_plan');
 });
 
+test('clears ungrounded OTHER melee filters and placeholder player names', async () => {
+  const model = modelFor({ ...validPlan, meleeKind: 'OTHER', playerName: 'self', actorName: 'none' });
+  const planner = new NaturalLanguageQueryPlanner(model);
+
+  const result = await planner.plan({ authorizationContext, message: '我打了他多少伤害' });
+
+  assert.equal(result.source, 'model');
+  assert.equal(result.plan.meleeKind, null);
+  assert.equal(result.plan.playerName, null);
+  assert.equal(result.plan.actorName, null);
+});
+
+test('keeps only melee categories explicitly named in the current message', async () => {
+  const kick = await new NaturalLanguageQueryPlanner(modelFor({ ...validPlan, meleeKind: 'KICK' })).plan({
+    authorizationContext, message: '昨天我踢了他多少伤害？',
+  });
+  const punch = await new NaturalLanguageQueryPlanner(modelFor({ ...validPlan, meleeKind: 'PUNCH' })).plan({
+    authorizationContext, message: '昨天我用拳头打了他多少伤害？',
+  });
+  const otherWithoutTrigger = await new NaturalLanguageQueryPlanner(modelFor({ ...validPlan, meleeKind: 'OTHER' })).plan({
+    authorizationContext, message: '昨天我打了他多少伤害？',
+  });
+
+  assert.equal(kick.plan.meleeKind, 'KICK');
+  assert.equal(punch.plan.meleeKind, 'PUNCH');
+  assert.equal(otherWithoutTrigger.plan.meleeKind, null);
+});
+
 test('does not prompt caller authorization identifiers and treats injection as untrusted text', async () => {
   const model = modelFor(validPlan);
   const planner = new NaturalLanguageQueryPlanner(model);

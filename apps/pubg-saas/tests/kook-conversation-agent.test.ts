@@ -36,6 +36,7 @@ test('ordinary group chat can finish directly without PUBG keywords or tool call
   assert.equal(result.stepCount, 1);
   assert.equal(result.totalTokens, 13);
   assert.match(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /每条有效人类消息都值得自然回应/u);
+  assert.match(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /没有本轮新查询结果时，不得改口、推翻或替换此前/u);
   assert.ok(PUBLIC_KOOK_AGENT_LIMITS.maxSteps >= 100);
   assert.equal(PUBLIC_KOOK_AGENT_LIMITS.totalTimeoutMs, 300_000);
   assert.equal(PUBLIC_KOOK_AGENT_LIMITS.stepTimeoutMs, 120_000);

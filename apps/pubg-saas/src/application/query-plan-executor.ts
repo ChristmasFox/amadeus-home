@@ -12,7 +12,12 @@ import type {
   ToolEnvelope,
 } from '@agent/pubg-domain/core';
 import type { AuthorizedPublicQuery } from './public-query-authorizer.js';
-import { QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
+import {
+  normalizePreviousQueryPlan,
+  normalizeQueryPlanForMessage,
+  QueryPlanSchema,
+  type QueryPlan,
+} from './nl-query-planner.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
@@ -40,6 +45,8 @@ export interface ExecuteQueryPlanInput {
   /** Revalidated here even though the caller should pass a planner-validated plan. */
   plan: QueryPlan;
   previousPlan?: QueryPlan | null;
+  /** Raw text for this request; only explicit melee words can enable a kind filter. */
+  sourceMessage?: string;
   /** Only an account claim/identity check performed by the handler may supply this. */
   selfPlayerId?: string;
   signal?: AbortSignal;
@@ -226,6 +233,7 @@ function resolveFollowUp(plan: QueryPlan, previousPlan: QueryPlan | null): Query
     comparePeriod: plan.comparePeriod ?? previousPlan.comparePeriod,
     matchCount: plan.matchCount ?? previousPlan.matchCount,
     dayCount: plan.dayCount ?? previousPlan.dayCount,
+    meleeKind: plan.meleeKind ?? (needsPrevious ? previousPlan.meleeKind : null),
     needsClarification: plan.needsClarification,
   };
 }
@@ -259,27 +267,28 @@ export class QueryPlanExecutor {
   async execute(input: ExecuteQueryPlanInput): Promise<QueryPlanExecutionResult> {
     const parsedPlan = QueryPlanSchema.safeParse(input.plan);
     if (!parsedPlan.success) return execution('clarification', 'invalid_query_plan');
-    if (parsedPlan.data.intent === 'team_damage' && parsedPlan.data.subject === 'self' && !hasValue(input.selfPlayerId)) {
+    const currentPlan = normalizeQueryPlanForMessage(parsedPlan.data, input.sourceMessage ?? '');
+    if (currentPlan.intent === 'team_damage' && currentPlan.subject === 'self' && !hasValue(input.selfPlayerId)) {
       return execution('unavailable', 'self_identity_not_prevalidated');
     }
     const parsedPrevious = input.previousPlan == null ? null : QueryPlanSchema.safeParse(input.previousPlan);
-    const previousPlan = parsedPrevious?.success ? parsedPrevious.data : null;
-    if (parsedPlan.data.intent === 'team_damage' && parsedPlan.data.subject === 'previous_player'
-      && !parsedPlan.data.actorName && !parsedPlan.data.playerName && !previousPlan?.actorName && !previousPlan?.playerName) {
+    const previousPlan = parsedPrevious?.success ? normalizePreviousQueryPlan(parsedPrevious.data) : null;
+    if (currentPlan.intent === 'team_damage' && currentPlan.subject === 'previous_player'
+      && !currentPlan.actorName && !currentPlan.playerName && !previousPlan?.actorName && !previousPlan?.playerName) {
       return execution('clarification', 'follow_up_context_required');
     }
-    const incomingPlan = parsedPlan.data.intent === 'team_damage'
+    const incomingPlan = currentPlan.intent === 'team_damage'
       ? {
-        ...parsedPlan.data,
+        ...currentPlan,
         subject: 'team' as const,
         playerName: null,
-        actorName: parsedPlan.data.actorName ?? (parsedPlan.data.subject === 'self'
+        actorName: currentPlan.actorName ?? (currentPlan.subject === 'self'
           ? input.selfPlayerId ?? null
-          : parsedPlan.data.subject === 'previous_player'
+          : currentPlan.subject === 'previous_player'
             ? previousPlan?.actorName ?? previousPlan?.playerName ?? null
-            : parsedPlan.data.playerName),
+            : currentPlan.playerName),
       }
-      : parsedPlan.data;
+      : currentPlan;
     const plan = resolveFollowUp(incomingPlan, previousPlan);
     if (!plan) return execution('clarification', 'follow_up_context_required');
     if (plan.needsClarification || plan.intent === 'unsupported') return execution('clarification', 'query_needs_clarification');
