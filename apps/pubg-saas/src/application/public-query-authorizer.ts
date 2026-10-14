@@ -3,6 +3,7 @@ import { createTeamContext, type TeamContext } from '@agent/pubg-domain/core';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { parseKookRequest } from '../channels/kook/request-event.js';
 import type { TrustedKookDirectMessage, TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import { sanitizeKookAssistantReplyContent } from './kook-message-queue.js';
 import { PostgresPubgRepository, type TrustedConversationScope } from '../infrastructure/postgres/pubg-repository.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
@@ -241,18 +242,18 @@ export class PublicQueryAuthorizer {
     const currentQuoteId = job.request.kind === 'group' ? job.request.event.quotedMessageId : null;
     const currentQuote = currentQuoteId ? byId.get(currentQuoteId) : undefined;
     const currentQuoteContext = currentQuote
-      ? `当前消息引用了${labelFor(currentQuote.speakerId)}：“${currentQuote.content.slice(0, 240)}”`
+      ? `引用内容来自${labelFor(currentQuote.speakerId)}：“${currentQuote.content.slice(0, 240)}”`
       : null;
     let totalCharacters = 0;
     const turns: KookAgentConversationTurn[] = [];
     for (const row of rows) {
       const target = row.replyTo ? byId.get(row.replyTo) : undefined;
       const relation = target
-        ? `（回复${labelFor(target.speakerId)}：“${target.content.slice(0, 240)}”）`
+        ? `（回复对象${labelFor(target.speakerId)}，引用：“${target.content.slice(0, 240)}”）`
         : '';
       const content = row.kind === 'human'
-        ? `[${labelFor(row.speakerId)}] ${relation}${row.content}`
-        : `${row.replyTo && target ? `[回复${labelFor(target.speakerId)}] ` : ''}${row.content}`;
+        ? `${labelFor(row.speakerId)}说：${relation}${row.content}`
+        : sanitizeKookAssistantReplyContent(row.content);
       if (totalCharacters + content.length > 6000) break;
       turns.push({ role: row.kind === 'assistant' ? 'assistant' : 'user', content });
       totalCharacters += content.length;

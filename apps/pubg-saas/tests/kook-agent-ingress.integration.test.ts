@@ -54,7 +54,7 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
   const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot });
   const agentModel = new MockLanguageModelV4({ doGenerate: [
     modelText('你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？'),
-    modelText('当然可以，几点集合？我先把跳伞点从海里划掉。'),
+    modelText('[回复成员1] 当然可以，几点集合？我先把跳伞点从海里划掉。'),
     modelText('可以叫上 @成员，今晚先约个集合时间。'),
     modelText('收到，我们接着刚才的话题聊。'),
   ] });
@@ -99,6 +99,28 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     await process(gameNight);
     const second = (await pool.query('SELECT payload_json FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, gameNight.msg_id])).rows[0]?.payload_json;
     assert.equal(second.content, '当然可以，几点集合？我先把跳伞点从海里划掉。');
+    let actualSentContent: string | null = null;
+    assert.equal(await outbox.deliverOne({
+      async send(targetId, payload, _nonce, replyTo) {
+        assert.equal(targetId, channel);
+        assert.equal(replyTo, gameNight.msg_id);
+        actualSentContent = payload.content;
+        return 'remote-game-night-1';
+      },
+    }), 'sent');
+    assert.equal(actualSentContent, second.content, 'the cleaned body is the content passed to the KOOK sender');
+    const scrubbedOutbox = (await pool.query(
+      'SELECT status,payload_json FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, gameNight.msg_id],
+    )).rows[0];
+    assert.deepEqual(scrubbedOutbox, { status: 'sent', payload_json: {} }, 'successful sends scrub outbox payloads');
+    const deliveredTranscript = (await pool.query(
+      'SELECT message_id,content FROM kook_conversation_messages WHERE bot_account_id=$1 AND channel_id=$2 AND source_event_id=$3 AND speaker_kind=\'assistant\'',
+      [bot, channel, gameNight.msg_id],
+    )).rows[0];
+    assert.deepEqual(deliveredTranscript, {
+      message_id: 'remote-game-night-1',
+      content: '当然可以，几点集合？我先把跳伞点从海里划掉。',
+    }, 'the sanitized, sent body stays traceable by source event and KOOK remote message ID');
 
     const mentionEvent = group(bot, guild, channel, userA, `<@${userB}> 今晚要不要一起开黑？`);
     await process(mentionEvent);
@@ -117,9 +139,10 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     assert.ok(job);
     const window = await authorizer.loadAgentConversation(job);
     assert.equal(window.currentSpeakerLabel, '成员1');
-    assert.equal(window.currentQuoteContext, '当前消息引用了助手：“你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？”');
-    assert.match(window.turns.map(turn => turn.content).join('\n'), /\[成员2\] 你好/u);
-    assert.match(window.turns.map(turn => turn.content).join('\n'), /\[回复成员2\]/u);
+    assert.equal(window.currentQuoteContext, '引用内容来自助手：“你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？”');
+    assert.match(window.turns.map(turn => turn.content).join('\n'), /成员2说：你好/u);
+    assert.match(window.turns.map(turn => turn.content).join('\n'), /回复对象助手/u);
+    assert.doesNotMatch(window.turns.map(turn => turn.content).join('\n'), /\[回复成员\d+\]/u);
     assert.doesNotMatch(JSON.stringify(window), new RegExp(`${userA}|${userB}|${bot}|${guild}|${channel}`, 'u'), 'model context must use speaker labels, not KOOK IDs');
     const otherReply = await handler(job, signal);
     await queue.complete(job, otherReply ?? null);

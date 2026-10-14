@@ -518,7 +518,7 @@ async function naturalLanguageReply(
     const currentContext = window.currentQuoteContext ? `${window.currentQuoteContext}\n` : '';
     const messages: ModelMessage[] = [
       ...window.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),
-      { role: 'user', content: `[${window.currentSpeakerLabel}] ${currentContext}${currentMessage}` },
+      { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${currentMessage}` },
     ];
     const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage });
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';

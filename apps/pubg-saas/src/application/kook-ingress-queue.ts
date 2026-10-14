@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { inspectKookRequest, parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
-import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
+import { sanitizeKookOutboundPayload, type KookTextPayload } from './kook-message-queue.js';
 import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
@@ -306,7 +306,7 @@ export class KookIngressQueue {
   async complete(job: KookIngressJob, reply: KookTextPayload | null,welcomeTarget?:VerifiedKookWelcomeTarget): Promise<void> {
     if (job.botAccountId !== this.botId)
       throw new Error('kook_bot_scope_mismatch');
-    const payload = reply === null ? null : validateKookMessagePayload(reply);
+    const payload = reply === null ? null : sanitizeKookOutboundPayload(reply);
     await transaction(this.pool, async (client) => {
       const result = await client.query(`SELECT * FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2
          AND status='processing' AND lease_token=$3 AND lease_until>now() AND expires_at>now() FOR UPDATE`, [this.botId, job.eventId, job.leaseToken]);

@@ -107,6 +107,78 @@ export function validateKookMessagePayload(value: unknown): KookTextPayload {
   return { type: payload.type, content: payload.content };
 }
 
+const REPLY_CLEANUP_FALLBACK = '我刚才没整理好回复，可以再问我一次吗？';
+const INTERNAL_JSON_KEYS = new Set([
+  'tool', 'toolname', 'toolcallid', 'toolresults', 'queryplan', 'intent', 'subject',
+  'playername', 'actorname', 'victimname', 'meleekind', 'evidencerefs',
+  'metricversion', 'debug', 'internal', 'finishreason', 'steps',
+]);
+
+function hasInternalJsonKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasInternalJsonKey);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, child]) =>
+    INTERNAL_JSON_KEYS.has(key.toLocaleLowerCase('en-US')) || hasInternalJsonKey(child));
+}
+
+/** Remove model-visible conversation scaffolding without rewriting ordinary
+ * prose or KOOK mention markup. Internal structured output fails closed. */
+export function sanitizeKookAssistantReplyContent(value: string): string {
+  let content = value.replace(/^\uFEFF/u, '').trim();
+  for (let pass = 0; pass < 12; pass += 1) {
+    const speaker = content.match(/^\s*(?:\[(?:回复\s*)?成员\s*#?\d+\]|(?:回复\s*)?成员\s*#?\d+\s*(?:说|回复)?\s*[:：])\s*/iu);
+    if (speaker) {
+      content = content.slice(speaker[0].length).trimStart();
+      continue;
+    }
+    const marker = content.match(/^\s*(?:\[(assistant|final|debug|internal|tool|json|queryplan|tool[_ -]?call)\]|(assistant\s+final|final\s+answer|debug|internal|queryplan|tool[_ -]?call|json)\s*[:：])\s*/iu);
+    if (marker) {
+      const label = (marker[1] ?? marker[2] ?? '').toLocaleLowerCase('en-US').replaceAll(/\s+/gu, ' ');
+      if (label === 'debug' || label === 'internal' || label === 'queryplan' || label === 'tool' || label.replaceAll(/[_-]/gu, ' ') === 'tool call') {
+        return REPLY_CLEANUP_FALLBACK;
+      }
+      content = content.slice(marker[0].length).trimStart();
+      continue;
+    }
+    break;
+  }
+
+  if (!content) return REPLY_CLEANUP_FALLBACK;
+  const fencedJson = content.match(/^```json\s*\n([\s\S]*?)\n```\s*$/iu);
+  const jsonCandidate = fencedJson?.[1] ?? content;
+  if (/^[{[]/u.test(jsonCandidate.trimStart())) {
+    try {
+      const parsed: unknown = JSON.parse(jsonCandidate);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const record = parsed as Record<string, unknown>;
+        const keys = Object.keys(record).sort();
+        if (typeof record.content === 'string' && (record.type === 'text' || record.type === 'kmarkdown')
+          && keys.every(key => key === 'content' || key === 'type')) {
+          return sanitizeKookAssistantReplyContent(record.content);
+        }
+        if (typeof record.answer === 'string' && keys.length === 1) {
+          return sanitizeKookAssistantReplyContent(record.answer);
+        }
+      }
+      if (hasInternalJsonKey(parsed)) return REPLY_CLEANUP_FALLBACK;
+    } catch {
+      // Keep malformed or user-facing JSON-like prose intact; only known
+      // internal structures are blocked below.
+    }
+  }
+  return content;
+}
+
+/** Apply deterministic cleanup before persistence and again at the KOOK HTTP boundary. */
+export function sanitizeKookOutboundPayload(value: unknown): KookTextPayload {
+  const payload = validateKookMessagePayload(value);
+  if (payload.type === 'card') return payload;
+  return validateKookMessagePayload({
+    type: payload.type,
+    content: sanitizeKookAssistantReplyContent(payload.content),
+  });
+}
+
 function idempotencyKey(event: TrustedKookGroupMessage, part: number): string {
   return createHash('sha256')
     .update(`${event.platform}\0${event.botAccountId}\0${event.messageId}\0${part}`)
@@ -123,9 +195,9 @@ function safeErrorCode(error: unknown): string {
 
 function parseJobPayload(value: unknown): KookTextPayload {
   if (typeof value === 'string') {
-    try { return validateKookMessagePayload(JSON.parse(value)); } catch { throw new Error('kook_outbox_payload_invalid'); }
+    try { return sanitizeKookOutboundPayload(JSON.parse(value)); } catch { throw new Error('kook_outbox_payload_invalid'); }
   }
-  try { return validateKookMessagePayload(value); } catch { throw new Error('kook_outbox_payload_invalid'); }
+  try { return sanitizeKookOutboundPayload(value); } catch { throw new Error('kook_outbox_payload_invalid'); }
 }
 
 /** Durable, tenant-scoped inbox dedupe and at-least-once group reply delivery.
@@ -193,7 +265,7 @@ export class KookMessageQueue {
 
   async enqueueReply(event: TrustedKookGroupMessage, payloadInput: unknown, part = 0): Promise<QueuedReply> {
     if (event.botAccountId !== this.botAccountId) throw new Error('kook_bot_scope_mismatch');
-    const payload = validateKookMessagePayload(payloadInput);
+    const payload = sanitizeKookOutboundPayload(payloadInput);
     if (!Number.isSafeInteger(part) || part < 0 || part > 9) throw new Error('kook_reply_part_invalid');
     const key = idempotencyKey(event, part);
     const result = await inTransaction(this.pool, async (client) => {

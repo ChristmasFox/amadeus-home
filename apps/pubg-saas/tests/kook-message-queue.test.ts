@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { KookMessageQueue, migratePublicDatabase, parseTrustedKookGroupMessage } from '../src/index.js';
+import {
+  KookMessageQueue,
+  migratePublicDatabase,
+  parseTrustedKookGroupMessage,
+  sanitizeKookAssistantReplyContent,
+} from '../src/index.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 
@@ -21,6 +26,16 @@ function groupEvent(guildId: string, channelId: string, userId: string, botId: s
     },
   }, botId)!;
 }
+
+test('sanitizes internal conversation labels while preserving normal prose and KOOK mention syntax', () => {
+  assert.equal(sanitizeKookAssistantReplyContent('[回复成员1] 成员2说：你好，今晚开黑吗？'), '你好，今晚开黑吗？');
+  assert.equal(sanitizeKookAssistantReplyContent('  回复成员 12：收到，我来看看。'), '收到，我来看看。');
+  assert.equal(sanitizeKookAssistantReplyContent('成员1的战绩不错，队伍配合也很好。'), '成员1的战绩不错，队伍配合也很好。');
+  assert.equal(sanitizeKookAssistantReplyContent('<@!123456> 你好！'), '<@!123456> 你好！');
+  assert.equal(sanitizeKookAssistantReplyContent('[DEBUG] token=private'), '我刚才没整理好回复，可以再问我一次吗？');
+  assert.equal(sanitizeKookAssistantReplyContent('```json\n{"intent":"query","queryPlan":{}}\n```'), '我刚才没整理好回复，可以再问我一次吗？');
+  assert.equal(sanitizeKookAssistantReplyContent('{"type":"text","content":"[回复成员2] 已收到。"}'), '已收到。');
+});
 
 test('KOOK inbox dedupes events and outbox pins destinations, retries and leases delivery', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 6 });

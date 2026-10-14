@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { validateKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
+import { sanitizeKookOutboundPayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
 import type { KookDailyMessageBudget } from '../../application/kook-daily-message-budget.js';
 import { KookRateLimitGate } from './rate-limit-gate.js';
 
@@ -76,7 +76,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     const targetId = requiredText(targetIdInput, 'target_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
     let payload: KookTextPayload;
-    try { payload = validateKookMessagePayload(payloadInput); } catch { throw codedError('kook_message_payload_invalid'); }
+    try { payload = sanitizeKookOutboundPayload(payloadInput); } catch { throw codedError('kook_message_payload_invalid'); }
     const body = new URLSearchParams({
       target_id: targetId,
       type: payload.type === 'text' ? '1' : payload.type === 'kmarkdown' ? '9' : '10',

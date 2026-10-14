@@ -33,6 +33,21 @@ test('sends only group message fields to the fixed KOOK create endpoint', async 
   assert.equal(request.body.has('guild_id'), false);
 });
 
+test('sanitizes assistant scaffolding at the final KOOK send boundary without changing mention markup', async () => {
+  let sentContent: string | null = null;
+  const client = new KookMessageApiClient({
+    token: 'fixture-token',
+    fetcher: async (_input, init) => {
+      sentContent = (init?.body as URLSearchParams).get('content');
+      return success({ msg_id: 'sanitized-message' });
+    },
+  });
+  await client.send('bound-channel', {
+    type: 'text', content: '[回复成员12] 成员3说：<@!123456> 你好！',
+  }, 'e'.repeat(64));
+  assert.equal(sentContent, '<@!123456> 你好！');
+});
+
 test('private replies use only the fixed direct-message endpoint and the source actor', async () => {
   let request: { url: string; body: URLSearchParams } | null = null;
   const client = new KookMessageApiClient({
