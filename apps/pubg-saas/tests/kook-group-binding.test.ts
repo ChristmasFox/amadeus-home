@@ -32,16 +32,17 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
   const suffix = randomUUID().replaceAll('-', '');
   const bot = `bot-${suffix}`, guildA = `guild-a-${suffix}`, guildB = `guild-b-${suffix}`;
   const channelA = `channel-a-${suffix}`, channelA2 = `channel-a2-${suffix}`, channelB = `channel-b-${suffix}`;
-  const actor = `actor-${suffix}`, regular = `regular-${suffix}`, admin = `admin-${suffix}`;
+  const actor = `actor-${suffix}`, regular = `regular-${suffix}`, admin = `admin-${suffix}`, fallbackActor = `fallback-${suffix}`;
   const target = `target-${suffix}`, stranger = `stranger-${suffix}`;
   const members = new Set([
-    `${guildA}:${channelA}:${actor}`, `${guildA}:${channelA}:${regular}`, `${guildA}:${channelA}:${admin}`,
+    `${guildA}:${channelA}:${actor}`, `${guildA}:${channelA}:${regular}`, `${guildA}:${channelA}:${admin}`, `${guildA}:${channelA}:${fallbackActor}`,
     `${guildA}:${channelA}:${target}`, `${guildA}:${channelA2}:${actor}`, `${guildA}:${channelA2}:${admin}`,
     `${guildB}:${channelB}:${regular}`,
   ]);
   const admins = new Set([`${guildA}:${admin}`]);
   let lookupCalls = 0;
   const promptInputs: string[] = [];
+  const intentDiagnostics: unknown[] = [];
   const playerResolver = new PublicPubgPlayerResolver({
     apiKey: 'synthetic-test-only',
     admission: { async acquire() {}, async observe() {} },
@@ -58,15 +59,18 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     async isTextChannelMember(guildId, channelId, userId) { return members.has(`${guildId}:${channelId}:${userId}`); },
   });
   const intents = {
-    async parse(message: string): Promise<KookGroupWriteIntent> {
+    async parse(message: string): Promise<KookGroupWriteIntent | null> {
       promptInputs.push(message);
+      if (message.includes('Fallback')) return null;
+      if (/^(?:\/|!)pubg(?:\s|$)/iu.test(message.trim())) return { action: 'legacy_command' };
       if (message.includes('队名')) return { action: 'rename_team', teamName: '夜猫小队' };
       if (message.includes('他的')) return { action: 'declare_pubg_account', target: 'mentioned_member', pubgName: 'Charlie' };
       if (message.includes('Echo')) return { action: 'declare_pubg_account', target: 'self', pubgName: 'Echo' };
-      return { action: 'declare_pubg_account', target: 'self', pubgName: 'Alpha' };
+      if (message.includes('PUBG 账号')) return { action: 'declare_pubg_account', target: 'self', pubgName: 'Alpha' };
+      return { action: 'unsupported' };
     },
   };
-  const handler = createKookGroupBindingHandler({ teams, players: playerResolver, intents });
+  const handler = createKookGroupBindingHandler({ teams, players: playerResolver, intents, onDiagnostic: event => intentDiagnostics.push(event) });
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot, maxRequestsPerUserPerMinute: 100, maxRequestsPerChannelPerMinute: 300,
     maxRequestsPerTenantPerMinute: 500, maxRequestsPerBotPerMinute: 1000,
@@ -134,8 +138,23 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     assert.equal(firstTeam.pubg_shard, 'steam');
     assert.equal((await pool.query('SELECT team_id FROM channel_bindings WHERE bot_account_id=$1 AND channel_id=$2', [bot, channelA])).rows[0]?.team_id, firstTeam.team_id);
 
+    const unrelated = group(guildA, channelA, actor, '今晚的比赛几点开始？');
+    assert.equal(await queue.ingestGatewayEvent(unrelated), 'accepted');
+    assert.equal(await queue.processOne(handler, signal, undefined, provision), 'done');
+    assert.equal((await pool.query('SELECT 1 FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, unrelated.msg_id])).rowCount, 0);
+    assert.equal(promptInputs.at(-1), '今晚的比赛几点开始？', 'ordinary group messages must be classified by the model');
+    assert.deepEqual(intentDiagnostics.at(-1), {
+      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_intent_unsupported', count: 1,
+    });
+    assert.equal(JSON.stringify(intentDiagnostics).includes('今晚的比赛'), false, 'diagnostics must exclude message contents');
+
     const first = await send(group(guildA, channelA, actor, '/pubg me Alpha'));
     assert.match(first.content, /已验证并绑定 PUBG 账号：Alpha/u);
+    const modelUnavailableCommand = await send(group(guildA, channelA, fallbackActor, '/pubg me Fallback'));
+    assert.match(modelUnavailableCommand.content, /Fallback/u);
+    assert.deepEqual(intentDiagnostics.at(-1), {
+      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_no_valid_intent', count: 1,
+    });
     assert.deepEqual((await pool.query(
       'SELECT pubg_shard,pubg_account_id,claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actor],
     )).rows[0], { pubg_shard: 'steam', pubg_account_id: `account.alpha_${suffix}`, claim_status: 'verified' });

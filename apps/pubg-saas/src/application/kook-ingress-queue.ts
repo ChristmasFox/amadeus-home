@@ -34,7 +34,7 @@ export interface KookIngressQueueOptions {
 }
 export interface KookIngressDiscardLog {
   event: 'kook_ingress_discarded';
-  stage: 'trusted_group' | 'relevance_filter' | 'freshness';
+  stage: 'trusted_group' | 'freshness' | 'admission' | 'processing' | 'intent_classifier';
   reason: string;
   count: number;
   channelId?: string;
@@ -67,8 +67,13 @@ function errorCode(error: unknown): string {
   if (error instanceof Error && /^[a-z0-9_]{1,64}$/u.test(error.message)) return error.message;
   return 'request_processing_failed';
 }
-/** The sole durable gateway ingress. It stages only addressed requests, pins
- * any existing team binding, and atomically commits a reply plus completion.
+const SAFE_PROCESSING_DIAGNOSTIC_REASONS = new Set([
+  'kook_ingress_binding_changed', 'kook_welcome_target_invalid', 'kook_welcome_channel_unconfigured',
+  'kook_channel_member_required', 'kook_target_channel_member_required', 'guild_team_ambiguous',
+]);
+/** The sole durable gateway ingress. It stages every trusted non-bot group
+ * message after durable admission limits, pins any existing team binding, and
+ * atomically commits a reply or intentional silence plus completion.
  * Business handlers must make their own state changes idempotent across retries. */
 export class KookIngressQueue {
   private readonly botId: string;
@@ -147,44 +152,53 @@ export class KookIngressQueue {
     }
     const serialized = JSON.stringify(parsed.envelope);
     const fingerprint = createHash('sha256').update(serialized).digest('hex');
-    return transaction(this.pool, async (client) => {
-      // Serialize admission counts across all connections for this bot.
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kook-ingress:${this.botId}`]);
-      const duplicate = await client.query('SELECT fingerprint FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2', [this.botId, parsed.eventId]);
-      if (duplicate.rowCount) {
-        if (duplicate.rows[0]?.fingerprint !== fingerprint)
-          throw new Error('kook_ingress_event_conflict');
-        return 'duplicate';
+    try {
+      return await transaction(this.pool, async (client) => {
+        // Serialize admission counts across all connections for this bot.
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kook-ingress:${this.botId}`]);
+        const duplicate = await client.query('SELECT fingerprint FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2', [this.botId, parsed.eventId]);
+        if (duplicate.rowCount) {
+          if (duplicate.rows[0]?.fingerprint !== fingerprint)
+            throw new Error('kook_ingress_event_conflict');
+          return 'duplicate';
+        }
+        const count = await client.query(`SELECT COUNT(*)::INTEGER AS total, COUNT(*) FILTER (WHERE user_id=$2)::INTEGER AS actor
+           FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('pending','processing','retry') AND expires_at>now()`, [this.botId, parsed.userId]);
+        if (Number(count.rows[0]?.total) >= this.maxPending || Number(count.rows[0]?.actor) >= this.maxPerUser) {
+          throw new Error('kook_ingress_capacity_exceeded');
+        }
+        const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
+           ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+           WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
+        const tenantId = typeof binding?.rows[0]?.tenant_id === 'string' ? binding.rows[0].tenant_id : null;
+        const channelId = parsed.request.kind === 'group' ? parsed.channelId : null;
+        const recent = await client.query(`SELECT
+          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS bot,
+          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND user_id=$2 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS actor,
+          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND channel_id=$3 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS channel,
+          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND tenant_id=$4 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS tenant`,
+        [this.botId, parsed.userId, channelId, tenantId]);
+        const recentCounts = recent.rows[0];
+        if (Number(recentCounts?.bot ?? 0) >= this.maxRequestsPerBotPerMinute) throw new Error('kook_ingress_rate_limited_bot');
+        if (Number(recentCounts?.tenant ?? 0) >= this.maxRequestsPerTenantPerMinute) throw new Error('kook_ingress_rate_limited_tenant');
+        if (Number(recentCounts?.channel ?? 0) >= this.maxRequestsPerChannelPerMinute) throw new Error('kook_ingress_rate_limited_channel');
+        if (Number(recentCounts?.actor ?? 0) >= this.maxRequestsPerUserPerMinute) throw new Error('kook_ingress_rate_limited_user');
+        const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
+        await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
+           tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'),$15)`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
+        binding?.rows[0]?.tenant_id ?? null, binding?.rows[0]?.team_id ?? null, parsed.targetKind, parsed.targetId,
+        parsed.replyToMessageId, fingerprint, serialized, this.ttlMs, parsed.request.kind === 'group' ? String(version?.rows[0]?.revision ?? 0) : null]);
+        return 'accepted';
+      });
+    } catch (error) {
+      const code = errorCode(error);
+      if (code === 'kook_ingress_capacity_exceeded' || /^kook_ingress_rate_limited_(?:bot|tenant|channel|user)$/u.test(code)) {
+        this.reportDiscard('admission', code, parsed.channelId ?? undefined);
+        return 'ignored';
       }
-      const count = await client.query(`SELECT COUNT(*)::INTEGER AS total, COUNT(*) FILTER (WHERE user_id=$2)::INTEGER AS actor
-         FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('pending','processing','retry') AND expires_at>now()`, [this.botId, parsed.userId]);
-      if (Number(count.rows[0]?.total) >= this.maxPending || Number(count.rows[0]?.actor) >= this.maxPerUser) {
-        throw new Error('kook_ingress_capacity_exceeded');
-      }
-      const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
-         ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
-         WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
-      const tenantId = typeof binding?.rows[0]?.tenant_id === 'string' ? binding.rows[0].tenant_id : null;
-      const channelId = parsed.request.kind === 'group' ? parsed.channelId : null;
-      const recent = await client.query(`SELECT
-        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS bot,
-        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND user_id=$2 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS actor,
-        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND channel_id=$3 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS channel,
-        (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND tenant_id=$4 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS tenant`,
-      [this.botId, parsed.userId, channelId, tenantId]);
-      const recentCounts = recent.rows[0];
-      if (Number(recentCounts?.bot ?? 0) >= this.maxRequestsPerBotPerMinute) throw new Error('kook_ingress_rate_limited_bot');
-      if (Number(recentCounts?.tenant ?? 0) >= this.maxRequestsPerTenantPerMinute) throw new Error('kook_ingress_rate_limited_tenant');
-      if (Number(recentCounts?.channel ?? 0) >= this.maxRequestsPerChannelPerMinute) throw new Error('kook_ingress_rate_limited_channel');
-      if (Number(recentCounts?.actor ?? 0) >= this.maxRequestsPerUserPerMinute) throw new Error('kook_ingress_rate_limited_user');
-      const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
-      await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
-         tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'),$15)`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
-      binding?.rows[0]?.tenant_id ?? null, binding?.rows[0]?.team_id ?? null, parsed.targetKind, parsed.targetId,
-      parsed.replyToMessageId, fingerprint, serialized, this.ttlMs, parsed.request.kind === 'group' ? String(version?.rows[0]?.revision ?? 0) : null]);
-      return 'accepted';
-    });
+      throw error;
+    }
   }
   async claimNext(): Promise<KookIngressJob | null> {
     const leaseToken = randomBytes(24).toString('base64url');
@@ -330,6 +344,8 @@ export class KookIngressQueue {
          next_attempt_at=CASE WHEN $4='retry' THEN now()+($6::BIGINT*interval '1 millisecond') ELSE NULL END,
          event_json=CASE WHEN $4='dead' THEN NULL ELSE event_json END,
          finished_at=CASE WHEN $4='dead' THEN now() ELSE NULL END WHERE bot_account_id=$1 AND event_id=$2 AND lease_token=$3`, [this.botId, job.eventId, job.leaseToken, dead ? 'dead' : 'retry', code, retryMs]);
+      if (dead) this.reportDiscard('processing', SAFE_PROCESSING_DIAGNOSTIC_REASONS.has(code) ? code : 'request_processing_failed',
+        job.request.kind === 'group' ? job.request.event.channelId : undefined);
       return dead ? 'dead' : 'retry';
     });
   }

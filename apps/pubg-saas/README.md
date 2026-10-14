@@ -112,12 +112,19 @@ remain unverified.
   clears session sequence state on the server's reconnect signal. Its socket
   factory uses Node 22's built-in WebSocket. Frame size and queued-frame count
   are bounded; shutdown drains in-flight durable writes. Coverage remains offline.
-- `KookIngressQueue` is the runtime's sole gateway ingress. It persists only
-  explicit `/pubg`/`!pubg` commands, messages mentioning this bot, DMs addressed
-  to it, documented button callbacks and bot-addressed guild-join events. Stored fields exclude display names,
-  cached roles, attachments and verification tokens. Existing group bindings
-  are pinned at reception and rechecked before processing/reply completion;
-  unbound requests cannot inherit a newly bound team's context.
+- `KookIngressQueue` is the runtime's sole gateway ingress. It accepts every
+  trusted text message from a non-bot group member, plus DMs addressed to the
+  bot, documented button callbacks and bot-addressed guild-join events. A
+  constrained model classifier selects account declaration, admin delegation,
+  team rename, statistics query, legacy command or silent/unsupported intent;
+  it has no IDs or write tools. The classifier is capped at 800 input characters
+  and 100 output tokens. Durable per-user/channel/tenant/bot rate limits run
+  before model calls; explicit legacy commands use the deterministic parser only
+  when the classifier is unavailable or returns no valid structured output.
+  Stored fields exclude display names, cached roles, attachments and verification
+  tokens. Existing group bindings are pinned at reception and rechecked before
+  processing/reply completion; unbound requests cannot inherit a newly bound
+  team's context.
 - `self_joined_guild` is committed before welcome target lookup. Fixed official
   guild/channel APIs select the configured welcome channel or default text
   channel and check its guild/type. Completion pins the target in the same

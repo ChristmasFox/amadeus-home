@@ -31,7 +31,7 @@ async function cleanup(pool: Pool, bot: string) {
   await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);
   await pool.end();
 }
-test('discard diagnostics contain no message or actor data and are rate limited by stage, reason, and channel', { skip: !databaseUrl }, async () => {
+test('trusted arbitrary messages are admitted and only malformed events emit content-free drop diagnostics', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 4 });
   const suffix = randomUUID();
   const f = await fixture(pool, suffix);
@@ -41,21 +41,21 @@ test('discard diagnostics contain no message or actor data and are rate limited 
     onDiscard: diagnostic => diagnostics.push(diagnostic),
   });
   try {
-    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `ignored-${suffix}-1`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'ignored');
-    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `ignored-${suffix}-2`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'ignored');
-    assert.deepEqual(diagnostics, [{ event: 'kook_ingress_discarded', stage: 'relevance_filter', reason: 'no_supported_intent_candidate', count: 1 }]);
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `accepted-${suffix}-1`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'accepted');
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `accepted-${suffix}-2`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'accepted');
+    assert.deepEqual(diagnostics, []);
 
     const malformed = group(f.bot, `malformed-${suffix}`, f.guild, '6115211415447433', f.user, 'sensitive untrusted content');
     malformed.extra.author.id = 'forged-actor';
     assert.equal(await queue.ingestGatewayEvent(malformed), 'ignored');
-    assert.deepEqual(diagnostics[1], {
+    assert.deepEqual(diagnostics[0], {
       event: 'kook_ingress_discarded', stage: 'trusted_group', reason: 'actor_id_mismatch', count: 1, channelId: '6115211415447433',
     });
     const serialized = JSON.stringify(diagnostics);
     for (const excluded of ['ordinary unrelated chatter', 'sensitive untrusted content', 'forged-actor', 'must-not-be-stored']) {
       assert.equal(serialized.includes(excluded), false);
     }
-    assert.equal((await pool.query('SELECT 1 FROM kook_ingress_events WHERE bot_account_id=$1', [f.bot])).rowCount, 0);
+    assert.equal((await pool.query('SELECT 1 FROM kook_ingress_events WHERE bot_account_id=$1', [f.bot])).rowCount, 2);
   } finally {
     await cleanup(pool, f.bot);
   }
@@ -96,7 +96,9 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     assert.deepEqual(reply, { target_kind: 'channel', target_id: f.channel, payload_json: { type: 'text', content: 'checked facts' } });
     assert.equal(await restarted.ingestGatewayEvent(event), 'duplicate');
     assert.equal(await restarted.processOne(async () => assert.fail('duplicate dispatched'), new AbortController().signal), 'empty');
-    assert.equal(await restarted.ingestGatewayEvent({ ...event, msg_id: `ordinary-${suffix}`, content: 'ordinary channel conversation' }), 'ignored');
+    const ordinary = { ...event, msg_id: `ordinary-${suffix}`, content: 'ordinary channel conversation' };
+    assert.equal(await restarted.ingestGatewayEvent(ordinary), 'accepted');
+    assert.equal(await restarted.processOne(async () => null, new AbortController().signal), 'done');
     const dm = direct(f.bot, `dm-${suffix}`, f.user);
     assert.equal(await restarted.ingestGatewayEvent(dm), 'accepted');
     assert.equal(await restarted.processOne(async (received) => {
@@ -152,12 +154,14 @@ test('ingress bounds admission and preserves actor order while rejecting a chang
   const pool = new Pool({ connectionString: databaseUrl, max: 6 });
   const suffix = randomUUID();
   const f = await fixture(pool, suffix);
-  const queue = new KookIngressQueue(pool, { botAccountId: f.bot, maxPending: 3, maxPendingPerUser: 2 });
+  const diagnostics: unknown[] = [];
+  const queue = new KookIngressQueue(pool, { botAccountId: f.bot, maxPending: 3, maxPendingPerUser: 2, onDiscard: diagnostic => diagnostics.push(diagnostic) });
   try {
     const first = group(f.bot, `a-${suffix}`, f.guild, f.channel, f.user);
     assert.equal(await queue.ingestGatewayEvent(first), 'accepted');
     assert.equal(await queue.ingestGatewayEvent(group(f.bot, `b-${suffix}`, f.guild, f.channel, f.user)), 'accepted');
-    await assert.rejects(queue.ingestGatewayEvent(group(f.bot, `c-${suffix}`, f.guild, f.channel, f.user)), /capacity_exceeded/u);
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `c-${suffix}`, f.guild, f.channel, f.user)), 'ignored');
+    assert.deepEqual(diagnostics[0], { event: 'kook_ingress_discarded', stage: 'admission', reason: 'kook_ingress_capacity_exceeded', count: 1 });
     const job = await queue.claimNext();
     assert.ok(job);
     assert.equal(job.eventId, first.msg_id);
@@ -197,6 +201,7 @@ test('ingress enforces per-user, channel, tenant and bot request windows', { ski
       "INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id) VALUES ($1,'kook',$2,$3,$4,$5)",
       [f.tenant, f.bot, otherChannel, f.team, f.user],
     );
+    const diagnostics: unknown[] = [];
     const queue = new KookIngressQueue(pool, {
       botAccountId: f.bot,
       maxRequestsPerUserPerMinute: 10,
@@ -204,15 +209,16 @@ test('ingress enforces per-user, channel, tenant and bot request windows', { ski
       maxRequestsPerTenantPerMinute: 10,
       maxRequestsPerBotPerMinute: 10,
       ...item.options,
+      onDiscard: diagnostic => diagnostics.push(diagnostic),
     });
     const channels = [f.channel, otherChannel] as const;
     const users = [f.user, `other-actor-${suffix}`] as const;
     try {
       assert.equal(await queue.ingestGatewayEvent(group(f.bot, `first-${item.name}-${suffix}`, f.guild, channels[item.firstChannel]!, users[item.firstUser]!)), 'accepted');
-      await assert.rejects(
-        queue.ingestGatewayEvent(group(f.bot, `second-${item.name}-${suffix}`, f.guild, channels[item.secondChannel]!, users[item.secondUser]!)),
-        new RegExp(item.expected, 'u'),
-      );
+      assert.equal(await queue.ingestGatewayEvent(group(f.bot, `second-${item.name}-${suffix}`, f.guild, channels[item.secondChannel]!, users[item.secondUser]!)), 'ignored');
+      assert.deepEqual(diagnostics[0], {
+        event: 'kook_ingress_discarded', stage: 'admission', reason: item.expected, count: 1,
+      });
     }
     finally { await cleanup(pool, f.bot); }
   }

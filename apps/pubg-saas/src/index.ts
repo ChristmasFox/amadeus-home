@@ -13,7 +13,6 @@ export * from './channels/kook/rate-limit-gate.js';
 export * from './channels/kook/trusted-button-event.js';
 export * from './channels/kook/confirmation-card.js';
 export * from './channels/kook/request-event.js';
-export * from './channels/kook/message-relevance.js';
 export * from './application/kook-ingress-queue.js';
 export * from './kook-runtime.js';
 export * from './application/kook-management-handler.js';

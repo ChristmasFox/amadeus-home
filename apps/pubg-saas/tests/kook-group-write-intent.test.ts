@@ -15,7 +15,7 @@ function modelFor(output: unknown): MockLanguageModelV4 {
   } });
 }
 
-test('classifies only the bounded account-declaration and team-rename intents', async () => {
+test('classifies the finite write, query, legacy-command, and silent intents', async () => {
   const accountModel = modelFor({ action: 'declare_pubg_account', target: 'mentioned_member', pubgName: 'Player One', teamName: null });
   const accountParser = new KookGroupWriteIntentParser(accountModel);
   assert.deepEqual(await accountParser.parse('他的 PUBG 账号是 Player One'), {
@@ -25,6 +25,13 @@ test('classifies only the bounded account-declaration and team-rename intents', 
 
   const renameParser = new KookGroupWriteIntentParser(modelFor({ action: 'rename_team', target: null, pubgName: null, teamName: '夜猫小队' }));
   assert.deepEqual(await renameParser.parse('我们的队名是 夜猫小队'), { action: 'rename_team', teamName: '夜猫小队' });
+
+  assert.deepEqual(await new KookGroupWriteIntentParser(modelFor({
+    action: 'query_stats', target: null, pubgName: null, teamName: null,
+  })).parse('昨晚谁对队友伤害最高？'), { action: 'query_stats' });
+  assert.deepEqual(await new KookGroupWriteIntentParser(modelFor({
+    action: 'legacy_command', target: null, pubgName: null, teamName: null,
+  })).parse('/pubg leaderboard kills yesterday'), { action: 'legacy_command' });
 });
 
 test('rejects hallucinated slots, extra identity fields, and unsupported writes', async () => {
@@ -38,4 +45,3 @@ test('rejects hallucinated slots, extra identity fields, and unsupported writes'
     action: 'unsupported', target: null, pubgName: null, teamName: null,
   })).parse('帮我查询今天的比赛'), { action: 'unsupported' });
 });
-

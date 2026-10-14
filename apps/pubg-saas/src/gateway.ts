@@ -60,8 +60,10 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
     const writeIntents = createPublicGroupWriteIntentParser(env);
+    const onDiagnostic = (event: import('./application/kook-ingress-queue.js').KookIngressDiscardLog) =>
+      process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`);
     const handler = composeKookRequestHandlers(
-      createKookGroupBindingHandler({ teams, players, ...(writeIntents ? { intents: writeIntents.parser } : {}) }),
+      createKookGroupBindingHandler({ teams, players, ...(writeIntents ? { intents: writeIntents.parser } : {}), onDiagnostic }),
       createKookPublicQueryHandler({ authorizer, claims, planner }),
       createKookManagementHandler({ teams, claims, players }),
     );
@@ -86,7 +88,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       },
       maintenance: () => authorizer.prune(),
       onError: code => process.stderr.write(`${JSON.stringify({ component: 'kook-runtime', event: 'error', code })}\n`),
-      onDiagnostic: event => process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`),
+      onDiagnostic,
     });
     await runtime.run(stop.signal);
   }

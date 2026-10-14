@@ -1,7 +1,6 @@
 import { parseTrustedKookButtonClick, type TrustedKookButtonClick } from './trusted-button-event.js';
 import { parseTrustedKookDirectMessage, inspectTrustedKookGroupMessage, type TrustedKookDirectMessage, type TrustedKookGroupMessage } from './trusted-group-event.js';
 import { parseTrustedKookGuildJoin, type TrustedKookGuildJoin } from './guild-welcome.js';
-import { classifyKookGroupMessage } from './message-relevance.js';
 
 export type KookRequestEvent = {
   kind: 'group';
@@ -33,7 +32,7 @@ export interface ParsedKookRequest {
 
 export type KookRequestInspection =
   | { kind: 'accepted'; parsed: ParsedKookRequest }
-  | { kind: 'dropped'; stage: 'trusted_group' | 'relevance_filter'; reason: string; channelId?: string }
+  | { kind: 'dropped'; stage: 'trusted_group'; reason: string; channelId?: string }
   | { kind: 'ignored' };
 
 function objectRecord(value: unknown): Record<string, unknown> | null {
@@ -68,10 +67,6 @@ export function inspectKookRequest(data: unknown, botAccountId: string): KookReq
       return { kind: 'dropped', stage: 'trusted_group', reason: inspection.reason, ...(channelId ? { channelId } : {}) };
     }
     const group = inspection.event;
-    const relevance = classifyKookGroupMessage(group.content);
-    if (relevance === 'irrelevant') {
-      return { kind: 'dropped', stage: 'relevance_filter', reason: 'no_supported_intent_candidate', channelId: group.channelId };
-    }
     const extra = objectRecord(dataRecord.extra) ?? {};
     const rawMentions = Array.isArray(extra.mention) ? extra.mention : [];
     const mentionsBot = rawMentions.includes(botAccountId);
@@ -122,8 +117,8 @@ export function inspectKookRequest(data: unknown, botAccountId: string): KookReq
   });
 }
 
-/** Gateway admission: ordinary group chat is skipped, while bounded PUBG
- * commands, account/team writes and stats queries are accepted without a bot mention. */
+/** Every bounded, trusted, non-bot text group message enters durable admission.
+ * Intent selection happens later in the constrained model classifier. */
 export function parseKookRequest(data: unknown, botAccountId: string): ParsedKookRequest | null {
   const inspection = inspectKookRequest(data, botAccountId);
   return inspection.kind === 'accepted' ? inspection.parsed : null;

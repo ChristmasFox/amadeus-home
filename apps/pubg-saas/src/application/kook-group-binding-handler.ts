@@ -1,15 +1,16 @@
 import type { KookGroupWriteIntentParserPort } from './kook-group-write-intent.js';
-import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
+import type { KookIngressDiscardLog, KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import type { TeamAdminService } from './team-admin-service.js';
 import type { PublicPubgPlayerResolverPort, ResolvedPubgPlayer } from '../infrastructure/pubg/player-resolver.js';
 import { parseKookManagementCommand } from '../channels/kook/management-command.js';
-import { isKookGroupBindingPhrase } from '../channels/kook/message-relevance.js';
+import { KOOK_GROUP_WRITE_INTENT_LIMITS } from './kook-group-write-intent.js';
 
 export interface KookGroupBindingServices {
   teams: TeamAdminService;
   players: PublicPubgPlayerResolverPort;
   intents?: KookGroupWriteIntentParserPort | null;
+  onDiagnostic?: (event: KookIngressDiscardLog) => void;
 }
 
 function message(content: string): KookTextPayload { return { type: 'text', content }; }
@@ -68,6 +69,46 @@ async function resolveAndClaim(
  * classifies only the constrained intent; KOOK actor/mention IDs and database
  * scope remain exclusively in trusted application code. */
 export function createKookGroupBindingHandler(services: KookGroupBindingServices): KookRequestHandler {
+  const diagnosticWindows = new Map<string, { loggedAt: number; suppressed: number }>();
+  function reportIntentDiagnostic(event: KookIngressDiscardLog): void {
+    const channelId = event.channelId && /^[0-9]{1,40}$/u.test(event.channelId) ? event.channelId : undefined;
+    const safeEvent: KookIngressDiscardLog = {
+      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: event.reason, count: event.count,
+      ...(channelId ? { channelId } : {}),
+    };
+    const key = `${safeEvent.reason}:${channelId ?? ''}`;
+    const now = Date.now();
+    let window = diagnosticWindows.get(key);
+    if (!window) {
+      if (diagnosticWindows.size >= 64) {
+        const oldest = diagnosticWindows.keys().next().value;
+        if (oldest !== undefined) diagnosticWindows.delete(oldest);
+      }
+      window = { loggedAt: now, suppressed: 0 };
+      diagnosticWindows.set(key, window);
+      try { services.onDiagnostic?.({ ...safeEvent, count: 1 }); } catch { /* logging cannot block a request */ }
+      return;
+    }
+    window.suppressed += 1;
+    if (now - window.loggedAt < 60_000) return;
+    const count = window.suppressed;
+    window.loggedAt = now;
+    window.suppressed = 0;
+    try { services.onDiagnostic?.({ ...safeEvent, count }); } catch { /* logging cannot block a request */ }
+  }
+
+  async function handleLegacyGroupCommand(job: KookIngressJob, signal: AbortSignal): Promise<KookTextPayload | undefined> {
+    if (job.request.kind !== 'group') return undefined;
+    const event = job.request.event;
+    const command = parseKookManagementCommand(event.content);
+    if (command?.kind === 'me') return await resolveAndClaim(job, services, event.userId, 'steam', command.name, signal);
+    if (command?.kind === 'claim') return await resolveAndClaim(job, services, event.userId, command.shard, command.name, signal);
+    if (/^(?:\/|!)pubg\s+me(?:\s|$)/iu.test(event.content.trim()) && command?.kind === 'invalid') {
+      return message('用法：/pubg me <PUBG 游戏名>。平台默认为 Steam。');
+    }
+    return undefined;
+  }
+
   return async (job, signal) => {
     try {
       if (signal.aborted) throw new Error('kook_request_aborted');
@@ -80,16 +121,34 @@ export function createKookGroupBindingHandler(services: KookGroupBindingServices
       }
       if (job.request.kind !== 'group') return undefined;
       const event = job.request.event;
-      const command = parseKookManagementCommand(event.content);
-      if (command?.kind === 'me') return await resolveAndClaim(job, services, event.userId, 'steam', command.name, signal);
-      if (command?.kind === 'claim') return await resolveAndClaim(job, services, event.userId, command.shard, command.name, signal);
-      if (/^(?:\/|!)pubg\s+me(?:\s|$)/iu.test(event.content.trim()) && command?.kind === 'invalid') {
-        return message('用法：/pubg me <PUBG 游戏名>。平台默认为 Steam。');
+      const explicitLegacyCommand = /^(?:\/|!)pubg(?:\s|$)/iu.test(event.content.trim());
+      if (!services.intents) {
+        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_unavailable', count: 1, channelId: event.channelId });
+        return explicitLegacyCommand ? await handleLegacyGroupCommand(job, signal) : null;
       }
-      if (!isKookGroupBindingPhrase(event.content)) return undefined;
-      if (!services.intents) return message('自然语言绑定当前不可用，请使用 /pubg me <PUBG 游戏名>。');
-      const intent = await services.intents.parse(stripMentionMarkup(event.content), signal);
-      if (!intent || intent.action === 'unsupported') return undefined;
+      const classifierInput = stripMentionMarkup(event.content);
+      const intent = classifierInput.length <= KOOK_GROUP_WRITE_INTENT_LIMITS.maxInputCharacters
+        ? await services.intents.parse(classifierInput, signal) : null;
+      if (!intent) {
+        const reason = classifierInput.length > KOOK_GROUP_WRITE_INTENT_LIMITS.maxInputCharacters
+          ? 'input_limit_exceeded' : 'model_no_valid_intent';
+        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason, count: 1, channelId: event.channelId });
+        // Only bounded, explicit legacy commands use deterministic parsing when
+        // the model is unavailable or returned no valid constrained intent.
+        return explicitLegacyCommand ? await handleLegacyGroupCommand(job, signal) : null;
+      }
+      if (intent.action === 'unsupported') {
+        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_intent_unsupported', count: 1, channelId: event.channelId });
+        return null;
+      }
+      if (intent.action === 'query_stats') return undefined;
+      if (intent.action === 'legacy_command') {
+        if (!explicitLegacyCommand) {
+          reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'legacy_command_prefix_missing', count: 1, channelId: event.channelId });
+          return null;
+        }
+        return await handleLegacyGroupCommand(job, signal);
+      }
       if (intent.action === 'rename_team') {
         if (!job.boundTeam) return message('当前频道尚未绑定服务器队伍。');
         await services.teams.renameBoundTeam(event, job.boundTeam, intent.teamName);

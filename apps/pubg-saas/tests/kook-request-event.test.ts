@@ -15,24 +15,37 @@ function group(content: string, mention: unknown[] = [], channelId = 'channel-1'
   };
 }
 
-test('group admission accepts unmentioned account/team writes and explicit commands, but excludes unrelated chatter', () => {
-  assert.equal(parseKookRequest(group('普通聊天'), 'bot-1'), null);
+test('all trusted non-bot group text reaches intent classification without a phrase prefilter', () => {
+  assert.equal(parseKookRequest(group('普通聊天'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('我的 PUBG 账号是 PlayerOne'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('我们的队名是 夜猫小队'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('查一下今天击杀'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('这周队友伤害谁最多？'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('/pubg me PlayerOne'), 'bot-1')?.request.kind, 'group');
-  assert.equal(parseKookRequest(group('@bot 你今天好吗？'), 'bot-1'), null);
-  assert.equal(parseKookRequest(group('PUBG挺好玩'), 'bot-1'), null);
+  assert.equal(parseKookRequest(group('@bot 你今天好吗？'), 'bot-1')?.request.kind, 'group');
+  assert.equal(parseKookRequest(group('PUBG挺好玩'), 'bot-1')?.request.kind, 'group');
+  assert.equal(parseKookRequest(group('no keyword or command at all'), 'bot-1')?.request.kind, 'group');
 });
 
-test('both the existing and newly added KOOK text channels admit the same relevant unmentioned query', () => {
+test('both the existing and newly added KOOK text channels admit arbitrary trusted messages', () => {
   for (const channelId of ['6115211415447433', '6521538183595713']) {
-    const parsed = parseKookRequest(group('查一下今天击杀', [], channelId), 'bot-1');
+    const parsed = parseKookRequest(group('晚饭吃什么', [], channelId), 'bot-1');
     assert.ok(parsed?.request.kind === 'group');
     assert.equal(parsed.channelId, channelId);
     assert.equal(parsed.targetId, channelId);
   }
+});
+
+test('self-authored and other bot messages are rejected before intent classification', () => {
+  const channelId = '6115211415447433';
+  const self = group('ignore bot loop', [], channelId, 'bot-1');
+  const otherBot = group('ignore another bot', [], channelId, 'other-bot', true);
+  assert.deepEqual(inspectKookRequest(self, 'bot-1'), {
+    kind: 'dropped', stage: 'trusted_group', reason: 'author_is_bot', channelId,
+  });
+  assert.deepEqual(inspectKookRequest(otherBot, 'bot-1'), {
+    kind: 'dropped', stage: 'trusted_group', reason: 'author_is_bot', channelId,
+  });
 });
 
 test('structured discard inspection reports only a reason and safe channel metadata', () => {
