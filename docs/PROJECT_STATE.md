@@ -1,5 +1,29 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Group-only account binding deployed to isolated SaaS
+
+Planner streaming incompatibility was fixed in commit `53b49e5` by sending
+`stream:false`; one real Planner request succeeded against the isolated
+9Router. Commit `8bcbe4c` adds one automatically provisioned KOOK-guild team,
+group-only self-binding, Steam-default `/pubg me`, natural-language account
+and team-name intents, real PUBG resolution before persistence, and
+admin-only `@member` delegation with current KOOK permission checks. The
+intent model cannot choose recipient IDs; only two bounded write actions are
+accepted. Existing tenant/team scoping and legacy management handlers remain.
+
+Validation passed: SaaS/PostgreSQL 117/117, private Kurisu 68/68, relevant
+typechecks, architecture check, secrets scan and diff check. Local OCI build
+verified amd64+arm64 (manifest
+`sha256:72000a4c40ab4bdedf4a82d37a609cba62f3e218d7fed49d88e761f1d4741f6d`).
+On `pubg-saas-m2-clean`, only Gateway and Worker were recreated as
+`local/pubg-saas:git-8bcbe4c4812a72a9c4841a8d4df7b62eda0f3bfb`. Worker is
+healthy; Gateway is running and its persisted KOOK WebSocket state is
+connected. PostgreSQL, egress-proxy and 9Router kept their prior container
+IDs. No PUBG lookup or user-message acceptance was performed; Arthur's manual
+KOOK acceptance remains next. Backup rehearsal remains paused. No private
+OpenClaw/9Router change, image push or production deployment occurred. See
+`.agent/checkpoints/2026-10-14-pubg-saas-group-binding-live.md`.
+
 ## 2026-10-14 — Isolated public SaaS model connection attempt
 
 Source commit `87de87d` limits cleartext HTTP and direct model egress to exact

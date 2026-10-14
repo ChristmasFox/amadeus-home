@@ -4,24 +4,26 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Latest explicit runtime authorization — 2026-10-14
 
-Arthur authorized a targeted model connection for the already isolated public
-SaaS stack on OrbStack VM `pubg-saas-m2-clean`. Commit `87de87d` adds an exact
-`MODEL_ALLOWED_INTERNAL_HOSTS` authority allowlist; only listed host:port
-authorities may use HTTP or bypass the egress proxy. The source tests and SaaS
-typecheck passed, and image `local/pubg-saas:git-87de87d06a4ed3c9b8df4dab26a2d1c3947efabe`
-was built locally without pushing. The stack's mode-0600 Gateway env file now
-points at the isolated `9router:20128` endpoint and `arthur-combo`; its API key
-was read directly from that VM's new 9Router `apiKeys` row without printing or
-committing it. Gateway/Worker were recreated. Compose also recreated the
-egress-proxy because all services share the updated image tag; PostgreSQL and
-the 9Router container remained unchanged.
+Planner compatibility was fixed in `53b49e5`: the AI SDK now explicitly asks
+9Router for a non-streaming response. One real Planner request on isolated M204
+`pubg-saas-m2-clean` succeeded. Arthur then authorized the group-only KOOK
+binding flow and admin delegation; source commit `8bcbe4c` adds the constrained
+two-action intent parser, verified PUBG lookup before atomic account writes,
+single-team-per-guild provisioning, fresh admin/member checks for delegation,
+and keeps legacy commands. No schema migration was needed.
 
-Post-restart KOOK WebSocket state was refreshed in PostgreSQL. The one allowed
-minimal model request reached 9Router and its usage record says `ok`, but the
-SaaS planner returned `provider_error` with one request. Model acceptance is
-therefore still open; no second request was made. The response/structured-output
-compatibility is the current root-cause hypothesis, not yet proven. Evidence:
-`.agent/checkpoints/2026-10-14-pubg-saas-9router-integration.md`.
+Acceptance passed: SaaS PostgreSQL suite 117/117, private Kurisu regression
+68/68, both source typechecks, architecture check, secret scan and diff check.
+The OCI build verified `linux/amd64` and `linux/arm64` under manifest
+`sha256:72000a4c40ab4bdedf4a82d37a609cba62f3e218d7fed49d88e761f1d4741f6d`.
+Only Gateway and Worker were recreated on M204 from commit `8bcbe4c`; both are
+running, Worker is healthy, and a boolean-only PG probe confirms the Gateway
+KOOK WebSocket session is connected. PostgreSQL, egress-proxy and the isolated
+9Router container IDs stayed unchanged. The Gateway has no Docker healthcheck;
+its running state and persisted KOOK session are the startup evidence. No
+migration, backup rehearsal, PUBG lookup, extra model request, message test,
+image push or private-runtime change was performed. Detailed evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-group-binding-live.md`.
 
 ## Operator-selected source implementation Goal — 2026-10-13
 
