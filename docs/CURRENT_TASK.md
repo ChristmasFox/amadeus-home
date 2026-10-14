@@ -19,22 +19,22 @@ mention IDs remain available to server-side authorization only.
 Provider failures, Domain tool failures, authorization denials and outbox quota
 or send failures each have distinct safe status/diagnostic paths. The local
 PostgreSQL schema adds migrations `0015` and `0016`. Validation passed:
-SaaS/PostgreSQL 126/126, PUBG/Kurisu regression 68/68, SaaS typecheck and
-package build. Python backup/Compose adapter tests passed 24/24 after fixing
-stdin forwarding for snapshot SQL. Local Buildx verified `linux/amd64` and
-`linux/arm64`; no image was pushed. A synthetic encrypted backup restored to
-a fresh isolated PostgreSQL instance with 39/39 public tables and app/backup
-permission boundaries verified.
+SaaS/PostgreSQL 128/128 with no skips, PUBG/Kurisu regression 68/68, SaaS
+typecheck and package build. Python backup/Compose adapter tests passed 24/24
+after fixing stdin forwarding for snapshot SQL. Local Buildx verified
+`linux/amd64` and `linux/arm64`; no image was pushed. A synthetic encrypted
+backup restored to a fresh isolated PostgreSQL instance with 39/39 public
+tables and app/backup permission boundaries verified.
 
-P4 source follow-up commits `d45d956` and `e600cab` add a sequential
-multi-tool Agent test and preserve natural-write authorization failures as
-`authorization_denied` or permission-check degradation in run status and safe
-diagnostics. The focused Agent, ingress, query and binding tests passed 9/9
-against the already-running loopback-only `pubg-saas-pg18` fixture; SaaS
-typecheck, `pnpm check:secrets` and `git diff --check` passed. The full SaaS
-suite has not been rerun after these two source commits. They are local commits
-ahead of `origin/main` and have not been deployed; M204 still runs the previously
-authorized `git-f5c40e2` image.
+P4 follow-up commits `d45d956`, `e600cab` and `a99c249` cover sequential Agent
+tool use and distinguish natural-write denials from KOOK permission-check
+outages in run status and safe diagnostics. The latest complete validation
+passed `pnpm test:pubg-saas` 128/128 with no skips on the already-running
+loopback-only `pubg-saas-pg18` fixture, `pnpm test:pubg` 68/68,
+`pnpm build:pubg-saas`, SaaS typecheck, `pnpm check:architecture`,
+`pnpm check:secrets` and `git diff --check`. These source commits are local and
+have not been pushed or deployed; M204 still runs the previously authorized
+`git-f5c40e2` image. Arthur's real KOOK conversational acceptance remains open.
 
 With the explicit M204 Gateway/Worker replacement authorization, image
 `local/pubg-saas:git-f5c40e2` was built and only those two services were
