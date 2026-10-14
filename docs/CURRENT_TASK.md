@@ -4,64 +4,37 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
 
-The current source replaces the forced intent classifier on the ordinary
-message path with a bounded Vercel AI SDK `ToolLoopAgent`. Every trusted human
-group message reaches the model even when it is ordinary chat or the channel
-has no bound team; explicit `/pubg` operations remain deterministic. The Agent
-can reply directly or call the existing authorized PUBG Domain executor and
-continue with a natural-language answer. Query slots now include kick/punch
-melee filters. Channel history is limited to 12 recent turns and 6,000
-characters for 12 hours, quote links are resolved only within that channel,
-and individual query sessions remain actor-scoped. KOOK mention IDs are
-redacted from model input, stored context and model-facing tool results; trusted
-mention IDs remain available to server-side authorization only.
+Source commit `d936f79` is pushed to `origin/main`. The Vercel AI SDK
+`ToolLoopAgent` now has a 300-second overall budget, 120-second step timeout,
+and a 128-step runaway guard without forcing normal turns to stop calling
+tools. If a timeout/provider failure or guard occurs after a Domain result,
+one bounded finalization call summarizes the completed results. Identical
+`pubg_query` calls reuse the first real output; team stats return the full
+eight-player roster in one Domain query. Server-side writes cap teams at eight;
+own-account rebind at capacity is permitted while a ninth new member is
+rejected. Existing tenant, permission, coverage and evidence checks remain.
 
-Provider failures, Domain tool failures, authorization denials and outbox quota
-or send failures each have distinct safe status/diagnostic paths. The local
-PostgreSQL schema adds migrations `0015` and `0016`. Validation passed:
-SaaS/PostgreSQL 128/128 with no skips, PUBG/Kurisu regression 68/68, SaaS
-typecheck and package build. Python backup/Compose adapter tests passed 24/24
-after fixing stdin forwarding for snapshot SQL. Local Buildx verified
-`linux/amd64` and `linux/arm64`; no image was pushed. A synthetic encrypted
-backup restored to a fresh isolated PostgreSQL instance with 39/39 public
-tables and app/backup permission boundaries verified.
+Source validation passed: SaaS/PostgreSQL 133/133 on the reused isolated
+`pubg-saas-pg18`, focused DB integration 28/28, PUBG/Kurisu regression 68/68,
+SaaS typecheck/build, architecture, secrets and diff checks. Buildx generated
+and verified `linux/amd64` and `linux/arm64`. An age-encrypted backup restored
+into a new isolated PG18.1 instance; 39/39 table counts and app/backup role and
+sequence boundaries passed.
 
-P4 follow-up commits `d45d956`, `e600cab` and `a99c249` cover sequential Agent
-tool use and distinguish natural-write denials from KOOK permission-check
-outages in run status and safe diagnostics. The latest complete validation
-passed `pnpm test:pubg-saas` 128/128 with no skips on the already-running
-loopback-only `pubg-saas-pg18` fixture, `pnpm test:pubg` 68/68,
-`pnpm build:pubg-saas`, SaaS typecheck, `pnpm check:architecture`,
-`pnpm check:secrets` and `git diff --check`. These source commits are local and
-have not been pushed or deployed; M204 still runs the previously authorized
-`git-f5c40e2` image. Arthur's real KOOK conversational acceptance remains open.
+Under Arthur's authorization, m2-clean now runs
+`local/pubg-saas:git-d936f79`. Gateway and Worker were replaced once; both
+started, Worker is healthy, and the read-only KOOK probe reports a connected
+session. The already-current migration `0016` was verified before the switch.
+PostgreSQL, egress-proxy and the SaaS 9Router retained their original container
+IDs. A mode-0600 rollback record is at
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-d936f79-pre-switch.txt`.
 
-With the explicit M204 Gateway/Worker replacement authorization, image
-`local/pubg-saas:git-f5c40e2` was built and only those two services were
-recreated. Migrations are at `0016`; Gateway is running with zero restarts and
-has persisted a KOOK session (`last_sn=29`), Worker and PostgreSQL are healthy.
-The existing PostgreSQL, egress proxy, and independent 9Router container IDs
-were preserved. The pre-migration encrypted snapshot and prior image setting
-remain in protected host-local storage. Current outbound-budget accounting is
-8/200 reservations as of the latest read-only check at 2026-10-14 08:26 UTC;
-KOOK developer-account eligibility is unverified.
-
-No live user message, model request, or PUBG API request was deliberately sent
-as a deployment smoke. A later read-only aggregate check at 2026-10-14 08:26
-UTC observed 7 ingress events, 7 Agent runs and 7 Outbox sends after the
-replacement. All 7 ingress events were `done`, and all 7 outbox rows were
-`sent`; Agent outcomes were 6 `replied` and 1 safe
-`provider_fallback/public_agent_empty_response`. The check read only counts,
-statuses and failure codes, not message text or user IDs. This proves those
-observed events traversed the live reply path, but does not establish which
-required test prompts were sent or their answer quality. A focused regression
-test now covers the empty-model-response fallback. Arthur's real conversational
-acceptance remains open; M2 is not complete.
-
-This task's current source checkpoint and repro details:
-`.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
-Runtime rollout and M204 rollback evidence:
-`.agent/checkpoints/2026-10-14-pubg-saas-agent-runtime-rollout.md`.
+The single real `昨日小队战绩` Agent invocation remains pending: the bot cannot
+create a trusted human event, and desktop/browser automation is disallowed.
+Arthur was asked to send the phrase in the target group. Verify only that
+single live result, then stop for Arthur. M2 is not complete until that real
+model/tool/outbox path succeeds and Arthur accepts the experience. Full
+evidence and reproduction: `.agent/checkpoints/2026-10-14-pubg-saas-agent-loop-recovery-rollout.md`.
 
 ## Previous public runtime authorization — historical baseline (2026-10-14)
 

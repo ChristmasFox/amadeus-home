@@ -1,5 +1,34 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Agent tool-loop recovery and eight-player roster rollout
+
+Commit `d936f79` was fast-forward pushed to `origin/main`. It raises the public
+Agent overall deadline to 300 seconds, uses a 120-second step timeout and a
+128-step runaway guard, summarizes completed tool results after timeout/guard
+recovery, reuses identical query output, and queries the full eight-player
+roster at once. PostgreSQL-backed binding and authorization enforce the eight
+member cap while allowing an existing member to replace their own account.
+SaaS tests passed 133/133 on the reused isolated PG18 service; focused
+integration passed 28/28; PUBG/Kurisu passed 68/68; package typecheck/build,
+architecture and secret checks passed.
+
+Buildx verified both amd64 and arm64. An encrypted backup restored to a fresh
+isolated PostgreSQL 18.1 instance with 39/39 table counts and app/backup table
+and sequence permission boundaries verified. The disposable restored database
+was removed by its exact marker; isolated volumes were retained.
+
+Only Gateway/Worker were replaced on authorized `pubg-saas-m2-clean` with
+`local/pubg-saas:git-d936f79`. Both are running; Worker is healthy and the
+read-only KOOK session probe is connected. The database was already at
+migration `0016`; PostgreSQL, egress-proxy and SaaS 9Router container IDs did
+not change. The protected rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-d936f79-pre-switch.txt`.
+
+The post-deployment real `昨日小队战绩` model/tool/outbox verification is still
+pending a trusted human group event. Arthur was asked to send that query; no
+bot-authored or synthetic production event will be used. M2 remains open.
+Detailed evidence: `.agent/checkpoints/2026-10-14-pubg-saas-agent-loop-recovery-rollout.md`.
+
 ## 2026-10-14 — Public conversational Agent M204 rollout
 
 Source commits `1e74e5a` and `f5c40e2` route every trusted human KOOK message
