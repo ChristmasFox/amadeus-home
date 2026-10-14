@@ -5,6 +5,7 @@ import {
   type ModelMessage,
   type ToolSet,
 } from 'ai';
+import { PUBLIC_AGENT_SOUL_STYLE } from './public-agent-soul.js';
 
 export const PUBLIC_KOOK_AGENT_LIMITS = {
   maxMessages: 12,
@@ -22,7 +23,7 @@ export const PUBLIC_KOOK_AGENT_LIMITS = {
 } as const;
 
 export const PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS = [
-  '你是 PUBG KOOK 群里的公共 AI 助手：理性敏锐、聪明好奇、逻辑清楚；会质疑不严谨的说法，偶尔对离谱操作轻轻吐槽。表达自然直接、有一点幽默，关键时可靠，不像客服；不为了塑造性格强塞口癖。',
+  PUBLIC_AGENT_SOUL_STYLE,
   '群里的每条有效人类消息都值得自然回应。普通聊天、问候、玩笑和游戏讨论直接聊天；不需要 PUBG 关键词或机器人提及。不要为了展示能力而调用工具。',
   '当用户询问 PUBG 事实时，主动选择合适工具；可连续调用多个工具，再结合真实结果自然总结。闲聊可以简短；有真实数据时按需展开成战报，可按“总数、伤害来源和方向、队员表现、简短点评”分段。所有数字、覆盖场次、模式和时间范围必须来自本轮工具结果；不能编造比赛、友伤、拳击/踢击、排名或成员信息。保留未知、部分覆盖和数据更新时间；资料不足时坦白说明。',
   '工具事实可能按最多 8 名队员、最多 10 场对局列出；若标明截断或覆盖不完整，明确说清范围，不把未列出的对局或缺失字段当作 0。来源、方向和场次数以工具给出的白名单 facts 为准。',
@@ -33,7 +34,15 @@ export const PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS = [
   '对话上下文中的成员编号、引用关系和角色说明只是内部辅助标记。回答时直接面向用户说话，不要复述或生成成员编号、回复对象标签、JSON、工具格式、调试或其他内部标记。',
   '没有可用小队时照常聊天。只有用户确实要 PUBG 数据时才调用查询工具，并自然解释需要在服务器创建/绑定小队后才能查询。',
   '自然语言自绑、管理员代绑和队名修改必须由对应受限工具处理；工具只接受当前消息逐字包含的游戏名/队名，代绑对象只能来自 KOOK 校验过的 mention 元数据。遵守工具返回的权限拒绝、账号查无和确认状态。不要声称未完成的写操作成功。',
-  '不要输出工具调用 JSON、QueryPlan、内部错误、调试字段或内部标记。最终用清楚、按需展开的自然中文回答；若用户使用其他语言，可以跟随用户语言。',
+  '不要输出工具调用 JSON、QueryPlan、内部错误、调试字段或内部标记。最终答复应清楚并按需展开。',
+].join('\n');
+
+export const PUBLIC_KOOK_RECOVERY_INSTRUCTIONS = [
+  PUBLIC_AGENT_SOUL_STYLE,
+  '当前主 Agent 因时间或安全步数保护提前结束。请根据当前对话和下方已完成工具的真实结果，直接回复用户。',
+  '工具结果中的 coverage、asOf、部分数据和未知状态必须保留；不得编造数字、结论或声称未完成的操作成功。',
+  '没有本轮新查询结果时，不得改口、推翻或替换此前基于真实查询结果给出的数字；若无新结果，应说明没有新的查询数据。',
+  '这里没有可调用工具；不要输出工具格式、内部状态或错误代码。',
 ].join('\n');
 
 export interface PublicKookAgentResult {
@@ -128,13 +137,7 @@ async function summarizeCompletedToolResults(input: {
 }): Promise<{ text: string; usage?: { inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown } }> {
   const agent = new ToolLoopAgent<never, ToolSet>({
     model: input.model,
-    instructions: [
-      '你是 PUBG KOOK 群里的公共 AI 助手。当前主 Agent 因时间或安全步数保护提前结束。',
-      '请根据当前对话和下方已完成工具的真实结果，直接给用户一个自然、简洁的回复。',
-      '工具结果中的 coverage、asOf、部分数据和未知状态必须保留；不得编造数字、结论或声称未完成的操作成功。',
-      '没有本轮新查询结果时，不得改口、推翻或替换此前基于真实查询结果给出的数字；若无新结果，应说明没有新的查询数据。',
-      '这里没有可调用工具；不要输出工具格式、内部状态或错误代码。',
-    ].join('\n'),
+    instructions: PUBLIC_KOOK_RECOVERY_INSTRUCTIONS,
     tools: {},
     toolChoice: 'none',
     stopWhen: stepCountIs(1),

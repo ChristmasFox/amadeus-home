@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && mkdir -p dist/src/infrastructure/postgres/migrations && cp src/infrastructure/postgres/migrations/*.sql dist/src/infrastructure/postgres/migrations/",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/src/infrastructure/postgres/migrations dist/src/application && cp src/infrastructure/postgres/migrations/*.sql dist/src/infrastructure/postgres/migrations/ && cp src/application/public-agent-soul.md dist/src/application/public-agent-soul.md",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
     "worker": "node dist/src/public-sync-worker.js"
