@@ -64,6 +64,16 @@ matching provider/fatal/panic error log lines were present in the preceding
 two-minute log window. The local outbound budget usage row read 15/200; existing
 usage attribution and KOOK developer-account eligibility are unverified.
 
+A later read-only check at 2026-10-14 07:45 UTC found one established
+Gateway-to-egress-proxy TCP connection and one established proxy outbound TCP
+connection to port 443. This is consistent with an open proxied WebSocket
+tunnel, but does not independently identify its upstream peer or prove that
+KOOK delivers application events. The database aggregate showed 10 completed
+group ingress events (latest 05:36 UTC), 2 completed direct messages, 5 button
+events, zero Agent runs, and 15 sent Outbox rows (latest 03:36 UTC). All
+retained human/group activity and sent replies predate the 07:37 UTC rollout;
+there is no post-rollout human-message result to claim.
+
 The deployment smoke did not send a group message or intentionally call the
 model or PUBG API. No PUBG/model credential was read for the isolated test
 projects. The production stack's configured provider credentials were left

@@ -38,8 +38,13 @@ remain in protected host-local storage. Current outbound-budget accounting is
 No live user message, model request, or PUBG API request was deliberately sent
 as a deployment smoke. The persisted session and container state do not prove
 that an actual group message receives a reply; the session sequence was not
-updated within the last two minutes at the read-only check. Arthur must perform
-the real KOOK conversational acceptance. M2 is not complete.
+updated within the last two minutes at the initial read-only check. A later
+read-only socket count found an established Gateway-to-proxy TCP connection
+and an established proxy outbound 443 connection, consistent with a live
+proxied WSS path but not proof of KOOK application delivery. Database
+aggregates still show no post-rollout ingress, Agent run, or Outbox send; all
+retained group events and sent replies predate the image replacement. Arthur
+must perform the real KOOK conversational acceptance. M2 is not complete.
 
 This task's current source checkpoint and repro details:
 `.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
