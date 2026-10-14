@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
+import { createServer as createHttpServer, request as httpRequest } from 'node:http';
 import { connect, createServer as createTcpServer } from 'node:net';
 import { once } from 'node:events';
 import test from 'node:test';
 import type { LookupAddress } from 'node:dns';
 import { getGlobalDispatcher, ProxyAgent, setGlobalDispatcher } from 'undici';
-import { createPublicEgressProxy, isBlockedEgressAddress, parseHttpsConnectAuthority } from '../src/infrastructure/egress-proxy.js';
+import { closeWorkerMetricsRelay, createPublicEgressProxy, createWorkerMetricsRelay, isBlockedEgressAddress, parseHttpsConnectAuthority } from '../src/infrastructure/egress-proxy.js';
 import { configurePublicEgress, parsePublicEgressProxy } from '../src/infrastructure/public-egress.js';
 
 test('public egress dispatcher URL rejects unsafe proxy URLs and enforces required configuration', () => {
@@ -120,5 +121,85 @@ test('Node WebSocket sends WSS through the configured global dispatcher', async 
     await proxy.close();
     proxyServer.close();
     await once(proxyServer, 'close');
+  }
+});
+
+function relayRequest(port: number, method: string, path: string): Promise<{ status: number; body: string }> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({ host: '127.0.0.1', port, method, path }, response => {
+      const chunks: Buffer[] = [];
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+      response.once('end', () => resolve({
+        status: response.statusCode ?? 0,
+        body: Buffer.concat(chunks).toString('utf8'),
+      }));
+    });
+    request.once('error', reject);
+    request.end();
+  });
+}
+
+test('worker metrics relay exposes only the fixed GET /metrics upstream path', async () => {
+  const upstreamRequests: Array<{ method: string | undefined; url: string | undefined }> = [];
+  const upstream = createHttpServer((request, response) => {
+    upstreamRequests.push({ method: request.method, url: request.url });
+    response.writeHead(200, { 'content-type': 'text/plain' });
+    response.end('pubg_saas_worker_up 1\n');
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const upstreamAddress = upstream.address();
+  assert.ok(upstreamAddress && typeof upstreamAddress !== 'string');
+  const relay = createWorkerMetricsRelay({
+    host: '127.0.0.1', port: 0,
+    upstreamHost: '127.0.0.1', upstreamPort: upstreamAddress.port,
+  });
+  await once(relay, 'listening');
+  const relayAddress = relay.address();
+  assert.ok(relayAddress && typeof relayAddress !== 'string');
+  try {
+    assert.deepEqual(await relayRequest(relayAddress.port, 'GET', '/metrics'), {
+      status: 200, body: 'pubg_saas_worker_up 1\n',
+    });
+    assert.equal((await relayRequest(relayAddress.port, 'GET', '/metrics?tenant=secret')).status, 404);
+    assert.equal((await relayRequest(relayAddress.port, 'POST', '/metrics')).status, 405);
+    assert.deepEqual(upstreamRequests, [{ method: 'GET', url: '/metrics' }]);
+  } finally {
+    await closeWorkerMetricsRelay(relay);
+    upstream.close();
+    await once(upstream, 'close');
+  }
+});
+
+test('worker metrics relay bounds upstream output and hides upstream failures', async () => {
+  let mode: 'error' | 'oversized' = 'error';
+  const upstream = createHttpServer((_request, response) => {
+    response.writeHead(mode === 'error' ? 502 : 200);
+    response.end(mode === 'error' ? 'upstream detail' : 'x'.repeat(32));
+  });
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const upstreamAddress = upstream.address();
+  assert.ok(upstreamAddress && typeof upstreamAddress !== 'string');
+  const relay = createWorkerMetricsRelay({
+    host: '127.0.0.1', port: 0,
+    upstreamHost: '127.0.0.1', upstreamPort: upstreamAddress.port,
+    maxResponseBytes: 16,
+  });
+  await once(relay, 'listening');
+  const relayAddress = relay.address();
+  assert.ok(relayAddress && typeof relayAddress !== 'string');
+  try {
+    assert.deepEqual(await relayRequest(relayAddress.port, 'GET', '/metrics'), {
+      status: 503, body: 'metrics temporarily unavailable\n',
+    });
+    mode = 'oversized';
+    assert.deepEqual(await relayRequest(relayAddress.port, 'GET', '/metrics'), {
+      status: 503, body: 'metrics temporarily unavailable\n',
+    });
+  } finally {
+    await closeWorkerMetricsRelay(relay);
+    upstream.close();
+    await once(upstream, 'close');
   }
 });

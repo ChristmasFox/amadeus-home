@@ -37,19 +37,22 @@ controls. Docker health checks cover worker liveness and PostgreSQL readiness.
 Host log collection, alert delivery and canonical-host thresholds are not
 installed or verified; configure a host-owned log/alert route before launch.
 
-Worker also exposes aggregate Prometheus text metrics at `/metrics` on container
-port `9464`, published by Compose only on host loopback. Scrape it locally with
+Worker exposes aggregate Prometheus text metrics at `/metrics` on its private
+container port `9464`. A separate fixed-path relay in `egress-proxy` forwards
+only `GET /metrics` to `worker:9464`; it rejects other methods and paths, caps
+the response at 64 KiB, and returns a generic error for upstream failures. Only
+the relay is published on host loopback at
+`127.0.0.1:${PUBG_SAAS_WORKER_METRICS_PORT:-9464}`. The Worker remains off the
+outbound bridge and has no host port. Scrape locally with
 `curl http://127.0.0.1:${PUBG_SAAS_WORKER_METRICS_PORT:-9464}/metrics`. The
 metrics contain process memory, pool/queue gauges, process-lifetime sync
 counters and alert-code counts; they do not include tenant, guild, team, player
 or actor labels. Counters reset when that Worker process restarts. Health remains
 on its separate container-loopback `/healthz` endpoint.
 
-On M204's OrbStack machine, Docker reported the loopback port binding, and the
-container endpoint returned 200, but a request to the host-published port
-returned 502. The cause is not established, so host-side scraping remains
-unverified on OrbStack. Do not connect the Worker to the public egress network
-to work around it; use `docker compose exec worker` for an in-container check.
+This relay routes host scrapes through the egress-proxy bridge while preserving
+the Worker's internal-only network boundary. Verify the host-loopback route on
+the target machine before relying on it for alerting.
 
 ## Build an immutable local image
 

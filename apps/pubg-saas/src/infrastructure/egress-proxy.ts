@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { BlockList, connect, isIP, type Socket } from 'node:net';
-import { createServer, type Server } from 'node:http';
+import { createServer, request as httpRequest, type Server, type ServerResponse } from 'node:http';
 import type { LookupAddress } from 'node:dns';
 import type { Duplex } from 'node:stream';
 import { pathToFileURL } from 'node:url';
@@ -50,6 +50,15 @@ export interface EgressProxyOptions {
   connectUpstream?: (address: string, port: number) => Promise<Socket>;
 }
 
+export interface WorkerMetricsRelayOptions {
+  host?: string;
+  port?: number;
+  upstreamHost?: string;
+  upstreamPort?: number;
+  timeoutMs?: number;
+  maxResponseBytes?: number;
+}
+
 const proxyClients = new WeakMap<Server, Set<Socket>>();
 
 export function closePublicEgressProxy(server: Server): Promise<void> {
@@ -59,6 +68,96 @@ export function closePublicEgressProxy(server: Server): Promise<void> {
     if (!server.listening) { resolve(); return; }
     server.close(() => resolve());
   });
+}
+
+export function closeWorkerMetricsRelay(server: Server): Promise<void> {
+  return new Promise(resolve => {
+    if (!server.listening) { resolve(); return; }
+    server.close(() => resolve());
+  });
+}
+
+function relayWorkerMetrics(response: ServerResponse, options: WorkerMetricsRelayOptions): void {
+  const timeoutMs = options.timeoutMs ?? 2000;
+  const maxResponseBytes = options.maxResponseBytes ?? 65536;
+  let completed = false;
+  const unavailable = () => {
+    if (completed) return;
+    completed = true;
+    if (!response.destroyed && !response.headersSent) {
+      response.writeHead(503, {
+        'cache-control': 'no-store',
+        connection: 'close',
+        'content-type': 'text/plain; charset=utf-8',
+      });
+      response.end('metrics temporarily unavailable\n');
+    }
+  };
+
+  const upstream = httpRequest({
+    hostname: options.upstreamHost ?? 'worker',
+    port: options.upstreamPort ?? 9464,
+    path: '/metrics',
+    method: 'GET',
+    timeout: timeoutMs,
+    headers: { accept: 'text/plain' },
+  }, upstreamResponse => {
+    if (upstreamResponse.statusCode !== 200) {
+      upstreamResponse.resume();
+      unavailable();
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    upstreamResponse.on('data', (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buffer.length;
+      if (size > maxResponseBytes) {
+        upstream.destroy();
+        unavailable();
+        return;
+      }
+      chunks.push(buffer);
+    });
+    upstreamResponse.once('end', () => {
+      if (completed || response.destroyed) return;
+      completed = true;
+      const body = Buffer.concat(chunks);
+      response.writeHead(200, {
+        'cache-control': 'no-store',
+        'content-length': body.length,
+        'content-type': 'text/plain; version=0.0.4; charset=utf-8',
+      });
+      response.end(body);
+    });
+    upstreamResponse.once('error', unavailable);
+  });
+  upstream.once('timeout', () => upstream.destroy(new Error('worker_metrics_timeout')));
+  upstream.once('error', unavailable);
+  upstream.end();
+}
+
+export function createWorkerMetricsRelay(options: WorkerMetricsRelayOptions = {}): Server {
+  const server = createServer((request, response) => {
+    if (request.method !== 'GET') {
+      response.writeHead(405, { connection: 'close', 'content-length': '0' });
+      response.end();
+      request.resume();
+      return;
+    }
+    if (request.url !== '/metrics') {
+      response.writeHead(404, { connection: 'close', 'content-length': '0' });
+      response.end();
+      request.resume();
+      return;
+    }
+    relayWorkerMetrics(response, options);
+  });
+  server.maxConnections = 32;
+  server.headersTimeout = 3000;
+  server.requestTimeout = 5000;
+  server.listen(options.port ?? 9465, options.host ?? '0.0.0.0');
+  return server;
 }
 
 function defaultLookup(hostname: string): Promise<LookupAddress[]> {
@@ -139,12 +238,18 @@ export function createPublicEgressProxy(options: EgressProxyOptions = {}): Serve
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PUBG_SAAS_EGRESS_PROXY_PORT ?? 8080);
-  if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
+  const metricsPort = Number(process.env.PUBG_SAAS_EGRESS_METRICS_PORT ?? 9465);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65535
+    || !Number.isSafeInteger(metricsPort) || metricsPort < 1 || metricsPort > 65535 || metricsPort === port) {
     process.stderr.write('pubg_saas_egress_proxy_config_invalid\n');
     process.exitCode = 1;
   } else {
     const server = createPublicEgressProxy({ host: '0.0.0.0', port });
-    const shutdown = () => { void closePublicEgressProxy(server).then(() => { process.exitCode = 0; }); };
+    const metricsRelay = createWorkerMetricsRelay({ host: '0.0.0.0', port: metricsPort });
+    const shutdown = () => {
+      void Promise.all([closePublicEgressProxy(server), closeWorkerMetricsRelay(metricsRelay)])
+        .then(() => { process.exitCode = 0; });
+    };
     process.once('SIGINT', shutdown);
     process.once('SIGTERM', shutdown);
   }
