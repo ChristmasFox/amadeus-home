@@ -11,9 +11,57 @@ export interface PublicPubgPlayerResolverPort {
   resolveNames(shard: string, names: string[], signal?: AbortSignal): Promise<PubgNameResolution>;
 }
 
+const ACCEPTANCE_PLAYERS: ReadonlyMap<string, ResolvedPubgPlayer> = new Map([
+  ['p3syntheticalpha', { accountId: 'account.p3synthetic_alpha', name: 'P3SyntheticAlpha' }],
+  ['p3syntheticbravo', { accountId: 'account.p3synthetic_bravo', name: 'P3SyntheticBravo' }],
+  ['p3syntheticcharlie', { accountId: 'account.p3synthetic_charlie', name: 'P3SyntheticCharlie' }],
+  ['p3syntheticdelta', { accountId: 'account.p3synthetic_delta', name: 'P3SyntheticDelta' }],
+]);
+
 export function validatePublicPubgShard(shard: string): string {
   if (!['steam', 'kakao', 'psn', 'xbox'].includes(shard)) throw new Error('public_pubg_shard_invalid');
   return shard;
+}
+
+class AcceptanceSyntheticPlayerResolver implements PublicPubgPlayerResolverPort {
+  async resolveNames(shard: string, names: string[]): Promise<PubgNameResolution> {
+    validatePublicPubgShard(shard);
+    if (!Array.isArray(names) || names.length < 1 || names.length > 4
+      || names.some(name => typeof name !== 'string' || !name.trim() || name.length > 100 || /[,\u0000-\u001f]/u.test(name))
+      || new Set(names.map(name => name.trim().toLowerCase())).size !== names.length) throw new Error('public_pubg_names_invalid');
+    const requested = names.map(name => name.trim());
+    const players = shard === 'steam'
+      ? requested.flatMap(name => {
+        const player = ACCEPTANCE_PLAYERS.get(name.toLowerCase());
+        return player ? [player] : [];
+      })
+      : [];
+    const resolvedNames = new Set(players.map(player => player.name.toLowerCase()));
+    return {
+      players,
+      missingNames: requested.filter(name => !resolvedNames.has(name.toLowerCase())),
+      ambiguousNames: [],
+    };
+  }
+}
+
+/** Synthetic identities are intentionally available only to isolated acceptance
+ * runs. Unknown names never fall through to the real PUBG API. */
+export function createConfiguredPublicPubgPlayerResolver(options: {
+  env: NodeJS.ProcessEnv;
+  apiKey?: string;
+  admission: PublicPubgAdmission;
+}): { resolver: PublicPubgPlayerResolverPort; synthetic: boolean } {
+  const acceptanceRequested = options.env.PUBG_SAAS_ACCEPTANCE_MODE !== undefined
+    || options.env.PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS !== undefined;
+  if (acceptanceRequested) {
+    if (options.env.PUBG_SAAS_ACCEPTANCE_MODE !== 'isolated'
+      || options.env.PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS !== '1'
+      || options.env.NODE_ENV === 'production') throw new Error('pubg_saas_synthetic_resolver_forbidden');
+    return { resolver: new AcceptanceSyntheticPlayerResolver(), synthetic: true };
+  }
+  if (!options.apiKey?.trim()) throw new Error('public_pubg_api_key_missing');
+  return { resolver: new PublicPubgPlayerResolver({ apiKey: options.apiKey, admission: options.admission }), synthetic: false };
 }
 
 /** Uses the shared API implementation with independent public credentials and

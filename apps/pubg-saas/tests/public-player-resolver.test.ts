@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { migratePublicDatabase, parseKookManagementCommand, PostgresPublicPubgAdmission, PublicPubgPlayerResolver } from '../src/index.js';
+import { createConfiguredPublicPubgPlayerResolver, migratePublicDatabase, parseKookManagementCommand, PostgresPublicPubgAdmission, PublicPubgPlayerResolver } from '../src/index.js';
 
 function success(data: unknown) { return new Response(JSON.stringify({ data }), { status: 200, headers: { 'x-ratelimit-limit': '10', 'x-ratelimit-remaining': '9' } }); }
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
@@ -39,6 +39,34 @@ test('lookup sanitizes upstream errors and cannot bypass a rejected public admis
   assert.equal(calls, 0);
   const unavailable = new PublicPubgPlayerResolver({ apiKey: 'must-not-leak', admission: { async acquire() { }, async observe() { } }, fetcher: async () => new Response(JSON.stringify({ errors: [{ detail: 'must-not-leak / private upstream body' }] }), { status: 403 }) });
   await assert.rejects(unavailable.resolveNames('steam', ['Alice']), error => error instanceof Error && error.message === 'public_pubg_lookup_unavailable' && !error.message.includes('must-not-leak'));
+});
+
+test('isolated acceptance resolver returns only fixed synthetic PUBG identities and never falls through', async () => {
+  const configured = createConfiguredPublicPubgPlayerResolver({
+    env: { PUBG_SAAS_ACCEPTANCE_MODE: 'isolated', PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS: '1', NODE_ENV: 'test' },
+    admission: { async acquire() { assert.fail('synthetic lookup must not acquire public PUBG admission'); }, async observe() { assert.fail('synthetic lookup must not observe an upstream response'); } },
+  });
+  assert.equal(configured.synthetic, true);
+  assert.deepEqual(await configured.resolver.resolveNames('steam', ['P3SyntheticAlpha', 'unknown-name']), {
+    players: [{ accountId: 'account.p3synthetic_alpha', name: 'P3SyntheticAlpha' }],
+    missingNames: ['unknown-name'], ambiguousNames: [],
+  });
+  assert.deepEqual(await configured.resolver.resolveNames('kakao', ['P3SyntheticAlpha']), {
+    players: [], missingNames: ['P3SyntheticAlpha'], ambiguousNames: [],
+  });
+  await assert.rejects(configured.resolver.resolveNames('steam', ['P3SyntheticAlpha', 'p3syntheticalpha']), /names_invalid/u);
+});
+
+test('synthetic PUBG identities require explicit isolated acceptance mode and are forbidden in production', () => {
+  const admission = { async acquire() { }, async observe() { } };
+  assert.throws(() => createConfiguredPublicPubgPlayerResolver({
+    env: { PUBG_SAAS_ACCEPTANCE_MODE: 'isolated', PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS: '1', NODE_ENV: 'production' },
+    admission,
+  }), /synthetic_resolver_forbidden/u);
+  assert.throws(() => createConfiguredPublicPubgPlayerResolver({
+    env: { PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS: '1', NODE_ENV: 'test' }, admission,
+  }), /synthetic_resolver_forbidden/u);
+  assert.throws(() => createConfiguredPublicPubgPlayerResolver({ env: { NODE_ENV: 'test' }, admission }), /public_pubg_api_key_missing/u);
 });
 
 test('explicit command arguments preserve player/label case and quoted spaces', () => {

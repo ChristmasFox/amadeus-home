@@ -9,7 +9,7 @@ import { TeamAdminService } from './application/team-admin-service.js';
 import { KookPermissionClient } from './channels/kook/permission-client.js';
 import { KookApplicationRuntime } from './kook-runtime.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
-import { PublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
+import { createConfiguredPublicPubgPlayerResolver } from './infrastructure/pubg/player-resolver.js';
 import { configurePublicEgress } from './infrastructure/public-egress.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
@@ -27,7 +27,8 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   if (args.length !== 1 || args[0] !== '--apply')
     throw new Error('pubg_saas_gateway_arguments_invalid');
   const databaseUrl = env.DATABASE_URL, botId = env.KOOK_BOT_ACCOUNT_ID, token = env.KOOK_BOT_TOKEN, apiKey = env.PUBLIC_PUBG_API_KEY;
-  if (!databaseUrl || !botId || !token || !apiKey)
+  const syntheticRequested = env.PUBG_SAAS_ACCEPTANCE_MODE !== undefined || env.PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS !== undefined;
+  if (!databaseUrl || !botId || !token || (!syntheticRequested && !apiKey?.trim()))
     throw new Error('pubg_saas_gateway_config_missing');
   configurePublicEgress(env);
   let parsed: URL;
@@ -53,7 +54,9 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const teams = new TeamAdminService(pool, permissions);
     const claims = new AccountClaimService(pool);
     const admission = new PostgresPublicPubgAdmission(pool, env.PUBLIC_PUBG_REQUESTS_PER_MINUTE ? Number(env.PUBLIC_PUBG_REQUESTS_PER_MINUTE) : 10);
-    const players = new PublicPubgPlayerResolver({ apiKey, admission });
+    const playerResolver = createConfiguredPublicPubgPlayerResolver({ env, ...(apiKey ? { apiKey } : {}), admission });
+    if (playerResolver.synthetic) process.stdout.write('PUBG_SAAS_PLAYER_LOOKUP=synthetic-acceptance-fixtures; no PUBG API requests will be made.\n');
+    const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
     const handler = composeKookRequestHandlers(
       createKookPublicQueryHandler({ authorizer, claims, planner }),
