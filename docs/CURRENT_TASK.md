@@ -185,6 +185,12 @@ PUBG/model call occurred. The test credential was removed from the VM after
 the run. Human-user inbound/callback/authorization flows still lack a test
 actor.
 
+Operator gate update (2026-10-14): Arthur deferred human P3 until the second
+text channel and test account are ready. Readiness has not been confirmed; do
+not open KOOK through desktop/browser automation or send test messages. The
+already-running isolated stack remains available for later human acceptance.
+This gate does not block independent local M2 work.
+
 Official quota source audit on 2026-10-14: KOOK's message reference states a
 10,000/day developer-account aggregate across bots, with a 12:00 Asia/Shanghai
 reset; its published developer policy also lists 200/day per bot and one

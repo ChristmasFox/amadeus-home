@@ -109,3 +109,11 @@ KOOK-only env file is recorded in the live task context; it must never be
 replaced with the full `.env.local`. To re-apply/start after an intentional
 stop, reuse the existing protected files and the same Compose commands above.
 Do not use `down -v`; the live P3 project owns its isolated PostgreSQL volume.
+
+## Operator readiness gate — 2026-10-14
+
+Arthur deferred the human interaction steps until the second text channel and
+test account are ready. Readiness has not been confirmed. Do not use desktop or
+browser automation to open KOOK, and do not send messages. The isolated project
+remains available from the already-running Gateway session; its presence does
+not count as human-flow acceptance.
