@@ -5,7 +5,7 @@ import { handleKookOnboardingRequest, type KookOnboardingServices } from './kook
 function message(content: string): KookTextPayload { return { type: 'text', content }; }
 const groupHelp = '群聊绑定：机器人进入服务器后会自动创建一支队伍并绑定默认文字频道；玩家发送“我的 PUBG 账号是 游戏名”或 /pubg me <游戏名>（默认 Steam）即可验证并绑定本人账号。管理员可发送“@成员 他的 PUBG 账号是 游戏名”代绑；频道成员可发送“我们的队名是 队名”修改队名。旧命令 /pubg claim <平台> <游戏名> 仍可自绑。队伍查询与管理：/pubg teams 列出服务器队伍；/pubg status 查看状态；/pubg add <游戏名…> 添加队员；/pubg roster <游戏名…> 替换完整名单；/pubg preference 查看或设置默认排行榜；/pubg alias list|set|delete 管理查询别名；/pubg privacy 查看数据说明。旧管理操作仍会按权限要求确认。';
 const directHelp = '账号绑定必须在队伍群聊中进行：/pubg me <游戏名>，平台默认为 Steam；旧命令 /pubg claim <平台> <游戏名> 也可在群聊使用。/pubg account 查看自己的关联；/pubg privacy 查看数据说明。';
-export const KOOK_PUBLIC_PRIVACY_NOTICE = '隐私与数据说明：本服务保存 KOOK 账号/频道标识、已授权队伍名单与 PUBG 公开比赛/遥测数据，用于队伍查询；不读取私人 Kurisu 的 SQLite、凭据或聊天记录。已处理的入站消息正文会立即清除，未完成请求最多保留 1 小时用于重试；追问上下文和查询结果最多保留 12 小时；模型用量（用户/请求关联、模型与 token 数）最多保留 30 天；收发事件标识及已结束的投递记录最多保留 7 天。自然语言查询文本和账号/队名写入意图会发送给配置的公共模型提供方；不会发送 tenant、队伍权限或 KOOK 用户标识，提供方自身的数据规则另行适用。账号声明会先通过 PUBG 公共 API 查验游戏名并保存 API 返回的账号 ID；这只证明该游戏名可解析，不证明 KOOK 用户拥有该 PUBG 账号。队伍默认排行榜指标及最后修改它的管理员标识会保留到管理员删除偏好或解散队伍；/pubg preference delete 可删除该设置。队伍自定义查询别名仅在管理员确认后保存，解绑频道不会删除别名；管理员可用 /pubg alias delete 删除，替换名单移除队员或解散队伍时会一并删除相关别名。/pubg account 可查看本人关联；历史 /pubg unclaim 仍需本人确认；服务器管理员可用 /pubg roster 更新名单、/pubg unbind 解绑频道或 /pubg disband 删除队伍关联数据。解除账号声明不会自动移除队伍名单中的 PUBG 账号；已发送消息无法由本服务撤回。';
+export const KOOK_PUBLIC_PRIVACY_NOTICE = '隐私与数据说明：本服务保存 KOOK 账号/频道标识、已授权队伍名单与 PUBG 公开比赛/遥测数据，用于队伍查询；不读取私人 Kurisu 的 SQLite、凭据、记忆或聊天记录。最近的群聊对话（发言者标识、正文、KOOK 回复引用关系）最多保留 12 小时，用于连续对话；直接消息上下文按用户隔离并最多保留 12 小时。未完成请求正文最多保留 1 小时用于重试；模型用量（用户/请求关联、模型与 token 数）最多保留 30 天；收发事件标识及已结束的投递记录最多保留 7 天。群聊和直接消息内容及账号/队名写入请求会发送给配置的公共模型提供方；不会发送 tenant、队伍权限或 KOOK 用户标识，提供方自身的数据规则另行适用。账号声明会先通过 PUBG 公共 API 查验游戏名并保存 API 返回的账号 ID；这只证明该游戏名可解析，不证明 KOOK 用户拥有该 PUBG 账号。队伍默认排行榜指标及最后修改它的管理员标识会保留到管理员删除偏好或解散队伍；/pubg preference delete 可删除该设置。队伍自定义查询别名仅在管理员确认后保存，解绑频道不会删除别名；管理员可用 /pubg alias delete 删除，替换名单移除队员或解散队伍时会一并删除相关别名。/pubg account 可查看本人关联；历史 /pubg unclaim 仍需本人确认；服务器管理员可用 /pubg roster 更新名单、/pubg unbind 解绑频道或 /pubg disband 删除队伍关联数据。解除账号声明不会自动移除队伍名单中的 PUBG 账号；已发送消息无法由本服务撤回。';
 const publicErrors: Record<string, string> = {
   guild_admin_required: '需要当前服务器的拥有者或管理员权限。',
   channel_not_bound: '当前频道尚未绑定队伍。',
@@ -32,8 +32,8 @@ const publicErrors: Record<string, string> = {
   public_pubg_lookup_invalid_response: 'PUBG 返回的账号信息无法可靠识别，请稍后重试。',
   invalid_team_label: '队伍名称需为 1–80 个字符。',
 };
-/** Deterministic management/onboarding paths. Query planning is attached
- * separately; these paths never invoke an LLM. */
+/** Deterministic management/onboarding paths. The public conversation Agent
+ * runs before this handler for ordinary chat; explicit commands stay here. */
 export function createKookManagementHandler(services: KookOnboardingServices): KookRequestHandler {
   return async (job, signal) => {
     if (signal.aborted)
@@ -57,6 +57,8 @@ export function createKookManagementHandler(services: KookOnboardingServices): K
         if (result.kind !== 'unclaim') throw new Error('account_claim_confirmation_unavailable');
         return message('你的 PUBG 账号声明关联已解除。');
       }
+      const explicitCommand = /^(?:\/|!)pubg(?:\s|$)/iu.test(request.event.content.trim());
+      if (!explicitCommand && request.kind === 'group') return undefined;
       const command = request.event.content.trim().replace(/^[!/]pubg(?:\s+|$)/iu, '').trim().toLowerCase();
       if (command === 'privacy') return message(KOOK_PUBLIC_PRIVACY_NOTICE);
       if (request.kind === 'group') {

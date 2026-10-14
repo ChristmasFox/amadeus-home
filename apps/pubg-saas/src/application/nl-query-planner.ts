@@ -42,6 +42,7 @@ export const QueryPlanSchema = z.object({
     'teammate_kills',
     'melee_kills',
   ]).nullable(),
+  meleeKind: z.enum(['KICK', 'PUNCH', 'OTHER']).nullable().default(null),
   period: z.enum([
     'today',
     'yesterday',
@@ -80,6 +81,7 @@ export const FALLBACK_QUERY_PLAN: QueryPlan = {
   actorName: null,
   victimName: null,
   metric: null,
+  meleeKind: null,
   period: null,
   comparePeriod: null,
   matchCount: null,

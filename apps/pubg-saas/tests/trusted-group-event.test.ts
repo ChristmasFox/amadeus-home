@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseTrustedKookDirectMessage, parseTrustedKookGroupMessage } from '../src/index.js';
+import { parseTrustedKookDirectMessage, parseTrustedKookGroupMessage, sanitizeKookMentionMarkup } from '../src/index.js';
 
 const event = {
   s: 0,
@@ -32,6 +32,7 @@ test('creates trusted scope from KOOK server/channel/actor fields and drops cach
     messageId: 'message-1',
     timestamp: 1_760_000_000_000,
     content: 'create squad',
+    quotedMessageId: null,
     mentionedUserIds: [],
     [Object.getOwnPropertySymbols(parsed ?? {})[0]!]: true,
   });
@@ -62,6 +63,23 @@ test('keeps only bounded user IDs from KOOK mention metadata and excludes the co
     ...event,
     d: { ...event.d, extra: { ...event.d.extra, mention: tooMany } },
   }, 'configured-bot')?.mentionedUserIds, []);
+});
+
+test('retains only the quoted message ID and rejects empty human text', () => {
+  const parsed = parseTrustedKookGroupMessage({
+    ...event,
+    d: { ...event.d, extra: { ...event.d.extra, quote: { msg_id: 'quoted-message-1', content: 'untrusted quoted text' } } },
+  }, 'configured-bot');
+  assert.equal(parsed?.quotedMessageId, 'quoted-message-1');
+  assert.equal(Object.hasOwn(parsed ?? {}, 'quotedContent'), false);
+  assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, content: '  ' } }, 'configured-bot'), null);
+});
+
+test('redacts KOOK mention identifiers before public-model input while preserving readable text', () => {
+  assert.equal(
+    sanitizeKookMentionMarkup('你好 <@123456> (met)789012(met)，今晚开黑吗？'),
+    '你好 @成员 @成员，今晚开黑吗？',
+  );
 });
 
 test('parses only direct text messages addressed to the configured bot for user-scoped actions', () => {

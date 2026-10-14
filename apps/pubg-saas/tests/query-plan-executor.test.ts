@@ -41,6 +41,7 @@ function makePlan(overrides: Partial<QueryPlan> = {}): QueryPlan {
     actorName: null,
     victimName: null,
     metric: null,
+    meleeKind: null,
     period: 'today',
     comparePeriod: null,
     matchCount: null,
@@ -200,6 +201,27 @@ test('last seven days passes an explicit half-open range to friendly damage quer
       businessDayStart: '06:00',
     },
     refresh: false,
+  });
+});
+
+test('kick query passes the exact melee category to the shared Domain telemetry filter', async () => {
+  const { calls, query, executor } = setup();
+  const result = await executor.execute({
+    authorizedQuery: query,
+    plan: makePlan({ intent: 'team_damage', period: 'yesterday', meleeKind: 'KICK' }),
+  });
+  assert.equal(result.kind, 'executed');
+  assert.deepEqual(calls[0]?.input, {
+    sessionId: 'session-1',
+    selector: {
+      type: 'time_range',
+      from: '2026-01-13T22:00:00.000Z',
+      to: '2026-01-14T22:00:00.000Z',
+      timezone: 'Asia/Shanghai',
+      businessDayStart: '06:00',
+    },
+    refresh: false,
+    meleeKind: 'KICK',
   });
 });
 

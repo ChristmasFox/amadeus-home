@@ -15,7 +15,7 @@ function group(content: string, mention: unknown[] = [], channelId = 'channel-1'
   };
 }
 
-test('all trusted non-bot group text reaches intent classification without a phrase prefilter', () => {
+test('all trusted non-bot group text reaches durable Agent ingress without a phrase prefilter', () => {
   assert.equal(parseKookRequest(group('普通聊天'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('我的 PUBG 账号是 PlayerOne'), 'bot-1')?.request.kind, 'group');
   assert.equal(parseKookRequest(group('我们的队名是 夜猫小队'), 'bot-1')?.request.kind, 'group');
@@ -36,7 +36,7 @@ test('both the existing and newly added KOOK text channels admit arbitrary trust
   }
 });
 
-test('self-authored and other bot messages are rejected before intent classification', () => {
+test('self-authored and other bot messages are rejected before Agent ingress', () => {
   const channelId = '6115211415447433';
   const self = group('ignore bot loop', [], channelId, 'bot-1');
   const otherBot = group('ignore another bot', [], channelId, 'other-bot', true);

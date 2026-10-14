@@ -84,6 +84,7 @@ export function inspectKookRequest(data: unknown, botAccountId: string): KookReq
             channel_type: 1,
             author: { id: group.userId, bot: false },
             mention: [...group.mentionedUserIds, ...(mentionsBot ? [botAccountId] : [])],
+            ...(group.quotedMessageId ? { quote: { msg_id: group.quotedMessageId } } : {}),
           },
         }
       },
@@ -117,8 +118,8 @@ export function inspectKookRequest(data: unknown, botAccountId: string): KookReq
   });
 }
 
-/** Every bounded, trusted, non-bot text group message enters durable admission.
- * Intent selection happens later in the constrained model classifier. */
+/** Every bounded, trusted, non-bot text group message enters durable admission
+ * and later reaches the conversation agent, independent of topic or mentions. */
 export function parseKookRequest(data: unknown, botAccountId: string): ParsedKookRequest | null {
   const inspection = inspectKookRequest(data, botAccountId);
   return inspection.kind === 'accepted' ? inspection.parsed : null;

@@ -10,13 +10,18 @@ are wired into an executable source entry point. Name-based commands/cards
 cover create/bind/list/roster changes, status/unbind/disband, and private
 self-claim/status/unclaim. Public lookup reuses the shared API client with
 independent PostgreSQL request admission. Automatic guild-invite welcome uses
-durable system-event intake plus verified guild/channel metadata. The public
-query handler authorizes each request, runs a bounded AI SDK planner when
-configured, and executes only validated plans through deterministic Domain
-queries. A separate PostgreSQL-backed worker syncs registered rosters and
-prefetches versioned telemetry. This is source-only; no SaaS service is
-deployed. Live human-actor button flows and developer-account quota eligibility
-remain unverified.
+durable system-event intake plus verified guild/channel metadata. Every trusted
+human text message reaches a bounded AI SDK `ToolLoopAgent`, whether it is
+ordinary chat or a PUBG question. The model can answer directly or call several
+constrained tools; each PUBG tool call is independently authorized and executes
+only validated plans through the shared deterministic Domain. A separate
+PostgreSQL-backed worker syncs registered rosters and prefetches versioned
+telemetry. Channel history keeps at most twelve recent turns for twelve hours,
+including speaker labels and trusted quote references; direct-message history is
+isolated by actor. Provider/tool errors create a safe reply and content-free
+diagnostic. KOOK daily send-budget exhaustion is recorded on the outbox row and
+reported separately from Agent errors. Live human-actor button flows and
+developer-account quota eligibility remain unverified.
 
 ## Trust boundaries
 
@@ -42,17 +47,19 @@ remain unverified.
   cannot receive an old queued request. Migration `0006` terminates legacy
   pending group events whose generation was not recorded, retaining their audit
   identity while removing payloads. It never invents historical authority.
-- `PublicQueryAuthorizer` is wired to the statistical query handler and runs
-  before free-text planning. The planner receives only `{scopeValidated:true}`
-  as authorization context, never tenant/team/user IDs; the executor resolves
-  aliases only inside the authorized roster and renders deterministic Domain
-  facts. Unsupported teammate-kill claims remain unavailable. Model usage is
-  persisted under tenant/team/user/request scope. Its `TeamContext` uses official names from the
+- `PublicQueryAuthorizer` rechecks the durable ingress lease, current KOOK
+  member/tenant/team binding, and roster for every tool invocation. The Agent
+  receives no tenant/team/user IDs; tool parameters express only business query
+  slots. The executor resolves aliases only inside the authorized roster and
+  preserves Domain coverage, `asOf`, partial results, and evidence references.
+  Unsupported teammate-kill claims remain unavailable. Model usage and safe
+  failure codes are persisted by event. Its `TeamContext` uses official names from the
   shared PUBG account directory when available, stable account IDs as fallback,
   and scoped confirmed aliases.
-  Every event is authorized independently; session follow-up reuses only its
-  validated plan context. Live KOOK membership/filter semantics need real-guild
-  acceptance. Official endpoint references: [guild/member APIs](https://developer.kookapp.cn/doc/http/guild)
+  Every tool invocation is authorized independently; each actor's follow-up
+  query state remains in that actor's trusted session. Channel history supplies
+  speaker labels only and never grants authority. Live KOOK membership/filter
+  semantics need real-guild acceptance. Official endpoint references: [guild/member APIs](https://developer.kookapp.cn/doc/http/guild)
   and [channel APIs](https://developer.kookapp.cn/doc/http/channel).
 - The adapter checks that the trusted channel remains bound to the selected
   tenant/team, or that a direct message has a `team_user_access` grant for the
@@ -220,9 +227,11 @@ node apps/pubg-saas/dist/src/public-sync-worker.js
 
 The public runtime requires its independent `DATABASE_URL`,
 `PUBLIC_PUBG_API_KEY`, and, for KOOK ingress, `KOOK_BOT_ACCOUNT_ID` plus
-`KOOK_BOT_TOKEN`, all outside Git. Optional AI planning uses
+`KOOK_BOT_TOKEN`, all outside Git. Natural conversation requires
 `MODEL_BASE_URL`, `MODEL_ID` and `MODEL_API_KEY`; all three must be configured
-together. Fixed commands still work when AI is unconfigured. Append `--apply`
+together. Fixed commands still work when AI is unconfigured, while ordinary
+messages receive a safe connection-error reply and a recorded diagnostic.
+Append `--apply`
 to start an entry point. The worker also accepts `--once` for a bounded single
 cycle:
 
@@ -231,7 +240,7 @@ pnpm --filter @agent/pubg-saas worker -- --apply --once
 ```
 
 Apply schema migrations separately before starting either runtime; the gateway
-and worker require migration `0011_kook_daily_message_budget.sql` and never migrate
+and worker require migration `0016_agent_authorization_outcomes.sql` and never migrate
 automatically. Ingress defaults are 10 requests/user/minute, 60/channel/minute,
 120/tenant/minute and 300/bot/minute; set `KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE`,
 `KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE`, `KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE`

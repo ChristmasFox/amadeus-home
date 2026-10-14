@@ -41,8 +41,8 @@ export interface KookOutboxJob {
 export type OutboxDeliveryResult = 'empty' | 'sent' | 'retry' | 'dead';
 
 export interface KookGroupMessageSender {
-  send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
-  sendDirect?(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void>;
+  send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<string | void>;
+  sendDirect?(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<string | void>;
   verifyWelcomeTarget?(guildId:string,channelId:string):Promise<boolean>;
 }
 
@@ -53,6 +53,17 @@ export interface KookMessageQueueOptions {
   baseRetryMs?: number;
   maxRetryMs?: number;
   random?: () => number;
+  onDeliveryFailure?: (event: KookOutboxFailureDiagnostic) => void;
+}
+
+export interface KookOutboxFailureDiagnostic {
+  event: 'kook_outbox_delivery_failed';
+  stage: 'outbox';
+  outcome: 'retry' | 'dead';
+  reason: string;
+  requestKey: string;
+  channelId?: string;
+  count: number;
 }
 
 interface TransactionClient extends PoolClient { }
@@ -126,6 +137,8 @@ export class KookMessageQueue {
   private readonly baseRetryMs: number;
   private readonly maxRetryMs: number;
   private readonly random: () => number;
+  private readonly onDeliveryFailure: ((event: KookOutboxFailureDiagnostic) => void) | undefined;
+  private readonly diagnosticWindows = new Map<string, { loggedAt: number; suppressed: number }>();
 
   constructor(private readonly pool: Pool, options: KookMessageQueueOptions) {
     this.botAccountId = requiredText(options.botAccountId, 'bot_account_id', 128);
@@ -134,6 +147,7 @@ export class KookMessageQueue {
     this.baseRetryMs = options.baseRetryMs ?? 1_000;
     this.maxRetryMs = options.maxRetryMs ?? 60_000;
     this.random = options.random ?? Math.random;
+    this.onDeliveryFailure = options.onDeliveryFailure;
     if (!Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1_000 || this.leaseMs > 5 * 60_000) throw new Error('kook_outbox_lease_invalid');
     if (!Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20) throw new Error('kook_outbox_attempt_limit_invalid');
     if (!Number.isSafeInteger(this.baseRetryMs) || this.baseRetryMs < 1 || this.baseRetryMs > 60 * 60_000
@@ -264,14 +278,24 @@ export class KookMessageQueue {
     };
   }
 
-  async markSent(job: Pick<KookOutboxJob, 'outboxId' | 'leaseToken'>): Promise<void> {
-    const result = await this.pool.query(
-      `UPDATE message_outbox
-       SET status='sent',payload_json='{}'::jsonb,next_attempt_at=NULL,lease_token=NULL,lease_until=NULL,last_error_code=NULL
-       WHERE outbox_id=$1 AND status='sending' AND lease_token=$2`,
-      [job.outboxId, job.leaseToken],
-    );
-    if (result.rowCount !== 1) throw new Error('kook_outbox_lease_lost');
+  async markSent(job: KookOutboxJob, remoteMessageId?: string): Promise<void> {
+    await inTransaction(this.pool, async client => {
+      const result = await client.query(
+        `UPDATE message_outbox
+         SET status='sent',payload_json='{}'::jsonb,next_attempt_at=NULL,lease_token=NULL,lease_until=NULL,last_error_code=NULL
+         WHERE outbox_id=$1 AND status='sending' AND lease_token=$2`,
+        [job.outboxId, job.leaseToken],
+      );
+      if (result.rowCount !== 1) throw new Error('kook_outbox_lease_lost');
+      if (remoteMessageId && /^[^\u0000-\u001f]{1,256}$/u.test(remoteMessageId) && job.sourceEventId) {
+        const conversationChannel = job.targetKind === 'channel' ? job.targetId : `dm:${job.botAccountId}:${job.targetId}`;
+        await client.query(
+          `UPDATE kook_conversation_messages SET message_id=$4
+           WHERE bot_account_id=$1 AND channel_id=$2 AND message_id=$3`,
+          [job.botAccountId, conversationChannel, `assistant:${job.sourceEventId}`, remoteMessageId],
+        );
+      }
+    });
   }
 
   async markFailed(job: Pick<KookOutboxJob, 'outboxId' | 'leaseToken'>, error: unknown): Promise<'retry' | 'dead'> {
@@ -344,15 +368,57 @@ export class KookMessageQueue {
       }
       if (job.targetKind === 'direct') {
         if (!sender.sendDirect) throw Object.assign(new Error('direct_sender_unavailable'), { code: 'direct_sender_unavailable' });
-        await sender.sendDirect(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        const remoteMessageId = await sender.sendDirect(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        await this.markSent(job, typeof remoteMessageId === 'string' ? remoteMessageId : undefined);
       } else {
-        await sender.send(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        const remoteMessageId = await sender.send(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        await this.markSent(job, typeof remoteMessageId === 'string' ? remoteMessageId : undefined);
       }
-      await this.markSent(job);
       return 'sent';
     } catch (error) {
-      return this.markFailed(job, error);
+      const outcome = await this.markFailed(job, error);
+      this.reportDeliveryFailure(job, error, outcome);
+      return outcome;
     }
+  }
+
+  private reportDeliveryFailure(job: KookOutboxJob, error: unknown, outcome: 'retry' | 'dead'): void {
+    if (!this.onDeliveryFailure) return;
+    const reason = safeErrorCode(error);
+    const channelId = job.channelId && /^[0-9]{1,40}$/u.test(job.channelId) ? job.channelId : undefined;
+    const key = `${reason}:${outcome}:${channelId ?? ''}`;
+    const now = Date.now();
+    let window = this.diagnosticWindows.get(key);
+    if (!window) {
+      if (this.diagnosticWindows.size >= 64) {
+        const oldest = this.diagnosticWindows.keys().next().value;
+        if (oldest !== undefined) this.diagnosticWindows.delete(oldest);
+      }
+      window = { loggedAt: now, suppressed: 0 };
+      this.diagnosticWindows.set(key, window);
+    } else if (now - window.loggedAt < 60_000) {
+      window.suppressed += 1;
+      return;
+    } else {
+      const count = window.suppressed + 1;
+      window.loggedAt = now;
+      window.suppressed = 0;
+      try {
+        this.onDeliveryFailure({
+          event: 'kook_outbox_delivery_failed', stage: 'outbox', outcome, reason,
+          requestKey: createHash('sha256').update(`${job.botAccountId}\0${job.sourceEventId ?? job.outboxId}`).digest('hex').slice(0, 16),
+          ...(channelId ? { channelId } : {}), count,
+        });
+      } catch { /* diagnostics must not change the durable delivery result */ }
+      return;
+    }
+    try {
+      this.onDeliveryFailure({
+        event: 'kook_outbox_delivery_failed', stage: 'outbox', outcome, reason,
+        requestKey: createHash('sha256').update(`${job.botAccountId}\0${job.sourceEventId ?? job.outboxId}`).digest('hex').slice(0, 16),
+        ...(channelId ? { channelId } : {}), count: 1,
+      });
+    } catch { /* diagnostics must not change the durable delivery result */ }
   }
 
   async pruneRetainedRecords(before: Date): Promise<{ inboxDeleted: number; outboxDeleted: number }> {

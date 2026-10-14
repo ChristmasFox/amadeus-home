@@ -1,15 +1,13 @@
-import type { KookGroupWriteIntentParserPort } from './kook-group-write-intent.js';
 import type { KookIngressDiscardLog, KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
 import type { TeamAdminService } from './team-admin-service.js';
 import type { PublicPubgPlayerResolverPort, ResolvedPubgPlayer } from '../infrastructure/pubg/player-resolver.js';
 import { parseKookManagementCommand } from '../channels/kook/management-command.js';
-import { KOOK_GROUP_WRITE_INTENT_LIMITS } from './kook-group-write-intent.js';
+import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 
 export interface KookGroupBindingServices {
   teams: TeamAdminService;
   players: PublicPubgPlayerResolverPort;
-  intents?: KookGroupWriteIntentParserPort | null;
   onDiagnostic?: (event: KookIngressDiscardLog) => void;
 }
 
@@ -19,6 +17,10 @@ function safeName(value: string): string {
 }
 function stripMentionMarkup(content: string): string {
   return content.replace(/<@!?[^>]{1,128}>/gu, ' ').replace(/\(met\)[^()\s]{1,128}\(met\)/gu, ' ').trim();
+}
+
+function literalAppears(messageText: string, value: string): boolean {
+  return messageText.normalize('NFKC').toLocaleLowerCase().includes(value.normalize('NFKC').toLocaleLowerCase());
 }
 
 const safeErrors: Record<string, string> = {
@@ -65,38 +67,9 @@ async function resolveAndClaim(
     : message(`已验证并绑定 PUBG 账号：${safeName(player.name)} → <@${targetUserId}>。再次声明即可更换。`);
 }
 
-/** All new bind/rename writes happen in the current group channel. The model
- * classifies only the constrained intent; KOOK actor/mention IDs and database
- * scope remain exclusively in trusted application code. */
+/** The deterministic legacy route remains available; ordinary natural
+ * messages are handled by the conversational agent and never classified here. */
 export function createKookGroupBindingHandler(services: KookGroupBindingServices): KookRequestHandler {
-  const diagnosticWindows = new Map<string, { loggedAt: number; suppressed: number }>();
-  function reportIntentDiagnostic(event: KookIngressDiscardLog): void {
-    const channelId = event.channelId && /^[0-9]{1,40}$/u.test(event.channelId) ? event.channelId : undefined;
-    const safeEvent: KookIngressDiscardLog = {
-      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: event.reason, count: event.count,
-      ...(channelId ? { channelId } : {}),
-    };
-    const key = `${safeEvent.reason}:${channelId ?? ''}`;
-    const now = Date.now();
-    let window = diagnosticWindows.get(key);
-    if (!window) {
-      if (diagnosticWindows.size >= 64) {
-        const oldest = diagnosticWindows.keys().next().value;
-        if (oldest !== undefined) diagnosticWindows.delete(oldest);
-      }
-      window = { loggedAt: now, suppressed: 0 };
-      diagnosticWindows.set(key, window);
-      try { services.onDiagnostic?.({ ...safeEvent, count: 1 }); } catch { /* logging cannot block a request */ }
-      return;
-    }
-    window.suppressed += 1;
-    if (now - window.loggedAt < 60_000) return;
-    const count = window.suppressed;
-    window.loggedAt = now;
-    window.suppressed = 0;
-    try { services.onDiagnostic?.({ ...safeEvent, count }); } catch { /* logging cannot block a request */ }
-  }
-
   async function handleLegacyGroupCommand(job: KookIngressJob, signal: AbortSignal): Promise<KookTextPayload | undefined> {
     if (job.request.kind !== 'group') return undefined;
     const event = job.request.event;
@@ -121,47 +94,60 @@ export function createKookGroupBindingHandler(services: KookGroupBindingServices
       }
       if (job.request.kind !== 'group') return undefined;
       const event = job.request.event;
-      const explicitLegacyCommand = /^(?:\/|!)pubg(?:\s|$)/iu.test(event.content.trim());
-      if (!services.intents) {
-        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_unavailable', count: 1, channelId: event.channelId });
-        return explicitLegacyCommand ? await handleLegacyGroupCommand(job, signal) : null;
-      }
-      const classifierInput = stripMentionMarkup(event.content);
-      const intent = classifierInput.length <= KOOK_GROUP_WRITE_INTENT_LIMITS.maxInputCharacters
-        ? await services.intents.parse(classifierInput, signal) : null;
-      if (!intent) {
-        const reason = classifierInput.length > KOOK_GROUP_WRITE_INTENT_LIMITS.maxInputCharacters
-          ? 'input_limit_exceeded' : 'model_no_valid_intent';
-        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason, count: 1, channelId: event.channelId });
-        // Only bounded, explicit legacy commands use deterministic parsing when
-        // the model is unavailable or returned no valid constrained intent.
-        return explicitLegacyCommand ? await handleLegacyGroupCommand(job, signal) : null;
-      }
-      if (intent.action === 'unsupported') {
-        reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_intent_unsupported', count: 1, channelId: event.channelId });
-        return null;
-      }
-      if (intent.action === 'query_stats') return undefined;
-      if (intent.action === 'legacy_command') {
-        if (!explicitLegacyCommand) {
-          reportIntentDiagnostic({ event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'legacy_command_prefix_missing', count: 1, channelId: event.channelId });
-          return null;
-        }
-        return await handleLegacyGroupCommand(job, signal);
-      }
-      if (intent.action === 'rename_team') {
-        if (!job.boundTeam) return message('当前频道尚未绑定服务器队伍。');
-        await services.teams.renameBoundTeam(event, job.boundTeam, intent.teamName);
-        return message(`队名已改为：${safeName(intent.teamName)}`);
-      }
-      const mentioned = event.mentionedUserIds.filter(userId => userId !== event.botAccountId);
-      if (intent.target === 'self') return await resolveAndClaim(job, services, event.userId, 'steam', intent.pubgName, signal);
-      if (mentioned.length !== 1) return message('代绑时请只 @ 一位当前频道成员。');
-      return await resolveAndClaim(job, services, mentioned[0]!, 'steam', intent.pubgName, signal);
+      if (!/^(?:\/|!)pubg\s+me(?:\s|$)|^(?:\/|!)pubg\s+claim(?:\s|$)/iu.test(event.content.trim())) return undefined;
+      return await handleLegacyGroupCommand(job, signal);
     } catch (error) {
       const safe = error instanceof Error ? safeErrors[error.message] : undefined;
       if (safe) return message(safe);
       throw error;
     }
   };
+}
+
+export type KookNaturalWriteIntent =
+  | { kind: 'declare_pubg_account'; target: 'self' | 'mentioned_member'; pubgName: string }
+  | { kind: 'rename_team'; teamName: string };
+
+/** Executes only a literal, model-selected write slot. Actor, mention IDs,
+ * guild/channel scope, admin status and current membership all come from the
+ * trusted event and TeamAdminService; this function has no model access. */
+export async function executeKookNaturalWrite(
+  job: KookIngressJob,
+  services: KookGroupBindingServices,
+  intent: KookNaturalWriteIntent,
+  signal: AbortSignal,
+): Promise<{ outcome: 'completed' | 'rejected'; message: string }> {
+  if (job.request.kind !== 'group' || !job.boundTeam) {
+    return { outcome: 'rejected', message: '当前频道还没有可用的 PUBG 小队。普通聊天可以继续；要查询或绑定 PUBG 数据，请先在服务器创建队伍。' };
+  }
+  const event = job.request.event;
+  const normalized = stripMentionMarkup(event.content);
+  if (intent.kind === 'rename_team') {
+    if (!intent.teamName.trim() || intent.teamName.length > 80 || !literalAppears(normalized, intent.teamName)) {
+      return { outcome: 'rejected', message: '我没能确认你要设置的完整队名，请直接写出新的队名。' };
+    }
+    try {
+      await services.teams.renameBoundTeam(event, job.boundTeam, intent.teamName);
+      return { outcome: 'completed', message: `队名已改为：${safeName(intent.teamName)}` };
+    } catch (error) {
+      const safe = error instanceof Error ? safeErrors[error.message] : undefined;
+      return { outcome: 'rejected', message: safe ?? '这次队名修改没有完成，请稍后重试。' };
+    }
+  }
+  if (!intent.pubgName.trim() || intent.pubgName.length > 100 || !literalAppears(normalized, intent.pubgName)) {
+    return { outcome: 'rejected', message: '我没能确认 PUBG 游戏名，请在消息里完整写出账号名。' };
+  }
+  const mentioned = event.mentionedUserIds.filter(userId => userId !== event.botAccountId);
+  const targetUserId = intent.target === 'self' ? event.userId : mentioned.length === 1 ? mentioned[0]! : null;
+  if (!targetUserId) return { outcome: 'rejected', message: '代绑时请只 @ 一位当前频道成员。' };
+  try {
+    const payload = await resolveAndClaim(job, services, targetUserId, 'steam', intent.pubgName, signal);
+    return {
+      outcome: payload.content === '查不到该 PUBG 账号' ? 'rejected' : 'completed',
+      message: sanitizeKookMentionMarkup(payload.content),
+    };
+  } catch (error) {
+    const safe = error instanceof Error ? safeErrors[error.message] : undefined;
+    return { outcome: 'rejected', message: safe ?? '账号绑定没有完成，请稍后重试。' };
+  }
 }

@@ -8,6 +8,7 @@ const basePlan: QueryPlan = {
   actorName: null,
   victimName: null,
   metric: 'kills',
+  meleeKind: null,
   period: 'today',
   comparePeriod: null,
   matchCount: null,

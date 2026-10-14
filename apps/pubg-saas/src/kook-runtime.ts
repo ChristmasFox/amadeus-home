@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { KookIngressQueue, type KookGuildJoinProvisioner, type KookGroupChannelProvisioner, type KookIngressDiscardLog, type KookIngressQueueOptions, type KookRequestHandler } from './application/kook-ingress-queue.js';
-import { KookMessageQueue } from './application/kook-message-queue.js';
+import { KookMessageQueue, type KookOutboxFailureDiagnostic } from './application/kook-message-queue.js';
 import { createNodeWebSocketFactory, KookGatewayApiClient, KookGatewayClient, PostgresKookGatewayStateStore, type KookGatewaySocketFactory } from './channels/kook/gateway.js';
 import { KookMessageApiClient } from './channels/kook/message-client.js';
 import {KookGuildWelcomeApiClient} from './channels/kook/guild-welcome.js';
@@ -20,6 +20,7 @@ export interface KookApplicationRuntimeOptions {
   maintenance?: () => Promise<void>;
   onError?: (code: string) => void;
   onDiagnostic?: (event: KookIngressDiscardLog) => void;
+  onOutboxDiagnostic?: (event: KookOutboxFailureDiagnostic) => void;
 }
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted)
@@ -54,7 +55,10 @@ export class KookApplicationRuntime {
       botAccountId: options.botAccountId,
       ...(options.onDiagnostic ? { onDiscard: options.onDiagnostic } : {}),
     });
-    this.outbox = new KookMessageQueue(options.pool, { botAccountId: options.botAccountId });
+    this.outbox = new KookMessageQueue(options.pool, {
+      botAccountId: options.botAccountId,
+      ...(options.onOutboxDiagnostic ? { onDeliveryFailure: options.onOutboxDiagnostic } : {}),
+    });
     const dailyBudget = new PostgresKookDailyMessageBudget(options.pool, options.botAccountId, options.dailyMessageBudget);
     this.sender = new KookMessageApiClient({ token: options.token, dailyBudget, ...(options.fetcher ? { fetcher: options.fetcher } : {}) });
     this.welcome=new KookGuildWelcomeApiClient({token:options.token,botAccountId:options.botAccountId,...(options.fetcher?{fetcher:options.fetcher}:{})});

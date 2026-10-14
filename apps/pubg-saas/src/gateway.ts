@@ -2,9 +2,9 @@ import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { AccountClaimService } from './application/account-claim-service.js';
 import { createKookManagementHandler } from './application/kook-management-handler.js';
-import { createKookGroupBindingHandler } from './application/kook-group-binding-handler.js';
+import { createKookGroupBindingHandler, executeKookNaturalWrite } from './application/kook-group-binding-handler.js';
 import { composeKookRequestHandlers, createKookPublicQueryHandler } from './application/kook-public-query-handler.js';
-import { createPublicGroupWriteIntentParser, createPublicQueryPlanner } from './infrastructure/ai/public-model.js';
+import { createPublicAgentModel } from './infrastructure/ai/public-model.js';
 import { PublicQueryAuthorizer } from './application/public-query-authorizer.js';
 import { TeamAdminService } from './application/team-admin-service.js';
 import { KookPermissionClient } from './channels/kook/permission-client.js';
@@ -41,14 +41,14 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   }
   if (!['postgres:', 'postgresql:'].includes(parsed.protocol))
     throw new Error('pubg_saas_database_url_invalid');
-  const planner = createPublicQueryPlanner(env);
+  const agent = createPublicAgentModel(env);
   const pool = new Pool({ connectionString: databaseUrl, max: 8, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 5000 });
   const stop = new AbortController();
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0016_agent_authorization_outcomes.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const permissions = new KookPermissionClient({ token });
@@ -59,12 +59,20 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     if (playerResolver.synthetic) process.stdout.write('PUBG_SAAS_PLAYER_LOOKUP=synthetic-acceptance-fixtures; no PUBG API requests will be made.\n');
     const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
-    const writeIntents = createPublicGroupWriteIntentParser(env);
     const onDiagnostic = (event: import('./application/kook-ingress-queue.js').KookIngressDiscardLog) =>
       process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`);
+    const onAgentDiagnostic = (event: import('./application/kook-public-query-handler.js').KookAgentDiagnostic) =>
+      process.stderr.write(`${JSON.stringify({ component: 'kook-agent', ...event })}\n`);
+    const onOutboxDiagnostic = (event: import('./application/kook-message-queue.js').KookOutboxFailureDiagnostic) =>
+      process.stderr.write(`${JSON.stringify({ component: 'kook-outbox', ...event })}\n`);
+    const bindingServices = { teams, players, onDiagnostic };
     const handler = composeKookRequestHandlers(
-      createKookGroupBindingHandler({ teams, players, ...(writeIntents ? { intents: writeIntents.parser } : {}), onDiagnostic }),
-      createKookPublicQueryHandler({ authorizer, claims, planner }),
+      createKookGroupBindingHandler(bindingServices),
+      createKookPublicQueryHandler({
+        authorizer, claims, agent,
+        executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
+        onAgentDiagnostic,
+      }),
       createKookManagementHandler({ teams, claims, players }),
     );
     const userRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE');
@@ -80,7 +88,9 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     };
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler, ingressLimits, dailyMessageBudget,
-      groupChannelProvisioner: async (event) => teams.ensureGroupChannel(event, await permissions.getGuildName(event.guildId)),
+      // A normal message in an unbound channel must still reach the chat agent.
+      // Team provisioning happens on the trusted guild-join flow or explicit
+      // management command, and PUBG tools remain unavailable until bound.
       guildJoinProvisioner: async (event, target) => {
         await teams.provisionFromGuildJoin(event, target);
         const name = target.guildName.replace(/@/gu, '＠');
@@ -89,6 +99,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       maintenance: () => authorizer.prune(),
       onError: code => process.stderr.write(`${JSON.stringify({ component: 'kook-runtime', event: 'error', code })}\n`),
       onDiagnostic,
+      onOutboxDiagnostic,
     });
     await runtime.run(stop.signal);
   }

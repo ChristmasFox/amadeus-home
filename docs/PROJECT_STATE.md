@@ -1,43 +1,37 @@
 # Project State — 2026-10-14
 
-## 2026-10-14 — Model-routed KOOK group messages deployed
+## 2026-10-14 — Public conversational Agent source correction (not deployed)
 
-Source commit `da03953` removes `message-relevance.ts` and the matching gate in
-`request-event.ts`. Every trusted, bounded, non-bot text group message now
-enters durable ingress; current database per-user/channel/tenant/bot limits
-run before intent classification. A strict AI SDK tool schema allows only
-account declaration, team rename, stats query, legacy command, or unsupported.
-Unsupported intent completes silently. Model-generated names must occur
-literally in the message; actor, tenant, channel, authority and delegated
-recipient IDs remain application-owned, with delegated target sourced only
-from validated KOOK mentions. Fresh admin/member checks and real PUBG lookup
-before persistence remain unchanged. `/pubg` commands use deterministic
-parsing only as a failure fallback when classification returns no valid intent.
-Classifier input/output caps are 800 characters/100 tokens. Bounded structured
-logs record trusted/admission/processing drops and model silence reasons without
-message contents, user IDs, or secrets. Each reason/channel is log-throttled.
+The active source removes `KookGroupWriteIntentParser` from the ordinary
+message path and runs every trusted human group message through a bounded
+Vercel AI SDK `ToolLoopAgent`. The model can answer directly, or call several
+tools in one turn. Existing `QueryPlanSchema`, authorization services and the
+shared PUBG Domain executor remain in use; each tool call revalidates the live
+ingress lease, actor, tenant/team binding, roster and channel membership.
+Follow-up query state remains scoped to the current actor. A new
+`meleeKind=KICK|PUNCH|OTHER` query slot reaches the existing Domain telemetry
+filter.
 
-The KOOK text channels `6115211415447433` and `6521538183595713` are covered by
-trusted-event tests. PostgreSQL integration proves ordinary chatter reaches the
-classifier and unsupported intent enqueues no reply; prior binding tests still
-cover validated self claims, admin delegation, actual player lookup, conflicts,
-membership and cross-tenant isolation. SaaS/PostgreSQL passed 121/121, private
-Kurisu regression 68/68, SaaS typecheck and architecture check passed, and
-secrets/diff checks passed. OCI Buildx verified both platforms at manifest
-`sha256:51e8d08f30e184c6eae5bb045cbf308704434d2c46473f5575f679fd10d85d70`.
+Migration `0015` adds channel/actor-scoped recent conversation storage with
+speaker and reply links (12-hour retention), plus minimal Agent run status.
+Migration `0016` records authorization denials distinctly. KOOK mention IDs
+are replaced with `@成员` before model input, history persistence, and
+model-facing write-tool results; write authorization continues to use only the
+trusted mention metadata inside the server. Provider errors, Domain tool
+errors, authorization denials, and KOOK outbox quota/send failures have
+separate status and safe diagnostics. Daily budget exhaustion keeps its
+durable deferred outbox row.
 
-On `pubg-saas-m2-clean`, only Gateway (`d153f94c8269`) and Worker
-(`7c0737c9dfa4`) were recreated from
-`local/pubg-saas:git-da039536d2f7c37d47995282e8a001cacf0897c2`; both restart
-counts are 0 and Worker is healthy. Gateway has no Docker healthcheck, but is
-running and its persisted KOOK session is connected (`last_sn=27`, updated
-`2026-10-14T05:01:34.691Z`). PostgreSQL (`e47fd49fcab5`), egress-proxy
-(`c5cd33cba219`) and 9Router (`2ce598008143`) retained their IDs. The stack
-`.env` remains mode 0600. No live message, PUBG request or model call was sent;
-Arthur's manual P3 test is next. The two temporary planner PG containers were
-removed earlier without volume deletion. No private OpenClaw/9Router action,
-image push or production deployment occurred. Evidence:
-`.agent/checkpoints/2026-10-14-pubg-saas-model-intent-router-live.md`.
+Validation passed: SaaS/PostgreSQL 126/126, private PUBG/Kurisu regression
+68/68, SaaS typecheck, and SaaS package build. Tests cover unbound ordinary
+chat replies, direct and multi-step Agent behavior, quote/history handling,
+speaker separation, tool/domain data, kick filtering, authorization denial,
+provider/tool fallbacks, mention-ID redaction and outbox daily-budget logging.
+No load/scale benchmark, Docker image build, deployment, or live KOOK request
+was run. M204 remains on the previously recorded `da03953` gateway/worker
+image; Arthur's real KOOK test-server experience is still required. M2 is not
+complete. Evidence and reproduction:
+`.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
 
 ## 2026-10-14 — Group-only account binding deployed to isolated SaaS
 

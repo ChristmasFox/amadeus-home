@@ -31,6 +31,7 @@ const validPlan: QueryPlan = {
   actorName: null,
   victimName: null,
   metric: 'teammate_damage',
+  meleeKind: null,
   period: 'yesterday',
   comparePeriod: null,
   matchCount: null,

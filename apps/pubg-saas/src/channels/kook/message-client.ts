@@ -59,11 +59,11 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     this.dailyBudget = options.dailyBudget;
   }
 
-  async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
+  async send(channelIdInput: string, payload: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<string | void> {
     return this.sendTo('message', channelIdInput, payload, nonceInput, replyToMessageId);
   }
 
-  async sendDirect(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<void> {
+  async sendDirect(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<string | void> {
     return this.sendTo('direct-message', userId, payload, nonce, replyToMessageId);
   }
 
@@ -71,7 +71,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     await this.dailyBudget?.prune();
   }
 
-  private async sendTo(kind: 'message' | 'direct-message', targetIdInput: string, payloadInput: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<void> {
+  private async sendTo(kind: 'message' | 'direct-message', targetIdInput: string, payloadInput: KookTextPayload, nonceInput: string, replyToMessageId?: string | null): Promise<string | void> {
     const route = `/api/v3/${kind}/create`;
     const targetId = requiredText(targetIdInput, 'target_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
@@ -122,13 +122,18 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     }
     let result: unknown;
     try { result = await response.json(); } catch { throw codedError('kook_message_response_invalid'); }
-    try { parseEnvelope(result); }
+    let envelope: KookApiEnvelope;
+    try { envelope = parseEnvelope(result); }
     catch (error) {
       if (error && typeof error === 'object' && 'code' in error && error.code === 'kook_message_api_rejected')
         if (budgetReservationId) await this.releaseKnownFailure(budgetReservationId);
       throw error;
     }
     if (budgetReservationId) await this.dailyBudget!.markSent(budgetReservationId);
+    if (envelope.data && typeof envelope.data === 'object' && !Array.isArray(envelope.data)) {
+      const messageId = (envelope.data as Record<string, unknown>).msg_id;
+      if (typeof messageId === 'string' && /^[^\u0000-\u001f]{1,256}$/u.test(messageId)) return messageId;
+    }
   }
 
   private async releaseKnownFailure(reservationId: string): Promise<void> {

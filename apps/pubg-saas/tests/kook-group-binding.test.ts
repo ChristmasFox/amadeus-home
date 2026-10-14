@@ -4,13 +4,13 @@ import test from 'node:test';
 import { Pool } from 'pg';
 import {
   createKookGroupBindingHandler,
+  executeKookNaturalWrite,
   KookGuildWelcomeApiClient,
   KookIngressQueue,
   migratePublicDatabase,
   parseTrustedKookGuildJoin,
   PublicPubgPlayerResolver,
   TeamAdminService,
-  type KookGroupWriteIntent,
 } from '../src/index.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
@@ -41,8 +41,6 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
   ]);
   const admins = new Set([`${guildA}:${admin}`]);
   let lookupCalls = 0;
-  const promptInputs: string[] = [];
-  const intentDiagnostics: unknown[] = [];
   const playerResolver = new PublicPubgPlayerResolver({
     apiKey: 'synthetic-test-only',
     admission: { async acquire() {}, async observe() {} },
@@ -58,19 +56,26 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     async isGuildAdmin(guildId, userId) { return admins.has(`${guildId}:${userId}`); },
     async isTextChannelMember(guildId, channelId, userId) { return members.has(`${guildId}:${channelId}:${userId}`); },
   });
-  const intents = {
-    async parse(message: string): Promise<KookGroupWriteIntent | null> {
-      promptInputs.push(message);
-      if (message.includes('Fallback')) return null;
-      if (/^(?:\/|!)pubg(?:\s|$)/iu.test(message.trim())) return { action: 'legacy_command' };
-      if (message.includes('队名')) return { action: 'rename_team', teamName: '夜猫小队' };
-      if (message.includes('他的')) return { action: 'declare_pubg_account', target: 'mentioned_member', pubgName: 'Charlie' };
-      if (message.includes('Echo')) return { action: 'declare_pubg_account', target: 'self', pubgName: 'Echo' };
-      if (message.includes('PUBG 账号')) return { action: 'declare_pubg_account', target: 'self', pubgName: 'Alpha' };
-      return { action: 'unsupported' };
-    },
+  const bindingServices = { teams, players: playerResolver };
+  const legacyHandler = createKookGroupBindingHandler(bindingServices);
+  // This test adapter simulates the AI SDK selecting the restricted write
+  // tool. Production does not inspect phrases or classify messages here.
+  const handler = async (job: Parameters<typeof legacyHandler>[0], signal: AbortSignal) => {
+    const legacy = await legacyHandler(job, signal);
+    if (legacy !== undefined) return legacy;
+    if (job.request.kind !== 'group') return null;
+    const content = job.request.event.content;
+    const self = /^我的 PUBG 账号是\s+(.+)$/u.exec(content);
+    if (self) return { type: 'text' as const, content: (await executeKookNaturalWrite(job, bindingServices,
+      { kind: 'declare_pubg_account', target: 'self', pubgName: self[1]! }, signal)).message };
+    const delegatedMarker = '他的 PUBG 账号是';
+    if (content.includes(delegatedMarker)) return { type: 'text' as const, content: (await executeKookNaturalWrite(job, bindingServices,
+      { kind: 'declare_pubg_account', target: 'mentioned_member', pubgName: content.slice(content.indexOf(delegatedMarker) + delegatedMarker.length).trim() }, signal)).message };
+    const rename = /^我们的队名是\s+(.+)$/u.exec(content);
+    if (rename) return { type: 'text' as const, content: (await executeKookNaturalWrite(job, bindingServices,
+      { kind: 'rename_team', teamName: rename[1]! }, signal)).message };
+    return null;
   };
-  const handler = createKookGroupBindingHandler({ teams, players: playerResolver, intents, onDiagnostic: event => intentDiagnostics.push(event) });
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot, maxRequestsPerUserPerMinute: 100, maxRequestsPerChannelPerMinute: 300,
     maxRequestsPerTenantPerMinute: 500, maxRequestsPerBotPerMinute: 1000,
@@ -140,21 +145,14 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
 
     const unrelated = group(guildA, channelA, actor, '今晚的比赛几点开始？');
     assert.equal(await queue.ingestGatewayEvent(unrelated), 'accepted');
-    assert.equal(await queue.processOne(handler, signal, undefined, provision), 'done');
-    assert.equal((await pool.query('SELECT 1 FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, unrelated.msg_id])).rowCount, 0);
-    assert.equal(promptInputs.at(-1), '今晚的比赛几点开始？', 'ordinary group messages must be classified by the model');
-    assert.deepEqual(intentDiagnostics.at(-1), {
-      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_intent_unsupported', count: 1,
-    });
-    assert.equal(JSON.stringify(intentDiagnostics).includes('今晚的比赛'), false, 'diagnostics must exclude message contents');
+    assert.equal(await queue.processOne(legacyHandler, signal, undefined, provision), 'done');
+    assert.equal((await pool.query('SELECT 1 FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, unrelated.msg_id])).rowCount, 0,
+      'the deterministic binding handler leaves ordinary chat to the Agent route');
 
     const first = await send(group(guildA, channelA, actor, '/pubg me Alpha'));
     assert.match(first.content, /已验证并绑定 PUBG 账号：Alpha/u);
     const modelUnavailableCommand = await send(group(guildA, channelA, fallbackActor, '/pubg me Fallback'));
     assert.match(modelUnavailableCommand.content, /Fallback/u);
-    assert.deepEqual(intentDiagnostics.at(-1), {
-      event: 'kook_ingress_discarded', stage: 'intent_classifier', reason: 'model_no_valid_intent', count: 1,
-    });
     assert.deepEqual((await pool.query(
       'SELECT pubg_shard,pubg_account_id,claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actor],
     )).rows[0], { pubg_shard: 'steam', pubg_account_id: `account.alpha_${suffix}`, claim_status: 'verified' });
@@ -187,9 +185,9 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
 
     const delegated = await send(group(guildA, channelA, admin, `<@${target}> 他的 PUBG 账号是 Charlie`, [target]));
     assert.match(delegated.content, /Charlie/u);
-    assert.match(delegated.content, new RegExp(target, 'u'));
+    assert.match(delegated.content, /@成员/u);
+    assert.doesNotMatch(delegated.content, new RegExp(target, 'u'), 'KOOK mention IDs stay outside model-facing tool results');
     assert.equal((await pool.query('SELECT pubg_account_id,claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, target])).rows[0]?.pubg_account_id, `account.charlie_${suffix}`);
-    assert.equal(promptInputs.at(-1)?.includes(target), false, 'KOOK mention IDs must not enter the model prompt');
 
     const beforeDeniedLookup = lookupCalls;
     const deniedDelegate = await send(group(guildA, channelA, regular, `<@${stranger}> 他的 PUBG 账号是 Charlie`, [stranger]));
@@ -240,6 +238,8 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     assert.match(String(privateReply.content), /群聊中发送/u);
     assert.equal((await pool.query('SELECT pubg_account_id FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actor])).rows[0]?.pubg_account_id, `account.bravo_${suffix}`);
   } finally {
+    await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM account_claims WHERE bot_account_id=$1', [bot]);

@@ -2,41 +2,39 @@
 
 Date: 2026-10-14 (Asia/Shanghai).
 
-## Latest explicit runtime authorization — 2026-10-14
+## Active task — public conversational Agent correction (2026-10-14)
 
-Source commit `da03953` removes the fixed-phrase/keyword gate from KOOK group
-ingress. Every schema-validated, non-bot text message is durably admitted under
-the existing per-user/channel/tenant/bot request limits and passed to a forced
-structured model classifier. Its finite actions are self/admin-delegated PUBG
-account declaration, team rename, stats query, legacy command, or unsupported
-(silent). Application code still owns validated KOOK mention IDs, live admin
-and membership checks, real PUBG lookup before account writes, tenant scope,
-query authorization, loop prevention and reply destination. Names must appear
-literally in the message; the model cannot produce identities. Only explicit
-legacy commands use deterministic parsing when the classifier is unavailable
-or returns no valid intent. Input is capped at 800 characters and generated
-output at 100 tokens. Drop and silent outcomes emit rate-limited structured
-reasons without message text, user IDs or secrets. Historical group payloads
-were not retained, so the exact per-message reason from the earlier incident
-cannot be reconstructed.
+The current source replaces the forced intent classifier on the ordinary
+message path with a bounded Vercel AI SDK `ToolLoopAgent`. Every trusted human
+group message reaches the model even when it is ordinary chat or the channel
+has no bound team; explicit `/pubg` operations remain deterministic. The Agent
+can reply directly or call the existing authorized PUBG Domain executor and
+continue with a natural-language answer. Query slots now include kick/punch
+melee filters. Channel history is limited to 12 recent turns and 6,000
+characters for 12 hours, quote links are resolved only within that channel,
+and individual query sessions remain actor-scoped. KOOK mention IDs are
+redacted from model input, stored context and model-facing tool results; trusted
+mention IDs remain available to server-side authorization only.
 
-KOOK lists old channel `6115211415447433` and new channel `6521538183595713` as
-text channels. Trusted-message tests exercise both IDs; PostgreSQL integration
-proves arbitrary chatter reaches the classifier and unsupported intent creates
-no reply, while old commands, self/admin binding and permissions remain
-covered. SaaS/PostgreSQL passes 121/121; private Kurisu passes 68/68; SaaS
-typecheck, architecture, secrets and diff checks pass. Local Buildx verified
-`linux/amd64` + `linux/arm64`, manifest
-`sha256:51e8d08f30e184c6eae5bb045cbf308704434d2c46473f5575f679fd10d85d70`.
-Only Gateway/Worker were recreated from
-`local/pubg-saas:git-da039536d2f7c37d47995282e8a001cacf0897c2`. Gateway is
-running with restart count 0 (the image has no Docker healthcheck); Worker is
-healthy with restart count 0. Persisted KOOK state is connected (`last_sn=27`,
-updated `2026-10-14T05:01:34.691Z`). PostgreSQL, egress-proxy and isolated
-9Router IDs are unchanged. The two named planner rehearsal PG containers were
-removed without deleting volumes. No real group message, PUBG request or model
-call was sent; Arthur's manual acceptance is next. Evidence and reproduction:
-`.agent/checkpoints/2026-10-14-pubg-saas-model-intent-router-live.md`.
+Provider failures, Domain tool failures, authorization denials and outbox quota
+or send failures each have distinct safe status/diagnostic paths. The local
+PostgreSQL schema adds migrations `0015` and `0016`. Validation passed:
+SaaS/PostgreSQL 126/126, PUBG/Kurisu regression 68/68, SaaS typecheck and
+package build. No Docker image was built and no runtime was replaced. M204
+continues to run the previously recorded `da03953` gateway/worker image.
+Arthur's real KOOK test-server experience remains required; M2 is not complete.
+
+This task's current source checkpoint and repro details:
+`.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
+
+## Previous public runtime authorization — 2026-10-14
+
+The prior image and test evidence remain historical. Source commit `da03953`
+is still the deployed image on M204 until a separately authorized replacement.
+Its forced classifier can silently complete an unsupported message; this is
+the behavior the active source correction replaces. Existing deployment scope
+remains limited to the named M204 public stack's gateway and worker. No private
+OpenClaw/Kurisu, private 9Router, or production resource may be changed.
 
 ## Operator-selected source implementation Goal — 2026-10-13
 

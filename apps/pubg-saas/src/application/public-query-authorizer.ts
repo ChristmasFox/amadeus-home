@@ -13,6 +13,20 @@ export interface PublicQueryPermissionChecker {
 }
 export interface PublicQueryTeamSelection { tenantId: string; teamId: string }
 export interface PublicQueryTeamChoice extends PublicQueryTeamSelection { label: string; pubgShard: string }
+export interface KookAgentConversationTurn { role: 'user' | 'assistant'; content: string }
+export interface KookAgentConversationWindow {
+  turns: KookAgentConversationTurn[];
+  currentSpeakerLabel: string;
+  currentQuoteContext: string | null;
+}
+export interface KookAgentRunRecord {
+  modelId: string | null;
+  outcome: 'replied' | 'authorization_denied' | 'provider_fallback' | 'tool_degraded' | 'model_unconfigured';
+  failureCode: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+}
 export interface PublicQueryAuthorizerOptions {
   botAccountId: string;
   sessionTtlMs?: number;
@@ -190,6 +204,78 @@ export class PublicQueryAuthorizer {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
     } finally { client.release(); }
+  }
+
+  /** Returns a small, speaker-labeled window from this trusted channel/DM.
+   * IDs stay in PostgreSQL and are used only to resolve quoted-message links. */
+  async loadAgentConversation(jobInput: KookIngressJob, limit = 12): Promise<KookAgentConversationWindow> {
+    const job = await this.storedJob(this.pool, jobInput);
+    if (job.request.kind !== 'group' && job.request.kind !== 'direct') return { turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null };
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('public_agent_history_limit_invalid');
+    const userId = job.request.event.userId;
+    const channelId = job.request.kind === 'group' ? job.request.event.channelId : `dm:${this.botId}:${userId}`;
+    const result = await this.pool.query(
+      `SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content
+       FROM kook_conversation_messages
+       WHERE bot_account_id=$1 AND channel_id=$2 AND expires_at>now() AND message_id<>$3
+       ORDER BY created_at DESC,message_id DESC LIMIT $4`,
+      [this.botId, channelId, job.eventId, limit],
+    );
+    const rows = result.rows.reverse().map(row => ({
+      messageId: String(row.message_id),
+      kind: row.speaker_kind === 'assistant' ? 'assistant' as const : 'human' as const,
+      speakerId: String(row.speaker_id),
+      replyTo: typeof row.reply_to_message_id === 'string' ? row.reply_to_message_id : null,
+      content: String(row.content).slice(0, 1600),
+    }));
+    const labels = new Map<string, string>([[this.botId, '助手'], [userId, '成员1']]);
+    let nextLabel = 2;
+    const labelFor = (speakerId: string) => {
+      if (speakerId === this.botId) return '助手';
+      let label = labels.get(speakerId);
+      if (!label) { label = `成员${nextLabel++}`; labels.set(speakerId, label); }
+      return label;
+    };
+    const byId = new Map(rows.map(row => [row.messageId, row]));
+    const currentQuoteId = job.request.kind === 'group' ? job.request.event.quotedMessageId : null;
+    const currentQuote = currentQuoteId ? byId.get(currentQuoteId) : undefined;
+    const currentQuoteContext = currentQuote
+      ? `当前消息引用了${labelFor(currentQuote.speakerId)}：“${currentQuote.content.slice(0, 240)}”`
+      : null;
+    let totalCharacters = 0;
+    const turns: KookAgentConversationTurn[] = [];
+    for (const row of rows) {
+      const target = row.replyTo ? byId.get(row.replyTo) : undefined;
+      const relation = target
+        ? `（回复${labelFor(target.speakerId)}：“${target.content.slice(0, 240)}”）`
+        : '';
+      const content = row.kind === 'human'
+        ? `[${labelFor(row.speakerId)}] ${relation}${row.content}`
+        : `${row.replyTo && target ? `[回复${labelFor(target.speakerId)}] ` : ''}${row.content}`;
+      if (totalCharacters + content.length > 6000) break;
+      turns.push({ role: row.kind === 'assistant' ? 'assistant' : 'user', content });
+      totalCharacters += content.length;
+    }
+    return { turns, currentSpeakerLabel: '成员1', currentQuoteContext };
+  }
+
+  /** Stores only outcome, model identifier, token totals and trusted actor scope.
+   * No prompt, completion, tool input, or raw provider error is retained. */
+  async recordAgentRun(jobInput: KookIngressJob, record: KookAgentRunRecord): Promise<void> {
+    const job = await this.storedJob(this.pool, jobInput);
+    if (job.request.kind !== 'group' && job.request.kind !== 'direct') throw new Error('public_agent_message_required');
+    if (record.failureCode !== null && !/^[a-z0-9_]{1,64}$/u.test(record.failureCode)) throw new Error('public_agent_failure_code_invalid');
+    await this.pool.query(
+      `INSERT INTO kook_agent_runs(bot_account_id,event_id,user_id,channel_id,model_id,outcome,failure_code,
+        input_tokens,output_tokens,total_tokens,expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+interval '30 days')
+       ON CONFLICT (bot_account_id,event_id) DO UPDATE SET model_id=EXCLUDED.model_id,outcome=EXCLUDED.outcome,
+        failure_code=EXCLUDED.failure_code,input_tokens=EXCLUDED.input_tokens,output_tokens=EXCLUDED.output_tokens,
+        total_tokens=EXCLUDED.total_tokens,expires_at=EXCLUDED.expires_at`,
+      [this.botId, job.eventId, job.request.event.userId,
+        job.request.kind === 'group' ? job.request.event.channelId : `dm:${this.botId}:${job.request.event.userId}`,
+        record.modelId, record.outcome, record.failureCode, record.inputTokens, record.outputTokens, record.totalTokens],
+    );
   }
 
   /** Removes expired metadata and unreachable result/context rows, scoped to

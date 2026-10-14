@@ -4,6 +4,7 @@ import { inspectKookRequest, parseKookRequest, type KookRequestEvent } from '../
 import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
 import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import type { TrustedKookGuildJoin } from '../channels/kook/guild-welcome.js';
 export interface KookIngressJob {
   botAccountId: string;
@@ -34,7 +35,7 @@ export interface KookIngressQueueOptions {
 }
 export interface KookIngressDiscardLog {
   event: 'kook_ingress_discarded';
-  stage: 'trusted_group' | 'freshness' | 'admission' | 'processing' | 'intent_classifier';
+  stage: 'trusted_group' | 'freshness' | 'admission' | 'processing';
   reason: string;
   count: number;
   channelId?: string;
@@ -71,7 +72,7 @@ const SAFE_PROCESSING_DIAGNOSTIC_REASONS = new Set([
   'kook_ingress_binding_changed', 'kook_welcome_target_invalid', 'kook_welcome_channel_unconfigured',
   'kook_channel_member_required', 'kook_target_channel_member_required', 'guild_team_ambiguous',
 ]);
-/** The sole durable gateway ingress. It stages every trusted non-bot group
+/** The sole durable gateway ingress. It stages every trusted non-bot human
  * message after durable admission limits, pins any existing team binding, and
  * atomically commits a reply or intentional silence plus completion.
  * Business handlers must make their own state changes idempotent across retries. */
@@ -189,6 +190,18 @@ export class KookIngressQueue {
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'),$15)`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
         binding?.rows[0]?.tenant_id ?? null, binding?.rows[0]?.team_id ?? null, parsed.targetKind, parsed.targetId,
         parsed.replyToMessageId, fingerprint, serialized, this.ttlMs, parsed.request.kind === 'group' ? String(version?.rows[0]?.revision ?? 0) : null]);
+        if (parsed.request.kind === 'group' || parsed.request.kind === 'direct') {
+          const request = parsed.request.event;
+          const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
+          await client.query(`INSERT INTO kook_conversation_messages(
+              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
+            ) VALUES ($1,$2,$3,'human',$4,$3,$5,$6,now()+interval '12 hours')
+            ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
+            this.botId, conversationChannelId, parsed.eventId, parsed.userId,
+            parsed.request.kind === 'group' ? parsed.request.event.quotedMessageId : null,
+            sanitizeKookMentionMarkup(request.content).slice(0, 1600),
+          ]);
+        }
         return 'accepted';
       });
     } catch (error) {
@@ -209,8 +222,10 @@ export class KookIngressQueue {
            AND (current.status<>'processing' OR current.lease_until<=now())
            AND NOT EXISTS (
              SELECT 1 FROM kook_ingress_events earlier WHERE earlier.bot_account_id=current.bot_account_id
-               AND earlier.user_id=current.user_id AND earlier.channel_id IS NOT DISTINCT FROM current.channel_id
-               AND earlier.guild_id IS NOT DISTINCT FROM current.guild_id
+               AND ((current.channel_id IS NOT NULL AND earlier.channel_id=current.channel_id
+                   AND earlier.guild_id IS NOT DISTINCT FROM current.guild_id)
+                 OR (current.channel_id IS NULL AND earlier.user_id=current.user_id
+                   AND earlier.guild_id IS NOT DISTINCT FROM current.guild_id))
                AND earlier.status IN ('pending','processing','retry') AND earlier.expires_at>now()
                AND (earlier.received_at,earlier.event_id)<(current.received_at,current.event_id)
            )
@@ -321,6 +336,17 @@ export class KookIngressQueue {
            channel_id,target_kind,target_id,source_event_id,payload_json,status,welcome_guild_id)
            VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'pending',$11) ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), key, this.botId, row.tenant_id, row.team_id,targetKind==='channel'?targetId:null,
         targetKind,targetId,row.reply_to_message_id,JSON.stringify(payload),isWelcome?parsed.guildId:null]);
+        if ((parsed.request.kind === 'group' || parsed.request.kind === 'direct')
+          && (payload.type === 'text' || payload.type === 'kmarkdown')) {
+          const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
+          await client.query(`INSERT INTO kook_conversation_messages(
+              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
+            ) VALUES ($1,$2,$3,'assistant',$4,$5,$6,$7,now()+interval '12 hours')
+            ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
+            this.botId, conversationChannelId, `assistant:${job.eventId}`, this.botId,
+            job.eventId, parsed.replyToMessageId, payload.content.slice(0, 1600),
+          ]);
+        }
       }
       await client.query(`UPDATE kook_ingress_events SET status='done',event_json=NULL,lease_token=NULL,lease_until=NULL,
          next_attempt_at=NULL,last_error_code=NULL,finished_at=now() WHERE bot_account_id=$1 AND event_id=$2`, [this.botId, job.eventId]);
@@ -416,5 +442,7 @@ export class KookIngressQueue {
     await this.pool.query("DELETE FROM pending_team_actions WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
     await this.pool.query("DELETE FROM pending_account_claims WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
     await this.pool.query("DELETE FROM pending_squad_setups WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at<=now()) OR consumed_at<now()-interval '1 day')", [this.botId]);
+    await this.pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1 AND expires_at<=now()', [this.botId]);
+    await this.pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1 AND expires_at<=now()', [this.botId]);
   }
 }

@@ -11,6 +11,8 @@ export interface TrustedKookGroupMessage {
   messageId: string;
   timestamp: number;
   content: string;
+  /** ID from KOOK quote metadata; message content from the quote is never trusted. */
+  quotedMessageId: string | null;
   /** User IDs taken only from KOOK's validated mention metadata. */
   mentionedUserIds: string[];
 }
@@ -53,6 +55,14 @@ function text(value: unknown, maxLength = 256): string | null {
   return normalized && normalized.length <= maxLength ? normalized : null;
 }
 
+/** Removes transport mention identifiers before chat text is sent to a public
+ * model. Trusted mention IDs remain separately available to server tools. */
+export function sanitizeKookMentionMarkup(content: string): string {
+  return content
+    .replace(/<@!?[^>]{1,128}>/gu, '@成员')
+    .replace(/\(met\)[^()\s]{1,128}\(met\)/gu, '@成员');
+}
+
 /** Parses only KOOK's documented group message event shape. Role IDs in the
  * event are deliberately discarded; management actions recheck via HTTP. */
 export function inspectTrustedKookGroupMessage(value: unknown, botAccountIdInput: string): TrustedKookGroupInspection {
@@ -85,7 +95,7 @@ export function inspectTrustedKookGroupMessage(value: unknown, botAccountIdInput
   if (!guildId) return { reason: 'guild_id_invalid' };
   if (!channelId) return { reason: 'channel_id_invalid' };
   if (!messageId) return { reason: 'message_id_invalid' };
-  if (content === null) return { reason: 'content_invalid' };
+  if (content === null || !content.trim()) return { reason: 'content_invalid' };
   if (content.length > 8192) return { reason: 'content_too_long' };
   if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp <= 0) return { reason: 'timestamp_invalid' };
   const rawMentions = metadata.mention;
@@ -93,6 +103,10 @@ export function inspectTrustedKookGroupMessage(value: unknown, botAccountIdInput
     ? [...new Set(rawMentions.filter((item): item is string => typeof item === 'string' && Boolean(text(item, 128))
       && item.trim() !== botAccountId).map(item => item.trim()))].slice(0, 20)
     : [];
+  const rawQuote = metadata.quote;
+  const quote = rawQuote && typeof rawQuote === 'object' && !Array.isArray(rawQuote)
+    ? rawQuote as Record<string, unknown> : null;
+  const quotedMessageId = text(quote?.msg_id ?? quote?.id, 256);
   return { event: {
     [verifiedGroupEvent]: true,
     platform: 'kook',
@@ -103,6 +117,7 @@ export function inspectTrustedKookGroupMessage(value: unknown, botAccountIdInput
     messageId,
     timestamp,
     content,
+    quotedMessageId,
     mentionedUserIds,
   } };
 }

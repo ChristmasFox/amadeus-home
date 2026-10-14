@@ -1,7 +1,6 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { LanguageModel } from 'ai';
 import { NaturalLanguageQueryPlanner } from '../../application/nl-query-planner.js';
-import { KookGroupWriteIntentParser } from '../../application/kook-group-write-intent.js';
 import { readPublicModelConfig } from './model-config.js';
 import { createPublicModelFetch } from './model-fetch.js';
 
@@ -11,8 +10,8 @@ export interface ConfiguredPublicQueryPlanner {
   modelId: string;
 }
 
-export interface ConfiguredPublicGroupWriteIntentParser {
-  parser: KookGroupWriteIntentParser;
+export interface ConfiguredPublicAgentModel {
+  model: Exclude<LanguageModel, string>;
   provider: 'saas-combo';
   modelId: string;
 }
@@ -42,11 +41,13 @@ export function createPublicQueryPlanner(env: NodeJS.ProcessEnv): ConfiguredPubl
   };
 }
 
-export function createPublicGroupWriteIntentParser(env: NodeJS.ProcessEnv): ConfiguredPublicGroupWriteIntentParser | null {
+/** Shared public chat model. Tools are bound per trusted ingress request by
+ * the application layer; this infrastructure module has no domain access. */
+export function createPublicAgentModel(env: NodeJS.ProcessEnv): ConfiguredPublicAgentModel | null {
   const configured = createPublicChatModel(env);
   if (!configured) return null;
   return {
-    parser: new KookGroupWriteIntentParser(configured.model),
+    model: configured.model,
     provider: 'saas-combo',
     modelId: configured.modelId,
   };

@@ -402,6 +402,7 @@ export class QueryPlanExecutor {
         ...(damageActor.kind === 'found' && damageVictim.kind === 'found'
           ? { actorPlayer: damageActor.id, victimPlayer: damageVictim.id }
           : {}),
+        ...(plan.meleeKind ? { meleeKind: plan.meleeKind } : {}),
         ...(signal ? { signal } : {}),
       });
       return {

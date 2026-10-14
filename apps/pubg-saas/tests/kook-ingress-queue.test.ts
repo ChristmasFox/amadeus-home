@@ -131,7 +131,11 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     const exhaustedEvent = group(f.bot, `budget-limited-${suffix}`, f.guild, f.channel, f.user);
     assert.equal(await restarted.ingestGatewayEvent(exhaustedEvent), 'accepted');
     assert.equal(await restarted.processOne(async () => ({ type: 'text', content: 'daily quota reply' }), new AbortController().signal), 'done');
-    const exhaustedQueue = new KookMessageQueue(pool, { botAccountId: f.bot, maxAttempts: 1 });
+    const deliveryDiagnostics: unknown[] = [];
+    const exhaustedQueue = new KookMessageQueue(pool, {
+      botAccountId: f.bot, maxAttempts: 1,
+      onDeliveryFailure: event => deliveryDiagnostics.push(event),
+    });
     const quotaError = Object.assign(new Error('kook_message_daily_budget_exhausted'), {
       code: 'kook_message_daily_budget_exhausted', retryAfterMs: 12 * 60 * 60_000,
     });
@@ -143,6 +147,14 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     assert.equal(quotaDeferred?.status, 'retry');
     assert.equal(quotaDeferred?.last_error_code, 'kook_message_daily_budget_exhausted');
     assert.ok(Number(quotaDeferred?.wait_ms) > 0);
+    assert.equal(deliveryDiagnostics.length, 1);
+    const deliveryDiagnostic = deliveryDiagnostics[0] as Record<string, unknown>;
+    assert.deepEqual({ ...deliveryDiagnostic, requestKey: undefined }, {
+      event: 'kook_outbox_delivery_failed', stage: 'outbox', outcome: 'retry',
+      reason: 'kook_message_daily_budget_exhausted', requestKey: undefined, count: 1,
+    });
+    assert.match(String(deliveryDiagnostic.requestKey), /^[a-f0-9]{16}$/u);
+    assert.equal(JSON.stringify(deliveryDiagnostics).includes(exhaustedEvent.msg_id), false);
     await pool.query('UPDATE message_outbox SET next_attempt_at=now() WHERE bot_account_id=$1 AND source_event_id=$2', [f.bot, limitedEvent.msg_id]);
     assert.equal(await oneAttemptQueue.deliverOne({ async send() {} }), 'sent');
   }
@@ -150,7 +162,7 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     await cleanup(pool, f.bot);
   }
 });
-test('ingress bounds admission and preserves actor order while rejecting a changed team binding', { skip: !databaseUrl }, async () => {
+test('ingress bounds admission, preserves channel conversation order, and rejects a changed team binding', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 6 });
   const suffix = randomUUID();
   const f = await fixture(pool, suffix);
@@ -166,12 +178,10 @@ test('ingress bounds admission and preserves actor order while rejecting a chang
     assert.ok(job);
     assert.equal(job.eventId, first.msg_id);
     await queue.fail(job, new Error('transient'));
-    assert.equal(await queue.claimNext(), null); // later message cannot overtake this actor's retry
+    assert.equal(await queue.claimNext(), null); // later channel message cannot overtake this retry
     assert.equal(await queue.ingestGatewayEvent(group(f.bot, `other-${suffix}`, f.guild, f.channel, `other-${f.user}`)), 'accepted');
-    const other = await queue.claimNext();
-    assert.ok(other);
-    assert.notEqual(other.eventId, job.eventId);
-    await queue.complete(other, null);
+    assert.equal(await queue.claimNext(), null); // preserve shared channel turn order across actors
+    await pool.query("UPDATE kook_ingress_events SET status='done',event_json=NULL WHERE bot_account_id=$1 AND event_id=$2", [f.bot, `other-${suffix}`]);
     await pool.query('DELETE FROM channel_bindings WHERE bot_account_id=$1', [f.bot]);
     await pool.query('UPDATE kook_ingress_events SET next_attempt_at=now() WHERE bot_account_id=$1', [f.bot]);
     assert.equal(await queue.processOne(async () => assert.fail('stale team dispatched'), new AbortController().signal), 'dead');
