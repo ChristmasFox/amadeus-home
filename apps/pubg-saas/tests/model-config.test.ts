@@ -100,3 +100,61 @@ test('constructs the public AI SDK model without issuing a provider request', ()
   assert.equal(result.modelId, 'saas-combo');
   assert.equal(typeof result.planner.plan, 'function');
 });
+
+test('sends explicit non-streaming requests through the public query planner', async () => {
+  let requestedStream: unknown;
+  const originalFetch = globalThis.fetch;
+  const plan = {
+    version: 1,
+    intent: 'team_stats',
+    subject: 'team',
+    playerName: null,
+    actorName: null,
+    victimName: null,
+    metric: 'kills',
+    period: 'today',
+    comparePeriod: null,
+    matchCount: null,
+    needsClarification: false,
+  };
+  globalThis.fetch = async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as { stream?: unknown };
+    requestedStream = body.stream;
+    return new Response(JSON.stringify({
+      id: 'chatcmpl-fixture',
+      object: 'chat.completion',
+      created: 1,
+      model: 'saas-combo',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call-query-plan',
+            type: 'function',
+            function: { name: 'submit_query_plan', arguments: JSON.stringify(plan) },
+          }],
+        },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: 10, completion_tokens: 12, total_tokens: 22 },
+    }), { headers: { 'content-type': 'application/json' } });
+  };
+
+  try {
+    const configured = createPublicQueryPlanner({
+      MODEL_BASE_URL: 'https://models.example/v1', MODEL_ID: 'saas-combo', MODEL_API_KEY: 'fixture-only-key',
+    });
+    assert.ok(configured);
+
+    const result = await configured.planner.plan({ authorizationContext: {}, message: '今天队伍击杀' });
+
+    assert.equal(requestedStream, false);
+    assert.equal(result.source, 'model');
+    assert.equal(result.failure, null);
+    assert.equal(result.plan.intent, 'team_stats');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

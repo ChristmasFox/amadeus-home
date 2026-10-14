@@ -18,6 +18,9 @@ export function createPublicQueryPlanner(env: NodeJS.ProcessEnv): ConfiguredPubl
     baseURL: config.baseURL,
     apiKey: config.apiKey,
     fetch: createPublicModelFetch(config.allowedInternalHosts),
+    // 9Router's OpenAI-compatible endpoint may stream when this field is omitted.
+    // AI SDK generateText expects the non-streaming JSON response from doGenerate.
+    transformRequestBody: body => ({ ...body, stream: body.stream ?? false }),
   });
   return {
     planner: new NaturalLanguageQueryPlanner(provider.chatModel(config.modelId)),
