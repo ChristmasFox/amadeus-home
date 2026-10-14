@@ -4,26 +4,29 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Latest explicit runtime authorization — 2026-10-14
 
-Planner compatibility was fixed in `53b49e5`: the AI SDK now explicitly asks
-9Router for a non-streaming response. One real Planner request on isolated M204
-`pubg-saas-m2-clean` succeeded. Arthur then authorized the group-only KOOK
-binding flow and admin delegation; source commit `8bcbe4c` adds the constrained
-two-action intent parser, verified PUBG lookup before atomic account writes,
-single-team-per-guild provisioning, fresh admin/member checks for delegation,
-and keeps legacy commands. No schema migration was needed.
+Source commit `fb16818` fixes the KOOK silent-drop path. The previous request
+event prefilter admitted only bot mentions, `/pubg` commands and binding
+phrases; its own test discarded `查一下今天击杀`. It now admits bounded PUBG
+stats-query candidates without a mention, keeps unrelated chatter out of the
+model path, logs rate-limited structured drop reasons without message/actor
+data, and explicitly rejects messages authored by the configured bot. Existing
+DB-backed ingress limits still apply. The prior raw messages were not retained,
+so their individual historical parser rejection reason cannot be recovered.
 
-Acceptance passed: SaaS PostgreSQL suite 117/117, private Kurisu regression
-68/68, both source typechecks, architecture check, secret scan and diff check.
-The OCI build verified `linux/amd64` and `linux/arm64` under manifest
-`sha256:72000a4c40ab4bdedf4a82d37a609cba62f3e218d7fed49d88e761f1d4741f6d`.
-Only Gateway and Worker were recreated on M204 from commit `8bcbe4c`; both are
-running, Worker is healthy, and a boolean-only PG probe confirms the Gateway
-KOOK WebSocket session is connected. PostgreSQL, egress-proxy and the isolated
-9Router container IDs stayed unchanged. The Gateway has no Docker healthcheck;
-its running state and persisted KOOK session are the startup evidence. No
-migration, backup rehearsal, PUBG lookup, extra model request, message test,
-image push or private-runtime change was performed. Detailed evidence:
-`.agent/checkpoints/2026-10-14-pubg-saas-group-binding-live.md`.
+The old channel `6115211415447433` and new channel `6521538183595713` are both
+listed by KOOK as text channels. Parser tests exercise both IDs, and the
+PostgreSQL integration test covers membership-gated lazy binding in a new
+channel. SaaS/PostgreSQL passes 120/120; private Kurisu passes 68/68; typecheck,
+architecture, secrets and diff checks pass. A dual-platform OCI build verified
+manifest `sha256:2779458c51433194631d092cbec2966fcbbd1ce1b3273d3f07522c4ff3252fbf`.
+Only Gateway/Worker were recreated from
+`local/pubg-saas:git-fb1681868947aa57c2195a26ab81186f1110e951`. Both run with
+restart count 0; Worker, PostgreSQL and egress-proxy are healthy; Gateway's
+persisted KOOK session is connected (`last_sn=27`). PostgreSQL, egress-proxy
+and isolated 9Router IDs stayed unchanged. The two named planner rehearsal PG
+containers were removed without deleting volumes. No live message or PUBG
+request was sent; Arthur's manual channel test is next. Evidence and commands:
+`.agent/checkpoints/2026-10-14-pubg-saas-ingress-diagnostics-live.md`.
 
 ## Operator-selected source implementation Goal — 2026-10-13
 

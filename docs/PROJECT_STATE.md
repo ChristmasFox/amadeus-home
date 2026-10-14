@@ -1,5 +1,34 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — KOOK unmentioned-query admission and ingress diagnostics
+
+Commit `fb16818` resolves the code-level silent-drop cause: `request-event.ts`
+previously filtered unmentioned natural-language queries before durable PG
+ingress. A regression reproducer for `查一下今天击杀` had asserted `null`.
+The local relevance gate now admits bounded account/team writes, supported
+stats-query phrases, and explicit `/pubg` commands without a bot mention;
+unrelated chat never reaches the model. Strict KOOK group identity/channel
+validation remains, and self-authored bot messages are rejected by both bot
+flag and configured bot ID. Rejections produce structured, per-reason/channel
+logs capped at one event per minute, containing no message, actor, or token.
+The existing durable per-user/channel/tenant/bot ingress rate limits remain.
+
+Read-only KOOK channel listing confirmed old text channel `6115211415447433`
+and new text channel `6521538183595713`. Both pass the unmentioned-query parser
+regression, and PostgreSQL integration covers fresh member validation before
+lazy binding of a second channel. SaaS/PostgreSQL suite passed 120/120 and
+Kurisu regression 68/68; relevant typechecks, architecture, secrets and diff
+checks passed. Dual-platform image manifest:
+`sha256:2779458c51433194631d092cbec2966fcbbd1ce1b3273d3f07522c4ff3252fbf`.
+M204 now runs image `local/pubg-saas:git-fb1681868947aa57c2195a26ab81186f1110e951`
+on Gateway/Worker only. Both have restart count 0; Worker health is healthy;
+the Gateway has an active persisted KOOK session. PG, egress-proxy and 9Router
+containers retained their IDs. The two requested temporary planner rehearsal
+PostgreSQL containers were removed without deleting their volumes. No real
+message or PUBG request was sent; manual acceptance remains with Arthur. No
+private runtime, production deployment, or image push was performed. Detailed
+evidence: `.agent/checkpoints/2026-10-14-pubg-saas-ingress-diagnostics-live.md`.
+
 ## 2026-10-14 — Group-only account binding deployed to isolated SaaS
 
 Planner streaming incompatibility was fixed in commit `53b49e5` by sending
