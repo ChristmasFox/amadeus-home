@@ -11,6 +11,8 @@ export interface TrustedKookGroupMessage {
   messageId: string;
   timestamp: number;
   content: string;
+  /** User IDs taken only from KOOK's validated mention metadata. */
+  mentionedUserIds: string[];
 }
 
 export interface TrustedKookDirectMessage {
@@ -55,6 +57,11 @@ export function parseTrustedKookGroupMessage(value: unknown, botAccountIdInput: 
   const timestamp = data.msg_timestamp;
   if (!guildId || !channelId || !messageId || content === null || content.length > 8192) return null;
   if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp <= 0) return null;
+  const rawMentions = metadata.mention;
+  const mentionedUserIds = Array.isArray(rawMentions) && rawMentions.length <= 32
+    ? [...new Set(rawMentions.filter((item): item is string => typeof item === 'string' && Boolean(text(item, 128))
+      && item.trim() !== botAccountId).map(item => item.trim()))].slice(0, 20)
+    : [];
   return {
     [verifiedGroupEvent]: true,
     platform: 'kook',
@@ -65,6 +72,7 @@ export function parseTrustedKookGroupMessage(value: unknown, botAccountIdInput: 
     messageId,
     timestamp,
     content,
+    mentionedUserIds,
   };
 }
 

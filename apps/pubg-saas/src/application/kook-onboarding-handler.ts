@@ -1,4 +1,4 @@
-import { createConfirmationCard, createOnboardingCard } from '../channels/kook/confirmation-card.js';
+import { createConfirmationCard } from '../channels/kook/confirmation-card.js';
 import { parseKookManagementCommand } from '../channels/kook/management-command.js';
 import type { PublicPubgPlayerResolverPort, ResolvedPubgPlayer } from '../infrastructure/pubg/player-resolver.js';
 import type { AccountClaimService } from './account-claim-service.js';
@@ -20,7 +20,7 @@ function safeAliasText(value: string): string {
 const guidance: Record<string, string> = {
   'ui:create': '请在要绑定的服务器频道发送：/pubg create steam "队伍名称" PlayerA PlayerB（1–4 名玩家）。平台支持 steam/kakao/psn/xbox；含空格的名称用引号包裹。查询后需确认；服务器拥有者或管理员才能执行。',
   'ui:bind': '请在目标服务器频道发送 /pubg teams 查看该服务器的队伍，再发送 /pubg bind <队伍ID>。绑定前需确认，且当前频道必须未绑定队伍。',
-  'ui:claim': '请在本私信发送 /pubg claim steam PlayerName。平台支持 steam/kakao/psn/xbox；名称含空格时用引号包裹。查询后需确认；此关联是本人声明，不能证明游戏账号所有权。',
+  'ui:claim': '请在当前队伍群聊发送 /pubg me PlayerName。平台默认为 Steam；游戏名含空格时用引号包裹。系统会先通过 PUBG 公共 API 校验该名称。',
 };
 
 async function resolve(services: KookOnboardingServices, shard: string, names: string[], signal: AbortSignal): Promise<{ players: ResolvedPubgPlayer[] } | { reply: KookTextPayload }> {
@@ -42,7 +42,7 @@ async function resolve(services: KookOnboardingServices, shard: string, names: s
  * mutations use opaque one-use setup/team/claim tokens after name resolution. */
 export async function handleKookOnboardingRequest(job: KookIngressJob, services: KookOnboardingServices, signal: AbortSignal): Promise<KookTextPayload | undefined> {
   const request = job.request;
-  if(request.kind==='guild_join')return createOnboardingCard();
+  if(request.kind==='guild_join')return text('机器人已加入服务器，可以在绑定频道内直接询问 PUBG 数据。');
   if (request.kind === 'button') {
     if (Object.hasOwn(guidance, request.event.value)) return text(guidance[request.event.value]!);
     const match = /^setup:([A-Za-z0-9_-]{43})$/u.exec(request.event.value);
@@ -52,7 +52,7 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
   }
   const command = parseKookManagementCommand(request.event.content);
   if (!command) return undefined;
-  if (command.kind === 'help') return createOnboardingCard();
+  if (command.kind === 'help') return text('机器人进入服务器后会自动创建并绑定队伍。账号绑定：/pubg me <游戏名>；自然语言可说“我的 PUBG 账号是 游戏名”。管理员可 @成员 代绑；频道成员可说“我们的队名是 队名”。旧命令 /pubg claim <平台> <游戏名> 仍可群聊自绑。');
   if (command.kind === 'invalid') return text('命令参数不完整或引号未闭合。发送 /pubg help 查看入口；游戏名和队伍名包含空格时请使用引号。');
   if (request.kind === 'group') {
     const event = request.event;
@@ -129,17 +129,10 @@ export async function handleKookOnboardingRequest(job: KookIngressJob, services:
         resolvedPlayers: resolved.players.map(player => ({ accountId: player.accountId, displayName: player.name })) }, job.boundTeam);
       return createConfirmationCard({ title: command.kind === 'add' ? '确认添加队员' : '确认替换队员名单', detail: `队伍：${current.label}\n平台：${current.pubgShard}\n${command.kind === 'add' ? '添加玩家' : '新的完整名单'}：${resolved.players.map(player => player.name).join('、')}\n仅本次操作者可确认。`, confirmText: '确认名单', confirmationToken: pending.confirmationToken, actionScope: 'team' });
     }
-    if (command.kind === 'claim') return text('个人账号声明关联请在 bot 私信中发送 /pubg claim <平台> <游戏名>。');
+    if (command.kind === 'claim') return text('请在队伍群聊中发送 /pubg claim <平台> <游戏名>，或使用 /pubg me <游戏名>（默认 Steam）。');
     return undefined;
   }
-  if (command.kind === 'claim') {
-    if (await services.claims.getMyClaim(request.event)) throw new Error('account_claim_already_bound');
-    const resolved = await resolve(services, command.shard, [command.name], signal);
-    if ('reply' in resolved) return resolved.reply;
-    const player = resolved.players[0]!;
-    const pending = await services.claims.prepareClaim(request.event, { pubgShard: command.shard, pubgAccountId: player.accountId });
-    return createConfirmationCard({ title: '确认声明关联我的账号', detail: `平台：${command.shard}\n游戏名：${player.name}\n这只是你本人的声明关联，未经账号所有权验证。仅本次操作者可确认。`, confirmText: '确认声明关联', confirmationToken: pending.confirmationToken, actionScope: 'claim' });
-  }
+  if (command.kind === 'claim') return text('账号绑定必须在队伍群聊中完成：/pubg claim <平台> <游戏名>。');
   if (['create', 'bind', 'teams', 'add', 'roster', 'preference', 'preference_set', 'preference_delete', 'alias_list', 'alias_set', 'alias_delete'].includes(command.kind)) return text('队伍管理需要在明确的服务器频道中发起。请到目标频道发送 /pubg help。');
   return undefined;
 }

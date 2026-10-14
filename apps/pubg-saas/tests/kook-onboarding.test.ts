@@ -11,7 +11,7 @@ function token(payload: KookTextPayload): string {
   return (JSON.parse(payload.content) as Array<{ modules: Array<{ elements?: Array<{ value: string }> }> }>)[0]!.modules[2]!.elements![0]!.value;
 }
 
-test('name-based onboarding creates two isolated squads, binds channels, confirms roster edits and self claims', { skip: !databaseUrl }, async () => {
+test('legacy onboarding keeps team commands and prevents private account binding', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 8 }); const suffix = randomUUID();
   const bot = `bot-${suffix}`, guildA = `guildA-${suffix}`, guildB = `guildB-${suffix}`, actorA = `actorA-${suffix}`, actorB = `actorB-${suffix}`, regular = `regular-${suffix}`, channelA = `channelA-${suffix}`, channelB = `channelB-${suffix}`, channelA2 = `channelA2-${suffix}`;
   // This management-flow fixture intentionally issues many requests from the
@@ -93,12 +93,9 @@ apiKey: 'public-fixture', admission: { async acquire() { }, async observe() { } 
     assert.deepEqual((await pool.query('SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenant_id, squadA.team_id])).rows, [{ pubg_account_id: `account.bob_${suffix.replaceAll('-', '')}` }]);
 
     const dm = (user: string) => ({ type: 1, channel_type: 'PERSON', target_id: bot, author_id: user, content: '/pubg claim steam Alice', msg_id: randomUUID(), msg_timestamp: Date.now() });
-    const claimCard = await send(dm(actorA)); const claimToken = token(claimCard);
-    assert.match((await send(click('', regular, claimToken))).content, /失效/u);
-    await send(click('', actorA, claimToken));
-    assert.equal((await pool.query('SELECT claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actorA])).rows[0]?.claim_status, 'self_declared');
-    const conflictCard = await send(dm(regular)); assert.match((await send(click('', regular, token(conflictCard)))).content, /已有其他用户/u);
-    assert.equal((await pool.query('SELECT 1 FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, regular])).rowCount, 0);
+    const privateClaim = await send(dm(actorA));
+    assert.match(privateClaim.content, /队伍群聊中/u);
+    assert.equal((await pool.query('SELECT 1 FROM account_claims WHERE bot_account_id=$1', [bot])).rowCount, 0);
 
     // A previously issued setup cannot become valid again after another bind/unbind cycle.
     const staleEvent = group(guildA, `stale-${suffix}`, actorA, '/pubg create steam Old Alice');

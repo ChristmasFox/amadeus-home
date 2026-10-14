@@ -93,7 +93,7 @@ test('runtime acknowledges persisted guild join before slow target resolution, t
       if(url.pathname.endsWith('/guild/view')){await blocked;return response({id:guild,welcome_channel_id:'welcome-channel'});}
       if(url.pathname.endsWith('/channel/view'))return response({id:'welcome-channel',guild_id:guild,type:1,is_category:false});
       assert.equal(url.pathname,'/api/v3/message/create');const body=init?.body as URLSearchParams;
-      assert.equal(body.get('target_id'),'welcome-channel');assert.equal(body.get('type'),'10');assert.equal(body.has('quote'),false);sends++;return response({msg_id:'welcome-response'});
+      assert.equal(body.get('target_id'),'welcome-channel');assert.equal(body.get('type'),'1');assert.equal(body.has('quote'),false);sends++;return response({msg_id:'welcome-response'});
     }});
     run=runtime.run(stop.signal);await waitFor(()=>connected);socket.open();socket.frame({s:1,d:{code:0,session_id:'welcome-session'}});
     const event=joined(bot,guild);socket.frame({s:0,sn:1,d:event});

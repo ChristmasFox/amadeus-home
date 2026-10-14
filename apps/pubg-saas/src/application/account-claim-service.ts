@@ -155,7 +155,19 @@ export class AccountClaimService {
     return this.confirmForActor(click, click.value, click.eventId);
   }
 
-  private async confirmForActor(event: { botAccountId: string; userId: string }, tokenInput: string, receiptEventId: string | null): Promise<ConfirmedAccountClaim> {
+  /** Public runtime callbacks may still accept an old one-use unclaim card,
+   * but must never commit a legacy self-declared claim that bypasses PUBG API
+   * resolution. New claims use TeamAdminService.claimVerifiedAccount. */
+  async confirmUnclaimFromButton(click: TrustedKookButtonClick): Promise<ConfirmedAccountClaim> {
+    return this.confirmForActor(click, click.value, click.eventId, 'unclaim');
+  }
+
+  private async confirmForActor(
+    event: { botAccountId: string; userId: string },
+    tokenInput: string,
+    receiptEventId: string | null,
+    requiredAction?: PendingAccountAction['kind'],
+  ): Promise<ConfirmedAccountClaim> {
     const token = requiredText(tokenInput, 'confirmation_token', 64);
     if (!/^[A-Za-z0-9_-]{43}$/u.test(token)) throw new Error('account_claim_confirmation_unavailable');
     const client = await this.pool.connect();
@@ -172,6 +184,7 @@ export class AccountClaimService {
       );
       const row = pending.rows[0];
       if (!row) throw new Error('account_claim_confirmation_unavailable');
+      if (requiredAction && row.action !== requiredAction) throw new Error('account_claim_confirmation_unavailable');
 
       if (row.consumed_at) {
         const result: ConfirmedAccountClaim = row.action === 'unclaim'

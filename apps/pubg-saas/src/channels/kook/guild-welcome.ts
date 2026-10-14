@@ -14,6 +14,7 @@ export interface VerifiedKookWelcomeTarget {
   botAccountId: string;
   guildId: string;
   channelId: string;
+  guildName: string;
 }
 
 export interface KookGuildWelcomeResolver {
@@ -79,6 +80,9 @@ export class KookGuildWelcomeApiClient implements KookGuildWelcomeResolver {
     const channelId=welcome && welcome!=='0'?welcome:fallback && fallback!=='0'?fallback:null;
     if(!channelId)return null;
     if(!await this.verifyTarget(event.guildId,channelId,signal))throw coded('kook_welcome_target_invalid');
-    return {[verifiedWelcomeTarget]:true,botAccountId:this.botId,guildId:event.guildId,channelId};
+    const rawName = typeof guild.name === 'string' ? guild.name.trim() : '';
+    const guildName = rawName && rawName.length <= 80 && !/[\u0000-\u001f\u007f]/u.test(rawName)
+      ? rawName : 'KOOK服务器';
+    return {[verifiedWelcomeTarget]:true,botAccountId:this.botId,guildId:event.guildId,channelId,guildName};
   }
 }

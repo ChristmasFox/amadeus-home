@@ -3,7 +3,8 @@ import type { Pool, PoolClient } from 'pg';
 import { parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
 import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
 import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
-import {createOnboardingCard} from '../channels/kook/confirmation-card.js';
+import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import type { TrustedKookGuildJoin } from '../channels/kook/guild-welcome.js';
 export interface KookIngressJob {
   botAccountId: string;
   eventId: string;
@@ -32,7 +33,9 @@ export interface KookIngressQueueOptions {
 }
 export type KookIngressResult = 'ignored' | 'accepted' | 'duplicate';
 export type KookIngressProcessResult = 'empty' | 'done' | 'retry' | 'dead';
-export type KookRequestHandler = (job: KookIngressJob, signal: AbortSignal) => Promise<KookTextPayload | null>;
+export type KookRequestHandler = (job: KookIngressJob, signal: AbortSignal) => Promise<KookTextPayload | null | undefined>;
+export type KookGroupChannelProvisioner = (event: TrustedKookGroupMessage, signal: AbortSignal) => Promise<{ tenantId: string; teamId: string }>;
+export type KookGuildJoinProvisioner = (event: TrustedKookGuildJoin, target: VerifiedKookWelcomeTarget, signal: AbortSignal) => Promise<KookTextPayload | null>;
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
@@ -53,6 +56,7 @@ function errorCode(error: unknown): string {
   if (error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
     && /^[a-z0-9_]{1,64}$/u.test(error.code))
     return error.code;
+  if (error instanceof Error && /^[a-z0-9_]{1,64}$/u.test(error.message)) return error.message;
   return 'request_processing_failed';
 }
 /** The sole durable gateway ingress. It stages only addressed requests, pins
@@ -185,6 +189,48 @@ export class KookIngressQueue {
       throw Object.assign(new Error('kook_ingress_binding_changed'), { code: 'kook_ingress_binding_changed' });
     }
   }
+
+  /** Pins a freshly auto-bound channel to the currently leased ingress event.
+   * The event must still be unbound at admission and the service must have
+   * created a newer binding revision for the same verified guild/channel. */
+  private async adoptProvisionedBinding(job: KookIngressJob, team: { tenantId: string; teamId: string }): Promise<void> {
+    if (job.request.kind !== 'group' || job.boundTeam) throw new Error('kook_ingress_binding_changed');
+    const event = job.request.event;
+    await transaction(this.pool, async (client) => {
+      const leased = await client.query(
+        `SELECT tenant_id,team_id,binding_revision FROM kook_ingress_events
+         WHERE bot_account_id=$1 AND event_id=$2 AND status='processing' AND lease_token=$3
+           AND lease_until>now() AND expires_at>now() FOR UPDATE`,
+        [this.botId, job.eventId, job.leaseToken],
+      );
+      const row = leased.rows[0];
+      if (!row || row.tenant_id !== null || row.team_id !== null
+        || String(row.binding_revision ?? 0) !== String(job.bindingRevision ?? 0)) throw new Error('kook_ingress_binding_changed');
+      const current = await client.query(
+        `SELECT tenant.tenant_id,binding.team_id,version.revision FROM tenants tenant
+         JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
+           AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+         JOIN channel_binding_versions version ON version.bot_account_id=binding.bot_account_id AND version.channel_id=binding.channel_id
+         WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3
+         FOR SHARE OF binding`,
+        [this.botId, event.guildId, event.channelId],
+      );
+      const binding = current.rows[0];
+      const expectedRevision = Number(job.bindingRevision ?? 0);
+      if (!binding || binding.tenant_id !== team.tenantId || binding.team_id !== team.teamId
+        || !Number.isSafeInteger(Number(binding.revision)) || Number(binding.revision) <= expectedRevision) {
+        throw new Error('kook_ingress_binding_changed');
+      }
+      const updated = await client.query(
+        `UPDATE kook_ingress_events SET tenant_id=$4,team_id=$5,binding_revision=$6
+         WHERE bot_account_id=$1 AND event_id=$2 AND lease_token=$3 AND tenant_id IS NULL AND team_id IS NULL`,
+        [this.botId, job.eventId, job.leaseToken, team.tenantId, team.teamId, String(binding.revision)],
+      );
+      if (!updated.rowCount) throw new Error('kook_ingress_binding_changed');
+      job.boundTeam = { tenantId: team.tenantId, teamId: team.teamId };
+      job.bindingRevision = String(binding.revision);
+    });
+  }
   async complete(job: KookIngressJob, reply: KookTextPayload | null,welcomeTarget?:VerifiedKookWelcomeTarget): Promise<void> {
     if (job.botAccountId !== this.botId)
       throw new Error('kook_bot_scope_mismatch');
@@ -234,7 +280,8 @@ export class KookIngressQueue {
       if (!row)
         throw new Error('kook_ingress_lease_lost');
       const dead = Number(row.attempt_count) >= this.maxAttempts || new Date(row.expires_at).getTime() <= Date.now()
-        || ['kook_ingress_binding_changed','kook_welcome_target_invalid','kook_welcome_channel_unconfigured'].includes(code);
+        || ['kook_ingress_binding_changed','kook_welcome_target_invalid','kook_welcome_channel_unconfigured',
+          'kook_channel_member_required','kook_target_channel_member_required','guild_team_ambiguous'].includes(code);
       const retryMs = Math.min(60000, this.baseRetryMs * 2 ** Math.min(Number(row.attempt_count) - 1, 20));
       await client.query(`UPDATE kook_ingress_events SET status=$4,lease_token=NULL,lease_until=NULL,last_error_code=$5,
          next_attempt_at=CASE WHEN $4='retry' THEN now()+($6::BIGINT*interval '1 millisecond') ELSE NULL END,
@@ -243,7 +290,13 @@ export class KookIngressQueue {
       return dead ? 'dead' : 'retry';
     });
   }
-  async processOne(handler: KookRequestHandler, signal: AbortSignal,welcomeResolver?:KookGuildWelcomeResolver): Promise<KookIngressProcessResult> {
+  async processOne(
+    handler: KookRequestHandler,
+    signal: AbortSignal,
+    welcomeResolver?: KookGuildWelcomeResolver,
+    groupChannelProvisioner?: KookGroupChannelProvisioner,
+    guildJoinProvisioner?: KookGuildJoinProvisioner,
+  ): Promise<KookIngressProcessResult> {
     if (signal.aborted)
       return 'empty';
     const job = await this.claimNext();
@@ -266,14 +319,22 @@ export class KookIngressQueue {
       }).catch(() => abort.abort()).finally(() => { renewalPending = false; });
     }, Math.max(100, Math.floor(this.leaseMs / 3)));
     try {
-      await this.requireCurrentBinding(this.pool, job);
+      if (job.request.kind === 'group' && !job.boundTeam && groupChannelProvisioner) {
+        const team = await groupChannelProvisioner(job.request.event, abort.signal);
+        await this.adoptProvisionedBinding(job, team);
+      } else {
+        await this.requireCurrentBinding(this.pool, job);
+      }
       let reply:KookTextPayload|null,welcomeTarget:VerifiedKookWelcomeTarget|undefined;
       if(job.request.kind==='guild_join'){
         if(!welcomeResolver)throw new Error('kook_welcome_resolver_unavailable');
         const target=await welcomeResolver.resolve(job.request.event,abort.signal);
         if(!target)throw Object.assign(new Error('kook_welcome_channel_unconfigured'),{code:'kook_welcome_channel_unconfigured'});
-        welcomeTarget=target;reply=createOnboardingCard();
-      }else{reply=await handler(job,abort.signal);}
+        welcomeTarget=target;
+        reply = guildJoinProvisioner
+          ? await guildJoinProvisioner(job.request.event, target, abort.signal)
+          : { type: 'text', content: '机器人已加入服务器，可以在绑定频道内直接询问 PUBG 数据。' };
+      }else{reply=(await handler(job,abort.signal)) ?? null;}
       if (abort.signal.aborted)
         throw new Error('kook_ingress_processing_aborted');
       await this.complete(job, reply,welcomeTarget);

@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { TrustedKookButtonClick } from '../channels/kook/trusted-button-event.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import { isVerifiedKookWelcomeTarget, type TrustedKookGuildJoin, type VerifiedKookWelcomeTarget } from '../channels/kook/guild-welcome.js';
 import { parseStoredTeamLeaderboardMetric, parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
 import { normalizeTeamAlias, normalizeTeamMemberLookup } from '../contracts/team-aliases.js';
 
@@ -9,6 +10,7 @@ type TeamConfirmationActor = Pick<TrustedKookGroupMessage, 'platform' | 'botAcco
 
 export interface GuildAdminPermissionChecker {
   isGuildAdmin(guildId: string, userId: string): Promise<boolean>;
+  isTextChannelMember?(guildId: string, channelId: string, userId: string): Promise<boolean>;
 }
 
 export interface CreateSquadInput {
@@ -82,6 +84,12 @@ function requiredText(value: string, key: string, maxLength = 256): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > maxLength) throw new Error(`invalid_${key}`);
   return normalized;
+}
+
+function teamLabel(value: string): string {
+  const label = requiredText(value, 'team_label', 80);
+  if (/[\u0000-\u001f\u007f]/u.test(label)) throw new Error('invalid_team_label');
+  return label;
 }
 
 function normalizedAccountIds(values: string[]): string[] {
@@ -268,6 +276,164 @@ export class TeamAdminService {
     const row = binding.rows[0];
     if (!row || row.tenant_id !== tenantId || row.team_id !== teamId) throw new Error('channel_binding_conflict');
     if (inserted.rowCount) await client.query('UPDATE channel_binding_versions SET revision=revision+1 WHERE bot_account_id=$1 AND channel_id=$2', [event.botAccountId, event.channelId]);
+  }
+
+  private async ensureSingleGuildTeam(
+    client: PoolClient,
+    event: TeamConfirmationActor,
+    defaultLabel: string,
+  ): Promise<TeamReference> {
+    const tenantId = await this.getOrCreateTenant(client, event);
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`kook-guild-team:${event.botAccountId}:${event.guildId}`]);
+    const teams = await client.query('SELECT team_id FROM teams WHERE tenant_id=$1 ORDER BY created_at,team_id FOR UPDATE', [tenantId]);
+    if (teams.rows.length > 1) throw new Error('guild_team_ambiguous');
+    if (teams.rows.length === 1 && typeof teams.rows[0]?.team_id === 'string') {
+      return { tenantId, teamId: teams.rows[0].team_id };
+    }
+    const teamId = randomUUID();
+    await client.query('INSERT INTO teams(tenant_id,team_id,label,pubg_shard) VALUES ($1,$2,$3,\'steam\')', [tenantId, teamId, teamLabel(defaultLabel)]);
+    return { tenantId, teamId };
+  }
+
+  /** A verified KOOK bot-join event creates the guild's one default Steam team
+   * and binds only the API-verified welcome/default text channel. */
+  async provisionFromGuildJoin(event: TrustedKookGuildJoin, target: VerifiedKookWelcomeTarget): Promise<TeamReference> {
+    if (!isVerifiedKookWelcomeTarget(target) || event.botAccountId !== target.botAccountId || event.guildId !== target.guildId) {
+      throw new Error('kook_welcome_target_invalid');
+    }
+    const actor: TeamConfirmationActor = {
+      platform: 'kook', botAccountId: event.botAccountId, guildId: event.guildId,
+      channelId: target.channelId, userId: event.botAccountId,
+    };
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const team = await this.ensureSingleGuildTeam(client, actor, target.guildName || 'KOOK服务器');
+      await this.bindChannel(client, actor, team.tenantId, team.teamId);
+      await client.query('COMMIT');
+      return team;
+    } catch (error) {
+      await rollbackQuietly(client);
+      if (isUniqueViolation(error)) throw new Error('channel_binding_conflict');
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** A new text channel can join its guild's single team only after a fresh
+   * KOOK channel-membership check for the message author. */
+  async ensureGroupChannel(event: TrustedKookGroupMessage, defaultLabel: string): Promise<TeamReference> {
+    if (event.platform !== 'kook' || !this.permissions.isTextChannelMember) throw new Error('kook_permission_check_unavailable');
+    if (!await this.permissions.isTextChannelMember(event.guildId, event.channelId, event.userId)) {
+      throw new Error('kook_channel_member_required');
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const team = await this.ensureSingleGuildTeam(client, event, defaultLabel);
+      await this.touchActor(client, event, team.tenantId);
+      await this.bindChannel(client, event, team.tenantId, team.teamId);
+      await this.grantTeamAccess(client, event, team.tenantId, team.teamId, 'member');
+      await client.query('COMMIT');
+      return team;
+    } catch (error) {
+      await rollbackQuietly(client);
+      if (isUniqueViolation(error)) throw new Error('channel_binding_conflict');
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async renameBoundTeam(event: TrustedKookGroupMessage, expectedTeam: TeamReference, labelInput: string): Promise<void> {
+    if (!this.permissions.isTextChannelMember) throw new Error('kook_permission_check_unavailable');
+    if (!await this.permissions.isTextChannelMember(event.guildId, event.channelId, event.userId)) {
+      throw new Error('kook_channel_member_required');
+    }
+    const label = teamLabel(labelInput);
+    const result = await this.pool.query(
+      `UPDATE teams team SET label=$5
+       FROM tenants tenant, channel_bindings binding
+       WHERE tenant.tenant_id=$1 AND tenant.platform='kook' AND tenant.bot_account_id=$2 AND tenant.guild_id=$3
+         AND binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform
+         AND binding.bot_account_id=tenant.bot_account_id AND binding.channel_id=$4
+         AND team.tenant_id=tenant.tenant_id AND team.team_id=binding.team_id AND team.team_id=$6`,
+      [expectedTeam.tenantId, event.botAccountId, event.guildId, event.channelId, label, expectedTeam.teamId],
+    );
+    if (!result.rowCount) throw new Error('team_action_scope_changed');
+  }
+
+  async assertAccountClaimAllowed(event: TrustedKookGroupMessage, targetUserIdInput: string): Promise<void> {
+    const targetUserId = requiredText(targetUserIdInput, 'user_id', 128);
+    if (!this.permissions.isTextChannelMember) throw new Error('kook_permission_check_unavailable');
+    if (!await this.permissions.isTextChannelMember(event.guildId, event.channelId, event.userId)) {
+      throw new Error('kook_channel_member_required');
+    }
+    if (targetUserId !== event.userId) {
+      await this.requireFreshGuildAdmin(event);
+      if (!await this.permissions.isTextChannelMember(event.guildId, event.channelId, targetUserId)) {
+        throw new Error('kook_target_channel_member_required');
+      }
+    }
+  }
+
+  /** Persists a PUBG API-resolved identity, its team membership, and the
+   * KOOK actor mapping atomically. Member delegation is checked against the
+   * live guild-admin and text-channel-membership APIs before the transaction. */
+  async claimVerifiedAccount(
+    event: TrustedKookGroupMessage,
+    expectedTeam: TeamReference,
+    targetUserIdInput: string,
+    shardInput: string,
+    account: ResolvedPubgAccount,
+  ): Promise<void> {
+    const targetUserId = requiredText(targetUserIdInput, 'user_id', 128);
+    const shard = requiredText(shardInput, 'pubg_shard', 32);
+    const accountId = requiredText(account.accountId, 'pubg_account_id', 128);
+    const displayName = requiredText(account.displayName, 'pubg_display_name', 100);
+    if (!/^(steam|kakao|psn|xbox)$/u.test(shard) || !/^account\.[A-Za-z0-9_-]{1,128}$/u.test(accountId)
+      || /[\u0000-\u001f\u007f]/u.test(displayName)) throw new Error('public_pubg_lookup_invalid_response');
+    await this.assertAccountClaimAllowed(event, targetUserId);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`pubg-claim:kook:${event.botAccountId}:${shard}:${accountId}`]);
+      const binding = await client.query(
+        `SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
+           ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
+         WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR UPDATE OF binding`,
+        [event.botAccountId, event.guildId, event.channelId],
+      );
+      const row = binding.rows[0];
+      if (!row || row.tenant_id !== expectedTeam.tenantId || row.team_id !== expectedTeam.teamId) throw new Error('team_action_scope_changed');
+      await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [expectedTeam.tenantId, expectedTeam.teamId]);
+      const targetIdentity = { botAccountId: event.botAccountId, userId: targetUserId };
+      await this.touchActor(client, targetIdentity, expectedTeam.tenantId);
+      await this.persistResolvedPlayers(client, shard, [{ accountId, displayName }]);
+      await client.query(
+        `INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id)
+         VALUES ($1,$2,$3,$4) ON CONFLICT (tenant_id,team_id,pubg_account_id)
+         DO UPDATE SET added_by_user_id=EXCLUDED.added_by_user_id`,
+        [expectedTeam.tenantId, expectedTeam.teamId, accountId, event.userId],
+      );
+      await client.query(
+        `INSERT INTO account_claims(platform,bot_account_id,user_id,pubg_shard,pubg_account_id,claim_status,claimed_at)
+         VALUES ('kook',$1,$2,$3,$4,'verified',now())
+         ON CONFLICT (platform,bot_account_id,user_id) DO UPDATE
+         SET pubg_shard=EXCLUDED.pubg_shard,pubg_account_id=EXCLUDED.pubg_account_id,claim_status='verified',claimed_at=now()`,
+        [event.botAccountId, targetUserId, shard, accountId],
+      );
+      await client.query(
+        `INSERT INTO team_user_access(tenant_id,team_id,platform,bot_account_id,user_id,role,granted_by_user_id)
+         VALUES ($1,$2,'kook',$3,$4,'member',$5)
+         ON CONFLICT (tenant_id,team_id,platform,bot_account_id,user_id)
+         DO UPDATE SET role=CASE WHEN team_user_access.role='admin' THEN 'admin' ELSE 'member' END,
+           granted_by_user_id=EXCLUDED.granted_by_user_id,granted_at=now()`,
+        [expectedTeam.tenantId, expectedTeam.teamId, event.botAccountId, targetUserId, event.userId],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await rollbackQuietly(client);
+      if (isUniqueViolation(error)) throw new Error('account_claim_conflict');
+      throw error;
+    } finally { client.release(); }
   }
 
   async createSquad(event: TrustedKookGroupMessage, input: CreateSquadInput): Promise<TeamReference> {

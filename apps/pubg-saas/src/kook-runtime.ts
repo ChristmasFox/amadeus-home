@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { KookIngressQueue, type KookIngressQueueOptions, type KookRequestHandler } from './application/kook-ingress-queue.js';
+import { KookIngressQueue, type KookGuildJoinProvisioner, type KookGroupChannelProvisioner, type KookIngressQueueOptions, type KookRequestHandler } from './application/kook-ingress-queue.js';
 import { KookMessageQueue } from './application/kook-message-queue.js';
 import { createNodeWebSocketFactory, KookGatewayApiClient, KookGatewayClient, PostgresKookGatewayStateStore, type KookGatewaySocketFactory } from './channels/kook/gateway.js';
 import { KookMessageApiClient } from './channels/kook/message-client.js';
@@ -10,6 +10,8 @@ export interface KookApplicationRuntimeOptions {
   botAccountId: string;
   token: string;
   handler: KookRequestHandler;
+  groupChannelProvisioner?: KookGroupChannelProvisioner;
+  guildJoinProvisioner?: KookGuildJoinProvisioner;
   socketFactory?: KookGatewaySocketFactory;
   fetcher?: typeof fetch;
   ingressLimits?: Omit<KookIngressQueueOptions, 'botAccountId'>;
@@ -95,7 +97,10 @@ export class KookApplicationRuntime {
             this.options.onError?.('kook_runtime_data_retention_failed');
           }
         }
-        const result = await this.ingress.processOne(this.options.handler, signal,this.welcome);
+        const result = await this.ingress.processOne(
+          this.options.handler, signal, this.welcome,
+          this.options.groupChannelProvisioner, this.options.guildJoinProvisioner,
+        );
         if (result === 'empty' || result === 'retry')
           await delay(this.pollMs, signal);
       }

@@ -10,6 +10,7 @@ export type KookManagementCommand =
   | { kind: 'bind'; teamId: string }
   | { kind: 'add' | 'roster'; names: string[] }
   | { kind: 'claim'; shard: string; name: string }
+  | { kind: 'me'; name: string }
   | { kind: 'invalid' };
 
 /** Explicit command grammar. Quotes preserve labels/gamertags with spaces;
@@ -48,6 +49,7 @@ export function parseKookManagementCommand(content: string): KookManagementComma
   if (kind === 'create' && args.length >= 3 && args.length <= 6) return { kind, shard: args[0]!.toLowerCase(), label: args[1]!, names: args.slice(2) };
   if (kind === 'bind' && args.length === 1) return { kind, teamId: args[0]! };
   if ((kind === 'add' || kind === 'roster') && args.length >= 1 && args.length <= 4) return { kind, names: args };
+  if (kind === 'me' && args.length === 1) return { kind, name: args[0]! };
   if (kind === 'claim' && args.length === 2) return { kind, shard: args[0]!.toLowerCase(), name: args[1]! };
   return { kind: 'invalid' };
 }

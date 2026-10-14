@@ -16,6 +16,8 @@ export * from './channels/kook/request-event.js';
 export * from './application/kook-ingress-queue.js';
 export * from './kook-runtime.js';
 export * from './application/kook-management-handler.js';
+export * from './application/kook-group-binding-handler.js';
+export * from './application/kook-group-write-intent.js';
 export * from './application/kook-onboarding-handler.js';
 export * from './channels/kook/management-command.js';
 export * from './infrastructure/pubg/player-resolver.js';

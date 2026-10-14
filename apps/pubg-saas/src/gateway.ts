@@ -2,8 +2,9 @@ import { pathToFileURL } from 'node:url';
 import { Pool } from 'pg';
 import { AccountClaimService } from './application/account-claim-service.js';
 import { createKookManagementHandler } from './application/kook-management-handler.js';
+import { createKookGroupBindingHandler } from './application/kook-group-binding-handler.js';
 import { composeKookRequestHandlers, createKookPublicQueryHandler } from './application/kook-public-query-handler.js';
-import { createPublicQueryPlanner } from './infrastructure/ai/public-model.js';
+import { createPublicGroupWriteIntentParser, createPublicQueryPlanner } from './infrastructure/ai/public-model.js';
 import { PublicQueryAuthorizer } from './application/public-query-authorizer.js';
 import { TeamAdminService } from './application/team-admin-service.js';
 import { KookPermissionClient } from './channels/kook/permission-client.js';
@@ -58,7 +59,9 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     if (playerResolver.synthetic) process.stdout.write('PUBG_SAAS_PLAYER_LOOKUP=synthetic-acceptance-fixtures; no PUBG API requests will be made.\n');
     const players = playerResolver.resolver;
     const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: botId });
+    const writeIntents = createPublicGroupWriteIntentParser(env);
     const handler = composeKookRequestHandlers(
+      createKookGroupBindingHandler({ teams, players, ...(writeIntents ? { intents: writeIntents.parser } : {}) }),
       createKookPublicQueryHandler({ authorizer, claims, planner }),
       createKookManagementHandler({ teams, claims, players }),
     );
@@ -75,6 +78,12 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     };
     const runtime = new KookApplicationRuntime({
       pool, botAccountId: botId, token, handler, ingressLimits, dailyMessageBudget,
+      groupChannelProvisioner: async (event) => teams.ensureGroupChannel(event, await permissions.getGuildName(event.guildId)),
+      guildJoinProvisioner: async (event, target) => {
+        await teams.provisionFromGuildJoin(event, target);
+        const name = target.guildName.replace(/@/gu, '＠');
+        return { type: 'text', content: `已为服务器「${name}」创建并绑定 PUBG 队伍，默认平台为 Steam。队员可在群聊发送“我的 PUBG 账号是 游戏名”或 /pubg me 游戏名。` };
+      },
       maintenance: () => authorizer.prune(),
       onError: code => process.stderr.write(`${code}\n`),
     });

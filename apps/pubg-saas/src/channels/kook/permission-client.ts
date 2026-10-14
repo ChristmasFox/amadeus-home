@@ -6,6 +6,7 @@ interface KookApiEnvelope<T> {
 interface GuildView {
   id?: string;
   user_id?: string;
+  name?: string;
 }
 
 interface GuildMember {
@@ -98,6 +99,14 @@ export class KookPermissionClient {
     let body: unknown;
     try { body = await response.json(); } catch { throw new Error('kook_permission_response_invalid'); }
     return parseEnvelope<T>(body).data;
+  }
+
+  async getGuildName(guildIdInput: string): Promise<string> {
+    const guildId = requiredId(guildIdInput, 'guild_id');
+    const guild = await this.get<GuildView>('guild/view', { guild_id: guildId });
+    if (parseId(guild.id) !== guildId) throw new Error('kook_permission_guild_invalid');
+    const name = typeof guild.name === 'string' ? guild.name.trim() : '';
+    return name && name.length <= 80 && !/[\u0000-\u001f\u007f]/u.test(name) ? name : 'PUBG小队';
   }
 
   private async getRolePermissions(guildId: string): Promise<Map<string, bigint>> {

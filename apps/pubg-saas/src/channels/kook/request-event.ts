@@ -28,7 +28,8 @@ export interface ParsedKookRequest {
   envelope: Record<string, unknown>;
 }
 /** GatewayClient passes frame.d. Ordinary group chat is excluded unless the
- * user mentions this bot or starts an explicit /pubg or !pubg command. */
+ * user mentions this bot, starts an explicit command, or uses a narrow binding
+ * phrase prefilter. */
 export function parseKookRequest(data: unknown, botAccountId: string): ParsedKookRequest | null {
   const envelope = { s: 0, d: data };
   const joined=parseTrustedKookGuildJoin(data,botAccountId);
@@ -42,8 +43,11 @@ export function parseKookRequest(data: unknown, botAccountId: string): ParsedKoo
     const extra = (data as {
       extra: Record<string, unknown>;
     }).extra;
-    const mentionsBot = Array.isArray(extra.mention) && extra.mention.includes(botAccountId);
-    if (!mentionsBot && !/^(?:\/|!)pubg(?:\s|$)/iu.test(group.content.trim()))
+    const rawMentions = Array.isArray(extra.mention) ? extra.mention : [];
+    const mentionsBot = rawMentions.includes(botAccountId);
+    const explicitCommand = /^(?:\/|!)pubg(?:\s|$)/iu.test(group.content.trim());
+    const bindingPhrase = /(?:我的|他的|她的|本人|我).{0,24}(?:PUBG|绝地求生).{0,12}(?:账号|帐号)|(?:PUBG|绝地求生).{0,12}(?:账号|帐号).{0,24}(?:是|叫)|(?:我们的|本队|我们).{0,8}队名/iu.test(group.content);
+    if (!mentionsBot && !explicitCommand && !bindingPhrase)
       return null;
     return {
       request: { kind: 'group', event: group }, eventId: group.messageId,
@@ -54,7 +58,12 @@ export function parseKookRequest(data: unknown, botAccountId: string): ParsedKoo
         s: 0, d: {
           type: 1, channel_type: 'GROUP', target_id: group.channelId, author_id: group.userId,
           content: group.content, msg_id: group.messageId, msg_timestamp: group.timestamp,
-          extra: { guild_id: group.guildId, channel_type: 1, author: { id: group.userId, bot: false }, mention: mentionsBot ? [botAccountId] : [] },
+          extra: {
+            guild_id: group.guildId,
+            channel_type: 1,
+            author: { id: group.userId, bot: false },
+            mention: [...group.mentionedUserIds, ...(mentionsBot ? [botAccountId] : [])],
+          },
         }
       },
     };

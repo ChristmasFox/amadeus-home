@@ -368,7 +368,7 @@ async function naturalLanguageReply(
   let selfWarning = '';
   if (result.plan.intent === 'my_stats' || result.plan.subject === 'self') {
     const claim = await services.claims.getClaimForActor(query.conversation.botAccountId, query.conversation.userId);
-    if (!claim) return message('你还没有声明关联 PUBG 账号。请先私信发送 /pubg claim <平台> <游戏名>，确认后可查询本人数据。');
+    if (!claim) return message('你还没有绑定 PUBG 账号。请在队伍群聊发送 /pubg me <游戏名>，默认平台为 Steam。');
     if (claim.pubgShard !== query.teamContext.team.platform) return message('你声明的 PUBG 平台与当前队伍不同，无法从这支队伍查询本人数据。');
     if (!query.teamContext.team.players.some(player => player.id === claim.pubgAccountId)) return message('你声明的 PUBG 账号不在当前队伍名单中。');
     selfPlayerId = claim.pubgAccountId;
@@ -439,7 +439,7 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
       if (!parsed) return await naturalLanguageReply(services, job, query, signal);
       if (parsed.intent.kind === 'my_stats') {
         const claim = await services.claims.getClaimForActor(query.conversation.botAccountId, query.conversation.userId);
-        if (!claim) return message('你还没有声明关联 PUBG 账号。请先私信发送 /pubg claim <平台> <游戏名>，确认后可查询本人数据。');
+        if (!claim) return message('你还没有绑定 PUBG 账号。请在队伍群聊发送 /pubg me <游戏名>，默认平台为 Steam。');
         if (claim.pubgShard !== query.teamContext.team.platform) return message('你声明的 PUBG 平台与当前队伍不同，无法从这支队伍查询本人数据。');
         if (!query.teamContext.team.players.some(player => player.id === claim.pubgAccountId)) return message('你声明的 PUBG 账号不在当前队伍名单中。');
         return statsReply(services, query, parsed.intent.period, signal, [claim.pubgAccountId], claim.claimStatus !== 'verified');
@@ -479,8 +479,13 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
 /** Query commands run before the management fallback; unknown text is left to
  * the existing deterministic onboarding/account handlers. */
 export function composeKookRequestHandlers(
-  queryHandler: (job: KookIngressJob, signal: AbortSignal) => Promise<KookTextPayload | undefined>,
-  fallback: KookRequestHandler,
+  ...handlers: Array<(job: KookIngressJob, signal: AbortSignal) => Promise<KookTextPayload | null | undefined>>
 ): KookRequestHandler {
-  return async (job, signal) => (await queryHandler(job, signal)) ?? fallback(job, signal);
+  return async (job, signal) => {
+    for (const handler of handlers) {
+      const reply = await handler(job, signal);
+      if (reply !== undefined) return reply;
+    }
+    return null;
+  };
 }

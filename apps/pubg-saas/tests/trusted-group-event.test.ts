@@ -32,6 +32,7 @@ test('creates trusted scope from KOOK server/channel/actor fields and drops cach
     messageId: 'message-1',
     timestamp: 1_760_000_000_000,
     content: 'create squad',
+    mentionedUserIds: [],
     [Object.getOwnPropertySymbols(parsed ?? {})[0]!]: true,
   });
   assert.equal(Object.hasOwn(parsed ?? {}, 'roles'), false);
@@ -44,6 +45,19 @@ test('rejects direct messages, spoofed actor identity, bots, malformed metadata,
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, extra: { ...event.d.extra, channel_type: 2 } } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, content: 'x'.repeat(8193) } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage(event, ' '), null);
+});
+
+test('keeps only bounded user IDs from KOOK mention metadata and excludes the configured bot', () => {
+  const parsed = parseTrustedKookGroupMessage({
+    ...event,
+    d: { ...event.d, extra: { ...event.d.extra, mention: ['user-target', 'configured-bot', 123, 'user-target'] } },
+  }, 'configured-bot');
+  assert.deepEqual(parsed?.mentionedUserIds, ['user-target']);
+  const tooMany = Array.from({ length: 33 }, (_, index) => `user-${index}`);
+  assert.deepEqual(parseTrustedKookGroupMessage({
+    ...event,
+    d: { ...event.d, extra: { ...event.d.extra, mention: tooMany } },
+  }, 'configured-bot')?.mentionedUserIds, []);
 });
 
 test('parses only direct text messages addressed to the configured bot for user-scoped actions', () => {

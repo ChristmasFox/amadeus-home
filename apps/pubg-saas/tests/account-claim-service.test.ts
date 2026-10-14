@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { AccountClaimService, migratePublicDatabase, parseTrustedKookDirectMessage } from '../src/index.js';
+import { AccountClaimService, migratePublicDatabase, parseTrustedKookButtonClick, parseTrustedKookDirectMessage } from '../src/index.js';
 
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 
@@ -41,6 +41,12 @@ test('account claim confirmations are private, one-use, self-declared and confli
     await migratePublicDatabase(pool);
     const claimA = await service.prepareClaim(eventA, { pubgShard: 'steam', pubgAccountId: accountA });
     await assert.rejects(service.confirm(eventB, claimA.confirmationToken), /account_claim_confirmation_unavailable/u);
+    const staleClaimClick = parseTrustedKookButtonClick({
+      s: 0,
+      d: { type: 255, channel_type: 'PERSON', msg_id: `claim-click-${suffix}`, msg_timestamp: Date.now(),
+        extra: { type: 'message_btn_click', body: { user_id: userA, target_id: '', msg_id: 'old-claim-card', value: claimA.confirmationToken } } },
+    }, botId)!;
+    await assert.rejects(service.confirmUnclaimFromButton(staleClaimClick), /account_claim_confirmation_unavailable/u);
     assert.equal(await service.getMyClaim(eventA), null);
     assert.deepEqual(await service.confirm(eventA, claimA.confirmationToken), {
       kind: 'claim',

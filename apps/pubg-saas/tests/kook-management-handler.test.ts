@@ -24,6 +24,7 @@ test('privacy help is available in DMs and unbound groups without database or mo
   assert.deepEqual(parseKookManagementCommand('/pubg alias set "Alice Smith" Captain'), { kind: 'alias_set', playerName: 'Alice Smith', alias: 'Captain' });
   assert.deepEqual(parseKookManagementCommand('/pubg alias delete Captain'), { kind: 'alias_delete', alias: 'Captain' });
   assert.deepEqual(parseKookManagementCommand('/pubg alias list'), { kind: 'alias_list' });
+  assert.deepEqual(parseKookManagementCommand('/pubg me "Player One"'), { kind: 'me', name: 'Player One' });
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /默认排行榜指标.*管理员标识.*preference delete.*查询别名.*alias delete/u);
   const handler = createKookManagementHandler({} as unknown as KookOnboardingServices);
   const bot = 'privacy-bot';
