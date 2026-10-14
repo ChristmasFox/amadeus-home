@@ -1,5 +1,38 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS public Agent rich battle reports
+
+Commit `adeb839f5bfec07134a11259608edaa7e9171096` is pushed to `origin/main`
+and deployed on OrbStack VM `pubg-saas-m2-clean` as ARM64 image
+`local/pubg-saas:git-adeb839f5bfec07134a11259608edaa7e9171096` (image ID
+`sha256:206a98e2f0cf9540c34a0dd1ccd4e94c646569026d3bddd6f1b84eb0be6489ba`).
+Only Gateway and Worker were recreated. Worker is healthy, Gateway is running,
+both have zero restarts, and the read-only KOOK probe reports connected with
+`last_sn=61`. PostgreSQL, egress-proxy, and SaaS 9Router were unchanged. No
+migration or manual model/PUBG query was run. The protected pre-switch rollback
+record is `/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-adeb839-pre-switch.txt`.
+
+The effective game-day boundary is 06:00 in `Asia/Shanghai`, shared by Kurisu,
+the Domain, and the PUBG Skill; the prior 05:00 reply text was inconsistent.
+The reported 5-versus-7 match totals cannot be adjudicated without comparing
+the separate SQLite/PostgreSQL cache contents and coverage, so no count was
+assumed or synthesized. The public Agent now receives bounded Domain facts:
+damage source and direction breakdowns, up to 10 safe match summaries, and
+approved stats for up to 8 roster players. Internal IDs, telemetry evidence,
+and debug fields are excluded. Per-step output budget is 1,600 tokens; overall
+timeout remains 300 seconds. The public persona uses generic style traits only;
+private memory, personal details, DMs, private nickname mappings, and private
+runtime files were not used or changed.
+
+Validation passed: `pnpm test:pubg-saas` 144/144 using the isolated PostgreSQL
+test database; `pnpm test:pubg` 70/70; PUBG/SaaS typecheck and builds;
+architecture, secrets, and diff checks. Gateway and Worker had no error,
+fatal, uncaught-exception, or startup-failure log matches in the inspected
+10-minute window. Detailed evidence and rollback steps are in
+`.agent/checkpoints/2026-10-14-pubg-saas-rich-agent-reports-rollout.md`.
+
+Arthur's live KOOK acceptance remains pending; M2 is not complete.
+
 ## 2026-10-14 — PUBG SaaS KOOK reply cleanup rollout
 
 Commit `ef81896` is pushed to `origin/main` and deployed on OrbStack VM

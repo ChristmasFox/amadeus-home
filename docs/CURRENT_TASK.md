@@ -2,7 +2,40 @@
 
 Date: 2026-10-14 (Asia/Shanghai).
 
-## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
+## Active task — public Agent rich battle reports (2026-10-14)
+
+Arthur authorized richer, Kurisu-aligned public KOOK replies, full validation,
+push, and Gateway/Worker-only replacement on `pubg-saas-m2-clean`. Source
+commit `adeb839f5bfec07134a11259608edaa7e9171096` is pushed to `origin/main`
+and deployed as ARM64 image
+`local/pubg-saas:git-adeb839f5bfec07134a11259608edaa7e9171096`. The reported
+05:00 boundary in a prior reply conflicts with the effective `Asia/Shanghai`,
+06:00 Domain/Skill/Kurisu setting. The 5-versus-7 match discrepancy cannot be
+resolved from counts alone because the independent SQLite and PostgreSQL
+caches may differ in freshness and coverage; no live PUBG lookup was performed.
+The Agent now receives the actual canonical time range and bounded coverage
+facts. Its tool output contains allowlisted damage-source/direction facts and
+approved roster stats (maximum 8 players and 10 match summaries), omitting
+internal identifiers and telemetry/debug data. Output budget is 1,600 tokens
+per step; the 300-second overall timeout is unchanged. Public persona guidance
+uses generic style traits only; private memory, personal data, DMs, nickname
+mappings, and private files were excluded.
+
+Full requested validation passed: `pnpm test:pubg-saas` 144/144 with isolated
+PostgreSQL, `pnpm test:pubg` 70/70, PUBG/SaaS typecheck and build, architecture,
+secrets, and diff checks. On `pubg-saas-m2-clean`, only Gateway and Worker were
+recreated. Worker is healthy, Gateway is running, both have zero restarts, and
+the read-only KOOK probe returned connected with `last_sn=61`. PostgreSQL,
+egress-proxy, and SaaS 9Router were unchanged; no migration or manual model/PUBG
+request ran. The mode-0600 pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-adeb839-pre-switch.txt`.
+Detailed evidence and rollback steps:
+`.agent/checkpoints/2026-10-14-pubg-saas-rich-agent-reports-rollout.md`.
+
+Arthur's real KOOK acceptance is pending; M2 is not complete. Stop here and
+wait for Arthur's test result.
+
+## Previous rollout — reply cleanup and M2 acceptance baseline (2026-10-14)
 
 Commit `ef81896` is pushed to `origin/main` and deployed to
 `pubg-saas-m2-clean` as immutable ARM64 image
