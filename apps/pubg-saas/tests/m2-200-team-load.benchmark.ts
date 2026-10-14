@@ -3,6 +3,8 @@
  *   PUBG_SAAS_TEST_DATABASE_URL=... pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
  *   PUBG_SAAS_BENCH_QUERIES_PER_TEAM=30 replays 6,000 scoped query tasks plus
  *   a 200-contender PostgreSQL global-admission/429-reset simulation.
+ *   PUBG_SAAS_BENCH_MATCHES_PER_TEAM=200 seeds 160,000 match-player rows.
+ *   PUBG_SAAS_BENCH_TASK_INTERVAL_MS=100 staggers query-task starts over time.
  *
  * This is a local, bounded simulation; it is not a production capacity test.
  */
@@ -16,7 +18,8 @@ import { PublicSyncWorker } from '../src/application/public-sync-worker.js';
 
 const TEAM_COUNT = 200;
 const PLAYERS_PER_TEAM = 4;
-const MATCHES_PER_TEAM = 2;
+const MATCHES_PER_TEAM = boundedInteger(process.env.PUBG_SAAS_BENCH_MATCHES_PER_TEAM, 2, 2, 500, 'benchmark_matches_per_team_invalid');
+const MATCH_LIST_WINDOW = 3;
 const TEST_DATABASE_URL = process.env.PUBG_SAAS_TEST_DATABASE_URL;
 const CONCURRENCY = boundedInteger(
   process.env.PUBG_SAAS_BENCH_CONCURRENCY,
@@ -27,6 +30,7 @@ const CONCURRENCY = boundedInteger(
 );
 // At most 10,000 query tasks: 200 teams × 50 requests/team.
 const QUERIES_PER_TEAM = boundedInteger(process.env.PUBG_SAAS_BENCH_QUERIES_PER_TEAM, 1, 1, 50);
+const TASK_INTERVAL_MS = boundedInteger(process.env.PUBG_SAAS_BENCH_TASK_INTERVAL_MS, 0, 0, 1_000, 'benchmark_task_interval_invalid');
 
 interface QuerySample {
   phase: string;
@@ -209,6 +213,28 @@ async function concurrentMap<T>(count: number, concurrency: number, task: (index
     for (;;) {
       const index = next++;
       if (index >= count) return;
+      results[index] = await task(index);
+    }
+  }));
+  return results;
+}
+
+async function staggeredMap<T>(
+  count: number,
+  concurrency: number,
+  taskIntervalMs: number,
+  task: (index: number) => Promise<T>,
+): Promise<T[]> {
+  if (taskIntervalMs === 0) return concurrentMap(count, concurrency, task);
+  const results = new Array<T>(count);
+  const startedAt = performance.now();
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(count, concurrency) }, async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= count) return;
+      const waitMs = startedAt + index * taskIntervalMs - performance.now();
+      if (waitMs > 0) await new Promise<void>(resolve => setTimeout(resolve, waitMs));
       results[index] = await task(index);
     }
   }));
@@ -418,7 +444,7 @@ async function main(): Promise<void> {
     phase = 'authorized_queries';
     const queryFailures: Array<{ code: string; index: number }> = [];
     const expectedQueryTasks = fixture.contexts.length * QUERIES_PER_TEAM;
-    const queryResults = await concurrentMap(expectedQueryTasks, queryConcurrency, async index => {
+    const queryResults = await staggeredMap(expectedQueryTasks, queryConcurrency, TASK_INTERVAL_MS, async index => {
       try {
         const teamIndex = index % fixture.contexts.length;
         const context = fixture.contexts[teamIndex]!;
@@ -426,9 +452,10 @@ async function main(): Promise<void> {
         const repository = new PostgresPubgRepository(measuredPool, context);
         const [count, visible] = await Promise.all([
           repository.countMatches(),
-          repository.listMatches({ limit: MATCHES_PER_TEAM + 1 }),
+          repository.listMatches({ limit: MATCH_LIST_WINDOW }),
         ]);
-        if (count !== fixture.expectedMatchCount || visible.length !== fixture.expectedMatchCount) {
+        const expectedWindowMatches = Math.min(fixture.expectedMatchCount, MATCH_LIST_WINDOW);
+        if (count !== fixture.expectedMatchCount || visible.length !== expectedWindowMatches) {
           throw new Error('authorized_match_count_mismatch');
         }
         if (visible.some(match => !team.matches.includes(match.matchId)
@@ -501,14 +528,19 @@ async function main(): Promise<void> {
       benchmark: 'pubg-saas-m2-synthetic-200-team',
       scope: 'local isolated schema; synthetic identifiers and match data; no live PUBG/KOOK/model calls',
       target: { host: databaseUrl.hostname, database: decodeURIComponent(databaseUrl.pathname.replace(/^\//u, '')), schema },
-      concurrency: { authorizedQueryTasks: queryConcurrency, independentWorkerRuns: workerConcurrency, poolMax: pool.options.max },
-      fixture: fixture.fixtures,
+        concurrency: { authorizedQueryTasks: queryConcurrency, independentWorkerRuns: workerConcurrency, poolMax: pool.options.max },
+      fixture: { ...fixture.fixtures, matchesPerTeam: MATCHES_PER_TEAM, matchListWindow: MATCH_LIST_WINDOW },
       authorizedQueryPhase: {
         ...queryPhase,
         teams: fixture.contexts.length,
         queriesPerTeam: QUERIES_PER_TEAM,
         tasks: expectedQueryTasks,
-        pacing: 'burst replay; daily volume is not spread across 24 hours',
+        pacing: TASK_INTERVAL_MS === 0
+          ? 'burst replay; daily volume is not spread across 24 hours'
+          : `task starts staggered every ${TASK_INTERVAL_MS} ms; synthetic replay, not a 24-hour schedule`,
+        taskStartIntervalMs: TASK_INTERVAL_MS,
+        targetTaskStartRatePerSecond: TASK_INTERVAL_MS === 0 ? null : round(1000 / TASK_INTERVAL_MS),
+        targetScheduleDurationMs: TASK_INTERVAL_MS === 0 ? 0 : Math.max(0, expectedQueryTasks - 1) * TASK_INTERVAL_MS,
         taskThroughputPerSecond: round(validQueryTasks / (queryElapsedMs / 1000)),
         failures: queryFailures.length + queryPhase.failures,
         failureCodes: countCodes(queryFailures.map(item => item.code)),
