@@ -1,12 +1,26 @@
 # PUBG KOOK SaaS V0.1 — Multi-tenant Domain & Independent Deployment Goal
 
-> **Current P3 operator gate (2026-10-14):** Arthur deferred the human KOOK
-> acceptance until the second text channel and test account are ready. Do not
-> automate the KOOK desktop/browser or send test messages before then. The
-> isolated M204 Gateway/Worker project remains running for the previously
-> requested acceptance; its live session alone does not pass P3.
+> **Current operator gate (2026-10-14):** Arthur will personally perform the
+> final real KOOK group experience test. Do not automate the KOOK
+> desktop/browser or send test messages. A WebSocket session alone does not
+> pass the live acceptance gate.
 
-> **Status (updated 2026-10-14):** M1 source/offline acceptance is verified on commit `880a5cf`: the isolated PostgreSQL SaaS suite passes 100/100 with no skips, private Kurisu regression passes 68/68, both typecheck groups pass, and migrations `0012`–`0014` provide bounded retention, team leaderboard preferences, and confirmed team-alias management. The 200-team synthetic run completed 200/200 query tasks and worker runs with zero failures; these fixture measurements do not establish canonical M204 capacity. A separate test-server run using only the authorized KOOK bot credential completed read-only guild/channel inventory and authenticated the Gateway WebSocket on a fresh isolated PG. No human message arrived, so real inbound handling, UI callback and bot reply remain unverified; the temporary stack was stopped and its PG volume retained.
+> **Active M2 interaction architecture and rollout (2026-10-14):** source
+> commits `1e74e5a` and `f5c40e2` replace classifier-gated ordinary messages
+> with a bounded Vercel AI SDK `ToolLoopAgent`; every trusted human message is
+> eligible for natural conversation, and the Agent may call authorized PUBG
+> tools over the existing shared Domain. Source tests, private Kurisu
+> regression, build/typechecks, backup adapter checks, local multi-architecture
+> image validation, and isolated encrypted restore passed. The explicitly
+> authorized M204 rollout replaced only Gateway and Worker with
+> `local/pubg-saas:git-f5c40e2`; the database is at migration `0016` and
+> supporting containers retain their prior IDs. No human chat, live model call
+> or PUBG lookup was initiated as a smoke test. The persisted KOOK session did
+> not receive a real end-to-end message in our verification, so Arthur's
+> hands-on test remains mandatory and M2 is open. Details:
+> `.agent/checkpoints/2026-10-14-pubg-saas-agent-runtime-rollout.md`.
+
+> **Historical implementation summary (recorded before the current Agent rollout):** M1 source/offline acceptance was verified on commit `880a5cf`: the isolated PostgreSQL SaaS suite passed 100/100 with no skips, private Kurisu regression passed 68/68, both typecheck groups passed, and migrations `0012`–`0014` provided bounded retention, team leaderboard preferences, and confirmed team-alias management. The 200-team synthetic run completed 200/200 query tasks and worker runs with zero failures; these fixture measurements do not establish canonical M204 capacity. A separate test-server run using only the authorized KOOK bot credential completed read-only guild/channel inventory and authenticated the Gateway WebSocket on a fresh isolated PG. No human message arrived, so real inbound handling, UI callback and bot reply remained unverified; the temporary stack was stopped and its PG volume retained. The later Agent rollout and current acceptance gate are recorded immediately above.
 > M2 local ARM64 acceptance on the current source includes image `local/pubg-saas:git-880a5cf` (manifest digest `sha256:6dd0afafea5fc7d33c1ed3eed34e7834b0bed911dbf8f31da373671acf8d142f`). Fresh isolated source and restore PG18.1 Compose projects applied all 14 migrations. Encrypted age backup/restore matched all 37/37 public tables and 14 migration rows; the synthetic tenant/team/job, preference, alias and sequence state survived. App DML/no-DDL, backup read-only/no-nextval and app sequence-use boundaries passed on both databases. After the public projects were stopped, Kurisu regression passed 68/68; read-only status showed private OpenClaw healthy and 9Router running, with neither restarted or changed. The initial inventory conclusion that the canonical host was absent was a name mismatch: the host profile resolves to OrbStack machine `nyannyan`; the follow-up below records canonical-host acceptance. No provider credential was loaded for this drill, no image was pushed, and no deployment occurred. Full evidence and commands: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 > Current-source M2 follow-up (2026-10-14, commit `20b06da`): M204 ARM64 image `local/pubg-saas:git-20b06da` (`sha256:492a72e07d7fcd7bc169b2bc8e0f8ac409d050f6843c93b69d77277a2e181f17`) started against a fresh isolated PG18.1 project. Encrypted backup restored into a distinct fresh PG container; 37/37 table counts, 14 migrations, fixture counts 1/1/1 and source/restore role probes passed. After both projects stopped, private regression passed 68/68 and OpenClaw/9Router IDs/start times were unchanged (restart count 0). No real PUBG/model credentials, push or deployment. Container-local Worker metrics returned 200 but OrbStack host-loopback metrics returned 502. Follow-up commit `7f3b95b` adds a fixed-path relay through egress-proxy; its host-loopback GET now returns 200 while Worker remains internal-only with no host port. Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-image-local-recovery.md` and `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
 > Current-source CI follow-up (2026-10-14): full SaaS/PostgreSQL tests passed 104/104 with no skips on the reused isolated PG18.6 fixture; architecture checks and 23 backup/adapter safety tests passed. After the metrics relay delta, the full suite passed 106/106 with no skips on the same fixture. The relay source commit `7f3b95b` built as local OCI for amd64+arm64 (manifest list `sha256:7cfc5d19b320b431f2da8b93afc4f1b6b6fd22f63bf884c139945d32d4da2d68`); its amd64 image also passed an emulated Compose smoke on M204 ARM64 (Worker reported `x64` and metrics GET returned 200), not a native amd64-host runtime test. No image push. Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md` and `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
@@ -130,7 +144,7 @@ flowchart TB
 | --- | --- | --- |
 | KOOK transport | `apps/pubg-saas/src/channels/kook` | WebSocket authentication/sequence/heartbeat/reconnect/resume, interaction events, source metadata, message IDs; no PUBG math |
 | Access / team / identity | `apps/pubg-saas/src/application` | validate trusted platform event, resolve guild/channel/user, create **AuthorizedScope**; admin and owner permissions; fail closed |
-| Conversations / AI | public application | per-conversation compact context; AI SDK `generateText` + validated structured output; tool loops bounded; safe response generation |
+| Conversations / AI | public application | every trusted human message enters a bounded AI SDK `ToolLoopAgent`; it replies naturally or calls server-authorized Domain tools; safe fallback and scoped conversation context |
 | PUBG Domain | `packages/pubg-domain` | one shared algorithm, input and output schemas, stats and telemetry facts; scoped team context; no OpenClaw/KOOK/WhatsApp imports |
 | Repository ports | domain contracts | asynchronous scoped query/write operations; no direct `SqlitePubgRepository` type in shared public service path |
 | Persistence | SQLite/private; Postgres/public | both implement sufficient repository ports; public indexed data queries and transactions |
@@ -175,11 +189,45 @@ Domain golden tests: run one fixture set through private SQLite and public Postg
 
 ### 4.3 Conversations / memory
 
-- Free-text replies use AI SDK with the public dedicated `saas-combo` and **domain constrained** intents. Queries like “昨晚谁踢队友最多？” -> “那他对谁伤害最高？” -> “和上周比？” must resolve the correct player and period from one authorized conversational thread.
-- Prefer message-reply correlation (`inReplyToMessageId`) plus bounded requester/channel/team short context. A single shared per-guild context is unsafe. If context ambiguous, ask one clarification rather than query a guessed teammate.
-- Store compact query/subject/time/evidenceRef plus minimal recent messages with TTL (initial design e.g. <=24h inactive; configurable). Persist explicit user/team preferences and aliases only after confirmation. Do not auto-ingest every channel conversation into long-term memory, and do not allow cross-tenant retrieval.
-- Deterministic cards/commands and account management **never call an LLM**; free-text understanding uses `generateText` with schema (Zod), validation and a bounded token budget. Optional bounded tool loop only if a single structured plan cannot meet a tested use case; never expose arbitrary shell/filesystem/network/SQL/other sessions.
-- Model-generated review gets **only sanitized, scoped fact envelopes**, capped length and style; validation ensures numeric claims/coverage come from evidence, and suppress/qualify unsupported numbers.
+- Every valid human text event in an accepted KOOK conversation enters the public
+  Agent path, whether or not it mentions the bot, contains `/pubg`, or discusses
+  PUBG. Ordinary chat receives a natural reply. Only trusted system/bot events,
+  duplicates, invalid input, and necessary safety/platform rate limits may be
+  excluded. No-team conversations remain available; a data tool explains team
+  setup only when the user asks for team data.
+- A bounded Vercel AI SDK `ToolLoopAgent` is the main conversation engine. It
+  can answer directly or choose one or more constrained tools, read actual
+  results, then produce the final natural-language answer. Model/provider or
+  business-tool failures produce a safe user-facing fallback and a traceable
+  run status; they must not normally turn into silent message completion.
+- Use channel-level recent history with speaker identity, message references
+  and a bounded retention/size, while keeping each actor's query subject/time
+  state separate. Multi-user topic continuity may use shared channel messages;
+  authorization context and private query state must never cross actors,
+  teams or tenants. Ask for clarification rather than guessing an ambiguous
+  player or time range.
+- Reuse `QueryPlanSchema`, authorized query execution and Domain evidence
+  envelopes as tools instead of maintaining a second classifier-driven main
+  path. `KookGroupWriteIntentParser` and `NaturalLanguageQueryPlanner` must not
+  decide whether an ordinary message gets a reply. Any structured model output
+  is validated, but topic classification is not a reply eligibility gate.
+- PUBG tools cover authorized squad/player stats, team damage, kick/melee
+  metrics, ranking, historical matches, comparisons, reviews and team info.
+  Facts, `coverage`, `asOf`, partial/unknown state and evidence references come
+  from the shared Domain. Tool parameters express query choices only; trusted
+  KOOK event/DB state determines tenant, team, actor and destination. Account
+  or team writes require server-side permission checks and any required user
+  confirmation; model output cannot directly commit high-risk changes.
+- Natural-language account binding remains a constrained application action:
+  self-bind or administrator delegation is resolved from trusted KOOK sender
+  and mention metadata, real PUBG lookup precedes persistence, and conflict or
+  lookup failures do not create a binding. Legacy `/pubg` and confirmation
+  cards remain reliable optional entry points.
+- Never expose arbitrary shell/filesystem/network/SQL/other-session tools. The
+  public Agent has its own persona and prompts; do not load or depend on
+  Kurisu's private memory, persona files, database or runtime. Generated
+  reviews receive only sanitized scoped facts and must not invent numeric
+  claims.
 
 ## 5. Public ingress, resilience and upstream limits
 
@@ -233,12 +281,12 @@ Implementation may proceed without repeated design questions; operator-facing li
 | **P1 — Shared multi-tenant-capable Domain** | Async repository port(s); scoped TeamContext; current SQLite adapter preserved; bounded joins; independent private plugin unchanged externally. | Both private API/tool compatibility tests + golden fixture stat parity; no owner credentials exposed; private synthetic single tenant works alone; non-authorized default team rejected in public. |
 | **P2 — Public persistence/application auth** | Postgres migrations/schema/indexes, identity/tenant/team/channel ownership, transactionally safe management and account claims, scoped result sets and conversation state. | Multi-tenant CRUD+integration tests on ephemeral Postgres; 2 guilds/2 users isolation, cross-team result-set and privilege-denial tests, repeated nicknames supported. |
 | **P3 — Public KOOK onboarding/transport** | KOOK WS adapter, cards, DM/interaction confirmations, event inbox/outbox, idempotency and outbound retry; isolated test bot. | Offline protocol fixtures plus real test KOOK guild if credentials/operator approval; reconnection/resume, duplicate messages, cross-channel delivery, callback replay/rebind unauthorized denial. |
-| **P4 — AI SDK natural-language UX** | `saas-combo` provider, validated QueryPlan, limited context, safe review generation, deterministic paths without AI, fallback and spend accounting. | Deidentified ~100–200 prompt benchmark incl Chinese alias/time/follow-up/teammate misdamage, injection and hallucinations; results compared against existing Kurisu PUBG behavior; report accuracy and token/P95. |
+| **P4 — Conversational Agent UX** | Dedicated public persona; bounded multi-step AI SDK Agent; natural replies on every accepted human message; scoped channel/user context; safe Domain tools and visible failure fallback. | Isolated end-to-end message-to-outbox tests prove ordinary chat replies, chained multi-tool queries and pronoun follow-ups; binding goes through trusted authorization; two-user context is isolated; no-team chat works; provider/tool failures are non-silent. Then Arthur verifies real KOOK chat. Deidentified prompt quality comparison may inform tuning but cannot replace live acceptance. |
 | **P5 — Ingestion, observability, resources** | Public PG scheduler/worker, global rate limiting, cache and parser versioning, metrics, alarms, resource caps, Compose CI/build and failures. | Multi-tenant simulated load 200 teams (~800 users), baseline ~30 queries/team/day if chosen; measured API rate compliance, KOOK message quota math, latency/resource report, partial coverage truthful; private workloads unaffected. |
 | **P6 — Backup/restore and migration rehearsal** | Secure backup, restore/migration runbook, immutable independent public image, fresh Linux recovery simulation, independence drills, privacy/deletion docs. | Stop public -> private still functions; restore public elsewhere -> public works with old host isolated; record RPO/RTO, secret checks and rollback; still no real cloud purchase required. |
 | **P7 — Controlled release review** | Summarize all phase evidence and blockers, update scoped architecture/docs without erasing private-only policies, and request operator go/no-go. | All gates pass and operator explicitly authorizes KOOK live onboarding/production `--apply` and any changes to 9Router or private deployed runtime. NO implicit deployment on successful tests. |
 
-Development order may re-sequence P3/P4 with mock ingress to find AI issues early, but **P1 and P2 safety boundaries cannot be deferred behind a live public rollout**. Use small auditable commits per phase; each phase should identify changed files, commands, results, unresolved assumptions, next checkpoint and rollback strategy. No blanket performance claim without load result. Existing `docs/CURRENT_TASK.md` points to other concurrent work: Codex must avoid applying it unintentionally and should update task pointer only when operator activates this Goal in its working branch.
+Development order may re-sequence P3/P4 with mock ingress to find AI issues early, but **P1 and P2 safety boundaries cannot be deferred behind a live public rollout**. Use small auditable commits per phase; each phase should identify changed files, commands, results, unresolved assumptions, next checkpoint and rollback strategy. No blanket performance claim without load result. `docs/CURRENT_TASK.md` is the canonical active-task pointer and currently points to this public SaaS Goal.
 
 ### Exact high-value security/functional tests
 

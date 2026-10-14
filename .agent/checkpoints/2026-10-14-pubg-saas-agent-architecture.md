@@ -42,16 +42,17 @@ Domain, server authorization and the private Kurisu runtime unchanged.
 - Focused Agent/ingress, binding, query executor, authorization and quote tests
   passed during implementation.
 
-## Current limits
+## Limits at the source-only checkpoint
 
 - No KOOK credentials or PUBG/model provider credentials were loaded for this
   source validation. No live PUBG call or model request was sent.
 - No real KOOK group message was sent. Arthur's real test-server experience
   remains the M2 acceptance gate; M2 is not complete.
-- No M204 runtime was replaced and no image was built or pushed. The public
-  M204 stack still runs the previously recorded `da03953` gateway/worker
-  image. The default SaaS outbound budget remains 200 messages per bot/day;
-  live remaining allowance and developer-account eligibility were not queried.
+- At this source-only checkpoint, no M204 runtime was replaced. That changed in
+  the later authorized rollout recorded at
+  `.agent/checkpoints/2026-10-14-pubg-saas-agent-runtime-rollout.md`.
+- The default SaaS outbound budget is 200 messages per bot/day; KOOK
+  developer-account eligibility remains unverified.
 - No 200-team load test or unrelated scale work was run.
 
 ## Reproduction

@@ -2,7 +2,7 @@
 
 Date: 2026-10-14 (Asia/Shanghai).
 
-## Active task — public conversational Agent correction (2026-10-14)
+## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
 
 The current source replaces the forced intent classifier on the ordinary
 message path with a bounded Vercel AI SDK `ToolLoopAgent`. Every trusted human
@@ -20,21 +20,39 @@ Provider failures, Domain tool failures, authorization denials and outbox quota
 or send failures each have distinct safe status/diagnostic paths. The local
 PostgreSQL schema adds migrations `0015` and `0016`. Validation passed:
 SaaS/PostgreSQL 126/126, PUBG/Kurisu regression 68/68, SaaS typecheck and
-package build. No Docker image was built and no runtime was replaced. M204
-continues to run the previously recorded `da03953` gateway/worker image.
-Arthur's real KOOK test-server experience remains required; M2 is not complete.
+package build. Python backup/Compose adapter tests passed 24/24 after fixing
+stdin forwarding for snapshot SQL. Local Buildx verified `linux/amd64` and
+`linux/arm64`; no image was pushed. A synthetic encrypted backup restored to
+a fresh isolated PostgreSQL instance with 39/39 public tables and app/backup
+permission boundaries verified.
+
+With the explicit M204 Gateway/Worker replacement authorization, image
+`local/pubg-saas:git-f5c40e2` was built and only those two services were
+recreated. Migrations are at `0016`; Gateway is running with zero restarts and
+has persisted a KOOK session (`last_sn=29`), Worker and PostgreSQL are healthy.
+The existing PostgreSQL, egress proxy, and independent 9Router container IDs
+were preserved. The pre-migration encrypted snapshot and prior image setting
+remain in protected host-local storage. Current outbound-budget accounting is
+15/200; KOOK developer-account eligibility is unverified.
+
+No live user message, model request, or PUBG API request was deliberately sent
+as a deployment smoke. The persisted session and container state do not prove
+that an actual group message receives a reply; the session sequence was not
+updated within the last two minutes at the read-only check. Arthur must perform
+the real KOOK conversational acceptance. M2 is not complete.
 
 This task's current source checkpoint and repro details:
 `.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
+Runtime rollout and M204 rollback evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-agent-runtime-rollout.md`.
 
-## Previous public runtime authorization — 2026-10-14
+## Previous public runtime authorization — historical baseline (2026-10-14)
 
-The prior image and test evidence remain historical. Source commit `da03953`
-is still the deployed image on M204 until a separately authorized replacement.
-Its forced classifier can silently complete an unsupported message; this is
-the behavior the active source correction replaces. Existing deployment scope
-remains limited to the named M204 public stack's gateway and worker. No private
-OpenClaw/Kurisu, private 9Router, or production resource may be changed.
+Before the latest authorized replacement, M204 ran source commit `da03953`,
+whose forced classifier could silently complete an unsupported message. The
+current correction replaces that path. Deployment scope remains limited to
+the named M204 public stack's Gateway and Worker. Private OpenClaw/Kurisu,
+private 9Router, and unrelated production resources remain outside scope.
 
 ## Operator-selected source implementation Goal — 2026-10-13
 

@@ -1,6 +1,35 @@
 # Project State — 2026-10-14
 
-## 2026-10-14 — Public conversational Agent source correction (not deployed)
+## 2026-10-14 — Public conversational Agent M204 rollout
+
+Source commits `1e74e5a` and `f5c40e2` route every trusted human KOOK message
+through the Vercel AI SDK `ToolLoopAgent`, preserve the existing authorized
+Domain executor, and fix Compose PostgreSQL snapshot stdin forwarding. Focused
+source validation passed: SaaS/PostgreSQL 126/126, private Kurisu regression
+68/68, SaaS typecheck/build, 24 backup/Compose adapter tests, architecture and
+secret checks. Local Buildx verified `linux/amd64` and `linux/arm64`; no image
+was pushed.
+
+After the separately authorized M204 rollout, `pubg-saas-public` Gateway and
+Worker run `local/pubg-saas:git-f5c40e2`. PostgreSQL is at migration `0016`.
+Gateway is running with zero restarts and persisted KOOK session state at
+`last_sn=29`; Worker and PostgreSQL are healthy. Existing PostgreSQL,
+egress-proxy, and independent 9Router container IDs were unchanged. A protected
+encrypted pre-migration snapshot was verified before migration. An isolated
+synthetic recovery restored 39/39 public tables and passed app/backup database
+permission probes. The current local daily budget row is 15/200; developer
+eligibility and the attribution of existing usage remain unverified.
+
+No live group message, model call, or PUBG API request was initiated as a
+deployment smoke. A stored WS session is not proof of an end-to-end reply, and
+the session sequence had not advanced within the last two minutes at the final
+read-only check. Arthur will perform real KOOK acceptance. M2 remains open.
+Rollback uses the protected pre-deploy image setting and encrypted snapshot;
+from the live Compose directory, restore that setting and run
+`docker compose up -d --no-deps --wait gateway worker`. Full evidence and
+reproduction are in `.agent/checkpoints/2026-10-14-pubg-saas-agent-runtime-rollout.md`.
+
+## 2026-10-14 — Public conversational Agent source correction (pre-rollout)
 
 The active source removes `KookGroupWriteIntentParser` from the ordinary
 message path and runs every trusted human group message through a bounded
@@ -27,10 +56,10 @@ Validation passed: SaaS/PostgreSQL 126/126, private PUBG/Kurisu regression
 chat replies, direct and multi-step Agent behavior, quote/history handling,
 speaker separation, tool/domain data, kick filtering, authorization denial,
 provider/tool fallbacks, mention-ID redaction and outbox daily-budget logging.
-No load/scale benchmark, Docker image build, deployment, or live KOOK request
-was run. M204 remains on the previously recorded `da03953` gateway/worker
-image; Arthur's real KOOK test-server experience is still required. M2 is not
-complete. Evidence and reproduction:
+At this checkpoint, no load/scale benchmark, Docker image build, deployment,
+or live KOOK request had been run. The subsequent rollout is recorded above;
+Arthur's real KOOK test-server experience is still required. M2 is not
+complete. Source evidence and reproduction:
 `.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.
 
 ## 2026-10-14 — Group-only account binding deployed to isolated SaaS
