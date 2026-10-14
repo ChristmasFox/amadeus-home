@@ -26,6 +26,16 @@ stdin forwarding for snapshot SQL. Local Buildx verified `linux/amd64` and
 a fresh isolated PostgreSQL instance with 39/39 public tables and app/backup
 permission boundaries verified.
 
+P4 source follow-up commits `d45d956` and `e600cab` add a sequential
+multi-tool Agent test and preserve natural-write authorization failures as
+`authorization_denied` or permission-check degradation in run status and safe
+diagnostics. The focused Agent, ingress, query and binding tests passed 9/9
+against the already-running loopback-only `pubg-saas-pg18` fixture; SaaS
+typecheck, `pnpm check:secrets` and `git diff --check` passed. The full SaaS
+suite has not been rerun after these two source commits. They are local commits
+ahead of `origin/main` and have not been deployed; M204 still runs the previously
+authorized `git-f5c40e2` image.
+
 With the explicit M204 Gateway/Worker replacement authorization, image
 `local/pubg-saas:git-f5c40e2` was built and only those two services were
 recreated. Migrations are at `0016`; Gateway is running with zero restarts and
