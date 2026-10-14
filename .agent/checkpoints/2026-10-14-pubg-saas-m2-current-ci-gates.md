@@ -32,6 +32,24 @@ regression. This CI gate does not supply live human KOOK events or PUBG/model
 provider evidence. GitHub Actions itself has not run because the branch has not
 been pushed.
 
+## Latest-source multiarch follow-up
+
+After the egress-proxy metrics relay landed in source commit `7f3b95b`, M204's
+local BuildKit builder produced an OCI archive for both `linux/amd64` and
+`linux/arm64`. The verifier accepted both platforms. OCI manifest-list digest:
+`sha256:7cfc5d19b320b431f2da8b93afc4f1b6b6fd22f63bf884c139945d32d4da2d68`.
+The 163 MB temporary archive was removed after verification. No image was
+pushed. This proves the latest source builds for both OCI platforms; it is not
+a Compose runtime test on physical amd64 Linux. Native ARM64 M204 Compose and
+host metrics relay acceptance are recorded in
+`.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
+
+Reproduce on M204 without publishing:
+
+```sh
+orb -m nyannyan -u root bash -lc 'cd /Users/nyannyan/amadeus-home && docker buildx build --platform linux/amd64,linux/arm64 --progress=plain --resource memory=4g --resource cpu-quota=400000 --output type=oci,dest=/var/tmp/pubg-saas-7f3b95b-multiarch.oci -f apps/pubg-saas/Dockerfile . && python3 scripts/verify-pubg-saas-oci.py /var/tmp/pubg-saas-7f3b95b-multiarch.oci && rm -f -- /var/tmp/pubg-saas-7f3b95b-multiarch.oci'
+```
+
 ## Reproduction
 
 Use the existing isolated PG fixture; do not start or stop it for this run.
@@ -54,6 +72,8 @@ docker buildx build --builder orbstack \
 python3 scripts/verify-pubg-saas-oci.py /tmp/pubg-saas-current.oci.tar
 ```
 
-After verification, remove only the generated `/tmp/pubg-saas-current.oci.tar`.
+For a current-source M204 reproduction, use the host profile's `nyannyan`
+machine and write the OCI output under `/var/tmp`, then run the same verifier.
+After verification, remove only the generated OCI archive.
 The separately required M204 Compose and database recovery commands are in
 [`2026-10-14-pubg-saas-m2-current-image-local-recovery.md`](2026-10-14-pubg-saas-m2-current-image-local-recovery.md).

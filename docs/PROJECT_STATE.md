@@ -25,6 +25,12 @@ checkpoint; this change only adds the
 fixed-path metrics relay and Compose port mapping. No image was pushed and no
 production or private runtime was changed. Reproduction:
 `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
+The same source commit also built as local OCI for `linux/amd64` and
+`linux/arm64`; the verifier accepted both under manifest-list digest
+`sha256:7cfc5d19b320b431f2da8b93afc4f1b6b6fd22f63bf884c139945d32d4da2d68`.
+The archive was removed and not pushed. This is multiarch build evidence, not
+an amd64 Linux Compose runtime test; full evidence is in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md`.
 
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 
