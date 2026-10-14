@@ -31,6 +31,11 @@ The same source commit also built as local OCI for `linux/amd64` and
 The archive was removed and not pushed. This is multiarch build evidence, not
 an amd64 Linux Compose runtime test; full evidence is in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md`.
+The amd64 image then passed a Compose smoke under emulation on the M204 ARM64
+machine: PG and Worker health checks passed, Worker `process.arch` was `x64`,
+and host metrics returned 200. The isolated volume was reused and retained;
+private OpenClaw/9Router remained running and unchanged. This does not replace
+a native x86_64 Linux runtime test.
 
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 

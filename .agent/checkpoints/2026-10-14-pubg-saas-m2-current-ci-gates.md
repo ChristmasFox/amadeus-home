@@ -44,6 +44,50 @@ a Compose runtime test on physical amd64 Linux. Native ARM64 M204 Compose and
 host metrics relay acceptance are recorded in
 `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
 
+The amd64 image was also loaded locally as
+`local/pubg-saas:git-7f3b95b-amd64` (image ID
+`sha256:0a8ceac6fe202e8ec6e6d10af858756c3d7c707acc991e560b33a56f1a9ad426`)
+and started with Compose on M204's ARM64 machine using its amd64 emulation.
+It reused the existing isolated PG volume: PostgreSQL, migration task,
+egress-proxy and Worker became healthy; inside the Worker `process.arch` was
+`x64`; host-loopback `/metrics` returned 200 and `pubg_saas_worker_up 1`.
+Compose was stopped with ordinary `down`, retaining the volume, and the test
+stack's prior `.env` image reference was restored. OpenClaw/9Router remained
+running with their recorded IDs/start times and restart count 0. This is an
+emulated runtime smoke on ARM64, not a native clean amd64 Linux host test.
+No Gateway, PUBG/model request, real credential, image push or deploy occurred.
+
+Reproduce on M204 after preparing the isolated stack documented above:
+
+```sh
+orb -m nyannyan -u root bash -lc 'cd /Users/nyannyan/amadeus-home && docker buildx build --platform linux/amd64 --load --resource memory=4g --resource cpu-quota=400000 -f apps/pubg-saas/Dockerfile -t local/pubg-saas:git-7f3b95b-amd64 .'
+```
+
+Run the Compose smoke against the previously created M204 isolated stack. Its
+secret/env files and PostgreSQL volume stay in place; the trap restores the
+original image reference and stops containers with ordinary `down`:
+
+```sh
+orb -m nyannyan -u root bash -lc '
+set -euo pipefail
+PROJECT=pubg-saas-m2-relay-20261014-7f3b95b
+STACK=/var/tmp/$PROJECT
+cp "$STACK/.env" "$STACK/.env.pre-amd64"
+cleanup() {
+  docker compose --project-name "$PROJECT" --project-directory "$STACK" --env-file "$STACK/.env" -f "$STACK/compose.yaml" down >/dev/null 2>&1 || true
+  mv -f "$STACK/.env.pre-amd64" "$STACK/.env"
+}
+trap cleanup EXIT
+sed -i "s|^PUBG_SAAS_IMAGE=.*|PUBG_SAAS_IMAGE=local/pubg-saas:git-7f3b95b-amd64|" "$STACK/.env"
+docker compose --project-name "$PROJECT" --project-directory "$STACK" --env-file "$STACK/.env" -f "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+docker compose --project-name "$PROJECT" --project-directory "$STACK" --env-file "$STACK/.env" -f "$STACK/compose.yaml" --profile ops run --rm migrate
+docker compose --project-name "$PROJECT" --project-directory "$STACK" --env-file "$STACK/.env" -f "$STACK/compose.yaml" up -d --wait worker
+WORKER=$(docker compose --project-name "$PROJECT" --project-directory "$STACK" --env-file "$STACK/.env" -f "$STACK/compose.yaml" ps -q worker)
+test "$(docker exec "$WORKER" node -p process.arch)" = x64
+curl --fail --silent --show-error http://127.0.0.1:29465/metrics | grep -Fx "pubg_saas_worker_up 1"
+'
+```
+
 Reproduce on M204 without publishing:
 
 ```sh

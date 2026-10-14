@@ -88,6 +88,9 @@ current-source architecture check, 23 backup/Compose-adapter safety tests and
 amd64+arm64 OCI build verification also pass locally without publishing.
 The relay source commit `7f3b95b` also passed a fresh M204 Buildx OCI build for
 both platforms; manifest `sha256:7cfc5d19b320b431f2da8b93afc4f1b6b6fd22f63bf884c139945d32d4da2d68` was verified and its temporary archive removed.
+Its amd64 image also passed an emulated Compose startup on M204 ARM64: Worker
+reported `x64`, became healthy, and host metrics returned 200. This is not a
+native amd64-host Compose test.
 Local Compose build/start, encrypted backup/restore
 with table-count and role-boundary probes, and the public-stop/private-Kurisu
 source regression are verified. Commit `7f3b95b` adds a fixed-path Worker
