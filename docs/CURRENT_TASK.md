@@ -88,7 +88,9 @@ current-source architecture check, 23 backup/Compose-adapter safety tests and
 amd64+arm64 OCI build verification also pass locally without publishing.
 Local Compose build/start, encrypted backup/restore
 with table-count and role-boundary probes, and the public-stop/private-Kurisu
-source regression are verified. The current M204 host-profile mapping resolves
+source regression are verified. Commit `7f3b95b` adds a fixed-path Worker
+metrics relay; its M204 host-loopback GET returned 200 while the Worker stayed
+internal-only and had no host port. The current M204 host-profile mapping resolves
 to OrbStack machine `nyannyan`; its local Compose/recovery and one bounded
 200-team host measurement are recorded below. A separate clean Linux VM also restored the
 public archive into a new PG volume and started the current Worker healthy;
@@ -205,6 +207,29 @@ cause remains unverified and is documented in the Compose README. No real
 PUBG/model credential, production DB, image push/deploy, 9Router change or
 private OpenClaw restart was involved. Full evidence and command sequence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-image-local-recovery.md`.
+
+### M204 Worker metrics relay acceptance — 2026-10-14
+
+Commit `7f3b95b` built on M204 OrbStack ARM64 as
+`local/pubg-saas:git-7f3b95b` (image ID
+`sha256:e52c734edc432eb5f9d84af9aa2c8086467f38146ec9dade75e26fe6b4c00d47`).
+An isolated Compose project initialized a fresh PostgreSQL 18.1 volume, applied
+the current migrations, and started a healthy Worker on an empty queue. The
+host-loopback metrics GET returned 200 and contained `pubg_saas_worker_up 1`;
+other paths returned 404 and POST returned 405. Docker inspection confirmed
+the Worker had no host-port binding and joined only `postgres_private` and
+`egress_internal`; only the egress proxy published the loopback relay port.
+
+The temporary Compose project stopped with ordinary `down`, retaining its
+isolated volume. OpenClaw and 9Router IDs, start times, running state and
+restart counts were identical before and after (both restart counts 0).
+Focused relay/Worker health/metrics tests passed 14/14; SaaS and private
+typechecks passed; the private PUBG suite passed 68/68; architecture and secret
+checks passed. No Gateway, PUBG API, model endpoint or real credential was
+used. The earlier full encrypted backup/restore and source/restore permission
+rehearsal remains in the current-image checkpoint above; this relay-only change
+does not touch PostgreSQL schema, backup tooling or role grants. Detailed
+commands: `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
 
 ### Current-source M2 source/OCI gates — 2026-10-14
 

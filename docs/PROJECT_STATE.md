@@ -1,5 +1,29 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — M204 Worker metrics relay host-loopback acceptance
+
+Commit `7f3b95b` built on OrbStack machine `nyannyan` as local ARM64 image
+`local/pubg-saas:git-7f3b95b` (image ID
+`sha256:e52c734edc432eb5f9d84af9aa2c8086467f38146ec9dade75e26fe6b4c00d47`).
+The isolated Compose project initialized a fresh PG18.1 volume, applied current
+migrations and started a healthy Worker on an empty queue. Host-loopback
+`GET /metrics` returned 200 with `pubg_saas_worker_up 1`; a query-string path
+returned 404 and POST returned 405. Docker inspection confirmed that only
+`egress-proxy` published the loopback relay port; Worker had no host port and
+only joined `postgres_private` and `egress_internal`.
+
+The project was stopped with ordinary `docker compose down`, retaining its
+isolated volume. OpenClaw and 9Router IDs, start times, running states and
+restart counts were identical before and after (both counts 0). Focused
+relay/Worker tests passed 14/14, current SaaS/private typechecks passed, the
+private PUBG regression passed 68/68, and architecture, secret and diff checks
+passed. The Gateway was not started; no PUBG/model request or real credential
+was used. The full encrypted backup/restore and role-boundary drill remains
+documented in the prior current-image checkpoint; this change only adds the
+fixed-path metrics relay and Compose port mapping. No image was pushed and no
+production or private runtime was changed. Reproduction:
+`.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
+
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 
 At current source commit `20b06da` (documentation-only `5409671` follows), the

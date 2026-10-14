@@ -52,7 +52,9 @@ on its separate container-loopback `/healthz` endpoint.
 
 This relay routes host scrapes through the egress-proxy bridge while preserving
 the Worker's internal-only network boundary. Verify the host-loopback route on
-the target machine before relying on it for alerting.
+the target machine before relying on it for alerting. On M204 OrbStack, commit
+`7f3b95b` returned HTTP 200 for `/metrics`, 404 for a query-string path and 405
+for POST; the Worker had no host port and joined only the two private networks.
 
 ## Build an immutable local image
 

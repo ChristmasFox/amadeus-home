@@ -97,11 +97,14 @@ Encrypted backup/decrypt/restore was exercised against the isolated PostgreSQL
 disposable database/roles were cleaned. The `public` schema TOC restore defect
 was fixed. A six-hour UTC systemd backup job and guarded seven-day retention
 source are present but uninstalled; its one-shot job passed against the isolated
-PostgreSQL fixture. Image build, clean Linux/cloud recovery, scheduled operation,
-tested egress restrictions and public/private stop-isolation remain open. A P3
-live smoke passed KOOK gateway auth, one labeled outbox delivery and sequence-1
-resume; full human-user flows need a test actor and a second channel. The daily
-budget integration suite passes, but developer-account eligibility and other
+PostgreSQL fixture. Current ARM64 M204 and clean Linux restore/startup drills
+pass; they do not prove full public operation with M204 unavailable. Application
+egress restrictions and public-stop/private-Kurisu regression are verified.
+Commit `7f3b95b` routes host metrics through a fixed GET-only relay; M204
+OrbStack host scraping returned 200 while Worker stayed on internal-only
+networks. A P3 live smoke passed KOOK gateway auth, one labeled outbox delivery
+and sequence-1 resume; full human-user flows need a test actor and a second
+channel. The daily budget integration suite passes, but developer-account eligibility and other
 bots' quota use remain unverified. The
 deidentified prompt benchmark and measured M204 resource/quota feasibility
 remain open. The P4 benchmark runner is in
@@ -109,8 +112,9 @@ remain open. The P4 benchmark runner is in
 owner-only 100–200-case prompt file and test-provider credentials before it can
 produce accuracy/token/P50/P95 evidence.
 The worker also emits aggregate queue state/age and process RSS/heap in each
-cycle log without tenant identifiers; host alert rules and M204 thresholds are
-still open.
+cycle log without tenant identifiers. Host alert rules/delivery, persistent
+backup scheduling, M204 thresholds, full independent runtime operation,
+verified quota eligibility and live PUBG/model benchmarks remain open.
 
 ## Request paths and guardrails
 
