@@ -1,5 +1,35 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS public SOUL-sourced persona rollout
+
+Commit `642f04eb5566f3b429373462a6ea75c3dd7c521b` is pushed and deployed on
+OrbStack VM `pubg-saas-m2-clean` as ARM64 image
+`local/pubg-saas:git-642f04eb5566f3b429373462a6ea75c3dd7c521b` (image ID
+`sha256:ee197854e86f63d518b264fa054d9eca45bf524289a9936d059f9ae5099c60a1`).
+Only Gateway and Worker were replaced. Gateway is running and Worker is
+healthy; both have zero restarts. The read-only KOOK probe returned connected,
+`last_sn=61`, updated within five minutes. PostgreSQL, egress-proxy, and SaaS
+9Router container IDs were unchanged; no migration ran. Gateway and Worker had
+zero error/fatal/uncaught/startup-failure log matches in the 10-minute window.
+No manual model/PUBG call was made.
+
+The public Agent's speaking-style source is the `说话方式` section of the
+private workspace `SOUL.md`, mirrored as a verbatim public-safe excerpt in
+`apps/pubg-saas/src/application/public-agent-soul.md`. The sole line naming
+the private assistant was excluded. Memory, personal details, DMs, and private
+nickname mappings were not read or copied; private runtime files were not
+modified. Both main and recovery Agent prompts use this copy, and tests pin the
+excerpt and enforce privacy exclusions.
+
+Validation passed: SaaS/PostgreSQL 146/146 with no skips using isolated PG18,
+PUBG/Kurisu 70/70, builds/typechecks, architecture, secrets, and diff checks.
+The mode-0600 pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-642f04e-pre-switch.txt`.
+Full results and rollback steps are in
+`.agent/checkpoints/2026-10-14-pubg-saas-public-soul-rollout.md`.
+
+Arthur's live KOOK acceptance is pending; M2 is not complete.
+
 ## 2026-10-14 — PUBG SaaS public Agent rich battle reports
 
 Commit `adeb839f5bfec07134a11259608edaa7e9171096` is pushed to `origin/main`

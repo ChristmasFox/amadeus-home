@@ -2,7 +2,35 @@
 
 Date: 2026-10-14 (Asia/Shanghai).
 
-## Active task — public Agent rich battle reports (2026-10-14)
+## Active task — SOUL-sourced public Agent persona (2026-10-14)
+
+Arthur clarified that public KOOK personality must use the private OpenClaw
+workspace `SOUL.md` as its source. The checked-in public-safe verbatim excerpt
+is `apps/pubg-saas/src/application/public-agent-soul.md`; it omits the single
+line naming the private assistant. Neither private memory/user/DM data nor
+private nickname mappings were read or copied, and no private files changed.
+The normal Agent and recovery summarizer share the excerpt; the build ships the
+copy beside the compiled code, and tests pin the copy and exclude private
+identity markers.
+
+Source commit `642f04eb5566f3b429373462a6ea75c3dd7c521b` is pushed and deployed
+to `pubg-saas-m2-clean` as ARM64 image
+`local/pubg-saas:git-642f04eb5566f3b429373462a6ea75c3dd7c521b`. Only Gateway
+and Worker were replaced. Gateway is running with zero restarts; Worker is
+healthy with zero restarts. KOOK is connected (`last_sn=61`), the inspected
+10-minute error-log match count is zero, and PostgreSQL/egress-proxy/SaaS
+9Router were unchanged. No migration or manual model/PUBG API request ran.
+`pnpm test:pubg-saas` passed 146/146 with no skips; `pnpm test:pubg` passed
+70/70; builds, typechecks, architecture, secrets and diff checks passed.
+
+The mode-0600 rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-642f04e-pre-switch.txt`.
+Full evidence and rollback steps:
+`.agent/checkpoints/2026-10-14-pubg-saas-public-soul-rollout.md`.
+Arthur's real KOOK acceptance remains pending; M2 is not complete. Stop here
+and wait for Arthur's test.
+
+## Previous rollout — public Agent rich battle reports (2026-10-14)
 
 Arthur authorized richer, Kurisu-aligned public KOOK replies, full validation,
 push, and Gateway/Worker-only replacement on `pubg-saas-m2-clean`. Source
