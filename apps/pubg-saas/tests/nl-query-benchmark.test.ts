@@ -34,7 +34,12 @@ const plan: QueryPlan = {
 
 function mockResult(output: QueryPlan) {
   return {
-    content: [{ type: 'text' as const, text: JSON.stringify(output) }],
+    content: [{
+      type: 'tool-call' as const,
+      toolCallId: 'query-plan-call',
+      toolName: 'submit_query_plan',
+      input: JSON.stringify(output),
+    }],
     finishReason: { unified: 'stop' as const, raw: 'stop' },
     usage: {
       inputTokens: { total: 31, noCache: 31, cacheRead: undefined, cacheWrite: undefined },

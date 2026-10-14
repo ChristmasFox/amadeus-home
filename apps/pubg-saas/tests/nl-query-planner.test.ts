@@ -16,7 +16,7 @@ const usage = {
 function modelFor(output: unknown): MockLanguageModelV4 {
   const text = typeof output === 'string' ? output : JSON.stringify(output);
   return new MockLanguageModelV4({ doGenerate: {
-    content: [{ type: 'text', text }],
+    content: [{ type: 'tool-call', toolCallId: 'query-plan-call', toolName: 'submit_query_plan', input: text }],
     finishReason: { unified: 'stop', raw: 'stop' },
     usage,
     warnings: [],
@@ -64,6 +64,9 @@ test('plans a bounded PUBG intent and accounts for mock-provider usage', async (
   });
   assert.equal(model.doGenerateCalls.length, 1);
   assert.equal(model.doGenerateCalls[0]?.maxOutputTokens, QUERY_PLANNER_LIMITS.maxOutputTokens);
+  assert.equal(model.doGenerateCalls[0]?.toolChoice?.type, 'tool');
+  assert.equal(model.doGenerateCalls[0]?.toolChoice?.toolName, 'submit_query_plan');
+  assert.equal(model.doGenerateCalls[0]?.tools?.[0]?.name, 'submit_query_plan');
 });
 
 test('does not prompt caller authorization identifiers and treats injection as untrusted text', async () => {
@@ -174,7 +177,7 @@ test('passes a caller abort signal into the provider invocation', async () => {
     doGenerate: async options => {
       providerSignal = options.abortSignal;
       return {
-        content: [{ type: 'text', text: JSON.stringify(validPlan) }],
+        content: [{ type: 'tool-call', toolCallId: 'query-plan-call', toolName: 'submit_query_plan', input: JSON.stringify(validPlan) }],
         finishReason: { unified: 'stop', raw: 'stop' },
         usage,
         warnings: [],
