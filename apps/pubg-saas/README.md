@@ -244,6 +244,17 @@ and 20 telemetry fetches per team per cycle. These are operating defaults, not
 a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry
 concurrency are bounded. SIGINT/SIGTERM stop intake and close pools.
 
+The isolated synthetic 200-team benchmark accepts
+`PUBG_SAAS_BENCH_QUERIES_PER_TEAM` from 1 to 50 (default 1). Setting it to 30
+replays 6,000 scoped query tasks against synthetic matches in a burst; it
+measures database/query behavior without KOOK, PUBG or model calls. It also
+simulates 200 concurrent teams contending for the PostgreSQL global PUBG
+admission row, applies a synthetic provider 429/reset window, and verifies that
+all contenders observe the pause and the new provider rate limit. The admission
+phase does not issue HTTP requests. This burst does not pace traffic across a
+day or establish a production SLO. The benchmark refuses non-loopback hosts and
+databases other than `pubg_test`, and drops its unique schema when the run exits.
+
 Each completed sync cycle writes one JSON log event with duration, teams and
 telemetry counters, aggregate due/delayed/leased/expired queue counts, the
 oldest due age, and process RSS/heap bytes. Queue telemetry contains no tenant

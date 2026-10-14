@@ -1,6 +1,8 @@
 /**
  * Synthetic M2 benchmark. Run explicitly with:
  *   PUBG_SAAS_TEST_DATABASE_URL=... pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
+ *   PUBG_SAAS_BENCH_QUERIES_PER_TEAM=30 replays 6,000 scoped query tasks plus
+ *   a 200-contender PostgreSQL global-admission/429-reset simulation.
  *
  * This is a local, bounded simulation; it is not a production capacity test.
  */
@@ -9,13 +11,22 @@ import { Pool, type PoolClient, type QueryResult } from 'pg';
 import { createTeamContext } from '@agent/pubg-domain/core';
 import { migratePublicDatabase } from '../src/infrastructure/postgres/migrate.js';
 import { PostgresPubgRepository } from '../src/infrastructure/postgres/pubg-repository.js';
+import { PostgresPublicPubgAdmission } from '../src/infrastructure/pubg/request-limiter.js';
 import { PublicSyncWorker } from '../src/application/public-sync-worker.js';
 
 const TEAM_COUNT = 200;
 const PLAYERS_PER_TEAM = 4;
 const MATCHES_PER_TEAM = 2;
 const TEST_DATABASE_URL = process.env.PUBG_SAAS_TEST_DATABASE_URL;
-const CONCURRENCY = boundedInteger(process.env.PUBG_SAAS_BENCH_CONCURRENCY, 8, 1, 16);
+const CONCURRENCY = boundedInteger(
+  process.env.PUBG_SAAS_BENCH_CONCURRENCY,
+  8,
+  1,
+  16,
+  'benchmark_concurrency_invalid',
+);
+// At most 10,000 query tasks: 200 teams × 50 requests/team.
+const QUERIES_PER_TEAM = boundedInteger(process.env.PUBG_SAAS_BENCH_QUERIES_PER_TEAM, 1, 1, 50);
 
 interface QuerySample {
   phase: string;
@@ -35,11 +46,17 @@ interface PhaseSamples {
   queryVerbs: Record<string, number>;
 }
 
-function boundedInteger(value: string | undefined, fallback: number, minimum: number, maximum: number): number {
+function boundedInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+  errorCode: string = 'benchmark_queries_per_team_invalid',
+): number {
   if (value === undefined) return fallback;
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed < minimum || parsed > maximum) {
-    throw new Error('benchmark_concurrency_invalid');
+    throw new Error(errorCode);
   }
   return parsed;
 }
@@ -127,6 +144,57 @@ function summarize(samples: QuerySample[], phase: string, elapsedMs: number): Ph
     p99Ms: round(percentile(durations, 0.99)),
     queriesPerSecond: round(elapsedMs > 0 ? selected.length / (elapsedMs / 1000) : 0),
     queryVerbs,
+  };
+}
+
+async function simulateGlobalPubgAdmission(pool: Pool): Promise<{
+  configuredRequestsPerMinute: number;
+  concurrentTeams: number;
+  immediatelyAdmitted: number;
+  initiallyDeferred: number;
+  post429Blocked: number;
+  resetPermitGranted: boolean;
+  providerObservedLimitEnforced: boolean;
+  failures: string[];
+}> {
+  const admission = new PostgresPublicPubgAdmission(pool, 10, 0);
+  const burst = await Promise.all(Array.from({ length: TEAM_COUNT }, () => admission.tryAcquire()));
+  const immediatelyAdmitted = burst.filter(waitMs => waitMs === 0).length;
+  const initiallyDeferred = burst.filter(waitMs => waitMs > 0).length;
+  const failures: string[] = [];
+  if (immediatelyAdmitted !== 1 || initiallyDeferred !== TEAM_COUNT - 1) {
+    failures.push('global_admission_did_not_serialize_team_burst');
+  }
+
+  await admission.observe(new Headers({
+    'x-ratelimit-limit': '2',
+    'x-ratelimit-remaining': '0',
+    'x-ratelimit-reset': String(Math.ceil(Date.now() / 1000) + 60),
+  }), 429);
+  const after429 = await Promise.all(Array.from({ length: TEAM_COUNT }, () => admission.tryAcquire()));
+  const post429Blocked = after429.filter(waitMs => waitMs > 50_000).length;
+  if (post429Blocked !== TEAM_COUNT) failures.push('provider_429_pause_not_shared');
+
+  await pool.query(
+    `UPDATE pubg_api_admission
+     SET blocked_until=NULL,next_request_at=clock_timestamp()-interval '1 second',
+         reserved_at=clock_timestamp()-interval '1 second'
+     WHERE quota_scope='public-pubg'`,
+  );
+  const resetPermitGranted = await admission.tryAcquire() === 0;
+  if (!resetPermitGranted) failures.push('global_admission_did_not_resume_after_reset');
+  const providerObservedLimitEnforced = await admission.tryAcquire() > 29_000;
+  if (!providerObservedLimitEnforced) failures.push('provider_observed_limit_not_enforced');
+
+  return {
+    configuredRequestsPerMinute: 10,
+    concurrentTeams: TEAM_COUNT,
+    immediatelyAdmitted,
+    initiallyDeferred,
+    post429Blocked,
+    resetPermitGranted,
+    providerObservedLimitEnforced,
+    failures,
   };
 }
 
@@ -349,10 +417,12 @@ async function main(): Promise<void> {
     const queryStarted = performance.now();
     phase = 'authorized_queries';
     const queryFailures: Array<{ code: string; index: number }> = [];
-    const queryResults = await concurrentMap(fixture.contexts.length, queryConcurrency, async index => {
+    const expectedQueryTasks = fixture.contexts.length * QUERIES_PER_TEAM;
+    const queryResults = await concurrentMap(expectedQueryTasks, queryConcurrency, async index => {
       try {
-        const context = fixture.contexts[index]!;
-        const team = fixture.teams[index]!;
+        const teamIndex = index % fixture.contexts.length;
+        const context = fixture.contexts[teamIndex]!;
+        const team = fixture.teams[teamIndex]!;
         const repository = new PostgresPubgRepository(measuredPool, context);
         const [count, visible] = await Promise.all([
           repository.countMatches(),
@@ -412,6 +482,12 @@ async function main(): Promise<void> {
     const workerElapsedMs = performance.now() - workerStarted;
     phase = 'idle';
     const workerPhase = summarize(samples, 'worker_reads', workerElapsedMs);
+    phase = 'global_pubg_admission';
+    const admissionStarted = performance.now();
+    const admissionResult = await simulateGlobalPubgAdmission(measuredPool);
+    const admissionElapsedMs = performance.now() - admissionStarted;
+    phase = 'idle';
+    const admissionPhase = summarize(samples, 'global_pubg_admission', admissionElapsedMs);
     const peakConnections = sampler.stop();
     sampler = undefined;
     const processMemoryObservation = processMemorySampler.stop();
@@ -420,7 +496,7 @@ async function main(): Promise<void> {
     const totalExpectedWorkerTeamRuns = TEAM_COUNT;
     const totalAttemptedWorkerTeamRuns = workerResults.reduce((sum, result) => sum + (result?.teamsAttempted ?? 0), 0);
     const totalCompletedWorkerTeamRuns = workerResults.reduce((sum, result) => sum + (result?.teamsCompleted ?? 0), 0);
-    const allFailures = queryFailures.length + workerFailures.length + queryPhase.failures + workerPhase.failures;
+    const allFailures = queryFailures.length + workerFailures.length + queryPhase.failures + workerPhase.failures + admissionResult.failures.length + admissionPhase.failures;
     const report = {
       benchmark: 'pubg-saas-m2-synthetic-200-team',
       scope: 'local isolated schema; synthetic identifiers and match data; no live PUBG/KOOK/model calls',
@@ -429,7 +505,10 @@ async function main(): Promise<void> {
       fixture: fixture.fixtures,
       authorizedQueryPhase: {
         ...queryPhase,
-        tasks: fixture.contexts.length,
+        teams: fixture.contexts.length,
+        queriesPerTeam: QUERIES_PER_TEAM,
+        tasks: expectedQueryTasks,
+        pacing: 'burst replay; daily volume is not spread across 24 hours',
         taskThroughputPerSecond: round(validQueryTasks / (queryElapsedMs / 1000)),
         failures: queryFailures.length + queryPhase.failures,
         failureCodes: countCodes(queryFailures.map(item => item.code)),
@@ -445,14 +524,19 @@ async function main(): Promise<void> {
         failures: workerFailures.length + workerPhase.failures,
         failureCodes: countCodes(workerFailures.map(item => item.code)),
       },
+      globalPubgAdmissionPhase: {
+        ...admissionPhase,
+        ...admissionResult,
+      },
       poolObservation: peakConnections,
       processMemoryObservation,
       totalFailures: allFailures,
       caveat: 'A bounded local synthetic benchmark; results do not establish production capacity or service-level objectives.',
     };
     console.log(JSON.stringify(report, null, 2));
-    if (allFailures !== 0 || validQueryTasks !== fixture.contexts.length
-      || totalCompletedWorkerTeamRuns !== totalExpectedWorkerTeamRuns) process.exitCode = 1;
+    if (allFailures !== 0 || validQueryTasks !== expectedQueryTasks
+      || totalCompletedWorkerTeamRuns !== totalExpectedWorkerTeamRuns
+      || admissionResult.failures.length !== 0) process.exitCode = 1;
   } finally {
     sampler?.stop();
     processMemorySampler?.stop();

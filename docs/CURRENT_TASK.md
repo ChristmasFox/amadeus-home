@@ -123,6 +123,25 @@ The first attempt's `createdAtUtc`-based figure was discarded because that
 timestamp follows snapshot and encryption. The backup utility now records and
 validates a conservative snapshot-request timestamp. Evidence and commands:
 `.agent/checkpoints/2026-10-14-pubg-saas-rpo-rto-rehearsal.md`.
+The query-load harness now supports 30 scoped query tasks per synthetic team.
+On the reused loopback-only PG18.6 `pubg-saas-pg18` fixture it replayed 6,000
+authorized tasks across 200 teams/800 users, executing 132,000 SQL statements
+in 27.288 s with zero task/scope failures; SQL statement P95/P99 were 3.02/88.71
+ms. Worker reads completed 200/200 team runs with zero failures in 380 ms.
+Pool peak was 16/20 with no waiters; the benchmark process RSS peaked at 257 MiB.
+This replay was an unpaced burst on the local fixture, so it does not establish
+canonical M204 headroom, live provider capacity or an SLO. The first run exposed
+and the rerun corrected a stale benchmark exit assertion; exact evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-6000-query-benchmark.md`.
+The same compiled harness then ran on M204 against its retained isolated PG18.1
+Compose fixture, with PG capped at 1 CPU/1 GiB and the runner at 1 CPU/512 MiB.
+It completed 6,000 tasks in 47.609 s (126.03 tasks/s), 132,000 SQL statements,
+zero failures, and 200/200 Worker team runs; pool peak was 16/20 with no
+waiters, runner RSS 115 MiB. The random schema count returned to zero; plain
+`down` retained the dedicated volume. OpenClaw and 9Router IDs/start times
+remained unchanged, restart counts 0. This remains a bounded query/Worker-class
+simulation, not full Gateway/Worker container headroom, paced daily load or an
+SLO. Detailed commands/results: `.agent/checkpoints/2026-10-14-pubg-saas-6000-query-benchmark.md`.
 P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,

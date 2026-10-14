@@ -67,6 +67,24 @@ the project stopped with plain `down`. This VM shares M204's physical OrbStack
 host, so this is local portability evidence, not cloud or host-outage proof.
 Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+The isolated 200-team benchmark now accepts up to 50 synthetic query tasks per
+team. A 30-per-team replay completed 6,000 authorized tasks across 200 teams
+and 800 users on the reusable local PG18.6 fixture: 132,000 SQL statements,
+zero scope/task failures, 219.88 tasks/s, and 200/200 Worker team runs. Pool
+peak was 16/20 without waiters; benchmark RSS peaked at 257 MiB. This was a
+burst replay on the local fixture; M204 service-container headroom, paced daily
+load, live provider throughput and SLO remain unverified. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-6000-query-benchmark.md`.
+
+The 6,000-task replay was repeated on M204 through an isolated PG18.1 Compose
+fixture with explicit 1 CPU/1 GiB PG limits and a 1 CPU/512 MiB runner cap. It
+completed in 47.609 s at 126.03 tasks/s, with 0 failures, 200/200 Worker team
+runs, 16/20 peak pool connections and no waiters; runner RSS peaked at 115 MiB.
+Its disposable schema count returned to zero, and plain `down` preserved the
+test volume. OpenClaw/9Router IDs, start times and restart counts were unchanged.
+This does not measure the live Compose Gateway/Worker containers or a production
+SLO. Full run details are in the checkpoint above.
+
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 
 At current source commit `20b06da` (documentation-only `5409671` follows), the

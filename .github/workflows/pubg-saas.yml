@@ -98,7 +98,7 @@ jobs:
       - name: Backup and restore safety tests
         run: python3 -m unittest discover -s scripts/tests -p 'test_pubg_saas_*.py' -v
       - name: Synthetic 200-team worker benchmark
-        run: pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
+        run: PUBG_SAAS_BENCH_QUERIES_PER_TEAM=30 pnpm --filter @agent/pubg-saas exec tsx tests/m2-200-team-load.benchmark.ts
 
   compose-and-multiarch-image:
     runs-on: ubuntu-latest
