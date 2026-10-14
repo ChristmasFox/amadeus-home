@@ -1,6 +1,7 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { NaturalLanguageQueryPlanner } from '../../application/nl-query-planner.js';
 import { readPublicModelConfig } from './model-config.js';
+import { createPublicModelFetch } from './model-fetch.js';
 
 export interface ConfiguredPublicQueryPlanner {
   planner: NaturalLanguageQueryPlanner;
@@ -16,6 +17,7 @@ export function createPublicQueryPlanner(env: NodeJS.ProcessEnv): ConfiguredPubl
     name: 'saas-combo',
     baseURL: config.baseURL,
     apiKey: config.apiKey,
+    fetch: createPublicModelFetch(config.allowedInternalHosts),
   });
   return {
     planner: new NaturalLanguageQueryPlanner(provider.chatModel(config.modelId)),
