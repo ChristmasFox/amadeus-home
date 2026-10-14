@@ -142,12 +142,33 @@ waiters, runner RSS 115 MiB. The random schema count returned to zero; plain
 remained unchanged, restart counts 0. This remains a bounded query/Worker-class
 simulation, not full Gateway/Worker container headroom, paced daily load or an
 SLO. Detailed commands/results: `.agent/checkpoints/2026-10-14-pubg-saas-6000-query-benchmark.md`.
+Current-source M204 recovery was then repeated on app commit `7249b12`: the
+local ARM64 image migrated a fresh source PG18.1 project and ran a healthy
+Worker. An encrypted backup restored to a different fresh PG: 37/37 table
+counts and 14 migrations matched; the tenant/team/job fixture was 1/1/1; app
+and backup table/sequence boundaries passed on both databases. Restored Worker
+health and queue metrics showed one delayed job, zero due/attempts, and zero
+inbox/outbox rows. After both public test projects were stopped with plain
+`down`, Kurisu regression passed 68/68 and private OpenClaw/9Router IDs, start
+times and restart counts remained unchanged. No real PUBG/model credentials,
+image push or deployment. The OrbStack snapshot-stream limitation and helper
+method are recorded with reproduction commands in
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-7249b12-local-recovery.md`.
 P3 real
 test-server smoke now proves gateway authentication, one labeled outbox
 delivery, and sequence-1 session resume. Full human-user flows (duplicate input,
 cross-channel routing, management callbacks and unauthorized denial) and KOOK
-eligibility remain unverified; the available guild has one text channel and no
-test actor was available. P4's deidentified prompt benchmark also remains open.
+eligibility remain unverified. Latest live update (2026-10-14): Arthur added a
+second text channel. Isolated M204 project `pubg-saas-p3-live-058118d` is now
+running from app commit `058118d`; Gateway completed KOOK WebSocket
+authentication/session handshake, and Worker/PostgreSQL are healthy. The
+Worker is attached only to the internal PG network. Gateway has only the two
+KOOK test credentials; no real PUBG or model credential is loaded. Synthetic
+player lookup is explicitly acceptance-only and production-disabled. Ordered
+Arthur command/callback steps are recorded in
+`.agent/checkpoints/2026-10-14-pubg-saas-p3-live-gateway.md`; human actions and
+KOOK eligibility still await acceptance. P4's deidentified prompt benchmark
+also remains open.
 No live provider accuracy, latency or capacity is claimed. P4 now has a
 de-identified 100-case synthetic corpus across ten query families, an
 owner-only external-file exporter, and a mock runner test; the real model

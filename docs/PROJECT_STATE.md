@@ -1,5 +1,44 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — M204 live KOOK P3 Gateway started
+
+Isolated Compose project `pubg-saas-p3-live-058118d` now runs on M204 from
+app commit `058118d`, local ARM64 image
+`local/pubg-saas:git-058118d` (manifest
+`sha256:fd1825f35b0c953b3e98e1b9f82397e0b3c992d18aa4e0f9237ebc79ae7af017`).
+Its fresh PG18.1 volume has all 14 migrations. PostgreSQL, Gateway, Worker and
+the egress proxy are running; Worker and PostgreSQL health checks pass. A
+boolean-only DB probe confirms the Gateway's KOOK WebSocket session handshake.
+Gateway has only the two test-bot credentials from the protected, ignored
+`.env.local`; it has no PUBG or model credential. Four fixed synthetic Steam
+players are enabled solely for this isolated acceptance; production refuses
+that mode. Worker has no outbound network and uses only its internal PG network.
+Arthur's ordered live commands cover synthetic create, one-use callback/repeat,
+second-channel bind, admin mutation and unauthorized denial. Those human steps
+remain pending, so this records startup readiness, not completed P3 acceptance.
+The project is intentionally left running. No image push, deployment, 9Router
+change, private OpenClaw restart or private data access occurred. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-p3-live-gateway.md`.
+
+## 2026-10-14 — Current-source M204 SaaS Compose and encrypted recovery
+
+App commit `7249b12` built locally on host-profile OrbStack `nyannyan` as
+ARM64 image `local/pubg-saas:git-7249b12` (manifest
+`sha256:2c17198eb271c4a103585830dc2944abe8dbbeff8d25ab22a733ea4ac9c8faee`).
+Fresh isolated source and restore PG18.1 projects applied 14 migrations and
+matched all 37/37 public-table counts; synthetic tenant/team/job counts were
+1/1/1. App/backup DML, DDL and sequence boundaries passed on both databases.
+The restored Worker was healthy with one delayed job, zero due work/attempts,
+and no inbox/outbox events. Both projects were stopped with plain `down`,
+preserving their isolated volumes. Kurisu tests passed 68/68 afterward; private
+OpenClaw and 9Router IDs/start times remained unchanged with restart count 0.
+No real PUBG/model credential, image push, deployment, 9Router edit or private
+OpenClaw restart occurred. The guest lacked `age` and OrbStack did not stream
+the long-lived snapshot session through the one-shot adapter; the tested
+workaround was a temporary PG18.1+age helper confined to each internal PG
+network. Detailed evidence and commands:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-7249b12-local-recovery.md`.
+
 ## 2026-10-14 — M204 Worker metrics relay host-loopback acceptance
 
 Commit `7f3b95b` built on OrbStack machine `nyannyan` as local ARM64 image

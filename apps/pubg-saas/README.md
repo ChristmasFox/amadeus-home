@@ -284,6 +284,14 @@ remains the manual entrance. Stats, leaderboard, self-stats, friendly-fire,
 review and natural-language follow-up queries are implemented. Real KOOK
 acceptance, prompt benchmark and scale/restore gates remain Goal requirements.
 
+For an isolated live KOOK acceptance without a PUBG key, the Gateway supports
+the explicit pair `PUBG_SAAS_ACCEPTANCE_MODE=isolated` and
+`PUBG_SAAS_SYNTHETIC_PUBG_PLAYERS=1` only when `NODE_ENV` is not `production`.
+This resolves only `P3SyntheticAlpha`, `P3SyntheticBravo`,
+`P3SyntheticCharlie` and `P3SyntheticDelta` to fixed synthetic Steam account
+IDs; unknown names remain missing and never fall through to PUBG. These fixture
+accounts have no real PUBG matches or statistics. Production rejects this mode.
+
 ## Local verification
 
 Build the shared dependencies and package with `pnpm build:pubg-saas`, then
