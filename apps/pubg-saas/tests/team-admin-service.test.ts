@@ -117,11 +117,20 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     assert.equal((await pool.query('SELECT 1 FROM sync_state WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rowCount, 0);
     await assert.rejects(service.confirmTeamAction(eventA, addP3.confirmationToken), /team_action_confirmation_unavailable/u);
 
-    const addP4 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p4-${suffix}`] });
-    const addP5 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p5-${suffix}`] });
-    await service.confirmTeamAction(eventA, addP4.confirmationToken);
-    await assert.rejects(service.confirmTeamAction(eventA, addP5.confirmationToken), /team_roster_limit_exceeded/u);
-    assert.equal(Number((await pool.query('SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rows[0]?.count), 4);
+    for (const accountId of [`p4-${suffix}`, `p5-${suffix}`, `p6-${suffix}`, `p7-${suffix}`]) {
+      const pending = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [accountId] });
+      await service.confirmTeamAction(eventA, pending.confirmationToken);
+    }
+    const addP8 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p8-${suffix}`] });
+    const concurrentlyPreparedP9 = await service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p9-${suffix}`] });
+    await service.confirmTeamAction(eventA, addP8.confirmationToken);
+    await assert.rejects(service.confirmTeamAction(eventA, concurrentlyPreparedP9.confirmationToken), /team_roster_limit_exceeded/u);
+    assert.equal(Number((await pool.query('SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [squadA.tenantId, squadA.teamId])).rows[0]?.count), 8);
+    await assert.rejects(
+      service.prepareTeamAction(eventA, { kind: 'add_members', pubgAccountIds: [`p10-${suffix}`] }),
+      /team_roster_limit_exceeded/u,
+      'the ninth member is rejected before a confirmation is issued',
+    );
 
     await pool.query(
       'INSERT INTO sync_state(tenant_id,team_id,state_key,checked_at,state_json) VALUES ($1,$2,$3,now(),\'{}\'::jsonb)',
@@ -251,7 +260,7 @@ test('team administration checks fresh privilege and scopes one-use confirmation
     assert.deepEqual(await service.listTeamAliases(eventB, squadB), []);
     const deleteIsolatedPreference = await service.prepareTeamAction(eventA, { kind: 'delete_leaderboard_metric' }, squadA);
     await service.confirmTeamAction(eventA, deleteIsolatedPreference.confirmationToken);
-    assert.equal(permissionChecks, 48);
+    assert.equal(permissionChecks, 57);
   } finally {
     await pool.query('DELETE FROM tenants WHERE guild_id = ANY($1::text[])', [[guildA, guildB]]).catch(() => undefined);
     await pool.query('DELETE FROM channel_identities WHERE platform=$1 AND bot_account_id=$2 AND user_id = ANY($3::text[])', ['kook', botId, [userA, userB]]).catch(() => undefined);

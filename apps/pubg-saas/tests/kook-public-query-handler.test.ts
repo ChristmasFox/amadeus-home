@@ -171,6 +171,68 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
       source: { store: 'pubg-api', syncInvoked: true, playerApiCalls: 1, matchApiCalls: 1, localMatchCount: 1 },
       discoveredMatchIds: [matchId], failedMatchIds: [],
     });
+    const repeatedQueryDiagnostics: unknown[] = [];
+    const repeatedQuery = plan('team_stats', { period: 'yesterday' });
+    const repeatedQueryModel = new MockLanguageModelV4({ doGenerate: [
+      toolCall(repeatedQuery),
+      toolCall(repeatedQuery),
+      finalText('我已经查到昨天的队伍资料，下面按真实覆盖情况总结。'),
+    ] });
+    const repeatedQueryHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot }),
+      claims,
+      agent: { model: repeatedQueryModel, provider: 'fixture-provider', modelId: 'fixture-model' },
+      onAgentDiagnostic: event => repeatedQueryDiagnostics.push(event),
+      now: () => now,
+    });
+    const repeatedQueryEvent = group(bot, guild, channel, admin, '昨日小队战绩');
+    assert.equal(await queue.ingestGatewayEvent(repeatedQueryEvent), 'accepted');
+    assert.equal(await queue.processOne(async (job, abortSignal) =>
+      (await repeatedQueryHandler(job, abortSignal)) ?? null, signal), 'done');
+    const repeatedQueryReply = await pool.query(
+      'SELECT payload_json->>\'content\' AS content FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2',
+      [bot, repeatedQueryEvent.msg_id],
+    );
+    assert.match(String(repeatedQueryReply.rows[0]?.content), /真实覆盖情况/u);
+    assert.equal(repeatedQueryModel.doGenerateCalls[2]?.toolChoice?.type, 'none');
+    assert.match(JSON.stringify(repeatedQueryModel.doGenerateCalls[2]?.prompt), /昨天队伍战绩/u,
+      'the forced summary step receives the successful Domain tool result');
+    assert.doesNotMatch(JSON.stringify(repeatedQueryModel.doGenerateCalls[2]?.prompt), /duplicate_suppressed/u,
+      'a duplicate call reuses the first real result instead of replacing it with a suppression marker');
+    assert.equal(repeatedQueryDiagnostics.filter(value => JSON.stringify(value).includes('pubg_query_result_')).length, 1,
+      'the first call records one content-free Domain result status');
+    assert.equal(repeatedQueryDiagnostics.filter(value => JSON.stringify(value).includes('pubg_query_repeated_arguments')).length, 1,
+      'the repeated identical parameters are detected and logged without exposing them');
+
+    let recoveryCalls = 0;
+    const recoveryDiagnostics: unknown[] = [];
+    const recoveryModel = new MockLanguageModelV4({ doGenerate: async () => {
+      recoveryCalls += 1;
+      if (recoveryCalls === 1) return toolCall(repeatedQuery) as never;
+      if (recoveryCalls === 2) throw Object.assign(new Error('fixture timeout'), { name: 'TimeoutError' });
+      return finalText('昨天有真实比赛记录，我按目前拿到的数据先总结。') as never;
+    } });
+    const recoveryHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot }),
+      claims,
+      agent: { model: recoveryModel, provider: 'fixture-provider', modelId: 'fixture-model' },
+      onAgentDiagnostic: event => recoveryDiagnostics.push(event),
+      now: () => now,
+    });
+    const recoveryEvent = group(bot, guild, channel, admin, '昨日小队战绩');
+    assert.equal(await queue.ingestGatewayEvent(recoveryEvent), 'accepted');
+    assert.equal(await queue.processOne(async (job, abortSignal) =>
+      (await recoveryHandler(job, abortSignal)) ?? null, signal), 'done');
+    const recoveryReply = await pool.query(
+      'SELECT payload_json->>\'content\' AS content FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2',
+      [bot, recoveryEvent.msg_id],
+    );
+    assert.match(String(recoveryReply.rows[0]?.content), /按目前拿到的数据先总结/u);
+    assert.deepEqual((await pool.query(
+      'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, recoveryEvent.msg_id],
+    )).rows[0], { outcome: 'replied', failure_code: 'public_agent_timeout' });
+    assert.ok(recoveryDiagnostics.some(value => JSON.stringify(value).includes('public_agent_timeout')));
+
     const pendingPreference = await teams.prepareTeamAction(trusted, { kind: 'set_leaderboard_metric', metric: 'kills' }, team);
     assert.deepEqual(await teams.confirmTeamAction(trusted, pendingPreference.confirmationToken), { kind: 'set_leaderboard_metric', team });
     assert.equal(await repository.getLeaderboardMetricPreference(), 'kills');
@@ -190,7 +252,7 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
       'SELECT model_id,outcome,input_tokens,output_tokens FROM kook_agent_runs WHERE bot_account_id=$1 AND user_id=$2 ORDER BY created_at',
       [bot, admin],
     );
-    assert.equal(recordedUsage.rowCount, 2);
+    assert.equal(recordedUsage.rowCount, 4);
     assert.ok(recordedUsage.rows.every(row => row.model_id === 'fixture-model' && row.outcome === 'replied'
       && row.input_tokens > 0 && row.output_tokens > 0));
 

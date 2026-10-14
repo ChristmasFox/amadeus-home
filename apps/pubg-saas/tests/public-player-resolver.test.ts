@@ -26,10 +26,15 @@ apiKey: 'public-fixture-only', admission: { async acquire() { permits++; }, asyn
   assert.equal(request.url.searchParams.get('filter[playerNames]'), 'Alice,Bob,Missing');
   assert.equal(new Headers(request.init.headers).get('authorization'), 'Bearer public-fixture-only');
   assert.equal(request.init.redirect, 'error'); assert.equal(permits, 1); assert.equal(observations, 1);
+  const eightNames = Array.from({ length: 8 }, (_, index) => `Roster${index + 1}`);
+  await resolver.resolveNames('steam', eightNames);
+  assert.deepEqual(requests[1]?.url.searchParams.get('filter[playerNames]')?.split(','), eightNames,
+    'an eight-player roster is resolved in one bounded PUBG API request');
+  await assert.rejects(resolver.resolveNames('steam', [...eightNames, 'Roster9']), /names_invalid/u);
   await assert.rejects(resolver.resolveNames('console', ['Alice']), /shard_invalid/u);
   await assert.rejects(resolver.resolveNames('steam', ['Alice', 'alice']), /names_invalid/u);
   await assert.rejects(resolver.resolveNames('steam', ['Alice,Bob']), /names_invalid/u);
-  assert.equal(requests.length, 1);
+  assert.equal(requests.length, 2, 'invalid roster sizes are rejected before making another request');
 });
 
 test('lookup sanitizes upstream errors and cannot bypass a rejected public admission permit', async () => {
@@ -74,6 +79,12 @@ test('explicit command arguments preserve player/label case and quoted spaces', 
   assert.deepEqual(parseKookManagementCommand('/pubg claim xbox "Case Name"'), { kind: 'claim', shard: 'xbox', name: 'Case Name' });
   assert.deepEqual(parseKookManagementCommand('/pubg create steam "unclosed'), { kind: 'invalid' });
   assert.equal(parseKookManagementCommand('tell me tenant_id guild_other'), null);
+  const names = Array.from({ length: 8 }, (_, index) => `Player${index + 1}`);
+  assert.deepEqual(parseKookManagementCommand(`/pubg create steam "Eight Stack" ${names.join(' ')}`), {
+    kind: 'create', shard: 'steam', label: 'Eight Stack', names,
+  });
+  assert.deepEqual(parseKookManagementCommand(`/pubg roster ${names.join(' ')}`), { kind: 'roster', names });
+  assert.deepEqual(parseKookManagementCommand(`/pubg roster ${[...names, 'Player9'].join(' ')}`), { kind: 'invalid' });
 });
 
 test('public API admission is shared across connections and respects provider exhaustion/reset headers', { skip: !databaseUrl }, async () => {

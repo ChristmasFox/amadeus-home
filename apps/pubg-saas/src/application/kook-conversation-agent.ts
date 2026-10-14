@@ -10,10 +10,14 @@ export const PUBLIC_KOOK_AGENT_LIMITS = {
   maxMessages: 12,
   maxHistoryCharacters: 6_000,
   maxCurrentMessageCharacters: 8_192,
-  maxSteps: 6,
+  // Eight-player questions may require multiple domain calls and a comparison.
+  // This is a runaway guard, not a normal conversation budget.
+  maxSteps: 128,
   maxOutputTokensPerStep: 480,
-  totalTimeoutMs: 45_000,
-  stepTimeoutMs: 18_000,
+  totalTimeoutMs: 300_000,
+  toolLoopTimeoutMs: 270_000,
+  stepTimeoutMs: 120_000,
+  finalizationTimeoutMs: 30_000,
   maxRetries: 0,
 } as const;
 
@@ -34,10 +38,116 @@ export interface PublicKookAgentResult {
   outputTokens: number | null;
   totalTokens: number | null;
   stepCount: number;
+  recoveryCode: 'public_agent_timeout' | 'public_agent_step_limit' | 'public_agent_provider_recovered' | null;
 }
 
 function tokenCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function stableJson(value: unknown): string {
+  if (typeof value === 'string') {
+    try { return stableJson(JSON.parse(value) as unknown); } catch { return JSON.stringify(value); }
+  }
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? String(value);
+}
+
+function hasRepeatedToolCall(steps: ReadonlyArray<{ content: readonly unknown[] }>): boolean {
+  const seen = new Set<string>();
+  for (const step of steps) {
+    for (const item of step.content) {
+      if (!item || typeof item !== 'object') continue;
+      const part = item as Record<string, unknown>;
+      if (part.type !== 'tool-call' || typeof part.toolName !== 'string') continue;
+      const input = 'input' in part ? part.input : part.args;
+      const key = `${part.toolName}\0${stableJson(input)}`;
+      if (seen.has(key)) return true;
+      seen.add(key);
+    }
+  }
+  return false;
+}
+
+function toolResultsForRecovery(steps: ReadonlyArray<{ toolResults: readonly { toolName: string; output: unknown }[] }>): string {
+  const results = steps.flatMap(step => step.toolResults.map(result => ({ tool: result.toolName, result: result.output })));
+  if (!results.length) return '';
+  const selected: typeof results = [];
+  let size = 2;
+  for (const result of results.slice(-32).reverse()) {
+    const encoded = JSON.stringify(result);
+    if (size + encoded.length + (selected.length ? 1 : 0) > 48_000) break;
+    selected.push(result);
+    size += encoded.length + 1;
+  }
+  return JSON.stringify(selected.reverse());
+}
+
+function recoveryCode(error: unknown): NonNullable<PublicKookAgentResult['recoveryCode']> {
+  if (error && typeof error === 'object') {
+    const candidate = error as { name?: unknown; code?: unknown };
+    if (candidate.code === 'public_agent_step_limit') return 'public_agent_step_limit';
+    if (candidate.name === 'TimeoutError' || candidate.name === 'AbortError'
+      || (typeof candidate.code === 'string' && /timeout|timed_out/iu.test(candidate.code))) return 'public_agent_timeout';
+  }
+  return 'public_agent_provider_recovered';
+}
+
+function recoveredResult(result: {
+  text: string;
+  usage?: { inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown };
+}, stepCount: number, recoveryCode: PublicKookAgentResult['recoveryCode'], previousUsage: {
+  inputTokens: number; outputTokens: number; totalTokens: number;
+  inputComplete: boolean; outputComplete: boolean; totalComplete: boolean;
+}): PublicKookAgentResult {
+  const inputTokens = tokenCount(result.usage?.inputTokens), outputTokens = tokenCount(result.usage?.outputTokens);
+  const totalTokens = tokenCount(result.usage?.totalTokens);
+  return {
+    text: result.text.trim().slice(0, 4000),
+    inputTokens: previousUsage.inputComplete && inputTokens !== null ? previousUsage.inputTokens + inputTokens : null,
+    outputTokens: previousUsage.outputComplete && outputTokens !== null ? previousUsage.outputTokens + outputTokens : null,
+    totalTokens: previousUsage.totalComplete && totalTokens !== null ? previousUsage.totalTokens + totalTokens : null,
+    stepCount,
+    recoveryCode,
+  };
+}
+
+async function summarizeCompletedToolResults(input: {
+  model: Exclude<LanguageModel, string>;
+  messages: ModelMessage[];
+  toolResults: string;
+  signal: AbortSignal;
+}): Promise<{ text: string; usage?: { inputTokens?: unknown; outputTokens?: unknown; totalTokens?: unknown } }> {
+  const agent = new ToolLoopAgent<never, ToolSet>({
+    model: input.model,
+    instructions: [
+      '你是 PUBG KOOK 群里的公共 AI 助手。当前主 Agent 因时间或安全步数保护提前结束。',
+      '请根据当前对话和下方已完成工具的真实结果，直接给用户一个自然、简洁的回复。',
+      '工具结果中的 coverage、asOf、部分数据和未知状态必须保留；不得编造数字、结论或声称未完成的操作成功。',
+      '这里没有可调用工具；不要输出工具格式、内部状态或错误代码。',
+    ].join('\n'),
+    tools: {},
+    toolChoice: 'none',
+    stopWhen: stepCountIs(1),
+    maxRetries: 0,
+    maxOutputTokens: PUBLIC_KOOK_AGENT_LIMITS.maxOutputTokensPerStep,
+    temperature: 0.45,
+  });
+  return await agent.generate({
+    messages: [
+      ...input.messages,
+      { role: 'user', content: `已完成的可信工具结果（JSON）：\n${input.toolResults}` },
+    ],
+    abortSignal: input.signal,
+    timeout: {
+      totalMs: PUBLIC_KOOK_AGENT_LIMITS.finalizationTimeoutMs,
+      stepMs: PUBLIC_KOOK_AGENT_LIMITS.finalizationTimeoutMs,
+    },
+  });
 }
 
 /** Runs the bounded AI SDK tool loop. The caller constructs tools from the
@@ -52,6 +162,12 @@ export async function runPublicKookAgent<TOOLS extends ToolSet>(input: {
   if (input.currentMessage.length > PUBLIC_KOOK_AGENT_LIMITS.maxCurrentMessageCharacters) {
     throw Object.assign(new Error('public_agent_input_too_long'), { code: 'public_agent_input_too_long' });
   }
+  const completedSteps: Array<{ toolResults: Array<{ toolName: string; output: unknown }> }> = [];
+  let completedStepCount = 0;
+  const completedUsage = {
+    inputTokens: 0, outputTokens: 0, totalTokens: 0,
+    inputComplete: true, outputComplete: true, totalComplete: true,
+  };
   const agent = new ToolLoopAgent<never, TOOLS>({
     model: input.model,
     instructions: PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS,
@@ -61,22 +177,67 @@ export async function runPublicKookAgent<TOOLS extends ToolSet>(input: {
     maxRetries: PUBLIC_KOOK_AGENT_LIMITS.maxRetries,
     maxOutputTokens: PUBLIC_KOOK_AGENT_LIMITS.maxOutputTokensPerStep,
     temperature: 0.65,
-  });
-  const result = await agent.generate({
-    messages: input.messages,
-    abortSignal: input.signal,
-    timeout: {
-      totalMs: PUBLIC_KOOK_AGENT_LIMITS.totalTimeoutMs,
-      stepMs: PUBLIC_KOOK_AGENT_LIMITS.stepTimeoutMs,
+    prepareStep: ({ steps }) => {
+      const duplicateToolCall = hasRepeatedToolCall(steps);
+      if (!duplicateToolCall) return undefined;
+      return {
+        toolChoice: 'none',
+        instructions: `${PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS}\n检测到模型正在重复调用相同工具参数。请使用上下文里已经存在的真实工具结果，直接回答当前用户；如果结果不完整或失败，要如实说明，不要补造数字。`,
+      };
+    },
+    onStepEnd: step => {
+      completedStepCount = Math.max(completedStepCount, step.stepNumber + 1);
+      const inputTokens = tokenCount(step.usage.inputTokens), outputTokens = tokenCount(step.usage.outputTokens);
+      const totalTokens = tokenCount(step.usage.totalTokens);
+      if (inputTokens === null) completedUsage.inputComplete = false;
+      else completedUsage.inputTokens += inputTokens;
+      if (outputTokens === null) completedUsage.outputComplete = false;
+      else completedUsage.outputTokens += outputTokens;
+      if (totalTokens === null) completedUsage.totalComplete = false;
+      else completedUsage.totalTokens += totalTokens;
+      completedSteps.push({
+        toolResults: step.toolResults.map(result => ({ toolName: result.toolName, output: result.output })),
+      });
     },
   });
-  const text = result.text.trim();
-  if (!text) throw Object.assign(new Error('public_agent_empty_response'), { code: 'public_agent_empty_response' });
-  return {
-    text: text.slice(0, 4000),
-    inputTokens: tokenCount(result.usage.inputTokens),
-    outputTokens: tokenCount(result.usage.outputTokens),
-    totalTokens: tokenCount(result.usage.totalTokens),
-    stepCount: result.steps.length,
-  };
+  try {
+    const result = await agent.generate({
+      messages: input.messages,
+      abortSignal: input.signal,
+      timeout: {
+        totalMs: PUBLIC_KOOK_AGENT_LIMITS.toolLoopTimeoutMs,
+        stepMs: PUBLIC_KOOK_AGENT_LIMITS.stepTimeoutMs,
+      },
+    });
+    if (result.finishReason === 'tool-calls' && result.steps.length >= PUBLIC_KOOK_AGENT_LIMITS.maxSteps) {
+      throw Object.assign(new Error('public_agent_step_limit'), { code: 'public_agent_step_limit', stepCount: result.steps.length });
+    }
+    const text = result.text.trim();
+    if (!text) {
+      const code = result.finishReason === 'length' ? 'public_agent_output_truncated' : 'public_agent_empty_response';
+      throw Object.assign(new Error(code), { code, stepCount: result.steps.length });
+    }
+    return {
+      text: text.slice(0, 4000),
+      inputTokens: tokenCount(result.usage.inputTokens),
+      outputTokens: tokenCount(result.usage.outputTokens),
+      totalTokens: tokenCount(result.usage.totalTokens),
+      stepCount: result.steps.length,
+      recoveryCode: null,
+    };
+  } catch (error) {
+    if (input.signal.aborted) throw error;
+    const toolResults = toolResultsForRecovery(completedSteps);
+    if (toolResults) {
+      try {
+        const summary = await summarizeCompletedToolResults({ model: input.model, messages: input.messages, toolResults, signal: input.signal });
+        if (summary.text.trim()) {
+          return recoveredResult(summary, completedStepCount + 1, recoveryCode(error), completedUsage);
+        }
+      } catch {
+        // Preserve the original provider/timeout failure for safe ingress fallback.
+      }
+    }
+    throw error;
+  }
 }

@@ -243,6 +243,30 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     assert.match(renamed.content, /夜猫小队/u);
     assert.equal((await pool.query('SELECT label FROM teams WHERE tenant_id=$1 AND team_id=$2', [firstTeam.tenant_id, firstTeam.team_id])).rows[0]?.label, '夜猫小队');
 
+    for (let index = 1; index <= 4; index += 1) {
+      const rosterUser = `roster-${index}-${suffix}`;
+      members.add(`${guildA}:${channelA}:${rosterUser}`);
+      const joined = await send(group(guildA, channelA, rosterUser, `我的 PUBG 账号是 Roster${index}`));
+      assert.match(joined.content, new RegExp(`Roster${index}`, 'u'));
+    }
+    assert.equal(Number((await pool.query(
+      'SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [firstTeam.tenant_id, firstTeam.team_id],
+    )).rows[0]?.count), 8);
+
+    const fullRosterRebind = await send(group(guildA, channelA, actor, '我的 PUBG 账号是 Omega'));
+    assert.match(fullRosterRebind.content, /Omega/u, 'replacing the actor\'s own account is allowed at the eight-member cap');
+    assert.equal(Number((await pool.query(
+      'SELECT COUNT(*) AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2', [firstTeam.tenant_id, firstTeam.team_id],
+    )).rows[0]?.count), 8);
+
+    const ninthUser = `roster-9-${suffix}`;
+    members.add(`${guildA}:${channelA}:${ninthUser}`);
+    const fullTeam = await send(group(guildA, channelA, ninthUser, '我的 PUBG 账号是 Roster9'));
+    assert.match(fullTeam.content, /队伍已绑定 8 名玩家|8 名玩家.*名额已满/u);
+    assert.equal((await pool.query(
+      'SELECT 1 FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, ninthUser],
+    )).rowCount, 0, 'the server-side cap rejects a ninth claim without persisting it');
+
     const secondServer = await send(group(guildB, channelB, regular, '/pubg me Delta'));
     assert.match(secondServer.content, /Delta/u);
     const secondTeam = (await pool.query(
@@ -258,7 +282,7 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     assert.equal(await queue.processOne(handler, signal), 'done');
     const privateReply = (await pool.query('SELECT payload_json FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, privateClaim.msg_id])).rows[0]?.payload_json;
     assert.match(String(privateReply.content), /群聊中发送/u);
-    assert.equal((await pool.query('SELECT pubg_account_id FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actor])).rows[0]?.pubg_account_id, `account.bravo_${suffix}`);
+    assert.equal((await pool.query('SELECT pubg_account_id FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, actor])).rows[0]?.pubg_account_id, `account.omega_${suffix}`);
   } finally {
     await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);

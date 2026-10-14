@@ -13,6 +13,7 @@ import type { PublicPubgAdmission } from '../infrastructure/pubg/request-limiter
 import { PostgresPubgRepository } from '../infrastructure/postgres/pubg-repository.js';
 import { validatePublicPubgShard } from '../infrastructure/pubg/player-resolver.js';
 import { PublicSyncQueue, type PublicSyncJob, type PublicSyncQueueSnapshot } from './public-sync-queue.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 const API_ORIGIN = 'https://api.pubg.com';
 const TELEMETRY_HOSTS = new Set(['telemetry-cdn.pubg.com', 'telemetry-cdn.playbattlegrounds.com']);
@@ -97,7 +98,7 @@ function endpoint(url: URL): { kind: 'api' | 'telemetry'; rateLimited: boolean; 
     const isMatch = /^\/shards\/(steam|kakao|psn|xbox)\/matches\/[A-Za-z0-9_.-]{1,128}$/u.test(url.pathname);
     if (isPlayers) {
       const ids = url.searchParams.getAll('filter[playerIds]');
-      if (url.searchParams.size !== 1 || ids.length !== 1 || ids[0]!.split(',').length > 4
+      if (url.searchParams.size !== 1 || ids.length !== 1 || ids[0]!.split(',').length > MAX_TEAM_ROSTER_SIZE
         || ids[0]!.split(',').some((id) => !ACCOUNT_ID.test(id))) throw new Error('public_sync_endpoint_invalid');
     } else if (!isMatch || url.search !== '') {
       throw new Error('public_sync_endpoint_invalid');
@@ -169,7 +170,7 @@ async function registeredTeam(pool: Pool, tenantId: string, teamId: string): Pro
       platform: first.pubg_shard,
       players: [...players.values()],
     };
-    if (team.players.length < 1 || team.players.length > 4
+    if (team.players.length < 1 || team.players.length > MAX_TEAM_ROSTER_SIZE
       || team.players.some((player) => !ACCOUNT_ID.test(player.id) || player.name.length > 100
         || player.aliases.some((alias) => alias.length > 100 || /[\u0000-\u001f]/u.test(alias)))) {
       throw new InvalidTeamError();

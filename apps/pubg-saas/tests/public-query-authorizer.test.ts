@@ -85,6 +85,28 @@ test('public query context comes from a live stored ingress and isolates guild, 
   } finally { await f.cleanup(); }
 });
 
+test('public query authorization loads every member from an eight-player team roster', { skip: !databaseUrl }, async () => {
+  const f = await fixture(); try {
+    const extraIds = Array.from({ length: 7 }, (_, index) => `account.roster_${index + 2}`);
+    for (const accountId of extraIds) {
+      await f.pool.query(
+        'INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id) VALUES ($1,$2,$3,$4)',
+        [f.a.tenantId, f.a.teamId, accountId, f.user],
+      );
+    }
+    const originalId = String((await f.pool.query(
+      'SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2 ORDER BY pubg_account_id LIMIT 1',
+      [f.a.tenantId, f.a.teamId],
+    )).rows[0]?.pubg_account_id);
+    const query = await f.authorized(group(f.bot, f.guild, f.channel, f.user));
+    assert.equal(query.teamContext.team.players.length, 8);
+    assert.deepEqual(new Set(query.teamContext.team.players.map(player => player.id)), new Set([
+      originalId,
+      ...extraIds,
+    ]));
+  } finally { await f.cleanup(); }
+});
+
 test('DM selection requires actor grants plus fresh guild membership and never reuses another team or account claim', { skip: !databaseUrl }, async () => {
   const f = await fixture(); try {
     const denied = await f.admit(dm(f.bot, f.other));

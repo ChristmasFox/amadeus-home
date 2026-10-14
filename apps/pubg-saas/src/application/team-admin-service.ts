@@ -5,6 +5,7 @@ import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-eve
 import { isVerifiedKookWelcomeTarget, type TrustedKookGuildJoin, type VerifiedKookWelcomeTarget } from '../channels/kook/guild-welcome.js';
 import { parseStoredTeamLeaderboardMetric, parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
 import { normalizeTeamAlias, normalizeTeamMemberLookup } from '../contracts/team-aliases.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 type TeamConfirmationActor = Pick<TrustedKookGroupMessage, 'platform' | 'botAccountId' | 'guildId' | 'userId' | 'channelId'>;
 
@@ -96,7 +97,7 @@ function normalizedAccountIds(values: string[]): string[] {
   if (!Array.isArray(values)) throw new Error('invalid_pubg_account_ids');
   const accountIds = values.map((value) => requiredText(value, 'pubg_account_id'));
   const unique = [...new Set(accountIds)];
-  if (!unique.length || unique.length > 4 || unique.length !== accountIds.length) {
+  if (!unique.length || unique.length > MAX_TEAM_ROSTER_SIZE || unique.length !== accountIds.length) {
     throw new Error('invalid_pubg_account_ids');
   }
   return unique;
@@ -404,6 +405,36 @@ export class TeamAdminService {
       const row = binding.rows[0];
       if (!row || row.tenant_id !== expectedTeam.tenantId || row.team_id !== expectedTeam.teamId) throw new Error('team_action_scope_changed');
       await client.query('SELECT 1 FROM teams WHERE tenant_id=$1 AND team_id=$2 FOR UPDATE', [expectedTeam.tenantId, expectedTeam.teamId]);
+      const previousClaim = await client.query(
+        `SELECT pubg_shard,pubg_account_id FROM account_claims
+         WHERE platform='kook' AND bot_account_id=$1 AND user_id=$2 FOR UPDATE`,
+        [event.botAccountId, targetUserId],
+      );
+      const previous = previousClaim.rows[0];
+      if (previous && (String(previous.pubg_shard) !== shard || String(previous.pubg_account_id) !== accountId)) {
+        const stillClaimed = await client.query(
+          `SELECT 1 FROM account_claims WHERE platform='kook' AND bot_account_id=$1
+           AND pubg_shard=$2 AND pubg_account_id=$3 AND user_id<>$4 LIMIT 1`,
+          [event.botAccountId, String(previous.pubg_shard), String(previous.pubg_account_id), targetUserId],
+        );
+        if (!stillClaimed.rowCount) {
+          await client.query(
+            'DELETE FROM team_members WHERE tenant_id=$1 AND team_id=$2 AND pubg_account_id=$3',
+            [expectedTeam.tenantId, expectedTeam.teamId, String(previous.pubg_account_id)],
+          );
+        }
+      }
+      const existingMember = await client.query(
+        'SELECT 1 FROM team_members WHERE tenant_id=$1 AND team_id=$2 AND pubg_account_id=$3',
+        [expectedTeam.tenantId, expectedTeam.teamId, accountId],
+      );
+      if (!existingMember.rowCount) {
+        const roster = await client.query(
+          'SELECT COUNT(*)::INTEGER AS count FROM team_members WHERE tenant_id=$1 AND team_id=$2',
+          [expectedTeam.tenantId, expectedTeam.teamId],
+        );
+        if (Number(roster.rows[0]?.count) >= MAX_TEAM_ROSTER_SIZE) throw new Error('team_roster_limit_exceeded');
+      }
       const targetIdentity = { botAccountId: event.botAccountId, userId: targetUserId };
       await this.touchActor(client, targetIdentity, expectedTeam.tenantId);
       await this.persistResolvedPlayers(client, shard, [{ accountId, displayName }]);
@@ -736,7 +767,7 @@ export class TeamAdminService {
       if (action.kind === 'add_members') {
         const members = await client.query('SELECT pubg_account_id FROM team_members WHERE tenant_id=$1 AND team_id=$2', [tenantId, teamId]);
         const roster = new Set<string>([...members.rows.map((row) => String(row.pubg_account_id)), ...action.pubgAccountIds]);
-        if (roster.size > 4) throw new Error('team_roster_limit_exceeded');
+        if (roster.size > MAX_TEAM_ROSTER_SIZE) throw new Error('team_roster_limit_exceeded');
       }
       await client.query("DELETE FROM pending_team_actions WHERE bot_account_id=$1 AND ((consumed_at IS NULL AND expires_at <= now()) OR consumed_at < now() - interval '1 day')", [event.botAccountId]);
       const pendingCount = await client.query(
@@ -843,7 +874,7 @@ export class TeamAdminService {
             ...current.rows.map((member) => String(member.pubg_account_id)),
             ...action.pubgAccountIds,
           ]);
-          if (combined.size > 4) throw new Error('team_roster_limit_exceeded');
+          if (combined.size > MAX_TEAM_ROSTER_SIZE) throw new Error('team_roster_limit_exceeded');
           for (const accountId of action.pubgAccountIds) {
             await client.query(
               `INSERT INTO team_members(tenant_id,team_id,pubg_account_id,added_by_user_id)

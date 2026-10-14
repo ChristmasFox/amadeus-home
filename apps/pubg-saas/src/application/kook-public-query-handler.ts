@@ -21,6 +21,7 @@ import type {
   PublicQueryTeamSelection,
 } from './public-query-authorizer.js';
 import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 
 type PublicQueryIntent =
@@ -47,7 +48,7 @@ export interface KookPublicQueryServices {
 }
 
 export interface KookAgentDiagnostic {
-  event: 'kook_agent_error';
+  event: 'kook_agent_error' | 'kook_agent_tool_trace';
   stage: 'model' | 'tool' | 'authorization' | 'persistence';
   reason: string;
   requestKey: string;
@@ -131,7 +132,7 @@ function teamDamagePlanText(envelope: ToolEnvelope, query: AuthorizedPublicQuery
       .sort((left, right) => right.damage - left.damage || left.name.localeCompare(right.name))
       .map(total => ({ actorName: total.name, knownDamage: total.damage, knownHitCount: total.hitCount }))
     : directions;
-  const lines = ranked.slice(0, 4).map(row => {
+  const lines = ranked.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
     const complete = coverage.complete && row.complete !== false;
     const direction = typeof row.actorName === 'string'
       ? safeLabel(row.actorName)
@@ -148,7 +149,7 @@ function comparisonText(envelope: ToolEnvelope, period: string, freshness: strin
   if (segments.length < 2) return `比较结果资料不完整，无法给出可靠对比。\n${freshness}`;
   const sections = segments.slice(0, 2).map(segment => {
     const rows = Array.isArray(segment.rows) ? segment.rows.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-    const lines = rows.slice(0, 4).map(row => {
+    const lines = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
       const metrics = object(row.metrics) ?? {};
       return `${safeLabel(row.label ?? row.key)}：击杀 ${numberText(metrics.kills)} · 伤害 ${numberText(metrics.damage)} · 场次 ${numberText(metrics.matches)}`;
     });
@@ -256,7 +257,7 @@ async function statsReply(services: KookPublicQueryServices, query: AuthorizedPu
   const envelope = await domain.queryStats({
     sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: period },
     metrics: ['matches', 'kills', 'assists', 'damage', 'kd'], operation: 'report', groupBy: 'player',
-    orderBy: { metric: 'damage', direction: 'desc' }, limit: playerIds ? 1 : 4,
+    orderBy: { metric: 'damage', direction: 'desc' }, limit: playerIds ? 1 : MAX_TEAM_ROSTER_SIZE,
     refresh: false, signal, ...(playerIds ? { playerIds } : {}),
   });
   const label = period === 'today' ? '今日' : '昨日';
@@ -270,7 +271,7 @@ function statsText(envelope: ToolEnvelope, period: string, freshness: string, su
   const heading = `${period}${subjectLabel}战绩`;
   if (envelope.status === 'no_matches' && coverage.complete) return `${heading}：该时段没有已覆盖的队伍对局。\n${freshness}`;
   if (!rows.length) return `${heading}：${coverage.complete ? '没有可展示的统计行。' : '数据覆盖不完整，无法确认是否没有对局。'}\n${freshness}`;
-  const shown = rows.slice(0, 4).map(row => {
+  const shown = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
     const label = safeLabel(row.label ?? row.key);
     const metrics = object(row.metrics) ?? {};
     const values = ['matches', 'kills', 'assists', 'damage', 'kd'].map(key => `${metricLabels[key]} ${numberText(metrics[key])}`);
@@ -287,7 +288,7 @@ function leaderboardText(envelope: ToolEnvelope, period: string, metric: string,
   if (envelope.status === 'no_matches' && coverage.complete) return `${periodLabel}排行榜：该时段没有已覆盖的队伍对局。\n${freshness}`;
   if (!rows.length) return `排行榜数据覆盖不完整，当前无法可靠排序。\n${freshness}`;
   const valueKey = metric;
-  const lines = rows.slice(0, 4).map((row, index) => {
+  const lines = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map((row, index) => {
     const metrics = object(row.metrics) ?? {};
     return `${index + 1}. ${safeLabel(row.label ?? row.key)} — ${metricLabels[metric] ?? metric} ${numberText(metrics[valueKey])}`;
   });
@@ -370,10 +371,15 @@ async function naturalLanguageReply(
   let authorizationDenied = false;
   let authorizationFailureCode: string | null = null;
   let writeAttempted = false;
+  const executedPubgQueries = new Set<string>();
+  const completedPubgQueries = new Map<string, unknown>();
   const reportToolFailure = (reason: string) => {
     toolDegraded = true;
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'tool', reason, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
   };
+  const reportToolTrace = (reason: string) => services.onAgentDiagnostic?.({
+    event: 'kook_agent_tool_trace', stage: 'tool', reason, requestKey, ...(channelId ? { channelId } : {}), count: 1,
+  });
   const reportAuthorizationUnavailable = (reason: string) => {
     toolDegraded = true;
     toolFailureCode = reason;
@@ -409,13 +415,20 @@ async function naturalLanguageReply(
   };
 
   const queryTool = tool({
-    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘；team_damage 的 meleeKind 可选 KICK/PUNCH/OTHER。参数仅是查询槽位。',
+    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘；team_damage 的 meleeKind 可选 KICK/PUNCH/OTHER。参数仅是查询槽位。一次返回即包含查询摘要与覆盖信息；相同参数不得重复查询，应直接使用已有结果回答。',
     inputSchema: QueryPlanSchema,
     execute: async planInput => {
       const parsedPlan = QueryPlanSchema.safeParse(planInput);
       if (!parsedPlan.success || parsedPlan.data.intent === 'unsupported') {
         return { status: 'clarification', message: '我还没弄清要查的内容，请补充队员、指标或时间范围。' };
       }
+      const queryKey = JSON.stringify(parsedPlan.data);
+      if (executedPubgQueries.has(queryKey)) {
+        reportToolTrace('pubg_query_repeated_arguments');
+        return completedPubgQueries.get(queryKey)
+          ?? { status: 'duplicate_suppressed', message: '相同参数的查询已在本轮执行；请直接使用之前的工具结果回答，不要重复查询。' };
+      }
+      executedPubgQueries.add(queryKey);
       try {
         const authorized = await executeAuthorized();
         if (authorized.kind === 'unbound') return { status: 'no_team', message: '当前服务器还没有绑定 PUBG 小队。只有需要 PUBG 数据时才需要创建/绑定队伍；可以在服务器先发送 /pubg create。' };
@@ -448,8 +461,10 @@ async function naturalLanguageReply(
         });
         if (execution.kind !== 'executed') {
           if (execution.kind === 'unavailable') reportToolFailure('pubg_domain_data_unavailable');
-          return { status: execution.kind, reason: execution.code,
+          const unavailable = { status: execution.kind, reason: execution.code,
             message: queryResultMessages[execution.code] ?? '当前无法安全执行这条查询，请补充条件后再试。' };
+          completedPubgQueries.set(queryKey, unavailable);
+          return unavailable;
         }
         await persistQueryPlan(query, execution.plan, now);
         const state = await query.repository.getSyncState(`team:${query.teamContext.team.id}`);
@@ -472,7 +487,7 @@ async function naturalLanguageReply(
           summary = statsText(execution.envelope, period, freshness, subjectLabel);
         }
         const evidence = execution.envelope.evidenceRefs as unknown as Record<string, unknown>;
-        return {
+        const toolResult = {
           status: execution.envelope.status,
           summary: `${selfWarning}${summary}`,
           coverage: {
@@ -487,15 +502,22 @@ async function naturalLanguageReply(
           metricVersion: execution.envelope.metricVersion,
           evidenceRefs: {
             matchIds: Array.isArray(evidence.matchIds) ? evidence.matchIds.slice(0, 8) : [],
-            playerIds: Array.isArray(evidence.playerIds) ? evidence.playerIds.slice(0, 4) : [],
+            playerIds: Array.isArray(evidence.playerIds) ? evidence.playerIds.slice(0, MAX_TEAM_ROSTER_SIZE) : [],
             fields: Array.isArray(evidence.fields) ? evidence.fields.slice(0, 24) : [],
             calculation: typeof evidence.calculation === 'string' ? evidence.calculation : null,
           },
         };
+        const resultStatus = ['ok', 'partial', 'no_matches', 'error'].includes(toolResult.status)
+          ? toolResult.status : 'other';
+        reportToolTrace(`pubg_query_result_${resultStatus}`);
+        completedPubgQueries.set(queryKey, toolResult);
+        return toolResult;
       } catch (error) {
         reportToolFailure('pubg_query_tool_failed');
         const safe = error instanceof Error ? safeErrors[error.message] : undefined;
-        return { status: 'unavailable', message: safe ?? 'PUBG 数据工具暂时不可用；不要猜测统计结果。' };
+        const unavailable = { status: 'unavailable', message: safe ?? 'PUBG 数据工具暂时不可用；不要猜测统计结果。' };
+        completedPubgQueries.set(queryKey, unavailable);
+        return unavailable;
       }
     },
   });
@@ -573,16 +595,21 @@ async function naturalLanguageReply(
     ];
     const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage: current });
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
+    if (result.recoveryCode) {
+      services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: result.recoveryCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
+    }
     await services.authorizer.recordAgentRun(job, {
       modelId: configured.modelId, outcome,
-      failureCode: toolDegraded ? toolFailureCode : authorizationDenied ? authorizationFailureCode ?? 'public_query_access_denied' : null,
+      failureCode: toolDegraded ? toolFailureCode : authorizationDenied ? authorizationFailureCode ?? 'public_query_access_denied' : result.recoveryCode,
       inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens,
     }).catch(() => services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'persistence', reason: 'agent_run_record_failed', requestKey, ...(channelId ? { channelId } : {}), count: 1 }));
     return message(result.text);
   } catch (error) {
     const code = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
       ? String((error as { code: string }).code) : '';
-    const failureCode = ['public_agent_input_too_long', 'public_agent_empty_response'].includes(code) ? code : 'agent_provider_error';
+    const failureCode = [
+      'public_agent_input_too_long', 'public_agent_empty_response', 'public_agent_step_limit', 'public_agent_output_truncated', 'public_agent_timeout',
+    ].includes(code) ? code : 'agent_provider_error';
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: failureCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
     await services.authorizer.recordAgentRun(job, {
       modelId: configured.modelId, outcome: 'provider_fallback', failureCode,
@@ -635,7 +662,7 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
         const envelope = await domain.queryStats({
           sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period },
           metrics: [metric as Metric], operation: 'rank', groupBy: 'player', orderBy: { metric, direction: 'desc' },
-          limit: 4, refresh: false, signal,
+          limit: MAX_TEAM_ROSTER_SIZE, refresh: false, signal,
         });
         return message(leaderboardText(envelope, parsed.intent.period, metric, freshness));
       }

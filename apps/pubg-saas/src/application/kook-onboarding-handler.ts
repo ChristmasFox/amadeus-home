@@ -18,7 +18,7 @@ function safeAliasText(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/@/gu, '＠').replace(/[`*_~>|]/gu, ' ').trim().slice(0, 100);
 }
 const guidance: Record<string, string> = {
-  'ui:create': '请在要绑定的服务器频道发送：/pubg create steam "队伍名称" PlayerA PlayerB（1–4 名玩家）。平台支持 steam/kakao/psn/xbox；含空格的名称用引号包裹。查询后需确认；服务器拥有者或管理员才能执行。',
+  'ui:create': '请在要绑定的服务器频道发送：/pubg create steam "队伍名称" PlayerA PlayerB（最多 8 名玩家）。平台支持 steam/kakao/psn/xbox；含空格的名称用引号包裹。查询后需确认；服务器拥有者或管理员才能执行。',
   'ui:bind': '请在目标服务器频道发送 /pubg teams 查看该服务器的队伍，再发送 /pubg bind <队伍ID>。绑定前需确认，且当前频道必须未绑定队伍。',
   'ui:claim': '请在当前队伍群聊发送 /pubg me PlayerName。平台默认为 Steam；游戏名含空格时用引号包裹。系统会先通过 PUBG 公共 API 校验该名称。',
 };

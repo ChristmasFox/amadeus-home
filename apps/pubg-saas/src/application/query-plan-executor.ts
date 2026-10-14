@@ -12,6 +12,7 @@ import type {
 } from '@agent/pubg-domain/core';
 import type { AuthorizedPublicQuery } from './public-query-authorizer.js';
 import { QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
 const DEFAULT_BUSINESS_DAY_START = '06:00';
@@ -364,7 +365,7 @@ export class QueryPlanExecutor {
           operation: 'rank',
           groupBy: 'player',
           orderBy: { metric, direction: 'desc' },
-          limit: 4,
+          limit: MAX_TEAM_ROSTER_SIZE,
           refresh: false,
           ...(signal ? { signal } : {}),
         });
@@ -385,7 +386,7 @@ export class QueryPlanExecutor {
         operation: 'report',
         groupBy: 'player',
         orderBy: { metric: metrics[0]!, direction: 'desc' },
-        limit: playerSelection.kind === 'player' ? 1 : 4,
+        limit: playerSelection.kind === 'player' ? 1 : MAX_TEAM_ROSTER_SIZE,
         refresh: false,
         ...(playerSelection.kind === 'player' ? { playerIds: [playerSelection.id] } : {}),
         ...(signal ? { signal } : {}),
@@ -443,7 +444,7 @@ export class QueryPlanExecutor {
         metrics,
         groupBy: 'player',
         orderBy: { metric: metrics[0]!, direction: 'desc' },
-        limit: playerIds ? 1 : 4,
+        limit: playerIds ? 1 : MAX_TEAM_ROSTER_SIZE,
         refresh: false,
         ...(playerIds ? { playerIds } : {}),
         ...(signal ? { signal } : {}),

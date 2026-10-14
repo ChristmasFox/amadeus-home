@@ -1,5 +1,6 @@
 import { PubgApiClient, PubgApiError } from '@agent/pubg-domain/core';
 import type { PublicPubgAdmission } from './request-limiter.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../../contracts/team-roster.js';
 
 export interface ResolvedPubgPlayer { accountId: string; name: string; }
 export interface PubgNameResolution {
@@ -26,7 +27,7 @@ export function validatePublicPubgShard(shard: string): string {
 class AcceptanceSyntheticPlayerResolver implements PublicPubgPlayerResolverPort {
   async resolveNames(shard: string, names: string[]): Promise<PubgNameResolution> {
     validatePublicPubgShard(shard);
-    if (!Array.isArray(names) || names.length < 1 || names.length > 4
+    if (!Array.isArray(names) || names.length < 1 || names.length > MAX_TEAM_ROSTER_SIZE
       || names.some(name => typeof name !== 'string' || !name.trim() || name.length > 100 || /[,\u0000-\u001f]/u.test(name))
       || new Set(names.map(name => name.trim().toLowerCase())).size !== names.length) throw new Error('public_pubg_names_invalid');
     const requested = names.map(name => name.trim());
@@ -90,7 +91,7 @@ export class PublicPubgPlayerResolver implements PublicPubgPlayerResolverPort {
 
   async resolveNames(shard: string, names: string[], signal?: AbortSignal): Promise<PubgNameResolution> {
     validatePublicPubgShard(shard);
-    if (!Array.isArray(names) || names.length < 1 || names.length > 4
+    if (!Array.isArray(names) || names.length < 1 || names.length > MAX_TEAM_ROSTER_SIZE
       || names.some(name => typeof name !== 'string' || !name.trim() || name.length > 100 || /[,\u0000-\u001f]/u.test(name))
       || new Set(names.map(name => name.trim().toLowerCase())).size !== names.length) throw new Error('public_pubg_names_invalid');
     const requested = names.map(name => name.trim());

@@ -5,6 +5,7 @@ import { parseKookRequest } from '../channels/kook/request-event.js';
 import type { TrustedKookDirectMessage, TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 import { PostgresPubgRepository, type TrustedConversationScope } from '../infrastructure/postgres/pubg-repository.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 type MessageEvent = TrustedKookGroupMessage | TrustedKookDirectMessage;
 export interface PublicQueryPermissionChecker {
@@ -159,7 +160,7 @@ export class PublicQueryAuthorizer {
            AND alias.team_id=member.team_id AND alias.pubg_account_id=member.pubg_account_id
          WHERE member.tenant_id=$1 AND member.team_id=$2 GROUP BY member.pubg_account_id,account.display_name ORDER BY member.pubg_account_id`, scope.slice(0, 2),
       );
-      if (!members.rowCount || members.rowCount > 4) throw new Error('public_query_roster_unavailable');
+      if (!members.rowCount || members.rowCount > MAX_TEAM_ROSTER_SIZE) throw new Error('public_query_roster_unavailable');
       const teamContext = createTeamContext(selectedTarget.tenantId, {
         id: selectedTarget.teamId, label: String(target.label), platform: String(target.pubg_shard),
         // Fall back to the stable account ID until a public official name has

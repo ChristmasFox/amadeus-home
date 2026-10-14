@@ -37,6 +37,7 @@ const safeErrors: Record<string, string> = {
   public_pubg_lookup_invalid_response: 'PUBG 返回的账号信息无法可靠识别，请稍后重试。',
   public_pubg_shard_invalid: '平台仅支持 steam/kakao/psn/xbox。',
   public_pubg_names_invalid: '请提供一个有效 PUBG 游戏名。',
+  team_roster_limit_exceeded: '这支队伍已绑定 8 名玩家，名额已满；请联系队伍管理员调整名单。',
 };
 
 function accountNotFound(): KookTextPayload { return message('查不到该 PUBG 账号'); }

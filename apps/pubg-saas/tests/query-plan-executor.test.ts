@@ -139,7 +139,7 @@ test('team stats uses the authorized session, bounded selector, no refresh, and 
       operation: 'report',
       groupBy: 'player',
       orderBy: { metric: 'matches', direction: 'desc' },
-      limit: 4,
+      limit: 8,
       refresh: false,
     },
   }]);

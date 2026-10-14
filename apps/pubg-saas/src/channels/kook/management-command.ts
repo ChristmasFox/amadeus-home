@@ -1,4 +1,5 @@
 import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../../contracts/team-preferences.js';
+import { MAX_TEAM_ROSTER_SIZE } from '../../contracts/team-roster.js';
 
 export type KookManagementCommand =
   | { kind: 'help' | 'privacy' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' | 'preference' | 'preference_delete' }
@@ -32,7 +33,7 @@ export function parseKookManagementCommand(content: string): KookManagementComma
   }
   if (quote || escaped) return { kind: 'invalid' };
   if (inToken) tokens.push(current);
-  if (tokens.length > 8 || tokens.some(token => !token || token.length > 100)) return { kind: 'invalid' };
+  if (tokens.length > MAX_TEAM_ROSTER_SIZE + 4 || tokens.some(token => !token || token.length > 100)) return { kind: 'invalid' };
   const kind = tokens[0]?.toLowerCase() ?? 'help';
   const args = tokens.slice(1);
   if (['help', 'privacy', 'teams', 'status', 'unbind', 'disband', 'account', 'unclaim'].includes(kind) && !args.length) return { kind: kind as 'help' | 'privacy' | 'teams' | 'status' | 'unbind' | 'disband' | 'account' | 'unclaim' };
@@ -46,9 +47,9 @@ export function parseKookManagementCommand(content: string): KookManagementComma
   if (kind === 'alias' && args[0]?.toLowerCase() === 'list' && args.length === 1) return { kind: 'alias_list' };
   if (kind === 'alias' && args[0]?.toLowerCase() === 'set' && args.length === 3) return { kind: 'alias_set', playerName: args[1]!, alias: args[2]! };
   if (kind === 'alias' && args[0]?.toLowerCase() === 'delete' && args.length === 2) return { kind: 'alias_delete', alias: args[1]! };
-  if (kind === 'create' && args.length >= 3 && args.length <= 6) return { kind, shard: args[0]!.toLowerCase(), label: args[1]!, names: args.slice(2) };
+  if (kind === 'create' && args.length >= 3 && args.length <= MAX_TEAM_ROSTER_SIZE + 2) return { kind, shard: args[0]!.toLowerCase(), label: args[1]!, names: args.slice(2) };
   if (kind === 'bind' && args.length === 1) return { kind, teamId: args[0]! };
-  if ((kind === 'add' || kind === 'roster') && args.length >= 1 && args.length <= 4) return { kind, names: args };
+  if ((kind === 'add' || kind === 'roster') && args.length >= 1 && args.length <= MAX_TEAM_ROSTER_SIZE) return { kind, names: args };
   if (kind === 'me' && args.length === 1) return { kind, name: args[0]! };
   if (kind === 'claim' && args.length === 2) return { kind, shard: args[0]!.toLowerCase(), name: args[1]! };
   return { kind: 'invalid' };

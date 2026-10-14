@@ -161,6 +161,7 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
       'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, emptyEvent.msg_id],
     )).rows[0], { outcome: 'provider_fallback', failure_code: 'public_agent_empty_response' });
     assert.equal(JSON.stringify(diagnostics).includes(emptyEvent.msg_id), false);
+
   } finally {
     await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);

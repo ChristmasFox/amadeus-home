@@ -101,7 +101,7 @@ developer-account quota eligibility remain unverified.
   A channel revision invalidates old setup cards after another bind/unbind
   cycle. Roster preparation checks the source request's selected team again
   after player lookup.
-- `PublicPubgPlayerResolver` batches 1–4 names through the shared API client
+- `PublicPubgPlayerResolver` batches 1–8 names through the shared API client
   at the fixed official endpoint, with redirects and hidden retries disabled.
   It preserves case, previews canonical API names, and cannot prepare a roster
   from missing/ambiguous/invalid results. It reads no private configuration.
@@ -286,7 +286,7 @@ changes use one-use confirmations. Names/labels retain case; quote those with sp
 
 | Context | Command | Result |
 | --- | --- | --- |
-| Unbound guild channel | `/pubg create steam "Squad Name" Alice Bob` | Resolve 1–4 names, confirm creation and binding |
+| Unbound guild channel | `/pubg create steam "Squad Name" Alice Bob` | Resolve up to 8 names, confirm creation and binding |
 | Guild channel | `/pubg teams` | List only this guild's teams (up to 50) |
 | Unbound guild channel | `/pubg bind <team-id>` | Confirm binding a team from this guild |
 | Bound guild channel | `/pubg add Charlie` / `/pubg roster Alice Bob` | Confirm adding/replacing roster |
