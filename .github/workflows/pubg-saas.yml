@@ -90,7 +90,9 @@ jobs:
       - name: Build private and public PUBG packages
         run: pnpm build:pubg && pnpm --filter @agent/pubg-saas build
       - name: Public SaaS PostgreSQL tests
-        run: pnpm test:pubg-saas
+        run: |
+          pnpm --filter @agent/pubg-domain build
+          pnpm test:pubg-saas
       - name: Private Kurisu regression
         run: pnpm test:pubg
       - name: Public and private typechecks
