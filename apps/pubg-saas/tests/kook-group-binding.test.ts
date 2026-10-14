@@ -2,13 +2,18 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
+import { MockLanguageModelV4 } from 'ai/test';
 import {
+  AccountClaimService,
   createKookGroupBindingHandler,
+  createKookPublicQueryHandler,
+  composeKookRequestHandlers,
   executeKookNaturalWrite,
   KookGuildWelcomeApiClient,
   KookIngressQueue,
   migratePublicDatabase,
   parseTrustedKookGuildJoin,
+  PublicQueryAuthorizer,
   PublicPubgPlayerResolver,
   TeamAdminService,
 } from '../src/index.js';
@@ -25,6 +30,23 @@ function group(guild: string, channel: string, actor: string, content: string, m
 
 function direct(bot: string, actor: string, content: string) {
   return { type: 1, channel_type: 'PERSON', target_id: bot, author_id: actor, content, msg_id: randomUUID(), msg_timestamp: Date.now() };
+}
+
+const agentUsage = {
+  inputTokens: { total: 8, noCache: 8, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 5, text: 5, reasoning: undefined },
+};
+
+function agentResponse(content: Array<Record<string, unknown>>, finish: 'stop' | 'tool-calls' = 'stop'): never {
+  return { content, finishReason: { unified: finish, raw: finish }, usage: agentUsage, warnings: [] } as never;
+}
+
+function agentToolCall(toolName: string, input: unknown) {
+  return agentResponse([{ type: 'tool-call', toolCallId: randomUUID(), toolName, input: JSON.stringify(input) }], 'tool-calls');
+}
+
+function agentText(text: string) {
+  return agentResponse([{ type: 'text', text }]);
 }
 
 test('group binding auto-provisions one guild team, verifies identities, gates delegation, and overwrites self claims', { skip: !databaseUrl }, async () => {
@@ -247,6 +269,129 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     await pool.query('DELETE FROM channel_identities WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM channel_binding_versions WHERE bot_account_id=$1', [bot]);
     await pool.query("DELETE FROM pubg_accounts WHERE account_id LIKE 'account.%' AND account_id LIKE $1", [`%_${suffix}`]);
+    await pool.end();
+  }
+});
+
+test('Agent account-binding tools use trusted mentions, real lookup results, and persist authorization denials', { skip: !databaseUrl }, async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 8 });
+  const suffix = randomUUID().replaceAll('-', '');
+  const bot = `agent-bot-${suffix}`, guild = `agent-guild-${suffix}`, channel = `agent-channel-${suffix}`;
+  const member = `member-${suffix}`, admin = `admin-${suffix}`, target = `target-${suffix}`, nonAdmin = `non-admin-${suffix}`;
+  const admins = new Set([`${guild}:${admin}`]);
+  const channelMembers = new Set([member, admin, target, nonAdmin]);
+  let lookupCalls = 0;
+  const teams = new TeamAdminService(pool, {
+    async isGuildAdmin(guildId, userId) { return admins.has(`${guildId}:${userId}`); },
+    async isTextChannelMember(guildId, channelId, userId) {
+      return guildId === guild && channelId === channel && channelMembers.has(userId);
+    },
+  });
+  const players = new PublicPubgPlayerResolver({
+    apiKey: 'synthetic-test-only',
+    admission: { async acquire() {}, async observe() {} },
+    fetcher: async input => {
+      lookupCalls += 1;
+      const names = new URL(String(input)).searchParams.get('filter[playerNames]')?.split(',') ?? [];
+      return new Response(JSON.stringify({ data: names.filter(name => name !== 'Unknown').map(name => ({
+        type: 'player', id: `account.${name.toLowerCase()}_${suffix}`, attributes: { name },
+      })) }));
+    },
+  });
+  const model = new MockLanguageModelV4({ doGenerate: [
+    agentToolCall('declare_pubg_account', { target: 'self', pubgName: 'Alpha' }),
+    agentText('已经查到并绑定你的 PUBG 账号 Alpha。'),
+    agentToolCall('declare_pubg_account', { target: 'mentioned_member', pubgName: 'Bravo' }),
+    agentText('已经查到并为被 @ 的队员绑定 PUBG 账号 Bravo。'),
+    agentToolCall('declare_pubg_account', { target: 'mentioned_member', pubgName: 'Charlie' }),
+    agentText('当前操作者不是管理员，代绑没有执行。'),
+    agentToolCall('declare_pubg_account', { target: 'self', pubgName: 'Unknown' }),
+    agentText('查不到该 PUBG 账号，所以没有记录。'),
+  ] });
+  const bindingServices = { teams, players };
+  const handler = composeKookRequestHandlers(
+    createKookGroupBindingHandler(bindingServices),
+    createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, {
+        async isGuildMember(guildId, userId) { return guildId === guild && channelMembers.has(userId); },
+        async isTextChannelMember(guildId, channelId, userId) {
+          return guildId === guild && channelId === channel && channelMembers.has(userId);
+        },
+      }, { botAccountId: bot }),
+      claims: new AccountClaimService(pool),
+      agent: { model, provider: 'synthetic-provider', modelId: 'synthetic-agent-model' },
+      executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
+    }),
+  );
+  const queue = new KookIngressQueue(pool, {
+    botAccountId: bot,
+    maxRequestsPerUserPerMinute: 100,
+    maxRequestsPerChannelPerMinute: 300,
+    maxRequestsPerTenantPerMinute: 500,
+    maxRequestsPerBotPerMinute: 1000,
+  });
+  const signal = new AbortController().signal;
+
+  async function send(event: ReturnType<typeof group>): Promise<string> {
+    assert.equal(await queue.ingestGatewayEvent(event), 'accepted');
+    assert.equal(await queue.processOne(
+      async (job, abortSignal) => (await handler(job, abortSignal)) ?? null,
+      signal,
+      undefined,
+      async trustedEvent => teams.ensureGroupChannel(trustedEvent, 'Agent Fixture Squad'),
+    ), 'done');
+    const row = (await pool.query(
+      'SELECT payload_json FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, event.msg_id],
+    )).rows[0];
+    assert.ok(row);
+    return String(row.payload_json.content);
+  }
+
+  try {
+    await migratePublicDatabase(pool);
+    const selfEvent = group(guild, channel, member, '我的 PUBG 账号是 Alpha');
+    assert.match(await send(selfEvent), /已经查到并绑定/u);
+    assert.deepEqual((await pool.query(
+      'SELECT pubg_account_id,claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, member],
+    )).rows[0], { pubg_account_id: `account.alpha_${suffix}`, claim_status: 'verified' });
+
+    const delegatedEvent = group(guild, channel, admin, `<@${target}> 他的 PUBG 账号是 Bravo`, [target]);
+    assert.match(await send(delegatedEvent), /为被 @ 的队员绑定/u);
+    assert.deepEqual((await pool.query(
+      'SELECT pubg_account_id,claim_status FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, target],
+    )).rows[0], { pubg_account_id: `account.bravo_${suffix}`, claim_status: 'verified' });
+    assert.equal(JSON.stringify(model.doGenerateCalls).includes(target), false,
+      'the Agent receives the mention label but never the trusted KOOK target ID');
+
+    const lookupsBeforeDenial = lookupCalls;
+    const deniedEvent = group(guild, channel, nonAdmin, `<@${target}> 他的 PUBG 账号是 Charlie`, [target]);
+    assert.match(await send(deniedEvent), /不是管理员/u);
+    assert.equal(lookupCalls, lookupsBeforeDenial, 'authorization is checked before the real account lookup');
+    assert.equal((await pool.query(
+      'SELECT 1 FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, nonAdmin],
+    )).rowCount, 0);
+    assert.deepEqual((await pool.query(
+      'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, deniedEvent.msg_id],
+    )).rows[0], { outcome: 'authorization_denied', failure_code: 'guild_admin_required' });
+
+    const missingEvent = group(guild, channel, member, '我的 PUBG 账号是 Unknown');
+    assert.match(await send(missingEvent), /查不到该 PUBG 账号/u);
+    assert.equal((await pool.query(
+      'SELECT 1 FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, member],
+    )).rowCount, 1, 'a lookup miss does not replace the existing account claim');
+  } finally {
+    await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]);
+    await pool.query("DELETE FROM account_claims WHERE platform='kook' AND bot_account_id=$1", [bot]);
+    await pool.query('DELETE FROM usage_records WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM pubg_accounts WHERE shard=$1 AND account_id=ANY($2::text[])', [
+      'steam', [`account.alpha_${suffix}`, `account.bravo_${suffix}`],
+    ]);
+    await pool.query('DELETE FROM channel_identities WHERE bot_account_id=$1', [bot]);
+    await pool.query('DELETE FROM channel_binding_versions WHERE bot_account_id=$1', [bot]);
     await pool.end();
   }
 });

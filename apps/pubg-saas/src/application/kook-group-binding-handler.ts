@@ -108,6 +108,30 @@ export type KookNaturalWriteIntent =
   | { kind: 'declare_pubg_account'; target: 'self' | 'mentioned_member'; pubgName: string }
   | { kind: 'rename_team'; teamName: string };
 
+export interface KookNaturalWriteResult {
+  outcome: 'completed' | 'rejected';
+  message: string;
+  /** Safe operational metadata; callers must not expose this to the model. */
+  failure?: { kind: 'authorization_denied' | 'authorization_unavailable'; code: string };
+}
+
+const authorizationDenialCodes = new Set([
+  'guild_admin_required',
+  'kook_channel_member_required',
+  'kook_target_channel_member_required',
+  'team_action_scope_changed',
+]);
+
+function naturalWriteFailure(error: unknown, fallback: string): KookNaturalWriteResult {
+  const code = error instanceof Error ? error.message : '';
+  const failure = authorizationDenialCodes.has(code)
+    ? { kind: 'authorization_denied' as const, code }
+    : code === 'kook_permission_check_unavailable'
+      ? { kind: 'authorization_unavailable' as const, code }
+      : undefined;
+  return { outcome: 'rejected', message: safeErrors[code] ?? fallback, ...(failure ? { failure } : {}) };
+}
+
 /** Executes only a literal, model-selected write slot. Actor, mention IDs,
  * guild/channel scope, admin status and current membership all come from the
  * trusted event and TeamAdminService; this function has no model access. */
@@ -116,7 +140,7 @@ export async function executeKookNaturalWrite(
   services: KookGroupBindingServices,
   intent: KookNaturalWriteIntent,
   signal: AbortSignal,
-): Promise<{ outcome: 'completed' | 'rejected'; message: string }> {
+): Promise<KookNaturalWriteResult> {
   if (job.request.kind !== 'group' || !job.boundTeam) {
     return { outcome: 'rejected', message: '当前频道还没有可用的 PUBG 小队。普通聊天可以继续；要查询或绑定 PUBG 数据，请先在服务器创建队伍。' };
   }
@@ -130,8 +154,7 @@ export async function executeKookNaturalWrite(
       await services.teams.renameBoundTeam(event, job.boundTeam, intent.teamName);
       return { outcome: 'completed', message: `队名已改为：${safeName(intent.teamName)}` };
     } catch (error) {
-      const safe = error instanceof Error ? safeErrors[error.message] : undefined;
-      return { outcome: 'rejected', message: safe ?? '这次队名修改没有完成，请稍后重试。' };
+      return naturalWriteFailure(error, '这次队名修改没有完成，请稍后重试。');
     }
   }
   if (!intent.pubgName.trim() || intent.pubgName.length > 100 || !literalAppears(normalized, intent.pubgName)) {
@@ -147,7 +170,6 @@ export async function executeKookNaturalWrite(
       message: sanitizeKookMentionMarkup(payload.content),
     };
   } catch (error) {
-    const safe = error instanceof Error ? safeErrors[error.message] : undefined;
-    return { outcome: 'rejected', message: safe ?? '账号绑定没有完成，请稍后重试。' };
+    return naturalWriteFailure(error, '账号绑定没有完成，请稍后重试。');
   }
 }

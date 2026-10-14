@@ -14,7 +14,7 @@ import type { KookTextPayload } from './kook-message-queue.js';
 import { QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
 import { QueryPlanExecutor } from './query-plan-executor.js';
 import { runPublicKookAgent } from './kook-conversation-agent.js';
-import type { KookNaturalWriteIntent } from './kook-group-binding-handler.js';
+import type { KookNaturalWriteIntent, KookNaturalWriteResult } from './kook-group-binding-handler.js';
 import type {
   AuthorizedPublicQuery,
   PublicQueryAuthorizer,
@@ -40,7 +40,7 @@ export interface KookPublicQueryServices {
   authorizer: PublicQueryAuthorizer;
   claims: AccountClaimService;
   agent?: { model: Exclude<LanguageModel, string>; provider: string; modelId: string } | null;
-  executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<{ outcome: 'completed' | 'rejected'; message: string }>;
+  executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<KookNaturalWriteResult>;
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
   executor?: QueryPlanExecutor;
   now?: () => Date;
@@ -367,6 +367,7 @@ async function naturalLanguageReply(
 
   let toolDegraded = false;
   let authorizationDenied = false;
+  let authorizationFailureCode: string | null = null;
   let writeAttempted = false;
   const reportToolFailure = (reason: string) => {
     toolDegraded = true;
@@ -388,6 +389,7 @@ async function naturalLanguageReply(
       const code = error instanceof Error ? error.message : '';
       if (code === 'public_query_access_denied' || code === 'public_query_binding_changed') {
         authorizationDenied = true;
+        authorizationFailureCode = 'public_query_access_denied';
         services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: 'public_query_access_denied', requestKey, ...(channelId ? { channelId } : {}), count: 1 });
         return { kind: 'denied' };
       }
@@ -517,7 +519,15 @@ async function naturalLanguageReply(
         execute: async input => {
           if (writeAttempted) return { outcome: 'rejected', message: '这条消息里已经处理过一次绑定请求。' };
           writeAttempted = true;
-          return services.executeNaturalWrite!(job, { kind: 'declare_pubg_account', ...input }, signal);
+          const result = await services.executeNaturalWrite!(job, { kind: 'declare_pubg_account', ...input }, signal);
+          if (result.failure?.kind === 'authorization_denied') {
+            authorizationDenied = true;
+            authorizationFailureCode = result.failure.code;
+            services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: result.failure.code, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
+          } else if (result.failure?.kind === 'authorization_unavailable') {
+            reportToolFailure(result.failure.code);
+          }
+          return { outcome: result.outcome, message: result.message };
         },
       }),
       rename_team: tool({
@@ -526,7 +536,15 @@ async function naturalLanguageReply(
         execute: async input => {
           if (writeAttempted) return { outcome: 'rejected', message: '这条消息里已经处理过一次队伍修改。' };
           writeAttempted = true;
-          return services.executeNaturalWrite!(job, { kind: 'rename_team', ...input }, signal);
+          const result = await services.executeNaturalWrite!(job, { kind: 'rename_team', ...input }, signal);
+          if (result.failure?.kind === 'authorization_denied') {
+            authorizationDenied = true;
+            authorizationFailureCode = result.failure.code;
+            services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: result.failure.code, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
+          } else if (result.failure?.kind === 'authorization_unavailable') {
+            reportToolFailure(result.failure.code);
+          }
+          return { outcome: result.outcome, message: result.message };
         },
       }),
     } : {}),
@@ -544,7 +562,7 @@ async function naturalLanguageReply(
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
     await services.authorizer.recordAgentRun(job, {
       modelId: configured.modelId, outcome,
-      failureCode: toolDegraded ? 'agent_tool_degraded' : authorizationDenied ? 'public_query_access_denied' : null,
+      failureCode: toolDegraded ? 'agent_tool_degraded' : authorizationDenied ? authorizationFailureCode ?? 'public_query_access_denied' : null,
       inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens,
     }).catch(() => services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'persistence', reason: 'agent_run_record_failed', requestKey, ...(channelId ? { channelId } : {}), count: 1 }));
     return message(result.text);
