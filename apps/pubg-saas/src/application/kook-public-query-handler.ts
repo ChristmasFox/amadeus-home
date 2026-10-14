@@ -366,6 +366,7 @@ async function naturalLanguageReply(
   }
 
   let toolDegraded = false;
+  let toolFailureCode = 'agent_tool_degraded';
   let authorizationDenied = false;
   let authorizationFailureCode: string | null = null;
   let writeAttempted = false;
@@ -373,12 +374,18 @@ async function naturalLanguageReply(
     toolDegraded = true;
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'tool', reason, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
   };
+  const reportAuthorizationUnavailable = (reason: string) => {
+    toolDegraded = true;
+    toolFailureCode = reason;
+    services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
+  };
 
   const executeAuthorized = async (): Promise<
     | { kind: 'authorized'; query: AuthorizedPublicQuery }
     | { kind: 'unbound' }
     | { kind: 'selection_required' }
     | { kind: 'denied' }
+    | { kind: 'authorization_unavailable' }
   > => {
     if (job.request.kind === 'group' && !job.boundTeam) return { kind: 'unbound' };
     try {
@@ -392,6 +399,10 @@ async function naturalLanguageReply(
         authorizationFailureCode = 'public_query_access_denied';
         services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: 'public_query_access_denied', requestKey, ...(channelId ? { channelId } : {}), count: 1 });
         return { kind: 'denied' };
+      }
+      if (code === 'kook_permission_check_unavailable') {
+        reportAuthorizationUnavailable(code);
+        return { kind: 'authorization_unavailable' };
       }
       throw error;
     }
@@ -410,6 +421,7 @@ async function naturalLanguageReply(
         if (authorized.kind === 'unbound') return { status: 'no_team', message: '当前服务器还没有绑定 PUBG 小队。只有需要 PUBG 数据时才需要创建/绑定队伍；可以在服务器先发送 /pubg create。' };
         if (authorized.kind === 'selection_required') return { status: 'selection_required', message: '当前用户有多支已授权队伍，需要在目标队伍频道查询。' };
         if (authorized.kind === 'denied') return { status: 'access_denied', message: '当前发言者没有这支队伍的查询权限，或频道绑定已变化。不要尝试其他队伍。' };
+        if (authorized.kind === 'authorization_unavailable') return { status: 'authorization_unavailable', message: 'KOOK 权限校验当前不可用；不要查询 PUBG 数据或推断用户权限。请稍后重试。' };
         const query = authorized.query;
         const now = services.now?.() ?? new Date();
         const context = await query.repository.getContext(query.conversation.sessionId, now);
@@ -497,6 +509,7 @@ async function naturalLanguageReply(
         if (authorized.kind === 'unbound') return { status: 'no_team', message: '当前服务器还没有 PUBG 小队，可以继续普通聊天；需要数据时再创建或绑定。' };
         if (authorized.kind === 'selection_required') return { status: 'selection_required', message: '有多支已授权队伍，请在目标队伍频道查看。' };
         if (authorized.kind === 'denied') return { status: 'access_denied', message: '当前发言者没有本队信息访问权限。' };
+        if (authorized.kind === 'authorization_unavailable') return { status: 'authorization_unavailable', message: 'KOOK 权限校验当前不可用；暂时无法安全读取队伍信息。请稍后重试。' };
         return {
           status: 'ok', team: authorized.query.teamContext.team.label,
           platform: authorized.query.teamContext.team.platform,
@@ -525,7 +538,7 @@ async function naturalLanguageReply(
             authorizationFailureCode = result.failure.code;
             services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: result.failure.code, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
           } else if (result.failure?.kind === 'authorization_unavailable') {
-            reportToolFailure(result.failure.code);
+            reportAuthorizationUnavailable(result.failure.code);
           }
           return { outcome: result.outcome, message: result.message };
         },
@@ -542,7 +555,7 @@ async function naturalLanguageReply(
             authorizationFailureCode = result.failure.code;
             services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'authorization', reason: result.failure.code, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
           } else if (result.failure?.kind === 'authorization_unavailable') {
-            reportToolFailure(result.failure.code);
+            reportAuthorizationUnavailable(result.failure.code);
           }
           return { outcome: result.outcome, message: result.message };
         },
@@ -562,7 +575,7 @@ async function naturalLanguageReply(
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
     await services.authorizer.recordAgentRun(job, {
       modelId: configured.modelId, outcome,
-      failureCode: toolDegraded ? 'agent_tool_degraded' : authorizationDenied ? authorizationFailureCode ?? 'public_query_access_denied' : null,
+      failureCode: toolDegraded ? toolFailureCode : authorizationDenied ? authorizationFailureCode ?? 'public_query_access_denied' : null,
       inputTokens: result.inputTokens, outputTokens: result.outputTokens, totalTokens: result.totalTokens,
     }).catch(() => services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'persistence', reason: 'agent_run_record_failed', requestKey, ...(channelId ? { channelId } : {}), count: 1 }));
     return message(result.text);

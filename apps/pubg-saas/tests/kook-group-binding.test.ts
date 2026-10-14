@@ -280,10 +280,12 @@ test('Agent account-binding tools use trusted mentions, real lookup results, and
   const member = `member-${suffix}`, admin = `admin-${suffix}`, target = `target-${suffix}`, nonAdmin = `non-admin-${suffix}`;
   const admins = new Set([`${guild}:${admin}`]);
   const channelMembers = new Set([member, admin, target, nonAdmin]);
+  let permissionUnavailableUser: string | null = null;
   let lookupCalls = 0;
   const teams = new TeamAdminService(pool, {
     async isGuildAdmin(guildId, userId) { return admins.has(`${guildId}:${userId}`); },
     async isTextChannelMember(guildId, channelId, userId) {
+      if (userId === permissionUnavailableUser) throw new Error('kook_permission_check_unavailable');
       return guildId === guild && channelId === channel && channelMembers.has(userId);
     },
   });
@@ -307,7 +309,10 @@ test('Agent account-binding tools use trusted mentions, real lookup results, and
     agentText('当前操作者不是管理员，代绑没有执行。'),
     agentToolCall('declare_pubg_account', { target: 'self', pubgName: 'Unknown' }),
     agentText('查不到该 PUBG 账号，所以没有记录。'),
+    agentToolCall('declare_pubg_account', { target: 'self', pubgName: 'Delta' }),
+    agentText('权限服务暂时不可用，我没有改动账号绑定。'),
   ] });
+  const diagnostics: unknown[] = [];
   const bindingServices = { teams, players };
   const handler = composeKookRequestHandlers(
     createKookGroupBindingHandler(bindingServices),
@@ -321,6 +326,7 @@ test('Agent account-binding tools use trusted mentions, real lookup results, and
       claims: new AccountClaimService(pool),
       agent: { model, provider: 'synthetic-provider', modelId: 'synthetic-agent-model' },
       executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
+      onAgentDiagnostic: event => diagnostics.push(event),
     }),
   );
   const queue = new KookIngressQueue(pool, {
@@ -379,6 +385,24 @@ test('Agent account-binding tools use trusted mentions, real lookup results, and
     assert.equal((await pool.query(
       'SELECT 1 FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, member],
     )).rowCount, 1, 'a lookup miss does not replace the existing account claim');
+
+    const lookupsBeforeUnavailable = lookupCalls;
+    const unavailableEvent = group(guild, channel, member, '我的 PUBG 账号是 Delta');
+    permissionUnavailableUser = member;
+    let unavailableReply = '';
+    try {
+      unavailableReply = await send(unavailableEvent);
+    } finally {
+      permissionUnavailableUser = null;
+    }
+    assert.match(unavailableReply, /权限服务暂时不可用/u);
+    assert.equal(lookupCalls, lookupsBeforeUnavailable, 'account resolution waits until the permission check succeeds');
+    assert.deepEqual((await pool.query(
+      'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, unavailableEvent.msg_id],
+    )).rows[0], { outcome: 'tool_degraded', failure_code: 'kook_permission_check_unavailable' });
+    assert.ok(diagnostics.some(value => JSON.stringify(value).includes('"stage":"authorization"')
+      && JSON.stringify(value).includes('kook_permission_check_unavailable')));
+    assert.equal(JSON.stringify(diagnostics).includes(unavailableEvent.msg_id), false);
   } finally {
     await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);

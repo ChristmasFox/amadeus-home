@@ -295,6 +295,33 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.equal(JSON.stringify(toolDiagnostics).includes('synthetic domain failure'), false);
     assert.equal(JSON.stringify(toolDiagnostics).includes(toolFailureEvent.msg_id), false);
 
+    const authorizationDiagnostics: unknown[] = [];
+    const authorizationUnavailableHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, {
+        async isGuildMember() { return true; },
+        async isTextChannelMember() { throw new Error('kook_permission_check_unavailable'); },
+      }, { botAccountId: bot }),
+      claims,
+      agent: { model: new MockLanguageModelV4({ doGenerate: [
+        toolCall(plan('team_stats')),
+        finalText('KOOK 权限校验暂时不可用，我没有读取战绩，请稍后重试。'),
+      ] }), provider: 'fixture-provider', modelId: 'fixture-model' },
+      onAgentDiagnostic: event => authorizationDiagnostics.push(event),
+    });
+    const authorizationUnavailableEvent = group(bot, guild, channel, admin, '昨天谁伤害最高？');
+    assert.equal(await queue.ingestGatewayEvent(authorizationUnavailableEvent), 'accepted');
+    assert.equal(await queue.processOne(async (job, abortSignal) =>
+      (await authorizationUnavailableHandler(job, abortSignal)) ?? null, signal), 'done');
+    assert.match(String((await pool.query(
+      'SELECT payload_json->>\'content\' AS content FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2',
+      [bot, authorizationUnavailableEvent.msg_id],
+    )).rows[0]?.content), /没有读取战绩/u);
+    assert.deepEqual((await pool.query(
+      'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, authorizationUnavailableEvent.msg_id],
+    )).rows[0], { outcome: 'tool_degraded', failure_code: 'kook_permission_check_unavailable' });
+    assert.ok(authorizationDiagnostics.some(value => JSON.stringify(value).includes('"stage":"authorization"')
+      && JSON.stringify(value).includes('kook_permission_check_unavailable')));
+
     const kickFollowUp = await send(group(bot, guild, channel, admin, '那他踢队友了吗？'));
     assert.match(kickFollowUp.content, /Alice 踢击队友 1 次、造成 5 点伤害/u);
   } finally {
