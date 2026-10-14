@@ -248,6 +248,27 @@ OpenClaw and 9Router IDs/start times/restart counts were unchanged. No Gateway
 or provider credential was used. Detailed commands and artifact hash:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+### Current-source isolated Linux runtime/egress repeat — 2026-10-14
+
+The same local ARM64 image was copied from M204 with `docker save/load` into
+the separate OrbStack Linux VM; all eight rootfs layers and runtime config
+matched. Fresh PG18.1 Compose applied 14 migrations and Worker/egress health
+passed. The loopback metrics GET returned 200. In the Worker network namespace,
+direct public/metadata TCP was unreachable, private-host and metadata proxy
+CONNECTs returned 403, and public HTTPS through the proxy returned 200. Plain
+`down` retained the PG volume. This is a separate VM on the same physical host,
+not a cloud or M204 power-off test. No Gateway/provider credential was used.
+Evidence and commands are in the current-source recovery checkpoint above.
+
+The latest M204 age artifact then restored on this Linux VM into a fresh PG18.1
+project: verification and guarded restore passed with 37/37 table counts and
+synthetic tenant/team/job rows of 1/1/1. App/backup role and sequence grants
+passed. Current Worker started healthy against the restored DB with one delayed
+job, zero attempts and zero due work; metrics returned up=1. The target was
+marker-cleaned and the project stopped with plain `down`. This confirms local
+cross-VM portability, not cloud or physical-M204 outage independence. Details:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ### Current-source M2 source/OCI gates — 2026-10-14
 
 The full `pnpm test:pubg-saas` suite passed 104/104 with no skips against the

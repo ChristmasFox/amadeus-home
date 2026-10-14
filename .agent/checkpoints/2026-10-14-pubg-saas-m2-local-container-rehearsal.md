@@ -804,6 +804,153 @@ cd /var/tmp/pubg-saas-m2-clean/restore && docker compose --env-file .env down
 pnpm test:pubg
 ```
 
+## Current-source clean-Linux Compose and egress repeat — 2026-10-14
+
+Transferred M204's local ARM64 image `local/pubg-saas:git-7f3b95b` into the
+separate OrbStack Linux VM `pubg-saas-m2-clean` with `docker save | docker
+load`; there was no registry push. All eight rootfs layer IDs and the runtime
+container configuration matched. A new Compose project and PG18.1 volume used
+the current checked-in Compose/role-init files. All 14 migrations applied,
+and PostgreSQL, egress-proxy and Worker health checks passed. The Worker queue
+was empty. The host-loopback metrics relay returned 200 with
+`pubg_saas_worker_up 1`.
+
+The existing credential-free egress smoke ran in the Worker network namespace:
+direct public and metadata TCP returned `ENETUNREACH`, proxy CONNECT to
+metadata and `host.docker.internal` returned 403, and public HTTPS through the
+proxy returned 200. Thus the current image can start in a separate Linux VM
+while its app containers have no default route and private-host/metadata
+targets stay denied. This VM shares the physical OrbStack host with M204; it is
+not a cloud or physical-host-outage rehearsal and does not prove complete
+public operation with M204 powered off.
+
+The project stopped with plain `docker compose down`, preserving its fresh PG
+volume and leaving no test containers running. No Gateway, KOOK credential,
+PUBG API or model request was used. The first host curl inherited an unusable
+OrbStack proxy setting and the first smoke-container run could not read its
+root-owned test script; clearing the proxy variables for loopback curl and
+making the non-secret script readable fixed both harness issues. The actual
+egress smoke passed without an application change.
+
+Reproduction with the retained isolated VM fixture and local image:
+
+```sh
+set -o pipefail
+orb -m nyannyan -u root docker save local/pubg-saas:git-7f3b95b \
+  | orb -m pubg-saas-m2-clean -u root docker load
+
+STACK=/var/tmp/pubg-saas-m2-current-7f3b95b/src
+PROJECT=pubg-saas-m2-clean-current-src-7f3b95b
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" --profile ops run --rm migrate
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait worker
+orb -m pubg-saas-m2-clean -u root env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy curl --noproxy '*' -fsS \
+  http://127.0.0.1:9464/metrics
+
+orb -m pubg-saas-m2-clean -u root mkdir -m 700 -p \
+  /var/tmp/pubg-saas-m2-current-7f3b95b/smoke
+tar -C scripts/tests -cf - pubg-saas-egress-smoke.mjs \
+  | orb -m pubg-saas-m2-clean -u root tar -xf - \
+    -C /var/tmp/pubg-saas-m2-current-7f3b95b/smoke
+orb -m pubg-saas-m2-clean -u root chmod 444 \
+  /var/tmp/pubg-saas-m2-current-7f3b95b/smoke/pubg-saas-egress-smoke.mjs
+
+# Run the non-secret smoke script in the Worker network namespace:
+orb -m pubg-saas-m2-clean -u root docker run --rm \
+  --network container:pubg-saas-m2-clean-current-src-7f3b95b-worker-1 \
+  --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  -v /var/tmp/pubg-saas-m2-current-7f3b95b/smoke/pubg-saas-egress-smoke.mjs:/run/egress-smoke.mjs:ro \
+  --entrypoint node local/pubg-saas:git-7f3b95b /run/egress-smoke.mjs
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" down
+```
+
+## Current-source cross-VM encrypted restore and Worker start — 2026-10-14
+
+Transferred the latest M204-generated encrypted artifact, owner-only synthetic
+age identity, current backup utility and helper image to `pubg-saas-m2-clean`
+using local `tar`/`docker save|load` streams only. No registry was used. In a
+new PG18.1 restore Compose project, checksum/decryption/archive verification
+passed and the guarded restore matched all 37/37 public-table counts. Tenant,
+team and sync-job counts were 1/1/1. The restored database passed app DML
+rollback, app DDL denial, backup table/sequence reads, backup DML/`nextval`
+denial, app sequence use and new migrator-owned sequence default grants.
+
+The current `7f3b95b` Worker then started healthy against that restored
+database. It discovered one team, attempted zero syncs, and saw one delayed
+job with zero due work; `/metrics` returned `pubg_saas_worker_up 1`. Gateway
+was not started. After exact-marker cleanup of the disposable restore DB, the
+Compose project stopped with plain `down`, preserving its volume. No KOOK,
+PUBG or model request occurred. The Worker-network egress smoke from the
+preceding section had already confirmed no direct route and denial of private
+host/metadata targets. This is a fresh-database and Worker portability drill
+on a second OrbStack VM, not cloud or physical-M204 outage acceptance; both
+VMs share the same physical host.
+
+The first tar attempt targeted the M204 VM path as if it were a Mac path; no
+files transferred and no restore started. The corrected pipeline used `orb`
+on both VM endpoints. No DB or existing fixture was changed by the failed
+attempt.
+
+Reproduction uses the retained synthetic fixture and owner-only files:
+
+```sh
+set -o pipefail
+orb -m nyannyan -u root docker save local/pubg-saas:git-7f3b95b \
+  | orb -m pubg-saas-m2-clean -u root docker load
+orb -m nyannyan -u root docker save local/pubg-saas-rehearsal-tools:git-87543bc \
+  | orb -m pubg-saas-m2-clean -u root docker load
+orb -m nyannyan -u root tar -C /var/tmp/pubg-saas-m2-current-7f3b95b \
+  -cf - age/identity.txt \
+  artifacts/pubg-saas-20261014T005056Z-07928f17.dump.age \
+  artifacts/pubg-saas-20261014T005056Z-07928f17.manifest.json \
+  scripts/pubg-saas-backup-restore.py \
+  verify.sh restore.sh role-probe.sh cleanup.sh \
+  | orb -m pubg-saas-m2-clean -u root tar -xf - \
+    -C /var/tmp/pubg-saas-m2-current-7f3b95b/recovery
+
+BASE=/var/tmp/pubg-saas-m2-current-7f3b95b
+STACK=$BASE/restore
+PROJECT=pubg-saas-m2-clean-current-restore-7f3b95b
+TARGET=pubg_saas_disposable_m2_7f3b95b_20261014
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait postgres egress-proxy
+# Verify and restore with the isolated PG/age helper container as in the
+# preceding fresh-Linux restore command block: mount $BASE/recovery/age at
+# /age:ro, the artifact directory at /archive:ro, the current backup script
+# at /opt/pubg-saas/scripts:ro, and only the restore bootstrap-password file
+# at /run/test-secrets/bootstrap-password:ro. Run verify.sh then restore.sh
+# inside the helper attached to this project's PostgreSQL network, using this
+# artifact and TARGET above. The scripts are part of the transferred recovery
+# directory; the helper invocation pattern is in the earlier fresh-Linux-host
+# restore section, and permission SQL/probes are in BACKUP_RESTORE_REHEARSAL.md.
+
+# Run the current restored-role probe with the helper-container mounts and
+# variables from infra/pubg-saas/BACKUP_RESTORE_REHEARSAL.md. The test-only
+# Worker URL points at the restored target; its only queue job is delayed.
+orb -m pubg-saas-m2-clean -u root sed -i \
+  "s|/pubg_saas?sslmode=disable|/$TARGET?sslmode=disable|" \
+  "$STACK/secrets/worker.env"
+orb -m pubg-saas-m2-clean -u root chmod 600 "$STACK/secrets/worker.env"
+orb -m pubg-saas-m2-clean -u root docker compose --project-name "$PROJECT" \
+  --project-directory "$STACK" --env-file "$STACK/.env" \
+  -f "$STACK/compose.yaml" up -d --wait worker
+orb -m pubg-saas-m2-clean -u root env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+  -u http_proxy -u https_proxy -u all_proxy curl --noproxy '*' -fsS \
+  http://127.0.0.1:9464/metrics
+# Cleanup the exact marked target and use plain down (no -v).
+```
+
 ### Remaining gates
 
 This is a successful clean isolated Linux ARM64 Compose/backup/restore drill.
@@ -1627,6 +1774,10 @@ password files are outside Git):
 
 ```sh
 source scripts/host-profile.sh
+orb -m "$ORBSTACK_MACHINE" -u root docker buildx build \
+  --platform linux/arm64 --load \
+  -f apps/pubg-saas/Dockerfile \
+  -t local/pubg-saas:git-7f3b95b .
 BASE=/var/tmp/pubg-saas-m2-current-7f3b95b
 STACK=$BASE/source
 PROJECT=pubg-saas-m2-current-src-7f3b95b

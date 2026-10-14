@@ -48,6 +48,25 @@ OpenClaw/9Router IDs, start times and restart counts remained unchanged. No
 Gateway, PUBG/model call, image push or deploy occurred. Evidence and
 reproduction: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
 
+The same current ARM64 image was copied locally into the isolated Linux VM
+with `docker save/load`; all eight rootfs layers and runtime configuration
+matched. Its fresh PG18.1 Compose project applied 14 migrations, reached healthy
+Worker/egress state, and exposed the metrics relay with GET 200. The credential-
+free Worker-network smoke confirmed direct public/metadata TCP was unreachable,
+private-host/metadata proxy CONNECTs returned 403, and public HTTPS through the
+proxy returned 200. Plain `down` retained the PG volume. This VM shares M204's
+physical OrbStack host, so this does not prove cloud or physical-host-outage
+independence. Evidence: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
+The M204-generated current age artifact also restored on the separate Linux VM
+into a fresh PG18.1 project: verification, 37/37 public-table counts, 1/1/1
+tenant/team/job rows and app/backup role boundaries passed. The current Worker
+started healthy against that restored DB with one delayed job and zero
+attempts/due work; metrics reported up=1. The marked target was cleaned and
+the project stopped with plain `down`. This VM shares M204's physical OrbStack
+host, so this is local portability evidence, not cloud or host-outage proof.
+Details: `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
 ## 2026-10-14 — Current-source SaaS CI and multiarch build gates
 
 At current source commit `20b06da` (documentation-only `5409671` follows), the
