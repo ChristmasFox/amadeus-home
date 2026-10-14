@@ -4,29 +4,37 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
 
-Source commit `3c51d4b` is pushed to `origin/main` and deployed to
-`pubg-saas-m2-clean` as
-`local/pubg-saas:git-3c51d4b6c0b55a15ba4ec39bd391d28aac21f98d` (ARM64 image
-`sha256:56d3d9fb493e17ac0832d62c159544d232a7bfdfe892b56e18fe1231a10963da`).
-Only Gateway and Worker were replaced. Both have zero restarts; Worker is
-healthy. The read-only PostgreSQL KOOK session probe reports
-`connected=true`, `last_sn=53`, updated at `2026-10-14T12:49:54.194Z`. Gateway
-and Worker each had zero startup error-log matches. PostgreSQL
-`e47fd49fcab5`, egress-proxy `c5cd33cba219`, and SaaS 9Router `2ce598008143`
-were unchanged. No migration, model request, or PUBG API request was run. The
-protected pre-switch rollback record is
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-3c51d4b-pre-switch.txt`.
+Commit `ef81896` is pushed to `origin/main` and deployed to
+`pubg-saas-m2-clean` as immutable ARM64 image
+`local/pubg-saas:git-ef81896a1c85a22afaf8c533e0d95929b425962f`
+(`sha256:fe49c38fb9183882b68058b8b4d0fab90b0f6f111c317b682c03bffee9d9018f`).
+Only Gateway and Worker were replaced. Gateway is running with zero restarts;
+Worker is healthy with zero restarts. The read-only PostgreSQL KOOK session
+probe reports `connected=true`, `last_sn=59`, updated at
+`2026-10-14T14:13:30.421144Z`. Gateway and Worker each had zero error-level log
+matches; Worker cycle logs showed zero queue snapshot errors, zero team
+failures and no alert codes. PostgreSQL `e47fd49fcab5`, egress-proxy
+`c5cd33cba219`, and SaaS 9Router `2ce598008143` were unchanged. No migration,
+model request, or PUBG API request was run. The protected pre-switch rollback
+record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ef81896-pre-switch.txt`.
 Deployment evidence and rollback steps:
-`.agent/checkpoints/2026-10-14-pubg-saas-friendly-damage-rollout.md`.
+`.agent/checkpoints/2026-10-14-pubg-saas-reply-cleanup-rollout.md`.
 
-The friendly-damage fix removes `OTHER` unless the current wording explicitly
-requests non-kick/non-punch melee; explicit KICK/PUNCH filters remain supported.
-It also reports the Domain-applied filters to the Agent and prevents changing
-previous real numbers without a new query result. Full validation passed:
-SaaS/PostgreSQL 139/139; `pnpm test:pubg` passed all 70 identity,
-presentation, Domain and plugin tests; PUBG and SaaS typecheck/build, both
-architecture checks, secrets scan and diff checks passed. The live friendly
-damage query and Arthur's KOOK acceptance remain pending. M2 is not complete.
+The 12:55 UTC `[回复成员N]` prefix came from bracketed assistant-turn
+formatting in `PublicQueryAuthorizer.loadAgentConversation`; the model echoed
+it and the reply was stored without cleanup. Conversation context now uses
+plain speaker descriptions, the public assistant prompt forbids repeating
+internal scaffolding, old assistant history is sanitized, and outbound text is
+cleaned before persistence and again at the KOOK HTTP boundary. Successful
+`message_outbox` rows intentionally set `payload_json={}` to scrub the body;
+the sanitized delivered transcript is retained for 12 hours and linked to the
+source event and KOOK remote message ID.
+
+Validation passed: SaaS/PostgreSQL 141/141 on the reused isolated PG18;
+`pnpm test:pubg` 70/70; focused ingress/outbox and KOOK sender tests 10/10;
+PUBG/SaaS typecheck and build, both architecture checks, secrets and diff
+checks passed. Arthur's live KOOK retest remains pending; M2 is not complete.
 
 The Vercel AI SDK
 `ToolLoopAgent` now has a 300-second overall budget, 120-second step timeout,

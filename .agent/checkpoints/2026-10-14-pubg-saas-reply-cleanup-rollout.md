@@ -54,6 +54,39 @@ gateway worker`.
 
 ## Deployment result
 
-Deployment is pending in this checkpoint. Append the built immutable image,
-post-switch container IDs, Worker health, KOOK connection state, protected
-service identity check, and bounded startup log result after deployment.
+The pushed source archive for commit `ef81896a1c85a22afaf8c533e0d95929b425962f`
+was built on `pubg-saas-m2-clean` for `linux/arm64` and loaded locally:
+
+- Tag: `local/pubg-saas:git-ef81896a1c85a22afaf8c533e0d95929b425962f`
+- Image ID: `sha256:fe49c38fb9183882b68058b8b4d0fab90b0f6f111c317b682c03bffee9d9018f`
+- Compose project: `pubg-saas-public`
+- Stack `.env` retained mode `0600`; only `PUBG_SAAS_IMAGE` changed.
+- Only Gateway and Worker were recreated with `--no-deps --force-recreate
+  --no-build --wait`.
+
+| Component | Before | After | Result |
+| --- | --- | --- | --- |
+| Gateway | `4eb208072980` | `5a02654f9dcd` | Running, zero restarts |
+| Worker | `a96544a59005` | `6afb2788ef31` | Healthy, zero restarts |
+| PostgreSQL | `e47fd49fcab5` | unchanged | Healthy |
+| egress-proxy | `c5cd33cba219` | unchanged | Healthy |
+| SaaS 9Router | `2ce598008143` | unchanged | Running |
+
+The read-only PostgreSQL session probe returned `connected=true`,
+`last_sn=59`, updated at `2026-10-14T14:13:30.421144Z`. Gateway and Worker
+each had zero error-level log matches in the 10-minute verification window.
+The two structured Worker cycle records reported zero queue snapshot errors,
+zero team failures and no alert codes. No model call, PUBG API call, migration,
+database container change, private runtime change, or human KOOK event was
+performed for deployment verification.
+
+The protected pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ef81896-pre-switch.txt`
+with mode `0600`. To roll back, restore its `PREVIOUS_IMAGE` value to
+`PUBG_SAAS_IMAGE` in the protected stack `.env`, keep mode `0600`, validate
+Compose config, then recreate only Gateway and Worker with
+`docker compose ... up -d --no-deps --force-recreate --no-build --wait gateway
+worker`.
+
+Arthur's live KOOK retest of the 12:55 `昨日队内误伤统计` response remains
+pending. M2 is not complete until Arthur validates the real conversation.

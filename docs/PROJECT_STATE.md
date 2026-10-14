@@ -1,5 +1,37 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS KOOK reply cleanup rollout
+
+Commit `ef81896` is pushed to `origin/main` and deployed on OrbStack VM
+`pubg-saas-m2-clean` as immutable ARM64 image
+`local/pubg-saas:git-ef81896a1c85a22afaf8c533e0d95929b425962f`
+(`sha256:fe49c38fb9183882b68058b8b4d0fab90b0f6f111c317b682c03bffee9d9018f`).
+Only Gateway and Worker were recreated. Worker is healthy and both have zero
+restarts. The read-only KOOK session probe returned `connected=true`,
+`last_sn=59`, updated at `2026-10-14T14:13:30.421144Z`. Gateway and Worker
+had zero error-level log matches; Worker cycle records had no queue errors,
+team failures or alerts. PostgreSQL (`e47fd49fcab5`), egress-proxy
+(`c5cd33cba219`) and SaaS 9Router (`2ce598008143`) were unchanged. No migration,
+model request, PUBG API request, or private runtime change was made.
+
+The assistant context previously prefixed replies with `[回复成员N]`, which
+the model could echo. Speaker formatting is now plain text, instructions forbid
+repeating internal context labels, conversation history is cleaned before
+reuse, and outbound messages are sanitized before outbox persistence and at
+the final KOOK HTTP boundary. Successful `message_outbox` rows use `{}` as a
+privacy scrub; the sanitized transcript remains linked to its source event
+and KOOK remote message ID for the existing 12-hour retention period.
+
+Validation passed: SaaS/PostgreSQL 141/141 on isolated PG18; `pnpm test:pubg`
+70/70; focused ingress/outbox and sender regressions 10/10; PUBG/SaaS
+typecheck/build, architecture checks, secrets and diff checks. The protected
+pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ef81896-pre-switch.txt`
+(mode 0600). Detailed evidence and rollback steps:
+`.agent/checkpoints/2026-10-14-pubg-saas-reply-cleanup-rollout.md`.
+
+Arthur's live KOOK retest remains pending; M2 is not complete.
+
 ## 2026-10-14 — PUBG SaaS friendly-damage filter correction
 
 Commit `3c51d4b` is pushed to `origin/main` and deployed on OrbStack VM
