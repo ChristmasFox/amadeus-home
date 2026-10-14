@@ -1,5 +1,19 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Current-source SaaS CI and multiarch build gates
+
+At current source commit `20b06da` (documentation-only `5409671` follows), the
+full public SaaS/PostgreSQL suite passed 104/104 with no skips on the existing
+loopback-only isolated `pubg-saas-pg18` test container (PostgreSQL 18.6,
+`pubg_test`). The database container remained running and was reused. The
+architecture check passed, as did all 23 backup/Compose-adapter safety tests.
+Buildx generated a local OCI image for both `linux/amd64` and `linux/arm64`,
+and `scripts/verify-pubg-saas-oci.py` accepted both platform manifests. The OCI
+file was removed after verification; there was no image push. This does not
+close real provider, human KOOK, persistent scheduling, host metrics scraping
+or final release-review gates. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md`.
+
 ## 2026-10-14 — Current-source M204 SaaS image and recovery acceptance
 
 Commit `20b06da` built natively on OrbStack ARM64 machine `nyannyan` as

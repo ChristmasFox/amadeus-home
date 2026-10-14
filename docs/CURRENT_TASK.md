@@ -81,11 +81,12 @@ M2 is active: worker cycle logs expose aggregate queue age/state and process
 RSS/heap without tenant IDs, and now emit identifier-free alert codes. The
 local synthetic 200-team simulation completed 200/200 authorized query tasks
 and worker runs. The KOOK sender reserves daily quota in PostgreSQL across
-restarts. The SaaS/Postgres suite passed 100/100 with no skips before the
-current metrics-only change, including concurrent budget admission, outbox
-deferral and the integrated runtime. The current Worker metrics delta adds six
-focused passing tests and typecheck coverage; the full SaaS suite remains for
-the final quality gate. Local Compose build/start, encrypted backup/restore
+restarts. The current SaaS/PostgreSQL suite passes 104/104 with no skips on the
+reused loopback-only isolated PG18.6 fixture, including concurrent budget
+admission, outbox deferral, the integrated runtime and Worker metrics. The
+current-source architecture check, 23 backup/Compose-adapter safety tests and
+amd64+arm64 OCI build verification also pass locally without publishing.
+Local Compose build/start, encrypted backup/restore
 with table-count and role-boundary probes, and the public-stop/private-Kurisu
 source regression are verified. The current M204 host-profile mapping resolves
 to OrbStack machine `nyannyan`; its local Compose/recovery and one bounded
@@ -204,6 +205,21 @@ cause remains unverified and is documented in the Compose README. No real
 PUBG/model credential, production DB, image push/deploy, 9Router change or
 private OpenClaw restart was involved. Full evidence and command sequence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-image-local-recovery.md`.
+
+### Current-source M2 source/OCI gates — 2026-10-14
+
+The full `pnpm test:pubg-saas` suite passed 104/104 with no skips against the
+reused loopback-only `pubg-saas-pg18` test container (PostgreSQL 18.6, database
+`pubg_test`). `pnpm check:architecture` passed, as did the backup/Compose
+PostgreSQL adapter safety suite (23/23). The current clean source built to a
+local OCI image for both `linux/amd64` and `linux/arm64`; the OCI manifest
+verifier accepted both platforms. The temporary archive was removed after
+verification; no registry push occurred. This is source/build evidence only:
+the prior ARM64 M204 Compose/recovery result remains separately recorded, and
+the full Goal still lacks live human KOOK flows, real PUBG/model acceptance,
+host-side metrics scraping on OrbStack, persistent backup scheduling, and the
+final go/no-go gate. Details and commands:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md`.
 
 ### M204 bounded 200-team host measurement — 2026-10-14
 
