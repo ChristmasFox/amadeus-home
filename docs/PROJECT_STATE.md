@@ -1,5 +1,30 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — PUBG SaaS friendly-damage filter correction
+
+Commit `3c51d4b` is pushed to `origin/main` and deployed on OrbStack VM
+`pubg-saas-m2-clean` as immutable ARM64 image
+`local/pubg-saas:git-3c51d4b6c0b55a15ba4ec39bd391d28aac21f98d`
+(`sha256:56d3d9fb493e17ac0832d62c159544d232a7bfdfe892b56e18fe1231a10963da`).
+Only Gateway and Worker were replaced; the Worker is healthy, both have zero
+restarts, and the read-only KOOK session query reports `connected=true`,
+`last_sn=53` at `2026-10-14T12:49:54.194Z`. Gateway and Worker had zero startup
+error-log matches. PostgreSQL (`e47fd49fcab5`), egress-proxy (`c5cd33cba219`)
+and SaaS 9Router (`2ce598008143`) were unchanged. The protected rollback record
+is `/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-3c51d4b-pre-switch.txt`.
+
+General friendly-damage wording now clears model-generated `OTHER`; KICK and
+PUNCH require explicit current wording, with only verified filters carried by
+an explicit follow-up. The query result exposes Domain-applied filters and the
+Agent must not replace prior real numbers without a fresh query. Validation:
+SaaS/PostgreSQL 139/139; `pnpm test:pubg` 70/70; PUBG/SaaS typecheck and build,
+architecture, secrets and diff checks passed. No migration, real model call or
+PUBG API call was performed. Arthur's live KOOK friendly-damage test remains
+pending; M2 remains open.
+
+Detailed deployment and rollback evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-friendly-damage-rollout.md`.
+
 ## 2026-10-14 — PUBG SaaS shared Domain and presentation rollout
 
 Commit `ac628dd` is deployed on OrbStack VM `pubg-saas-m2-clean` as immutable

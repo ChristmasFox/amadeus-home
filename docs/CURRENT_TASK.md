@@ -4,19 +4,29 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Active task — conversational Agent rollout and M2 acceptance (2026-10-14)
 
-Source commit `ac628dd` is pushed to `origin/main` and deployed to
+Source commit `3c51d4b` is pushed to `origin/main` and deployed to
 `pubg-saas-m2-clean` as
-`local/pubg-saas:git-ac628dde9ad46d824603d387446f9e1a95eeaa28` (ARM64 image
-`sha256:7d05776e3b9232b2ac67653378ad4e66015ba62c3ccc67b00b9383ff61f46293`).
-Only Gateway and Worker were replaced. Worker is healthy; Gateway is running
-with zero restarts, and the read-only PostgreSQL KOOK session probe reports
-`connected=true`, `last_sn=43`, updated at `2026-10-14T11:44:08.669Z`. Both
-containers had zero error-level log matches after startup. PostgreSQL,
-egress-proxy and SaaS 9Router container IDs are unchanged. The protected
-pre-switch rollback record is
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-ac628dd-pre-switch.txt`.
+`local/pubg-saas:git-3c51d4b6c0b55a15ba4ec39bd391d28aac21f98d` (ARM64 image
+`sha256:56d3d9fb493e17ac0832d62c159544d232a7bfdfe892b56e18fe1231a10963da`).
+Only Gateway and Worker were replaced. Both have zero restarts; Worker is
+healthy. The read-only PostgreSQL KOOK session probe reports
+`connected=true`, `last_sn=53`, updated at `2026-10-14T12:49:54.194Z`. Gateway
+and Worker each had zero startup error-log matches. PostgreSQL
+`e47fd49fcab5`, egress-proxy `c5cd33cba219`, and SaaS 9Router `2ce598008143`
+were unchanged. No migration, model request, or PUBG API request was run. The
+protected pre-switch rollback record is
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261014-pubg-saas-3c51d4b-pre-switch.txt`.
 Deployment evidence and rollback steps:
-`.agent/checkpoints/2026-10-14-pubg-saas-ac628dd-deployment.md`.
+`.agent/checkpoints/2026-10-14-pubg-saas-friendly-damage-rollout.md`.
+
+The friendly-damage fix removes `OTHER` unless the current wording explicitly
+requests non-kick/non-punch melee; explicit KICK/PUNCH filters remain supported.
+It also reports the Domain-applied filters to the Agent and prevents changing
+previous real numbers without a new query result. Full validation passed:
+SaaS/PostgreSQL 139/139; `pnpm test:pubg` passed all 70 identity,
+presentation, Domain and plugin tests; PUBG and SaaS typecheck/build, both
+architecture checks, secrets scan and diff checks passed. The live friendly
+damage query and Arthur's KOOK acceptance remain pending. M2 is not complete.
 
 The Vercel AI SDK
 `ToolLoopAgent` now has a 300-second overall budget, 120-second step timeout,
