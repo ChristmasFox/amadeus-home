@@ -95,8 +95,10 @@ alert delivery, release-grade RPO/RTO, scheduled backup installation,
 quota/eligibility and full independent-runtime drills remain. The clean Linux
 ARM64 guest now passes Compose recovery, application egress isolation, and the combined encrypted
 backup/prune job. The six-hour timer passed an ephemeral systemd integration
-in the isolated Linux VM; it is not persistently installed on M204 or the
-canonical host.
+and then an automatically scheduled one-shot on the isolated Linux VM. It
+fired at the next UTC boundary, completed backup plus prune successfully, and
+was disabled/removed after the check. No persistent timer is installed on
+M204 or the canonical host.
 
 Latest isolated RPO/RTO drill: the age backup completed in 641 ms and verified
 in 135 ms. The new manifest `snapshotRequestedAtUtc` measured 0.624 s to the
@@ -105,7 +107,8 @@ in 1.558 s, and the restored Worker was healthy 14.619 s after failure. Its
 synthetic queue had one delayed job, zero attempts and zero failures. App
 rollback DML/DDL denial and backup sequence-read/no-`nextval` probes passed.
 This is recovery-mechanics evidence for one synthetic tenant/team/job; the
-six-hour timer is still not installed and release-scale RPO/RTO remains open.
+isolated VM timer auto-fired once, but no persistent timer is installed on
+M204/canonical host and release-scale RPO/RTO remains open.
 The first attempt's `createdAtUtc`-based figure was discarded because that
 timestamp follows snapshot and encryption. The backup utility now records and
 validates a conservative snapshot-request timestamp. Evidence and commands:

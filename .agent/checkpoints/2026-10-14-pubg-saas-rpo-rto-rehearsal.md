@@ -129,3 +129,52 @@ The actual artifact from this run was
 `pubg-saas-20261013T234634Z-1d518e61.dump.age`. The 200-team load result and
 separate-host egress/recovery evidence remain in
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
+## Six-hour systemd timer auto-trigger
+
+After the timing drill, temporarily installed a uniquely named service/timer
+under `/etc/systemd/system` on the same isolated VM. The timer used the
+repository's `OnCalendar=*-*-* 00,06,12,18:00:00 UTC`, `Persistent=true`, and
+`AccuracySec=1min` settings. It was enabled at 23:54:19 UTC; systemd reported
+the 00:00 UTC event, then automatically started the job at 00:00:01 UTC.
+`systemd` recorded `Result=success`, exit 0, and completion at 00:00:02 UTC.
+The job generated encrypted artifact
+`pubg-saas-20261014T000001Z-3f6610fc.dump.age`, SHA-256
+`c015ed1d7111222e044c6e2ae36a6c3b7f4aa49a7fc91d2d846757544d9af488`, mode
+0600, 87,756 bytes, with 37 public-table counts and the new snapshot timestamp.
+Retention passed and removed zero pairs. This confirms one actual timer event
+and one successful backup/prune execution in the isolated VM, not sustained
+six-hour operation or canonical-host scheduling.
+
+The temporary test service ran as root because its local-only PostgreSQL
+adapter invokes Docker Compose. It used a mode-0600 env file holding only test
+database credentials, recipients path, and owner-only artifact path. The timer
+was disabled, both unit files and that env file were removed, and only then was
+the test PG project stopped with ordinary `down`; the volume and encrypted
+artifact remain. Post-cleanup checks found no matching unit files or running
+test containers. No M204 service or production host was changed.
+
+To repeat with an isolated VM already prepared as in the preceding section,
+render the repository service template with the VM's test-only env and Compose
+adapter paths, set a unique unit name, install it under `/etc/systemd/system`,
+then run:
+
+```sh
+systemd-analyze verify /etc/systemd/system/pubg-saas-backup-m2-validation.service \
+  /etc/systemd/system/pubg-saas-backup-m2-validation.timer
+systemctl daemon-reload
+systemctl enable --now pubg-saas-backup-m2-validation.timer
+systemctl list-timers --all pubg-saas-backup-m2-validation.timer --no-pager
+# Observe the next UTC boundary and confirm with:
+systemctl show pubg-saas-backup-m2-validation.service \
+  --property=Result,ExecMainStatus,ExecMainStartTimestamp,ExecMainExitTimestamp
+journalctl -u pubg-saas-backup-m2-validation.service -n 12 --no-pager
+systemctl disable --now pubg-saas-backup-m2-validation.timer
+rm -f /etc/systemd/system/pubg-saas-backup-m2-validation.service \
+  /etc/systemd/system/pubg-saas-backup-m2-validation.timer
+systemctl daemon-reload
+```
+
+Do not use this root-run Compose adapter configuration as a production
+service. Production/canonical-host scheduling still requires a dedicated
+least-privilege backup-host arrangement and external credential storage.

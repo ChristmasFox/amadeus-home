@@ -117,6 +117,19 @@ database was removed with exact-marker cleanup and both test Compose projects
 were stopped without deleting their volumes. Details:
 `.agent/checkpoints/2026-10-14-pubg-saas-rpo-rto-rehearsal.md`.
 
+## 2026-10-14 — Isolated six-hour backup timer auto-trigger
+
+Temporarily enabled a test-only systemd timer in the isolated Linux VM with
+the repository's six-hour UTC calendar. It automatically fired at 00:00:01
+UTC; the oneshot exited 0 in about one second, encrypted the synthetic
+37-table PostgreSQL backup, and completed seven-day prune with zero pairs
+removed. The artifact is mode 0600 with SHA-256
+`c015ed1d7111222e044c6e2ae36a6c3b7f4aa49a7fc91d2d846757544d9af488`. The
+test service ran as root only to use the local Compose-PG adapter. Timer,
+service and env file were removed after the run, and the source PG project was
+stopped without deleting its volume. No M204 or production timer was installed.
+Full evidence: `.agent/checkpoints/2026-10-14-pubg-saas-rpo-rto-rehearsal.md`.
+
 ## 2026-10-14 — Isolated Linux SaaS image and recovery drill
 
 Built the current tree locally in OrbStack as
