@@ -308,7 +308,8 @@ def main() -> int:
             if tool == "pg_restore":
                 return run_pg_restore(base, extra_env, args)
             command = compose_exec(base, extra_env, tool, *args)
-            return subprocess.run(command, stdin=None, stdout=None, check=False).returncode
+            stdin = sys.stdin if tool == "psql" else None
+            return subprocess.run(command, stdin=stdin, stdout=None, check=False).returncode
         finally:
             remove_passfile(base, extra_env, pass_file)
     except (OSError, ToolError) as error:

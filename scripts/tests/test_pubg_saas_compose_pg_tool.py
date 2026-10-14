@@ -1,5 +1,7 @@
 import importlib.util
+import io
 import os
+import subprocess
 import stat
 import tempfile
 import unittest
@@ -21,6 +23,22 @@ BACKUP_SPEC.loader.exec_module(BACKUP)
 
 
 class ComposePostgresToolTests(unittest.TestCase):
+    def test_psql_adapter_forwards_standard_input(self):
+        stdin = io.StringIO("BEGIN; SELECT pg_export_snapshot();\n")
+        completed = subprocess.CompletedProcess(["psql"], 0)
+        with (
+            patch.object(TOOL, "compose_base", return_value=(["docker", "compose"], "pubg-saas-m2-test-01")),
+            patch.object(TOOL, "verify_isolated_database"),
+            patch.object(TOOL, "connection_env", return_value=([], None)),
+            patch.object(TOOL, "put_passfile"),
+            patch.object(TOOL, "remove_passfile"),
+            patch.object(TOOL.sys, "argv", ["psql", "-X", "-qAt"]),
+            patch.object(TOOL.sys, "stdin", stdin),
+            patch.object(TOOL.subprocess, "run", return_value=completed) as run,
+        ):
+            self.assertEqual(TOOL.main(), 0)
+        self.assertIs(run.call_args.kwargs["stdin"], stdin)
+
     def test_pgpass_escapes_delimiters_and_line_breaks(self):
         self.assertEqual(TOOL.pgpass_escape(r"a:b\c\nd\re"), r"a\:b\\c\\nd\\re")
 
