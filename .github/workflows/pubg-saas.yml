@@ -87,6 +87,8 @@ jobs:
         run: |
           pnpm check:secrets
           pnpm check:architecture
+      - name: Build shared PUBG Domain and SaaS packages
+        run: pnpm build:pubg-saas
       - name: Public SaaS PostgreSQL tests
         run: pnpm test:pubg-saas
       - name: Private Kurisu regression
