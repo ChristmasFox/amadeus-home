@@ -43,18 +43,20 @@ has persisted a KOOK session (`last_sn=29`), Worker and PostgreSQL are healthy.
 The existing PostgreSQL, egress proxy, and independent 9Router container IDs
 were preserved. The pre-migration encrypted snapshot and prior image setting
 remain in protected host-local storage. Current outbound-budget accounting is
-15/200; KOOK developer-account eligibility is unverified.
+8/200 reservations as of the latest read-only check at 2026-10-14 08:26 UTC;
+KOOK developer-account eligibility is unverified.
 
 No live user message, model request, or PUBG API request was deliberately sent
-as a deployment smoke. The persisted session and container state do not prove
-that an actual group message receives a reply; the session sequence was not
-updated within the last two minutes at the initial read-only check. A later
-read-only socket count found an established Gateway-to-proxy TCP connection
-and an established proxy outbound 443 connection, consistent with a live
-proxied WSS path but not proof of KOOK application delivery. Database
-aggregates still show no post-rollout ingress, Agent run, or Outbox send; all
-retained group events and sent replies predate the image replacement. Arthur
-must perform the real KOOK conversational acceptance. M2 is not complete.
+as a deployment smoke. A later read-only aggregate check at 2026-10-14 08:26
+UTC observed 7 ingress events, 7 Agent runs and 7 Outbox sends after the
+replacement. All 7 ingress events were `done`, and all 7 outbox rows were
+`sent`; Agent outcomes were 6 `replied` and 1 safe
+`provider_fallback/public_agent_empty_response`. The check read only counts,
+statuses and failure codes, not message text or user IDs. This proves those
+observed events traversed the live reply path, but does not establish which
+required test prompts were sent or their answer quality. A focused regression
+test now covers the empty-model-response fallback. Arthur's real conversational
+acceptance remains open; M2 is not complete.
 
 This task's current source checkpoint and repro details:
 `.agent/checkpoints/2026-10-14-pubg-saas-agent-architecture.md`.

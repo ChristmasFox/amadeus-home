@@ -142,6 +142,25 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     });
     assert.equal(JSON.stringify(diagnostics).includes('private provider detail'), false);
     assert.equal(JSON.stringify(diagnostics).includes(failEvent.msg_id), false, 'logs expose only a hashed request key');
+
+    const emptyEvent = group(bot, guild, channel, userA, '你有听到吗？');
+    const emptyResponseHandler = createKookPublicQueryHandler({
+      authorizer,
+      claims: new AccountClaimService(pool),
+      agent: { model: new MockLanguageModelV4({ doGenerate: async () => modelText('') }), provider: 'fixture-provider', modelId: 'fixture-model' },
+      onAgentDiagnostic: event => diagnostics.push(event),
+    });
+    assert.equal(await queue.ingestGatewayEvent(emptyEvent), 'accepted');
+    assert.equal(await queue.processOne(async (leased, abortSignal) =>
+      (await emptyResponseHandler(leased, abortSignal)) ?? null, signal), 'done');
+    const emptyReply = (await pool.query(
+      'SELECT payload_json FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, emptyEvent.msg_id],
+    )).rows[0]?.payload_json;
+    assert.match(emptyReply.content, /遇到一点技术问题/u);
+    assert.deepEqual((await pool.query(
+      'SELECT outcome,failure_code FROM kook_agent_runs WHERE bot_account_id=$1 AND event_id=$2', [bot, emptyEvent.msg_id],
+    )).rows[0], { outcome: 'provider_fallback', failure_code: 'public_agent_empty_response' });
+    assert.equal(JSON.stringify(diagnostics).includes(emptyEvent.msg_id), false);
   } finally {
     await pool.query('DELETE FROM kook_agent_runs WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);
