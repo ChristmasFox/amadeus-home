@@ -59,6 +59,12 @@ export interface RelativePeriodInput {
   label?: string;
 }
 
+export interface RecentDaysInput {
+  type: 'recent_days';
+  count: number;
+  label?: string;
+}
+
 export interface LastMatchesInput {
   type: 'last_n_matches';
   count: number;
@@ -70,9 +76,9 @@ export interface ResultSetInput {
   resultSetId: string;
 }
 
-export type ToolSelectorInput = TimeRangeInput | RelativePeriodInput | LastMatchesInput | ResultSetInput;
+export type ToolSelectorInput = TimeRangeInput | RelativePeriodInput | RecentDaysInput | LastMatchesInput | ResultSetInput;
 
-export type SearchSelectorInput = TimeRangeInput | RelativePeriodInput;
+export type SearchSelectorInput = TimeRangeInput | RelativePeriodInput | RecentDaysInput;
 
 export interface StatsToolInput extends SubjectInput {
   sessionId: string;
@@ -398,6 +404,13 @@ function selectorToCanonical(selector: ToolSelectorInput, timezone: string, busi
   if (selector.type === 'relative_period') {
     return { type: 'relative_period', value: selector.value, ...(selector.label ? { label: selector.label } : {}) };
   }
+  if (selector.type === 'recent_days') {
+    return {
+      type: 'recent_days',
+      count: Math.min(Math.max(Math.trunc(selector.count), 1), 366),
+      ...(selector.label ? { label: selector.label } : {}),
+    };
+  }
   if (selector.type === 'last_n_matches') {
     return { type: 'last_n_matches', count: Math.min(Math.max(Math.trunc(selector.count), 1), 100), offset: Math.max(0, Math.trunc(selector.offset ?? 0)) };
   }
@@ -696,19 +709,19 @@ export class PubgDomainService {
     const now = this.now();
     const selectorTimezone = input.selector?.type === 'time_range' ? input.selector.timezone ?? this.timezone : this.timezone;
     const selectorBusinessDayStart = input.selector?.type === 'time_range' ? input.selector.businessDayStart ?? this.businessDayStart : this.businessDayStart;
-    const resolvedSelector = input.selector
-      ? resolveSelector(
-        input.selector.type === 'relative_period'
-          ? { type: 'relative_period', value: input.selector.value, ...(input.selector.label ? { label: input.selector.label } : {}) }
-          : {
-            type: 'time_range',
-            start: input.selector.from,
-            end: input.selector.to,
-            timezone: input.selector.timezone ?? this.timezone,
-            businessDayStart: input.selector.businessDayStart ?? this.businessDayStart,
-          },
-        { timezone: selectorTimezone, businessDayStart: selectorBusinessDayStart, now },
-      )
+    const canonicalSearchSelector: Selector | null = input.selector
+      ? input.selector.type === 'time_range'
+        ? {
+          type: 'time_range',
+          start: input.selector.from,
+          end: input.selector.to,
+          timezone: input.selector.timezone ?? this.timezone,
+          businessDayStart: input.selector.businessDayStart ?? this.businessDayStart,
+        }
+        : input.selector
+      : null;
+    const resolvedSelector = canonicalSearchSelector
+      ? resolveSelector(canonicalSearchSelector, { timezone: selectorTimezone, businessDayStart: selectorBusinessDayStart, now })
       : null;
     const from = resolvedSelector ? Date.parse(resolvedSelector.start) : input.from ? asFiniteDate(input.from) : 0;
     const to = resolvedSelector ? Date.parse(resolvedSelector.end) : input.to ? asFiniteDate(input.to) : now.getTime();

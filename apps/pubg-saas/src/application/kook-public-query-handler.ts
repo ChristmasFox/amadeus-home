@@ -5,9 +5,9 @@ import {
   PubgDomainService,
   emptyContext,
   type Metric,
-  type SyncState,
   type ToolEnvelope,
 } from '@agent/pubg-domain/core';
+import { buildPubgToolPresentation, type PubgSourceRange, type PubgToolName } from '@agent/presentation';
 import type { AccountClaimService } from './account-claim-service.js';
 import type { KookIngressJob, KookRequestHandler } from './kook-ingress-queue.js';
 import type { KookTextPayload } from './kook-message-queue.js';
@@ -56,11 +56,6 @@ export interface KookAgentDiagnostic {
   count: number;
 }
 
-const metricLabels: Record<string, string> = {
-  matches: '场次', kills: '击杀', assists: '助攻', damage: '伤害', avg_damage: '场均伤害',
-  kd: 'KD', wins: '吃鸡', top10: '前十', revives: '救援',
-};
-
 function message(content: string): KookTextPayload { return { type: 'text', content: content.slice(0, 4000) }; }
 
 const queryResultMessages: Record<string, string> = {
@@ -107,63 +102,6 @@ function rosterPlayerId(query: AuthorizedPublicQuery, name: string | null): stri
   const matches = query.teamContext.team.players.filter(player =>
     [player.id, player.name, ...player.aliases].some(candidate => candidate.normalize('NFKC').trim().toLocaleLowerCase('en-US') === normalized));
   return matches.length === 1 ? matches[0]!.id : null;
-}
-
-function teamDamagePlanText(envelope: ToolEnvelope, query: AuthorizedPublicQuery, plan: QueryPlan, period: string, freshness: string): string {
-  const data = object(envelope.data), coverage = envelope.coverage;
-  const action = plan.meleeKind === 'KICK' ? '踢击' : plan.meleeKind === 'PUNCH' ? '拳击' : plan.meleeKind === 'OTHER' ? '近战' : '误伤';
-  if (envelope.status === 'no_matches' && coverage.complete) return `${period}队友${action}：该时段没有已覆盖的队伍对局。\n${freshness}`;
-  const actorId = rosterPlayerId(query, plan.actorName ?? plan.playerName);
-  const victimId = rosterPlayerId(query, plan.victimName);
-  const allDirections = Array.isArray(data?.directions) ? data.directions.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  const directions = allDirections
-    .filter(row => (!actorId || object(row.actor)?.playerId === actorId) && (!victimId || object(row.victim)?.playerId === victimId))
-    .sort((left, right) => Number(right.knownDamage ?? 0) - Number(left.knownDamage ?? 0));
-  if (!directions.length) return `${coverage.complete ? `没有发现符合条件的队友${action}记录。` : `队友${action}资料覆盖不完整，无法确认结果；当前不会认定为 0。`}\n${freshness}`;
-  const ranked: Array<Record<string, unknown>> = !actorId && !victimId
-    ? [...directions.reduce((totals, row) => {
-      const actor = object(row.actor) ?? {}, key = String(actor.playerId ?? '');
-      const total = totals.get(key) ?? { name: safeLabel(actor.name), damage: 0, hitCount: 0 };
-      total.damage += Number(row.knownDamage ?? 0);
-      total.hitCount += Number(row.knownHitCount ?? 0);
-      totals.set(key, total);
-      return totals;
-    }, new Map<string, { name: string; damage: number; hitCount: number }>()).values()]
-      .sort((left, right) => right.damage - left.damage || left.name.localeCompare(right.name))
-      .map(total => ({ actorName: total.name, knownDamage: total.damage, knownHitCount: total.hitCount }))
-    : directions;
-  const lines = ranked.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
-    const complete = coverage.complete && row.complete !== false;
-    const direction = typeof row.actorName === 'string'
-      ? safeLabel(row.actorName)
-      : `${safeLabel(object(row.actor)?.name)} → ${safeLabel(object(row.victim)?.name)}`;
-    return `${direction}：${complete ? '' : '已知至少 '}${numberText(complete ? row.damage : row.knownDamage)} 伤害 / ${numberText(complete ? row.hitCount : row.knownHitCount)} 次`;
-  });
-  const qualifier = coverage.complete ? '按已覆盖资料排序' : '部分遥测，仅显示已知下限，排名可能变化';
-  return `${period}${actorId || victimId ? `定向队友${action}` : `队伍${action}榜`}（${qualifier}）\n${lines.join('\n')}\n${freshness}`;
-}
-
-function comparisonText(envelope: ToolEnvelope, period: string, freshness: string): string {
-  const data = object(envelope.data), segments = Array.isArray(data?.segments)
-    ? data.segments.map(object).filter((segment): segment is Record<string, unknown> => Boolean(segment)) : [];
-  if (segments.length < 2) return `比较结果资料不完整，无法给出可靠对比。\n${freshness}`;
-  const sections = segments.slice(0, 2).map(segment => {
-    const rows = Array.isArray(segment.rows) ? segment.rows.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-    const lines = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
-      const metrics = object(row.metrics) ?? {};
-      return `${safeLabel(row.label ?? row.key)}：击杀 ${numberText(metrics.kills)} · 伤害 ${numberText(metrics.damage)} · 场次 ${numberText(metrics.matches)}`;
-    });
-    return `${safeLabel(segment.label ?? period)}\n${lines.length ? lines.join('\n') : '该时段没有可展示的数据行。'}`;
-  });
-  const status = envelope.status === 'partial' || !envelope.coverage.complete ? '（部分覆盖）' : '';
-  return `战绩对比${status}\n${sections.join('\n')}\n${freshness}`;
-}
-
-function periodDisplay(period: QueryPlan['period']): string {
-  return ({
-    today: '今天', yesterday: '昨天', last_night: '昨晚', last_7_days: '最近七天', previous_7_days: '此前七天',
-    this_week: '本周', last_week: '上周', last_match: '最近一场', recent_matches: '最近多场', previous_period: '上一周期',
-  } as const)[period ?? 'today'];
 }
 
 function safeLabel(value: unknown): string {
@@ -232,27 +170,68 @@ function object(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-function numberText(value: unknown): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '未知';
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+function presentationSourceRange(queryResolved: Record<string, unknown>): PubgSourceRange | undefined {
+  const asRange = (value: unknown): { from: string | null; to: string | null } | null => {
+    const row = object(value);
+    if (!row) return null;
+    const from = typeof row.start === 'string' ? row.start : typeof row.from === 'string' ? row.from : null;
+    const to = typeof row.end === 'string' ? row.end : typeof row.to === 'string' ? row.to : null;
+    return from || to ? { from, to } : null;
+  };
+  const primary = asRange(queryResolved.sourceRange ?? queryResolved.resolvedSelector ?? queryResolved.selector);
+  const resolvedSegments = Array.isArray(queryResolved.resolvedSegments) ? queryResolved.resolvedSegments : queryResolved.segments;
+  const segments = Array.isArray(resolvedSegments) ? resolvedSegments.flatMap((value) => {
+    const segment = object(value);
+    const range = asRange(segment?.resolvedSelector ?? segment?.selector);
+    return segment && range ? [{ label: String(segment.label ?? '区间'), ...range }] : [];
+  }) : [];
+  if (!primary && !segments.length) return undefined;
+  return { from: primary?.from ?? null, to: primary?.to ?? null, ...(segments.length ? { segments } : {}) };
 }
 
-function freshnessNote(state: SyncState, now: Date): string {
-  const checked = Date.parse(state.checkedAt);
-  if (!Number.isFinite(checked)) return '数据新鲜度未知。';
-  const ageMs = now.getTime() - checked;
-  if (ageMs < 0) return '同步时间异常，数据新鲜度未知。';
-  const time = new Date(checked).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-  if (state.coverage.freshness === 'stale' || ageMs > 5 * 60_000) return `使用缓存数据（上次同步：${time}，可能已过期）。`;
-  if (state.coverage.freshness === 'unknown') return `数据新鲜度未知（上次检查：${time}）。`;
-  return `上次同步：${time}。`;
+function presentationInput(envelope: ToolEnvelope, toolName: PubgToolName, teamDamage?: { aggregateByActor?: boolean; actorPlayerId?: string; victimPlayerId?: string }) {
+  const coverage = envelope.coverage;
+  const sourceRange = presentationSourceRange(envelope.queryResolved);
+  return {
+    presentationStyle: 'public_agent' as const,
+    status: envelope.status,
+    data: envelope.data,
+    dataUpdatedAt: envelope.asOf,
+    ...(sourceRange ? { sourceRange } : {}),
+    queryResolved: envelope.queryResolved,
+    evidenceRefs: {
+      matchIds: envelope.evidenceRefs.matchIds.slice(0, 8),
+      playerIds: envelope.evidenceRefs.playerIds.slice(0, MAX_TEAM_ROSTER_SIZE),
+      fields: envelope.evidenceRefs.fields.slice(0, 24),
+    },
+    coverage: {
+      status: coverage.status,
+      complete: coverage.complete,
+      freshness: coverage.freshness,
+      checkedAt: coverage.checkedAt ?? null,
+      coverageStart: coverage.coverageStart ?? null,
+      coverageEnd: coverage.coverageEnd ?? null,
+      sourceUnavailable: coverage.sourceUnavailable,
+    },
+    ...(teamDamage ? { teamDamage } : {}),
+  };
+}
+
+function renderEnvelope(
+  envelope: ToolEnvelope,
+  toolName: PubgToolName,
+  now: Date,
+  teamDamage?: { aggregateByActor?: boolean; actorPlayerId?: string; victimPlayerId?: string },
+): string {
+  return buildPubgToolPresentation(toolName, presentationInput(envelope, toolName, teamDamage), {
+    timezone: 'Asia/Shanghai', now, includeCoverage: true, localizedMetrics: true,
+  }).displayText;
 }
 
 async function statsReply(services: KookPublicQueryServices, query: AuthorizedPublicQuery, period: 'today' | 'yesterday', signal: AbortSignal, playerIds?: string[], selfDeclared = false): Promise<KookTextPayload> {
   const state = await query.repository.getSyncState(`team:${query.teamContext.team.id}`);
   if (!state || state.source.syncInvoked !== true) return message('PUBG 数据同步状态未知；当前不会把空缓存当作 0 场或 0 伤害。');
   const now = services.now?.() ?? new Date();
-  const freshness = freshnessNote(state, now);
   const domain = new PubgDomainService({ teamContext: query.teamContext, repository: query.repository, now: () => now });
   const envelope = await domain.queryStats({
     sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: period },
@@ -260,75 +239,8 @@ async function statsReply(services: KookPublicQueryServices, query: AuthorizedPu
     orderBy: { metric: 'damage', direction: 'desc' }, limit: playerIds ? 1 : MAX_TEAM_ROSTER_SIZE,
     refresh: false, signal, ...(playerIds ? { playerIds } : {}),
   });
-  const label = period === 'today' ? '今日' : '昨日';
   const warning = selfDeclared ? '本人账号为自我声明，所有权未经验证。\n' : '';
-  return message(warning + statsText(envelope, label, freshness));
-}
-
-function statsText(envelope: ToolEnvelope, period: string, freshness: string, subjectLabel = '队伍'): string {
-  const data = object(envelope.data), rows = Array.isArray(data?.rows) ? data.rows.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  const coverage = envelope.coverage;
-  const heading = `${period}${subjectLabel}战绩`;
-  if (envelope.status === 'no_matches' && coverage.complete) return `${heading}：该时段没有已覆盖的队伍对局。\n${freshness}`;
-  if (!rows.length) return `${heading}：${coverage.complete ? '没有可展示的统计行。' : '数据覆盖不完整，无法确认是否没有对局。'}\n${freshness}`;
-  const shown = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map(row => {
-    const label = safeLabel(row.label ?? row.key);
-    const metrics = object(row.metrics) ?? {};
-    const values = ['matches', 'kills', 'assists', 'damage', 'kd'].map(key => `${metricLabels[key]} ${numberText(metrics[key])}`);
-    return `${label}：${values.join(' · ')}`;
-  });
-  const status = envelope.status === 'partial' || !coverage.complete ? '部分覆盖' : '已覆盖';
-  return `${heading}（${status}）\n${shown.join('\n')}\n${freshness}`;
-}
-
-function leaderboardText(envelope: ToolEnvelope, period: string, metric: string, freshness: string): string {
-  const periodLabel = period === 'today' ? '今日' : '昨日';
-  const data = object(envelope.data), rows = Array.isArray(data?.rows) ? data.rows.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  const coverage = envelope.coverage;
-  if (envelope.status === 'no_matches' && coverage.complete) return `${periodLabel}排行榜：该时段没有已覆盖的队伍对局。\n${freshness}`;
-  if (!rows.length) return `排行榜数据覆盖不完整，当前无法可靠排序。\n${freshness}`;
-  const valueKey = metric;
-  const lines = rows.slice(0, MAX_TEAM_ROSTER_SIZE).map((row, index) => {
-    const metrics = object(row.metrics) ?? {};
-    return `${index + 1}. ${safeLabel(row.label ?? row.key)} — ${metricLabels[metric] ?? metric} ${numberText(metrics[valueKey])}`;
-  });
-  const status = envelope.status === 'partial' || !coverage.complete ? '部分覆盖，名次可能变化' : '按已覆盖数据排序';
-  return `${periodLabel}${metricLabels[metric] ?? metric}榜（${status}）\n${lines.join('\n')}\n${freshness}`;
-}
-
-function teamDamageText(envelope: ToolEnvelope, period: string, freshness: string): string {
-  const periodLabel = period === 'today' ? '今日' : '昨日';
-  const data = object(envelope.data), coverage = envelope.coverage;
-  if (envelope.status === 'no_matches' && coverage.complete) return `${periodLabel}队友伤害：该时段没有已覆盖的队伍对局。\n${freshness}`;
-  const directions = Array.isArray(data?.directions) ? data.directions.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  if (!directions.length) return `队友伤害资料不可用或覆盖不完整，不能据此认定为 0。\n${freshness}`;
-  const lines = directions.slice(0, 8).map(row => {
-    const actor = safeLabel(object(row.actor)?.name), victim = safeLabel(object(row.victim)?.name);
-    const complete = row.complete === true;
-    const amount = complete ? row.damage : row.knownDamage;
-    const count = complete ? row.hitCount : row.knownHitCount;
-    return `${actor} → ${victim}：${complete ? '' : '已知至少 '}${numberText(amount)} 伤害 / ${numberText(count)} 次`;
-  });
-  return `${periodLabel}队友伤害${envelope.status === 'partial' ? '（资料不完整）' : ''}\n${lines.join('\n')}\n${freshness}`;
-}
-
-function reviewText(envelope: ToolEnvelope, period: string, freshness: string): string {
-  const data = object(envelope.data);
-  const matches = Array.isArray(data?.matches) ? data.matches.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  const reviews = Array.isArray(data?.reviews) ? data.reviews.map(object).filter((row): row is Record<string, unknown> => Boolean(row)) : [];
-  if (envelope.status === 'no_matches') return `${period}复盘：没有已覆盖的队伍对局。\n${freshness}`;
-  if (!matches.length) return `当前没有可用的复盘资料，或 PUBG 同步状态尚未确认。\n${freshness}`;
-  const summaries = reviews.slice(0, 4).map((review, index) => {
-    const match = object(review.match) ?? matches[index] ?? {};
-    const reviewData = object(review.data) ?? {};
-    const analysis = object(reviewData.derivedAnalysis) ?? {};
-    const place = safeLabel(match.placement ?? '名次未知');
-    const summary = review.status === 'ok' && typeof analysis.summary === 'string'
-      ? safeLabel(analysis.summary)
-      : '复盘遥测资料不完整，暂不生成结论';
-    return `${index + 1}. ${safeLabel(match.mapName ?? '未知地图')} · 第 ${place} 名：${summary}`;
-  });
-  return `${period}复盘${envelope.status === 'partial' ? '（部分资料）' : ''}\n${summaries.join('\n')}\n${freshness}`;
+  return message(warning + renderEnvelope(envelope, 'pubg_query_stats', now));
 }
 
 function selectionPrompt(choices: Array<{ tenantId: string; teamId: string; label: string }>, commandText: string): KookTextPayload {
@@ -415,7 +327,7 @@ async function naturalLanguageReply(
   };
 
   const queryTool = tool({
-    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘；team_damage 的 meleeKind 可选 KICK/PUNCH/OTHER。参数仅是查询槽位。一次返回即包含查询摘要与覆盖信息；相同参数不得重复查询，应直接使用已有结果回答。',
+    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘；team_damage 的 meleeKind 可选 KICK/PUNCH/OTHER。参数仅是查询槽位。一次返回包含共享战报 presentation、证据、覆盖和新鲜度事实；相同参数不得重复查询，应直接使用已有结果回答。',
     inputSchema: QueryPlanSchema,
     execute: async planInput => {
       const parsedPlan = QueryPlanSchema.safeParse(planInput);
@@ -467,37 +379,29 @@ async function naturalLanguageReply(
           return unavailable;
         }
         await persistQueryPlan(query, execution.plan, now);
-        const state = await query.repository.getSyncState(`team:${query.teamContext.team.id}`);
-        const freshness = state?.source.syncInvoked === true
-          ? freshnessNote(state, now)
-          : 'PUBG 数据同步状态未知；当前不会把空缓存当作 0。';
-        const period = periodDisplay(execution.plan.period);
-        let summary: string;
-        if (execution.plan.intent === 'team_damage') {
-          summary = teamDamagePlanText(execution.envelope, query, execution.plan, period, freshness);
-        } else if (execution.plan.intent === 'match_review') {
-          summary = reviewText(execution.envelope, period, freshness);
-        } else if (execution.plan.intent === 'comparison') {
-          summary = comparisonText(execution.envelope, period, freshness);
-        } else if (execution.plan.intent === 'leaderboard') {
-          summary = leaderboardText(execution.envelope, execution.plan.period ?? 'today', (execution.plan.metric ?? 'damage') as TeamLeaderboardMetric, freshness);
-        } else {
-          const subjectLabel = execution.plan.intent === 'my_stats' ? '本人'
-            : execution.plan.intent === 'player_stats' ? '队员' : '队伍';
-          summary = statsText(execution.envelope, period, freshness, subjectLabel);
-        }
+        const toolName: PubgToolName = execution.plan.intent === 'team_damage' ? 'pubg_query_team_damage'
+          : execution.plan.intent === 'match_review' ? 'pubg_get_period_review'
+            : execution.plan.intent === 'comparison' ? 'pubg_compare_stats' : 'pubg_query_stats';
+        const actorPlayerId = execution.plan.intent === 'team_damage'
+          ? rosterPlayerId(query, execution.plan.actorName ?? execution.plan.playerName) : null;
+        const victimPlayerId = execution.plan.intent === 'team_damage'
+          ? rosterPlayerId(query, execution.plan.victimName) : null;
+        const teamDamage = execution.plan.intent === 'team_damage'
+          ? {
+            aggregateByActor: !actorPlayerId && !victimPlayerId,
+            ...(actorPlayerId ? { actorPlayerId } : {}),
+            ...(victimPlayerId ? { victimPlayerId } : {}),
+          }
+          : undefined;
+        const presented = buildPubgToolPresentation(toolName, presentationInput(execution.envelope, toolName, teamDamage), {
+          timezone: 'Asia/Shanghai', now, includeCoverage: true, localizedMetrics: true,
+        });
         const evidence = execution.envelope.evidenceRefs as unknown as Record<string, unknown>;
         const toolResult = {
           status: execution.envelope.status,
-          summary: `${selfWarning}${summary}`,
-          coverage: {
-            status: execution.envelope.coverage.status,
-            complete: execution.envelope.coverage.complete,
-            freshness: execution.envelope.coverage.freshness,
-            checkedAt: execution.envelope.coverage.checkedAt,
-            coverageStart: execution.envelope.coverage.coverageStart,
-            coverageEnd: execution.envelope.coverage.coverageEnd,
-          },
+          summary: `${selfWarning}${presented.displayText}`,
+          presentation: presented.presentation,
+          coverage: presented.presentation.coverage,
           asOf: execution.envelope.asOf,
           metricVersion: execution.envelope.metricVersion,
           evidenceRefs: {
@@ -655,7 +559,6 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
       const state = await query.repository.getSyncState(`team:${query.teamContext.team.id}`);
       if (!state || state.source.syncInvoked !== true) return message('PUBG 数据同步状态未知；当前不会把空缓存当作 0 场或 0 伤害。');
       const now = services.now?.() ?? new Date();
-      const freshness = freshnessNote(state, now);
       const domain = new PubgDomainService({ teamContext: query.teamContext, repository: query.repository, now: () => now });
       if (parsed.intent.kind === 'leaderboard') {
         const metric = parsed.intent.metric ?? await query.repository.getLeaderboardMetricPreference() ?? 'damage';
@@ -664,17 +567,17 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
           metrics: [metric as Metric], operation: 'rank', groupBy: 'player', orderBy: { metric, direction: 'desc' },
           limit: MAX_TEAM_ROSTER_SIZE, refresh: false, signal,
         });
-        return message(leaderboardText(envelope, parsed.intent.period, metric, freshness));
+        return message(renderEnvelope(envelope, 'pubg_query_stats', now));
       }
       if (parsed.intent.kind === 'team_damage') {
         const envelope = await domain.queryTeamDamage({ sessionId: query.conversation.sessionId, selector: { type: 'relative_period', value: parsed.intent.period }, refresh: false, signal });
-        return message(teamDamageText(envelope, parsed.intent.period, freshness));
+        return message(renderEnvelope(envelope, 'pubg_query_team_damage', now, { aggregateByActor: true }));
       }
       const search = await domain.searchMatches({ sessionId: query.conversation.sessionId,
         selector: { type: 'relative_period', value: parsed.intent.period }, page: 0, pageSize: 4, refresh: false, signal });
-      if (!search.resultSetId) return message(`当前没有可用的复盘资料，数据状态：${search.status}。\n${freshness}`);
+      if (!search.resultSetId) return message(renderEnvelope(search, 'pubg_search_matches', now));
       const envelope = await domain.getPeriodReview({ sessionId: query.conversation.sessionId, searchResultSetId: search.resultSetId, signal });
-      return message(reviewText(envelope, parsed.intent.period, freshness));
+      return message(renderEnvelope(envelope, 'pubg_get_period_review', now));
     } catch (error) {
       const safe = error instanceof Error ? safeErrors[error.message] : undefined;
       if (safe) return message(safe);

@@ -155,6 +155,58 @@ test('PUBG period review keeps Domain order and renders cross-day match times', 
   assert.match(output, /数据更新时间：23:05/u);
 });
 
+test('PUBG team damage presentation aggregates full and partial facts without losing field semantics', () => {
+  const base = {
+    dataUpdatedAt: '2026-09-20T15:05:00.000Z',
+    evidenceRefs: { matchIds: ['m1'], playerIds: ['p1', 'p2'], fields: ['teamDamage'] },
+    queryResolved: {},
+    teamDamage: { aggregateByActor: true },
+  };
+  const full = buildPubgToolPresentation('pubg_query_team_damage', {
+    ...base,
+    status: 'ok',
+    coverage: { status: 'OK', complete: true, freshness: 'fresh', checkedAt: base.dataUpdatedAt, coverageStart: null, coverageEnd: null, sourceUnavailable: false },
+    data: {
+      direction: 'all directions', source: null, meleeKind: null, totalHitCount: 6, totalDamage: 20,
+      directions: [
+        { actor: { playerId: 'p1', name: 'Alice' }, victim: { playerId: 'p2', name: 'Bob' }, hitCount: 2, damage: 10, knownHitCount: 2, knownDamage: 10, complete: true, evidenceRefs: ['m1'] },
+        { actor: { playerId: 'p1', name: 'Alice' }, victim: { playerId: 'p2', name: 'Bob' }, hitCount: 1, damage: 4, knownHitCount: 1, knownDamage: 4, complete: true, evidenceRefs: ['m1'] },
+        { actor: { playerId: 'p2', name: 'Bob' }, victim: { playerId: 'p1', name: 'Alice' }, hitCount: 3, damage: 6, knownHitCount: 3, knownDamage: 6, complete: true, evidenceRefs: ['m1'] },
+      ],
+    },
+  }, { now: base.dataUpdatedAt, includeCoverage: true });
+  assert.equal(validatePubgPresentation(full.presentation).valid, true);
+  assert.equal(full.presentation.type, 'pubg_team_damage');
+  if (full.presentation.type !== 'pubg_team_damage') return;
+  assert.equal(full.presentation.rankingBasis, 'damage');
+  assert.deepEqual(full.presentation.actorTotals?.map(row => [row.actor, row.damage, row.hitCount, row.knownDamage, row.position]), [
+    ['Alice', 14, 3, 14, 1], ['Bob', 6, 3, 6, 2],
+  ]);
+  assert.match(full.displayText, /Alice：14 伤害 \/ 3 次/u);
+  assert.match(full.displayText, /数据覆盖：完整（OK）/u);
+  assert.match(full.displayText, /数据新鲜度：较新/u);
+
+  const partial = buildPubgToolPresentation('pubg_query_team_damage', {
+    ...base,
+    status: 'partial',
+    coverage: { status: 'PARTIAL', complete: false, freshness: 'unknown', checkedAt: base.dataUpdatedAt, coverageStart: null, coverageEnd: null, sourceUnavailable: false },
+    data: {
+      direction: 'all directions', source: null, meleeKind: null, totalHitCount: null, totalDamage: null,
+      directions: [
+        { actor: { playerId: 'p1', name: 'Alice' }, victim: { playerId: 'p2', name: 'Bob' }, hitCount: null, damage: null, knownHitCount: 2, knownDamage: 10, complete: false, evidenceRefs: ['m1'] },
+      ],
+    },
+  }, { now: base.dataUpdatedAt, includeCoverage: true });
+  assert.equal(validatePubgPresentation(partial.presentation).valid, true);
+  assert.equal(partial.presentation.type, 'pubg_team_damage');
+  if (partial.presentation.type !== 'pubg_team_damage') return;
+  assert.equal(partial.presentation.rankingBasis, 'knownDamage');
+  assert.deepEqual(partial.presentation.actorTotals?.map(row => [row.damage, row.hitCount, row.knownDamage, row.knownHitCount]), [[null, null, 10, 2]]);
+  assert.match(partial.displayText, /Alice：已知至少 10 伤害 \/ 2 次/u);
+  assert.match(partial.displayText, /数据覆盖：不完整（PARTIAL）/u);
+  assert.match(partial.displayText, /数据新鲜度：未知/u);
+});
+
 test('every registered PUBG native tool has a validated presentation and displayText', () => {
   for (const toolName of Object.keys(PUBG_PRESENTATION_REGISTRY)) {
     const result = buildPubgToolPresentation(toolName, {

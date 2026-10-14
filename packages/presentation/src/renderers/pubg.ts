@@ -27,6 +27,8 @@ import {
 export interface PubgRenderOptions {
   timezone?: string;
   now?: Date | string;
+  includeCoverage?: boolean;
+  localizedMetrics?: boolean;
 }
 
 function timeOptions(options: PubgRenderOptions, extra: { forceDate?: boolean } = {}) {
@@ -66,11 +68,27 @@ function sourceRangeLines(range: PubgSourceRange | undefined, options: PubgRende
 
 function footer(presentation: PubgPresentationBase, options: PubgRenderOptions): string[] {
   const updated = formatDisplayTime(presentation.dataUpdatedAt, timeOptions(options)) ?? '未知';
-  return ['', ...sourceRangeLines(presentation.sourceRange, options), `数据更新时间：${updated}`];
+  const coverage = options.includeCoverage && presentation.coverage
+    ? [
+      `数据覆盖：${presentation.coverage.complete ? '完整' : '不完整'}（${presentation.coverage.status}）`,
+      `数据新鲜度：${presentation.coverage.freshness === 'fresh' ? '较新' : presentation.coverage.freshness === 'stale' ? '可能过期' : '未知'}`,
+    ]
+    : [];
+  return ['', ...sourceRangeLines(presentation.sourceRange, options), ...coverage, `数据更新时间：${updated}`];
 }
 
-function metricRow(row: PubgMetricRow): string {
-  const entries = Object.entries(row.values).map(([key, item]) => `${userText(key)}=${value(item)}`);
+const METRIC_LABELS: Record<string, string> = {
+  matches: '场次', kills: '击杀', assists: '助攻', damage: '伤害', avg_damage: '场均伤害',
+  kd: 'KD', deaths: '死亡', wins: '胜利', top10: '前十', rank: '排名', dbnos: '倒地',
+  revives: '救援', headshot_kills: '爆头击杀', survival_time: '生存时间', longest_kill: '最远击杀',
+  avg_kills: '场均击杀', avg_rank: '场均排名', top10_rate: '前十率', denominatorZero: '零死亡场次',
+  performance_score: '表现分', chicken_index: '吃鸡指数',
+};
+
+function metricRow(row: PubgMetricRow, localizedMetrics: boolean): string {
+  const entries = Object.entries(row.values).map(([key, item]) => localizedMetrics
+    ? `${METRIC_LABELS[key] ?? userText(key)} ${value(item)}`
+    : `${userText(key)}=${value(item)}`);
   const rank = row.position === undefined ? '' : `（序号：${value(row.position)}）`;
   return `- ${userText(row.label)}${rank}${entries.length ? `：${entries.join('，')}` : ''}`;
 }
@@ -87,7 +105,7 @@ export function renderPubgStatus(presentation: PubgStatusPresentation, options: 
 export function renderPubgStats(presentation: PubgStatsPresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgStatsPresentation(presentation));
   const lines = [userText(validated.headline), '', userText(validated.summary)];
-  if (validated.rows.length) lines.push('', ...validated.rows.map(metricRow));
+  if (validated.rows.length) lines.push('', ...validated.rows.map(row => metricRow(row, options.localizedMetrics === true)));
   return lines.concat(footer(validated, options)).join('\n');
 }
 
@@ -106,11 +124,11 @@ export function renderPubgMatchList(presentation: PubgMatchListPresentation, opt
 export function renderPubgComparison(presentation: PubgComparisonPresentation, options: PubgRenderOptions = {}): string {
   const validated = assertValid(validatePubgComparisonPresentation(presentation));
   const lines = [userText(validated.headline), '', userText(validated.summary)];
-  if (validated.rows.length) lines.push('', '差值（前段 - 后段）：', ...validated.rows.map(metricRow));
+  if (validated.rows.length) lines.push('', '差值（前段 - 后段）：', ...validated.rows.map(row => metricRow(row, options.localizedMetrics === true)));
   for (const segment of validated.segments) {
     lines.push('', `区间：${userText(segment.label)}`);
     if (segment.sourceRange) lines.push(...sourceRangeLines(segment.sourceRange, options));
-    if (segment.rows.length) lines.push(...segment.rows.map(metricRow));
+    if (segment.rows.length) lines.push(...segment.rows.map(row => metricRow(row, options.localizedMetrics === true)));
   }
   return lines.concat(footer(validated, options)).join('\n');
 }
@@ -161,7 +179,22 @@ export function renderPubgTeamDamage(presentation: PubgTeamDamagePresentation, o
   if (status) lines.push(status);
   if (validated.source || validated.meleeKind) lines.push(`筛选：${userText(validated.source ?? '全部')}${validated.meleeKind ? ` / ${userText(validated.meleeKind)}` : ''}`);
   lines.push(`总次数：${value(validated.totalHitCount)}｜总伤害：${value(validated.totalDamage)}`, '', userText(validated.summary));
-  if (validated.directions.length) lines.push('', '方向明细：', ...validated.directions.map((direction) => `- ${userText(direction.actor)} → ${userText(direction.victim)}：${value(direction.hitCount)} 次，${value(direction.damage)} 伤害${direction.complete ? '' : '（不完整）'}`));
+  if (validated.actorTotals?.length) {
+    const ranking = validated.rankingBasis === 'knownDamage' ? '已知伤害下限' : '完整伤害';
+    lines.push('', `队员汇总（按${ranking}排序）：`, ...validated.actorTotals.map((total) => {
+      const damage = total.complete ? total.damage : total.knownDamage;
+      const hitCount = total.complete ? total.hitCount : total.knownHitCount;
+      return `- ${userText(total.actor)}：${total.complete ? '' : '已知至少 '}${value(damage)} 伤害 / ${value(hitCount)} 次`;
+    }));
+  }
+  if (validated.directions.length) lines.push('', '方向明细：', ...validated.directions.map((direction) => {
+    if (options.localizedMetrics) {
+      const damage = direction.complete ? direction.damage : direction.knownDamage ?? direction.damage;
+      const hitCount = direction.complete ? direction.hitCount : direction.knownHitCount ?? direction.hitCount;
+      return `- ${userText(direction.actor)} → ${userText(direction.victim)}：${direction.complete ? '' : '已知至少 '}${value(damage)} 伤害 / ${value(hitCount)} 次${direction.complete ? '' : '（不完整）'}`;
+    }
+    return `- ${userText(direction.actor)} → ${userText(direction.victim)}：${value(direction.hitCount)} 次，${value(direction.damage)} 伤害${direction.complete ? '' : '（不完整）'}`;
+  }));
   return lines.concat(footer(validated, options)).join('\n');
 }
 

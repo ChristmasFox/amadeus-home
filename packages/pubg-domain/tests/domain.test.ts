@@ -20,6 +20,7 @@ import {
   importLegacyPubgData,
   normalizeRecords,
   resolveSelector,
+  resolvePreviousPeriodSelector,
   selectMatchReviewFactCategories,
   scopeMatchReviewFacts,
   type Coverage,
@@ -246,6 +247,48 @@ test('PUBG relative selectors use the canonical 06:00 business day', () => {
     assert.equal(yesterday.start, expectedYesterdayStart);
     assert.equal(yesterday.end, expectedTodayStart);
   }
+});
+
+test('rolling windows and previous-period selection are resolved by the shared Domain', () => {
+  const now = new Date('2026-09-19T00:30:00.000Z');
+  const options = { now, timezone: 'Asia/Shanghai', businessDayStart: '06:00' };
+  const expected: Record<string, [string, string]> = {
+    today: ['2026-09-18T22:00:00.000Z', now.toISOString()],
+    yesterday: ['2026-09-17T22:00:00.000Z', '2026-09-18T22:00:00.000Z'],
+    last_night: ['2026-09-18T10:00:00.000Z', '2026-09-18T22:00:00.000Z'],
+    last_7_days: ['2026-09-12T00:30:00.000Z', now.toISOString()],
+    previous_7_days: ['2026-09-05T00:30:00.000Z', '2026-09-12T00:30:00.000Z'],
+    this_week: ['2026-09-13T22:00:00.000Z', now.toISOString()],
+    last_week: ['2026-09-06T22:00:00.000Z', '2026-09-13T22:00:00.000Z'],
+  };
+  for (const [period, [start, end]] of Object.entries(expected)) {
+    const resolved = resolveSelector({ type: 'relative_period', value: period }, options);
+    assert.deepEqual([resolved.start, resolved.end], [start, end], period);
+  }
+  const recentDays = resolveSelector({ type: 'recent_days', count: 3 }, options);
+  assert.deepEqual([recentDays.start, recentDays.end], ['2026-09-16T22:00:00.000Z', now.toISOString()]);
+  const previousRecentDays = resolvePreviousPeriodSelector({ type: 'recent_days', count: 3 }, options);
+  assert.equal(previousRecentDays?.type, 'time_range');
+  if (previousRecentDays?.type === 'time_range') {
+    assert.deepEqual([previousRecentDays.start, previousRecentDays.end], ['2026-09-13T22:00:00.000Z', '2026-09-16T22:00:00.000Z']);
+  }
+
+  const previousCases = [
+    ['today', 'yesterday', ['2026-09-17T22:00:00.000Z', '2026-09-18T22:00:00.000Z']],
+    ['yesterday', 'day_before_yesterday', ['2026-09-16T22:00:00.000Z', '2026-09-17T22:00:00.000Z']],
+    ['last_7_days', 'previous_7_days', ['2026-09-05T00:30:00.000Z', '2026-09-12T00:30:00.000Z']],
+    ['previous_7_days', 'days_14_to_21_ago', ['2026-08-29T00:30:00.000Z', '2026-09-05T00:30:00.000Z']],
+  ] as const;
+  for (const [period, previousValue, range] of previousCases) {
+    const previous = resolvePreviousPeriodSelector({ type: 'relative_period', value: period }, options);
+    assert.deepEqual(previous, { type: 'relative_period', value: previousValue });
+    const resolved = resolveSelector(previous!, options);
+    assert.deepEqual([resolved.start, resolved.end], range, `${period} previous period`);
+  }
+  assert.deepEqual(resolvePreviousPeriodSelector({ type: 'last_n_matches', count: 4, offset: 0 }), {
+    type: 'last_n_matches', count: 4, offset: 4,
+  });
+  assert.equal(resolvePreviousPeriodSelector({ type: 'relative_period', value: 'last_night' }), null);
 });
 
 test('PUBG explicit ranges preserve caller instants instead of applying the 06:00 boundary', () => {

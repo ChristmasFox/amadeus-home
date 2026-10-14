@@ -16,6 +16,18 @@ export interface PubgPresentationBase {
   status: PubgPresentationStatus;
   dataUpdatedAt: string;
   sourceRange?: PubgSourceRange;
+  coverage?: PubgPresentationCoverage;
+}
+
+/** Provenance facts passed through from the shared Domain envelope. */
+export interface PubgPresentationCoverage {
+  status: string;
+  complete: boolean;
+  freshness: 'fresh' | 'stale' | 'unknown';
+  checkedAt: string | null;
+  coverageStart: string | null;
+  coverageEnd: string | null;
+  sourceUnavailable: boolean;
 }
 
 export interface PresentationTextItem {
@@ -139,7 +151,20 @@ export interface PubgTeamDamageDirection {
   victim: string;
   hitCount: number | null;
   damage: number | null;
+  knownHitCount?: number;
+  knownDamage?: number;
   complete: boolean;
+  evidenceRefs: string[];
+}
+
+export interface PubgTeamDamageActorTotal {
+  actor: string;
+  damage: number | null;
+  hitCount: number | null;
+  knownDamage: number;
+  knownHitCount: number;
+  complete: boolean;
+  position: number;
   evidenceRefs: string[];
 }
 
@@ -152,6 +177,8 @@ export interface PubgTeamDamagePresentation extends PubgPresentationBase {
   totalHitCount: number | null;
   totalDamage: number | null;
   directions: PubgTeamDamageDirection[];
+  actorTotals?: PubgTeamDamageActorTotal[];
+  rankingBasis?: 'damage' | 'knownDamage';
   summary: string;
   evidenceRefs: string[];
 }

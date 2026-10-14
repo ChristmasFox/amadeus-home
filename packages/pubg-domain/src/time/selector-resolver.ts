@@ -176,6 +176,18 @@ export function resolveSelector(selector: Selector, resolverOptions: ResolverOpt
   }
 
   const value = selector.value.trim();
+  // Rolling windows are named selectors so every runtime uses the same clock
+  // and half-open interval semantics. The public SaaS adapter must not perform
+  // this arithmetic before invoking the Domain.
+  if (value === 'last_7_days') {
+    return range(new Date(now.getTime() - 7 * 86400000), now, selector.label ?? '最近七天', options.timezone, options.businessDayStart);
+  }
+  if (value === 'previous_7_days') {
+    return range(new Date(now.getTime() - 14 * 86400000), new Date(now.getTime() - 7 * 86400000), selector.label ?? '此前七天', options.timezone, options.businessDayStart);
+  }
+  if (value === 'days_14_to_21_ago') {
+    return range(new Date(now.getTime() - 21 * 86400000), new Date(now.getTime() - 14 * 86400000), selector.label ?? '更早七天', options.timezone, options.businessDayStart);
+  }
   const currentParts = localParts(now, options.timezone);
   const currentDate = { year: currentParts.year, month: currentParts.month, day: currentParts.day };
   const [businessHour = 6, businessMinute = 0] = options.businessDayStart.split(':').map(Number);
@@ -258,6 +270,53 @@ export function resolveSelector(selector: Selector, resolverOptions: ResolverOpt
     return range(start, now, selector.label ?? value, options.timezone, options.businessDayStart);
   }
   return range(currentBusinessStart, now, selector.label ?? '今天', options.timezone, options.businessDayStart);
+}
+
+/** Resolve the preceding comparable interval for a canonical selector. */
+export function resolvePreviousPeriodSelector(selector: Selector, resolverOptions: ResolverOptions = {}): Selector | null {
+  if (selector.type === 'last_n_matches') {
+    return { ...selector, offset: (selector.offset ?? 0) + selector.count };
+  }
+
+  if (selector.type === 'recent_days') {
+    const resolved = resolveSelector(selector, resolverOptions);
+    const start = Date.parse(resolved.start);
+    if (!Number.isFinite(start)) return null;
+    return {
+      type: 'time_range',
+      start: new Date(start - selector.count * 86400000).toISOString(),
+      end: new Date(start).toISOString(),
+      timezone: resolved.timezone,
+      businessDayStart: resolved.businessDayStart,
+    };
+  }
+
+  if (selector.type === 'relative_period') {
+    const previousValue: Record<string, string> = {
+      today: 'yesterday',
+      yesterday: 'day_before_yesterday',
+      this_week: 'last_week',
+      last_7_days: 'previous_7_days',
+      previous_7_days: 'days_14_to_21_ago',
+    };
+    const value = previousValue[selector.value.trim()];
+    return value ? { type: 'relative_period', value } : null;
+  }
+
+  if (selector.type === 'result_set') return null;
+
+  const resolved = resolveSelector(selector, resolverOptions);
+  const start = Date.parse(resolved.start);
+  const end = Date.parse(resolved.end);
+  const duration = end - start;
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  return {
+    type: 'time_range',
+    start: new Date(start - duration).toISOString(),
+    end: new Date(start).toISOString(),
+    timezone: resolved.timezone,
+    businessDayStart: resolved.businessDayStart,
+  };
 }
 
 export function canonicalizeSelector(selector: Selector, options: ResolverOptions = {}): Selector {

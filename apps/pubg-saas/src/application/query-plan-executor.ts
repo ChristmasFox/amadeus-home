@@ -1,6 +1,7 @@
 import {
   PubgDomainService,
-  resolveSelector,
+  resolvePreviousPeriodSelector,
+  type Selector,
   type Metric,
 } from '@agent/pubg-domain/core';
 import type {
@@ -16,7 +17,6 @@ import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 
 const DEFAULT_TIMEZONE = 'Asia/Shanghai';
 const DEFAULT_BUSINESS_DAY_START = '06:00';
-const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_STATS_METRICS: Metric[] = ['matches', 'kills', 'assists', 'damage', 'kd'];
 const DOMAIN_METRICS = new Set<Metric>([
   'matches', 'kills', 'assists', 'damage', 'avg_damage', 'kd', 'deaths', 'wins', 'top10', 'rank',
@@ -51,20 +51,35 @@ export type QueryPlanExecutionResult =
   | { kind: 'unavailable'; code: string };
 
 type PeriodValue = NonNullable<QueryPlan['period']>;
-type RangeSelector = Extract<StatsToolInput['selector'], { type: 'time_range' }>;
+type DateSelector = Extract<StatsToolInput['selector'], { type: 'time_range' | 'relative_period' | 'recent_days' }>;
 type MatchSelector = Extract<StatsToolInput['selector'], { type: 'last_n_matches' }>;
 
 type PeriodSelection =
-  | { kind: 'time_range'; selector: RangeSelector }
+  | { kind: 'time_period'; selector: DateSelector }
   | { kind: 'last_n_matches'; selector: MatchSelector }
   | { kind: 'recent_matches'; count: number };
 
-type StatsSelector = RangeSelector | MatchSelector;
+type StatsSelector = DateSelector | MatchSelector;
 
 function statsSelector(period: PeriodSelection): StatsSelector {
   return period.kind === 'recent_matches'
     ? { type: 'last_n_matches', count: period.count, offset: 0 }
     : period.selector;
+}
+
+function canonicalSelector(period: PeriodSelection): Selector {
+  if (period.kind === 'recent_matches') return { type: 'last_n_matches', count: period.count, offset: 0 };
+  const selector = period.selector;
+  if (selector.type === 'last_n_matches') return {
+    type: 'last_n_matches', count: selector.count, offset: selector.offset ?? 0,
+  };
+  if (selector.type === 'relative_period') return { type: 'relative_period', value: selector.value, ...(selector.label ? { label: selector.label } : {}) };
+  if (selector.type === 'recent_days') return { type: 'recent_days', count: selector.count, ...(selector.label ? { label: selector.label } : {}) };
+  return {
+    type: 'time_range', start: selector.from, end: selector.to,
+    timezone: selector.timezone ?? DEFAULT_TIMEZONE,
+    businessDayStart: selector.businessDayStart ?? DEFAULT_BUSINESS_DAY_START,
+  };
 }
 
 function hasValue(value: string | undefined): value is string {
@@ -120,99 +135,63 @@ function resolvePlayerIds(
   return { kind: 'player', id: resolved.id };
 }
 
-function timeRange(
-  from: Date,
-  to: Date,
-  timezone: string,
-  businessDayStart: string,
-): RangeSelector {
-  return {
-    type: 'time_range',
-    from: from.toISOString(),
-    to: to.toISOString(),
-    timezone,
-    businessDayStart,
-  };
+function selectorForPeriod(period: PeriodValue | null | undefined, matchCount: number | null, dayCount: number | null | undefined): PeriodSelection | null {
+  if (!period || period === 'previous_period') return null;
+  if (period === 'last_match') return { kind: 'last_n_matches', selector: { type: 'last_n_matches', count: 1, offset: 0 } };
+  if (period === 'recent_matches') return matchCount ? { kind: 'recent_matches', count: matchCount } : null;
+  if (period === 'recent_days') return dayCount ? { kind: 'time_period', selector: { type: 'recent_days', count: dayCount } } : null;
+  return { kind: 'time_period', selector: { type: 'relative_period', value: period } };
 }
 
-function relativeRange(
-  value: string,
-  now: Date,
-  timezone: string,
-  businessDayStart: string,
-): RangeSelector {
-  // Call only with an explicit allowlisted selector. Domain's resolver defaults
-  // unrecognized relative periods to today, so all callers validate first.
-  const resolved = resolveSelector(
-    { type: 'relative_period', value, label: value },
-    { now, timezone, businessDayStart },
-  );
-  return {
-    type: 'time_range',
-    from: resolved.start,
-    to: resolved.end,
-    timezone,
-    businessDayStart,
-  };
-}
-
-function previousPeriodSelection(
-  basePeriod: PeriodValue | null | undefined,
-  matchCount: number | null,
-  now: Date,
-  timezone: string,
-  businessDayStart: string,
-): PeriodSelection | null {
-  if (!basePeriod || basePeriod === 'previous_period') return null;
-  switch (basePeriod) {
-    case 'today': return { kind: 'time_range', selector: relativeRange('yesterday', now, timezone, businessDayStart) };
-    case 'yesterday': return { kind: 'time_range', selector: relativeRange('day_before_yesterday', now, timezone, businessDayStart) };
-    case 'this_week': return { kind: 'time_range', selector: relativeRange('last_week', now, timezone, businessDayStart) };
-    case 'last_7_days': return { kind: 'time_range', selector: timeRange(new Date(now.getTime() - 14 * DAY_MS), new Date(now.getTime() - 7 * DAY_MS), timezone, businessDayStart) };
-    case 'previous_7_days': return { kind: 'time_range', selector: timeRange(new Date(now.getTime() - 21 * DAY_MS), new Date(now.getTime() - 14 * DAY_MS), timezone, businessDayStart) };
-    case 'last_match': return { kind: 'last_n_matches', selector: { type: 'last_n_matches', count: 1, offset: 1 } };
-    case 'recent_matches':
-      return matchCount
-        ? { kind: 'last_n_matches', selector: { type: 'last_n_matches', count: matchCount, offset: matchCount } }
-        : null;
-    case 'last_night':
-    case 'last_week':
-      return null;
-  }
+function selectionForSelector(selector: Selector): PeriodSelection | null {
+  if (selector.type === 'last_n_matches') return { kind: 'last_n_matches', selector: {
+    type: 'last_n_matches', count: selector.count, offset: selector.offset ?? 0,
+    ...(selector.label === undefined ? {} : { label: selector.label }),
+  } };
+  if (selector.type === 'relative_period') return { kind: 'time_period', selector: {
+    type: 'relative_period', value: selector.value,
+    ...(selector.label === undefined ? {} : { label: selector.label }),
+  } };
+  if (selector.type === 'recent_days') return { kind: 'time_period', selector: {
+    type: 'recent_days', count: selector.count,
+    ...(selector.label === undefined ? {} : { label: selector.label }),
+  } };
+  if (selector.type === 'time_range') return { kind: 'time_period', selector: {
+    type: 'time_range', from: selector.start, to: selector.end,
+    timezone: selector.timezone ?? DEFAULT_TIMEZONE,
+    businessDayStart: selector.businessDayStart ?? DEFAULT_BUSINESS_DAY_START,
+  } };
+  return null;
 }
 
 function periodSelection(
   period: PeriodValue | null,
   matchCount: number | null,
+  dayCount: number | null | undefined,
   previousBasePeriod: PeriodValue | null | undefined,
+  previousBaseDayCount: number | null | undefined,
   now: Date,
   timezone: string,
   businessDayStart: string,
 ): PeriodSelection | null {
   if (!period) return null;
   if (period === 'previous_period') {
-    return previousPeriodSelection(previousBasePeriod, matchCount, now, timezone, businessDayStart);
+    const base = selectorForPeriod(previousBasePeriod, matchCount, previousBaseDayCount);
+    if (!base) return null;
+    const previous = resolvePreviousPeriodSelector(canonicalSelector(base), {
+      now,
+      timezone,
+      businessDayStart,
+    });
+    return previous ? selectionForSelector(previous) : null;
   }
-  if (period === 'last_match') return { kind: 'last_n_matches', selector: { type: 'last_n_matches', count: 1, offset: 0 } };
-  if (period === 'recent_matches') {
-    return matchCount ? { kind: 'recent_matches', count: matchCount } : null;
-  }
-  if (period === 'last_7_days') {
-    return { kind: 'time_range', selector: timeRange(new Date(now.getTime() - 7 * DAY_MS), now, timezone, businessDayStart) };
-  }
-  if (period === 'previous_7_days') {
-    return { kind: 'time_range', selector: timeRange(new Date(now.getTime() - 14 * DAY_MS), new Date(now.getTime() - 7 * DAY_MS), timezone, businessDayStart) };
-  }
-  if (period === 'today' || period === 'yesterday' || period === 'last_night' || period === 'this_week' || period === 'last_week') {
-    return { kind: 'time_range', selector: relativeRange(period, now, timezone, businessDayStart) };
-  }
-  return null;
+  return selectorForPeriod(period, matchCount, dayCount);
 }
 
-function periodLabel(period: PeriodValue | null): string | null {
+function periodLabel(period: PeriodValue | null, dayCount?: number | null): string | null {
   if (!period) return null;
   const labels: Record<PeriodValue, string> = {
-    today: '今天', yesterday: '昨天', last_night: '昨晚', last_7_days: '最近七天',
+    today: '今天', yesterday: '昨天', last_night: '昨晚', recent_days: `最近${dayCount ?? ''}天`, last_7_days: '最近七天',
     previous_7_days: '此前七天', this_week: '本周', last_week: '上周', last_match: '最近一场',
     recent_matches: '最近多场', previous_period: '上一周期',
   };
@@ -246,6 +225,7 @@ function resolveFollowUp(plan: QueryPlan, previousPlan: QueryPlan | null): Query
     period: plan.period === 'previous_period' || plan.period === null ? previousPlan.period : plan.period,
     comparePeriod: plan.comparePeriod ?? previousPlan.comparePeriod,
     matchCount: plan.matchCount ?? previousPlan.matchCount,
+    dayCount: plan.dayCount ?? previousPlan.dayCount,
     needsClarification: plan.needsClarification,
   };
 }
@@ -331,14 +311,16 @@ export class QueryPlanExecutor {
     const currentPeriod = periodSelection(
       plan.period,
       plan.matchCount,
+      plan.dayCount,
       previousPlan?.period,
+      previousPlan?.dayCount,
       this.now(),
       this.timezone,
       this.businessDayStart,
     );
     if (!currentPeriod) return execution('clarification', plan.period ? 'period_not_supported' : 'period_required');
 
-    if ((plan.intent === 'team_damage' || plan.intent === 'match_review') && currentPeriod.kind !== 'time_range') {
+    if ((plan.intent === 'team_damage' || plan.intent === 'match_review') && currentPeriod.kind !== 'time_period') {
       if (plan.intent === 'match_review' && currentPeriod.kind === 'recent_matches' && currentPeriod.count <= 4) {
         // Recent match review has a separately bounded path below.
       } else {
@@ -395,7 +377,7 @@ export class QueryPlanExecutor {
     }
 
     if (plan.intent === 'team_damage') {
-      if (currentPeriod.kind !== 'time_range') return execution('clarification', 'period_not_supported_for_intent');
+      if (currentPeriod.kind !== 'time_period') return execution('clarification', 'period_not_supported_for_intent');
       const envelope = await domain.queryTeamDamage({
         sessionId,
         selector: currentPeriod.selector,
@@ -425,7 +407,9 @@ export class QueryPlanExecutor {
       const comparePeriod = periodSelection(
         plan.comparePeriod,
         plan.matchCount,
+        plan.dayCount,
         plan.period,
+        plan.dayCount,
         this.now(),
         this.timezone,
         this.businessDayStart,
@@ -438,8 +422,8 @@ export class QueryPlanExecutor {
       const envelope = await domain.compareStats({
         sessionId,
         segments: [
-          { label: periodLabel(plan.period) ?? statsSelector(currentPeriod).type, selector: statsSelector(currentPeriod) },
-          { label: periodLabel(plan.comparePeriod) ?? statsSelector(comparePeriod).type, selector: statsSelector(comparePeriod) },
+          { label: periodLabel(plan.period, plan.dayCount) ?? statsSelector(currentPeriod).type, selector: statsSelector(currentPeriod) },
+          { label: periodLabel(plan.comparePeriod, plan.dayCount) ?? statsSelector(comparePeriod).type, selector: statsSelector(comparePeriod) },
         ],
         metrics,
         groupBy: 'player',
@@ -463,8 +447,8 @@ export class QueryPlanExecutor {
         refresh: false,
         ...(playerIds ? { playerIds } : {}),
         ...(signal ? { signal } : {}),
-        ...(currentPeriod.kind === 'time_range'
-          ? { from: currentPeriod.selector.from, to: currentPeriod.selector.to }
+        ...(currentPeriod.kind === 'time_period'
+          ? { selector: currentPeriod.selector }
           : { recentN: currentPeriod.count }),
       };
       const search = await domain.searchMatches(searchInput);

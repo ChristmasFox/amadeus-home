@@ -15,6 +15,7 @@ import type {
   PubgStatsPresentation,
   PubgStatusPresentation,
   PubgTeamDamagePresentation,
+  PubgPresentationCoverage,
 } from '../contracts/pubg.js';
 import {
   assertValid,
@@ -34,6 +35,7 @@ export interface PubgToolPresentationInput {
   data: unknown;
   dataUpdatedAt: string;
   sourceRange?: PubgSourceRange;
+  coverage?: PubgPresentationCoverage;
   queryResolved?: Record<string, unknown>;
   evidenceRefs?: {
     matchIds?: string[];
@@ -41,6 +43,12 @@ export interface PubgToolPresentationInput {
     fields?: string[];
   };
   error?: { code?: string; reason?: string };
+  teamDamage?: {
+    aggregateByActor?: boolean;
+    actorPlayerId?: string;
+    victimPlayerId?: string;
+  };
+  presentationStyle?: 'public_agent';
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -137,6 +145,28 @@ function queryLabel(input: PubgToolPresentationInput, fallback: string): string 
   return text(selector.label ?? record(query.summary).periodLabel, fallback);
 }
 
+function publicPeriodLabel(input: PubgToolPresentationInput, fallback: string): string {
+  let label = queryLabel(input, '');
+  if (!label) {
+    const query = record(input.queryResolved);
+    const selector = record(query.resolvedSelector ?? query.selector);
+    const value = stringOrNull(selector.value);
+    label = value ? ({
+      today: '今日', yesterday: '昨天', last_night: '昨晚', last_7_days: '最近七天',
+      previous_7_days: '此前七天', this_week: '本周', last_week: '上周',
+    } as Record<string, string>)[value] ?? value : fallback;
+  }
+  return label === '今天' ? '今日' : label;
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  matches: '场次', kills: '击杀', assists: '助攻', damage: '伤害', avg_damage: '场均伤害',
+  kd: 'KD', deaths: '死亡', wins: '胜利', top10: '前十', rank: '排名', dbnos: '倒地',
+  revives: '救援', headshot_kills: '爆头击杀', survival_time: '生存时间', longest_kill: '最远击杀',
+  avg_kills: '场均击杀', avg_rank: '场均排名', top10_rate: '前十率', denominatorZero: '零死亡场次',
+  performance_score: '表现分', chicken_index: '吃鸡指数',
+};
+
 function statusMessage(status: PubgPresentationStatus): string {
   if (status === 'partial') return '结果不完整，缺失事实保持为未知。';
   if (status === 'no_matches') return '没有找到符合条件的比赛。';
@@ -144,10 +174,10 @@ function statusMessage(status: PubgPresentationStatus): string {
   return '';
 }
 
-function base(input: PubgToolPresentationInput): { status: PubgPresentationStatus; dataUpdatedAt: string; sourceRange?: PubgSourceRange } {
+function base(input: PubgToolPresentationInput): { status: PubgPresentationStatus; dataUpdatedAt: string; sourceRange?: PubgSourceRange; coverage?: PubgPresentationCoverage } {
   const status = input.status ?? 'ok';
   const range = sourceRange(input);
-  return { status, dataUpdatedAt: input.dataUpdatedAt, ...(range ? { sourceRange: range } : {}) };
+  return { status, dataUpdatedAt: input.dataUpdatedAt, ...(range ? { sourceRange: range } : {}), ...(input.coverage ? { coverage: input.coverage } : {}) };
 }
 
 function knownFor(input: PubgToolPresentationInput, extra: string[] = []): Set<string> {
@@ -193,11 +223,20 @@ export function buildPubgStatsPresentation(input: PubgToolPresentationInput): Pu
       ? '战绩已生成。'
       : `共 ${matchCount} 场。`;
   const query = record(input.queryResolved);
+  const reference = record(query.reference);
+  const orderBy = record(query.orderBy);
+  const requestedMetrics = Array.isArray(query.metrics) ? query.metrics : [];
+  const subjectLabel = reference.subjectExplicit === true ? '玩家' : '队伍';
+  const operation = text(data.operation ?? query.operation, 'report');
+  const requestedMetric = stringOrNull(orderBy.metric) ?? stringOrNull(requestedMetrics[0]);
+  const publicHeadline = operation === 'rank'
+    ? `${publicPeriodLabel(input, 'PUBG')}${requestedMetric ? METRIC_LABELS[requestedMetric] ?? requestedMetric : ''}榜`
+    : `${publicPeriodLabel(input, 'PUBG')}${subjectLabel}战绩`;
   const presentation: PubgStatsPresentation = {
     ...base(input),
     type: 'pubg_stats',
-    headline: queryLabel(input, 'PUBG 战绩'),
-    operation: text(data.operation ?? query.operation, 'report'),
+    headline: input.presentationStyle === 'public_agent' ? publicHeadline : queryLabel(input, 'PUBG 战绩'),
+    operation,
     groupBy: text(data.groupBy ?? query.groupBy, 'player'),
     summary: `${statusMessage(input.status ?? 'ok')}${statusMessage(input.status ?? 'ok') ? '\n' : ''}${summaryText}`,
     rows,
@@ -301,7 +340,7 @@ export function buildPubgMatchDetailPresentation(input: PubgToolPresentationInpu
   return assertValid(validatePubgMatchDetailPresentation(presentation, known));
 }
 
-export function buildPubgMatchReviewPresentation(input: { data: unknown; dataUpdatedAt: string; status?: PubgPresentationStatus; sourceRange?: PubgSourceRange; evidenceRefs?: PubgToolPresentationInput['evidenceRefs'] }): PubgMatchReviewPresentation {
+export function buildPubgMatchReviewPresentation(input: PubgToolPresentationInput): PubgMatchReviewPresentation {
   const data = record(input.data);
   const facts = record(data.facts);
   const match = record(facts.match);
@@ -319,9 +358,7 @@ export function buildPubgMatchReviewPresentation(input: { data: unknown; dataUpd
   const mapName = typeof match.mapName === 'string' ? match.mapName : '未知地图';
   const ordinal = numberOrNull(match.ordinal);
   const candidate: PubgMatchReviewPresentation = {
-    status: input.status ?? 'ok',
-    dataUpdatedAt: input.dataUpdatedAt,
-    ...(input.sourceRange ? { sourceRange: input.sourceRange } : {}),
+    ...base(input),
     type: 'pubg_match_review',
     headline: `${ordinal === null ? '' : `第${ordinal}局 · `}${mapName}`,
     overview: {
@@ -407,37 +444,93 @@ function playerName(value: unknown): string {
 export function buildPubgTeamDamagePresentation(input: PubgToolPresentationInput): PubgTeamDamagePresentation {
   const data = record(input.data);
   const known = knownFor(input);
-  const directions = Array.isArray(data.directions) ? data.directions.flatMap((item) => {
+  const rawDirections = Array.isArray(data.directions) ? data.directions.flatMap((item) => {
     const row = record(item);
+    const actorId = stringOrNull(record(row.actor).playerId);
+    const victimId = stringOrNull(record(row.victim).playerId);
+    if (input.teamDamage?.actorPlayerId && actorId !== input.teamDamage.actorPlayerId) return [];
+    if (input.teamDamage?.victimPlayerId && victimId !== input.teamDamage.victimPlayerId) return [];
     const actor = playerName(row.actor);
     const victim = playerName(row.victim);
     return [{
       actor,
       victim,
+      actorId,
       hitCount: numberOrNull(row.hitCount),
       damage: numberOrNull(row.damage),
+      knownHitCount: numberOrNull(row.knownHitCount) ?? numberOrNull(row.hitCount) ?? 0,
+      knownDamage: numberOrNull(row.knownDamage) ?? numberOrNull(row.damage) ?? 0,
       complete: row.complete === true,
       evidenceRefs: evidenceFor(row, known),
     }];
   }) : [];
+  const completeCoverage = input.coverage?.complete ?? data.complete === true;
+  let actorTotals: PubgTeamDamagePresentation['actorTotals'];
+  let rankingBasis: PubgTeamDamagePresentation['rankingBasis'];
+  if (input.teamDamage?.aggregateByActor) {
+    const totals = [...rawDirections.reduce((aggregates, row) => {
+      const key = row.actorId ?? row.actor;
+      const total = aggregates.get(key) ?? {
+        actor: row.actor,
+        damage: 0,
+        hitCount: 0,
+        knownDamage: 0,
+        knownHitCount: 0,
+        complete: completeCoverage,
+        evidenceRefs: new Set<string>(),
+      };
+      total.knownDamage += row.knownDamage;
+      total.knownHitCount += row.knownHitCount;
+      if (row.damage === null || row.hitCount === null || !row.complete) total.complete = false;
+      else {
+        total.damage += row.damage;
+        total.hitCount += row.hitCount;
+      }
+      for (const ref of row.evidenceRefs) total.evidenceRefs.add(ref);
+      aggregates.set(key, total);
+      return aggregates;
+    }, new Map<string, { actor: string; damage: number; hitCount: number; knownDamage: number; knownHitCount: number; complete: boolean; evidenceRefs: Set<string> }>()).values()]
+      .map((total) => ({
+        ...total,
+        damage: completeCoverage && total.complete ? total.damage : null,
+        hitCount: completeCoverage && total.complete ? total.hitCount : null,
+        complete: completeCoverage && total.complete,
+        evidenceRefs: [...total.evidenceRefs],
+      }));
+    const rankByCompleteDamage = completeCoverage && totals.every((total) => total.complete);
+    rankingBasis = rankByCompleteDamage ? 'damage' : 'knownDamage';
+    totals.sort((left, right) => (rankByCompleteDamage ? right.damage ?? 0 : right.knownDamage) - (rankByCompleteDamage ? left.damage ?? 0 : left.knownDamage)
+      || left.actor.localeCompare(right.actor));
+    actorTotals = totals.map((total, index) => ({ ...total, position: index + 1 }));
+  }
+  const directions = rawDirections.map(({ actorId: _actorId, knownDamage, knownHitCount, ...direction }) => ({
+    ...direction,
+    ...(input.presentationStyle === 'public_agent' ? { knownDamage, knownHitCount } : {}),
+  }));
   const source = stringOrNull(data.source);
   const meleeKind = stringOrNull(data.meleeKind);
   const direction = text(data.direction, directions.length ? directions.map((item) => `${item.actor} → ${item.victim}`).join('、') : 'all directions');
+  const publicDamageAction = meleeKind === 'KICK' ? '队友踢击' : meleeKind === 'PUNCH' ? '队友拳击' : meleeKind === 'OTHER' ? '队友近战' : '队友伤害';
+  const publicHeadline = `${publicPeriodLabel(input, '')}${publicDamageAction}`;
   const totalHitCount = numberOrNull(data.totalHitCount);
   const totalDamage = numberOrNull(data.totalDamage);
-  const summary = input.status === 'partial'
-    ? '部分 Telemetry 暂不可用，未知数量没有被当作 0。'
-    : directions.length ? `共 ${directions.length} 个方向。` : statusMessage(input.status ?? 'ok') || '未发现队友动作。';
+  const summary = input.status === 'partial' || !completeCoverage
+    ? input.presentationStyle === 'public_agent' && !directions.length
+      ? '队友伤害资料不可用或覆盖不完整，不能据此认定为 0。'
+      : '部分 Telemetry 暂不可用，未知数量没有被当作 0。'
+    : actorTotals ? `队友伤害按已覆盖资料汇总，共 ${actorTotals.length} 名有记录队员。`
+      : directions.length ? `共 ${directions.length} 个方向。` : statusMessage(input.status ?? 'ok') || '未发现队友动作。';
   const candidate: PubgTeamDamagePresentation = {
     ...base(input),
     type: 'pubg_team_damage',
-    headline: 'PUBG 队友动作/误伤',
+    headline: input.presentationStyle === 'public_agent' ? publicHeadline : 'PUBG 队友动作/误伤',
     direction,
     source,
     meleeKind,
     totalHitCount,
     totalDamage,
     directions,
+    ...(actorTotals ? { actorTotals, ...(rankingBasis ? { rankingBasis } : {}) } : {}),
     summary,
     evidenceRefs: input.evidenceRefs?.matchIds ?? [],
   };

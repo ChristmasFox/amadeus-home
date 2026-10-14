@@ -14,6 +14,7 @@ import type {
   PubgStatsPresentation,
   PubgStatusPresentation,
   PubgTeamDamagePresentation,
+  PubgPresentationCoverage,
   PresentationTextItem,
 } from '../contracts/pubg.js';
 
@@ -106,13 +107,33 @@ function sourceRange(value: unknown, path: string, errors: string[]): PubgSource
   return { from, to, ...(segments.length ? { segments } : {}) };
 }
 
-function base(value: Record<string, unknown>, expectedType: string, errors: string[], path = 'presentation'): { status: PubgPresentationStatus; dataUpdatedAt: string; sourceRange?: PubgSourceRange } {
+function presentationCoverage(value: unknown, path: string, errors: string[]): PubgPresentationCoverage | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    errors.push(`${path} must be an object`);
+    return undefined;
+  }
+  const row = value as Record<string, unknown>;
+  const status = stringValue(row.status, `${path}.status`, errors);
+  const complete = typeof row.complete === 'boolean' ? row.complete : (errors.push(`${path}.complete must be boolean`), false);
+  const freshness = ['fresh', 'stale', 'unknown'].includes(String(row.freshness))
+    ? row.freshness as PubgPresentationCoverage['freshness']
+    : (errors.push(`${path}.freshness is invalid`), 'unknown' as const);
+  const checkedAt = row.checkedAt === null ? null : iso(row.checkedAt, `${path}.checkedAt`, errors, false) ?? null;
+  const coverageStart = row.coverageStart === null ? null : iso(row.coverageStart, `${path}.coverageStart`, errors, false) ?? null;
+  const coverageEnd = row.coverageEnd === null ? null : iso(row.coverageEnd, `${path}.coverageEnd`, errors, false) ?? null;
+  const sourceUnavailable = typeof row.sourceUnavailable === 'boolean' ? row.sourceUnavailable : (errors.push(`${path}.sourceUnavailable must be boolean`), false);
+  return status ? { status, complete, freshness, checkedAt, coverageStart, coverageEnd, sourceUnavailable } : undefined;
+}
+
+function base(value: Record<string, unknown>, expectedType: string, errors: string[], path = 'presentation'): { status: PubgPresentationStatus; dataUpdatedAt: string; sourceRange?: PubgSourceRange; coverage?: PubgPresentationCoverage } {
   if (value.type !== expectedType) errors.push(`${path}.type must be ${expectedType}`);
   const statusValue = value.status;
   if (!['ok', 'partial', 'no_matches', 'error'].includes(String(statusValue))) errors.push(`${path}.status is invalid`);
   const dataUpdatedAt = iso(value.dataUpdatedAt, `${path}.dataUpdatedAt`, errors) ?? '';
   const range = sourceRange(value.sourceRange, `${path}.sourceRange`, errors);
-  return { status: statusValue as PubgPresentationStatus, dataUpdatedAt, ...(range ? { sourceRange: range } : {}) };
+  const coverage = presentationCoverage(value.coverage, `${path}.coverage`, errors);
+  return { status: statusValue as PubgPresentationStatus, dataUpdatedAt, ...(range ? { sourceRange: range } : {}), ...(coverage ? { coverage } : {}) };
 }
 
 function scalarRecord(value: unknown, path: string, errors: string[]): Record<string, PubgPresentationScalar> {
@@ -337,12 +358,38 @@ export function validatePubgTeamDamagePresentation(value: unknown, knownEvidence
     const victim = stringValue(value.victim, `directions[${index}].victim`, errors);
     const hitCount = finiteOrNull(value.hitCount, `directions[${index}].hitCount`, errors);
     const damage = finiteOrNull(value.damage, `directions[${index}].damage`, errors);
+    const knownHitCount = value.knownHitCount === undefined ? undefined : finiteOrNull(value.knownHitCount, `directions[${index}].knownHitCount`, errors);
+    const knownDamage = value.knownDamage === undefined ? undefined : finiteOrNull(value.knownDamage, `directions[${index}].knownDamage`, errors);
     const complete = value.complete === true || value.complete === false ? value.complete : (errors.push(`directions[${index}].complete must be boolean`), false);
     const refsValue = refs(value.evidenceRefs, `directions[${index}].evidenceRefs`, errors, knownEvidence);
-    if (actor && victim) directions.push({ actor, victim, hitCount: hitCount ?? null, damage: damage ?? null, complete, evidenceRefs: refsValue });
+    if (actor && victim) directions.push({ actor, victim, hitCount: hitCount ?? null, damage: damage ?? null, ...(knownHitCount === undefined ? {} : { knownHitCount: knownHitCount ?? 0 }), ...(knownDamage === undefined ? {} : { knownDamage: knownDamage ?? 0 }), complete, evidenceRefs: refsValue });
   });
+  let actorTotals: PubgTeamDamagePresentation['actorTotals'];
+  if (row.actorTotals !== undefined) {
+      if (!Array.isArray(row.actorTotals)) errors.push('actorTotals must be an array');
+      else {
+        const parsedActorTotals: NonNullable<PubgTeamDamagePresentation['actorTotals']> = [];
+        row.actorTotals.forEach((item, index) => {
+          if (!item || typeof item !== 'object') { errors.push(`actorTotals[${index}] must be an object`); return; }
+          const total = item as Record<string, unknown>;
+          const actor = stringValue(total.actor, `actorTotals[${index}].actor`, errors);
+          const damage = finiteOrNull(total.damage, `actorTotals[${index}].damage`, errors);
+          const hitCount = finiteOrNull(total.hitCount, `actorTotals[${index}].hitCount`, errors);
+          const knownDamage = finiteOrNull(total.knownDamage, `actorTotals[${index}].knownDamage`, errors);
+          const knownHitCount = finiteOrNull(total.knownHitCount, `actorTotals[${index}].knownHitCount`, errors);
+          const complete = typeof total.complete === 'boolean' ? total.complete : (errors.push(`actorTotals[${index}].complete must be boolean`), false);
+          const position = finiteOrNull(total.position, `actorTotals[${index}].position`, errors);
+          const evidenceRefs = refs(total.evidenceRefs, `actorTotals[${index}].evidenceRefs`, errors, knownEvidence);
+          if (actor) parsedActorTotals.push({ actor, damage: damage ?? null, hitCount: hitCount ?? null, knownDamage: knownDamage ?? 0, knownHitCount: knownHitCount ?? 0, complete, position: position ?? index + 1, evidenceRefs });
+        });
+      actorTotals = parsedActorTotals;
+    }
+  }
+  const rankingBasis = row.rankingBasis === undefined ? undefined
+    : row.rankingBasis === 'damage' || row.rankingBasis === 'knownDamage' ? row.rankingBasis
+      : (errors.push('rankingBasis is invalid'), undefined);
   if (!headline || !direction || !summary) return result(value as PubgTeamDamagePresentation, errors);
-  return result({ ...common, type: 'pubg_team_damage', headline, direction, source, meleeKind, totalHitCount: totalHitCount ?? null, totalDamage: totalDamage ?? null, directions, summary, evidenceRefs }, errors);
+  return result({ ...common, type: 'pubg_team_damage', headline, direction, source, meleeKind, totalHitCount: totalHitCount ?? null, totalDamage: totalDamage ?? null, directions, ...(actorTotals ? { actorTotals } : {}), ...(rankingBasis ? { rankingBasis } : {}), summary, evidenceRefs }, errors);
 }
 
 export function validatePubgPresentation(value: unknown, knownEvidence?: ReadonlySet<string>): ValidationResult<PubgPresentation> {

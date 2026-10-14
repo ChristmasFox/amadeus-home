@@ -43,6 +43,7 @@ function makePlan(overrides: Partial<QueryPlan> = {}): QueryPlan {
     metric: null,
     meleeKind: null,
     period: 'today',
+    dayCount: null,
     comparePeriod: null,
     matchCount: null,
     needsClarification: false,
@@ -128,13 +129,7 @@ test('team stats uses the authorized session, bounded selector, no refresh, and 
     method: 'queryStats',
     input: {
       sessionId: 'session-1',
-      selector: {
-        type: 'time_range',
-        from: '2026-01-14T22:00:00.000Z',
-        to: NOW.toISOString(),
-        timezone: 'Asia/Shanghai',
-        businessDayStart: '06:00',
-      },
+      selector: { type: 'relative_period', value: 'today' },
       metrics: ['matches', 'kills', 'assists', 'damage', 'kd'],
       operation: 'report',
       groupBy: 'player',
@@ -193,13 +188,7 @@ test('last seven days passes an explicit half-open range to friendly damage quer
   assert.equal(calls[0]?.method, 'queryTeamDamage');
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
-    selector: {
-      type: 'time_range',
-      from: '2026-01-08T12:00:00.000Z',
-      to: NOW.toISOString(),
-      timezone: 'Asia/Shanghai',
-      businessDayStart: '06:00',
-    },
+    selector: { type: 'relative_period', value: 'last_7_days' },
     refresh: false,
   });
 });
@@ -213,13 +202,7 @@ test('kick query passes the exact melee category to the shared Domain telemetry 
   assert.equal(result.kind, 'executed');
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
-    selector: {
-      type: 'time_range',
-      from: '2026-01-13T22:00:00.000Z',
-      to: '2026-01-14T22:00:00.000Z',
-      timezone: 'Asia/Shanghai',
-      businessDayStart: '06:00',
-    },
+    selector: { type: 'relative_period', value: 'yesterday' },
     refresh: false,
     meleeKind: 'KICK',
   });
@@ -234,13 +217,7 @@ test('friendly fire resolves both named directions only inside the authorized ro
   assert.equal(pair.kind, 'executed');
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
-    selector: {
-      type: 'time_range',
-      from: '2026-01-13T22:00:00.000Z',
-      to: '2026-01-14T22:00:00.000Z',
-      timezone: 'Asia/Shanghai',
-      businessDayStart: '06:00',
-    },
+    selector: { type: 'relative_period', value: 'yesterday' },
     refresh: false,
     actorPlayer: 'player-1',
     victimPlayer: 'player-2',
@@ -264,13 +241,7 @@ test('friendly fire can rank the authorized actor without asking Domain to trust
   assert.equal(result.kind, 'executed');
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
-    selector: {
-      type: 'time_range',
-      from: '2026-01-14T22:00:00.000Z',
-      to: NOW.toISOString(),
-      timezone: 'Asia/Shanghai',
-      businessDayStart: '06:00',
-    },
+    selector: { type: 'relative_period', value: 'today' },
     refresh: false,
   });
 });
@@ -289,13 +260,7 @@ test('friendly fire follow-up inherits the prior authorized player and period', 
   assert.equal(result.plan.actorName, 'Alpha');
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
-    selector: {
-      type: 'time_range',
-      from: '2026-01-13T22:00:00.000Z',
-      to: '2026-01-14T22:00:00.000Z',
-      timezone: 'Asia/Shanghai',
-      businessDayStart: '06:00',
-    },
+    selector: { type: 'relative_period', value: 'yesterday' },
     refresh: false,
   });
 });
@@ -323,12 +288,53 @@ test('comparison uses two explicit supported segments and deterministic metric o
   });
   assert.equal(result.kind, 'executed');
   assert.equal(calls[0]?.method, 'compareStats');
-  const input = calls[0]?.input as { sessionId: string; segments: Array<{ selector: { from: string; to: string } }>; refresh: boolean };
+  const input = calls[0]?.input as { sessionId: string; segments: Array<{ selector: { type: string; value?: string } }>; refresh: boolean };
   assert.equal(input.sessionId, 'session-1');
   assert.equal(input.refresh, false);
-  assert.deepEqual(input.segments.map((segment) => [segment.selector.from, segment.selector.to]), [
-    ['2026-01-14T22:00:00.000Z', NOW.toISOString()],
-    ['2026-01-13T22:00:00.000Z', '2026-01-14T22:00:00.000Z'],
+  assert.deepEqual(input.segments.map((segment) => segment.selector), [
+    { type: 'relative_period', value: 'today' },
+    { type: 'relative_period', value: 'yesterday' },
+  ]);
+});
+
+test('previous period comparison sends Domain selectors for prior time windows and match batches', async () => {
+  const first = setup();
+  const daily = await first.executor.execute({
+    authorizedQuery: first.query,
+    plan: makePlan({ intent: 'comparison', period: 'today', comparePeriod: 'previous_period', metric: 'kills' }),
+  });
+  assert.equal(daily.kind, 'executed');
+  assert.deepEqual((first.calls[0]?.input as { segments: Array<{ selector: unknown }> }).segments.map(segment => segment.selector), [
+    { type: 'relative_period', value: 'today' },
+    { type: 'relative_period', value: 'yesterday' },
+  ]);
+
+  const matches = setup();
+  const recent = await matches.executor.execute({
+    authorizedQuery: matches.query,
+    plan: makePlan({ intent: 'comparison', period: 'recent_matches', comparePeriod: 'previous_period', matchCount: 3, metric: 'kills' }),
+  });
+  assert.equal(recent.kind, 'executed');
+  assert.deepEqual((matches.calls[0]?.input as { segments: Array<{ selector: unknown }> }).segments.map(segment => segment.selector), [
+    { type: 'last_n_matches', count: 3, offset: 0 },
+    { type: 'last_n_matches', count: 3, offset: 3 },
+  ]);
+
+  const days = setup();
+  const recentDays = await days.executor.execute({
+    authorizedQuery: days.query,
+    plan: makePlan({ intent: 'comparison', period: 'recent_days', dayCount: 3, comparePeriod: 'previous_period', metric: 'kills' }),
+  });
+  assert.equal(recentDays.kind, 'executed');
+  assert.deepEqual((days.calls[0]?.input as { segments: Array<{ label: string; selector: unknown }> }).segments, [
+    { label: '最近3天', selector: { type: 'recent_days', count: 3 } },
+    { label: '上一周期', selector: {
+      type: 'time_range',
+      from: '2026-01-09T22:00:00.000Z',
+      to: '2026-01-12T22:00:00.000Z',
+      timezone: 'Asia/Shanghai',
+      businessDayStart: '06:00',
+    } },
   ]);
 });
 
@@ -346,8 +352,7 @@ test('period review uses explicit from/to, refresh false, and the Domain result-
     pageSize: 4,
     sort: 'desc',
     refresh: false,
-    from: '2026-01-13T22:00:00.000Z',
-    to: '2026-01-14T22:00:00.000Z',
+    selector: { type: 'relative_period', value: 'yesterday' },
   });
   assert.deepEqual(calls[1]?.input, { sessionId: 'session-1', searchResultSetId: 'review-set-1' });
   if (result.kind === 'executed') assert.equal(result.envelope.status, 'partial');
@@ -362,10 +367,10 @@ test('follow-up inherits only the prior validated plan and resolves its authoriz
     plan: makePlan({ intent: 'follow_up', subject: 'previous_player', playerName: null, metric: 'damage', period: null }),
   });
   assert.equal(result.kind, 'executed');
-  const input = calls[0]?.input as { playerIds?: string[]; metrics: string[]; selector: { from: string; to: string } };
+  const input = calls[0]?.input as { playerIds?: string[]; metrics: string[]; selector: { type: string; value?: string } };
   assert.deepEqual(input.playerIds, ['player-2']);
   assert.deepEqual(input.metrics, ['damage']);
-  assert.deepEqual([input.selector.from, input.selector.to], ['2026-01-13T22:00:00.000Z', '2026-01-14T22:00:00.000Z']);
+  assert.deepEqual(input.selector, { type: 'relative_period', value: 'yesterday' });
 });
 
 test('previous-period request without session context clarifies instead of falling back to today', async () => {

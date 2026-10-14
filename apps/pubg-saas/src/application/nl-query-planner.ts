@@ -47,6 +47,7 @@ export const QueryPlanSchema = z.object({
     'today',
     'yesterday',
     'last_night',
+    'recent_days',
     'last_7_days',
     'previous_7_days',
     'this_week',
@@ -55,6 +56,7 @@ export const QueryPlanSchema = z.object({
     'recent_matches',
     'previous_period',
   ]).nullable(),
+  dayCount: z.number().int().min(1).max(366).nullable().optional(),
   comparePeriod: z.enum([
     'today',
     'yesterday',
@@ -83,6 +85,7 @@ export const FALLBACK_QUERY_PLAN: QueryPlan = {
   metric: null,
   meleeKind: null,
   period: null,
+  dayCount: null,
   comparePeriod: null,
   matchCount: null,
   needsClarification: true,
@@ -131,6 +134,7 @@ const SYSTEM_INSTRUCTIONS = [
   'Never choose a tenant, team, user, channel, session, recipient, or data source.',
   'Use null for slots that are not stated or cannot be safely inferred. Set needsClarification when needed.',
   'For friendly-fire damage, use actorName and victimName only when those roster members are explicitly named; either slot may be null.',
+  'When the user asks for a specific recent N-day game-day window, use period recent_days and set dayCount to the stated number (1–366); the Domain applies the configured 06:00 boundary. Keep last_7_days for the existing rolling seven-day window. Leave dayCount null when no count is stated.',
   'Do not answer the user or invent facts; classify the request only.',
 ].join('\n');
 

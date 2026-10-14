@@ -41,7 +41,7 @@ const teamStats = examples('team-stats', [
   { message: '过去七天队伍吃了几把鸡？', plan: { metric: 'wins', period: 'last_7_days' } },
   { message: '上周每场平均伤害多少？', plan: { metric: 'avg_damage', period: 'last_week' } },
   { message: '这周大家总助攻多少？', plan: { metric: 'assists', period: 'this_week' } },
-  { message: '昨天队伍救起队友几次？', plan: { metric: 'revives', period: 'yesterday' } },
+  { message: '最近三天队伍救起队友几次？', plan: { metric: 'revives', period: 'recent_days', dayCount: 3 } },
   { message: '上一局我们队打了几场？', plan: { metric: 'matches', period: 'last_match' } },
   { message: '最近五局一共多少击杀？', plan: { metric: 'kills', period: 'recent_matches', matchCount: 5 } },
   { message: '前一个周期的队伍 KD 是多少？', plan: { metric: 'kd', period: 'previous_period', needsClarification: true } },

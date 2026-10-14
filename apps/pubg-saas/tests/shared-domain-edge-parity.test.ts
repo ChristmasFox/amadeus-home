@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Pool } from 'pg';
+import { buildPubgToolPresentation, type PubgToolName } from '@agent/presentation';
 import {
   CanonicalQuerySchema, createTeamContext, DeterministicQueryEngine, PubgDomainService, SqlitePubgRepository,
   SqlitePubgRepositoryAdapter, TelemetryWorker, type Coverage, type PubgRepositoryPort, type SourceInfo, type TeamConfig,
-  type ReviewEvidence, type TeamDamageQueryInput, type ToolEnvelope,
+  type Metric, type ReviewEvidence, type TeamDamageQueryInput, type ToolEnvelope,
 } from '@agent/pubg-domain';
 import { migratePublicDatabase, PostgresPubgRepository } from '../src/index.js';
 const databaseUrl = process.env.PUBG_SAAS_TEST_DATABASE_URL;
@@ -19,6 +20,27 @@ interface EdgeFixture {
   telemetry: Record<string, unknown[]>; damageExpected: Record<string, [number, number]>;
 }
 const original = JSON.parse(readFileSync(new URL('../../../packages/pubg-domain/tests/fixtures/shared-edge-cases.json', import.meta.url), 'utf8')) as EdgeFixture;
+
+function presentEnvelope(envelope: ToolEnvelope, toolName: PubgToolName, teamDamage?: { aggregateByActor?: boolean }) {
+  return buildPubgToolPresentation(toolName, {
+    status: envelope.status,
+    data: envelope.data,
+    dataUpdatedAt: envelope.asOf,
+    queryResolved: envelope.queryResolved,
+    evidenceRefs: envelope.evidenceRefs,
+    coverage: {
+      status: envelope.coverage.status,
+      complete: envelope.coverage.complete,
+      freshness: envelope.coverage.freshness,
+      checkedAt: envelope.coverage.checkedAt ?? null,
+      coverageStart: envelope.coverage.coverageStart ?? null,
+      coverageEnd: envelope.coverage.coverageEnd ?? null,
+      sourceUnavailable: envelope.coverage.sourceUnavailable,
+    },
+    ...(teamDamage ? { teamDamage } : {}),
+  }, { now: envelope.asOf, includeCoverage: true });
+}
+
 async function fixture() {
   const suffix = randomUUID(), tenant = `tenant-${suffix}`, bot = `bot-${suffix}`, channel = `channel-${suffix}`, user = `user-${suffix}`, session = `session-${suffix}`, directory = mkdtempSync(join(tmpdir(), 'pubg-shared-edge-'));
   const names = new Map([original.team.id, ...original.team.players.map(player => player.id), ...original.matches.map(match => match.matchId)].map(id => [id, `${suffix}-${id}`]));
@@ -64,6 +86,56 @@ version: 3, queryId: scenario.id, domain: 'pubg', subject: { type: 'team', ids: 
   } finally { await f.cleanup(); }
 });
 
+test('SQLite and PostgreSQL resolve named periods and produce identical stats presentations', { skip: !databaseUrl }, async () => {
+  const f = await fixture(); try {
+    const service = (repository: PubgRepositoryPort) => new PubgDomainService({
+      teamContext: f.context,
+      repository,
+      now: () => new Date(f.input.now),
+    });
+    const sqlite = service(f.privateRepo), postgres = service(f.publicRepo);
+    const expectedRanges: Record<string, [string, string]> = {
+      today: ['2026-09-18T22:00:00.000Z', f.input.now],
+      yesterday: ['2026-09-17T22:00:00.000Z', '2026-09-18T22:00:00.000Z'],
+      last_night: ['2026-09-18T10:00:00.000Z', '2026-09-18T22:00:00.000Z'],
+      last_7_days: ['2026-09-12T00:30:00.000Z', f.input.now],
+      previous_7_days: ['2026-09-05T00:30:00.000Z', '2026-09-12T00:30:00.000Z'],
+      this_week: ['2026-09-13T22:00:00.000Z', f.input.now],
+      last_week: ['2026-09-06T22:00:00.000Z', '2026-09-13T22:00:00.000Z'],
+    };
+    for (const [period, [start, end]] of Object.entries(expectedRanges)) {
+      const input = { sessionId: f.session, selector: { type: 'relative_period' as const, value: period }, metrics: ['matches', 'kills', 'damage'] as Metric[], refresh: false };
+      const [privateEnvelope, publicEnvelope] = await Promise.all([sqlite.queryStats(input), postgres.queryStats(input)]);
+      assert.deepEqual(publicEnvelope.data, privateEnvelope.data, `${period} stats`);
+      assert.deepEqual(publicEnvelope.evidenceRefs, privateEnvelope.evidenceRefs, `${period} evidence`);
+      const resolved = publicEnvelope.queryResolved.resolvedSelector as { start: string; end: string };
+      assert.deepEqual([resolved.start, resolved.end], [start, end], `${period} resolved range`);
+      const privatePresentation = presentEnvelope(privateEnvelope, 'pubg_query_stats');
+      const publicPresentation = presentEnvelope(publicEnvelope, 'pubg_query_stats');
+      assert.deepEqual(publicPresentation.presentation, privatePresentation.presentation, `${period} structured presentation`);
+      assert.equal(publicPresentation.displayText, privatePresentation.displayText, `${period} rendered presentation`);
+      assert.equal(publicPresentation.presentation.coverage?.freshness, privatePresentation.presentation.coverage?.freshness);
+    }
+    const recentDaysInput = {
+      sessionId: f.session,
+      selector: { type: 'recent_days' as const, count: 3 },
+      metrics: ['matches', 'kills', 'damage'] as Metric[],
+      refresh: false,
+    };
+    const [privateRecentDays, publicRecentDays] = await Promise.all([
+      sqlite.queryStats(recentDaysInput), postgres.queryStats(recentDaysInput),
+    ]);
+    const resolvedRecentDays = publicRecentDays.queryResolved.resolvedSelector as { start: string; end: string };
+    assert.deepEqual([resolvedRecentDays.start, resolvedRecentDays.end], ['2026-09-16T22:00:00.000Z', f.input.now]);
+    assert.deepEqual(publicRecentDays.data, privateRecentDays.data, 'recent three business days stats');
+    assert.deepEqual(publicRecentDays.evidenceRefs, privateRecentDays.evidenceRefs, 'recent three business days evidence');
+    const privateRecentPresentation = presentEnvelope(privateRecentDays, 'pubg_query_stats');
+    const publicRecentPresentation = presentEnvelope(publicRecentDays, 'pubg_query_stats');
+    assert.deepEqual(publicRecentPresentation.presentation, privateRecentPresentation.presentation, 'recent three days structured presentation');
+    assert.equal(publicRecentPresentation.displayText, privateRecentPresentation.displayText, 'recent three days rendered presentation');
+  } finally { await f.cleanup(); }
+});
+
 test('SQLite and PostgreSQL preserve damage/kick/melee facts, evidence, cache versions, partial unknowns and successful zero', { skip: !databaseUrl }, async () => {
   const f = await fixture(); try {
     const service = (repo: PubgRepositoryPort, version: string, mode: 'full' | 'partial' | 'zero' | 'unavailable') => new PubgDomainService({
@@ -79,6 +151,14 @@ team: f.input.team, store: repo, featureVersion: version,
     }
     const privateFull = service(f.privateRepo, 'edge-full', 'full'), publicFull = service(f.publicRepo, 'edge-full', 'full');
     const all = await pair(privateFull, publicFull); assert.equal(all.status, 'ok'); assert.deepEqual([all.data.totalHitCount, all.data.totalDamage], f.input.damageExpected.all);
+    const sqliteDisplay = presentEnvelope(await privateFull.queryTeamDamage({ sessionId: f.session, selector: { type: 'relative_period', value: 'yesterday' }, refresh: false }), 'pubg_query_team_damage', { aggregateByActor: true });
+    const postgresDisplay = presentEnvelope(await publicFull.queryTeamDamage({ sessionId: f.session, selector: { type: 'relative_period', value: 'yesterday' }, refresh: false }), 'pubg_query_team_damage', { aggregateByActor: true });
+    assert.deepEqual(postgresDisplay.presentation, sqliteDisplay.presentation, 'friendly damage presentation');
+    assert.equal(postgresDisplay.presentation.type, 'pubg_team_damage');
+    if (postgresDisplay.presentation.type === 'pubg_team_damage') {
+      assert.equal(postgresDisplay.presentation.rankingBasis, 'damage');
+      assert.ok(postgresDisplay.presentation.actorTotals?.every(total => total.damage !== null && total.hitCount !== null));
+    }
     assert.deepEqual(all.evidenceRefs.matchIds, [f.names.get('boundary'), f.names.get('late')]);
     for (const [kind, filter] of Object.entries({ kick: { actorPlayer: 'a', victimPlayer: 'b', source: 'MELEE' as const, meleeKind: 'KICK' as const }, punch: { source: 'MELEE' as const, meleeKind: 'PUNCH' as const }, melee: { source: 'MELEE' as const } })) {
       const result = await pair(privateFull, publicFull, filter); assert.deepEqual([result.data.totalHitCount, result.data.totalDamage], f.input.damageExpected[kind]);
@@ -92,6 +172,12 @@ team: f.input.team, store: repo, featureVersion: version,
     const partial = await pair(service(f.privateRepo, 'edge-partial', 'partial'), service(f.publicRepo, 'edge-partial', 'partial'));
     assert.equal(partial.status, 'partial'); assert.equal(partial.data.totalHitCount, null); assert.equal(partial.data.totalDamage, null);
     assert.deepEqual([partial.data.knownHitCount, partial.data.knownDamage], f.input.damageExpected.partialKnown); assert.equal(partial.coverage.complete, false); assert.deepEqual(partial.coverage.failedMatchIds, [f.names.get('late')]);
+    const partialPresentation = presentEnvelope(partial, 'pubg_query_team_damage', { aggregateByActor: true }).presentation;
+    assert.equal(partialPresentation.type, 'pubg_team_damage');
+    if (partialPresentation.type === 'pubg_team_damage') {
+      assert.equal(partialPresentation.rankingBasis, 'knownDamage');
+      assert.ok(partialPresentation.actorTotals?.every(total => total.damage === null && total.hitCount === null));
+    }
     const unknown = await pair(service(f.privateRepo, 'edge-unavailable', 'unavailable'), service(f.publicRepo, 'edge-unavailable', 'unavailable'));
     assert.equal(unknown.status, 'partial'); assert.equal(unknown.data.totalHitCount, null); assert.equal(unknown.data.totalDamage, null); assert.equal(unknown.data.knownHitCount, 0);
     const zero = await pair(service(f.privateRepo, 'edge-zero', 'zero'), service(f.publicRepo, 'edge-zero', 'zero'));
