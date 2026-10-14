@@ -4,29 +4,39 @@ Date: 2026-10-14 (Asia/Shanghai).
 
 ## Latest explicit runtime authorization — 2026-10-14
 
-Source commit `fb16818` fixes the KOOK silent-drop path. The previous request
-event prefilter admitted only bot mentions, `/pubg` commands and binding
-phrases; its own test discarded `查一下今天击杀`. It now admits bounded PUBG
-stats-query candidates without a mention, keeps unrelated chatter out of the
-model path, logs rate-limited structured drop reasons without message/actor
-data, and explicitly rejects messages authored by the configured bot. Existing
-DB-backed ingress limits still apply. The prior raw messages were not retained,
-so their individual historical parser rejection reason cannot be recovered.
+Source commit `da03953` removes the fixed-phrase/keyword gate from KOOK group
+ingress. Every schema-validated, non-bot text message is durably admitted under
+the existing per-user/channel/tenant/bot request limits and passed to a forced
+structured model classifier. Its finite actions are self/admin-delegated PUBG
+account declaration, team rename, stats query, legacy command, or unsupported
+(silent). Application code still owns validated KOOK mention IDs, live admin
+and membership checks, real PUBG lookup before account writes, tenant scope,
+query authorization, loop prevention and reply destination. Names must appear
+literally in the message; the model cannot produce identities. Only explicit
+legacy commands use deterministic parsing when the classifier is unavailable
+or returns no valid intent. Input is capped at 800 characters and generated
+output at 100 tokens. Drop and silent outcomes emit rate-limited structured
+reasons without message text, user IDs or secrets. Historical group payloads
+were not retained, so the exact per-message reason from the earlier incident
+cannot be reconstructed.
 
-The old channel `6115211415447433` and new channel `6521538183595713` are both
-listed by KOOK as text channels. Parser tests exercise both IDs, and the
-PostgreSQL integration test covers membership-gated lazy binding in a new
-channel. SaaS/PostgreSQL passes 120/120; private Kurisu passes 68/68; typecheck,
-architecture, secrets and diff checks pass. A dual-platform OCI build verified
-manifest `sha256:2779458c51433194631d092cbec2966fcbbd1ce1b3273d3f07522c4ff3252fbf`.
+KOOK lists old channel `6115211415447433` and new channel `6521538183595713` as
+text channels. Trusted-message tests exercise both IDs; PostgreSQL integration
+proves arbitrary chatter reaches the classifier and unsupported intent creates
+no reply, while old commands, self/admin binding and permissions remain
+covered. SaaS/PostgreSQL passes 121/121; private Kurisu passes 68/68; SaaS
+typecheck, architecture, secrets and diff checks pass. Local Buildx verified
+`linux/amd64` + `linux/arm64`, manifest
+`sha256:51e8d08f30e184c6eae5bb045cbf308704434d2c46473f5575f679fd10d85d70`.
 Only Gateway/Worker were recreated from
-`local/pubg-saas:git-fb1681868947aa57c2195a26ab81186f1110e951`. Both run with
-restart count 0; Worker, PostgreSQL and egress-proxy are healthy; Gateway's
-persisted KOOK session is connected (`last_sn=27`). PostgreSQL, egress-proxy
-and isolated 9Router IDs stayed unchanged. The two named planner rehearsal PG
-containers were removed without deleting volumes. No live message or PUBG
-request was sent; Arthur's manual channel test is next. Evidence and commands:
-`.agent/checkpoints/2026-10-14-pubg-saas-ingress-diagnostics-live.md`.
+`local/pubg-saas:git-da039536d2f7c37d47995282e8a001cacf0897c2`. Gateway is
+running with restart count 0 (the image has no Docker healthcheck); Worker is
+healthy with restart count 0. Persisted KOOK state is connected (`last_sn=27`,
+updated `2026-10-14T05:01:34.691Z`). PostgreSQL, egress-proxy and isolated
+9Router IDs are unchanged. The two named planner rehearsal PG containers were
+removed without deleting volumes. No real group message, PUBG request or model
+call was sent; Arthur's manual acceptance is next. Evidence and reproduction:
+`.agent/checkpoints/2026-10-14-pubg-saas-model-intent-router-live.md`.
 
 ## Operator-selected source implementation Goal — 2026-10-13
 

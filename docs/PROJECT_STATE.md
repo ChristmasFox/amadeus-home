@@ -1,33 +1,43 @@
 # Project State — 2026-10-14
 
-## 2026-10-14 — KOOK unmentioned-query admission and ingress diagnostics
+## 2026-10-14 — Model-routed KOOK group messages deployed
 
-Commit `fb16818` resolves the code-level silent-drop cause: `request-event.ts`
-previously filtered unmentioned natural-language queries before durable PG
-ingress. A regression reproducer for `查一下今天击杀` had asserted `null`.
-The local relevance gate now admits bounded account/team writes, supported
-stats-query phrases, and explicit `/pubg` commands without a bot mention;
-unrelated chat never reaches the model. Strict KOOK group identity/channel
-validation remains, and self-authored bot messages are rejected by both bot
-flag and configured bot ID. Rejections produce structured, per-reason/channel
-logs capped at one event per minute, containing no message, actor, or token.
-The existing durable per-user/channel/tenant/bot ingress rate limits remain.
+Source commit `da03953` removes `message-relevance.ts` and the matching gate in
+`request-event.ts`. Every trusted, bounded, non-bot text group message now
+enters durable ingress; current database per-user/channel/tenant/bot limits
+run before intent classification. A strict AI SDK tool schema allows only
+account declaration, team rename, stats query, legacy command, or unsupported.
+Unsupported intent completes silently. Model-generated names must occur
+literally in the message; actor, tenant, channel, authority and delegated
+recipient IDs remain application-owned, with delegated target sourced only
+from validated KOOK mentions. Fresh admin/member checks and real PUBG lookup
+before persistence remain unchanged. `/pubg` commands use deterministic
+parsing only as a failure fallback when classification returns no valid intent.
+Classifier input/output caps are 800 characters/100 tokens. Bounded structured
+logs record trusted/admission/processing drops and model silence reasons without
+message contents, user IDs, or secrets. Each reason/channel is log-throttled.
 
-Read-only KOOK channel listing confirmed old text channel `6115211415447433`
-and new text channel `6521538183595713`. Both pass the unmentioned-query parser
-regression, and PostgreSQL integration covers fresh member validation before
-lazy binding of a second channel. SaaS/PostgreSQL suite passed 120/120 and
-Kurisu regression 68/68; relevant typechecks, architecture, secrets and diff
-checks passed. Dual-platform image manifest:
-`sha256:2779458c51433194631d092cbec2966fcbbd1ce1b3273d3f07522c4ff3252fbf`.
-M204 now runs image `local/pubg-saas:git-fb1681868947aa57c2195a26ab81186f1110e951`
-on Gateway/Worker only. Both have restart count 0; Worker health is healthy;
-the Gateway has an active persisted KOOK session. PG, egress-proxy and 9Router
-containers retained their IDs. The two requested temporary planner rehearsal
-PostgreSQL containers were removed without deleting their volumes. No real
-message or PUBG request was sent; manual acceptance remains with Arthur. No
-private runtime, production deployment, or image push was performed. Detailed
-evidence: `.agent/checkpoints/2026-10-14-pubg-saas-ingress-diagnostics-live.md`.
+The KOOK text channels `6115211415447433` and `6521538183595713` are covered by
+trusted-event tests. PostgreSQL integration proves ordinary chatter reaches the
+classifier and unsupported intent enqueues no reply; prior binding tests still
+cover validated self claims, admin delegation, actual player lookup, conflicts,
+membership and cross-tenant isolation. SaaS/PostgreSQL passed 121/121, private
+Kurisu regression 68/68, SaaS typecheck and architecture check passed, and
+secrets/diff checks passed. OCI Buildx verified both platforms at manifest
+`sha256:51e8d08f30e184c6eae5bb045cbf308704434d2c46473f5575f679fd10d85d70`.
+
+On `pubg-saas-m2-clean`, only Gateway (`d153f94c8269`) and Worker
+(`7c0737c9dfa4`) were recreated from
+`local/pubg-saas:git-da039536d2f7c37d47995282e8a001cacf0897c2`; both restart
+counts are 0 and Worker is healthy. Gateway has no Docker healthcheck, but is
+running and its persisted KOOK session is connected (`last_sn=27`, updated
+`2026-10-14T05:01:34.691Z`). PostgreSQL (`e47fd49fcab5`), egress-proxy
+(`c5cd33cba219`) and 9Router (`2ce598008143`) retained their IDs. The stack
+`.env` remains mode 0600. No live message, PUBG request or model call was sent;
+Arthur's manual P3 test is next. The two temporary planner PG containers were
+removed earlier without volume deletion. No private OpenClaw/9Router action,
+image push or production deployment occurred. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-model-intent-router-live.md`.
 
 ## 2026-10-14 — Group-only account binding deployed to isolated SaaS
 
