@@ -68,6 +68,47 @@ test('ToolLoopAgent executes a selected domain tool and returns to the model for
   assert.equal(result.stepCount, 2);
 });
 
+test('ToolLoopAgent can call multiple tools in sequence before composing its final answer', async () => {
+  const model = new MockLanguageModelV4({ doGenerate: [
+    response([{ type: 'tool-call', toolCallId: 'team-info-1', toolName: 'team_info', input: JSON.stringify({ includeRoster: true }) }], 'tool-calls') as never,
+    response([{ type: 'tool-call', toolCallId: 'query-1', toolName: 'pubg_query', input: JSON.stringify({ selector: 'yesterday', metric: 'damage' }) }], 'tool-calls') as never,
+    response([{ type: 'text', text: '昨天 Alice 伤害最高；小队共覆盖两场，数据不完整。' }], 'stop') as never,
+  ] });
+  const calls: string[] = [];
+  const tools = {
+    team_info: tool({
+      description: 'Read the authorized team roster.',
+      inputSchema: z.object({ includeRoster: z.boolean() }).strict(),
+      execute: async input => {
+        calls.push('team_info');
+        assert.deepEqual(input, { includeRoster: true });
+        return { status: 'ok', team: 'Fixture Squad', roster: ['Alice', 'Bob'] };
+      },
+    }),
+    pubg_query: tool({
+      description: 'Read authorized PUBG Domain facts.',
+      inputSchema: z.object({ selector: z.string(), metric: z.string() }).strict(),
+      execute: async input => {
+        calls.push('pubg_query');
+        assert.deepEqual(input, { selector: 'yesterday', metric: 'damage' });
+        return { status: 'partial', coverage: { complete: false }, asOf: '2026-10-14T00:00:00.000Z', facts: 'Alice 420 damage; Bob 180 damage' };
+      },
+    }),
+  };
+  const result = await runPublicKookAgent({
+    model,
+    tools,
+    messages: [{ role: 'user', content: '[成员1] 昨天谁伤害最高？' }],
+    signal: new AbortController().signal,
+    currentMessage: '昨天谁伤害最高？',
+  });
+  assert.deepEqual(calls, ['team_info', 'pubg_query']);
+  assert.match(result.text, /Alice 伤害最高/u);
+  assert.equal(result.stepCount, 3);
+  assert.match(JSON.stringify(model.doGenerateCalls[2]?.prompt), /Alice 420 damage/u,
+    'the final model step receives the actual query-tool result');
+});
+
 test('provider failures reject from the SDK wrapper for the ingress handler to persist and answer safely', async () => {
   const model = new MockLanguageModelV4({ doGenerate: async () => { throw new Error('private provider detail and key'); } });
   await assert.rejects(runPublicKookAgent({
