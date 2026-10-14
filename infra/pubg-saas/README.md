@@ -45,6 +45,12 @@ counters and alert-code counts; they do not include tenant, guild, team, player
 or actor labels. Counters reset when that Worker process restarts. Health remains
 on its separate container-loopback `/healthz` endpoint.
 
+On M204's OrbStack machine, Docker reported the loopback port binding, and the
+container endpoint returned 200, but a request to the host-published port
+returned 502. The cause is not established, so host-side scraping remains
+unverified on OrbStack. Do not connect the Worker to the public egress network
+to work around it; use `docker compose exec worker` for an in-container check.
+
 ## Build an immutable local image
 
 Build from the Git checkout and tag the image with its full source commit. The

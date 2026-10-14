@@ -1,5 +1,33 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Current-source M204 SaaS image and recovery acceptance
+
+Commit `20b06da` built natively on OrbStack ARM64 machine `nyannyan` as
+`local/pubg-saas:git-20b06da` (`sha256:492a72e07d7fcd7bc169b2bc8e0f8ac409d050f6843c93b69d77277a2e181f17`).
+Two uniquely named isolated Compose projects used separate fresh PG18.1
+containers and volumes. Source migrations through `0014` passed, the Worker was
+healthy on an empty queue, and the Gateway ran only in dry-run mode. The Worker
+metrics endpoint returned 200 inside its container. Its Compose host-loopback
+binding returned 502 when requested from the OrbStack machine; host scraping
+there remains unverified and no egress boundary was weakened.
+
+The source database contained one synthetic tenant, team and delayed job plus
+a migrator-owned sequence. Age backup/verification and fresh-container restore
+passed with SHA-256
+`76fbe72fac3bb4e66ec96f611dc7fe471703e2ee3cfad6b1623351b718b4663a`;
+37/37 public-table counts, all 14 migration rows and fixture counts 1/1/1
+matched. App rollback DML, DDL denial, backup table/sequence SELECT, backup
+DML/`nextval` denial, app sequence usage, and restored default sequence grants
+passed on source and restored PG. The disposable restore DB was removed through
+its guarded cleanup command.
+
+Both temporary projects were stopped with plain `down`, retaining their
+isolated volumes. Kurisu regression passed 68/68; private OpenClaw and 9Router
+IDs/start times were unchanged with restart counts 0. No real PUBG/model
+credential, production database, image push/deployment, 9Router setting or
+private OpenClaw runtime was touched. Exact steps and limitations:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-image-local-recovery.md`.
+
 ## 2026-10-14 — Canonical M204 local SaaS Compose and recovery rehearsal
 
 The current host profile resolves to OrbStack machine `nyannyan`; earlier

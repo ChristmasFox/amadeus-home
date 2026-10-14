@@ -81,13 +81,15 @@ M2 is active: worker cycle logs expose aggregate queue age/state and process
 RSS/heap without tenant IDs, and now emit identifier-free alert codes. The
 local synthetic 200-team simulation completed 200/200 authorized query tasks
 and worker runs. The KOOK sender reserves daily quota in PostgreSQL across
-restarts. The current SaaS/Postgres suite passes 100/100 with no skips,
-including concurrent budget admission, outbox deferral and the integrated
-runtime. Local Compose build/start, encrypted backup/restore with table-count
-and role-boundary probes, and the public-stop/private-Kurisu source regression
-are verified. The current M204 host-profile mapping resolves to OrbStack
-machine `nyannyan`; its local Compose/recovery and one bounded 200-team host
-measurement are recorded below. A separate clean Linux VM also restored the
+restarts. The SaaS/Postgres suite passed 100/100 with no skips before the
+current metrics-only change, including concurrent budget admission, outbox
+deferral and the integrated runtime. The current Worker metrics delta adds six
+focused passing tests and typecheck coverage; the full SaaS suite remains for
+the final quality gate. Local Compose build/start, encrypted backup/restore
+with table-count and role-boundary probes, and the public-stop/private-Kurisu
+source regression are verified. The current M204 host-profile mapping resolves
+to OrbStack machine `nyannyan`; its local Compose/recovery and one bounded
+200-team host measurement are recorded below. A separate clean Linux VM also restored the
 public archive into a new PG volume and started the current Worker healthy;
 its proxy denied private M204 egress. This is a database/Worker startup drill,
 not full public-service independence. Sustained production-shaped capacity and
@@ -178,6 +180,30 @@ backup tool and its snapshot checks were unchanged. The image was not pushed,
 and no provider credential, production database, 9Router setting or private
 OpenClaw runtime was used or changed. Full steps and evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-local-container-rehearsal.md`.
+
+### Current-source M2 image, backup and restore acceptance — 2026-10-14
+
+Commit `20b06da` built on the M204 ARM64 machine as
+`local/pubg-saas:git-20b06da` (image ID
+`sha256:492a72e07d7fcd7bc169b2bc8e0f8ac409d050f6843c93b69d77277a2e181f17`).
+The isolated source PG18.1 project applied migrations through `0014`; Worker
+health and its in-container metrics endpoint passed, and Gateway was run only
+in side-effect-free dry-run mode. Age backup verification and restore to a
+separate fresh PG18.1 container passed: 37/37 table counts, 14 migration rows,
+and fixture tenant/team/job counts 1/1/1 matched. Source and restored app DML
+rollback, app DDL denial, backup table/sequence reads, backup DML/`nextval`
+denial, and app sequence usage all passed. The restored disposable database
+was removed through the exact marker/name guard.
+
+After both rehearsal projects were stopped with plain `down`,
+`pnpm test:pubg` passed 68/68. OpenClaw/9Router IDs, start times and restart
+counts matched the pre-stop snapshot (restart count 0); no private service was
+restarted or changed. A host-loopback scrape of the new Worker metrics mapping
+returned 502 in OrbStack despite the in-container endpoint returning 200; the
+cause remains unverified and is documented in the Compose README. No real
+PUBG/model credential, production DB, image push/deploy, 9Router change or
+private OpenClaw restart was involved. Full evidence and command sequence:
+`.agent/checkpoints/2026-10-14-pubg-saas-m2-current-image-local-recovery.md`.
 
 ### M204 bounded 200-team host measurement — 2026-10-14
 
