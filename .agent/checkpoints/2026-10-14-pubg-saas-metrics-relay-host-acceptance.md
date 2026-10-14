@@ -42,9 +42,10 @@ restore logic or role grants, so that full restore was not repeated.
 - `pnpm test:pubg`: 68/68 passed.
 - `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check`:
   passed.
-- The full SaaS/PostgreSQL suite last passed 104/104 without skips on the
-  reusable isolated PG18.6 fixture at the earlier current-source CI gate; that
-  full suite was not repeated for this isolated HTTP relay delta.
+- The full SaaS/PostgreSQL suite passed 106/106 with no skips on the reused,
+  loopback-only PostgreSQL 18.6 fixture (`pubg-saas-pg18`, database `pubg_test`).
+  Its test password was passed through the test process environment without
+  printing or storing it in the repository.
 
 ## Reproduction
 

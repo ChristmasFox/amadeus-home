@@ -81,7 +81,7 @@ M2 is active: worker cycle logs expose aggregate queue age/state and process
 RSS/heap without tenant IDs, and now emit identifier-free alert codes. The
 local synthetic 200-team simulation completed 200/200 authorized query tasks
 and worker runs. The KOOK sender reserves daily quota in PostgreSQL across
-restarts. The current SaaS/PostgreSQL suite passes 104/104 with no skips on the
+restarts. The current SaaS/PostgreSQL suite passes 106/106 with no skips on the
 reused loopback-only isolated PG18.6 fixture, including concurrent budget
 admission, outbox deferral, the integrated runtime and Worker metrics. The
 current-source architecture check, 23 backup/Compose-adapter safety tests and
@@ -223,11 +223,12 @@ the Worker had no host-port binding and joined only `postgres_private` and
 The temporary Compose project stopped with ordinary `down`, retaining its
 isolated volume. OpenClaw and 9Router IDs, start times, running state and
 restart counts were identical before and after (both restart counts 0).
-Focused relay/Worker health/metrics tests passed 14/14; SaaS and private
-typechecks passed; the private PUBG suite passed 68/68; architecture and secret
-checks passed. No Gateway, PUBG API, model endpoint or real credential was
-used. The earlier full encrypted backup/restore and source/restore permission
-rehearsal remains in the current-image checkpoint above; this relay-only change
+Focused relay/Worker health/metrics tests passed 14/14; the full SaaS suite
+passed 106/106 with no skips on the reused isolated PG18.6 fixture; SaaS and
+private typechecks passed; the private PUBG suite passed 68/68; architecture
+and secret checks passed. No Gateway, PUBG API, model endpoint or real
+credential was used. The earlier full encrypted backup/restore and role-boundary
+rehearsal is in the current-image checkpoint above; this relay-only change
 does not touch PostgreSQL schema, backup tooling or role grants. Detailed
 commands: `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
 

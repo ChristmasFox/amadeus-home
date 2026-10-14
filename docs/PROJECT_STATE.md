@@ -15,11 +15,13 @@ only joined `postgres_private` and `egress_internal`.
 The project was stopped with ordinary `docker compose down`, retaining its
 isolated volume. OpenClaw and 9Router IDs, start times, running states and
 restart counts were identical before and after (both counts 0). Focused
-relay/Worker tests passed 14/14, current SaaS/private typechecks passed, the
-private PUBG regression passed 68/68, and architecture, secret and diff checks
-passed. The Gateway was not started; no PUBG/model request or real credential
-was used. The full encrypted backup/restore and role-boundary drill remains
-documented in the prior current-image checkpoint; this change only adds the
+relay/Worker tests passed 14/14, and the full SaaS/PostgreSQL suite passed
+106/106 with no skips on the reused loopback-only PG18.6 fixture. Current
+SaaS/private typechecks passed, the private PUBG regression passed 68/68, and
+architecture, secret and diff checks passed. The Gateway was not started; no
+PUBG/model request or real credential was used. The full encrypted
+backup/restore and role-boundary drill is documented in the prior current-image
+checkpoint; this change only adds the
 fixed-path metrics relay and Compose port mapping. No image was pushed and no
 production or private runtime was changed. Reproduction:
 `.agent/checkpoints/2026-10-14-pubg-saas-metrics-relay-host-acceptance.md`.
@@ -37,6 +39,8 @@ file was removed after verification; there was no image push. This does not
 close real provider, human KOOK, persistent scheduling, host metrics scraping
 or final release-review gates. Evidence:
 `.agent/checkpoints/2026-10-14-pubg-saas-m2-current-ci-gates.md`.
+The later relay commit `7f3b95b` passed the updated full suite 106/106 and
+verified M204 host metrics scraping; see the current entry above.
 
 ## 2026-10-14 — Current-source M204 SaaS image and recovery acceptance
 
