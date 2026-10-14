@@ -1,5 +1,31 @@
 # Project State — 2026-10-14
 
+## 2026-10-14 — Isolated public SaaS model connection attempt
+
+Source commit `87de87d` limits cleartext HTTP and direct model egress to exact
+authorities in `MODEL_ALLOWED_INTERNAL_HOSTS`; other private addresses remain
+subject to the guarded egress proxy. Its 7 focused model-config/routing tests,
+SaaS typecheck, secret scan and diff check passed. M204 OrbStack built local
+ARM64 image `local/pubg-saas:git-87de87d06a4ed3c9b8df4dab26a2d1c3947efabe`
+(image ID `sha256:b4ac246a14797e058a82a7d4c4cf035880035b86735b369793e718684a51aa33`);
+the image was not pushed.
+
+On `pubg-saas-m2-clean`, the ignored stack `secrets/gateway.env` was updated
+from the isolated 9Router `apiKeys` table and remains mode 0600. It contains
+the model endpoint, model ID and API key; no secret values are retained here.
+Only Gateway and Worker were passed to the Compose recreate command, but Compose
+also recreated `egress-proxy` because it shares the changed image tag. The PG
+container stayed unchanged and healthy; Worker is healthy; Gateway and the new
+9Router are running (neither has a configured Docker healthcheck).
+
+The post-restart KOOK state row has a session and an `updated_at` later than the
+new Gateway start time. Exactly one minimal planner request was issued. 9Router
+recorded an upstream `ok`, while the SaaS planner returned fallback
+`provider_error` with `requestCount=1`. No retry was made. Model acceptance is
+not complete; response/structured-output compatibility is a hypothesis pending
+Arthur's next instruction. No private OpenClaw or private 9Router action was
+taken. Full evidence: `.agent/checkpoints/2026-10-14-pubg-saas-9router-integration.md`.
+
 ## 2026-10-14 — M204 live KOOK P3 Gateway started
 
 Isolated Compose project `pubg-saas-p3-live-058118d` now runs on M204 from

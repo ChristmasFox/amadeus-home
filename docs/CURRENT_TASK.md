@@ -2,13 +2,34 @@
 
 Date: 2026-10-14 (Asia/Shanghai).
 
+## Latest explicit runtime authorization — 2026-10-14
+
+Arthur authorized a targeted model connection for the already isolated public
+SaaS stack on OrbStack VM `pubg-saas-m2-clean`. Commit `87de87d` adds an exact
+`MODEL_ALLOWED_INTERNAL_HOSTS` authority allowlist; only listed host:port
+authorities may use HTTP or bypass the egress proxy. The source tests and SaaS
+typecheck passed, and image `local/pubg-saas:git-87de87d06a4ed3c9b8df4dab26a2d1c3947efabe`
+was built locally without pushing. The stack's mode-0600 Gateway env file now
+points at the isolated `9router:20128` endpoint and `arthur-combo`; its API key
+was read directly from that VM's new 9Router `apiKeys` row without printing or
+committing it. Gateway/Worker were recreated. Compose also recreated the
+egress-proxy because all services share the updated image tag; PostgreSQL and
+the 9Router container remained unchanged.
+
+Post-restart KOOK WebSocket state was refreshed in PostgreSQL. The one allowed
+minimal model request reached 9Router and its usage record says `ok`, but the
+SaaS planner returned `provider_error` with one request. Model acceptance is
+therefore still open; no second request was made. The response/structured-output
+compatibility is the current root-cause hypothesis, not yet proven. Evidence:
+`.agent/checkpoints/2026-10-14-pubg-saas-9router-integration.md`.
+
 ## Operator-selected source implementation Goal — 2026-10-13
 
 The operator explicitly activated `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` for this
 worktree. Continue its phases while preserving the separate Image Lab/runtime
-work recorded below; this activation does not authorize deploy, external
-exposure, cloud provisioning, production credentials, private OpenClaw restart,
-or 9Router administration.
+work recorded below. A later explicit operator instruction authorizes only the
+isolated public SaaS/9Router integration recorded above; it does not authorize
+private OpenClaw or private 9Router changes.
 
 P0 is complete: the baseline was clean at `3f4cac2`; the initial workflow plan
 selected FAST; the public/private dependency map and synthetic stat golden are
