@@ -3,8 +3,14 @@ import { Pool } from 'pg';
 import { PublicSyncWorker } from './application/public-sync-worker.js';
 import { PostgresPublicPubgAdmission } from './infrastructure/pubg/request-limiter.js';
 import { configurePublicEgress } from './infrastructure/public-egress.js';
-import { startWorkerHealthServer, stopWorkerHealthServer } from './infrastructure/worker-health-server.js';
+import {
+  startWorkerHealthServer,
+  startWorkerMetricsServer,
+  stopWorkerHealthServer,
+  stopWorkerMetricsServer,
+} from './infrastructure/worker-health-server.js';
 import { createPublicSyncCycleLog } from './application/worker-alerts.js';
+import { PublicSyncWorkerMetrics } from './application/worker-metrics.js';
 
 const DEFAULT_INTERVAL_MS = 5 * 60_000;
 
@@ -52,7 +58,9 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   const leaseMs = positiveInteger(env.PUBLIC_SYNC_LEASE_MS, 120_000, 15 * 60_000);
   const pool = new Pool({ connectionString: databaseUrl, max: 4, connectionTimeoutMillis: 5000, idleTimeoutMillis: 10000, statement_timeout: 30_000 });
   const stop = new AbortController();
+  const metrics = new PublicSyncWorkerMetrics();
   let healthServer: Awaited<ReturnType<typeof startWorkerHealthServer>> | undefined;
+  let metricsServer: Awaited<ReturnType<typeof startWorkerMetricsServer>> | undefined;
   const onStop = () => stop.abort();
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
@@ -60,6 +68,15 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
     const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'");
     if (!ready.rowCount) throw new Error('pubg_saas_schema_upgrade_required');
     healthServer = await startWorkerHealthServer();
+    const metricsPort = positiveInteger(env.PUBG_SAAS_WORKER_METRICS_PORT, 9464, 65_535);
+    metricsServer = await startWorkerMetricsServer(() => {
+      const memory = process.memoryUsage();
+      return metrics.render({
+        rssBytes: memory.rss,
+        heapUsedBytes: memory.heapUsed,
+        pool: { totalCount: pool.totalCount, idleCount: pool.idleCount, waitingCount: pool.waitingCount },
+      });
+    }, metricsPort);
     const worker = new PublicSyncWorker(pool, {
       apiKey,
       admission: new PostgresPublicPubgAdmission(pool, requestsPerMinute, 30_000),
@@ -81,14 +98,16 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
         // print database details into collected worker logs.
       }
       const memory = process.memoryUsage();
-      process.stdout.write(`${JSON.stringify(createPublicSyncCycleLog({
+      const cycleLog = createPublicSyncCycleLog({
         observedAt: new Date().toISOString(),
         cycle: result,
         durationMs: Math.round((performance.now() - cycleStartedAt) * 10) / 10,
         queue,
         rssBytes: memory.rss,
         heapUsedBytes: memory.heapUsed,
-      }))}\n`);
+      });
+      metrics.recordCycle(cycleLog);
+      process.stdout.write(`${JSON.stringify(cycleLog)}\n`);
       if (once || stop.signal.aborted) break;
       await wait(intervalMs, stop.signal);
     } while (!stop.signal.aborted);
@@ -97,9 +116,13 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
     process.removeListener('SIGINT', onStop);
     process.removeListener('SIGTERM', onStop);
     try {
-      if (healthServer) await stopWorkerHealthServer(healthServer);
+      if (metricsServer) await stopWorkerMetricsServer(metricsServer);
     } finally {
-      await pool.end();
+      try {
+        if (healthServer) await stopWorkerHealthServer(healthServer);
+      } finally {
+        await pool.end();
+      }
     }
   }
 }

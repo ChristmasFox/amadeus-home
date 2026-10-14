@@ -37,6 +37,14 @@ controls. Docker health checks cover worker liveness and PostgreSQL readiness.
 Host log collection, alert delivery and canonical-host thresholds are not
 installed or verified; configure a host-owned log/alert route before launch.
 
+Worker also exposes aggregate Prometheus text metrics at `/metrics` on container
+port `9464`, published by Compose only on host loopback. Scrape it locally with
+`curl http://127.0.0.1:${PUBG_SAAS_WORKER_METRICS_PORT:-9464}/metrics`. The
+metrics contain process memory, pool/queue gauges, process-lifetime sync
+counters and alert-code counts; they do not include tenant, guild, team, player
+or actor labels. Counters reset when that Worker process restarts. Health remains
+on its separate container-loopback `/healthz` endpoint.
+
 ## Build an immutable local image
 
 Build from the Git checkout and tag the image with its full source commit. The

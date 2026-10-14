@@ -132,6 +132,7 @@ services:
     environment:
       PUBG_SAAS_EGRESS_PROXY: http://egress-proxy:8080
       PUBG_SAAS_EGRESS_PROXY_REQUIRED: "1"
+      PUBG_SAAS_WORKER_METRICS_PORT: "9464"
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/public-sync-worker.js", "--apply"]
@@ -143,6 +144,8 @@ services:
     networks:
       - postgres_private
       - egress_internal
+    ports:
+      - "127.0.0.1:${PUBG_SAAS_WORKER_METRICS_PORT:-9464}:9464"
     stop_grace_period: 45s
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
