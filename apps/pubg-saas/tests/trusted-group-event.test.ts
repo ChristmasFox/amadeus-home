@@ -45,6 +45,10 @@ test('rejects direct messages, spoofed actor identity, bots, malformed metadata,
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, extra: { ...event.d.extra, channel_type: 2 } } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage({ ...event, d: { ...event.d, content: 'x'.repeat(8193) } }, 'configured-bot'), null);
   assert.equal(parseTrustedKookGroupMessage(event, ' '), null);
+  assert.equal(parseTrustedKookGroupMessage({
+    ...event,
+    d: { ...event.d, author_id: 'configured-bot', extra: { ...event.d.extra, author: { id: 'configured-bot', bot: false } } },
+  }, 'configured-bot'), null);
 });
 
 test('keeps only bounded user IDs from KOOK mention metadata and excludes the configured bot', () => {

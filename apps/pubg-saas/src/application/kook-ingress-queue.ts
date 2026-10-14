@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
+import { inspectKookRequest, parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
 import { validateKookMessagePayload, type KookTextPayload } from './kook-message-queue.js';
 import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
@@ -30,6 +30,14 @@ export interface KookIngressQueueOptions {
   leaseMs?: number;
   maxAttempts?: number;
   baseRetryMs?: number;
+  onDiscard?: (event: KookIngressDiscardLog) => void;
+}
+export interface KookIngressDiscardLog {
+  event: 'kook_ingress_discarded';
+  stage: 'trusted_group' | 'relevance_filter' | 'freshness';
+  reason: string;
+  count: number;
+  channelId?: string;
 }
 export type KookIngressResult = 'ignored' | 'accepted' | 'duplicate';
 export type KookIngressProcessResult = 'empty' | 'done' | 'retry' | 'dead';
@@ -74,6 +82,8 @@ export class KookIngressQueue {
   private readonly leaseMs: number;
   private readonly maxAttempts: number;
   private readonly baseRetryMs: number;
+  private readonly onDiscard: ((event: KookIngressDiscardLog) => void) | undefined;
+  private readonly discardWindows = new Map<string, { loggedAt: number; suppressed: number }>();
   constructor(private readonly pool: Pool, options: KookIngressQueueOptions) {
     this.botId = options.botAccountId.trim();
     this.maxPending = options.maxPending ?? 1000;
@@ -86,6 +96,7 @@ export class KookIngressQueue {
     this.leaseMs = options.leaseMs ?? 30000;
     this.maxAttempts = options.maxAttempts ?? 5;
     this.baseRetryMs = options.baseRetryMs ?? 1000;
+    this.onDiscard = options.onDiscard;
     if (!this.botId || this.botId.length > 128 || !Number.isSafeInteger(this.maxPending) || this.maxPending < 1 || this.maxPending > 10000
       || !Number.isSafeInteger(this.maxPerUser) || this.maxPerUser < 1 || this.maxPerUser > this.maxPending
       || !Number.isSafeInteger(this.maxRequestsPerUserPerMinute) || this.maxRequestsPerUserPerMinute < 1 || this.maxRequestsPerUserPerMinute > 10000
@@ -98,10 +109,42 @@ export class KookIngressQueue {
       || !Number.isSafeInteger(this.baseRetryMs) || this.baseRetryMs < 1 || this.baseRetryMs > 60000)
       throw new Error('kook_ingress_limits_invalid');
   }
+  private reportDiscard(stage: KookIngressDiscardLog['stage'], reason: string, channelId?: string): void {
+    const safeChannel = channelId && /^[0-9]{1,40}$/u.test(channelId) ? channelId : undefined;
+    const key = `${stage}:${reason}:${safeChannel ?? ''}`;
+    const now = Date.now();
+    let window = this.discardWindows.get(key);
+    if (!window) {
+      if (this.discardWindows.size >= 64) {
+        const oldest = this.discardWindows.keys().next().value;
+        if (oldest !== undefined) this.discardWindows.delete(oldest);
+      }
+      window = { loggedAt: now, suppressed: 0 };
+      this.discardWindows.set(key, window);
+      try { this.onDiscard?.({ event: 'kook_ingress_discarded', stage, reason, count: 1, ...(safeChannel ? { channelId: safeChannel } : {}) }); }
+      catch { /* diagnostics must never block event handling */ }
+      return;
+    }
+    window.suppressed += 1;
+    if (now - window.loggedAt < 60_000) return;
+    const count = window.suppressed;
+    window.loggedAt = now;
+    window.suppressed = 0;
+    try { this.onDiscard?.({ event: 'kook_ingress_discarded', stage, reason, count, ...(safeChannel ? { channelId: safeChannel } : {}) }); }
+    catch { /* diagnostics must never block event handling */ }
+  }
   async ingestGatewayEvent(data: unknown): Promise<KookIngressResult> {
-    const parsed = parseKookRequest(data, this.botId);
-    if (!parsed || parsed.timestamp < Date.now() - this.ttlMs || parsed.timestamp > Date.now() + 5 * 60000)
+    const inspection = inspectKookRequest(data, this.botId);
+    if (inspection.kind === 'ignored') return 'ignored';
+    if (inspection.kind === 'dropped') {
+      this.reportDiscard(inspection.stage, inspection.reason, inspection.channelId);
       return 'ignored';
+    }
+    const parsed = inspection.parsed;
+    if (parsed.timestamp < Date.now() - this.ttlMs || parsed.timestamp > Date.now() + 5 * 60000) {
+      this.reportDiscard('freshness', 'timestamp_out_of_window', parsed.channelId ?? undefined);
+      return 'ignored';
+    }
     const serialized = JSON.stringify(parsed.envelope);
     const fingerprint = createHash('sha256').update(serialized).digest('hex');
     return transaction(this.pool, async (client) => {

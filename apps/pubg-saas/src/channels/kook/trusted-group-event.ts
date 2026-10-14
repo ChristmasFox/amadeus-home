@@ -25,6 +25,28 @@ export interface TrustedKookDirectMessage {
   content: string;
 }
 
+export type TrustedKookGroupRejectReason =
+  | 'bot_account_invalid'
+  | 'envelope_invalid'
+  | 'message_type_unsupported'
+  | 'extra_invalid'
+  | 'channel_not_text'
+  | 'author_missing'
+  | 'author_invalid'
+  | 'author_is_bot'
+  | 'actor_id_invalid'
+  | 'actor_id_mismatch'
+  | 'guild_id_invalid'
+  | 'channel_id_invalid'
+  | 'message_id_invalid'
+  | 'content_invalid'
+  | 'content_too_long'
+  | 'timestamp_invalid';
+
+export type TrustedKookGroupInspection =
+  | { event: TrustedKookGroupMessage }
+  | { reason: TrustedKookGroupRejectReason };
+
 function text(value: unknown, maxLength = 256): string | null {
   if (typeof value !== 'string') return null;
   const normalized = value.trim();
@@ -33,36 +55,45 @@ function text(value: unknown, maxLength = 256): string | null {
 
 /** Parses only KOOK's documented group message event shape. Role IDs in the
  * event are deliberately discarded; management actions recheck via HTTP. */
-export function parseTrustedKookGroupMessage(value: unknown, botAccountIdInput: string): TrustedKookGroupMessage | null {
+export function inspectTrustedKookGroupMessage(value: unknown, botAccountIdInput: string): TrustedKookGroupInspection {
   const botAccountId = text(botAccountIdInput, 128);
-  if (!botAccountId || !value || typeof value !== 'object' || Array.isArray(value)) return null;
+  if (!botAccountId) return { reason: 'bot_account_invalid' };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { reason: 'envelope_invalid' };
   const envelope = value as Record<string, unknown>;
-  if (envelope.s !== 0 || !envelope.d || typeof envelope.d !== 'object' || Array.isArray(envelope.d)) return null;
+  if (envelope.s !== 0 || !envelope.d || typeof envelope.d !== 'object' || Array.isArray(envelope.d)) return { reason: 'envelope_invalid' };
   const data = envelope.d as Record<string, unknown>;
-  if (data.channel_type !== 'GROUP' || (data.type !== 1 && data.type !== 9)) return null;
+  if (data.channel_type !== 'GROUP' || (data.type !== 1 && data.type !== 9)) return { reason: 'message_type_unsupported' };
   const extra = data.extra;
-  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) return null;
+  if (!extra || typeof extra !== 'object' || Array.isArray(extra)) return { reason: 'extra_invalid' };
   const metadata = extra as Record<string, unknown>;
-  if (metadata.channel_type !== 1) return null;
+  if (metadata.channel_type !== 1) return { reason: 'channel_not_text' };
   const author = metadata.author;
-  if (!author || typeof author !== 'object' || Array.isArray(author)) return null;
+  if (!author || typeof author !== 'object' || Array.isArray(author)) return { reason: 'author_missing' };
   const authorInfo = author as Record<string, unknown>;
-  if (authorInfo.bot === true) return null;
+  if (authorInfo.bot === true) return { reason: 'author_is_bot' };
   const userId = text(data.author_id, 128);
-  if (!userId || text(authorInfo.id, 128) !== userId) return null;
+  if (!userId) return { reason: 'actor_id_invalid' };
+  if (userId === botAccountId) return { reason: 'author_is_bot' };
+  const authorId = text(authorInfo.id, 128);
+  if (!authorId) return { reason: 'author_invalid' };
+  if (authorId !== userId) return { reason: 'actor_id_mismatch' };
   const guildId = text(metadata.guild_id, 128);
   const channelId = text(data.target_id, 128);
   const messageId = text(data.msg_id, 256);
   const content = typeof data.content === 'string' ? data.content : null;
   const timestamp = data.msg_timestamp;
-  if (!guildId || !channelId || !messageId || content === null || content.length > 8192) return null;
-  if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp <= 0) return null;
+  if (!guildId) return { reason: 'guild_id_invalid' };
+  if (!channelId) return { reason: 'channel_id_invalid' };
+  if (!messageId) return { reason: 'message_id_invalid' };
+  if (content === null) return { reason: 'content_invalid' };
+  if (content.length > 8192) return { reason: 'content_too_long' };
+  if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp <= 0) return { reason: 'timestamp_invalid' };
   const rawMentions = metadata.mention;
   const mentionedUserIds = Array.isArray(rawMentions) && rawMentions.length <= 32
     ? [...new Set(rawMentions.filter((item): item is string => typeof item === 'string' && Boolean(text(item, 128))
       && item.trim() !== botAccountId).map(item => item.trim()))].slice(0, 20)
     : [];
-  return {
+  return { event: {
     [verifiedGroupEvent]: true,
     platform: 'kook',
     botAccountId,
@@ -73,7 +104,12 @@ export function parseTrustedKookGroupMessage(value: unknown, botAccountIdInput: 
     timestamp,
     content,
     mentionedUserIds,
-  };
+  } };
+}
+
+export function parseTrustedKookGroupMessage(value: unknown, botAccountIdInput: string): TrustedKookGroupMessage | null {
+  const inspection = inspectTrustedKookGroupMessage(value, botAccountIdInput);
+  return 'event' in inspection ? inspection.event : null;
 }
 
 /** Parses a direct user message addressed to this configured bot. KOOK's

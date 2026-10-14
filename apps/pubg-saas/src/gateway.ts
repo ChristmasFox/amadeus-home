@@ -85,7 +85,8 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
         return { type: 'text', content: `已为服务器「${name}」创建并绑定 PUBG 队伍，默认平台为 Steam。队员可在群聊发送“我的 PUBG 账号是 游戏名”或 /pubg me 游戏名。` };
       },
       maintenance: () => authorizer.prune(),
-      onError: code => process.stderr.write(`${code}\n`),
+      onError: code => process.stderr.write(`${JSON.stringify({ component: 'kook-runtime', event: 'error', code })}\n`),
+      onDiagnostic: event => process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`),
     });
     await runtime.run(stop.signal);
   }

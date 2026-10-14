@@ -4,6 +4,7 @@ import type { KookTextPayload } from './kook-message-queue.js';
 import type { TeamAdminService } from './team-admin-service.js';
 import type { PublicPubgPlayerResolverPort, ResolvedPubgPlayer } from '../infrastructure/pubg/player-resolver.js';
 import { parseKookManagementCommand } from '../channels/kook/management-command.js';
+import { isKookGroupBindingPhrase } from '../channels/kook/message-relevance.js';
 
 export interface KookGroupBindingServices {
   teams: TeamAdminService;
@@ -14,9 +15,6 @@ export interface KookGroupBindingServices {
 function message(content: string): KookTextPayload { return { type: 'text', content }; }
 function safeName(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/@/gu, '＠').trim().slice(0, 100);
-}
-function isWriteCandidate(content: string): boolean {
-  return /(?:我的|他的|她的|本人|我).{0,24}(?:PUBG|绝地求生).{0,12}(?:账号|帐号)|(?:PUBG|绝地求生).{0,12}(?:账号|帐号).{0,24}(?:是|叫)|(?:我们的|本队|我们).{0,8}队名/iu.test(content);
 }
 function stripMentionMarkup(content: string): string {
   return content.replace(/<@!?[^>]{1,128}>/gu, ' ').replace(/\(met\)[^()\s]{1,128}\(met\)/gu, ' ').trim();
@@ -88,7 +86,7 @@ export function createKookGroupBindingHandler(services: KookGroupBindingServices
       if (/^(?:\/|!)pubg\s+me(?:\s|$)/iu.test(event.content.trim()) && command?.kind === 'invalid') {
         return message('用法：/pubg me <PUBG 游戏名>。平台默认为 Steam。');
       }
-      if (!isWriteCandidate(event.content)) return undefined;
+      if (!isKookGroupBindingPhrase(event.content)) return undefined;
       if (!services.intents) return message('自然语言绑定当前不可用，请使用 /pubg me <PUBG 游戏名>。');
       const intent = await services.intents.parse(stripMentionMarkup(event.content), signal);
       if (!intent || intent.action === 'unsupported') return undefined;

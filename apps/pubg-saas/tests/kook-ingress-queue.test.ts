@@ -31,6 +31,36 @@ async function cleanup(pool: Pool, bot: string) {
   await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);
   await pool.end();
 }
+test('discard diagnostics contain no message or actor data and are rate limited by stage, reason, and channel', { skip: !databaseUrl }, async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  const suffix = randomUUID();
+  const f = await fixture(pool, suffix);
+  const diagnostics: unknown[] = [];
+  const queue = new KookIngressQueue(pool, {
+    botAccountId: f.bot,
+    onDiscard: diagnostic => diagnostics.push(diagnostic),
+  });
+  try {
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `ignored-${suffix}-1`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'ignored');
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `ignored-${suffix}-2`, f.guild, f.channel, f.user, 'ordinary unrelated chatter')), 'ignored');
+    assert.deepEqual(diagnostics, [{ event: 'kook_ingress_discarded', stage: 'relevance_filter', reason: 'no_supported_intent_candidate', count: 1 }]);
+
+    const malformed = group(f.bot, `malformed-${suffix}`, f.guild, '6115211415447433', f.user, 'sensitive untrusted content');
+    malformed.extra.author.id = 'forged-actor';
+    assert.equal(await queue.ingestGatewayEvent(malformed), 'ignored');
+    assert.deepEqual(diagnostics[1], {
+      event: 'kook_ingress_discarded', stage: 'trusted_group', reason: 'actor_id_mismatch', count: 1, channelId: '6115211415447433',
+    });
+    const serialized = JSON.stringify(diagnostics);
+    for (const excluded of ['ordinary unrelated chatter', 'sensitive untrusted content', 'forged-actor', 'must-not-be-stored']) {
+      assert.equal(serialized.includes(excluded), false);
+    }
+    assert.equal((await pool.query('SELECT 1 FROM kook_ingress_events WHERE bot_account_id=$1', [f.bot])).rowCount, 0);
+  } finally {
+    await cleanup(pool, f.bot);
+  }
+});
+
 test('durable ingress resumes after restart, owns its destinations, and atomically scrubs completed requests', { skip: !databaseUrl }, async () => {
   const pool = new Pool({ connectionString: databaseUrl, max: 6 });
   const suffix = randomUUID();

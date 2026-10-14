@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { KookIngressQueue, type KookGuildJoinProvisioner, type KookGroupChannelProvisioner, type KookIngressQueueOptions, type KookRequestHandler } from './application/kook-ingress-queue.js';
+import { KookIngressQueue, type KookGuildJoinProvisioner, type KookGroupChannelProvisioner, type KookIngressDiscardLog, type KookIngressQueueOptions, type KookRequestHandler } from './application/kook-ingress-queue.js';
 import { KookMessageQueue } from './application/kook-message-queue.js';
 import { createNodeWebSocketFactory, KookGatewayApiClient, KookGatewayClient, PostgresKookGatewayStateStore, type KookGatewaySocketFactory } from './channels/kook/gateway.js';
 import { KookMessageApiClient } from './channels/kook/message-client.js';
@@ -19,6 +19,7 @@ export interface KookApplicationRuntimeOptions {
   dailyMessageBudget?: number;
   maintenance?: () => Promise<void>;
   onError?: (code: string) => void;
+  onDiagnostic?: (event: KookIngressDiscardLog) => void;
 }
 function delay(ms: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted)
@@ -48,7 +49,11 @@ export class KookApplicationRuntime {
     this.pollMs = options.pollMs ?? 250;
     if (!Number.isSafeInteger(this.pollMs) || this.pollMs < 1 || this.pollMs > 60000)
       throw new Error('kook_runtime_poll_invalid');
-    this.ingress = new KookIngressQueue(options.pool, { ...options.ingressLimits, botAccountId: options.botAccountId });
+    this.ingress = new KookIngressQueue(options.pool, {
+      ...options.ingressLimits,
+      botAccountId: options.botAccountId,
+      ...(options.onDiagnostic ? { onDiscard: options.onDiagnostic } : {}),
+    });
     this.outbox = new KookMessageQueue(options.pool, { botAccountId: options.botAccountId });
     const dailyBudget = new PostgresKookDailyMessageBudget(options.pool, options.botAccountId, options.dailyMessageBudget);
     this.sender = new KookMessageApiClient({ token: options.token, dailyBudget, ...(options.fetcher ? { fetcher: options.fetcher } : {}) });

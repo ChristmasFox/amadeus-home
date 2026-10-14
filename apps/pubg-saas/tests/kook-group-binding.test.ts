@@ -62,6 +62,7 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
       promptInputs.push(message);
       if (message.includes('队名')) return { action: 'rename_team', teamName: '夜猫小队' };
       if (message.includes('他的')) return { action: 'declare_pubg_account', target: 'mentioned_member', pubgName: 'Charlie' };
+      if (message.includes('Echo')) return { action: 'declare_pubg_account', target: 'self', pubgName: 'Echo' };
       return { action: 'declare_pubg_account', target: 'self', pubgName: 'Alpha' };
     },
   };
@@ -193,6 +194,11 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     assert.equal(await queue.ingestGatewayEvent(nonMemberProvisionEvent), 'accepted');
     assert.equal(await queue.processOne(handler, signal, undefined, provision), 'dead');
     assert.equal((await pool.query('SELECT 1 FROM channel_bindings WHERE bot_account_id=$1 AND channel_id=$2', [bot, channelA2])).rowCount, 0);
+
+    const secondChannelSelf = await send(group(guildA, channelA2, admin, '我的 PUBG 账号是 Echo'));
+    assert.match(secondChannelSelf.content, /Echo/u);
+    assert.equal((await pool.query('SELECT team_id FROM channel_bindings WHERE bot_account_id=$1 AND channel_id=$2', [bot, channelA2])).rows[0]?.team_id, firstTeam.team_id);
+    assert.equal((await pool.query('SELECT pubg_account_id FROM account_claims WHERE bot_account_id=$1 AND user_id=$2', [bot, admin])).rows[0]?.pubg_account_id, `account.echo_${suffix}`);
 
     const renamed = await send(group(guildA, channelA, regular, '我们的队名是 夜猫小队'));
     assert.match(renamed.content, /夜猫小队/u);
