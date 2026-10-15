@@ -24,9 +24,19 @@ numeric user mentions map to KOOK's native mention syntax.
 Validation passed: `pnpm test:pubg-saas` 155/155 against reused isolated PG18,
 zero skips; `pnpm test:pubg` 71/71, zero skips; SaaS build, both typecheck
 chains, architecture checks, secret scan, and `git diff --check`. Source
-rollout status and rollback evidence will be recorded here after the authorized
-M204 Gateway/Worker replacement. Arthur's KOOK acceptance remains pending; M2
-is not complete.
+commit `0d5de29b5f61049aebaeb255312e39ad6c6a1a5b` is pushed to `origin/main`.
+The dual-platform OCI build verified amd64 and arm64; the local M204 ARM64 image
+is `local/pubg-saas:git-0d5de29b5f61049aebaeb255312e39ad6c6a1a5b`
+(`sha256:ca562817734eeb8f4dc4c68e1febf247c857401a4676a2cb1c9ed58770486c8d`).
+Only Gateway and Worker were replaced. Gateway is running with zero restarts;
+Worker is healthy with zero restarts. The KOOK session row is present at
+`last_sn=76`, updated `2026-10-15T04:43:36.455Z`; the inspected recent
+structured error count is zero for both containers. PostgreSQL, egress-proxy,
+and SaaS 9Router container IDs are unchanged. Protected mode-0600 rollback
+records are `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-0d5de29-pre-switch`
+and `.../20261015-pubg-saas-0d5de29-post-switch`. No image was pushed to a
+registry and no private runtime/config was touched. Arthur's KOOK acceptance
+remains pending; M2 is not complete.
 
 ## Active task — remove public-only KOOK quotas and context expiry (2026-10-15)
 

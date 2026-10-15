@@ -26,8 +26,22 @@ sent, with durable retry and safe failure diagnostics.
 The focused sender/adapter suite passes 13/13; full SaaS/PostgreSQL tests pass
 155/155 with no skips; PUBG/Kurisu tests pass 71/71 with no skips. SaaS build,
 typechecks, architecture checks, secrets scan, and diff checks pass. The source
-follow-up is being added to the current authorized M204 Gateway/Worker release;
-rollout evidence will follow.
+commit `0d5de29b5f61049aebaeb255312e39ad6c6a1a5b` is pushed to `origin/main`.
+The amd64/arm64 OCI build passed manifest verification; the local M204 ARM64
+image is `local/pubg-saas:git-0d5de29b5f61049aebaeb255312e39ad6c6a1a5b`
+(`sha256:ca562817734eeb8f4dc4c68e1febf247c857401a4676a2cb1c9ed58770486c8d`).
+Only Gateway and Worker were replaced. Gateway is running with zero restarts;
+Worker is healthy with zero restarts. KOOK session state is present at
+`last_sn=76` (`2026-10-15T04:43:36.455Z`), and the inspected 10-minute
+structured error count is zero for both services. PostgreSQL, egress-proxy,
+and SaaS 9Router IDs are unchanged. No registry push occurred. The mode-0600
+pre/post rollback records are:
+
+- `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-0d5de29-pre-switch`
+- `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-0d5de29-post-switch`
+
+No private OpenClaw/Kurisu/9Router resource changed. Arthur's KOOK acceptance
+remains pending; M2 is not complete.
 
 ## Latest follow-up — remove SaaS-only quotas and conversation expiry
 
