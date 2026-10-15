@@ -352,3 +352,19 @@ promotion scope `existing-live-openclaw-digest`, and no container switch.
 Formal release/tag/notification remain pending; this is not yet `RELEASED`.
 The execution timeline, evidence locations, and exact release dry-run are
 recorded in `.agent/checkpoints/2026-10-15-lab-live-verified-dreaming-release-pending.md`.
+
+## Formal Lab 1.10.5 release — 2026-10-15
+
+After P1 validation passed, the authorized formal promotion ran through
+`scripts/release-lab.sh release --apply --promote-live-candidate`. It created
+the annotated local tag `lab/v1.10.5` at
+`0f109389378dc322dbc780997f3133b5f69eb53e`, wrote the released manifest
+`/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T145222Z-released.json`,
+and confirmed the formal Owner notification was sent. The canonical release
+tool does not push tags, so this tag remains local.
+
+Promotion reused the already-live immutable candidate and performed no
+container switch. Post-release `status --live --manifest` reported
+`DRIFT_STATUS=IN_SYNC`; the container remained healthy at the accepted digest
+and source. No rollback was needed. Overall P1 acceptance is
+`LIVE_VERIFIED`, and the formal Lab product status is `RELEASED`.
