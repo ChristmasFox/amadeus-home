@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import argparse
 import re
 import subprocess
 import sys
@@ -157,13 +158,18 @@ def one_container(machine: str, container: str, service: str, compose_file: str,
 
 def main() -> int:
     try:
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("--service", choices=("openclaw", "product-radar"), action="append")
+        args = parser.parse_args()
         machine, openclaw_compose, radar_compose, openclaw_config = host_profile()
         if machine == "community":
             raise RuntimeError("no operator-owned Lab host profile is configured")
-        services = [
-            one_container(machine, "openclaw", "openclaw", openclaw_compose, openclaw_config),
-            one_container(machine, "product-radar", "product-radar", radar_compose),
-        ]
+        requested = set(args.service or ("openclaw", "product-radar"))
+        services = []
+        if "openclaw" in requested:
+            services.append(one_container(machine, "openclaw", "openclaw", openclaw_compose, openclaw_config))
+        if "product-radar" in requested:
+            services.append(one_container(machine, "product-radar", "product-radar", radar_compose))
     except (OSError, RuntimeError) as error:
         print(f"LAB_RUNTIME_SNAPSHOT_ERROR={error}", file=sys.stderr)
         return 2

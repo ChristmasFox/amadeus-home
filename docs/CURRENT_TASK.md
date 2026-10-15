@@ -5,8 +5,8 @@ Date: 2026-10-15 (Asia/Shanghai).
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; ordered Lab acceptance
-stopped at item 4 (`DREAMING_PREFLIGHT_BLOCKED`)**. Arthur authorized the
+`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; reauthorized Lab sequence at
+candidate build (item 2), pending `BUILD_VERIFIED`**. Arthur authorized the
 ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
 `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
@@ -20,6 +20,27 @@ paused. The earlier item-4 preflight stop remains evidence about the old image;
 this authorization permits a new-image run only after deployment and source
 boundary verification. No operation is authorized against Gate, its
 PostgreSQL, or M2 runtime.
+
+## Reauthorized Lab sequence — candidate source preparation
+
+The OpenClaw-only candidate tooling now builds and applies a prebuilt image
+with provenance tied to the bumped Lab version. Candidate deployment retains
+only the OpenClaw service scope, takes an external protected checkpoint, and
+rolls back the Compose image reference on post-switch failure while preserving
+SQLite/WAL, sessions, Workspace, and memory writes. Formal promotion of the
+already-live candidate validates the P1 evidence digest/source before creating
+the local tag. `status --live` follows an OpenClaw-only manifest's service set.
+
+Focused candidate-deploy and release-tooling fixtures, shell/Python syntax,
+Memory Core patch/policy tests, `pnpm check:secrets`, `git diff --check`, and
+Lab version validation passed. The workflow plan classified these script
+changes as `OPENCLAW_RELEASE_CONFIG` and forbids a build in its default plan;
+Arthur's explicit ordered approval authorizes the separate candidate build.
+The canonical Lab version has been bumped from `1.10.4` to `1.10.5` with one
+release note so the immutable candidate's version and source match. These
+source changes are not yet committed or pushed. No image build, container
+switch, runtime data write, notification, or release tag has occurred in this
+preparation phase.
 
 ## Latest Goal continuation audit — 2026-10-15T13:27Z
 

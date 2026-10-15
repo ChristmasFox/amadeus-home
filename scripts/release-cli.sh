@@ -12,6 +12,10 @@ APPLY=0
 APPROVAL_REF=""
 BUILD_MODE=build-auto
 BUILD_MODE_SET=0
+OPENCLAW_ONLY=0
+OPENCLAW_IMAGE=""
+PROMOTE_LIVE_CANDIDATE=0
+PROMOTION_CHECKPOINT_REF=""
 LINEAGE_BRIDGE=0
 CREATE_TAG=0
 LIVE=0
@@ -40,7 +44,11 @@ usage() {
 Options:
   --apply                         required for any release/runtime write
   --approval-ref <non-secret-id> required with --apply
-  --build-auto | --build | --no-build   Lab build selection (default: --build-auto)
+  --build-auto | --build | --build-openclaw | --no-build   Lab build selection
+  --openclaw-only                  limit Lab candidate scope to the OpenClaw service
+  --image <immutable-ref>          prebuilt Lab OpenClaw candidate image
+  --promote-live-candidate         formalize the already-live candidate without switching containers
+  --checkpoint-ref <path>          protected candidate checkpoint used for promotion
   --lineage-bridge                Lab-only guarded source-lineage bridge
   --create-tag                    required with an applied formal release
   --live                          query current Lab container metadata (read-only)
@@ -74,7 +82,12 @@ while (($#)); do
     --approval-ref) (($# >= 2)) || fail '--approval-ref requires a value'; APPROVAL_REF="$2"; shift ;;
     --build-auto) BUILD_MODE=build-auto; BUILD_MODE_SET=1 ;;
     --build) BUILD_MODE=build; BUILD_MODE_SET=1 ;;
+    --build-openclaw) BUILD_MODE=build-openclaw; BUILD_MODE_SET=1 ;;
     --no-build) BUILD_MODE=no-build; BUILD_MODE_SET=1 ;;
+    --openclaw-only) OPENCLAW_ONLY=1 ;;
+    --image) (($# >= 2)) || fail '--image requires a value'; OPENCLAW_IMAGE="$2"; shift ;;
+    --promote-live-candidate) PROMOTE_LIVE_CANDIDATE=1 ;;
+    --checkpoint-ref) (($# >= 2)) || fail '--checkpoint-ref requires a value'; PROMOTION_CHECKPOINT_REF="$2"; shift ;;
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --create-tag) CREATE_TAG=1 ;;
     --live) LIVE=1 ;;
@@ -89,6 +102,23 @@ while (($#)); do
 done
 
 [[ "$COMMAND" =~ ^(plan|verify|candidate|release|status|rollback-plan)$ ]] || fail "Unknown command: $COMMAND"
+if ((OPENCLAW_ONLY)); then
+  [[ "$BUILD_MODE" == no-build ]] || fail 'OpenClaw-only candidate apply reuses the separately verified immutable image via --no-build.'
+  if [[ "$COMMAND" == candidate ]]; then
+    [[ "$PRODUCT" == lab ]] || fail '--openclaw-only applies only to Lab.'
+    [[ -n "$OPENCLAW_IMAGE" ]] || fail '--openclaw-only candidate requires --image <immutable-ref>.'
+  elif [[ "$COMMAND" == release ]]; then
+    ((PROMOTE_LIVE_CANDIDATE)) || fail 'OpenClaw-only formal release requires --promote-live-candidate.'
+  else
+    fail '--openclaw-only applies only to Lab candidate or live-candidate promotion.'
+  fi
+fi
+if ((PROMOTE_LIVE_CANDIDATE)); then
+  [[ "$PRODUCT" == lab && "$COMMAND" == release ]] || fail '--promote-live-candidate applies only to formal Lab release.'
+  ((OPENCLAW_ONLY)) || fail '--promote-live-candidate requires --openclaw-only.'
+  [[ "$BUILD_MODE" == no-build ]] || fail 'Live candidate promotion cannot build or switch containers.'
+  [[ -n "$PROMOTION_CHECKPOINT_REF" ]] || fail 'Live candidate promotion requires --checkpoint-ref from the candidate deploy.'
+fi
 if ((APPLY)); then
   [[ "$COMMAND" == candidate || "$COMMAND" == release ]] || fail "--apply is not valid for $COMMAND"
   [[ "$APPROVAL_REF" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{1,159}$ ]] || fail '--apply requires a non-secret --approval-ref identifier'
@@ -131,6 +161,7 @@ printf 'PRODUCT=%s\nENVIRONMENT=%s\nCOMMAND=%s\nVERSION=%s\n' "$PRODUCT" "$ENVIR
 run_lab_deploy_plan() {
   local -a args=()
   if [[ "$COMMAND" == candidate ]]; then args+=(--candidate); fi
+  if ((OPENCLAW_ONLY)); then args+=(--openclaw-only --image "$OPENCLAW_IMAGE"); fi
   if ((LINEAGE_BRIDGE)); then args+=(--lineage-bridge --build); else args+=("--$BUILD_MODE"); fi
   bash "$ROOT_DIR/scripts/deploy-openclaw.sh" "${args[@]}"
 }
@@ -140,7 +171,7 @@ require_clean_tree() {
 }
 
 lab_apply_and_record() {
-  local phase="$1" state_root timestamp output_path temp_output temp_runtime checkpoint status
+  local phase="$1" state_root timestamp output_path temp_output temp_runtime checkpoint status tag_created=0
   state_root="${AMAD_RELEASE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/amadeus/releases}"
   python3 - "$state_root" "$ROOT_DIR" <<'PY' || fail 'Protected external Lab release-state directory must already exist with mode 0700.'
 import os
@@ -167,7 +198,16 @@ PY
   CLEANUP_FILES+=("$temp_output")
   temp_runtime="$(mktemp "${TMPDIR:-/tmp}/lab-release-runtime.XXXXXX")"
   CLEANUP_FILES+=("$temp_runtime")
-  if [[ "$phase" == release ]]; then
+  if [[ "$phase" == release && "$PROMOTE_LIVE_CANDIDATE" -eq 1 ]]; then
+    # shellcheck disable=SC1091
+    source "$ROOT_DIR/scripts/host-profile.sh"
+    amadeus_host_profile_load "$ROOT_DIR"
+    [[ "$PROMOTION_CHECKPOINT_REF" == "$SKULD_BACKUP_ROOT/deploy/"* ]] \
+      || fail '--checkpoint-ref must be under the verified external Lab deployment backup root.'
+    [[ -d "$PROMOTION_CHECKPOINT_REF" && ! -L "$PROMOTION_CHECKPOINT_REF" && "$(stat -f %Lp "$PROMOTION_CHECKPOINT_REF")" == 700 ]] \
+      || fail '--checkpoint-ref must be an existing protected directory with mode 0700.'
+    checkpoint="$PROMOTION_CHECKPOINT_REF"
+  elif [[ "$phase" == release ]]; then
     if ((LINEAGE_BRIDGE)); then
       bash "$ROOT_DIR/scripts/deploy-openclaw.sh" --apply --build --lineage-bridge --full-verify 2>&1 | tee "$temp_output"
     else
@@ -176,17 +216,42 @@ PY
   else
     if ((LINEAGE_BRIDGE)); then
       candidate_args=(--apply --candidate --build --lineage-bridge)
+    elif ((OPENCLAW_ONLY)); then
+      candidate_args=(--apply --candidate --openclaw-only --no-build --image "$OPENCLAW_IMAGE")
     else
       candidate_args=(--apply --candidate "--$BUILD_MODE")
     fi
     bash "$ROOT_DIR/scripts/deploy-openclaw.sh" "${candidate_args[@]}" 2>&1 | tee "$temp_output"
   fi
-  checkpoint="$(sed -n 's/^CHECKPOINT=//p' "$temp_output" | tail -n 1)"
+  if ! { [[ "$phase" == release && "$PROMOTE_LIVE_CANDIDATE" -eq 1 ]]; }; then
+    checkpoint="$(sed -n 's/^CHECKPOINT=//p' "$temp_output" | tail -n 1)"
+  fi
   [[ -n "$checkpoint" ]] || fail 'Deploy completed without a checkpoint reference; release manifest was not written.'
-  python3 "$ROOT_DIR/scripts/lab-runtime-snapshot.py" > "$temp_runtime" || fail 'Deploy completed but actual runtime provenance could not be read; release manifest was not written.'
+  snapshot_args=()
+  if ((OPENCLAW_ONLY)); then snapshot_args+=(--service openclaw); fi
+  python3 "$ROOT_DIR/scripts/lab-runtime-snapshot.py" "${snapshot_args[@]}" > "$temp_runtime" || fail 'Deploy completed but actual runtime provenance could not be read; release manifest was not written.'
+  if [[ "$phase" == release && "$PROMOTE_LIVE_CANDIDATE" -eq 1 ]]; then
+    python3 - "$MEMORY_ACCEPTANCE" "$temp_runtime" "$VERSION" <<'PY' || fail 'Live runtime does not match the accepted P1 candidate digest/source/version; no formal tag was created.'
+import json, re, sys
+from pathlib import Path
+evidence_path, runtime_path, expected_version = sys.argv[1:]
+evidence = json.loads(Path(evidence_path).read_text())
+snapshot = json.loads(Path(runtime_path).read_text())
+rows = snapshot.get('services') or []
+if len(rows) != 1 or rows[0].get('service') != 'openclaw': raise SystemExit('promotion snapshot must contain exactly the Lab OpenClaw service')
+row = rows[0]
+if row.get('state') != 'running' or row.get('health') != 'healthy': raise SystemExit('live candidate is not healthy')
+if row.get('version') != expected_version: raise SystemExit('live candidate version differs from Lab VERSION')
+if row.get('digest') != evidence.get('runtimeImageDigest'): raise SystemExit('live image digest differs from LIVE_VERIFIED evidence')
+if row.get('gitSha') != evidence.get('sourceCommit') or not re.fullmatch(r'[0-9a-f]{40}', str(row.get('gitSha', ''))):
+    raise SystemExit('live image source differs from the LIVE_VERIFIED source commit')
+print('LIVE_CANDIDATE_MATCH=passed')
+PY
+  fi
   if [[ "$phase" == release ]]; then
     version_tag="lab/v$VERSION"
     git -C "$ROOT_DIR" tag -a "$version_tag" -m "Lab $VERSION release"
+    tag_created=1
     printf 'PRODUCT_TAG_CREATED=%s\nPUSHED=0\n' "$version_tag"
   fi
   manifest_args=(
@@ -199,8 +264,49 @@ PY
   )
   if [[ "$phase" == release ]]; then manifest_args+=(--release-tag "lab/v$VERSION"); fi
   if ! "${manifest_args[@]}"; then
+    if ((tag_created && PROMOTE_LIVE_CANDIDATE)); then
+      git -C "$ROOT_DIR" tag -d "lab/v$VERSION" >/dev/null 2>&1 || true
+      rm -f -- "$output_path"
+      printf '%s\n' 'PROMOTION_ROLLBACK=removed_new_local_tag_and_manifest; live_candidate_and_data_preserved' >&2
+      exit 2
+    fi
     printf '%s\n' 'POST_APPLY_STATE=FAILED; runtime changed, preserve the checkpoint and reconcile the external manifest manually.' >&2
     exit 2
+  fi
+  if ((PROMOTE_LIVE_CANDIDATE)); then
+    # The formal notice follows the same fixed owner outbox path used by the
+    # deployment script; failure removes only this unpushed tag/manifest.
+    # shellcheck disable=SC1091
+    source "$ROOT_DIR/scripts/host-profile.sh"
+    amadeus_host_profile_load "$ROOT_DIR"
+    event_key="amadeus-release:$VERSION"
+    event_id="$(printf '%s' "$event_key" | shasum -a 256 | cut -c1-40)"
+    if ! "$ROOT_DIR/scripts/notify-owner.sh" \
+      --remote-machine "$ORBSTACK_MACHINE" \
+      --outbox-dir "$OPENCLAW_DATA_DIR/notifications" \
+      --event-key "$event_key" \
+      --source amadeus-release \
+      --headline "Amadeus $VERSION · 世界线收束" \
+      --summary "$(bash "$ROOT_DIR/scripts/amadeus-version.sh" notes)" \
+      --severity success --significance major --theme worldline_convergence \
+      --fact-label 版本 --fact-value "$VERSION" --worldline-closing; then
+      git -C "$ROOT_DIR" tag -d "lab/v$VERSION" >/dev/null 2>&1 || true
+      rm -f -- "$output_path"
+      fail 'Formal owner notification failed; the new local tag and manifest were removed; the live candidate and data remain.'
+    fi
+    if ! orb -m "$ORBSTACK_MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$event_id.sent.json"; then
+      for attempt in $(seq 1 30); do
+        orb -m "$ORBSTACK_MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$event_id.sent.json" && break
+        sleep 1
+      done
+    fi
+    if ! orb -m "$ORBSTACK_MACHINE" -u root test -f "$OPENCLAW_DATA_DIR/notifications/$event_id.sent.json"; then
+      git -C "$ROOT_DIR" tag -d "lab/v$VERSION" >/dev/null 2>&1 || true
+      rm -f -- "$output_path"
+      fail 'Formal owner notification did not reach sent state; the new local tag and manifest were removed; the live candidate and data remain.'
+    fi
+    printf 'FORMAL_RELEASE_NOTIFICATION=sent\n'
+    printf 'LIVE_CANDIDATE_PROMOTED=1\n'
   fi
 }
 
@@ -283,7 +389,13 @@ case "$COMMAND" in
       printf 'APPLY=not-requested\nRELEASE_STATUS=%s\n' "$([[ $COMMAND == candidate ]] && printf UNRELEASED_CANDIDATE || printf PLAN_ONLY)"
       printf 'APPROVAL_REQUIRED=explicit --apply --approval-ref <id>%s\n' "$([[ $COMMAND == release ]] && printf ' --create-tag' || true)"
       if [[ "$PRODUCT" == lab ]]; then
-        if [[ "$COMMAND" == release ]]; then run_lab_deploy_plan; else run_lab_deploy_plan; fi
+        if ((PROMOTE_LIVE_CANDIDATE)); then
+          [[ -n "$MEMORY_ACCEPTANCE" ]] || fail 'live-candidate promotion plan requires --memory-acceptance evidence.'
+          python3 "$ROOT_DIR/scripts/validate-lab-memory-acceptance.py" "$MEMORY_ACCEPTANCE" --repo "$ROOT_DIR"
+          printf 'PROMOTION_SCOPE=existing-live-openclaw-digest\nCONTAINER_SWITCH=none\nTAG=lab/v%s\n' "$VERSION"
+        else
+          run_lab_deploy_plan
+        fi
       else
         printf 'GATE_SEQUENCE=verify,build-once,precheck,protected-backup,migrator,application-switch,health\n'
         printf '%s\n' 'GATE_ROLLBACK=application rollback only when schema compatibility allows; never force-restore the entire PostgreSQL volume by default.'
@@ -292,10 +404,36 @@ case "$COMMAND" in
     fi
     ;;
   status)
+    if [[ -z "$MANIFEST" ]]; then
+      state_root="${AMAD_RELEASE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/amadeus/releases}"
+      shopt -s nullglob
+      manifests=("$state_root/$PRODUCT-$ENVIRONMENT-"*.json)
+      if ((${#manifests[@]})); then MANIFEST="${manifests[${#manifests[@]}-1]}"; fi
+    fi
     if [[ "$PRODUCT" == lab && "$LIVE" -eq 1 ]]; then
       temp_snapshot="$(mktemp "${TMPDIR:-/tmp}/lab-release-runtime.XXXXXX")"
       CLEANUP_FILES+=("$temp_snapshot")
-      if python3 "$ROOT_DIR/scripts/lab-runtime-snapshot.py" > "$temp_snapshot"; then
+      snapshot_args=()
+      if [[ -n "$MANIFEST" && -f "$MANIFEST" ]]; then
+        manifest_services="$(python3 - "$MANIFEST" <<'PY'
+import json, sys
+from pathlib import Path
+document = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+rows = document.get('imageDigests')
+if not isinstance(rows, list) or not rows:
+    raise SystemExit('release manifest has no controlled service images')
+services = [row.get('service') if isinstance(row, dict) else None for row in rows]
+if len(set(services)) != len(services) or any(service not in {'openclaw', 'product-radar'} for service in services):
+    raise SystemExit('release manifest contains invalid or duplicate Lab services')
+for service in services:
+    print(service)
+PY
+)" || fail 'Could not derive the live snapshot scope from the protected manifest.'
+        while IFS= read -r service; do
+          [[ -n "$service" ]] && snapshot_args+=(--service "$service")
+        done <<< "$manifest_services"
+      fi
+      if python3 "$ROOT_DIR/scripts/lab-runtime-snapshot.py" "${snapshot_args[@]}" > "$temp_snapshot"; then
         printf '%s\n' 'RUNTIME_SNAPSHOT=observed'
         printf 'RUNTIME_FACTS_JSON='
         cat "$temp_snapshot"
@@ -303,12 +441,6 @@ case "$COMMAND" in
       else
         printf '%s\n' 'RUNTIME_SNAPSHOT=UNKNOWN'
       fi
-    fi
-    if [[ -z "$MANIFEST" ]]; then
-      state_root="${AMAD_RELEASE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/amadeus/releases}"
-      shopt -s nullglob
-      manifests=("$state_root/$PRODUCT-$ENVIRONMENT-"*.json)
-      if ((${#manifests[@]})); then MANIFEST="${manifests[${#manifests[@]}-1]}"; fi
     fi
     if [[ -n "$RUNTIME_SNAPSHOT" && -f "$MANIFEST" ]]; then
       python3 "$ROOT_DIR/scripts/release-state.py" doctor --manifest "$MANIFEST" --runtime "$RUNTIME_SNAPSHOT"

@@ -64,12 +64,23 @@ scripts/release-lab.sh candidate --apply --approval-ref <review-id>
 scripts/release-lab.sh status --live
 ```
 
-The candidate uses the existing one-instance OpenClaw deploy path, preserves
-the current product version, records the checkpoint, source revision, both
-image identities, runtime config/Compose fingerprints, approval and validation
-references, and reminds the operator after 48 hours. That reminder never stops
-the service. Candidate mode skips the formal release notification and release
-maintenance steps.
+The general candidate flow uses the existing one-instance OpenClaw deploy
+path, preserves the current product version, records the checkpoint, source
+revision, image identities, runtime config/Compose fingerprints, approval and
+validation references, and reminds the operator after 48 hours. That reminder
+never stops the service. Candidate mode skips formal release notification
+and release maintenance steps.
+
+For an explicitly authorized OpenClaw-only Lab candidate that must match a
+future release version, bump the Lab patch version and replace the single
+release note before committing the source. Build with
+`deploy-openclaw.sh --build-only --candidate --openclaw-only --build-openclaw`,
+then apply the immutable image with
+`release-lab.sh candidate --apply --openclaw-only --no-build --image <image> --approval-ref <review-id>`.
+This guarded path checkpoints the Lab OpenClaw data and changes only the
+OpenClaw Compose image; it records an OpenClaw-only manifest and sends the
+candidate owner notification. It does not publish an image or create a
+release tag. `status --live` uses the service set recorded in that manifest.
 
 After candidate validation, prepare Lab's single-release notes and use the
 version helper. A formal release requires a separate approval, a protected

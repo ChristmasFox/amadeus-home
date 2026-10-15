@@ -17,6 +17,8 @@ AUTO_BUILD=0
 NO_BUILD=0
 FULL_VERIFY=0
 CANDIDATE=0
+OPENCLAW_ONLY=0
+BUILD_ONLY=0
 QWEN_IMAGE_BASE_URL="${AMADEUS_QWEN_IMAGE_BASE_URL:-http://host.docker.internal:18793/v1}"
 QWEN_IMAGE_LOCAL_ONLY="${AMADEUS_QWEN_IMAGE_LOCAL_ONLY:-0}"
 QWEN_IMAGE_FALLBACK_ENABLED="${AMADEUS_QWEN_IMAGE_FALLBACK_ENABLED:-0}"
@@ -33,6 +35,8 @@ Usage:
   ./scripts/deploy-openclaw.sh --apply --build
   ./scripts/deploy-openclaw.sh --apply --build-auto
   ./scripts/deploy-openclaw.sh --apply --candidate --build-auto  # pre-release real acceptance; no release notification
+  ./scripts/deploy-openclaw.sh --apply --candidate --openclaw-only --build-openclaw
+  ./scripts/deploy-openclaw.sh --build-only --candidate --openclaw-only --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-radar
   ./scripts/deploy-openclaw.sh --apply --no-build
@@ -44,8 +48,13 @@ compares the current Git tree with the live image commit and builds only affecte
 images. --build-openclaw and --build-radar build one image. --no-build reuses
 the live images for workspace/compose/config-only updates and rejects stale
 images when plugin or service source changed. --candidate replaces the one
-runtime for real acceptance before a version bump, preserves checkpoints and
-skips release notification/maintenance; it is not a second runtime or release.
+runtime for real acceptance, preserves checkpoints and skips formal release
+notification/maintenance; it is not a second runtime or release. The guarded
+OpenClaw-only candidate requires the next Lab version before its immutable
+build so image provenance matches the eventual release source.
+--openclaw-only is a maintainer Lab candidate scope. It requires a fresh
+OpenClaw build and an advanced version, and never writes Product Radar,
+networks, cron, the host notification hook, or runtime secret files.
 --lineage-bridge is a one-time explicit release cutover for a live image whose
 Git source commit was removed by an approved history rewrite. It requires
 --apply plus fresh builds of both images and reads the protected live image's
@@ -154,6 +163,24 @@ assert_image_fresh() {
     fail "$target image is stale for the current Git tree; use --build-auto, --build-$target, or --build."
   fi
 }
+assert_openclaw_candidate_image() {
+  local image="$1" tagged_commit labels
+  tagged_commit="$(image_source_commit "$image")" || fail "Candidate image tag must contain a Git commit and timestamp: $image"
+  [[ "$tagged_commit" == "$COMMIT" ]] || fail "Candidate image source tag does not match current source $COMMIT."
+  labels="$(orb -m "$MACHINE" -u root docker image inspect --format '{{json .Config.Labels}}' "$image")" \
+    || fail "Candidate image is not available on Lab machine: $image"
+  python3 - "$SOURCE_REVISION" "$AMADEUS_VERSION" "$labels" <<'PY'
+import json, re, sys
+revision, version, raw_labels = sys.argv[1:]
+labels = json.loads(raw_labels)
+if labels.get('com.amadeus.release.provenance') != 'amadeus-product-release-v1': raise SystemExit('candidate provenance marker is invalid')
+if labels.get('org.opencontainers.image.revision') != revision: raise SystemExit('candidate source revision does not match current HEAD')
+if labels.get('org.opencontainers.image.version') != version: raise SystemExit('candidate product version does not match VERSION')
+created = labels.get('org.opencontainers.image.created', '')
+if not re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', created): raise SystemExit('candidate build timestamp is invalid')
+print('OPENCLAW_CANDIDATE_PROVENANCE=passed')
+PY
+}
 version_is_greater() {
   local candidate="$1" previous="$2"
   local candidate_major candidate_minor candidate_patch previous_major previous_minor previous_patch
@@ -203,6 +230,8 @@ while (($#)); do
     --dry-run) APPLY=0 ;;
     --apply) APPLY=1 ;;
     --candidate) CANDIDATE=1 ;;
+    --openclaw-only) OPENCLAW_ONLY=1 ;;
+    --build-only) BUILD_ONLY=1 ;;
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --build) BUILD=1; BUILD_OPENCLAW=1; BUILD_RADAR=1 ;;
     --build-auto) AUTO_BUILD=1 ;;
@@ -219,6 +248,24 @@ while (($#)); do
   shift
 done
 
+if ((OPENCLAW_ONLY)); then
+  ((CANDIDATE == 1)) || fail '--openclaw-only requires --candidate.'
+  ((BUILD == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) \
+    || fail '--openclaw-only excludes full, Product Radar, and build-auto modes.'
+  if ((BUILD_ONLY)); then
+    ((APPLY == 0 && BUILD_OPENCLAW == 1 && NO_BUILD == 0)) \
+      || fail '--build-only --openclaw-only requires --build-openclaw without --apply or --no-build.'
+  elif ((APPLY)); then
+    ((BUILD_OPENCLAW == 0 && NO_BUILD == 1 && AUTO_BUILD == 0)) \
+      || fail 'OpenClaw-only apply requires a prebuilt --image and --no-build.'
+    [[ -n "$IMAGE" ]] || fail 'OpenClaw-only apply requires the prebuilt --image reference.'
+  else
+    ((BUILD_OPENCLAW == 1 || NO_BUILD == 1)) || fail 'OpenClaw-only plan requires --build-openclaw or --no-build.'
+  fi
+  ((LINEAGE_BRIDGE == 0)) || fail '--openclaw-only does not support lineage bridge.'
+  [[ -z "$RADAR_IMAGE" ]] || fail '--openclaw-only does not accept --radar-image.'
+fi
+
 if ((AUTO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || NO_BUILD))); then
   fail '--build-auto cannot be combined with an explicit build or no-build option.'
 fi
@@ -226,6 +273,8 @@ if ((NO_BUILD && (BUILD || BUILD_OPENCLAW || BUILD_RADAR || AUTO_BUILD))); then
   fail '--no-build cannot be combined with a build option.'
 fi
 ((FULL_VERIFY == 0 || APPLY == 1)) || fail '--full-verify requires --apply.'
+((BUILD_ONLY == 0 || APPLY == 0)) || fail '--build-only cannot be combined with --apply.'
+((BUILD_ONLY == 0 || OPENCLAW_ONLY == 1)) || fail '--build-only is scoped to --openclaw-only candidates.'
 ((LINEAGE_BRIDGE == 0 || APPLY == 1)) || fail '--lineage-bridge requires --apply.'
 [[ "$IMAGE" != *$'\n'* && "$IMAGE" != *[[:space:]]* ]] || fail 'OpenClaw image tag contains whitespace.'
 [[ "$RADAR_IMAGE" != *$'\n'* && "$RADAR_IMAGE" != *[[:space:]]* ]] || fail 'Product Radar image tag contains whitespace.'
@@ -242,8 +291,12 @@ RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
 # The deployment envelope owns the world-line closing. Strip an accidentally
 # repeated standalone closing from release notes before appending it once.
 RELEASE_NOTES="$(printf '%s\n' "$RELEASE_NOTES" | sed '/^[[:space:]]*El Psy Kongroo\.[[:space:]]*$/d')"
-if ((APPLY)); then
-  if ((AUTO_BUILD)); then
+if ((BUILD_ONLY && OPENCLAW_ONLY)); then
+  IMAGE="${IMAGE:-local/openclaw-amadeus:git-$COMMIT-$STAMP}"
+elif ((APPLY)); then
+  if ((OPENCLAW_ONLY)); then
+    :
+  elif ((AUTO_BUILD)); then
     [[ -z "$IMAGE" && -z "$RADAR_IMAGE" ]] || fail '--build-auto resolves both images from the live CasaOS containers; omit --image/--radar-image.'
     IMAGE="$(resolve_live_image openclaw)" || fail 'Could not resolve the live OpenClaw image for --build-auto.'
     RADAR_IMAGE="$(resolve_live_image product-radar)" || fail 'Could not resolve the live Product Radar image for --build-auto.'
@@ -270,7 +323,13 @@ fi
 if ((NO_BUILD)); then
   ((BUILD_OPENCLAW == 0 && BUILD_RADAR == 0 && AUTO_BUILD == 0)) || fail '--no-build cannot be combined with any build option.'
 fi
-if ((BUILD_OPENCLAW == 1 && BUILD_RADAR == 1)); then
+if ((OPENCLAW_ONLY && BUILD_ONLY)); then
+  BUILD_MODE='openclaw-only-build'
+elif ((OPENCLAW_ONLY && NO_BUILD)); then
+  BUILD_MODE='openclaw-only-prebuilt'
+elif ((OPENCLAW_ONLY)); then
+  BUILD_MODE='openclaw-only-scoped'
+elif ((BUILD_OPENCLAW == 1 && BUILD_RADAR == 1)); then
   BUILD_MODE='all'
 elif ((BUILD_OPENCLAW == 1)); then
   BUILD_MODE='openclaw-only'
@@ -286,10 +345,12 @@ shown_image="$IMAGE"
 shown_radar_image="$RADAR_IMAGE"
 [[ -n "$shown_image" ]] || shown_image='resolved from live CasaOS container on apply'
 [[ -n "$shown_radar_image" ]] || shown_radar_image='resolved from live CasaOS container on apply'
-printf 'MODE=%s\n' "$([[ $APPLY -eq 1 ]] && printf apply || printf dry-run)"
+if ((BUILD_ONLY)); then deployment_mode=build-only; elif ((APPLY)); then deployment_mode=apply; else deployment_mode=dry-run; fi
+printf 'MODE=%s\n' "$deployment_mode"
 printf 'BUILD_MODE=%s\n' "$BUILD_MODE"
 printf 'AMADEUS_VERSION=%s\n' "$AMADEUS_VERSION"
 printf 'DEPLOYMENT_PHASE=%s\n' "$([[ $CANDIDATE -eq 1 ]] && printf candidate || printf release)"
+printf 'DEPLOYMENT_SCOPE=%s\n' "$([[ $OPENCLAW_ONLY -eq 1 ]] && printf openclaw-only || printf lab-default)"
 printf 'QWEN_IMAGE_LOCAL_ONLY=%s\n' "$QWEN_IMAGE_LOCAL_ONLY"
 printf 'QWEN_IMAGE_FALLBACK_ENABLED=%s\n' "$QWEN_IMAGE_FALLBACK_ENABLED"
 printf 'LINEAGE_BRIDGE=%s\n' "$LINEAGE_BRIDGE"
@@ -297,31 +358,36 @@ printf 'OPENCLAW_IMAGE=%s\n' "$shown_image"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$shown_radar_image"
 printf 'MACHINE=%s\n' "$MACHINE"
 
-if ((APPLY == 0)); then
+if ((APPLY == 0 && BUILD_ONLY == 0)); then
   printf '%s\n' 'PLAN=on apply, reuse live images by default; --build-auto rebuilds only affected images; --build remains the explicit full two-image migration path.'
   live_openclaw="$(resolve_live_image openclaw 2>/dev/null || true)"
-  live_radar="$(resolve_live_image product-radar 2>/dev/null || true)"
+  if ((OPENCLAW_ONLY == 0)); then live_radar="$(resolve_live_image product-radar 2>/dev/null || true)"; else live_radar=''; fi
   if [[ -n "$live_openclaw" ]]; then
     if image_needs_rebuild "$live_openclaw" openclaw; then printf '%s\n' 'AUTO_SCOPE_OPENCLAW=build'; else printf '%s\n' 'AUTO_SCOPE_OPENCLAW=reuse'; fi
   fi
-  if [[ -n "$live_radar" ]]; then
+  if ((OPENCLAW_ONLY == 0)) && [[ -n "$live_radar" ]]; then
     if image_needs_rebuild "$live_radar" radar; then printf '%s\n' 'AUTO_SCOPE_PRODUCT_RADAR=build'; else printf '%s\n' 'AUTO_SCOPE_PRODUCT_RADAR=reuse'; fi
   fi
   exit 0
 fi
 
-[[ "$MACHINE" != community ]] || fail 'Apply requires an operator-owned host profile; community defaults are dry-run only.'
+[[ "$MACHINE" != community ]] || fail 'Lab build/apply requires an operator-owned host profile; community defaults are dry-run only.'
 
-[[ -n "$IMAGE" && -n "$RADAR_IMAGE" ]] || fail 'Apply requires resolvable OpenClaw and Product Radar images.'
+[[ -n "$IMAGE" ]] || fail 'Apply requires a resolvable OpenClaw image.'
+if ((OPENCLAW_ONLY == 0)); then [[ -n "$RADAR_IMAGE" ]] || fail 'Apply requires a resolvable Product Radar image.'; fi
 git -C "$ROOT_DIR" diff --check
 git -C "$ROOT_DIR" diff --quiet || fail 'Refusing apply with unstaged changes; commit reviewed source first.'
 git -C "$ROOT_DIR" diff --cached --quiet || fail 'Refusing apply with staged-but-uncommitted changes.'
-if ((CANDIDATE)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
+if ((CANDIDATE && OPENCLAW_ONLY == 0)); then assert_candidate_version_unchanged; else assert_release_version_advanced; fi
 
-python3 "$ROOT_DIR/scripts/provision-9router-image-combo.py" --verify-live --machine "$MACHINE"
-python3 "$ROOT_DIR/scripts/verify-9router-image-reference.py" --machine "$MACHINE"
-if ((BUILD_OPENCLAW == 0)); then assert_image_fresh "$IMAGE" openclaw; fi
-if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
+if ((APPLY)); then
+  python3 "$ROOT_DIR/scripts/provision-9router-image-combo.py" --verify-live --machine "$MACHINE"
+  python3 "$ROOT_DIR/scripts/verify-9router-image-reference.py" --machine "$MACHINE"
+fi
+if ((BUILD_OPENCLAW == 0)); then
+  if ((OPENCLAW_ONLY)); then assert_openclaw_candidate_image "$IMAGE"; else assert_image_fresh "$IMAGE" openclaw; fi
+fi
+if ((OPENCLAW_ONLY == 0 && BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 
 (
   cd "$ROOT_DIR"
@@ -384,7 +450,7 @@ if ((BUILD_OPENCLAW)); then
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
 fi
-if ((BUILD_OPENCLAW)); then
+if ((BUILD_OPENCLAW || OPENCLAW_ONLY)); then
   # Immutable-image preflight before any checkpoint-backed runtime write. The
   # container runs as node, so root-readable-only bundles must fail here.
   orb -m "$MACHINE" -u root docker run --rm --user 1000:1000 --entrypoint node "$IMAGE" --check /app/dist/extensions/amadeus/dist/index.js >/dev/null \
@@ -393,15 +459,19 @@ if ((BUILD_OPENCLAW)); then
   orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'codex-amadeus-heartbeat-silent-delivery-v1' /app/dist/heartbeat-runner-CPy-qxAy.mjs" \
     || fail 'Immutable OpenClaw image is missing the heartbeat silence guard.'
   printf 'OPENCLAW_IMAGE_HEARTBEAT_SILENCE=passed\n'
-  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/session-ingestion-*.mjs && grep -Fq 'amadeus-memory-backfill-peer-admission-v1' /app/dist/session-backfill-*.mjs" \
+  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/session-ingestion-*.mjs && grep -Fq 'amadeus-memory-backfill-peer-admission-v1' /app/dist/session-backfill-*.mjs && grep -Fq 'amadeus-memory-dreaming-no-corpus-v1' /app/dist/dreaming-phases-*.mjs && grep -Fq 'amadeus-memory-dreaming-no-corpus-v1' /app/dist/extensions/memory-core/index.js && grep -Fq 'classifyDreamingSessionAdmission' /app/dist/session-ingestion-*.mjs" \
     || fail 'Immutable OpenClaw image is missing the Memory Core runtime fixes.'
   printf 'OPENCLAW_IMAGE_MEMORY_CORE_PATCH=passed\n'
 fi
 image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
 printf 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s\n' "$image_amadeus_version"
-validate_vps_account_map_source
-run_vps_account_map_node_preflight
+if ((OPENCLAW_ONLY)); then
+  printf 'OPENCLAW_RUNTIME_SECRET_FILES=preserved\n'
+else
+  validate_vps_account_map_source
+  run_vps_account_map_node_preflight
+fi
 if ((BUILD_RADAR)); then
   docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
     --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
@@ -411,16 +481,31 @@ if ((BUILD_RADAR)); then
   docker image inspect --format '{{json .Config.Labels}}' "$RADAR_IMAGE" | python3 "$ROOT_DIR/scripts/verify-image-provenance.py" \
     --revision "$SOURCE_REVISION" --version "$AMADEUS_VERSION" --build-time "$BUILD_TIMESTAMP"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
-else
+elif ((OPENCLAW_ONLY == 0)); then
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"
 fi
 
+if ((BUILD_ONLY)); then
+  printf 'BUILD_VERIFIED=passed\nOPENCLAW_IMAGE=%s\nSOURCE_REVISION=%s\nVERSION=%s\n' "$IMAGE" "$SOURCE_REVISION" "$AMADEUS_VERSION"
+  exit 0
+fi
+
 CHECKPOINT_ID="amadeus-openclaw-$STAMP"
-CHECKPOINT_DIR="$OPENCLAW_DATA_DIR/backups/$CHECKPOINT_ID"
+CHECKPOINT_DIR="$SKULD_BACKUP_ROOT/deploy/$CHECKPOINT_ID"
 OPENCLAW_COMPOSE_FILE="$OPENCLAW_APP_DIR/docker-compose.yml"
 RADAR_COMPOSE_FILE="$RADAR_APP_DIR/docker-compose.yml"
 RADAR_ENV_FILE="$RADAR_APP_DIR/.env"
 MEDIA_COMPOSE_FILE="$MEDIA_ADAPTER_APP_DIR/docker-compose.yml"
+
+if ((OPENCLAW_ONLY)); then
+  STORAGE_PREFLIGHT_LIB_ONLY=1
+  # shellcheck disable=SC1091
+  source "$ROOT_DIR/scripts/storage-preflight.sh"
+  storage_host_volume_check "$EXTERNAL_STORAGE_ROOT" "$EXTERNAL_STORAGE_VOLUME_UUID"
+  if ((STORAGE_FAILURES == 0)); then storage_read_sentinel "$EXTERNAL_STORAGE_ROOT" "$EXTERNAL_STORAGE_SENTINEL_ID"; fi
+  if ((STORAGE_FAILURES == 0)); then storage_identity_only_check "$CHECKPOINT_DIR"; fi
+  ((STORAGE_FAILURES == 0)) || fail 'External Lab checkpoint storage identity is not verified; no runtime change was made.'
+fi
 
 PREPARE="$ROOT_DIR/scripts/openclaw_prepare.py"
 PATCH_RUNTIME="$ROOT_DIR/scripts/patch-openclaw-channel-identity.mjs"
@@ -452,15 +537,14 @@ SOUL_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/SOUL.see
 USER_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/USER.seed.md")"
 MEMORY_B64="$(base64_file "$ROOT_DIR/integrations/openclaw/workspace-seed/MEMORY.seed.md")"
 
-orb -m "$MACHINE" -u root python3 - \
-  "$CHECKPOINT_DIR" \
+CHECKPOINT_ARGS=(
+  "$CHECKPOINT_DIR"
   "$OPENCLAW_COMPOSE_FILE" openclaw-compose.before.yml \
   "$OPENCLAW_APP_DIR/.env" openclaw-compose.env.before \
-  "$RADAR_COMPOSE_FILE" product-radar-compose.before.yml \
-  "$RADAR_ENV_FILE" product-radar.env.before \
-  "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml \
   "$OPENCLAW_DATA_DIR/config/openclaw.json" openclaw-config.before.json \
   "$OPENCLAW_DATA_DIR/config/state/openclaw.sqlite" openclaw-state.sqlite.before \
+  "$OPENCLAW_DATA_DIR/config/agents/main/agent/openclaw-agent.sqlite" openclaw-agent.sqlite.before \
+  "$OPENCLAW_DATA_DIR/config/agents/main/sessions" openclaw-sessions.before \
   "$OPENCLAW_DATA_DIR/openclaw.env" openclaw.env.before \
   "$OPENCLAW_DATA_DIR/secrets" openclaw-secrets.before \
   "$OPENCLAW_DATA_DIR/data/pubg.sqlite" pubg.sqlite.before \
@@ -468,10 +552,19 @@ orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR/data/vps-usage-state.json" vps-usage-state.json.before \
   "$OPENCLAW_DATA_DIR/data/longbridge-oauth.json" longbridge-oauth.json.before \
   "$OPENCLAW_DATA_DIR/data/longbridge-sdk-home" longbridge-sdk-home.before \
-  "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before \
   "$OPENCLAW_DATA_DIR/notifications" owner-notifications.before \
   "$OPENCLAW_DATA_DIR/workspace" openclaw-workspace.before \
-  "$OPENCLAW_DATA_DIR/config/npm/projects" openclaw-whatsapp-npm-projects.before <<'PY'
+  "$OPENCLAW_DATA_DIR/config/npm/projects" openclaw-whatsapp-npm-projects.before
+)
+if ((OPENCLAW_ONLY == 0)); then
+  CHECKPOINT_ARGS+=(
+    "$RADAR_COMPOSE_FILE" product-radar-compose.before.yml
+    "$RADAR_ENV_FILE" product-radar.env.before
+    "$MEDIA_COMPOSE_FILE" media-organizer-compose.before.yml
+    "$RADAR_DATA_DIR/product-radar.sqlite" product-radar.sqlite.before
+  )
+fi
+orb -m "$MACHINE" -u root python3 - "${CHECKPOINT_ARGS[@]}" <<'PY'
 import hashlib, json, os, shutil, sqlite3, stat, subprocess, sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -487,7 +580,7 @@ for i in range(0, len(args), 2):
     source, destination = Path(args[i]), checkpoint / args[i + 1]
     if not source.exists(): continue
     destination.parent.mkdir(parents=True, exist_ok=True)
-    if source.name == 'openclaw.sqlite':
+    if source.suffix in {'.sqlite', '.sqlite3', '.db'}:
         if source.is_symlink(): raise SystemExit('OpenClaw state SQLite path must not be a symlink')
         live = sqlite3.connect('file:' + str(source) + '?mode=ro', uri=True, timeout=15)
         saved = sqlite3.connect(str(destination))
@@ -497,7 +590,7 @@ for i in range(0, len(args), 2):
     elif source.is_dir(): shutil.copytree(source, destination, symlinks=True)
     else: shutil.copy2(source, destination)
 containers = {}
-for name in ['openclaw','product-radar','media-organizer-adapter','changedetection','9router']:
+for name in ['openclaw']:
     try: containers[name] = subprocess.check_output(['docker','inspect','--format','{{.State.Status}}',name], text=True).strip()
     except subprocess.CalledProcessError: containers[name] = 'absent'
 manifest = []
@@ -508,7 +601,7 @@ for i in range(0, len(args), 2):
         item['kind'] = 'directory' if source.is_dir() else 'file'
         item['mode'] = oct(source.stat().st_mode & 0o777)
         item['size'] = sum(path.stat().st_size for path in source.rglob('*') if path.is_file()) if source.is_dir() else source.stat().st_size
-        sensitive = source.name in {'openclaw.env', '.env', 'longbridge-oauth.json', 'longbridge-sdk-home', 'openclaw.sqlite'} or 'secrets' in source.parts
+        sensitive = source.suffix in {'.sqlite', '.sqlite3', '.db'} or source.name in {'openclaw.env', '.env', 'longbridge-oauth.json', 'longbridge-sdk-home'} or 'secrets' in source.parts
         if not sensitive and source.is_file():
             digest = hashlib.sha256()
             with source.open('rb') as stream:
@@ -530,15 +623,66 @@ for name in ('backup-manifest.json', 'checkpoint.json'):
 print('CHECKPOINT=' + str(checkpoint))
 PY
 
-[[ -f "$QWEN_IMAGE_TOKEN_HOST_FILE" && "$(stat -f %Lp "$QWEN_IMAGE_TOKEN_HOST_FILE")" == 600 ]] || fail "Qwen image token must exist with mode 600: $QWEN_IMAGE_TOKEN_HOST_FILE"
-[[ "$QWEN_IMAGE_TOKEN_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] || fail 'Qwen guest token must stay under the protected OpenClaw secrets directory.'
-orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chown 1000:1000 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/qwen-image-token.tmp "$1"' bash "$QWEN_IMAGE_TOKEN_GUEST_FILE" < "$QWEN_IMAGE_TOKEN_HOST_FILE"
-orb -m "$MACHINE" -u root test -f "$QWEN_IMAGE_TOKEN_GUEST_FILE"
-orb -m "$MACHINE" -u root bash -lc 'set -Eeuo pipefail; path="$1"; install -d -o root -g root -m 0700 "$(dirname "$path")"; cat > "$path.tmp"; chown 1000:1000 "$path.tmp"; chmod 0600 "$path.tmp"; mv -f "$path.tmp" "$path"' bash "$VPS_ACCOUNT_MAP_GUEST_FILE" < "$VPS_ACCOUNT_MAP_HOST_FILE"
-orb -m "$MACHINE" -u root test -f "$VPS_ACCOUNT_MAP_GUEST_FILE"
-orb -m "$MACHINE" -u root test "$(orb -m "$MACHINE" -u root stat -c %a "$VPS_ACCOUNT_MAP_GUEST_FILE")" = 600
-printf 'OPENCLAW_VPS_ACCOUNT_MAP=installed\n'
+if ((OPENCLAW_ONLY)); then
+  orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-compose.before.yml"
+  orb -m "$MACHINE" -u root test -s "$CHECKPOINT_DIR/openclaw-agent.sqlite.before"
+  orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-workspace.before"
+  orb -m "$MACHINE" -u root test -d "$CHECKPOINT_DIR/openclaw-sessions.before"
+fi
 
+OPENCLAW_SWITCHED=0
+rollback_openclaw_candidate() {
+  local status=$? restore_status=0
+  if ((OPENCLAW_ONLY && OPENCLAW_SWITCHED && status != 0)); then
+    trap - EXIT
+    set +e
+    printf 'CANDIDATE_FAILURE=rollback_started checkpoint=%s\n' "$CHECKPOINT_DIR" >&2
+    orb -m "$MACHINE" -u root python3 - "$CHECKPOINT_DIR/openclaw-compose.before.yml" "$OPENCLAW_COMPOSE_FILE" <<'PY'
+import os, sys
+from pathlib import Path
+source, destination = map(Path, sys.argv[1:])
+if source.is_symlink() or not source.is_file(): raise SystemExit('checkpoint Compose source is unavailable')
+temporary = destination.with_name(destination.name + '.rollback-tmp')
+temporary.write_bytes(source.read_bytes())
+os.chmod(temporary, source.stat().st_mode & 0o777)
+os.replace(temporary, destination)
+PY
+    restore_status=$?
+    if ((restore_status == 0)); then
+      orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw" >/dev/null
+      restore_status=$?
+    fi
+    if ((restore_status == 0)); then
+      for attempt in $(seq 1 40); do
+        orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1 && break
+        sleep 2
+      done
+      orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18789/healthz >/dev/null
+      restore_status=$?
+    fi
+    if ((restore_status == 0)); then
+      printf 'CANDIDATE_ROLLBACK=passed checkpoint=%s persisted_data=preserved\n' "$CHECKPOINT_DIR" >&2
+    else
+      printf 'CANDIDATE_ROLLBACK=failed checkpoint=%s inspect_before_any_restore=true\n' "$CHECKPOINT_DIR" >&2
+    fi
+    exit "$status"
+  fi
+  return "$status"
+}
+if ((OPENCLAW_ONLY)); then trap rollback_openclaw_candidate EXIT; fi
+
+if ((OPENCLAW_ONLY == 0)); then
+  [[ -f "$QWEN_IMAGE_TOKEN_HOST_FILE" && "$(stat -f %Lp "$QWEN_IMAGE_TOKEN_HOST_FILE")" == 600 ]] || fail "Qwen image token must exist with mode 600: $QWEN_IMAGE_TOKEN_HOST_FILE"
+  [[ "$QWEN_IMAGE_TOKEN_GUEST_FILE" == /DATA/AppData/openclaw/secrets/* ]] || fail 'Qwen guest token must stay under the protected OpenClaw secrets directory.'
+  orb -m "$MACHINE" -u root bash -lc 'umask 077; mkdir -p /DATA/AppData/openclaw/secrets; cat > /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chmod 600 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; chown 1000:1000 /DATA/AppData/openclaw/secrets/qwen-image-token.tmp; mv -f /DATA/AppData/openclaw/secrets/qwen-image-token.tmp "$1"' bash "$QWEN_IMAGE_TOKEN_GUEST_FILE" < "$QWEN_IMAGE_TOKEN_HOST_FILE"
+  orb -m "$MACHINE" -u root test -f "$QWEN_IMAGE_TOKEN_GUEST_FILE"
+  orb -m "$MACHINE" -u root bash -lc 'set -Eeuo pipefail; path="$1"; install -d -o root -g root -m 0700 "$(dirname "$path")"; cat > "$path.tmp"; chown 1000:1000 "$path.tmp"; chmod 0600 "$path.tmp"; mv -f "$path.tmp" "$path"' bash "$VPS_ACCOUNT_MAP_GUEST_FILE" < "$VPS_ACCOUNT_MAP_HOST_FILE"
+  orb -m "$MACHINE" -u root test -f "$VPS_ACCOUNT_MAP_GUEST_FILE"
+  orb -m "$MACHINE" -u root test "$(orb -m "$MACHINE" -u root stat -c %a "$VPS_ACCOUNT_MAP_GUEST_FILE")" = 600
+  printf 'OPENCLAW_VPS_ACCOUNT_MAP=installed\n'
+fi
+
+if ((OPENCLAW_ONLY == 0)); then
 orb -m "$MACHINE" -u root python3 - \
   "$OPENCLAW_DATA_DIR" "$CONFIG_B64" "$TEAM_B64" "$AGENTS_B64" "$SOUL_B64" "$USER_B64" "$MEMORY_B64" < "$PREPARE"
 
@@ -647,7 +791,29 @@ os.chmod(env_path, 0o600)
 print('OPENCLAW_COMPOSE=installed')
 print('OPENCLAW_COMPOSE_ENV=installed')
 PY
+else
+  OPENCLAW_SWITCHED=1
+  orb -m "$MACHINE" -u root python3 - "$OPENCLAW_COMPOSE_FILE" "$IMAGE" <<'PY'
+import os, re, sys
+from pathlib import Path
+compose, image = Path(sys.argv[1]), sys.argv[2]
+if compose.is_symlink() or not compose.is_file(): raise SystemExit('existing OpenClaw Compose file must be a regular file')
+if not re.fullmatch(r'[A-Za-z0-9._/@:-]+', image): raise SystemExit('invalid OpenClaw image tag')
+text = compose.read_text()
+pattern = re.compile(r'(?m)^(\s*image:\s*)\S+\s*$')
+matches = list(pattern.finditer(text))
+if len(matches) != 1: raise SystemExit('existing OpenClaw Compose must contain exactly one image reference')
+match = matches[0]
+updated = text[:match.start()] + match.group(1) + image + text[match.end():]
+temporary = compose.with_name(compose.name + '.candidate-tmp')
+temporary.write_text(updated)
+os.chmod(temporary, compose.stat().st_mode & 0o777)
+os.replace(temporary, compose)
+print('OPENCLAW_COMPOSE_IMAGE=updated')
+PY
+fi
 
+if ((OPENCLAW_ONLY == 0)); then
 orb -m "$MACHINE" -u root python3 - \
   "$RADAR_APP_DIR" "$RADAR_COMPOSE_FILE" "$RADAR_COMPOSE_B64" "$RADAR_IMAGE" "$RADAR_ENV_FILE" <<'PY'
 import base64, os, re, sys
@@ -682,19 +848,24 @@ env.write_text('\n'.join(filtered) + '\n'); os.chmod(env, 0o600)
 print('PRODUCT_RADAR_COMPOSE=installed')
 print('PRODUCT_RADAR_ENV=legacy_notification_keys_removed')
 PY
+fi
 
-orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create "$AMADEUS_NETWORK_NAME" >/dev/null
+if ((OPENCLAW_ONLY)); then
+  orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || fail "$AMADEUS_NETWORK_NAME network is unavailable; scoped deployment will not create shared networks."
+else
+  orb -m "$MACHINE" -u root docker network inspect "$AMADEUS_NETWORK_NAME" >/dev/null 2>&1 || orb -m "$MACHINE" -u root docker network create "$AMADEUS_NETWORK_NAME" >/dev/null
+fi
 orb -m "$MACHINE" -u root docker network inspect "$NINE_ROUTER_NETWORK_NAME" >/dev/null 2>&1 || fail "$NINE_ROUTER_NETWORK_NAME network is unavailable."
 MEDIA_ADAPTER_PRESENT=0
-if orb -m "$MACHINE" -u root docker inspect "$MEDIA_ADAPTER_CONTAINER" >/dev/null 2>&1; then
+if ((OPENCLAW_ONLY == 0)) && orb -m "$MACHINE" -u root docker inspect "$MEDIA_ADAPTER_CONTAINER" >/dev/null 2>&1; then
   MEDIA_ADAPTER_PRESENT=1
   if ! orb -m "$MACHINE" -u root docker inspect --format '{{json .NetworkSettings.Networks}}' "$MEDIA_ADAPTER_CONTAINER" 2>/dev/null | grep -q "$AMADEUS_NETWORK_NAME"; then
     orb -m "$MACHINE" -u root docker network connect --alias media-organizer-adapter "$AMADEUS_NETWORK_NAME" "$MEDIA_ADAPTER_CONTAINER"
   fi
-else
+elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER=absent (external service was not restored; media tool acceptance remains pending)' >&2
 fi
-orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null
+if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" config >/dev/null; fi
 # Rebuild the pinned host's persisted plugin index from the candidate image
 # after a consistent state SQLite backup, but before any plugin/Skill preflight
 # or container switch. A stale index can omit a healthy Amadeus bundle.
@@ -787,10 +958,14 @@ print('GROUP_CAPABILITY_TOOL_POLICY=scoped')
 print('DM_SESSION_SCOPE=per-account-channel-peer')
 PY
 
-orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
-orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null && docker compose restart openclaw >/dev/null"
-# The pinned WhatsApp module is volume-installed. A same-image compose up can
-# leave the Node process running with the old media agent; restart loads it.
+if ((OPENCLAW_ONLY)); then
+  orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build --no-deps openclaw >/dev/null"
+else
+  orb -m "$MACHINE" -u root docker compose --project-directory "$RADAR_APP_DIR" -f "$RADAR_COMPOSE_FILE" up -d --no-build product-radar >/dev/null
+  orb -m "$MACHINE" -u root bash -lc "cd '$OPENCLAW_APP_DIR' && docker compose up -d --no-build >/dev/null && docker compose restart openclaw >/dev/null"
+  # The pinned WhatsApp module is volume-installed. A same-image compose up can
+  # leave the Node process running with the old media agent; restart loads it.
+fi
 
 for attempt in $(seq 1 40); do
   if orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 3 http://127.0.0.1:18789/healthz >/dev/null 2>&1; then break; fi
@@ -804,13 +979,13 @@ started_at="$(orb -m "$MACHINE" -u root docker inspect openclaw --format '{{.Sta
 registration_count="$(orb -m "$MACHINE" -u root docker logs --since "$started_at" openclaw 2>&1 | grep -F -c 'amadeus native capability plugin registered' || true)"
 [[ "$registration_count" =~ ^[0-9]+$ && "$registration_count" -ge 1 ]] || fail 'Amadeus plugin did not register in the live Gateway; restore the protected checkpoint.'
 printf 'AMADEUS_GATEWAY_REGISTRATION=passed\n'
-orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null
-if ((MEDIA_ADAPTER_PRESENT)); then
+if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root curl --fail --silent --show-error --max-time 5 http://127.0.0.1:5315/health >/dev/null; fi
+if ((OPENCLAW_ONLY == 0 && MEDIA_ADAPTER_PRESENT)); then
   orb -m "$MACHINE" -u root docker exec openclaw sh -lc 'node -e "fetch(\"http://media-organizer-adapter:8765/healthz\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"' >/dev/null
-else
+elif ((OPENCLAW_ONLY == 0)); then
   printf '%s\n' 'MEDIA_ADAPTER_NETWORK=skipped_missing_service'
 fi
-orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null
+if ((OPENCLAW_ONLY == 0)); then orb -m "$MACHINE" -u root docker exec openclaw sh -lc "ssh -i /run/secrets/mac_ssh_key -o BatchMode=yes -o ConnectTimeout=8 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null '$MAC_CONTROL_USER@$MAC_CONTROL_HOST' nas.status" >/dev/null; fi
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js channels status --json > '$CHECKPOINT_DIR/channels-status.json'"
 
 ensure_cron() {
@@ -869,6 +1044,7 @@ remove_cron() {
     orb -m "$MACHINE" -u root docker exec openclaw node dist/index.js cron rm "$existing_id" --json >/dev/null
   fi
 }
+if ((OPENCLAW_ONLY == 0)); then
 remove_cron amadeus-briefing-morning
 remove_cron amadeus-briefing-evening
 edit_existing_cron amadeus-vps-morning '30 9 * * *' '调用 amadeus_vps_live_status、amadeus_vps_usage、amadeus_vps_system_status、amadeus_vps_services、amadeus_vps_subscription_overview、amadeus_vps_traffic_fuse；根据返回事实生成简洁中文 VPS 晨间报告，流量段单独输出十格 █/░ 与 usedPercent，并明确区分累计套餐已用/总量/剩余/重置时间和 reportWindow 的最近 12 小时窗口。窗口必须按 startAt/endAt 单独列出整机 providerBytes、active subscriptionBytes、legacyBytes（仅在 complete 时列出）和 otherServiceBytes；后者必须标注“其他服务/未归因残差（未校准）”，它只是 providerBytes 减 active subscriptionBytes 的口径残差，不是精确的服务计量，窗口不完整就写 unknown。另含 provider 上次成功采样增量、私有 account map 中各活动账号自 T0 起及 dedicated operator 账号自创建起的 monitored 总量、已下线 legacy 历史用量（仅非零）、可比较时的窗口增长与用量最高账户、来源 freshness/degraded 状态。providerDelta、proxyAccounted 与整机套餐分别陈述；reconciliation=uncalibrated 时明确关系未知，不计算生命周期差值或声称异常。所有 unknown/stale/error 必须如实保留，不得补零或推测。另用 traffic_fuse 工具说明上海自然日整机观测字节、source/coverage、状态和阈值；只有 verified 状态才报告共享速率和限速开始时间，若 capped 要给出下一个北京时间 00:00。把自然日熔断与累计套餐、账号归因分开，并注明 Linux 出口限速不能保证提供商计费不超过 50 GB，因为入口流量可能已计费。随后调用 amadeus_notify_owner，传入 type=worldline_notification_intent、eventType=vps_report_morning、kind=scheduled_report、severity 按事实取 success/warning/error、significance 按影响取 notable/major/critical、eventKey 使用当天正式 vps-report:当天日期:morning、source=vps-report、headline、facts、summary、occurredAt；手动或补跑使用 vps-report:manual:<当前 ISO 时间>:morning，不得占用正式 key。' 'amadeus_vps_live_status amadeus_vps_usage amadeus_vps_system_status amadeus_vps_services amadeus_vps_subscription_overview amadeus_vps_traffic_fuse amadeus_notify_owner'
@@ -883,13 +1059,16 @@ ensure_cron amadeus-pubg-sync-daily '0 0 * * *' '调用 pubg_telemetry_sync_repo
 ensure_cron amadeus-market-open '30 9 * * 1-5' '调用 amadeus_market_overview（phase=open）与 amadeus_market_session；由 Longbridge trading day/session 事实判断是否为有效开盘检查，不能把固定时钟当作市场真相。有效时把 overview.notification 的完整结构化对象原样传给 amadeus_notify_owner；非交易日、休市、OAuth reauth 或 provider unavailable 时直接结束，不得改写行情或数据时间。' 'amadeus_market_overview amadeus_market_session amadeus_notify_owner' 'America/New_York'
 ensure_cron amadeus-market-close '0 16 * * 1-5' '调用 amadeus_market_overview（phase=close）与 amadeus_market_session；由 Longbridge trading day/session 事实判断是否为有效收盘检查，不能把固定时钟当作市场真相。有效时把 overview.notification 的完整结构化对象原样传给 amadeus_notify_owner；非交易日、休市、OAuth reauth 或 provider unavailable 时直接结束，不得改写行情或数据时间。' 'amadeus_market_overview amadeus_market_session amadeus_notify_owner' 'America/New_York'
 orb -m "$MACHINE" -u root bash -lc "docker exec openclaw node dist/index.js cron list --json > '$CHECKPOINT_DIR/cron-list.json'"
+fi
 
+if ((OPENCLAW_ONLY == 0)); then
 HOOK_PATH="$CODEX_NOTIFY_HOOK_PATH"
 HOOK_BACKUP_DIR="$CODEX_NOTIFY_BACKUP_ROOT/$CHECKPOINT_ID"
 mkdir -p "$HOOK_BACKUP_DIR"
 mkdir -p "$(dirname -- "$HOOK_PATH")"
 if [[ -f "$HOOK_PATH" ]]; then cp -p "$HOOK_PATH" "$HOOK_BACKUP_DIR/codex-notify.before.sh"; fi
 install -m 755 "$ROOT_DIR/integrations/openclaw/codex-notify.sh" "$HOOK_PATH"
+fi
 
 if ((CANDIDATE)); then
   ACCEPTANCE_KEY="amadeus-candidate-deploy:$CHECKPOINT_ID"
@@ -985,9 +1164,9 @@ printf 'POST_DEPLOY_EVIDENCE=%s\n' "$POST_DEPLOY_EVIDENCE_DIR"
 printf 'OPENCLAW_IMAGE=%s\n' "$IMAGE"
 printf 'PRODUCT_RADAR_IMAGE=%s\n' "$RADAR_IMAGE"
 printf '%s\n' 'OPENCLAW_HEALTH=passed'
-printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'
+if ((OPENCLAW_ONLY == 0)); then printf '%s\n' 'PRODUCT_RADAR_HEALTH=passed'; else printf '%s\n' 'PRODUCT_RADAR=untouched'; fi
 if ((MEDIA_ADAPTER_PRESENT)); then printf '%s\n' 'MEDIA_ADAPTER_NETWORK=passed'; fi
-printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'
+if ((OPENCLAW_ONLY == 0)); then printf '%s\n' 'NAS_SSH_READONLY_SMOKE=passed'; fi
 printf '%s\n' "OWNER_NOTIFICATION=$owner_notification_status"
 printf 'OWNER_OUTBOX_SMOKE=%s\n' passed
 printf '%s\n' "LOG_POLICY=$log_policy_status"
