@@ -136,6 +136,21 @@ runtime extension. No live data or service was changed. Full evidence and the
 recovery boundary are in
 `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
 
+## Authorized reindex and retrieval acceptance — 2026-10-15
+
+- `openclaw memory index --force --agent main` exited 0. The resulting status
+  is 3 indexed files / 3 scanned files, 70 chunks, `dirty=false`, FTS
+  enabled/available, vector enabled at 1024 dimensions, hybrid mode, and a
+  valid index identity. The embedding cache reports 72 entries.
+- The exact keyword query returned 3 results; all 3 had positive text and
+  vector scores. A different-worded semantic paraphrase returned 1 result with
+  a positive vector score. Only result counts and numeric score summaries
+  were retained; no memory snippets, paths, or text were emitted.
+- The pre-write checkpoint remains intact and no rollback was needed. No
+  session database was deleted or replaced, and no service restart occurred.
+  Modified-file incremental-refresh and restart-persistence gates remain
+  outstanding for full P1 `LIVE_VERIFIED` acceptance.
+
 ## Rebuild and recovery procedure
 
 Before any approved rebuild:
@@ -191,7 +206,7 @@ the GitHub Actions workflow itself has not run on GitHub.
 
 `pnpm workflow:plan` classifies the Dockerfile change as
 `RELEASE_BUILD_REQUIRED`; no Docker build was run. Therefore
-`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. Apart from the
-synthetic request recorded above, no memory search query, `memory index`,
-`memory reset`, session backfill, Dreaming run, or file/database write was
-issued for this repair.
+`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. Besides the
+synthetic Embedding request and the two redacted retrieval queries recorded
+above, no `memory reset`, session backfill, Dreaming run, or file/database
+write outside the derived-index rebuild was issued for this repair.

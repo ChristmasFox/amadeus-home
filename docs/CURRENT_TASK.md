@@ -25,8 +25,8 @@ commits remain local and unpushed.
 passed, and the requested working-tree `git diff --check` passed on the clean
 tree. A supplemental full-range `git diff --check origin/main...HEAD` reported
 six trailing-space lines in three Markdown reports; these were not rewritten.
-No runtime, database, or M2 action occurred. The next authorized item is the
-protected SQLite and memory-directory backup before any index write.
+No runtime, database, or M2 action occurred in step 1. The next authorized
+item was the Embedding probe, completed in step 2 below.
 
 ## Explicit Lab approval sequence — step 2 — 2026-10-15
 
@@ -39,7 +39,8 @@ tokens). No memory text was sent and no index or runtime state was changed.
 The pre-probe index remained 2 files / 70 chunks, 3 scanned files, FTS
 available, vector enabled, `dirty=true`; Dreaming session corpus count was 0.
 This verifies provider reachability and dimension only, not semantic retrieval.
-Next: reindex only after the verified protected checkpoint below is committed.
+The protected backup and index acceptance are recorded in step 3 below;
+incremental-refresh and post-restart persistence gates remain open.
 
 ## Explicit Lab approval sequence — step 3 pre-write checkpoint — 2026-10-15
 
@@ -57,10 +58,27 @@ baseline remains `dirty=true`, 2 files / 70 chunks / 3 scanned, FTS available,
 
 The generic helper initially could not verify `vec0`; after loading the pinned
 runtime extension, the retained snapshot passed both SQLite checks. No source
-database, WAL, session, workspace, container, or service was changed. The
-checkpoint and exact recovery boundary are in
-`.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`. Index write is
-still pending.
+database, WAL, session, workspace, container, or service was changed during
+backup. The checkpoint and exact recovery boundary are in
+`.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`. The force
+reindex then passed; detailed retrieval and `dirty=false` evidence follows.
+
+## Explicit Lab approval sequence — step 3 acceptance — 2026-10-15
+
+`openclaw memory index --force --agent main` exited 0. The post-index status
+reports 3 indexed / 3 scanned files, 70 chunks, `dirty=false`, FTS available,
+hybrid search, valid index identity, and 1024 dimensions. An exact `Kurisu`
+keyword search returned 3 results with positive text and vector scores for all
+3. A paraphrased semantic query returned 1 result with a positive vector score.
+The command output was filtered in-container to counts and scores; no result
+snippets or memory text were emitted. The verified pre-write backup remains at
+the external checkpoint path above; no rollback was needed.
+
+This completes the requested rebuild, keyword/semantic retrieval, and
+`dirty=false` checks. Modified-file incremental refresh and persistence across
+the planned step-6 deployment/restart remain open P1 `LIVE_VERIFIED` gates.
+Next authorized item: the constrained Dreaming run, after verifying that the
+current runtime can isolate Arthur's WhatsApp direct-message source.
 
 P2 established independent Lab/Gate SemVer sources and release-note checks;
 Lab remains `1.10.4`, Gate remains `0.1.0`, and no formal tag was created. The

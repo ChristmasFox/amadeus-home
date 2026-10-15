@@ -9,10 +9,13 @@ index write, a protected external checkpoint was created at
 `/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T124516Z`. The
 agent SQLite online backup passed `quick_check` and `integrity_check`; the
 memory directory plus `MEMORY.md` archive passed content comparison and
-checksum verification. Current baseline is `dirty=true` (2 indexed files, 3
-scanned), FTS available, vector dimension 1024. The index rebuild, live
-keyword/semantic retrieval acceptance, Dreaming, candidate build, apply, and
-formal Lab release remain pending. Gate/M2 was not touched. Evidence and
+checksum verification. The authorized force reindex completed; exact keyword
+retrieval returned 3 results with positive FTS and vector scores, a paraphrase
+returned a positive vector match, and current status is 3/3 files with
+`dirty=false`, FTS available, hybrid mode, and vector dimension 1024. Modified-
+file incremental refresh and restart persistence remain open. Dreaming,
+candidate build, apply, and formal Lab release remain pending. Gate/M2 was not
+touched. Evidence and
 recovery boundaries: `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
 
 ## 2026-10-15 — PUBG SaaS Kurisu-aligned traffic and context
