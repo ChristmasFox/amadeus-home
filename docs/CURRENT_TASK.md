@@ -4,6 +4,31 @@ Date: 2026-10-15 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
+Arthur clarified that the earlier authorization to explicitly enable
+Dreaming/restart Lab was based on a mistaken “Dreaming disabled” conclusion.
+The bundled default is enabled, Dreaming acceptance already passed, and Lab
+1.10.5 is already released. That authorization is withdrawn: do not edit Lab's
+runtime config or restart it. The earlier failed config attempt had already
+been rolled back before this correction.
+
+Read-only follow-up found the existing incremental index current at 5 files /
+92 chunks, `dirty=false`, hybrid mode, FTS available, and a complete 1024-D
+vector index. Restart persistence is evidenced without another restart: index
+acceptance was observed at `2026-10-15T14:50:04Z`; the already-performed
+rollback restart started `openclaw` at `2026-10-15T15:23:48Z`; post-restart
+read-only status retained the same index counts and `dirty=false`. Evidence:
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/post-restart-index-verification.json`.
+No further runtime change occurred. The hanging `release-config-hash` process
+is absent, and M2 Buildx entries are terminal with no migration/deploy
+process observed; M2 remains paused and untouched.
+
+The read-only snapshot helper's stuck-query path was fixed in source commit
+`2e9f66c` (`fix: bound Lab runtime snapshot queries`): digest reads now call
+`sha256sum` directly with a 30-second timeout and fail closed. Its focused
+test, workflow/architecture/secrets checks, affected typechecks and PUBG tests
+passed. No image was built and this commit was not pushed. Existing unrelated
+Gate worktree edits remain untouched.
+
 Latest continuation: the authorized Lab Dreaming config change stopped at
 `openclaw config validate` because atomic replacement changed the config owner
 to root. The original config was restored from a protected checkpoint and Lab

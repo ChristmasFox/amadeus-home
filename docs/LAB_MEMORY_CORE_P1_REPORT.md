@@ -368,3 +368,23 @@ container switch. Post-release `status --live --manifest` reported
 `DRIFT_STATUS=IN_SYNC`; the container remained healthy at the accepted digest
 and source. No rollback was needed. Overall P1 acceptance is
 `LIVE_VERIFIED`, and the formal Lab product status is `RELEASED`.
+
+## Post-index persistence after an already completed rollback restart — 2026-10-15
+
+Arthur clarified that the later request to explicitly enable Dreaming and
+restart Lab was based on a mistaken disabled-state conclusion: the bundled
+`DEFAULT_MEMORY_DREAMING_ENABLED=true`, the controlled Dreaming acceptance
+already passed, and Lab 1.10.5 was already released. That authorization was
+withdrawn. The failed config attempt was rolled back before the correction;
+there has been no Lab config edit or restart afterward.
+
+The index acceptance record was observed at `2026-10-15T14:50:04Z` with 5
+files, 92 chunks, and `dirty=false`. The subsequent rollback restarted the
+same `openclaw` container at `2026-10-15T15:23:48Z`; it restored only
+`openclaw.json` and did not restore or change SQLite/Workspace data. A later
+read-only `memory status --json` retained 5 files, 92 chunks, `dirty=false`,
+hybrid search, available FTS, a complete 1024-dimension vector index, valid
+index identity, and zero scan issues. This verifies persistence across an
+already completed restart without issuing another restart or index write.
+The mode-0600 sanitized evidence is
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/post-restart-index-verification.json`.

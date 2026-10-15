@@ -58,14 +58,39 @@ checks for this task must use sanitized metadata probes.
 
 ## Source and release status
 
-The owner-only WhatsApp template/policy and preparer tests pass locally. The
-release snapshot hash query now uses direct `sha256sum` with a 30-second bound;
-its focused timeout/command test and the release-tooling test pass. The
-`pnpm check:secrets` and `git diff --check` checks passed. These source changes
-remain uncommitted; no new image was built or pushed.
+The owner-only WhatsApp template/policy edits were reverted after Arthur's
+correction. The independent release snapshot hash query now uses direct
+`sha256sum` with a 30-second bound; commit `2e9f66c` contains that fix and its
+focused test, with workflow coverage. The focused timeout/command test,
+release-tooling test, `pnpm check:secrets`, and `git diff --check` passed. No
+new image was built or pushed.
 
 The existing local `lab/v1.10.5` tag remains at commit
 `0f109389378dc322dbc780997f3133b5f69eb53e`; no tag was moved or recreated.
 Formal release was not attempted after this failed validation. Any future
-continuation must first fix the config replacement ownership issue, rerun
-validation before restart, and re-establish the P1 live gates.
+continuation at that time was conditioned on fixing the config replacement
+ownership issue and re-running validation before restart; the operator
+correction below supersedes that proposed continuation.
+
+## Superseding operator correction and read-only follow-up
+
+Arthur clarified that the authorization to explicitly enable Dreaming and
+restart Lab was based on an incorrect disabled-state conclusion. The bundled
+default is enabled, Dreaming acceptance already passed, and Lab 1.10.5 is
+already released. That authorization is withdrawn. The failed config attempt
+above was already rolled back before the correction; no Lab runtime config
+change or restart was made afterward. The owner-only template/preparer edits
+derived only from that attempted scope were reverted to repository HEAD; no
+live config change was performed.
+
+The post-Dreaming incremental index acceptance at `2026-10-15T14:50:04Z`
+reported 5 files / 92 chunks and `dirty=false`. The rollback restart began at
+`2026-10-15T15:23:48Z`. A read-only status check after that already completed
+restart retained the same counts and `dirty=false`, with hybrid search, FTS,
+and the 1024-D vector index available. No additional restart or index refresh
+was issued. Detailed sanitized evidence is
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/post-restart-index-verification.json`.
+
+The `release-config-hash` process is no longer present. Read-only M2 checks
+found only terminal Buildx records and no migration/deploy process; no M2
+database query, log inspection, service action, or data change occurred.

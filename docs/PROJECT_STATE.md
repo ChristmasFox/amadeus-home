@@ -1,5 +1,27 @@
 # Project State — 2026-10-15
 
+## 2026-10-15 — Dreaming authorization correction and index persistence evidence
+
+Arthur clarified that the earlier authorization to explicitly enable
+Dreaming/restart Lab was based on an incorrect conclusion that Dreaming was
+disabled. The bundled default is enabled, the controlled Dreaming acceptance
+already passed, and Lab 1.10.5 is already released. That authorization is
+withdrawn. The earlier failed config attempt had been rolled back before this
+correction; no Lab runtime config edit or restart was performed afterward.
+
+The current read-only index status is 5 files / 92 chunks, `dirty=false`,
+hybrid search, FTS available, complete 1024-D vector index, valid identity,
+and no scan issues. The accepted index state at `2026-10-15T14:50:04Z` survived
+the already-performed rollback restart (`openclaw` start time
+`2026-10-15T15:23:48Z`); the post-restart status retained the same file/chunk
+counts and `dirty=false`. No new restart or index write was issued in this
+continuation. Sanitized evidence is at
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/post-restart-index-verification.json`.
+
+The `release-config-hash` process is absent, so no kill signal was needed.
+Read-only M2 inspection found only terminal Buildx history and no migration or
+deployment process; M2 services and data were not changed.
+
 ## 2026-10-15 — Lab Dreaming config attempt rolled back
 
 After the earlier Lab 1.10.5 release, Arthur authorized an additional
@@ -13,10 +35,12 @@ Dreaming, index refresh, build, or new release followed. The scheduled 03:00
 Asia/Shanghai job was not edited. See
 `.agent/checkpoints/2026-10-15-lab-dreaming-config-validation-rollback.md`.
 
-The local source changes for the WhatsApp-only template/policy and bounded
-release snapshot query passed focused tests, `pnpm check:secrets`, and
-`git diff --check`, but remain uncommitted. Existing local tag `lab/v1.10.5`
-was not moved or recreated.
+The WhatsApp-only template/preparer policy edits derived from that attempted
+scope were reverted. The independent bounded release snapshot query fix was
+committed as `2e9f66c`; it passed its focused test, workflow/architecture/
+secrets checks, affected typechecks, and PUBG tests. No image was built and
+that source commit was not pushed. Existing local tag `lab/v1.10.5` was not
+moved or recreated.
 
 ## 2026-10-15 — Lab `RELEASED` as 1.10.5
 
