@@ -32,6 +32,12 @@ database, secret, image, release tag, or registry was changed.
   validated loopback test database before invoking the SaaS suite, so missing
   or unsafe targets cannot silently skip PostgreSQL-backed cases. The
   database guard is in `af48ed6`. No Gate environment was queried or modified.
+- A current `release-gate.sh --help` check caught unquoted heredoc expansion:
+  shell treated the documented test-database variable and backticked names as
+  commands, emitted errors, and omitted the literal constraints. `release-cli.sh`
+  now prints the product usage line separately and uses a quoted heredoc for
+  option text. The regression fixture requires empty stderr and the literal
+  database-variable and name constraints in Gate help.
 - `scripts/release-state.py` validates and writes manifests and compares them
   with runtime snapshots. It checks the product tag, per-image source/version/
   build provenance, digest, Compose image reference and Compose file digest,
@@ -84,6 +90,9 @@ Passed focused local fixtures and source checks:
   `_test`/`_testing` database names, rejects URI query/fragment overrides, and
   verifies missing/remote targets fail before package tests without printing
   URL credentials
+- `python3 scripts/test-release-tooling.py` passes with the new no-shell-
+  expansion help checks; `bash -n scripts/release-cli.sh` passes, and actual
+  Gate help prints the complete test-database requirement without stderr.
 - `python3 scripts/test-lab-memory-acceptance.py` — incomplete live checks and
   post-acceptance Memory Core source drift fail closed
 - `bash scripts/test-developer-workflow.sh`

@@ -325,12 +325,15 @@ assert lab_apply.returncode != 0 and "not valid for plan" in lab_apply.stderr
 for wrapper in ("release-lab.sh", "release-gate.sh"):
     help_output = invoke("bash", str(ROOT / "scripts" / wrapper), "--help")
     assert help_output.returncode == 0 and "rollback-plan" in help_output.stdout
+    assert help_output.stderr == "", f"{wrapper} help must not execute shell substitutions: {help_output.stderr}"
 lab_help = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "--help").stdout
 gate_help = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "--help").stdout
 assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
 assert "--environment" not in lab_help and "Gate" not in lab_help
 assert "gate-local|gate-staging|gate-prod" in gate_help
 assert "M2 remains paused" in gate_help and "reviewed" in gate_help
+assert "PUBG_SAAS_TEST_DATABASE_URL" in gate_help
+assert "database named `test`/`testing`" in gate_help
 assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))
 
 with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:

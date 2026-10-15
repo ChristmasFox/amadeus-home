@@ -32,6 +32,19 @@ were terminal (`Completed`); sampled `Error` entries were terminal as well.
 No in-flight M2 build/deploy was observed. No database query, log inspection,
 service action, or M2 data change occurred.
 
+## P3 source follow-up — Gate release help expansion — 2026-10-15
+
+An actual `scripts/release-gate.sh --help` invocation exposed unquoted heredoc
+expansion: Bash tried to run the documented `PUBG_SAAS_TEST_DATABASE_URL`,
+`test`, and `testing` tokens as commands, emitted errors, and omitted the
+literal database constraints. `scripts/release-cli.sh` now emits the usage
+line with `printf` and renders option text through a quoted heredoc.
+`scripts/test-release-tooling.py` asserts both product help commands have no
+stderr and that Gate help contains the literal database-variable and target
+rules. The fixture, `bash -n scripts/release-cli.sh`, actual Gate help,
+`pnpm workflow:plan` (`FAST`), `git diff --check`, and `pnpm check:secrets`
+passed. No Gate runtime, database, or M2 state changed.
+
 ## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
 
 The authorized Dreaming run was not invoked. Read-only inspection of the live

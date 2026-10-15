@@ -34,8 +34,8 @@ cleanup_temporary_files() {
 trap cleanup_temporary_files EXIT
 usage() {
   if [[ "$PRODUCT" == lab ]]; then
-    cat <<USAGE
-Usage: scripts/release-${PRODUCT}.sh plan|verify|candidate|release|status|rollback-plan [options]
+    printf 'Usage: scripts/release-%s.sh plan|verify|candidate|release|status|rollback-plan [options]\n' "$PRODUCT"
+    cat <<'USAGE'
 
 Options:
   --apply                         required for any release/runtime write
@@ -49,8 +49,8 @@ Options:
   --memory-acceptance <path>      external LIVE_VERIFIED P1 report required for Lab release
 USAGE
   else
-    cat <<USAGE
-Usage: scripts/release-${PRODUCT}.sh plan|verify|candidate|release|status|rollback-plan [options]
+    printf 'Usage: scripts/release-%s.sh plan|verify|candidate|release|status|rollback-plan [options]\n' "$PRODUCT"
+    cat <<'USAGE'
 
 Options:
   --apply                         required for any release/runtime write
