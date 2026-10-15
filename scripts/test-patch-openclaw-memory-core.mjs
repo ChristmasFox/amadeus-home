@@ -9,10 +9,12 @@ import {
   normalizeDreamingPeer,
   normalizeWhatsAppPeer,
   patchChildEnvSource,
+  patchMemorySearchFtsStatusSource,
   patchPluginManifest,
   patchSessionAdmissionSource,
   patchSessionBackfillSource,
   sessionDirectPeer,
+  resolveVisibleMemorySearchMode,
   verifyDreamingAdmissionBeforeScan,
   verifySessionBackfillAdmissionBeforeScan,
   whatsappSessionMatchesPeer,
@@ -34,6 +36,29 @@ const originalChildSource = `prefix\n${BASE_CHILD_ENV}\nsuffix`;
 const patchedChildSource = patchChildEnvSource(originalChildSource);
 assert.match(patchedChildSource, new RegExp(MARKERS.childEnv));
 assert.equal(patchChildEnvSource(patchedChildSource), patchedChildSource);
+
+const searchToolsFixture = `async function executeMemorySearchToolQuery(params) {
+\tconst latestDebug = runtimeDebug.at(-1);
+\treturn {
+\t\tsearchMode: params.effectiveMode ?? latestDebug?.effectiveMode,
+\t\tdebug: {
+\t\t\teffectiveMode: params.effectiveMode ?? "n/a",
+\t\t}
+\t};
+}`;
+const patchedSearchTools = patchMemorySearchFtsStatusSource(searchToolsFixture, false);
+assert.match(patchedSearchTools, new RegExp(MARKERS.searchFtsStatus));
+assert.match(patchedSearchTools, /searchMode: effectiveSearchMode,/u);
+assert.match(patchedSearchTools, /effectiveMode: effectiveSearchMode \?\? "n\/a",/u);
+assert.equal(patchMemorySearchFtsStatusSource(patchedSearchTools), patchedSearchTools);
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'fts-only' }, fts: { enabled: true, available: true } }), 'fts-only');
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'fts-only' }, fts: { enabled: true, available: false } }), 'unavailable');
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'fts-only' }, fts: { enabled: false, available: true } }), 'unavailable');
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'hybrid' } }), undefined);
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'fts-only' }, fts: { enabled: false, available: false } }, undefined, { effectiveMode: 'hybrid' }), 'hybrid');
+assert.equal(resolveVisibleMemorySearchMode({ custom: { searchMode: 'hybrid' } }, 'keyword-only', { effectiveMode: 'hybrid' }), 'keyword-only');
+assert.throws(() => patchMemorySearchFtsStatusSource(searchToolsFixture), /digest mismatch/u);
+assert.throws(() => patchMemorySearchFtsStatusSource(patchedSearchTools.replace('effectiveMode: effectiveSearchMode ?? "n/a",', 'effectiveMode: "n/a",')), /incomplete/u);
 
 const ownerPeer = 'whatsapp:+19995550123';
 const ownerSession = 'agent:main:whatsapp:secondary:direct:+19995550123@s.whatsapp.net';
@@ -136,4 +161,4 @@ assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.all
 assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.allowlistedDirectPeerFiles.properties.whatsapp.type, 'string');
 assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.allowlistedDirectPeerFiles.properties.telegram.type, 'string');
 
-console.log('OPENCLAW_MEMORY_CORE_PATCH_TESTS=passed child_env=7 peer_match=15 admission=18 before_read=10 source_patch=4 schema=4');
+console.log('OPENCLAW_MEMORY_CORE_PATCH_TESTS=passed child_env=7 peer_match=15 admission=18 before_read=10 search_fts_status=12 source_patch=4 schema=4');

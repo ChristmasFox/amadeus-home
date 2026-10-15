@@ -2,10 +2,10 @@
 /**
  * Narrow OpenClaw 2026.9.4 Memory Core compatibility patch.
  *
- * Keep sqlite-vec's worker on the image-managed glibc search path, and apply
- * the configured Dreaming channel/peer admission policy before reading a
- * session transcript. The owner peer is read from a protected runtime file;
- * it is never embedded in this image or emitted to logs.
+ * Keep sqlite-vec's worker on the image-managed glibc search path, expose
+ * keyword-only degradation when Embeddings are unavailable, and apply the
+ * configured Dreaming peer policy before reading a session transcript. Owner
+ * peers come from protected runtime files, never the image or logs.
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -16,6 +16,7 @@ export const MARKERS = Object.freeze({
   sessionAdmission: 'amadeus-memory-dreaming-peer-admission-v2',
   sessionBackfill: 'amadeus-memory-backfill-peer-admission-v1',
   manifest: 'amadeus-memory-dreaming-peer-admission-v2',
+  searchFtsStatus: 'amadeus-memory-search-fts-status-v1',
 });
 
 export const PIN = Object.freeze({
@@ -25,6 +26,7 @@ export const PIN = Object.freeze({
   dreamingPhasesSha256: '07644badc9be12fd6e83ad30f39760fa92299263fd5691d1f14101010705560a',
   sessionBackfillSha256: '32aa04a5ff5439d902615ccda1dab774197752fa65d9c1ee9258d3ed529466ff',
   manifestSha256: 'a22bebfcec65c37b41a4d05de40f95d4da6e7501c081cc434d006f77fdb47e66',
+  searchToolsBundleSha256: '2042127708bad9c7c419f51aa0073e4290ee16190fdea9b00bf4de6c59949a36',
 });
 
 export const BASE_CHILD_ENV = `function buildChildEnv(env = process.env) {
@@ -55,6 +57,17 @@ export function buildMemoryCoreChildEnv(env = {}, arch = process.arch) {
     if (inherited === expected) childEnv.LD_LIBRARY_PATH = expected;
   }
   return childEnv;
+}
+
+export function resolveVisibleMemorySearchMode(status, effectiveMode, latestDebug) {
+  const explicitMode = effectiveMode ?? latestDebug?.effectiveMode;
+  if (explicitMode !== undefined) return explicitMode;
+  if (status?.custom?.searchMode === 'fts-only') {
+    return status?.fts?.enabled === true && status?.fts?.available === true
+      ? 'fts-only'
+      : 'unavailable';
+  }
+  return undefined;
 }
 
 export function normalizeWhatsAppPeer(value) {
@@ -207,6 +220,48 @@ export function patchSessionBackfillSource(source) {
   return patched;
 }
 
+export function patchMemorySearchFtsStatusSource(source, verifyPinnedDigest = true) {
+  if (source.includes(MARKERS.searchFtsStatus)) {
+    if (
+      !source.includes('resolveVisibleMemorySearchMode(status, params.effectiveMode, latestDebug)') ||
+      !source.includes('searchMode: effectiveSearchMode,') ||
+      !source.includes('effectiveMode: effectiveSearchMode ?? "n/a",')
+    ) {
+      throw new Error('incomplete memory search FTS status patch');
+    }
+    return source;
+  }
+  if (verifyPinnedDigest && hash(source) !== PIN.searchToolsBundleSha256) {
+    throw new Error('pinned memory search tools bundle digest mismatch');
+  }
+  const helperAnchor = 'async function executeMemorySearchToolQuery(params) {';
+  let result = replaceOnce(
+    source,
+    helperAnchor,
+    `// ${MARKERS.searchFtsStatus}\n${resolveVisibleMemorySearchMode.toString()}\n${helperAnchor}`,
+    'memory search mode helper',
+  );
+  result = replaceOnce(
+    result,
+    '\tconst latestDebug = runtimeDebug.at(-1);\n\treturn {',
+    '\tconst latestDebug = runtimeDebug.at(-1);\n\tconst effectiveSearchMode = resolveVisibleMemorySearchMode(status, params.effectiveMode, latestDebug);\n\treturn {',
+    'memory search effective mode',
+  );
+  result = replaceOnce(
+    result,
+    'searchMode: params.effectiveMode ?? latestDebug?.effectiveMode,',
+    'searchMode: effectiveSearchMode,',
+    'memory search mode result',
+  );
+  result = replaceOnce(
+    result,
+    'effectiveMode: params.effectiveMode ?? "n/a",',
+    'effectiveMode: effectiveSearchMode ?? "n/a",',
+    'memory search mode diagnostics',
+  );
+  return result;
+}
+
 export function verifyDreamingAdmissionBeforeScan(source, verifyPinnedDigest = true) {
   if (verifyPinnedDigest && hash(source) !== PIN.dreamingPhasesSha256) {
     throw new Error('pinned Dreaming phase bundle digest mismatch');
@@ -317,6 +372,17 @@ function main(argv = process.argv.slice(2)) {
   const sessionFiles = files.filter((name) => /^session-ingestion-[^/]+\.mjs$/u.test(name));
   if (sessionFiles.length !== 1) throw new Error(`expected one pinned session-ingestion bundle; found ${sessionFiles.length}`);
   const sessionFile = path.join(coreRoot, sessionFiles[0]);
+  const searchToolsFiles = files
+    .filter((name) => /^tools-[^/]+\.mjs$/u.test(name))
+    .map((name) => path.join(coreRoot, name))
+    .filter((filePath) => {
+      const source = fs.readFileSync(filePath, 'utf8');
+      return source.includes('searchMode: params.effectiveMode ?? latestDebug?.effectiveMode,') ||
+        source.includes(MARKERS.searchFtsStatus);
+    });
+  if (searchToolsFiles.length !== 1) {
+    throw new Error(`expected one pinned memory search tools bundle; found ${searchToolsFiles.length}`);
+  }
   const dreamingFiles = files.filter((name) => /^dreaming-phases-[^/]+\.mjs$/u.test(name))
     .map((name) => path.join(coreRoot, name))
     .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('await scanSessionIngestionSource({'));
@@ -333,7 +399,8 @@ function main(argv = process.argv.slice(2)) {
   patchFile(sessionFile, PIN.sessionAdmissionSha256, MARKERS.sessionAdmission, patchSessionAdmissionSource, 'Dreaming session admission', apply);
   patchFile(backfillFile, PIN.sessionBackfillSha256, MARKERS.sessionBackfill, patchSessionBackfillSource, 'session-backfill peer admission', apply);
   patchFile(manifestFile, PIN.manifestSha256, MARKERS.manifest, patchPluginManifest, 'memory-core manifest', apply);
-  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready backfill_peer_filter=ready`);
+  patchFile(searchToolsFiles[0], PIN.searchToolsBundleSha256, MARKERS.searchFtsStatus, patchMemorySearchFtsStatusSource, 'memory search FTS status', apply);
+  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready backfill_peer_filter=ready search_fts_status=ready`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {

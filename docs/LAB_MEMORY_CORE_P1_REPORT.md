@@ -55,6 +55,35 @@ changed in the live runtime.
   `DREAMS.md` is absent, and no recall/promotion audit entries exist. The
   available evidence does not prove that a Dreaming phase ran or promoted a
   candidate; there was no eligible session corpus at inspection time.
+- The latest read-only follow-up at `2026-10-15 12:08 UTC` reports 2 indexed files,
+  70 chunks, FTS enabled/available, hybrid search mode, a 1024-dimension vector
+  index, and `dirty=true`. The scanner reports 3 files, so the index is not
+  current. The Dreaming audit still reports zero session-corpus files and no
+  session-ingestion file. This supersedes the earlier `dirty=false` snapshot.
+  No search query, `--deep` provider readiness probe, Embedding request, index
+  refresh, or Dreaming run was issued; no memory text was emitted.
+
+## Provider-outage source audit
+
+- Read-only inspection of the pinned 2026.9.4 Memory Core source found that an
+  optional Embedding provider failure retains FTS keyword retrieval when FTS
+  is available. The manager records `custom.searchMode=fts-only` after provider
+  initialization fails, and returns keyword-only results rather than claiming
+  vector matches. Required-provider failures remain unavailable.
+- The search tool did not forward that manager status into its returned `mode`:
+  it used only runtime debug `effectiveMode`, which is absent on this fallback
+  path, and its diagnostic defaulted to `n/a`. This left the caller without an
+  explicit semantic-unavailable signal even though FTS results were retained.
+- The source patch now maps the pinned manager status to `mode=fts-only` and
+  `debug.effectiveMode=fts-only` when FTS is enabled and available; otherwise
+  it reports `unavailable`. The patch checks the pinned compiled tools
+  bundle digest and fails closed on drift; a fixture covers FTS-only, hybrid,
+  explicit partial-keyword mode, idempotency, and an incomplete patch marker.
+  Local validation passed with `node scripts/test-patch-openclaw-memory-core.mjs`.
+  The exact compiled tools bundle from the running pinned image was also piped
+  through the patch and JavaScript syntax check without writing to the image.
+- This new patch has not been built into an image or exercised by a live search.
+  The running image still has the prior behavior. No live query was issued.
 
 ## Rebuild and recovery procedure
 

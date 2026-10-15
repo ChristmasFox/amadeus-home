@@ -28,6 +28,8 @@ def load_module(name: str, filename: str):
 
 
 state = load_module("release_state", "release-state.py")
+snapshot = load_module("lab_runtime_snapshot", "lab-runtime-snapshot.py")
+impact = load_module("image_impact", "image-impact.py")
 oci = load_module("verify_pubg_saas_oci", "verify-pubg-saas-oci.py")
 provenance = load_module("verify_image_provenance", "verify-image-provenance.py")
 
@@ -39,6 +41,50 @@ def invoke(*args: str, cwd: Path = ROOT, env=None) -> subprocess.CompletedProces
 now = datetime(2026, 10, 15, 8, 0, tzinfo=timezone.utc)
 sha = "a" * 40
 digest = "sha256:" + "b" * 64
+assert '{{with (index .Config "Labels")}}' in snapshot.IMAGE_INSPECT_FORMAT
+fixture_image_id = "sha256:" + "c" * 64
+missing_labels = "|".join((
+    fixture_image_id, "[]", "<no value>", "<no value>", "<no value>", "<no value>",
+    "2026-10-15T07:00:00.000000000Z",
+))
+with tempfile.TemporaryDirectory(prefix="release-snapshot-git-") as temporary:
+    unavailable = snapshot.parse_image_inspect_output(
+        missing_labels,
+        fixture_image_id,
+        "local/product-radar:git-ffffffffffff-20261015070000",
+        Path(temporary),
+    )
+    assert unavailable["gitSha"] is None and unavailable["version"] is None
+    assert unavailable["provenanceSource"] == "unavailable"
+current_sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+current_prefix = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short=12", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+current_version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+tag_fallback = snapshot.parse_image_inspect_output(
+    missing_labels,
+    fixture_image_id,
+    f"local/openclaw-amadeus:git-{current_prefix}-20261015070000",
+)
+assert tag_fallback["gitSha"] == current_sha and tag_fallback["version"] == current_version
+assert tag_fallback["provenanceSource"] == "immutable-image-tag+git-source"
+inherited_labels = "|".join((
+    fixture_image_id, "[]", "base-image", "e" * 40, "2026.9.4",
+    "2026-09-10T22:52:04.118Z", "2026-10-15T07:00:00.000000000Z",
+))
+ignored_base_labels = snapshot.parse_image_inspect_output(
+    inherited_labels,
+    fixture_image_id,
+    f"local/openclaw-amadeus:git-{current_prefix}-20261015070000",
+)
+assert ignored_base_labels["gitSha"] == current_sha and ignored_base_labels["version"] == current_version
+assert ignored_base_labels["builtAt"] == "2026-10-15T07:00:00.000000000Z"
+assert ignored_base_labels["provenanceSource"] == "immutable-image-tag+git-source"
+labelled = snapshot.parse_image_inspect_output(
+    "|".join((fixture_image_id, f'["local/image@{digest}"]', snapshot.PROVENANCE_MARKER, sha, "1.10.5", "2026-10-15T07:00:00Z", "2026-10-15T07:00:00.000000000Z")),
+    fixture_image_id,
+    "local/image:ci",
+)
+assert labelled["digest"] == digest and labelled["gitSha"] == sha and labelled["version"] == "1.10.5"
+assert labelled["provenanceSource"] == "oci-label"
 manifest = {
     "manifestSchema": state.MANIFEST_SCHEMA,
     "product": "lab",
@@ -185,11 +231,18 @@ def oci_fixture(path: Path, labels: dict[str, str]) -> None:
 
 
 labels = {
+    "com.amadeus.release.provenance": "amadeus-product-release-v1",
     "org.opencontainers.image.revision": sha,
     "org.opencontainers.image.version": "1.10.5",
     "org.opencontainers.image.created": "2026-10-15T07:00:00Z",
 }
 provenance.validate(labels, sha, "1.10.5", "2026-10-15T07:00:00Z")
+try:
+    provenance.validate({**labels, "com.amadeus.release.provenance": "base-image"}, sha, "1.10.5", "2026-10-15T07:00:00Z")
+except ValueError as error:
+    assert "provenance" in str(error)
+else:
+    raise AssertionError("image without the product provenance marker unexpectedly passed")
 with tempfile.TemporaryDirectory(prefix="release-oci-test-") as temporary:
     archive = Path(temporary) / "gate.oci.tar"
     oci_fixture(archive, labels)
@@ -261,7 +314,12 @@ with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     plan = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "candidate", "--build-auto", env=env)
     assert plan.returncode == 0, plan.stderr
     assert "MODE=dry-run" in plan.stdout and "DEPLOYMENT_PHASE=candidate" in plan.stdout
-    assert "AUTO_SCOPE_OPENCLAW=build" in plan.stdout and "AUTO_SCOPE_PRODUCT_RADAR=build" in plan.stdout
+    full_commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
+    changed_paths = impact.git_names(ROOT, full_commit, "HEAD")
+    expected_openclaw = "build" if impact.classify(ROOT, "openclaw", changed_paths)[0] != "REUSE" else "reuse"
+    expected_radar = "build" if impact.classify(ROOT, "radar", changed_paths)[0] != "REUSE" else "reuse"
+    assert f"AUTO_SCOPE_OPENCLAW={expected_openclaw}" in plan.stdout
+    assert f"AUTO_SCOPE_PRODUCT_RADAR={expected_radar}" in plan.stdout
     orb_calls = log.read_text(encoding="utf-8")
     assert "docker inspect" in orb_calls and "docker compose" not in orb_calls and "docker run" not in orb_calls
 

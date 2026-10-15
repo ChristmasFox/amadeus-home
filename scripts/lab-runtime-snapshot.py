@@ -13,6 +13,26 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+OCI_REVISION_LABEL = "org.opencontainers.image.revision"
+OCI_VERSION_LABEL = "org.opencontainers.image.version"
+OCI_CREATED_LABEL = "org.opencontainers.image.created"
+PROVENANCE_LABEL = "com.amadeus.release.provenance"
+PROVENANCE_MARKER = "amadeus-product-release-v1"
+
+
+def label_field(name: str) -> str:
+    return '{{with (index .Config "Labels")}}{{index . "' + name + '"}}{{else}}<no value>{{end}}'
+
+
+IMAGE_INSPECT_FORMAT = "|".join((
+    "{{.Id}}",
+    "{{json .RepoDigests}}",
+    label_field(PROVENANCE_LABEL),
+    label_field(OCI_REVISION_LABEL),
+    label_field(OCI_VERSION_LABEL),
+    label_field(OCI_CREATED_LABEL),
+    "{{.Created}}",
+))
 
 
 def run(command: list[str]) -> str:
@@ -55,6 +75,51 @@ def config_digest(machine: str, config_file: str) -> str:
     return "sha256:" + value
 
 
+def parse_image_inspect_output(output: str, image_id: str, image_ref: str, repo: Path = ROOT) -> dict[str, Any]:
+    fields = output.split("|", 6)
+    if len(fields) != 7:
+        raise RuntimeError("cannot parse sanitized image provenance fields")
+    inspected_id, repo_digests_text, provenance_marker, revision, version, created_label, created = fields
+    if inspected_id != image_id:
+        raise RuntimeError("container and image identity differ")
+    try:
+        repo_digests = json.loads(repo_digests_text)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("image digest metadata is invalid") from error
+    if not isinstance(repo_digests, list) or any(not isinstance(item, str) for item in repo_digests):
+        raise RuntimeError("image digest metadata is invalid")
+    digest = repo_digests[0].rsplit("@", 1)[-1] if repo_digests else image_id
+    provenance_source = "oci-label"
+    if provenance_marker != PROVENANCE_MARKER:
+        revision = version = created_label = "<no value>"
+        provenance_source = "unavailable"
+    if revision in {"", "<no value>"} or version in {"", "<no value>"}:
+        provenance_source = "unavailable"
+        match = re.search(r":git-([0-9a-fA-F]{7,40})-([0-9]{12}|[0-9]{14})$", image_ref)
+        if match:
+            resolved = subprocess.run(
+                ["git", "-C", str(repo), "rev-parse", "--verify", f"{match.group(1)}^{{commit}}"],
+                capture_output=True, text=True, check=False,
+            )
+            if resolved.returncode == 0:
+                revision = resolved.stdout.strip()
+                version_result = subprocess.run(
+                    ["git", "-C", str(repo), "show", f"{revision}:VERSION"],
+                    capture_output=True, text=True, check=False,
+                )
+                if version_result.returncode == 0:
+                    version = version_result.stdout.strip()
+                    provenance_source = "immutable-image-tag+git-source"
+    built_at = created_label if created_label not in {"", "<no value>"} else created
+    return {
+        "digest": digest,
+        "gitSha": None if revision in {"", "<no value>"} else revision,
+        "version": None if version in {"", "<no value>"} else version,
+        "builtAt": built_at,
+        "provenanceSource": provenance_source,
+    }
+
+
 def one_container(machine: str, container: str, service: str, compose_file: str, config_file: str | None = None) -> dict[str, Any]:
     fields = run([
         "orb", "-m", machine, "-u", "root", "docker", "inspect",
@@ -68,50 +133,24 @@ def one_container(machine: str, container: str, service: str, compose_file: str,
         raise RuntimeError(f"runtime identity is incomplete for {service}")
     image_fields = run([
         "orb", "-m", machine, "-u", "root", "docker", "image", "inspect",
-        "--format", '{{.Id}}|{{json .RepoDigests}}|{{index .Config.Labels "org.opencontainers.image.revision"}}|{{index .Config.Labels "org.opencontainers.image.version"}}|{{index .Config.Labels "org.opencontainers.image.created"}}|{{.Created}}',
+        "--format", IMAGE_INSPECT_FORMAT,
+        "--",
         image_id,
-    ]).split("|", 5)
-    if len(image_fields) != 6:
-        raise RuntimeError(f"cannot parse sanitized provenance fields for {service}")
-    inspected_id, repo_digests_text, revision, version, created_label, created = image_fields
-    if inspected_id != image_id:
-        raise RuntimeError(f"container and image identity differ for {service}")
-    try:
-        repo_digests = json.loads(repo_digests_text)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"image digest metadata is invalid for {service}") from error
-    digest = repo_digests[0].rsplit("@", 1)[-1] if isinstance(repo_digests, list) and repo_digests else image_id
-    provenance_source = "oci-label"
-    if revision in {"", "<no value>"} or version in {"", "<no value>"}:
-        match = re.search(r":git-([0-9a-fA-F]{7,40})-([0-9]{12}|[0-9]{14})$", image_ref)
-        if match:
-            resolved = subprocess.run(
-                ["git", "-C", str(ROOT), "rev-parse", "--verify", f"{match.group(1)}^{{commit}}"],
-                capture_output=True, text=True, check=False,
-            )
-            if resolved.returncode == 0:
-                revision = resolved.stdout.strip()
-                version_result = subprocess.run(
-                    ["git", "-C", str(ROOT), "show", f"{revision}:VERSION"],
-                    capture_output=True, text=True, check=False,
-                )
-                if version_result.returncode == 0:
-                    version = version_result.stdout.strip()
-                    provenance_source = "immutable-image-tag+git-source"
-    built_at = created_label if created_label not in {"", "<no value>"} else created
+    ])
+    image_provenance = parse_image_inspect_output(image_fields, image_id, image_ref)
     return {
         "service": service,
         "imageRef": image_ref,
         "composeDigest": compose_digest(machine, compose_file),
         "configDigest": config_digest(machine, config_file) if config_file else None,
-        "digest": digest,
+        "digest": image_provenance["digest"],
         "imageId": image_id,
         "state": state,
         "health": health,
-        "version": None if version in {"", "<no value>"} else version,
-        "gitSha": None if revision in {"", "<no value>"} else revision,
-        "builtAt": built_at,
-        "provenanceSource": provenance_source,
+        "version": image_provenance["version"],
+        "gitSha": image_provenance["gitSha"],
+        "builtAt": image_provenance["builtAt"],
+        "provenanceSource": image_provenance["provenanceSource"],
         "schemaVersion": None,
     }
 

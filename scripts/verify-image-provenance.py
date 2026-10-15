@@ -12,19 +12,22 @@ from typing import Any
 
 
 LABEL_PREFIX = "org.opencontainers.image."
+PROVENANCE_LABEL = "com.amadeus.release.provenance"
+PROVENANCE_MARKER = "amadeus-product-release-v1"
 
 
 def validate(labels: Any, revision: str, version: str, build_time: str) -> None:
     if not isinstance(labels, dict):
         raise ValueError("image labels are not an object")
     expected = {
-        "revision": revision,
-        "version": version,
-        "created": build_time,
+        PROVENANCE_LABEL: PROVENANCE_MARKER,
+        LABEL_PREFIX + "revision": revision,
+        LABEL_PREFIX + "version": version,
+        LABEL_PREFIX + "created": build_time,
     }
     for key, value in expected.items():
-        if labels.get(LABEL_PREFIX + key) != value:
-            raise ValueError(f"OCI label mismatch: {key}")
+        if labels.get(key) != value:
+            raise ValueError(f"OCI label mismatch: {key.rsplit('.', 1)[-1]}")
     if not re.fullmatch(r"[0-9a-f]{40}", revision):
         raise ValueError("source revision must be a full lowercase Git SHA")
     if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)", version):

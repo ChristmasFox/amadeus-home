@@ -49,11 +49,16 @@ database, secret, image, release tag, or registry was changed.
   PUBG Domain changes classify Lab plus Gate; Presentation changes classify
   OpenClaw, Product Radar, and Gate. Docs and unrelated scripts reuse images.
 - OpenClaw, Product Radar, and Gate OCI images receive labels for full source
-  revision, product version, and build time. Gate's multi-platform OCI checker
-  verifies amd64/arm64 config hashes and provenance labels. No image was built
-  during this phase. The lineage parser accepts legacy 12-digit and current
-  14-digit UTC tag timestamps; a missing source commit still requires the
-  existing explicit two-image lineage bridge.
+  revision, product version, build time, and the product-owned
+  `com.amadeus.release.provenance` marker. The Lab runtime reader trusts those
+  labels only when that marker is present, so labels inherited from an upstream
+  base image cannot masquerade as Lab provenance. Legacy images fall back to
+  immutable tag plus reachable Git source; an unreachable source remains
+  unavailable. Gate's multi-platform OCI checker verifies amd64/arm64 config
+  hashes and provenance labels. No image was built during this phase. The
+  lineage parser accepts legacy 12-digit and current 14-digit UTC tag
+  timestamps; a missing source commit still requires the existing explicit
+  two-image lineage bridge.
 - Added `lab-source.yml` so shared Domain/Presentation changes run Lab tests;
   the existing Gate workflow runs its product tests and multi-architecture OCI
   build. Both workflows are read/test/build only. Neither contains a registry
@@ -91,8 +96,21 @@ and Actions itself was not run.
 
 ## Limits and recovery notes
 
-- The Lab live runtime snapshot adapter is source-only and was not run. The
-  P1 report remains `SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`; no
+- A read-only `scripts/release-lab.sh status --live` follow-up at
+  `2026-10-15T12:08:12Z` successfully captured both Lab services. OpenClaw was
+  healthy at digest
+  `sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`;
+  its legacy image tag resolves to source
+  `4a5734826eca479f59a2fd039fd12f9ff5d03580` and Lab `1.10.4`. Product Radar
+  was healthy at digest
+  `sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`,
+  but its `633dd216` image source is absent from the current Git object database
+  and the old image has no product-owned provenance marker. Its source and
+  product version therefore remain unavailable. The drift doctor returned
+  `UNKNOWN` because there is no protected release manifest. The adapter now
+  handles absent Docker label maps and rejects inherited base-image labels as
+  product provenance.
+- The P1 report remains `SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`; no
   external `LIVE_VERIFIED` report exists. The formal release command therefore
   remains blocked.
 - Gate M2 remains paused. Gate-Staging and Gate-Prod have no host profiles or

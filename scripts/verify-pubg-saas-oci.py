@@ -101,6 +101,7 @@ def main() -> None:
         if not all(supplied):
             parser.error("all three expected provenance labels must be supplied together")
         expected = {
+            "com.amadeus.release.provenance": "amadeus-product-release-v1",
             "org.opencontainers.image.revision": args.expected_revision,
             "org.opencontainers.image.version": args.expected_version,
             "org.opencontainers.image.created": args.expected_build_time,

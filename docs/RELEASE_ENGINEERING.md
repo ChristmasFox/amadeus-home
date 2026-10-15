@@ -17,11 +17,17 @@ each built image digest. The Docker tag is a locator; the recorded image digest
 is the artifact identity.
 
 New image builds carry OCI labels for source revision, product version, and
-build timestamp. Gate CI verifies those labels in both amd64 and arm64 OCI
-images and verifies the descriptor/config hashes. CI builds and tests on PRs
-and main pushes; it does not create release tags, push a registry image, or
-deploy. Changes under `packages/pubg-domain` trigger Lab and Gate checks;
-`packages/presentation` triggers Lab, Product Radar, and Gate checks.
+build timestamp, plus
+`com.amadeus.release.provenance=amadeus-product-release-v1`. The marker
+distinguishes product values from labels inherited from an upstream base
+image. The Lab runtime reader trusts standard labels only when this marker is
+present; legacy images fall back to an immutable tag and reachable Git source,
+otherwise provenance remains unknown. Gate CI verifies labels and the marker
+in both amd64 and arm64 OCI images and verifies descriptor/config hashes. CI
+builds and tests on PRs and main pushes; it does not create release tags, push
+a registry image, or deploy. Changes under `packages/pubg-domain` trigger Lab
+and Gate checks; `packages/presentation` triggers Lab, Product Radar, and Gate
+checks.
 
 ## Lab command flow
 

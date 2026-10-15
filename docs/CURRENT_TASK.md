@@ -40,6 +40,17 @@ prove semantic retrieval. Dreaming is scheduled but has no eligible session
 corpus and no recorded run history. Do not describe live memory acceptance as
 complete; see the P1 report for the exact evidence boundary and pending gates.
 
+The latest read-only memory status is `dirty=true` with 2 indexed files, 70
+chunks, FTS available, a 1024-dimension vector index, and 3 scanned files. A
+source-only audit found that optional Embedding failure retains FTS but the
+tool response omitted the manager's `fts-only` mode. A new pinned source patch
+now exposes `mode=fts-only` when FTS is available and `mode=unavailable` when
+it is not; its fixture and exact pinned-bundle syntax check passed, but
+the Docker image has not been rebuilt and no live search was issued. Index
+refresh, `memory status --deep` provider probing, paid Embedding, Dreaming,
+deploy, and release remain unauthorized. See the updated P1 report and
+approval checklist.
+
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
 Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or

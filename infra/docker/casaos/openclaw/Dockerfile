@@ -7,7 +7,8 @@ LABEL org.opencontainers.image.title="OpenClaw Amadeus agent" \
       org.opencontainers.image.source="agent-monorepo" \
       org.opencontainers.image.version="${OCI_PRODUCT_VERSION}" \
       org.opencontainers.image.revision="${OCI_SOURCE_REVISION}" \
-      org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}"
+      org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}" \
+      com.amadeus.release.provenance="amadeus-product-release-v1"
 
 WORKDIR /app
 
@@ -115,6 +116,9 @@ RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-memory-core.mjs --core-root /app/dist --apply \
     && node --check /app/dist/worker/worker.mjs \
     && node --check /app/dist/extensions/memory-core/manager-runtime.js \
+    && search_tools_bundle="$(grep -l 'amadeus-memory-search-fts-status-v1' /app/dist/tools-*.mjs)" \
+    && test -n "$search_tools_bundle" \
+    && node --check "$search_tools_bundle" \
     && session_bundle="$(find /app/dist -maxdepth 1 -name 'session-ingestion-*.mjs' -print -quit)" \
     && test -n "$session_bundle" \
     && node --check "$session_bundle" \
