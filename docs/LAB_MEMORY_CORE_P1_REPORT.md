@@ -1,19 +1,19 @@
 # Lab Memory Core P1 repair report
 
 Date: 2026-10-15 (Asia/Shanghai)  
-Status: **`SOURCE_FIXED` + `BLOCKED_OPERATOR_AUTHORIZATION`**  
-Scope: source, configuration, temporary fixtures, and read-only runtime
-inspection. No Lab/Gate service was restarted or deployed; no memory content,
-session transcript, credential value, index, or application database was
-changed in the live runtime.
+Status: **`SOURCE_FIXED`; live acceptance in progress**
+Scope: source, configuration, temporary fixtures, read-only runtime inspection,
+and one separately authorized synthetic Embedding probe. No Lab/Gate service
+was restarted or deployed; no memory content, session transcript, credential
+value, index, or application database was changed in the live runtime.
 
 ## Source repair
 
 - The Lab template now explicitly allows and enables `memory-core`, assigns it
   to `plugins.slots.memory`, enables `memory.search`, and declares Dreaming at
   `03:00 Asia/Shanghai`. Semantic search remains configured for
-  `Qwen/qwen3.7-text-embedding-flash`; this is still pending a real Embedding
-  request and is not asserted as working.
+  `Qwen/qwen3.7-text-embedding-flash`; one synthetic endpoint probe succeeded,
+  while semantic retrieval remains unverified.
 - The OpenClaw 2026.9.4 patch requires complete session metadata and a valid
   admission policy. It permits only direct WhatsApp/Telegram sessions whose
   parsed peer matches the channel's protected allowlist. Unknown channels,
@@ -77,6 +77,23 @@ changed in the live runtime.
   P1 source patch has not been built into that image. Product Radar remains
   healthy with source/version unavailable; drift remains `UNKNOWN` without a
   protected manifest.
+
+## Authorized 9Router Embedding probe — 2026-10-15
+
+- The live OpenClaw config was read with output restricted to nonsecret fields:
+  provider `openai-compatible`, model `Qwen/qwen3.7-text-embedding-flash`,
+  base URL `http://9router:20128/v1`, and API key reference
+  `OPENCLAW_9ROUTER_API_KEY` present. No key value was emitted.
+- One request was sent to the configured `/v1/embeddings` endpoint using only
+  the synthetic text `Synthetic Lab Embedding interface probe: copper orchard
+  orbit 42.` The response was HTTP 200, returned model
+  `qwen3.7-text-embedding-flash`, and contained 1024 finite vector elements;
+  provider usage reported 32 input tokens.
+- The pre-request index snapshot was 2 files, 70 chunks, 3 scanned files,
+  FTS enabled/available, vector enabled, hybrid search mode, and `dirty=true`.
+  No memory text, search query, or application write was involved. This proves
+  endpoint reachability, authentication, response shape, and the 1024-dimension
+  contract; it does not prove semantic retrieval or `LIVE_VERIFIED` acceptance.
 
 ## Provider-outage source audit
 
@@ -156,6 +173,7 @@ the GitHub Actions workflow itself has not run on GitHub.
 
 `pnpm workflow:plan` classifies the Dockerfile change as
 `RELEASE_BUILD_REQUIRED`; no Docker build was run. Therefore
-`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. No HTTP POST,
-Embedding request, memory search query, `memory index`, `memory reset`, session
-backfill, Dreaming run, or file/database write was issued for this repair.
+`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. Apart from the
+synthetic request recorded above, no memory search query, `memory index`,
+`memory reset`, session backfill, Dreaming run, or file/database write was
+issued for this repair.

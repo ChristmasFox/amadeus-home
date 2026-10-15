@@ -5,11 +5,10 @@ Date: 2026-10-15 (Asia/Shanghai).
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; live memory acceptance
-blocked on operator authorization**.
-Runtime apply, production index rebuild, paid Embedding requests, Dreaming
-memory writes, and formal release remain unauthorized. The sanitized baseline
-and P0 evidence are in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
+`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; authorized Lab live
+acceptance in progress**. Arthur authorized the ordered Lab-only actions on
+2026-10-15. The sanitized baseline and P0 evidence are in
+`docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
@@ -26,8 +25,21 @@ commits remain local and unpushed.
 passed, and the requested working-tree `git diff --check` passed on the clean
 tree. A supplemental full-range `git diff --check origin/main...HEAD` reported
 six trailing-space lines in three Markdown reports; these were not rewritten.
-No runtime, database, or M2 action occurred. Next authorized item is the
-synthetic Lab 9Router Embedding probe; the index has not been refreshed.
+No runtime, database, or M2 action occurred. The next authorized item is the
+protected SQLite and memory-directory backup before any index write.
+
+## Explicit Lab approval sequence — step 2 — 2026-10-15
+
+The running Lab config was checked without emitting credentials: provider
+`openai-compatible`, model `Qwen/qwen3.7-text-embedding-flash`, base URL
+`http://9router:20128/v1`, and a present `OPENCLAW_9ROUTER_API_KEY` reference.
+One synthetic request to `/v1/embeddings` returned HTTP 200, model
+`qwen3.7-text-embedding-flash`, and a finite 1024-element vector (32 input
+tokens). No memory text was sent and no index or runtime state was changed.
+The pre-probe index remained 2 files / 70 chunks, 3 scanned files, FTS
+available, vector enabled, `dirty=true`; Dreaming session corpus count was 0.
+This verifies provider reachability and dimension only, not semantic retrieval.
+Next: protected SQLite and memory-directory backup before any index write.
 
 P2 established independent Lab/Gate SemVer sources and release-note checks;
 Lab remains `1.10.4`, Gate remains `0.1.0`, and no formal tag was created. The
