@@ -100,6 +100,23 @@ database URL, and no database connection, M2 query, container action, Docker
 build, or deploy occurred. The worktree is clean; `main` is 12 commits ahead
 of `origin/main`. Gate M2 remains paused.
 
+## P1 merged-config and pinned-schema CI follow-up — 2026-10-15
+
+P1 source review found that the `openclaw_prepare.py` merge-preservation fixture
+and the actual pinned OpenClaw config-schema test were not both represented in
+the Lab CI path. Commit `c3bc25c` adds checks that managed Memory Core settings
+survive final config merging while existing commands, metadata, security, and
+WhatsApp allow data remain preserved; Lab CI now runs the pinned OpenClaw
+2026.9.4 config-validation fixture and triggers when its helper/test changes.
+
+The memory-policy fixture, pinned-runtime config test (6/6, zero skips),
+Memory Core patch fixture, workflow tests, architecture check, secrets scan,
+Python/YAML syntax, and `git diff --check` passed. `pnpm workflow:plan` classified
+the source/CI change as FAST. No Lab/Gate runtime, database, index, or memory
+content was touched; the GitHub Actions run and all P1 live acceptance gates
+remain open. `main` is 14 commits ahead of `origin/main`; Gate M2 remains
+paused.
+
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
 Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or

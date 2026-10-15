@@ -31,6 +31,14 @@ changed in the live runtime.
 - The configured memory source remains `memory`; `rememberAcrossConversations`
   remains `false`. That flag is not used as authorization for session
   ingestion.
+- The `openclaw_prepare.py` merge fixture now proves the managed Memory Core
+  settings and memory slot from the template survive merging, while existing
+  operator commands, metadata, security settings, and WhatsApp allow data are
+  preserved. Stale prior memory settings do not override the managed template.
+- Lab CI now runs the pinned-runtime config-validation fixture in addition to
+  the Memory Core admission tests. Path filters cover that test and its
+  `openclaw_test_runtime.py` helper, so changes to the schema-validation
+  boundary retrigger the workflow.
 
 ## Read-only runtime evidence
 
@@ -131,10 +139,13 @@ Passed focused checks:
 - `python3 scripts/test-openclaw-memory-policy.py`
 - `python3 scripts/test-openclaw-group-image-policy.py` (uses an isolated
   temporary copy of pinned OpenClaw 2026.9.4 with repository patches applied;
-  config validation returned `valid=true`)
+  all 6 tests passed without skips and config validation returned `valid=true`)
 - `python3 scripts/test-openclaw-speech-config.py`
 - `bash scripts/test-openclaw-session-isolation.sh`
 - Python/Node syntax checks, `git diff --check`, `pnpm check:secrets`
+
+The pinned-runtime config-validation test and merge fixture are source evidence;
+the GitHub Actions workflow itself has not run on GitHub.
 
 `pnpm workflow:plan` classifies the Dockerfile change as
 `RELEASE_BUILD_REQUIRED`; no Docker build was run. Therefore
