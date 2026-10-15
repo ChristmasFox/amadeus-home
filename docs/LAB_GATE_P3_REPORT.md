@@ -28,8 +28,10 @@ database, secret, image, release tag, or registry was changed.
   environment adapter exists. Its help is scoped to Gate environment,
   approval, tag, and manifest options and states the adapter boundary; it no
   longer lists Lab-only build, lineage, or memory evidence flags. The help fix
-  and its regression fixture are in commit `8d1c62e`. No Gate environment was
-  queried or modified.
+  and its regression fixture are in commit `8d1c62e`. `verify` now requires a
+  validated loopback test database before invoking the SaaS suite, so missing
+  or unsafe targets cannot silently skip PostgreSQL-backed cases. The
+  database guard is in `af48ed6`. No Gate environment was queried or modified.
 - `scripts/release-state.py` validates and writes manifests and compares them
   with runtime snapshots. It checks the product tag, per-image source/version/
   build provenance, digest, Compose image reference and Compose file digest,
@@ -78,6 +80,10 @@ Passed focused local fixtures and source checks:
   labels, CLI approval/actor/reference guards, memory-evidence option guards,
   product-specific CLI help, output non-disclosure, and Lab candidate dry-run
   with a stubbed `orb`
+- Gate test-database fixtures — accepts only loopback `test`/`testing` or
+  `_test`/`_testing` database names, rejects URI query/fragment overrides, and
+  verifies missing/remote targets fail before package tests without printing
+  URL credentials
 - `python3 scripts/test-lab-memory-acceptance.py` — incomplete live checks and
   post-acceptance Memory Core source drift fail closed
 - `bash scripts/test-developer-workflow.sh`

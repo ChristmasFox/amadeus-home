@@ -82,6 +82,24 @@ is unchanged: 2 files, 70 chunks, FTS available, 1024 dimensions, `dirty=true`
 with 3 scanned files; Dreaming has zero session-corpus files. No query or
 runtime write was performed.
 
+## Gate verify test-database preflight — 2026-10-15
+
+The P4 audit showed the earlier Gate package test command skipped 34
+PostgreSQL-backed cases when `PUBG_SAAS_TEST_DATABASE_URL` was absent. Commit
+`af48ed6` adds a fail-closed validator and makes Gate `verify` run it before
+invoking tests. It accepts only loopback targets with database name `test`,
+`testing`, `_test`, or `_testing`, rejects URI query/fragment overrides, and
+never prints the connection URL. GitHub Actions validates its isolated
+`localhost:5432/pubg_test` service; README and release runbook document the
+requirement.
+
+Release tooling fixtures, workflow tests, architecture check, secrets scan,
+Python/shell/YAML syntax, and `git diff --check` passed. `pnpm workflow:plan`
+classified the changes as FAST. The Gate PostgreSQL suite was not run with a
+database URL, and no database connection, M2 query, container action, Docker
+build, or deploy occurred. The worktree is clean; `main` is 12 commits ahead
+of `origin/main`. Gate M2 remains paused.
+
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
 Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or

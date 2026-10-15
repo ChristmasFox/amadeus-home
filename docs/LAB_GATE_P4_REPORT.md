@@ -20,8 +20,8 @@ formal release or complete Gate M2.
 | Build impact | `SOURCE_TESTED`; a Memory Core patch-only change forces OpenClaw rebuild, shared Domain changes affect Lab and Gate, Presentation changes affect all consuming images, and unknown Docker inputs fail conservatively. | No Docker/OCI image was built. |
 | Provenance and drift | `SOURCE_TESTED`; synthetic digest, source, Compose/config, health, tag, and expiry cases pass. A fresh read-only Lab snapshot observed both services healthy. | The doctor reports `UNKNOWN` because no protected manifest exists. Product Radar's legacy tag names an unreachable source SHA and its product version is unavailable. Gate has no configured environment adapter. |
 | Rollback and persistence | `SOURCE_TESTED`; recovery paths and SQLite/PostgreSQL boundaries are documented; synthetic manifest and fail-closed cases pass. | No restore rehearsal or volume/database operation was performed. |
-| Lab and Gate package regression | `PACKAGE_BUILD_VERIFIED` and `SOURCE_TESTED`; local package builds, typechecks, and tests passed for PUBG, Amadeus, Product Radar, and Gate. | Gate's run without `PUBG_SAAS_TEST_DATABASE_URL` skipped 34 PostgreSQL-backed tests (121 passed, 0 failed). M2's database tests were not pointed at any live database. |
-| CI and multi-architecture OCI | Workflow YAML parses successfully. The Gate workflow defines an isolated PostgreSQL service and amd64/arm64 OCI verification; Lab CI covers Memory Core admission and package regressions. | GitHub Actions was not run. No OCI image, registry push, tag, or deployment was produced. |
+| Lab and Gate package regression | `PACKAGE_BUILD_VERIFIED` and `SOURCE_TESTED`; local package builds, typechecks, and tests passed for PUBG, Amadeus, Product Radar, and Gate. The Gate release CLI now preflights its database target. | The earlier Gate run without `PUBG_SAAS_TEST_DATABASE_URL` skipped 34 PostgreSQL-backed tests (121 passed, 0 failed). The new fixture proves `verify` stops before tests when the URL is missing and rejects remote, non-test, or query-overridden targets. No database-backed suite was rerun here; M2's database was not touched. |
+| CI and multi-architecture OCI | Workflow YAML parses successfully. The Gate workflow defines an isolated PostgreSQL service, validates its `pubg_test` target, and performs amd64/arm64 OCI verification; Lab CI covers Memory Core admission and package regressions. | GitHub Actions was not run. No OCI image, registry push, tag, or deployment was produced. |
 
 ## Validation performed
 
@@ -34,6 +34,9 @@ formal release or complete Gate M2.
   developer workflow, and OpenClaw session-isolation checks.
 - Provider-outage source fixture confirms `fts-only` is reported while explicit
   partial-keyword mode and normal hybrid mode keep their existing precedence.
+- Gate release tooling fixtures confirm the loopback/test-name database
+  preflight, reject query-parameter host overrides, and ensure missing/remote
+  targets fail before tests without printing URL credentials.
 - The current pinned compiled tools bundle accepted the new patch digest and
   passed a local JavaScript syntax check; no image build or runtime write ran.
 - Local package builds: `pnpm build:pubg`, `pnpm build:amadeus`,
