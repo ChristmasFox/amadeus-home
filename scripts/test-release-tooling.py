@@ -195,7 +195,7 @@ with tempfile.TemporaryDirectory(prefix="release-state-test-") as temporary:
     assert composed["imageDigests"][0]["provenanceSource"] == "oci-label"
 
 
-def oci_fixture(path: Path, labels: dict[str, str]) -> None:
+def oci_fixture(path: Path, labels: dict[str, str], include_attestations: bool = False) -> None:
     entries: dict[str, bytes] = {}
     manifests = []
     for arch in ("amd64", "arm64"):
@@ -221,6 +221,37 @@ def oci_fixture(path: Path, labels: dict[str, str]) -> None:
             "size": len(image_manifest),
             "platform": {"architecture": arch, "os": "linux"},
         })
+        if include_attestations:
+            attestation_config = json.dumps({
+                "architecture": "unknown",
+                "os": "unknown",
+                "config": {"Labels": {}},
+                "rootfs": {"type": "layers", "diff_ids": []},
+            }, separators=(",", ":")).encode()
+            attestation_config_hash = hashlib.sha256(attestation_config).hexdigest()
+            entries[f"blobs/sha256/{attestation_config_hash}"] = attestation_config
+            attestation_manifest = json.dumps({
+                "schemaVersion": 2,
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "config": {
+                    "mediaType": "application/vnd.oci.image.config.v1+json",
+                    "digest": f"sha256:{attestation_config_hash}",
+                    "size": len(attestation_config),
+                },
+                "layers": [],
+            }, separators=(",", ":")).encode()
+            attestation_hash = hashlib.sha256(attestation_manifest).hexdigest()
+            entries[f"blobs/sha256/{attestation_hash}"] = attestation_manifest
+            manifests.append({
+                "mediaType": "application/vnd.oci.image.manifest.v1+json",
+                "digest": f"sha256:{attestation_hash}",
+                "size": len(attestation_manifest),
+                "platform": {"architecture": "unknown", "os": "unknown"},
+                "annotations": {
+                    "vnd.docker.reference.type": "attestation-manifest",
+                    "vnd.docker.reference.digest": f"sha256:{manifest_hash}",
+                },
+            })
     entries["oci-layout"] = b'{"imageLayoutVersion":"1.0.0"}'
     entries["index.json"] = json.dumps({"schemaVersion": 2, "manifests": manifests}, separators=(",", ":")).encode()
     with tarfile.open(path, "w") as archive:
@@ -269,7 +300,7 @@ else:
     raise AssertionError("image without the product provenance marker unexpectedly passed")
 with tempfile.TemporaryDirectory(prefix="release-oci-test-") as temporary:
     archive = Path(temporary) / "gate.oci.tar"
-    oci_fixture(archive, labels)
+    oci_fixture(archive, labels, include_attestations=True)
     assert oci.verify(archive, labels) == {"linux/amd64", "linux/arm64"}
     try:
         oci.verify(archive, {**labels, "org.opencontainers.image.version": "0.1.1"})

@@ -21,6 +21,15 @@ def verify(archive_path: Path, expected_labels: dict[str, str] | None = None) ->
             digest = descriptor.get("digest")
             if not isinstance(digest, str) or not digest.startswith("sha256:"):
                 raise ValueError("oci_descriptor_digest_invalid")
+            annotations = descriptor.get("annotations")
+            annotation_map = annotations if isinstance(annotations, dict) else {}
+            # BuildKit emits OCI attestation manifests beside each platform
+            # image. They carry provenance, but are not runnable image
+            # configs and do not receive the product labels being verified.
+            is_attestation = (
+                annotation_map.get("vnd.docker.reference.type") == "attestation-manifest"
+                or bool(descriptor.get("artifactType"))
+            )
             digest_hex = digest.removeprefix("sha256:")
             if digest_hex in visited:
                 return
@@ -37,7 +46,7 @@ def verify(archive_path: Path, expected_labels: dict[str, str] | None = None) ->
             manifest = json.loads(raw_manifest)
 
             config_descriptor = manifest.get("config")
-            if isinstance(config_descriptor, dict):
+            if isinstance(config_descriptor, dict) and not is_attestation:
                 config_digest = config_descriptor.get("digest")
                 if not isinstance(config_digest, str) or not config_digest.startswith("sha256:"):
                     raise ValueError("oci_config_digest_invalid")
