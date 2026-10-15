@@ -226,7 +226,10 @@ export class PublicSyncWorker {
     this.queue = new PublicSyncQueue(pool, { leaseMs: this.leaseMs });
     this.now = options.now ?? (() => new Date());
     const fetchImpl = createPublicSyncFetch(options.admission, options.fetchImpl);
-    this.client = new PubgApiClient({ apiKey: options.apiKey, baseUrl: API_ORIGIN, maxRetries: 0, concurrency: 2, timeoutMs: 15_000, fetchImpl });
+    // Use the shared Domain client's retry, concurrency, and timeout defaults,
+    // matching the private Kurisu plugin configuration. Upstream admission is
+    // still enforced independently by the shared PostgreSQL limiter.
+    this.client = new PubgApiClient({ apiKey: options.apiKey, baseUrl: API_ORIGIN, fetchImpl });
     this.telemetryDownloader = new PubgApiTelemetryDownloader({
       apiKey: options.apiKey,
       baseUrl: API_ORIGIN,

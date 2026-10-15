@@ -40,10 +40,12 @@ test('ordinary group chat can finish directly without PUBG keywords or tool call
   assert.match(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /所有数字、覆盖场次、模式和时间范围必须来自本轮工具结果/u);
   assert.match(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /没有本轮新查询结果时，不得改口、推翻或替换此前/u);
   assert.doesNotMatch(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /Arthur|Kurisu|MEMORY\.md|USER\.md|私聊/iu);
-  assert.ok(PUBLIC_KOOK_AGENT_LIMITS.maxSteps >= 100);
-  assert.equal(PUBLIC_KOOK_AGENT_LIMITS.maxOutputTokensPerStep, 1_600);
+  assert.equal('maxSteps' in PUBLIC_KOOK_AGENT_LIMITS, false);
+  assert.equal('maxOutputTokensPerStep' in PUBLIC_KOOK_AGENT_LIMITS, false);
   assert.equal(PUBLIC_KOOK_AGENT_LIMITS.totalTimeoutMs, 300_000);
-  assert.equal(PUBLIC_KOOK_AGENT_LIMITS.stepTimeoutMs, 120_000);
+  assert.equal(PUBLIC_KOOK_AGENT_LIMITS.toolLoopTimeoutMs + PUBLIC_KOOK_AGENT_LIMITS.finalizationTimeoutMs, 300_000);
+  assert.equal(model.doGenerateCalls[0]?.maxOutputTokens, undefined,
+    'the public Agent does not impose a per-step output-token ceiling');
 });
 
 test('ToolLoopAgent executes a selected domain tool and returns to the model for the final answer', async () => {
@@ -116,7 +118,7 @@ test('ToolLoopAgent can call multiple tools in sequence before composing its fin
     'the final model step receives the actual query-tool result');
 });
 
-test('long Agent tool chains are not cut off by the former six-step ceiling', async () => {
+test('long Agent tool chains are not cut off by a fixed small step ceiling', async () => {
   const calls: number[] = [];
   const model = new MockLanguageModelV4({ doGenerate: [
     ...Array.from({ length: 18 }, (_, index) => response([
@@ -171,10 +173,11 @@ test('a repeated identical tool call forces a no-tools summary step', async () =
   assert.match(JSON.stringify(model.doGenerateCalls[2]?.prompt), /昨日两场已覆盖/u);
 });
 
-test('the high step safety ceiling summarizes completed tool results instead of returning a degradation message', async () => {
+test('the Agent can continue beyond the former step ceiling and returns the final model response', async () => {
+  const toolCallCount = 140;
   let toolExecutions = 0;
   const model = new MockLanguageModelV4({ doGenerate: Array.from(
-    { length: PUBLIC_KOOK_AGENT_LIMITS.maxSteps }, (_, index) => response([
+    { length: toolCallCount }, (_, index) => response([
       { type: 'tool-call', toolCallId: `loop-${index}`, toolName: 'team_info', input: JSON.stringify({ id: index }) },
     ], 'tool-calls') as never,
   ).concat(response([{ type: 'text', text: '已根据工具结果完成总结；仍有少数资料可能未覆盖。' }], 'stop') as never) });
@@ -191,13 +194,11 @@ test('the high step safety ceiling summarizes completed tool results instead of 
     signal: new AbortController().signal,
     currentMessage: '查一下队伍。',
   });
-  assert.equal(toolExecutions, PUBLIC_KOOK_AGENT_LIMITS.maxSteps);
-  assert.equal(result.recoveryCode, 'public_agent_step_limit');
-  assert.equal(result.stepCount, PUBLIC_KOOK_AGENT_LIMITS.maxSteps + 1);
+  assert.equal(toolExecutions, toolCallCount);
+  assert.equal(result.recoveryCode, null);
+  assert.equal(result.stepCount, toolCallCount + 1);
   assert.match(result.text, /工具结果完成总结/u);
-  assert.equal(model.doGenerateCalls.at(-1)?.toolChoice?.type, 'none', 'only the recovery pass is text-only');
-  assert.match(JSON.stringify(model.doGenerateCalls.at(-1)?.prompt), /team-player-result-127/u,
-    'the recovery pass receives completed outputs from the bounded tool loop');
+  assert.notEqual(model.doGenerateCalls.at(-1)?.toolChoice?.type, 'none');
 
   const truncatedModel = new MockLanguageModelV4({ doGenerate: [response([], 'length') as never] });
   await assert.rejects(runPublicKookAgent({
@@ -237,6 +238,37 @@ test('a timed out Agent summarizes already completed tools within the reserved r
   assert.equal(model.doGenerateCalls.at(-1)?.toolChoice?.type, 'none');
   assert.match(JSON.stringify(model.doGenerateCalls.at(-1)?.prompt), /队伍伤害合计 2,100/u,
     'timeout recovery is grounded in the tool output already obtained');
+});
+
+test('timeout recovery keeps all completed tool results beyond the former recovery size cap', async () => {
+  const callCount = 40;
+  let modelCalls = 0;
+  const model = new MockLanguageModelV4({ doGenerate: async () => {
+    modelCalls += 1;
+    if (modelCalls <= callCount) return response([
+      { type: 'tool-call', toolCallId: `recovery-${modelCalls}`, toolName: 'pubg_query', input: JSON.stringify({ page: modelCalls }) },
+    ], 'tool-calls') as never;
+    if (modelCalls === callCount + 1) throw Object.assign(new Error('fixture timeout'), { name: 'TimeoutError' });
+    return response([{ type: 'text', text: '我已根据全部已取结果回复。' }], 'stop') as never;
+  } });
+  const result = await runPublicKookAgent({
+    model,
+    tools: {
+      pubg_query: tool({
+        description: 'Read a distinct authorized Domain page.',
+        inputSchema: z.object({ page: z.number() }).strict(),
+        execute: async ({ page }) => ({ status: 'ok', summary: `page-${page}-${'x'.repeat(2_000)}` }),
+      }),
+    },
+    messages: [{ role: 'user', content: '[成员1] 汇总所有已查页面。' }],
+    signal: new AbortController().signal,
+    currentMessage: '汇总所有已查页面。',
+  });
+  assert.equal(result.recoveryCode, 'public_agent_timeout');
+  const recoveredPrompt = JSON.stringify(model.doGenerateCalls.at(-1)?.prompt);
+  assert.match(recoveredPrompt, /page-40-/u);
+  assert.ok(recoveredPrompt.length > 48_000,
+    'recovery does not silently drop results due to an independent character budget');
 });
 
 test('provider failures reject from the SDK wrapper for the ingress handler to persist and answer safely', async () => {

@@ -421,6 +421,38 @@ test('PUBG API sync refreshes the match list but fetches only matches missing fr
   assert.equal(requestedPaths.filter((path) => path.endsWith('/matches/m2')).length, 1);
 });
 
+test('PUBG API sync fairly rotates player match lists before applying a small match ceiling', async () => {
+  const requestedMatchIds: string[] = [];
+  const client = new PubgApiClient({
+    apiKey: 'test-api-key',
+    baseUrl: 'https://api.example.test',
+    maxRetries: 0,
+    fetchImpl: async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/players')) {
+        return jsonResponse({ data: [
+          { type: 'player', id: 'p1', relationships: { matches: { data: ['p1-newest', 'p1-older', 'p1-oldest'].map(id => ({ type: 'match', id })) } } },
+          { type: 'player', id: 'p2', relationships: { matches: { data: ['p1-newest', 'p2-only'].map(id => ({ type: 'match', id })) } } },
+        ] });
+      }
+      const matchId = url.pathname.split('/').at(-1)!;
+      requestedMatchIds.push(matchId);
+      return jsonResponse(matchPayload(matchId, matchId === 'p1-newest'
+        ? '2026-09-18T12:00:00.000Z' : '2026-09-18T11:00:00.000Z'));
+    },
+  });
+
+  const synced = await client.syncTeam(TEAM, {
+    maxMatches: 2,
+    now: new Date('2026-09-19T00:00:00.000Z'),
+  });
+
+  assert.deepEqual(synced.discoveredMatchIds, ['p1-newest', 'p2-only']);
+  assert.deepEqual(new Set(requestedMatchIds), new Set(['p1-newest', 'p2-only']));
+  assert.equal(requestedMatchIds.includes('p1-older'), false,
+    'a small shared ceiling reserves a slot for the other player before advancing the first player list');
+});
+
 test('recent PUBG searches force fresh discovery and reuse cached details when no match is new', async () => {
   const root = mkdtempSync(join(tmpdir(), 'pubg-domain-latest-cache-'));
   const dbPath = join(root, 'pubg.sqlite');

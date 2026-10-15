@@ -1,184 +1,153 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildPublicAgentCoverage, buildPublicAgentFacts } from '../src/application/public-agent-facts.js';
+import { buildPublicAgentFacts } from '../src/application/public-agent-facts.js';
 
-test('coverage facts preserve the queried and available match counts without failed match ids', () => {
-  const coverage = buildPublicAgentCoverage({
-    status: 'PARTIAL',
-    complete: false,
-    freshness: 'stale',
-    checkedAt: '2026-10-14T10:00:00.000Z',
-    coverageStart: '2026-10-13T22:00:00.000Z',
-    coverageEnd: '2026-10-14T22:00:00.000Z',
-    sourceUnavailable: false,
-    localComplete: false,
-    queryCovered: false,
-    requiredMatchCount: 7,
-    availableMatchCount: 5,
-    failedMatchIds: ['private-match-id'],
-  }, new Date('2026-10-14T12:00:00.000Z'));
-  assert.deepEqual(coverage, {
-    status: 'PARTIAL',
-    complete: false,
-    freshness: 'stale',
-    checkedAtLocal: '2026-10-14 18:00',
-    coverageStartLocal: '2026-10-14 06:00',
-    coverageEndLocal: '2026-10-15 06:00',
-    sourceUnavailable: false,
-    localComplete: false,
-    queryCovered: false,
-    requiredMatchCount: 7,
-    availableMatchCount: 5,
-  });
-  assert.equal(JSON.stringify(coverage).includes('private-match-id'), false);
-  assert.equal(JSON.stringify(coverage).includes('failedMatchIds'), false);
-});
+const roster = [
+  { id: 'account-private-actor', name: 'Alpha', aliases: ['A'] },
+  { id: 'account-private-victim', name: 'Bravo', aliases: ['B'] },
+];
 
-test('team damage facts expose bounded source/direction totals without evidence or internal ids', () => {
-  const roster = [
-    { id: 'account-secret-actor', name: 'Alpha', aliases: ['A'] },
-    { id: 'account-secret-victim', name: 'Bravo', aliases: ['B'] },
-  ];
+function findKeys(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(findKeys);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, item]) => [key, ...findKeys(item)]);
+}
+
+test('the Agent receives the complete Domain envelope, presentation, and display text without internal identifiers', () => {
   const matches = Array.from({ length: 11 }, (_, index) => ({
+    id: `internal-record-${index}`,
     matchId: `private-match-${index}`,
     startedAt: `2026-10-${String(1 + index).padStart(2, '0')}T12:00:00.000Z`,
     mapName: 'Erangel',
     gameMode: 'squad-fpp',
     placement: 2,
-    hitCount: index === 0 ? 2 : 1,
-    damage: index === 0 ? 25.5 : 10,
+    hitCount: 2,
+    damage: 25.5,
     teamDamage: [{
       id: `private-fact-${index}`,
-      actorPlayerId: 'account-secret-actor',
-      victimPlayerId: 'account-secret-victim',
-      source: index === 1 ? 'GUN' : 'MELEE',
-      hitCount: index === 0 ? 2 : 1,
-      damage: index === 0 ? 25.5 : 10,
-      phase: 'internal-phase',
+      actorPlayerId: roster[0]!.id,
+      victimPlayerId: roster[1]!.id,
+      source: 'MELEE',
+      hitCount: 2,
+      damage: 25.5,
       evidenceIds: [`private-evidence-${index}`],
     }],
-    telemetry: { status: 'FETCHED', cacheLookup: 'internal-cache-state' },
+    telemetry: { status: 'FETCHED', combat: { events: [{ category: 'team_damage', damage: 25.5 }] }, cacheLookup: 'HIT' },
   }));
-  const facts = buildPublicAgentFacts({
-    intent: 'team_damage',
+  const result = buildPublicAgentFacts({
+    status: 'partial',
+    data: {
+      complete: false,
+      knownHitCount: 22,
+      knownDamage: 280.5,
+      matches,
+      unavailableMatchIds: ['private-unavailable-match'],
+      telemetry: { requestedMatchCount: 12, availableMatchCount: 11, unavailableMatchIds: ['private-unavailable-match'] },
+    },
+    coverage: { status: 'PARTIAL', complete: false, freshness: 'fresh', requiredMatchCount: 12, availableMatchCount: 11 },
+    asOf: '2026-10-14T12:00:00.000Z',
+    metricVersion: 'pubg-metric-v1',
+    queryResolved: {
+      tool: 'pubg_query_team_damage',
+      sessionId: 'private-session-id',
+      sourceRange: { from: '2026-10-13T22:00:00.000Z', to: '2026-10-14T22:00:00.000Z', timezone: 'Asia/Shanghai', businessDayStart: '06:00' },
+      order: matches.map(match => match.matchId),
+    },
+    evidenceRefs: {
+      matchIds: matches.map(match => match.matchId),
+      playerIds: roster.map(player => player.id),
+      fields: ['matches.teamDamage', 'matches.telemetry.combat'],
+      calculation: 'pubg_team_damage_v1',
+    },
+    error: { code: 'partial_review', retryable: true, reason: 'private-match-id detail omitted' },
+    presentation: {
+      type: 'pubg_team_damage',
+      coverage: { complete: false },
+      evidenceRefs: { matchIds: matches.map(match => match.matchId), playerIds: roster.map(player => player.id) },
+    },
+    displayText: '已知 11 场，Alpha 对 Bravo 的 MELEE 伤害为 280.50。',
     roster,
     now: new Date('2026-10-14T12:00:00.000Z'),
-    queryResolved: {
-      matchCount: 11,
-      sourceRange: {
-        from: '2026-10-13T22:00:00.000Z',
-        to: '2026-10-14T22:00:00.000Z',
-        timezone: 'Asia/Shanghai',
-        businessDayStart: '06:00',
-      },
-      direction: { actorPlayerId: 'account-secret-actor', victimPlayerId: 'account-secret-victim' },
-    },
-    data: {
-      direction: 'internal directional label',
-      complete: true,
-      totalHitCount: 12,
-      totalDamage: 125.5,
-      knownHitCount: 12,
-      knownDamage: 125.5,
-      directions: [{
-        actor: { playerId: 'account-secret-actor', name: 'internal actor label' },
-        victim: { playerId: 'account-secret-victim', name: 'internal victim label' },
-        hitCount: 12,
-        damage: 125.5,
-        knownHitCount: 12,
-        knownDamage: 125.5,
-        complete: true,
-        matchIds: ['private-match-evidence'],
-      }],
-      bySource: [
-        { source: 'MELEE', hitCount: 11, damage: 115.5, knownHitCount: 11, knownDamage: 115.5 },
-        { source: 'GUN', hitCount: 1, damage: 10, knownHitCount: 1, knownDamage: 10 },
-      ],
-      matches,
-      telemetry: { requestedMatchCount: 11, availableMatchCount: 11, unavailableMatchIds: ['private-match-evidence'], statusCounts: { FETCHED: 11 } },
-    },
   });
 
-  assert.ok(facts);
-  const teamDamage = facts as {
-    matchCount: number;
-    listedMatchCount: number;
-    matchesTruncated: boolean;
-    sourceRange: { fromLocal: string; toLocal: string; businessDayStart: string };
-    bySource: Array<{ source: string; matchCount: number }>;
-    directions: Array<{ actor: string; victim: string; sources: Array<{ source: string; matchCount: number }> }>;
-    matches: unknown[];
+  const encoded = JSON.stringify(result);
+  const facts = result as {
+    status: string;
+    data: { matches: Array<{ matchReference: string; teamDamage: Array<{ actorName: string; victimName: string }> }> };
+    evidence: { matchCount: number; playerCount: number };
+    presentation: { type: string };
+    displayText: string;
+    error: { code: string; retryable: boolean };
   };
-  assert.equal(teamDamage.matchCount, 11);
-  assert.equal(teamDamage.listedMatchCount, 10);
-  assert.equal(teamDamage.matches.length, 10);
-  assert.equal(teamDamage.matchesTruncated, true);
-  assert.deepEqual(teamDamage.sourceRange, {
-    fromLocal: '2026-10-14 06:00',
-    toLocal: '2026-10-15 06:00',
-    timezone: 'Asia/Shanghai',
-    businessDayStart: '06:00',
-  });
-  assert.deepEqual(teamDamage.bySource.map(({ source, matchCount }) => [source, matchCount]), [['MELEE', 10], ['GUN', 1]]);
-  assert.equal(teamDamage.directions[0]?.actor, 'Alpha');
-  assert.equal(teamDamage.directions[0]?.victim, 'Bravo');
-  assert.deepEqual(teamDamage.directions[0]?.sources.map(({ source, matchCount }) => [source, matchCount]), [['MELEE', 10], ['GUN', 1]]);
-
-  const encoded = JSON.stringify(facts);
-  for (const forbidden of ['private-match', 'private-fact', 'private-evidence', 'account-secret', 'evidenceIds', 'matchIds', 'playerId', 'telemetry', 'phase', 'cacheLookup', 'internal actor']) {
-    assert.equal(encoded.includes(forbidden), false, `public facts leaked ${forbidden}`);
-  }
+  assert.equal(facts.status, 'partial');
+  assert.equal(facts.data.matches.length, 11, 'there is no public-only ten-match facts slice');
+  assert.equal(facts.data.matches[0]?.matchReference, '第1场');
+  assert.equal(facts.data.matches[10]?.teamDamage[0]?.actorName, 'Alpha');
+  assert.equal(facts.data.matches[10]?.teamDamage[0]?.victimName, 'Bravo');
+  assert.deepEqual(facts.evidence, { matchCount: 11, playerCount: 2, fields: ['matches.teamDamage', 'matches.telemetry.combat'] });
+  assert.equal(facts.presentation.type, 'pubg_team_damage');
+  assert.equal(facts.displayText, '已知 11 场，Alpha 对 Bravo 的 MELEE 伤害为 280.50。');
+  assert.deepEqual(facts.error, { code: 'partial_review', retryable: true });
+  assert.equal(encoded.includes('private-match'), false);
+  assert.equal(encoded.includes('private-record'), false);
+  assert.equal(encoded.includes('private-fact'), false);
+  assert.equal(encoded.includes('private-evidence'), false);
+  assert.equal(encoded.includes('account-private'), false);
+  assert.equal(encoded.includes('private-session'), false);
+  assert.equal(encoded.includes('cacheLookup'), false);
+  assert.equal(encoded.includes('sessionId'), false);
+  assert.equal(findKeys(result).some(key => /(?:^|_)(?:id|ids)$/iu.test(key)), false);
 });
 
-test('stats facts cap the roster and expose only the approved player metric allowlist', () => {
-  const roster = Array.from({ length: 9 }, (_, index) => ({ id: `account-${index}`, name: `Player ${index}`, aliases: [`Alias ${index}`] }));
-  const rows = roster.map((player, index) => ({
+test('complete player statistics retain every Domain metric for the authorized roster', () => {
+  const players = Array.from({ length: 8 }, (_, index) => ({ id: `account-${index}`, name: `Player ${index}`, aliases: [`Alias ${index}`] }));
+  const rows = players.map((player, index) => ({
     key: player.id,
-    label: 'untrusted domain label',
     groupBy: 'player',
     metrics: {
-      matches: 3,
-      kills: index,
-      dbnos: 1,
-      assists: 2,
-      revives: 1,
-      wins: 1,
-      top10: 2,
-      headshot_kills: 1,
-      longest_kill: 125.5,
-      survival_time: 3_600,
-      damage: 500,
-      kd: 2,
-      deaths: 1,
-      rank: 4,
-      performance_score: 88,
-      chicken_index: 12,
-      denominatorZero: 0,
+      matches: 3, kills: index, dbnos: 1, assists: 2, revives: 1, wins: 1, top10: 2,
+      headshot_kills: 1, longest_kill: 125.5, survival_time: 3_600, damage: 500, kd: 2,
+      deaths: 1, rank: 4, performance_score: 88, chicken_index: 12,
     },
-    activityStatus: 'ACTIVE',
-    matchIds: ['private-match-id'],
-    evidenceRefs: ['private-evidence-id'],
   }));
-  const facts = buildPublicAgentFacts({
-    intent: 'team_stats',
-    roster,
-    now: new Date('2026-10-14T12:00:00.000Z'),
-    queryResolved: { sourceRange: { from: '2026-10-13T22:00:00.000Z', to: '2026-10-14T22:00:00.000Z', timezone: 'Asia/Shanghai', businessDayStart: '06:00' } },
-    data: { rows, summary: { uniqueMatchCount: 3 }, queryId: 'private-query-id', sessionId: 'private-session-id' },
+  const result = buildPublicAgentFacts({
+    status: 'ok', data: { rows, summary: { uniqueMatchCount: 3 } }, coverage: { complete: true },
+    asOf: '2026-10-14T12:00:00.000Z', queryResolved: {}, evidenceRefs: { playerIds: players.map(player => player.id), matchIds: [] },
+    presentation: { type: 'pubg_stats' }, displayText: '小队数据已更新。', roster: players, now: new Date('2026-10-14T12:00:00.000Z'),
   });
 
-  assert.ok(facts);
-  const stats = facts as { matchCount: number; playersTruncated: boolean; players: Array<{ name: string; aliases: string[]; stats: Record<string, number | null> }> };
-  assert.equal(stats.matchCount, 3);
-  assert.equal(stats.players.length, 8);
-  assert.equal(stats.playersTruncated, true);
-  assert.equal(stats.players[0]?.name, 'Player 0');
-  assert.equal(stats.players[0]?.aliases[0], 'Alias 0');
-  assert.deepEqual(Object.keys(stats.players[0]?.stats ?? {}).sort(), [
-    'assists', 'damage', 'dbnos', 'deaths', 'headshot_kills', 'kd', 'kills', 'longest_kill', 'matches', 'rank', 'revives', 'survival_time', 'top10', 'wins',
-  ]);
-  const encoded = JSON.stringify(facts);
-  for (const forbidden of ['account-', 'private-match', 'private-evidence', 'private-query', 'private-session', 'performance_score', 'chicken_index', 'denominatorZero', 'activityStatus', 'matchIds', 'evidenceRefs', 'key']) {
-    assert.equal(encoded.includes(forbidden), false, `public facts leaked ${forbidden}`);
-  }
+  const stats = result as { data: { rows: Array<{ playerName: string; metrics: Record<string, number> }> } };
+  assert.equal(stats.data.rows.length, 8);
+  assert.equal(stats.data.rows[0]?.playerName, 'Player 0');
+  assert.equal(stats.data.rows[0]?.metrics.performance_score, 88);
+  assert.equal(stats.data.rows[0]?.metrics.chicken_index, 12);
+  assert.equal(JSON.stringify(result).includes('account-0'), false);
+});
+
+test('review facts retain per-match Domain details while removing session and match IDs', () => {
+  const result = buildPublicAgentFacts({
+    status: 'partial',
+    data: {
+      period: { label: '昨天', orderedMatchIds: ['match-private-1'] },
+      reviews: [{
+        matchId: 'match-private-1',
+        status: 'partial',
+        match: { matchId: 'match-private-1', createdAt: '2026-10-14T03:07:00.000Z', mapName: 'Erangel', gameMode: 'duo-fpp' },
+        data: { facts: { match: { mapName: 'Erangel' }, players: [{ name: 'Alpha', stats: { kills: 3, assists: 1 } }] } },
+      }],
+    },
+    coverage: { complete: false }, asOf: '2026-10-14T04:00:00.000Z',
+    queryResolved: { sessionId: 'private-session', searchResultSetId: 'private-result-set', categories: null },
+    evidenceRefs: { matchIds: ['match-private-1'], playerIds: [roster[0]!.id] },
+    presentation: { type: 'pubg_period_review', evidenceRefs: { matchIds: ['match-private-1'] } },
+    displayText: '昨天这场 Alpha 击杀 3 人。', roster, now: new Date('2026-10-14T12:00:00.000Z'),
+  });
+  const encoded = JSON.stringify(result);
+  assert.match(encoded, /period_review/u);
+  assert.match(encoded, /kills/iu);
+  assert.match(encoded, /第1场/u);
+  assert.equal(encoded.includes('match-private-1'), false);
+  assert.equal(encoded.includes('private-session'), false);
+  assert.equal(encoded.includes('private-result-set'), false);
+  assert.equal(encoded.includes('orderedMatchIds'), false);
 });

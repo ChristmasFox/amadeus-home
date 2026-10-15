@@ -73,7 +73,7 @@ export class PublicPubgPlayerResolver implements PublicPubgPlayerResolverPort {
     if (!options.apiKey.trim()) throw new Error('public_pubg_api_key_missing');
     const fetcher = options.fetcher ?? fetch;
     this.client = new PubgApiClient({
-      apiKey: options.apiKey, baseUrl: 'https://api.pubg.com', maxRetries: 0, timeoutMs: 15_000,
+      apiKey: options.apiKey, baseUrl: 'https://api.pubg.com',
       fetchImpl: async (input, init) => {
         const url = new URL(String(input));
         if (url.origin !== 'https://api.pubg.com' || !/^\/shards\/(steam|kakao|psn|xbox)\/players$/u.test(url.pathname)) throw new Error('public_pubg_endpoint_invalid');

@@ -403,13 +403,35 @@ test('period review refreshes match discovery and uses the Domain result-set han
   assert.deepEqual(calls[0]?.input, {
     sessionId: 'session-1',
     page: 0,
-    pageSize: 4,
-    sort: 'desc',
+    pageSize: 50,
+    sort: 'asc',
     refresh: true,
     selector: { type: 'relative_period', value: 'yesterday' },
   });
   assert.deepEqual(calls[1]?.input, { sessionId: 'session-1', searchResultSetId: 'review-set-1' });
   if (result.kind === 'executed') assert.equal(result.envelope.status, 'partial');
+});
+
+test('match review supports the shared Domain recent-match range and single latest match', async () => {
+  const recent = setup();
+  const batch = await recent.executor.execute({
+    authorizedQuery: recent.query,
+    plan: makePlan({ intent: 'match_review', period: 'recent_matches', matchCount: 100 }),
+  });
+  assert.equal(batch.kind, 'executed');
+  assert.deepEqual(recent.calls[0]?.input, {
+    sessionId: 'session-1', page: 0, pageSize: 50, recentN: 100, sort: 'desc', refresh: true,
+  });
+
+  const latest = setup();
+  const single = await latest.executor.execute({
+    authorizedQuery: latest.query,
+    plan: makePlan({ intent: 'match_review', period: 'last_match' }),
+  });
+  assert.equal(single.kind, 'executed');
+  assert.deepEqual(latest.calls[0]?.input, {
+    sessionId: 'session-1', page: 0, pageSize: 50, recentN: 1, sort: 'desc', refresh: true,
+  });
 });
 
 test('follow-up inherits only the prior validated plan and resolves its authorized player alias', async () => {

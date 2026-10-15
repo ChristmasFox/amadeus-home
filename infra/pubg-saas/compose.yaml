@@ -137,6 +137,7 @@ services:
       PUBG_SAAS_EGRESS_PROXY: http://egress-proxy:8080
       PUBG_SAAS_EGRESS_PROXY_REQUIRED: "1"
       PUBG_SAAS_WORKER_METRICS_PORT: "9464"
+      PUBLIC_SYNC_MAX_MATCHES: "500" # Matches the private PUBG plugin's configured maxMatches.
     secrets:
       - pubg_app_password
     command: ["node", "dist/src/public-sync-worker.js", "--apply"]

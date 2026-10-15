@@ -159,6 +159,33 @@ function matchIdsFromEntry(entry: JsonObject): string[] {
     : [];
 }
 
+/** PUBG returns each player's recent matches newest-first. Round-robin the
+ * player lists before applying the shared sync ceiling so roster ordering
+ * cannot let one account consume every available slot. */
+function fairMatchSelection(snapshots: readonly PlayerMatchSnapshot[], maxMatches: number): string[] {
+  const perPlayer = snapshots.map(snapshot => [...new Set(snapshot.matchIds)]);
+  const cursors = perPlayer.map(() => 0);
+  const selected: string[] = [];
+  const seen = new Set<string>();
+  while (selected.length < maxMatches) {
+    let selectedThisRound = false;
+    for (let playerIndex = 0; playerIndex < perPlayer.length && selected.length < maxMatches; playerIndex += 1) {
+      const matchIds = perPlayer[playerIndex]!;
+      while (cursors[playerIndex]! < matchIds.length) {
+        const matchId = matchIds[cursors[playerIndex]!]!;
+        cursors[playerIndex]! += 1;
+        if (seen.has(matchId)) continue;
+        seen.add(matchId);
+        selected.push(matchId);
+        selectedThisRound = true;
+        break;
+      }
+    }
+    if (!selectedThisRound) break;
+  }
+  return selected;
+}
+
 function normalizeMatchPayload(
   payload: unknown,
   configuredById: Map<string, TeamPlayer>,
@@ -392,7 +419,7 @@ export class PubgApiClient {
         matchIds: matchIdsFromEntry(entry ?? {}),
       };
     });
-    const discoveredMatchIds = [...new Set(snapshots.flatMap((snapshot) => snapshot.matchIds))].slice(0, maxMatches);
+    const discoveredMatchIds = fairMatchSelection(snapshots, maxMatches);
     const knownMatchIds = new Set(options.knownMatchIds ?? []);
     const matchIdsToFetch = discoveredMatchIds.filter((matchId) => !knownMatchIds.has(matchId));
     const gate = new ConcurrencyGate(this.concurrency);

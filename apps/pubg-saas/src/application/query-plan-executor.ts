@@ -332,12 +332,8 @@ export class QueryPlanExecutor {
     );
     if (!currentPeriod) return execution('clarification', plan.period ? 'period_not_supported' : 'period_required');
 
-    if ((plan.intent === 'team_damage' || plan.intent === 'match_review') && currentPeriod.kind !== 'time_period') {
-      if (plan.intent === 'match_review' && currentPeriod.kind === 'recent_matches' && currentPeriod.count <= 4) {
-        // Recent match review has a separately bounded path below.
-      } else {
-        return execution('clarification', 'period_not_supported_for_intent');
-      }
+    if (plan.intent === 'team_damage' && currentPeriod.kind !== 'time_period') {
+      return execution('clarification', 'period_not_supported_for_intent');
     }
 
     const syncState = await input.authorizedQuery.repository.getSyncState(`team:${input.authorizedQuery.teamContext.team.id}`);
@@ -449,19 +445,18 @@ export class QueryPlanExecutor {
     }
 
     if (plan.intent === 'match_review') {
-      if (currentPeriod.kind === 'last_n_matches') return execution('clarification', 'review_match_offset_not_supported');
       const playerIds = playerSelection.kind === 'player' ? [playerSelection.id] : undefined;
+      const searchPeriod = currentPeriod.kind === 'time_period'
+        ? { selector: currentPeriod.selector, sort: 'asc' as const }
+        : { recentN: currentPeriod.kind === 'recent_matches' ? currentPeriod.count : currentPeriod.selector.count, sort: 'desc' as const };
       const searchInput: SearchMatchesInput = {
         sessionId,
         page: 0,
-        pageSize: 4,
-        sort: 'desc',
+        pageSize: 50,
+        ...searchPeriod,
         refresh: true,
         ...(playerIds ? { playerIds } : {}),
         ...(signal ? { signal } : {}),
-        ...(currentPeriod.kind === 'time_period'
-          ? { selector: currentPeriod.selector }
-          : { recentN: currentPeriod.count }),
       };
       const search = await domain.searchMatches(searchInput);
       if (!search.resultSetId) return execution('unavailable', 'review_result_set_unavailable');

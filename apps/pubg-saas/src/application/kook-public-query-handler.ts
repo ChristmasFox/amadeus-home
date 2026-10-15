@@ -24,7 +24,7 @@ import type {
 import { parseTeamLeaderboardMetric, type TeamLeaderboardMetric } from '../contracts/team-preferences.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
-import { buildPublicAgentCoverage, buildPublicAgentFacts } from './public-agent-facts.js';
+import { buildPublicAgentFacts } from './public-agent-facts.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -202,9 +202,9 @@ function presentationInput(envelope: ToolEnvelope, toolName: PubgToolName, teamD
     ...(sourceRange ? { sourceRange } : {}),
     queryResolved: envelope.queryResolved,
     evidenceRefs: {
-      matchIds: envelope.evidenceRefs.matchIds.slice(0, 8),
-      playerIds: envelope.evidenceRefs.playerIds.slice(0, MAX_TEAM_ROSTER_SIZE),
-      fields: envelope.evidenceRefs.fields.slice(0, 24),
+      matchIds: [...envelope.evidenceRefs.matchIds],
+      playerIds: [...envelope.evidenceRefs.playerIds],
+      fields: [...envelope.evidenceRefs.fields],
     },
     coverage: {
       status: coverage.status,
@@ -333,7 +333,7 @@ async function naturalLanguageReply(
   };
 
   const queryTool = tool({
-    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘。一般友伤查询不要传 meleeKind；只有当前原文明确提到踢/脚才传 KICK，明确提到拳才传 PUNCH；OTHER 只用于明确要求踢和拳以外的近战，绝不表示默认的其他伤害。不确定时传 null。姓名槽里的 none/self 等占位词视为未指定。参数仅是查询槽位。结果包含 presentation 摘要、脱敏且有上限的 Domain facts、覆盖、新鲜度、规范时间范围和实际过滤条件；不会提供内部 ID 或 Telemetry evidence。友伤 facts 至多列 8 名队员、10 场对局；数字和场次数须按完整性及截断标记解释。相同参数不得重复查询，应直接使用已有结果回答。',
+    description: '按当前可信 KOOK 频道和发言者查询已授权小队的真实 PUBG Domain 数据。用于战绩、玩家统计、友伤、拳击/踢击、排名、历史比赛、比较和复盘。一般友伤查询不要传 meleeKind；只有当前原文明确提到踢/脚才传 KICK，明确提到拳才传 PUNCH；OTHER 只用于明确要求踢和拳以外的近战，绝不表示默认的其他伤害。不确定时传 null。姓名槽里的 none/self 等占位词视为未指定。参数仅是查询槽位。结果保留完整 Domain envelope data、共享 presentation、displayText、覆盖、新鲜度、规范时间范围和实际过滤条件；只移除内部标识、调试字段和私人数据。相同参数不得重复查询，应直接使用已有结果回答。',
     inputSchema: QueryPlanSchema,
     execute: async planInput => {
       const parsedPlan = QueryPlanSchema.safeParse(planInput);
@@ -406,13 +406,20 @@ async function naturalLanguageReply(
         });
         const queryResolved = execution.envelope.queryResolved;
         const facts = buildPublicAgentFacts({
-          intent: execution.plan.intent,
+          status: execution.envelope.status,
           data: execution.envelope.data,
+          coverage: execution.envelope.coverage,
+          asOf: execution.envelope.asOf,
+          ...(execution.envelope.metricVersion ? { metricVersion: execution.envelope.metricVersion } : {}),
           queryResolved,
+          evidenceRefs: execution.envelope.evidenceRefs,
+          ...(execution.envelope.error ? { error: execution.envelope.error } : {}),
+          presentation: presented.presentation,
+          displayText: presented.displayText,
           roster: query.teamContext.team.players,
           now,
         });
-        const factsRange = object(facts?.sourceRange);
+        const factsRange = object(facts.sourceRangeLocal);
         const teamDamageFilters = execution.plan.intent === 'team_damage' ? {
           sourceRange: factsRange,
           direction: execution.plan.actorName && execution.plan.victimName
@@ -421,13 +428,10 @@ async function naturalLanguageReply(
           meleeKind: ['KICK', 'PUNCH', 'OTHER'].includes(String(queryResolved.meleeKind)) ? queryResolved.meleeKind : 'ALL',
         } : undefined;
         const toolResult = {
+          ...facts,
           status: execution.envelope.status,
-          summary: `${selfWarning}${presented.displayText}`,
-          ...(facts ? { facts } : {}),
+          ...(selfWarning ? { identityWarning: selfWarning.trim() } : {}),
           ...(teamDamageFilters ? { filtersApplied: teamDamageFilters } : {}),
-          coverage: buildPublicAgentCoverage(execution.envelope.coverage, now),
-          asOf: execution.envelope.asOf,
-          ...(factsRange ? { sourceRange: factsRange } : {}),
         };
         const resultStatus = ['ok', 'partial', 'no_matches', 'error'].includes(toolResult.status)
           ? toolResult.status : 'other';
@@ -537,7 +541,7 @@ async function naturalLanguageReply(
     const code = error && typeof error === 'object' && 'code' in error && typeof (error as { code?: unknown }).code === 'string'
       ? String((error as { code: string }).code) : '';
     const failureCode = [
-      'public_agent_input_too_long', 'public_agent_empty_response', 'public_agent_step_limit', 'public_agent_output_truncated', 'public_agent_timeout',
+      'public_agent_empty_response', 'public_agent_output_truncated', 'public_agent_timeout',
     ].includes(code) ? code : 'agent_provider_error';
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: failureCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
     await services.authorizer.recordAgentRun(job, {
@@ -599,7 +603,7 @@ export function createKookPublicQueryHandler(services: KookPublicQueryServices):
         return message(renderEnvelope(envelope, 'pubg_query_team_damage', now, { aggregateByActor: true }));
       }
       const search = await domain.searchMatches({ sessionId: query.conversation.sessionId,
-        selector: { type: 'relative_period', value: parsed.intent.period }, page: 0, pageSize: 4, refresh: true, signal });
+        selector: { type: 'relative_period', value: parsed.intent.period }, page: 0, pageSize: 50, refresh: true, signal });
       if (!search.resultSetId) return message(renderEnvelope(search, 'pubg_search_matches', now));
       const envelope = await domain.getPeriodReview({ sessionId: query.conversation.sessionId, searchResultSetId: search.resultSetId, signal });
       return message(renderEnvelope(envelope, 'pubg_get_period_review', now));

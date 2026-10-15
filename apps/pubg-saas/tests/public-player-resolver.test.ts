@@ -37,6 +37,26 @@ apiKey: 'public-fixture-only', admission: { async acquire() { permits++; }, asyn
   assert.equal(requests.length, 2, 'invalid roster sizes are rejected before making another request');
 });
 
+test('name lookup follows the shared Domain client retry defaults after a transient provider error', async () => {
+  let permits = 0, observations = 0, calls = 0;
+  const resolver = new PublicPubgPlayerResolver({
+    apiKey: 'public-fixture-only',
+    admission: { async acquire() { permits++; }, async observe() { observations++; } },
+    fetcher: async () => {
+      calls++;
+      return calls === 1
+        ? new Response(JSON.stringify({ errors: [{ detail: 'temporary provider failure' }] }), { status: 503 })
+        : success([{ type: 'player', id: 'account.synthetic_alice', attributes: { name: 'Alice' } }]);
+    },
+  });
+  assert.deepEqual(await resolver.resolveNames('steam', ['Alice']), {
+    players: [{ accountId: 'account.synthetic_alice', name: 'Alice' }], missingNames: [], ambiguousNames: [],
+  });
+  assert.equal(calls, 2);
+  assert.equal(permits, 2, 'each retry passes through the public shared-key admission limiter');
+  assert.equal(observations, 2);
+});
+
 test('lookup sanitizes upstream errors and cannot bypass a rejected public admission permit', async () => {
   let calls = 0;
   const resolver = new PublicPubgPlayerResolver({ apiKey: 'must-not-leak', admission: { async acquire() { throw new Error('public_pubg_lookup_rate_limited'); }, async observe() { } }, fetcher: async () => { calls++; return success([]); } });

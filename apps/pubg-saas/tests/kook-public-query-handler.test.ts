@@ -308,6 +308,24 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.ok(match);
     assert.equal((await persistedTelemetry.ensure(match)).status, 'FETCHED');
 
+    const reviewModel = new MockLanguageModelV4({ doGenerate: [
+      toolCall(plan('match_review', { period: 'today' })),
+      finalText('今天这场复盘已按 Domain 返回的事实整理。'),
+    ] });
+    const reviewHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot }),
+      claims,
+      agent: { model: reviewModel, provider: 'fixture-provider', modelId: 'fixture-model' },
+      now: () => now,
+    });
+    const reviewed = await send(group(bot, guild, channel, admin, '复盘今天'), reviewHandler);
+    assert.match(reviewed.content, /Domain 返回/u);
+    const reviewToolContext = JSON.stringify(reviewModel.doGenerateCalls[1]?.prompt);
+    assert.match(reviewToolContext, /pubg_period_review/u);
+    assert.match(reviewToolContext, /"reviews"/u);
+    assert.match(reviewToolContext, /"combat"/u);
+    assert.doesNotMatch(reviewToolContext, new RegExp(`${alice}|${bob}|${matchId}`, 'u'));
+
     const teamDamage = await send(group(bot, guild, channel, admin, '/pubg team damage today'));
     assert.match(teamDamage.content, /今日队友伤害/u);
     assert.match(teamDamage.content, /Alice → Bob：42 伤害 \/ 2 次/u);
@@ -337,7 +355,9 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.match(agentToolContext, /"directions"/u);
     assert.match(agentToolContext, /"matchCount":1/u);
     assert.doesNotMatch(agentToolContext, new RegExp(`${alice}|${bob}|${matchId}`, 'u'));
-    assert.doesNotMatch(agentToolContext, /evidenceRefs|matchIds|playerId|evidenceIds|cacheLookup|"phase"/u);
+    assert.doesNotMatch(agentToolContext, /evidenceRefs|matchIds|playerId|evidenceIds|cacheLookup/u);
+    assert.match(agentToolContext, /"phase":"in_match"/u,
+      'complete Domain telemetry facts are preserved after removing internal identifiers');
     const safeFilterTrace = JSON.stringify(generalDamageDiagnostics);
     assert.match(safeFilterTrace, /pubg_team_damage_filters_period_today_direction_pair_source_all_melee_all/u);
     assert.doesNotMatch(safeFilterTrace, new RegExp(`${alice}|${bob}|${generalDamageEvent.msg_id}`, 'u'),
