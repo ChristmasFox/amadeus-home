@@ -26,15 +26,28 @@ pending limit.
 The patch adds migrations 0017–0020 for persistent transcript/query context,
 ordered outbox parts, and separate source/reply-target IDs. Existing quota
 migrations remain in the ordered migration history; the runtime no longer
-reserves or records local daily quota usage. Validation passed before rollout:
-SaaS PostgreSQL 150/150 and PUBG/Kurisu 71/71, both zero skipped; both package
+reserves or records local daily quota usage. Validation passed: SaaS
+PostgreSQL 150/150 and PUBG/Kurisu 71/71, both zero skipped; both package
 typecheck chains, SaaS build, architecture checks, secrets scan, and
 `git diff --check` passed. Reused isolated PG container `pubg-saas-pg18`; no
 Docker up/down was needed.
 
-Commit, push, M204 build/deploy, migration and Gateway/Worker health evidence
-will be recorded here after the authorized rollout. Arthur's KOOK acceptance
-remains the final product check; do not declare M2 complete.
+Commit `83c1bcc761842676ec750708a43f8d0f33e9d39a` is pushed to `origin/main`.
+The ARM64 image `local/pubg-saas:git-83c1bcc761842676ec750708a43f8d0f33e9d39a`
+was built locally on `pubg-saas-m2-clean` (image ID
+`sha256:e30b16c473b4f9c1ce183271fe43060001f367f9e052050b5f57ab5c52bd14d9`).
+Migrations 0017–0020 are applied. Only Gateway and Worker were replaced;
+Gateway is running with zero restarts and Worker is healthy with zero restarts.
+The KOOK session resumed and advanced to `last_sn=74` at
+`2026-10-15T04:20:45.338Z`. Recent gateway/worker error-record counts are zero.
+PostgreSQL, egress-proxy, and SaaS 9Router container IDs are unchanged. The
+protected mode-0600 rollback records are
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-83c1bcc-pre-switch`
+and `.../20261015-pubg-saas-83c1bcc-post-switch`.
+
+No production deployment, private OpenClaw/Kurisu action, or 9Router change was
+made. Arthur's KOOK acceptance remains the final product check; do not declare
+M2 complete.
 
 ## Previous milestone — Kurisu-aligned public sync and Domain facts (2026-10-15)
 

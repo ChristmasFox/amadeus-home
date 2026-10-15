@@ -28,20 +28,38 @@ passed. Focused PG regressions prove 11 events from one user/minute are
 accepted, more than 12 old messages and 6,000 characters load into context,
 past-expiry query context remains authorized only under current scope, 205
 outbound sends do not hit a local daily quota, and a 17,000-character reply is
-delivered in ordered chunks. Rollout evidence will be added after the
-authorized Gateway/Worker-only replacement.
+delivered in ordered chunks.
+
+Commit `83c1bcc761842676ec750708a43f8d0f33e9d39a` is pushed to `origin/main`.
+The locally built ARM64 image is
+`local/pubg-saas:git-83c1bcc761842676ec750708a43f8d0f33e9d39a` (image ID
+`sha256:e30b16c473b4f9c1ce183271fe43060001f367f9e052050b5f57ab5c52bd14d9`).
+Migrations 0017–0020 are applied; only Gateway and Worker were replaced.
+Gateway runs with zero restarts and Worker is healthy with zero restarts. KOOK
+session resumed at `last_sn=74`, updated
+`2026-10-15T04:20:45.338Z`; recent gateway and worker error-record counts are
+zero. PostgreSQL, egress-proxy and SaaS 9Router are unchanged. No image was
+pushed, no production deployment was made, and no private runtime or config
+was touched. Arthur's KOOK acceptance remains pending; M2 is not complete.
+
+Protected mode-0600 rollback records:
+
+- Pre-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-83c1bcc-pre-switch`
+- Post-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-83c1bcc-post-switch`
 
 ## Outcome
 
-Commits `e355b2ef673662b60757b69966c73768e89830e5`,
+Commits `83c1bcc761842676ec750708a43f8d0f33e9d39a`,
+`e355b2ef673662b60757b69966c73768e89830e5`,
 `6a9171fe10ff5948b421bf6c6cf973704e82f0cd`,
 `f47783d5869071224486d0c26b580eb7ebb835de`, and
 `66e1006b04b8726f50a80a15c3b0024d049228f0` are on `origin/main`; follow-up
-commit `122cd79` is also pushed. M204 runs ARM64 image
-`local/pubg-saas:git-122cd79`
-(image ID `sha256:05618c63ea4b6b7cbe4ddd23455187e26ced0da13e7e3222948b7592d980aca3`).
-Only Gateway and Worker were recreated. PostgreSQL, egress-proxy, SaaS 9Router,
-nyannyan, private OpenClaw, private 9Router, and Kurisu were not changed.
+commit `122cd79` is also pushed. M204 currently runs ARM64 image
+`local/pubg-saas:git-83c1bcc761842676ec750708a43f8d0f33e9d39a`
+(image ID `sha256:e30b16c473b4f9c1ce183271fe43060001f367f9e052050b5f57ab5c52bd14d9`).
+Only Gateway and Worker were recreated for this follow-up. PostgreSQL,
+egress-proxy, SaaS 9Router, nyannyan, private OpenClaw, private 9Router, and
+Kurisu were not changed.
 
 ## Root cause and code changes
 
@@ -117,10 +135,10 @@ remain excluded from model-visible facts.
   quota, and ordered split delivery for overlong replies.
 - M204 build/rollout evidence will be recorded after the authorized switch.
 
-## M204 rollout evidence
+## Previous rollout evidence — 122cd79
 
-Only Gateway and Worker were replaced for both app-only switches. The current
-container IDs are recorded in
+Only Gateway and Worker were replaced for the previous app-only switch. The
+container IDs from that switch are recorded in
 `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-post-switch.txt`.
 Worker and Gateway have zero restarts; Worker is healthy and Compose reported
 Gateway healthy. The KOOK session cursor is `last_sn=72`, updated at
@@ -141,15 +159,15 @@ acceptance remains pending; M2 is not complete.
 
 Protected target records, mode 0600:
 
-- Pre-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-pre-switch.txt`
-- Post-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-post-switch.txt`
+- Pre-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-83c1bcc-pre-switch`
+- Post-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-83c1bcc-post-switch`
 
-To roll back this correction, restore
-`PUBG_SAAS_IMAGE=local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
-in the protected target `.env`, validate Compose, then run only:
+To roll back this correction, restore the pre-switch `.env` and compose file,
+validate Compose, then run only:
 
 ```sh
 docker compose up -d --no-deps --force-recreate --no-build --wait gateway worker
 ```
 
-No database downgrade is needed.
+No database downgrade is needed; migrations 0017–0020 are additive, and the
+previous `local/pubg-saas:git-122cd79` image remains available on M204.
