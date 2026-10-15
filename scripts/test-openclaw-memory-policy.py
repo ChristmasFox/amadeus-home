@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -78,6 +79,35 @@ with tempfile.TemporaryDirectory(prefix="openclaw-memory-policy-test-") as tempo
     assert hardlink_source.read_bytes() == content
 
 config = json.loads((ROOT / "integrations/openclaw/openclaw.json.example").read_text())
+template_memory = copy.deepcopy(config["memory"])
+template_memory_slot = config["plugins"]["slots"]["memory"]
+existing_config = {
+    "commands": {"ownerAllowFrom": ["whatsapp:owner-fixture"]},
+    "meta": {"operatorValue": "preserve-me"},
+    "security": {"operatorPolicy": "preserve-me"},
+    "channels": {
+        "whatsapp": {
+            "allowFrom": ["whatsapp:owner-fixture"],
+            "accounts": {"primary": {"operatorValue": "preserve-me"}},
+        }
+    },
+    "memory": {"search": {"enabled": False}},
+    "plugins": {"slots": {"memory": "legacy-memory-provider"}},
+}
+prepare.merge_preserved(config, existing_config)
+assert config["memory"] == template_memory, "managed Memory Core config must reach the final merged config"
+assert config["plugins"]["slots"]["memory"] == template_memory_slot
+assert config["commands"] == existing_config["commands"]
+assert config["meta"] == existing_config["meta"]
+assert config["security"] == existing_config["security"]
+assert (
+    config["channels"]["whatsapp"]["allowFrom"]
+    == existing_config["channels"]["whatsapp"]["allowFrom"]
+)
+assert (
+    config["channels"]["whatsapp"]["accounts"]
+    == existing_config["channels"]["whatsapp"]["accounts"]
+)
 assert config["memory"]["search"]["enabled"] is True
 assert config["memory"]["search"]["sources"] == ["memory"]
 assert config["memory"]["search"]["rememberAcrossConversations"] is False

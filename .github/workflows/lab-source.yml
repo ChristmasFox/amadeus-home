@@ -13,9 +13,11 @@ on:
       - "infra/docker/casaos/openclaw/**"
       - "apps/product-radar/**"
       - "scripts/openclaw_prepare.py"
+      - "scripts/openclaw_test_runtime.py"
       - "scripts/patch-openclaw-*.mjs"
       - "scripts/test-patch-openclaw-*.mjs"
       - "scripts/test-openclaw-memory-policy.py"
+      - "scripts/test-openclaw-group-image-policy.py"
       - "scripts/test-openclaw-session-isolation.sh"
       - "scripts/image-impact.py"
       - "scripts/test-image-impact.py"
@@ -51,9 +53,11 @@ on:
       - "infra/docker/casaos/openclaw/**"
       - "apps/product-radar/**"
       - "scripts/openclaw_prepare.py"
+      - "scripts/openclaw_test_runtime.py"
       - "scripts/patch-openclaw-*.mjs"
       - "scripts/test-patch-openclaw-*.mjs"
       - "scripts/test-openclaw-memory-policy.py"
+      - "scripts/test-openclaw-group-image-policy.py"
       - "scripts/test-openclaw-session-isolation.sh"
       - "scripts/image-impact.py"
       - "scripts/test-image-impact.py"
@@ -120,6 +124,7 @@ jobs:
         run: |
           node scripts/test-patch-openclaw-memory-core.mjs
           python3 scripts/test-openclaw-memory-policy.py
+          python3 scripts/test-openclaw-group-image-policy.py
           bash scripts/test-openclaw-session-isolation.sh
           python3 scripts/test-image-impact.py
           python3 scripts/test-release-tooling.py
