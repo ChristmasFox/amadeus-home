@@ -175,3 +175,14 @@ No Product Radar rebuild/apply was performed: its legacy image source remains
 unavailable, and the current `--build-radar` apply path would also reconcile
 and restart OpenClaw. Gate remains paused; no Gate apply, DB action, image
 build, tag, or release was performed in this continuation.
+
+## Product Radar-only apply guard — 2026-10-15
+
+The Lab deployment script now rejects apply when only Product Radar is selected
+for a fresh build, including `--build-auto` when OpenClaw is reusable. This
+prevents the Lab-default deployment path from restarting OpenClaw for a Radar-
+only source drift. `scripts/test-deploy-radar-only-apply.py` uses a synthetic
+OrbStack stub to verify explicit and automatic rejection while preserving the
+Radar-only dry-run; the stub records only image inspection and no build or
+Compose command. The separate Product Radar apply path remains an open source
+engineering limitation. No image build or runtime operation was performed.

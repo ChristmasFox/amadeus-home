@@ -26,7 +26,11 @@ Fresh read-only status at `2026-10-15T15:40:47Z` confirms the released Lab
 OpenClaw manifest is `IN_SYNC` at 1.10.5. Product Radar remains healthy but
 its legacy source/version are `UNKNOWN`; a dry-run selects it for rebuild, but
 the existing apply route also revalidates configuration and restarts OpenClaw,
-so no Product Radar build/apply was attempted. A current M2 check found all
+so no Product Radar build/apply was attempted. The Lab deploy entry now blocks
+any apply selecting a Product Radar-only rebuild, including `--build-auto`,
+before build/checkpoint/apply; a synthetic fixture verifies dry-run and
+rejection without Docker/Compose writes. An isolated Product Radar apply route
+remains unsupported. A current M2 check found all
 Buildx history terminal and no build/deploy/migration command; services remain
 running and M2 remains paused. No DB query or service action ran.
 

@@ -31,7 +31,11 @@ version/source remain `UNKNOWN`. The dry-run
 `bash scripts/deploy-openclaw.sh --dry-run --build-radar` selects a Product
 Radar rebuild. Applying that existing full-stack path also revalidates and
 restarts OpenClaw; no build/apply is authorized for Product Radar in this
-continuation. M2's current Gateway/Worker/PostgreSQL/proxy/SaaS 9Router/BuildKit
+continuation. The Lab deploy entry now rejects `--apply` whenever the selected
+fresh build is Product Radar-only (including `--build-auto`); a synthetic
+regression confirms dry-run remains available and neither Compose nor Docker
+build is reached. An isolated Product Radar apply path remains unsupported.
+M2's current Gateway/Worker/PostgreSQL/proxy/SaaS 9Router/BuildKit
 containers remain up; returned Buildx history is terminal and the guest
 process list has no build/deploy/migration command. No database query or M2
 service action ran. A read-only `git fetch --no-tags origin 633dd216339f`

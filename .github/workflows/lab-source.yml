@@ -24,6 +24,7 @@ on:
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/test-deploy-radar-only-apply.py"
       - "scripts/test-openclaw-lineage-compatibility.sh"
       - "scripts/amadeus-version.sh"
       - "scripts/test-amadeus-version.sh"
@@ -65,6 +66,7 @@ on:
       - "scripts/developer-workflow.sh"
       - "scripts/test-developer-workflow.sh"
       - "scripts/deploy-openclaw.sh"
+      - "scripts/test-deploy-radar-only-apply.py"
       - "scripts/test-openclaw-lineage-compatibility.sh"
       - "scripts/amadeus-version.sh"
       - "scripts/test-amadeus-version.sh"
@@ -134,6 +136,7 @@ jobs:
           python3 scripts/test-lab-memory-acceptance.py
           bash scripts/test-developer-workflow.sh
           bash scripts/test-openclaw-lineage-compatibility.sh
+          python3 scripts/test-deploy-radar-only-apply.py
       - name: Architecture and secret checks
         run: |
           pnpm check:architecture

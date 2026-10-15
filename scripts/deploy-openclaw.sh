@@ -38,7 +38,7 @@ Usage:
   ./scripts/deploy-openclaw.sh --apply --candidate --openclaw-only --build-openclaw
   ./scripts/deploy-openclaw.sh --build-only --candidate --openclaw-only --build-openclaw
   ./scripts/deploy-openclaw.sh --apply --build-openclaw
-  ./scripts/deploy-openclaw.sh --apply --build-radar
+  ./scripts/deploy-openclaw.sh --dry-run --build-radar
   ./scripts/deploy-openclaw.sh --apply --no-build
   ./scripts/deploy-openclaw.sh --apply --build --lineage-bridge
   ./scripts/deploy-openclaw.sh --apply --image <openclaw-image> --radar-image <radar-image>
@@ -55,6 +55,9 @@ build so image provenance matches the eventual release source.
 --openclaw-only is a maintainer Lab candidate scope. It requires a fresh
 OpenClaw build and an advanced version, and never writes Product Radar,
 networks, cron, the host notification hook, or runtime secret files.
+Applying a Product Radar-only build through the Lab-default path is refused:
+that path also restarts OpenClaw. Until an isolated Product Radar apply path is
+available, review and build both images for a full Lab deployment.
 --lineage-bridge is a one-time explicit release cutover for a live image whose
 Git source commit was removed by an approved history rewrite. It requires
 --apply plus fresh builds of both images and reads the protected live image's
@@ -339,6 +342,10 @@ elif ((AUTO_BUILD)); then
   BUILD_MODE='auto/no-build'
 else
   BUILD_MODE='no-build'
+fi
+
+if ((APPLY == 1 && OPENCLAW_ONLY == 0 && BUILD_RADAR == 1 && BUILD_OPENCLAW == 0)); then
+  fail 'Refusing Product Radar-only apply: the Lab-default deployment also restarts OpenClaw. Use --dry-run or prepare a reviewed full two-image Lab deployment.'
 fi
 
 shown_image="$IMAGE"
