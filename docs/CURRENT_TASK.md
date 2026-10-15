@@ -21,6 +21,28 @@ controlled item-4 run stopped at preflight; an existing scheduled run was
 later found in metadata, with source isolation unverified. The cron remains
 enabled and items 5–7 require fresh explicit authorization.
 
+## Latest Goal continuation audit — 2026-10-15T13:27Z
+
+Read `AGENTS.md`, this task pointer, the full active Goal, and the current M2
+pause checkpoint. Fetched `origin/main`; it added no commits. The worktree was
+clean before this audit, `origin/main` is an ancestor of `main`, and the local
+branch is 17 commits ahead at `f8eff10`. No rebase was needed.
+
+Read-only M2 observation on `pubg-saas-m2-clean`: Gateway running and Worker
+healthy for 9 hours; PostgreSQL, egress proxy, and SaaS 9Router running for 28
+hours; BuildKit service running for 28 hours. All listed Buildx history entries
+were terminal (`Completed` or `Error`); the newest completed builds were 9
+hours old. The process table showed no active migration/build/deploy command.
+No PostgreSQL query, log inspection, service action, or M2 data change was
+performed. M2 remains paused for Arthur's real KOOK acceptance and the P7
+controlled release review.
+
+Focused source revalidation passed: Memory Core patch, memory policy, pinned
+OpenClaw image/schema (6/6), session isolation, image-impact, Lab memory
+acceptance guard, release tooling, Lab and Gate SemVer, lineage compatibility,
+architecture, workflow, and secrets checks. No Docker/OCI build or product
+database suite ran. Runtime writes remain `none`.
+
 ## Goal continuation audit — repository and Gate M2 read-only check — 2026-10-15
 
 Fetched `origin/main`; it added no commits. `main` is clean and 10 commits
