@@ -51,6 +51,27 @@ and architecture checks, both product SemVer suites, the Lab memory-release
 fail-closed test, and lineage compatibility. No Gate PostgreSQL suite or
 Docker/OCI build was run.
 
+## P0/P3 source-plan refresh — 2026-10-15
+
+Fetched `origin/main`; it added no commits. The clean local `main` is 14
+commits ahead of the remote. `scripts/release-lab.sh plan` returned
+`MODE=dry-run`, `BUILD_MODE=auto/no-build`, and `CHANGED_PATHS=0`; it selected
+an OpenClaw rebuild for current Dockerfile/build-analyzer/Memory Core patch
+inputs and a Product Radar rebuild because source `633dd216339f` is
+unreachable. The plan does not query live containers, and no build/apply or
+runtime operation occurred. This does not establish `BUILD_VERIFIED` or
+refresh live drift evidence. P0 addendum: `docs/LAB_GATE_P0_BASELINE_AUDIT.md`.
+
+## P0 sanitized Lab snapshot — 2026-10-15T13:14:51Z
+
+`python3 scripts/lab-runtime-snapshot.py` confirmed OpenClaw remains healthy
+at source `4a5734826eca479f59a2fd039fd12f9ff5d03580`, version `1.10.4`, digest
+`sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`.
+Product Radar remains healthy, but its tagged `633dd216339f` source and product
+provenance remain unavailable. Only sanitized image/health/digest metadata and
+Compose/config hashes were read. No runtime write occurred. Full evidence is
+in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`.
+
 ## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
 
 The authorized Dreaming run was not invoked. Read-only inspection of the live

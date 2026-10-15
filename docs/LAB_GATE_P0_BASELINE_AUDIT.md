@@ -134,9 +134,45 @@ open.
   negative are recorded.
 - No runtime write occurred. No service was restarted, deployed, or rolled
   back; no credential, database, memory file, or index was changed.
-- P1 must validate the real OpenClaw 2026.9.4 plugin/config/schema behavior,
-  Dreaming admission, and 9Router Embedding capability. A real Embedding call
-  and any index rebuild remain separately blocked on operator authorization.
-- P2/P3 must add independent product versions, validated source/digest
-  manifests, a conservative Docker build-input impact map, and read-only drift
-  status. No Tag, release, registry push, or environment promotion occurred.
+- At P0 exit, P1 still needed to validate the real OpenClaw 2026.9.4
+  plugin/config/schema behavior, Dreaming admission, and 9Router Embedding
+  capability. Later authorized probe/index evidence and the remaining live
+  gates are recorded in the P1 report; full `LIVE_VERIFIED` is still open.
+- At P0 exit, P2/P3 version sources, manifests, build-impact analysis, and
+  drift tooling remained to be implemented. They were subsequently completed
+  in the P2/P3 reports. No formal Tag, registry push, or environment
+  promotion occurred.
+
+## Latest sanitized Lab runtime observation — 2026-10-15T13:14:51Z
+
+`python3 scripts/lab-runtime-snapshot.py` read only image/container identity,
+health, and Compose/config digests. OpenClaw remained healthy at
+`local/openclaw-amadeus:git-4a57348-202610150912`, digest
+`sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`,
+Lab version `1.10.4`, source
+`4a5734826eca479f59a2fd039fd12f9ff5d03580`; its provenance was resolved from
+the immutable image tag and reachable Git source. Compose and config digests
+were respectively
+`sha256:16bc284289f270b1d9f451e906feb0cfd6269611e7e206baee6f69ad36fdd771`
+and
+`sha256:7106f78e2cde95b7b3ed6cf4ef457eaf4fd7f9d0ea75a125da54768190f09315`.
+Product Radar remained healthy at digest
+`sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`;
+its tagged source `633dd216339f` is still unreachable and product provenance
+is unavailable. No configuration contents, credentials, memory, database,
+logs, or session data were read; no runtime state changed. This confirms the
+earlier candidate is still live, not that its unbuilt source patches are
+active.
+
+## Post-audit source-plan revalidation — 2026-10-15
+
+After the P0 baseline, `scripts/release-lab.sh plan` was rerun against the
+current committed source. It returned `MODE=dry-run`, `BUILD_MODE=auto/no-build`,
+and `CHANGED_PATHS=0`; it did not query the live containers because the plan
+resolves those image references only on apply. The current source plan selects
+an OpenClaw rebuild for the changed Dockerfile/build analyzer/Memory Core patch
+inputs, and requires a Product Radar rebuild because its recorded source
+`633dd216339f` is unavailable in the current Git object database. This is
+source/lineage planning evidence only: no image was built, no container was
+queried or changed, and `BUILD_VERIFIED` remains false. The dry-run does not
+resolve the outstanding live digest/Compose provenance evidence.
