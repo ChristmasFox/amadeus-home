@@ -34,6 +34,24 @@ remains unsupported. A current M2 check found all
 Buildx history terminal and no build/deploy/migration command; services remain
 running and M2 remains paused. No DB query or service action ran.
 
+## 2026-10-15 — fresh read-only Goal verification
+
+At `2026-10-15T15:54:43Z`, the released Lab 1.10.5 manifest still matched the
+live healthy OpenClaw source and digest (`DRIFT_STATUS=IN_SYNC`). A filtered
+read-only memory status reports 5 files / 92 chunks, `dirty=false`, FTS
+available/enabled, and a complete enabled vector index. Product Radar is also
+healthy, but the `633dd216339f` image still has no reachable Git source,
+product-owned provenance, or product version; the Lab plan selects Radar
+rebuild and OpenClaw reuse. Commit `0cb2462` adds a fail-closed guard so this
+Radar-only apply is rejected before any build or checkpoint; a separate Radar
+apply path remains unimplemented.
+
+The M2 stack remains running and paused. Its Buildx records are terminal and
+no migration/build/deploy command was observed; no DB query or service action
+ran. Lab source verification and local release fixtures pass; Gate
+database-backed tests and GitHub Actions were not run. No Docker build, apply,
+push, or tag occurred.
+
 ## 2026-10-15 — Lab Dreaming config attempt rolled back
 
 After the earlier Lab 1.10.5 release, Arthur authorized an additional

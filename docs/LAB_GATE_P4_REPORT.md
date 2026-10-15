@@ -133,4 +133,6 @@ M2's human KOOK acceptance/Go-No-Go remains open and M2 was not resumed. The
 current Product Radar image is healthy but its legacy source/version remain
 `UNKNOWN`; the read-only plan selects a rebuild, and its current apply path
 would also reconcile/restart OpenClaw, so no Product Radar operation was
-attempted. These limits do not change Lab OpenClaw's verified release status.
+attempted. The later source guard blocks that Radar-only apply before build or
+checkpoint; no isolated Product Radar apply path exists yet. These limits do
+not change Lab OpenClaw's verified release status.

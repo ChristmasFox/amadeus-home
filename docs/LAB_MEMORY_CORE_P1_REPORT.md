@@ -388,3 +388,9 @@ index identity, and zero scan issues. This verifies persistence across an
 already completed restart without issuing another restart or index write.
 The mode-0600 sanitized evidence is
 `/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/post-restart-index-verification.json`.
+
+A fresh read-only `memory status --json --agent main` at
+`2026-10-15T15:55Z` reports the same 5 files / 92 chunks and `dirty=false`,
+with FTS enabled/available and the vector index enabled and complete. This is
+a status read only; it does not repeat the incremental refresh, Dreaming run,
+or restart.

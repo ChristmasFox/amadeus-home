@@ -49,6 +49,36 @@ test, workflow/architecture/secrets checks, affected typechecks and PUBG tests
 passed. No image was built and this commit was not pushed. Existing unrelated
 Gate worktree edits remain untouched.
 
+## Formal Goal continuation audit — 2026-10-15T15:55Z
+
+Fetched `origin/main`; it added no commits. `main` remains seven commits ahead.
+The three pre-existing Gate worktree edits remain unstaged and untouched.
+Fresh read-only `scripts/release-lab.sh status --live --manifest` at
+`2026-10-15T15:54:43Z` reports Lab 1.10.5 healthy and `DRIFT_STATUS=IN_SYNC`
+at source `57e472ebe014a0b4d3574d7ef30107340dc99308`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`,
+with the restored baseline config digest. A filtered read-only Memory Core
+status retained 5 files / 92 chunks, `dirty=false`, FTS enabled/available,
+and a complete enabled vector index. The separate Product Radar snapshot at
+`2026-10-15T15:55:04Z` is healthy but has no product-owned provenance, Git
+source, or product version; its lineage remains `UNKNOWN`.
+
+The Lab release dry-run selects OpenClaw `reuse` and Product Radar `build`;
+the new fail-closed guard rejects a Radar-only apply before build/checkpoint.
+The Gate dry-run reports `GATE_ADAPTER=unconfigured` and makes no M2 runtime
+query. M2 Gateway/Worker remain up, PostgreSQL/proxy/9Router/BuildKit remain
+up, and every Buildx history record is terminal. No in-flight migration/build/
+deploy or `release-config-hash` process remains; no M2 query or service action
+ran.
+
+Local verification passed: `bash scripts/release-lab.sh verify`,
+`pnpm typecheck:pubg-saas`, release/image-impact/memory-acceptance and
+Radar-only apply fixtures, Lab/Gate SemVer suites, lineage compatibility,
+workflow tests, architecture, secrets, shell/YAML syntax, and `git diff
+--check`. The Gate PostgreSQL suite and GitHub Actions were not run. No image
+build, database write, runtime operation, push, or tag was performed. Source
+guard commit `0cb2462` remains local; no pre-existing Gate edits were included.
+
 Earlier config attempt (rolled back before Arthur's correction): the authorized
 Lab Dreaming config change stopped at `openclaw config validate` because
 atomic replacement changed the config owner to root. The original config was

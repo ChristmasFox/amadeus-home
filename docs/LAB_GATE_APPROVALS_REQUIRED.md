@@ -43,7 +43,9 @@ product-owned provenance, so source/version are `UNKNOWN`. The read-only
 `git fetch --no-tags origin 633dd216339f` failed with `couldn't find remote
 ref`; the original source was not recovered. The read-only
 `bash scripts/deploy-openclaw.sh --dry-run --build-radar` selects a rebuild.
-The current apply path is not isolated to Product Radar: it also reconciles
-OpenClaw configuration and restarts OpenClaw. No Product Radar build or apply
-is authorized by this checklist; it needs a reviewed scope-specific path and
+The current Lab-default apply path is not isolated to Product Radar: it also
+reconciles OpenClaw configuration and restarts OpenClaw. The current source
+guard rejects an apply when only Product Radar is selected for a fresh build,
+before any build or checkpoint. No Product Radar build or apply is authorized
+by this checklist; an isolated path still needs source implementation and
 separate approval. Gate M2 remains paused and untouched.

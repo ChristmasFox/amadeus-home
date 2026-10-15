@@ -216,3 +216,26 @@ history row terminal (`Completed` or `Error`). The guest process table showed
 no active build, deploy, or migration command. No database query, log
 inspection, service action, or M2 data change occurred. The `release-config-hash`
 host process was absent. No Lab runtime write occurred in this refresh.
+
+## Fresh read-only continuation snapshot — 2026-10-15T15:55Z
+
+The released Lab manifest was compared to a live OpenClaw snapshot at
+`2026-10-15T15:54:43Z`: version `1.10.5`, source
+`57e472ebe014a0b4d3574d7ef30107340dc99308`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`,
+healthy and `DRIFT_STATUS=IN_SYNC`; the config digest is the restored
+baseline. Product Radar was separately sampled at `2026-10-15T15:55:04Z`:
+healthy at digest
+`sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`,
+but its legacy `633dd216339f` source and version remain unavailable and its
+image has no product-owned provenance. The Lab dry-run selects OpenClaw reuse
+and Product Radar rebuild. Commit `0cb2462` makes an apply with only a Radar
+rebuild fail closed before build/checkpoint; a separate Radar apply route is
+still absent. No image was built or service changed.
+
+The latest filtered in-container memory status is 5 files / 92 chunks,
+`dirty=false`, FTS enabled and available, and vector search enabled with a
+complete index. The previously verified post-restart persistence evidence
+remains the source for restart survival; no new restart or index write was
+performed. M2 containers remain up, all returned Buildx rows are terminal,
+and no in-flight M2 operation was found. No M2 DB query or service action ran.
