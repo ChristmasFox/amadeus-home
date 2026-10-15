@@ -33,7 +33,8 @@ cleanup_temporary_files() {
 }
 trap cleanup_temporary_files EXIT
 usage() {
-  cat <<USAGE
+  if [[ "$PRODUCT" == lab ]]; then
+    cat <<USAGE
 Usage: scripts/release-${PRODUCT}.sh plan|verify|candidate|release|status|rollback-plan [options]
 
 Options:
@@ -42,12 +43,27 @@ Options:
   --build-auto | --build | --no-build   Lab build selection (default: --build-auto)
   --lineage-bridge                Lab-only guarded source-lineage bridge
   --create-tag                    required with an applied formal release
-  --environment <name>            Gate environment: gate-local|gate-staging|gate-prod
   --live                          query current Lab container metadata (read-only)
   --manifest <path>               protected external release manifest
   --runtime-snapshot <path>       sanitized runtime snapshot for drift doctor
   --memory-acceptance <path>      external LIVE_VERIFIED P1 report required for Lab release
 USAGE
+  else
+    cat <<USAGE
+Usage: scripts/release-${PRODUCT}.sh plan|verify|candidate|release|status|rollback-plan [options]
+
+Options:
+  --apply                         required for any release/runtime write
+  --approval-ref <non-secret-id> required with --apply
+  --create-tag                    required with an applied formal release
+  --environment <name>            gate-local|gate-staging|gate-prod (default: gate-local)
+  --manifest <path>               protected external release manifest (status)
+  --runtime-snapshot <path>       sanitized Gate runtime snapshot (status)
+
+Gate-Local M2 remains paused. Staging/Prod apply requires a reviewed
+environment adapter; no adapter is currently configured.
+USAGE
+  fi
 }
 
 while (($#)); do

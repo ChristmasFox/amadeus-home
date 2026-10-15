@@ -51,6 +51,23 @@ refresh, `memory status --deep` provider probing, paid Embedding, Dreaming,
 deploy, and release remain unauthorized. Source follow-up commit: `48b88ac`.
 See the updated P1 report and approval checklist.
 
+## Latest Goal continuation audit — 2026-10-15
+
+Fetched `origin/main`; it added no commits. `main` is clean and 8 commits
+ahead of `origin/main`, with one worktree. Gate-Local Gateway was up and Worker,
+PostgreSQL, egress proxy, and 9Router were healthy in the read-only container
+listing. No host build, deployment, or migration process was observed; the
+long-running BuildKit daemon alone does not establish an active build. No M2
+database query, log inspection, or service action was performed. M2 remains
+paused with its existing acceptance work open.
+
+The P3 CLI audit found that `release-gate.sh --help` showed Lab-only build,
+lineage, and memory-evidence options. `release-cli.sh` now renders separate
+Lab and Gate help; Gate help identifies its environment/manifest options and
+the paused M2 and missing-adapter limits. The focused release-tooling fixture
+and both real help commands pass. Gate-Staging `plan` remains a dry-run with
+`GATE_ADAPTER=unconfigured`; no Gate runtime query occurred.
+
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
 Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or

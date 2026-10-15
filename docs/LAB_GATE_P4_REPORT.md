@@ -27,8 +27,9 @@ formal release or complete Gate M2.
 
 - Release state and CLI fixtures: protected file mode, non-overwrite, approval
   and actor validation, credential-like reference rejection without echoing the
-  supplied value, Lab-only memory evidence guard, synthetic drift states,
-  multi-architecture OCI labels, and Lab dry-run with a stubbed `orb`.
+  supplied value, Lab-only memory evidence guard, product-scoped CLI help,
+  synthetic drift states, multi-architecture OCI labels, and Lab dry-run with
+  a stubbed `orb`.
 - Memory Core admission and image impact fixtures, SemVer helpers, Lab lineage,
   developer workflow, and OpenClaw session-isolation checks.
 - Provider-outage source fixture confirms `fts-only` is reported while explicit

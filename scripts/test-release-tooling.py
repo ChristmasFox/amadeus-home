@@ -293,6 +293,13 @@ assert lab_apply.returncode != 0 and "not valid for plan" in lab_apply.stderr
 for wrapper in ("release-lab.sh", "release-gate.sh"):
     help_output = invoke("bash", str(ROOT / "scripts" / wrapper), "--help")
     assert help_output.returncode == 0 and "rollback-plan" in help_output.stdout
+lab_help = invoke("bash", str(ROOT / "scripts/release-lab.sh"), "--help").stdout
+gate_help = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "--help").stdout
+assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
+assert "--environment" not in lab_help and "Gate" not in lab_help
+assert "gate-local|gate-staging|gate-prod" in gate_help
+assert "M2 remains paused" in gate_help and "reviewed" in gate_help
+assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))
 
 with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     root = Path(temporary)
@@ -323,4 +330,4 @@ with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     orb_calls = log.read_text(encoding="utf-8")
     assert "docker inspect" in orb_calls and "docker compose" not in orb_calls and "docker run" not in orb_calls
 
-print("RELEASE_TOOLING_TEST=passed manifest=protected drift=synthetic candidate=48h-reminder oci=amd64+arm64 cli=fail-closed")
+print("RELEASE_TOOLING_TEST=passed manifest=protected drift=synthetic candidate=48h-reminder oci=amd64+arm64 cli=fail-closed product-help=distinct")

@@ -25,7 +25,10 @@ database, secret, image, release tag, or registry was changed.
 - `scripts/release-gate.sh` exposes the same planning, verification, status,
   and rollback-plan commands. Gate-Local apply is rejected while M2 is paused.
   Gate-Staging/Prod apply is rejected until a reviewed source-controlled
-  environment adapter exists. No Gate environment was queried or modified.
+  environment adapter exists. Its help is scoped to Gate environment,
+  approval, tag, and manifest options and states the adapter boundary; it no
+  longer lists Lab-only build, lineage, or memory evidence flags. No Gate
+  environment was queried or modified.
 - `scripts/release-state.py` validates and writes manifests and compares them
   with runtime snapshots. It checks the product tag, per-image source/version/
   build provenance, digest, Compose image reference and Compose file digest,
@@ -72,7 +75,8 @@ Passed focused local fixtures and source checks:
 - `python3 scripts/test-release-tooling.py` — manifest file permissions,
   digest/config/health drift, 48-hour reminder, synthetic OCI platforms and
   labels, CLI approval/actor/reference guards, memory-evidence option guards,
-  output non-disclosure, and Lab candidate dry-run with a stubbed `orb`
+  product-specific CLI help, output non-disclosure, and Lab candidate dry-run
+  with a stubbed `orb`
 - `python3 scripts/test-lab-memory-acceptance.py` — incomplete live checks and
   post-acceptance Memory Core source drift fail closed
 - `bash scripts/test-developer-workflow.sh`

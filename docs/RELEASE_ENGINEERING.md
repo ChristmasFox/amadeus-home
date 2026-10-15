@@ -42,6 +42,11 @@ scripts/release-lab.sh status --live
 scripts/release-lab.sh rollback-plan
 ```
 
+The Lab help shows its image build, lineage bridge, live snapshot, and Memory
+Core evidence options. Gate help shows its environment, tag, manifest, and
+runtime-snapshot options, and states that Gate-Local is paused and the
+Staging/Prod adapters are absent.
+
 `plan` wraps the existing `deploy-openclaw.sh` dry-run and image-impact
 analysis. It reads live image references to show which images would rebuild;
 it does not build or restart containers. `verify` runs the product's local
