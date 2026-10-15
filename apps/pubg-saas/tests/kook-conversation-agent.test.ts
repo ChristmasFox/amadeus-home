@@ -48,6 +48,21 @@ test('ordinary group chat can finish directly without PUBG keywords or tool call
     'the public Agent does not impose a per-step output-token ceiling');
 });
 
+test('Agent replies are only bounded by the KOOK message payload limit', async () => {
+  const text = '战报'.repeat(3_500);
+  const model = new MockLanguageModelV4({ doGenerate: [response([{ type: 'text', text }], 'stop') as never] });
+  const result = await runPublicKookAgent({
+    model,
+    tools: {},
+    messages: [{ role: 'user', content: '展开昨天的完整战报。' }],
+    signal: new AbortController().signal,
+    currentMessage: '展开昨天的完整战报。',
+  });
+  assert.equal(result.text.length, text.length,
+    'the former 4,000-character application cap cannot truncate an otherwise platform-valid report');
+  assert.ok(result.text.length <= 8_000);
+});
+
 test('ToolLoopAgent executes a selected domain tool and returns to the model for the final answer', async () => {
   const model = new MockLanguageModelV4({ doGenerate: [
     response([{ type: 'tool-call', toolCallId: 'query-call-1', toolName: 'pubg_query', input: JSON.stringify({ selector: 'yesterday' }) }], 'tool-calls') as never,

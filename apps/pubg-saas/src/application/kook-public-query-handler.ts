@@ -58,7 +58,7 @@ export interface KookAgentDiagnostic {
   count: number;
 }
 
-function message(content: string): KookTextPayload { return { type: 'text', content: content.slice(0, 4000) }; }
+function message(content: string): KookTextPayload { return { type: 'text', content: content.slice(0, 8000) }; }
 
 const queryResultMessages: Record<string, string> = {
   follow_up_context_required: '这条追问没有可用的上一条查询，请补充要查询的队伍、队员或时间范围。',
