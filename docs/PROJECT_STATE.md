@@ -1,5 +1,15 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T00:29+08:00 — final source fixture sweep
+
+The final P1/P3 fixture sweep passed for Memory Core patch/admission, Telegram
+allowlist and group-image policy, session isolation, image-impact analysis,
+bounded Lab snapshot queries, memory acceptance fail-closed behavior, image
+lineage compatibility, Radar-only apply rejection, both SemVer suites, and
+workflow scope/efficiency. The Radar-only fixture recorded zero runtime writes.
+No live service or production data changed. The existing M2 human acceptance
+remains open and independent.
+
 ## 2026-10-16T00:24+08:00 — Goal P3/P4 source verification
 
 Local `main` contains P3/P4 follow-up commits `5a6a81f` (BuildKit OCI

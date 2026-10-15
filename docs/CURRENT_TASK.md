@@ -54,6 +54,22 @@ Buildx entries were terminal, and no migration/build/deploy process was
 active. No M2 database query or service action occurred. No Docker image build,
 Lab/Gate deployment, product release, tag, or push occurred in this follow-up.
 
+## 2026-10-16T00:29+08:00 — final P1/P3 fixture sweep
+
+The final local source sweep passed: `node scripts/test-patch-openclaw-memory-core.mjs`,
+`python3 scripts/test-openclaw-memory-policy.py`,
+`python3 scripts/test-openclaw-group-image-policy.py` (6/6),
+`bash scripts/test-openclaw-session-isolation.sh`,
+`python3 scripts/test-image-impact.py`,
+`python3 scripts/test-lab-runtime-snapshot.py`,
+`python3 scripts/test-lab-memory-acceptance.py`,
+`bash scripts/test-openclaw-lineage-compatibility.sh`,
+`python3 scripts/test-deploy-radar-only-apply.py`, both product SemVer test
+scripts, and `pnpm test:workflow`. The lineage fixture's missing-source lines
+were expected synthetic inputs; the fixture passed. Radar-only apply rejection
+recorded zero runtime writes. No Lab/Gate live service, production database,
+secret, or memory index was changed.
+
 ## Fresh continuation audit — 2026-10-16T00:03+08:00
 
 Fetched `origin/main`; it added no commits. `origin/main` remains an ancestor
