@@ -53,11 +53,14 @@ See the updated P1 report and approval checklist.
 
 ## Latest Goal continuation audit — 2026-10-15
 
-Fetched `origin/main`; it added no commits. `main` is clean and 8 commits
-ahead of `origin/main`, with one worktree. Gate-Local Gateway was up and Worker,
-PostgreSQL, egress proxy, and 9Router were healthy in the read-only container
-listing. No host build, deployment, or migration process was observed; the
-long-running BuildKit daemon alone does not establish an active build. No M2
+Fetched `origin/main`; it added no commits. At audit start `main` was clean and
+8 commits ahead, with one worktree. The Gate CLI help correction and regression
+fixture were committed as `8d1c62e`; immediately afterward the worktree was
+clean and `main` was 9 commits ahead of `origin/main`. Gate-Local Gateway was
+up and Worker, PostgreSQL, egress proxy, and 9Router were healthy in the
+read-only container listing. No host build, deployment, or migration process
+was observed; the long-running BuildKit daemon alone does not establish an
+active build. No M2
 database query, log inspection, or service action was performed. M2 remains
 paused with its existing acceptance work open.
 

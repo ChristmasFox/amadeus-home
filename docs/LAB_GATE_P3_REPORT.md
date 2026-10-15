@@ -27,8 +27,9 @@ database, secret, image, release tag, or registry was changed.
   Gate-Staging/Prod apply is rejected until a reviewed source-controlled
   environment adapter exists. Its help is scoped to Gate environment,
   approval, tag, and manifest options and states the adapter boundary; it no
-  longer lists Lab-only build, lineage, or memory evidence flags. No Gate
-  environment was queried or modified.
+  longer lists Lab-only build, lineage, or memory evidence flags. The help fix
+  and its regression fixture are in commit `8d1c62e`. No Gate environment was
+  queried or modified.
 - `scripts/release-state.py` validates and writes manifests and compares them
   with runtime snapshots. It checks the product tag, per-image source/version/
   build provenance, digest, Compose image reference and Compose file digest,
