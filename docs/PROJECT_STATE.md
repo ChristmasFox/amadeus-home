@@ -1,6 +1,6 @@
 # Project State — 2026-10-15
 
-## 2026-10-15 — Lab Memory Core live acceptance (in progress)
+## 2026-10-15 — Lab Memory Core live acceptance (stopped at item 4)
 
 Arthur authorized the ordered Lab-only acceptance sequence for OrbStack
 `nyannyan` / container `openclaw`. The configured 9Router Embedding endpoint
@@ -13,10 +13,17 @@ checksum verification. The authorized force reindex completed; exact keyword
 retrieval returned 3 results with positive FTS and vector scores, a paraphrase
 returned a positive vector match, and current status is 3/3 files with
 `dirty=false`, FTS available, hybrid mode, and vector dimension 1024. Modified-
-file incremental refresh and restart persistence remain open. Dreaming,
-candidate build, apply, and formal Lab release remain pending. Gate/M2 was not
-touched. Evidence and
-recovery boundaries: `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
+file incremental refresh and restart persistence remain open. Dreaming was
+not invoked: the live image lacks the source admission marker and function,
+and its sanitized policy allows both WhatsApp and Telegram. The authorized
+WhatsApp-only boundary therefore cannot be verified before reads. The enabled
+cron was not manually invoked; no transcript was read and no Dreaming write or
+rollback was needed. The ordered procedure stopped here; candidate build,
+apply, and formal Lab release were not started. Gate/M2 was not touched.
+Reindex checkpoint evidence is in
+`.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`; the Dreaming
+stop evidence is in
+`.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
 
 ## 2026-10-15 — PUBG SaaS Kurisu-aligned traffic and context
 

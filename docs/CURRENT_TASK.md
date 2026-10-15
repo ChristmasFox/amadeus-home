@@ -5,12 +5,26 @@ Date: 2026-10-15 (Asia/Shanghai).
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; authorized Lab live
-acceptance in progress**. Arthur authorized the ordered Lab-only actions on
-2026-10-15. The sanitized baseline and P0 evidence are in
+`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; ordered Lab acceptance
+stopped at item 4 (`DREAMING_PREFLIGHT_BLOCKED`)**. Arthur authorized the
+ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
 `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
+
+## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
+
+The authorized Dreaming run was not invoked. Read-only inspection of the live
+OpenClaw 2026.9.4 image found neither the repository's
+`amadeus-memory-dreaming-peer-admission-v2` marker nor
+`classifyDreamingSessionAdmission`; the live sanitized policy allows both
+WhatsApp and Telegram. A zero-file session-corpus status does not prove
+before-read isolation. The enabled Dreaming cron's `lastRunStatus=ok` was not
+treated as run evidence, and it was not manually invoked. No transcript was
+read and no Dreaming or runtime write occurred. There is no rollback needed.
+Items 5–7 (candidate build, apply, and formal release) were not started. Full
+sanitized evidence is in
+`.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
 
 ## Explicit Lab approval sequence — step 1 — 2026-10-15
 

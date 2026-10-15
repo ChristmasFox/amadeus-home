@@ -1,11 +1,12 @@
 # Lab Memory Core P1 repair report
 
 Date: 2026-10-15 (Asia/Shanghai)  
-Status: **`SOURCE_FIXED`; live acceptance in progress**
+Status: **`SOURCE_FIXED`; ordered live acceptance stopped at item 4**
 Scope: source, configuration, temporary fixtures, read-only runtime inspection,
-and one separately authorized synthetic Embedding probe. No Lab/Gate service
-was restarted or deployed; no memory content, session transcript, credential
-value, index, or application database was changed in the live runtime.
+one separately authorized synthetic Embedding probe, and authorized Lab index
+acceptance. No Lab/Gate service was restarted or deployed. The derived memory
+index was rebuilt after a verified external backup; no source memory content,
+session transcript, credential value, or session-history database was changed.
 
 ## Source repair
 
@@ -186,6 +187,21 @@ candidate or a documented `SKIPPED_NO_ELIGIBLE_CORPUS` result, with no
 unauthorized source in the output. Existing `lastRunStatus=ok` alone is not
 accepted as execution evidence.
 
+## Ordered Dreaming preflight stop — 2026-10-15
+
+Arthur authorized one run restricted to Arthur's own WhatsApp direct message.
+The run was not invoked because the live OpenClaw 2026.9.4 image contains
+neither `amadeus-memory-dreaming-peer-admission-v2` nor
+`classifyDreamingSessionAdmission`. Its sanitized memory policy allows both
+WhatsApp and Telegram, so the configured exclusions and peer-file reference
+do not prove the requested source boundary is enforced before transcript
+reads. Memory status showed zero session-corpus files, which does not prove
+that no other session source could be read. The enabled Dreaming cron's
+`lastRunStatus=ok` was not treated as a run record and no cron run was
+triggered. No transcript was read and no memory write or rollback was needed.
+The ordered procedure stopped here; build/apply/release were not started.
+See `.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
+
 ## Validation and limits
 
 Passed focused checks:
@@ -206,7 +222,9 @@ the GitHub Actions workflow itself has not run on GitHub.
 
 `pnpm workflow:plan` classifies the Dockerfile change as
 `RELEASE_BUILD_REQUIRED`; no Docker build was run. Therefore
-`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. Besides the
+`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. The ordered
+Lab acceptance is stopped before item 5 by the Dreaming preflight finding.
+Besides the
 synthetic Embedding request and the two redacted retrieval queries recorded
 above, no `memory reset`, session backfill, Dreaming run, or file/database
 write outside the derived-index rebuild was issued for this repair.
