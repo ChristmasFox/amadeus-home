@@ -56,6 +56,7 @@ is_env_path() {
 has_pubg=0
 has_pubg_private=0
 has_pubg_saas=0
+has_pubg_domain=0
 has_identity=0
 has_amadeus=0
 has_presentation=0
@@ -76,10 +77,11 @@ for path in "${FILES[@]-}"; do
   [[ -n "$path" ]] || continue
   if is_env_path "$path"; then env_count=$((env_count + 1)); continue; fi
   case "$path" in
-    packages/pubg-domain/src/*|plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
-    packages/pubg-domain/*) has_pubg=1 ;;
+    packages/pubg-domain/src/*) has_pubg=1; has_pubg_private=1; has_pubg_domain=1; has_pubg_saas=1 ;;
+    plugins/pubg/*) has_pubg=1; has_pubg_private=1 ;;
+    packages/pubg-domain/*) has_pubg=1; has_pubg_domain=1; has_pubg_saas=1 ;;
     apps/pubg-saas/src/*|apps/pubg-saas/tests/*|apps/pubg-saas/tsconfig.json) has_pubg=1; has_pubg_saas=1 ;;
-    packages/presentation/*) has_presentation=1 ;;
+    packages/presentation/*) has_presentation=1; has_pubg_saas=1; has_amadeus=1; has_product=1 ;;
     packages/identity/*) has_identity=1 ;;
     plugins/amadeus/*) has_amadeus=1 ;;
     apps/product-radar/src/*|apps/product-radar/tests/*|apps/product-radar/scripts/*|apps/product-radar/tsconfig.json) has_product=1 ;;
@@ -100,6 +102,9 @@ for path in "${FILES[@]-}"; do
     scripts/pubg-saas-backup-*|scripts/pubg-saas-compose-pg-tool.py|scripts/storage-*|scripts/backup.sh|scripts/service-aware-backup.sh|scripts/sqlite-consistent-snapshot.py|scripts/reclaim-immich-old-source.sh|scripts/migrate-immich-media.sh|scripts/secrets-inventory.sh|scripts/export-skuld-secrets.sh|scripts/import-skuld-secrets.sh|scripts/test-*skuld*|scripts/test-storage-*)
       has_storage=1
       [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
+      ;;
+    scripts/release-*.sh|scripts/release-state.py|scripts/image-impact.py|scripts/test-image-impact.py|scripts/test-release-tooling.py|scripts/lab-runtime-snapshot.py|scripts/verify-image-provenance.py|scripts/verify-pubg-saas-oci.py|scripts/validate-lab-memory-acceptance.py|scripts/test-lab-memory-acceptance.py|scripts/test-openclaw-lineage-compatibility.sh|infra/release/*|.github/workflows/*)
+      has_fast=1
       ;;
     docs/OPERATION_SKULD_*|docs/SERVICE_AWARE_BACKUP_REGISTRY.json|docs/VALIDATION_MATRIX.md)
       has_skuld_docs=1
@@ -149,6 +154,7 @@ elif ((has_speech)); then
 elif ((has_voice_patch)); then
   LEVEL=RUNTIME; WORKFLOW=VOICE_PATCH
 fi
+if ((has_presentation)); then WORKFLOW=SHARED_PRESENTATION; fi
 
 printf 'CHANGE_SCOPE_LEVEL=%s\n' "$LEVEL"
 printf 'CHANGE_SCOPE_WORKFLOW=%s\n' "$WORKFLOW"
@@ -175,6 +181,8 @@ if ((has_pubg_saas)); then
     DOCKER_IMAGE_SET='pubg-saas'
   fi
 fi
+if ((has_pubg_domain)); then DOCKER_IMAGE_SET='openclaw+pubg-saas'; fi
+if ((has_presentation)); then DOCKER_IMAGE_SET='openclaw+product-radar+pubg-saas'; fi
 printf 'DOCKER_IMAGE_SET=%s\n' "$DOCKER_IMAGE_SET"
 printf 'CHANGED_PATHS=%s\n' "${#FILES[@]}"
 for path in "${FILES[@]-}"; do printf 'PATH=%s\n' "$path"; done
@@ -186,6 +194,7 @@ case "$WORKFLOW" in
   PUBG_SAAS) printf '%s\n' 'VERIFY=pnpm typecheck:pubg, pnpm test:pubg, pnpm typecheck:pubg-saas, pnpm test:pubg-saas, git diff --check; deployment remains explicit.' ;;
   AMADEUS_IDENTITY) printf '%s\n' 'VERIFY=pnpm typecheck:amadeus, pnpm test:amadeus, git diff --check; deployment remains explicit.' ;;
   PRESENTATION) printf '%s\n' 'VERIFY=presentation typecheck/tests, pnpm check:architecture, git diff --check; deployment remains explicit.' ;;
+  SHARED_PRESENTATION) printf '%s\n' 'VERIFY=shared presentation + Lab OpenClaw/Product Radar + Gate SaaS tests/typechecks; no synchronized version bump or deployment.' ;;
   PRODUCT_RADAR) printf '%s\n' 'VERIFY=Product Radar typecheck/tests, git diff --check; deployment remains explicit.' ;;
   QWEN3_TTS) printf '%s\n' 'VERIFY=Python speech tests, host plist/shell lint, git diff --check; deployment remains explicit.' ;;
   VOICE_PATCH) printf '%s\n' 'VERIFY=pnpm verify:openclaw-patch, git diff --check; Docker/Compose/deploy remain explicit.' ;;

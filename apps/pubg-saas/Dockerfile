@@ -1,4 +1,7 @@
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS build
+ARG OCI_SOURCE_REVISION=unknown
+ARG OCI_PRODUCT_VERSION=unknown
+ARG OCI_BUILD_TIMESTAMP=unknown
 
 WORKDIR /workspace
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
@@ -29,6 +32,13 @@ RUN pnpm --filter @agent/presentation build \
   && cp -a packages/presentation/dist /prod/node_modules/@agent/presentation/dist
 
 FROM node:22-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS runtime
+ARG OCI_SOURCE_REVISION=unknown
+ARG OCI_PRODUCT_VERSION=unknown
+ARG OCI_BUILD_TIMESTAMP=unknown
+LABEL org.opencontainers.image.title="Gate PUBG SaaS" \
+      org.opencontainers.image.version="${OCI_PRODUCT_VERSION}" \
+      org.opencontainers.image.revision="${OCI_SOURCE_REVISION}" \
+      org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}"
 
 WORKDIR /app
 ENV NODE_ENV=production

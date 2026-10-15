@@ -66,7 +66,13 @@ so `up` cannot silently build a different source tree.
 ```sh
 commit="$(git rev-parse HEAD)"
 image="local/pubg-saas:git-${commit}"
-docker build -f apps/pubg-saas/Dockerfile -t "$image" .
+build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+version="$(node -p 'require("./apps/pubg-saas/package.json").version')"
+docker build \
+  --build-arg "OCI_SOURCE_REVISION=$commit" \
+  --build-arg "OCI_PRODUCT_VERSION=$version" \
+  --build-arg "OCI_BUILD_TIMESTAMP=$build_time" \
+  -f apps/pubg-saas/Dockerfile -t "$image" .
 ```
 
 For an ARM64 or amd64 Linux builder, select the target platform explicitly. A

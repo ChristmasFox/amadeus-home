@@ -1,0 +1,133 @@
+name: Lab source regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".dockerignore"
+      - "plugins/amadeus/**"
+      - "plugins/pubg/**"
+      - "packages/presentation/**"
+      - "packages/pubg-domain/**"
+      - "integrations/openclaw/**"
+      - "infra/docker/casaos/openclaw/**"
+      - "apps/product-radar/**"
+      - "scripts/openclaw_prepare.py"
+      - "scripts/patch-openclaw-*.mjs"
+      - "scripts/test-patch-openclaw-*.mjs"
+      - "scripts/test-openclaw-memory-policy.py"
+      - "scripts/test-openclaw-session-isolation.sh"
+      - "scripts/image-impact.py"
+      - "scripts/test-image-impact.py"
+      - "scripts/developer-workflow.sh"
+      - "scripts/test-developer-workflow.sh"
+      - "scripts/deploy-openclaw.sh"
+      - "scripts/test-openclaw-lineage-compatibility.sh"
+      - "scripts/amadeus-version.sh"
+      - "scripts/test-amadeus-version.sh"
+      - "VERSION"
+      - "RELEASE_NOTES.md"
+      - "scripts/release-*.sh"
+      - "scripts/release-state.py"
+      - "scripts/lab-runtime-snapshot.py"
+      - "scripts/verify-image-provenance.py"
+      - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/test-release-tooling.py"
+      - "scripts/validate-lab-memory-acceptance.py"
+      - "scripts/test-lab-memory-acceptance.py"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/lab-source.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".dockerignore"
+      - "plugins/amadeus/**"
+      - "plugins/pubg/**"
+      - "packages/presentation/**"
+      - "packages/pubg-domain/**"
+      - "integrations/openclaw/**"
+      - "infra/docker/casaos/openclaw/**"
+      - "apps/product-radar/**"
+      - "scripts/openclaw_prepare.py"
+      - "scripts/patch-openclaw-*.mjs"
+      - "scripts/test-patch-openclaw-*.mjs"
+      - "scripts/test-openclaw-memory-policy.py"
+      - "scripts/test-openclaw-session-isolation.sh"
+      - "scripts/image-impact.py"
+      - "scripts/test-image-impact.py"
+      - "scripts/developer-workflow.sh"
+      - "scripts/test-developer-workflow.sh"
+      - "scripts/deploy-openclaw.sh"
+      - "scripts/test-openclaw-lineage-compatibility.sh"
+      - "scripts/amadeus-version.sh"
+      - "scripts/test-amadeus-version.sh"
+      - "VERSION"
+      - "RELEASE_NOTES.md"
+      - "scripts/release-*.sh"
+      - "scripts/release-state.py"
+      - "scripts/lab-runtime-snapshot.py"
+      - "scripts/verify-image-provenance.py"
+      - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/test-release-tooling.py"
+      - "scripts/validate-lab-memory-acceptance.py"
+      - "scripts/test-lab-memory-acceptance.py"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/lab-source.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lab-source-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lab-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install pinned pnpm and workspace dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.19.0 --activate
+          pnpm install --frozen-lockfile
+      - name: Domain and shared presentation builds
+        run: |
+          pnpm --filter @agent/presentation build
+          pnpm --filter @agent/pubg-domain build
+          pnpm build:pubg
+      - name: Lab and Product Radar regressions
+        run: |
+          pnpm typecheck:pubg
+          pnpm test:pubg
+          pnpm typecheck:amadeus
+          pnpm test:amadeus
+          pnpm typecheck:product-radar
+          pnpm test:product-radar
+      - name: Memory Core admission and build-impact fixtures
+        run: |
+          node scripts/test-patch-openclaw-memory-core.mjs
+          python3 scripts/test-openclaw-memory-policy.py
+          bash scripts/test-openclaw-session-isolation.sh
+          python3 scripts/test-image-impact.py
+          python3 scripts/test-release-tooling.py
+          python3 scripts/test-lab-memory-acceptance.py
+          bash scripts/test-developer-workflow.sh
+          bash scripts/test-openclaw-lineage-compatibility.sh
+      - name: Architecture and secret checks
+        run: |
+          pnpm check:architecture
+          pnpm check:secrets
+          git diff --check

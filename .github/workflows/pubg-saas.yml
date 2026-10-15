@@ -16,8 +16,13 @@ on:
       - "scripts/pubg-saas-*.py"
       - "scripts/pubg-saas-version.sh"
       - "scripts/test-pubg-saas-version.sh"
-      - "scripts/tests/test_pubg_saas_*.py"
+      - "scripts/release-*.sh"
+      - "scripts/release-cli.sh"
+      - "scripts/release-state.py"
+      - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/test-release-tooling.py"
+      - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -37,8 +42,13 @@ on:
       - "scripts/pubg-saas-*.py"
       - "scripts/pubg-saas-version.sh"
       - "scripts/test-pubg-saas-version.sh"
-      - "scripts/tests/test_pubg_saas_*.py"
+      - "scripts/release-*.sh"
+      - "scripts/release-cli.sh"
+      - "scripts/release-state.py"
+      - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/test-release-tooling.py"
+      - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -95,6 +105,7 @@ jobs:
         run: |
           bash scripts/pubg-saas-version.sh check
           bash scripts/test-pubg-saas-version.sh
+          python3 scripts/test-release-tooling.py
       - name: Build private and public PUBG packages
         run: pnpm build:pubg && pnpm --filter @agent/pubg-saas build
       - name: Public SaaS PostgreSQL tests
@@ -141,8 +152,16 @@ jobs:
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - name: Build Linux amd64 and arm64 OCI image without publishing
         run: |
+          build_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          product_version="$(node -e 'process.stdout.write(require("./apps/pubg-saas/package.json").version)')"
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
+            --build-arg "OCI_SOURCE_REVISION=$GITHUB_SHA" \
+            --build-arg "OCI_PRODUCT_VERSION=$product_version" \
+            --build-arg "OCI_BUILD_TIMESTAMP=$build_time" \
             --output type=oci,dest=/tmp/pubg-saas-multiarch.oci.tar \
             --file apps/pubg-saas/Dockerfile .
-          python3 scripts/verify-pubg-saas-oci.py /tmp/pubg-saas-multiarch.oci.tar
+          python3 scripts/verify-pubg-saas-oci.py /tmp/pubg-saas-multiarch.oci.tar \
+            --expected-revision "$GITHUB_SHA" \
+            --expected-version "$product_version" \
+            --expected-build-time "$build_time"

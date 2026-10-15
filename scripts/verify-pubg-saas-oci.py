@@ -12,7 +12,7 @@ from pathlib import Path
 EXPECTED_PLATFORMS = {"linux/amd64", "linux/arm64"}
 
 
-def verify(archive_path: Path) -> set[str]:
+def verify(archive_path: Path, expected_labels: dict[str, str] | None = None) -> set[str]:
     platforms: set[str] = set()
     visited: set[str] = set()
 
@@ -29,7 +29,12 @@ def verify(archive_path: Path) -> set[str]:
             blob = archive.extractfile(f"blobs/sha256/{digest_hex}")
             if blob is None:
                 raise ValueError("oci_descriptor_blob_missing")
-            manifest = json.load(blob)
+            raw_manifest = blob.read()
+            import hashlib
+
+            if hashlib.sha256(raw_manifest).hexdigest() != digest_hex:
+                raise ValueError("oci_descriptor_digest_mismatch")
+            manifest = json.loads(raw_manifest)
 
             config_descriptor = manifest.get("config")
             if isinstance(config_descriptor, dict):
@@ -40,11 +45,22 @@ def verify(archive_path: Path) -> set[str]:
                 config_blob = archive.extractfile(f"blobs/sha256/{config_hex}")
                 if config_blob is None:
                     raise ValueError("oci_config_blob_missing")
-                config = json.load(config_blob)
+                raw_config = config_blob.read()
+                if hashlib.sha256(raw_config).hexdigest() != config_hex:
+                    raise ValueError("oci_config_digest_mismatch")
+                config = json.loads(raw_config)
                 os_name = config.get("os")
                 architecture = config.get("architecture")
                 if isinstance(os_name, str) and isinstance(architecture, str):
                     platforms.add(f"{os_name}/{architecture}")
+                if expected_labels is not None:
+                    container_config = config.get("config")
+                    labels = container_config.get("Labels") if isinstance(container_config, dict) else None
+                    if not isinstance(labels, dict):
+                        raise ValueError("oci_provenance_labels_missing")
+                    for key, expected in expected_labels.items():
+                        if labels.get(key) != expected:
+                            raise ValueError("oci_provenance_label_mismatch:" + key.rsplit(".", 1)[-1])
 
             children = manifest.get("manifests", [])
             if not isinstance(children, list):
@@ -75,9 +91,24 @@ def verify(archive_path: Path) -> set[str]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("archive", type=Path)
+    parser.add_argument("--expected-revision")
+    parser.add_argument("--expected-version")
+    parser.add_argument("--expected-build-time")
     args = parser.parse_args()
-    platforms = verify(args.archive)
+    expected = None
+    supplied = (args.expected_revision, args.expected_version, args.expected_build_time)
+    if any(value is not None for value in supplied):
+        if not all(supplied):
+            parser.error("all three expected provenance labels must be supplied together")
+        expected = {
+            "org.opencontainers.image.revision": args.expected_revision,
+            "org.opencontainers.image.version": args.expected_version,
+            "org.opencontainers.image.created": args.expected_build_time,
+        }
+    platforms = verify(args.archive, expected)
     print("PUBG_SAAS_OCI_PLATFORMS=" + ",".join(sorted(EXPECTED_PLATFORMS & platforms)))
+    if expected is not None:
+        print("PUBG_SAAS_OCI_PROVENANCE=valid")
 
 
 if __name__ == "__main__":

@@ -4,8 +4,9 @@ Date: 2026-10-15 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
-Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3/P4
-source work remains; live memory acceptance blocked on operator authorization**.
+Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
+`SOURCE_COMPLETE`; P4 source/evidence consolidation remains; live memory
+acceptance blocked on operator authorization**.
 Runtime apply, production index rebuild, paid Embedding requests, Dreaming
 memory writes, and formal release remain unauthorized. The sanitized baseline
 and P0 evidence are in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
@@ -16,6 +17,14 @@ P2 established independent Lab/Gate SemVer sources and release-note checks;
 Lab remains `1.10.4`, Gate remains `0.1.0`, and no formal tag was created. The
 report and validation evidence are in `docs/LAB_GATE_P2_REPORT.md`. No product
 build or runtime change occurred in P2.
+
+P3 added Lab/Gate release CLIs, external digest/status manifests, conservative
+Dockerfile/workspace impact analysis, OCI provenance labels, shared CI and the
+operator runbook. Lab apply remains approval-gated and formal release requires
+real P1 `LIVE_VERIFIED` evidence. Gate-Local M2 remains paused; Staging/Prod
+adapters are not configured, so Gate apply fails closed. P3 evidence is in
+`docs/LAB_GATE_P3_REPORT.md` and command details are in
+`docs/RELEASE_ENGINEERING.md`.
 
 The P1 source tests passed. Runtime inspection confirmed the pinned provider
 and current FTS/vector index state, but did not issue an Embedding request or

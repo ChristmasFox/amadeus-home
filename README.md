@@ -28,6 +28,8 @@
 
 Lab 使用根目录 [`VERSION`](VERSION) 与 [`RELEASE_NOTES.md`](RELEASE_NOTES.md)；Gate 使用 [`apps/pubg-saas/package.json`](apps/pubg-saas/package.json) 的 `version` 和 [Gate Release Notes](apps/pubg-saas/RELEASE_NOTES.md)。根 `package.json.version` 是 Monorepo 工具元数据，不是产品版本。两端按标准 SemVer 独立递进；正式 Tag 分别是 `lab/vX.Y.Z` 和 `gate/vX.Y.Z`。Candidate 由 Git SHA 与镜像 digest 标识，不代表正式发行。
 
+发布命令与 Candidate/回滚操作边界见[双产品 Release Engineering 手册](docs/RELEASE_ENGINEERING.md)。
+
 > **部署范围：** 下文“快速开始”适用于 **Lab 风格的社区 WhatsApp / OpenClaw 安装**，不是 Gate-Prod 的安装教程。Gate 当前仅处于本地 M2 验收。相关资料：[Gate 应用说明](apps/pubg-saas/README.md) · [Gate Compose](infra/pubg-saas/README.md) · [架构文档](docs/ARCHITECTURE.md)。
 
 ## 从 PUBG 战绩机器人开始

@@ -117,46 +117,36 @@ resolve_live_image() {
 }
 image_source_commit() {
   local image="$1"
-  if [[ "$image" =~ :git-([0-9a-fA-F]{7,40})-[0-9]{14}$ ]]; then
+  if [[ "$image" =~ :git-([0-9a-fA-F]{7,40})-([0-9]{12}|[0-9]{14})$ ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
     return 0
   fi
   return 1
 }
-is_openclaw_image_path() {
-  case "$1" in
-    integrations/openclaw/delivery-boundary/*|plugins/pubg/*|plugins/amadeus/*|packages/presentation/*|packages/pubg-domain/*|infra/docker/casaos/openclaw/Dockerfile|scripts/patch-openclaw-channel-identity.mjs|scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs|scripts/patch-openclaw-group-image-policy.mjs|scripts/patch-openclaw-heartbeat-silence.mjs|scripts/openclaw-voice-*.mjs|pnpm-lock.yaml|pnpm-workspace.yaml|VERSION) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-is_radar_image_path() {
-  case "$1" in
-    apps/product-radar/*|packages/presentation/*|apps/product-radar/Dockerfile|pnpm-lock.yaml|pnpm-workspace.yaml) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 image_needs_rebuild() {
-  local image="$1" target="$2" source_commit path
+  local image="$1" target="$2" source_commit image_target result state
   source_commit="$(image_source_commit "$image")" || fail "$target image tag must contain a git commit and timestamp: $image"
   if ! git -C "$ROOT_DIR" cat-file -e "$source_commit^{commit}" 2>/dev/null; then
     printf 'IMAGE_LINEAGE_MISSING target=%s commit=%s rebuild=required\n' "$target" "$source_commit" >&2
     return 0
   fi
-  # Root package.json changes only require an image rebuild when dependency/runtime metadata changed;
-  # script-only changes must not rebuild either image. This keeps --build-auto affected-only.
-  if git -C "$ROOT_DIR" diff --unified=0 "$source_commit..HEAD" -- package.json | grep -E '^\+[^+].*"(dependencies|devDependencies|peerDependencies|optionalDependencies|engines|packageManager)"' >/dev/null; then
-    return 0
-  fi
-  while IFS= read -r path; do
-    [[ -n "$path" ]] || continue
-    if [[ "$target" == openclaw ]] && is_openclaw_image_path "$path"; then
+  case "$target" in
+    openclaw) image_target=openclaw ;;
+    radar|product-radar) image_target=radar ;;
+    *) fail "No image-impact target mapping for $target." ;;
+  esac
+  result="$(python3 "$ROOT_DIR/scripts/image-impact.py" --repo "$ROOT_DIR" --base "$source_commit" --target "$image_target")" \
+    || fail "Could not analyze $target build inputs; refusing to reuse the image."
+  state="$(sed -n 's/^IMAGE_IMPACT=//p' <<<"$result" | head -n 1)"
+  case "$state" in
+    REUSE) return 1 ;;
+    REBUILD|UNKNOWN)
+      printf 'IMAGE_IMPACT target=%s state=%s\n' "$target" "$state" >&2
+      while IFS= read -r reason; do [[ "$reason" == REASON=* ]] && printf 'IMAGE_IMPACT_DETAIL %s\n' "${reason#REASON=}" >&2; done <<<"$result"
       return 0
-    fi
-    if [[ "$target" == radar ]] && is_radar_image_path "$path"; then
-      return 0
-    fi
-  done < <(git -C "$ROOT_DIR" diff --name-only "$source_commit..HEAD")
-  return 1
+      ;;
+    *) fail "Image impact analyzer returned no recognized state for $target." ;;
+  esac
 }
 assert_image_fresh() {
   local image="$1" target="$2"
@@ -244,6 +234,8 @@ fi
 ((QWEN_IMAGE_LOCAL_ONLY == 0 || CANDIDATE == 1)) || fail 'Qwen local-only image route is candidate-only.'
 STAMP="$(date -u +%Y%m%d%H%M%S)"
 COMMIT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
+SOURCE_REVISION="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+BUILD_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 AMADEUS_VERSION="$(bash "$VERSION_TOOL" show)"
 bash "$VERSION_TOOL" check >/dev/null
 RELEASE_NOTES="$(bash "$VERSION_TOOL" notes)"
@@ -381,7 +373,13 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
 )
 
 if ((BUILD_OPENCLAW)); then
-  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
+  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
+    --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
+    --build-arg "OCI_PRODUCT_VERSION=$AMADEUS_VERSION" \
+    --build-arg "OCI_BUILD_TIMESTAMP=$BUILD_TIMESTAMP" \
+    --file "$ROOT_DIR/infra/docker/casaos/openclaw/Dockerfile" --tag "$IMAGE" "$ROOT_DIR"
+  docker image inspect --format '{{json .Config.Labels}}' "$IMAGE" | python3 "$ROOT_DIR/scripts/verify-image-provenance.py" \
+    --revision "$SOURCE_REVISION" --version "$AMADEUS_VERSION" --build-time "$BUILD_TIMESTAMP"
   docker --context orbstack save "$IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$IMAGE" >/dev/null 2>&1 || fail "OpenClaw image not found: $IMAGE"
@@ -405,7 +403,13 @@ printf 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s\n' "$image_amadeus_version"
 validate_vps_account_map_source
 run_vps_account_map_node_preflight
 if ((BUILD_RADAR)); then
-  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
+  docker buildx build --platform linux/arm64 --load --progress=plain "${DOCKER_BUILD_PROXY_ARGS[@]}" \
+    --build-arg "OCI_SOURCE_REVISION=$SOURCE_REVISION" \
+    --build-arg "OCI_PRODUCT_VERSION=$AMADEUS_VERSION" \
+    --build-arg "OCI_BUILD_TIMESTAMP=$BUILD_TIMESTAMP" \
+    --file "$ROOT_DIR/apps/product-radar/Dockerfile" --tag "$RADAR_IMAGE" "$ROOT_DIR"
+  docker image inspect --format '{{json .Config.Labels}}' "$RADAR_IMAGE" | python3 "$ROOT_DIR/scripts/verify-image-provenance.py" \
+    --revision "$SOURCE_REVISION" --version "$AMADEUS_VERSION" --build-time "$BUILD_TIMESTAMP"
   docker --context orbstack save "$RADAR_IMAGE" | orb -m "$MACHINE" -u root docker load
 else
   orb -m "$MACHINE" -u root docker image inspect "$RADAR_IMAGE" >/dev/null 2>&1 || fail "Product Radar image not found: $RADAR_IMAGE"

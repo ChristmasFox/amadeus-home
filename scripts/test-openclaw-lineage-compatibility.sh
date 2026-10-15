@@ -40,6 +40,7 @@ source "$defs"
 
 openclaw_image="local/openclaw-amadeus:git-${old_sha}-20260101000000"
 radar_image="local/product-radar:git-${old_sha}-20260101000000"
+[[ "$(image_source_commit "local/openclaw-amadeus:git-${old_sha}-202601010000")" == "$old_sha" ]]
 image_needs_rebuild "$openclaw_image" openclaw
 image_needs_rebuild "$radar_image" radar
 

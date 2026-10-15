@@ -51,8 +51,9 @@ Lab 正式发布完成后脚本会用
 `amadeus-release:<版本>` 写入 checkpoint 和生产 owner outbox，并等待 `.sent.json`。版本不递进
 或通知未送达时，部署返回失败。
 
-Gate 的独立产品级 release / candidate CLI 与 Gate-Local 晋级入口在 P3 实现前尚未提供；Gate
-M2 保持暂停，本文不把现有 Compose 命令描述为正式 Gate Release。
+Gate 的独立产品级入口为 `scripts/release-gate.sh`。Gate-Local M2 仍暂停，
+Gate-Staging/Prod 目标 adapter 尚未配置；在 adapter 与环境授权就绪前，Gate `--apply`
+会 fail closed，本文不把现有 Compose 命令描述为正式 Gate Release。
 
 任何 Docker build、Compose 写入、停止服务、数据迁移都必须通过明确的 RELEASE/apply
 入口；默认 dry-run。生产目标是 OrbStack `ubuntu` 的 CasaOS，不是 macOS host Docker。

@@ -1,4 +1,7 @@
 FROM node:22-bookworm-slim AS build
+ARG OCI_SOURCE_REVISION=unknown
+ARG OCI_PRODUCT_VERSION=unknown
+ARG OCI_BUILD_TIMESTAMP=unknown
 WORKDIR /workspace
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -15,6 +18,13 @@ RUN rm -f /prod/node_modules/@agent/presentation \
   && cp -a /workspace/packages/presentation/. /prod/node_modules/@agent/presentation/
 
 FROM node:22-bookworm-slim
+ARG OCI_SOURCE_REVISION=unknown
+ARG OCI_PRODUCT_VERSION=unknown
+ARG OCI_BUILD_TIMESTAMP=unknown
+LABEL org.opencontainers.image.title="Product Radar" \
+  org.opencontainers.image.version="${OCI_PRODUCT_VERSION}" \
+  org.opencontainers.image.revision="${OCI_SOURCE_REVISION}" \
+  org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}"
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /prod/ ./

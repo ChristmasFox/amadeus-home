@@ -53,7 +53,10 @@ with the schema version. Migration release plans require a precheck, protected
 backup, idempotent application, and forward/backward compatibility review.
 Recovery must account for writes made after migration; replacing the whole
 PostgreSQL volume with an old snapshot is not the default rollback method.
-These checks belong in the Gate release tooling, not in the paused M2 runtime.
+These checks belong in `scripts/release-gate.sh` and a future reviewed
+environment adapter, not in the paused M2 runtime. The CLI currently plans and
+validates release metadata; it fails closed when no staging/production adapter
+is configured.
 
 ## Worldline notification boundary
 

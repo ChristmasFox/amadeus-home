@@ -1,0 +1,50 @@
+{
+  "manifestSchema": "amadeus-release-manifest/v1",
+  "product": "lab",
+  "environment": "lab-maintainer",
+  "status": "candidate",
+  "version": "1.10.5",
+  "gitSha": "<full-40-character-commit-sha>",
+  "imageRefs": [
+    {
+      "service": "openclaw",
+      "imageRef": "local/openclaw-amadeus:git-<full-sha>-<utc-build-timestamp>",
+      "composeDigest": "sha256:<64-character-compose-config-digest>",
+      "configDigest": "sha256:<64-character-redacted-runtime-config-fingerprint>"
+    },
+    {
+      "service": "product-radar",
+      "imageRef": "local/product-radar:git-<full-sha>-<utc-build-timestamp>",
+      "composeDigest": "sha256:<64-character-compose-config-digest>",
+      "configDigest": null
+    }
+  ],
+  "imageDigests": [
+    {
+      "service": "openclaw",
+      "digest": "sha256:<64-character-image-digest>",
+      "gitSha": "<full-40-character-commit-sha>",
+      "version": "1.10.5",
+      "builtAt": "<RFC3339 timestamp>",
+      "provenanceSource": "org.opencontainers.image labels"
+    },
+    {
+      "service": "product-radar",
+      "digest": "sha256:<64-character-image-digest>",
+      "gitSha": "<full-40-character-commit-sha>",
+      "version": "1.10.5",
+      "builtAt": "<RFC3339 timestamp>",
+      "provenanceSource": "OCI labels or immutable image tag plus Git source"
+    }
+  ],
+  "builtAt": "<RFC3339 timestamp>",
+  "deployedAt": "<RFC3339 timestamp>",
+  "schemaVersion": null,
+  "checkpointRef": "<protected-checkpoint-reference>",
+  "actor": "<non-secret-operator-identifier>",
+  "approvalRef": "<reviewable-approval-reference>",
+  "validationRef": "<validation-evidence-reference>",
+  "candidateAt": "<RFC3339 timestamp>",
+  "releaseTag": null,
+  "rollbackFrom": null
+}

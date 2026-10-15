@@ -1,8 +1,13 @@
 FROM ghcr.io/openclaw/openclaw:2026.9.4@sha256:cc596b846506a5f4cfcee111394a2725f375f01cca2ebb492a161fd1b747f101
 
+ARG OCI_SOURCE_REVISION=unknown
+ARG OCI_PRODUCT_VERSION=unknown
+ARG OCI_BUILD_TIMESTAMP=unknown
 LABEL org.opencontainers.image.title="OpenClaw Amadeus agent" \
       org.opencontainers.image.source="agent-monorepo" \
-      org.opencontainers.image.version="2026.9.4"
+      org.opencontainers.image.version="${OCI_PRODUCT_VERSION}" \
+      org.opencontainers.image.revision="${OCI_SOURCE_REVISION}" \
+      org.opencontainers.image.created="${OCI_BUILD_TIMESTAMP}"
 
 WORKDIR /app
 

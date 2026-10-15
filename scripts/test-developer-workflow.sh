@@ -16,11 +16,12 @@ scope() { ./scripts/developer-workflow.sh --files "$@"; }
 
 pubg="$(scope packages/pubg-domain/src/index.ts)"
 assert_line "$pubg" 'CHANGE_SCOPE_LEVEL=RUNTIME'
-assert_line "$pubg" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
+assert_line "$pubg" 'CHANGE_SCOPE_WORKFLOW=PUBG_SAAS'
+assert_line "$pubg" 'DOCKER_IMAGE_SET=openclaw+pubg-saas'
 assert_line "$pubg" 'DOCKER_BUILD=forbidden'
 
 pubg_golden_fixture="$(scope packages/pubg-domain/tests/fixtures/shared-domain-golden.json apps/pubg-saas/src/infrastructure/postgres/pubg-repository.ts)"
-assert_line "$pubg_golden_fixture" 'DOCKER_IMAGE_SET=pubg-saas'
+assert_line "$pubg_golden_fixture" 'DOCKER_IMAGE_SET=openclaw+pubg-saas'
 
 plugin="$(scope plugins/pubg/src/index.ts)"
 assert_line "$plugin" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
@@ -40,7 +41,8 @@ assert_line "$amadeus" 'CHANGE_SCOPE_WORKFLOW=AMADEUS_IDENTITY'
 
 presentation="$(scope packages/presentation/src/index.ts)"
 assert_line "$presentation" 'CHANGE_SCOPE_LEVEL=RUNTIME'
-assert_line "$presentation" 'CHANGE_SCOPE_WORKFLOW=PRESENTATION'
+assert_line "$presentation" 'CHANGE_SCOPE_WORKFLOW=SHARED_PRESENTATION'
+assert_line "$presentation" 'DOCKER_IMAGE_SET=openclaw+product-radar+pubg-saas'
 
 product="$(scope apps/product-radar/src/core/application.ts)"
 assert_line "$product" 'CHANGE_SCOPE_LEVEL=RUNTIME'
@@ -130,11 +132,17 @@ manifest="$(scope docs/OPERATION_SKULD_MIGRATION_MANIFEST.json docs/OPERATION_SK
 assert_line "$manifest" 'CHANGE_SCOPE_WORKFLOW=SKULD_CONSISTENCY'
 pubg_with_validation_matrix="$(scope packages/pubg-domain/src/index.ts docs/VALIDATION_MATRIX.md)"
 assert_line "$pubg_with_validation_matrix" 'CHANGE_SCOPE_LEVEL=RUNTIME'
-assert_line "$pubg_with_validation_matrix" 'CHANGE_SCOPE_WORKFLOW=PUBG_DOMAIN_PLUGIN'
+assert_line "$pubg_with_validation_matrix" 'CHANGE_SCOPE_WORKFLOW=PUBG_SAAS'
+assert_line "$pubg_with_validation_matrix" 'DOCKER_IMAGE_SET=openclaw+pubg-saas'
 product_only="$(scope apps/product-radar/src/core/application.ts)"
 assert_line "$product_only" 'DOCKER_IMAGE_SET=product-radar'
 shared="$(scope packages/presentation/src/index.ts apps/product-radar/src/core/application.ts)"
-assert_line "$shared" 'DOCKER_IMAGE_SET=both'
+assert_line "$shared" 'DOCKER_IMAGE_SET=openclaw+product-radar+pubg-saas'
+
+release_cli="$(scope scripts/release-lab.sh scripts/image-impact.py scripts/test-release-tooling.py)"
+assert_line "$release_cli" 'CHANGE_SCOPE_LEVEL=FAST'
+assert_line "$release_cli" 'DOCKER_BUILD=forbidden'
+assert_line "$release_cli" 'DOCKER_IMAGE_SET=none'
 
 printf '%s\n' 'Developer workflow scope tests passed.'
 
