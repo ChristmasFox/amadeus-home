@@ -17,6 +17,21 @@ and sentinel, and migration never uses `rsync --delete`.
   checkpoint、迁移、停用旧 consumer 和 health/smoke。
 - ENV_RECREATE_NO_BUILD：只重建外部配置，不构建镜像。
 
+## Product versions and release identity
+
+- Lab uses root `VERSION` and `RELEASE_NOTES.md`; Gate uses
+  `apps/pubg-saas/package.json.version` and
+  `apps/pubg-saas/RELEASE_NOTES.md`. Root `package.json.version` is Monorepo
+  tooling metadata only.
+- Both product versions use standard SemVer. Validate or bump them with
+  `scripts/amadeus-version.sh` (Lab compatibility name) and
+  `scripts/pubg-saas-version.sh` (Gate). Formal tags use `lab/vX.Y.Z` and
+  `gate/vX.Y.Z`; existing historical tags are not renamed.
+- Git SHA plus image digest identifies a development Candidate. It is not a
+  product Release and does not advance either version source. Shared Domain or
+  Presentation changes can test/build both products without forcing a
+  synchronized version bump.
+
 执行：
 
 ```sh
@@ -25,33 +40,36 @@ pnpm workflow:verify
 pnpm test:workflow
 ```
 
-实际发布建议使用 `scripts/deploy-openclaw.sh --apply --build-auto`；配置/workspace-only
+Lab 正式发布使用 `scripts/deploy-openclaw.sh --apply --build-auto`；配置/workspace-only
 改动使用 `--apply --no-build`，脚本会检查 live image 是否仍覆盖当前业务 source。只有
 明确需要完整两镜像 release 时才使用 `--apply --build`；`--full-verify` 可在选择性发布时
 显式追加全量本地验证。
 
-每次 `--apply` 都必须先通过 release version gate：当前根目录 `VERSION` 必须严格高于
-live OpenClaw image source commit 中的版本；发布完成后脚本会用
+Lab release apply 必须先通过版本门禁：根目录 `VERSION` 必须严格高于
+live OpenClaw image source commit 中的 Lab 版本；候选模式保持当前 Lab 版本且不写正式发布通知。
+Lab 正式发布完成后脚本会用
 `amadeus-release:<版本>` 写入 checkpoint 和生产 owner outbox，并等待 `.sent.json`。版本不递进
 或通知未送达时，部署返回失败。
+
+Gate 的独立产品级 release / candidate CLI 与 Gate-Local 晋级入口在 P3 实现前尚未提供；Gate
+M2 保持暂停，本文不把现有 Compose 命令描述为正式 Gate Release。
 
 任何 Docker build、Compose 写入、停止服务、数据迁移都必须通过明确的 RELEASE/apply
 入口；默认 dry-run。生产目标是 OrbStack `ubuntu` 的 CasaOS，不是 macOS host Docker。
 
-## Amadeus 1.4.5 validation policy
+## Validation policy
 
 `pnpm workflow:plan` is authoritative at the start of each implementation phase. It emits the
-scope workflow and `DOCKER_IMAGE_SET`; storage/backup/migration shell changes use only the
+scope workflow and `DOCKER_IMAGE_SET`; storage/backup/migration shell changes use the
 storage-runtime, migration-readiness, service-aware-backup and manifest contract fixtures. A
-configuration-only OpenClaw change is a no-build apply; runtime source changes rebuild only the
-affected image.
+configuration-only OpenClaw change may use a no-build apply after explicit authorization; runtime
+source changes rebuild only the affected image when a release is explicitly approved.
 
 Use `scripts/run-check.sh` for bounded command evidence. Successful checks emit one summary line,
 failed checks retain only a bounded diagnostic tail, and an unchanged cache key may reuse a passed
 check. `docs/VALIDATION_MATRIX.md` is the source for the tier selection.
 
-The release boundary has one final full local gate (`pnpm test`, `pnpm typecheck`, `pnpm build`,
-`pnpm check:secrets`, architecture, and fresh-clone rehearsal). Live acceptance then checks runtime
-truth only: health, storage state/history, safe scheduled maintenance, service-aware backups,
-secrets metadata, migration readiness and owner notification. Fresh-clone rehearsal sets
-`AMADEUS_FRESH_CLONE_REHEARSAL=1` and never recursively invokes itself.
+The release boundary has a local verification gate selected from affected paths, including
+`pnpm check:secrets`, architecture and relevant product tests. Live acceptance then checks actual
+runtime health, storage state, backup/recovery evidence and owner notification. Fresh-clone
+rehearsal sets `AMADEUS_FRESH_CLONE_REHEARSAL=1` and never recursively invokes itself.

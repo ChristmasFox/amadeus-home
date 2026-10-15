@@ -30,6 +30,31 @@ Gate 从本地迁到云端不会改变产品身份；正式实例叫 Gate-Prod�
 
 开发 Agent 的规范入口为根目录 [`AGENTS.md`](../AGENTS.md)。以下历史部署章节可能含旧时间点，当前运行状态应以 Git、实际运行环境和 `docs/CURRENT_TASK.md` 为准。
 
+## Independent product versions and release identity
+
+| Product | Version source | Release notes | Formal tag | Candidate identity |
+| --- | --- | --- | --- | --- |
+| Lab | Root `VERSION` | Root `RELEASE_NOTES.md` | `lab/vX.Y.Z` | Full Git SHA plus immutable image digest |
+| Gate | `apps/pubg-saas/package.json.version` | `apps/pubg-saas/RELEASE_NOTES.md` | `gate/vX.Y.Z` | Git SHA plus immutable image digest, scoped to Gate-Local/Staging/Prod |
+
+Both versions use standard SemVer and advance independently. Root
+`package.json.version` remains Monorepo tooling metadata. A normal source commit
+does not bump a product version; a Candidate is not a formal release. Historical
+`v1.10.4` tags remain unchanged. Shared Domain and Presentation commits can
+trigger both products' checks without forcing them to release together. The
+Lab-compatible version command is `scripts/amadeus-version.sh`; Gate uses
+`scripts/pubg-saas-version.sh`. Version validation does not create tags or
+deploy either product.
+
+Gate-Local, Gate-Staging and Gate-Prod promotions must retain the same
+validated image digest; an environment promotion must not rebuild a different
+artifact. Gateway, Worker and Migrator identities must be recorded together
+with the schema version. Migration release plans require a precheck, protected
+backup, idempotent application, and forward/backward compatibility review.
+Recovery must account for writes made after migration; replacing the whole
+PostgreSQL volume with an old snapshot is not the default rollback method.
+These checks belong in the Gate release tooling, not in the paused M2 runtime.
+
 ## Worldline notification boundary
 
 主动通知统一经过：业务事实 → capability adapter →

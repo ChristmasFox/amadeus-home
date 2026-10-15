@@ -14,7 +14,7 @@ read_version() {
   [[ -f "$VERSION_FILE" ]] || fail "Missing version file: $VERSION_FILE"
   local value
   value="$(tr -d '[:space:]' < "$VERSION_FILE")"
-  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "Invalid Amadeus version: $value"
+  [[ "$value" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || fail "Invalid Lab SemVer: $value"
   printf '%s\n' "$value"
 }
 
@@ -51,15 +51,18 @@ Usage:
   ./scripts/amadeus-version.sh check
   ./scripts/amadeus-version.sh notes
   ./scripts/amadeus-version.sh bump patch
+  ./scripts/amadeus-version.sh bump minor
+  ./scripts/amadeus-version.sh bump major
 
 Version policy:
-  Every release uses bump patch and advances by 0.0.1.
-  Patch is 0..9; when it reaches 9, carry into minor: 0.0.9 -> 0.1.0.
-  Minor is 0..99; when it also reaches 99, carry into major: 0.99.9 -> 1.0.0.
-  bump minor and bump major are not supported.
+  VERSION is the Lab product version. It follows standard SemVer increments:
+  patch increments the patch component; minor increments minor and resets
+  patch; major increments major and resets minor and patch.
 
-After bumping, replace the first line and body of RELEASE_NOTES.md before deploy. The body is a concise
-single-release summary only, written in Chinese for the deployment notice; do not append prior release notes or repeat unchanged capabilities.
+After bumping, replace the first line and body of RELEASE_NOTES.md before a
+formal Lab release. The body is one release summary in Chinese; do not append
+prior release notes or repeat unchanged capabilities. Historical vX.Y.Z tags
+remain intact; new formal Lab tags use lab/vX.Y.Z.
 USAGE
 }
 
@@ -85,19 +88,19 @@ print("\n".join(lines[1:]).strip())
 PY
   ;;
   bump)
-    [[ $# -eq 2 ]] || fail 'bump requires exactly one kind: patch'
+    [[ $# -eq 2 ]] || fail 'bump requires exactly one kind: patch, minor, or major'
     kind="$2"
-    [[ "$kind" == patch ]] || fail "Only bump patch is supported; versions advance by 0.0.1 and carry at 9 (received: $kind)"
+    [[ "$kind" == patch || "$kind" == minor || "$kind" == major ]] || fail "Unsupported SemVer bump kind (received: $kind)"
     IFS=. read -r major minor patch <<< "$version"
-    if (( patch < 9 )); then
-      patch=$((patch + 1))
-    elif (( minor < 99 )); then
-      minor=$((minor + 1))
-      patch=0
-    else
+    if [[ "$kind" == major ]]; then
       major=$((major + 1))
       minor=0
       patch=0
+    elif [[ "$kind" == minor ]]; then
+      minor=$((minor + 1))
+      patch=0
+    else
+      patch=$((patch + 1))
     fi
     next_version="$major.$minor.$patch"
     temporary="$(mktemp "$ROOT_DIR/.amadeus-version.XXXXXX")"
@@ -107,7 +110,7 @@ PY
     mv "$temporary" "$VERSION_FILE"
     trap - EXIT
     printf 'VERSION=%s\n' "$next_version"
-    printf '%s\n' 'NEXT=replace RELEASE_NOTES.md with this release only, then run check.'
+    printf '%s\n' 'NEXT=replace RELEASE_NOTES.md with this Lab release only, then run check.'
     ;;
   help|--help|-h|'')
     usage

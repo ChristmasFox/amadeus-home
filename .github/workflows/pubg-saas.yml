@@ -14,6 +14,8 @@ on:
       - "scripts/check-architecture.mjs"
       - "scripts/check-secrets.sh"
       - "scripts/pubg-saas-*.py"
+      - "scripts/pubg-saas-version.sh"
+      - "scripts/test-pubg-saas-version.sh"
       - "scripts/tests/test_pubg_saas_*.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "package.json"
@@ -33,6 +35,8 @@ on:
       - "scripts/check-architecture.mjs"
       - "scripts/check-secrets.sh"
       - "scripts/pubg-saas-*.py"
+      - "scripts/pubg-saas-version.sh"
+      - "scripts/test-pubg-saas-version.sh"
       - "scripts/tests/test_pubg_saas_*.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "package.json"
@@ -87,6 +91,10 @@ jobs:
         run: |
           pnpm check:secrets
           pnpm check:architecture
+      - name: Gate product version and release notes
+        run: |
+          bash scripts/pubg-saas-version.sh check
+          bash scripts/test-pubg-saas-version.sh
       - name: Build private and public PUBG packages
         run: pnpm build:pubg && pnpm --filter @agent/pubg-saas build
       - name: Public SaaS PostgreSQL tests

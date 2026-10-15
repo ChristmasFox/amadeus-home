@@ -6,6 +6,17 @@
 
 项目级命名规范见 [AGENTS.md](../../AGENTS.md)，双产品架构见 [ARCHITECTURE.md](../../docs/ARCHITECTURE.md)。
 
+## Gate product version
+
+Gate's independent product version lives in this package's `package.json`.
+Validate it with `bash scripts/pubg-saas-version.sh check` and preview the
+release notes with `bash scripts/pubg-saas-version.sh notes`. Standard SemVer
+bumps are available through `bump patch`, `bump minor`, and `bump major`.
+Formal Gate tags use `gate/vX.Y.Z`; the current `0.1.0` value is a development
+baseline and does not mean M2 has passed human KOOK acceptance or that
+Gate-Prod has launched. Gate-Local candidates remain identified by Git SHA and
+immutable image digest.
+
 This package implements public persistence, authorization and the current KOOK
 transport slice from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations
 and a `PubgRepositoryPort` adapter, a trusted group-message parser, fresh guild

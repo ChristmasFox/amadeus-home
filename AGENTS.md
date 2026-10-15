@@ -45,9 +45,16 @@
 - Domain 层保持平台无关，不把 Telegram、KOOK、WhatsApp 或 OpenClaw API 细节写入 PUBG/domain package；平台差异放在 plugin、adapter 或 integration 层。
 - LLM 只位于边界（planner、解释和自然语言入口）；核心 domain、状态转换、协议校验和结果排序必须保持 deterministic、可测试、可回滚。
 - 外部部署和运行时写操作必须明确使用 `--apply` 或等价确认；默认先 dry-run，canonical target 是本地 host profile 指定的 OrbStack CasaOS（M204 当前为 `example-node`）。
-- 版本唯一来源是根目录 `VERSION`；release 只允许执行 `scripts/amadeus-version.sh bump patch`。
-  patch 位范围为 `0..9`，minor 位范围为 `0..99`；`0.9.9 -> 0.10.0`，`0.99.9 -> 1.0.0`。
-  `bump minor` 和 `bump major` 不支持，`RELEASE_NOTES.md` 只写当前单次 release。
+- 产品版本各自管理：Lab 的唯一版本来源是根目录 `VERSION`；Gate 的唯一版本来源是
+  `apps/pubg-saas/package.json.version`。根 `package.json.version` 只描述 Monorepo 工具元数据。
+- 两个产品都按标准 SemVer 使用各自的版本工具；Lab 兼容入口是
+  `scripts/amadeus-version.sh bump patch|minor|major`，Gate 是
+  `scripts/pubg-saas-version.sh bump patch|minor|major`。版本变更须同步该产品当前单次
+  Release Notes；普通 Commit 不自动增加产品版本。
+- 新正式 Tag 分别使用 `lab/vX.Y.Z` 与 `gate/vX.Y.Z`。历史 `v1.10.4` 等 Tag 保持原样；
+  Git SHA + image digest 的 Candidate 不是正式 Release，也不创建产品正式 Tag。
+- 正式产品 Tag 只能指向已验收且获批准的发布源码；版本工具和普通 Commit 不创建 Tag，
+  不修改既有 Tag，也不代表生产已部署。
 
 ## Architecture ownership matrix
 
