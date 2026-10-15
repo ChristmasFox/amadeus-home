@@ -13,13 +13,19 @@ checksum verification. The authorized force reindex completed; exact keyword
 retrieval returned 3 results with positive FTS and vector scores, a paraphrase
 returned a positive vector match, and current status is 3/3 files with
 `dirty=false`, FTS available, hybrid mode, and vector dimension 1024. Modified-
-file incremental refresh and restart persistence remain open. Dreaming was
-not invoked: the live image lacks the source admission marker and function,
-and its sanitized policy allows both WhatsApp and Telegram. The authorized
-WhatsApp-only boundary therefore cannot be verified before reads. The enabled
-cron was not manually invoked; no transcript was read and no Dreaming write or
-rollback was needed. The ordered procedure stopped here; candidate build,
-apply, and formal Lab release were not started. Gate/M2 was not touched.
+file incremental refresh and restart persistence remain open. The authorized
+controlled Dreaming run was stopped because the live image lacks the source
+admission marker and function, and its sanitized policy allows both WhatsApp
+and Telegram. A subsequent metadata-only cron-history query found that the
+pre-existing scheduled job completed automatically on 2026-10-15 at 03:00
+Asia/Shanghai (200245 ms, delivery not requested); a 2026-10-13 run had failed.
+The job remains enabled and is next due 2026-10-16 at 03:00. Its source
+isolation and exact read/write effects are unverified. No transcript, prompt,
+summary, or memory text was read. Current metadata reports no session corpus,
+ingestion state, audit entries, promotions, or `DREAMS.md`; these observations
+do not prove what the scheduled run accessed. The cron was not changed. The
+ordered procedure stopped here; candidate build, apply, and formal Lab release
+were not started. Gate/M2 was not touched.
 Reindex checkpoint evidence is in
 `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`; the Dreaming
 stop evidence is in

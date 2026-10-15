@@ -15,9 +15,11 @@ the indexed rebuild/recovery procedure are in
 The current continuation authorization is limited to source, tests, CI,
 documentation, and harmless validation. It does not authorize an image build,
 runtime restart/deployment, further live memory-index write, production
-database write, formal release tag, or cloud migration. The earlier Lab
-authorization remains historical evidence for completed items 1–3; step 4
-stopped before Dreaming, and items 5–7 require fresh explicit authorization.
+database write, formal release tag, cloud migration, or cron change. The
+earlier Lab authorization remains evidence for completed items 1–3. The
+controlled item-4 run stopped at preflight; an existing scheduled run was
+later found in metadata, with source isolation unverified. The cron remains
+enabled and items 5–7 require fresh explicit authorization.
 
 ## Goal continuation audit — repository and Gate M2 read-only check — 2026-10-15
 
@@ -81,16 +83,24 @@ source is unreachable. No build or apply occurred.
 
 ## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
 
-The authorized Dreaming run was not invoked. Read-only inspection of the live
-OpenClaw 2026.9.4 image found neither the repository's
+The authorized controlled Dreaming run was not invoked. Read-only inspection
+of the live OpenClaw 2026.9.4 image found neither the repository's
 `amadeus-memory-dreaming-peer-admission-v2` marker nor
 `classifyDreamingSessionAdmission`; the live sanitized policy allows both
 WhatsApp and Telegram. A zero-file session-corpus status does not prove
-before-read isolation. The enabled Dreaming cron's `lastRunStatus=ok` was not
-treated as run evidence, and it was not manually invoked. No transcript was
-read and no Dreaming or runtime write occurred. There is no rollback needed.
-Items 5–7 (candidate build, apply, and formal release) were not started. Full
-sanitized evidence is in
+before-read isolation. A subsequent read-only cron-history query found seven
+records: the existing scheduled job completed on 2026-10-15 03:00
+Asia/Shanghai (`succeeded`, 200245 ms, delivery not requested), and a prior
+scheduled run on Oct 13 failed. This automated run was not the authorized
+controlled run; its source isolation and exact read/write effects are
+unverified. We did not read its prompt, summary, transcript, or memory text.
+The cron remains enabled, with the next execution due 2026-10-16 03:00
+Asia/Shanghai. Current memory metadata reports zero session-corpus files,
+zero audit entries/promotions, no session-ingestion state, and no `DREAMS.md`,
+but this does not prove what the scheduled run accessed. No cron or runtime
+write was made by us and no rollback was performed. Items 5–7 (candidate
+build, apply, and formal release) were not started. Full sanitized evidence
+is in
 `.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
 
 ## Explicit Lab approval sequence — step 1 — 2026-10-15
@@ -185,7 +195,8 @@ formal tag, or registry publish occurred. Gate M2 remains paused.
 The P1 source tests passed. Runtime inspection confirmed the pinned provider
 and current FTS/vector index state, but did not issue an Embedding request or
 prove semantic retrieval. Dreaming is scheduled but has no eligible session
-corpus and no recorded run history. Do not describe live memory acceptance as
+corpus; later metadata inspection found an automatic scheduled run, whose
+source isolation is unverified. Do not describe live memory acceptance as
 complete; see the P1 report for the exact evidence boundary and pending gates.
 
 The latest read-only memory status at approximately

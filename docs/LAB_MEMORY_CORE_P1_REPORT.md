@@ -57,13 +57,14 @@ session transcript, credential value, or session-history database was changed.
   request was sent to `/v1/embeddings`. Route compatibility, returned
   dimensions, billing, and error behavior are unverified. The status payload
   reports provider state `pending`.
-- Dreaming is loaded and configured in the runtime. Cron lists the
-  `0 3 * * *` schedule in `Asia/Shanghai` with `lastRunStatus=ok`; the separate
-  run-history query returned no run records. Memory status reports no session
-  corpus or session-ingestion state, `/workspace/memory` contains no files,
-  `DREAMS.md` is absent, and no recall/promotion audit entries exist. The
-  available evidence does not prove that a Dreaming phase ran or promoted a
-  candidate; there was no eligible session corpus at inspection time.
+- Dreaming is loaded and configured in the runtime. At this initial snapshot,
+  Cron listed the `0 3 * * *` schedule in `Asia/Shanghai` with
+  `lastRunStatus=ok`; the separate run-history query returned no records.
+  Memory status reported no session corpus or session-ingestion state,
+  `/workspace/memory` contained no files, `DREAMS.md` was absent, and no
+  recall/promotion audit entries existed. This initial observation did not
+  prove that Dreaming ran or promoted a candidate. A later metadata-only
+  history query found seven retained records; see the follow-up below.
 - The latest read-only follow-up at approximately `2026-10-15 12:30 UTC`
   reports 2 indexed files, 70 chunks, FTS enabled/available, hybrid search
   mode, a
@@ -189,18 +190,27 @@ accepted as execution evidence.
 
 ## Ordered Dreaming preflight stop — 2026-10-15
 
-Arthur authorized one run restricted to Arthur's own WhatsApp direct message.
-The run was not invoked because the live OpenClaw 2026.9.4 image contains
-neither `amadeus-memory-dreaming-peer-admission-v2` nor
+Arthur authorized one controlled run restricted to Arthur's own WhatsApp
+direct message. It was not invoked because the live OpenClaw 2026.9.4 image
+contains neither `amadeus-memory-dreaming-peer-admission-v2` nor
 `classifyDreamingSessionAdmission`. Its sanitized memory policy allows both
 WhatsApp and Telegram, so the configured exclusions and peer-file reference
 do not prove the requested source boundary is enforced before transcript
 reads. Memory status showed zero session-corpus files, which does not prove
 that no other session source could be read. The enabled Dreaming cron's
-`lastRunStatus=ok` was not treated as a run record and no cron run was
-triggered. No transcript was read and no memory write or rollback was needed.
-The ordered procedure stopped here; build/apply/release were not started.
-See `.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
+`lastRunStatus=ok` was not treated as evidence for the authorized controlled
+run. A later metadata-only history query found seven retained scheduled-run
+records. The existing job completed automatically on 2026-10-15 at 03:00
+Asia/Shanghai with status `succeeded`, duration 200245 ms, and delivery not
+requested; a prior Oct 13 run failed. The query excluded prompts, summaries,
+session identifiers, and content. The job remains enabled and is next due
+2026-10-16 at 03:00. Current Memory status reports zero session-corpus files,
+suspicious files/lines, audit entries, and promotions; no session-ingestion
+state exists, `DREAMS.md` is absent, and the memory directory contains one
+zero-byte file. These facts do not establish which sources the scheduled run
+read or its exact effects. No transcript or run content was read, and no cron
+change was made. The ordered procedure stopped here; build/apply/release were
+not started. See `.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
 The current Goal continuation is limited to source, tests, CI, documentation,
 and harmless validation. Further live index operations, image builds,
 restarts, deployments, and release tagging require fresh explicit
@@ -228,7 +238,8 @@ the GitHub Actions workflow itself has not run on GitHub.
 `RELEASE_BUILD_REQUIRED`; no Docker build was run. Therefore
 `BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` remain false. The ordered
 Lab acceptance is stopped before item 5 by the Dreaming preflight finding.
-Besides the
-synthetic Embedding request and the two redacted retrieval queries recorded
-above, no `memory reset`, session backfill, Dreaming run, or file/database
-write outside the derived-index rebuild was issued for this repair.
+Besides the synthetic Embedding request and the two redacted retrieval queries
+recorded above, no `memory reset`, session backfill, or manually controlled
+Dreaming run was issued by this repair; the pre-existing scheduled execution
+is described above. No file/database write outside the derived-index rebuild
+was issued by us.

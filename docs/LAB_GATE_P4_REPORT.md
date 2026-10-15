@@ -14,7 +14,7 @@ formal release or complete Gate M2.
 | Memory Core plugin/config | `SOURCE_TESTED`; P1 read-only runtime inspection reported the pinned OpenClaw 2026.9.4 `memory-core` enabled and loaded. Config/admission fixtures pass. | No post-change image build or deployment; this does not establish current post-deploy behavior. |
 | Embedding | `LIVE_SYNTHETIC_PROBE_PASSED`; one synthetic request to the configured 9Router endpoint returned HTTP 200, 1024 finite dimensions, and 32 input tokens. No memory text was sent. | This proves endpoint reachability, authentication, and response shape, not post-build Memory Core provider readiness. The source patch has not been built into the live image. |
 | KNN / FTS | `LIVE_INDEX_ACCEPTANCE_PARTIAL`; after a verified external backup, force reindex completed with 3/3 files, 70 chunks, FTS available, hybrid mode, and `dirty=false`. A keyword query returned 3 results with positive text/vector scores; a paraphrase returned 1 positive vector match. | Modified-file incremental refresh and restart persistence remain unverified. The image containing current Memory Core patches has not been built or deployed. |
-| Dreaming | `SOURCE_TESTED`; 03:00 `Asia/Shanghai` schedule and before-read allowlist admission are covered by source fixtures. The authorized live run was stopped before invocation. | The live image lacks the admission marker/function; sanitized policy allows WhatsApp and Telegram. Session corpus count was zero, but that does not prove source isolation. No transcript was read and no candidate or memory write occurred. |
+| Dreaming | `SOURCE_TESTED`; 03:00 `Asia/Shanghai` schedule and before-read allowlist admission are covered by source fixtures. The authorized controlled run was stopped before invocation. | A metadata-only query later found the pre-existing scheduled job completed at 2026-10-15 03:00 (200245 ms; delivery not requested); the Oct 13 scheduled run failed. The live image lacks the admission marker/function and its sanitized policy allows WhatsApp and Telegram, so source isolation and exact effects are unverified. No transcript or run content was read. The job remains enabled; next due 2026-10-16 03:00. |
 | Session isolation | `SOURCE_TESTED`; peer allow/deny, missing/revoked/malformed allowlists, and admission-before-transcript-read fixtures pass. | The live image does not contain the admission patch, so runtime enforcement is not verified. The Dreaming acceptance stopped before any transcript read. |
 | Lab / Gate versions | `SOURCE_TESTED`; Lab SemVer transitions and Gate's independent version path pass sandbox tests. Current sources remain Lab `1.10.4` and Gate `0.1.0`. | No version bump or product tag was created. |
 | Build impact | `SOURCE_TESTED`; a Memory Core patch-only change forces OpenClaw rebuild, shared Domain changes affect Lab and Gate, Presentation changes affect all consuming images, and unknown Docker inputs fail conservatively. | No Docker/OCI image was built. |
@@ -76,10 +76,14 @@ sequence completed one synthetic Embedding probe and a backed-up derived-index
 rebuild. Detailed sanitized evidence is in
 [`LAB_MEMORY_CORE_P1_REPORT.md`](LAB_MEMORY_CORE_P1_REPORT.md) and the
 pre-write checkpoint is `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
-Dreaming then stopped before invocation because the current image lacks the
-source admission guard. No candidate image, deployment, release version, tag,
-or registry publish was created. No Gate runtime, PostgreSQL data, session
-history, source memory file, or credential was changed.
+The controlled Dreaming acceptance then stopped before invocation because the
+current image lacks the source admission guard. A later metadata-only query
+found a separate automatic scheduled run at 2026-10-15 03:00 Asia/Shanghai;
+its source isolation and exact effects remain unverified, and the next run is
+due 2026-10-16 03:00 while the existing job remains enabled. No run content was
+read and no cron change was made. No candidate image, deployment, release
+version, tag, or registry publish was created. No Gate runtime, PostgreSQL
+data, session history, source memory file, or credential was changed.
 
 ## Completion boundary
 
