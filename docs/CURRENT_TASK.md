@@ -72,6 +72,13 @@ provenance remain unavailable. Only sanitized image/health/digest metadata and
 Compose/config hashes were read. No runtime write occurred. Full evidence is
 in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`.
 
+The same continuation reran the guarded
+`bash scripts/deploy-openclaw.sh --dry-run --candidate --build-auto`. The P0
+12-digit OpenClaw tag rejection is fixed by P3 commit `61504f5`; the current
+dry-run accepts it and selects OpenClaw rebuild for changed image inputs.
+Product Radar still requires rebuild because its recorded `633dd216339f`
+source is unreachable. No build or apply occurred.
+
 ## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
 
 The authorized Dreaming run was not invoked. Read-only inspection of the live

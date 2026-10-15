@@ -86,19 +86,26 @@ that patch file, and invoked the exact `image_source_commit`,
 result was `REBUILD_MISSED`. This proves a single-file patch change can silently
 reuse a stale OpenClaw image under `--build-auto`.
 
-There is a separate fail-closed issue for the currently running image tag:
-`git-4a57348-202610150912` has a 12-digit time suffix, while
-`image_source_commit()` requires 14 digits. The default read-only command
-`./scripts/deploy-openclaw.sh --dry-run --candidate --build-auto` returned:
+At the P0 baseline, the running OpenClaw tag
+`git-4a57348-202610150912` had a 12-digit time suffix while
+`image_source_commit()` required 14 digits, so the default read-only command
+rejected that tag. P3 later fixed this compatibility issue in commit
+`61504f5`; the lineage parser and regression fixture now accept both legacy
+12-digit and current 14-digit UTC suffixes. A current
+`bash scripts/deploy-openclaw.sh --dry-run --candidate --build-auto` completed
+without the old tag error and returned:
 
 ```text
 MODE=dry-run
 BUILD_MODE=auto/no-build
-openclaw image tag must contain a git commit and timestamp: local/openclaw-amadeus:git-4a57348-202610150912
+IMAGE_IMPACT target=openclaw state=REBUILD
+AUTO_SCOPE_OPENCLAW=build
+IMAGE_LINEAGE_MISSING target=radar commit=633dd216339f rebuild=required
+AUTO_SCOPE_PRODUCT_RADAR=build
 ```
 
-So the current live tag is rejected instead of silently skipped; the
-reproducible missing-path false negative applies to otherwise valid tags. The
+The separate build-input false negative reproduced above was also fixed in
+P3; this current dry-run conservatively selects both affected images. The
 `--candidate` mode preserves the same single-runtime boundary and skips formal
 release notification. `--no-build` checks image freshness before applying.
 `--lineage-bridge` remains an explicit `--apply`-only path requiring fresh
