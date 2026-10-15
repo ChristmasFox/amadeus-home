@@ -17,6 +17,7 @@ export const MARKERS = Object.freeze({
   sessionBackfill: 'amadeus-memory-backfill-peer-admission-v1',
   manifest: 'amadeus-memory-dreaming-peer-admission-v2',
   searchFtsStatus: 'amadeus-memory-search-fts-status-v1',
+  dreamingNoCorpus: 'amadeus-memory-dreaming-no-corpus-v1',
 });
 
 export const PIN = Object.freeze({
@@ -24,6 +25,7 @@ export const PIN = Object.freeze({
   childEnvSha256: 'a3d7355f2615621421f078b8870923ae89af6f2bf2d18a4aab648c1953261fa9',
   sessionAdmissionSha256: 'c8df902d4f91a9069b4372409e700e8c43c48308e4dc0c052bab86ff812399c4',
   dreamingPhasesSha256: '07644badc9be12fd6e83ad30f39760fa92299263fd5691d1f14101010705560a',
+  dreamingIndexSha256: '5c352aebdab7e5f908a17a0e06302ec7bf06d48b42fff636fd503113bfe5fd9d',
   sessionBackfillSha256: '32aa04a5ff5439d902615ccda1dab774197752fa65d9c1ee9258d3ed529466ff',
   manifestSha256: 'a22bebfcec65c37b41a4d05de40f95d4da6e7501c081cc434d006f77fdb47e66',
   searchToolsBundleSha256: '2042127708bad9c7c419f51aa0073e4290ee16190fdea9b00bf4de6c59949a36',
@@ -289,6 +291,118 @@ export function verifyDreamingAdmissionBeforeScan(source, verifyPinnedDigest = t
   return true;
 }
 
+export function patchDreamingNoCorpusSource(source, verifyPinnedDigest = true) {
+  if (source.includes(MARKERS.dreamingNoCorpus)) {
+    for (const required of [
+      'reason: "SKIPPED_NO_ELIGIBLE_CORPUS"',
+      'noEligibleCorpusPhases === enabledPhases',
+      'skippedNoEligibleCorpusPhases',
+    ]) {
+      if (!source.includes(required)) throw new Error('incomplete Dreaming no-corpus result patch');
+    }
+    return source;
+  }
+  if (verifyPinnedDigest && hash(source) !== PIN.dreamingPhasesSha256) {
+    throw new Error('pinned Dreaming phase bundle digest mismatch');
+  }
+  let result = replaceOnce(
+    source,
+    'async function runLightDreaming(params) {',
+    `// ${MARKERS.dreamingNoCorpus}\nasync function runLightDreaming(params) {`,
+    'Dreaming no-corpus marker',
+  );
+  result = replaceOnce(
+    result,
+    '\t\tconst capped = entries.slice(0, params.config.limit);\n\t\tconst bodyLines = buildLightDreamingBody(capped);',
+    '\t\tconst capped = entries.slice(0, params.config.limit);\n\t\tif (capped.length === 0) return { capped, recentDiaryEntries, skippedNoEligibleCorpus: true };\n\t\tconst bodyLines = buildLightDreamingBody(capped);',
+    'empty Light Dreaming result',
+  );
+  result = replaceOnce(
+    result,
+    '\t});\n\tif (params.subagent && capped.length > 0) {',
+    '\t});\n\tif (capped.length === 0) return { status: "skipped", reason: "SKIPPED_NO_ELIGIBLE_CORPUS" };\n\tif (params.subagent && capped.length > 0) {',
+    'Light Dreaming no-corpus result',
+  );
+  result = replaceOnce(
+    result,
+    '\t\tconst entries = stagedEntries.length > 0 ? stagedEntries : allEntries;\n\t\tconst preview = previewRemDreaming({',
+    '\t\tconst entries = stagedEntries.length > 0 ? stagedEntries : allEntries;\n\t\tif (entries.length === 0) return { entries, skippedNoEligibleCorpus: true };\n\t\tconst preview = previewRemDreaming({',
+    'empty REM Dreaming result',
+  );
+  result = replaceOnce(
+    result,
+    '\t});\n\tif (params.subagent && entries.length > 0) {',
+    '\t});\n\tif (entries.length === 0) return { status: "skipped", reason: "SKIPPED_NO_ELIGIBLE_CORPUS" };\n\tif (params.subagent && entries.length > 0) {',
+    'REM Dreaming no-corpus result',
+  );
+  result = replaceOnce(
+    result,
+    '\tlet degradedPhases = 0;\n\tlet pendingNarratives = 0;\n\tasync function runPhase(phase, config, run) {\n\t\tif (!config.enabled || config.limit <= 0) return;',
+    '\tlet degradedPhases = 0;\n\tlet pendingNarratives = 0;\n\tlet enabledPhases = 0;\n\tlet noEligibleCorpusPhases = 0;\n\tasync function runPhase(phase, config, run) {\n\t\tif (!config.enabled || config.limit <= 0) return;\n\t\tenabledPhases += 1;',
+    'Dreaming phase result counters',
+  );
+  result = replaceOnce(
+    result,
+    '\t\t\tif (outcome.status === "degraded") degradedPhases += 1;\n\t\t\telse if (outcome.status === "pending") pendingNarratives += 1;',
+    '\t\t\tif (outcome.status === "degraded") degradedPhases += 1;\n\t\t\telse if (outcome.status === "pending") pendingNarratives += 1;\n\t\t\tif (outcome.reason === "SKIPPED_NO_ELIGIBLE_CORPUS") noEligibleCorpusPhases += 1;',
+    'Dreaming no-corpus phase accounting',
+  );
+  result = replaceOnce(
+    result,
+    '\treturn {\n\t\tdegradedPhases,\n\t\tpendingNarratives\n\t};\n}\n//#endregion',
+    '\tif (enabledPhases > 0 && noEligibleCorpusPhases === enabledPhases) return {\n\t\tdegradedPhases,\n\t\tpendingNarratives,\n\t\tskippedNoEligibleCorpusPhases: noEligibleCorpusPhases,\n\t\tstatus: "skipped",\n\t\treason: "SKIPPED_NO_ELIGIBLE_CORPUS"\n\t};\n\treturn {\n\t\tdegradedPhases,\n\t\tpendingNarratives,\n\t\tskippedNoEligibleCorpusPhases: noEligibleCorpusPhases\n\t};\n}\n//#endregion',
+    'Dreaming sweep result',
+  );
+  return result;
+}
+
+export function patchDreamingIndexResultSource(source, verifyPinnedDigest = true) {
+  if (source.includes(MARKERS.dreamingNoCorpus)) {
+    for (const required of [
+      'noCorpusResult ? "memory-core: SKIPPED_NO_ELIGIBLE_CORPUS"',
+      'DREAMING_RESULT=SKIPPED_NO_ELIGIBLE_CORPUS',
+      'skippedNoCorpusWorkspaces',
+    ]) {
+      if (!source.includes(required)) throw new Error('incomplete Dreaming index no-corpus patch');
+    }
+    return source;
+  }
+  if (verifyPinnedDigest && hash(source) !== PIN.dreamingIndexSha256) {
+    throw new Error('pinned Memory Core index bundle digest mismatch');
+  }
+  let result = replaceOnce(
+    source,
+    '//#region extensions/memory-core/src/dreaming.ts',
+    `// ${MARKERS.dreamingNoCorpus}\n//#region extensions/memory-core/src/dreaming.ts`,
+    'Dreaming index no-corpus marker',
+  );
+  result = replaceOnce(
+    result,
+    '\tlet degradedNarratives = 0;\n\tlet pendingNarratives = 0;\n\tconst pluginConfig',
+    '\tlet degradedNarratives = 0;\n\tlet pendingNarratives = 0;\n\tlet skippedNoCorpusWorkspaces = 0;\n\tconst pluginConfig',
+    'Dreaming index no-corpus counter',
+  );
+  result = replaceOnce(
+    result,
+    '\t\t\tdegradedNarratives += phaseResult?.degradedPhases ?? 0;\n\t\t\tpendingNarratives += phaseResult?.pendingNarratives ?? 0;',
+    '\t\t\tdegradedNarratives += phaseResult?.degradedPhases ?? 0;\n\t\t\tpendingNarratives += phaseResult?.pendingNarratives ?? 0;\n\t\t\tif (phaseResult?.reason === "SKIPPED_NO_ELIGIBLE_CORPUS") {\n\t\t\t\tskippedNoCorpusWorkspaces += 1;\n\t\t\t\tcontinue;\n\t\t\t}',
+    'Dreaming index skip before durable promotion',
+  );
+  result = replaceOnce(
+    result,
+    '\tconst summary = `memory-core: dreaming promotion complete (workspaces=${workspaces.length}, candidates=${totalCandidates}, applied=${totalApplied}, failed=${failedWorkspaces}, degraded=${degradedNarratives}, narrativesPending=${pendingNarratives}).`;',
+    '\tconst noCorpusResult = workspaces.length > 0 && failedWorkspaces === 0 && skippedNoCorpusWorkspaces === workspaces.length && totalCandidates === 0 && totalApplied === 0;\n\tconst summary = noCorpusResult\n\t\t? `memory-core: DREAMING_RESULT=SKIPPED_NO_ELIGIBLE_CORPUS (workspaces=${workspaces.length}, candidates=${totalCandidates}, applied=${totalApplied}).`\n\t\t: `memory-core: dreaming promotion complete (workspaces=${workspaces.length}, candidates=${totalCandidates}, applied=${totalApplied}, failed=${failedWorkspaces}, degraded=${degradedNarratives}, narrativesPending=${pendingNarratives}, skippedNoCorpus=${skippedNoCorpusWorkspaces}).`;',
+    'Dreaming index result summary',
+  );
+  result = replaceOnce(
+    result,
+    'reason: degradedNarratives > 0 ? "memory-core: short-term dreaming degraded" : "memory-core: short-term dreaming processed"',
+    'reason: noCorpusResult ? "memory-core: SKIPPED_NO_ELIGIBLE_CORPUS" : degradedNarratives > 0 ? "memory-core: short-term dreaming degraded" : "memory-core: short-term dreaming processed"',
+    'Dreaming index result reason',
+  );
+  return result;
+}
+
 export function verifySessionBackfillAdmissionBeforeScan(source, verifyPinnedDigest = true) {
   if (verifyPinnedDigest && hash(source) !== PIN.sessionBackfillSha256) {
     throw new Error('pinned session-backfill bundle digest mismatch');
@@ -387,7 +501,9 @@ function main(argv = process.argv.slice(2)) {
     .map((name) => path.join(coreRoot, name))
     .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('await scanSessionIngestionSource({'));
   if (dreamingFiles.length !== 1) throw new Error(`expected one pinned Dreaming phase bundle; found ${dreamingFiles.length}`);
-  verifyDreamingAdmissionBeforeScan(fs.readFileSync(dreamingFiles[0], 'utf8'));
+  const dreamingFile = dreamingFiles[0];
+  const dreamingSource = fs.readFileSync(dreamingFile, 'utf8');
+  verifyDreamingAdmissionBeforeScan(dreamingSource, !dreamingSource.includes(MARKERS.dreamingNoCorpus));
   const backfillFiles = files.filter((name) => /^session-backfill-[^/]+\.mjs$/u.test(name))
     .map((name) => path.join(coreRoot, name))
     .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('await scanSessionIngestionSource({'));
@@ -397,10 +513,13 @@ function main(argv = process.argv.slice(2)) {
   verifySessionBackfillAdmissionBeforeScan(backfillSource, !backfillSource.includes(MARKERS.sessionBackfill));
   patchFile(runtimeFile, PIN.childEnvSha256, MARKERS.childEnv, patchChildEnvSource, 'KNN child environment', apply);
   patchFile(sessionFile, PIN.sessionAdmissionSha256, MARKERS.sessionAdmission, patchSessionAdmissionSource, 'Dreaming session admission', apply);
+  patchFile(dreamingFile, PIN.dreamingPhasesSha256, MARKERS.dreamingNoCorpus, patchDreamingNoCorpusSource, 'Dreaming no-corpus result', apply);
   patchFile(backfillFile, PIN.sessionBackfillSha256, MARKERS.sessionBackfill, patchSessionBackfillSource, 'session-backfill peer admission', apply);
   patchFile(manifestFile, PIN.manifestSha256, MARKERS.manifest, patchPluginManifest, 'memory-core manifest', apply);
   patchFile(searchToolsFiles[0], PIN.searchToolsBundleSha256, MARKERS.searchFtsStatus, patchMemorySearchFtsStatusSource, 'memory search FTS status', apply);
-  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready backfill_peer_filter=ready search_fts_status=ready`);
+  const dreamingIndexFile = path.join(coreRoot, 'extensions/memory-core/index.js');
+  patchFile(dreamingIndexFile, PIN.dreamingIndexSha256, MARKERS.dreamingNoCorpus, patchDreamingIndexResultSource, 'Dreaming result summary', apply);
+  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready dreaming_no_corpus=ready backfill_peer_filter=ready search_fts_status=ready`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {

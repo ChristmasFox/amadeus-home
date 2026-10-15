@@ -9,6 +9,8 @@ import {
   normalizeDreamingPeer,
   normalizeWhatsAppPeer,
   patchChildEnvSource,
+  patchDreamingIndexResultSource,
+  patchDreamingNoCorpusSource,
   patchMemorySearchFtsStatusSource,
   patchPluginManifest,
   patchSessionAdmissionSource,
@@ -134,6 +136,98 @@ assert.equal(verifyDreamingAdmissionBeforeScan(dreamingOrder, false), true);
 assert.throws(() => verifyDreamingAdmissionBeforeScan(dreamingOrder), /digest mismatch/u);
 assert.throws(() => verifyDreamingAdmissionBeforeScan(dreamingOrder.replace('sources.push(source);\nawait scanSessionIngestionSource({', 'await scanSessionIngestionSource({\nsources.push(source);'), false), /not gated/u);
 
+const dreamingNoCorpusFixture = `async function runLightDreaming(params) {
+	const { capped, recentDiaryEntries } = await withMemoryWorkspaceLock(params.workspaceDir, async () => {
+		const capped = entries.slice(0, params.config.limit);
+		const bodyLines = buildLightDreamingBody(capped);
+		await writeDailyDreamingPhaseBlock({
+			phase: "light"
+		});
+		return {
+			capped,
+			recentDiaryEntries
+		};
+	});
+	if (params.subagent && capped.length > 0) {
+		return await runDreamNarrative({});
+	}
+	return { status: "skipped" };
+}
+async function runRemDreaming(params) {
+	const { entries, preview } = await withMemoryWorkspaceLock(params.workspaceDir, async () => {
+		const entries = stagedEntries.length > 0 ? stagedEntries : allEntries;
+		const preview = previewRemDreaming({
+			entries
+		});
+		await writeDailyDreamingPhaseBlock({
+			phase: "rem"
+		});
+		return {
+			entries,
+			preview
+		};
+	});
+	if (params.subagent && entries.length > 0) {
+		return await runDreamNarrative({});
+	}
+	return { status: "skipped" };
+}
+async function runDreamingSweepPhases(params) {
+	let degradedPhases = 0;
+	let pendingNarratives = 0;
+	async function runPhase(phase, config, run) {
+		if (!config.enabled || config.limit <= 0) return;
+		try {
+			const outcome = await run({});
+			if (outcome.status === "degraded") degradedPhases += 1;
+			else if (outcome.status === "pending") pendingNarratives += 1;
+		} catch (err) {
+			throw err;
+		}
+	}
+	await runPhase("light", lightConfig, runLightDreaming);
+	await runPhase("rem", remConfig, runRemDreaming);
+	return {
+		degradedPhases,
+		pendingNarratives
+	};
+}
+//#endregion
+`;
+const patchedDreamingNoCorpus = patchDreamingNoCorpusSource(dreamingNoCorpusFixture, false);
+assert.match(patchedDreamingNoCorpus, new RegExp(MARKERS.dreamingNoCorpus));
+assert.match(patchedDreamingNoCorpus, /capped\.length === 0\) return \{ capped, recentDiaryEntries/u);
+assert.match(patchedDreamingNoCorpus, /entries\.length === 0\) return \{ entries, skippedNoEligibleCorpus: true \}/u);
+assert.match(patchedDreamingNoCorpus, /reason: "SKIPPED_NO_ELIGIBLE_CORPUS"/u);
+assert.match(patchedDreamingNoCorpus, /noEligibleCorpusPhases === enabledPhases/u);
+assert.ok(patchedDreamingNoCorpus.indexOf('capped.length === 0) return') < patchedDreamingNoCorpus.indexOf('await writeDailyDreamingPhaseBlock'));
+assert.ok(patchedDreamingNoCorpus.indexOf('entries.length === 0) return') < patchedDreamingNoCorpus.indexOf('await writeDailyDreamingPhaseBlock', patchedDreamingNoCorpus.indexOf('async function runRemDreaming')));
+assert.equal(patchDreamingNoCorpusSource(patchedDreamingNoCorpus), patchedDreamingNoCorpus);
+assert.throws(() => patchDreamingNoCorpusSource(dreamingNoCorpusFixture), /digest mismatch/u);
+
+const dreamingIndexFixture = `//#region extensions/memory-core/src/dreaming.ts
+	let degradedNarratives = 0;
+	let pendingNarratives = 0;
+	const pluginConfig = {};
+			degradedNarratives += phaseResult?.degradedPhases ?? 0;
+			pendingNarratives += phaseResult?.pendingNarratives ?? 0;
+			const repair = await repairShortTermPromotionArtifacts({ workspaceDir });
+	const summary = \`memory-core: dreaming promotion complete (workspaces=\${workspaces.length}, candidates=\${totalCandidates}, applied=\${totalApplied}, failed=\${failedWorkspaces}, degraded=\${degradedNarratives}, narrativesPending=\${pendingNarratives}).\`;
+	return {
+		handled: true,
+		reason: degradedNarratives > 0 ? "memory-core: short-term dreaming degraded" : "memory-core: short-term dreaming processed"
+	};
+}`;
+const patchedDreamingIndex = patchDreamingIndexResultSource(dreamingIndexFixture, false);
+assert.match(patchedDreamingIndex, new RegExp(MARKERS.dreamingNoCorpus));
+assert.match(patchedDreamingIndex, /phaseResult\?\.reason === "SKIPPED_NO_ELIGIBLE_CORPUS"/u);
+assert.match(patchedDreamingIndex, /DREAMING_RESULT=SKIPPED_NO_ELIGIBLE_CORPUS/u);
+assert.match(patchedDreamingIndex, /workspaces\.length > 0 && failedWorkspaces === 0/u);
+assert.match(patchedDreamingIndex, /reason: noCorpusResult \? "memory-core: SKIPPED_NO_ELIGIBLE_CORPUS"/u);
+assert.ok(patchedDreamingIndex.indexOf('continue;') < patchedDreamingIndex.indexOf('repairShortTermPromotionArtifacts'));
+assert.equal(patchDreamingIndexResultSource(patchedDreamingIndex), patchedDreamingIndex);
+assert.throws(() => patchDreamingIndexResultSource(dreamingIndexFixture), /digest mismatch/u);
+
 const backfillFixture = `const sources = corpus.filter((entry) => !sessionExclusionReason(entry, params.admissionPolicy, forgottenSessionIds));\nfor (const archiveFile of params.archiveFiles) {\n\tconst source = foreignSessionIngestionSource(params.agentId, archiveFile);\n\t\tif (!canonicalPaths.has(source.absolutePath)) {\n\t\t\tsources.push(source);\n\t\t\tcanonicalPaths.add(source.absolutePath);\n\t\t}\n}\nawait scanSessionIngestionSource({`;
 assert.equal(verifySessionBackfillAdmissionBeforeScan(backfillFixture, false), true);
 assert.throws(() => verifySessionBackfillAdmissionBeforeScan(backfillFixture), /digest mismatch/u);
@@ -161,4 +255,4 @@ assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.all
 assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.allowlistedDirectPeerFiles.properties.whatsapp.type, 'string');
 assert.equal(patchedManifest.configSchema.properties.memoryPolicy.properties.allowlistedDirectPeerFiles.properties.telegram.type, 'string');
 
-console.log('OPENCLAW_MEMORY_CORE_PATCH_TESTS=passed child_env=7 peer_match=15 admission=18 before_read=10 search_fts_status=12 source_patch=4 schema=4');
+console.log('OPENCLAW_MEMORY_CORE_PATCH_TESTS=passed child_env=7 peer_match=15 admission=18 before_read=10 search_fts_status=12 source_patch=4 dreaming_skip=4 schema=4');

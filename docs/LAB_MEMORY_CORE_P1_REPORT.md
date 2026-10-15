@@ -29,6 +29,13 @@ session transcript, credential value, or session-history database was changed.
   and checked to apply admission before `scanSessionIngestionSource`. Manual
   archive inputs without trustworthy session-origin metadata are excluded.
   The plugin manifest patch adds the Telegram allowlist schema field.
+- The pinned Dreaming phase bundle now returns
+  `SKIPPED_NO_ELIGIBLE_CORPUS` when every enabled Light/REM phase has no
+  eligible entries. Those empty phases do not write a completed daily phase
+  block or phase-specific signal; Memory Core skips durable promotion for the
+  skipped workspace and logs `DREAMING_RESULT=SKIPPED_NO_ELIGIBLE_CORPUS`.
+  The existing signal-ingestion stage still runs before candidate selection;
+  this source result does not replace runtime proof of transcript isolation.
 - The configured memory source remains `memory`; `rememberAcrossConversations`
   remains `false`. That flag is not used as authorization for session
   ingestion.
@@ -227,6 +234,11 @@ Passed focused checks:
 - `python3 scripts/test-openclaw-group-image-policy.py` (uses an isolated
   temporary copy of pinned OpenClaw 2026.9.4 with repository patches applied;
   all 6 tests passed without skips and config validation returned `valid=true`)
+- `node scripts/test-patch-openclaw-memory-core.mjs` now also checks empty
+  Light/REM early-return ordering, aggregate skip reporting, durable-promotion
+  bypass, index summary, idempotence, and the zero-workspace result. The pinned
+  runtime fixture applies the patch twice and syntax-checks both modified
+  Dreaming bundles.
 - `python3 scripts/test-openclaw-speech-config.py`
 - `bash scripts/test-openclaw-session-isolation.sh`
 - Python/Node syntax checks, `git diff --check`, `pnpm check:secrets`

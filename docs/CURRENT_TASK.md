@@ -43,6 +43,29 @@ acceptance guard, release tooling, Lab and Gate SemVer, lineage compatibility,
 architecture, workflow, and secrets checks. No Docker/OCI build or product
 database suite ran. Runtime writes remain `none`.
 
+## P1 Dreaming empty-corpus source follow-up — 2026-10-15T13:38Z
+
+The pinned OpenClaw 2026.9.4 Dreaming phases previously wrote an empty
+completed Light/REM phase block and exposed only a generic `skipped` status;
+the Memory Core caller still entered deep promotion. The source patch now
+returns `SKIPPED_NO_ELIGIBLE_CORPUS` when all enabled phases have no eligible
+entries, skips their phase-block writes and the corresponding workspace's
+durable promotion, and logs an explicit `DREAMING_RESULT` summary. Preexisting
+signal ingestion still runs before candidate selection, so this does not prove
+the source of any live transcript.
+
+The patch unit fixture passed its empty-phase ordering, aggregation, promotion
+bypass, zero-workspace, idempotence, and pinned-digest assertions. The pinned
+runtime fixture applied the patch twice to a temporary OpenClaw tree, passed
+configuration validation (6/6), and syntax-checked the modified Dreaming phase
+and Memory Core index bundles. Memory policy and session-isolation fixtures
+also passed. `pnpm check:architecture`, `pnpm test:workflow`, the relevant
+Python/Node syntax checks, `pnpm check:secrets`, and `git diff --check` passed;
+`pnpm workflow:plan` classified the changes as FAST with Docker forbidden.
+No runtime, cron, database, memory index, build, deployment, or release-tag
+action occurred; step 4 remains stopped and items 5–7 remain outside the
+current continuation authorization.
+
 ## Goal continuation audit — repository and Gate M2 read-only check — 2026-10-15
 
 Fetched `origin/main`; it added no commits. `main` is clean and 10 commits

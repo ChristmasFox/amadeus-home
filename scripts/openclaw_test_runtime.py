@@ -28,8 +28,8 @@ def patch_pinned_runtime_tree(source_dist: Path, destination: Path, root: Path) 
         text=True,
         check=True,
     )
-    if "backfill_peer_filter=ready" not in patch.stdout:
-        raise AssertionError("pinned OpenClaw patch did not report the session-backfill admission gate")
+    if "backfill_peer_filter=ready" not in patch.stdout or "dreaming_no_corpus=ready" not in patch.stdout:
+        raise AssertionError("pinned OpenClaw patch did not report all Dreaming admission/result gates")
     subprocess.run(
         ["node", str(root / "scripts/patch-openclaw-memory-core.mjs"), "--core-root", str(destination), "--apply"],
         cwd=root,
@@ -40,6 +40,8 @@ def patch_pinned_runtime_tree(source_dist: Path, destination: Path, root: Path) 
     targets = [destination / "extensions/memory-core/manager-runtime.js"]
     targets.extend(destination.glob("session-ingestion-*.mjs"))
     targets.extend(destination.glob("session-backfill-*.mjs"))
+    targets.extend(destination.glob("dreaming-phases-*.mjs"))
+    targets.append(destination / "extensions/memory-core/index.js")
     for target in targets:
         subprocess.run(["node", "--check", str(target)], cwd=root, capture_output=True, text=True, check=True)
     return destination / "extensions"
