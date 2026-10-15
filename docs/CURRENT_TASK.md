@@ -6,8 +6,7 @@ Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
 `SOURCE_COMPLETE`; P3 `SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab
-candidate is `BUILD_VERIFIED` and deployed. Dreaming and incremental retrieval
-acceptance passed; formal Lab release/tag is the remaining authorized step.**
+`BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` for version 1.10.5.**
 Arthur authorized the ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
 `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
@@ -16,15 +15,36 @@ the indexed rebuild/recovery procedure are in
 Arthur renewed and reordered the authorization on 2026-10-15 for Lab only:
 push current source; build the Lab OpenClaw candidate; apply it through the
 guarded deploy path; run owner-only Dreaming on that image; formally release
-only after all P1 live gates pass. The source push, candidate build/deploy,
-Dreaming run, privacy review, and incremental index/retrieval acceptance are
-complete. Formal release/tag remains pending its apply step. The previous
-Dreaming preflight stop is superseded by direct inspection of the bundled
-Memory Core executor and the successful controlled run below. Gate remains
-excluded and M2 stays paused; no operation is authorized against Gate,
-PostgreSQL, or M2 runtime.
+only after all P1 live gates pass. All steps completed. The previous Dreaming
+preflight stop is superseded by direct inspection of the bundled Memory Core
+executor and the successful controlled run below. Gate remains excluded and
+M2 stays paused; no operation was performed against Gate, PostgreSQL, or M2.
 
-## Reordered Lab sequence — P1 live verification complete; release pending — 2026-10-15
+## Reordered Lab sequence — `RELEASED` — 2026-10-15
+
+Formal promotion completed through `scripts/release-lab.sh release --apply`
+with `--promote-live-candidate`; it verified the live candidate digest/source,
+created the annotated local tag `lab/v1.10.5`, wrote the released manifest
+`/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T145222Z-released.json`,
+and confirmed the formal Owner notification was sent. The manifest records
+release source commit
+`0f109389378dc322dbc780997f3133b5f69eb53e`; the running image remains the
+verified immutable candidate sourced from
+`57e472ebe014a0b4d3574d7ef30107340dc99308` at digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+No container switch occurred during formal promotion. Per the canonical
+release tooling contract, the tag is local and was not pushed. A final
+`scripts/release-lab.sh status --live --manifest <released-manifest>` returned
+`DRIFT_STATUS=IN_SYNC`, with the Lab container healthy. No rollback was needed.
+
+The P1 evidence validates as `LIVE_VERIFIED`; its protected source is
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming/live-acceptance.json`.
+Dreaming run/privacy details, the SQLite/Workspace checkpoint, and release
+verification are summarized in
+`.agent/checkpoints/2026-10-15-lab-release-complete.md`. The schedule remains
+enabled at 03:00 Asia/Shanghai, next due 2026-10-16 03:00.
+
+## Earlier Lab sequence snapshot — P1 live verification complete; release pending at that checkpoint — 2026-10-15 (superseded)
 
 The existing `Memory Dreaming Promotion` job is the Memory Core-managed
 executor: the bundled default enables Dreaming when no explicit config entry is

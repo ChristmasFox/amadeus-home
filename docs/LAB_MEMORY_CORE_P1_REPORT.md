@@ -1,7 +1,7 @@
 # Lab Memory Core P1 repair report
 
 Date: 2026-10-15 (Asia/Shanghai)  
-Status: **`SOURCE_FIXED` + `BUILD_VERIFIED` + P1 `LIVE_VERIFIED`; Lab candidate deployed and verified; controlled Dreaming and incremental retrieval passed; formal `RELEASED` tag/notification pending**
+Status: **`SOURCE_FIXED` + `BUILD_VERIFIED` + `LIVE_VERIFIED` + `RELEASED`; Lab 1.10.5 is formally released and live `IN_SYNC`**
 Scope: source, configuration, temporary fixtures, a synthetic Embedding probe,
 Lab index acceptance, and the later explicitly authorized candidate build and
 Lab OpenClaw deployment. The derived index was rebuilt after a verified

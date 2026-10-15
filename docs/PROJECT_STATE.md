@@ -1,6 +1,32 @@
 # Project State — 2026-10-15
 
-## 2026-10-15 — Lab P1 `LIVE_VERIFIED`; formal release pending
+## 2026-10-15 — Lab `RELEASED` as 1.10.5
+
+The authorized Lab-only sequence is complete. P1 `LIVE_VERIFIED` evidence
+passed and formal Lab release completed through
+`scripts/release-lab.sh release --apply --promote-live-candidate`. It created
+the annotated local tag `lab/v1.10.5`, recorded release source
+`0f109389378dc322dbc780997f3133b5f69eb53e` in the external released manifest,
+and confirmed the formal Owner notification was sent. The canonical release
+tool does not push tags; `lab/v1.10.5` remains local. The manifest is
+`/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T145222Z-released.json`.
+
+The running Lab OpenClaw is healthy and `status --live --manifest` reports
+`IN_SYNC`. It remains on the already-verified image
+`local/openclaw-amadeus:git-57e472ebe014-20261015140824`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`,
+source `57e472ebe014a0b4d3574d7ef30107340dc99308`. Formal promotion performed
+no container switch and required no rollback.
+
+Dreaming ran successfully for one allowlisted owner workspace and wrote Light
+and REM narratives; no promotions were created. The daily job remains enabled
+at 03:00 Asia/Shanghai, next due 2026-10-16 03:00. The pre-index protected
+SQLite/Workspace checkpoint and sanitized P1/privacy evidence are under
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming`.
+Detailed completion evidence is in
+`.agent/checkpoints/2026-10-15-lab-release-complete.md`.
+
+## Earlier Lab P1 `LIVE_VERIFIED` snapshot — formal release pending at that checkpoint (superseded)
 
 The authorized Lab-only order has now completed source push, candidate build,
 guarded deployment, controlled Dreaming, privacy review, and incremental
@@ -23,11 +49,8 @@ retrieval passed. P1 evidence validates as `LIVE_VERIFIED` for candidate source
 `57e472ebe014a0b4d3574d7ef30107340dc99308`.
 
 The formal release dry-run passed for tag `lab/v1.10.5`, promotion scope
-`existing-live-openclaw-digest`, and no container switch. Formal release,
-notification, and tag creation remain pending. Detailed sanitized evidence is
-in `.agent/checkpoints/2026-10-15-lab-live-verified-dreaming-release-pending.md`.
-The earlier stop below is retained as a historical checkpoint and is
-superseded by this outcome.
+`existing-live-openclaw-digest`, and no container switch. At this checkpoint,
+formal release/tag were still pending. See the later release completion above.
 
 ## Earlier Lab candidate deployment — Dreaming preflight stopped at that checkpoint (superseded)
 
