@@ -4,9 +4,29 @@
 
 # Agent Monorepo 工作规则
 
-## OpenClaw Amadeus 稳态边界
+## Lab / Gate 产品与部署命名规范
 
-OpenClaw 是唯一 Agent runtime：PUBG 保持原生 plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 与 Codex 通知留在原生 `plugins/amadeus`/明确外部服务及 owner outbox。旧 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md` 是已完成历史目标，不是运行时或新任务指令。不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套 sender；部署仍须外部备份、secret 保护、真实验收和可恢复 checkpoint。
+本仓库包含两条**都可开源**、采用 Kurisu SOUL 风格的 AI Agent 产品路线。代称描述产品及部署角色，**不代表代码是否公开**，也不是两种角色人格。
+
+| 代称 | 产品定义 | 部署身份 |
+| --- | --- | --- |
+| **Lab** | OpenClaw **自托管 Kurisu**；社区用户可自行部署自己的 Lab | 维护者实例常驻 Mac mini / OrbStack |
+| **Gate** | Vercel AI SDK **KOOK 小队服务 Kurisu**；独立多租户 SaaS | 产品身份，和运行位置无关 |
+| **Gate-Local** | Gate 的本地开发、验证、试用实例 | Mac mini 独立 OrbStack Machine，M2 试用中 |
+| **Gate-Staging** | Gate 的未来预发布实例 | 按需启动，独立测试身份与数据 |
+| **Gate-Prod** | Gate 未来的云端生产实例 | 尚未上线、云主机尚未选定 |
+
+- Lab 是**自托管产品路线**，不是未开源或仅维护者能部署的“私人 Agent”。Lab / Gate 两边源码可开源；**各实例的记忆、会话、文件、凭据和数据不会因源码开源而共享**。
+- 在 Lab 之内 OpenClaw 是唯一 Agent runtime；Gate 是独立的 AI SDK Agent，不属于 Lab 的第二个编排器。旧“OpenClaw 唯一 Agent runtime”规则仅适用于 Lab。
+- Lab 和 Gate 共享 `packages/pubg-domain` 的 PUBG 统计、时间和 Telemetry 业务语义，以及适用的 `packages/presentation` 事实展示契约；两套存储/工具适配可不同，禁止复制核心计算。
+- Lab 与 Gate 的运行进程、SQLite/PostgreSQL、权限、Bot/模型/API 凭据、会话/记忆、调度及网络访问严格隔离；相同的 Kurisu 人格风格不构成跨实例数据访问授权。
+- Gate 云迁移后产品名仍为 Gate，正式实例称 Gate-Prod。经授权切换完成后必须停止 Gate-Local 中使用**正式 KOOK Bot 身份**的 Gateway/Worker，禁止双活；本地可用独立测试 Bot 保留按需测试环境。
+- Gate-Prod **不能默认指向现有 `amadeus-gateway` VPS**；云端主机和资源尚未决定。命名本身不构成部署、停服或数据库迁移授权。
+- 以上是文档/沟通约定，无需重命名 npm 包、仓库、容器、数据库或代码符号。“Image Lab”仍是独立的生图功能名称。历史 Goal/checkpoint 不进行无意义的全局替换。
+
+## Lab 自托管 OpenClaw 稳态边界
+
+在 Lab 内，OpenClaw 是唯一 Agent runtime（Gate 是独立的 AI SDK 小队服务，不属于 Lab 的第二编排器）：PUBG 保持原生 plugin/domain，Product Radar、媒体整理、NAS、HomeLab、VPS、KOOK 与 Codex 通知留在原生 `plugins/amadeus`/明确外部服务及 owner outbox。旧 `docs/OPENCLAW_AMADEUS_MIGRATION_GOAL.md` 是已完成历史目标，不是运行时或新任务指令。不要恢复 LangBot/n8n/旧 Runtime、关键词路由、第二个 Agent 或第二套 sender；部署仍须外部备份、secret 保护、真实验收和可恢复 checkpoint。
 
 ## Source of Truth
 
@@ -31,6 +51,8 @@ OpenClaw 是唯一 Agent runtime：PUBG 保持原生 plugin/domain，Product Rad
 
 ## Architecture ownership matrix
 
+下表主要对应 Lab 的 OpenClaw 与原生插件；Gate 的 AI SDK Agent、KOOK 接入及多租户授权归 `apps/pubg-saas/`。跨产品 PUBG Domain 与展示契约分别归 `packages/pubg-domain`、`packages/presentation`。
+
 | Concern | Sole owner | Boundary rule |
 | --- | --- | --- |
 | Persona, tone, and general conversation behavior | `integrations/openclaw/workspace/SOUL.md` | Never place capability workflow, identity policy, or time semantics here. |
@@ -50,7 +72,7 @@ Before adding a capability, record the answers in `docs/CAPABILITY_TEMPLATE.md`:
 - What structured result/presentation contract, evidence references, unknown states, and time semantics are required?
 - Which side effects, outbox/idempotency keys, secrets, backups, and rollback checkpoints are in scope?
 - Which focused tests, architecture checks, `pnpm check:secrets`, release build, and real acceptance evidence prove completion?
-- Confirm that no SOUL/AGENTS workflow text, keyword router, transport-specific business logic, second runtime, or notification fallback is being introduced.
+- Confirm that no SOUL/AGENTS workflow text, keyword router, transport-specific business logic, second Lab runtime, or notification fallback is being introduced.
 
 ## Amadeus Gateway VPS
 

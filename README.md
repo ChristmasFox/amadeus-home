@@ -1,6 +1,6 @@
 # Amadeus Home
 
-**WhatsApp-first · Self-hosted AI assistant powered by OpenClaw + 9Router**
+**两条开源 Kurisu 世界线：Lab（OpenClaw 自托管）与 Gate（KOOK 小队服务）· 共享 PUBG Domain**
 
 [![Community CI](https://github.com/ChristmasFox/amadeus-home/actions/workflows/community-pubg-onboarding.yml/badge.svg)](https://github.com/ChristmasFox/amadeus-home/actions/workflows/community-pubg-onboarding.yml)
 
@@ -10,13 +10,29 @@
 >
 > **原生产环境维护者：** 本次更新把个人 9Router 生图账号白名单移出了 Git。更新本地仓库及下一次生产部署前，务必阅读 [私有账号策略迁移](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md)，避免因缺少本地策略文件而导致部署拒绝。
 
+## Lab / Gate：两条产品世界线
+
+**Lab 与 Gate 都使用 Kurisu 的人格风格，也都可以开源。** 它们是两个独立部署的 Agent 产品，而不是两个不同角色；区别在架构、服务方式和运行数据，不在代码是否开放。
+
+| 代称 | 运行方式 | 当前状态 |
+| --- | --- | --- |
+| **Lab** | OpenClaw + WhatsApp/Telegram + SQLite + 可选 HomeLab 扩展；**自托管 Kurisu**，任何社区用户都可自行部署 | 本 README 的社区 Docker 快速开始以 Lab 为基础 |
+| **Gate** | Vercel AI SDK Agent + KOOK + 独立 Worker / PostgreSQL；**多租户小队服务 Kurisu** | **Gate-Local** 在 Mac mini 独立测试，M2 真人试用中 |
+| **Gate-Prod** | Gate 将来的云端正式服务 | **尚未上线**；云服务器未选定 |
+
+**Gate 指产品，不指主机。** Gate-Local 是本地测试环境，Gate-Staging 是未来预发布环境，Gate-Prod 是未来正式生产环境。迁云后 Gate 仍叫 Gate；正式迁移切换后，不能在本地和云端同时运行使用同一正式 KOOK Bot 身份的 Gateway/Worker。
+
+两端只共享 PUBG 源码与适用的事实展示契约：[`packages/pubg-domain`](packages/pubg-domain/) 和 [`packages/presentation`](packages/presentation/)。**各实例的记忆、会话、用户数据、数据库、权限与凭据独立**；源码开源不意味着运行数据共享。
+
+> **部署范围：** 下文“快速开始”适用于 **Lab 风格的社区 WhatsApp / OpenClaw 安装**，不是 Gate-Prod 的安装教程。Gate 当前仅处于本地 M2 验收。相关资料：[Gate 应用说明](apps/pubg-saas/README.md) · [Gate Compose](infra/pubg-saas/README.md) · [架构文档](docs/ARCHITECTURE.md)。
+
 ## 从 PUBG 战绩机器人开始
 
 和朋友打 PUBG，最常遇到的问题就是：**谁踢了队友？伤害打了多少？这周谁最能打？**
 
-Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PUBG 官方 API 和比赛 Telemetry 获取事实，再借助 OpenClaw 和模型生成易读的战绩分析。
+Lab 可以让用户在 WhatsApp 私聊或群聊自然提问；Gate 则面向 KOOK 玩家小队，支持普通聊天与按需调用 PUBG 工具。两端都通过 PUBG 官方 API 与比赛 Telemetry 获取事实，再由各自的 Agent 组织回复。
 
-**不必每次都重新下载整场比赛：比赛数据持久化到 SQLite，刷新时只补充新对局；Telemetry 也会复用已解析的事实缓存。** 在配置好定时任务后，还能提前同步比赛和事件数据，让后续查询尽量减少现场下载。
+**不必每次都重新下载整场比赛：Lab 使用 SQLite、Gate 使用 PostgreSQL 持久化事实，双方复用增量同步、统计与 Telemetry 领域语义。** 在配置好定时任务后，还能提前同步比赛和事件数据，让后续查询尽量减少现场下载。
 
 > “查询昨天的小队战绩。”
 >
@@ -39,7 +55,7 @@ Amadeus Home 让你在 WhatsApp 私聊或群聊里直接提出问题。它从 PU
 
 PUBG 统计由确定性 Domain 完成；AI 负责理解你的问题与组织回复。**PUBG API 不经过 9Router**，后者负责 OpenClaw 的模型调用。
 
-## PUBG 数据引擎：持久化缓存 + 增量拉取 + 定时预取
+## PUBG 数据引擎：持久化缓存 + 增量拉取 + 定时预取（以下以 Lab 为例）
 
 **不是每收到一条 WhatsApp 消息，就重新下载所有比赛和 Telemetry。** 项目把数据采集、缓存、统计和 AI 回复分开，优先复用已经验证的本地事实，减少重复请求和等待。
 
@@ -96,18 +112,23 @@ PUBG 统计由确定性 Domain 完成；AI 负责理解你的问题与组织回�
 
 ```mermaid
 flowchart TB
-  W["WhatsApp：私聊 / 群聊"] --> O["OpenClaw Agent"]
-  O -->|"模型推理"| R["9Router"]
-  R --> M["用户自行授权的模型提供商"]
-  O -->|"工具调用"| P["PUBG Plugin（10 个工具）"]
-  P --> D["PUBG Domain / Telemetry"]
-  D -->|"增量读取"| A["PUBG 官方 API"]
-  D <--> DB[("SQLite · Match / Telemetry 缓存")]
-  C["可配置的 OpenClaw Cron"] -->|"按小时预取 / 每日汇总"| P
-  O -.-> X["可选 Amadeus / HomeLab 扩展"]
+  WA["WhatsApp / Telegram"] --> LAB["Lab · OpenClaw Agent"]
+  KO["KOOK 玩家"] --> GATE["Gate · AI SDK Agent"]
+  LAB --> LP["OpenClaw PUBG Tools"]
+  GATE --> GP["服务端授权的公共 PUBG Tools"]
+  LP --> DOMAIN["共享 PUBG Domain / Telemetry"]
+  GP --> DOMAIN
+  DOMAIN --> API["PUBG 官方 API"]
+  LP --- LDB[("Lab · SQLite")]
+  GP --- GDB[("Gate · PostgreSQL")]
+  LAB --> LMODEL["Lab 独立模型路由"]
+  GATE --> GMODEL["Gate 独立模型路由"]
+  LAB -.-> EXT["可选 HomeLab 扩展"]
 ```
 
-## 快速开始：WhatsApp + 9Router + PUBG
+图示为共享源码、分开部署的逻辑架构。不同实例由各自的授权和存储适配器访问共享 Domain，Gate 不读取 Lab 的会话、记忆或 HomeLab 数据。
+
+## 快速开始：Lab 社区部署（WhatsApp + 9Router + PUBG）
 
 ### 环境要求
 
@@ -205,12 +226,14 @@ pnpm check:secrets
 | 源码目录 | 用途 |
 | --- | --- |
 | [`plugins/pubg/`](plugins/pubg/) | 10 个 OpenClaw PUBG 工具 |
-| [`packages/pubg-domain/`](packages/pubg-domain/) | PUBG API、SQLite、统计与 Telemetry |
+| [`packages/pubg-domain/`](packages/pubg-domain/) | Lab / Gate 共用的 PUBG API、统计、时间与 Telemetry |
 | [`packages/identity/`](packages/identity/) | 身份与外部游戏账号绑定 |
 | [`packages/presentation/`](packages/presentation/) | 多渠道结果展示 |
 | [`infra/community/`](infra/community/) | 社区 Docker / 9Router 模型路由 / 安全默认配置 |
 | [`integrations/openclaw/`](integrations/openclaw/) | OpenClaw 集成 |
-| [`plugins/amadeus/`](plugins/amadeus/) | 个人 HomeLab 的扩展插件 |
+| [`plugins/amadeus/`](plugins/amadeus/) | Lab 可选的 HomeLab 扩展插件 |
+| [`apps/pubg-saas/`](apps/pubg-saas/) | Gate · KOOK AI SDK Agent、多租户授权与数据访问 |
+| [`infra/pubg-saas/`](infra/pubg-saas/) | Gate 独立 Gateway、Worker、PostgreSQL 与 Compose 部署模板 |
 
 **生产环境维护者**：请查看 [OpenClaw 运维文档](integrations/openclaw/README.md)、[9Router 维护文档](infra/9router/README.md) 和 [私有策略迁移指南](docs/PRODUCTION_9ROUTER_POLICY_MIGRATION.md)。社区用户不要执行个人生产的 `--apply` 部署脚本。
 
@@ -218,7 +241,7 @@ pnpm check:secrets
 
 欢迎通过 [GitHub Issues](https://github.com/ChristmasFox/amadeus-home/issues) 提交功能想法与脱敏后的错误信息。
 
-仍待完成：全新 Linux amd64/arm64 的镜像构建与实测、真实 WhatsApp + 9Router + PUBG 端到端验收、对旧 PR 历史引用的 Support 清理结果，以及适合公开的脱敏战报截图。
+**Lab 社区发行待办：** 全新 Linux 主机的真实 WhatsApp + 9Router + PUBG 端到端验收、旧 PR 历史引用的 Support 清理结果和适合公开的脱敏截图。**Gate：** 已有双架构源码构建与 KOOK 本地试用进展，但 M2 完整人工验收、Gate-Prod 云端部署与真实规模化验证尚未完成。
 
 **许可证：[MIT License](LICENSE)**（项目原创源码与文档）。允许按 MIT 条款使用、修改、再分发和商用；请保留原版权及许可声明。OpenClaw、9Router、PUBG API、依赖库及第三方模型/素材仍分别受其自身许可证、服务条款或商标权约束，本仓库的 MIT 许可证不授予其额外权利。
 

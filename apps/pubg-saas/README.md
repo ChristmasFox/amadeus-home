@@ -1,4 +1,10 @@
-# PUBG KOOK SaaS source
+# Gate — KOOK 小队服务（AI SDK）
+
+**Gate** 是基于 Vercel AI SDK 的开源 KOOK 小队 Agent 产品，与 **Lab（OpenClaw 自托管 Kurisu）** 并列。二者采用 Kurisu 风格，复用 `packages/pubg-domain` 与适用的 `packages/presentation` 事实契约，但运行进程、数据库、会话、长期记忆、凭据与权限相互隔离。Lab 不是未开源的“私人 Agent”，任何人也可自行部署 Lab。
+
+**Gate-Local** 是 Mac mini / OrbStack 上的 M2 测试实例；**Gate-Staging** 是未来的预发布环境；**Gate-Prod** 是未来云端正式生产环境（尚未上线，主机未定，不能默认视为现有 `amadeus-gateway` VPS）。云端正式切换后，不能让本地与云端两个 Gateway/Worker 同时持有同一正式 KOOK Bot 身份。任何迁移、部署和停机仍需单独批准。
+
+项目级命名规范见 [AGENTS.md](../../AGENTS.md)，双产品架构见 [ARCHITECTURE.md](../../docs/ARCHITECTURE.md)。
 
 This package implements public persistence, authorization and the current KOOK
 transport slice from `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`: PostgreSQL migrations

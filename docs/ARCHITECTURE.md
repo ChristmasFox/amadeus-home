@@ -2,6 +2,34 @@
 
 更新时间：2026-10-01（Amadeus image lifecycle 1.7.5 original-request context correction pending; production rolled back）
 
+## Lab / Gate：产品与部署边界（2026-10-15）
+
+Lab 与 Gate 是**两条都可开源的 Kurisu Agent 产品路线**，不是不同角色，也不以源码是否公开区分。
+
+| 名称 | Agent / 接入 | 实例存储与授权 | 运行身份 |
+| --- | --- | --- | --- |
+| **Lab** | 自托管 OpenClaw、WhatsApp / Telegram、原生 Tools | SQLite、OpenClaw 会话/记忆、实例自有密钥 | 维护者实例位于 Mac mini；社区用户也可自行部署 |
+| **Gate-Local** | AI SDK `ToolLoopAgent`、KOOK Gateway / Worker | 独立 PostgreSQL、独立 KOOK 多租户授权与模型凭据 | Mac mini 上独立 OrbStack 环境，M2 试用中 |
+| **Gate-Staging** | Gate 的未来预发布实例 | 独立测试凭据、数据与机器人 | 按需启动 |
+| **Gate-Prod** | Gate 未来的云端正式服务 | 与 Lab / Gate-Local 隔离的生产状态 | 尚未上线、云主机尚未选定 |
+
+```mermaid
+flowchart TB
+  WA["WhatsApp / Telegram"] --> LAB["Lab · OpenClaw"]
+  KO["KOOK"] --> GATE["Gate · AI SDK Agent"]
+  LAB --> LP["原生 PUBG Plugin / SQLite Adapter"]
+  GATE --> GP["授权后的公共 PUBG Tools / PostgreSQL Adapter"]
+  LP --> CORE["共享 packages/pubg-domain"]
+  GP --> CORE
+  CORE --> PRE["共享 packages/presentation"]
+```
+
+**源码共享，部署独立：** 核心 PUBG 统计、时间和 Telemetry 语义集中在同一 Domain 源码；适用的事实展示契约由 Presentation 统一。Lab 和 Gate 可以拥有不同的 Agent、存储适配和界面风格，但不共享会话、记忆、用户数据、授权、模型密钥、服务或进程。
+
+Gate 从本地迁到云端不会改变产品身份；正式实例叫 Gate-Prod。获批准的切换完成后，必须停用 Gate-Local 中使用同一**正式 KOOK Bot** 的 Gateway/Worker，以免双活。测试版可使用独立 Bot 按需启动。**Gate-Prod 不是现有 `amadeus-gateway` VPS 的别名**；服务器未选定，命名不代表部署授权。
+
+开发 Agent 的规范入口为根目录 [`AGENTS.md`](../AGENTS.md)。以下历史部署章节可能含旧时间点，当前运行状态应以 Git、实际运行环境和 `docs/CURRENT_TASK.md` 为准。
+
 ## Worldline notification boundary
 
 主动通知统一经过：业务事实 → capability adapter →
@@ -18,7 +46,7 @@ Radar 使用可配置的 `amadeus_network`，主机、Mac control user、Fashion
 `infra/host-profile.env`，不进入 Git。Operation Skuld 只做 readiness 和临时
 恢复演练，本目标不执行 Mac mini cutover。
 
-## 单一 Agent 主链
+## Lab：自托管 OpenClaw 主链
 
 \`\`\`text
 Telegram / WhatsApp / future OpenClaw channel
@@ -46,25 +74,15 @@ provider-neutral external account。OpenClaw 只提供可信 channel/account/sen
 `plugins/pubg` 在边界将 `provider=pubg` account 转换成 Domain 可理解的 player id/name，
 `packages/pubg-domain` 不接触 Telegram/WhatsApp、昵称、手机号或 JID。
 
-OpenClaw 是唯一 Agent runtime。没有 LangBot/Mastra/n8n runtime、旧 facade、关键词路由、
-第二个 planner 或业务 fallback。LLM 只在 OpenClaw planner/表达边界；统计、权限、预览确认、
-状态转换和排序保持 deterministic。
+在 **Lab 自托管实例内部**，OpenClaw 是唯一 Agent runtime；没有 LangBot/Mastra/n8n 的替代 runtime、旧 facade、关键词路由、第二个 Lab planner 或业务 fallback。**Gate 是并列的独立 AI SDK Agent**，不是 Lab 内的第二编排器。Lab 的统计、权限、预览确认、状态转换和排序保持 deterministic。
 
-### 独立的公共 KOOK PUBG 应用
+### Gate：独立的 KOOK 小队服务
 
-私有 Agent runtime 仍由 OpenClaw 唯一承载。`docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` 定义了独立面向
-外部用户的 KOOK PUBG Node.js 应用；它可在应用边界使用 AI SDK 做受限的自然语言规划，不管理
-私有 Kurisu session 或 worker。授权、租户隔离、领域计算、结果校验和消息目的地仍由确定性应用代码控制。
+Gate 是独立 Node.js + Vercel AI SDK 应用：正常聊天直接生成自然回复，战绩问题由 `ToolLoopAgent` 选择经服务端授权的 PUBG 工具；授权、实际统计、证据和消息目的地始终由确定性代码控制，而不是由模型自主授予。Gate 的 KOOK Gateway、PostgreSQL、Worker、模型配置与生命周期开辟独立边界，不接入 Lab 的运行时或私人数据。
 
-公共与私有部署从同一 `packages/pubg-domain` 源码分别构建、测试和发布：私有端保留
-`plugins/pubg`、SQLite、私有队伍/API 凭证和 OpenClaw lifecycle；公共端拥有 KOOK transport、
-多租户授权、PostgreSQL、独立 worker、Bot/API/model 凭证及 Compose 生命周期。两者不共享运行中
-服务、数据库、会话、worker 或凭证。公共实现以该 Goal 的 phase gate 为准；组件在源码和运行时
-得到验证前不视为已交付。当前责任路径索引见 [`PROJECT_MAP.md`](PROJECT_MAP.md)。
+双方复用 `packages/pubg-domain`、适用的 `packages/presentation`；分别构建、验收和发布，同一源码变更不会自动更新另一实例。
 
-当前公共源码已有 PostgreSQL schema/migration 与 scope-pinned Domain repository；临时
-PostgreSQL 18 测试通过了两 guild/team 隔离、重复显示名、会话/结果集边界和一组 SQLite/Postgres
-合成统计 golden parity。KOOK 身份授权、应用入口、其他边界 case 的全量 parity 与运行部署仍未交付。
+Gate-Local 已完成 PostgreSQL 多租户、KOOK Gateway、Worker、队列、Agent 工具调用等本地实现，并处于 M2 真人试用阶段；维护者反馈基本 KOOK 交互正常，但**M2 完整验收尚未签署**，Gate-Prod 亦未上线。最新状态见 [`CURRENT_TASK.md`](CURRENT_TASK.md)，历史任务与约束见 `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`。
 
 ## DeliveryEnvelope v2 — 唯一用户交付合同
 
