@@ -108,7 +108,7 @@ and Actions itself was not run.
 ## Limits and recovery notes
 
 - A read-only `scripts/release-lab.sh status --live` follow-up at
-  `2026-10-15T12:17:37Z` successfully captured both Lab services. OpenClaw was
+  `2026-10-15T12:29:17Z` successfully captured both Lab services. OpenClaw was
   healthy at digest
   `sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`;
   its legacy image tag resolves to source

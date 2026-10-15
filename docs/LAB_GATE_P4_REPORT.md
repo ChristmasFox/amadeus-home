@@ -58,7 +58,7 @@ Docker build or Compose action followed. The P3 runbook is
 evidence remains in the [P0 audit](LAB_GATE_P0_BASELINE_AUDIT.md), [P1 report](LAB_MEMORY_CORE_P1_REPORT.md),
 [P2 report](LAB_GATE_P2_REPORT.md), and [P3 report](LAB_GATE_P3_REPORT.md).
 
-The latest read-only Lab snapshot was captured at `2026-10-15T12:17:37Z`.
+The latest read-only Lab snapshot was captured at `2026-10-15T12:29:17Z`.
 OpenClaw was healthy at image digest
 `sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`;
 its immutable tag resolves to the full source SHA and Lab `1.10.4`. Product

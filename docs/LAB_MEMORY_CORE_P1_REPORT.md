@@ -63,13 +63,20 @@ changed in the live runtime.
   `DREAMS.md` is absent, and no recall/promotion audit entries exist. The
   available evidence does not prove that a Dreaming phase ran or promoted a
   candidate; there was no eligible session corpus at inspection time.
-- The latest read-only follow-up at `2026-10-15 12:17 UTC` reports 2 indexed files,
-  70 chunks, FTS enabled/available, hybrid search mode, a 1024-dimension vector
-  index, and `dirty=true`. The scanner reports 3 files, so the index is not
-  current. The Dreaming audit still reports zero session-corpus files and no
-  session-ingestion file. This supersedes the earlier `dirty=false` snapshot.
-  No search query, `--deep` provider readiness probe, Embedding request, index
-  refresh, or Dreaming run was issued; no memory text was emitted.
+- The latest read-only follow-up at approximately `2026-10-15 12:30 UTC`
+  reports 2 indexed files, 70 chunks, FTS enabled/available, hybrid search
+  mode, a
+  1024-dimension vector index, and `dirty=true`. The scanner reports 3 files,
+  so the index is not current. Provider state remains `pending`; Dreaming has
+  zero session-corpus files. This supersedes the earlier `dirty=false`
+  snapshot. No search query, `--deep` provider readiness probe, Embedding
+  request, index refresh, or Dreaming run was issued; no memory text was
+  emitted.
+- The sanitized Lab status snapshot at `2026-10-15T12:29:17Z` still reports
+  OpenClaw healthy at the 1.10.4 candidate digest from source `4a57348`; the
+  P1 source patch has not been built into that image. Product Radar remains
+  healthy with source/version unavailable; drift remains `UNKNOWN` without a
+  protected manifest.
 
 ## Provider-outage source audit
 

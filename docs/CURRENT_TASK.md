@@ -40,8 +40,10 @@ prove semantic retrieval. Dreaming is scheduled but has no eligible session
 corpus and no recorded run history. Do not describe live memory acceptance as
 complete; see the P1 report for the exact evidence boundary and pending gates.
 
-The latest read-only memory status is `dirty=true` with 2 indexed files, 70
-chunks, FTS available, a 1024-dimension vector index, and 3 scanned files. A
+The latest read-only memory status at approximately
+`2026-10-15 12:30 UTC` is `dirty=true` with 2 indexed files, 70 chunks, FTS
+available, a 1024-dimension vector index, and 3 scanned files; provider state
+is still `pending`. A
 source-only audit found that optional Embedding failure retains FTS but the
 tool response omitted the manager's `fts-only` mode. A new pinned source patch
 now exposes `mode=fts-only` when FTS is available and `mode=unavailable` when
@@ -114,8 +116,33 @@ Memory Core patch fixture, workflow tests, architecture check, secrets scan,
 Python/YAML syntax, and `git diff --check` passed. `pnpm workflow:plan` classified
 the source/CI change as FAST. No Lab/Gate runtime, database, index, or memory
 content was touched; the GitHub Actions run and all P1 live acceptance gates
-remain open. `main` is 14 commits ahead of `origin/main`; Gate M2 remains
-paused.
+remain open. `main` was 14 commits ahead of `origin/main` at that commit; Gate
+M2 remains paused.
+
+## Latest read-only Goal state refresh — 2026-10-15
+
+Fetched `origin/main`; it added no commits. `main` is now clean and 15 commits
+ahead. M2 read-only checks found Gateway running and Worker healthy for 8
+hours, PostgreSQL and egress proxy healthy, and the existing BuildKit service
+running. The host had no build/deploy/migration process; the Buildx history
+entries were terminal (`Completed` or `Error`), with the newest completed
+8 hours earlier. No M2 database query, log inspection, or service action ran.
+
+The sanitized Lab release snapshot at `2026-10-15T12:29:17Z` reports OpenClaw
+healthy at digest
+`sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`,
+version `1.10.4`, source `4a5734826eca479f59a2fd039fd12f9ff5d03580`. Product
+Radar is healthy at digest
+`sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`;
+its source/version remain unavailable and drift is `UNKNOWN` without a
+protected release manifest.
+
+Immediately afterward, filtered Memory Core status reports 2 files, 70 chunks,
+`dirty=true` against 3 scanned files, FTS enabled/available, hybrid mode, a
+complete 1024-dimension vector index, provider `pending`, and zero Dreaming
+session-corpus files. No memory query, deep/provider probe, Embedding request,
+index refresh, or Dreaming run was issued. P1 remains
+`SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`; Gate M2 remains paused.
 
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
