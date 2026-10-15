@@ -4,6 +4,27 @@ Date: 2026-10-16 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
+## 2026-10-16T00:16+08:00 — read-only confirmation after authorization correction
+
+Arthur's withdrawal of the previous Dreaming/config/restart authorization is
+in force. A fresh read-only `scripts/release-lab.sh status --live --manifest
+<released-manifest>` captured at `2026-10-15T16:15:58Z` reports Lab 1.10.5
+healthy and `DRIFT_STATUS=IN_SYNC` at the released image and manifest.
+
+At `2026-10-15T16:16:46Z`, read-only `openclaw memory status --json --agent
+main` reported 5 files / 92 chunks, `dirty=false`, hybrid search, FTS enabled
+and available, and a complete enabled 1024-D vector index with valid
+identity. Scan issues and Dreaming suspicious session files/lines are zero.
+Provider metadata remains `pending`; no provider probe was run. No memory
+content was read or emitted. Since the index is current, there is no
+incremental refresh pending; the already-recorded post-restart persistence
+evidence remains sufficient, so no restart is needed for this verification.
+
+The local process list has no `release-config-hash` process. No kill signal,
+Lab config edit, restart, Dreaming invocation, index write, or other runtime
+write occurred. Gate M2 and the three pre-existing unstaged Gate test/OCI
+edits remain untouched.
+
 ## Fresh continuation audit — 2026-10-16T00:03+08:00
 
 Fetched `origin/main`; it added no commits. `origin/main` remains an ancestor

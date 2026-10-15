@@ -1,5 +1,18 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T00:16+08:00 — post-correction read-only check
+
+Lab 1.10.5 remains healthy and `IN_SYNC` with its released manifest at the
+`2026-10-15T16:15:58Z` runtime snapshot. A read-only Memory Core status at
+`2026-10-15T16:16:46Z` reports 5 files / 92 chunks, `dirty=false`, hybrid
+search, FTS available, and a complete 1024-D vector index with valid identity;
+scan and Dreaming suspicious-file/line counts are zero. Provider state is
+`pending` metadata only; no provider probe or memory-content read occurred.
+The incremental refresh is already complete and no restart-dependent check
+remains, because post-restart persistence was verified after the earlier
+rollback restart. No Lab config, restart, Dreaming, index, or runtime write
+occurred. `release-config-hash` is absent; no process needed termination.
+
 ## 2026-10-16 — fresh read-only Goal verification
 
 Lab 1.10.5 remains healthy and `DRIFT_STATUS=IN_SYNC` at the released source
