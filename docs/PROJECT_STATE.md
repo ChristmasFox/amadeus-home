@@ -1,5 +1,21 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T00:24+08:00 — Goal P3/P4 source verification
+
+Local `main` contains P3/P4 follow-up commits `5a6a81f` (BuildKit OCI
+attestation-aware verification), `b143ab1` (durable KOOK ingress test race),
+and `e61ac75` (evidence). A fresh `origin/main` fetch found no new upstream
+commits; these local commits are not pushed. The verification plan classified
+the three code paths as Gate `RUNTIME` and forbade Docker image builds.
+
+Release tooling/OCI fixtures passed; Gate typecheck and PostgreSQL suite passed
+(155/155, zero skips) on a disposable loopback/tmpfs PostgreSQL 18.1 test
+container, removed afterward. Shared PUBG typecheck/test passed (71/71), as
+did architecture, secret, and diff checks. The checksum-verified actionlint
+v1.7.12 binary passed all five workflow files. GitHub-hosted Actions have not
+run. No Gate M2 database/service action or production runtime write occurred;
+M2's human acceptance and Go/No-Go remain open as independent work.
+
 ## 2026-10-16T00:16+08:00 — post-correction read-only check
 
 Lab 1.10.5 remains healthy and `IN_SYNC` with its released manifest at the
