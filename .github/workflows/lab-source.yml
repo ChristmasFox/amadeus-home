@@ -32,6 +32,7 @@ on:
       - "scripts/release-*.sh"
       - "scripts/release-state.py"
       - "scripts/lab-runtime-snapshot.py"
+      - "scripts/test-lab-runtime-snapshot.py"
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/test-release-tooling.py"
@@ -72,6 +73,7 @@ on:
       - "scripts/release-*.sh"
       - "scripts/release-state.py"
       - "scripts/lab-runtime-snapshot.py"
+      - "scripts/test-lab-runtime-snapshot.py"
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
       - "scripts/test-release-tooling.py"
@@ -127,6 +129,7 @@ jobs:
           python3 scripts/test-openclaw-group-image-policy.py
           bash scripts/test-openclaw-session-isolation.sh
           python3 scripts/test-image-impact.py
+          python3 scripts/test-lab-runtime-snapshot.py
           python3 scripts/test-release-tooling.py
           python3 scripts/test-lab-memory-acceptance.py
           bash scripts/test-developer-workflow.sh

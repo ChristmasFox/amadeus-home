@@ -19,6 +19,7 @@ OCI_VERSION_LABEL = "org.opencontainers.image.version"
 OCI_CREATED_LABEL = "org.opencontainers.image.created"
 PROVENANCE_LABEL = "com.amadeus.release.provenance"
 PROVENANCE_MARKER = "amadeus-product-release-v1"
+QUERY_TIMEOUT_SECONDS = 30
 
 
 def label_field(name: str) -> str:
@@ -37,7 +38,16 @@ IMAGE_INSPECT_FORMAT = "|".join((
 
 
 def run(command: list[str]) -> str:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=QUERY_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("read-only Lab runtime query timed out") from None
     if result.returncode:
         raise RuntimeError("read-only Lab runtime query failed")
     return result.stdout.strip()
@@ -58,9 +68,8 @@ def host_profile() -> tuple[str, str, str, str]:
 
 def compose_digest(machine: str, compose_file: str) -> str:
     value = run([
-        "orb", "-m", machine, "-u", "root", "bash", "-lc",
-        'sha256sum -- "$1" | cut -d" " -f1', "release-compose-hash", compose_file,
-    ])
+        "orb", "-m", machine, "-u", "root", "sha256sum", "--", compose_file,
+    ]).partition(" ")[0]
     if not re.fullmatch(r"[0-9a-f]{64}", value):
         raise RuntimeError("Compose configuration digest is invalid")
     return "sha256:" + value
@@ -68,9 +77,8 @@ def compose_digest(machine: str, compose_file: str) -> str:
 
 def config_digest(machine: str, config_file: str) -> str:
     value = run([
-        "orb", "-m", machine, "-u", "root", "bash", "-lc",
-        'sha256sum -- "$1" | cut -d" " -f1', "release-config-hash", config_file,
-    ])
+        "orb", "-m", machine, "-u", "root", "sha256sum", "--", config_file,
+    ]).partition(" ")[0]
     if not re.fullmatch(r"[0-9a-f]{64}", value):
         raise RuntimeError("runtime configuration digest is invalid")
     return "sha256:" + value

@@ -103,7 +103,7 @@ for path in "${FILES[@]-}"; do
       has_storage=1
       [[ "$path" == *backup* || "$path" == *secret* ]] && has_backup=1
       ;;
-    scripts/release-*.sh|scripts/release-state.py|scripts/image-impact.py|scripts/test-image-impact.py|scripts/test-release-tooling.py|scripts/lab-runtime-snapshot.py|scripts/verify-image-provenance.py|scripts/verify-pubg-saas-oci.py|scripts/validate-lab-memory-acceptance.py|scripts/test-lab-memory-acceptance.py|scripts/test-openclaw-lineage-compatibility.sh|infra/release/*|.github/workflows/*)
+    scripts/release-*.sh|scripts/release-state.py|scripts/image-impact.py|scripts/test-image-impact.py|scripts/test-release-tooling.py|scripts/lab-runtime-snapshot.py|scripts/test-lab-runtime-snapshot.py|scripts/verify-image-provenance.py|scripts/verify-pubg-saas-oci.py|scripts/validate-lab-memory-acceptance.py|scripts/test-lab-memory-acceptance.py|scripts/test-openclaw-lineage-compatibility.sh|infra/release/*|.github/workflows/*)
       has_fast=1
       ;;
     docs/OPERATION_SKULD_*|docs/SERVICE_AWARE_BACKUP_REGISTRY.json|docs/VALIDATION_MATRIX.md)

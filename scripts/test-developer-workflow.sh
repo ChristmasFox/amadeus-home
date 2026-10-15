@@ -139,7 +139,7 @@ assert_line "$product_only" 'DOCKER_IMAGE_SET=product-radar'
 shared="$(scope packages/presentation/src/index.ts apps/product-radar/src/core/application.ts)"
 assert_line "$shared" 'DOCKER_IMAGE_SET=openclaw+product-radar+pubg-saas'
 
-release_cli="$(scope scripts/release-lab.sh scripts/image-impact.py scripts/test-release-tooling.py)"
+release_cli="$(scope scripts/release-lab.sh scripts/image-impact.py scripts/test-release-tooling.py scripts/lab-runtime-snapshot.py scripts/test-lab-runtime-snapshot.py)"
 assert_line "$release_cli" 'CHANGE_SCOPE_LEVEL=FAST'
 assert_line "$release_cli" 'DOCKER_BUILD=forbidden'
 assert_line "$release_cli" 'DOCKER_IMAGE_SET=none'
