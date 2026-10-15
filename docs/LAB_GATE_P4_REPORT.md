@@ -12,14 +12,14 @@ formal release or complete Gate M2.
 | Area | Evidence and status | Remaining boundary |
 | --- | --- | --- |
 | Memory Core plugin/config | `SOURCE_TESTED`; P1 read-only runtime inspection reported the pinned OpenClaw 2026.9.4 `memory-core` enabled and loaded. Config/admission fixtures pass. | No post-change image build or deployment; this does not establish current post-deploy behavior. |
-| Embedding | `SOURCE_CONFIGURED`; the catalog contained the configured model ID. | No `/v1/embeddings` request was sent. Actual model compatibility, authentication, returned vector dimension, billing, and semantic availability remain unknown. |
-| KNN / FTS | `LIVE_INDEX_STATUS_OBSERVED`; the latest read-only check reports 1024 dimensions, FTS enabled/available, hybrid mode, 2 indexed files, 70 chunks, and `dirty=true`; the scanner sees 3 files. Source audit confirms optional-provider loss retains FTS keyword results. A pinned source patch now reports `mode=fts-only` when FTS remains available, or `unavailable` otherwise. | The index is stale. No semantic paraphrase query, hybrid retrieval query, incremental refresh, forced rebuild, or restart-persistence check was run. The explicit mode patch is not built into the running image. Index status is not retrieval acceptance. |
-| Dreaming | `SOURCE_TESTED`; 03:00 `Asia/Shanghai` schedule and allowlist admission are covered by source fixtures. | Prior read-only inspection had no run-history record or eligible corpus. No actual Dreaming run, candidate write, or persistence claim is made. |
-| Session isolation | `SOURCE_TESTED`; peer allow/deny, missing/revoked/malformed allowlists, and admission-before-transcript-read fixtures pass. | Real transcript reads and memory writes were not authorized or performed. |
+| Embedding | `LIVE_SYNTHETIC_PROBE_PASSED`; one synthetic request to the configured 9Router endpoint returned HTTP 200, 1024 finite dimensions, and 32 input tokens. No memory text was sent. | This proves endpoint reachability, authentication, and response shape, not post-build Memory Core provider readiness. The source patch has not been built into the live image. |
+| KNN / FTS | `LIVE_INDEX_ACCEPTANCE_PARTIAL`; after a verified external backup, force reindex completed with 3/3 files, 70 chunks, FTS available, hybrid mode, and `dirty=false`. A keyword query returned 3 results with positive text/vector scores; a paraphrase returned 1 positive vector match. | Modified-file incremental refresh and restart persistence remain unverified. The image containing current Memory Core patches has not been built or deployed. |
+| Dreaming | `SOURCE_TESTED`; 03:00 `Asia/Shanghai` schedule and before-read allowlist admission are covered by source fixtures. The authorized live run was stopped before invocation. | The live image lacks the admission marker/function; sanitized policy allows WhatsApp and Telegram. Session corpus count was zero, but that does not prove source isolation. No transcript was read and no candidate or memory write occurred. |
+| Session isolation | `SOURCE_TESTED`; peer allow/deny, missing/revoked/malformed allowlists, and admission-before-transcript-read fixtures pass. | The live image does not contain the admission patch, so runtime enforcement is not verified. The Dreaming acceptance stopped before any transcript read. |
 | Lab / Gate versions | `SOURCE_TESTED`; Lab SemVer transitions and Gate's independent version path pass sandbox tests. Current sources remain Lab `1.10.4` and Gate `0.1.0`. | No version bump or product tag was created. |
 | Build impact | `SOURCE_TESTED`; a Memory Core patch-only change forces OpenClaw rebuild, shared Domain changes affect Lab and Gate, Presentation changes affect all consuming images, and unknown Docker inputs fail conservatively. | No Docker/OCI image was built. |
 | Provenance and drift | `SOURCE_TESTED`; synthetic digest, source, Compose/config, health, tag, and expiry cases pass. A fresh read-only Lab snapshot observed both services healthy. | The doctor reports `UNKNOWN` because no protected manifest exists. Product Radar's legacy tag names an unreachable source SHA and its product version is unavailable. Gate has no configured environment adapter. |
-| Rollback and persistence | `SOURCE_TESTED`; recovery paths and SQLite/PostgreSQL boundaries are documented; synthetic manifest and fail-closed cases pass. | No restore rehearsal or volume/database operation was performed. |
+| Rollback and persistence | `SOURCE_TESTED`; recovery paths and SQLite/PostgreSQL boundaries are documented; synthetic manifest and fail-closed cases pass. A protected online SQLite backup was verified before the authorized derived-index rebuild. | No full restore rehearsal or database-volume operation was performed. The pre-write backup remains available; no rollback was needed. |
 | Lab and Gate package regression | `PACKAGE_BUILD_VERIFIED` and `SOURCE_TESTED`; local package builds, typechecks, and tests passed for PUBG, Amadeus, Product Radar, and Gate. The Gate release CLI now preflights its database target. | The earlier Gate run without `PUBG_SAAS_TEST_DATABASE_URL` skipped 34 PostgreSQL-backed tests (121 passed, 0 failed). The new fixture proves `verify` stops before tests when the URL is missing and rejects remote, non-test, or query-overridden targets. No database-backed suite was rerun here; M2's database was not touched. |
 | CI and multi-architecture OCI | Workflow YAML parses successfully. The Gate workflow defines an isolated PostgreSQL service, validates its `pubg_test` target, and performs amd64/arm64 OCI verification; Lab CI covers Memory Core admission, merged-config behavior, and the pinned OpenClaw 2026.9.4 schema check. | GitHub Actions was not run. No OCI image, registry push, tag, or deployment was produced. |
 
@@ -58,7 +58,7 @@ Docker build or Compose action followed. The P3 runbook is
 evidence remains in the [P0 audit](LAB_GATE_P0_BASELINE_AUDIT.md), [P1 report](LAB_MEMORY_CORE_P1_REPORT.md),
 [P2 report](LAB_GATE_P2_REPORT.md), and [P3 report](LAB_GATE_P3_REPORT.md).
 
-The latest read-only Lab snapshot was captured at `2026-10-15T12:29:17Z`.
+The baseline read-only Lab snapshot was captured at `2026-10-15T12:29:17Z`.
 OpenClaw was healthy at image digest
 `sha256:4f114efaca19335424915fdc7d365b03d7af474354fe49ff8ced4581f932dc9f`;
 its immutable tag resolves to the full source SHA and Lab `1.10.4`. Product
@@ -67,16 +67,32 @@ Radar was healthy at digest
 but its source/version are unknown because the tagged `633dd216` commit is not
 reachable and the legacy image lacks the product provenance marker. The
 snapshot contains Compose/config hashes only, not their contents. No runtime
-write occurred.
+write occurred during that P4 snapshot.
+
+## Subsequent authorized Lab acceptance — 2026-10-15
+
+After the P4 source/evidence consolidation, the separately authorized Lab
+sequence completed one synthetic Embedding probe and a backed-up derived-index
+rebuild. Detailed sanitized evidence is in
+[`LAB_MEMORY_CORE_P1_REPORT.md`](LAB_MEMORY_CORE_P1_REPORT.md) and the
+pre-write checkpoint is `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
+Dreaming then stopped before invocation because the current image lacks the
+source admission guard. No candidate image, deployment, release version, tag,
+or registry publish was created. No Gate runtime, PostgreSQL data, session
+history, source memory file, or credential was changed.
 
 ## Completion boundary
 
-P4 source/evidence consolidation is complete. P1 remains
-`SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`; real Embedding, retrieval,
-index rebuild, Dreaming, and post-deploy checks remain open. The individually
+P4 source/evidence consolidation is complete. P1 remains `SOURCE_FIXED`, with
+partial live evidence for Embedding and index retrieval; `LIVE_VERIFIED` is
+not established. Incremental refresh, restart persistence, runtime admission,
+Dreaming, candidate build, and post-deploy checks remain open. The ordered Lab
+acceptance stopped at item 4 before candidate build. The individually
 reviewable actions and their effects/recovery paths are listed in
 [`docs/LAB_GATE_APPROVALS_REQUIRED.md`](LAB_GATE_APPROVALS_REQUIRED.md).
 
-No Lab or Gate runtime was changed. No live secret, production database,
-SQLite index, memory file, container, release version, formal tag, or external
-registry was changed. Gate M2 remains paused and incomplete.
+No Lab or Gate service was restarted or replaced. The authorized derived
+SQLite index was rebuilt after backup; no session-history database, production
+PostgreSQL, source memory file, live secret, container definition, release
+version, formal tag, or external registry was changed. Gate M2 remains paused
+and incomplete.
