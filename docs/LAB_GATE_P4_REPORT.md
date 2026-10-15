@@ -140,11 +140,13 @@ not change Lab OpenClaw's verified release status.
 ## Local source verification refresh — 2026-10-16
 
 The Gate PostgreSQL suite was run locally against a new isolated `pubg_test`
-database using the workflow's pinned PostgreSQL 18.1 image digest. The
-database port was loopback-only, its data directory was tmpfs-backed, and the
-container was removed after the run. `scripts/validate-pubg-saas-test-database.py`
-accepted the target; `pnpm test:pubg-saas` passed 155/155 with zero skips.
-No Gate-Local M2 database or service was queried or changed.
+database using the workflow image
+`postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a`.
+Host port `55439` was loopback-only, the data directory was tmpfs-backed, and
+the container was capped at 768 MiB / 1 CPU and removed after the run.
+`scripts/validate-pubg-saas-test-database.py` accepted the target;
+`pnpm test:pubg-saas` passed 155/155 with zero skips. No Gate-Local M2 database
+or service was queried or changed.
 
 The private `pnpm test:pubg` suites passed 71/71, `pnpm test:workflow` passed,
 and `python3 scripts/test-release-tooling.py` passed its synthetic manifest,

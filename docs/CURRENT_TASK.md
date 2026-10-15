@@ -50,8 +50,9 @@ ran. Runtime writes for this audit: `none`.
 The Gate database suite, previously not run because no safe local URL was
 available, passed `pnpm test:pubg-saas` 155/155 with zero skips against a new
 isolated `pubg_test` database using the CI-pinned PostgreSQL 18.1 image digest.
+The image was `postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a`.
 The database was bound only to `127.0.0.1`, stored on container tmpfs, capped
-at 768 MiB / 1 CPU, and validated by
+at 768 MiB / 1 CPU (host port `55439`), and validated by
 `scripts/validate-pubg-saas-test-database.py`. The exact temporary container
 was removed afterward; no new Docker volume or listening port remained. This
 did not connect to Gate-Local M2.
