@@ -1,8 +1,67 @@
 # Current Task — PUBG KOOK SaaS V0.1 source implementation
 
-Date: 2026-10-14 (Asia/Shanghai).
+Date: 2026-10-15 (Asia/Shanghai).
 
-## Active task — SOUL-sourced public Agent persona (2026-10-14)
+## Active task — Kurisu-aligned public sync and Domain facts (2026-10-15)
+
+Arthur authorized aligning public KOOK match discovery and report facts with
+private Kurisu while preserving shared PUBG Domain rules, tenant authorization,
+and the independent PostgreSQL/Worker runtime. The live override
+`PUBLIC_SYNC_MAX_MATCHES=10` was in the gitignored
+`infra/pubg-saas/secrets/worker.env`; it has been removed. Canonical Compose and
+the live Worker now use 500, matching the private plugin's configured
+`maxMatches`. Shared Domain selection round-robins each member's newest-first
+match list before applying that ceiling, so one account cannot consume it.
+Worker/API resolution use shared Domain retry, timeout, and concurrency defaults;
+the public PUBG admission gate remains at 10 requests/minute.
+
+The public Agent receives the complete sanitized Domain envelope, shared
+presentation/display text, per-match facts, and review facts. The former facts
+whitelist and evidence/match truncation are gone. The Agent has no fixed step
+or per-step token cap; the only overall deadline is Arthur's 300 seconds, with
+completed tool results summarized on timeout. Replies can use KOOK's 8,000
+character payload limit. Internal identifiers, private data, and diagnostics
+remain redacted.
+
+The source commits `e355b2ef673662b60757b69966c73768e89830e5`,
+`6a9171fe10ff5948b421bf6c6cf973704e82f0cd`,
+`f47783d5869071224486d0c26b580eb7ebb835de`, and
+`66e1006b04b8726f50a80a15c3b0024d049228f0` are pushed to `origin/main`.
+The deployed ARM64 image is
+`local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
+(image ID `sha256:c2274bf0f79343632cf128e80491579b2f9441232b741583e23b3f8a16423054`).
+Only Gateway and Worker were replaced on `pubg-saas-m2-clean`; PostgreSQL,
+egress-proxy, and SaaS 9Router retain the same container IDs. Worker is
+healthy, Gateway is healthy, and both have zero restarts. KOOK cursor is
+`last_sn=72`, updated at `2026-10-15T03:27:14.890493Z`. No migration ran and
+no image was pushed.
+
+The channel-bound team has 132 discovered matches. The formerly missing
+`2026-10-14 21:07:10` competitive duo (004 + kim) and `23:01:13` competitive
+squad (004 + kim + 008) are present in PostgreSQL and the team's discovered
+match index. Gateway and Worker had zero error/fatal-level JSON log records in
+the inspected 10-minute window.
+
+Limit audit: team sync uses the shared Domain's 500-match default; per-query
+match pagination (`pageSize` 50, latest 100), review freshness, coverage, time
+selection, cache semantics, and telemetry behavior are shared Domain rules.
+No public Agent facts whitelist, evidence cap, per-step token budget, or fixed
+step count remains. The remaining service boundaries and their reasons are
+listed in `.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`; in
+particular, KOOK policy, finite public conversation retention, multi-tenant
+admission, and the independent Worker still have platform/security limits.
+
+Validation: `pnpm test:pubg-saas` passed 150/150 with no skips against the
+reused isolated PostgreSQL instance; `pnpm test:pubg` passed 71/71 with no
+skips. PUBG/SaaS builds and typechecks, architecture, secrets, and diff checks
+passed. Rollback evidence is in the mode-0600 target records
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-pre-switch.txt`
+and `.../20261015-pubg-saas-66e1006-post-switch.txt`.
+
+Arthur's KOOK acceptance remains pending. M2 is not complete; stop here and
+wait for his real test.
+
+## Previous milestone — SOUL-sourced public Agent persona (2026-10-14)
 
 Arthur clarified that public KOOK personality must use the private OpenClaw
 workspace `SOUL.md` as its source. The checked-in public-safe verbatim excerpt
