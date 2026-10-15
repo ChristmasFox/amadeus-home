@@ -186,3 +186,30 @@ OrbStack stub to verify explicit and automatic rejection while preserving the
 Radar-only dry-run; the stub records only image inspection and no build or
 Compose command. The separate Product Radar apply path remains an open source
 engineering limitation. No image build or runtime operation was performed.
+
+## Gate OCI verifier and CI semantics follow-up — 2026-10-16
+
+BuildKit OCI archives may include attestation manifests beside runnable
+platform images. The verifier previously treated an attestation's synthetic
+`unknown/unknown` config as a runnable image and checked it for Gate product
+labels. Commit `5a6a81f` now skips config/platform/provenance checks only for
+descriptors marked as attestations, while retaining blob digest validation
+and requiring both `linux/amd64` and `linux/arm64` runnable images. The
+synthetic OCI fixture includes attestation manifests and verifies that a wrong
+product version still fails. `python3 scripts/test-release-tooling.py` passed.
+
+Commit `b143ab1` also removes a race in the durable KOOK ingress test by
+waiting for both the handler count and durable sequence before asserting the
+blocked-handler state. Gate validation passed `pnpm typecheck:pubg-saas`,
+`pnpm test:pubg-saas` (155/155, zero skips), `pnpm typecheck:pubg`,
+`pnpm test:pubg` (71/71), architecture and secret checks, and `git diff
+--check`. The PostgreSQL suite used a disposable loopback-only, tmpfs-backed
+PostgreSQL 18.1 fixture and removed its exact container afterward; M2's
+existing database and services were not queried or changed.
+
+The official actionlint v1.7.12 macOS ARM64 release was SHA-256 verified and
+passed against all five `.github/workflows/*.yml` files. Its binary was
+removed after use. GitHub-hosted Actions have not run because these local
+source commits have not been pushed; this report does not claim a remote CI
+run. No image build, runtime deploy, database migration, tag, release, or push
+occurred for this follow-up.

@@ -25,6 +25,35 @@ Lab config edit, restart, Dreaming invocation, index write, or other runtime
 write occurred. Gate M2 and the three pre-existing unstaged Gate test/OCI
 edits remain untouched.
 
+## 2026-10-16T00:24+08:00 — P3/P4 Gate tooling verification
+
+The latest `origin/main` fetch added no commits. The three pre-existing
+Gate-related worktree changes were reviewed, validated, and committed locally
+as two source commits: `5a6a81f` teaches the SaaS OCI verifier to ignore
+BuildKit attestation configs while still checking runnable amd64/arm64 image
+labels and digests; `b143ab1` makes the durable KOOK ingress test wait for the
+handler and persisted sequence together, removing an assertion race. No M2
+application or database runtime was changed.
+
+`pnpm workflow:plan` classified the three changed paths as `RUNTIME`, with
+Docker build forbidden and no Compose action. Validation passed:
+`python3 scripts/test-release-tooling.py`, `pnpm typecheck:pubg-saas`,
+`pnpm test:pubg-saas` (155/155, zero skips), `pnpm typecheck:pubg`,
+`pnpm test:pubg` (71/71), `pnpm check:architecture`, `pnpm check:secrets`, and
+`git diff --check`. The PostgreSQL suite used the CI-pinned PostgreSQL 18.1
+image, bound to loopback on port 55439 with tmpfs storage, 768 MiB / 1 CPU;
+the disposable test container was removed, no volume or listener remained,
+and the existing `pubg-saas-pg18` container was left untouched.
+
+Official actionlint v1.7.12 passed against all five repository workflows after
+the downloaded macOS ARM64 archive matched its published SHA-256. The binary
+was temporary and removed. This validates workflow semantics locally; GitHub
+Actions itself remains unrun because the local commits have not been pushed.
+Gate M2 Gateway/Worker/PostgreSQL/proxy/9Router/BuildKit remained running,
+Buildx entries were terminal, and no migration/build/deploy process was
+active. No M2 database query or service action occurred. No Docker image build,
+Lab/Gate deployment, product release, tag, or push occurred in this follow-up.
+
 ## Fresh continuation audit — 2026-10-16T00:03+08:00
 
 Fetched `origin/main`; it added no commits. `origin/main` remains an ancestor
