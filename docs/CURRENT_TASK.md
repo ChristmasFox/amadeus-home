@@ -71,6 +71,17 @@ the paused M2 and missing-adapter limits. The focused release-tooling fixture
 and both real help commands pass. Gate-Staging `plan` remains a dry-run with
 `GATE_ADAPTER=unconfigured`; no Gate runtime query occurred.
 
+The evidence-doc update was committed as `01f5d6d`; `main` was 10 commits
+ahead immediately afterward. A fresh sanitized Lab snapshot at
+`2026-10-15T12:17:37Z` again found OpenClaw and Product Radar healthy. OpenClaw
+remains the 1.10.4 image tagged to source
+`4a5734826eca479f59a2fd039fd12f9ff5d03580`; Product Radar's source and product
+version remain unavailable, and the drift doctor remains
+`UNKNOWN` without a protected manifest. The latest filtered Memory Core status
+is unchanged: 2 files, 70 chunks, FTS available, 1024 dimensions, `dirty=true`
+with 3 scanned files; Dreaming has zero session-corpus files. No query or
+runtime write was performed.
+
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 
 Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or

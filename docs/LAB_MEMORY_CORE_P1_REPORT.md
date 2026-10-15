@@ -55,7 +55,7 @@ changed in the live runtime.
   `DREAMS.md` is absent, and no recall/promotion audit entries exist. The
   available evidence does not prove that a Dreaming phase ran or promoted a
   candidate; there was no eligible session corpus at inspection time.
-- The latest read-only follow-up at `2026-10-15 12:08 UTC` reports 2 indexed files,
+- The latest read-only follow-up at `2026-10-15 12:17 UTC` reports 2 indexed files,
   70 chunks, FTS enabled/available, hybrid search mode, a 1024-dimension vector
   index, and `dirty=true`. The scanner reports 3 files, so the index is not
   current. The Dreaming audit still reports zero session-corpus files and no
