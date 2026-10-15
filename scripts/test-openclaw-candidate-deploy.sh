@@ -39,6 +39,8 @@ assert 'RUN chmod 0644 /opt/amadeus/VERSION' in image
 assert 'chmod 0644 "$temporary"' in Path('scripts/amadeus-version.sh').read_text()
 assert 'RUN chmod 0644 /app/dist/extensions/amadeus/dist/index.js' in image
 assert 'OPENCLAW_IMAGE_NODE_PREFLIGHT=passed' in s
+assert 'amadeus-memory-dreaming-peer-admission-v2' in s
+assert 'amadeus-memory-backfill-peer-admission-v1' in s
 assert 'AMADEUS_GATEWAY_REGISTRATION=passed' in s
 assert 'OPENCLAW_IMAGE_AMADEUS_VERSION=%s' in s
 assert 'RUNTIME_AMADEUS_VERSION=%s' in s

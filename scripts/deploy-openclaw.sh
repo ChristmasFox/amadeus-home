@@ -395,7 +395,7 @@ if ((BUILD_OPENCLAW)); then
   orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'codex-amadeus-heartbeat-silent-delivery-v1' /app/dist/heartbeat-runner-CPy-qxAy.mjs" \
     || fail 'Immutable OpenClaw image is missing the heartbeat silence guard.'
   printf 'OPENCLAW_IMAGE_HEARTBEAT_SILENCE=passed\n'
-  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v1' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'whatsapp-peer:not-allowlisted' /app/dist/session-ingestion-*.mjs" \
+  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'amadeus-memory-dreaming-peer-admission-v2' /app/dist/session-ingestion-*.mjs && grep -Fq 'amadeus-memory-backfill-peer-admission-v1' /app/dist/session-backfill-*.mjs" \
     || fail 'Immutable OpenClaw image is missing the Memory Core runtime fixes.'
   printf 'OPENCLAW_IMAGE_MEMORY_CORE_PATCH=passed\n'
 fi
