@@ -2,7 +2,22 @@
 
 Date: 2026-10-15 (Asia/Shanghai).
 
-## Active follow-up — KOOK channel message adapter (2026-10-15)
+## Operator pause overlay — Gate M3 (2026-10-15)
+
+Status: **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**. Do not start another M3
+phase or deploy until the Lab long-term-memory and Lab/Gate version-engineering
+special project is complete. The pause checkpoint is
+`.agent/tasks/2026-10-15-gate-m3-paused.md`.
+
+Repository/Goal state did not contain a Gate M3 Goal or phase plan when this
+pause was recorded: the tracked Gate evidence below is M2 trial work, and the
+Codex Goal record points to the already-paused PUBG SaaS Goal. Therefore the
+exact M3 completed/current/outstanding phases and M3-specific test evidence
+cannot be safely inferred; the checkpoint records this gap instead of
+relabeling M2 evidence. Do not use `/goal resume` until the actual Gate M3 Goal
+is identified in the Goal system.
+
+## Last recorded Gate source milestone — KOOK channel message adapter (2026-10-15)
 
 Arthur requested that platform presentation differences stay in one KOOK
 channel adapter while public Agent and PUBG Domain behavior continue to match
@@ -38,7 +53,7 @@ and `.../20261015-pubg-saas-0d5de29-post-switch`. No image was pushed to a
 registry and no private runtime/config was touched. Arthur's KOOK acceptance
 remains pending; M2 is not complete.
 
-## Active task — remove public-only KOOK quotas and context expiry (2026-10-15)
+## Last recorded Gate task — remove public-only KOOK quotas and context expiry (2026-10-15)
 
 Arthur authorized aligning the public Gateway's sender and conversation
 retention with private Kurisu. The local 200-message daily sender quota and
