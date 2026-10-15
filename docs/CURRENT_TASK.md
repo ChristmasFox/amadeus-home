@@ -12,14 +12,14 @@ ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence a
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
-The current continuation authorization is limited to source, tests, CI,
-documentation, and harmless validation. It does not authorize an image build,
-runtime restart/deployment, further live memory-index write, production
-database write, formal release tag, cloud migration, or cron change. The
-earlier Lab authorization remains evidence for completed items 1–3. The
-controlled item-4 run stopped at preflight; an existing scheduled run was
-later found in metadata, with source isolation unverified. The cron remains
-enabled and items 5–7 require fresh explicit authorization.
+Arthur renewed and reordered the authorization on 2026-10-15 for Lab only:
+push current source; build the Lab OpenClaw candidate; apply it through the
+guarded deploy path; then run owner-only Dreaming on that image; formally
+release only after all P1 live gates pass. Gate remains excluded and M2 stays
+paused. The earlier item-4 preflight stop remains evidence about the old image;
+this authorization permits a new-image run only after deployment and source
+boundary verification. No operation is authorized against Gate, its
+PostgreSQL, or M2 runtime.
 
 ## Latest Goal continuation audit — 2026-10-15T13:27Z
 
@@ -42,6 +42,25 @@ OpenClaw image/schema (6/6), session isolation, image-impact, Lab memory
 acceptance guard, release tooling, Lab and Gate SemVer, lineage compatibility,
 architecture, workflow, and secrets checks. No Docker/OCI build or product
 database suite ran. Runtime writes remain `none`.
+
+## Reauthorized Lab sequence — step 1 complete — 2026-10-15T13:42Z
+
+Arthur explicitly reauthorized Lab operations and reordered the remaining
+sequence: push; build candidate; deploy candidate; run owner-only Dreaming on
+the new image; formal Lab release only after `LIVE_VERIFIED`. Gate and the
+paused Gate M2 environment remain out of scope.
+
+Fetched `origin/main`; it had no commits beyond the local base. The clean
+`main` branch was 19 commits ahead; `git rebase origin/main` reported the
+branch up to date. `pnpm check:secrets` and `git diff --check` passed. Pushed
+through `47a8d2158c66968ee1d14e802f68a6fa59a8851f`; a subsequent fetch verified
+`HEAD == origin/main`. No M2 migration/build/deploy was in flight in the
+read-only check: its Buildx entries were terminal and no matching operation
+process was observed. M2 containers remained running and untouched.
+
+Next: inspect the Lab-only candidate plan and build inputs, then build the
+OpenClaw candidate from the pushed source. No container switch, memory write,
+release tag, or Gate operation occurred in step 1.
 
 ## P1 Dreaming empty-corpus source follow-up — 2026-10-15T13:38Z
 
