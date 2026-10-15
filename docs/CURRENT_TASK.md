@@ -1,19 +1,27 @@
-# Current Task — PUBG KOOK SaaS V0.1 source implementation
+# Current Task — Lab Memory Recovery and Dual Product Release Engineering
 
 Date: 2026-10-15 (Asia/Shanghai).
 
-## Operator pause overlay — Gate M2 / PUBG KOOK SaaS V0.1 (2026-10-15)
+Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
-Status: **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**. Keep the M2 Goal open and
-unfinished. Prioritize the Lab long-term-memory and Lab/Gate version-engineering
-special project; after it completes, return to the final formal M2 acceptance.
-The pause checkpoint is `.agent/tasks/2026-10-15-gate-m2-paused.md`.
+Status: **P0 audit complete; P1 Memory Core source repair in progress**.
+Runtime apply, production index rebuild, paid Embedding requests, and formal
+release remain unauthorized. The sanitized baseline and P0 evidence are in
+`docs/LAB_GATE_P0_BASELINE_AUDIT.md`.
 
-The active Goal is `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` and remains paused, not
-cancelled or complete. Source/offline M2 gates and local rollout evidence are
-recorded below and in the Goal checkpoints. Arthur's final real KOOK
-conversation acceptance and the controlled release review remain open; do not
-substitute a WebSocket connection or source tests for the human acceptance.
+## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
+
+Gate M2 remains **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**, not cancelled or
+complete. Its current Goal is `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md`; the pause
+checkpoint is `.agent/tasks/2026-10-15-gate-m2-paused.md`. Preserve all M2
+source, migrations, runtime data, and existing evidence. Arthur's real KOOK
+conversation acceptance and the controlled release review remain open.
+
+The P0 read-only observation found Gateway/Worker running without restart,
+PostgreSQL and egress proxy healthy, and the SaaS 9Router running. No M2
+deployment or migration command was in flight in the pause checkpoint. No
+database query or write was performed for this audit; see the P0 report for
+the observed service states and evidence limits.
 
 ## Last recorded Gate source milestone — KOOK channel message adapter (2026-10-15)
 
