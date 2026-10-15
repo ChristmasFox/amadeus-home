@@ -37,10 +37,11 @@ Lab version validation passed. The workflow plan classified these script
 changes as `OPENCLAW_RELEASE_CONFIG` and forbids a build in its default plan;
 Arthur's explicit ordered approval authorizes the separate candidate build.
 The canonical Lab version has been bumped from `1.10.4` to `1.10.5` with one
-release note so the immutable candidate's version and source match. These
-source changes are not yet committed or pushed. No image build, container
-switch, runtime data write, notification, or release tag has occurred in this
-preparation phase.
+release note so the immutable candidate's version and source match. The
+reviewed changes were committed as
+`e5157175911e5f6d95f42be1d9ebb85fcf176a28`, pushed to `origin/main`, and
+verified equal after fetch. No image build, container switch, runtime data
+write, notification, or release tag has occurred in this preparation phase.
 
 ## Latest Goal continuation audit — 2026-10-15T13:27Z
 
