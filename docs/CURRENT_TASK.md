@@ -5,8 +5,10 @@ Date: 2026-10-15 (Asia/Shanghai).
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; reauthorized Lab sequence at
-candidate build (item 2), pending `BUILD_VERIFIED`**. Arthur authorized the
+`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab candidate is
+`BUILD_VERIFIED` and deployed; stopped before Dreaming because the live
+Memory Core config has no Dreaming entry. P1 `LIVE_VERIFIED` and `RELEASED`
+remain incomplete.** Arthur authorized the
 ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
 `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
@@ -15,11 +17,46 @@ the indexed rebuild/recovery procedure are in
 Arthur renewed and reordered the authorization on 2026-10-15 for Lab only:
 push current source; build the Lab OpenClaw candidate; apply it through the
 guarded deploy path; then run owner-only Dreaming on that image; formally
-release only after all P1 live gates pass. Gate remains excluded and M2 stays
+release only after all P1 live gates pass. Steps 1–3 completed; step 4 stopped
+before invocation after its required config preflight failed. No Dreaming
+output was produced and step 5 is not started. Gate remains excluded and M2 stays
 paused. The earlier item-4 preflight stop remains evidence about the old image;
 this authorization permits a new-image run only after deployment and source
 boundary verification. No operation is authorized against Gate, its
 PostgreSQL, or M2 runtime.
+
+## Reordered Lab sequence — candidate built and deployed; Dreaming stopped — 2026-10-15
+
+Step 1 completed: source commit `57e472ebe014a0b4d3574d7ef30107340dc99308`
+was pushed and verified at `origin/main` after rebase, `pnpm check:secrets`,
+and `git diff --check`. Step 2 completed with `BUILD_VERIFIED`: Lab-only ARM64
+image `local/openclaw-amadeus:git-57e472ebe014-20261015140824`, version
+`1.10.5`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+Build checks include the latest before-read peer-admission, backfill admission,
+and no-corpus Dreaming patches. Evidence:
+`/Volumes/Avalon/backups/operation-skuld/deploy/candidate-build-amadeus-openclaw-20261015140824/build-evidence.json`.
+
+Step 3 completed through `scripts/release-lab.sh candidate` delegating to
+`scripts/deploy-openclaw.sh`; no bare Compose deployment was used. The
+protected pre-switch checkpoint is
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261015141417`.
+The Lab OpenClaw candidate is healthy and remains live; its candidate manifest
+validates, and its candidate deployment notification reached `sent` (formal
+release notification was not sent). Post-deploy health, plugin registration,
+keyword and semantic
+retrieval, `dirty=false`, and the live before-read peer-admission/source
+markers passed. Product Radar was untouched. No rollback was needed.
+
+Step 4 stopped before execution: live `memory-core` configuration has no
+`dreaming` entry. The enabled “Memory Dreaming Promotion” automation is an
+`agentTurn` limited to `memory_search`, so it is not a Dreaming executor and
+was not run. No controlled Dreaming read or write occurred. Step 5 formal
+release/tag is not started because P1 `LIVE_VERIFIED` is incomplete; the
+incremental-refresh gate also remains open. Detailed sanitized evidence and
+recovery references are in
+`.agent/checkpoints/2026-10-15-lab-candidate-deployment-dreaming-stop.md` and
+`docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
 ## Reauthorized Lab sequence — candidate source preparation
 

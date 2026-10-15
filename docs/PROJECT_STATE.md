@@ -1,6 +1,40 @@
 # Project State — 2026-10-15
 
-## 2026-10-15 — Lab Memory Core live acceptance (stopped at item 4)
+## 2026-10-15 — Lab candidate deployed; Dreaming preflight stopped
+
+The reordered Lab-only sequence completed source push, candidate build, and
+candidate deployment. Source `57e472ebe014a0b4d3574d7ef30107340dc99308` is at
+`origin/main`. `BUILD_VERIFIED` is recorded for Lab OpenClaw 1.10.5,
+`local/openclaw-amadeus:git-57e472ebe014-20261015140824`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+The build includes the before-read Dreaming peer-admission, backfill admission,
+and no-corpus patches.
+
+The candidate was applied only to Lab `openclaw` through
+`scripts/deploy-openclaw.sh` via the guarded release wrapper. The protected
+pre-switch checkpoint is
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261015141417`;
+its online SQLite snapshot, sessions, and Workspace are present. Candidate
+health and plugin registration passed. Post-deploy index status is 3/3 files,
+70 chunks, `dirty=false`, hybrid mode, valid identity, FTS available, and a
+complete 1024-dimension vector index. Keyword and semantic retrieval returned
+positive scores; live before-read, Dreaming peer-admission, and backfill
+admission markers were verified. Product Radar was untouched. The candidate
+remains live and no rollback was needed.
+
+The authorized controlled Dreaming run stopped before invocation because the
+live `memory-core` config has no `dreaming` entry. The similarly named enabled
+automation is an `agentTurn` limited to `memory_search`, not a Dreaming
+executor; it was not run. No controlled Dreaming read or write occurred and
+no transcript, phone number, or memory snippet was inspected or recorded.
+P1 `LIVE_VERIFIED` is incomplete (including incremental refresh); formal
+release and tag were not started. Gate, PostgreSQL, and M2 remain untouched.
+Sanitized acceptance evidence is in
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261015141417/postdeploy-acceptance.json`;
+checkpoint and rollback notes are in
+`.agent/checkpoints/2026-10-15-lab-candidate-deployment-dreaming-stop.md`.
+
+## 2026-10-15 — Earlier Lab Memory Core acceptance snapshot (superseded by candidate rollout above)
 
 Arthur authorized the ordered Lab-only acceptance sequence for OrbStack
 `nyannyan` / container `openclaw`. The configured 9Router Embedding endpoint

@@ -1,12 +1,14 @@
 # Lab Memory Core P1 repair report
 
 Date: 2026-10-15 (Asia/Shanghai)  
-Status: **`SOURCE_FIXED`; ordered live acceptance stopped at item 4**
-Scope: source, configuration, temporary fixtures, read-only runtime inspection,
-one separately authorized synthetic Embedding probe, and authorized Lab index
-acceptance. No Lab/Gate service was restarted or deployed. The derived memory
-index was rebuilt after a verified external backup; no source memory content,
-session transcript, credential value, or session-history database was changed.
+Status: **`SOURCE_FIXED` + `BUILD_VERIFIED`; Lab candidate deployed and live checks passed; controlled Dreaming stopped before run; P1 `LIVE_VERIFIED` and `RELEASED` remain incomplete**
+Scope: source, configuration, temporary fixtures, a synthetic Embedding probe,
+Lab index acceptance, and the later explicitly authorized candidate build and
+Lab OpenClaw deployment. The derived index was rebuilt after a verified
+external backup. The candidate deployment recreated only Lab OpenClaw; no
+Gate service, session-history database, credential value, or source memory
+content was changed. See the latest outcome below; earlier snapshots in this
+report are historical and superseded where they conflict.
 
 ## Source repair
 
@@ -160,6 +162,54 @@ recovery boundary are in
   Modified-file incremental-refresh and restart-persistence gates remain
   outstanding for full P1 `LIVE_VERIFIED` acceptance.
 
+## Reordered Lab candidate outcome and Dreaming stop — 2026-10-15
+
+The later explicit Lab-only authorization completed source push, candidate
+build, and candidate deployment before starting Dreaming. The pushed source is
+`57e472ebe014a0b4d3574d7ef30107340dc99308`; the Lab OpenClaw candidate is
+version `1.10.5`, image
+`local/openclaw-amadeus:git-57e472ebe014-20261015140824`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+`BUILD_VERIFIED` evidence confirms the image contains the latest before-read
+peer-admission, backfill-admission, and no-corpus Dreaming fixes.
+
+The candidate was deployed through the guarded Lab release wrapper, which used
+`scripts/deploy-openclaw.sh`; no bare Compose command was used. A protected
+pre-switch checkpoint was created at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261015141417`.
+The online SQLite backup, session backup, and Workspace backup are present.
+Candidate health and Amadeus plugin registration passed. After the container
+recreation, the memory index remained 3 files / 70 chunks, `dirty=false`, FTS
+available, hybrid search, valid identity, and complete 1024-dimensional vector
+state. The keyword query returned 3 results with positive text and vector
+scores; the semantic paraphrase returned 3 positive vector scores. The running
+image exposed the before-read Dreaming gate, admission classifier, backfill
+admission, and no-corpus markers. Sanitized config checks found one WhatsApp
+owner peer, no configured Telegram peer file (so Telegram direct admission
+fails closed), and group/channel exclusion. No query text, snippets, phone
+number, or peer identifier is included in the evidence.
+
+Dreaming was stopped before invocation. The live
+`plugins.entries.memory-core.config` has no `dreaming` entry. The existing
+“Memory Dreaming Promotion” automation is enabled but is an `agentTurn` with
+only `memory_search` allowed tools and delivery disabled; it is not an actual
+Dreaming executor and was not run. No controlled Dreaming source read, memory
+write, or output occurred, so there was no output on which to perform the
+requested phone-number/cross-user/group leakage inspection. The candidate
+remains healthy and live; rollback was not performed because candidate
+application succeeded and the Dreaming stop occurred before any operation.
+The protected checkpoint remains available.
+
+`LIVE_VERIFIED` is still false: modified-file incremental refresh remains
+unverified, and the authorized Dreaming run did not occur. No formal Lab
+release or tag was created. Candidate build evidence is at
+`/Volumes/Avalon/backups/operation-skuld/deploy/candidate-build-amadeus-openclaw-20261015140824/build-evidence.json`;
+post-deploy acceptance and manifest are at
+`/Volumes/Avalon/backups/operation-skuld/deploy/amadeus-openclaw-20261015141417/postdeploy-acceptance.json`
+and `/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T141417Z-candidate.json`.
+Recovery and rollback boundary are recorded in
+`.agent/checkpoints/2026-10-15-lab-candidate-deployment-dreaming-stop.md`.
+
 ## Rebuild and recovery procedure
 
 Before any approved rebuild:
@@ -195,7 +245,7 @@ candidate or a documented `SKIPPED_NO_ELIGIBLE_CORPUS` result, with no
 unauthorized source in the output. Existing `lastRunStatus=ok` alone is not
 accepted as execution evidence.
 
-## Ordered Dreaming preflight stop — 2026-10-15
+## Earlier ordered Dreaming preflight stop — prior image, 2026-10-15 (superseded by the candidate outcome below)
 
 Arthur authorized one controlled run restricted to Arthur's own WhatsApp
 direct message. It was not invoked because the live OpenClaw 2026.9.4 image
