@@ -1,5 +1,23 @@
 # Project State — 2026-10-15
 
+## 2026-10-15 — Lab Dreaming config attempt rolled back
+
+After the earlier Lab 1.10.5 release, Arthur authorized an additional
+Lab-only configuration change to enable Dreaming with owner WhatsApp direct
+messages as its only source. The protected backup was verified, but the
+pre-restart config validation failed because an atomic root-owned replacement
+made the mode-0600 file unreadable by container uid 1000. The saved config was
+restored, ownership returned to `1000:1000`, and only Lab `openclaw` was
+restarted. The restored config validates and the container is healthy. No
+Dreaming, index refresh, build, or new release followed. The scheduled 03:00
+Asia/Shanghai job was not edited. See
+`.agent/checkpoints/2026-10-15-lab-dreaming-config-validation-rollback.md`.
+
+The local source changes for the WhatsApp-only template/policy and bounded
+release snapshot query passed focused tests, `pnpm check:secrets`, and
+`git diff --check`, but remain uncommitted. Existing local tag `lab/v1.10.5`
+was not moved or recreated.
+
 ## 2026-10-15 — Lab `RELEASED` as 1.10.5
 
 The authorized Lab-only sequence is complete. P1 `LIVE_VERIFIED` evidence

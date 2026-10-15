@@ -4,7 +4,15 @@ Date: 2026-10-15 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
-Status: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
+Latest continuation: the authorized Lab Dreaming config change stopped at
+`openclaw config validate` because atomic replacement changed the config owner
+to root. The original config was restored from a protected checkpoint and Lab
+`openclaw` restarted healthy; the restored config validates. No controlled
+Dreaming, incremental refresh, build, or new release was attempted after this
+failure. Evidence and the rollback command are in
+`.agent/checkpoints/2026-10-15-lab-dreaming-config-validation-rollback.md`.
+
+Status before that continuation: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
 `SOURCE_COMPLETE`; P3 `SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab
 `BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` for version 1.10.5.**
 Arthur authorized the ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
