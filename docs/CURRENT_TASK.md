@@ -45,6 +45,25 @@ entry was terminal, and no migration container or `release-config-hash`
 process was present. No M2 database query, migration, build, or service action
 ran. Runtime writes for this audit: `none`.
 
+## P4 local PostgreSQL and cross-product regression — 2026-10-16T00:12+08:00
+
+The Gate database suite, previously not run because no safe local URL was
+available, passed `pnpm test:pubg-saas` 155/155 with zero skips against a new
+isolated `pubg_test` database using the CI-pinned PostgreSQL 18.1 image digest.
+The database was bound only to `127.0.0.1`, stored on container tmpfs, capped
+at 768 MiB / 1 CPU, and validated by
+`scripts/validate-pubg-saas-test-database.py`. The exact temporary container
+was removed afterward; no new Docker volume or listening port remained. This
+did not connect to Gate-Local M2.
+
+`pnpm test:pubg` passed all four suites (71/71); `pnpm test:workflow` and
+`python3 scripts/test-release-tooling.py` passed, including the synthetic OCI
+attestation and Gate database-target cases. The three existing M2 worktree
+edits remain unstaged and unchanged. GitHub Actions itself remains unrun
+because the local source commits have not been pushed; M2's human acceptance
+and Go/No-Go remain open. No Lab/Gate service action or production database
+write occurred.
+
 Arthur clarified that the earlier authorization to explicitly enable
 Dreaming/restart Lab was based on a mistaken “Dreaming disabled” conclusion.
 The bundled default is enabled, Dreaming acceptance already passed, and Lab

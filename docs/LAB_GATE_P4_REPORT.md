@@ -136,3 +136,21 @@ would also reconcile/restart OpenClaw, so no Product Radar operation was
 attempted. The later source guard blocks that Radar-only apply before build or
 checkpoint; no isolated Product Radar apply path exists yet. These limits do
 not change Lab OpenClaw's verified release status.
+
+## Local source verification refresh — 2026-10-16
+
+The Gate PostgreSQL suite was run locally against a new isolated `pubg_test`
+database using the workflow's pinned PostgreSQL 18.1 image digest. The
+database port was loopback-only, its data directory was tmpfs-backed, and the
+container was removed after the run. `scripts/validate-pubg-saas-test-database.py`
+accepted the target; `pnpm test:pubg-saas` passed 155/155 with zero skips.
+No Gate-Local M2 database or service was queried or changed.
+
+The private `pnpm test:pubg` suites passed 71/71, `pnpm test:workflow` passed,
+and `python3 scripts/test-release-tooling.py` passed its synthetic manifest,
+drift, OCI attestation, CLI-guard, and test-target cases. The database-backed
+source regression is now locally verified, but GitHub Actions remains unrun
+because this branch has not been pushed. Publishing/pushing still requires its
+separate approval. Arthur's real KOOK acceptance and M2 Go/No-Go remain open;
+no OCI build, registry push, Lab/Gate deployment, or formal Gate release was
+performed.
