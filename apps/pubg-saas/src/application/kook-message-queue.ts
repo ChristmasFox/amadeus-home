@@ -1,9 +1,10 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
+import { splitKookMessagePayload, validateKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from '../channels/kook/message-adapter.js';
 
-export type KookTextPayload = { type: 'text' | 'kmarkdown' | 'card'; content: string };
-export const KOOK_MAX_MESSAGE_LENGTH = 8000;
+export { KOOK_MAX_MESSAGE_LENGTH, validateKookMessagePayload } from '../channels/kook/message-adapter.js';
+export type { KookGroupMessageSender, KookTextPayload } from '../channels/kook/message-adapter.js';
 
 export interface AcceptedGroupEvent {
   tenantId: string;
@@ -41,12 +42,6 @@ export interface KookOutboxJob {
 }
 
 export type OutboxDeliveryResult = 'empty' | 'sent' | 'retry' | 'dead';
-
-export interface KookGroupMessageSender {
-  send(channelId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<string | void>;
-  sendDirect?(userId: string, payload: KookTextPayload, nonce: string, replyToMessageId?: string | null): Promise<string | void>;
-  verifyWelcomeTarget?(guildId:string,channelId:string):Promise<boolean>;
-}
 
 export interface KookMessageQueueOptions {
   botAccountId: string;
@@ -90,23 +85,6 @@ function requiredText(value: string, key: string, maxLength = 256): string {
   const normalized = value.trim();
   if (!normalized || normalized.length > maxLength) throw new Error(`invalid_${key}`);
   return normalized;
-}
-
-export function validateKookMessagePayload(value: unknown): KookTextPayload {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('kook_payload_invalid');
-  const payload = value as Record<string, unknown>;
-  if ((payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card') || typeof payload.content !== 'string'
-    || !payload.content.trim() || payload.content.length > KOOK_MAX_MESSAGE_LENGTH) {
-    throw new Error('kook_payload_invalid');
-  }
-  if (payload.type === 'card') {
-    let cards: unknown;
-    try { cards = JSON.parse(payload.content); } catch { throw new Error('kook_payload_invalid'); }
-    if (!Array.isArray(cards) || cards.length < 1 || cards.length > 5
-      || cards.some((card) => !card || typeof card !== 'object' || (card as Record<string, unknown>).type !== 'card'
-        || !Array.isArray((card as Record<string, unknown>).modules))) throw new Error('kook_payload_invalid');
-  }
-  return { type: payload.type, content: payload.content };
 }
 
 const REPLY_CLEANUP_FALLBACK = '我刚才没整理好回复，可以再问我一次吗？';
@@ -188,36 +166,10 @@ export function splitKookOutboundPayload(value: unknown): KookTextPayload[] {
   const candidate = value as Record<string, unknown>;
   if ((candidate.type !== 'text' && candidate.type !== 'kmarkdown' && candidate.type !== 'card')
     || typeof candidate.content !== 'string' || !candidate.content.trim()) throw new Error('kook_payload_invalid');
-  if (candidate.type === 'card') return [sanitizeKookOutboundPayload(value)];
-  const type = candidate.type;
-  const content = sanitizeKookAssistantReplyContent(candidate.content);
-  const chunks: string[] = [];
-  const mentionPattern = /\(met\)[^()\s]{1,128}\(met\)|<@!?[^>]{1,128}>/gu;
-  let start = 0;
-  while (start < content.length) {
-    let end = Math.min(start + KOOK_MAX_MESSAGE_LENGTH, content.length);
-    if (end < content.length) {
-      if (end > start && /[\uDC00-\uDFFF]/u.test(content[end]!)) end -= 1;
-      mentionPattern.lastIndex = 0;
-      for (const match of content.matchAll(mentionPattern)) {
-        const mentionStart = match.index ?? 0;
-        const mentionEnd = mentionStart + match[0].length;
-        if (mentionStart < end && mentionEnd > end) {
-          end = mentionStart > start ? mentionStart : mentionEnd;
-          break;
-        }
-      }
-      const floor = start + Math.floor((end - start) * 0.65);
-      const newline = content.lastIndexOf('\n', end - 1);
-      const whitespace = Math.max(content.lastIndexOf(' ', end - 1), content.lastIndexOf('\t', end - 1));
-      const boundary = Math.max(newline, whitespace);
-      if (boundary >= floor) end = boundary + 1;
-    }
-    if (end <= start) end = Math.min(start + KOOK_MAX_MESSAGE_LENGTH, content.length);
-    chunks.push(content.slice(start, end));
-    start = end;
-  }
-  return chunks.map(chunk => validateKookMessagePayload({ type, content: chunk }));
+  const payload = candidate.type === 'card'
+    ? sanitizeKookOutboundPayload(value)
+    : { type: candidate.type, content: sanitizeKookAssistantReplyContent(candidate.content) } as KookTextPayload;
+  return splitKookMessagePayload(payload);
 }
 
 function idempotencyKey(event: TrustedKookGroupMessage, part: number): string {

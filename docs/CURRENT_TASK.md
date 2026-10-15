@@ -2,6 +2,32 @@
 
 Date: 2026-10-15 (Asia/Shanghai).
 
+## Active follow-up — KOOK channel message adapter (2026-10-15)
+
+Arthur requested that platform presentation differences stay in one KOOK
+channel adapter while public Agent and PUBG Domain behavior continue to match
+private Kurisu. Source now centralizes KOOK payload validation, Markdown
+conversion, mention adaptation, and long-message splitting in
+`apps/pubg-saas/src/channels/kook/message-adapter.ts`. Official API limits are
+8,000 characters for both plain and KMarkdown message content; card text
+elements have separate 2,000-character plain-text and 5,000-character
+KMarkdown limits.
+
+Long replies split at paragraph/newline/word boundaries. The adapter preserves
+links and mention tokens, reopens inline formatting and block quotes, and
+closes/reopens code fences per message. Existing ordered outbox delivery keeps
+later parts behind an unsent earlier part and retries failures. Markdown
+headings/lists and WhatsApp-style emphasis are converted to supported
+KMarkdown; Unicode emoji and KOOK emoji shortcodes remain intact, and neutral
+numeric user mentions map to KOOK's native mention syntax.
+
+Validation passed: `pnpm test:pubg-saas` 155/155 against reused isolated PG18,
+zero skips; `pnpm test:pubg` 71/71, zero skips; SaaS build, both typecheck
+chains, architecture checks, secret scan, and `git diff --check`. Source
+rollout status and rollback evidence will be recorded here after the authorized
+M204 Gateway/Worker replacement. Arthur's KOOK acceptance remains pending; M2
+is not complete.
+
 ## Active task — remove public-only KOOK quotas and context expiry (2026-10-15)
 
 Arthur authorized aligning the public Gateway's sender and conversation

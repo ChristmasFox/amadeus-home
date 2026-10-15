@@ -1,4 +1,5 @@
-import { sanitizeKookOutboundPayload, type KookGroupMessageSender, type KookTextPayload } from '../../application/kook-message-queue.js';
+import { sanitizeKookOutboundPayload } from '../../application/kook-message-queue.js';
+import { adaptKookMessagePayload, type KookGroupMessageSender, type KookTextPayload } from './message-adapter.js';
 import { KookRateLimitGate } from './rate-limit-gate.js';
 
 interface KookApiEnvelope {
@@ -67,7 +68,7 @@ export class KookMessageApiClient implements KookGroupMessageSender {
     const targetId = requiredText(targetIdInput, 'target_id', 128);
     const nonce = requiredText(nonceInput, 'nonce', 64);
     let payload: KookTextPayload;
-    try { payload = sanitizeKookOutboundPayload(payloadInput); } catch { throw codedError('kook_message_payload_invalid'); }
+    try { payload = adaptKookMessagePayload(sanitizeKookOutboundPayload(payloadInput)); } catch { throw codedError('kook_message_payload_invalid'); }
     const body = new URLSearchParams({
       target_id: targetId,
       type: payload.type === 'text' ? '1' : payload.type === 'kmarkdown' ? '9' : '10',

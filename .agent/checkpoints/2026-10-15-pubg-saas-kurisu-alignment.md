@@ -1,5 +1,34 @@
 # PUBG SaaS Kurisu alignment — 2026-10-15
 
+## Source follow-up — KOOK channel message adapter
+
+The public transport boundary now centralizes KOOK message type selection,
+payload validation, format conversion and long-message splitting in
+`apps/pubg-saas/src/channels/kook/message-adapter.ts`; Agent and Domain layers
+do not apply a KOOK-specific response-length limit. KOOK's message API gives
+one 8,000-character `content` limit for both plain text and KMarkdown. Card
+elements separately allow 2,000 characters for `plain-text` and 5,000 for
+`kmarkdown`. See the [official message API](https://developer.kookapp.cn/doc/http/message),
+[KMarkdown reference](https://developer.kookapp.cn/doc/kmarkdown), and
+[CardMessage reference](https://developer.kookapp.cn/doc/cardmessage).
+
+The adapter maps Markdown headings and unordered lists to supported KMarkdown
+forms, converts WhatsApp-style `_italic_`/`~strike~` and single-star bold,
+preserves KOOK-supported `:emoji:` shortcuts and Unicode emoji, and turns
+neutral numeric `<@id>` / `<@!id>` tokens into native `(met)id(met)` mentions.
+Non-HTTP(S) Markdown links remain visible as label plus address. Long replies
+split on paragraph, newline and word boundaries; link and mention tokens are
+kept whole; inline emphasis and quotes are reopened in continuation messages;
+large fenced code blocks are split by lines and each outbox part has a complete
+fence. Existing outbox ordering holds later parts until an earlier part is
+sent, with durable retry and safe failure diagnostics.
+
+The focused sender/adapter suite passes 13/13; full SaaS/PostgreSQL tests pass
+155/155 with no skips; PUBG/Kurisu tests pass 71/71 with no skips. SaaS build,
+typechecks, architecture checks, secrets scan, and diff checks pass. The source
+follow-up is being added to the current authorized M204 Gateway/Worker release;
+rollout evidence will follow.
+
 ## Latest follow-up — remove SaaS-only quotas and conversation expiry
 
 Arthur authorized removing the public-only daily sender quota, ingress
@@ -98,9 +127,15 @@ remain excluded from model-visible facts.
   bypasses it, matching PUBG/Kurisu semantics. The limiter is not shared with
   the independent Kurisu process.
 - **KOOK sender transport:** there is no local 200/day budget. Actual KOOK
-  response bucket/global headers and 429 guidance control delivery. Individual
-  text messages stay within 8,000 characters and longer replies are split,
-  because KOOK imposes a per-message payload limit.
+  response bucket/global headers and 429 guidance control delivery. The single
+  channel adapter enforces the official 8,000-character message content limit
+  for both plain text and KMarkdown, and the separate card-element limits of
+  2,000 plain-text / 5,000 KMarkdown characters. It converts portable Markdown
+  headings/lists and WhatsApp emphasis, preserves KOOK emoji, maps numeric user
+  mentions, and splits long messages at natural boundaries while keeping
+  formatting structures intact. Ordered durable outbox retries keep chunks in
+  sequence. These are KOOK transport/API differences; they do not cap Agent or
+  Domain output.
 - **Conversation retention:** public text history and query session context are
   persistent, grouped by channel or DM actor, with no row-count, character, or
   12-hour expiry cap. This matches the inspected private session scope
