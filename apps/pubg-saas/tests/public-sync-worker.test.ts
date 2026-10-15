@@ -71,8 +71,8 @@ test('public sync HTTP boundary allows only official API and telemetry GETs and 
     headers: { authorization: 'Bearer fixture-only' },
   }), /public_sync_telemetry_auth_forbidden/u);
   await assert.rejects(guarded('https://api.pubg.com/shards/steam/matches/fixture', { method: 'POST' }), /public_sync_method_invalid/u);
-  assert.equal(admission.acquired, 2, 'player discovery and match detail requests both share public API admission');
-  assert.equal(admission.observed, 2, 'provider response quota headers from both API endpoints are observed');
+  assert.equal(admission.acquired, 1, 'only rate-limited player discovery uses public API admission');
+  assert.equal(admission.observed, 1, 'only player discovery quota headers are observed');
   assert.ok(requests.every((request) => request.redirect === 'error'));
   assert.equal(requests[0]?.authorization, 'Bearer fixture-only');
   assert.equal(requests[1]?.authorization, 'Bearer fixture-only');
@@ -98,6 +98,8 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
   const matchOwners = new Map([[matchA, [accountA1, accountShared, accountB2]]]);
   const admission = new AdmissionFixture();
   let apiRequests = 0;
+  let playerDiscoveryRequests = 0;
+  let matchDetailRequests = 0;
   const cdnAuthorizations: Array<string | null> = [];
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
@@ -105,6 +107,7 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
       apiRequests++;
       assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer fixture-only');
       if (url.pathname.endsWith('/players')) {
+        playerDiscoveryRequests++;
         const ids = (url.searchParams.get('filter[playerIds]') ?? '').split(',').filter(Boolean);
         return Response.json({ data: ids.flatMap((id) => {
           const player = players.get(id);
@@ -116,6 +119,7 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
           }] : [];
         }) });
       }
+      matchDetailRequests++;
       const matchId = url.pathname.split('/').at(-1) ?? '';
       const ownerIds = matchOwners.get(matchId) ?? [];
       const match = {
@@ -184,10 +188,12 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
       telemetryFetched: 2,
       telemetryUnavailable: 0,
     });
-    assert.equal(admission.acquired, apiRequests,
-      'every player discovery and match detail API request shares public admission');
-    assert.equal(admission.observed, apiRequests,
-      'every official API response is observed for provider quota headers');
+    assert.equal(matchDetailRequests, 2);
+    assert.equal(apiRequests, playerDiscoveryRequests + matchDetailRequests);
+    assert.equal(admission.acquired, playerDiscoveryRequests,
+      'only rate-limited player discovery uses public admission');
+    assert.equal(admission.observed, playerDiscoveryRequests,
+      'only player discovery responses consume shared rate-limit headers');
     assert.deepEqual(cdnAuthorizations, [null, null]);
 
     const contextA = {

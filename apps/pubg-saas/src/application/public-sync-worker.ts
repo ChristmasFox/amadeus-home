@@ -103,9 +103,10 @@ function endpoint(url: URL): { kind: 'api' | 'telemetry'; rateLimited: boolean; 
     } else if (!isMatch || url.search !== '') {
       throw new Error('public_sync_endpoint_invalid');
     }
-    // Player discovery and match detail requests both consume the same
-    // account-level PUBG quota; each is admitted through the shared limiter.
-    return { kind: 'api', rateLimited: true, maxBytes: MAX_API_RESPONSE_BYTES };
+    // PUBG's rate-limited player discovery endpoint uses shared admission.
+    // Match detail requests are not counted by PUBG and follow Kurisu's
+    // behavior without an extra public-only gate.
+    return { kind: 'api', rateLimited: isPlayers, maxBytes: MAX_API_RESPONSE_BYTES };
   }
   if (TELEMETRY_HOSTS.has(url.hostname) && url.search === ''
     && /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]*-telemetry\.json$/u.test(url.pathname)) {
@@ -115,8 +116,9 @@ function endpoint(url: URL): { kind: 'api' | 'telemetry'; rateLimited: boolean; 
 }
 
 /** Restricts the worker to official public PUBG API and telemetry endpoints.
- * Every authenticated API call consumes shared admission; public telemetry CDN
- * objects do not and never receive the API key. Redirects are rejected. */
+ * Rate-limited player discovery uses shared admission; match details follow the
+ * provider's unmetered endpoint policy. Public telemetry CDN objects never
+ * receive the API key. Redirects are rejected. */
 export function createPublicSyncFetch(
   admission: PublicPubgAdmission,
   fetchImpl: typeof fetch = fetch,
