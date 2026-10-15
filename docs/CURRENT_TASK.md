@@ -44,6 +44,12 @@ stderr and that Gate help contains the literal database-variable and target
 rules. The fixture, `bash -n scripts/release-cli.sh`, actual Gate help,
 `pnpm workflow:plan` (`FAST`), `git diff --check`, and `pnpm check:secrets`
 passed. No Gate runtime, database, or M2 state changed.
+The fix and regression fixture are in commit `d712cb3`. Focused revalidation
+also passed the Memory Core patch and policy fixtures, pinned schema check
+(6/6), session isolation, build-impact and release-tooling fixtures, workflow
+and architecture checks, both product SemVer suites, the Lab memory-release
+fail-closed test, and lineage compatibility. No Gate PostgreSQL suite or
+Docker/OCI build was run.
 
 ## Explicit Lab approval sequence — step 4 stopped — 2026-10-15
 

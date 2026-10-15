@@ -37,7 +37,8 @@ database, secret, image, release tag, or registry was changed.
   commands, emitted errors, and omitted the literal constraints. `release-cli.sh`
   now prints the product usage line separately and uses a quoted heredoc for
   option text. The regression fixture requires empty stderr and the literal
-  database-variable and name constraints in Gate help.
+  database-variable and name constraints in Gate help. The fix and fixture
+  are committed as `d712cb3`.
 - `scripts/release-state.py` validates and writes manifests and compares them
   with runtime snapshots. It checks the product tag, per-image source/version/
   build provenance, digest, Compose image reference and Compose file digest,
