@@ -2,20 +2,22 @@
 
 ## 2026-10-15 — PUBG SaaS sync and report alignment
 
-Source commits `e355b2e`, `6a9171f`, `f47783d`, and `66e1006` are pushed to
-`origin/main`. ARM64 image `local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
-(image ID `sha256:c2274bf0f79343632cf128e80491579b2f9441232b741583e23b3f8a16423054`)
+Source commits `e355b2e`, `6a9171f`, `f47783d`, `66e1006`, and `122cd79` are pushed to
+`origin/main`. ARM64 image `local/pubg-saas:git-122cd79`
+(image ID `sha256:05618c63ea4b6b7cbe4ddd23455187e26ced0da13e7e3222948b7592d980aca3`)
 is deployed to `pubg-saas-m2-clean`. Only Gateway and Worker were recreated;
 PostgreSQL, egress-proxy, and SaaS 9Router container IDs are unchanged. Gateway
 and Worker have zero restarts, Worker is healthy, KOOK cursor is recent
-(`last_sn=72`), and the inspected 10-minute error/fatal-level JSON log count is
-zero. No migration ran and no image was pushed.
+(`last_sn=72`, updated at `2026-10-15T03:36:45.536304Z`), and the inspected
+10-minute error/fatal-level JSON log count is zero. No migration ran and no image was pushed.
 
 The prior live `PUBLIC_SYNC_MAX_MATCHES=10` override was in ignored
 `infra/pubg-saas/secrets/worker.env`; it is removed. Compose and the live Worker
 now use `max_matches=500`, `interval_ms=300000`,
 `max_telemetry_fetches=20`, `team_concurrency=2`, and public PUBG admission
-`10/min`. The shared Domain selector round-robins member match lists. The
+`10/min` for `/players`; `/matches` follows Kurisu and bypasses admission. The
+66e1006 `/matches` gate was removed. The shared Domain selector round-robins
+member match lists. The
 channel-bound team's 132 discovered matches include the restored Oct 14 21:07
 duo and 23:01 squad.
 
@@ -25,14 +27,18 @@ caps are removed, with internal identifiers and diagnostics still redacted.
 There is no fixed Agent step or per-step token budget; the 300-second overall
 budget recovers with completed tool results. Domain query pagination, review
 freshness, coverage, cache semantics, and game-day time selection are shared.
+The admission behavior is tested to gate `/players` only, while retaining
+endpoint allowlisting, redirect rejection, and the no-key telemetry boundary.
 The remaining differences and their Arthur/security/platform reasons are in
 `.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`.
 
-Validation: SaaS/PostgreSQL 150/150 and PUBG/Kurisu 71/71, both with zero
-skips; affected builds/typechecks, architecture, secrets and diff checks
-passed. Mode-0600 pre/post-switch records and rollback steps are in
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-pre-switch.txt`
-and `.../20261015-pubg-saas-66e1006-post-switch.txt`.
+The full SaaS/PostgreSQL suite (150/150) and PUBG/Kurisu suite (71/71) passed
+with zero skips before the `/matches` correction. The focused PostgreSQL
+sync-worker suite passed 2/2 with zero skips after it, with SaaS
+typecheck/build, secrets, and diff checks passed. Mode-0600 pre/post-switch
+records and rollback steps are in
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-pre-switch.txt`
+and `.../20261015-pubg-saas-122cd79-post-switch.txt`.
 
 Arthur's KOOK acceptance is pending; M2 is not complete.
 

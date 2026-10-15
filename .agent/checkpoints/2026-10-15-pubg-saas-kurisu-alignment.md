@@ -5,10 +5,10 @@
 Commits `e355b2ef673662b60757b69966c73768e89830e5`,
 `6a9171fe10ff5948b421bf6c6cf973704e82f0cd`,
 `f47783d5869071224486d0c26b580eb7ebb835de`, and
-`66e1006b04b8726f50a80a15c3b0024d049228f0` are on `origin/main`.
-M204 runs ARM64 image
-`local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
-(image ID `sha256:c2274bf0f79343632cf128e80491579b2f9441232b741583e23b3f8a16423054`).
+`66e1006b04b8726f50a80a15c3b0024d049228f0` are on `origin/main`; follow-up
+commit `122cd79` is also pushed. M204 runs ARM64 image
+`local/pubg-saas:git-122cd79`
+(image ID `sha256:05618c63ea4b6b7cbe4ddd23455187e26ced0da13e7e3222948b7592d980aca3`).
 Only Gateway and Worker were recreated. PostgreSQL, egress-proxy, SaaS 9Router,
 nyannyan, private OpenClaw, private 9Router, and Kurisu were not changed.
 
@@ -26,7 +26,10 @@ The Agent now receives the complete sanitized Domain envelope plus shared
 presentation and display text, including match/review facts. The former facts
 whitelist, match/evidence truncation, fixed step count, and per-step token cap
 are gone. Tool/API calls use shared Domain retry/timeout/concurrency defaults.
-All authenticated official PUBG API requests use the public admission gate.
+Only rate-limited `/players` discovery uses public admission. A review of
+66e1006 found it had also gated `/matches`; follow-up `122cd79` removed that
+extra gate to match Kurisu and PUBG endpoint policy. Endpoint allowlisting,
+redirect rejection, and telemetry's no-authorization rule remain.
 The overall Agent deadline remains 300 seconds; completed tool results are
 summarized if the loop times out. Internal IDs, private data, and diagnostics
 remain excluded from model-visible facts.
@@ -52,10 +55,12 @@ The following public-runtime differences remain:
   authorization and privacy; it does not change Domain facts.
 - Teams are capped at 8 players and all writes require server-side permission
   checks. Arthur explicitly required both.
-- Public PUBG API traffic is gated at 10 requests/minute across the SaaS
-  service. Arthur previously required a limit while sharing the PUBG API key
-  with Kurisu; the separate processes do not have a cross-runtime shared
-  limiter, so this gate limits SaaS traffic but does not reserve Kurisu's share.
+- Public `/players` discovery traffic is gated at 10 requests/minute across
+  the SaaS service. `/matches` is not gated because PUBG does not count it
+  against API request rate and Kurisu does not gate it. Arthur previously
+  required protection while sharing the PUBG API key; the separate processes
+  do not have a cross-runtime shared limiter, so the SaaS gate does not reserve
+  Kurisu's share.
 - KOOK outbound sends have a 200-message per-bot daily budget, resetting at
   noon Asia/Shanghai. This follows KOOK's published unverified-developer bot
   eligibility ceiling; KOOK response headers also govern actual send limits.
@@ -83,22 +88,29 @@ The following public-runtime differences remain:
   operations and retain their own model prompt/reply style. The surface
   difference is the KOOK adapter boundary, not a second Domain implementation.
 
+The 66e1006 change introduced one new admission gate beyond prior behavior:
+`/matches`. Commit `122cd79` removed it. The admission tests assert that
+`/players` consumes permits and `/matches` does not; endpoint allowlisting,
+redirect rejection, and telemetry no-key assertions remain.
+
 ## Validation
 
-- `pnpm test:pubg-saas`: 150/150 passed, zero skipped, against the reused
-  isolated PostgreSQL test instance.
-- `pnpm test:pubg`: 71/71 passed, zero skipped.
-- PUBG/SaaS typechecks and builds, `pnpm check:architecture`,
-  `pnpm check:secrets`, and `git diff --check` passed.
-- ARM64 build succeeded locally on the target VM; no image was pushed.
+- Before the `/matches` correction, `pnpm test:pubg-saas`: 150/150 passed,
+  zero skipped, against the reused isolated PostgreSQL test instance.
+- Before the correction, `pnpm test:pubg`: 71/71 passed, zero skipped.
+- For commit `122cd79`, focused `public-sync-worker.test.ts`: 2/2 passed,
+  zero skipped, against the reused isolated PostgreSQL instance. SaaS
+  typecheck/build, `pnpm check:secrets`, and `git diff --check` passed.
+- ARM64 image build succeeded locally on the target VM; no image was pushed.
 
 ## M204 rollout evidence
 
-Only Gateway and Worker were replaced. The final container IDs are recorded
-in `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-post-switch.txt`.
+Only Gateway and Worker were replaced for both app-only switches. The current
+container IDs are recorded in
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-post-switch.txt`.
 Worker and Gateway have zero restarts; Worker is healthy and Compose reported
 Gateway healthy. The KOOK session cursor is `last_sn=72`, updated at
-`2026-10-15T03:27:14.890493Z`. Gateway and Worker had zero error/fatal-level
+`2026-10-15T03:36:45.536304Z`. Gateway and Worker had zero error/fatal-level
 JSON log entries in the inspected 10-minute window.
 
 Within the channel-bound team, the discovered-match index contains 132 IDs.
@@ -115,11 +127,11 @@ acceptance remains pending; M2 is not complete.
 
 Protected target records, mode 0600:
 
-- Pre-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-pre-switch.txt`
-- Post-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-post-switch.txt`
+- Pre-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-pre-switch.txt`
+- Post-switch: `/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-post-switch.txt`
 
-To roll back, restore
-`PUBG_SAAS_IMAGE=local/pubg-saas:git-f47783d5869071224486d0c26b580eb7ebb835de`
+To roll back this correction, restore
+`PUBG_SAAS_IMAGE=local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
 in the protected target `.env`, validate Compose, then run only:
 
 ```sh

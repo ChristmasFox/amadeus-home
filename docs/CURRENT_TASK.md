@@ -12,8 +12,9 @@ and the independent PostgreSQL/Worker runtime. The live override
 the live Worker now use 500, matching the private plugin's configured
 `maxMatches`. Shared Domain selection round-robins each member's newest-first
 match list before applying that ceiling, so one account cannot consume it.
-Worker/API resolution use shared Domain retry, timeout, and concurrency defaults;
-the public PUBG admission gate remains at 10 requests/minute.
+Worker/API resolution use shared Domain retry, timeout, and concurrency defaults.
+The rate-limited `/players` endpoint uses the public 10 requests/minute
+admission gate; `/matches` follows Kurisu and bypasses it.
 
 The public Agent receives the complete sanitized Domain envelope, shared
 presentation/display text, per-match facts, and review facts. The former facts
@@ -26,14 +27,15 @@ remain redacted.
 The source commits `e355b2ef673662b60757b69966c73768e89830e5`,
 `6a9171fe10ff5948b421bf6c6cf973704e82f0cd`,
 `f47783d5869071224486d0c26b580eb7ebb835de`, and
-`66e1006b04b8726f50a80a15c3b0024d049228f0` are pushed to `origin/main`.
+`66e1006b04b8726f50a80a15c3b0024d049228f0`, and
+`122cd79` are pushed to `origin/main`.
 The deployed ARM64 image is
-`local/pubg-saas:git-66e1006b04b8726f50a80a15c3b0024d049228f0`
-(image ID `sha256:c2274bf0f79343632cf128e80491579b2f9441232b741583e23b3f8a16423054`).
+`local/pubg-saas:git-122cd79`
+(image ID `sha256:05618c63ea4b6b7cbe4ddd23455187e26ced0da13e7e3222948b7592d980aca3`).
 Only Gateway and Worker were replaced on `pubg-saas-m2-clean`; PostgreSQL,
 egress-proxy, and SaaS 9Router retain the same container IDs. Worker is
 healthy, Gateway is healthy, and both have zero restarts. KOOK cursor is
-`last_sn=72`, updated at `2026-10-15T03:27:14.890493Z`. No migration ran and
+`last_sn=72`, updated at `2026-10-15T03:36:45.536304Z`. No migration ran and
 no image was pushed.
 
 The channel-bound team has 132 discovered matches. The formerly missing
@@ -47,16 +49,18 @@ match pagination (`pageSize` 50, latest 100), review freshness, coverage, time
 selection, cache semantics, and telemetry behavior are shared Domain rules.
 No public Agent facts whitelist, evidence cap, per-step token budget, or fixed
 step count remains. The remaining service boundaries and their reasons are
-listed in `.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`; in
-particular, KOOK policy, finite public conversation retention, multi-tenant
-admission, and the independent Worker still have platform/security limits.
+listed in `.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`. The
+66e1006 `/matches` admission gate was removed; authenticated `/players`
+discovery remains gated, endpoint allowlisting and redirect rejection remain,
+and telemetry requests still carry no API key.
 
-Validation: `pnpm test:pubg-saas` passed 150/150 with no skips against the
-reused isolated PostgreSQL instance; `pnpm test:pubg` passed 71/71 with no
-skips. PUBG/SaaS builds and typechecks, architecture, secrets, and diff checks
-passed. Rollback evidence is in the mode-0600 target records
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-66e1006-pre-switch.txt`
-and `.../20261015-pubg-saas-66e1006-post-switch.txt`.
+Before the `/matches` correction, `pnpm test:pubg-saas` passed 150/150 and
+`pnpm test:pubg` passed 71/71, both with no skips. For `122cd79`, the focused
+PostgreSQL `public-sync-worker.test.ts` passed 2/2 with no skips; SaaS
+typecheck/build, secrets, and diff checks passed. Rollback evidence is in the
+mode-0600 target records
+`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-pre-switch.txt`
+and `.../20261015-pubg-saas-122cd79-post-switch.txt`.
 
 Arthur's KOOK acceptance remains pending. M2 is not complete; stop here and
 wait for his real test.
