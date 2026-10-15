@@ -1,5 +1,20 @@
 # Project State — 2026-10-15
 
+## 2026-10-15 — Lab Memory Core live acceptance (in progress)
+
+Arthur authorized the ordered Lab-only acceptance sequence for OrbStack
+`nyannyan` / container `openclaw`. The configured 9Router Embedding endpoint
+passed one synthetic probe (HTTP 200, 1024 finite dimensions). Before any
+index write, a protected external checkpoint was created at
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T124516Z`. The
+agent SQLite online backup passed `quick_check` and `integrity_check`; the
+memory directory plus `MEMORY.md` archive passed content comparison and
+checksum verification. Current baseline is `dirty=true` (2 indexed files, 3
+scanned), FTS available, vector dimension 1024. The index rebuild, live
+keyword/semantic retrieval acceptance, Dreaming, candidate build, apply, and
+formal Lab release remain pending. Gate/M2 was not touched. Evidence and
+recovery boundaries: `.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
+
 ## 2026-10-15 — PUBG SaaS Kurisu-aligned traffic and context
 
 Commit `83c1bcc761842676ec750708a43f8d0f33e9d39a` is pushed to `origin/main`.

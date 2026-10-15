@@ -118,6 +118,24 @@ value, index, or application database was changed in the live runtime.
   The running image still has the prior behavior. No live query was issued.
   Source follow-up commit: `48b88ac`.
 
+## Pre-reindex protected checkpoint — 2026-10-15
+
+The authorized Lab run created and verified an external, mode-0700 checkpoint
+at `/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T124516Z`.
+The agent SQLite snapshot was produced with the online backup API and passed
+both `PRAGMA quick_check` and `PRAGMA integrity_check` after loading the
+pinned `sqlite-vec 0.1.9` `vec0` extension. The 340,561,920-byte snapshot SHA-256
+is `a8b90f7c7bff9e0b87c9d528a4396edab46c0efa956feb22dc0b84b2f668a720`.
+The mode-0600 memory archive includes `workspace/memory/` and
+`workspace/MEMORY.md`; archive extraction matched the source tree hash and
+`gzip -t` passed. `DREAMS.md` was absent. The metadata-only index baseline is
+2 files / 70 chunks / 3 scanned, `dirty=true`, FTS available, 1024 vector
+dimensions, and identity status `valid`. The generic Python verifier first
+failed because `vec0` was not loaded; verification succeeded with the pinned
+runtime extension. No live data or service was changed. Full evidence and the
+recovery boundary are in
+`.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`.
+
 ## Rebuild and recovery procedure
 
 Before any approved rebuild:

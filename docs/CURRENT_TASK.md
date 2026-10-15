@@ -39,7 +39,28 @@ tokens). No memory text was sent and no index or runtime state was changed.
 The pre-probe index remained 2 files / 70 chunks, 3 scanned files, FTS
 available, vector enabled, `dirty=true`; Dreaming session corpus count was 0.
 This verifies provider reachability and dimension only, not semantic retrieval.
-Next: protected SQLite and memory-directory backup before any index write.
+Next: reindex only after the verified protected checkpoint below is committed.
+
+## Explicit Lab approval sequence — step 3 pre-write checkpoint — 2026-10-15
+
+The protected external checkpoint is
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T124516Z` (directory
+0700; artifacts 0600). The full agent SQLite database was captured through the
+online backup API (340,561,920 bytes; SHA-256
+`a8b90f7c7bff9e0b87c9d528a4396edab46c0efa956feb22dc0b84b2f668a720`); both
+`quick_check` and `integrity_check` returned `ok` with the bundled `vec0`
+extension loaded. The protected memory archive contains `workspace/memory/`
+and `workspace/MEMORY.md`; extracted tree comparison, `gzip -t`, and hash
+verification passed. `DREAMS.md` was absent. The metadata-only pre-write index
+baseline remains `dirty=true`, 2 files / 70 chunks / 3 scanned, FTS available,
+1024 dimensions, identity `valid`, provider state `pending`.
+
+The generic helper initially could not verify `vec0`; after loading the pinned
+runtime extension, the retained snapshot passed both SQLite checks. No source
+database, WAL, session, workspace, container, or service was changed. The
+checkpoint and exact recovery boundary are in
+`.agent/checkpoints/2026-10-15-lab-memory-reindex-prewrite.md`. Index write is
+still pending.
 
 P2 established independent Lab/Gate SemVer sources and release-note checks;
 Lab remains `1.10.4`, Gate remains `0.1.0`, and no formal tag was created. The
