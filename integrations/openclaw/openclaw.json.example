@@ -22,6 +22,22 @@
     "dmScope": "per-account-channel-peer",
     "groupScope": "per-group"
   },
+  "memory": {
+    "search": {
+      "provider": "openai-compatible",
+      "model": "Qwen/qwen3.7-text-embedding-flash",
+      "remote": {
+        "baseUrl": "http://9router:20128/v1",
+        "apiKey": {
+          "source": "env",
+          "provider": "default",
+          "id": "OPENCLAW_9ROUTER_API_KEY"
+        }
+      },
+      "sources": ["memory"],
+      "rememberAcrossConversations": false
+    }
+  },
   "browser": {
     "ssrfPolicy": {
       "dangerouslyAllowPrivateNetwork": true
@@ -111,6 +127,19 @@
     "enabled": true,
     "allow": ["pubg", "amadeus", "whatsapp", "telegram"],
     "entries": {
+      "memory-core": {
+        "config": {
+          "memoryPolicy": {
+            "allowedChannels": ["whatsapp", "telegram"],
+            "allowlistedDirectPeerFiles": {
+              "whatsapp": "/run/secrets/owner_whatsapp_target"
+            },
+            "excludeSessions": {
+              "chatTypes": ["group", "channel"]
+            }
+          }
+        }
+      },
       "pubg": {
         "enabled": true,
         "config": {

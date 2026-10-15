@@ -101,13 +101,19 @@ COPY scripts/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-channel-ide
 COPY scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs
 COPY scripts/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-group-image-policy.mjs
 COPY scripts/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-heartbeat-silence.mjs
+COPY scripts/patch-openclaw-memory-core.mjs /tmp/patch-openclaw-memory-core.mjs
 COPY scripts/openclaw-voice-*.mjs /tmp/
 RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs --core-root /app/dist \
     && node /tmp/patch-openclaw-group-image-policy.mjs --core-root /app/dist --apply \
     && node /tmp/patch-openclaw-heartbeat-silence.mjs --core-root /app/dist --apply \
+    && node /tmp/patch-openclaw-memory-core.mjs --core-root /app/dist --apply \
     && node --check /app/dist/worker/worker.mjs \
-    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/openclaw-voice-*.mjs
+    && node --check /app/dist/extensions/memory-core/manager-runtime.js \
+    && session_bundle="$(find /app/dist -maxdepth 1 -name 'session-ingestion-*.mjs' -print -quit)" \
+    && test -n "$session_bundle" \
+    && node --check "$session_bundle" \
+    && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-memory-core.mjs /tmp/openclaw-voice-*.mjs
 
 COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary
 RUN node /opt/amadeus/delivery-boundary/core-completion.mjs --host-root /app --apply \

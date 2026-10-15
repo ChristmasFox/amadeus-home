@@ -365,8 +365,10 @@ if ((BUILD_RADAR == 0)); then assert_image_fresh "$RADAR_IMAGE" radar; fi
   node --check scripts/patch-openclaw-whatsapp-voice-lifecycle.mjs
   node --check scripts/patch-openclaw-group-image-policy.mjs
   node --check scripts/patch-openclaw-heartbeat-silence.mjs
+  node --check scripts/patch-openclaw-memory-core.mjs
   node scripts/test-patch-openclaw-group-image-policy.mjs
   node scripts/test-patch-openclaw-heartbeat-silence.mjs
+  node scripts/test-patch-openclaw-memory-core.mjs
   pnpm test:openclaw-image-route-authority
   node scripts/test-delivery-boundary.mjs
   node scripts/test-patch-openclaw-whatsapp-voice-lifecycle.mjs
@@ -393,6 +395,9 @@ if ((BUILD_OPENCLAW)); then
   orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'codex-amadeus-heartbeat-silent-delivery-v1' /app/dist/heartbeat-runner-CPy-qxAy.mjs" \
     || fail 'Immutable OpenClaw image is missing the heartbeat silence guard.'
   printf 'OPENCLAW_IMAGE_HEARTBEAT_SILENCE=passed\n'
+  orb -m "$MACHINE" -u root docker run --rm --entrypoint sh "$IMAGE" -lc "grep -Fq 'amadeus-memory-knn-loader-path-v1' /app/dist/extensions/memory-core/manager-runtime.js && grep -Fq 'amadeus-memory-dreaming-peer-admission-v1' /app/dist/extensions/memory-core/openclaw.plugin.json && grep -Fq 'whatsapp-peer:not-allowlisted' /app/dist/session-ingestion-*.mjs" \
+    || fail 'Immutable OpenClaw image is missing the Memory Core runtime fixes.'
+  printf 'OPENCLAW_IMAGE_MEMORY_CORE_PATCH=passed\n'
 fi
 image_amadeus_version="$(orb -m "$MACHINE" -u root docker run --rm --entrypoint cat "$IMAGE" /opt/amadeus/VERSION | tr -d '[:space:]')"
 [[ "$image_amadeus_version" == "$AMADEUS_VERSION" ]] || fail "Immutable OpenClaw candidate contains Amadeus VERSION=$image_amadeus_version, expected $AMADEUS_VERSION."
@@ -424,6 +429,7 @@ for source in \
   "$ROOT_DIR/integrations/openclaw/openclaw.json.example" \
   "$ROOT_DIR/packages/pubg-domain/config/default-team.json" \
   "$VOICE_LIFECYCLE_PATCH_RUNTIME" \
+  "$ROOT_DIR/scripts/patch-openclaw-memory-core.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-markers.mjs" \
   "$ROOT_DIR/scripts/openclaw-voice-lease.mjs" \
   "$ROOT_DIR/integrations/openclaw/workspace-seed/AGENTS.seed.md" \
