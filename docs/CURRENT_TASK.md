@@ -5,8 +5,8 @@ Date: 2026-10-15 (Asia/Shanghai).
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
 Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 source/evidence consolidation remains; live memory
-acceptance blocked on operator authorization**.
+`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; live memory acceptance
+blocked on operator authorization**.
 Runtime apply, production index rebuild, paid Embedding requests, Dreaming
 memory writes, and formal release remain unauthorized. The sanitized baseline
 and P0 evidence are in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
@@ -24,7 +24,15 @@ operator runbook. Lab apply remains approval-gated and formal release requires
 real P1 `LIVE_VERIFIED` evidence. Gate-Local M2 remains paused; Staging/Prod
 adapters are not configured, so Gate apply fails closed. P3 evidence is in
 `docs/LAB_GATE_P3_REPORT.md` and command details are in
-`docs/RELEASE_ENGINEERING.md`.
+`docs/RELEASE_ENGINEERING.md`. Source commit: `61504f5`.
+
+P4 consolidates the acceptance matrix, source/package validation, unresolved
+live boundaries, and separate-approval checklist in
+`docs/LAB_GATE_P4_REPORT.md` and `docs/LAB_GATE_APPROVALS_REQUIRED.md`. Local
+Lab/Gate package builds, typechecks, and tests passed; Gate's database-backed
+tests were skipped because no test database URL was supplied. No Docker/OCI
+build, runtime apply, paid Embedding request, index rebuild, Dreaming write,
+formal tag, or registry publish occurred. Gate M2 remains paused.
 
 The P1 source tests passed. Runtime inspection confirmed the pinned provider
 and current FTS/vector index state, but did not issue an Embedding request or
