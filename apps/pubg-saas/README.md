@@ -101,10 +101,12 @@ developer-account quota eligibility remain unverified.
   A channel revision invalidates old setup cards after another bind/unbind
   cycle. Roster preparation checks the source request's selected team again
   after player lookup.
-- `PublicPubgPlayerResolver` batches 1–8 names through the shared API client
-  at the fixed official endpoint, with redirects and hidden retries disabled.
-  It preserves case, previews canonical API names, and cannot prepare a roster
-  from missing/ambiguous/invalid results. It reads no private configuration.
+- `PublicPubgPlayerResolver` batches 1–8 names through the shared Domain API
+  client at the fixed official endpoint. Transient retries use the same Domain
+  defaults as Kurisu, and each attempt reacquires public API admission; redirects
+  remain disabled. It preserves case, previews canonical API names, and cannot
+  prepare a roster from missing/ambiguous/invalid results. It reads no private
+  configuration.
 - `PostgresPublicPubgAdmission` spaces requests globally across public
   connections (default 10 RPM), with bounded waits and provider exhaustion/reset
   and lower-limit header handling. `PUBLIC_PUBG_REQUESTS_PER_MINUTE` is controlled
