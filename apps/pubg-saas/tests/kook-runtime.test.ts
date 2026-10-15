@@ -81,7 +81,10 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     socket.frame({ s: 0, sn: 1, d: group });
     socket.frame({ s: 0, sn: 2, d: { type: 1, channel_type: 'PERSON', target_id: bot, author_id: user, content: '/pubg claim', msg_id: `dm-${suffix}`, msg_timestamp: Date.now() } });
     socket.frame({ s: 0, sn: 3, d: { type: 255, channel_type: 'PERSON', msg_id: `click-${suffix}`, msg_timestamp: Date.now(), extra: { type: 'message_btn_click', body: { user_id: user, msg_id: 'original-card', target_id: channel, value: 'x'.repeat(43) } } } });
-    await waitFor(async () => Number((await pool.query('SELECT last_sn FROM kook_gateway_state WHERE bot_account_id=$1', [bot])).rows[0]?.last_sn) === 3, 'durable sequence while handler blocked');
+    await waitFor(async () => {
+      const lastSn = Number((await pool.query('SELECT last_sn FROM kook_gateway_state WHERE bot_account_id=$1', [bot])).rows[0]?.last_sn);
+      return handled === 1 && lastSn === 3;
+    }, 'durable sequence while handler blocked');
     assert.equal(handled, 1);
     assert.equal(requests.length, 0);
     unblock();
