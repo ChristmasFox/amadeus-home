@@ -1,4 +1,29 @@
-# Project State — 2026-10-15
+# Project State — 2026-10-16
+
+## 2026-10-16 — fresh read-only Goal verification
+
+Lab 1.10.5 remains healthy and `DRIFT_STATUS=IN_SYNC` at the released source
+and digest. Memory Core reports 5 files / 92 chunks, `dirty=false`, hybrid
+search, available FTS, and a complete enabled 1024-D vector index with valid
+identity and no scan issues. The status command reports provider state
+`pending` but did not probe it; the earlier accepted Embedding request and
+keyword/semantic retrieval remain separate evidence. Session-corpus metadata
+shows 3 files and no suspicious files/lines; no private text was read and no
+incremental refresh was needed.
+
+The existing Dreaming job remains enabled at 03:00 Asia/Shanghai, with the
+last run `ok` and next run `2026-10-16T03:00:00+08:00` as of the 00:03 local
+snapshot. No config edit, restart, Dreaming invocation, or runtime write was
+performed. Product Radar remains healthy but its legacy Git source and
+product-owned provenance remain `UNKNOWN`; the exact source object and any
+unreachable local Product Radar/Presentation commit were not found. Its
+Radar-only Lab apply remains fail-closed.
+
+Gate M2 remains paused and untouched. Its services were running, Buildx
+history was terminal, and no migration container or `release-config-hash`
+process was present. No database query or service action occurred. Local
+`main` is eight commits ahead of `origin/main`; three existing Gate test/OCI
+worktree edits remain unstaged and preserved.
 
 ## 2026-10-15 — Dreaming authorization correction and index persistence evidence
 

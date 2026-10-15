@@ -239,3 +239,24 @@ complete index. The previously verified post-restart persistence evidence
 remains the source for restart survival; no new restart or index write was
 performed. M2 containers remain up, all returned Buildx rows are terminal,
 and no in-flight M2 operation was found. No M2 DB query or service action ran.
+
+## 2026-10-16 fresh read-only source and runtime check
+
+At `2026-10-16T00:03+08:00`, the released Lab OpenClaw manifest still matched
+the live healthy image: version `1.10.5`, source
+`57e472ebe014a0b4d3574d7ef30107340dc99308`, digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`,
+and `DRIFT_STATUS=IN_SYNC`. Product Radar was healthy at digest
+`sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`,
+but still had no reported Git SHA, product version, or product-owned
+provenance. `git cat-file` confirmed the `633dd216339f` object is absent; a
+read-only scan of local unreachable commits found none changing
+`apps/product-radar/` or `packages/presentation/`. The original source lineage
+therefore remains unrecoverable from this local object database. The
+Radar-only apply guard remains in place; no image build or apply was attempted.
+
+Gate M2's Gateway/Worker, PostgreSQL, egress proxy, SaaS 9Router, and BuildKit
+were running. All returned Buildx entries were terminal; no migration
+container or `release-config-hash` process was present. No M2 database query
+or service action occurred. The Dreaming schedule remained enabled for
+03:00 Asia/Shanghai; the observation preceded that day's scheduled run.

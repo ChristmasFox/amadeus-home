@@ -394,3 +394,21 @@ A fresh read-only `memory status --json --agent main` at
 with FTS enabled/available and the vector index enabled and complete. This is
 a status read only; it does not repeat the incremental refresh, Dreaming run,
 or restart.
+
+## Fresh read-only status — 2026-10-16T00:03+08:00
+
+The current released image still reports 5 files / 92 chunks, `dirty=false`,
+hybrid search, FTS enabled/available, a complete enabled 1024-D vector index,
+valid index identity, and zero scan issues. Provider state is `pending` in
+this metadata response; no deep/provider probe was requested. The earlier
+authorized synthetic Embedding probe and accepted keyword/semantic searches
+remain their own evidence and were not repeated. Session-corpus metadata
+reports 3 files, zero suspicious files/lines, and an existing ingestion state;
+no transcript, JID, phone number, or memory text was read or emitted.
+
+The read-only cron metadata contains exactly one enabled “Memory Dreaming
+Promotion” entry at `0 3 * * *` `Asia/Shanghai`, with last status `ok` at
+`2026-10-15T22:34:09+08:00` and next run `2026-10-16T03:00:00+08:00`. This
+observation was before the next scheduled run. The configuration and schedule
+were not changed. Since `dirty=false`, no incremental index refresh was
+needed or issued; no Lab restart or other runtime write occurred.

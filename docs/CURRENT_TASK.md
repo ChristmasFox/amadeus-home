@@ -1,8 +1,49 @@
 # Current Task — Lab Memory Recovery and Dual Product Release Engineering
 
-Date: 2026-10-15 (Asia/Shanghai).
+Date: 2026-10-16 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
+
+## Fresh continuation audit — 2026-10-16T00:03+08:00
+
+Fetched `origin/main`; it added no commits. `origin/main` remains an ancestor
+of local `main`, now eight commits ahead at `ae94c27`. The only worktree edits
+remain the three pre-existing Gate M2 test/OCI files; they were inspected and
+left unstaged and unchanged.
+
+Read-only `scripts/release-lab.sh status --live --manifest` reports released
+Lab 1.10.5 `IN_SYNC`, healthy at source
+`57e472ebe014a0b4d3574d7ef30107340dc99308` and digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+Memory status reports 5 indexed/scanned files, 92 chunks, `dirty=false`,
+hybrid search, FTS enabled/available, and an enabled, complete 1024-D vector
+index with valid identity and zero scan issues. The status metadata reports
+provider state `pending`; this status read did not probe the provider. The
+previously accepted Embedding probe and keyword/semantic retrieval remain the
+separate evidence. Session-corpus metadata reports 3 files and zero
+suspicious files/lines; no transcript or memory content was read. No
+incremental refresh is pending, so no index write was issued.
+
+The existing “Memory Dreaming Promotion” job has one enabled entry at
+`0 3 * * *`, `Asia/Shanghai`; metadata reports last status `ok` at
+`2026-10-15T22:34:09+08:00` and next run `2026-10-16T03:00:00+08:00`. At this
+snapshot it had not reached the next scheduled time. Its definition and
+schedule were not changed. No Lab config edit, restart, Dreaming invocation,
+or release action occurred in this audit.
+
+Product Radar is healthy, but source/version and product-owned provenance
+remain `UNKNOWN` at digest
+`sha256:1f708837c5d55fcb608108621d74402936a767397fb76af0b4c9c4fc655e396b`.
+The `633dd216339f` commit object is absent; a local unreachable-commit scan
+found no commit touching Product Radar or Presentation that recovers it. The
+Lab default path still rejects a Radar-only apply before build/checkpoint;
+no build or apply was attempted.
+
+Gate M2 remains paused and unchanged. Gateway/Worker, PostgreSQL, egress
+proxy, SaaS 9Router, and BuildKit were running; every returned Buildx history
+entry was terminal, and no migration container or `release-config-hash`
+process was present. No M2 database query, migration, build, or service action
+ran. Runtime writes for this audit: `none`.
 
 Arthur clarified that the earlier authorization to explicitly enable
 Dreaming/restart Lab was based on a mistaken “Dreaming disabled” conclusion.
