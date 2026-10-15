@@ -22,6 +22,14 @@ The `release-config-hash` process is absent, so no kill signal was needed.
 Read-only M2 inspection found only terminal Buildx history and no migration or
 deployment process; M2 services and data were not changed.
 
+Fresh read-only status at `2026-10-15T15:40:47Z` confirms the released Lab
+OpenClaw manifest is `IN_SYNC` at 1.10.5. Product Radar remains healthy but
+its legacy source/version are `UNKNOWN`; a dry-run selects it for rebuild, but
+the existing apply route also revalidates configuration and restarts OpenClaw,
+so no Product Radar build/apply was attempted. A current M2 check found all
+Buildx history terminal and no build/deploy/migration command; services remain
+running and M2 remains paused. No DB query or service action ran.
+
 ## 2026-10-15 — Lab Dreaming config attempt rolled back
 
 After the earlier Lab 1.10.5 release, Arthur authorized an additional

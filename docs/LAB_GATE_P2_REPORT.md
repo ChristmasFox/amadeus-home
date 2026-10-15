@@ -44,7 +44,23 @@ Passed:
 - `git diff --check`
 - `pnpm workflow:plan` — `FAST`; Docker build forbidden; 11 changed paths
 
-Current source checks report Lab `1.10.4` and Gate `0.1.0`. No version file
-was changed by the fixture tests. No live Gate M2 service or database was
-modified. P3 release CLIs, candidate/manifest tracking, drift detection, and
-build-impact analysis remain outstanding.
+At P2 phase close, source checks reported Lab `1.10.4` and Gate `0.1.0`. No
+version file was changed by the fixture tests. No live Gate M2 service or
+database was modified. P3 release CLIs, candidate/manifest tracking, drift
+detection, and build-impact analysis remained outstanding at that point; see
+the subsequent phase and release evidence below and in the P3 report.
+
+## Subsequent Lab 1.10.5 release — 2026-10-15
+
+The P2 source phase above completed before the separately authorized Lab
+candidate/release sequence. Root `VERSION` and the single-release notes now
+identify Lab `1.10.5`; Gate remains on its independent `0.1.0` development
+baseline. After P1 evidence passed, formal promotion created the local
+annotated tag `lab/v1.10.5` at source commit
+`0f109389378dc322dbc780997f3133b5f69eb53e` and recorded external manifest
+`/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T145222Z-released.json`.
+The running OpenClaw artifact remains the verified immutable candidate from
+`57e472ebe014a0b4d3574d7ef30107340dc99308`; promotion made no container
+switch. The tag remains local, no Gate version/tag was created, and no Gate
+runtime or database was modified. See the current P1 and P3 follow-ups for
+live evidence and status.

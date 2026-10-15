@@ -146,3 +146,32 @@ and Actions itself was not run.
   `node:22-bookworm-slim`; that test created no container.
 - No candidate apply, release, tag, push, database migration, secret change,
   Embedding request, memory rebuild, or Compose operation ran.
+
+## Subsequent authorized Lab candidate and release — 2026-10-15
+
+After the source-only P3 phase, Arthur separately authorized the Lab-only
+candidate sequence. The 1.10.5 OpenClaw image was built from
+`57e472ebe014a0b4d3574d7ef30107340dc99308` at
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`;
+it includes the before-read peer-admission patch. Candidate application went
+through `scripts/release-lab.sh candidate` and the existing
+`scripts/deploy-openclaw.sh` guarded path, with an external protected
+pre-switch checkpoint. No bare Compose apply was used. Post-switch health,
+retrieval, source admission, and the later controlled Dreaming/index evidence
+are detailed in the P1 report and release checkpoint.
+
+After the P1 evidence validator returned `LIVE_VERIFIED`, formal promotion
+created local tag `lab/v1.10.5`, wrote the protected external released manifest,
+and delivered the formal owner notification. Promotion reused the live
+candidate digest without a container switch. A fresh read-only
+`scripts/release-lab.sh status --live --manifest <released-manifest>` at
+`2026-10-15T15:40:47Z` returned `DRIFT_STATUS=IN_SYNC` for OpenClaw.
+
+This continuation also fixed a potentially unbounded snapshot query in
+`scripts/lab-runtime-snapshot.py` (`2e9f66c`): config and Compose hashes now use
+direct `sha256sum` calls with a 30-second subprocess timeout, with a focused
+timeout/fail-closed fixture. A fresh runtime snapshot completed successfully.
+No Product Radar rebuild/apply was performed: its legacy image source remains
+unavailable, and the current `--build-radar` apply path would also reconcile
+and restart OpenClaw. Gate remains paused; no Gate apply, DB action, image
+build, tag, or release was performed in this continuation.

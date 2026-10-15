@@ -183,3 +183,33 @@ inputs, and requires a Product Radar rebuild because its recorded source
 source/lineage planning evidence only: no image was built, no container was
 queried or changed, and `BUILD_VERIFIED` remains false. The dry-run does not
 resolve the outstanding live digest/Compose provenance evidence.
+
+## Post-release read-only state refresh — 2026-10-15T15:40Z
+
+The bounded `python3 scripts/lab-runtime-snapshot.py` query and
+`scripts/release-lab.sh status --live --manifest
+/Users/nyannyan/.local/state/amadeus/releases/lab-lab-maintainer-20261015T145222Z-released.json`
+completed read-only. OpenClaw is running and healthy at Lab 1.10.5, source
+`57e472ebe014a0b4d3574d7ef30107340dc99308`, OCI-provenance-backed digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`,
+and the released manifest reports `DRIFT_STATUS=IN_SYNC`. The live config
+digest remains the restored baseline
+`sha256:7106f78e2cde95b7b3ed6cf4ef457eaf4fd7f9d0ea75a125da54768190f09315`.
+No config contents were read.
+
+Product Radar remains running and healthy at its recorded legacy digest, but
+the tag's source commit `633dd216339f` is absent from Git and the image has no
+product-owned provenance marker; source/version remain `UNKNOWN`. The
+read-only plan `bash scripts/deploy-openclaw.sh --dry-run --build-radar`
+returned `AUTO_SCOPE_PRODUCT_RADAR=build`. Its existing apply path is a full
+Lab-stack operation that also rewrites/revalidates OpenClaw configuration and
+restarts OpenClaw, so no build/apply was attempted under the current scope.
+This Product Radar lineage gap remains an explicit open drift item, not a
+claim that all Lab services are in sync.
+
+Gate M2 read-only inspection on `pubg-saas-m2-clean` found Gateway and Worker
+up, PostgreSQL/proxy/SaaS 9Router/BuildKit up, and every returned Buildx
+history row terminal (`Completed` or `Error`). The guest process table showed
+no active build, deploy, or migration command. No database query, log
+inspection, service action, or M2 data change occurred. The `release-config-hash`
+host process was absent. No Lab runtime write occurred in this refresh.

@@ -22,6 +22,20 @@ No further runtime change occurred. The hanging `release-config-hash` process
 is absent, and M2 Buildx entries are terminal with no migration/deploy
 process observed; M2 remains paused and untouched.
 
+Fresh read-only release status at `2026-10-15T15:40:47Z` reports Lab OpenClaw
+1.10.5 healthy and `DRIFT_STATUS=IN_SYNC` against the released manifest. Its
+image remains the verified candidate digest/source; runtime config digest is
+the restored baseline. Product Radar is also healthy, but its legacy source
+`633dd216339f` has no reachable Git commit or product-owned provenance, so its
+version/source remain `UNKNOWN`. The dry-run
+`bash scripts/deploy-openclaw.sh --dry-run --build-radar` selects a Product
+Radar rebuild. Applying that existing full-stack path also revalidates and
+restarts OpenClaw; no build/apply is authorized for Product Radar in this
+continuation. M2's current Gateway/Worker/PostgreSQL/proxy/SaaS 9Router/BuildKit
+containers remain up; returned Buildx history is terminal and the guest
+process list has no build/deploy/migration command. No database query or M2
+service action ran.
+
 The read-only snapshot helper's stuck-query path was fixed in source commit
 `2e9f66c` (`fix: bound Lab runtime snapshot queries`): digest reads now call
 `sha256sum` directly with a 30-second timeout and fail closed. Its focused
@@ -29,15 +43,16 @@ test, workflow/architecture/secrets checks, affected typechecks and PUBG tests
 passed. No image was built and this commit was not pushed. Existing unrelated
 Gate worktree edits remain untouched.
 
-Latest continuation: the authorized Lab Dreaming config change stopped at
-`openclaw config validate` because atomic replacement changed the config owner
-to root. The original config was restored from a protected checkpoint and Lab
-`openclaw` restarted healthy; the restored config validates. No controlled
-Dreaming, incremental refresh, build, or new release was attempted after this
-failure. Evidence and the rollback command are in
+Earlier config attempt (rolled back before Arthur's correction): the authorized
+Lab Dreaming config change stopped at `openclaw config validate` because
+atomic replacement changed the config owner to root. The original config was
+restored from a protected checkpoint and Lab `openclaw` restarted healthy; the
+restored config validates. No Dreaming, incremental refresh, build, or release
+was attempted in that failed continuation; later authorized acceptance and
+release results are recorded above. Evidence and the rollback command are in
 `.agent/checkpoints/2026-10-15-lab-dreaming-config-validation-rollback.md`.
 
-Status before that continuation: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
+Status at that historical checkpoint: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
 `SOURCE_COMPLETE`; P3 `SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab
 `BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED` for version 1.10.5.**
 Arthur authorized the ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in

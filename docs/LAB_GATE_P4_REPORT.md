@@ -1,7 +1,7 @@
 # Lab / Gate P4 delivery evidence
 
 Date: 2026-10-15 (Asia/Shanghai)
-Status: **`SOURCE_EVIDENCE_COMPLETE; LIVE_ACCEPTANCE_GATES_OPEN`**
+Status: **`SOURCE_EVIDENCE_COMPLETE; LAB_P1_LIVE_VERIFIED_AND_RELEASED; GATE_M2_ACCEPTANCE_OPEN; PRODUCT_RADAR_PROVENANCE_UNKNOWN`**
 
 P4 consolidates the P0–P3 evidence and records what is source-tested, package
 built, live-observed, and still awaiting authorization. It does not certify a
@@ -100,3 +100,33 @@ SQLite index was rebuilt after backup; no session-history database, production
 PostgreSQL, source memory file, live secret, container definition, release
 version, formal tag, or external registry was changed. Gate M2 remains paused
 and incomplete.
+
+## Superseding Lab acceptance and release — 2026-10-15
+
+The preceding completion-boundary snapshot is historical. After separate
+Lab-only authorization, the 1.10.5 candidate containing before-read peer
+admission was built and applied through the guarded release/deploy path. P1
+acceptance is now `LIVE_VERIFIED`: the protected evidence validates all
+required checks, including the real 9Router 1024-dimension response, keyword
+and semantic retrieval, incremental indexing, clean `dirty=false` state,
+Dreaming execution/persistence, and source isolation. The index had 5 files /
+92 chunks and remained clean after an already completed rollback restart;
+this persistence evidence required no restart in the correction continuation.
+Dreaming read one owner-allowlisted workspace, excluded groups/channels, and
+the metadata privacy scan found no phone-number or peer-ID matches. The
+existing 03:00 Asia/Shanghai schedule remains enabled and unchanged.
+
+Lab 1.10.5 is `BUILD_VERIFIED`, `LIVE_VERIFIED`, and `RELEASED`; its local
+annotated tag is `lab/v1.10.5`. The current live OpenClaw image is healthy and
+the released manifest status is `IN_SYNC`. The formal promotion made no
+container switch. Since Arthur's correction, no Lab config edit, restart,
+index write, image build, or release action occurred. The withdrawn
+Dreaming-enable/restart authorization is not active.
+
+Remaining boundaries are product-specific: GitHub Actions has not run because
+the branch was not pushed; publishing remains separately unauthorized; Gate
+M2's human KOOK acceptance/Go-No-Go remains open and M2 was not resumed. The
+current Product Radar image is healthy but its legacy source/version remain
+`UNKNOWN`; the read-only plan selects a rebuild, and its current apply path
+would also reconcile/restart OpenClaw, so no Product Radar operation was
+attempted. These limits do not change Lab OpenClaw's verified release status.

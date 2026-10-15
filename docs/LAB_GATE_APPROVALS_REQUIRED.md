@@ -27,3 +27,21 @@ or registry publishing is authorized by this checklist. Current P1 evidence
 and the safe reindex procedure are in
 [`LAB_MEMORY_CORE_P1_REPORT.md`](LAB_MEMORY_CORE_P1_REPORT.md), and release
 mechanics are in [`RELEASE_ENGINEERING.md`](RELEASE_ENGINEERING.md).
+
+## Subsequent correction and remaining drift — 2026-10-15
+
+Arthur withdrew the later authorization to explicitly enable Dreaming or
+restart Lab because the bundled default was already enabled and Dreaming had
+passed. The attempted config change was rolled back before the correction;
+there has been no Lab config edit or restart afterward. The post-index status
+after that already completed rollback restart retained 5 files / 92 chunks and
+`dirty=false`; see the sanitized external evidence referenced by the P1 report.
+
+One independent P0 drift item remains: Product Radar is healthy, but its
+legacy image source `633dd216339f` is unreachable and its image lacks
+product-owned provenance, so source/version are `UNKNOWN`. The read-only
+`bash scripts/deploy-openclaw.sh --dry-run --build-radar` selects a rebuild.
+The current apply path is not isolated to Product Radar: it also reconciles
+OpenClaw configuration and restarts OpenClaw. No Product Radar build or apply
+is authorized by this checklist; it needs a reviewed scope-specific path and
+separate approval. Gate M2 remains paused and untouched.
