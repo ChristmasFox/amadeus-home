@@ -5,6 +5,13 @@
 > desktop/browser or send test messages. A WebSocket session alone does not
 > pass the live acceptance gate.
 
+> **Goal pause status (2026-10-15): PAUSED / BLOCKED_BY_RELEASE_ENGINEERING.**
+> M2 is still open and is not cancelled, restarted, or complete. Prioritize the
+> Lab long-term-memory and Lab/Gate version-engineering special project first;
+> then resume M2 at its final formal KOOK acceptance and controlled release
+> review. Pause evidence and recovery steps:
+> `.agent/tasks/2026-10-15-gate-m2-paused.md`.
+
 > **Active M2 interaction architecture and rollout (2026-10-14):** source
 > commits `1e74e5a` and `f5c40e2` replace classifier-gated ordinary messages
 > with a bounded Vercel AI SDK `ToolLoopAgent`; every trusted human message is

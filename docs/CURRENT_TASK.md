@@ -2,20 +2,18 @@
 
 Date: 2026-10-15 (Asia/Shanghai).
 
-## Operator pause overlay — Gate M3 (2026-10-15)
+## Operator pause overlay — Gate M2 / PUBG KOOK SaaS V0.1 (2026-10-15)
 
-Status: **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**. Do not start another M3
-phase or deploy until the Lab long-term-memory and Lab/Gate version-engineering
-special project is complete. The pause checkpoint is
-`.agent/tasks/2026-10-15-gate-m3-paused.md`.
+Status: **PAUSED / BLOCKED_BY_RELEASE_ENGINEERING**. Keep the M2 Goal open and
+unfinished. Prioritize the Lab long-term-memory and Lab/Gate version-engineering
+special project; after it completes, return to the final formal M2 acceptance.
+The pause checkpoint is `.agent/tasks/2026-10-15-gate-m2-paused.md`.
 
-Repository/Goal state did not contain a Gate M3 Goal or phase plan when this
-pause was recorded: the tracked Gate evidence below is M2 trial work, and the
-Codex Goal record points to the already-paused PUBG SaaS Goal. Therefore the
-exact M3 completed/current/outstanding phases and M3-specific test evidence
-cannot be safely inferred; the checkpoint records this gap instead of
-relabeling M2 evidence. Do not use `/goal resume` until the actual Gate M3 Goal
-is identified in the Goal system.
+The active Goal is `docs/PUBG_KOOK_SAAS_V0_1_GOAL.md` and remains paused, not
+cancelled or complete. Source/offline M2 gates and local rollout evidence are
+recorded below and in the Goal checkpoints. Arthur's final real KOOK
+conversation acceptance and the controlled release review remain open; do not
+substitute a WebSocket connection or source tests for the human acceptance.
 
 ## Last recorded Gate source milestone — KOOK channel message adapter (2026-10-15)
 
