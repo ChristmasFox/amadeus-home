@@ -4,8 +4,12 @@ Date: 2026-10-15 (Asia/Shanghai)
 Status: **`SOURCE_EVIDENCE_COMPLETE; LAB_P1_LIVE_VERIFIED_AND_RELEASED; GATE_M2_ACCEPTANCE_OPEN; PRODUCT_RADAR_PROVENANCE_UNKNOWN`**
 
 P4 consolidates the P0–P3 evidence and records what is source-tested, package
-built, live-observed, and still awaiting authorization. It does not certify a
-formal release or complete Gate M2.
+built, live-observed, and still awaiting authorization. At the initial source
+consolidation it did not certify a formal release; the later Lab release is
+recorded in the superseding section below. Gate M2 remains incomplete.
+
+The acceptance matrix below is the P4 phase-close snapshot. Read the
+superseding section at the end for current Lab acceptance and release status.
 
 ## Acceptance matrix
 
