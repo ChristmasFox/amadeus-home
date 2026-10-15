@@ -62,17 +62,21 @@ test('public sync HTTP boundary allows only official API and telemetry GETs and 
   await guarded('https://api.pubg.com/shards/steam/players?filter%5BplayerIds%5D=account.test', {
     headers: { authorization: 'Bearer fixture-only' },
   });
+  await guarded('https://api.pubg.com/shards/steam/matches/fixture', {
+    headers: { authorization: 'Bearer fixture-only' },
+  });
   await guarded('https://telemetry-cdn.pubg.com/test/match-telemetry.json');
   await assert.rejects(guarded('https://example.com/test-telemetry.json'), /public_sync_endpoint_invalid/u);
   await assert.rejects(guarded('https://telemetry-cdn.pubg.com/test/match-telemetry.json', {
     headers: { authorization: 'Bearer fixture-only' },
   }), /public_sync_telemetry_auth_forbidden/u);
   await assert.rejects(guarded('https://api.pubg.com/shards/steam/matches/fixture', { method: 'POST' }), /public_sync_method_invalid/u);
-  assert.equal(admission.acquired, 1);
-  assert.equal(admission.observed, 1);
+  assert.equal(admission.acquired, 2, 'player discovery and match detail requests both share public API admission');
+  assert.equal(admission.observed, 2, 'provider response quota headers from both API endpoints are observed');
   assert.ok(requests.every((request) => request.redirect === 'error'));
   assert.equal(requests[0]?.authorization, 'Bearer fixture-only');
-  assert.equal(requests[1]?.authorization, null);
+  assert.equal(requests[1]?.authorization, 'Bearer fixture-only');
+  assert.equal(requests[2]?.authorization, null);
 });
 
 test('public worker syncs persisted rosters, stores match and friendly-fire telemetry in each tenant scope', { skip: !databaseUrl }, async () => {
@@ -93,10 +97,12 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
   ]);
   const matchOwners = new Map([[matchA, [accountA1, accountShared, accountB2]]]);
   const admission = new AdmissionFixture();
+  let apiRequests = 0;
   const cdnAuthorizations: Array<string | null> = [];
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.origin === 'https://api.pubg.com') {
+      apiRequests++;
       assert.equal(new Headers(init?.headers).get('authorization'), 'Bearer fixture-only');
       if (url.pathname.endsWith('/players')) {
         const ids = (url.searchParams.get('filter[playerIds]') ?? '').split(',').filter(Boolean);
@@ -178,8 +184,10 @@ test('public worker syncs persisted rosters, stores match and friendly-fire tele
       telemetryFetched: 2,
       telemetryUnavailable: 0,
     });
-    assert.equal(admission.acquired, 2, 'one player discovery request per registered team shares public API admission');
-    assert.equal(admission.observed, 2);
+    assert.equal(admission.acquired, apiRequests,
+      'every player discovery and match detail API request shares public admission');
+    assert.equal(admission.observed, apiRequests,
+      'every official API response is observed for provider quota headers');
     assert.deepEqual(cdnAuthorizations, [null, null]);
 
     const contextA = {
