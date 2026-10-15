@@ -201,6 +201,10 @@ that no other session source could be read. The enabled Dreaming cron's
 triggered. No transcript was read and no memory write or rollback was needed.
 The ordered procedure stopped here; build/apply/release were not started.
 See `.agent/checkpoints/2026-10-15-lab-dreaming-preflight-stop.md`.
+The current Goal continuation is limited to source, tests, CI, documentation,
+and harmless validation. Further live index operations, image builds,
+restarts, deployments, and release tagging require fresh explicit
+authorization.
 
 ## Validation and limits
 

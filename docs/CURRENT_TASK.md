@@ -12,6 +12,13 @@ ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence a
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
+The current continuation authorization is limited to source, tests, CI,
+documentation, and harmless validation. It does not authorize an image build,
+runtime restart/deployment, further live memory-index write, production
+database write, formal release tag, or cloud migration. The earlier Lab
+authorization remains historical evidence for completed items 1–3; step 4
+stopped before Dreaming, and items 5–7 require fresh explicit authorization.
+
 ## Goal continuation audit — repository and Gate M2 read-only check — 2026-10-15
 
 Fetched `origin/main`; it added no commits. `main` is clean and 10 commits
