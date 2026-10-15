@@ -4,28 +4,70 @@ Date: 2026-10-15 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
-Status: **P0 audit complete; P1 `SOURCE_FIXED`; P2 `SOURCE_COMPLETE`; P3
-`SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab candidate is
-`BUILD_VERIFIED` and deployed; stopped before Dreaming because the live
-Memory Core config has no Dreaming entry. P1 `LIVE_VERIFIED` and `RELEASED`
-remain incomplete.** Arthur authorized the
-ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
+Status: **P0 audit complete; P1 `SOURCE_FIXED` and `LIVE_VERIFIED`; P2
+`SOURCE_COMPLETE`; P3 `SOURCE_COMPLETE`; P4 `SOURCE_EVIDENCE_COMPLETE`; Lab
+candidate is `BUILD_VERIFIED` and deployed. Dreaming and incremental retrieval
+acceptance passed; formal Lab release/tag is the remaining authorized step.**
+Arthur authorized the ordered Lab-only actions on 2026-10-15. The sanitized baseline and P0 evidence are in
 `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
 Arthur renewed and reordered the authorization on 2026-10-15 for Lab only:
 push current source; build the Lab OpenClaw candidate; apply it through the
-guarded deploy path; then run owner-only Dreaming on that image; formally
-release only after all P1 live gates pass. Steps 1–3 completed; step 4 stopped
-before invocation after its required config preflight failed. No Dreaming
-output was produced and step 5 is not started. Gate remains excluded and M2 stays
-paused. The earlier item-4 preflight stop remains evidence about the old image;
-this authorization permits a new-image run only after deployment and source
-boundary verification. No operation is authorized against Gate, its
+guarded deploy path; run owner-only Dreaming on that image; formally release
+only after all P1 live gates pass. The source push, candidate build/deploy,
+Dreaming run, privacy review, and incremental index/retrieval acceptance are
+complete. Formal release/tag remains pending its apply step. The previous
+Dreaming preflight stop is superseded by direct inspection of the bundled
+Memory Core executor and the successful controlled run below. Gate remains
+excluded and M2 stays paused; no operation is authorized against Gate,
 PostgreSQL, or M2 runtime.
 
-## Reordered Lab sequence — candidate built and deployed; Dreaming stopped — 2026-10-15
+## Reordered Lab sequence — P1 live verification complete; release pending — 2026-10-15
+
+The existing `Memory Dreaming Promotion` job is the Memory Core-managed
+executor: the bundled default enables Dreaming when no explicit config entry is
+present, and its `agentTurn` payload carries the Memory Core promotion token
+handled before an agent reply. The earlier checkpoint's conclusion that this
+was only an ordinary `memory_search` automation was incorrect. No job
+definition, schedule, or timezone was changed. The controlled job run succeeded
+at `2026-10-15T22:34:09+08:00`; it used one workspace, produced zero promotion
+candidates, and completed both Light and REM narrative writes. The existing
+schedule remains enabled at `0 3 * * *` `Asia/Shanghai`; its next run is
+`2026-10-16T03:00:00+08:00`.
+
+Dreaming's before-read peer admission and classifier markers were present.
+The configured WhatsApp peer matched the owner target, Telegram direct
+admission failed closed without a configured peer file, and groups/channels
+were excluded. The session corpus reported zero suspicious files or lines.
+A metadata-only privacy scan of six added/changed files found no explicit or
+ambiguous phone number, Owner phone match, WhatsApp JID, or group JID. It
+recorded no transcript or memory snippets. Sanitized details are in the
+external `dreaming-verification.json` listed below.
+
+Before the index write, a new protected checkpoint was created at
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming`.
+Its agent SQLite online backup passed `quick_check=ok`; the full Workspace tree,
+including `memory/`, matched source files. The checkpoint directory is mode
+0700; the SQLite and evidence files are mode 0600. The authorized incremental
+`openclaw memory index --agent main` indexed five files. Final status is five
+files, 92 chunks, `dirty=false`, FTS available, hybrid search, and a complete
+1024-dimension vector index. A keyword query and semantic paraphrase query both
+returned positive results; query snippets were not retained. The candidate
+remains healthy at digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+
+`scripts/validate-lab-memory-acceptance.py` accepted the external P1 evidence
+as `LIVE_VERIFIED` for source
+`57e472ebe014a0b4d3574d7ef30107340dc99308`. The guarded release dry-run passed
+with scope `existing-live-openclaw-digest`, no container switch, and tag
+`lab/v1.10.5`. No tag, formal release manifest, or formal release notification
+has been created/sent yet. The exact evidence and release dry-run are recorded
+in `.agent/checkpoints/2026-10-15-lab-live-verified-dreaming-release-pending.md`.
+The old preflight snapshot remains a historical record of the earlier stop.
+
+## Earlier ordered Lab snapshot — candidate built and deployed; Dreaming stopped at that checkpoint — 2026-10-15 (superseded)
 
 Step 1 completed: source commit `57e472ebe014a0b4d3574d7ef30107340dc99308`
 was pushed and verified at `origin/main` after rebase, `pnpm check:secrets`,

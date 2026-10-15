@@ -1,7 +1,7 @@
 # Lab Memory Core P1 repair report
 
 Date: 2026-10-15 (Asia/Shanghai)  
-Status: **`SOURCE_FIXED` + `BUILD_VERIFIED`; Lab candidate deployed and live checks passed; controlled Dreaming stopped before run; P1 `LIVE_VERIFIED` and `RELEASED` remain incomplete**
+Status: **`SOURCE_FIXED` + `BUILD_VERIFIED` + P1 `LIVE_VERIFIED`; Lab candidate deployed and verified; controlled Dreaming and incremental retrieval passed; formal `RELEASED` tag/notification pending**
 Scope: source, configuration, temporary fixtures, a synthetic Embedding probe,
 Lab index acceptance, and the later explicitly authorized candidate build and
 Lab OpenClaw deployment. The derived index was rebuilt after a verified
@@ -305,3 +305,50 @@ recorded above, no `memory reset`, session backfill, or manually controlled
 Dreaming run was issued by this repair; the pre-existing scheduled execution
 is described above. No file/database write outside the derived-index rebuild
 was issued by us.
+
+## Superseding Lab live acceptance — Dreaming and incremental index passed — 2026-10-15
+
+The later candidate image was inspected directly after the earlier preflight
+stop. The bundled Dreaming code sets `DEFAULT_MEMORY_DREAMING_ENABLED=true`, so
+the missing explicit `dreaming` config entry did not disable it. The enabled
+“Memory Dreaming Promotion” job is the Memory Core-managed executor: its
+`agentTurn` payload carries the promotion trigger handled by the
+`before_agent_reply` hook. The earlier conclusion that the job was an ordinary
+`memory_search` automation was incorrect and is superseded here. The job was
+run once without editing its definition or schedule. It succeeded at
+`2026-10-15T22:34:09+08:00`, used one workspace, produced zero promotion
+candidates, and completed both Light and REM narrative writes. The existing
+daily `03:00 Asia/Shanghai` schedule is still enabled, next due
+`2026-10-16T03:00:00+08:00`.
+
+The live before-read peer-admission and classifier markers were present. The
+sole configured WhatsApp peer matched the Owner target; Telegram direct
+admission failed closed because its peer file is not configured; groups and
+channels were excluded. The run's session corpus reports zero suspicious
+files/lines. A metadata-only scan of six added/changed Workspace files found
+zero explicitly formatted phone numbers, ambiguous phone candidates, Owner
+phone matches, WhatsApp JIDs, or group JIDs. No transcript or memory snippets
+were retained in the evidence.
+
+Before refreshing the index, a protected external checkpoint was created at
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming`.
+It contains a SQLite online backup with `PRAGMA quick_check=ok` and a complete
+Workspace copy whose file tree matched the source. The directory is mode 0700;
+the SQLite snapshot and evidence JSON files are mode 0600. The authorized
+incremental `openclaw memory index --agent main` indexed five files. Status is
+five files/92 chunks, `dirty=false`, FTS available, hybrid search, complete
+1024-dimension vector index, and no scan issues. A keyword query returned one
+positive result; a semantic paraphrase query returned two positive results.
+The Dreaming notes were present and indexed after the run.
+
+The protected external
+`live-acceptance.json` passed `scripts/validate-lab-memory-acceptance.py` as
+`LIVE_VERIFIED` for source
+`57e472ebe014a0b4d3574d7ef30107340dc99308` and candidate digest
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+The sanitized run/privacy record is `dreaming-verification.json` in the same
+checkpoint. The guarded formal-release dry-run passed for `lab/v1.10.5`,
+promotion scope `existing-live-openclaw-digest`, and no container switch.
+Formal release/tag/notification remain pending; this is not yet `RELEASED`.
+The execution timeline, evidence locations, and exact release dry-run are
+recorded in `.agent/checkpoints/2026-10-15-lab-live-verified-dreaming-release-pending.md`.

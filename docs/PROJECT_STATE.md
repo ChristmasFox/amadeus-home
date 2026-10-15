@@ -1,6 +1,35 @@
 # Project State — 2026-10-15
 
-## 2026-10-15 — Lab candidate deployed; Dreaming preflight stopped
+## 2026-10-15 — Lab P1 `LIVE_VERIFIED`; formal release pending
+
+The authorized Lab-only order has now completed source push, candidate build,
+guarded deployment, controlled Dreaming, privacy review, and incremental
+index/retrieval acceptance. Candidate version `1.10.5` remains healthy at
+`sha256:4cb3c044925bb371b7232e47520b04d17633862549b9e315e555fbc9ce7aefd9`.
+The Dreaming run succeeded at `2026-10-15T22:34:09+08:00`, wrote Light and REM
+narratives, read one allowlisted owner workspace, and promoted zero candidates.
+The existing daily job remains enabled at `03:00 Asia/Shanghai`; next run is
+`2026-10-16T03:00:00+08:00`. No schedule change was made.
+
+The before-read peer admission, owner-target allowlist match, Telegram fail
+closed behavior, and group/channel exclusion passed. A sanitized scan of six
+changed files found zero phone, ambiguous number, Owner phone, WhatsApp JID, or
+group JID matches. The pre-index protected checkpoint at
+`/Volumes/Avalon/backups/operation-skuld/lab-memory/20261015T144403Z-post-dreaming`
+contains a SQLite online backup with `quick_check=ok` and a verified complete
+Workspace copy. Incremental indexing moved from 3 files/70 chunks and
+`dirty=true` to 5 files/92 chunks and `dirty=false`; FTS and semantic/hybrid
+retrieval passed. P1 evidence validates as `LIVE_VERIFIED` for candidate source
+`57e472ebe014a0b4d3574d7ef30107340dc99308`.
+
+The formal release dry-run passed for tag `lab/v1.10.5`, promotion scope
+`existing-live-openclaw-digest`, and no container switch. Formal release,
+notification, and tag creation remain pending. Detailed sanitized evidence is
+in `.agent/checkpoints/2026-10-15-lab-live-verified-dreaming-release-pending.md`.
+The earlier stop below is retained as a historical checkpoint and is
+superseded by this outcome.
+
+## Earlier Lab candidate deployment — Dreaming preflight stopped at that checkpoint (superseded)
 
 The reordered Lab-only sequence completed source push, candidate build, and
 candidate deployment. Source `57e472ebe014a0b4d3574d7ef30107340dc99308` is at
