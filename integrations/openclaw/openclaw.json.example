@@ -24,6 +24,7 @@
   },
   "memory": {
     "search": {
+      "enabled": true,
       "provider": "openai-compatible",
       "model": "Qwen/qwen3.7-text-embedding-flash",
       "remote": {
@@ -125,14 +126,24 @@
   },
   "plugins": {
     "enabled": true,
-    "allow": ["pubg", "amadeus", "whatsapp", "telegram"],
+    "allow": ["pubg", "amadeus", "whatsapp", "telegram", "memory-core"],
+    "slots": {
+      "memory": "memory-core"
+    },
     "entries": {
       "memory-core": {
+        "enabled": true,
         "config": {
+          "dreaming": {
+            "enabled": true,
+            "frequency": "0 3 * * *",
+            "timezone": "Asia/Shanghai"
+          },
           "memoryPolicy": {
             "allowedChannels": ["whatsapp", "telegram"],
             "allowlistedDirectPeerFiles": {
-              "whatsapp": "/run/secrets/owner_whatsapp_target"
+              "whatsapp": "/run/secrets/owner_whatsapp_target",
+              "telegram": "/home/node/.openclaw/dreaming-telegram-peer"
             },
             "excludeSessions": {
               "chatTypes": ["group", "channel"]

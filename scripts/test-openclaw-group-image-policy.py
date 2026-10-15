@@ -14,6 +14,7 @@ import unittest
 spec = importlib.util.spec_from_file_location("openclaw_prepare", Path(__file__).with_name("openclaw_prepare.py"))
 prepare = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prepare)
+from openclaw_test_runtime import patch_pinned_runtime_tree
 
 
 class GroupImagePolicyTest(unittest.TestCase):
@@ -81,15 +82,21 @@ class GroupImagePolicyTest(unittest.TestCase):
         if not cli.is_file():
             self.skipTest("pinned OpenClaw npm dependency is not installed")
         config = json.loads((root / "integrations/openclaw/openclaw.json.example").read_text())
+        config["channels"]["telegram"]["allowFrom"] = ["123456789"]
         keys = prepare.owner_tool_policy_keys("+15555550123")
         config["tools"]["toolsBySender"].update({key: {"allow": ["*"]} for key in keys})
         prepare.ensure_group_image_policies(config["channels"]["whatsapp"], keys)
         prepare.ensure_group_image_policies(config["channels"]["telegram"])
         with tempfile.TemporaryDirectory() as directory:
-            target = Path(directory) / "openclaw.json"
+            temporary = Path(directory)
+            patched_extensions = patch_pinned_runtime_tree(cli.parent / "dist", temporary / "dist", root)
+            target = temporary / "openclaw.json"
             target.write_text(json.dumps(config))
             env = {**os.environ, "OPENCLAW_CONFIG_PATH": str(target),
-                   "OPENCLAW_9ROUTER_API_KEY": "fixture-only"}
+                   "OPENCLAW_9ROUTER_API_KEY": "fixture-only",
+                   "OPENCLAW_BUNDLED_PLUGINS_DIR": str(patched_extensions),
+                   "OPENCLAW_TEST_TRUST_BUNDLED_PLUGINS_DIR": "1",
+                   "VITEST": "1"}
             result = subprocess.run(["node", str(cli), "config", "validate", "--json"],
                                     cwd=root, env=env, capture_output=True, text=True, check=True)
             self.assertTrue(json.loads(result.stdout)["valid"])

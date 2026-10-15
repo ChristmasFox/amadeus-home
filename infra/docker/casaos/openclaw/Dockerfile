@@ -113,6 +113,7 @@ RUN node /tmp/patch-openclaw-channel-identity.mjs --core-root /app/dist \
     && session_bundle="$(find /app/dist -maxdepth 1 -name 'session-ingestion-*.mjs' -print -quit)" \
     && test -n "$session_bundle" \
     && node --check "$session_bundle" \
+    && for backfill_bundle in /app/dist/session-backfill-*.mjs; do [ -f "$backfill_bundle" ] || continue; node --check "$backfill_bundle"; done \
     && rm /tmp/patch-openclaw-channel-identity.mjs /tmp/patch-openclaw-whatsapp-voice-lifecycle.mjs /tmp/patch-openclaw-group-image-policy.mjs /tmp/patch-openclaw-heartbeat-silence.mjs /tmp/patch-openclaw-memory-core.mjs /tmp/openclaw-voice-*.mjs
 
 COPY integrations/openclaw/delivery-boundary /opt/amadeus/delivery-boundary

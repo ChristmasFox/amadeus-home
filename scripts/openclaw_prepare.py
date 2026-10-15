@@ -8,6 +8,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import sys
 import errno
 from pathlib import Path
@@ -166,6 +167,63 @@ def valid_owner_targets(existing: dict) -> list[str]:
     return [str(value).strip() for value in values if isinstance(value, (str, int)) and str(value).strip().startswith("whatsapp:")]
 
 
+def telegram_peer_allowlist_content(values: object) -> bytes:
+    """Build a private, numeric-only allowlist from the operator's Telegram allowFrom."""
+    if not isinstance(values, list) or not values:
+        raise SystemExit("OpenClaw Telegram allowFrom must contain trusted numeric user IDs")
+    peers: list[str] = []
+    for raw in values:
+        if type(raw) is int:
+            value = str(raw)
+        elif isinstance(raw, str):
+            value = raw.strip()
+        else:
+            raise SystemExit("OpenClaw Telegram allowFrom contains an unsupported peer")
+        value = re.sub(r"^(?:telegram|tg|user|id):", "", value, flags=re.IGNORECASE)
+        if not re.fullmatch(r"[1-9][0-9]{0,19}", value):
+            raise SystemExit("OpenClaw Telegram allowFrom must contain trusted numeric user IDs only")
+        peer = f"telegram:{value}"
+        if peer not in peers:
+            peers.append(peer)
+    return ("\n".join(peers) + "\n").encode()
+
+
+def ensure_telegram_peer_allowlist(target: Path, content: bytes) -> None:
+    """Create a private derived allowlist, preserving and validating existing state."""
+    try:
+        current = target.lstat()
+    except FileNotFoundError:
+        try:
+            descriptor = os.open(
+                target,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+        except FileExistsError:
+            return ensure_telegram_peer_allowlist(target, content)
+        created_stat = os.fstat(descriptor)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            ensure_owner(target, 0o600)
+        except BaseException:
+            try:
+                current = target.lstat()
+                if current.st_dev == created_stat.st_dev and current.st_ino == created_stat.st_ino:
+                    target.unlink()
+            except FileNotFoundError:
+                pass
+            raise
+        return
+    if not stat.S_ISREG(current.st_mode) or current.st_nlink != 1:
+        raise SystemExit("Telegram memory allowlist is not a regular file")
+    if target.read_bytes() != content:
+        raise SystemExit("Telegram memory allowlist differs from OpenClaw Telegram allowFrom")
+    ensure_owner(target, 0o600)
+
+
 def owner_phone(owner_target: str) -> str:
     value = owner_target.strip()
     if not value.startswith("whatsapp:"):
@@ -322,6 +380,8 @@ def main() -> None:
     current_allow = existing_config.get("channels", {}).get("telegram", {}).get("allowFrom", [])
     if not isinstance(current_allow, list) or not current_allow:
         raise SystemExit("OpenClaw Telegram allowFrom is empty; refuse to widen identity scope")
+    telegram_memory_allowlist = telegram_peer_allowlist_content(current_allow)
+    ensure_telegram_peer_allowlist(config_dir / "dreaming-telegram-peer", telegram_memory_allowlist)
     config.setdefault("channels", {}).setdefault("telegram", {})["allowFrom"] = current_allow
     owner_target_value = owner_candidates[0] if owner_candidates else owner_target.read_text().strip()
     config.setdefault("commands", {})["ownerAllowFrom"] = [owner_target_value]
@@ -356,6 +416,7 @@ def main() -> None:
     print("EXTERNAL_CONFIG=prepared")
     print("OWNER_TARGET=validated")
     print("TELEGRAM_ALLOWLIST=preserved")
+    print("TELEGRAM_MEMORY_ALLOWLIST=validated")
     print("SECRET_FILES=prepared")
     print("SEED_MISSING_ONLY=yes")
     print("RUNTIME_WORKSPACE_PRESERVED=yes")

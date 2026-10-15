@@ -13,14 +13,17 @@ import path from 'node:path';
 
 export const MARKERS = Object.freeze({
   childEnv: 'amadeus-memory-knn-loader-path-v1',
-  sessionAdmission: 'amadeus-memory-dreaming-peer-admission-v1',
-  manifest: 'amadeus-memory-dreaming-peer-admission-v1',
+  sessionAdmission: 'amadeus-memory-dreaming-peer-admission-v2',
+  sessionBackfill: 'amadeus-memory-backfill-peer-admission-v1',
+  manifest: 'amadeus-memory-dreaming-peer-admission-v2',
 });
 
 export const PIN = Object.freeze({
   version: '2026.9.4',
   childEnvSha256: 'a3d7355f2615621421f078b8870923ae89af6f2bf2d18a4aab648c1953261fa9',
   sessionAdmissionSha256: 'c8df902d4f91a9069b4372409e700e8c43c48308e4dc0c052bab86ff812399c4',
+  dreamingPhasesSha256: '07644badc9be12fd6e83ad30f39760fa92299263fd5691d1f14101010705560a',
+  sessionBackfillSha256: '32aa04a5ff5439d902615ccda1dab774197752fa65d9c1ee9258d3ed529466ff',
   manifestSha256: 'a22bebfcec65c37b41a4d05de40f95d4da6e7501c081cc434d006f77fdb47e66',
 });
 
@@ -67,46 +70,72 @@ export function normalizeWhatsAppPeer(value) {
   return `peer:${peer}`;
 }
 
-export function whatsappSessionMatchesPeer(sessionKey, allowlistContent) {
+export function normalizeDreamingPeer(channel, value) {
+  if (channel === 'whatsapp') return normalizeWhatsAppPeer(value);
+  if (channel !== 'telegram' || typeof value !== 'string') return '';
+  const peer = value.trim().toLowerCase().replace(/^(?:telegram|tg|user|id):/u, '');
+  return /^[1-9][0-9]{0,19}$/u.test(peer) ? `telegram:${peer}` : '';
+}
+
+export function sessionDirectPeer(sessionKey, channel) {
+  if (typeof sessionKey !== 'string' || !['whatsapp', 'telegram'].includes(channel)) return '';
+  const parts = sessionKey.split(':');
+  const directIndex = parts.indexOf('direct');
+  if (directIndex < 0) return '';
+  const channelIndex = parts.lastIndexOf(channel, directIndex - 1);
+  if (channelIndex < 0) return '';
+  let peerIndex = directIndex + 1;
+  if (['whatsapp', 'telegram', 'tg', 'user', 'peer', 'jid', 'id'].includes(parts[peerIndex])) peerIndex += 1;
+  return parts[peerIndex] ?? '';
+}
+
+export function directSessionMatchesPeer(channel, sessionKey, allowlistContent) {
   if (typeof sessionKey !== 'string' || typeof allowlistContent !== 'string') return false;
   const entries = allowlistContent.split(/\r?\n/u).map((entry) => entry.trim()).filter(Boolean);
-  if (entries.length !== 1) return false;
-  const expected = normalizeWhatsAppPeer(entries[0]);
-  if (!expected) return false;
-  return sessionKey.split(':').some((part) => normalizeWhatsAppPeer(part) === expected);
+  if (entries.length === 0 || (channel === 'whatsapp' && entries.length !== 1)) return false;
+  const expected = entries.map((entry) => normalizeDreamingPeer(channel, entry));
+  if (expected.some((peer) => !peer)) return false;
+  return expected.includes(normalizeDreamingPeer(channel, sessionDirectPeer(sessionKey, channel)));
+}
+
+export function whatsappSessionMatchesPeer(sessionKey, allowlistContent) {
+  return directSessionMatchesPeer('whatsapp', sessionKey, allowlistContent);
 }
 
 export function classifyDreamingSessionAdmission({ metadata, sessionKey, policy, readPeerFile }) {
-  if (!metadata) return policy.allowedChannels.length > 0 ? 'session-metadata:missing' : undefined;
+  if (!metadata) return 'session-metadata:missing';
+  if (!policy) return 'admission-policy:missing';
   if (
-    metadata.hookExternalContentSource &&
-    policy.hookExternalContentSources.includes(metadata.hookExternalContentSource)
-  ) {
+    !Array.isArray(policy.hookExternalContentSources) ||
+    !Array.isArray(policy.channels) ||
+    !Array.isArray(policy.chatTypes) ||
+    !Array.isArray(policy.allowedChannels) ||
+    !policy.allowlistedDirectPeerFiles || typeof policy.allowlistedDirectPeerFiles !== 'object'
+  ) return 'admission-policy:invalid';
+  if (metadata.hookExternalContentSource) {
     return `hookExternalContentSource:${metadata.hookExternalContentSource}`;
   }
+  if (metadata.channel && policy.channels.includes(metadata.channel)) return `channel:${metadata.channel}`;
   if (metadata.chatType && policy.chatTypes.includes(metadata.chatType)) {
     return `chatType:${metadata.chatType}`;
   }
   if (policy.allowedChannels.length > 0) {
     if (!metadata.channel || !policy.allowedChannels.includes(metadata.channel)) return 'channel:not-allowlisted';
     if (metadata.chatType !== 'direct') return 'chatType:not-direct';
-    if (metadata.channel === 'whatsapp') {
-      const allowlistFile = policy.allowlistedDirectPeerFiles.whatsapp;
-      if (!allowlistFile) return 'whatsapp-peer:allowlist-missing';
-      let allowlistContent;
-      try {
-        allowlistContent = readPeerFile(allowlistFile);
-      } catch {
-        return 'whatsapp-peer:allowlist-unavailable';
-      }
-      if (!whatsappSessionMatchesPeer(sessionKey, allowlistContent)) return 'whatsapp-peer:not-allowlisted';
+    const allowlistFile = policy.allowlistedDirectPeerFiles[metadata.channel];
+    const reasonPrefix = `${metadata.channel}-peer`;
+    if (!allowlistFile) return `${reasonPrefix}:allowlist-missing`;
+    if (typeof sessionKey !== 'string' || !sessionKey) return `${reasonPrefix}:session-key-missing`;
+    let allowlistContent;
+    try {
+      allowlistContent = readPeerFile(allowlistFile);
+    } catch {
+      return `${reasonPrefix}:allowlist-unavailable`;
     }
+    if (!directSessionMatchesPeer(metadata.channel, sessionKey, allowlistContent)) return `${reasonPrefix}:not-allowlisted`;
     return undefined;
   }
-  if (metadata.channel && policy.channels.includes(metadata.channel)) return `channel:${metadata.channel}`;
-  return metadata.chatType && policy.chatTypes.includes(metadata.chatType)
-    ? `chatType:${metadata.chatType}`
-    : undefined;
+  return 'channel:not-allowlisted';
 }
 
 function replaceOnce(source, find, replacement, label) {
@@ -133,7 +162,9 @@ export function patchChildEnvSource(source) {
 
 export function patchSessionAdmissionSource(source) {
   if (source.includes(MARKERS.sessionAdmission)) {
-    if (!source.includes('whatsapp-peer:not-allowlisted')) throw new Error('incomplete Dreaming peer admission patch');
+    if (!source.includes('const reasonPrefix = `${metadata.channel}-peer`;') || !source.includes('session-origin:missing') || !source.includes('admission-policy:invalid')) {
+      throw new Error('incomplete Dreaming peer admission patch');
+    }
     return source;
   }
   const importAnchor = 'import fs from "node:fs/promises";';
@@ -150,8 +181,83 @@ export function patchSessionAdmissionSource(source) {
   if (startIndex < 0 || endIndex < 0 || result.indexOf(start, startIndex + 1) >= 0) {
     throw new Error('pinned Dreaming admission functions not found exactly once');
   }
-  const injected = `// ${MARKERS.sessionAdmission}\n${normalizeWhatsAppPeer.toString()}\n${whatsappSessionMatchesPeer.toString()}\n${classifyDreamingSessionAdmission.toString()}\nfunction resolveAdmissionPolicy(pluginConfig) {\n\tconst memoryPolicy = asNullableRecord(pluginConfig?.memoryPolicy);\n\tconst exclusions = asNullableRecord(memoryPolicy?.excludeSessions);\n\tif (!exclusions && !memoryPolicy) return;\n\tconst values = (record, key) => Array.isArray(record?.[key]) ? normalizeStringEntries(record[key].filter((value) => typeof value === "string")) : [];\n\tconst peerFiles = asNullableRecord(memoryPolicy?.allowlistedDirectPeerFiles);\n\tconst allowlistedDirectPeerFiles = Object.fromEntries(Object.entries(peerFiles ?? {}).filter(([, value]) => typeof value === "string" && value.trim().length > 0));\n\tconst policy = {\n\t\thookExternalContentSources: values(exclusions, "hookExternalContentSources"),\n\t\tchannels: values(exclusions, "channels"),\n\t\tchatTypes: values(exclusions, "chatTypes"),\n\t\tallowedChannels: values(memoryPolicy, "allowedChannels"),\n\t\tallowlistedDirectPeerFiles\n\t};\n\treturn Object.values(policy).some((entries) => Array.isArray(entries) ? entries.length > 0 : Object.keys(entries).length > 0) ? policy : void 0;\n}\nfunction sessionExclusionReason(source, policy, forgottenSessionIds) {\n\tif (!source.sessionOrigin) return;\n\tconst { agentId, sessionId } = source.sessionOrigin;\n\tif (forgottenSessionIds ? forgottenSessionIds.has(sessionId) : listMemorySessionTombstones({ agentId, sessionIds: [sessionId] }).length > 0) return "forgotten";\n\tif (!policy) return;\n\tconst metadata = loadMemorySessionMetadata({ ...source.sessionOrigin, storePath: source.buildOptions.storePath });\n\tif (!metadata && policy.allowedChannels.length === 0) return;\n\treturn classifyDreamingSessionAdmission({\n\t\tmetadata,\n\t\tsessionKey: source.sessionOrigin.sessionKey,\n\t\tpolicy,\n\t\treadPeerFile: (filePath) => readDreamingPeerAllowlist(filePath, "utf8")\n\t});\n}`;
+  const injected = `// ${MARKERS.sessionAdmission}\n${normalizeWhatsAppPeer.toString()}\n${normalizeDreamingPeer.toString()}\n${sessionDirectPeer.toString()}\n${directSessionMatchesPeer.toString()}\n${whatsappSessionMatchesPeer.toString()}\n${classifyDreamingSessionAdmission.toString()}\nfunction resolveAdmissionPolicy(pluginConfig) {\n\tconst memoryPolicy = asNullableRecord(pluginConfig?.memoryPolicy);\n\tconst exclusions = asNullableRecord(memoryPolicy?.excludeSessions);\n\tconst values = (record, key) => Array.isArray(record?.[key]) ? normalizeStringEntries(record[key].filter((value) => typeof value === "string")) : [];\n\tconst peerFiles = asNullableRecord(memoryPolicy?.allowlistedDirectPeerFiles);\n\tconst allowlistedDirectPeerFiles = Object.fromEntries(Object.entries(peerFiles ?? {}).filter(([, value]) => typeof value === "string" && value.trim().length > 0));\n\treturn {\n\t\thookExternalContentSources: values(exclusions, "hookExternalContentSources"),\n\t\tchannels: values(exclusions, "channels"),\n\t\tchatTypes: values(exclusions, "chatTypes"),\n\t\tallowedChannels: values(memoryPolicy, "allowedChannels"),\n\t\tallowlistedDirectPeerFiles\n\t};\n}\nfunction sessionExclusionReason(source, policy, forgottenSessionIds) {\n\tif (!source.sessionOrigin) return "session-origin:missing";\n\tconst { agentId, sessionId } = source.sessionOrigin;\n\tif (forgottenSessionIds ? forgottenSessionIds.has(sessionId) : listMemorySessionTombstones({ agentId, sessionIds: [sessionId] }).length > 0) return "forgotten";\n\tconst metadata = loadMemorySessionMetadata({ ...source.sessionOrigin, storePath: source.buildOptions.storePath });\n\treturn classifyDreamingSessionAdmission({\n\t\tmetadata,\n\t\tsessionKey: source.sessionOrigin.sessionKey,\n\t\tpolicy,\n\t\treadPeerFile: (filePath) => readDreamingPeerAllowlist(filePath, "utf8")\n\t});\n}`;
   return result.slice(0, startIndex) + injected + result.slice(endIndex);
+}
+
+export function patchSessionBackfillSource(source) {
+  if (source.includes(MARKERS.sessionBackfill)) {
+    if (!source.includes('!sessionExclusionReason(source, params.admissionPolicy, forgottenSessionIds)')) {
+      throw new Error('incomplete session-backfill admission patch');
+    }
+    verifySessionBackfillAdmissionBeforeScan(source, false);
+    return source;
+  }
+  const archiveAnchor = `if (!canonicalPaths.has(source.absolutePath)) {
+\t\t\tsources.push(source);
+\t\t\tcanonicalPaths.add(source.absolutePath);
+\t\t}`;
+  const protectedArchive = `// ${MARKERS.sessionBackfill}
+\t\tif (!canonicalPaths.has(source.absolutePath) && !sessionExclusionReason(source, params.admissionPolicy, forgottenSessionIds)) {
+\t\t\tsources.push(source);
+\t\t\tcanonicalPaths.add(source.absolutePath);
+\t\t}`;
+  const patched = replaceOnce(source, archiveAnchor, protectedArchive, 'session-backfill archive admission');
+  verifySessionBackfillAdmissionBeforeScan(patched, false);
+  return patched;
+}
+
+export function verifyDreamingAdmissionBeforeScan(source, verifyPinnedDigest = true) {
+  if (verifyPinnedDigest && hash(source) !== PIN.dreamingPhasesSha256) {
+    throw new Error('pinned Dreaming phase bundle digest mismatch');
+  }
+  const admission = 'const excludedReason = sessionExclusionReason(source, params.admissionPolicy, forgottenSessionIds);';
+  const continueAnchor = 'continue;';
+  const enqueue = 'sources.push(source);';
+  const scan = 'await scanSessionIngestionSource({';
+  const admissionIndex = source.indexOf(admission);
+  const guardIndex = source.indexOf('if (excludedReason) {', admissionIndex + admission.length);
+  const continueIndex = source.indexOf(continueAnchor, admissionIndex + admission.length);
+  const enqueueIndex = source.indexOf(enqueue, admissionIndex + admission.length);
+  const scanIndex = source.indexOf(scan);
+  if (
+    admissionIndex < 0 || source.indexOf(admission, admissionIndex + admission.length) >= 0 ||
+    guardIndex < 0 || source.indexOf('if (excludedReason) {', guardIndex + 1) >= 0 ||
+    continueIndex < 0 || enqueueIndex < 0 || source.indexOf(enqueue, enqueueIndex + enqueue.length) >= 0 ||
+    scanIndex < 0 || source.indexOf(scan, scanIndex + scan.length) >= 0
+  ) {
+    throw new Error('Dreaming admission-before-scan anchors are missing or ambiguous');
+  }
+  if (!(admissionIndex < guardIndex && guardIndex < continueIndex && continueIndex < enqueueIndex && enqueueIndex < scanIndex)) {
+    throw new Error('Dreaming transcript scan is not gated by session admission');
+  }
+  return true;
+}
+
+export function verifySessionBackfillAdmissionBeforeScan(source, verifyPinnedDigest = true) {
+  if (verifyPinnedDigest && hash(source) !== PIN.sessionBackfillSha256) {
+    throw new Error('pinned session-backfill bundle digest mismatch');
+  }
+  const corpusAdmission = '!sessionExclusionReason(entry, params.admissionPolicy, forgottenSessionIds)';
+  const archiveSource = 'const source = foreignSessionIngestionSource(params.agentId, archiveFile);';
+  const archiveAdmission = '!sessionExclusionReason(source, params.admissionPolicy, forgottenSessionIds)';
+  const archiveEnqueue = 'sources.push(source);';
+  const scan = 'await scanSessionIngestionSource({';
+  const indexes = [corpusAdmission, archiveSource, scan].map((anchor) => source.indexOf(anchor));
+  if (indexes.some((index) => index < 0)) throw new Error('session-backfill admission-before-scan anchors are missing');
+  const [corpusAdmissionIndex, archiveSourceIndex, scanIndex] = indexes;
+  if (!(corpusAdmissionIndex < archiveSourceIndex && archiveSourceIndex < scanIndex)) {
+    throw new Error('session-backfill transcript scan is not gated by session admission');
+  }
+  if (source.includes(MARKERS.sessionBackfill)) {
+    const archiveAdmissionIndex = source.indexOf(archiveAdmission, archiveSourceIndex + archiveSource.length);
+    const archiveEnqueueIndex = source.indexOf(archiveEnqueue, archiveAdmissionIndex + archiveAdmission.length);
+    if (
+      archiveAdmissionIndex < 0 || archiveEnqueueIndex < 0 || source.indexOf(archiveAdmission, archiveAdmissionIndex + archiveAdmission.length) >= 0 ||
+      !(archiveSourceIndex < archiveAdmissionIndex && archiveAdmissionIndex < archiveEnqueueIndex && archiveEnqueueIndex < scanIndex)
+    ) throw new Error('session-backfill archive source is not gated by session admission');
+  }
+  return true;
 }
 
 export function patchPluginManifest(source, verifyPinnedDigest = true) {
@@ -175,7 +281,7 @@ export function patchPluginManifest(source, verifyPinnedDigest = true) {
   memoryPolicy.properties.allowlistedDirectPeerFiles = {
     type: 'object',
     additionalProperties: false,
-    properties: { whatsapp: { type: 'string' } },
+    properties: { whatsapp: { type: 'string' }, telegram: { type: 'string' } },
   };
   return `${JSON.stringify(manifest, null, 2)}\n`;
 }
@@ -207,13 +313,27 @@ function main(argv = process.argv.slice(2)) {
   if (!coreRoot || !path.isAbsolute(coreRoot)) throw new Error('--core-root must be an absolute path');
   const runtimeFile = path.join(coreRoot, 'extensions/memory-core/manager-runtime.js');
   const manifestFile = path.join(coreRoot, 'extensions/memory-core/openclaw.plugin.json');
-  const sessionFiles = fs.readdirSync(coreRoot).filter((name) => /^session-ingestion-[^/]+\.mjs$/u.test(name));
+  const files = fs.readdirSync(coreRoot);
+  const sessionFiles = files.filter((name) => /^session-ingestion-[^/]+\.mjs$/u.test(name));
   if (sessionFiles.length !== 1) throw new Error(`expected one pinned session-ingestion bundle; found ${sessionFiles.length}`);
   const sessionFile = path.join(coreRoot, sessionFiles[0]);
+  const dreamingFiles = files.filter((name) => /^dreaming-phases-[^/]+\.mjs$/u.test(name))
+    .map((name) => path.join(coreRoot, name))
+    .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('await scanSessionIngestionSource({'));
+  if (dreamingFiles.length !== 1) throw new Error(`expected one pinned Dreaming phase bundle; found ${dreamingFiles.length}`);
+  verifyDreamingAdmissionBeforeScan(fs.readFileSync(dreamingFiles[0], 'utf8'));
+  const backfillFiles = files.filter((name) => /^session-backfill-[^/]+\.mjs$/u.test(name))
+    .map((name) => path.join(coreRoot, name))
+    .filter((filePath) => fs.readFileSync(filePath, 'utf8').includes('await scanSessionIngestionSource({'));
+  if (backfillFiles.length !== 1) throw new Error(`expected one pinned session-backfill bundle; found ${backfillFiles.length}`);
+  const backfillFile = backfillFiles[0];
+  const backfillSource = fs.readFileSync(backfillFile, 'utf8');
+  verifySessionBackfillAdmissionBeforeScan(backfillSource, !backfillSource.includes(MARKERS.sessionBackfill));
   patchFile(runtimeFile, PIN.childEnvSha256, MARKERS.childEnv, patchChildEnvSource, 'KNN child environment', apply);
   patchFile(sessionFile, PIN.sessionAdmissionSha256, MARKERS.sessionAdmission, patchSessionAdmissionSource, 'Dreaming session admission', apply);
+  patchFile(backfillFile, PIN.sessionBackfillSha256, MARKERS.sessionBackfill, patchSessionBackfillSource, 'session-backfill peer admission', apply);
   patchFile(manifestFile, PIN.manifestSha256, MARKERS.manifest, patchPluginManifest, 'memory-core manifest', apply);
-  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready`);
+  console.log(`OPENCLAW_MEMORY_CORE_PATCH=${apply ? 'applied' : 'patchable'} version=${PIN.version} child_env=ready dreaming_peer_filter=ready backfill_peer_filter=ready`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {

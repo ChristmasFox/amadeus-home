@@ -4,10 +4,19 @@ Date: 2026-10-15 (Asia/Shanghai).
 
 Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
 
-Status: **P0 audit complete; P1 Memory Core source repair in progress**.
-Runtime apply, production index rebuild, paid Embedding requests, and formal
-release remain unauthorized. The sanitized baseline and P0 evidence are in
-`docs/LAB_GATE_P0_BASELINE_AUDIT.md`.
+Status: **P0 audit complete; P1 `SOURCE_FIXED`; live acceptance blocked on
+operator authorization; P2/P3/P4 source work remains**.
+Runtime apply, production index rebuild, paid Embedding requests, Dreaming
+memory writes, and formal release remain unauthorized. The sanitized baseline
+and P0 evidence are in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
+the indexed rebuild/recovery procedure are in
+`docs/LAB_MEMORY_CORE_P1_REPORT.md`.
+
+The P1 source tests passed. Runtime inspection confirmed the pinned provider
+and current FTS/vector index state, but did not issue an Embedding request or
+prove semantic retrieval. Dreaming is scheduled but has no eligible session
+corpus and no recorded run history. Do not describe live memory acceptance as
+complete; see the P1 report for the exact evidence boundary and pending gates.
 
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 

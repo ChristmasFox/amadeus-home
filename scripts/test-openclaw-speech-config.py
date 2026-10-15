@@ -6,6 +6,9 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
+
+from openclaw_test_runtime import patch_pinned_runtime_tree
 
 ROOT = Path(__file__).resolve().parents[1]
 config_path = ROOT / "integrations/openclaw/openclaw.json.example"
@@ -73,11 +76,20 @@ assert "verified inbound WhatsApp voice lease" in voice_skill
 assert "tts" not in c["channels"].get("telegram", {})
 cli = ROOT / "node_modules/.pnpm/openclaw@2026.9.4/node_modules/openclaw/openclaw.mjs"
 if cli.is_file():
-    env = {**os.environ, "OPENCLAW_CONFIG_PATH": str(config_path),
-           "OPENCLAW_9ROUTER_API_KEY": "placeholder"}
-    result = subprocess.run(["node", str(cli), "config", "validate", "--json"],
-                            cwd=ROOT, env=env, capture_output=True, text=True, check=True)
-    assert json.loads(result.stdout)["valid"] is True
+    c["channels"]["telegram"]["allowFrom"] = ["123456789"]
+    with tempfile.TemporaryDirectory(prefix="openclaw-speech-config-") as directory:
+        temporary = Path(directory)
+        patched_extensions = patch_pinned_runtime_tree(cli.parent / "dist", temporary / "dist", ROOT)
+        target = temporary / "openclaw.json"
+        target.write_text(json.dumps(c))
+        env = {**os.environ, "OPENCLAW_CONFIG_PATH": str(target),
+               "OPENCLAW_9ROUTER_API_KEY": "placeholder",
+               "OPENCLAW_BUNDLED_PLUGINS_DIR": str(patched_extensions),
+               "OPENCLAW_TEST_TRUST_BUNDLED_PLUGINS_DIR": "1",
+               "VITEST": "1"}
+        result = subprocess.run(["node", str(cli), "config", "validate", "--json"],
+                                cwd=ROOT, env=env, capture_output=True, text=True, check=True)
+        assert json.loads(result.stdout)["valid"] is True
     runtime_root = cli.parent / "dist"
     tool_descriptors = list(runtime_root.glob("core-tool-factory-descriptors-*.mjs"))
     assert len(tool_descriptors) == 1
