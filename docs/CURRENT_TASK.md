@@ -13,6 +13,22 @@ and P0 evidence are in `docs/LAB_GATE_P0_BASELINE_AUDIT.md`; P1 evidence and
 the indexed rebuild/recovery procedure are in
 `docs/LAB_MEMORY_CORE_P1_REPORT.md`.
 
+## Explicit Lab approval sequence — step 1 — 2026-10-15
+
+Arthur authorized the Lab-scoped actions in `docs/LAB_GATE_APPROVALS_REQUIRED.md`
+in listed order. The repository was 16 commits ahead of `origin/main`, while
+the authorization specified 11. To stay within that count, exactly the oldest
+11 commits were pushed, through `854c14e0c4143325eca07366e82e4b7a5b335290`.
+The remote `main` was fetched afterward and verified at that SHA; five later
+commits remain local and unpushed.
+
+`git rebase origin/main` reported the branch up to date. `pnpm check:secrets`
+passed, and the requested working-tree `git diff --check` passed on the clean
+tree. A supplemental full-range `git diff --check origin/main...HEAD` reported
+six trailing-space lines in three Markdown reports; these were not rewritten.
+No runtime, database, or M2 action occurred. Next authorized item is the
+synthetic Lab 9Router Embedding probe; the index has not been refreshed.
+
 P2 established independent Lab/Gate SemVer sources and release-note checks;
 Lab remains `1.10.4`, Gate remains `0.1.0`, and no formal tag was created. The
 report and validation evidence are in `docs/LAB_GATE_P2_REPORT.md`. No product
