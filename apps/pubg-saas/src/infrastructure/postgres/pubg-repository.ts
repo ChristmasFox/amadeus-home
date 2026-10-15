@@ -228,7 +228,7 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
          ON team.tenant_id=session.tenant_id AND team.team_id=session.team_id
          WHERE session.tenant_id=$1 AND session.team_id=$2 AND session.platform=$3 AND session.bot_account_id=$4
            AND session.user_id=$5 AND session.channel_id=$6 AND session.session_id=$7 AND session.kind=$8
-           AND session.expires_at>now() AND session.team_revision=team.query_revision
+           AND session.team_revision=team.query_revision
            AND (session.kind='direct_team' OR session.binding_revision=COALESCE(
              (SELECT revision FROM channel_binding_versions WHERE bot_account_id=$4 AND channel_id=$6),0))
          FOR SHARE OF session`,
@@ -586,15 +586,15 @@ export class PostgresPubgRepository implements PubgRepositoryPort {
 
   async setContext(context: SessionContextRecord): Promise<void> {
     await this.withConversationScope(context.sessionId, async (client, conversation) => client.query(
-      `INSERT INTO session_contexts(
+       `INSERT INTO session_contexts(
          tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id,
          expires_at, context_json
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'infinity'::timestamptz,$8::jsonb)
        ON CONFLICT (tenant_id, team_id, platform, bot_account_id, user_id, channel_id, session_id)
-       DO UPDATE SET expires_at=EXCLUDED.expires_at, context_json=EXCLUDED.context_json`,
+       DO UPDATE SET expires_at='infinity'::timestamptz, context_json=EXCLUDED.context_json`,
       [this.scope.tenantId, this.scope.teamId, conversation.platform, conversation.botAccountId,
       conversation.userId, conversation.channelId, conversation.sessionId,
-      context.expiresAt, JSON.stringify(context)],
+      JSON.stringify(context)],
     ).then(() => undefined));
   }
 

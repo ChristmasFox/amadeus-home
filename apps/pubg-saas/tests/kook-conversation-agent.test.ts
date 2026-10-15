@@ -42,6 +42,8 @@ test('ordinary group chat can finish directly without PUBG keywords or tool call
   assert.doesNotMatch(PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS, /Arthur|Kurisu|MEMORY\.md|USER\.md|私聊/iu);
   assert.equal('maxSteps' in PUBLIC_KOOK_AGENT_LIMITS, false);
   assert.equal('maxOutputTokensPerStep' in PUBLIC_KOOK_AGENT_LIMITS, false);
+  assert.equal('maxMessages' in PUBLIC_KOOK_AGENT_LIMITS, false);
+  assert.equal('maxHistoryCharacters' in PUBLIC_KOOK_AGENT_LIMITS, false);
   assert.equal(PUBLIC_KOOK_AGENT_LIMITS.totalTimeoutMs, 300_000);
   assert.equal(PUBLIC_KOOK_AGENT_LIMITS.toolLoopTimeoutMs + PUBLIC_KOOK_AGENT_LIMITS.finalizationTimeoutMs, 300_000);
   assert.equal(model.doGenerateCalls[0]?.maxOutputTokens, undefined,

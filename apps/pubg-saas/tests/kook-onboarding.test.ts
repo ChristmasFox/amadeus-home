@@ -19,10 +19,6 @@ test('legacy onboarding keeps team commands and prevents private account binding
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot,
     baseRetryMs: 1,
-    maxRequestsPerUserPerMinute: 100,
-    maxRequestsPerChannelPerMinute: 250,
-    maxRequestsPerTenantPerMinute: 500,
-    maxRequestsPerBotPerMinute: 1000,
   });
   let lookups = 0, ownerAAllowed = true;
   let duringLookup: (() => Promise<void>) | null = null;

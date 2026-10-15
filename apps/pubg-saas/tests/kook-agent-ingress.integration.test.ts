@@ -45,10 +45,6 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
   const diagnostics: unknown[] = [];
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot,
-    maxRequestsPerUserPerMinute: 100,
-    maxRequestsPerChannelPerMinute: 300,
-    maxRequestsPerTenantPerMinute: 500,
-    maxRequestsPerBotPerMinute: 1000,
   });
   const permissions = { isGuildMember: async () => true, isTextChannelMember: async () => true };
   const authorizer = new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot });
@@ -133,6 +129,14 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     assert.match(mentionPrompt, /@成员 今晚要不要一起开黑/u);
     assert.equal(mentionPrompt.includes(userB), false, 'KOOK mention IDs never enter the model prompt');
 
+    for (let index = 0; index < 14; index += 1) {
+      await pool.query(`INSERT INTO kook_conversation_messages(
+        bot_account_id,channel_id,message_id,speaker_kind,speaker_id,content,created_at,expires_at
+      ) VALUES ($1,$2,$3,'human',$4,$5,now()-interval '13 hours'+($6::INTEGER*interval '1 minute'),now()-interval '12 hours')`, [
+        bot, channel, `old-history-${index}-${suffix}`, userA, `history-${index} ${'历史事实'.repeat(160)}`, index,
+      ]);
+    }
+
     const otherSpeaker = group(bot, guild, channel, userB, '那我们几点集合？', 'remote-bot-message-1');
     assert.equal(await queue.ingestGatewayEvent(otherSpeaker), 'accepted');
     const job = await queue.claimNext();
@@ -142,10 +146,53 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     assert.equal(window.currentQuoteContext, '引用内容来自助手：“你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？”');
     assert.match(window.turns.map(turn => turn.content).join('\n'), /成员2说：你好/u);
     assert.match(window.turns.map(turn => turn.content).join('\n'), /回复对象助手/u);
+    assert.ok(window.turns.length > 12, 'retained channel history is not capped at twelve messages');
+    assert.ok(window.turns.reduce((total, turn) => total + turn.content.length, 0) > 6000, 'retained channel history is not capped at six thousand characters');
+    assert.match(window.turns[0]?.content ?? '', /history-0/u);
+    assert.ok(window.turns.some(turn => /history-13/u.test(turn.content)));
     assert.doesNotMatch(window.turns.map(turn => turn.content).join('\n'), /\[回复成员\d+\]/u);
     assert.doesNotMatch(JSON.stringify(window), new RegExp(`${userA}|${userB}|${bot}|${guild}|${channel}`, 'u'), 'model context must use speaker labels, not KOOK IDs');
     const otherReply = await handler(job, signal);
     await queue.complete(job, otherReply ?? null);
+
+    let drainedReplies = 0;
+    while (true) {
+      const delivery = await outbox.deliverOne({ async send() { drainedReplies += 1; return `drained-fixture-reply-${drainedReplies}`; } });
+      if (delivery === 'empty') break;
+      assert.equal(delivery, 'sent');
+    }
+    const longReply = `${'甲'.repeat(7999)}(met)123456(met)${'乙'.repeat(9000)}`;
+    const longEvent = group(bot, guild, channel, userA, '请完整说完');
+    assert.equal(await queue.ingestGatewayEvent(longEvent), 'accepted');
+    assert.equal(await queue.processOne(async () => ({ type: 'text', content: longReply }), signal), 'done');
+    const parts = (await pool.query(
+      'SELECT payload_json,reply_part,reply_part_count FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2 ORDER BY reply_part',
+      [bot, longEvent.msg_id],
+    )).rows;
+    assert.ok(parts.length > 2);
+    assert.ok(parts.every(row => String((row.payload_json as Record<string, unknown>).content).length <= 8000));
+    assert.deepEqual(parts.map(row => Number(row.reply_part)), parts.map((_, index) => index));
+    assert.ok(parts.every(row => Number(row.reply_part_count) === parts.length));
+    assert.equal(parts.map(row => String((row.payload_json as Record<string, unknown>).content)).join(''), longReply);
+    assert.equal(String((parts[0]!.payload_json as Record<string, unknown>).content).endsWith('(met)'), false);
+    assert.equal(String((parts[1]!.payload_json as Record<string, unknown>).content).startsWith('(met)123456(met)'), true);
+    const sentParts: string[] = [];
+    for (let index = 0; index < parts.length; index += 1) {
+      assert.equal(await outbox.deliverOne({
+        async send(targetId, payload, _nonce, replyTo) {
+          assert.equal(targetId, channel);
+          assert.equal(replyTo ?? null, index === 0 ? longEvent.msg_id : null);
+          sentParts.push(payload.content);
+          return `remote-long-part-${index}`;
+        },
+      }), 'sent');
+    }
+    assert.equal(sentParts.join(''), longReply, 'all KOOK-sized chunks are sent in order without truncation');
+    const retainedLongReply = (await pool.query(
+      'SELECT content FROM kook_conversation_messages WHERE bot_account_id=$1 AND channel_id=$2 AND source_event_id=$3 AND speaker_kind=\'assistant\'',
+      [bot, channel, longEvent.msg_id],
+    )).rows[0]?.content;
+    assert.equal(retainedLongReply, longReply, 'the full assistant reply remains available to later conversation turns');
 
     const failEvent = group(bot, guild, channel, userA, '你还在吗？');
     const failedModel = new MockLanguageModelV4({ doGenerate: async () => { throw new Error('private provider detail and secret'); } });

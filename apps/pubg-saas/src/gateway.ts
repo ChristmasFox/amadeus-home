@@ -48,7 +48,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0016_agent_authorization_outcomes.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0020_persistent_query_context.sql'");
     if (!ready.rowCount)
       throw new Error('pubg_saas_schema_upgrade_required');
     const permissions = new KookPermissionClient({ token });
@@ -75,19 +75,8 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       }),
       createKookManagementHandler({ teams, claims, players }),
     );
-    const userRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE');
-    const channelRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE');
-    const tenantRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE');
-    const botRate = optionalNumber(env, 'KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE');
-    const dailyMessageBudget = optionalNumber(env, 'KOOK_DAILY_MESSAGE_BUDGET') ?? 200;
-    const ingressLimits = {
-      ...(userRate !== undefined ? { maxRequestsPerUserPerMinute: userRate } : {}),
-      ...(channelRate !== undefined ? { maxRequestsPerChannelPerMinute: channelRate } : {}),
-      ...(tenantRate !== undefined ? { maxRequestsPerTenantPerMinute: tenantRate } : {}),
-      ...(botRate !== undefined ? { maxRequestsPerBotPerMinute: botRate } : {}),
-    };
     const runtime = new KookApplicationRuntime({
-      pool, botAccountId: botId, token, handler, ingressLimits, dailyMessageBudget,
+      pool, botAccountId: botId, token, handler,
       // A normal message in an unbound channel must still reach the chat agent.
       // Team provisioning happens on the trusted guild-join flow or explicit
       // management command, and PUBG tools remain unavailable until bound.

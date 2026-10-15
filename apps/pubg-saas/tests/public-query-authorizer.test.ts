@@ -31,7 +31,7 @@ async function fixture() {
   const accountId = `account.player_${suffix.replaceAll('-', '')}`;
   const a = await teams.createSquad(event(), { label: 'Same squad name', pubgShard: 'steam', pubgAccountIds: [accountId] });
   const b = await teams.createSquad(event(guildB, channelB, other), { label: 'Same squad name', pubgShard: 'kakao', pubgAccountIds: [accountId] });
-  const queue = new KookIngressQueue(pool, { botAccountId: bot, maxPendingPerUser: 100 });
+  const queue = new KookIngressQueue(pool, { botAccountId: bot });
   const auth = new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot });
   async function admit(data: unknown): Promise<KookIngressJob> { assert.equal(await queue.ingestGatewayEvent(data), 'accepted'); const job = await queue.claimNext(); assert.ok(job); return job; }
   async function authorized(data: unknown, selection?: { tenantId: string; teamId: string }): Promise<AuthorizedPublicQuery> {
@@ -137,7 +137,7 @@ test('DM selection requires actor grants plus fresh guild membership and never r
   } finally { await f.cleanup(); }
 });
 
-test('roster, aliases, expiry and same-team rebind invalidate prior public follow-up state and queued authority', { skip: !databaseUrl }, async () => {
+test('roster, aliases and same-team rebind invalidate prior public follow-up state while sessions persist', { skip: !databaseUrl }, async () => {
   const f = await fixture(); try {
     const old = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); await old.repository.setContext(emptyContext(old.conversation.sessionId));
     await old.repository.setResultSet({ id: 'fixture-result', sessionId: old.conversation.sessionId, expiresAt: new Date(Date.now() + 60000).toISOString() } as ResultSetRecord);
@@ -158,8 +158,8 @@ test('roster, aliases, expiry and same-team rebind invalidate prior public follo
       VALUES ($1,$2,'kook',$3,$4,$5,now()-interval '31 days'),($1,$2,'kook',$3,$4,$6,now()-interval '29 days')`,
     [f.a.tenantId, f.a.teamId, f.bot, f.user, oldUsageRequest, recentUsageRequest]);
     await f.pool.query('UPDATE public_query_sessions SET expires_at=now()-interval \'1 second\' WHERE session_id=$1', [alias.conversation.sessionId]);
-    await assert.rejects(alias.repository.countMatches(), /public_query_session_unavailable/u);
-    const afterExpiry = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.notEqual(afterExpiry.conversation.sessionId, alias.conversation.sessionId);
+    await assert.doesNotReject(alias.repository.countMatches());
+    const afterExpiry = await f.authorized(group(f.bot, f.guild, f.channel, f.user)); assert.equal(afterExpiry.conversation.sessionId, alias.conversation.sessionId);
     const queued = group(f.bot, f.guild, f.channel, f.user); assert.equal(await f.queue.ingestGatewayEvent(queued), 'accepted');
     const pending = await f.teams.prepareTeamAction(f.event(), { kind: 'unbind_channel' }); await f.teams.confirmTeamAction(f.event(), pending.confirmationToken);
     await f.teams.bindExistingSquad(f.event(), f.a.teamId);

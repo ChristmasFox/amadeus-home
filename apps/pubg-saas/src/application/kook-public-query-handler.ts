@@ -58,7 +58,7 @@ export interface KookAgentDiagnostic {
   count: number;
 }
 
-function message(content: string): KookTextPayload { return { type: 'text', content: content.slice(0, 8000) }; }
+function message(content: string): KookTextPayload { return { type: 'text', content }; }
 
 const queryResultMessages: Record<string, string> = {
   follow_up_context_required: '这条追问没有可用的上一条查询，请补充要查询的队伍、队员或时间范围。',
@@ -94,7 +94,10 @@ async function persistQueryPlan(query: AuthorizedPublicQuery, plan: QueryPlan, n
     activeDomain: 'pubg',
     references: { ...base.references, queryPlan: plan },
     updatedAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + 12 * 60 * 60_000).toISOString(),
+    // Public transcripts and per-user query context follow the private
+    // assistant's persistent session behavior; the DB scope is still rechecked
+    // against the current trusted KOOK event on every query.
+    expiresAt: '9999-12-31T23:59:59.999Z',
   });
 }
 

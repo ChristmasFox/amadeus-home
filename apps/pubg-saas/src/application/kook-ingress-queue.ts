@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { inspectKookRequest, parseKookRequest, type KookRequestEvent } from '../channels/kook/request-event.js';
-import { sanitizeKookOutboundPayload, type KookTextPayload } from './kook-message-queue.js';
+import { splitKookOutboundPayload, type KookTextPayload } from './kook-message-queue.js';
 import {isVerifiedKookWelcomeTarget,type VerifiedKookWelcomeTarget,type KookGuildWelcomeResolver} from '../channels/kook/guild-welcome.js';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
@@ -22,11 +22,6 @@ export interface KookIngressJob {
 export interface KookIngressQueueOptions {
   botAccountId: string;
   maxPending?: number;
-  maxPendingPerUser?: number;
-  maxRequestsPerUserPerMinute?: number;
-  maxRequestsPerChannelPerMinute?: number;
-  maxRequestsPerTenantPerMinute?: number;
-  maxRequestsPerBotPerMinute?: number;
   payloadTtlMs?: number;
   leaseMs?: number;
   maxAttempts?: number;
@@ -79,11 +74,6 @@ const SAFE_PROCESSING_DIAGNOSTIC_REASONS = new Set([
 export class KookIngressQueue {
   private readonly botId: string;
   private readonly maxPending: number;
-  private readonly maxPerUser: number;
-  private readonly maxRequestsPerUserPerMinute: number;
-  private readonly maxRequestsPerChannelPerMinute: number;
-  private readonly maxRequestsPerTenantPerMinute: number;
-  private readonly maxRequestsPerBotPerMinute: number;
   private readonly ttlMs: number;
   private readonly leaseMs: number;
   private readonly maxAttempts: number;
@@ -93,22 +83,12 @@ export class KookIngressQueue {
   constructor(private readonly pool: Pool, options: KookIngressQueueOptions) {
     this.botId = options.botAccountId.trim();
     this.maxPending = options.maxPending ?? 1000;
-    this.maxPerUser = options.maxPendingPerUser ?? 20;
-    this.maxRequestsPerUserPerMinute = options.maxRequestsPerUserPerMinute ?? 10;
-    this.maxRequestsPerChannelPerMinute = options.maxRequestsPerChannelPerMinute ?? 60;
-    this.maxRequestsPerTenantPerMinute = options.maxRequestsPerTenantPerMinute ?? 120;
-    this.maxRequestsPerBotPerMinute = options.maxRequestsPerBotPerMinute ?? 300;
     this.ttlMs = options.payloadTtlMs ?? 60 * 60000;
     this.leaseMs = options.leaseMs ?? 30000;
     this.maxAttempts = options.maxAttempts ?? 5;
     this.baseRetryMs = options.baseRetryMs ?? 1000;
     this.onDiscard = options.onDiscard;
     if (!this.botId || this.botId.length > 128 || !Number.isSafeInteger(this.maxPending) || this.maxPending < 1 || this.maxPending > 10000
-      || !Number.isSafeInteger(this.maxPerUser) || this.maxPerUser < 1 || this.maxPerUser > this.maxPending
-      || !Number.isSafeInteger(this.maxRequestsPerUserPerMinute) || this.maxRequestsPerUserPerMinute < 1 || this.maxRequestsPerUserPerMinute > 10000
-      || !Number.isSafeInteger(this.maxRequestsPerChannelPerMinute) || this.maxRequestsPerChannelPerMinute < 1 || this.maxRequestsPerChannelPerMinute > 100000
-      || !Number.isSafeInteger(this.maxRequestsPerTenantPerMinute) || this.maxRequestsPerTenantPerMinute < 1 || this.maxRequestsPerTenantPerMinute > 100000
-      || !Number.isSafeInteger(this.maxRequestsPerBotPerMinute) || this.maxRequestsPerBotPerMinute < 1 || this.maxRequestsPerBotPerMinute > 100000
       || !Number.isSafeInteger(this.ttlMs) || this.ttlMs < 1000 || this.ttlMs > 24 * 60 * 60000
       || !Number.isSafeInteger(this.leaseMs) || this.leaseMs < 1000 || this.leaseMs > 5 * 60000
       || !Number.isSafeInteger(this.maxAttempts) || this.maxAttempts < 1 || this.maxAttempts > 20
@@ -163,9 +143,9 @@ export class KookIngressQueue {
             throw new Error('kook_ingress_event_conflict');
           return 'duplicate';
         }
-        const count = await client.query(`SELECT COUNT(*)::INTEGER AS total, COUNT(*) FILTER (WHERE user_id=$2)::INTEGER AS actor
-           FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('pending','processing','retry') AND expires_at>now()`, [this.botId, parsed.userId]);
-        if (Number(count.rows[0]?.total) >= this.maxPending || Number(count.rows[0]?.actor) >= this.maxPerUser) {
+        const count = await client.query(`SELECT COUNT(*)::INTEGER AS total
+           FROM kook_ingress_events WHERE bot_account_id=$1 AND status IN ('pending','processing','retry') AND expires_at>now()`, [this.botId]);
+        if (Number(count.rows[0]?.total) >= this.maxPending) {
           throw new Error('kook_ingress_capacity_exceeded');
         }
         const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
@@ -173,17 +153,6 @@ export class KookIngressQueue {
            WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
         const tenantId = typeof binding?.rows[0]?.tenant_id === 'string' ? binding.rows[0].tenant_id : null;
         const channelId = parsed.request.kind === 'group' ? parsed.channelId : null;
-        const recent = await client.query(`SELECT
-          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS bot,
-          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND user_id=$2 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS actor,
-          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND channel_id=$3 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS channel,
-          (SELECT COUNT(*) FROM kook_ingress_events WHERE bot_account_id=$1 AND tenant_id=$4 AND received_at>=clock_timestamp()-interval '1 minute')::INTEGER AS tenant`,
-        [this.botId, parsed.userId, channelId, tenantId]);
-        const recentCounts = recent.rows[0];
-        if (Number(recentCounts?.bot ?? 0) >= this.maxRequestsPerBotPerMinute) throw new Error('kook_ingress_rate_limited_bot');
-        if (Number(recentCounts?.tenant ?? 0) >= this.maxRequestsPerTenantPerMinute) throw new Error('kook_ingress_rate_limited_tenant');
-        if (Number(recentCounts?.channel ?? 0) >= this.maxRequestsPerChannelPerMinute) throw new Error('kook_ingress_rate_limited_channel');
-        if (Number(recentCounts?.actor ?? 0) >= this.maxRequestsPerUserPerMinute) throw new Error('kook_ingress_rate_limited_user');
         const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
         await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
            tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)
@@ -195,18 +164,18 @@ export class KookIngressQueue {
           const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
           await client.query(`INSERT INTO kook_conversation_messages(
               bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
-            ) VALUES ($1,$2,$3,'human',$4,$3,$5,$6,now()+interval '12 hours')
+           ) VALUES ($1,$2,$3,'human',$4,$3,$5,$6,'infinity'::timestamptz)
             ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
             this.botId, conversationChannelId, parsed.eventId, parsed.userId,
             parsed.request.kind === 'group' ? parsed.request.event.quotedMessageId : null,
-            sanitizeKookMentionMarkup(request.content).slice(0, 1600),
+            sanitizeKookMentionMarkup(request.content),
           ]);
         }
         return 'accepted';
       });
     } catch (error) {
       const code = errorCode(error);
-      if (code === 'kook_ingress_capacity_exceeded' || /^kook_ingress_rate_limited_(?:bot|tenant|channel|user)$/u.test(code)) {
+      if (code === 'kook_ingress_capacity_exceeded') {
         this.reportDiscard('admission', code, parsed.channelId ?? undefined);
         return 'ignored';
       }
@@ -306,7 +275,8 @@ export class KookIngressQueue {
   async complete(job: KookIngressJob, reply: KookTextPayload | null,welcomeTarget?:VerifiedKookWelcomeTarget): Promise<void> {
     if (job.botAccountId !== this.botId)
       throw new Error('kook_bot_scope_mismatch');
-    const payload = reply === null ? null : sanitizeKookOutboundPayload(reply);
+    const payloads = reply === null ? [] : splitKookOutboundPayload(reply);
+    const conversationText = payloads.map(payload => payload.content).join('');
     await transaction(this.pool, async (client) => {
       const result = await client.query(`SELECT * FROM kook_ingress_events WHERE bot_account_id=$1 AND event_id=$2
          AND status='processing' AND lease_token=$3 AND lease_until>now() AND expires_at>now() FOR UPDATE`, [this.botId, job.eventId, job.leaseToken]);
@@ -324,7 +294,7 @@ export class KookIngressQueue {
         bindingRevision: row.binding_revision === null ? null : String(row.binding_revision),
         boundTeam: typeof row.tenant_id === 'string' && typeof row.team_id === 'string' ? { tenantId: row.tenant_id, teamId: row.team_id } : null,
       });
-      if (payload) {
+      if (payloads.length) {
         const isWelcome=parsed.request.kind==='guild_join';
         if(isWelcome && (!isVerifiedKookWelcomeTarget(welcomeTarget)||welcomeTarget.botAccountId!==this.botId || welcomeTarget.guildId!==parsed.guildId)){
           throw Object.assign(new Error('kook_welcome_target_invalid'),{code:'kook_welcome_target_invalid'});
@@ -332,19 +302,24 @@ export class KookIngressQueue {
         if(!isWelcome && welcomeTarget)throw new Error('kook_reply_destination_override');
         const targetKind=isWelcome?'channel':row.target_kind,targetId=isWelcome?welcomeTarget!.channelId:row.target_id;
         const key = createHash('sha256').update(`kook\0${this.botId}\0${job.eventId}\0reply`).digest('hex');
-        await client.query(`INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,
-           channel_id,target_kind,target_id,source_event_id,payload_json,status,welcome_guild_id)
-           VALUES ($1,$2,'kook',$3,$4,$5,$6,$7,$8,$9,$10::jsonb,'pending',$11) ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), key, this.botId, row.tenant_id, row.team_id,targetKind==='channel'?targetId:null,
-        targetKind,targetId,row.reply_to_message_id,JSON.stringify(payload),isWelcome?parsed.guildId:null]);
+        for (const [replyPart, payload] of payloads.entries()) {
+          const partKey = payloads.length === 1 ? key : createHash('sha256').update(`${key}\0${replyPart}`).digest('hex');
+          await client.query(`INSERT INTO message_outbox(outbox_id,idempotency_key,reply_group_key,reply_part,reply_part_count,
+             platform,bot_account_id,tenant_id,team_id,channel_id,target_kind,target_id,source_event_id,reply_to_message_id,payload_json,status,welcome_guild_id)
+             VALUES ($1,$2,$3,$4,$5,'kook',$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'pending',$15)
+             ON CONFLICT (idempotency_key) DO NOTHING`, [randomUUID(), partKey, payloads.length > 1 ? key : '', replyPart,
+          payloads.length, this.botId, row.tenant_id, row.team_id, targetKind === 'channel' ? targetId : null,
+          targetKind, targetId, job.eventId, replyPart === 0 ? row.reply_to_message_id : null, JSON.stringify(payload), isWelcome ? parsed.guildId : null]);
+        }
         if ((parsed.request.kind === 'group' || parsed.request.kind === 'direct')
-          && (payload.type === 'text' || payload.type === 'kmarkdown')) {
+          && (payloads[0]!.type === 'text' || payloads[0]!.type === 'kmarkdown')) {
           const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
           await client.query(`INSERT INTO kook_conversation_messages(
               bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
-            ) VALUES ($1,$2,$3,'assistant',$4,$5,$6,$7,now()+interval '12 hours')
+            ) VALUES ($1,$2,$3,'assistant',$4,$5,$6,$7,'infinity'::timestamptz)
             ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
             this.botId, conversationChannelId, `assistant:${job.eventId}`, this.botId,
-            job.eventId, parsed.replyToMessageId, payload.content.slice(0, 1600),
+            job.eventId, parsed.replyToMessageId, conversationText,
           ]);
         }
       }

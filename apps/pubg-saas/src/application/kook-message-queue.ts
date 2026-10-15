@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { TrustedKookGroupMessage } from '../channels/kook/trusted-group-event.js';
 
 export type KookTextPayload = { type: 'text' | 'kmarkdown' | 'card'; content: string };
+export const KOOK_MAX_MESSAGE_LENGTH = 8000;
 
 export interface AcceptedGroupEvent {
   tenantId: string;
@@ -31,6 +32,7 @@ export interface KookOutboxJob {
   targetId: string;
   welcomeGuildId: string | null;
   sourceEventId: string | null;
+  replyToMessageId: string | null;
   outboxId: string;
   idempotencyKey: string;
   leaseToken: string;
@@ -94,7 +96,7 @@ export function validateKookMessagePayload(value: unknown): KookTextPayload {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('kook_payload_invalid');
   const payload = value as Record<string, unknown>;
   if ((payload.type !== 'text' && payload.type !== 'kmarkdown' && payload.type !== 'card') || typeof payload.content !== 'string'
-    || !payload.content.trim() || payload.content.length > 8000) {
+    || !payload.content.trim() || payload.content.length > KOOK_MAX_MESSAGE_LENGTH) {
     throw new Error('kook_payload_invalid');
   }
   if (payload.type === 'card') {
@@ -177,6 +179,45 @@ export function sanitizeKookOutboundPayload(value: unknown): KookTextPayload {
     type: payload.type,
     content: sanitizeKookAssistantReplyContent(payload.content),
   });
+}
+
+/** Sanitize a complete model reply, then split it into platform-sized sends.
+ * KOOK mention markup remains intact when it crosses a prospective boundary. */
+export function splitKookOutboundPayload(value: unknown): KookTextPayload[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('kook_payload_invalid');
+  const candidate = value as Record<string, unknown>;
+  if ((candidate.type !== 'text' && candidate.type !== 'kmarkdown' && candidate.type !== 'card')
+    || typeof candidate.content !== 'string' || !candidate.content.trim()) throw new Error('kook_payload_invalid');
+  if (candidate.type === 'card') return [sanitizeKookOutboundPayload(value)];
+  const type = candidate.type;
+  const content = sanitizeKookAssistantReplyContent(candidate.content);
+  const chunks: string[] = [];
+  const mentionPattern = /\(met\)[^()\s]{1,128}\(met\)|<@!?[^>]{1,128}>/gu;
+  let start = 0;
+  while (start < content.length) {
+    let end = Math.min(start + KOOK_MAX_MESSAGE_LENGTH, content.length);
+    if (end < content.length) {
+      if (end > start && /[\uDC00-\uDFFF]/u.test(content[end]!)) end -= 1;
+      mentionPattern.lastIndex = 0;
+      for (const match of content.matchAll(mentionPattern)) {
+        const mentionStart = match.index ?? 0;
+        const mentionEnd = mentionStart + match[0].length;
+        if (mentionStart < end && mentionEnd > end) {
+          end = mentionStart > start ? mentionStart : mentionEnd;
+          break;
+        }
+      }
+      const floor = start + Math.floor((end - start) * 0.65);
+      const newline = content.lastIndexOf('\n', end - 1);
+      const whitespace = Math.max(content.lastIndexOf(' ', end - 1), content.lastIndexOf('\t', end - 1));
+      const boundary = Math.max(newline, whitespace);
+      if (boundary >= floor) end = boundary + 1;
+    }
+    if (end <= start) end = Math.min(start + KOOK_MAX_MESSAGE_LENGTH, content.length);
+    chunks.push(content.slice(start, end));
+    start = end;
+  }
+  return chunks.map(chunk => validateKookMessagePayload({ type, content: chunk }));
 }
 
 function idempotencyKey(event: TrustedKookGroupMessage, part: number): string {
@@ -265,7 +306,7 @@ export class KookMessageQueue {
 
   async enqueueReply(event: TrustedKookGroupMessage, payloadInput: unknown, part = 0): Promise<QueuedReply> {
     if (event.botAccountId !== this.botAccountId) throw new Error('kook_bot_scope_mismatch');
-    const payload = sanitizeKookOutboundPayload(payloadInput);
+    const payloads = splitKookOutboundPayload(payloadInput);
     if (!Number.isSafeInteger(part) || part < 0 || part > 9) throw new Error('kook_reply_part_invalid');
     const key = idempotencyKey(event, part);
     const result = await inTransaction(this.pool, async (client) => {
@@ -287,24 +328,34 @@ export class KookMessageQueue {
         [row.tenant_id, row.team_id, event.botAccountId, event.channelId],
       );
       if (!binding.rowCount) throw new Error('kook_reply_destination_unbound');
-      const inserted = await client.query(
-        `INSERT INTO message_outbox(
-           outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,target_id,source_event_id,payload_json,status
-         ) VALUES ($1,$2,'kook',$3,$4,$5,$6,$6,$7,$8::jsonb,'pending')
-         ON CONFLICT (idempotency_key) DO NOTHING
-         RETURNING outbox_id`,
-        [randomUUID(), key, event.botAccountId, row.tenant_id, row.team_id, row.channel_id, event.messageId, JSON.stringify(payload)],
-      );
-      const existing = inserted.rows[0]?.outbox_id
-        ? String(inserted.rows[0].outbox_id)
-        : String((await client.query('SELECT outbox_id FROM message_outbox WHERE idempotency_key=$1', [key])).rows[0]?.outbox_id ?? '');
-      if (!existing) throw new Error('kook_outbox_enqueue_failed');
+      let firstInsertedId = '';
+      let created = false;
+      for (const [replyPart, payload] of payloads.entries()) {
+        const partKey = payloads.length === 1 ? key : createHash('sha256').update(`${key}\0${replyPart}`).digest('hex');
+        const inserted = await client.query(
+          `INSERT INTO message_outbox(
+             outbox_id,idempotency_key,reply_group_key,reply_part,reply_part_count,
+             platform,bot_account_id,tenant_id,team_id,channel_id,target_id,source_event_id,reply_to_message_id,payload_json,status
+           ) VALUES ($1,$2,$3,$4,$5,'kook',$6,$7,$8,$9,$9,$10,$11,$12::jsonb,'pending')
+           ON CONFLICT (idempotency_key) DO NOTHING
+           RETURNING outbox_id`,
+          [randomUUID(), partKey, payloads.length > 1 ? key : '', replyPart, payloads.length,
+            event.botAccountId, row.tenant_id, row.team_id, row.channel_id, event.messageId,
+            replyPart === 0 ? event.messageId : null, JSON.stringify(payload)],
+        );
+        const outboxId = inserted.rows[0]?.outbox_id
+          ? String(inserted.rows[0].outbox_id)
+          : String((await client.query('SELECT outbox_id FROM message_outbox WHERE idempotency_key=$1', [partKey])).rows[0]?.outbox_id ?? '');
+        if (!outboxId) throw new Error('kook_outbox_enqueue_failed');
+        if (replyPart === 0) firstInsertedId = outboxId;
+        if (inserted.rowCount === 1) created = true;
+      }
       await client.query(
         `UPDATE message_inbox SET status='reply_queued'
          WHERE platform='kook' AND bot_account_id=$1 AND source_event_id=$2`,
         [event.botAccountId, event.messageId],
       );
-      return { outboxId: existing, idempotencyKey: key, created: inserted.rowCount === 1 };
+      return { outboxId: firstInsertedId, idempotencyKey: key, created };
     });
     return result;
   }
@@ -313,13 +364,19 @@ export class KookMessageQueue {
     const leaseToken = randomBytes(24).toString('base64url');
     const result = await this.pool.query(
       `WITH candidate AS (
-         SELECT outbox_id FROM message_outbox
-         WHERE status IN ('pending','retry','sending')
-           AND (next_attempt_at IS NULL OR next_attempt_at <= now())
-           AND bot_account_id=$3
-           AND (status <> 'sending' OR lease_until IS NULL OR lease_until <= now())
-         ORDER BY created_at,outbox_id
-         FOR UPDATE SKIP LOCKED LIMIT 1
+         SELECT message.outbox_id FROM message_outbox message
+         WHERE message.status IN ('pending','retry','sending')
+           AND (message.next_attempt_at IS NULL OR message.next_attempt_at <= now())
+           AND message.bot_account_id=$3
+           AND (message.status <> 'sending' OR message.lease_until IS NULL OR message.lease_until <= now())
+           AND (message.reply_group_key='' OR NOT EXISTS (
+             SELECT 1 FROM message_outbox earlier
+             WHERE earlier.bot_account_id=message.bot_account_id
+               AND earlier.reply_group_key=message.reply_group_key
+               AND earlier.reply_part<message.reply_part AND earlier.status<>'sent'
+           ))
+         ORDER BY message.created_at,message.outbox_id
+         FOR UPDATE OF message SKIP LOCKED LIMIT 1
        )
        UPDATE message_outbox AS message
        SET status='sending', attempt_count=message.attempt_count+1,
@@ -328,7 +385,7 @@ export class KookMessageQueue {
        WHERE message.outbox_id=candidate.outbox_id
        RETURNING message.outbox_id,message.idempotency_key,message.tenant_id,message.team_id,
                  message.bot_account_id,message.channel_id,message.target_kind,message.target_id,
-                 message.source_event_id,message.attempt_count,message.payload_json,message.welcome_guild_id`,
+                 message.source_event_id,message.reply_to_message_id,message.attempt_count,message.payload_json,message.welcome_guild_id`,
       [leaseToken, this.leaseMs, this.botAccountId],
     );
     const row = result.rows[0];
@@ -344,6 +401,7 @@ export class KookMessageQueue {
       targetId: typeof row.target_id === 'string' && row.target_id ? row.target_id : String(row.channel_id),
       welcomeGuildId:typeof row.welcome_guild_id==='string'?row.welcome_guild_id:null,
       sourceEventId: typeof row.source_event_id === 'string' ? row.source_event_id : null,
+      replyToMessageId: typeof row.reply_to_message_id === 'string' ? row.reply_to_message_id : null,
       leaseToken,
       attemptCount: Number(row.attempt_count),
       payload: parseJobPayload(row.payload_json),
@@ -383,8 +441,7 @@ export class KookMessageQueue {
       const providerDelay = error && typeof error === 'object' && 'retryAfterMs' in error
         && typeof (error as { retryAfterMs?: unknown }).retryAfterMs === 'number'
         ? (error as { retryAfterMs: number }).retryAfterMs : null;
-      const providerRateLimited = errorCode === 'kook_message_api_rate_limited'
-        || errorCode === 'kook_message_daily_budget_exhausted';
+      const providerRateLimited = errorCode === 'kook_message_api_rate_limited';
       if (attempts >= this.maxAttempts && !providerRateLimited) {
         await client.query(
           `UPDATE message_outbox
@@ -440,10 +497,10 @@ export class KookMessageQueue {
       }
       if (job.targetKind === 'direct') {
         if (!sender.sendDirect) throw Object.assign(new Error('direct_sender_unavailable'), { code: 'direct_sender_unavailable' });
-        const remoteMessageId = await sender.sendDirect(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        const remoteMessageId = await sender.sendDirect(job.targetId, job.payload, job.idempotencyKey, job.replyToMessageId);
         await this.markSent(job, typeof remoteMessageId === 'string' ? remoteMessageId : undefined);
       } else {
-        const remoteMessageId = await sender.send(job.targetId, job.payload, job.idempotencyKey, job.sourceEventId);
+        const remoteMessageId = await sender.send(job.targetId, job.payload, job.idempotencyKey, job.replyToMessageId);
         await this.markSent(job, typeof remoteMessageId === 'string' ? remoteMessageId : undefined);
       }
       return 'sent';

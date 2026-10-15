@@ -31,7 +31,6 @@ export interface KookAgentRunRecord {
 }
 export interface PublicQueryAuthorizerOptions {
   botAccountId: string;
-  sessionTtlMs?: number;
   maxTeamChoices?: number;
 }
 const authorizedQuery = Symbol('authorized-public-pubg-query');
@@ -61,14 +60,11 @@ function choice(row: QueryResultRow): PublicQueryTeamChoice {
  * do not create DM grants; an account claim does not imply guild/team access. */
 export class PublicQueryAuthorizer {
   private readonly botId: string;
-  private readonly ttlMs: number;
   private readonly maxChoices: number;
   constructor(private readonly pool: Pool, private readonly permissions: PublicQueryPermissionChecker, options: PublicQueryAuthorizerOptions) {
     this.botId = requiredId(options.botAccountId);
-    this.ttlMs = options.sessionTtlMs ?? 12 * 60 * 60000;
     this.maxChoices = options.maxTeamChoices ?? 20;
-    if (!Number.isSafeInteger(this.ttlMs) || this.ttlMs < 1000 || this.ttlMs > 24 * 60 * 60000
-      || !Number.isSafeInteger(this.maxChoices) || this.maxChoices < 2 || this.maxChoices > 200) throw new Error('public_query_limits_invalid');
+    if (!Number.isSafeInteger(this.maxChoices) || this.maxChoices < 2 || this.maxChoices > 200) throw new Error('public_query_limits_invalid');
   }
 
   private async storedJob(client: Pool | PoolClient, job: KookIngressJob, lock = false): Promise<KookIngressJob> {
@@ -177,20 +173,20 @@ export class PublicQueryAuthorizer {
       if (previous.rowCount) {
         const row = previous.rows[0]!;
         if (!sameTeam(row, selectedTarget) || row.user_id !== event.userId || row.channel_id !== channel || row.kind !== kind
-          || String(row.team_revision) !== revision || (row.binding_revision === null ? null : String(row.binding_revision)) !== bindingRevision
-          || new Date(row.expires_at).getTime() <= Date.now()) throw new Error('public_query_request_scope_changed');
+          || String(row.team_revision) !== revision || (row.binding_revision === null ? null : String(row.binding_revision)) !== bindingRevision)
+          throw new Error('public_query_request_scope_changed');
         sessionId = String(row.session_id);
       } else {
         const existing = await client.query(
           `SELECT session_id FROM public_query_sessions WHERE tenant_id=$1 AND team_id=$2 AND bot_account_id=$3
            AND user_id=$4 AND channel_id=$5 AND kind=$6 AND team_revision=$7 AND binding_revision IS NOT DISTINCT FROM $8::BIGINT
-           AND expires_at>now() ORDER BY updated_at DESC,session_id LIMIT 1 FOR UPDATE`, [...scope, revision, bindingRevision],
+         ORDER BY updated_at DESC,session_id LIMIT 1 FOR UPDATE`, [...scope, revision, bindingRevision],
         );
         sessionId = existing.rows[0] ? String(existing.rows[0].session_id) : randomUUID();
         await client.query(
           `INSERT INTO public_query_sessions(session_id,tenant_id,team_id,platform,bot_account_id,user_id,channel_id,kind,team_revision,binding_revision,expires_at)
-           VALUES ($1,$2,$3,'kook',$4,$5,$6,$7,$8,$9,now()+($10::BIGINT*interval '1 millisecond'))
-           ON CONFLICT (session_id) DO UPDATE SET expires_at=EXCLUDED.expires_at,updated_at=now()`, [sessionId, ...scope, revision, bindingRevision, this.ttlMs],
+           VALUES ($1,$2,$3,'kook',$4,$5,$6,$7,$8,$9,'infinity'::timestamptz)
+           ON CONFLICT (session_id) DO UPDATE SET expires_at='infinity'::timestamptz,updated_at=now()`, [sessionId, ...scope, revision, bindingRevision],
         );
         const requestId = createHash('sha256').update(JSON.stringify(['kook', this.botId, current.eventId])).digest('hex');
         await client.query('INSERT INTO public_query_requests(bot_account_id,event_id,request_id,session_id) VALUES ($1,$2,$3,$4)', [this.botId, current.eventId, requestId, sessionId]);
@@ -208,27 +204,26 @@ export class PublicQueryAuthorizer {
     } finally { client.release(); }
   }
 
-  /** Returns a small, speaker-labeled window from this trusted channel/DM.
+  /** Returns the retained, speaker-labeled history from this trusted channel/DM.
    * IDs stay in PostgreSQL and are used only to resolve quoted-message links. */
-  async loadAgentConversation(jobInput: KookIngressJob, limit = 12): Promise<KookAgentConversationWindow> {
+  async loadAgentConversation(jobInput: KookIngressJob): Promise<KookAgentConversationWindow> {
     const job = await this.storedJob(this.pool, jobInput);
     if (job.request.kind !== 'group' && job.request.kind !== 'direct') return { turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null };
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('public_agent_history_limit_invalid');
     const userId = job.request.event.userId;
     const channelId = job.request.kind === 'group' ? job.request.event.channelId : `dm:${this.botId}:${userId}`;
     const result = await this.pool.query(
       `SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content
        FROM kook_conversation_messages
-       WHERE bot_account_id=$1 AND channel_id=$2 AND expires_at>now() AND message_id<>$3
-       ORDER BY created_at DESC,message_id DESC LIMIT $4`,
-      [this.botId, channelId, job.eventId, limit],
+       WHERE bot_account_id=$1 AND channel_id=$2 AND message_id<>$3
+       ORDER BY created_at,message_id`,
+      [this.botId, channelId, job.eventId],
     );
-    const rows = result.rows.reverse().map(row => ({
+    const rows = result.rows.map(row => ({
       messageId: String(row.message_id),
       kind: row.speaker_kind === 'assistant' ? 'assistant' as const : 'human' as const,
       speakerId: String(row.speaker_id),
       replyTo: typeof row.reply_to_message_id === 'string' ? row.reply_to_message_id : null,
-      content: String(row.content).slice(0, 1600),
+      content: String(row.content),
     }));
     const labels = new Map<string, string>([[this.botId, '助手'], [userId, '成员1']]);
     let nextLabel = 2;
@@ -242,21 +237,18 @@ export class PublicQueryAuthorizer {
     const currentQuoteId = job.request.kind === 'group' ? job.request.event.quotedMessageId : null;
     const currentQuote = currentQuoteId ? byId.get(currentQuoteId) : undefined;
     const currentQuoteContext = currentQuote
-      ? `引用内容来自${labelFor(currentQuote.speakerId)}：“${currentQuote.content.slice(0, 240)}”`
+      ? `引用内容来自${labelFor(currentQuote.speakerId)}：“${currentQuote.content}”`
       : null;
-    let totalCharacters = 0;
     const turns: KookAgentConversationTurn[] = [];
     for (const row of rows) {
       const target = row.replyTo ? byId.get(row.replyTo) : undefined;
       const relation = target
-        ? `（回复对象${labelFor(target.speakerId)}，引用：“${target.content.slice(0, 240)}”）`
+        ? `（回复对象${labelFor(target.speakerId)}，引用：“${target.content}”）`
         : '';
       const content = row.kind === 'human'
         ? `${labelFor(row.speakerId)}说：${relation}${row.content}`
         : sanitizeKookAssistantReplyContent(row.content);
-      if (totalCharacters + content.length > 6000) break;
       turns.push({ role: row.kind === 'assistant' ? 'assistant' : 'user', content });
-      totalCharacters += content.length;
     }
     return { turns, currentSpeakerLabel: '成员1', currentQuoteContext };
   }

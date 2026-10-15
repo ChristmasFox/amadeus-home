@@ -7,8 +7,6 @@ import {
 import { PUBLIC_AGENT_SOUL_STYLE } from './public-agent-soul.js';
 
 export const PUBLIC_KOOK_AGENT_LIMITS = {
-  maxMessages: 12,
-  maxHistoryCharacters: 6_000,
   totalTimeoutMs: 300_000,
   toolLoopTimeoutMs: 270_000,
   finalizationTimeoutMs: 30_000,
@@ -102,7 +100,7 @@ function recoveredResult(result: {
   const inputTokens = tokenCount(result.usage?.inputTokens), outputTokens = tokenCount(result.usage?.outputTokens);
   const totalTokens = tokenCount(result.usage?.totalTokens);
   return {
-    text: result.text.trim().slice(0, 8000),
+    text: result.text.trim(),
     inputTokens: previousUsage.inputComplete && inputTokens !== null ? previousUsage.inputTokens + inputTokens : null,
     outputTokens: previousUsage.outputComplete && outputTokens !== null ? previousUsage.outputTokens + outputTokens : null,
     totalTokens: previousUsage.totalComplete && totalTokens !== null ? previousUsage.totalTokens + totalTokens : null,
@@ -199,7 +197,7 @@ export async function runPublicKookAgent<TOOLS extends ToolSet>(input: {
       throw Object.assign(new Error(code), { code, stepCount: result.steps.length });
     }
     return {
-      text: text.slice(0, 8000),
+      text,
       inputTokens: tokenCount(result.usage.inputTokens),
       outputTokens: tokenCount(result.usage.outputTokens),
       totalTokens: tokenCount(result.usage.totalTokens),

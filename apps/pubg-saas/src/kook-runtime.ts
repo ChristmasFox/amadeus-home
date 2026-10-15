@@ -4,7 +4,6 @@ import { KookMessageQueue, type KookOutboxFailureDiagnostic } from './applicatio
 import { createNodeWebSocketFactory, KookGatewayApiClient, KookGatewayClient, PostgresKookGatewayStateStore, type KookGatewaySocketFactory } from './channels/kook/gateway.js';
 import { KookMessageApiClient } from './channels/kook/message-client.js';
 import {KookGuildWelcomeApiClient} from './channels/kook/guild-welcome.js';
-import { PostgresKookDailyMessageBudget } from './infrastructure/postgres/kook-message-budget.js';
 export interface KookApplicationRuntimeOptions {
   pool: Pool;
   botAccountId: string;
@@ -16,7 +15,6 @@ export interface KookApplicationRuntimeOptions {
   fetcher?: typeof fetch;
   ingressLimits?: Omit<KookIngressQueueOptions, 'botAccountId'>;
   pollMs?: number;
-  dailyMessageBudget?: number;
   maintenance?: () => Promise<void>;
   onError?: (code: string) => void;
   onDiagnostic?: (event: KookIngressDiscardLog) => void;
@@ -59,8 +57,7 @@ export class KookApplicationRuntime {
       botAccountId: options.botAccountId,
       ...(options.onOutboxDiagnostic ? { onDeliveryFailure: options.onOutboxDiagnostic } : {}),
     });
-    const dailyBudget = new PostgresKookDailyMessageBudget(options.pool, options.botAccountId, options.dailyMessageBudget);
-    this.sender = new KookMessageApiClient({ token: options.token, dailyBudget, ...(options.fetcher ? { fetcher: options.fetcher } : {}) });
+    this.sender = new KookMessageApiClient({ token: options.token, ...(options.fetcher ? { fetcher: options.fetcher } : {}) });
     this.welcome=new KookGuildWelcomeApiClient({token:options.token,botAccountId:options.botAccountId,...(options.fetcher?{fetcher:options.fetcher}:{})});
     this.gateway = new KookGatewayClient({
       botAccountId: options.botAccountId,
@@ -125,7 +122,6 @@ export class KookApplicationRuntime {
       try {
         if (Date.now() - lastPrune >= 60000) {
           await this.outbox.pruneRetainedRecords(new Date(Date.now() - 7 * 24 * 60 * 60000));
-          await this.sender.pruneDailyBudgetReservations();
           lastPrune = Date.now();
         }
         await this.outbox.deliverOne({send:(...args)=>this.sender.send(...args),sendDirect:(...args)=>this.sender.sendDirect(...args),verifyWelcomeTarget:(guild,channel)=>this.welcome.verifyTarget(guild,channel)});
@@ -133,7 +129,6 @@ export class KookApplicationRuntime {
       catch {
         this.options.onError?.('kook_runtime_outbox_failed');
       }
-      // The durable daily budget and KOOK response headers gate actual sends.
       await delay(this.pollMs, signal);
     }
   }

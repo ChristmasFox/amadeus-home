@@ -24,8 +24,6 @@ async function fixture(pool: Pool, suffix: string) {
 }
 async function cleanup(pool: Pool, bot: string) {
   await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);
-  await pool.query('DELETE FROM kook_message_daily_reservations WHERE bot_account_id=$1', [bot]);
-  await pool.query('DELETE FROM kook_message_daily_usage WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM message_inbox WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]);
   await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);
@@ -128,33 +126,6 @@ test('durable ingress resumes after restart, owns its destinations, and atomical
     assert.equal(delayed?.status, 'retry');
     assert.equal(delayed?.last_error_code, 'kook_message_api_rate_limited');
     assert.ok(Number(delayed?.wait_ms) >= 119_000);
-    const exhaustedEvent = group(f.bot, `budget-limited-${suffix}`, f.guild, f.channel, f.user);
-    assert.equal(await restarted.ingestGatewayEvent(exhaustedEvent), 'accepted');
-    assert.equal(await restarted.processOne(async () => ({ type: 'text', content: 'daily quota reply' }), new AbortController().signal), 'done');
-    const deliveryDiagnostics: unknown[] = [];
-    const exhaustedQueue = new KookMessageQueue(pool, {
-      botAccountId: f.bot, maxAttempts: 1,
-      onDeliveryFailure: event => deliveryDiagnostics.push(event),
-    });
-    const quotaError = Object.assign(new Error('kook_message_daily_budget_exhausted'), {
-      code: 'kook_message_daily_budget_exhausted', retryAfterMs: 12 * 60 * 60_000,
-    });
-    assert.equal(await exhaustedQueue.deliverOne({ async send() { throw quotaError; } }), 'retry');
-    const quotaDeferred = (await pool.query(
-      `SELECT status,last_error_code,EXTRACT(EPOCH FROM (next_attempt_at-now()))*1000 AS wait_ms
-       FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2`, [f.bot, exhaustedEvent.msg_id],
-    )).rows[0];
-    assert.equal(quotaDeferred?.status, 'retry');
-    assert.equal(quotaDeferred?.last_error_code, 'kook_message_daily_budget_exhausted');
-    assert.ok(Number(quotaDeferred?.wait_ms) > 0);
-    assert.equal(deliveryDiagnostics.length, 1);
-    const deliveryDiagnostic = deliveryDiagnostics[0] as Record<string, unknown>;
-    assert.deepEqual({ ...deliveryDiagnostic, requestKey: undefined }, {
-      event: 'kook_outbox_delivery_failed', stage: 'outbox', outcome: 'retry',
-      reason: 'kook_message_daily_budget_exhausted', requestKey: undefined, count: 1,
-    });
-    assert.match(String(deliveryDiagnostic.requestKey), /^[a-f0-9]{16}$/u);
-    assert.equal(JSON.stringify(deliveryDiagnostics).includes(exhaustedEvent.msg_id), false);
     await pool.query('UPDATE message_outbox SET next_attempt_at=now() WHERE bot_account_id=$1 AND source_event_id=$2', [f.bot, limitedEvent.msg_id]);
     assert.equal(await oneAttemptQueue.deliverOne({ async send() {} }), 'sent');
   }
@@ -167,18 +138,20 @@ test('ingress bounds admission, preserves channel conversation order, and reject
   const suffix = randomUUID();
   const f = await fixture(pool, suffix);
   const diagnostics: unknown[] = [];
-  const queue = new KookIngressQueue(pool, { botAccountId: f.bot, maxPending: 3, maxPendingPerUser: 2, onDiscard: diagnostic => diagnostics.push(diagnostic) });
+  const queue = new KookIngressQueue(pool, { botAccountId: f.bot, maxPending: 3, onDiscard: diagnostic => diagnostics.push(diagnostic) });
   try {
     const first = group(f.bot, `a-${suffix}`, f.guild, f.channel, f.user);
     assert.equal(await queue.ingestGatewayEvent(first), 'accepted');
     assert.equal(await queue.ingestGatewayEvent(group(f.bot, `b-${suffix}`, f.guild, f.channel, f.user)), 'accepted');
-    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `c-${suffix}`, f.guild, f.channel, f.user)), 'ignored');
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `c-${suffix}`, f.guild, f.channel, f.user)), 'accepted');
+    assert.equal(await queue.ingestGatewayEvent(group(f.bot, `overflow-${suffix}`, f.guild, f.channel, f.user)), 'ignored');
     assert.deepEqual(diagnostics[0], { event: 'kook_ingress_discarded', stage: 'admission', reason: 'kook_ingress_capacity_exceeded', count: 1 });
     const job = await queue.claimNext();
     assert.ok(job);
     assert.equal(job.eventId, first.msg_id);
     await queue.fail(job, new Error('transient'));
     assert.equal(await queue.claimNext(), null); // later channel message cannot overtake this retry
+    await pool.query("UPDATE kook_ingress_events SET status='done',event_json=NULL WHERE bot_account_id=$1 AND event_id=$2", [f.bot, `c-${suffix}`]);
     assert.equal(await queue.ingestGatewayEvent(group(f.bot, `other-${suffix}`, f.guild, f.channel, `other-${f.user}`)), 'accepted');
     assert.equal(await queue.claimNext(), null); // preserve shared channel turn order across actors
     await pool.query("UPDATE kook_ingress_events SET status='done',event_json=NULL WHERE bot_account_id=$1 AND event_id=$2", [f.bot, `other-${suffix}`]);
@@ -195,43 +168,20 @@ test('ingress bounds admission, preserves channel conversation order, and reject
     await cleanup(pool, f.bot);
   }
 });
-test('ingress enforces per-user, channel, tenant and bot request windows', { skip: !databaseUrl }, async () => {
-  const cases = [
-    { name: 'user', options: { maxRequestsPerUserPerMinute: 1 }, firstChannel: 0, secondChannel: 0, firstUser: 0, secondUser: 0, expected: 'kook_ingress_rate_limited_user' },
-    { name: 'channel', options: { maxRequestsPerChannelPerMinute: 1 }, firstChannel: 0, secondChannel: 0, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_channel' },
-    { name: 'tenant', options: { maxRequestsPerTenantPerMinute: 1 }, firstChannel: 0, secondChannel: 1, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_tenant' },
-    { name: 'bot', options: { maxRequestsPerBotPerMinute: 1 }, firstChannel: 0, secondChannel: 1, firstUser: 0, secondUser: 1, expected: 'kook_ingress_rate_limited_bot' },
-  ] as const;
-  for (const item of cases) {
-    const pool = new Pool({ connectionString: databaseUrl, max: 4 });
-    const suffix = randomUUID();
-    const f = await fixture(pool, suffix);
-    const otherChannel = `channel-extra-${suffix}`;
-    await pool.query(
-      "INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id) VALUES ($1,'kook',$2,$3,$4,$5)",
-      [f.tenant, f.bot, otherChannel, f.team, f.user],
-    );
-    const diagnostics: unknown[] = [];
-    const queue = new KookIngressQueue(pool, {
-      botAccountId: f.bot,
-      maxRequestsPerUserPerMinute: 10,
-      maxRequestsPerChannelPerMinute: 10,
-      maxRequestsPerTenantPerMinute: 10,
-      maxRequestsPerBotPerMinute: 10,
-      ...item.options,
-      onDiscard: diagnostic => diagnostics.push(diagnostic),
-    });
-    const channels = [f.channel, otherChannel] as const;
-    const users = [f.user, `other-actor-${suffix}`] as const;
-    try {
-      assert.equal(await queue.ingestGatewayEvent(group(f.bot, `first-${item.name}-${suffix}`, f.guild, channels[item.firstChannel]!, users[item.firstUser]!)), 'accepted');
-      assert.equal(await queue.ingestGatewayEvent(group(f.bot, `second-${item.name}-${suffix}`, f.guild, channels[item.secondChannel]!, users[item.secondUser]!)), 'ignored');
-      assert.deepEqual(diagnostics[0], {
-        event: 'kook_ingress_discarded', stage: 'admission', reason: item.expected, count: 1,
-      });
+test('ingress accepts more than ten events per user per minute without local request throttles', { skip: !databaseUrl }, async () => {
+  const pool = new Pool({ connectionString: databaseUrl, max: 4 });
+  const suffix = randomUUID();
+  const f = await fixture(pool, suffix);
+  const queue = new KookIngressQueue(pool, { botAccountId: f.bot });
+  try {
+    for (let index = 0; index < 11; index += 1) {
+      assert.equal(await queue.ingestGatewayEvent(
+        group(f.bot, `burst-${index}-${suffix}`, f.guild, f.channel, f.user),
+      ), 'accepted');
     }
-    finally { await cleanup(pool, f.bot); }
+    assert.equal(Number((await pool.query('SELECT COUNT(*)::INTEGER AS count FROM kook_ingress_events WHERE bot_account_id=$1', [f.bot])).rows[0]?.count), 11);
   }
+  finally { await cleanup(pool, f.bot); }
 });
 test('additive migrations upgrade an applied schema and preserve existing outbox destinations', { skip: !databaseUrl }, async () => {
   const admin = new Pool({ connectionString: databaseUrl, max: 1 });
@@ -245,9 +195,13 @@ test('additive migrations upgrade an applied schema and preserve existing outbox
     await pool.query("INSERT INTO message_outbox(outbox_id,idempotency_key,platform,bot_account_id,tenant_id,team_id,channel_id,payload_json,status) VALUES ('old','old','kook','synthetic-bot','synthetic-tenant','synthetic-team','synthetic-channel','{}','pending')");
     await migratePublicDatabase(pool);
     await migratePublicDatabase(pool);
-    assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id FROM message_outbox')).rows[0], { target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null });
+    assert.deepEqual((await pool.query('SELECT target_kind,target_id,source_event_id,reply_to_message_id,reply_part,reply_part_count FROM message_outbox')).rows[0], {
+      target_kind: 'channel', target_id: 'synthetic-channel', source_event_id: null,
+      reply_to_message_id: null, reply_part: 0, reply_part_count: 1,
+    });
     assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'")).rowCount, 1);
     assert.equal((await pool.query("SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='kook_message_daily_reservations' AND column_name='reservation_hash'")).rowCount, 1);
+    assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0020_persistent_query_context.sql'")).rowCount, 1);
   }
   finally {
     await pool.end();

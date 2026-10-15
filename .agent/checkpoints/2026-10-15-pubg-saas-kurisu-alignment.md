@@ -1,5 +1,36 @@
 # PUBG SaaS Kurisu alignment — 2026-10-15
 
+## Latest follow-up — remove SaaS-only quotas and conversation expiry
+
+Arthur authorized removing the public-only daily sender quota, ingress
+per-user/channel/tenant/bot requests-per-minute gates, and the 12-message /
+6,000-character / 1,600-character-per-row / 12-hour conversation caps. Runtime
+quota reservations are gone; the historic 0011 database migration remains in
+sequence for upgrade compatibility and is no longer used by Gateway/Worker.
+Conversation and query sessions now persist; they remain isolated by KOOK
+channel or DM actor. Persisted history never grants access: each tool call
+still validates the live trusted event, actor, tenant, team, channel binding,
+roster and revisions.
+
+For KOOK's 8,000-character per-message transport limit, text/kmarkdown replies
+are split into ordered outbox rows without truncation; mention markup is kept
+whole. Provider bucket/global headers and actual 429 retry behavior remain.
+The explicit eight-player cap, write authorization/redaction, 300-second
+overall Agent timeout and shared-key `/players` 10/minute admission remain;
+`/matches` is not admitted through that limiter. A 1,000-item total pending
+queue capacity remains as a durable-backlog safety boundary, with no
+per-user-pending cap.
+
+Source verification passed: `pnpm test:pubg-saas` 150/150 against isolated PG,
+zero skipped; `pnpm test:pubg` 71/71, zero skipped; PUBG/SaaS typechecks, SaaS
+build, architecture checks, `pnpm check:secrets`, and `git diff --check` all
+passed. Focused PG regressions prove 11 events from one user/minute are
+accepted, more than 12 old messages and 6,000 characters load into context,
+past-expiry query context remains authorized only under current scope, 205
+outbound sends do not hit a local daily quota, and a 17,000-character reply is
+delivered in ordered chunks. Rollout evidence will be added after the
+authorized Gateway/Worker-only replacement.
+
 ## Outcome
 
 Commits `e355b2ef673662b60757b69966c73768e89830e5`,
@@ -34,74 +65,57 @@ The overall Agent deadline remains 300 seconds; completed tool results are
 summarized if the loop times out. Internal IDs, private data, and diagnostics
 remain excluded from model-visible facts.
 
-## Limit audit
+## Current public/Kurisu differences and reasons
 
-No public-only query-result or facts cap remains. Domain-owned limits and rules
-are shared with Kurisu: match discovery default 500; match search page size up
-to 50 and latest-match request up to 100; review search freshness; coverage and
-cache behavior; telemetry fetch default and concurrency; and `Asia/Shanghai`
-06:00 business-day selection. No custom step or per-step token limit is on the
-Agent path. The legacy planner class retains limits for its isolated tests and
-benchmark only; Gateway does not construct or call it.
-
-The following public-runtime differences remain:
-
-- Public persistence and execution use PostgreSQL, an independent KOOK Gateway,
-  and a Worker; Kurisu uses its own SQLite and OpenClaw plugin. This is the
-  required runtime and tenant-isolation boundary.
-- The public server validates each tool call against trusted KOOK event,
-  tenant, channel, member, and roster state, and sanitizes internal IDs and
-  debug/private fields before model use. This is required multi-tenant
-  authorization and privacy; it does not change Domain facts.
-- Teams are capped at 8 players and all writes require server-side permission
-  checks. Arthur explicitly required both.
-- Public `/players` discovery traffic is gated at 10 requests/minute across
-  the SaaS service. `/matches` is not gated because PUBG does not count it
-  against API request rate and Kurisu does not gate it. Arthur previously
-  required protection while sharing the PUBG API key; the separate processes
-  do not have a cross-runtime shared limiter, so the SaaS gate does not reserve
-  Kurisu's share.
-- KOOK outbound sends have a 200-message per-bot daily budget, resetting at
-  noon Asia/Shanghai. This follows KOOK's published unverified-developer bot
-  eligibility ceiling; KOOK response headers also govern actual send limits.
-- Ingress defaults are 10 requests/user/minute, 60/channel/minute,
-  120/tenant/minute, and 300/bot/minute, with 1,000 pending total and 20 per
-  user. These implement Arthur's earlier group/user throttle and cost-control
-  requirement and protect the public queue from loops or overload.
-- Conversation context uses at most the most recent 12 messages and 6,000
-  characters, stores an individual conversation message at up to 1,600
-  characters, and retains group/DM conversation text for 12 hours. Arthur
-  required finite recent channel context; bounded retention and no shared
-  Kurisu memory are privacy requirements.
-- KOOK inbound message validation caps content at 8,192 characters and
-  outbound payloads at 8,000 characters. These are KOOK transport boundaries.
-- The independent public Worker schedules up to 2 teams per worker cycle and
-  syncs every 300,000 ms; the cadence matches Kurisu's configured five-minute
-  freshness. Team concurrency is Worker scheduling, with no equivalent
-  background multi-tenant scheduler in the private plugin.
-- Public ingress/outbox and authorization use expiring leases, deduplication,
-  retry attempts, and query-session TTLs to prevent stale writes and duplicate
-  delivery in a multi-process service. Those are PostgreSQL queue/security
-  mechanics, not PUBG time or reporting semantics.
-- The public Agent exposes a generic `pubg_query` and `team_info` tool surface;
-  Kurisu registers several native PUBG tools. Both route to the same Domain
-  operations and retain their own model prompt/reply style. The surface
-  difference is the KOOK adapter boundary, not a second Domain implementation.
-
-The 66e1006 change introduced one new admission gate beyond prior behavior:
-`/matches`. Commit `122cd79` removed it. The admission tests assert that
-`/players` consumes permits and `/matches` does not; endpoint allowlisting,
-redirect rejection, and telemetry no-key assertions remain.
+- **Runtime and storage:** public SaaS uses KOOK Gateway/Worker plus PostgreSQL
+  and separate public model configuration; private Kurisu uses its OpenClaw
+  plugin and SQLite. This is the required product and tenant boundary.
+- **Tenant and write authorization:** every public PUBG tool call is checked
+  against current trusted KOOK event, tenant, team, user, channel binding,
+  roster and revision; writes use server-side permission checks and secret
+  redaction. This is required multi-tenant security.
+- **Team size:** public teams cap at 8 players, as Arthur explicitly required.
+- **PUBG player discovery:** public `/players` calls use a shared public-service
+  10/minute admission gate because the PUBG key has a limited quota; `/matches`
+  bypasses it, matching PUBG/Kurisu semantics. The limiter is not shared with
+  the independent Kurisu process.
+- **KOOK sender transport:** there is no local 200/day budget. Actual KOOK
+  response bucket/global headers and 429 guidance control delivery. Individual
+  text messages stay within 8,000 characters and longer replies are split,
+  because KOOK imposes a per-message payload limit.
+- **Conversation retention:** public text history and query session context are
+  persistent, grouped by channel or DM actor, with no row-count, character, or
+  12-hour expiry cap. This matches the inspected private session scope
+  configuration; private memory, DMs and user files are not imported. Public
+  authorization is rechecked per request.
+- **Durable queue mechanics:** public ingress admits up to 1,000 pending events
+  globally (not per user), expires unhandled request payloads after one hour,
+  retries with leased/idempotent outbox delivery, and prunes completed outbox
+  metadata after seven days. Model usage metadata is kept for 30 days. These
+  are multi-process durable-queue and operational-record mechanics; they do
+  not truncate retained conversation history or grant authority.
+- **Agent deadline:** 300 seconds overall, as Arthur explicitly required; the
+  high runaway guard is 128 steps, enough for the eight-player query workflow.
+- **Domain behavior:** time windows, match discovery/search, coverage, review,
+  statistics, telemetry semantics and cache behavior are the shared PUBG
+  Domain implementation. No second public statistics algorithm exists.
+- **Tool interface/persona:** public Agent exposes KOOK-oriented generic tools
+  and a public-safe SOUL excerpt; Kurisu exposes native OpenClaw tools. Replies
+  remain model-generated in each runtime. Private memories, user data and
+  private nickname mappings are excluded from the public Agent.
 
 ## Validation
 
-- Before the `/matches` correction, `pnpm test:pubg-saas`: 150/150 passed,
-  zero skipped, against the reused isolated PostgreSQL test instance.
-- Before the correction, `pnpm test:pubg`: 71/71 passed, zero skipped.
-- For commit `122cd79`, focused `public-sync-worker.test.ts`: 2/2 passed,
-  zero skipped, against the reused isolated PostgreSQL instance. SaaS
-  typecheck/build, `pnpm check:secrets`, and `git diff --check` passed.
-- ARM64 image build succeeded locally on the target VM; no image was pushed.
+- Current source: `pnpm test:pubg-saas` passed 150/150 with zero skipped against
+  the reused isolated PostgreSQL test instance; `pnpm test:pubg` passed 71/71
+  with zero skipped.
+- `pnpm typecheck:pubg`, `pnpm typecheck:pubg-saas`,
+  `pnpm build:pubg-saas`, `pnpm check:architecture`,
+  `pnpm test:architecture`, `pnpm check:secrets`, and `git diff --check` passed.
+- Full isolated-PG regressions include no per-minute ingress rejection,
+  persistent context beyond the old caps/expiry, no local 200-message sender
+  quota, and ordered split delivery for overlong replies.
+- M204 build/rollout evidence will be recorded after the authorized switch.
 
 ## M204 rollout evidence
 

@@ -2,68 +2,63 @@
 
 Date: 2026-10-15 (Asia/Shanghai).
 
-## Active task — Kurisu-aligned public sync and Domain facts (2026-10-15)
+## Active task — remove public-only KOOK quotas and context expiry (2026-10-15)
 
-Arthur authorized aligning public KOOK match discovery and report facts with
-private Kurisu while preserving shared PUBG Domain rules, tenant authorization,
-and the independent PostgreSQL/Worker runtime. The live override
-`PUBLIC_SYNC_MAX_MATCHES=10` was in the gitignored
-`infra/pubg-saas/secrets/worker.env`; it has been removed. Canonical Compose and
-the live Worker now use 500, matching the private plugin's configured
-`maxMatches`. Shared Domain selection round-robins each member's newest-first
-match list before applying that ceiling, so one account cannot consume it.
-Worker/API resolution use shared Domain retry, timeout, and concurrency defaults.
-The rate-limited `/players` endpoint uses the public 10 requests/minute
-admission gate; `/matches` follows Kurisu and bypasses it.
+Arthur authorized aligning the public Gateway's sender and conversation
+retention with private Kurisu. The local 200-message daily sender quota and
+per-user/channel/tenant/bot ingress request-rate gates are removed. KOOK's
+actual bucket/global response headers and 429 retry guidance remain in force.
+Transcript history is now retained without the public-only 12-message,
+6,000-character, 1,600-character-per-row, or 12-hour expiry caps; query
+sessions are persistent as well. Group history remains channel-scoped and DM
+history remains actor-scoped. Every PUBG tool call still revalidates the
+current trusted KOOK event, tenant, team, user, channel binding, roster, and
+revision; history never grants authorization.
 
-The public Agent receives the complete sanitized Domain envelope, shared
-presentation/display text, per-match facts, and review facts. The former facts
-whitelist and evidence/match truncation are gone. The Agent has no fixed step
-or per-step token cap; the only overall deadline is Arthur's 300 seconds, with
-completed tool results summarized on timeout. Replies can use KOOK's 8,000
-character payload limit. Internal identifiers, private data, and diagnostics
-remain redacted.
+Replies over KOOK's 8,000-character per-message limit are split into ordered,
+durable outbox parts, preserving all text and keeping a KOOK mention intact.
+The public team cap (8), write authorization/redaction, 300-second Agent
+timeout, and shared-key `/players` admission (10/minute) remain. `/matches`
+still bypasses that admission gate. The global ingress backlog capacity of
+1,000 is retained as a durable-queue capacity boundary; there is no per-user
+pending limit.
+
+The patch adds migrations 0017–0020 for persistent transcript/query context,
+ordered outbox parts, and separate source/reply-target IDs. Existing quota
+migrations remain in the ordered migration history; the runtime no longer
+reserves or records local daily quota usage. Validation passed before rollout:
+SaaS PostgreSQL 150/150 and PUBG/Kurisu 71/71, both zero skipped; both package
+typecheck chains, SaaS build, architecture checks, secrets scan, and
+`git diff --check` passed. Reused isolated PG container `pubg-saas-pg18`; no
+Docker up/down was needed.
+
+Commit, push, M204 build/deploy, migration and Gateway/Worker health evidence
+will be recorded here after the authorized rollout. Arthur's KOOK acceptance
+remains the final product check; do not declare M2 complete.
+
+## Previous milestone — Kurisu-aligned public sync and Domain facts (2026-10-15)
+
+The live `PUBLIC_SYNC_MAX_MATCHES=10` override was removed. Canonical Compose
+and the Worker use 500, matching the private plugin's configured `maxMatches`.
+Shared Domain selection round-robins each member's newest-first match list
+before applying that ceiling, so one account cannot consume it. The public
+Agent receives the complete sanitized Domain envelope, shared
+presentation/display text, per-match facts, and review facts. The `/matches`
+admission gate was removed; authenticated `/players` discovery remains gated,
+endpoint allowlisting and redirect rejection remain, and telemetry requests
+still carry no API key.
 
 The source commits `e355b2ef673662b60757b69966c73768e89830e5`,
 `6a9171fe10ff5948b421bf6c6cf973704e82f0cd`,
-`f47783d5869071224486d0c26b580eb7ebb835de`, and
-`66e1006b04b8726f50a80a15c3b0024d049228f0`, and
-`122cd79` are pushed to `origin/main`.
-The deployed ARM64 image is
-`local/pubg-saas:git-122cd79`
-(image ID `sha256:05618c63ea4b6b7cbe4ddd23455187e26ced0da13e7e3222948b7592d980aca3`).
-Only Gateway and Worker were replaced on `pubg-saas-m2-clean`; PostgreSQL,
-egress-proxy, and SaaS 9Router retain the same container IDs. Worker is
-healthy, Gateway is healthy, and both have zero restarts. KOOK cursor is
-`last_sn=72`, updated at `2026-10-15T03:36:45.536304Z`. No migration ran and
-no image was pushed.
+`f47783d5869071224486d0c26b580eb7ebb835de`,
+`66e1006b04b8726f50a80a15c3b0024d049228f0`, and `122cd79` are on
+`origin/main`; ARM64 image `local/pubg-saas:git-122cd79` was deployed to
+`pubg-saas-m2-clean`. Only Gateway and Worker were replaced. The former
+missing 2026-10-14 21:07 duo and 23:01 squad matches are in PostgreSQL and the
+team's discovered-match index. Earlier deployment evidence remains in
+`.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`.
 
-The channel-bound team has 132 discovered matches. The formerly missing
-`2026-10-14 21:07:10` competitive duo (004 + kim) and `23:01:13` competitive
-squad (004 + kim + 008) are present in PostgreSQL and the team's discovered
-match index. Gateway and Worker had zero error/fatal-level JSON log records in
-the inspected 10-minute window.
-
-Limit audit: team sync uses the shared Domain's 500-match default; per-query
-match pagination (`pageSize` 50, latest 100), review freshness, coverage, time
-selection, cache semantics, and telemetry behavior are shared Domain rules.
-No public Agent facts whitelist, evidence cap, per-step token budget, or fixed
-step count remains. The remaining service boundaries and their reasons are
-listed in `.agent/checkpoints/2026-10-15-pubg-saas-kurisu-alignment.md`. The
-66e1006 `/matches` admission gate was removed; authenticated `/players`
-discovery remains gated, endpoint allowlisting and redirect rejection remain,
-and telemetry requests still carry no API key.
-
-Before the `/matches` correction, `pnpm test:pubg-saas` passed 150/150 and
-`pnpm test:pubg` passed 71/71, both with no skips. For `122cd79`, the focused
-PostgreSQL `public-sync-worker.test.ts` passed 2/2 with no skips; SaaS
-typecheck/build, secrets, and diff checks passed. Rollback evidence is in the
-mode-0600 target records
-`/var/tmp/pubg-saas-m2-clean/checkpoints/20261015-pubg-saas-122cd79-pre-switch.txt`
-and `.../20261015-pubg-saas-122cd79-post-switch.txt`.
-
-Arthur's KOOK acceptance remains pending. M2 is not complete; stop here and
-wait for his real test.
+Arthur's KOOK acceptance remains pending; M2 is not complete.
 
 ## Previous milestone — SOUL-sourced public Agent persona (2026-10-14)
 

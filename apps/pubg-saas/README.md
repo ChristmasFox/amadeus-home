@@ -16,12 +16,10 @@ ordinary chat or a PUBG question. The model can answer directly or call several
 constrained tools; each PUBG tool call is independently authorized and executes
 only validated plans through the shared deterministic Domain. A separate
 PostgreSQL-backed worker syncs registered rosters and prefetches versioned
-telemetry. Channel history keeps at most twelve recent turns for twelve hours,
-including speaker labels and trusted quote references; direct-message history is
-isolated by actor. Provider/tool errors create a safe reply and content-free
-diagnostic. KOOK daily send-budget exhaustion is recorded on the outbox row and
-reported separately from Agent errors. Live human-actor button flows and
-developer-account quota eligibility remain unverified.
+telemetry. Channel history is persistent and keeps speaker labels and trusted
+quote references; direct-message history is isolated by actor. Provider/tool
+errors create a safe reply and content-free diagnostic. Live human-actor button
+flows remain unverified.
 
 ## Trust boundaries
 
@@ -38,11 +36,11 @@ developer-account quota eligibility remain unverified.
   explicit `team_user_access` grant and fresh guild membership; multiple
   authorized teams produce a selection response. A self-declared PUBG account
   claim never supplies this grant. Removed membership/API failure denies access.
-- Query sessions have opaque server-created IDs, requester/channel/team keys
-  and at most 24 hours of inactivity (default 12 hours). A request ledger makes
-  ingress retries reuse the exact session without storing message text. Roster,
-  alias/shard changes, expired sessions, revoked/regranted DM access and channel
-  binding generations invalidate old state at the managed repository boundary.
+- Query sessions have opaque server-created IDs and requester/channel/team
+  keys. They do not expire for inactivity; roster, alias/shard changes,
+  revoked/regranted DM access and channel binding generations invalidate old
+  state at the managed repository boundary. A request ledger makes ingress
+  retries reuse the exact session without storing message text.
   Ingress also pins its binding generation; the same team unbound and rebound
   cannot receive an old queued request. Migration `0006` terminates legacy
   pending group events whose generation was not recorded, retaining their audit
@@ -127,8 +125,9 @@ developer-account quota eligibility remain unverified.
   constrained model classifier selects account declaration, admin delegation,
   team rename, statistics query, legacy command or silent/unsupported intent;
   it has no IDs or write tools. The classifier is capped at 800 input characters
-  and 100 output tokens. Durable per-user/channel/tenant/bot rate limits run
-  before model calls; explicit legacy commands use the deterministic parser only
+  and 100 output tokens. Global pending-queue capacity protects the durable
+  worker backlog; there are no added per-user/channel/tenant/bot rate gates.
+  Explicit legacy commands use the deterministic parser only
   when the classifier is unavailable or returns no valid structured output.
   Stored fields exclude display names, cached roles, attachments and verification
   tokens. Existing group bindings are pinned at reception and rechecked before
@@ -190,14 +189,18 @@ eligibility and quota feasibility remain preflight work.
 
 Users can send `/pubg privacy` in a DM or group, including an unbound group, to
 see the current data-use statement. The public gateway clears processed ingress
-content immediately and runs the bounded retention sweep on the 60-second
-ingress-maintenance cadence. Query sessions/results expire after 12 hours;
-usage records expire after 30 days; terminal message-inbox/outbox records
-expire after 7 days. Team roster and PUBG public-fact cache are retained to
-serve an active team; `/pubg unclaim` removes only the user's PUBG account
-claim, while an administrator can replace a roster, unbind a channel, or
-disband a team. The statement also discloses that natural-language text and its
-prior structured plan are sent to the configured public inference provider.
+payloads immediately and runs the bounded retention sweep on the 60-second
+ingress-maintenance cadence. Conversation transcripts and per-user query
+sessions follow the assistant's persistent session behavior: no 12-hour,
+message-count, or character-count cap. Every PUBG tool call still revalidates
+the current trusted event, user, tenant, team and channel binding; session
+history grants no authority. Usage records expire after 30 days; terminal
+message-inbox/outbox records expire after 7 days. Team roster and PUBG
+public-fact cache are retained to serve an active team; `/pubg unclaim` removes
+only the user's PUBG account claim, while an administrator can replace a
+roster, unbind a channel, or disband a team. The statement also discloses that
+natural-language text and its prior structured plan are sent to the configured
+public inference provider.
 Retention delivery requires the public gateway runtime to be running; it has
 not been installed on a production host.
 
@@ -242,21 +245,13 @@ pnpm --filter @agent/pubg-saas worker -- --apply --once
 ```
 
 Apply schema migrations separately before starting either runtime; the gateway
-and worker require migration `0016_agent_authorization_outcomes.sql` and never migrate
-automatically. Ingress defaults are 10 requests/user/minute, 60/channel/minute,
-120/tenant/minute and 300/bot/minute; set `KOOK_MAX_REQUESTS_PER_USER_PER_MINUTE`,
-`KOOK_MAX_REQUESTS_PER_CHANNEL_PER_MINUTE`, `KOOK_MAX_REQUESTS_PER_TENANT_PER_MINUTE`
-and `KOOK_MAX_REQUESTS_PER_BOT_PER_MINUTE` to tune them. KOOK REST sends pause
-on documented route/global rate headers and defer 429s through durable outbox
-retry. Its separate daily message allowance is developer-account-wide and must
-be verified with other bots' usage during live preflight; this single bot cannot
-observe that aggregate. Outbound channel and DM sends reserve a durable daily
-message slot in PostgreSQL before calling KOOK. `KOOK_DAILY_MESSAGE_BUDGET`
-defaults to 200 per SaaS bot and resets at noon Asia/Shanghai. Raise it only
-after checking developer-account eligibility and leaving capacity for other
-bots under the same account. Explicit API rejections release the reservation;
-ambiguous transport failures retain it until the next quota window. See
-[KOOK's daily message quota](https://developer.kookapp.cn/doc/http/message).
+and worker require migration `0020_persistent_query_context.sql` and never migrate
+automatically. The SaaS adds no per-user/channel/tenant/bot requests-per-minute
+gate and no local daily send quota. KOOK REST response bucket/global headers
+and 429 retry guidance are honored through the durable outbox. PUBG player
+lookups retain the shared-key `/players` admission limit of 10 requests per
+minute. Text replies longer than KOOK's 8,000-character per-message limit are
+split into ordered outbox parts; content is not truncated.
 The worker defaults to 5-minute cycles, 500 discovered matches
 and 20 telemetry fetches per team per cycle. These are operating defaults, not
 a 200-team capacity claim. Pools, API/telemetry response bodies and telemetry

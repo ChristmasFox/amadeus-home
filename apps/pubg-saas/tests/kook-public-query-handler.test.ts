@@ -80,10 +80,6 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
   const now = new Date();
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot, baseRetryMs: 1,
-    maxRequestsPerUserPerMinute: 100,
-    maxRequestsPerChannelPerMinute: 300,
-    maxRequestsPerTenantPerMinute: 500,
-    maxRequestsPerBotPerMinute: 1000,
   });
   const teams = new TeamAdminService(pool, { isGuildAdmin: async () => true });
   const claims = new AccountClaimService(pool);
@@ -189,6 +185,13 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     assert.equal(await queue.ingestGatewayEvent(repeatedQueryEvent), 'accepted');
     assert.equal(await queue.processOne(async (job, abortSignal) =>
       (await repeatedQueryHandler(job, abortSignal)) ?? null, signal), 'done');
+    const retainedQueryContext = (await pool.query(
+      `SELECT expires_at::text AS expires_at,context_json->>'expiresAt' AS context_expires_at
+       FROM session_contexts WHERE bot_account_id=$1 AND user_id=$2 AND channel_id=$3 ORDER BY session_id LIMIT 1`,
+      [bot, admin, channel],
+    )).rows[0];
+    assert.equal(retainedQueryContext?.expires_at, 'infinity');
+    assert.equal(retainedQueryContext?.context_expires_at, '9999-12-31T23:59:59.999Z');
     const repeatedQueryReply = await pool.query(
       'SELECT payload_json->>\'content\' AS content FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2',
       [bot, repeatedQueryEvent.msg_id],

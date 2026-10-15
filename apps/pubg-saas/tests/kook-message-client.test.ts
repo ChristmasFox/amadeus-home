@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { KookMessageApiClient, KookRateLimitGate } from '../src/index.js';
+import { KookMessageApiClient, KookRateLimitGate, splitKookOutboundPayload } from '../src/index.js';
 
 function success(data: unknown): Response {
   return new Response(JSON.stringify({ code: 0, data }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -46,6 +46,16 @@ test('sanitizes assistant scaffolding at the final KOOK send boundary without ch
     type: 'text', content: '[回复成员12] 成员3说：<@!123456> 你好！',
   }, 'e'.repeat(64));
   assert.equal(sentContent, '<@!123456> 你好！');
+});
+
+test('splits long replies at KOOK message boundaries without truncating mentions or Unicode', () => {
+  const source = `${'甲'.repeat(7999)}(met)123456(met)${'😀'.repeat(5000)}`;
+  const parts = splitKookOutboundPayload({ type: 'text', content: source });
+  assert.ok(parts.length > 1);
+  assert.ok(parts.every(part => part.content.length <= 8000));
+  assert.equal(parts.map(part => part.content).join(''), source);
+  assert.equal(parts[0]?.content.endsWith('(met)'), false);
+  assert.equal(parts[1]?.content.startsWith('(met)123456(met)'), true);
 });
 
 test('private replies use only the fixed direct-message endpoint and the source actor', async () => {
@@ -159,28 +169,16 @@ test('429 returns a durable retry delay and later sends defer without another AP
   assert.equal(rateLimitGate.waitMs('/api/v3/message/create'), 0);
 });
 
-test('daily message budget is settled only on definitive KOOK outcomes', async () => {
-  const budgetCalls: string[] = [];
-  const reservationIds: string[] = [];
-  const dailyBudget = {
-    async reserve(reservationId: string) { reservationIds.push(reservationId); budgetCalls.push('reserve'); },
-    async markSent(reservationId: string) { assert.equal(reservationId, reservationIds.at(-1)); budgetCalls.push('sent'); },
-    async release(reservationId: string) { assert.equal(reservationId, reservationIds.at(-1)); budgetCalls.push('release'); },
-    async prune() { return 0; },
-  };
-  const accepted = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => success({ msg_id: 'sent' }) });
-  await accepted.send('bound-channel', { type: 'text', content: 'hello' }, 'daily-accepted');
-  assert.deepEqual(budgetCalls, ['reserve', 'sent']);
-
-  budgetCalls.length = 0;
-  const rejected = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => new Response('{"code":400}', { status: 200 }) });
-  await assert.rejects(rejected.send('bound-channel', { type: 'text', content: 'no' }, 'daily-rejected'));
-  assert.deepEqual(budgetCalls, ['reserve', 'release']);
-
-  budgetCalls.length = 0;
-  const unknown = new KookMessageApiClient({ token: 'fixture-token', dailyBudget, fetcher: async () => { throw new Error('connection ended after request write'); } });
-  await assert.rejects(unknown.send('bound-channel', { type: 'text', content: 'uncertain' }, 'daily-unknown'));
-  assert.deepEqual(budgetCalls, ['reserve']);
-  assert.equal(new Set(reservationIds).size, 3);
-  assert.ok(reservationIds.every(reservationId => !['daily-accepted', 'daily-rejected', 'daily-unknown'].includes(reservationId)));
+test('connection failures expose a stable code and never echo provider details', async () => {
+  const client = new KookMessageApiClient({
+    token: 'secret-fixture',
+    fetcher: async () => { throw new Error('fixture response carried secret-fixture and private detail'); },
+  });
+  await assert.rejects(client.send('bound-channel', { type: 'text', content: 'hello' }, 'safe-error'), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.equal((error as Error & { code?: string }).code, 'kook_message_api_unavailable');
+    assert.equal(error.message.includes('secret-fixture'), false);
+    assert.equal(error.message.includes('private detail'), false);
+    return true;
+  });
 });

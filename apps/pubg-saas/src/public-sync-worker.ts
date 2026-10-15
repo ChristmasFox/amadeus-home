@@ -65,7 +65,7 @@ export async function publicSyncWorkerMain(args: string[], env: NodeJS.ProcessEn
   process.once('SIGINT', onStop);
   process.once('SIGTERM', onStop);
   try {
-    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0016_agent_authorization_outcomes.sql'");
+    const ready = await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0020_persistent_query_context.sql'");
     if (!ready.rowCount) throw new Error('pubg_saas_schema_upgrade_required');
     healthServer = await startWorkerHealthServer();
     const metricsPort = positiveInteger(env.PUBG_SAAS_WORKER_METRICS_PORT, 9464, 65_535);

@@ -50,7 +50,7 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     await pool.query("INSERT INTO teams(tenant_id,team_id,label,pubg_shard) VALUES ($1,$2,'runtime fixture','steam')", [tenant, team]);
     await pool.query("INSERT INTO channel_bindings(tenant_id,platform,bot_account_id,channel_id,team_id,bound_by_user_id) VALUES ($1,'kook',$2,$3,$4,$5)", [tenant, bot, channel, team, user]);
     const runtime = new KookApplicationRuntime({
-      pool, botAccountId: bot, token: 'fixture-only', pollMs: 5, dailyMessageBudget: 3, onError: code => errors.push(code),
+      pool, botAccountId: bot, token: 'fixture-only', pollMs: 5, onError: code => errors.push(code),
       maintenance: async () => { maintenanceRuns += 1; },
       socketFactory: () => { connected = true; return socket; },
       fetcher: async (input, init) => {
@@ -99,15 +99,14 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     socket.frame({ s: 0, sn: 5, d: { type: 1, channel_type: 'PERSON', target_id: bot, author_id: user, content: '/pubg status', msg_id: `dm-budget-${suffix}`, msg_timestamp: Date.now() } });
     await waitFor(async () => {
       const row = (await pool.query('SELECT status,last_error_code FROM message_outbox WHERE bot_account_id=$1 AND source_event_id=$2', [bot, `dm-budget-${suffix}`])).rows[0];
-      return row?.status === 'retry' && row.last_error_code === 'kook_message_daily_budget_exhausted';
-    }, 'outbox defers when the durable daily send budget is exhausted');
-    assert.equal(Number((await pool.query('SELECT used_count FROM kook_message_daily_usage WHERE bot_account_id=$1', [bot])).rows[0]?.used_count), 3);
-    assert.equal(requests.length, 3);
+      return row?.status === 'sent' && row.last_error_code === null;
+    }, 'the fourth reply is delivered without a local daily send cap');
+    assert.equal(requests.length, 4);
     assert.ok(maintenanceRuns > 0);
     abort.abort();
     await run;
     assert.equal(handled, 4);
-    assert.equal(requests.length, 3);
+    assert.equal(requests.length, 4);
     assert.deepEqual(errors, []);
     assert.equal((await pool.query('SELECT 1 FROM kook_ingress_events WHERE bot_account_id=$1 AND event_json IS NOT NULL', [bot])).rowCount, 0);
   }
@@ -117,8 +116,6 @@ test('runtime commits gateway ingress ahead of slow work, routes group/DM/button
     if (run)
       await run.catch(() => undefined);
     await pool.query('DELETE FROM message_outbox WHERE bot_account_id=$1', [bot]);
-    await pool.query('DELETE FROM kook_message_daily_reservations WHERE bot_account_id=$1', [bot]);
-    await pool.query('DELETE FROM kook_message_daily_usage WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_ingress_events WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM kook_gateway_state WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM tenants WHERE bot_account_id=$1', [bot]);

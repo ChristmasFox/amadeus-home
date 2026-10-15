@@ -99,8 +99,7 @@ test('group binding auto-provisions one guild team, verifies identities, gates d
     return null;
   };
   const queue = new KookIngressQueue(pool, {
-    botAccountId: bot, maxRequestsPerUserPerMinute: 100, maxRequestsPerChannelPerMinute: 300,
-    maxRequestsPerTenantPerMinute: 500, maxRequestsPerBotPerMinute: 1000,
+    botAccountId: bot,
   });
   const signal = new AbortController().signal;
   const provision = async (event: Parameters<typeof teams.ensureGroupChannel>[0]) =>
@@ -355,10 +354,6 @@ test('Agent account-binding tools use trusted mentions, real lookup results, and
   );
   const queue = new KookIngressQueue(pool, {
     botAccountId: bot,
-    maxRequestsPerUserPerMinute: 100,
-    maxRequestsPerChannelPerMinute: 300,
-    maxRequestsPerTenantPerMinute: 500,
-    maxRequestsPerBotPerMinute: 1000,
   });
   const signal = new AbortController().signal;
 
