@@ -326,9 +326,13 @@ accounts have no real PUBG matches or statistics. Production rejects this mode.
 
 Build the shared dependencies and package with `pnpm build:pubg-saas`, then
 typecheck with `pnpm typecheck:pubg-saas`. Set `PUBG_SAAS_TEST_DATABASE_URL` to
-a dedicated isolated test database before `pnpm test:pubg-saas`; tests create
-synthetic schemas/rows and clean them up. Never point it at a live or shared
-database. On 2026-10-13, all 75 SaaS tests passed with isolated PostgreSQL 18
+a dedicated isolated test database, then validate it with
+`python3 scripts/validate-pubg-saas-test-database.py` before
+`pnpm test:pubg-saas`. The validator accepts only loopback hosts and database
+names `test`/`testing` or ending in `_test`/`_testing`; URI query parameters
+are rejected to prevent connection-field overrides. Tests create synthetic
+schemas/rows and clean them up. Never point it at a live or shared database.
+On 2026-10-13, all 75 SaaS tests passed with isolated PostgreSQL 18
 and no skips; `pnpm typecheck:pubg` and `pnpm typecheck:pubg-saas` passed, and
 `pnpm test:pubg` passed all 68 private
 identity/presentation/Domain/plugin tests. The suite covers

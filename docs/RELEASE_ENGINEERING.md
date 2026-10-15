@@ -116,6 +116,14 @@ Gate-Staging or Gate-Prod adapter currently exists, so Gate `--apply` fails
 closed. Adding an adapter requires a separate reviewed source change and
 environment authorization.
 
+`release-gate.sh verify` now refuses to run the SaaS suite without
+`PUBG_SAAS_TEST_DATABASE_URL` targeting loopback and a database named `test`,
+`testing`, or with a `_test`/`_testing` suffix. This prevents the release check
+from silently passing while PostgreSQL-backed tests are skipped and keeps the
+test runner away from a remote/shared database. URI query parameters and
+fragments are rejected so they cannot override connection fields. GitHub
+Actions validates its isolated `pubg_test` service with the same check.
+
 The eventual promotion path builds one Gate image for a committed source,
 records its multi-platform digest, and promotes that exact digest from
 Gate-Local to Gate-Staging and then Gate-Prod without rebuilding. Each

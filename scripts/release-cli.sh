@@ -62,6 +62,8 @@ Options:
 
 Gate-Local M2 remains paused. Staging/Prod apply requires a reviewed
 environment adapter; no adapter is currently configured.
+Gate verify requires `PUBG_SAAS_TEST_DATABASE_URL` to point to a loopback
+database named `test`/`testing` or ending in `_test`/`_testing`.
 USAGE
   fi
 }
@@ -110,6 +112,9 @@ if [[ "$PRODUCT" == gate ]]; then
 else
   [[ -z "$ENVIRONMENT" || "$ENVIRONMENT" == lab-maintainer ]] || fail 'Lab environment is fixed to lab-maintainer'
   ENVIRONMENT=lab-maintainer
+fi
+if [[ "$PRODUCT" == gate && "$COMMAND" == verify ]]; then
+  python3 "$ROOT_DIR/scripts/validate-pubg-saas-test-database.py" || fail 'Gate verify requires a dedicated loopback PostgreSQL test database; see apps/pubg-saas/README.md'
 fi
 ((CREATE_TAG == 0)) || [[ "$COMMAND" == release ]] || fail '--create-tag is valid only for release'
 ((LIVE == 0)) || [[ "$COMMAND" == status ]] || fail '--live is valid only for status'

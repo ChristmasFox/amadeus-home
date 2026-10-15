@@ -32,6 +32,7 @@ snapshot = load_module("lab_runtime_snapshot", "lab-runtime-snapshot.py")
 impact = load_module("image_impact", "image-impact.py")
 oci = load_module("verify_pubg_saas_oci", "verify-pubg-saas-oci.py")
 provenance = load_module("verify_image_provenance", "verify-image-provenance.py")
+test_database = load_module("validate_pubg_saas_test_database", "validate-pubg-saas-test-database.py")
 
 
 def invoke(*args: str, cwd: Path = ROOT, env=None) -> subprocess.CompletedProcess[str]:
@@ -237,6 +238,29 @@ labels = {
     "org.opencontainers.image.created": "2026-10-15T07:00:00Z",
 }
 provenance.validate(labels, sha, "1.10.5", "2026-10-15T07:00:00Z")
+assert test_database.validate_test_database_url(None) == "missing"
+assert test_database.validate_test_database_url(
+    "postgresql://postgres:fixturepass@localhost:5432/pubg_test"
+) is None
+assert test_database.validate_test_database_url("postgres://user@127.0.0.1:5432/team_testing") is None
+assert test_database.validate_test_database_url("postgres://user@db.example.com:5432/pubg_test") == "host"
+assert test_database.validate_test_database_url("postgres://user@localhost:5432/production") == "database_name"
+assert test_database.validate_test_database_url(
+    "postgres://user@localhost:5432/pubg_test?host=db.example.com"
+) == "query_parameters"
+assert test_database.validate_test_database_url("https://localhost:5432/pubg_test") == "scheme"
+safe_test_database = invoke(
+    "python3", str(ROOT / "scripts/validate-pubg-saas-test-database.py"),
+    env={**os.environ, "PUBG_SAAS_TEST_DATABASE_URL": "postgresql://postgres:fixturepass@localhost:5432/pubg_test"},
+)
+assert safe_test_database.returncode == 0 and "GATE_TEST_DATABASE=SAFE" in safe_test_database.stdout
+unsafe_test_database_url = "postgresql://tester:fixturepass@db.example.com:5432/production"
+unsafe_test_database = invoke(
+    "python3", str(ROOT / "scripts/validate-pubg-saas-test-database.py"),
+    env={**os.environ, "PUBG_SAAS_TEST_DATABASE_URL": unsafe_test_database_url},
+)
+assert unsafe_test_database.returncode != 0 and "reason=host" in unsafe_test_database.stderr
+assert "fixturepass" not in unsafe_test_database.stdout + unsafe_test_database.stderr
 try:
     provenance.validate({**labels, "com.amadeus.release.provenance": "base-image"}, sha, "1.10.5", "2026-10-15T07:00:00Z")
 except ValueError as error:
@@ -260,6 +284,14 @@ gate_status = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "status")
 assert gate_status.returncode == 0 and "DRIFT_STATUS=UNKNOWN" in gate_status.stdout
 gate_apply = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "candidate", "--apply")
 assert gate_apply.returncode != 0 and "--approval-ref" in gate_apply.stderr
+gate_verify_env = dict(os.environ)
+gate_verify_env.pop("PUBG_SAAS_TEST_DATABASE_URL", None)
+gate_verify_without_database = invoke(
+    "bash", str(ROOT / "scripts/release-gate.sh"), "verify", env=gate_verify_env,
+)
+assert gate_verify_without_database.returncode != 0
+assert "GATE_TEST_DATABASE=BLOCKED reason=missing" in gate_verify_without_database.stderr
+assert "test:pubg-saas" not in gate_verify_without_database.stdout
 credential_ref = invoke(
     "bash", str(ROOT / "scripts/release-lab.sh"), "candidate", "--apply",
     "--approval-ref", "deployment-token-123",
@@ -330,4 +362,4 @@ with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:
     orb_calls = log.read_text(encoding="utf-8")
     assert "docker inspect" in orb_calls and "docker compose" not in orb_calls and "docker run" not in orb_calls
 
-print("RELEASE_TOOLING_TEST=passed manifest=protected drift=synthetic candidate=48h-reminder oci=amd64+arm64 cli=fail-closed product-help=distinct")
+print("RELEASE_TOOLING_TEST=passed manifest=protected drift=synthetic candidate=48h-reminder oci=amd64+arm64 cli=fail-closed product-help=distinct gate-test-db=loopback-only")

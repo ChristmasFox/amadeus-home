@@ -21,6 +21,7 @@ on:
       - "scripts/release-state.py"
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/validate-pubg-saas-test-database.py"
       - "scripts/test-release-tooling.py"
       - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
@@ -47,6 +48,7 @@ on:
       - "scripts/release-state.py"
       - "scripts/verify-image-provenance.py"
       - "scripts/verify-pubg-saas-oci.py"
+      - "scripts/validate-pubg-saas-test-database.py"
       - "scripts/test-release-tooling.py"
       - "scripts/tests/test_pubg_saas_*.py"
       - "package.json"
@@ -106,6 +108,8 @@ jobs:
           bash scripts/pubg-saas-version.sh check
           bash scripts/test-pubg-saas-version.sh
           python3 scripts/test-release-tooling.py
+      - name: Validate isolated PostgreSQL test target
+        run: python3 scripts/validate-pubg-saas-test-database.py
       - name: Build private and public PUBG packages
         run: pnpm build:pubg && pnpm --filter @agent/pubg-saas build
       - name: Public SaaS PostgreSQL tests
