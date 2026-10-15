@@ -34,7 +34,9 @@ restarts OpenClaw; no build/apply is authorized for Product Radar in this
 continuation. M2's current Gateway/Worker/PostgreSQL/proxy/SaaS 9Router/BuildKit
 containers remain up; returned Buildx history is terminal and the guest
 process list has no build/deploy/migration command. No database query or M2
-service action ran.
+service action ran. A read-only `git fetch --no-tags origin 633dd216339f`
+failed with `couldn't find remote ref`; the legacy Product Radar source cannot
+be recovered by that direct SHA fetch.
 
 The read-only snapshot helper's stuck-query path was fixed in source commit
 `2e9f66c` (`fix: bound Lab runtime snapshot queries`): digest reads now call

@@ -40,6 +40,8 @@ after that already completed rollback restart retained 5 files / 92 chunks and
 One independent P0 drift item remains: Product Radar is healthy, but its
 legacy image source `633dd216339f` is unreachable and its image lacks
 product-owned provenance, so source/version are `UNKNOWN`. The read-only
+`git fetch --no-tags origin 633dd216339f` failed with `couldn't find remote
+ref`; the original source was not recovered. The read-only
 `bash scripts/deploy-openclaw.sh --dry-run --build-radar` selects a rebuild.
 The current apply path is not isolated to Product Radar: it also reconciles
 OpenClaw configuration and restarts OpenClaw. No Product Radar build or apply

@@ -200,6 +200,9 @@ No config contents were read.
 Product Radar remains running and healthy at its recorded legacy digest, but
 the tag's source commit `633dd216339f` is absent from Git and the image has no
 product-owned provenance marker; source/version remain `UNKNOWN`. The
+read-only `git fetch --no-tags origin 633dd216339f` also failed with
+`couldn't find remote ref`, so the historical source cannot be recovered by
+that direct fetch. The
 read-only plan `bash scripts/deploy-openclaw.sh --dry-run --build-radar`
 returned `AUTO_SCOPE_PRODUCT_RADAR=build`. Its existing apply path is a full
 Lab-stack operation that also rewrites/revalidates OpenClaw configuration and
