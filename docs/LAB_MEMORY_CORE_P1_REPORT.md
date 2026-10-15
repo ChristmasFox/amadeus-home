@@ -84,6 +84,7 @@ changed in the live runtime.
   through the patch and JavaScript syntax check without writing to the image.
 - This new patch has not been built into an image or exercised by a live search.
   The running image still has the prior behavior. No live query was issued.
+  Source follow-up commit: `48b88ac`.
 
 ## Rebuild and recovery procedure
 

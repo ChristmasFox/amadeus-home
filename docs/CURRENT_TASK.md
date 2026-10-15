@@ -48,8 +48,8 @@ now exposes `mode=fts-only` when FTS is available and `mode=unavailable` when
 it is not; its fixture and exact pinned-bundle syntax check passed, but
 the Docker image has not been rebuilt and no live search was issued. Index
 refresh, `memory status --deep` provider probing, paid Embedding, Dreaming,
-deploy, and release remain unauthorized. See the updated P1 report and
-approval checklist.
+deploy, and release remain unauthorized. Source follow-up commit: `48b88ac`.
+See the updated P1 report and approval checklist.
 
 ## Preserved Gate M2 pause — PUBG KOOK SaaS V0.1 (2026-10-15)
 

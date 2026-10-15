@@ -109,7 +109,8 @@ and Actions itself was not run.
   product version therefore remain unavailable. The drift doctor returned
   `UNKNOWN` because there is no protected release manifest. The adapter now
   handles absent Docker label maps and rejects inherited base-image labels as
-  product provenance.
+  product provenance. This provenance and Memory Core status follow-up is
+  committed as `48b88ac`; no image was built from it.
 - The P1 report remains `SOURCE_FIXED + BLOCKED_OPERATOR_AUTHORIZATION`; no
   external `LIVE_VERIFIED` report exists. The formal release command therefore
   remains blocked.
