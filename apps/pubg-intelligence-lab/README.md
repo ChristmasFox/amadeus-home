@@ -16,13 +16,15 @@ The page binds to `http://127.0.0.1:4179` by default. To allow access from the s
 
 Date inputs use Asia/Shanghai calendar days. SQLite timestamps remain stored as UTC instants.
 
-## Optional intent model
+## Optional research model
 
-Without model settings, a local deterministic intent parser handles summary, trend, player comparison, map breakdown, and telemetry coverage questions. If all three variables below are set, the app uses the Vercel AI SDK with an OpenAI-compatible endpoint to classify the research question. Match data and calculations stay local; phone-like and credential-shaped text is redacted before planning and persistence.
+Without model settings, a deterministic local answer is shown with a clear degraded-mode notice. If the base URL and API key below are set, the app uses Vercel AI SDK for bounded intent planning, read-only scoped tool calls, and a typed fact/inference/hypothesis presentation. Gemini Flash is the default model ID for an OpenAI-compatible router; `PUBG_INTELLIGENCE_AI_MODEL` can select another configured model such as the local 9router `arthur-combo` route. Only aliases and aggregate facts are sent in tool results; raw match/event references and player labels are resolved locally. Phone-like values, credentials, known squad names, and local file paths are redacted or aliased before model calls.
 
 - `PUBG_INTELLIGENCE_AI_BASE_URL`
 - `PUBG_INTELLIGENCE_AI_API_KEY`
-- `PUBG_INTELLIGENCE_AI_MODEL`
+- `PUBG_INTELLIGENCE_AI_MODEL` (optional; defaults to `google/gemini-2.5-flash`)
+
+The response can use tactical coaching, squad-humor, or chronological-story wording. Templates change wording only; candidate claims are schema-validated, every claim must cite evidence returned by a read-only server tool, and unsupported numeric values or references fall back to local deterministic output. The server fixes the selected squad and date scope; model tool inputs cannot choose a tenant, file, database, or arbitrary match ID.
 
 ## Data handling
 

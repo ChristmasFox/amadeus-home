@@ -24,6 +24,7 @@ const DEFAULT_INTENT: ResearchIntent = { action: 'summary', metric: 'damage', gr
 export function redactSensitiveText(value: string): string {
   return value.slice(0, 1200)
     .replace(/(?<!\d)1[3-9]\d{9}(?!\d)/gu, '[手机号已隐藏]')
+    .replace(/(?:~\/|\/(?:Users|private|tmp|DATA|Volumes|var|home|workspace|mnt)\/)[^\s"'<>]+/giu, '[路径已隐藏]')
     .replace(/\b(?:sk-[A-Za-z0-9]{20,}|gh[pousr]_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|Bearer\s+[A-Za-z0-9._-]{20,})\b/giu, '[凭据已隐藏]')
     .replace(/\b(api[_ -]?key|access[_ -]?token|app[_ -]?secret|bot[_ -]?token|password)\s*[:=]\s*[^\s,;]+/giu, '$1=[凭据已隐藏]');
 }

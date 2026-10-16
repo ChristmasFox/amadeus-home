@@ -111,3 +111,16 @@ body{height:100vh;height:100dvh;min-height:0;overflow:hidden}
 .battle-evidence-chain small{font:7px/1.6 var(--mono);color:#84958d;overflow-wrap:anywhere}
 .battle-uncertainty,.battle-evaluation-note{margin-top:8px;padding:8px;border-radius:5px;background:#1c1b17;color:#c3a978;font:7px/1.55 var(--mono)}
 .battle-evaluation-note{margin:0;padding:10px;background:#111817;color:#74847e;border-top:1px solid #283833}
+
+.assistant-degraded{margin:10px 0;padding:9px 10px;border:1px solid #57472e;border-radius:6px;background:#211c14;color:#d0b37a;font:9px/1.55 var(--mono)}
+.assistant-claims{display:grid;gap:8px;margin:10px 0}
+.assistant-claim{padding:10px;border:1px solid #293a35;border-radius:7px;background:#101817}
+.assistant-claim p{margin:7px 0;color:#d4e0da;font-size:11px;line-height:1.55}
+.assistant-claim small{display:block;color:#82928a;font:9px/1.5 var(--mono)}
+.claim-kind{display:inline-block;padding:3px 6px;border:1px solid #365047;border-radius:10px;color:#a6d5ae;font:8px var(--mono)}
+.claim-kind.inference{border-color:#45503a;color:#d8c278}
+.claim-kind.hypothesis{border-color:#493d50;color:#c4a5d3}
+.assistant-evidence-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.assistant-evidence-links button{max-width:100%;overflow:hidden;text-overflow:ellipsis;border:1px solid #34463f;border-radius:5px;background:#16211e;color:#9fbaaa;padding:5px 7px;font:8px var(--mono);cursor:pointer}
+.composer-top label{display:flex;align-items:center;gap:8px}
+.composer-top select{border:1px solid #2b3c36;border-radius:5px;background:#121b18;color:#a8bba9;padding:3px 7px;font:8px var(--mono)}

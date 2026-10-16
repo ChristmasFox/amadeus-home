@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -49,10 +49,12 @@ test('local research planner recognizes trends, member comparisons, maps, and te
   assert.equal((await new NaturalLanguageResearchPlanner().plan('最近一周整体表现')).source, 'local-rule');
 });
 
-test('research text redaction removes phone-like values and credential-shaped input', () => {
+test('research text redaction removes phone-like values, credentials, and local paths', () => {
   const phone = '13' + '8' + '0'.repeat(8);
   const credential = 'sk-' + 'a'.repeat(24);
   assert.equal(redactSensitiveText(`联系 ${phone}，token ${credential}`), '联系 [手机号已隐藏]，token [凭据已隐藏]');
+  assert.equal(redactSensitiveText('数据库 /DATA/AppData/openclaw/data/private.sqlite'), '数据库 [路径已隐藏]');
+  assert.equal(redactSensitiveText('配置 ~/.config/amadeus/private.json'), '配置 [路径已隐藏]');
 });
 
 test('research aggregates only the selected roster and date window with linked match evidence', () => {
@@ -119,6 +121,22 @@ test('experiment results persist in a private database separate from the source 
     const database = new DatabaseSync(path);
     assert.equal(database.prepare('SELECT COUNT(*) AS count FROM research_runs').get().count, 1);
     database.close();
+    assert.equal(statSync(path).mode & 0o777, 0o600);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('experiment store creates private child directories without changing an existing parent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'pubg-intelligence-parent-mode-'));
+  const directory = join(root, 'private-experiments');
+  const path = join(directory, 'experiments.sqlite');
+  try {
+    chmodSync(root, 0o755);
+    const store = new ExperimentRunStore(path);
+    store.close();
+    assert.equal(statSync(root).mode & 0o777, 0o755);
+    assert.equal(statSync(directory).mode & 0o777, 0o700);
     assert.equal(statSync(path).mode & 0o777, 0o600);
   } finally {
     rmSync(root, { recursive: true, force: true });

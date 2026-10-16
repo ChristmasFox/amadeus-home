@@ -183,6 +183,18 @@ interface ResearchResponse {
   intent: { action: string; metric: string | null; groupBy: string | null };
   plannerSource: 'ai-sdk' | 'local-rule';
   report: ResearchReport;
+  assistant: {
+    version: string;
+    status: 'answered' | 'abstained' | 'degraded';
+    source: 'ai-sdk' | 'deterministic-fallback';
+    template: 'tactical_coaching' | 'squad_humor' | 'chronological_story';
+    answer: string;
+    claims: Array<{ kind: 'fact' | 'inference' | 'hypothesis'; text: string; evidenceRefs: string[]; evidenceCount: number; assumptions: string[]; uncertainty: string | null }>;
+    evidence: Array<{ ref: string; matchId: string; eventId: string | null; timeSeconds: number | null; kind: string }>;
+    toolNames: string[];
+    degradedReason: string | null;
+    labels: Record<string, string>;
+  };
 }
 
 interface ChatEntry {
@@ -260,13 +272,34 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   return <div className="metric"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div>;
 }
 
-function ResultBlock({ result }: { result: ResearchResponse }) {
+function resolveMemberAliases(value: string, labels: Record<string, string>): string {
+  return Object.entries(labels).sort(([left], [right]) => right.length - left.length)
+    .reduce((text, [alias, label]) => text.replaceAll(alias, label), value);
+}
+
+function ResultBlock({ result, onEvidence }: { result: ResearchResponse; onEvidence: (evidence: ResearchResponse['assistant']['evidence'][number]) => void }) {
   const { report } = result;
   const maxBar = Math.max(1, ...report.breakdown.map((item) => item.average));
   return (
     <div className="result-block">
-      <div className="result-heading"><span className="result-dot" />研究结果 <span className="result-scope">{report.scope.squadLabel} · {report.scope.selectedMatches} 场</span></div>
-      <p className="result-answer">{report.answer}</p>
+      <div className="result-heading"><span className="result-dot" />研究结果 <span className="result-scope">{report.scope.squadLabel} · {report.scope.selectedMatches} 场 · {result.assistant.source === 'ai-sdk' ? 'AI SDK' : '本地降级'}</span></div>
+      <p className="result-answer">{resolveMemberAliases(result.assistant.answer, result.assistant.labels)}</p>
+      {result.assistant.degradedReason && <div className="assistant-degraded">{result.assistant.degradedReason === 'model_unavailable'
+        ? '未配置可用 AI 模型；本次展示本机确定性统计。可设置 PUBG_INTELLIGENCE_AI_BASE_URL、PUBG_INTELLIGENCE_AI_API_KEY，并将模型留空以优先尝试 Gemini。'
+        : 'AI 输出未通过证据校验；已回退到本机确定性统计。'}</div>}
+      {result.assistant.claims.length > 0 && <div className="assistant-claims">{result.assistant.claims.map((claim, index) => <div className="assistant-claim" key={`${claim.kind}-${index}`}>
+        <span className={`claim-kind ${claim.kind}`}>{claim.kind === 'fact' ? '事实' : claim.kind === 'inference' ? '推断' : '假设'}</span>
+        <p>{resolveMemberAliases(claim.text, result.assistant.labels)}</p>
+        <small>{claim.evidenceCount} 条证据</small>
+        {claim.assumptions.map((assumption, assumptionIndex) => <small key={`${index}-assumption-${assumptionIndex}`}>假设：{resolveMemberAliases(assumption, result.assistant.labels)}</small>)}
+        {claim.uncertainty && <small>{resolveMemberAliases(claim.uncertainty, result.assistant.labels)}</small>}
+        <div className="assistant-evidence-links">{claim.evidenceRefs.map((ref) => {
+          const evidence = result.assistant.evidence.find((item) => item.ref === ref);
+          return evidence ? <button type="button" key={ref} onClick={() => onEvidence(evidence)}>
+            {evidence.matchId}{evidence.eventId ? ` · ${evidence.eventId}` : ' · 比赛级引用'}
+          </button> : null;
+        })}</div>
+      </div>)}</div>}
       <div className="result-metrics">
         <Metric label="平均伤害" value={number(report.summary.averageDamage)} />
         <Metric label="总击杀" value={number(report.summary.totalKills)} />
@@ -307,6 +340,8 @@ export function App() {
   const [frequentPairsError, setFrequentPairsError] = useState('');
   const [question, setQuestion] = useState('');
   const [chat, setChat] = useState<ChatEntry[]>([]);
+  const [researchTemplate, setResearchTemplate] = useState<ResearchResponse['assistant']['template']>('tactical_coaching');
+  const [pendingEvidence, setPendingEvidence] = useState<ResearchResponse['assistant']['evidence'][number] | null>(null);
   const [activeResearch, setActiveResearch] = useState<ResearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -363,7 +398,7 @@ export function App() {
   const selectedEpisode = battleData?.episodes?.find((episode) => episode.id === selectedEpisodeId) ?? battleData?.episodes?.[0] ?? null;
   const circleSamplesById = useMemo(() => new Map((battleData?.circleSamples ?? []).map((sample) => [sample.id, sample])), [battleData]);
 
-  async function loadBattleReconstruction() {
+  async function loadBattleReconstruction(focusEventId?: string | null) {
     if (!selectedMatchId || battleLoading) return;
     setBattleLoading(true);
     setBattleError('');
@@ -375,13 +410,30 @@ export function App() {
       if (to) scope.set('to', to);
       const result = await json<BattleMatchResponse>(`/api/matches/${encodeURIComponent(selectedMatchId)}/episodes?${scope}`);
       setBattleData(result);
-      setSelectedEpisodeId(result.episodes?.[0]?.id ?? '');
+      const focused = focusEventId ? result.episodes?.find((episode) => episode.evidenceEventIds.includes(focusEventId)) : undefined;
+      setSelectedEpisodeId(focused?.id ?? result.episodes?.[0]?.id ?? '');
     } catch {
       setBattleError('交战重建读取失败，请稍后重试。');
     } finally {
       setBattleLoading(false);
     }
   }
+
+  function openAssistantEvidence(evidence: ResearchResponse['assistant']['evidence'][number]) {
+    setPendingEvidence(evidence);
+    if (evidence.matchId !== selectedMatchId) setSelectedMatchId(evidence.matchId);
+    else if (evidence.eventId) {
+      void loadBattleReconstruction(evidence.eventId);
+      setPendingEvidence(null);
+    } else setPendingEvidence(null);
+  }
+
+  useEffect(() => {
+    if (!pendingEvidence || pendingEvidence.matchId !== selectedMatchId || detailLoading) return;
+    const focusEventId = pendingEvidence.eventId;
+    setPendingEvidence(null);
+    if (focusEventId) void loadBattleReconstruction(focusEventId);
+  }, [pendingEvidence, selectedMatchId, detailLoading]);
 
   async function loadFrequentPairs() {
     if (!squadId || frequentPairsLoading) return;
@@ -411,10 +463,17 @@ export function App() {
     try {
       const result = await json<ResearchResponse>('/api/research', {
         method: 'POST',
-        body: JSON.stringify({ question: value, squadId, from, to }),
+        body: JSON.stringify({
+          question: value,
+          squadId,
+          from,
+          to,
+          template: researchTemplate,
+          history: chat.slice(-6).map(({ role, text }) => ({ role, text })),
+        }),
       });
       setActiveResearch(result);
-      setChat((entries) => [...entries, { role: 'assistant', text: result.report.answer, result }]);
+      setChat((entries) => [...entries, { role: 'assistant', text: result.assistant.answer, result }]);
     } catch {
       setChat((entries) => [...entries, { role: 'assistant', text: '这次研究没有完成。请检查时间范围后重试。' }]);
     } finally {
@@ -471,16 +530,18 @@ export function App() {
             </div></div>}
             {chat.map((entry, index) => <div className={`chat-entry ${entry.role}`} key={`${entry.role}-${index}`}>
               <div className="chat-entry-avatar">{entry.role === 'user' ? '你' : 'P'}</div>
-              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.plannerSource === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div><p>{entry.text}</p>{entry.result && <ResultBlock result={entry.result} />}</div>
+              <div className="chat-entry-body"><div className="chat-entry-label">{entry.role === 'user' ? '研究问题' : `LAB ANALYSIS${entry.result ? ` · ${entry.result.assistant.source === 'ai-sdk' ? 'AI SDK' : 'LOCAL'}` : ''}`}</div><p>{entry.text}</p>{entry.result && <ResultBlock result={entry.result} onEvidence={openAssistantEvidence} />}</div>
             </div>)}
             {loading && <div className="thinking"><span /><span /><span />正在整理比赛证据…</div>}
           </div>
           <form className="composer" onSubmit={(event) => void submitQuestion(event)}>
-            <div className="composer-top"><span>研究问题</span><span>↵ 发送</span></div>
+            <div className="composer-top"><label>研究问题 <select value={researchTemplate} onChange={(event) => setResearchTemplate(event.target.value as ResearchResponse['assistant']['template'])}>
+              <option value="tactical_coaching">战术复盘</option><option value="squad_humor">小队轻松叙事</option><option value="chronological_story">时间线故事</option>
+            </select></label><span>↵ 发送</span></div>
             <textarea rows={2} placeholder="例如：比较最近一个月队员的伤害贡献" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void submitQuestion(); } }} />
             <div className="composer-bottom"><span><i />仅使用当前小队与时间范围</span><button type="submit" disabled={!question.trim() || loading}>分析 <b>↗</b></button></div>
           </form>
-          <div className="ai-note">{bootstrap?.modelEnabled ? '研究问题会发送到已配置模型做意图识别；统计计算在本机完成。' : '当前使用本地规则解析；不连接外部模型。'} 实验结果独立保存在本机。</div>
+          <div className="ai-note">{bootstrap?.modelEnabled ? 'AI SDK 可读取当前范围内的统计、交战和证据；数值由本机确定性规则计算。' : '未配置模型时仅使用本机确定性统计，并明确标记降级。'} 对话上下文不能改变小队或日期范围。</div>
         </section>
 
         <aside className="right-rail">

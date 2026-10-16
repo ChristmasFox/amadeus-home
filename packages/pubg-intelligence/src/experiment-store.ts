@@ -22,6 +22,7 @@ export interface StoredResearchRun {
   intent: unknown;
   source: string;
   report: unknown;
+  assistant?: unknown;
 }
 
 /** Persistent experiment output lives outside the production PUBG database. */
@@ -30,7 +31,6 @@ export class ExperimentRunStore {
 
   constructor(readonly filename: string) {
     mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
-    chmodSync(dirname(filename), 0o700);
     this.db = new DatabaseSync(filename);
     chmodSync(filename, 0o600);
     this.db.exec(`
@@ -51,7 +51,8 @@ export class ExperimentRunStore {
     this.db.prepare(`
       INSERT INTO research_runs(run_id, created_at, question, intent_json, planner_source, report_json)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, new Date().toISOString(), redactSensitiveText(run.question), JSON.stringify(run.intent), run.source, JSON.stringify(run.report));
+    `).run(id, new Date().toISOString(), redactSensitiveText(run.question), JSON.stringify(run.intent), run.source,
+      JSON.stringify({ report: run.report, assistant: run.assistant ?? null }));
     return id;
   }
 

@@ -1,8 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import { homedir, networkInterfaces } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { createServer as createViteServer } from 'vite';
+import type { LanguageModel } from 'ai';
 import {
   analyzeMatchReview,
   DEFAULT_TIMEZONE,
@@ -22,13 +24,19 @@ import {
   buildFrequentPairCandidates,
   ExperimentRunStore,
   analyzeTacticalMatch,
+  anonymizeResearchText,
   NaturalLanguageResearchPlanner,
+  ResearchTemplateSchema,
+  runResearchAssistant,
   normalizeBattleTelemetry,
   redactSensitiveText,
   reconstructBattleEpisodes,
   tacticalPlayerRef,
   type BattleTelemetryDocument,
   type ResearchSquad,
+  type ResearchTemplate,
+  type ResearchAssistantEvidence,
+  type ResearchAssistantToolset,
   type TacticalMatchAnalysis,
 } from '@agent/pubg-intelligence';
 import { createResearchModel } from './model.js';
@@ -55,6 +63,7 @@ interface Snapshot {
   battleTelemetry: Map<string, Promise<BattleTelemetryDocument>>;
   experimentStore: ExperimentRunStore;
   planner: NaturalLanguageResearchPlanner;
+  researchModel?: Exclude<LanguageModel, string>;
   modelEnabled: boolean;
 }
 
@@ -106,7 +115,7 @@ function ensureSeparateExperimentPath(sourcePath: string, experimentPath: string
   if (sourceReal === experimentReal) throw new Error('experiment_store_must_be_separate');
 }
 
-async function openSnapshot(): Promise<Snapshot> {
+async function openSnapshot(modelOverride?: Exclude<LanguageModel, string>): Promise<Snapshot> {
   const configuredDatabase = process.env.PUBG_INTELLIGENCE_DB?.trim();
   if (!configuredDatabase) throw new Error('PUBG_INTELLIGENCE_DB_REQUIRED');
   const sourcePath = realpathSync(configuredDatabase);
@@ -136,7 +145,7 @@ async function openSnapshot(): Promise<Snapshot> {
 
   const squads = buildResearchSquads(matches);
   const selectedSquad = defaultSquad(matches, squads);
-  const model = createResearchModel();
+  const model = modelOverride ?? createResearchModel();
   return {
     matches,
     byId: new Map(matches.map((match) => [match.matchId, match])),
@@ -147,6 +156,7 @@ async function openSnapshot(): Promise<Snapshot> {
     battleTelemetry: new Map(),
     experimentStore: new ExperimentRunStore(experimentPath),
     planner: new NaturalLanguageResearchPlanner(model),
+    ...(model ? { researchModel: model } : {}),
     modelEnabled: Boolean(model),
   };
 }
@@ -350,6 +360,302 @@ function selectSquad(snapshot: Snapshot, requestedId: unknown): ResearchSquad {
 
 function inSquad(match: NormalizedMatch, squad: ResearchSquad): boolean {
   return !squad.memberIds.length || match.players.some((player) => squad.memberIds.includes(player.accountId));
+}
+
+interface AssistantEvidenceDetail extends ResearchAssistantEvidence {
+  matchRef: string;
+  occurredAt: string | null;
+  detail: string;
+  actor: string | null;
+  victim: string | null;
+  damage: number | null;
+}
+
+interface ScopedAssistantContext {
+  tools: ResearchAssistantToolset;
+  evidenceByAlias: Map<string, ResearchAssistantEvidence>;
+  labels: Record<string, string>;
+}
+
+function createScopedAssistantContext(input: {
+  snapshot: Snapshot;
+  matches: readonly NormalizedMatch[];
+  squad: ResearchSquad;
+  telemetryMatchIds: ReadonlySet<string>;
+}): ScopedAssistantContext {
+  const { snapshot, matches, squad } = input;
+  const memberIds = new Set(squad.memberIds.length
+    ? squad.memberIds
+    : matches.flatMap((match) => match.players.map((player) => player.accountId)));
+  const accountAliases = new Map<string, string>();
+  const labels: Record<string, string> = {};
+  const nameAliases: Array<{ name: string; alias: string }> = [];
+  for (const [index, accountId] of [...memberIds].sort().entries()) {
+    const alias = `PLAYER_${String(index + 1).padStart(2, '0')}`;
+    accountAliases.set(accountId, alias);
+    const player = matches.flatMap((match) => match.players).find((candidate) => candidate.accountId === accountId);
+    const name = player ? safePlayerName(player.displayName || player.playerName, index) : `队员 ${index + 1}`;
+    labels[alias] = name;
+    nameAliases.push({ name, alias });
+  }
+  const metricAliases = new Map([...memberIds].map((accountId) => [createHash('sha256').update(accountId).digest('hex').slice(0, 12), accountAliases.get(accountId)!]));
+  const sortedMatches = [...matches].sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId));
+  const matchAliases = new Map(sortedMatches.map((match, index) => [match.matchId, `M${String(index + 1).padStart(4, '0')}`]));
+  const matchesByAlias = new Map(sortedMatches.map((match) => [matchAliases.get(match.matchId)!, match]));
+  const evidenceByAlias = new Map<string, ResearchAssistantEvidence>();
+  const evidenceDetails = new Map<string, AssistantEvidenceDetail>();
+  const sourceAliases = new Map<string, string>();
+  let nextEvidenceNumber = 1;
+
+  const addEvidence = (inputEvidence: Omit<AssistantEvidenceDetail, 'ref'>): string => {
+    const sourceKey = `${inputEvidence.matchId}\u001f${inputEvidence.eventId ?? ''}\u001f${inputEvidence.kind}`;
+    const existing = sourceAliases.get(sourceKey);
+    if (existing) return existing;
+    const ref = `E${String(nextEvidenceNumber++).padStart(4, '0')}`;
+    const detail = { ...inputEvidence, ref };
+    sourceAliases.set(sourceKey, ref);
+    evidenceByAlias.set(ref, { ref, matchId: detail.matchId, eventId: detail.eventId, timeSeconds: detail.timeSeconds, kind: detail.kind });
+    evidenceDetails.set(ref, detail);
+    return ref;
+  };
+
+  const metricReport = (metric: 'damage' | 'kills' | 'knocks' | 'revives' | 'wins' | 'top10' | 'matches' | 'survival_time', groupBy: 'week' | 'map' | 'player' | 'none') => {
+    const intent = {
+      action: groupBy === 'week' ? 'trend' : groupBy === 'map' ? 'map_breakdown' : groupBy === 'player' ? 'player_comparison' : 'summary',
+      metric,
+      groupBy: groupBy === 'none' ? null : groupBy,
+    } as const;
+    const report = buildResearchReport({ matches, squad, intent, telemetryMatchIds: input.telemetryMatchIds });
+    const evidenceRefs = report.evidence.map((evidence) => addEvidence({
+      matchId: evidence.matchId,
+      eventId: null,
+      timeSeconds: null,
+      kind: `match-store:${evidence.field}`,
+      matchRef: matchAliases.get(evidence.matchId) ?? 'M0000',
+      occurredAt: evidence.occurredAt,
+      detail: `${evidence.mapName} · ${evidence.occurredAt ?? '时间未知'} · ${evidence.value} · ${evidence.description}`,
+      actor: null,
+      victim: null,
+      damage: null,
+    }));
+    const players = report.players.map((player) => ({
+      member: metricAliases.get(player.id) ?? 'PLAYER_UNKNOWN',
+      matches: player.matches,
+      kills: player.kills,
+      damage: player.damage,
+      knocks: player.knocks,
+      revives: player.revives,
+      averageDamage: player.averageDamage,
+      wins: player.wins,
+    }));
+    const breakdown = report.breakdown.map((item) => ({
+      label: groupBy === 'player' ? nameAliases.find((label) => label.name === item.label)?.alias ?? 'PLAYER_UNKNOWN' : item.label,
+      matches: item.matches,
+      rankedMatches: item.rankedMatches,
+      total: item.total,
+      average: item.average,
+      wins: item.wins,
+      top10: item.top10,
+    }));
+    return {
+      status: report.status,
+      metric,
+      groupBy,
+      selectedMatches: report.scope.selectedMatches,
+      summary: report.summary,
+      telemetry: report.telemetry,
+      players,
+      breakdown,
+      evidenceRefs,
+    };
+  };
+
+  const playerRef = (accountId: string | null): string | null => accountId ? accountAliases.get(accountId) ?? 'OPPONENT' : null;
+  const tools: ResearchAssistantToolset = {
+    searchMatches: ({ mapName, limit }) => {
+      const filtered = sortedMatches.filter((match) => !mapName || match.mapName.toLocaleLowerCase('zh-CN').includes(mapName.toLocaleLowerCase('zh-CN'))).slice(0, limit);
+      const rows = filtered.map((match) => {
+        const matchRef = matchAliases.get(match.matchId)!;
+        const ref = addEvidence({
+          matchId: match.matchId,
+          eventId: null,
+          timeSeconds: null,
+          kind: 'match-store:match-search',
+          matchRef,
+          occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+          detail: `${match.mapName} · ${match.gameMode} · ${match.players.filter((player) => memberIds.has(player.accountId)).reduce((sum, player) => sum + player.kills, 0)} kills`,
+          actor: null,
+          victim: null,
+          damage: null,
+        });
+        const squadPlayers = match.players.filter((player) => memberIds.has(player.accountId));
+        const placements = [...new Set(squadPlayers.map((player) => player.rank).filter((rank): rank is number => rank !== null && rank > 0))];
+        return {
+          matchRef,
+          date: match.createdAt ?? new Date(match.timestamp).toISOString(),
+          mapName: match.mapName || '未知地图',
+          mode: match.gameMode,
+          placement: placements.length === 1 ? placements[0] : null,
+          kills: squadPlayers.reduce((sum, player) => sum + player.kills, 0),
+          damage: squadPlayers.reduce((sum, player) => sum + player.damage, 0),
+          telemetry: input.telemetryMatchIds.has(match.matchId) ? 'cached' : 'missing',
+          evidenceRefs: [ref],
+        };
+      });
+      return { status: rows.length ? 'available' : 'empty', count: rows.length, matches: rows };
+    },
+    getScopedMetrics: ({ metric, groupBy }) => metricReport(metric, groupBy),
+    compareRescues: async ({ limit }) => {
+      const telemetryMatches = sortedMatches.filter((match) => snapshot.telemetryUrls.has(match.matchId)).slice(0, 30);
+      const revives = new Map<string, { actorId: string; victimId: string; events: Array<{ match: NormalizedMatch; event: BattleTelemetryDocument['events'][number] }> }>();
+      let cursor = 0;
+      let unavailableMatches = 0;
+      await Promise.all(Array.from({ length: Math.min(3, telemetryMatches.length) }, async () => {
+        while (cursor < telemetryMatches.length) {
+          const match = telemetryMatches[cursor++]!;
+          try {
+            const telemetry = await loadBattleTelemetry(snapshot, match);
+            for (const event of telemetry.events) {
+              if (event.type !== 'REVIVE' || event.phase !== 'in_match' || !event.actorId || !event.victimId
+                || !memberIds.has(event.actorId) || !memberIds.has(event.victimId)
+                || !event.actorTeamId || event.actorTeamId !== event.victimTeamId) continue;
+              const key = `${event.actorId}\u001f${event.victimId}`;
+              const row = revives.get(key) ?? { actorId: event.actorId, victimId: event.victimId, events: [] };
+              row.events.push({ match, event });
+              revives.set(key, row);
+            }
+          } catch {
+            unavailableMatches += 1;
+          }
+        }
+      }));
+      const pairs = [...revives.values()].sort((left, right) => right.events.length - left.events.length
+        || (accountAliases.get(left.actorId) ?? '').localeCompare(accountAliases.get(right.actorId) ?? '')
+        || (accountAliases.get(left.victimId) ?? '').localeCompare(accountAliases.get(right.victimId) ?? ''))
+        .slice(0, limit).map((row) => {
+          const refs = row.events.slice(0, 8).map(({ match, event }) => addEvidence({
+            matchId: match.matchId,
+            eventId: event.sourceEventId,
+            timeSeconds: event.timeSeconds,
+            kind: 'directed-revive',
+            matchRef: matchAliases.get(match.matchId) ?? 'M0000',
+            occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+            detail: `${match.mapName} · ${event.timeSeconds === null ? '时间未知' : `${Math.floor(event.timeSeconds / 60)}:${String(Math.floor(event.timeSeconds % 60)).padStart(2, '0')}`} · ${playerRef(event.actorId)} → ${playerRef(event.victimId)} REVIVE`,
+            actor: playerRef(event.actorId),
+            victim: playerRef(event.victimId),
+            damage: null,
+          }));
+          return { actor: playerRef(row.actorId), victim: playerRef(row.victimId), count: row.events.length, evidenceRefs: refs };
+        });
+      return {
+        status: pairs.length ? 'available' : 'insufficient_data',
+        requestedMatches: telemetryMatches.length,
+        analyzedMatches: telemetryMatches.length - unavailableMatches,
+        unavailableMatches,
+        denominator: 'selected-squad same-team directed REVIVE pairs in available telemetry',
+        pairs,
+        evidenceRefs: pairs.flatMap((pair) => pair.evidenceRefs),
+      };
+    },
+    getMatchEpisodes: async ({ matchRef }) => {
+      const match = matchesByAlias.get(matchRef);
+      if (!match) return { status: 'outside_scope', matchRef };
+      const telemetry = await loadBattleTelemetry(snapshot, match);
+      const trackedPlayerIds = match.players.filter((player) => memberIds.has(player.accountId)).map((player) => player.accountId);
+      const reconstruction = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+      const eventsById = new Map(telemetry.events.map((event) => [event.sourceEventId, event]));
+      const opponentIds = [...new Set(telemetry.events.flatMap((event) => [event.actorId, event.victimId]).filter((id): id is string => Boolean(id) && !memberIds.has(id!)))].sort();
+      const opponentAliases = new Map(opponentIds.map((id, index) => [id, `OPPONENT_${String(index + 1).padStart(2, '0')}`]));
+      const safePlayer = (id: string | null) => id ? accountAliases.get(id) ?? opponentAliases.get(id) ?? 'OPPONENT_UNKNOWN' : null;
+      const episodes = reconstruction.episodes.slice(0, 16).map((episode, episodeIndex) => {
+        const sourceEvents = episode.timeline.slice(0, 24).flatMap((timeline) => {
+          const event = eventsById.get(timeline.sourceEventId);
+          if (!event) return [];
+          const ref = addEvidence({
+            matchId: match.matchId,
+            eventId: event.sourceEventId,
+            timeSeconds: event.timeSeconds,
+            kind: `battle:${event.type.toLocaleLowerCase('en-US')}`,
+            matchRef,
+            occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(),
+            detail: `${match.mapName} · ${event.type} · ${event.timeSeconds === null ? '时间未知' : `${Math.floor(event.timeSeconds / 60)}:${String(Math.floor(event.timeSeconds % 60)).padStart(2, '0')}`} · ${safePlayer(event.actorId) ?? '未知'}${event.victimId ? ` → ${safePlayer(event.victimId)}` : ''}`,
+            actor: safePlayer(event.actorId),
+            victim: safePlayer(event.victimId),
+            damage: event.type === 'DAMAGE' ? event.damage : null,
+          });
+          return [{ ref, type: event.type, timeSeconds: event.timeSeconds, actor: safePlayer(event.actorId), victim: safePlayer(event.victimId), damage: event.type === 'DAMAGE' ? event.damage : null }];
+        });
+        return {
+          episodeRef: `B${String(episodeIndex + 1).padStart(2, '0')}`,
+          startSeconds: episode.startSeconds,
+          endSeconds: episode.endSeconds,
+          durationSeconds: episode.durationSeconds,
+          firstKnockRef: episode.firstKnock ? sourceAliases.get(`${match.matchId}\u001f${episode.firstKnock.sourceEventId}\u001fbattle:knock`) ?? null : null,
+          participantAliases: episode.participantRefs.map((ref) => {
+            const player = match.players.find((candidate) => battlePlayerRef(match.matchId, candidate.accountId) === ref);
+            return player ? safePlayer(player.accountId) : 'OPPONENT_UNKNOWN';
+          }),
+          teams: episode.teams.map((team) => ({ tracked: team.tracked, lastObserved: team.lastObserved })),
+          events: sourceEvents,
+        };
+      });
+      const circleTransitions = reconstruction.circleTransitions.slice(0, 24).map((transition, index) => {
+        const from = telemetry.events.find((event) => event.sourceEventId === transition.fromSourceEventId);
+        const to = telemetry.events.find((event) => event.sourceEventId === transition.toSourceEventId);
+        const beforeRef = from ? addEvidence({
+          matchId: match.matchId, eventId: from.sourceEventId, timeSeconds: from.timeSeconds, kind: 'circle-transition-before', matchRef,
+          occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(), detail: `${match.mapName} · circle sample before transition`, actor: null, victim: null, damage: null,
+        }) : null;
+        const afterRef = to ? addEvidence({
+          matchId: match.matchId, eventId: to.sourceEventId, timeSeconds: to.timeSeconds, kind: 'circle-transition-after', matchRef,
+          occurredAt: match.createdAt ?? new Date(match.timestamp).toISOString(), detail: `${match.mapName} · circle sample after transition`, actor: null, victim: null, damage: null,
+        }) : null;
+        return { transitionRef: `C${String(index + 1).padStart(2, '0')}`, timeSeconds: transition.timeSeconds, changedZones: transition.changedZones, evidenceRefs: [beforeRef, afterRef].filter((ref): ref is string => Boolean(ref)) };
+      });
+      return {
+        status: reconstruction.status,
+        matchRef,
+        parserVersion: reconstruction.parserVersion,
+        schemaVersion: reconstruction.schemaVersion,
+        episodes,
+        omittedEpisodeCount: Math.max(0, reconstruction.episodes.length - episodes.length),
+        circleTransitions,
+        evidenceRefs: [...new Set([...episodes.flatMap((episode) => episode.events.map((event) => event.ref)), ...circleTransitions.flatMap((row) => row.evidenceRefs)])],
+      };
+    },
+    lookupEvidence: ({ evidenceRefs }) => ({
+      items: evidenceRefs.flatMap((ref) => {
+        const detail = evidenceDetails.get(ref);
+        return detail ? [{ ref, matchRef: detail.matchRef, occurredAt: detail.occurredAt, timeSeconds: detail.timeSeconds, kind: detail.kind, detail: detail.detail, actor: detail.actor, victim: detail.victim, damage: detail.damage }] : [];
+      }),
+      evidenceRefs: evidenceRefs.filter((ref) => evidenceDetails.has(ref)),
+    }),
+  };
+  return { tools, evidenceByAlias, labels };
+}
+
+function deterministicAssistantFallback(question: string, reportAnswer: string, action: string): { answer: string; evidenceRefs: string[]; citeReportEvidence: boolean } {
+  const normalized = question.normalize('NFKC').toLocaleLowerCase('zh-CN');
+  const thirdCircleWipe = /第三(?:个)?圈|third\s+circle/iu.test(normalized)
+    && /团灭|全灭|wipe/iu.test(normalized)
+    && /为什么|原因|经常|频繁|why/iu.test(normalized);
+  if (thirdCircleWipe) {
+    return {
+      answer: '当前数据没有可核实的毒圈阶段编号和团灭因果标签，不能确认“第三圈经常团灭”。我先不推断原因。',
+      evidenceRefs: [],
+      citeReportEvidence: false,
+    };
+  }
+  const directedRevive = /谁救谁|谁.{0,8}(救|扶|拉).{0,8}谁|who.{0,12}revive/iu.test(normalized);
+  if (directedRevive) {
+    return {
+      answer: 'Match Store 只提供队员救援总数，不能确定具体是谁救了谁；当前没有 AI 分析可用的事件级证据，我先不比较救援方向。',
+      evidenceRefs: [],
+      citeReportEvidence: false,
+    };
+  }
+  if (action === 'unsupported' || action === 'telemetry_coverage') return { answer: reportAnswer, evidenceRefs: [], citeReportEvidence: false };
+  return { answer: reportAnswer, evidenceRefs: [], citeReportEvidence: true };
 }
 
 function visibleMatch(match: NormalizedMatch, squad: ResearchSquad, snapshot: Snapshot) {
@@ -624,25 +930,94 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     const bounds = safeDateBounds(from, to);
     if (!bounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
     const squad = selectSquad(snapshot, body.squadId);
-    const plan = await snapshot.planner.plan(question);
+    const templateResult = ResearchTemplateSchema.safeParse(body.template ?? 'tactical_coaching');
+    if (!templateResult.success) { send(response, 400, { error: 'invalid_template' }); return; }
+    const template: ResearchTemplate = templateResult.data;
+    const selectedMatchId = typeof body.matchId === 'string' ? body.matchId : undefined;
+    let scopedMatches = snapshot.matches.filter((match) => {
+      if (!inSquad(match, squad)) return false;
+      if (bounds.fromMs !== undefined && match.timestamp < bounds.fromMs) return false;
+      if (bounds.toMs !== undefined && match.timestamp >= bounds.toMs) return false;
+      return true;
+    });
+    if (selectedMatchId) {
+      const selected = scopedMatches.find((match) => match.matchId === selectedMatchId);
+      if (!selected) { send(response, 404, { error: 'match_outside_scope' }); return; }
+      scopedMatches = [selected];
+    }
+    const playerNames = new Map<string, string>();
+    for (const [index, match] of scopedMatches.entries()) {
+      for (const player of match.players) {
+        const accountId = player.accountId;
+        if (squad.memberIds.length && !squad.memberIds.includes(accountId)) continue;
+        playerNames.set(accountId, safePlayerName(player.displayName || player.playerName, index));
+      }
+    }
+    const playerAliases = [...playerNames.entries()].sort(([left], [right]) => left.localeCompare(right))
+      .map(([accountId, name], index) => ({ name, alias: `PLAYER_${String(index + 1).padStart(2, '0')}` }));
+    const privateIdentifiers = [
+      ...snapshot.matches.map((match) => ({ value: match.matchId, alias: '[比赛编号已隐藏]' })),
+      ...snapshot.matches.flatMap((match) => match.players.map((player) => ({ value: player.accountId, alias: '[队员编号已隐藏]' }))),
+    ];
+    const selectedPlayerNames = new Set(playerAliases.map((item) => item.name.toLocaleLowerCase('zh-CN')));
+    const outOfScopePlayerAliases = snapshot.matches.flatMap((match) => match.players)
+      .map((player) => player.displayName || player.playerName)
+      .filter((name) => name.trim() && !selectedPlayerNames.has(name.toLocaleLowerCase('zh-CN')))
+      .map((name) => ({ name, alias: '[范围外队员已隐藏]' }));
+    const promptPlayerAliases = [...playerAliases, ...outOfScopePlayerAliases];
+    const modelQuestion = anonymizeResearchText(question, promptPlayerAliases, privateIdentifiers);
+    const rawHistory = Array.isArray(body.history) ? body.history : [];
+    const priorTurns: Array<{ role: 'user' | 'assistant'; text: string }> = rawHistory.flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+      const row = item as Record<string, unknown>;
+      if ((row.role !== 'user' && row.role !== 'assistant') || typeof row.text !== 'string') return [];
+      return [{ role: row.role as 'user' | 'assistant', text: anonymizeResearchText(redactSensitiveText(row.text), promptPlayerAliases, privateIdentifiers) }];
+    }).slice(-6);
+    const plan = await snapshot.planner.plan(modelQuestion);
     const report = buildResearchReport({
-      matches: snapshot.matches,
+      matches: scopedMatches,
       squad,
       intent: plan.intent,
       telemetryMatchIds: new Set(snapshot.features.keys()),
-      ...(bounds.fromMs === undefined ? {} : { fromMs: bounds.fromMs }),
-      ...(bounds.toMs === undefined ? {} : { toMs: bounds.toMs }),
-      ...(typeof body.matchId === 'string' && snapshot.byId.has(body.matchId) ? { selectedMatchId: body.matchId } : {}),
     });
-    const runId = snapshot.experimentStore.save({ question, intent: plan.intent, source: plan.source, report });
-    send(response, 200, { runId, intent: plan.intent, plannerSource: plan.source, report });
+    const assistantContext = createScopedAssistantContext({
+      snapshot,
+      matches: scopedMatches,
+      squad,
+      telemetryMatchIds: new Set(snapshot.features.keys()),
+    });
+    const fallbackMetrics = await assistantContext.tools.getScopedMetrics({
+      metric: plan.intent.metric ?? 'damage',
+      groupBy: plan.intent.groupBy ?? 'none',
+    }) as { evidenceRefs?: string[] };
+    const deterministicFallback = deterministicAssistantFallback(question, report.answer, plan.intent.action);
+    const assistant = await runResearchAssistant({
+      ...(snapshot.researchModel ? { model: snapshot.researchModel } : {}),
+      message: modelQuestion,
+      priorTurns,
+      template,
+      scopeDescription: `${from ?? 'start'} through ${to ?? 'latest'}, selected squad, ${scopedMatches.length} eligible matches`,
+      fallbackAnswer: deterministicFallback.answer,
+      fallbackEvidenceRefs: deterministicFallback.citeReportEvidence ? fallbackMetrics.evidenceRefs ?? [] : deterministicFallback.evidenceRefs,
+      tools: assistantContext.tools,
+      evidenceByAlias: assistantContext.evidenceByAlias,
+      signal: AbortSignal.timeout(45_000),
+    });
+    const runId = snapshot.experimentStore.save({ question, intent: plan.intent, source: plan.source, report, assistant });
+    send(response, 200, {
+      runId,
+      intent: plan.intent,
+      plannerSource: plan.source,
+      report,
+      assistant: { ...assistant, labels: assistantContext.labels },
+    });
     return;
   }
   send(response, 404, { error: 'not_found' });
 }
 
-export async function startServer(): Promise<{ close: () => Promise<void>; url: string }> {
-  const snapshot = await openSnapshot();
+export async function startServer(options: { researchModel?: Exclude<LanguageModel, string> } = {}): Promise<{ close: () => Promise<void>; url: string }> {
+  const snapshot = await openSnapshot(options.researchModel);
   const port = Number(process.env.PORT ?? DEFAULT_PORT);
   const host = process.env.HOST?.trim() || DEFAULT_HOST;
   if (!isLoopbackHost(host) && !isPrivateIPv4Host(host)) throw new Error('HOST_MUST_BE_LOOPBACK_OR_PRIVATE_IPV4');
