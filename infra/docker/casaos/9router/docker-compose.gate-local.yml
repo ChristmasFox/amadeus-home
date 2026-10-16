@@ -1,0 +1,105 @@
+services:
+  9router:
+    image: local/9router-saas:git-${NINE_ROUTER_SOURCE_SHA:?Set NINE_ROUTER_SOURCE_SHA to the exact source commit}
+    container_name: pubg-saas-9router
+    restart: unless-stopped
+    env_file:
+      - ./9router.env
+    environment:
+      BASE_URL: http://127.0.0.1:20128
+      PORT: "20128"
+      HTTP_PROXY: http://egress-proxy:8080
+      HTTPS_PROXY: http://egress-proxy:8080
+      http_proxy: http://egress-proxy:8080
+      https_proxy: http://egress-proxy:8080
+      NO_PROXY: localhost,127.0.0.1,::1,9router,pubg-saas-9router
+      no_proxy: localhost,127.0.0.1,::1,9router,pubg-saas-9router
+      AMADEUS_ASR_BRIDGE_KEY_FILE: /run/secrets/asr_bridge_key
+      AMADEUS_ASR_UPSTREAM_KEY_FILE: /run/secrets/asr_upstream_key
+      AMADEUS_TTS_BRIDGE_ENABLED: "1"
+      AMADEUS_TTS_BRIDGE_KEY_FILE: /run/secrets/tts_bridge_key
+      AMADEUS_TTS_CLOUD_API_KEY_FILE: /run/secrets/tts_cloud_api_key
+      AMADEUS_TTS_CLOUD_VOICE_ID_FILE: /run/secrets/tts_cloud_voice_id
+      AMADEUS_TTS_CLOUD_VOICE_ID_31_FILE: /run/secrets/tts_cloud_voice_id_31
+      AMADEUS_TTS_LOCAL_KEY_FILE: /run/secrets/tts_local_key
+      AMADEUS_TTS_STYLE_FILE: /opt/amadeus/kurisu_style.json
+    expose:
+      - "20128"
+    volumes:
+      - type: bind
+        source: /srv/pubg-saas-9router/data
+        target: /app/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/asr-bridge-key
+        target: /run/secrets/asr_bridge_key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/asr-upstream-api-key
+        target: /run/secrets/asr_upstream_key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/tts-bridge-key
+        target: /run/secrets/tts_bridge_key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/tts-cloud-api-key
+        target: /run/secrets/tts_cloud_api_key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/tts-cloud-voice-id
+        target: /run/secrets/tts_cloud_voice_id
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/tts-cloud-voice-id-31
+        target: /run/secrets/tts_cloud_voice_id_31
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: /srv/pubg-saas-9router/secrets/tts-local-key
+        target: /run/secrets/tts_local_key
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      egress_internal:
+        aliases:
+          - 9router
+          - pubg-saas-9router
+    cpus: 1.0
+    mem_limit: 1g
+    logging:
+      driver: local
+      options:
+        max-file: "3"
+        max-size: 20m
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          Promise.all(["http://127.0.0.1:20128/api/health","http://127.0.0.1:20129/healthz","http://127.0.0.1:20130/healthz"].map(async url=>{const response=await fetch(url);if(!response.ok)throw new Error("unhealthy")})).then(()=>process.exit(0)).catch(()=>process.exit(1))
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  egress_internal:
+    external: true
+    name: pubg-saas-public_egress_internal

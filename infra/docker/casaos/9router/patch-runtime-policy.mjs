@@ -6,8 +6,8 @@ import { readFile, writeFile, readdir, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const MARKER = 'amadeus-image-account-policy-0.5.95';
-export const NO_LOCK_MARKER = 'amadeus-image-request-scoped-no-lock-0.5.95';
+export const MARKER = 'amadeus-image-account-policy-0.5.104';
+export const NO_LOCK_MARKER = 'amadeus-image-request-scoped-no-lock-0.5.104';
 const ACCOUNT_ANCHOR = 'let k=await (0,d.getProviderConnections)({provider:g,isActive:!0});';
 const MARK_ACCOUNT_ANCHOR = 'async function m(a,b,c,e=null,i=null,k=null){';
 const CONFIG_ANCHOR = 'const nextConfig = ';
@@ -18,7 +18,7 @@ function one(source, anchor, name) {
 }
 
 export function validatePolicy(policy) {
-  if (!policy || policy.packageVersion !== '0.5.95' ||
+  if (!policy || policy.packageVersion !== '0.5.104' ||
       !(policy.imageAccount === null || (
         policy.imageAccount?.provider === 'codex' &&
         JSON.stringify(policy.imageAccount?.models) === JSON.stringify(['gpt-image-2.5-sunburst', 'gpt-image-2.5-flare', 'gpt-image-2.5']) &&

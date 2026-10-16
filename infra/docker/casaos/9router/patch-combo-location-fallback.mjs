@@ -5,8 +5,8 @@
 import { chmod, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export const MARKER = "amadeus-combo-location-fallback-0.5.95";
-export const VERSION = "0.5.95";
+export const MARKER = "amadeus-combo-location-fallback-0.5.104";
+export const VERSION = "0.5.104";
 const ANCHOR = '{text:"overloaded",backoff:!0}';
 const INSERT = '{text:"overloaded",backoff:!0},/* ' + MARKER + ' */{text:"user location is not supported",cooldownMs:3e4},{text:"location is not supported for the api",cooldownMs:3e4},{text:"failed_precondition",cooldownMs:3e4}';
 // Prefer the shared retry-table chunk; also accept other webpack copies of t2.

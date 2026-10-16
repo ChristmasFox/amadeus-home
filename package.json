@@ -10,6 +10,7 @@
     "check:secrets": "./scripts/check-secrets.sh",
     "check:architecture": "node scripts/check-architecture.mjs",
     "test:architecture": "node scripts/test-check-architecture.mjs",
+    "test:9router-patches": "node infra/docker/casaos/9router/test-runtime-policy.mjs && node infra/docker/casaos/9router/test-image-upstream-diagnostics.mjs && node infra/docker/casaos/9router/test-image-combo-safety.mjs && node infra/docker/casaos/9router/test-combo-location-fallback.mjs && node infra/docker/casaos/9router/test-selfhosted-tts-style.mjs && node infra/docker/casaos/9router/test-asr-bridge.mjs && node infra/docker/casaos/9router/test-tts-bridge.mjs",
     "test:model-capability-adapter": "python3 scripts/test-provision-9router-speech.py && python3 scripts/test-provision-9router-image-combo.py && python3 scripts/test-smoke-9router-image.py && python3 scripts/test-checkpoint-amadeus-model-capability.py && python3 scripts/test-openclaw-group-image-policy.py && python3 scripts/test-openclaw-speech-config.py && node scripts/test-patch-openclaw-group-image-policy.mjs && node scripts/test-openclaw-bilingual-voice.mjs && node scripts/test-delivery-boundary.mjs",
     "test:openclaw-workspace": "python3 scripts/test-openclaw-workspace.py",
     "test:openclaw-image-route-authority": "node --test integrations/openclaw/delivery-boundary/image-route-authority.test.mjs",
