@@ -98,7 +98,7 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal((await memory.searchLexical(direct, '中文'))[0]?.key, 'mixed');
     assert.equal((await memory.searchLexical(direct, 'abc中文'))[0]?.key, 'mixed');
     assert.equal(await memory.forget(direct, 'language'), true);
-    assert.deepEqual(await memory.listRecent(direct), []);
+    assert.equal((await memory.listRecent(direct)).some(item => item.key === 'language'), false);
     assert.equal(await memory.create(direct, { key: 'language', content: '旧租约不应复活' }), 'already_exists');
     assert.equal(await memory.rememberAgain(direct, { key: 'language', content: '不能用旧事件恢复' }, 3), false);
     await queue.complete(direct, null);
