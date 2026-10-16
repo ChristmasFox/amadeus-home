@@ -93,10 +93,10 @@ def write_private_state(path: pathlib.Path, repository: pathlib.Path, value: dic
 
 
 def classify_changed_scope(paths: list[str]) -> tuple[str, str | None]:
-    """Gate/shared runtime changes trigger Gate deployment, even in mixed commits."""
+    """Independent Gate deployment for Gate/shared runtime changes, even in mixed commits."""
     if not paths:
         return "no_changes", None
-    if any(path.startswith(GATE_PREFIXES + SHARED_PREFIXES) for path in paths):
+    if any(path.startswith(GATE_PREFIXES + SHARED_PREFIXES + ("scripts/gate-", "scripts/release-gate")) for path in paths):
         return "gate_only", None
     if any(path.startswith(("plugins/", "apps/product-radar/", "integrations/openclaw/")) for path in paths):
         return "lab_only", None
@@ -209,12 +209,14 @@ def split_sql_statements(sql: str) -> list[str] | None:
 
 
 def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str | None]:
-    """Stop actual destructive SQL; CI plus an encrypted backup covers normal migrations.
+    """Flag genuinely destructive operations; never demand a token for normal SQL.
 
-    Optional pgvector DDL is not in migrate.ts and is never run by this path.
-    PostgreSQL's transactional migrator validates SQL instead of a regex allowlist.
+    The runtime migrator executes one transaction with an advisory lock. SQL
+    syntax and compatibility are exercised in isolated CI PostgreSQL tests.
+    Optional 0025/pgvector is deliberately not in migrate.ts and is not applied.
     """
-    migrations = [path for path in paths if path.startswith("apps/pubg-saas/src/infrastructure/postgres/migrations/")
+    prefix = "apps/pubg-saas/src/infrastructure/postgres/migrations/"
+    migrations = [path for path in paths if path.startswith(prefix)
                   and not path.endswith("/0025_gate_memory_pgvector.sql")]
     if not migrations:
         return "reversible_app_candidate", None
@@ -248,10 +250,9 @@ def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str
                 return "destructive_schema", "destructive_database_operation"
             if re.match(r"UPDATE\s+\S+\s+SET\b", sql, re.I) and not re.search(r"\bWHERE\b", sql, re.I):
                 return "destructive_schema", "unbounded_data_update"
-            if re.match(r"GRANT\b|REVOKE\b|ALTER\s+SYSTEM\b", sql, re.I) or re.search(
-                r"\bSECURITY\s+DEFINER\b", sql, re.I
-            ):
+            if re.match(r"GRANT\b|REVOKE\b|ALTER\s+SYSTEM\b", sql, re.I) or re.search(r"\bSECURITY\s+DEFINER\b", sql, re.I):
                 return "unreviewed_migration", "migration_security_change_requires_review"
+            # Migration validity and real behavior are tested against isolated PG.
             if re.match(r"(?:DROP\s+(?:INDEX|VIEW)|ALTER\s+TABLE|UPDATE|INSERT|MERGE|"
                         r"CREATE|COMMENT|DO|SELECT)\b", sql, re.I):
                 continue
