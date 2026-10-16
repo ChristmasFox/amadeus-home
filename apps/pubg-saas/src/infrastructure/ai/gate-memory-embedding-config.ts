@@ -83,12 +83,13 @@ export function readGateMemoryEmbeddingConfig(env: NodeJS.ProcessEnv): GateMemor
   const modelId = clean(env[keys.modelId]);
   const apiKey = clean(env[keys.apiKey]);
   const dailyTokenBudget = clean(env[keys.dailyTokenBudget]);
-  const supplied = [baseURL, modelId, apiKey, dailyTokenBudget].filter(Boolean).length;
-  if (supplied === 0) {
+  if (!baseURL && !modelId && !apiKey && !dailyTokenBudget) {
     if (enable === '1') throw new Error('gate_memory_embedding_config_incomplete');
     return null;
   }
-  if (supplied !== 4) throw new Error('gate_memory_embedding_config_incomplete');
+  if (!baseURL || !modelId || !apiKey || !dailyTokenBudget) {
+    throw new Error('gate_memory_embedding_config_incomplete');
+  }
   const allowedInternalHosts = parseAllowedInternalHosts(env[keys.internalHosts]);
   if (!validBaseURL(baseURL, allowedInternalHosts) || modelId.length > 200
     || /[\u0000-\u001f\u007f]/u.test(modelId) || apiKey.length > 4096
