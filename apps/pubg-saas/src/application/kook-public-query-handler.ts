@@ -15,6 +15,7 @@ import type { KookTextPayload } from './kook-message-queue.js';
 import { normalizeQueryPlanForMessage, QueryPlanSchema, type QueryPlan } from './nl-query-planner.js';
 import { QueryPlanExecutor } from './query-plan-executor.js';
 import { runPublicKookAgent } from './kook-conversation-agent.js';
+import { buildGateWorkingContext } from './gate-context-builder.js';
 import type { KookNaturalWriteIntent, KookNaturalWriteResult } from './kook-group-binding-handler.js';
 import type {
   AuthorizedPublicQuery,
@@ -524,10 +525,11 @@ async function naturalLanguageReply(
 
   try {
     const window = await services.authorizer.loadAgentConversation(job);
-    const currentContext = window.currentQuoteContext ? `${window.currentQuoteContext}\n` : '';
+    const context = buildGateWorkingContext(window, currentMessage);
+    const currentContext = context.currentQuoteContext ? `${context.currentQuoteContext}\n` : '';
     const messages: ModelMessage[] = [
-      ...window.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),
-      { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${currentMessage}` },
+      ...context.turns.map(turn => ({ role: turn.role, content: turn.content }) as ModelMessage),
+      { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${context.currentMessage}` },
     ];
     const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage });
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';

@@ -35,6 +35,7 @@ export interface PublicQueryAuthorizerOptions {
   botAccountId: string;
   maxTeamChoices?: number;
 }
+const MAX_AGENT_CONVERSATION_ROWS = 80;
 const authorizedQuery = Symbol('authorized-public-pubg-query');
 export interface AuthorizedPublicQuery {
   readonly [authorizedQuery]: true;
@@ -255,20 +256,118 @@ export class PublicQueryAuthorizer {
     if (job.request.kind !== 'group' && job.request.kind !== 'direct') return { turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null };
     const userId = job.request.event.userId;
     const channelId = job.request.kind === 'group' ? job.request.event.channelId : `dm:${this.botId}:${userId}`;
-    const result = await this.pool.query(
-      `SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content
-       FROM kook_conversation_messages
-       WHERE bot_account_id=$1 AND channel_id=$2 AND message_id<>$3
-       ORDER BY created_at,message_id`,
-      [this.botId, channelId, job.eventId],
-    );
-    const rows = result.rows.map(row => ({
+    const emptyWindow = (): KookAgentConversationWindow => ({ turns: [], currentSpeakerLabel: '成员1', currentQuoteContext: null });
+
+    if (job.request.kind === 'group') {
+      try {
+        await this.verifyConversationBinding(this.pool, job);
+        if (!await this.permissions.isTextChannelMember(job.request.event.guildId, channelId, userId)) return emptyWindow();
+      } catch {
+        // A failed channel check disables historical context only. The current
+        // event can still receive ordinary-chat handling; PUBG tools perform
+        // their own fresh authorization before reading team data.
+        return emptyWindow();
+      }
+    }
+
+    const client = await this.pool.connect();
+    let rows: Array<{ messageId: string; kind: 'assistant' | 'human'; speakerId: string; replyTo: string | null; content: string }>;
+    let quotedRow: { message_id: unknown; speaker_kind: unknown; speaker_id: unknown; content: unknown } | undefined;
+    try {
+      await client.query('BEGIN');
+      const current = await this.storedJob(client, jobInput, true);
+      if (current.request.kind === 'group') await this.verifyConversationBinding(client, current);
+
+      let result: { rows: QueryResultRow[] };
+      let scopePredicate: string;
+      let scopeParams: unknown[];
+      let quotePosition: number;
+      if (current.request.kind === 'group') {
+        const revision = current.bindingRevision;
+        if (revision === null) throw new Error('public_query_binding_changed');
+        const tenantId = current.boundTeam?.tenantId ?? null;
+        const teamId = current.boundTeam?.teamId ?? null;
+        scopePredicate = `context_scope_kind='group'
+          AND context_binding_revision=$4::BIGINT
+          AND context_tenant_id IS NOT DISTINCT FROM $5::TEXT
+          AND context_team_id IS NOT DISTINCT FROM $6::TEXT
+          AND EXISTS (SELECT 1 FROM channel_binding_versions version
+            WHERE version.bot_account_id=$1 AND version.channel_id=$2 AND version.revision=$4::BIGINT)
+          AND EXISTS (SELECT 1 FROM kook_ingress_events ingress
+            WHERE ingress.bot_account_id=$1 AND ingress.event_id=$3 AND ingress.lease_token=$7
+              AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+              AND ingress.event_kind='group' AND ingress.channel_id=$2
+              AND ingress.binding_revision=$4::BIGINT
+              AND ingress.tenant_id IS NOT DISTINCT FROM $5::TEXT
+              AND ingress.team_id IS NOT DISTINCT FROM $6::TEXT)`;
+        scopeParams = [this.botId, channelId, current.eventId, revision, tenantId, teamId, current.leaseToken];
+        quotePosition = 8;
+        result = await client.query(
+          `SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content FROM (
+             SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content,created_at
+             FROM kook_conversation_messages
+             WHERE bot_account_id=$1 AND channel_id=$2 AND message_id<>$3 AND ${scopePredicate}
+             ORDER BY created_at DESC,message_id DESC LIMIT $8
+           ) recent ORDER BY created_at,message_id`,
+          [...scopeParams, MAX_AGENT_CONVERSATION_ROWS],
+        );
+      } else {
+        scopePredicate = `context_scope_kind='direct'`;
+        scopeParams = [this.botId, channelId, current.eventId, current.leaseToken];
+        quotePosition = 6;
+        result = await client.query(
+          `SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content FROM (
+             SELECT message_id,speaker_kind,speaker_id,reply_to_message_id,content,created_at
+             FROM kook_conversation_messages
+             WHERE bot_account_id=$1 AND channel_id=$2 AND message_id<>$3 AND ${scopePredicate}
+               AND EXISTS (SELECT 1 FROM kook_ingress_events ingress
+                 WHERE ingress.bot_account_id=$1 AND ingress.event_id=$3 AND ingress.lease_token=$4
+                   AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+                   AND ingress.event_kind='direct' AND ingress.channel_id IS NULL)
+             ORDER BY created_at DESC,message_id DESC LIMIT $5
+           ) recent ORDER BY created_at,message_id`,
+          [...scopeParams.slice(0, 4), MAX_AGENT_CONVERSATION_ROWS],
+        );
+      }
+      rows = result.rows.map(row => ({
       messageId: String(row.message_id),
       kind: row.speaker_kind === 'assistant' ? 'assistant' as const : 'human' as const,
       speakerId: String(row.speaker_id),
       replyTo: typeof row.reply_to_message_id === 'string' ? row.reply_to_message_id : null,
       content: String(row.content),
-    }));
+      }));
+
+      const currentQuoteId = current.request.kind === 'group' ? current.request.event.quotedMessageId : null;
+      if (current.request.kind === 'group' && currentQuoteId && !rows.some(row => row.messageId === currentQuoteId)) {
+        const quoteResult = await client.query(
+          `SELECT message_id,speaker_kind,speaker_id,content
+           FROM kook_conversation_messages
+           WHERE bot_account_id=$1 AND channel_id=$2 AND message_id=$${quotePosition}
+             AND ${scopePredicate}
+             AND EXISTS (SELECT 1 FROM kook_ingress_events ingress
+               WHERE ingress.bot_account_id=$1 AND ingress.event_id=$3 AND ingress.lease_token=$7
+                 AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
+                 AND ingress.event_kind='group' AND ingress.channel_id=$2)
+             AND EXISTS (SELECT 1 FROM channel_binding_versions version
+               WHERE version.bot_account_id=$1 AND version.channel_id=$2 AND version.revision=$4::BIGINT)
+           LIMIT 1`,
+          [...scopeParams, currentQuoteId],
+        );
+        quotedRow = quoteResult.rows[0];
+      }
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      if (error instanceof Error && error.message === 'public_query_binding_changed') {
+        rows = [];
+        quotedRow = undefined;
+      } else {
+        throw error;
+      }
+    } finally {
+      client.release();
+    }
+
     const labels = new Map<string, string>([[this.botId, '助手'], [userId, '成员1']]);
     let nextLabel = 2;
     const labelFor = (speakerId: string) => {
@@ -279,22 +378,54 @@ export class PublicQueryAuthorizer {
     };
     const byId = new Map(rows.map(row => [row.messageId, row]));
     const currentQuoteId = job.request.kind === 'group' ? job.request.event.quotedMessageId : null;
-    const currentQuote = currentQuoteId ? byId.get(currentQuoteId) : undefined;
+    const recentQuote = currentQuoteId ? byId.get(currentQuoteId) : undefined;
+    const currentQuote = recentQuote ?? (quotedRow ? {
+      messageId: String(quotedRow.message_id),
+      kind: quotedRow.speaker_kind === 'assistant' ? 'assistant' as const : 'human' as const,
+      speakerId: String(quotedRow.speaker_id),
+      replyTo: null,
+      content: String(quotedRow.content),
+    } : undefined);
     const currentQuoteContext = currentQuote
-      ? `引用内容来自${labelFor(currentQuote.speakerId)}：“${currentQuote.content}”`
+      ? `引用目标消息 ${currentQuote.messageId}，来自${labelFor(currentQuote.speakerId)}：“${currentQuote.content}”`
       : null;
     const turns: KookAgentConversationTurn[] = [];
     for (const row of rows) {
       const target = row.replyTo ? byId.get(row.replyTo) : undefined;
       const relation = target
         ? `（回复对象${labelFor(target.speakerId)}，引用：“${target.content}”）`
-        : '';
+        : row.replyTo ? `（回复目标消息 ${row.replyTo}；正文不在近期窗口）` : '';
       const content = row.kind === 'human'
         ? `${labelFor(row.speakerId)}说：${relation}${row.content}`
         : sanitizeKookAssistantReplyContent(row.content);
       turns.push({ role: row.kind === 'assistant' ? 'assistant' : 'user', content });
     }
     return { turns, currentSpeakerLabel: '成员1', currentQuoteContext };
+  }
+
+  private async verifyConversationBinding(client: Pool | PoolClient, job: KookIngressJob): Promise<void> {
+    if (job.request.kind !== 'group' || job.bindingRevision === null) throw new Error('public_query_binding_changed');
+    const event = job.request.event;
+    const current = await client.query(
+      `SELECT version.revision,binding.tenant_id,binding.team_id,tenant.guild_id
+       FROM channel_binding_versions version
+       LEFT JOIN channel_bindings binding ON binding.platform='kook'
+         AND binding.bot_account_id=version.bot_account_id AND binding.channel_id=version.channel_id
+       LEFT JOIN tenants tenant ON tenant.tenant_id=binding.tenant_id
+         AND tenant.platform='kook' AND tenant.bot_account_id=binding.bot_account_id
+       WHERE version.bot_account_id=$1 AND version.channel_id=$2`,
+      [this.botId, event.channelId],
+    );
+    const row = current.rows[0];
+    const liveTeam = row && row.tenant_id !== null && row.team_id !== null && row.guild_id === event.guildId
+      ? { tenantId: String(row.tenant_id), teamId: String(row.team_id) }
+      : null;
+    if (!row || String(row.revision) !== job.bindingRevision
+      || (row.team_id !== null && !liveTeam)
+      || Boolean(job.boundTeam) !== Boolean(liveTeam)
+      || (job.boundTeam && liveTeam && (job.boundTeam.tenantId !== liveTeam.tenantId || job.boundTeam.teamId !== liveTeam.teamId))) {
+      throw new Error('public_query_binding_changed');
+    }
   }
 
   /** Stores only outcome, model identifier, token totals and trusted actor scope.

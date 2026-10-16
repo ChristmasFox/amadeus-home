@@ -38,12 +38,52 @@ async function fixture() {
     const job = await admit(data), result = await auth.authorize(job, selection); assert.equal(result.kind, 'authorized'); if (result.kind !== 'authorized') throw new Error('fixture_authorization_failed'); await queue.complete(job, null); return result.query;
   }
   async function cleanup() {
+    await pool.query('DELETE FROM kook_conversation_messages WHERE bot_account_id=$1', [bot]);
     await pool.query('DELETE FROM usage_records WHERE bot_account_id=$1', [bot]);
     for (const table of ['session_contexts', 'result_sets', 'kook_ingress_events', 'message_outbox', 'channel_binding_versions', 'channel_identities', 'tenants']) await pool.query(`DELETE FROM ${table} WHERE bot_account_id=$1`, [bot]);
     await pool.end();
   }
   return { pool, bot, user, other, guild, guildB, channel, channelB, permissions, teams, event, a, b, queue, auth, admit, authorized, cleanup };
 }
+
+test('agent conversation history is fenced to the current binding generation and fresh channel membership', { skip: !databaseUrl }, async () => {
+  const f = await fixture(); try {
+    const oldMessage = group(f.bot, f.guild, f.channel, f.user);
+    oldMessage.content = 'synthetic old-team memory must remain archived';
+    const oldJob = await f.admit(oldMessage);
+    await f.queue.complete(oldJob, null);
+
+    const sameGeneration = group(f.bot, f.guild, f.channel, f.user);
+    sameGeneration.content = 'same-generation working context';
+    const sameGenerationJob = await f.admit(sameGeneration);
+    const sameGenerationWindow = await f.auth.loadAgentConversation(sameGenerationJob);
+    assert.equal(sameGenerationWindow.turns.length, 1);
+    assert.match(sameGenerationWindow.turns[0]!.content, /synthetic old-team memory/u);
+    await f.queue.complete(sameGenerationJob, null);
+
+    const replacement = await f.teams.createSquad(f.event(f.guild, `replacement-${f.channel}`), {
+      label: 'Replacement team', pubgShard: 'steam', pubgAccountIds: [`replacement-${f.a.teamId}`],
+    });
+    const pending = await f.teams.prepareTeamAction(f.event(), { kind: 'unbind_channel' });
+    await f.teams.confirmTeamAction(f.event(), pending.confirmationToken);
+    await f.teams.bindExistingSquad(f.event(), replacement.teamId);
+
+    const afterRebind = group(f.bot, f.guild, f.channel, f.user);
+    afterRebind.content = 'new-generation context';
+    const newGenerationJob = await f.admit(afterRebind);
+    const newGenerationWindow = await f.auth.loadAgentConversation(newGenerationJob);
+    assert.deepEqual(newGenerationWindow.turns, []);
+    assert.ok(f.permissions.calls.includes(`channel:${f.guild}:${f.channel}:${f.user}`));
+    await f.queue.complete(newGenerationJob, null);
+
+    f.permissions.denied.add(`${f.guild}:${f.user}`);
+    const removedMemberJob = await f.admit(group(f.bot, f.guild, f.channel, f.user));
+    const removedMemberWindow = await f.auth.loadAgentConversation(removedMemberJob);
+    assert.deepEqual(removedMemberWindow.turns, []);
+    assert.equal(removedMemberWindow.currentQuoteContext, null);
+    await f.queue.complete(removedMemberJob, null);
+  } finally { await f.cleanup(); }
+});
 
 test('public query context comes from a live stored ingress and isolates guild, actor, channel and bot', { skip: !databaseUrl }, async () => {
   const f = await fixture(); try {
@@ -210,5 +250,40 @@ test('query authorization migration never backfills queued group authority from 
     assert.deepEqual((await pool.query("SELECT status,event_json,last_error_code FROM kook_ingress_events WHERE event_id='old-group'")).rows[0], { status: 'dead', event_json: null, last_error_code: 'kook_ingress_binding_revision_unknown' });
     assert.equal((await pool.query("SELECT status FROM kook_ingress_events WHERE event_id='old-dm'")).rows[0]?.status, 'pending');
     assert.equal((await pool.query("SELECT 1 FROM schema_migrations WHERE migration_id='0012_privacy_retention_indexes.sql'")).rowCount, 1);
+  } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
+});
+
+test('conversation scope migration reuses only ingress-proven direct history and archives legacy group rows', { skip: !databaseUrl }, async () => {
+  const admin = new Pool({ connectionString: databaseUrl, max: 1 });
+  const schema = `conversation_scope_${randomUUID().replaceAll('-', '')}`;
+  await admin.query(`CREATE SCHEMA ${schema}`);
+  const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${schema}`, max: 2 });
+  try {
+    await pool.query(`CREATE TABLE kook_ingress_events (
+      bot_account_id TEXT NOT NULL,event_id TEXT NOT NULL,event_kind TEXT NOT NULL,user_id TEXT NOT NULL,
+      PRIMARY KEY (bot_account_id,event_id)
+    )`);
+    await pool.query(`CREATE TABLE kook_conversation_messages (
+      bot_account_id TEXT NOT NULL,channel_id TEXT NOT NULL,message_id TEXT NOT NULL,
+      speaker_kind TEXT NOT NULL,speaker_id TEXT NOT NULL,source_event_id TEXT,reply_to_message_id TEXT,
+      content TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),expires_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (bot_account_id,channel_id,message_id)
+    )`);
+    await pool.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id)
+      VALUES ('fixture-bot','direct-event','direct','fixture-user'),
+        ('fixture-bot','group-event','group','fixture-user')`);
+    await pool.query(`INSERT INTO kook_conversation_messages(
+      bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,content,expires_at
+    ) VALUES
+      ('fixture-bot','dm:fixture-bot:fixture-user','direct-event','human','fixture-user','direct-event','synthetic dm','infinity'),
+      ('fixture-bot','fixture-group','group-event','human','fixture-user','group-event','synthetic group','infinity')`);
+
+    const migration = await readFile(new URL('../src/infrastructure/postgres/migrations/0022_scoped_agent_conversation.sql', import.meta.url), 'utf8');
+    await pool.query(migration);
+    const scopes = await pool.query('SELECT message_id,context_scope_kind,context_binding_revision FROM kook_conversation_messages ORDER BY message_id');
+    assert.deepEqual(scopes.rows, [
+      { message_id: 'direct-event', context_scope_kind: 'direct', context_binding_revision: null },
+      { message_id: 'group-event', context_scope_kind: null, context_binding_revision: null },
+    ]);
   } finally { await pool.end(); await admin.query(`DROP SCHEMA ${schema} CASCADE`); await admin.end(); }
 });

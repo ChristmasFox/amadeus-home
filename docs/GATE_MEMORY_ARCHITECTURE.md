@@ -46,9 +46,10 @@ Do not copy Lab's SQLite, sessions, Owner allowlists or provider API keys.
 
 ## Further milestones
 
-1. Replace the unbounded prompt-history load with a bounded working window
-   plus summary/checkpoint and citation-aware historical retrieval. Keep the
-   full PostgreSQL history; preserve meaningful reply/quote relations.
+1. The source now replaces the unbounded prompt-history load with a bounded
+   working window and a same-scope lookup for the current quote. Add scoped
+   rolling summaries/checkpoints and citation-aware historical retrieval;
+   keep the full PostgreSQL history and preserve meaningful reply relations.
 2. Add a Gate-only Embedding adapter with an explicit key and routing policy,
    dimension/model-index contract, timeouts, cost caps and rate limits. The
    Lab 9Router Qwen embedding result (1024 dimensions) **does not** prove
@@ -99,9 +100,11 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
 
 ### Explicitly unfinished
 
-- The current Gate memory store still is **not wired to AI SDK prompt
-  assembly**, cannot autonomously summarize conversations, and has no
-  semantic embedding/vector index. Existing full message archives remain.
+- The `GateMemoryStore` is **not wired to AI SDK prompt assembly**. Ordinary
+  chat now receives bounded recent transcript turns and the current quote;
+  there is still no memory recall, rolling summary, autonomous conversation
+  summary, or semantic embedding/vector index. Existing full message archives
+  remain.
 - There is no automatic deletion of inaccessible **old channel generations**.
   Their isolation is intentional; implement a reviewed retention/erasure
   policy, safe cleanup preview, and protected Gate backup before scheduling
@@ -116,9 +119,9 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
   transcript or historical backups; holistic privacy erasure needs a separate
   retention and recovery design.
 
-Next: bounded prompt assembly and hybrid semantic recall with **Gate-owned**
-Embedding credentials, private scoped indexes and consent-aware consolidation.
-No runtime migration or Gate-Local deployment is implied by a source merge.
+Next: scoped summaries, hybrid semantic recall with **Gate-owned** Embedding
+credentials, private scoped indexes and consent-aware consolidation. No runtime
+migration or Gate-Local deployment is implied by a source merge.
 
 ## Follow-up lexical audit — 2026-10-16
 
@@ -147,3 +150,117 @@ No runtime migration or Gate-Local deployment is implied by a source merge.
   not wired to any Agent tool or autonomous learning. Removing it now
   would reintroduce the previously reviewed inability to intentionally
   restore a tombstone; actual user-facing consent is a later milestone.
+
+## P0 conversation-context audit — 2026-10-16
+
+### Runtime source path and trust fences
+
+1. `KookIngressQueue.ingestGatewayEvent` validates and deduplicates the
+   KOOK event, records its durable ingress row with the admission-time channel
+   binding revision/team snapshot, and stores the current human message.
+   `adoptProvisionedBinding` updates that ingress and current transcript row
+   together if this event safely creates a team binding.
+2. The public handler receives a leased job and calls
+   `PublicQueryAuthorizer.loadAgentConversation` before `runPublicKookAgent`.
+   For group context, the authorizer checks the current binding generation,
+   freshly checks KOOK channel membership, then locks/reloads the active
+   ingress lease and checks the binding again before reading. A denied or
+   unavailable channel-membership check suppresses historical context while
+   allowing ordinary chat to proceed; each PUBG tool still performs its own
+   fresh authorization. Direct-message history uses the bot-and-actor-derived
+   `dm:<bot>:<user>` channel and an active direct-event lease.
+3. The SQL history read matches the transcript's group scope, tenant, team,
+   and binding revision against the current `channel_binding_versions` row
+   and active ingress lease. It selects at most 80 prior rows, restores them
+   to chronological order, and resolves reply links only from that selected
+   scope. A current quote can trigger one additional lookup under the same
+   scope and lease. Binding changes during the read yield an empty context.
+4. `buildGateWorkingContext` selects recent turns within a 4,000-token
+   *estimate* budget, clips current quote context to 1,000 estimated tokens,
+   and passes the current user message separately without clipping. The
+   estimate is `conservative_unicode_char_v1` (ASCII code point = one-third
+   token; other code point = one token), not the configured provider's actual
+   tokenizer. Policy slots of 1,000 each for episodic summary and long-term
+   recall are reserved in the budget type but are not populated or spent yet.
+5. On completion, the ingress queue revalidates the active lease and current
+   binding before writing the assistant transcript and transactional outbox.
+   Provider diagnostics retain usage totals and status only, not prompt or
+   completion text.
+
+### Schema, regression evidence, and search behavior
+
+- Migration `0015_kook_agent_conversation.sql` stored bot/channel/speaker,
+  source/reply IDs, content, and expiry, with no team or binding provenance.
+  Migration `0017_public_context_retention.sql` changed transcript expiry to
+  infinity. Therefore an old group row cannot safely be assigned to a later
+  binding based on its channel alone.
+- New, source-only migration `0022_scoped_agent_conversation.sql` adds
+  nullable scope columns and a scope/recent index. Existing group rows remain
+  unscoped archives and are not injected. A legacy direct row is backfilled
+  only when its retained durable ingress proves the same bot, direct event,
+  and actor-derived DM channel. The migration has **not** been applied to
+  Gate-Local.
+- Synthetic isolated-PostgreSQL regression coverage exercises a team rebind:
+  the old generation is visible only within its original generation, and the
+  new generation receives no prior team's transcript. It also checks that
+  removed channel membership yields no historical window. The migration
+  fixture proves safe direct-message backfill while legacy group provenance
+  remains null.
+- Lexical memory recall still filters by bot, memory scope, actor/channel,
+  tenant/team, and binding revision. A 10,000-row synthetic cross-scope
+  `EXPLAIN` selected `idx_gate_memory_scope_recent` with the complete scope in
+  its index condition; CJK `lower(memory_key/content) LIKE ...` remains a
+  filter within the selected scope. `searchLexical` now applies a 500 ms
+  PostgreSQL statement timeout by default (configurable from 10 to 10,000
+  ms). The plan does not prove sublinear behavior for a large single scope;
+  `pg_trgm` or another text index remains future work.
+- Focused source verification passed: 18 tests across
+  `public-query-authorizer.test.ts`, `gate-context-builder.test.ts`,
+  `kook-agent-ingress.integration.test.ts`,
+  `kook-public-query-handler.test.ts`, and
+  `gate-memory-foundation.test.ts`; SaaS TypeScript typecheck and
+  `git diff --check` passed. These tests use the isolated local PostgreSQL
+  fixture, not Gate-Local.
+
+### Provider and PostgreSQL baseline
+
+- The Gate Compose source pins PostgreSQL
+  `postgres:18.1-bookworm@sha256:cc9f4143a8d2fa8cf3749d0cb4d26ecf2d53a77a2ac807e9ebd67ae22426221a`.
+  The image is the standard PostgreSQL image; source migrations add no
+  extension, and migration `0021_gate_memory_foundation.sql` explicitly
+  avoids assuming pgvector. No pgvector extension or embedding adapter is
+  implemented by this source change.
+- A read-only Gate-Local probe, when performed under the canonical local host
+  profile, should first record the running PostgreSQL container image ID/digest
+  and then run `SELECT version();` and
+  `SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';`.
+  An empty extension result means vector is unavailable in that database.
+  This audit did not connect to or query the Gate-Local database; the M2
+  checkpoint still says `PAUSED / BLOCKED_BY_RELEASE_ENGINEERING`. No runtime
+  mutation, migration, or deployment was performed.
+- Model configuration is `MODEL_BASE_URL`, `MODEL_ID`, and `MODEL_API_KEY`;
+  a non-HTTPS HTTP endpoint is accepted only when its exact host:port appears
+  in `MODEL_ALLOWED_INTERNAL_HOSTS`. Compose supplies
+  `PUBG_SAAS_EGRESS_PROXY` and requires it, so application requests use the
+  guarded egress proxy. The public agent has a 300,000 ms total timeout,
+  including a 270,000 ms tool-loop and 30,000 ms finalization budget. Token
+  usage is recorded when the provider returns it, but there is no application
+  monetary cost cap or Gate-owned embedding-provider configuration yet.
+
+### Exact source and fixture changes in this audit
+
+- Application: `apps/pubg-saas/src/application/gate-context-builder.ts`,
+  `gate-memory-store.ts`, `kook-ingress-queue.ts`,
+  `kook-public-query-handler.ts`, and `public-query-authorizer.ts`.
+- Migration/bootstrap/export: `apps/pubg-saas/src/infrastructure/postgres/migrations/0022_scoped_agent_conversation.sql`,
+  `apps/pubg-saas/src/infrastructure/postgres/migrate.ts`, and
+  `apps/pubg-saas/src/index.ts`.
+- Tests: `apps/pubg-saas/tests/gate-context-builder.test.ts`,
+  `gate-memory-foundation.test.ts`,
+  `kook-agent-ingress.integration.test.ts`, and
+  `public-query-authorizer.test.ts`.
+- Documentation: `docs/GATE_MEMORY_ARCHITECTURE.md`.
+
+This closes the source-level cross-binding regression and bounded ordinary
+chat context baseline. It does not close Gate M2, deploy Gate-Local, implement
+semantic memory retrieval, or complete P1–P6 of the active Goal.

@@ -19,8 +19,12 @@ export interface GateMemoryDraft {
   key: string;
   content: string;
 }
+export interface GateMemoryStoreOptions {
+  lexicalSearchTimeoutMs?: number;
+}
 
 const MAX_RESULTS = 24;
+const DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS = 500;
 const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
 
@@ -118,7 +122,17 @@ function liveFence(eventIndex: number, tokenIndex: number): string {
 }
 
 export class GateMemoryStore {
-  constructor(private readonly pool: Pool, private readonly authority: GateMemoryScopeResolver) {}
+  private readonly lexicalSearchTimeoutMs: number;
+  constructor(
+    private readonly pool: Pool,
+    private readonly authority: GateMemoryScopeResolver,
+    options: GateMemoryStoreOptions = {},
+  ) {
+    this.lexicalSearchTimeoutMs = options.lexicalSearchTimeoutMs ?? DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS;
+    if (!Number.isSafeInteger(this.lexicalSearchTimeoutMs) || this.lexicalSearchTimeoutMs < 10 || this.lexicalSearchTimeoutMs > 10_000) {
+      throw new Error('gate_memory_lexical_timeout_invalid');
+    }
+  }
 
   private async trustedScope(job: KookIngressJob): Promise<(string | number)[]> {
     const trusted = await this.authority.resolveMemoryScope(job);
@@ -159,8 +173,22 @@ export class GateMemoryStore {
     )
     SELECT memory_key,content,revision,updated_at FROM candidates WHERE score>0
     ORDER BY score DESC,updated_at DESC,memory_key LIMIT $10`;
-    const result = await this.pool.query(sql, [...scope, search, grams, limit, job.eventId, job.leaseToken, ...patterns]);
-    return result.rows.map(project);
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('statement_timeout',$1,true)", [`${this.lexicalSearchTimeoutMs}ms`]);
+      const result = await client.query(sql, [...scope, search, grams, limit, job.eventId, job.leaseToken, ...patterns]);
+      await client.query('COMMIT');
+      return result.rows.map(project);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      if (error && typeof error === 'object' && 'code' in error && error.code === '57014') {
+        throw new Error('gate_memory_lexical_timeout');
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /** New key only; a conflicting revision/tombstone is never overwritten. */

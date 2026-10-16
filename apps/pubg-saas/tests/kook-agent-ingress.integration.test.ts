@@ -131,8 +131,9 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
 
     for (let index = 0; index < 14; index += 1) {
       await pool.query(`INSERT INTO kook_conversation_messages(
-        bot_account_id,channel_id,message_id,speaker_kind,speaker_id,content,created_at,expires_at
-      ) VALUES ($1,$2,$3,'human',$4,$5,now()-interval '13 hours'+($6::INTEGER*interval '1 minute'),now()-interval '12 hours')`, [
+        bot_account_id,channel_id,message_id,speaker_kind,speaker_id,content,created_at,expires_at,
+        context_scope_kind,context_binding_revision
+      ) VALUES ($1,$2,$3,'human',$4,$5,now()-interval '13 hours'+($6::INTEGER*interval '1 minute'),now()-interval '12 hours','group',0)`, [
         bot, channel, `old-history-${index}-${suffix}`, userA, `history-${index} ${'历史事实'.repeat(160)}`, index,
       ]);
     }
@@ -143,7 +144,7 @@ test('unbound human group messages reach Agent, produce outbox replies, preserve
     assert.ok(job);
     const window = await authorizer.loadAgentConversation(job);
     assert.equal(window.currentSpeakerLabel, '成员1');
-    assert.equal(window.currentQuoteContext, '引用内容来自助手：“你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？”');
+    assert.equal(window.currentQuoteContext, '引用目标消息 remote-bot-message-1，来自助手：“你好！今天想聊游戏，还是已经准备好今晚的开黑阵容？”');
     assert.match(window.turns.map(turn => turn.content).join('\n'), /成员2说：你好/u);
     assert.match(window.turns.map(turn => turn.content).join('\n'), /回复对象助手/u);
     assert.ok(window.turns.length > 12, 'retained channel history is not capped at twelve messages');

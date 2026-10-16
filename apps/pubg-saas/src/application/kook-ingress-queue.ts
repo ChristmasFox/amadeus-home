@@ -148,12 +148,16 @@ export class KookIngressQueue {
         if (Number(count.rows[0]?.total) >= this.maxPending) {
           throw new Error('kook_ingress_capacity_exceeded');
         }
+        if (parsed.request.kind === 'group') {
+          await client.query('INSERT INTO channel_binding_versions(bot_account_id,channel_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [this.botId, parsed.channelId]);
+        }
+        const version = parsed.request.kind === 'group'
+          ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId])
+          : null;
         const binding = parsed.request.kind === 'group' ? await client.query(`SELECT tenant.tenant_id,binding.team_id FROM tenants tenant JOIN channel_bindings binding
            ON binding.tenant_id=tenant.tenant_id AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
            WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3 FOR SHARE OF binding`, [this.botId, parsed.guildId, parsed.channelId]) : null;
         const tenantId = typeof binding?.rows[0]?.tenant_id === 'string' ? binding.rows[0].tenant_id : null;
-        const channelId = parsed.request.kind === 'group' ? parsed.channelId : null;
-        const version = parsed.request.kind === 'group' ? await client.query('SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2', [this.botId, parsed.channelId]) : null;
         await client.query(`INSERT INTO kook_ingress_events(bot_account_id,event_id,event_kind,user_id,guild_id,channel_id,
            tenant_id,team_id,target_kind,target_id,reply_to_message_id,fingerprint,event_json,expires_at,binding_revision)
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,now()+($14::BIGINT*interval '1 millisecond'),$15)`, [this.botId, parsed.eventId, parsed.request.kind, parsed.userId, parsed.guildId, parsed.channelId,
@@ -163,12 +167,17 @@ export class KookIngressQueue {
           const request = parsed.request.event;
           const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
           await client.query(`INSERT INTO kook_conversation_messages(
-              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
-           ) VALUES ($1,$2,$3,'human',$4,$3,$5,$6,'infinity'::timestamptz)
+              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at,
+              context_scope_kind,context_tenant_id,context_team_id,context_binding_revision
+           ) VALUES ($1,$2,$3,'human',$4,$3,$5,$6,'infinity'::timestamptz,$7,$8,$9,$10)
             ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
             this.botId, conversationChannelId, parsed.eventId, parsed.userId,
             parsed.request.kind === 'group' ? parsed.request.event.quotedMessageId : null,
             sanitizeKookMentionMarkup(request.content),
+            parsed.request.kind,
+            tenantId,
+            typeof binding?.rows[0]?.team_id === 'string' ? binding.rows[0].team_id : null,
+            parsed.request.kind === 'group' ? String(version?.rows[0]?.revision ?? 0) : null,
           ]);
         }
         return 'accepted';
@@ -268,6 +277,12 @@ export class KookIngressQueue {
         [this.botId, job.eventId, job.leaseToken, team.tenantId, team.teamId, String(binding.revision)],
       );
       if (!updated.rowCount) throw new Error('kook_ingress_binding_changed');
+      await client.query(
+        `UPDATE kook_conversation_messages
+         SET context_tenant_id=$4,context_team_id=$5,context_binding_revision=$6
+         WHERE bot_account_id=$1 AND channel_id=$2 AND message_id=$3 AND context_scope_kind='group'`,
+        [this.botId, event.channelId, job.eventId, team.tenantId, team.teamId, String(binding.revision)],
+      );
       job.boundTeam = { tenantId: team.tenantId, teamId: team.teamId };
       job.bindingRevision = String(binding.revision);
     });
@@ -315,11 +330,14 @@ export class KookIngressQueue {
           && (payloads[0]!.type === 'text' || payloads[0]!.type === 'kmarkdown')) {
           const conversationChannelId = parsed.channelId ?? `dm:${this.botId}:${parsed.userId}`;
           await client.query(`INSERT INTO kook_conversation_messages(
-              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at
-            ) VALUES ($1,$2,$3,'assistant',$4,$5,$6,$7,'infinity'::timestamptz)
+              bot_account_id,channel_id,message_id,speaker_kind,speaker_id,source_event_id,reply_to_message_id,content,expires_at,
+              context_scope_kind,context_tenant_id,context_team_id,context_binding_revision
+            ) VALUES ($1,$2,$3,'assistant',$4,$5,$6,$7,'infinity'::timestamptz,$8,$9,$10,$11)
             ON CONFLICT (bot_account_id,channel_id,message_id) DO NOTHING`, [
             this.botId, conversationChannelId, `assistant:${job.eventId}`, this.botId,
             job.eventId, parsed.replyToMessageId, conversationText,
+            parsed.request.kind, row.tenant_id, row.team_id,
+            parsed.request.kind === 'group' ? row.binding_revision : null,
           ]);
         }
       }

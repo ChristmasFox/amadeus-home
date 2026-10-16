@@ -53,6 +53,11 @@ test('missing trusted ingress authority blocks every memory read/write before SQ
   await assert.rejects(denied.forget(job, 'k'), /gate_memory_scope_unavailable/u);
 });
 
+test('lexical timeout policy rejects invalid values', () => {
+  assert.throws(() => new GateMemoryStore({} as Pool, { resolveMemoryScope: async () => null }, { lexicalSearchTimeoutMs: 0 }), /gate_memory_lexical_timeout_invalid/u);
+  assert.throws(() => new GateMemoryStore({} as Pool, { resolveMemoryScope: async () => null }, { lexicalSearchTimeoutMs: 10_001 }), /gate_memory_lexical_timeout_invalid/u);
+});
+
 test('real KOOK lease and scoped SQL guard isolate live DM and bound channel memories', { skip: !url }, async () => {
   const pool = new Pool({ connectionString: url, max: 5 });
   const id = randomUUID().replaceAll('-', '');
@@ -128,8 +133,24 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
       (bot_account_id,scope_kind,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
       SELECT $1,'channel',$2,$3,$4,$5::BIGINT,'noise_'||n,'普通闲聊',$6
       FROM generate_series(1,150) n`, [bot, channel, team.tenantId, team.teamId, active.bindingRevision, group.eventId]);
+    await pool.query(`INSERT INTO gate_memory_entries
+      (bot_account_id,scope_kind,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
+      SELECT $1,'channel','other-channel-'||n,'other-tenant-'||n,'other-team-'||n,1,'other_noise_'||n,'无关合成记录',$2
+      FROM generate_series(1,10000) n`, [bot, group.eventId]);
+
     const matches = await memory.searchLexical(group, '在哪个地图玩得最多');
     assert.equal(matches[0]?.key, 'map_preference');
+    await pool.query('ANALYZE gate_memory_entries');
+    const plan = await pool.query(`EXPLAIN
+      SELECT memory_key,content FROM gate_memory_entries
+      WHERE bot_account_id=$1 AND scope_kind='channel' AND actor_id=''
+        AND channel_id=$2 AND tenant_id=$3 AND team_id=$4 AND binding_revision=$5::BIGINT
+        AND revoked_at IS NULL
+        AND (lower(memory_key) LIKE $6 ESCAPE '#' OR lower(content) LIKE $6 ESCAPE '#')`,
+    [bot, channel, team.tenantId, team.teamId, active.bindingRevision, '%在哪个地图玩得最多%']);
+    const planText = plan.rows.map(row => String(row['QUERY PLAN'])).join('\n');
+    assert.match(planText, /idx_gate_memory_scope_recent/u);
+    console.log('GATE_MEMORY_LEXICAL_EXPLAIN=' + planText.replaceAll('\n', ' | '));
     assert.equal((await pool.query('SELECT 1 FROM public_query_sessions WHERE bot_account_id=$1', [bot])).rowCount, 0);
 
     denied = true;
