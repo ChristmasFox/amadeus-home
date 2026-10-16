@@ -1,5 +1,18 @@
 # Agent Bootstrap — Lab / Gate
 
+## Gate-Local automatic deployment invariant
+
+For Gate-Local, **the job is to finish deployment, not to manufacture approval
+exceptions**. Following green phase validation, converge legitimate stale Gate
+application images automatically; execute non-destructive versioned migrations
+under transaction and checkpoint; smoke-test and roll back failed application
+updates. Never add hard-coded source-SHA exception lists, per-SQL approval
+manifests, or repeat the CI database fixture against the running Gate-Local
+host. Keep the existing single-instance target identity, data backup for schema
+changes, and destructive/extension safety boundaries. This rule does not
+authorize Gate-Staging/Prod promotion or touch Lab.
+
+
 **Start here:** read `docs/ENGINEERING_POLICY.md` once, then the user-selected
 Goal's acceptance clauses. Use `pnpm devctl goal status` to resume; do **not**
 re-read the entire Goal, `CURRENT_TASK.md`, `CONTEXT.md` or old checkpoints

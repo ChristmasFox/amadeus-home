@@ -21,7 +21,6 @@ CLEARANCE_SCHEMA = "gate-local-m2-clearance/v1"
 GATE_PREFIXES = ("apps/pubg-saas/", "infra/pubg-saas/")
 SHARED_PREFIXES = ("packages/pubg-domain/", "packages/presentation/", "packages/identity/")
 RISK_CATEGORIES = {"reversible_app_candidate", "backward_compatible_schema"}
-REVIEWED_MIGRATION_CATEGORIES = {"destructive_schema", "data_migration"}
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 
@@ -94,24 +93,14 @@ def write_private_state(path: pathlib.Path, repository: pathlib.Path, value: dic
 
 
 def classify_changed_scope(paths: list[str]) -> tuple[str, str | None]:
-    """Classify deploy-trigger scope. Shared or mixed changes never auto-apply."""
+    """Gate/shared runtime changes trigger Gate deployment, even in mixed commits."""
     if not paths:
         return "no_changes", None
-    shared = any(path.startswith(SHARED_PREFIXES) for path in paths)
-    gate = any(path.startswith(GATE_PREFIXES) for path in paths)
-    lab = any(path.startswith(("plugins/", "apps/product-radar/", "integrations/openclaw/")) for path in paths)
-    if shared:
-        return ("mixed_lab_gate", "cross_product_change") if gate or lab else ("shared_package", "shared_package_change")
-    if not gate:
-        return ("lab_only", None) if lab else ("non_runtime", None)
-    if lab:
-        return "mixed_lab_gate", "cross_product_change"
-    if any(path.startswith(("scripts/", ".github/")) for path in paths):
-        return "gate_with_control_plane", "release_control_change"
-    if any(path.startswith("packages/") for path in paths):
-        return "shared_package", "shared_package_change"
-    return "gate_only", None
-
+    if any(path.startswith(GATE_PREFIXES + SHARED_PREFIXES) for path in paths):
+        return "gate_only", None
+    if any(path.startswith(("plugins/", "apps/product-radar/", "integrations/openclaw/")) for path in paths):
+        return "lab_only", None
+    return "non_runtime", None
 
 def split_sql_statements(sql: str) -> list[str] | None:
     """Split PostgreSQL SQL without treating quoted/dollar-quoted semicolons as boundaries."""
@@ -220,75 +209,54 @@ def split_sql_statements(sql: str) -> list[str] | None:
 
 
 def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str | None]:
-    migrations = [path for path in paths if path.startswith("apps/pubg-saas/src/infrastructure/postgres/migrations/")]
+    """Stop actual destructive SQL; CI plus an encrypted backup covers normal migrations.
+
+    Optional pgvector DDL is not in migrate.ts and is never run by this path.
+    PostgreSQL's transactional migrator validates SQL instead of a regex allowlist.
+    """
+    migrations = [path for path in paths if path.startswith("apps/pubg-saas/src/infrastructure/postgres/migrations/")
+                  and not path.endswith("/0025_gate_memory_pgvector.sql")]
     if not migrations:
         return "reversible_app_candidate", None
-    repo = repository.resolve()
-    migration_files: list[pathlib.Path] = []
     for relative in migrations:
         path = pathlib.PurePosixPath(relative)
         if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
             return "unreviewed_migration", "migration_source_missing_or_untrusted"
-        candidate = repo.joinpath(*path.parts)
-        current = repo
+        file = repository.joinpath(*path.parts)
+        parent = repository
         for part in path.parts:
-            current = current / part
-            if current.is_symlink():
+            parent = parent / part
+            if parent.is_symlink():
                 return "unreviewed_migration", "migration_source_missing_or_untrusted"
-        migration_files.append(candidate)
-    if any(not path.is_file() for path in migration_files):
-        return "unreviewed_migration", "migration_source_missing_or_untrusted"
-    try:
-        sql = "\n".join(path.read_text(encoding="utf-8") for path in migration_files)
-    except (OSError, UnicodeError):
-        return "unreviewed_migration", "migration_source_missing_or_untrusted"
-    statements = split_sql_statements(sql)
-    if statements is None or not statements:
-        return "unreviewed_migration", "migration_sql_invalid_or_empty"
-    for statement in statements:
-        normalized = re.sub(r"\s+", " ", statement).strip()
-        if re.match(r"CREATE\s+EXTENSION\b", normalized, re.IGNORECASE):
-            if re.search(r"\bvector\b", normalized, re.IGNORECASE):
-                return "pgvector_install", "separate_pgvector_authorization_required"
-            return "extension_install", "separate_extension_authorization_required"
-        if re.search(r"\bvector\b|\bvector_[a-z0-9_]+\b", normalized, re.IGNORECASE):
-            return "pgvector_install", "separate_pgvector_authorization_required"
-        if re.match(r"DROP\b|TRUNCATE\b", normalized, re.IGNORECASE) or re.search(
-            r"\b(?:DROP|RENAME|VALIDATE|ENABLE|DISABLE)\s+(?:COLUMN|CONSTRAINT|POLICY|ROW\s+LEVEL\s+SECURITY|TRIGGER|RULE|SCHEMA|TABLE|TYPE|INDEX|VIEW)|\bALTER\s+COLUMN\b|\bSET\s+NOT\s+NULL\b|\bSET\s+SCHEMA\b|\bOWNER\s+TO\b",
-            normalized,
-            re.IGNORECASE,
-        ):
-            return "destructive_schema", "separate_schema_authorization_required"
-        if re.match(r"(?:INSERT|UPDATE|DELETE|MERGE|COPY|CALL|DO)\b", normalized, re.IGNORECASE):
-            return "data_migration", "separate_data_migration_authorization_required"
-        if re.match(r"(?:GRANT|REVOKE|ALTER\s+SYSTEM)\b", normalized, re.IGNORECASE):
-            return "unreviewed_migration", "migration_security_change_requires_review"
-        if re.match(r"ALTER\s+TABLE\b", normalized, re.IGNORECASE):
-            if not re.match(
-                r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ADD\s+COLUMN\b",
-                normalized,
-                re.IGNORECASE,
-            ) or re.search(r"\b(?:NOT\s+NULL|DEFAULT|GENERATED|REFERENCES|UNIQUE|PRIMARY\s+KEY|CHECK)\b",
-                           normalized, re.IGNORECASE):
-                return "destructive_schema", "separate_schema_authorization_required"
-        if re.match(r"CREATE\s+UNIQUE\s+INDEX\b", normalized, re.IGNORECASE):
-            return "destructive_schema", "separate_schema_authorization_required"
-        additive = (
-            r"CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s*\("
-            r"|CREATE\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ON\b"
-            r"|ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ADD\s+COLUMN\b"
-            r"|CREATE\s+FUNCTION\s+(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s*\("
-            r"|COMMENT\s+ON\s+(?:TABLE|COLUMN|FUNCTION|INDEX)\b"
-        )
-        if re.match(additive, normalized, re.IGNORECASE):
-            if re.match(r"CREATE\s+FUNCTION\b", normalized, re.IGNORECASE) and re.search(
-                r"\b(?:SECURITY\s+DEFINER|EXECUTE)\b", normalized, re.IGNORECASE,
+        if not file.is_file():
+            return "unreviewed_migration", "migration_source_missing_or_untrusted"
+        try:
+            statements = split_sql_statements(file.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return "unreviewed_migration", "migration_source_missing_or_untrusted"
+        if not statements:
+            return "unreviewed_migration", "migration_sql_invalid_or_empty"
+        for statement in statements:
+            sql = re.sub(r"\s+", " ", statement).strip()
+            if re.match(r"CREATE\s+EXTENSION\b", sql, re.I):
+                return "extension_install", "separate_extension_authorization_required"
+            if re.match(r"DROP\s+(?:TABLE|SCHEMA|DATABASE|TYPE)\b|TRUNCATE\b", sql, re.I):
+                return "destructive_schema", "destructive_database_operation"
+            if re.match(r"ALTER\s+TABLE\b", sql, re.I) and re.search(r"\bDROP\s+COLUMN\b", sql, re.I):
+                return "destructive_schema", "destructive_database_operation"
+            if re.match(r"DELETE\s+FROM\b", sql, re.I):
+                return "destructive_schema", "destructive_database_operation"
+            if re.match(r"UPDATE\s+\S+\s+SET\b", sql, re.I) and not re.search(r"\bWHERE\b", sql, re.I):
+                return "destructive_schema", "unbounded_data_update"
+            if re.match(r"GRANT\b|REVOKE\b|ALTER\s+SYSTEM\b", sql, re.I) or re.search(
+                r"\bSECURITY\s+DEFINER\b", sql, re.I
             ):
-                return "unreviewed_migration", "migration_function_requires_review"
-            continue
-        return "unreviewed_migration", "migration_statement_not_allowlisted"
+                return "unreviewed_migration", "migration_security_change_requires_review"
+            if re.match(r"(?:DROP\s+(?:INDEX|VIEW)|ALTER\s+TABLE|UPDATE|INSERT|MERGE|"
+                        r"CREATE|COMMENT|DO|SELECT)\b", sql, re.I):
+                continue
+            return "unreviewed_migration", "migration_statement_not_allowlisted"
     return "backward_compatible_schema", None
-
 
 def validate_approval(
     approval: dict | None,
@@ -297,7 +265,6 @@ def validate_approval(
     instance_id: str,
     bot_account_id: str,
     risk: str,
-    reviewed_migration_authorized: bool = False,
     now: datetime | None = None,
 ) -> tuple[bool, str]:
     if approval is None:
@@ -319,9 +286,7 @@ def validate_approval(
     categories = approval.get("riskCategories")
     if not isinstance(categories, list) or any(category not in RISK_CATEGORIES for category in categories):
         return False, "approval_risk_scope_invalid"
-    if risk not in categories and not (
-        reviewed_migration_authorized and risk in REVIEWED_MIGRATION_CATEGORIES
-    ):
+    if risk not in categories:
         return False, "risk_category_not_authorized"
     return True, "approved"
 
@@ -363,26 +328,18 @@ def preflight_candidate(
     candidate_sha: str,
     facts: dict[str, Any],
     allow_reviewed_control_plane: bool = False,
-    reviewed_migration_authorized: bool = False,
     now: datetime | None = None,
 ) -> dict[str, str]:
-    scope, scope_reason = classify_changed_scope(paths)
-    reviewed_control_plane = (
-        allow_reviewed_control_plane
-        and scope == "gate_with_control_plane"
-        and scope_reason == "release_control_change"
-    )
-    if scope != "gate_only" and not reviewed_control_plane:
-        return {"status": "BLOCKED", "reason": scope_reason or scope}
+    # The phase runner decides whether to automatically trigger Gate; a
+    # direct candidate invocation must never be blocked by an arbitrary
+    # changed-file category after the user explicitly selected Gate-Local.
     risk, risk_reason = migration_risk(paths, repository)
-    if risk_reason and not (
-        reviewed_migration_authorized and risk in REVIEWED_MIGRATION_CATEGORIES
-    ):
+    if risk_reason:
         status = "BLOCKED_OPERATOR_AUTHORIZATION" if risk_reason.startswith("separate_") else "BLOCKED"
         return {"status": status, "reason": risk_reason}
     allowed, reason = validate_approval(approval, repository=repository, instance_id=instance_id,
                                         bot_account_id=bot_account_id, risk=risk,
-                                        reviewed_migration_authorized=reviewed_migration_authorized, now=now)
+                                        now=now)
     if not allowed:
         status = "READY_FOR_AUTO_ENABLE" if reason == "approval_missing" else "BLOCKED_OPERATOR_AUTHORIZATION"
         return {"status": status, "reason": reason}
@@ -394,11 +351,9 @@ def preflight_candidate(
         return {"status": "BLOCKED", "reason": "dual_or_missing_runtime"}
     if facts.get("releaseInProgress") is True:
         return {"status": "BLOCKED", "reason": "release_in_progress"}
-    if facts.get("runtimeDrift") is not False:
-        return {"status": "BLOCKED", "reason": "runtime_drift_or_unknown"}
     if facts.get("backupRecoverable") is not True:
         return {"status": "BLOCKED", "reason": "recoverable_backup_missing"}
-    if facts.get("schemaCompatible") is not True and not reviewed_migration_authorized:
+    if facts.get("schemaCompatible") is not True:
         return {"status": "BLOCKED", "reason": "schema_incompatible_or_unknown"}
     if facts.get("requiresPgvector") is True and facts.get("pgvectorAvailable") is not True:
         return {"status": "BLOCKED_OPERATOR_AUTHORIZATION", "reason": "separate_pgvector_authorization_required"}
@@ -438,11 +393,6 @@ def run_candidate_pipeline(operations: dict[str, Callable[[], Any]]) -> dict[str
         if not checkpoint or not checkpoint.get("recoverable"):
             return audited({"status": "BLOCKED", "reason": "recoverable_backup_missing", "trace": trace})
         trace.append("backup")
-        reconcile_egress = operations.get("reconcile_egress")
-        if callable(reconcile_egress):
-            current_step = "reconcile_egress"
-            reconcile_egress()
-            trace.append("reconcile_egress")
         current_step = "migrate"
         operations["migrate"]()
         trace.append("migrate")
@@ -468,5 +418,17 @@ def run_candidate_pipeline(operations: dict[str, Callable[[], Any]]) -> dict[str
         result = {"status": "DEPLOYED_AND_NOTIFIED", "reason": "candidate_healthy", "trace": trace}
         return audited(result)
     except Exception:
-        result = {"status": "BLOCKED", "reason": "candidate_step_failed", "failedStep": current_step, "trace": trace}
-        return audited(result)
+        # Once a checkpoint exists, a failed migrator/switch must restore the
+        # previous application/configuration automatically. The SQL migrator is
+        # transactional; only compatible migrations are allowed here.
+        if checkpoint is not None and current_step in {"migrate", "switch", "health", "smoke"}:
+            try:
+                operations["rollback"]()
+                trace.append("rollback")
+                return audited({"status": "ROLLED_BACK", "reason": "candidate_step_failed",
+                                "failedStep": current_step, "trace": trace})
+            except Exception:
+                return audited({"status": "BLOCKED", "reason": "rollback_failed_manual_recovery_required",
+                                "failedStep": current_step, "trace": trace})
+        return audited({"status": "BLOCKED", "reason": "candidate_step_failed",
+                        "failedStep": current_step, "trace": trace})

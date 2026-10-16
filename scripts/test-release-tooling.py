@@ -363,18 +363,14 @@ assert "Lab build selection" in lab_help and "--memory-acceptance" in lab_help
 assert "--environment" not in lab_help and "Gate" not in lab_help
 assert "gate-local|gate-staging|gate-prod" in gate_help
 assert "M2 may remain paused" in gate_help and "does not clear or resume M2" in gate_help
-assert "formal release" in gate_help and "reviewed" in gate_help
-assert "--allow-reviewed-control-plane" in gate_help
+assert "formal release" in gate_help
+assert "converges stale application images" in gate_help or "reconciles" in gate_help or "applies tested compatible" in gate_help
+assert "--allow-reviewed-control-plane" not in gate_help
+assert "--reviewed-migration-authorization" not in gate_help
 assert "PUBG_SAAS_TEST_DATABASE_URL" in gate_help
 assert "database named `test`/`testing`" in gate_help
 assert all(option not in gate_help for option in ("--build-auto", "--lineage-bridge", "--live", "--memory-acceptance"))
-reviewed_control_plane_plan = invoke("bash", str(ROOT / "scripts/release-gate.sh"), "plan",
-                                     "--allow-reviewed-control-plane")
-assert reviewed_control_plane_plan.returncode != 0
-assert "limited to an applied Gate-Local candidate" in reviewed_control_plane_plan.stderr
 release_cli = (ROOT / "scripts/release-cli.sh").read_text(encoding="utf-8")
-assert 'manifest_services="$(python3 - "$MANIFEST"' in release_cli
-assert 'snapshot_args+=(--service "$service")' in release_cli
 assert "--promote-live-candidate" in release_cli and "LIVE_CANDIDATE_MATCH=passed" in release_cli
 
 with tempfile.TemporaryDirectory(prefix="release-cli-dry-run-") as temporary:

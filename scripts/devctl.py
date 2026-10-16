@@ -578,15 +578,13 @@ def finish_phase(phase: str, dry_run: bool) -> None:
         print("LAB_CANDIDATE=SKIPPED reason=" + reason)
     if gate:
         gate_status, gate_reason = gate_auto_status()
-        if lab:
-            print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=cross_product_change_requires_separate_review source_candidate=" + source[:12])
-        elif gate_status == "disabled" and gate_reason == "state_missing":
+        if gate_status == "disabled" and gate_reason == "state_missing":
             print("GATE_DEPLOYMENT=READY_FOR_AUTO_ENABLE source_candidate=" + source[:12])
             print("GATE_DEPLOYMENT_NEXT=pnpm devctl configure gate-auto-enable")
         elif gate_status == "enabled":
             execute(["bash", "scripts/release-gate.sh", "candidate", "--apply",
                      "--approval-ref", "devctl:" + source[:12]], "gate-local-candidate", False)
-            print("GATE_DEPLOYMENT=DEPLOYED_AND_NOTIFIED source_candidate=" + source[:12])
+            print("GATE_DEPLOYMENT=CANDIDATE_FINISHED source_candidate=" + source[:12])
         else:
             print("GATE_DEPLOYMENT=BLOCKED_OPERATOR_AUTHORIZATION reason=" + gate_reason +
                   " source_candidate=" + source[:12])

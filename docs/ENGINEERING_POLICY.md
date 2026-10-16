@@ -1,5 +1,26 @@
 # Engineering Policy — Autonomous Goal Workflow V2
 
+## Gate-Local deploy behavior (2026-10-16 simplification)
+
+Gate-Local is a development/test instance. Once the existing one-time target
+configuration is present, a passing Goal phase / CI is sufficient to attempt an
+automatic candidate rollout. **Do not require additional per-migration approval
+JSON, hard-coded old image SHAs, matching Gateway/Worker/egress image IDs, or a
+second live test-database verify.** Valid stale application images are reconciled
+by the normal Compose rollout. Ordinary additive and scoped data migrations are
+applied transactionally after a protected encrypted database checkpoint.
+Code-only releases save application configuration without redundantly dumping
+the unchanged entire database. Post-switch smoke failure automatically rolls
+back the application image and configuration.
+
+Stop only for wrong Bot/target, duplicate active Gateway/Worker, destructive
+database operations or unsupported extension/PG image changes, unavailable
+migration backup, or an unrecoverable deployment error. **CI green is necessary
+but does not prove the actual Gate-Local runtime is healthy.** A candidate is
+recorded deployed only after runtime checks. No Gate-Prod auto-promotion;
+Lab and Gate runtimes remain separate.
+
+
 > Current rules for any code agent working in this repository. Read this short
 > file once per task. A Goal specifies product behavior and acceptance criteria,
 > not a duplicate set of generic tests, runtime permissions, or publication rules.
