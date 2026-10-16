@@ -2,6 +2,8 @@ import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import type { GateMemoryEmbeddingContract } from './gate-memory-embedding.js';
 import { KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
+const REINDEX_STATEMENT_TIMEOUT = '3000ms';
+
 export interface GateMemoryIndexGenerationState extends QueryResultRow {
   bot_account_id: string;
   active_provider_id: string;
@@ -111,6 +113,7 @@ export class GateMemoryIndexGenerationManager {
   async scanNextPage(botAccountId: string, limit = 50): Promise<GateMemoryIndexScanResult> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('gate_memory_index_scan_limit_invalid');
     return transaction(this.pool, async client => {
+      await client.query("SELECT set_config('statement_timeout',$1,true)", [REINDEX_STATEMENT_TIMEOUT]);
       const stateResult = await client.query<GateMemoryIndexGenerationState>(
         'SELECT * FROM gate_memory_index_generation_state WHERE bot_account_id=$1 FOR UPDATE', [botAccountId],
       );
@@ -178,6 +181,7 @@ export class GateMemoryIndexGenerationManager {
   async resume(botAccountId: string): Promise<number> {
     await this.requireVectorSchema(this.pool);
     return transaction(this.pool, async client => {
+      await client.query("SELECT set_config('statement_timeout',$1,true)", [REINDEX_STATEMENT_TIMEOUT]);
       const result = await client.query<GateMemoryIndexGenerationState>(
         `UPDATE gate_memory_index_generation_state SET reindex_status='building',last_error_code=NULL,updated_at=now()
          WHERE bot_account_id=$1 AND reindex_status IN ('paused','failed') AND building_index_version IS NOT NULL
@@ -245,6 +249,7 @@ export class GateMemoryIndexGenerationManager {
   async activate(botAccountId: string): Promise<void> {
     await this.requireVectorSchema(this.pool);
     await transaction(this.pool, async client => {
+      await client.query("SELECT set_config('statement_timeout',$1,true)", [REINDEX_STATEMENT_TIMEOUT]);
       const stateResult = await client.query<GateMemoryIndexGenerationState>(
         'SELECT * FROM gate_memory_index_generation_state WHERE bot_account_id=$1 FOR UPDATE', [botAccountId],
       );

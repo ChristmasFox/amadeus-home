@@ -1,0 +1,24 @@
+{
+  "datasetVersion": 1,
+  "fixture": "synthetic-no-user-data",
+  "entries": [
+    { "actorId": "actor-a", "key": "favorite_map", "content": "我现在常在艾伦格地图的森林落地", "revision": 3, "updatedAt": "2026-09-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "favorite_map", "content": "以前常选米拉玛", "revision": 1, "updatedAt": "2024-01-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "main_weapon", "content": "我经常使用 M416", "revision": 1, "updatedAt": "2026-08-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "a_profile", "content": "A 位使用 800 DPI", "revision": 1, "updatedAt": "2026-07-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "emoji_style", "content": "我喜欢 🎮‍👾 主题的配色", "revision": 1, "updatedAt": "2026-06-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "old_match_note", "content": "2023 年和阿晴一起开黑", "revision": 1, "updatedAt": "2023-05-01T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-a", "key": "sensitivity", "content": "镜头灵敏度 42", "revision": 1, "updatedAt": "2026-09-20T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null },
+    { "actorId": "actor-b", "key": "guild_member_note", "content": "只属于另一位用户的频道信息", "revision": 1, "updatedAt": "2026-09-20T00:00:00.000Z", "sourceKind": "user_confirmed", "sourceReliability": 95, "validUntil": null }
+  ],
+  "cases": [
+    { "id": "han-paraphrase", "actorId": "actor-a", "query": "我一般从哪个地方落地？", "semantic": [{ "key": "favorite_map", "revision": 3, "similarity": 0.94 }, { "key": "sensitivity", "revision": 1, "similarity": 0.79 }], "expected": ["favorite_map"] },
+    { "id": "single-han-lexical-fallback", "actorId": "actor-a", "query": "图", "lexical": [{ "key": "favorite_map", "revision": 3 }], "semanticReason": "semantic_timeout", "expected": ["favorite_map"] },
+    { "id": "mixed-chinese-english", "actorId": "actor-a", "query": "我平时主要用哪把 M416？", "semantic": [{ "key": "main_weapon", "revision": 1, "similarity": 0.91 }], "expected": ["main_weapon"] },
+    { "id": "older-relevant-fact", "actorId": "actor-a", "query": "去年和谁一起开黑来着？", "semantic": [{ "key": "old_match_note", "revision": 1, "similarity": 0.93 }], "expected": ["old_match_note"] },
+    { "id": "single-latin-letter", "actorId": "actor-a", "query": "A 位设置是什么？", "lexical": [{ "key": "a_profile", "revision": 1 }], "expected": ["a_profile"] },
+    { "id": "emoji-zwj", "actorId": "actor-a", "query": "我的 🎮‍👾 风格是什么？", "semantic": [{ "key": "emoji_style", "revision": 1, "similarity": 0.89 }], "expected": ["emoji_style"] },
+    { "id": "old-new-conflict", "actorId": "actor-a", "query": "我现在更喜欢哪张图？", "exact": [{ "key": "favorite_map", "revision": 1 }], "semantic": [{ "key": "favorite_map", "revision": 1, "similarity": 0.94 }, { "key": "favorite_map", "revision": 3, "similarity": 0.91 }], "expected": ["favorite_map"], "expectedRevision": 3 },
+    { "id": "cross-actor-contamination", "actorId": "actor-a", "query": "另一位队员的频道信息是什么？", "semantic": [{ "key": "guild_member_note", "revision": 1, "similarity": 0.99, "foreignActorId": "actor-b" }], "expected": [] }
+  ]
+}

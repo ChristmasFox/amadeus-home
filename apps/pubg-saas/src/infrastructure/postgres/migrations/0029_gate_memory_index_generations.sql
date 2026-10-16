@@ -34,6 +34,9 @@ CREATE TABLE gate_memory_index_generation_state (
   CHECK ((reindex_status='idle') = (building_index_version IS NULL))
 );
 
+CREATE INDEX idx_gate_memory_index_rebuild_scan
+  ON gate_memory_entries(bot_account_id,memory_id) WHERE revoked_at IS NULL;
+
 -- Mutations enqueue the active index and any in-progress shadow index. If the
 -- per-bot state has not yet been bootstrapped, the legacy generation is v1.
 CREATE FUNCTION gate_memory_index_job_versions(target_bot_account_id TEXT)

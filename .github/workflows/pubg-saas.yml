@@ -165,7 +165,11 @@ jobs:
       - name: Run isolated optional pgvector fixture
         env:
           PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
-        run: pnpm --filter @agent/pubg-saas exec tsx --test tests/gate-memory-pgvector.test.ts
+        run: |
+          test "$RUN_PGVECTOR_TESTS" = "1"
+          test -n "$PUBG_SAAS_PGVECTOR_TEST_DATABASE_URL"
+          test -n "$PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID"
+          pnpm --filter @agent/pubg-saas exec tsx --test tests/gate-memory-pgvector.test.ts
 
   compose-and-multiarch-image:
     runs-on: ubuntu-latest
