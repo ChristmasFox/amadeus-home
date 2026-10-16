@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { KookIngressJob } from './kook-ingress-queue.js';
+import { KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
 export type GateMemoryScope =
   | { kind: 'dm'; botAccountId: string; actorId: string }
@@ -23,35 +24,47 @@ const MAX_RESULTS = 24;
 const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
 
-function boundedText(value: string, max: number): string {
+function boundedText(value: string, max: number, emojiSequence = false): string {
   if (typeof value !== 'string') throw new Error('gate_memory_input_invalid');
   const text = value.normalize('NFC').trim();
-  if (!text || text.length > max || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(text))
+  if (!text || text.length > max || /[\p{Cc}\p{Cs}]/u.test(text))
     throw new Error('gate_memory_input_invalid');
+  for (let i = 0; i < text.length; i += 1) {
+    if (!/\p{Cf}/u.test(text[i]!)) continue;
+    // ZWJ is legitimate between emoji pictographs, not in keys or words.
+    if (!emojiSequence || text[i] !== '\u200d'
+      || !/\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\uFE0F)?$/u.test(text.slice(0, i))
+      || !/^\p{Extended_Pictographic}/u.test(text.slice(i + 1)))
+      throw new Error('gate_memory_input_invalid');
+  }
   return text;
 }
 
 export function validateGateMemoryDraft(input: GateMemoryDraft): GateMemoryDraft {
   return { key: boundedText(input.key, 96).toLocaleLowerCase('en-US'),
-    content: boundedText(input.content, 800) };
+    content: boundedText(input.content, 800, true) };
 }
 
 /** A bounded lexical fallback, not an embedding or a semantic model. */
 export function memorySearchTokens(query: string): string[] {
-  const normalized = boundedText(query, 240).toLocaleLowerCase('en-US');
+  const normalized = boundedText(query, 240, true).toLocaleLowerCase('en-US');
   const tokens: string[] = [];
-  for (const match of normalized.matchAll(/[\p{Script=Han}]+|[\p{L}\p{N}]+/gu)) {
-    const run = match[0]!;
-    if (/^\p{Script=Han}+$/u.test(run)) {
-      for (let index = 0; index < run.length - 1; index += 1) tokens.push(run.slice(index, index + 2));
-    } else if (run.length > 1) tokens.push(run);
+  // Split a mixed Latin/Han run by script; Han characters are also \p{L}.
+  for (const match of normalized.matchAll(/[\p{L}\p{N}]+/gu)) {
+    for (const chunk of match[0]!.match(/\p{Script=Han}+|[^\p{Script=Han}]+/gu) ?? []) {
+      if (/^\p{Script=Han}+$/u.test(chunk)) {
+        const chars = Array.from(chunk);
+        for (let index = 0; index + 1 < chars.length; index += 1)
+          tokens.push(chars[index]! + chars[index + 1]!);
+      } else if (chunk.length > 1) tokens.push(chunk);
+    }
   }
   return [...new Set(tokens)].slice(0, 240);
 }
 
 export function rankGateMemories(entries: GateMemoryEntry[], query: string, limit = 8): GateMemoryEntry[] {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-  const search = boundedText(query, 240).toLocaleLowerCase('en-US');
+  const search = boundedText(query, 240, true).toLocaleLowerCase('en-US');
   const words = memorySearchTokens(search);
   return entries.map((item, index) => {
     const haystack = (item.key + ' ' + item.content).toLocaleLowerCase('en-US');
@@ -76,9 +89,7 @@ function project(row: Record<string, unknown>): GateMemoryEntry {
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at) };
 }
 
-/** The live ingress and current binding are checked in the *same SQL statement*
- * as each memory operation, closing the gap after external membership checks.
- * No session creation, advisory locks, lease extension, or FOR UPDATE. */
+/** The statement-level live check denies stale scopes after a channel rebind. */
 function liveFence(eventIndex: number, tokenIndex: number): string {
   const eventSlot = '$' + eventIndex;
   const tokenSlot = '$' + tokenIndex;
@@ -93,12 +104,10 @@ function liveFence(eventIndex: number, tokenIndex: number): string {
           AND ingress.channel_id=$4 AND ingress.tenant_id=$5 AND ingress.team_id=$6
           AND ingress.binding_revision=$7::BIGINT
           AND EXISTS (
-            SELECT 1 FROM channel_bindings binding
-            JOIN tenants tenant ON tenant.tenant_id=binding.tenant_id
-              AND tenant.platform=binding.platform AND tenant.bot_account_id=binding.bot_account_id
-            JOIN channel_binding_versions version ON version.bot_account_id=binding.bot_account_id
-              AND version.channel_id=binding.channel_id
-            WHERE binding.bot_account_id=$1 AND binding.channel_id=$4
+            SELECT 1 FROM tenants tenant
+            ${KOOK_CHANNEL_BINDING_JOIN}
+            ${KOOK_CHANNEL_VERSION_JOIN}
+            WHERE tenant.bot_account_id=$1 AND binding.channel_id=$4
               AND binding.tenant_id=$5 AND binding.team_id=$6
               AND tenant.platform='kook' AND tenant.guild_id=ingress.guild_id
               AND version.revision=$7::BIGINT
@@ -129,12 +138,15 @@ export class GateMemoryStore {
 
   async searchLexical(job: KookIngressJob, query: string, limit = 8): Promise<GateMemoryEntry[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-    const search = boundedText(query, 240).toLocaleLowerCase('en-US');
+    const search = boundedText(query, 240, true).toLocaleLowerCase('en-US');
     const grams = memorySearchTokens(search);
-    if (!grams.length) return [];
     const scope = await this.trustedScope(job);
-    // Rank every row in this *one* trusted scope, then return a bounded result.
-    // There is no 128-most-recent window that can hide older relevant entries.
+    // Filter candidates before expensive scoring; never discard old matches by age.
+    const terms = [...new Set([search, ...grams])].slice(0, 32);
+    const patterns = terms.map(term => '%' + term.replace(/[#%_]/gu, char => '#' + char) + '%');
+    const candidates = terms.map((_, i) =>
+      "(lower(memory_key) LIKE $" + (13 + i) + " ESCAPE '#' OR lower(content) LIKE $" + (13 + i) + " ESCAPE '#')"
+    ).join(' OR ');
     const sql = `WITH candidates AS (
       SELECT memory_key,content,revision,updated_at,
         CASE WHEN position($8 in lower(memory_key))>0 OR position($8 in lower(content))>0
@@ -143,11 +155,11 @@ export class GateMemoryStore {
             WHERE position(gram.token in lower(memory_key))>0
                OR position(gram.token in lower(content))>0
           ) END AS score
-      FROM gate_memory_entries WHERE ` + FILTER + ` AND revoked_at IS NULL` + liveFence(11, 12) + `
+      FROM gate_memory_entries WHERE ` + FILTER + ' AND revoked_at IS NULL AND (' + candidates + ')' + liveFence(11, 12) + `
     )
     SELECT memory_key,content,revision,updated_at FROM candidates WHERE score>0
     ORDER BY score DESC,updated_at DESC,memory_key LIMIT $10`;
-    const result = await this.pool.query(sql, [...scope, search, grams, limit, job.eventId, job.leaseToken]);
+    const result = await this.pool.query(sql, [...scope, search, grams, limit, job.eventId, job.leaseToken, ...patterns]);
     return result.rows.map(project);
   }
 
@@ -182,9 +194,7 @@ export class GateMemoryStore {
   }
 
 
-  /** Explicit re-remembering requires a *newly admitted* message after the
-   * tombstone, plus CAS revision. A pre-revocation lease cannot revive it.
-   * Not exposed as an unrestricted model-facing tool. */
+  /** Only an event received after revocation can restore a tombstone. */
   async rememberAgain(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);

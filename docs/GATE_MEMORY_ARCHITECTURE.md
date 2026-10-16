@@ -119,3 +119,31 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
 Next: bounded prompt assembly and hybrid semantic recall with **Gate-owned**
 Embedding credentials, private scoped indexes and consent-aware consolidation.
 No runtime migration or Gate-Local deployment is implied by a source merge.
+
+## Follow-up lexical audit — 2026-10-16
+
+- The lexical search no longer short-circuits when the query has no
+  bigrams: a single Han character, single Latin letter or emoji can match
+  the complete original string. An empty/invalid query is still rejected.
+- Mixed Han/Latin runs are split by script before generating Han bigrams.
+  Prefix/wildcard characters are escaped before being bound to PostgreSQL
+  LIKE predicates; there is no SQL string interpolation of user input.
+- User-facing memory content may include a ZWJ **only inside an actual emoji
+  sequence**. Keys and unsafe control/format characters remain rejected.
+  U+FE0F variation selectors were already allowed (they are not `Cf`).
+- SQL prefilters by actual lexical overlap **before scoring** and still ranks
+  across the full authorized scope; it does not reintroduce a newest-N cap.
+  This reduces unnecessary scoring but **does not guarantee indexed,
+  sublinear text search**: short CJK LIKE predicates may still scan all
+  memories inside a scope. Before scaling Gate beyond small-team use, add
+  an explicitly reviewed pg_trgm/other suitable index, verify actual
+  migrator CREATE EXTENSION privileges, inspect EXPLAIN plans, load-test
+  large scopes and set a tested query-time budget. Avoid silently dropping
+  older memory to satisfy a latency limit.
+- KOOK binding JOIN predicates now live in a shared helper used by
+  PUBG authorization and memory checks. Membership still comes from the
+  fresh KOOK API and memory operations retain their statement-level fence.
+- `rememberAgain` is retained as a tested *explicit restore primitive*,
+  not wired to any Agent tool or autonomous learning. Removing it now
+  would reintroduce the previously reviewed inability to intentionally
+  restore a tombstone; actual user-facing consent is a later milestone.

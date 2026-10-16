@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { GateMemoryStore, rankGateMemories, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
+import { GateMemoryStore, rankGateMemories, memorySearchTokens, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
 import type { GateMemoryScope, GateMemoryScopeResolver } from '../src/index.js';
 import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 
@@ -33,6 +33,15 @@ test('Chinese bigrams recover related surface forms without claiming semantics',
   assert.deepEqual(rankGateMemories(facts, '平时踢什么球').map(e => e.key), []);
   assert.throws(() => validateGateMemoryDraft({ key: 'hidden', content: 'a\u200bb' }), /gate_memory_input_invalid/u);
   assert.throws(() => validateGateMemoryDraft({ key: 'rtl\u202e', content: 'ok' }), /gate_memory_input_invalid/u);
+  assert.deepEqual(memorySearchTokens('abc中文'), ['abc', '中文']);
+  assert.deepEqual(memorySearchTokens('猫'), []);
+  assert.deepEqual(memorySearchTokens('🐈'), []);
+  assert.equal(rankGateMemories(facts, '图')[0]?.key, 'favorite_map');
+  assert.equal(rankGateMemories([{ ...facts[0]!, content: 'abc中文' }], 'abc中文')[0]?.key, 'favorite_map');
+  assert.deepEqual(validateGateMemoryDraft({ key: 'emoji', content: '一家人👨‍👩‍👧、猫🐈️' }),
+    { key: 'emoji', content: '一家人👨‍👩‍👧、猫🐈️' });
+  assert.throws(() => validateGateMemoryDraft({ key: 'hidden', content: 'a\u200db' }), /gate_memory_input_invalid/u);
+  assert.throws(() => validateGateMemoryDraft({ key: 'hidden', content: 'a\u200cb' }), /gate_memory_input_invalid/u);
 });
 
 test('missing trusted ingress authority blocks every memory read/write before SQL', async () => {
@@ -85,8 +94,11 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal((await memory.listRecent(direct))[0]?.content, '默认中文');
     assert.equal(await memory.revise(direct, { key: 'language', content: '默认日语' }, 1), true);
     assert.equal((await memory.searchLexical(direct, '日语'))[0]?.revision, 2);
+    assert.equal(await memory.create(direct, { key: 'mixed', content: 'abc中文' }), 'created');
+    assert.equal((await memory.searchLexical(direct, '中文'))[0]?.key, 'mixed');
+    assert.equal((await memory.searchLexical(direct, 'abc中文'))[0]?.key, 'mixed');
     assert.equal(await memory.forget(direct, 'language'), true);
-    assert.deepEqual(await memory.listRecent(direct), []);
+    assert.equal((await memory.listRecent(direct)).some(item => item.key === 'language'), false);
     assert.equal(await memory.create(direct, { key: 'language', content: '旧租约不应复活' }), 'already_exists');
     assert.equal(await memory.rememberAgain(direct, { key: 'language', content: '不能用旧事件恢复' }, 3), false);
     await queue.complete(direct, null);
@@ -104,6 +116,8 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal((await pool.query('SELECT 1 FROM public_query_sessions WHERE bot_account_id=$1', [bot])).rowCount, 0);
     assert.equal((await pool.query('SELECT 1 FROM public_query_requests WHERE bot_account_id=$1', [bot])).rowCount, 0);
     assert.equal(await memory.create(group, { key: 'map_preference', content: '喜欢艾伦格地图' }), 'created');
+    assert.equal((await memory.searchLexical(group, '艾'))[0]?.key, 'map_preference');
+    assert.equal((await memory.searchLexical(group, '图'))[0]?.key, 'map_preference');
 
     // Full-scope search: 150 fresher records cannot make the older relevant
     // memory disappear behind an arbitrary "latest 128" prefilter.

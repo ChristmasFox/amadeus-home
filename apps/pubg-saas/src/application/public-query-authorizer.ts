@@ -8,6 +8,7 @@ import { PostgresPubgRepository, type TrustedConversationScope } from '../infras
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import type { GateMemoryScope } from './gate-memory-store.js';
+import { KOOK_CHANNEL_BINDING_FILTER, KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
 type MessageEvent = TrustedKookGroupMessage | TrustedKookDirectMessage;
 export interface PublicQueryPermissionChecker {
@@ -94,10 +95,10 @@ export class PublicQueryAuthorizer {
       if (selection) throw new Error('public_query_group_selection_forbidden');
       const event = job.request.event;
       const result = await client.query(
-        `SELECT team.*,tenant.guild_id FROM tenants tenant JOIN teams team ON team.tenant_id=tenant.tenant_id
-         JOIN channel_bindings binding ON binding.tenant_id=team.tenant_id AND binding.team_id=team.team_id
-           AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
-         WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2 AND binding.channel_id=$3
+        `SELECT team.*,tenant.guild_id FROM tenants tenant
+         JOIN teams team ON team.tenant_id=tenant.tenant_id
+         ${KOOK_CHANNEL_BINDING_JOIN}
+         WHERE ${KOOK_CHANNEL_BINDING_FILTER} AND binding.team_id=team.team_id
          ${lock ? 'FOR SHARE OF team,binding' : ''}`, [this.botId, event.guildId, event.channelId],
       );
       const version = await client.query(`SELECT revision FROM channel_binding_versions WHERE bot_account_id=$1 AND channel_id=$2${lock ? ' FOR SHARE' : ''}`, [this.botId, event.channelId]);
@@ -205,16 +206,11 @@ export class PublicQueryAuthorizer {
     } finally { client.release(); }
   }
 
-  /** Pure read-only memory admission: no session creation, lease renewal,
-   * advisory lock, FOR UPDATE or database write. On a channel the final
-   * statement rechecks the current live binding and ingress lease, after a
-   * fresh KOOK membership check. The returned revision is read from the
-   * database, never copied from the caller's job. */
+  /** Memory admission is read-only so recall cannot renew PUBG sessions or compete for their write locks. */
   async resolveMemoryScope(jobInput: KookIngressJob): Promise<GateMemoryScope | null> {
     const job = await this.storedJob(this.pool, jobInput);
     if (job.request.kind === 'direct') {
-      // KOOK DM sender was verified at durable ingress; no implicit team
-      // membership or access to shared group memories is granted.
+      // A trusted DM does not imply group or PUBG team access.
       return { kind: 'dm', botAccountId: this.botId, actorId: job.request.event.userId };
     }
     const bound = job.boundTeam;
@@ -224,15 +220,13 @@ export class PublicQueryAuthorizer {
     const verifyBinding = async () => this.pool.query(
       `SELECT tenant.tenant_id,binding.team_id,tenant.guild_id,version.revision
        FROM tenants tenant
-       JOIN channel_bindings binding ON binding.tenant_id=tenant.tenant_id
-         AND binding.platform=tenant.platform AND binding.bot_account_id=tenant.bot_account_id
-       JOIN channel_binding_versions version ON version.bot_account_id=binding.bot_account_id
-         AND version.channel_id=binding.channel_id
+       ${KOOK_CHANNEL_BINDING_JOIN}
+       ${KOOK_CHANNEL_VERSION_JOIN}
        JOIN kook_ingress_events ingress ON ingress.bot_account_id=tenant.bot_account_id
          AND ingress.event_id=$5 AND ingress.lease_token=$6
          AND ingress.status='processing' AND ingress.lease_until>now() AND ingress.expires_at>now()
-       WHERE tenant.platform='kook' AND tenant.bot_account_id=$1 AND tenant.guild_id=$2
-         AND binding.channel_id=$3 AND tenant.tenant_id=$4 AND binding.team_id=$7
+       WHERE ${KOOK_CHANNEL_BINDING_FILTER}
+         AND tenant.tenant_id=$4 AND binding.team_id=$7
          AND version.revision=$8::BIGINT
          AND ingress.event_kind='group' AND ingress.user_id=$9
          AND ingress.guild_id=$2 AND ingress.channel_id=$3
