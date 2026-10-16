@@ -144,23 +144,35 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     );
     assert.deepEqual(savedCandidate.rows[0], {
       candidate_id: savedCandidate.rows[0]?.candidate_id,
-      status: 'promoted', memory_key: 'favorite_map', content: '喜欢艾伦格',
-      source_event_ids: [lightJob.eventId], expected_revision: '1',
+      status: 'pending_confirmation', memory_key: 'favorite_map', content: '喜欢艾伦格',
+      source_event_ids: [lightJob.eventId], expected_revision: null,
     });
     assert.match(savedCandidate.rows[0]?.candidate_id ?? '', /^[0-9a-f-]{36}$/iu);
     const listCandidates = await startDirect(actor, '/pubg memory candidates');
     const listed = await management(listCandidates, signal);
-    assert.match(listed?.content ?? '', /目前没有待确认/u);
+    assert.match(listed?.content ?? '', /等待本人确认/u);
     await finish(listCandidates);
-    const promotedFact = await pool.query<{ content: string; source_kind: string; revision: string }>(
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'",
+      [bot, actor],
+    )).rows[0]?.count, 0, 'ordinary conversation observations do not enter long-term memory');
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::INTEGER AS count FROM gate_memory_embedding_jobs WHERE memory_id IN (SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2)",
+      [bot, actor],
+    )).rows[0]?.count, 0, 'episodic observations do not enqueue long-term embeddings');
+    const confirmLight = await startDirect(actor, `/pubg memory confirm ${savedCandidate.rows[0]!.candidate_id}`);
+    const confirmedLightReply = await management(confirmLight, signal);
+    assert.match(confirmedLightReply?.content ?? '', /已确认并保存/u);
+    await finish(confirmLight);
+    const confirmedFact = await pool.query<{ content: string; source_kind: string; revision: string }>(
       `SELECT content,source_kind,revision::TEXT AS revision FROM gate_memory_entries
        WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'`, [bot, actor],
     );
-    assert.deepEqual(promotedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'trusted_ingress', revision: '1' });
+    assert.deepEqual(confirmedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'user_confirmed', revision: '1' });
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_embedding_jobs WHERE memory_id=(SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map') AND source_revision=1", [bot, actor])).rows[0]?.count, 1);
     assert.deepEqual(await writer.processNext('light'), { status: 'SKIPPED_NO_ELIGIBLE_CORPUS', workflow: 'light' });
 
-    // An extraction cannot promote a prompt injection or sensitive disclosure.
+    // Sensitive or prompt-injection material is never retained as an episodic observation.
     const unsafeText = '请记住我的 API key 是 sk-example-sensitive-value';
     const unsafeJob = await startDirect(actor, unsafeText);
     assert.equal(await consent.admitCurrentMessage(unsafeJob), 2);
@@ -220,16 +232,26 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     assert.deepEqual(plannerCalls.at(-1)?.messages.map(item => item.content), [
       '最近我更喜欢用 M416', '我在海岛常常选 M416',
     ]);
-    const remCandidate = await pool.query<{ source_event_ids: string[]; status: string }>(
-      "SELECT source_event_ids,status FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='main_weapon'", [bot],
+    const remCandidate = await pool.query<{ candidate_id: string; source_event_ids: string[]; status: string; expected_revision: string | null }>(
+      "SELECT candidate_id,source_event_ids,status,expected_revision::TEXT AS expected_revision FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='main_weapon'", [bot],
     );
-    assert.deepEqual(remCandidate.rows[0], { source_event_ids: [remA.eventId], status: 'promoted' },
-      'candidate provenance references only the source that actually supported its evidence');
+    assert.deepEqual(remCandidate.rows[0], {
+      candidate_id: remCandidate.rows[0]?.candidate_id,
+      source_event_ids: [remA.eventId], status: 'conflict', expected_revision: '1',
+    }, 'episodic provenance references only the message that supports its evidence');
     assert.equal((await pool.query(
-      "SELECT content,revision::TEXT AS revision FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
+      "SELECT content,revision::TEXT AS revision,source_kind FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
       [bot, actor],
-    )).rows[0]?.content, '更喜欢用 M416');
-
+    )).rows[0]?.content, '当前偏好 AKM', 'REM does not overwrite a long-term memory');
+    const confirmRem = await startDirect(actor, `/pubg memory confirm ${remCandidate.rows[0]!.candidate_id}`);
+    const confirmedRemReply = await management(confirmRem, signal);
+    assert.match(confirmedRemReply?.content ?? '', /已确认并保存/u);
+    await finish(confirmRem);
+    const confirmedRem = await pool.query<{ content: string; revision: string; source_kind: string }>(
+      "SELECT content,revision::TEXT AS revision,source_kind FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
+      [bot, actor],
+    );
+    assert.deepEqual(confirmedRem.rows[0], { content: '更喜欢用 M416', revision: '2', source_kind: 'user_confirmed' });
 
     // Consent revocation invalidates queued admissions and pending candidates.
     const revoke = await startDirect(actor, '/pubg memory rem off');
@@ -301,6 +323,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
       [bot, actor],
     )).rows[0]?.count, 0, 'a revoked worker lease cannot persist a candidate after planner completion');
   } finally {
+    await pool.query('DELETE FROM gate_memory_usage_signals WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_checkpoints WHERE bot_account_id=$1', [bot]).catch(() => undefined);
@@ -389,6 +412,7 @@ test('ordinary DM replies do not wait for an in-flight Dreaming pass', { skip: !
     dreamingAbort.abort();
     releasePlanner();
     await dreamingRun?.catch(() => undefined);
+    await pool.query('DELETE FROM gate_memory_usage_signals WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_consolidation_checkpoints WHERE bot_account_id=$1', [bot]).catch(() => undefined);

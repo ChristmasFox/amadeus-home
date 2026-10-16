@@ -7,6 +7,8 @@ import type {
   MemoryObservation,
   MemoryPlanningRequest,
   MemorySearchReason,
+  MemoryUsageSignal,
+  MemoryUsageSignalKind,
   MemoryWriteResult,
 } from '../contracts.js';
 
@@ -20,6 +22,7 @@ export interface MemorySearchSources {
 export interface MemoryStoragePort<TAuthorization = unknown> {
   withAuthorizedSearch<T>(authorization: TAuthorization, work: (sources: MemorySearchSources) => Promise<T>): Promise<T>;
   observe(authorization: TAuthorization, observation: MemoryObservation): Promise<void>;
+  recordUsageSignals(authorization: TAuthorization, kind: MemoryUsageSignalKind, signals: readonly MemoryUsageSignal[]): Promise<void>;
   remember(authorization: TAuthorization, write: ExplicitMemoryWrite): Promise<MemoryWriteResult>;
   forget(authorization: TAuthorization, request: MemoryForgetRequest): Promise<MemoryWriteResult>;
 }

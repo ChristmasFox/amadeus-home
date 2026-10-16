@@ -83,6 +83,16 @@ export interface MemoryRecallResult {
   context: string | null;
 }
 
+/** Content-free signal linking a trusted recalled entry to one request. */
+export interface MemoryUsageSignal {
+  key: string;
+  revision: number;
+  sourceEventId: string;
+  queryFingerprint: string;
+}
+
+export type MemoryUsageSignalKind = 'recalled' | 'used';
+
 export interface MemoryRecallPolicyOptions {
   topK: number;
   semanticSimilarityThreshold: number;

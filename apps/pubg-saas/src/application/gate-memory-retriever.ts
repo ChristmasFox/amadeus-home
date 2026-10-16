@@ -1,4 +1,4 @@
-import { fuseMemoryCandidates } from '@agent/memory';
+import { createMemoryUsageSignals, fuseMemoryCandidates } from '@agent/memory';
 import type {
   MemoryRecallPolicyOptions,
   MemoryRecallResult,
@@ -130,6 +130,12 @@ export class MemoryRetriever {
           candidates: mode === 'disabled' ? [] : candidates,
           context: mode === 'disabled' ? null : renderContext(candidates),
         };
+        if (result.candidates.length) {
+          try {
+            const signals = createMemoryUsageSignals(rawQuery, result.candidates);
+            await this.store.recordUsageSignals(job, signals, 'recalled');
+          } catch { /* usage evidence must never change recall */ }
+        }
         return this.report(startedAt, result, counts);
       });
     } catch {
@@ -137,5 +143,14 @@ export class MemoryRetriever {
         mode: 'disabled', reason: 'memory_scope_unavailable', candidates: [], context: null,
       }, counts);
     }
+  }
+
+  async recordUsed(
+    job: KookIngressJob,
+    rawQuery: string,
+    candidates: readonly GateMemoryRetrievedCandidate[],
+  ): Promise<void> {
+    const signals = createMemoryUsageSignals(rawQuery, candidates);
+    await this.store.recordUsageSignals(job, signals, 'used');
   }
 }

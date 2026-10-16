@@ -13,6 +13,8 @@ import type {
   MemorySearchMetric,
   MemorySearchResult,
   MemorySemanticSearchResult,
+  MemoryUsageSignal,
+  MemoryUsageSignalKind,
   MemoryWriteState,
   MemoryWriteMetadata,
 } from '@agent/memory';
@@ -222,6 +224,74 @@ export class GateMemoryStore {
       lexical: (query, limit = 8) => this.searchLexicalScoped(job, query, limit, scope),
       semantic: (query, provider, limit = 8) => this.searchSemanticScoped(job, query, provider, limit, scope),
     });
+  }
+
+  /** Persist only keyed usage evidence; query text and memory content are not copied. */
+  async recordUsageSignals(
+    job: KookIngressJob,
+    signals: readonly MemoryUsageSignal[],
+    kind: MemoryUsageSignalKind,
+  ): Promise<void> {
+    if (!signals.length) return;
+    if (kind !== 'recalled' && kind !== 'used') throw new Error('gate_memory_usage_signal_kind_invalid');
+    const valid = signals.filter(signal => typeof signal.key === 'string' && signal.key.length > 0
+      && signal.key.length <= 96 && Number.isSafeInteger(signal.revision) && signal.revision > 0
+      && typeof signal.sourceEventId === 'string' && signal.sourceEventId.length > 0
+      && signal.sourceEventId.length <= 256 && /^[a-f0-9]{64}$/u.test(signal.queryFingerprint));
+    if (!valid.length) return;
+    const scope = await this.trustedScope(job);
+    const sql = `WITH requested AS (
+        SELECT * FROM unnest($9::TEXT[],$10::BIGINT[],$11::TEXT[],$12::CHAR(64)[])
+          AS item(memory_key,memory_revision,memory_source_event_id,query_fingerprint)
+      )
+      INSERT INTO gate_memory_usage_signals(
+        bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,
+        memory_key,memory_revision,memory_source_event_id,request_event_id,query_fingerprint,signal_kind
+      )
+      SELECT $1,$2,$3,$4,$5,$6,$7,item.memory_key,item.memory_revision,item.memory_source_event_id,
+        $8,item.query_fingerprint,$13
+      FROM requested item
+      JOIN gate_memory_entries memory ON memory.bot_account_id=$1 AND memory.scope_kind=$2
+        AND memory.actor_id=$3 AND memory.channel_id=$4 AND memory.tenant_id=$5
+        AND memory.team_id=$6 AND memory.binding_revision=$7::BIGINT
+        AND memory.memory_key=item.memory_key AND memory.revision=item.memory_revision
+        AND memory.source_event_id=item.memory_source_event_id
+        AND memory.revoked_at IS NULL AND memory.superseded_at IS NULL
+        AND (memory.valid_until IS NULL OR memory.valid_until>now()) AND memory.source_kind<>'unknown'
+      WHERE EXISTS (
+        SELECT 1 FROM kook_ingress_events ingress
+        WHERE ingress.bot_account_id=$1 AND ingress.event_id=$14
+          AND ingress.lease_token=$15::UUID AND ingress.status='processing'
+          AND ingress.lease_until>now() AND ingress.expires_at>now()
+          AND (
+            ($2='dm' AND ingress.event_kind='direct' AND ingress.user_id=$3)
+            OR ($2='channel' AND ingress.event_kind='group'
+              AND ingress.channel_id=$4 AND ingress.tenant_id=$5 AND ingress.team_id=$6
+              AND ingress.binding_revision=$7::BIGINT
+              AND EXISTS (
+                SELECT 1 FROM tenants tenant
+                ${KOOK_CHANNEL_BINDING_JOIN}
+                ${KOOK_CHANNEL_VERSION_JOIN}
+                WHERE tenant.bot_account_id=$1 AND binding.channel_id=$4
+                  AND binding.tenant_id=$5 AND binding.team_id=$6
+                  AND tenant.platform='kook' AND tenant.guild_id=ingress.guild_id
+                  AND version.revision=$7::BIGINT
+              )
+            )
+          )
+      )
+      ON CONFLICT DO NOTHING`;
+    await this.pool.query(sql, [
+      ...scope,
+      job.eventId,
+      valid.map(signal => signal.key),
+      valid.map(signal => signal.revision),
+      valid.map(signal => signal.sourceEventId),
+      valid.map(signal => signal.queryFingerprint),
+      kind,
+      job.eventId,
+      job.leaseToken,
+    ]);
   }
 
   async listRecent(job: KookIngressJob, limit = 16): Promise<GateMemoryEntry[]> {
@@ -538,17 +608,28 @@ export class GateMemoryStore {
     return result.rows[0]?.updated === true;
   }
 
-  /** Tombstone removes stored text and blocks replayed creates. */
+  /** Tombstone removes stored text, usage evidence, and stale episodic candidates. */
   async forget(job: KookIngressJob, key: string): Promise<boolean> {
     const scope = await this.trustedScope(job);
+    const canonicalKey = canonicalizeGateMemoryKey(key);
     const sql = `WITH updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
       revision=revision+1,updated_at=now() WHERE ` + FILTER + ' AND memory_key=$8 AND revoked_at IS NULL'
-      + liveFence(9, 10) + ` RETURNING memory_id,revision), queued AS (
+      + liveFence(9, 10) + ` RETURNING memory_id,revision), usage_deleted AS (
+        DELETE FROM gate_memory_usage_signals WHERE ` + FILTER + ' AND memory_key=$8'
+          + liveFence(9, 10) + ` RETURNING signal_id
+      ), candidates_deleted AS (
+        UPDATE gate_memory_consolidation_candidates SET status='rejected',result_reason=NULL,
+          memory_key='rejected',content='[rejected]',source_event_ids=ARRAY[]::TEXT[],
+          expected_revision=NULL,confirmed_by_event_id=NULL,updated_at=now()
+        WHERE $2='dm' AND bot_account_id=$1 AND actor_id=$3 AND memory_key=$8
+          AND status IN ('pending_confirmation','conflict','duplicate','promoted')` + liveFence(9, 10) + ` RETURNING candidate_id
+      ), queued AS (
         INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
         SELECT memory_id,revision,'delete' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
-      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
+      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued,
+        EXISTS(SELECT 1 FROM candidates_deleted) AS candidate_deleted`;
     const result = await this.pool.query(sql, [...scope,
-      canonicalizeGateMemoryKey(key), boundedText(job.eventId, 256), job.leaseToken]);
-    return result.rows[0]?.updated === true;
+      canonicalKey, boundedText(job.eventId, 256), job.leaseToken]);
+    return result.rows[0]?.updated === true || result.rows[0]?.candidate_deleted === true;
   }
 }

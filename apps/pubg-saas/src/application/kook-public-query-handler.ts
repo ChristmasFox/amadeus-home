@@ -561,6 +561,13 @@ async function naturalLanguageReply(
       { role: 'user', content: `${window.currentSpeakerLabel}说：${currentContext}${context.currentMessage}` },
     ];
     const result = await runPublicKookAgent({ model: configured.model, tools, messages, signal, currentMessage });
+    if (!result.recoveryCode && context.longTermMemoryContext
+      && memoryResult?.candidates.length && services.memoryRetriever?.recordUsed) {
+      const presented = memoryResult.candidates.filter(candidate =>
+        context.longTermMemoryContext?.includes(JSON.stringify(candidate.key))
+        && context.longTermMemoryContext?.includes(JSON.stringify(candidate.content)));
+      await services.memoryRetriever.recordUsed(job, currentMessage, presented).catch(() => undefined);
+    }
     const outcome = toolDegraded ? 'tool_degraded' : authorizationDenied ? 'authorization_denied' : 'replied';
     if (result.recoveryCode) {
       services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: result.recoveryCode, requestKey, ...(channelId ? { channelId } : {}), count: 1 });

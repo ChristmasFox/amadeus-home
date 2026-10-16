@@ -47,8 +47,16 @@ commands, PostgreSQL adapters/migrations, provider configuration and runtime
 wiring. The current `KookIngressJob`, Pool types, Gate SQL and environment keys
 must not cross into `@agent/memory`.
 
-Today `gateway.ts` runs Light every 30 seconds and REM every six hours. The
-current consolidation workflow has no Deep phase and can promote an eligible
-candidate directly from Light/REM; this does not meet the approved Goal's
-episodic-first and evidence-based Deep requirements. Existing migrations and
-tests are the baseline to preserve while changing that behavior.
+At the original baseline `gateway.ts` ran Light every 30 seconds and REM every
+six hours. The P2 update below removes direct Light/REM promotion; the later
+nightly scheduler and Deep phase remain planned Goal work.
+
+## P2 behavior update
+
+Ordinary DM Light/REM output is retained as an expiring, source-linked
+candidate observation. The worker no longer writes it to `gate_memory_entries`
+or queues embeddings. A person may still explicitly confirm a candidate, and
+explicit remember/correct/forget remains immediate. Recall and successful
+prompt-use signals retain memory key/revision, source and request event IDs,
+and a normalized query fingerprint for 90 days; query text and memory content
+are not copied into the signal table.
