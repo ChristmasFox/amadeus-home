@@ -70,8 +70,7 @@ Options:
 
 Gate-Local candidate apply uses the protected local autopilot and the
 repo-wide standing host authorization shared by linked worktrees; no
-per-worktree opt-in or terminal confirmation is required. M2 may remain
-paused; candidate apply does not clear or resume M2. M2 clearance is reserved for future formal
+per-worktree opt-in or terminal confirmation is required. M2 may remain paused; candidate apply does not clear or resume M2. M2 clearance is reserved for future formal
 release. Gate-Local converges stale application images automatically and
 applies tested compatible migrations after a protected database backup.
 Staging/Prod apply requires a reviewed environment adapter.
