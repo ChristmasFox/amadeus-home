@@ -1,176 +1,31 @@
+import { fuseMemoryCandidates } from '@agent/memory';
+import type {
+  MemoryRecallPolicyOptions,
+  MemoryRecallResult,
+  MemoryRetrievedCandidate,
+  MemoryRetrievalMetric,
+  MemoryRetrievalMode,
+  MemoryRetrievalReason,
+} from '@agent/memory';
 import type { GateMemoryEmbeddingClient } from './gate-memory-embedding.js';
 import type { GateMemoryEntry, GateMemoryStore } from './gate-memory-store.js';
-import { memorySearchTokens } from './gate-memory-store.js';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 
-export type GateMemoryRetrievalMode = 'hybrid' | 'lexical_only' | 'disabled';
-export type GateMemoryRetrievalReason =
-  | 'semantic_unconfigured' | 'vector_index_unavailable' | 'semantic_unavailable' | 'semantic_timeout'
-  | 'embedding_budget_exhausted' | 'embedding_budget_unavailable' | 'memory_scope_unavailable'
-  | 'memory_store_unavailable' | 'memory_candidate_source_unavailable' | null;
+export type GateMemoryRetrievalMode = MemoryRetrievalMode;
+export type GateMemoryRetrievalReason = MemoryRetrievalReason;
+export type GateMemoryRetrievedCandidate = MemoryRetrievedCandidate;
+export type GateMemoryRetrievalMetric = MemoryRetrievalMetric;
+export type GateMemoryRetrievalResult = MemoryRecallResult;
 
-export interface GateMemoryRetrievedCandidate {
-  canonicalKey: string;
-  key: string;
-  content: string;
-  revision: number;
-  updatedAt: string;
-  sourceEventId: string;
-  sourceKind: GateMemoryEntry['sourceKind'];
-  score: number;
-  sources: Array<'exact' | 'lexical' | 'semantic'>;
-  reasons: string[];
-}
-
-export interface GateMemoryRetrievalMetric {
-  mode: GateMemoryRetrievalMode;
-  reason: GateMemoryRetrievalReason;
-  durationMs: number;
-  candidateCount: number;
-  exactCount: number;
-  lexicalCount: number;
-  semanticCount: number;
-}
-
-export interface GateMemoryRetrievalResult {
-  mode: GateMemoryRetrievalMode;
-  reason: GateMemoryRetrievalReason;
-  candidates: GateMemoryRetrievedCandidate[];
-  context: string | null;
-}
-
-export interface MemoryRetrieverOptions {
-  topK?: number;
+export interface MemoryRetrieverOptions extends Partial<MemoryRecallPolicyOptions> {
   candidateLimit?: number;
-  semanticSimilarityThreshold?: number;
-  minimumScore?: number;
   onMetric?: (metric: GateMemoryRetrievalMetric) => void;
 }
 
-interface RankedCandidate {
-  entry: GateMemoryEntry;
-  score: number;
-  sources: Set<'exact' | 'lexical' | 'semantic'>;
-  reasons: Set<string>;
-}
-
-const RRF_K = 60;
 const DEFAULT_TOP_K = 6;
 const DEFAULT_CANDIDATE_LIMIT = 20;
 const DEFAULT_SEMANTIC_THRESHOLD = 0.72;
 const DEFAULT_MINIMUM_SCORE = 0.005;
-
-function canonicalKey(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('en-US')
-    .replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
-}
-
-function lexicalOverlap(entry: GateMemoryEntry, query: string): number {
-  const normalized = query.normalize('NFC').trim().toLocaleLowerCase('en-US');
-  const haystack = `${entry.key} ${entry.content}`.normalize('NFC').toLocaleLowerCase('en-US');
-  if (haystack.includes(normalized)) return 1;
-  const tokens = memorySearchTokens(normalized);
-  if (!tokens.length) return 0;
-  return tokens.filter(token => haystack.includes(token)).length / tokens.length;
-}
-
-function sourceReliability(entry: GateMemoryEntry): number {
-  const declared = Number.isFinite(entry.sourceReliability)
-    ? Math.min(1, Math.max(0, entry.sourceReliability / 100)) : 0;
-  const sourceCap: Record<GateMemoryEntry['sourceKind'], number> = {
-    trusted_ingress: 0.85,
-    user_confirmed: 0.98,
-    system_verified: 1,
-    unknown: 0,
-  };
-  return Math.min(declared, sourceCap[entry.sourceKind]);
-}
-
-function freshness(entry: GateMemoryEntry, nowMs: number): number {
-  const updatedAt = Date.parse(entry.updatedAt);
-  if (!Number.isFinite(updatedAt)) return 0.7;
-  const ageDays = Math.max(0, (nowMs - updatedAt) / 86_400_000);
-  return 0.7 + 0.3 * Math.exp(-ageDays / 1_825);
-}
-
-function addRanked(
-  candidates: Map<string, RankedCandidate>,
-  entry: GateMemoryEntry,
-  source: 'exact' | 'lexical' | 'semantic',
-  rank: number,
-  weight: number,
-  reason: string,
-  nowMs: number,
-  quality = 1,
-): void {
-  if (entry.sourceKind === 'unknown' || entry.validUntil && Date.parse(entry.validUntil) <= nowMs
-    || !entry.content || !Number.isSafeInteger(entry.revision) || entry.revision < 1) return;
-  const normalizedKey = canonicalKey(entry.key);
-  if (!normalizedKey) return;
-  const candidateKey = `${normalizedKey}\0${entry.revision}`;
-  let candidate = candidates.get(candidateKey);
-  if (!candidate) {
-    candidate = { entry, score: 0, sources: new Set(), reasons: new Set() };
-    candidates.set(candidateKey, candidate);
-  }
-  candidate.score += weight * quality / (RRF_K + rank)
-    * sourceReliability(entry) * freshness(entry, nowMs);
-  candidate.sources.add(source);
-  candidate.reasons.add(reason);
-}
-
-function fuseCandidates(
-  query: string,
-  exact: GateMemoryEntry[],
-  lexical: GateMemoryEntry[],
-  semantic: GateMemoryEntry[],
-  options: Required<Pick<MemoryRetrieverOptions, 'topK' | 'semanticSimilarityThreshold' | 'minimumScore'>>,
-): GateMemoryRetrievedCandidate[] {
-  const nowMs = Date.now();
-  const ranked = new Map<string, RankedCandidate>();
-  exact.forEach((entry, index) => addRanked(ranked, entry, 'exact', index + 1, 4,
-    'exact_key_or_content_match', nowMs));
-  lexical.forEach((entry, index) => {
-    const overlap = lexicalOverlap(entry, query);
-    if (overlap >= 0.2) addRanked(ranked, entry, 'lexical', index + 1, 1,
-      `lexical_overlap_${overlap.toFixed(2)}`, nowMs, overlap);
-  });
-  semantic.forEach((entry, index) => {
-    const similarity = entry.semanticSimilarity;
-    if (similarity !== undefined && similarity >= options.semanticSimilarityThreshold) {
-      addRanked(ranked, entry, 'semantic', index + 1, 1.5,
-        `cosine_similarity_${similarity.toFixed(3)}`, nowMs, similarity);
-    }
-  });
-
-  const newestByKey = new Map<string, RankedCandidate>();
-  for (const candidate of ranked.values()) {
-    const key = canonicalKey(candidate.entry.key);
-    const previous = newestByKey.get(key);
-    if (!previous || candidate.entry.revision > previous.entry.revision
-      || (candidate.entry.revision === previous.entry.revision && candidate.score > previous.score)) {
-      newestByKey.set(key, candidate);
-    }
-  }
-  return [...newestByKey.values()]
-    .filter(candidate => candidate.sources.has('exact') || candidate.score >= options.minimumScore)
-    .sort((left, right) => right.score - left.score
-      || right.entry.revision - left.entry.revision
-      || left.entry.key.localeCompare(right.entry.key))
-    .slice(0, options.topK)
-    .map(candidate => ({
-      canonicalKey: canonicalKey(candidate.entry.key),
-      key: candidate.entry.key,
-      content: candidate.entry.content,
-      revision: candidate.entry.revision,
-      updatedAt: candidate.entry.updatedAt,
-      sourceEventId: candidate.entry.sourceEventId,
-      sourceKind: candidate.entry.sourceKind,
-      score: candidate.score,
-      sources: [...candidate.sources].sort(),
-      reasons: [...candidate.reasons].sort(),
-    }));
-}
 
 function renderContext(candidates: readonly GateMemoryRetrievedCandidate[]): string | null {
   if (!candidates.length) return null;
@@ -195,7 +50,7 @@ function searchFailureReason(): GateMemoryRetrievalReason {
   return 'memory_candidate_source_unavailable';
 }
 
-/** Scope is authorized once per turn; each candidate query remains scoped in SQL. */
+/** Gate owns request authorization and SQL access; reusable scoring lives in @agent/memory. */
 export class MemoryRetriever {
   private readonly topK: number;
   private readonly candidateLimit: number;
@@ -256,7 +111,7 @@ export class MemoryRetriever {
         counts.exact = exact.length;
         counts.lexical = lexical.length;
         counts.semantic = semanticSearch.matches.length;
-        const candidates = fuseCandidates(rawQuery, exact, lexical, semanticSearch.matches, {
+        const candidates = fuseMemoryCandidates(rawQuery, exact, lexical, semanticSearch.matches, {
           topK: this.topK,
           semanticSimilarityThreshold: this.semanticSimilarityThreshold,
           minimumScore: this.minimumScore,

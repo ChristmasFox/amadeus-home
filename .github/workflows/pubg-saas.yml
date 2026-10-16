@@ -6,6 +6,7 @@ on:
     paths:
       - ".dockerignore"
       - "apps/pubg-saas/**"
+      - "packages/agent-memory/**"
       - "infra/pubg-saas/**"
       - "packages/identity/**"
       - "packages/presentation/**"
@@ -36,6 +37,7 @@ on:
     paths:
       - ".dockerignore"
       - "apps/pubg-saas/**"
+      - "packages/agent-memory/**"
       - "infra/pubg-saas/**"
       - "packages/identity/**"
       - "packages/presentation/**"
@@ -117,7 +119,7 @@ jobs:
       - name: Validate isolated PostgreSQL test target
         run: python3 scripts/validate-pubg-saas-test-database.py
       - name: Build private and public PUBG packages
-        run: pnpm build:pubg && pnpm --filter @agent/pubg-saas build
+        run: pnpm build:pubg && pnpm build:pubg-saas
       - name: Public SaaS PostgreSQL tests
         run: |
           pnpm --filter @agent/pubg-domain build
@@ -172,6 +174,7 @@ jobs:
           pnpm install --frozen-lockfile --filter @agent/pubg-saas...
       - name: Build shared presentation and PUBG domain
         run: |
+          pnpm --filter @agent/memory build
           pnpm --filter @agent/presentation build
           pnpm --filter @agent/pubg-domain build
       - name: Run isolated optional pgvector fixture

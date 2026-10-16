@@ -2,10 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient, QueryResultRow } from 'pg';
 import { z } from 'zod';
 import { generateText, tool, type LanguageModel } from 'ai';
+import type { MemoryCandidateDraft } from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import { canonicalizeGateMemoryKey } from './gate-memory-store.js';
 
 export type GateMemoryConsolidationWorkflow = 'light' | 'rem';
+export type GateMemoryConsolidationCandidate = MemoryCandidateDraft;
 export interface GateMemoryConsolidationConsent {
   light: { enabled: boolean; version: number };
   rem: { enabled: boolean; version: number };

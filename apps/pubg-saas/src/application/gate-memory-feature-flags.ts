@@ -12,8 +12,10 @@ export interface GateMemoryFeatureFlags {
   autoLearn: GateMemoryFeatureFlag;
 }
 
-function featureFlag(value: string | undefined): GateMemoryFeatureFlag {
-  if (value === undefined || value.trim() === '') return { enabled: true, status: 'enabled_default' };
+function featureFlag(value: string | undefined, enabledByDefault: boolean): GateMemoryFeatureFlag {
+  if (value === undefined || value.trim() === '') {
+    return { enabled: enabledByDefault, status: enabledByDefault ? 'enabled_default' : 'disabled_by_operator' };
+  }
   if (value === '0') return { enabled: false, status: 'disabled_by_operator' };
   if (value === '1') return { enabled: true, status: 'enabled_by_operator' };
   return { enabled: false, status: 'misconfigured' };
@@ -22,9 +24,9 @@ function featureFlag(value: string | undefined): GateMemoryFeatureFlag {
 /** Memory is part of Gate by default. Flags are explicit kill switches. */
 export function readGateMemoryFeatureFlags(env: NodeJS.ProcessEnv): GateMemoryFeatureFlags {
   return {
-    read: featureFlag(env.GATE_MEMORY_READ_ENABLED),
-    write: featureFlag(env.GATE_MEMORY_WRITE_ENABLED),
-    autoLearn: featureFlag(env.GATE_MEMORY_AUTO_LEARN_ENABLED),
+    read: featureFlag(env.GATE_MEMORY_READ_ENABLED, MEMORY_FEATURE_DEFAULTS.read),
+    write: featureFlag(env.GATE_MEMORY_WRITE_ENABLED, MEMORY_FEATURE_DEFAULTS.write),
+    autoLearn: featureFlag(env.GATE_MEMORY_AUTO_LEARN_ENABLED, MEMORY_FEATURE_DEFAULTS.autoLearn),
   };
 }
 
@@ -43,3 +45,4 @@ export function gateMemoryEmbeddingStatus(
     return 'misconfigured';
   }
 }
+import { MEMORY_FEATURE_DEFAULTS } from '@agent/memory';

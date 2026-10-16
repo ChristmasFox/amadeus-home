@@ -182,7 +182,7 @@ the same environment as `--target`; the URL and password are never command-line
 arguments. The admin uses one Bot account at a time.
 
 ```sh
-pnpm --filter @agent/pubg-saas build
+pnpm build:pubg-saas
 export GATE_MEMORY_ADMIN_TARGET=gate-local
 # Load GATE_MEMORY_ADMIN_DATABASE_URL from the protected secret store.
 node apps/pubg-saas/dist/src/gate-memory-admin.js status \

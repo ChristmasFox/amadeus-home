@@ -1,5 +1,18 @@
 # Project State — 2026-10-16
 
+## 2026-10-16T19:01+08:00 — Gate memory extraction P0 candidate
+
+P0 of `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md` completed at source SHA
+`243ab74ebd9a87f0f132fe56f904dfaf601f7492`. The protected candidate path
+deployed `local/pubg-saas:git-243ab74ebd9a87f0f132fe56f904dfaf601f7492`,
+image ID
+`sha256:409e2de388f403d12578d27f0292928e53de0c35404d7470533aa49c60e99695`.
+Gateway, Worker, PostgreSQL, and egress-proxy are running healthy; the three
+app containers have restart count 0. The protected checkpoint is
+`/Users/nyannyan/.local/share/pubg-saas-backup/gate-local-20261016T110130Z-243ab74ebd9a`.
+M2 remains PAUSED and no clearance was created; Lab and its runtime were not
+changed. P1 is active.
+
 ## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
 
 PR #11 was rebased onto `8a731d9`, all seven GitHub checks passed, and merge

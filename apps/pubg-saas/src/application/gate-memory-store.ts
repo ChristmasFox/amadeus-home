@@ -1,4 +1,21 @@
 import type { Pool } from 'pg';
+import {
+  MAX_MEMORY_RESULTS,
+  MemoryPolicyError,
+  canonicalizeMemoryKey,
+  memorySearchTokens as tokenizeMemorySearch,
+  rankMemoryEntries,
+  validateMemoryDraft,
+} from '@agent/memory';
+import type {
+  MemoryDraft,
+  MemoryEntry,
+  MemorySearchMetric,
+  MemorySearchResult,
+  MemorySemanticSearchResult,
+  MemoryWriteState,
+  MemoryWriteMetadata,
+} from '@agent/memory';
 import type { KookIngressJob } from './kook-ingress-queue.js';
 import type { GateMemoryEmbeddingClient, GateMemoryEmbeddingContract } from './gate-memory-embedding.js';
 import { estimateGateEmbeddingTokens } from './gate-memory-embedding.js';
@@ -12,35 +29,16 @@ export type GateMemoryScope =
 export interface GateMemoryScopeResolver {
   resolveMemoryScope(job: KookIngressJob): Promise<GateMemoryScope | null>;
 }
-export interface GateMemoryEntry {
-  key: string;
-  content: string;
-  revision: number;
-  updatedAt: string;
-  sourceEventId: string;
-  sourceKind: 'trusted_ingress' | 'user_confirmed' | 'system_verified' | 'unknown';
-  sourceReliability: number;
-  validUntil: string | null;
-  semanticSimilarity?: number;
-}
-export interface GateMemoryDraft {
-  key: string;
-  content: string;
-}
-export interface GateMemoryWriteMetadata {
-  sourceKind?: GateMemoryEntry['sourceKind'];
-  sourceReliability?: number;
-  validUntil?: string | null;
-}
-export interface GateMemoryWriteState extends GateMemoryEntry {
-  revoked: boolean;
-}
+export type GateMemoryEntry = MemoryEntry;
+export type GateMemoryDraft = MemoryDraft;
+export type GateMemoryWriteMetadata = MemoryWriteMetadata;
+export type GateMemoryWriteState = MemoryWriteState;
 export interface GateMemoryStoreOptions {
   lexicalSearchTimeoutMs?: number;
   onSearchMetric?: (metric: GateMemorySearchMetric) => void;
 }
 
-const MAX_RESULTS = 24;
+const MAX_RESULTS = MAX_MEMORY_RESULTS;
 const DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS = 500;
 const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
@@ -51,21 +49,9 @@ const enqueueUpserts = (source: 'updated') => `INSERT INTO gate_memory_embedding
   CROSS JOIN LATERAL gate_memory_index_job_versions(${source}.bot_account_id) generation
   ON CONFLICT DO NOTHING RETURNING job_id`;
 
-export interface GateMemorySearchResult {
-  entries: GateMemoryEntry[];
-  mode: 'semantic' | 'lexical_only';
-  reason: 'semantic_unconfigured' | 'vector_index_unavailable' | 'semantic_unavailable'
-    | 'semantic_timeout' | 'embedding_budget_exhausted' | 'embedding_budget_unavailable' | null;
-}
-export interface GateMemorySearchMetric {
-  durationMs: number;
-  mode: GateMemorySearchResult['mode'];
-  reason: GateMemorySearchResult['reason'];
-}
-export interface GateMemorySemanticSearchResult {
-  matches: GateMemoryEntry[];
-  reason: GateMemorySearchResult['reason'];
-}
+export type GateMemorySearchResult = MemorySearchResult;
+export type GateMemorySearchMetric = MemorySearchMetric;
+export type GateMemorySemanticSearchResult = MemorySemanticSearchResult;
 export interface GateMemoryAuthorizedSearch {
   exact(query: string, limit?: number): Promise<GateMemoryEntry[]>;
   lexical(query: string, limit?: number): Promise<GateMemoryEntry[]>;
@@ -93,16 +79,20 @@ function boundedText(value: string, max: number, emojiSequence = false): string 
   return text;
 }
 
+function withGateMemoryPolicyErrors<T>(work: () => T): T {
+  try { return work(); }
+  catch (error) {
+    if (error instanceof MemoryPolicyError) throw new Error(`gate_memory_${error.code}`);
+    throw error;
+  }
+}
+
 export function validateGateMemoryDraft(input: GateMemoryDraft): GateMemoryDraft {
-  return { key: canonicalizeGateMemoryKey(input.key),
-    content: boundedText(input.content, 800, true) };
+  return withGateMemoryPolicyErrors(() => validateMemoryDraft(input));
 }
 
 export function canonicalizeGateMemoryKey(value: string): string {
-  const normalized = boundedText(value, 96).normalize('NFKC').toLocaleLowerCase('en-US')
-    .replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
-  if (!normalized || normalized.length > 96) throw new Error('gate_memory_input_invalid');
-  return normalized;
+  return withGateMemoryPolicyErrors(() => canonicalizeMemoryKey(value));
 }
 
 function validatedWriteMetadata(input: GateMemoryWriteMetadata = {}): {
@@ -129,32 +119,11 @@ function validatedWriteMetadata(input: GateMemoryWriteMetadata = {}): {
 
 /** A bounded lexical fallback, not an embedding or a semantic model. */
 export function memorySearchTokens(query: string): string[] {
-  const normalized = boundedText(query, 240, true).toLocaleLowerCase('en-US');
-  const tokens: string[] = [];
-  // Split a mixed Latin/Han run by script; Han characters are also \p{L}.
-  for (const match of normalized.matchAll(/[\p{L}\p{N}]+/gu)) {
-    for (const chunk of match[0]!.match(/\p{Script=Han}+|[^\p{Script=Han}]+/gu) ?? []) {
-      if (/^\p{Script=Han}+$/u.test(chunk)) {
-        const chars = Array.from(chunk);
-        for (let index = 0; index + 1 < chars.length; index += 1)
-          tokens.push(chars[index]! + chars[index + 1]!);
-      } else if (chunk.length > 1) tokens.push(chunk);
-    }
-  }
-  return [...new Set(tokens)].slice(0, 240);
+  return withGateMemoryPolicyErrors(() => tokenizeMemorySearch(query));
 }
 
 export function rankGateMemories(entries: GateMemoryEntry[], query: string, limit = 8): GateMemoryEntry[] {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
-  const search = boundedText(query, 240, true).toLocaleLowerCase('en-US');
-  const words = memorySearchTokens(search);
-  return entries.map((item, index) => {
-    const haystack = (item.key + ' ' + item.content).toLocaleLowerCase('en-US');
-    const score = haystack.includes(search) ? 1000
-      : words.reduce((value, word) => value + (haystack.includes(word) ? 1 : 0), 0);
-    return { item, index, score };
-  }).filter(match => match.score > 0).sort((a, b) => b.score - a.score || a.index - b.index)
-    .slice(0, limit).map(match => match.item);
+  return withGateMemoryPolicyErrors(() => rankMemoryEntries(entries, query, limit));
 }
 
 function scopedArgs(scope: GateMemoryScope): (string | number)[] {

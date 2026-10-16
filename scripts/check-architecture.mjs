@@ -69,6 +69,13 @@ export function checkArchitecture(root = REPO_ROOT) {
     errors.push('AGENTS.md hardcodes an active Goal instead of pointing to CURRENT_TASK');
   }
   const required = [
+    'packages/agent-memory/package.json',
+    'packages/agent-memory/src/index.ts',
+    'packages/agent-memory/src/plugin.ts',
+    'packages/agent-memory/src/contracts.ts',
+    'packages/agent-memory/src/ports/index.ts',
+    'packages/agent-memory/src/recall/fusion.ts',
+    'packages/agent-memory/src/recall/search.ts',
     'packages/presentation/package.json',
     'packages/presentation/src/index.ts',
     'plugins/amadeus/openclaw.plugin.json',
@@ -124,6 +131,13 @@ export function checkArchitecture(root = REPO_ROOT) {
     'packages/presentation/src',
     /^\s*(?:import|export).*from\s+["'][^"']*(?:openclaw|telegram|whatsapp|sqlite|node:(?:http|https))[^"']*["']/iu,
     'presentation package imports an integration module',
+    errors,
+  );
+  checkForbiddenImports(
+    root,
+    'packages/agent-memory/src',
+    /^\s*(?:import|export).*from\s+["'](?!\.|node:)[^"']+["']/iu,
+    '@agent/memory has an external runtime dependency',
     errors,
   );
 

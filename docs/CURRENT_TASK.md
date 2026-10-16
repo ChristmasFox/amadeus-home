@@ -2,7 +2,22 @@
 
 Date: 2026-10-16 (Asia/Shanghai).
 
-Active Goal: `docs/LAB_MEMORY_AND_DUAL_RELEASE_ENGINEERING_GOAL.md`.
+Active Goal: `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md`.
+
+## 2026-10-16T19:01+08:00 — Gate memory extraction P0 candidate
+
+P0 is complete at source SHA `243ab74ebd9a87f0f132fe56f904dfaf601f7492`.
+The pre-extraction boundary map and the ordinary-reply/Dreaming concurrency
+regression are recorded in `docs/GATE_MEMORY_PACKAGE_BOUNDARY.md` and
+`apps/pubg-saas/tests/gate-memory-consolidation.integration.test.ts`. The
+protected `devctl goal finish-phase P0` path applied Gate-Local candidate
+`local/pubg-saas:git-243ab74ebd9a87f0f132fe56f904dfaf601f7492` (image ID
+`sha256:409e2de388f403d12578d27f0292928e53de0c35404d7470533aa49c60e99695`).
+Gateway, Worker, PostgreSQL, and egress-proxy are running healthy; the three
+app containers have restart count 0. The protected deployment checkpoint is
+`/Users/nyannyan/.local/share/pubg-saas-backup/gate-local-20261016T110130Z-243ab74ebd9a`.
+M2 remains PAUSED with clearance reserved for formal release; Lab was not
+touched. P1 is now in progress.
 
 ## 2026-10-16T18:39+08:00 — Gate 9router 0.5.104 live
 
