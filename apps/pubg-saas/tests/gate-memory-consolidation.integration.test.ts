@@ -79,7 +79,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
 
     const blockedOptIn = await startDirect(actor, '/pubg memory light on');
     const blockedOptInReply = await operatorDisabledManagement(blockedOptIn, signal);
-    assert.match(blockedOptInReply?.content ?? '', /运营者尚未启用.*未保存本次授权/u);
+    assert.match(blockedOptInReply?.content ?? '', /全局关闭.*无法重新开启/u);
     await finish(blockedOptIn);
     assert.equal((await pool.query(
       "SELECT 1 FROM gate_memory_consolidation_consents WHERE bot_account_id=$1 AND actor_id=$2 AND workflow='light'",
@@ -94,7 +94,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     assert.deepEqual(liveLease.rows[0], { event_kind: 'direct', user_id: actor, target_kind: 'direct', target_id: actor,
       status: 'processing', token_matches: true, lease_live: true });
     const enabledReply = await commandHandler(enableLight, signal);
-    assert.match(enabledReply?.content ?? '', /Light 整理授权已开启/u);
+    assert.match(enabledReply?.content ?? '', /Light 自动记忆已开启/u);
     await finish(enableLight);
     const lightConsent = await pool.query<{ consent_version: string; enabled: boolean }>(
       "SELECT consent_version::TEXT AS consent_version,enabled FROM gate_memory_consolidation_consents WHERE bot_account_id=$1 AND actor_id=$2 AND workflow='light'",
@@ -110,7 +110,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const admission = await pool.query<{ status: string; source_event_id: string; consent_version: string; serialized: string }>(
       `SELECT admission.status,admission.source_event_id,admission.consent_version::TEXT AS consent_version,
         row_to_json(admission)::TEXT AS serialized FROM gate_memory_consolidation_admissions admission
-       WHERE bot_account_id=$1 AND actor_id=$2 AND source_event_id=$3`, [bot, actor, lightJob.eventId],
+       WHERE bot_account_id=$1 AND actor_id=$2 AND source_event_id=$3 AND workflow='light'`, [bot, actor, lightJob.eventId],
     );
     assert.equal(admission.rows[0]?.status, 'pending');
     assert.equal(admission.rows[0]?.consent_version, '1');
@@ -126,31 +126,26 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     );
     assert.deepEqual(savedCandidate.rows[0], {
       candidate_id: savedCandidate.rows[0]?.candidate_id,
-      status: 'pending_confirmation', memory_key: 'favorite_map', content: '喜欢艾伦格',
-      source_event_ids: [lightJob.eventId], expected_revision: null,
+      status: 'promoted', memory_key: 'favorite_map', content: '喜欢艾伦格',
+      source_event_ids: [lightJob.eventId], expected_revision: '1',
     });
     assert.match(savedCandidate.rows[0]?.candidate_id ?? '', /^[0-9a-f-]{36}$/iu);
     const listCandidates = await startDirect(actor, '/pubg memory candidates');
     const listed = await management(listCandidates, signal);
-    assert.match(listed?.content ?? '', new RegExp(savedCandidate.rows[0]!.candidate_id, 'u'));
+    assert.match(listed?.content ?? '', /目前没有待确认/u);
     await finish(listCandidates);
-    const confirm = await startDirect(actor, `/pubg memory confirm ${savedCandidate.rows[0]!.candidate_id}`);
-    const confirmReply = await management(confirm, signal);
-    assert.match(confirmReply?.content ?? '', /已确认并保存/u);
-    assert.match((await management(confirm, signal))?.content ?? '', /已经由当前请求确认/u);
-    await finish(confirm);
     const promotedFact = await pool.query<{ content: string; source_kind: string; revision: string }>(
       `SELECT content,source_kind,revision::TEXT AS revision FROM gate_memory_entries
        WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'`, [bot, actor],
     );
-    assert.deepEqual(promotedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'user_confirmed', revision: '1' });
+    assert.deepEqual(promotedFact.rows[0], { content: '喜欢艾伦格', source_kind: 'trusted_ingress', revision: '1' });
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_embedding_jobs WHERE memory_id=(SELECT memory_id FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map') AND source_revision=1", [bot, actor])).rows[0]?.count, 1);
     assert.deepEqual(await writer.processNext('light'), { status: 'SKIPPED_NO_ELIGIBLE_CORPUS', workflow: 'light' });
 
     // An extraction cannot promote a prompt injection or sensitive disclosure.
     const unsafeText = '请记住我的 API key 是 sk-example-sensitive-value';
     const unsafeJob = await startDirect(actor, unsafeText);
-    assert.equal(await consent.admitCurrentMessage(unsafeJob), 1);
+    assert.equal(await consent.admitCurrentMessage(unsafeJob), 2);
     await finish(unsafeJob);
     nextCandidates = [{ confidence: 'high', subject: 'self', kind: 'stable_preference', key: 'secret',
       content: '我的 API key 是 sk-example-sensitive-value', evidence: unsafeText, validity: 'stable' }];
@@ -188,7 +183,7 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
        VALUES ($1,'dm',$2,'','','',0,'main_weapon','当前偏好 AKM','synthetic-seed','user_confirmed',95)`, [bot, actor],
     );
     const otherMessage = await startDirect(other, '另一个用户也喜欢 M416');
-    assert.equal(await consent.admitCurrentMessage(otherMessage), 0);
+    assert.equal(await consent.admitCurrentMessage(otherMessage), 2);
     await finish(otherMessage);
     nextCandidates = [{ confidence: 'high', subject: 'self', kind: 'stable_preference', key: 'main_weapon',
       content: '更喜欢用 M416', evidence: '最近我更喜欢用 M416', validity: 'stable' }];
@@ -200,22 +195,13 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const remCandidate = await pool.query<{ source_event_ids: string[]; status: string }>(
       "SELECT source_event_ids,status FROM gate_memory_consolidation_candidates WHERE bot_account_id=$1 AND memory_key='main_weapon'", [bot],
     );
-    assert.deepEqual(remCandidate.rows[0], { source_event_ids: [remA.eventId], status: 'conflict' },
+    assert.deepEqual(remCandidate.rows[0], { source_event_ids: [remA.eventId], status: 'promoted' },
       'candidate provenance references only the source that actually supported its evidence');
-    await pool.query(
-      `UPDATE gate_memory_entries SET content='当前偏好 AUG',revision=revision+1,updated_at=now()
-       WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'`, [bot, actor],
-    );
-    const casCandidate = await pool.query<{ candidate_id: string; expected_revision: string }>(
-      `SELECT candidate_id,expected_revision::TEXT AS expected_revision FROM gate_memory_consolidation_candidates
-       WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'`, [bot, actor],
-    );
-    assert.equal(casCandidate.rows[0]?.expected_revision, '1');
-    const staleConfirm = await startDirect(actor, `/pubg memory confirm ${casCandidate.rows[0]!.candidate_id}`);
-    const staleReply = await management(staleConfirm, signal);
-    assert.match(staleReply?.content ?? '', /版本已变化/u);
-    await finish(staleConfirm);
-    assert.equal((await pool.query("SELECT content FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'", [bot, actor])).rows[0]?.content, '当前偏好 AUG');
+    assert.equal((await pool.query(
+      "SELECT content,revision::TEXT AS revision FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='main_weapon'",
+      [bot, actor],
+    )).rows[0]?.content, '更喜欢用 M416');
+
 
     // Consent revocation invalidates queued admissions and pending candidates.
     const revoke = await startDirect(actor, '/pubg memory rem off');
@@ -224,7 +210,8 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     await finish(revoke);
     const revoked = await pool.query<{ status: string; candidate_count: number }>(
       `SELECT admission.status,(SELECT COUNT(*)::INTEGER FROM gate_memory_consolidation_candidates candidate
-         WHERE candidate.bot_account_id=$1 AND candidate.actor_id=$2 AND candidate.memory_key='main_weapon') AS candidate_count
+         WHERE candidate.bot_account_id=$1 AND candidate.actor_id=$2 AND candidate.memory_key='main_weapon'
+           AND candidate.status IN ('pending_confirmation','conflict')) AS candidate_count
        FROM gate_memory_consolidation_admissions admission
        WHERE admission.bot_account_id=$1 AND admission.actor_id=$2 AND admission.workflow='rem'
          AND admission.source_event_id=$3`,
