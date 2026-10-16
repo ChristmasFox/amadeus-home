@@ -71,8 +71,8 @@ Options:
 Gate-Local candidate apply uses the protected local autopilot and requires
 the external one-time Gate approval. M2 may remain paused; candidate apply
 does not clear or resume M2. M2 clearance is reserved for future formal
-release. The optional control-plane flag is only for an explicitly reviewed
-direct Gate-Local apply; automatic phase deployment still blocks those edits.
+release. Gate-Local converges stale application images automatically and
+applies tested compatible migrations after a protected database backup.
 Staging/Prod apply requires a reviewed environment adapter.
 Gate verify requires `PUBG_SAAS_TEST_DATABASE_URL` to point to a loopback
 database named `test`/`testing` or ending in `_test`/`_testing`.
