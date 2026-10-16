@@ -169,6 +169,22 @@ class GateAutopilotContracts(unittest.TestCase):
             )
         self.assertEqual(result, ("unreviewed_migration", "migration_source_missing_or_untrusted"))
 
+    def test_symlinked_migration_parent_and_path_traversal_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "0042_link.sql").write_text("CREATE TABLE example(id INTEGER);\n", encoding="utf-8")
+            postgres = root / "apps/pubg-saas/src/infrastructure/postgres"
+            postgres.parent.mkdir(parents=True)
+            postgres.symlink_to(outside, target_is_directory=True)
+            linked = "apps/pubg-saas/src/infrastructure/postgres/migrations/0042_link.sql"
+            self.assertEqual(gate.migration_risk([linked], root),
+                             ("unreviewed_migration", "migration_source_missing_or_untrusted"))
+            escaped = linked + "/../../../../../../../../outside/0042_link.sql"
+            self.assertEqual(gate.migration_risk([escaped], root),
+                             ("unreviewed_migration", "migration_source_missing_or_untrusted"))
+
     def test_pipeline_orders_backup_before_migration_and_switch(self):
         ops, calls = operations()
         result = gate.run_candidate_pipeline(ops)
@@ -218,6 +234,73 @@ class GateAutopilotContracts(unittest.TestCase):
             file_path.write_text("DROP TABLE gate_memory_entries;", encoding="utf-8")
             self.assertEqual(gate.migration_risk([migration], root),
                              ("destructive_schema", "separate_schema_authorization_required"))
+
+    def test_migration_classifier_allows_additive_schema_and_preserves_dollar_bodies(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_additive.sql"
+            file_path = root / migration
+            file_path.parent.mkdir(parents=True)
+            file_path.write_text(
+                """-- Punctuation in comments must not become executable SQL.
+                CREATE TABLE gate_fixture (id UUID PRIMARY KEY);
+                CREATE INDEX idx_gate_fixture_id ON gate_fixture(id);
+                CREATE FUNCTION gate_fixture_noop() RETURNS VOID LANGUAGE plpgsql AS $body$
+                BEGIN
+                  PERFORM 1;
+                  PERFORM 2;
+                END;
+                $body$;
+                """,
+                encoding="utf-8",
+            )
+            self.assertEqual(gate.migration_risk([migration], root), ("backward_compatible_schema", None))
+
+    def test_migration_classifier_blocks_data_and_unreviewed_statements(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_risk.sql"
+            file_path = root / migration
+            file_path.parent.mkdir(parents=True)
+            cases = (
+                ("DELETE FROM gate_memory_entries;", ("data_migration", "separate_data_migration_authorization_required")),
+                ("TRUNCATE gate_memory_entries;", ("destructive_schema", "separate_schema_authorization_required")),
+                ("ALTER TABLE gate_memory_entries ALTER COLUMN content TYPE TEXT;",
+                 ("destructive_schema", "separate_schema_authorization_required")),
+                ("ALTER TABLE gate_memory_entries ADD COLUMN required_value TEXT NOT NULL DEFAULT 'x';",
+                 ("destructive_schema", "separate_schema_authorization_required")),
+                ("CREATE UNIQUE INDEX gate_memory_key_unique ON gate_memory_entries(memory_key);",
+                 ("destructive_schema", "separate_schema_authorization_required")),
+                ("SELECT 1;", ("unreviewed_migration", "migration_statement_not_allowlisted")),
+                ("GRANT ALL ON gate_memory_entries TO public;",
+                 ("unreviewed_migration", "migration_security_change_requires_review")),
+                ("CREATE FUNCTION unsafe() RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN END $$;",
+                 ("unreviewed_migration", "migration_function_requires_review")),
+                ("CREATE EXTENSION pg_trgm;", ("extension_install", "separate_extension_authorization_required")),
+                ("ALTER TABLE gate_memory_entries ADD COLUMN embedding extensions.vector;",
+                 ("pgvector_install", "separate_pgvector_authorization_required")),
+            )
+            for sql, expected in cases:
+                with self.subTest(sql=sql):
+                    file_path.write_text(sql, encoding="utf-8")
+                    self.assertEqual(gate.migration_risk([migration], root), expected)
+
+    def test_candidate_authorization_blocks_include_recovery_steps(self):
+        self.assertIn("gate-m2-clear", candidate.recovery_step("m2_pause_active"))
+        self.assertIn("backup", candidate.recovery_step("separate_data_migration_authorization_required"))
+        self.assertIn("failed step", candidate.recovery_step("candidate_step_failed"))
+        self.assertIn("external audit", candidate.recovery_step("candidate_adapter_failed"))
+
+    def test_preflight_requires_separate_authorization_for_data_migrations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_data.sql"
+            target = root / migration
+            target.parent.mkdir(parents=True)
+            target.write_text("UPDATE gate_memory_entries SET content='redacted';", encoding="utf-8")
+            result = preflight(repository=root, paths=[migration])
+        self.assertEqual(result["status"], "BLOCKED_OPERATOR_AUTHORIZATION")
+        self.assertEqual(result["reason"], "separate_data_migration_authorization_required")
 
     def test_external_state_is_private_and_mode_checked(self):
         with tempfile.TemporaryDirectory() as temporary:

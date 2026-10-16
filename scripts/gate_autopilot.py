@@ -111,21 +111,180 @@ def classify_changed_scope(paths: list[str]) -> tuple[str, str | None]:
     return "gate_only", None
 
 
+def split_sql_statements(sql: str) -> list[str] | None:
+    """Split PostgreSQL SQL without treating quoted/dollar-quoted semicolons as boundaries."""
+    statements: list[str] = []
+    current: list[str] = []
+    single_quote = False
+    double_quote = False
+    dollar_quote: str | None = None
+    line_comment = False
+    block_depth = 0
+    index = 0
+    while index < len(sql):
+        char = sql[index]
+        next_char = sql[index + 1] if index + 1 < len(sql) else ""
+        if line_comment:
+            if char == "\n":
+                current.append("\n")
+                line_comment = False
+            index += 1
+            continue
+        if block_depth:
+            if char == "/" and next_char == "*":
+                block_depth += 1
+                index += 2
+            elif char == "*" and next_char == "/":
+                block_depth -= 1
+                index += 2
+            else:
+                index += 1
+            continue
+        if dollar_quote:
+            if sql.startswith(dollar_quote, index):
+                current.append(dollar_quote)
+                index += len(dollar_quote)
+                dollar_quote = None
+            else:
+                current.append(char)
+                index += 1
+            continue
+        if single_quote:
+            current.append(char)
+            if char == "\\" and next_char:
+                current.append(next_char)
+                index += 2
+                continue
+            if char == "'":
+                if next_char == "'":
+                    current.append(next_char)
+                    index += 2
+                    continue
+                single_quote = False
+            index += 1
+            continue
+        if double_quote:
+            current.append(char)
+            if char == '"':
+                if next_char == '"':
+                    current.append(next_char)
+                    index += 2
+                    continue
+                double_quote = False
+            index += 1
+            continue
+        if char == "-" and next_char == "-":
+            line_comment = True
+            current.append(" ")
+            index += 2
+            continue
+        if char == "/" and next_char == "*":
+            block_depth = 1
+            current.append(" ")
+            index += 2
+            continue
+        if char == "'":
+            single_quote = True
+            current.append(char)
+            index += 1
+            continue
+        if char == '"':
+            double_quote = True
+            current.append(char)
+            index += 1
+            continue
+        if char == "$":
+            match = re.match(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$", sql[index:])
+            if match:
+                dollar_quote = match.group(0)
+                current.append(dollar_quote)
+                index += len(dollar_quote)
+                continue
+        if char == ";":
+            statement = "".join(current).strip()
+            if statement:
+                statements.append(statement)
+            current.clear()
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    if single_quote or double_quote or dollar_quote or block_depth:
+        return None
+    tail = "".join(current).strip()
+    if tail:
+        statements.append(tail)
+    return statements
+
+
 def migration_risk(paths: list[str], repository: pathlib.Path) -> tuple[str, str | None]:
     migrations = [path for path in paths if path.startswith("apps/pubg-saas/src/infrastructure/postgres/migrations/")]
     if not migrations:
         return "reversible_app_candidate", None
-    migration_files = [(repository / path) for path in migrations]
-    if any(not path.is_file() or path.is_symlink() for path in migration_files):
+    repo = repository.resolve()
+    migration_files: list[pathlib.Path] = []
+    for relative in migrations:
+        path = pathlib.PurePosixPath(relative)
+        if path.is_absolute() or any(part in {".", ".."} for part in path.parts):
+            return "unreviewed_migration", "migration_source_missing_or_untrusted"
+        candidate = repo.joinpath(*path.parts)
+        current = repo
+        for part in path.parts:
+            current = current / part
+            if current.is_symlink():
+                return "unreviewed_migration", "migration_source_missing_or_untrusted"
+        migration_files.append(candidate)
+    if any(not path.is_file() for path in migration_files):
         return "unreviewed_migration", "migration_source_missing_or_untrusted"
     try:
         sql = "\n".join(path.read_text(encoding="utf-8") for path in migration_files)
     except (OSError, UnicodeError):
         return "unreviewed_migration", "migration_source_missing_or_untrusted"
-    if re.search(r"\bCREATE\s+EXTENSION\b|\bvector\s*\(|USING\s+vector\b", sql, re.IGNORECASE):
-        return "pgvector_install", "separate_pgvector_authorization_required"
-    if re.search(r"\bDROP\s+(?:TABLE|COLUMN|TYPE|INDEX|CONSTRAINT|SCHEMA)\b|\bRENAME\s+(?:COLUMN|TO)\b", sql, re.IGNORECASE):
-        return "destructive_schema", "separate_schema_authorization_required"
+    statements = split_sql_statements(sql)
+    if statements is None or not statements:
+        return "unreviewed_migration", "migration_sql_invalid_or_empty"
+    for statement in statements:
+        normalized = re.sub(r"\s+", " ", statement).strip()
+        if re.match(r"CREATE\s+EXTENSION\b", normalized, re.IGNORECASE):
+            if re.search(r"\bvector\b", normalized, re.IGNORECASE):
+                return "pgvector_install", "separate_pgvector_authorization_required"
+            return "extension_install", "separate_extension_authorization_required"
+        if re.search(r"\bvector\b|\bvector_[a-z0-9_]+\b", normalized, re.IGNORECASE):
+            return "pgvector_install", "separate_pgvector_authorization_required"
+        if re.match(r"DROP\b|TRUNCATE\b", normalized, re.IGNORECASE) or re.search(
+            r"\b(?:DROP|RENAME|VALIDATE|ENABLE|DISABLE)\s+(?:COLUMN|CONSTRAINT|POLICY|ROW\s+LEVEL\s+SECURITY|TRIGGER|RULE|SCHEMA|TABLE|TYPE|INDEX|VIEW)|\bALTER\s+COLUMN\b|\bSET\s+NOT\s+NULL\b|\bSET\s+SCHEMA\b|\bOWNER\s+TO\b",
+            normalized,
+            re.IGNORECASE,
+        ):
+            return "destructive_schema", "separate_schema_authorization_required"
+        if re.match(r"(?:INSERT|UPDATE|DELETE|MERGE|COPY|CALL|DO)\b", normalized, re.IGNORECASE):
+            return "data_migration", "separate_data_migration_authorization_required"
+        if re.match(r"(?:GRANT|REVOKE|ALTER\s+SYSTEM)\b", normalized, re.IGNORECASE):
+            return "unreviewed_migration", "migration_security_change_requires_review"
+        if re.match(r"ALTER\s+TABLE\b", normalized, re.IGNORECASE):
+            if not re.match(
+                r"ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ADD\s+COLUMN\b",
+                normalized,
+                re.IGNORECASE,
+            ) or re.search(r"\b(?:NOT\s+NULL|DEFAULT|GENERATED|REFERENCES|UNIQUE|PRIMARY\s+KEY|CHECK)\b",
+                           normalized, re.IGNORECASE):
+                return "destructive_schema", "separate_schema_authorization_required"
+        if re.match(r"CREATE\s+UNIQUE\s+INDEX\b", normalized, re.IGNORECASE):
+            return "destructive_schema", "separate_schema_authorization_required"
+        additive = (
+            r"CREATE\s+(?:UNLOGGED\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s*\("
+            r"|CREATE\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+NOT\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ON\b"
+            r"|ALTER\s+TABLE\s+(?:ONLY\s+)?(?:IF\s+EXISTS\s+)?(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s+ADD\s+COLUMN\b"
+            r"|CREATE\s+FUNCTION\s+(?:[a-z_][\w$]*\.)?[a-z_][\w$]*\s*\("
+            r"|COMMENT\s+ON\s+(?:TABLE|COLUMN|FUNCTION|INDEX)\b"
+        )
+        if re.match(additive, normalized, re.IGNORECASE):
+            if re.match(r"CREATE\s+FUNCTION\b", normalized, re.IGNORECASE) and re.search(
+                r"\b(?:SECURITY\s+DEFINER|EXECUTE)\b", normalized, re.IGNORECASE,
+            ):
+                return "unreviewed_migration", "migration_function_requires_review"
+            continue
+        return "unreviewed_migration", "migration_statement_not_allowlisted"
     return "backward_compatible_schema", None
 
 
@@ -205,7 +364,8 @@ def preflight_candidate(
         return {"status": "BLOCKED", "reason": scope_reason or scope}
     risk, risk_reason = migration_risk(paths, repository)
     if risk_reason:
-        return {"status": "BLOCKED", "reason": risk_reason}
+        status = "BLOCKED_OPERATOR_AUTHORIZATION" if risk_reason.startswith("separate_") else "BLOCKED"
+        return {"status": status, "reason": risk_reason}
     allowed, reason = validate_approval(approval, repository=repository, instance_id=instance_id,
                                         bot_account_id=bot_account_id, risk=risk, now=now)
     if not allowed:

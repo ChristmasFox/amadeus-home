@@ -89,10 +89,13 @@ notified.
 The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
 `GATE_MEMORY_WRITE_ENABLED`, `GATE_MEMORY_AUTO_LEARN_ENABLED`, or embedding
 requests. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
-unreviewed control-plane changes, destructive schema changes, and pgvector
-image/extension operations. No target query, backup, image build, database
-migration, or service switch is performed when approval or M2 clearance is
-missing.
+unreviewed control-plane changes, destructive schema changes, data-changing
+migrations, unrecognized SQL statements, and extension/pgvector operations.
+The migration classifier only auto-authorizes an explicit allowlist of
+additive table/index/function DDL; unknown syntax fails closed. A blocked
+candidate prints a fixed recovery step for its reason. No target query,
+backup, image build, database migration, or service switch is performed when
+approval or M2 clearance is missing.
 
 To revoke Gate-Local automation, remove both local records:
 

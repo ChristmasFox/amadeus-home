@@ -45,6 +45,79 @@ def deployment_status(error: CandidateError) -> str:
     return "BLOCKED_OPERATOR_AUTHORIZATION" if isinstance(error, OperatorAuthorizationRequired) else "BLOCKED"
 
 
+def recovery_step(reason: str) -> str:
+    if reason.startswith("approval_"):
+        return "review the external Gate-Local approval; create or renew it with pnpm devctl configure gate-auto-enable"
+    if reason.startswith("m2_") or reason == "m2_pause_active":
+        return "complete the separate M2 human acceptance, then record its evidence with pnpm devctl configure gate-m2-clear"
+    return {
+        "separate_pgvector_authorization_required": "prepare a separately authorized pgvector image/extension plan and verified Gate backup; this autopilot will not apply it",
+        "separate_extension_authorization_required": "review the extension change with dedicated authorization and verified backup/restore evidence",
+        "separate_schema_authorization_required": "review schema compatibility, verified backup/restore, and forward or rollback steps under the schema risk gate",
+        "separate_data_migration_authorization_required": "prepare explicit data-migration authorization and a verified backup; automatic backfill remains disabled",
+        "migration_statement_not_allowlisted": "review the migration statement manually and use a separately approved release path",
+        "migration_sql_invalid_or_empty": "repair the migration SQL in the reviewed Git source and rerun the dry-run preflight",
+        "migration_security_change_requires_review": "review the privilege change independently before selecting any release path",
+        "migration_function_requires_review": "review the database function security and behavior before selecting any release path",
+        "migration_source_missing_or_untrusted": "restore the changed migration from the reviewed Git commit and rerun source verification",
+        "shared_package_change": "split the shared package update into a reviewed change and verify both Lab and Gate consumers",
+        "no_changes": "commit the intended Gate source change and rerun the candidate preflight",
+        "non_runtime": "review the changed paths; this candidate path only applies Gate runtime source",
+        "lab_only": "route the change through the Lab release path; Gate autopilot will not apply it",
+        "release_control_change": "review the Gate release-control changes independently; this candidate path does not auto-apply control-plane edits",
+        "target_machine_scope_mismatch": "verify the Gate-Local machine in the external approval and keep it separate from the Lab machine",
+        "target_machine_invalid": "select the configured Gate-Local machine from the host profile and renew the scoped Gate approval",
+        "gate_target_overlaps_lab_machine": "configure a dedicated Gate-Local OrbStack machine, then renew the Gate approval",
+        "target_bot_or_image_identity_untrusted": "verify the fixed Gate app path, Gate Bot account ID, and immutable active image on the selected target",
+        "target_bot_identity_changed": "verify the Gate Bot binding and reissue the approval only after the intended target is confirmed",
+        "target_identity_untrusted": "verify the Gate-Local target identity and active image against the external approval before retrying",
+        "bot_identity_mismatch": "verify the Gate Bot account binding and reissue the approval only for the intended Bot",
+        "target_compose_service_identity_invalid": "restore the reviewed Gate Compose service names and image references, then rerun target verification",
+        "dual_or_missing_runtime": "inspect the Gate Gateway and Worker count for the selected Bot; resolve the duplicate or missing process before retrying",
+        "active_runtime_not_running": "restore the single Gate Gateway and Worker to a healthy state before retrying the candidate",
+        "target_gateway_container_missing": "verify the Gate Gateway service and target machine, then rerun the read-only target preflight",
+        "compose_runtime_facts_invalid": "repair the Gate Compose/runtime inspection path and verify its fixed service identities",
+        "runtime_drift_or_unknown": "compare the running Gateway, Worker, egress image, Compose file, and external deployment record; repair drift before retrying",
+        "schema_incompatible_or_unknown": "review the migration against the live compatible schema window in an isolated fixture before retrying",
+        "release_in_progress": "wait for or reconcile the existing Gate release lock and audit before starting another candidate",
+        "recoverable_backup_missing": "verify the external age recipients/identity and restore fixture; no migration or service switch was attempted",
+        "backup_directory_missing": "restore the protected external Gate checkpoint directory with owner-only permissions",
+        "backup_directory_symlink_refused": "replace the external checkpoint symlink with a real owner-only directory",
+        "backup_directory_inside_repository": "move Gate release artifacts outside the checkout and retry the preflight",
+        "backup_directory_unavailable": "restore access to the protected external Gate checkpoint directory and verify its owner",
+        "backup_directory_permissions_invalid": "set the external Gate checkpoint directory to owner-only mode 0700 and verify its owner",
+        "encrypted_database_checkpoint_failed": "check the Gate backup permissions, age configuration, and pg_dump health, then repeat the isolated restore rehearsal",
+        "encrypted_database_checkpoint_verify_failed": "inspect the encrypted checkpoint and age identity, then repeat the isolated pg_restore listing before retrying",
+        "candidate_host_tools_unavailable": "install or repair the required host-side Gate candidate tools, then rerun read-only verification",
+        "candidate_image_transfer_failed": "check the Gate target transport and free space, then retry transfer of the immutable digest",
+        "candidate_image_digest_mismatch": "discard the mismatched candidate and rebuild or transfer the image matching the recorded immutable digest",
+        "immutable_candidate_digest_invalid": "rebuild the Gate image with a valid immutable digest and rerun candidate verification",
+        "checkpoint_path_already_exists": "inspect the external checkpoint and audit for that candidate; use a new reviewed source commit for another attempt",
+        "candidate_health_or_smoke_failed": "review the checkpoint and rollback audit, confirm the previous application is healthy, and diagnose the failed Gate health probe",
+        "rollback_failed_manual_recovery_required": "use the external checkpoint to restore the previous Compose/env and follow the Gate application recovery runbook",
+        "rollback_checkpoint_missing": "restore the protected previous Compose and environment checkpoint before attempting another candidate",
+        "candidate_step_failed": "review the recorded failed step, checkpoint, and audit; reconcile schema and application state before retrying",
+        "candidate_adapter_incomplete": "repair the Gate candidate adapter so every guarded build, backup, migration, switch, health, smoke, audit, notify, and rollback step is present",
+        "immutable_candidate_identity_missing": "rebuild the candidate and record both its source commit and immutable image digest",
+        "command_unavailable_or_timed_out": "verify the host release command and Gate-Local target health, then retry the blocked step",
+        "command_failed": "inspect the fixed release command result and external checkpoint/audit, then repair the failing Gate preflight step",
+        "source_sha_invalid": "restore a valid committed Git source state and rerun the Gate candidate preflight",
+        "active_goal_state_unavailable": "restore the private devctl Goal state from the active checkout, then rerun the candidate preflight",
+        "active_goal_base_invalid": "repair the active Goal base commit in devctl state using a valid Git commit, then rerun preflight",
+        "apply_requires_clean_committed_source": "commit the reviewed Gate change and clean unrelated worktree edits before candidate apply",
+        "external_release_file_missing": "restore the protected Gate release adapter files outside the repository",
+        "release_file_inside_repository": "move Gate release secrets and adapter state outside the Git checkout",
+        "external_release_file_unavailable": "restore access to the protected external Gate release adapter files",
+        "external_release_file_untrusted": "review and restore the protected external Gate release adapter files with the expected owner and contents",
+        "private_release_file_permissions_invalid": "set protected external Gate release files to owner-only permissions and verify their owner",
+        "notification_hook_untrusted": "restore the approved Gate-private notification hook with its expected external path and permissions",
+        "approval_reference_invalid": "check the approval reference against the external Gate-Local approval record and retry with the matching reference",
+        "release_lock_symlink_refused": "remove the untrusted external Gate lock symlink after reviewing any active release, then retry",
+        "private_test_notification_failed": "verify the Gate-private notification hook and deliver the recorded candidate status through the approved test channel",
+        "cross_product_change": "split the Gate change from Lab/shared changes and review the two release paths separately",
+    }.get(reason, "review the named preflight gate and external audit/checkpoint before retrying")
+
+
 def command(args: list[str], *, input_data: bytes | None = None, timeout: int = 1800) -> bytes:
     try:
         result = subprocess.run(args, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
@@ -255,9 +328,7 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[st
             raise CandidateError("runtime_drift_or_unknown")
     risk, risk_reason = migration_risk(paths, ROOT)
     if risk_reason:
-        error = OperatorAuthorizationRequired if risk_reason in {
-            "separate_pgvector_authorization_required", "separate_schema_authorization_required",
-        } else CandidateError
+        error = OperatorAuthorizationRequired if risk_reason.startswith("separate_") else CandidateError
         raise error(risk_reason)
     facts = {
         "targetTrusted": True,
@@ -523,6 +594,8 @@ def gate_apply(approval_ref: str) -> int:
                                          "audit": audit, "rollback": rollback})
         print("GATE_DEPLOYMENT=" + result["status"] + " source_candidate=" + sha[:12])
         print("GATE_DEPLOYMENT_REASON=" + result["reason"])
+        if result["status"] not in {"DEPLOYED_AND_NOTIFIED", "ALREADY_CURRENT"}:
+            print("GATE_DEPLOYMENT_NEXT=" + recovery_step(result["reason"]))
         print("GATE_CHECKPOINT=" + str(checkpoint))
         if result.get("auditStatus") == "failed":
             print("GATE_AUDIT=FAILED manual evidence review required")
@@ -543,12 +616,15 @@ def main() -> int:
         return gate_apply(args[3])
     except OperatorAuthorizationRequired as error:
         print("GATE_DEPLOYMENT=" + deployment_status(error) + " reason=" + str(error), file=sys.stderr)
+        print("GATE_DEPLOYMENT_NEXT=" + recovery_step(str(error)), file=sys.stderr)
         return 2
     except CandidateError as error:
         print("GATE_DEPLOYMENT=" + deployment_status(error) + " reason=" + str(error), file=sys.stderr)
+        print("GATE_DEPLOYMENT_NEXT=" + recovery_step(str(error)), file=sys.stderr)
         return 2
     except Exception:
         print("GATE_DEPLOYMENT=BLOCKED reason=candidate_adapter_failed", file=sys.stderr)
+        print("GATE_DEPLOYMENT_NEXT=" + recovery_step("candidate_adapter_failed"), file=sys.stderr)
         return 2
 
 
