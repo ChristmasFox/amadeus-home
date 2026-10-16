@@ -503,6 +503,13 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
             raise CandidateError("target_bot_or_image_identity_untrusted")
         if current_image != active_image:
             needs_convergence = True
+        elif not needs_convergence:
+            # The image tag may have been rebuilt in-place while a container
+            # is still running an older image ID. Treat this as repairable.
+            running_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", ids[0])
+            tagged_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", active_image)
+            if running_id != tagged_id:
+                needs_convergence = True
     migration_paths = candidate_migration_paths(image_match.group(1), sha, paths)
     risk, reason = migration_risk(migration_paths, ROOT)
     if reason:
@@ -647,6 +654,16 @@ def gate_apply(approval_ref: str) -> int:
                 with path.open("xb") as output:
                     os.fchmod(output.fileno(), 0o600)
                     output.write(value)
+            if risk == "reversible_app_candidate":
+                # Code-only changes do not need another full database dump.
+                # Preserve Compose/env to roll back the application image.
+                metadata = {**state, "createdAt": now.isoformat(),
+                            "databaseScope": "unchanged", "checkpointStatus": "application_recoverable"}
+                with (checkpoint / "checkpoint.json").open("x", encoding="utf-8") as output:
+                    os.fchmod(output.fileno(), 0o600)
+                    json.dump(metadata, output, ensure_ascii=False, sort_keys=True)
+                    output.write("\n")
+                return {"recoverable": True, "path": str(checkpoint)}
             artifact = checkpoint / "pubg-saas.dump.age"
             dump_cmd = [*compose_base(machine, layout), "exec", "--no-TTY", "postgres", "sh", "-c",
                         full_database_dump_shell()]
@@ -701,7 +718,8 @@ def gate_apply(approval_ref: str) -> int:
                 raise
 
         def switch() -> dict[str, Any]:
-            remote_compose(machine, layout, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
+            remote_compose(machine, layout, "up", "-d", "--no-build", "--force-recreate", "--wait",
+                           "egress-proxy", "gateway", "worker", timeout=900)
             return {"image": image}
 
         def healthy() -> bool:
@@ -781,7 +799,7 @@ def gate_apply(approval_ref: str) -> int:
             print("GATE_AUDIT_PATH=" + str(backup_root / f"gate-local-precheckpoint-failure-{created}-{sha[:12]}.json"))
         if result.get("auditStatus") == "failed":
             print("GATE_AUDIT=FAILED manual evidence review required")
-        return 0 if result["status"] in {"DEPLOYED_AND_NOTIFIED", "ALREADY_CURRENT"} else 2
+        return 0 if result["status"] in {"DEPLOYED_AND_NOTIFIED", "DEPLOYED_NOTIFICATION_FAILED", "ALREADY_CURRENT"} else 2
     finally:
         lock.close()
 
