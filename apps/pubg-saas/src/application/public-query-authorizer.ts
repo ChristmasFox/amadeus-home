@@ -217,7 +217,8 @@ export class PublicQueryAuthorizer {
       // membership or access to shared group memories is granted.
       return { kind: 'dm', botAccountId: this.botId, actorId: job.request.event.userId };
     }
-    if (job.request.kind !== 'group' || !job.boundTeam ||
+    const bound = job.boundTeam;
+    if (job.request.kind !== 'group' || !bound ||
         job.bindingRevision === null || !/^[1-9][0-9]{0,17}$/u.test(job.bindingRevision)) return null;
     const event = job.request.event;
     const verifyBinding = async () => this.pool.query(
@@ -238,8 +239,8 @@ export class PublicQueryAuthorizer {
          AND ingress.tenant_id=$4 AND ingress.team_id=$7
          AND ingress.binding_revision=$8::BIGINT
        LIMIT 2`,
-      [this.botId, event.guildId, event.channelId, job.boundTeam.tenantId,
-        job.eventId, job.leaseToken, job.boundTeam.teamId, job.bindingRevision, event.userId],
+      [this.botId, event.guildId, event.channelId, bound.tenantId,
+        job.eventId, job.leaseToken, bound.teamId, job.bindingRevision, event.userId],
     );
     const before = await verifyBinding();
     if (before.rowCount !== 1) return null;
