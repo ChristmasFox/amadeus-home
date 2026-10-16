@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import type { KookIngressJob } from './kook-ingress-queue.js';
+import { KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
 export type GateMemoryScope =
   | { kind: 'dm'; botAccountId: string; actorId: string }
@@ -88,9 +89,7 @@ function project(row: Record<string, unknown>): GateMemoryEntry {
     updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at) };
 }
 
-/** The live ingress and current binding are checked in the *same SQL statement*
- * as each memory operation, closing the gap after external membership checks.
- * No session creation, advisory locks, lease extension, or FOR UPDATE. */
+/** The statement-level live check denies stale scopes after a channel rebind. */
 function liveFence(eventIndex: number, tokenIndex: number): string {
   const eventSlot = '$' + eventIndex;
   const tokenSlot = '$' + tokenIndex;
@@ -105,12 +104,10 @@ function liveFence(eventIndex: number, tokenIndex: number): string {
           AND ingress.channel_id=$4 AND ingress.tenant_id=$5 AND ingress.team_id=$6
           AND ingress.binding_revision=$7::BIGINT
           AND EXISTS (
-            SELECT 1 FROM channel_bindings binding
-            JOIN tenants tenant ON tenant.tenant_id=binding.tenant_id
-              AND tenant.platform=binding.platform AND tenant.bot_account_id=binding.bot_account_id
-            JOIN channel_binding_versions version ON version.bot_account_id=binding.bot_account_id
-              AND version.channel_id=binding.channel_id
-            WHERE binding.bot_account_id=$1 AND binding.channel_id=$4
+            SELECT 1 FROM tenants tenant
+            ${KOOK_CHANNEL_BINDING_JOIN}
+            ${KOOK_CHANNEL_VERSION_JOIN}
+            WHERE tenant.bot_account_id=$1 AND binding.channel_id=$4
               AND binding.tenant_id=$5 AND binding.team_id=$6
               AND tenant.platform='kook' AND tenant.guild_id=ingress.guild_id
               AND version.revision=$7::BIGINT
@@ -197,9 +194,7 @@ export class GateMemoryStore {
   }
 
 
-  /** Explicit re-remembering requires a *newly admitted* message after the
-   * tombstone, plus CAS revision. A pre-revocation lease cannot revive it.
-   * Not exposed as an unrestricted model-facing tool. */
+  /** Only an event received after revocation can restore a tombstone. */
   async rememberAgain(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);
