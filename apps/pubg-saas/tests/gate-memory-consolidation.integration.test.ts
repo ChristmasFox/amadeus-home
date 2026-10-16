@@ -171,6 +171,12 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const enableRem = await startDirect(actor, '/pubg memory rem on');
     await management(enableRem, signal);
     await finish(enableRem);
+    // Default-on REM has also seen earlier fixture messages; isolate this
+    // scenario so it asserts batching/provenance rather than prior fixture history.
+    await pool.query(
+      "DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1 AND actor_id=$2 AND workflow='rem'",
+      [bot, actor],
+    );
     const remA = await startDirect(actor, '最近我更喜欢用 M416');
     assert.equal(await consent.admitCurrentMessage(remA), 2, 'both explicitly enabled workflows receive separate scoped admissions');
     await finish(remA);
