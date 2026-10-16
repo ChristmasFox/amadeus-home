@@ -228,6 +228,10 @@ def remote(machine: str, *args: str, timeout: int = 60, input_data: bytes | None
     return command(["orb", "-m", machine, "-u", "root", *args], input_data=input_data, timeout=timeout)
 
 
+def remote_text(machine: str, *args: str, timeout: int = 60) -> str:
+    return remote(machine, *args, timeout=timeout).decode("utf-8", errors="strict").strip()
+
+
 def configured_lab_machine() -> str:
     script = 'source "$1"; amadeus_host_profile_load "$2"; printf "%s" "$ORBSTACK_MACHINE"'
     return text(["bash", "-c", script, "gate-candidate-host-profile",
@@ -263,8 +267,8 @@ def target_layout_from_labels(project: str, service: str, working_dir: str,
 
 
 def discover_remote_layout(machine: str) -> dict[str, str]:
-    gateways = text(remote(machine, "docker", "ps", "-q", "--filter",
-                           "label=com.docker.compose.service=gateway")).splitlines()
+    gateways = remote_text(machine, "docker", "ps", "-q", "--filter",
+                           "label=com.docker.compose.service=gateway").splitlines()
     if len(gateways) != 1:
         raise CandidateError("target_gateway_container_missing")
     label_format = "\n".join(
@@ -272,7 +276,7 @@ def discover_remote_layout(machine: str) -> dict[str, str]:
         for name in ("com.docker.compose.project", "com.docker.compose.service",
                      "com.docker.compose.project.working_dir", "com.docker.compose.project.config_files")
     )
-    labels = text(remote(machine, "docker", "inspect", "--format", label_format, gateways[0])).splitlines()
+    labels = remote_text(machine, "docker", "inspect", "--format", label_format, gateways[0]).splitlines()
     if len(labels) != 4:
         raise CandidateError("compose_runtime_facts_invalid")
     return target_layout_from_labels(*labels)
@@ -376,27 +380,27 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
     required = {name: by_service.get(name, []) for name in ("postgres", "egress-proxy", "gateway", "worker")}
     if any(len(items) != 1 for items in required.values()):
         raise CandidateError("target_compose_service_identity_invalid")
-    all_gateway_ids = text(remote(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=gateway")).splitlines()
-    all_worker_ids = text(remote(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=worker")).splitlines()
+    all_gateway_ids = remote_text(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=gateway").splitlines()
+    all_worker_ids = remote_text(machine, "docker", "ps", "-q", "--filter", "label=com.docker.compose.service=worker").splitlines()
     if len(all_gateway_ids) != 1 or len(all_worker_ids) != 1:
         raise CandidateError("dual_or_missing_runtime")
     gateway_state = str(required["gateway"][0].get("State", required["gateway"][0].get("state", ""))).lower()
     worker_state = str(required["worker"][0].get("State", required["worker"][0].get("state", ""))).lower()
     if "running" not in gateway_state or "running" not in worker_state:
         raise CandidateError("active_runtime_not_running")
-    active_container_id = text(remote_compose(machine, layout, "ps", "--quiet", "gateway"))
+    active_container_id = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", "gateway")
     active_container_ids = active_container_id.splitlines()
     if len(active_container_ids) != 1:
         raise CandidateError("target_gateway_container_missing")
-    running_image_id = text(remote(machine, "docker", "inspect", "--format", "{{.Image}}", active_container_ids[0]))
-    tagged_image_id = text(remote(machine, "docker", "image", "inspect", "--format", "{{.Id}}", active_image))
+    running_image_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", active_container_ids[0])
+    tagged_image_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", active_image)
     if running_image_id != tagged_image_id:
         raise CandidateError("runtime_drift_or_unknown")
     for service in ("worker", "egress-proxy"):
-        service_ids = text(remote_compose(machine, layout, "ps", "--quiet", service)).splitlines()
+        service_ids = remote_text(machine, *compose_base(machine, layout), "ps", "--quiet", service).splitlines()
         if len(service_ids) != 1:
             raise CandidateError("target_compose_service_identity_invalid")
-        service_image_id = text(remote(machine, "docker", "inspect", "--format", "{{.Image}}", service_ids[0]))
+        service_image_id = remote_text(machine, "docker", "inspect", "--format", "{{.Image}}", service_ids[0])
         if service_image_id != tagged_image_id:
             raise CandidateError("runtime_drift_or_unknown")
     migration_paths = candidate_migration_paths(image_match.group(1), sha, paths)
@@ -529,7 +533,7 @@ def gate_apply(approval_ref: str, *, allow_reviewed_control_plane: bool = False)
             current_bot = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
             if current_bot != policy.get("botAccountId"):
                 raise CandidateError("target_bot_identity_changed")
-            candidate_id = text(remote(machine, "docker", "image", "inspect", "--format", "{{.Id}}", image))
+            candidate_id = remote_text(machine, "docker", "image", "inspect", "--format", "{{.Id}}", image)
             if candidate_id != state.get("digest"):
                 raise CandidateError("candidate_image_digest_mismatch")
 

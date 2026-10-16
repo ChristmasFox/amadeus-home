@@ -114,6 +114,15 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(layout["envFile"],
                          "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas/.env")
 
+    def test_remote_compose_labels_decode_as_output_not_command_arguments(self):
+        app_dir = "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas"
+        labels = f"pubg-saas-public\ngateway\n{app_dir}\n{app_dir}/compose.yaml\n".encode()
+        with patch.object(candidate, "remote", side_effect=[b"gateway-container-id\n", labels]) as remote:
+            layout = candidate.discover_remote_layout("pubg-saas-m2-clean")
+        self.assertEqual(layout["appDir"], app_dir)
+        self.assertEqual(layout["composeFile"], app_dir + "/compose.yaml")
+        self.assertEqual(remote.call_count, 2)
+
     def test_gate_target_layout_rejects_untrusted_compose_labels(self):
         invalid = (
             ("lab", "gateway", "/var/tmp/repo/infra/pubg-saas", "/var/tmp/repo/infra/pubg-saas/compose.yaml"),
