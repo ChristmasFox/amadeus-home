@@ -15,6 +15,7 @@ import { configurePublicEgress } from './infrastructure/public-egress.js';
 import { GateMemoryStore } from './application/gate-memory-store.js';
 import { MemoryRetriever } from './application/gate-memory-retriever.js';
 import { createGateMemoryEmbeddingProvider } from './infrastructure/ai/gate-memory-embedding-provider.js';
+import { GateMemoryIntentClassifier, GateMemoryWriteCoordinator } from './application/gate-memory-writer.js';
 
 function optionalNumber(env: NodeJS.ProcessEnv, key: string): number | undefined {
   const value = env[key];
@@ -71,6 +72,9 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
     const memoryRetriever = new MemoryRetriever(memoryStore, memoryEmbeddingProvider, {
       onMetric: metric => process.stdout.write(`${JSON.stringify({ component: 'gate-memory-retrieval', ...metric })}\n`),
     });
+    const memoryWriter = agent
+      ? new GateMemoryWriteCoordinator(pool, memoryStore, authorizer, new GateMemoryIntentClassifier(agent.model))
+      : undefined;
     const onDiagnostic = (event: import('./application/kook-ingress-queue.js').KookIngressDiscardLog) =>
       process.stdout.write(`${JSON.stringify({ component: 'kook-ingress', ...event })}\n`);
     const onAgentDiagnostic = (event: import('./application/kook-public-query-handler.js').KookAgentDiagnostic) =>
@@ -83,6 +87,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookPublicQueryHandler({
         authorizer, claims, agent,
         memoryRetriever,
+        ...(memoryWriter ? { memoryWriter } : {}),
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),

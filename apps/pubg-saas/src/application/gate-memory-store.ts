@@ -27,6 +27,14 @@ export interface GateMemoryDraft {
   key: string;
   content: string;
 }
+export interface GateMemoryWriteMetadata {
+  sourceKind?: GateMemoryEntry['sourceKind'];
+  sourceReliability?: number;
+  validUntil?: string | null;
+}
+export interface GateMemoryWriteState extends GateMemoryEntry {
+  revoked: boolean;
+}
 export interface GateMemoryStoreOptions {
   lexicalSearchTimeoutMs?: number;
   onSearchMetric?: (metric: GateMemorySearchMetric) => void;
@@ -82,8 +90,37 @@ function boundedText(value: string, max: number, emojiSequence = false): string 
 }
 
 export function validateGateMemoryDraft(input: GateMemoryDraft): GateMemoryDraft {
-  return { key: boundedText(input.key, 96).toLocaleLowerCase('en-US'),
+  return { key: canonicalizeGateMemoryKey(input.key),
     content: boundedText(input.content, 800, true) };
+}
+
+export function canonicalizeGateMemoryKey(value: string): string {
+  const normalized = boundedText(value, 96).normalize('NFKC').toLocaleLowerCase('en-US')
+    .replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
+  if (!normalized || normalized.length > 96) throw new Error('gate_memory_input_invalid');
+  return normalized;
+}
+
+function validatedWriteMetadata(input: GateMemoryWriteMetadata = {}): {
+  sourceKind: NonNullable<GateMemoryWriteMetadata['sourceKind']>;
+  sourceReliability: number;
+  validUntil: string | null;
+} {
+  const sourceKind = input.sourceKind ?? 'trusted_ingress';
+  if (!['trusted_ingress', 'user_confirmed', 'system_verified', 'unknown'].includes(sourceKind)) {
+    throw new Error('gate_memory_source_kind_invalid');
+  }
+  const sourceReliability = input.sourceReliability ?? (sourceKind === 'user_confirmed' ? 95 : 80);
+  if (!Number.isSafeInteger(sourceReliability) || sourceReliability < 0 || sourceReliability > 100) {
+    throw new Error('gate_memory_source_reliability_invalid');
+  }
+  let validUntil: string | null = null;
+  if (input.validUntil != null) {
+    const timestamp = Date.parse(input.validUntil);
+    if (!Number.isFinite(timestamp)) throw new Error('gate_memory_valid_until_invalid');
+    validUntil = new Date(timestamp).toISOString();
+  }
+  return { sourceKind, sourceReliability, validUntil };
 }
 
 /** A bounded lexical fallback, not an embedding or a semantic model. */
@@ -229,6 +266,18 @@ export class GateMemoryStore {
     return this.withAuthorizedSearch(job, search => search.exact(query, limit));
   }
 
+  async getWriteState(job: KookIngressJob, key: string): Promise<GateMemoryWriteState | null> {
+    const canonicalKey = canonicalizeGateMemoryKey(key);
+    const scope = await this.trustedScope(job);
+    const sql = `SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,
+        source_reliability,valid_until,(revoked_at IS NOT NULL) AS revoked
+      FROM gate_memory_entries WHERE ` + FILTER + ` AND memory_key=$8`
+      + liveFence(9, 10) + ` LIMIT 1`;
+    const result = await this.pool.query(sql, [...scope, canonicalKey, job.eventId, job.leaseToken]);
+    const row = result.rows[0];
+    return row ? { ...project(row), revoked: row.revoked === true } : null;
+  }
+
   async searchLexical(job: KookIngressJob, query: string, limit = 8): Promise<GateMemoryEntry[]> {
     return this.withAuthorizedSearch(job, search => search.lexical(query, limit));
   }
@@ -241,7 +290,10 @@ export class GateMemoryStore {
   ): Promise<GateMemoryEntry[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
     const search = boundedText(rawQuery, 240, true).toLocaleLowerCase('en-US');
-    const canonicalKey = search.replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/gu, '');
+    let canonicalKey = '';
+    if (search.length <= 96) {
+      try { canonicalKey = canonicalizeGateMemoryKey(search); } catch { /* Non-key queries still use exact content matching. */ }
+    }
     const sql = `SELECT memory_key,content,revision,updated_at,source_event_id,source_kind,
         source_reliability,valid_until
       FROM gate_memory_entries WHERE ` + FILTER + ` AND ` + ACTIVE_MEMORY_FILTER
@@ -423,14 +475,16 @@ export class GateMemoryStore {
   }
 
   /** New key only; a conflicting revision/tombstone is never overwritten. */
-  async create(job: KookIngressJob, draft: GateMemoryDraft): Promise<'created' | 'already_exists'> {
+  async create(job: KookIngressJob, draft: GateMemoryDraft, metadata: GateMemoryWriteMetadata = {}): Promise<'created' | 'already_exists'> {
     const value = validateGateMemoryDraft(draft);
+    const source = validatedWriteMetadata(metadata);
     const scope = await this.trustedScope(job);
-    const sql = `WITH allowed AS (SELECT 1 WHERE TRUE` + liveFence(10, 11) + `),
+    const sql = `WITH allowed AS (SELECT 1 WHERE TRUE` + liveFence(14, 15) + `),
       inserted AS (
         INSERT INTO gate_memory_entries
-        (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
-        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 FROM allowed
+        (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id,
+         source_kind,source_reliability,valid_until)
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13 FROM allowed
         ON CONFLICT DO NOTHING RETURNING memory_id
       ), queued AS (
         INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
@@ -440,49 +494,56 @@ export class GateMemoryStore {
              EXISTS(SELECT 1 FROM inserted) AS inserted,
              EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
-      boundedText(job.eventId, 256), job.leaseToken]);
+      boundedText(job.eventId, 256), source.sourceKind, source.sourceReliability, source.validUntil,
+      job.eventId, job.leaseToken]);
     if (result.rows[0]?.allowed !== true) throw new Error('gate_memory_scope_unavailable');
     return result.rows[0]?.inserted === true ? 'created' : 'already_exists';
   }
 
-  async revise(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
+  async revise(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number, metadata: GateMemoryWriteMetadata = {}): Promise<boolean> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);
+    const source = validatedWriteMetadata(metadata);
     const scope = await this.trustedScope(job);
     const sql = `WITH updated AS (
-      UPDATE gate_memory_entries SET content=$9,source_event_id=$10,revision=revision+1,updated_at=now() WHERE `
-      + FILTER + ' AND memory_key=$8 AND revision=$11 AND revoked_at IS NULL' + liveFence(10, 12) + `
+      UPDATE gate_memory_entries SET content=$9,source_event_id=$10,source_kind=$11,source_reliability=$12,
+        valid_until=$13,revision=revision+1,updated_at=now() WHERE `
+      + FILTER + ' AND memory_key=$8 AND revision=$14 AND revoked_at IS NULL' + liveFence(10, 15) + `
       RETURNING memory_id,revision
     ), queued AS (
       INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
       SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
     ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
-      boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
+      boundedText(job.eventId, 256), source.sourceKind, source.sourceReliability, source.validUntil,
+      expectedRevision, job.leaseToken]);
     return result.rows[0]?.updated === true;
   }
 
 
   /** Only an event received after revocation can restore a tombstone. */
-  async rememberAgain(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number): Promise<boolean> {
+  async rememberAgain(job: KookIngressJob, draft: GateMemoryDraft, expectedRevision: number, metadata: GateMemoryWriteMetadata = {}): Promise<boolean> {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);
+    const source = validatedWriteMetadata(metadata);
     const scope = await this.trustedScope(job);
     const sql = `WITH updated AS (UPDATE gate_memory_entries
-      SET content=$9,source_event_id=$10,revoked_at=NULL,revision=revision+1,updated_at=now()
-      WHERE ` + FILTER + ` AND memory_key=$8 AND revision=$11
+      SET content=$9,source_event_id=$10,source_kind=$11,source_reliability=$12,valid_until=$13,
+        revoked_at=NULL,revision=revision+1,updated_at=now()
+      WHERE ` + FILTER + ` AND memory_key=$8 AND revision=$14
       AND revoked_at IS NOT NULL AND source_event_id<>$10
       AND revoked_at < (
         SELECT ingress.received_at FROM kook_ingress_events ingress
-        WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$12
+        WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$15
           AND ingress.status='processing' AND ingress.lease_until>now()
           AND ingress.expires_at>now()
-      )` + liveFence(10, 12) + ` RETURNING memory_id,revision), queued AS (
+      )` + liveFence(10, 15) + ` RETURNING memory_id,revision), queued AS (
         INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
         SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
       ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
-      boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
+      boundedText(job.eventId, 256), source.sourceKind, source.sourceReliability, source.validUntil,
+      expectedRevision, job.leaseToken]);
     return result.rows[0]?.updated === true;
   }
 
@@ -496,7 +557,7 @@ export class GateMemoryStore {
         SELECT memory_id,revision,'delete' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
       ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope,
-      boundedText(key, 96).toLocaleLowerCase('en-US'), boundedText(job.eventId, 256), job.leaseToken]);
+      canonicalizeGateMemoryKey(key), boundedText(job.eventId, 256), job.leaseToken]);
     return result.rows[0]?.updated === true;
   }
 }

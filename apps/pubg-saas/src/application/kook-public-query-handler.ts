@@ -27,6 +27,7 @@ import { MAX_TEAM_ROSTER_SIZE } from '../contracts/team-roster.js';
 import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.js';
 import { buildPublicAgentFacts } from './public-agent-facts.js';
 import type { MemoryRetriever } from './gate-memory-retriever.js';
+import type { GateMemoryWriteCoordinator } from './gate-memory-writer.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -48,6 +49,7 @@ export interface KookPublicQueryServices {
   executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<KookNaturalWriteResult>;
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
   memoryRetriever?: MemoryRetriever;
+  memoryWriter?: GateMemoryWriteCoordinator;
   executor?: QueryPlanExecutor;
   now?: () => Date;
 }
@@ -288,6 +290,11 @@ async function naturalLanguageReply(
     }).catch(() => undefined);
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'model', reason: 'agent_model_unconfigured', requestKey, ...(channelId ? { channelId } : {}), count: 1 });
     return message('我这边的公共助手还没连上模型，暂时无法正常接话。稍后再试一下。');
+  }
+
+  if (services.memoryWriter) {
+    const memoryReply = await services.memoryWriter.handle(job, signal).catch(() => undefined);
+    if (memoryReply) return memoryReply;
   }
 
   let toolDegraded = false;

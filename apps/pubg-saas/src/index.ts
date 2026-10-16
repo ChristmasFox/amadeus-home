@@ -26,6 +26,7 @@ export * from './application/kook-public-query-handler.js';
 export * from './application/kook-conversation-agent.js';
 export * from './application/gate-memory-store.js';
 export * from './application/gate-memory-retriever.js';
+export * from './application/gate-memory-writer.js';
 export * from './application/gate-context-builder.js';
 export * from './application/gate-conversation-checkpoints.js';
 export * from './application/gate-memory-embedding.js';

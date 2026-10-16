@@ -411,3 +411,46 @@ P3 source changes are in `apps/pubg-saas/src/application/gate-memory-*`,
 `gate-context-builder.ts`, `kook-public-query-handler.ts`,
 `kook-conversation-agent.ts`, migration `0026`, and focused retriever,
 context-builder, foundation, and pgvector tests.
+
+## P4 explicit DM writer and revocation — 2026-10-16
+
+- The public KOOK handler sends only a current **direct message** to a bounded
+  AI SDK tool call with a strict Zod intent schema. It sees no conversation
+  history, permissions, tenant/channel selection, database tools, or SQL. A
+  group message bypasses the writer before classification. Normal chat proceeds
+  when the classifier returns `none`; model and schema failures do not create
+  a write suggestion.
+- `GateMemoryWriteCoordinator` re-resolves the current trusted DM ingress
+  scope. It accepts only high-confidence self-authored explicit requests with
+  verbatim evidence. Only stable preferences and verifiable facts can be
+  saved; sensitive disclosures, third-party subjects, instruction/prompt
+  injection, self-harm or harm-risk text, episodic events, and ephemeral
+  context are refused. Stable preferences have no expiry; verifiable facts
+  require a 30- or 90-day validity window. Writes use canonical keys, trusted
+  source provenance and reliability, duplicate/conflict checks, revision CAS,
+  and the existing current-lease SQL fence.
+- A new explicit `remember` after a tombstone invokes `rememberAgain`, whose
+  database fence requires a newly received event after revocation. Replays of
+  an event consult its receipt before classification; the unique DM event
+  constraint and idempotency hash prevent a retry from creating another
+  mutation. Migration `0027_gate_memory_write_receipts.sql` stores scope/event
+  identifiers, canonical key and outcome, but no memory content. Group shared
+  memory remains unwritable.
+- A user can list, correct and forget personal DM facts. Listing displays
+  source category, revision, update date, and validity when present. Revocation
+  excludes a fact from lexical and semantic recall immediately; vector deletion
+  remains queued. Forgetting a memory does **not** delete its raw KOOK
+  transcript, protected backups, or the content-free idempotency receipt; the
+  receipt currently has no automatic expiry. `/pubg privacy` explains this
+  lifecycle, including persistent transcript retention.
+- The isolated PostgreSQL synthetic KOOK fixture exercises remember/replay,
+  conflict, CAS correction, list, expiring fact, sensitive and third-party
+  refusal, immediate forget/no recall, explicit restore, another actor's DM
+  isolation, and group bypass. It does not connect to Gate-Local or send a real
+  provider request. M2 remains `PAUSED / BLOCKED_BY_RELEASE_ENGINEERING`.
+
+P4 source changes are in `gate-memory-store.ts`, new
+`gate-memory-writer.ts`, `kook-public-query-handler.ts`, `gateway.ts`,
+migration `0027_gate_memory_write_receipts.sql`, focused writer fixtures, and
+the KOOK privacy notice. Async consolidation, automated learning, and runtime
+deployment remain out of scope.

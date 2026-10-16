@@ -27,6 +27,8 @@ test('privacy help is available in DMs and unbound groups without database or mo
   assert.deepEqual(parseKookManagementCommand('/pubg me "Player One"'), { kind: 'me', name: 'Player One' });
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /默认排行榜指标.*管理员标识.*preference delete.*查询别名.*alias delete/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /按频道隔离.*按用户隔离并持久保留/u);
+  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Gate 长期记忆只在本人私聊中按明确的保存\/更正请求写入.*不从群聊或普通聊天自动学习/u);
+  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /立即退出召回.*原始 KOOK 聊天记录、受保护备份.*写入幂等回执.*没有自动过期/u);
   assert.doesNotMatch(KOOK_PUBLIC_PRIVACY_NOTICE, /最多保留 12 小时|每分钟 10 条|每日 200 条/u);
   const handler = createKookManagementHandler({} as unknown as KookOnboardingServices);
   const bot = 'privacy-bot';
