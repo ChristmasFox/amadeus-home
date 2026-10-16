@@ -121,6 +121,16 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertTrue(candidate.database_backup_required("reversible_app_candidate", True))
         self.assertTrue(candidate.database_backup_required("backward_compatible_schema", False))
 
+    def test_full_backup_rollback_preserves_postgres_owners_and_acl_metadata(self):
+        dump = candidate.full_database_dump_shell()
+        restore = candidate.full_database_restore_shell()
+        self.assertIn("pg_dump -Fc", dump)
+        self.assertNotIn("--no-owner", dump)
+        self.assertNotIn("--no-acl", dump)
+        self.assertIn("pg_restore --single-transaction --clean --if-exists", restore)
+        self.assertNotIn("--no-owner", restore)
+        self.assertNotIn("--no-acl", restore)
+
     def test_canary_tenant_selection_requires_one_marked_identifier(self):
         self.assertEqual(candidate.unique_test_tenant_id("1\n", "fixture-canary-01\n"), "fixture-canary-01")
         with self.assertRaisesRegex(candidate.CandidateError, "canary_test_tenant_not_unique"):
