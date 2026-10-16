@@ -160,8 +160,10 @@ jobs:
           corepack enable
           corepack prepare pnpm@11.19.0 --activate
           pnpm install --frozen-lockfile --filter @agent/pubg-saas...
-      - name: Build shared PUBG domain
-        run: pnpm --filter @agent/pubg-domain build
+      - name: Build shared presentation and PUBG domain
+        run: |
+          pnpm --filter @agent/presentation build
+          pnpm --filter @agent/pubg-domain build
       - name: Run isolated optional pgvector fixture
         env:
           PUBG_SAAS_PGVECTOR_TEST_CONTAINER_ID: ${{ job.services.postgres.id }}
