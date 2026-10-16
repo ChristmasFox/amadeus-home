@@ -8,8 +8,8 @@ function safeCandidateText(value: string, max = 160): string {
   return value.replace(/[\u0000-\u001f\u007f]/gu, ' ').replace(/@/gu, '＠').trim().slice(0, max);
 }
 const groupHelp = '群聊绑定：机器人进入服务器后会自动创建一支队伍并绑定默认文字频道；玩家发送“我的 PUBG 账号是 游戏名”或 /pubg me <游戏名>（默认 Steam）即可验证并绑定本人账号。管理员可发送“@成员 他的 PUBG 账号是 游戏名”代绑；频道成员可发送“我们的队名是 队名”修改队名。旧命令 /pubg claim <平台> <游戏名> 仍可自绑。队伍查询与管理：/pubg teams 列出服务器队伍；/pubg status 查看状态；/pubg add <游戏名…> 添加队员；/pubg roster <游戏名…> 替换完整名单；/pubg preference 查看或设置默认排行榜；/pubg alias list|set|delete 管理查询别名；/pubg privacy 查看数据说明。旧管理操作仍会按权限要求确认。';
-const directHelp = '账号绑定必须在队伍群聊中进行：/pubg me <游戏名>，平台默认为 Steam；旧命令 /pubg claim <平台> <游戏名> 也可在群聊使用。/pubg account 查看自己的关联；/pubg privacy 查看数据说明；/pubg memory light|rem on|off|status 管理本人私聊的记忆整理授权；/pubg memory candidates 查看候选，可用 confirm|reject <候选ID> 处理。';
-export const KOOK_PUBLIC_PRIVACY_NOTICE = '隐私与数据说明：本服务保存 KOOK 账号/频道标识、已授权队伍名单与 PUBG 公开比赛/遥测数据，用于队伍查询；不读取 Lab 私人 Kurisu 的 SQLite、凭据、记忆或聊天记录。群聊对话按频道隔离、私聊对话按用户隔离并持久保留，不设条数、字符数或 12 小时自动清理上限；历史内容不会授予权限，PUBG 查询每次仍依据当前可信 KOOK 事件重新验证身份、租户、队伍和频道绑定。未完成请求正文最多保留 1 小时用于重试；模型用量（用户/请求关联、模型与 token 数）最多保留 30 天；收发事件标识及已结束的投递记录最多保留 7 天。群聊和直接消息内容及账号/队名写入请求会发送给配置的公共模型提供方；不会发送 tenant、队伍权限或 KOOK 用户标识，提供方自身的数据规则另行适用。Gate 长期记忆只在本人私聊中按明确的保存/更正请求写入；可在私聊中列出、更正和忘记。被忘记的记忆会立即退出召回，排队中的向量也受撤销状态阻止；原始 KOOK 聊天记录、受保护备份和无内容的写入幂等回执可能仍保留，回执当前没有自动过期。记忆列表会显示来源类别、版本和事实有效期；变化较快的事实必须设有效期。Light/REM 整理默认关闭；本人可在私聊发送 /pubg memory light on 或 /pubg memory rem on 明确授权未来私聊进入待整理队列；还需 Gate 运营者启用独立自动整理开关，授权可用对应 off 命令撤回。群聊不会进入整理队列；当前没有周期调度，候选须本人确认，撤回授权会使待处理消息失效并删除未确认候选。整理只保留有界来源引用与候选内容；来源 KOOK 原始对话和受保护备份仍按上文保留。账号声明会先通过 PUBG 公共 API 查验游戏名并保存 API 返回的账号 ID；这只证明该游戏名可解析，不证明 KOOK 用户拥有该 PUBG 账号。队伍默认排行榜指标及最后修改它的管理员标识会保留到管理员删除偏好或解散队伍；/pubg preference delete 可删除该设置。队伍自定义查询别名仅在管理员确认后保存，解绑频道不会删除别名；管理员可用 /pubg alias delete 删除，替换名单移除队员或解散队伍时会一并删除相关别名。/pubg account 可查看本人关联；历史 /pubg unclaim 仍需本人确认；服务器管理员可用 /pubg roster 更新名单、/pubg unbind 解绑频道或 /pubg disband 删除队伍关联数据。解除账号声明不会自动移除队伍名单中的 PUBG 账号；已发送消息无法由本服务撤回。';
+const directHelp = '账号绑定必须在队伍群聊中进行：/pubg me <游戏名>，平台默认为 Steam；旧命令 /pubg claim <平台> <游戏名> 也可在群聊使用。/pubg account 查看自己的关联；/pubg privacy 查看数据说明；/pubg memory light|rem on|off|status 管理本人私聊的自动记忆整理开关；记忆默认自动学习，off 可关闭，on 可重新开启。';
+export const KOOK_PUBLIC_PRIVACY_NOTICE = '隐私与数据说明：本服务保存 KOOK 账号/频道标识、已授权队伍名单与 PUBG 公开比赛/遥测数据，用于队伍查询；不读取 Lab 私人 Kurisu 的 SQLite、凭据、记忆或聊天记录。群聊对话按频道隔离、私聊对话按用户隔离并持久保留，不设条数、字符数或 12 小时自动清理上限；历史内容不会授予权限，PUBG 查询每次仍依据当前可信 KOOK 事件重新验证身份、租户、队伍和频道绑定。未完成请求正文最多保留 1 小时用于重试；模型用量（用户/请求关联、模型与 token 数）最多保留 30 天；收发事件标识及已结束的投递记录最多保留 7 天。群聊和直接消息内容及账号/队名写入请求会发送给配置的公共模型提供方；不会发送 tenant、队伍权限或 KOOK 用户标识，提供方自身的数据规则另行适用。Gate 长期记忆只在本人私聊中按明确的保存/更正请求写入；可在私聊中列出、更正和忘记。被忘记的记忆会立即退出召回，排队中的向量也受撤销状态阻止；原始 KOOK 聊天记录、受保护备份和无内容的写入幂等回执可能仍保留，回执当前没有自动过期。记忆列表会显示来源类别、版本和事实有效期；变化较快的事实必须设有效期。Light/REM 自动整理默认开启；本人可在私聊发送 /pubg memory light off 或 /pubg memory rem off 随时关闭对应整理，也可用 on 重新开启。群聊不会进入个人记忆整理队列；高置信、非敏感、来源可验证的本人事实会自动进入长期记忆，不要求逐条确认。整理只保留有界来源引用与候选内容；来源 KOOK 原始对话和受保护备份仍按上文保留。账号声明会先通过 PUBG 公共 API 查验游戏名并保存 API 返回的账号 ID；这只证明该游戏名可解析，不证明 KOOK 用户拥有该 PUBG 账号。队伍默认排行榜指标及最后修改它的管理员标识会保留到管理员删除偏好或解散队伍；/pubg preference delete 可删除该设置。队伍自定义查询别名仅在管理员确认后保存，解绑频道不会删除别名；管理员可用 /pubg alias delete 删除，替换名单移除队员或解散队伍时会一并删除相关别名。/pubg account 可查看本人关联；历史 /pubg unclaim 仍需本人确认；服务器管理员可用 /pubg roster 更新名单、/pubg unbind 解绑频道或 /pubg disband 删除队伍关联数据。解除账号声明不会自动移除队伍名单中的 PUBG 账号；已发送消息无法由本服务撤回。';
 const publicErrors: Record<string, string> = {
   guild_admin_required: '需要当前服务器的拥有者或管理员权限。',
   channel_not_bound: '当前频道尚未绑定队伍。',
@@ -85,14 +85,14 @@ export function createKookManagementHandler(services: KookOnboardingServices,
         if (memoryCommand[2]!.toLowerCase() === 'status') {
           const status = await memoryConsent.getConsent(job);
           const current = status[workflow];
-          return message(`${workflow === 'light' ? 'Light' : 'REM'} 整理：${current.enabled ? '本人授权已开启' : '本人授权未开启'}（授权版本 ${current.version}）。运营开关：${autoLearnEnabled ? '已启用' : '未启用'}；整理任务没有周期调度，只会在手动触发时运行。`);
+          return message(`${workflow === 'light' ? 'Light' : 'REM'} 自动记忆：${current.enabled ? '开启' : '关闭'}（版本 ${current.version || '默认'}）。全局能力：${autoLearnEnabled ? '可用' : '已关闭'}。`);
         }
         const enabled = memoryCommand[2]!.toLowerCase() === 'on';
         if (enabled && !autoLearnEnabled) {
-          return message('Gate 运营者尚未启用 Light/REM 接收开关，未保存本次授权。');
+          return message('Gate 的自动记忆能力当前被全局关闭，无法重新开启。');
         }
         const current = await memoryConsent.setConsent(job, workflow, enabled);
-        return message(`${workflow === 'light' ? 'Light' : 'REM'} 整理授权已${current.enabled ? '开启' : '关闭'}。${current.enabled ? '之后的本人私聊消息可进入隔离的待整理队列；目前没有自动调度。' : '待处理消息已失效，尚未确认的候选会被撤回。'}`);
+        return message(`${workflow === 'light' ? 'Light' : 'REM'} 自动记忆已${current.enabled ? '开启' : '关闭'}。${current.enabled ? '之后的本人私聊会自动整理长期记忆。' : '待处理消息已失效，未处理候选会被撤回。'}`);
       }
       const onboardingReply = await handleKookOnboardingRequest(job, services, signal);
       if (onboardingReply !== undefined) return onboardingReply;
