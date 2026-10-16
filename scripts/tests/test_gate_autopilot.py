@@ -101,6 +101,32 @@ def operations(**overrides):
 
 
 class GateAutopilotContracts(unittest.TestCase):
+    def test_gate_target_layout_is_discovered_from_active_compose_labels(self):
+        layout = candidate.target_layout_from_labels(
+            "pubg-saas-public", "gateway",
+            "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas",
+            "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas/compose.yaml",
+        )
+        self.assertEqual(layout["project"], "pubg-saas-public")
+        self.assertEqual(layout["appDir"], "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas")
+        self.assertEqual(layout["composeFile"],
+                         "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas/compose.yaml")
+        self.assertEqual(layout["envFile"],
+                         "/var/tmp/pubg-saas-live-0fefe78/repo/infra/pubg-saas/.env")
+
+    def test_gate_target_layout_rejects_untrusted_compose_labels(self):
+        invalid = (
+            ("lab", "gateway", "/var/tmp/repo/infra/pubg-saas", "/var/tmp/repo/infra/pubg-saas/compose.yaml"),
+            ("pubg-saas", "worker", "/var/tmp/repo/infra/pubg-saas", "/var/tmp/repo/infra/pubg-saas/compose.yaml"),
+            ("pubg-saas", "gateway", "/var/tmp/repo/infra/pubg-saas", "/tmp/other/compose.yaml"),
+            ("pubg-saas", "gateway", "/var/tmp/repo/infra/pubg-saas", "/var/tmp/repo/infra/pubg-saas/../compose.yaml"),
+            ("pubg-saas", "gateway", "/var/tmp/repo/infra/pubg-saas", "/var/tmp/repo/infra/pubg-saas/compose.yaml,/tmp/extra.yaml"),
+        )
+        for labels in invalid:
+            with self.subTest(labels=labels):
+                with self.assertRaises(candidate.CandidateError):
+                    candidate.target_layout_from_labels(*labels)
+
     def test_candidate_error_labels_keep_runtime_blocks_distinct_from_authorization(self):
         self.assertEqual(candidate.deployment_status(candidate.OperatorAuthorizationRequired("m2_pause_active")),
                          "BLOCKED_OPERATOR_AUTHORIZATION")

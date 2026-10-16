@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import pathlib
+import posixpath
 import re
 import shutil
 import stat
@@ -27,10 +28,8 @@ from gate_autopilot import (  # noqa: E402
 
 POLICY_PATH = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-auto-approval.json"
 CLEARANCE_PATH = pathlib.Path.home() / ".config" / "amadeus" / "gate-local-m2-clearance.json"
-APP_DIR = "/var/lib/casaos/apps/pubg-saas"
-DATA_DIR = "/DATA/AppData/pubg-saas"
-PROJECT = "pubg-saas"
 IMAGE_RE = re.compile(r"local/pubg-saas:git-([0-9a-f]{40})\Z")
+COMPOSE_NAMES = {"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
 
 
 class CandidateError(Exception):
@@ -210,27 +209,73 @@ def configured_lab_machine() -> str:
                  str(ROOT / "scripts/host-profile.sh"), str(ROOT)], timeout=10)
 
 
-def verify_remote_layout(machine: str) -> None:
-    code = (
-        "import os,pathlib,stat,sys; root=pathlib.Path('/'); "
-        "paths=['/var','/var/lib','/var/lib/casaos','/var/lib/casaos/apps',"
-        "'/var/lib/casaos/apps/pubg-saas','/var/lib/casaos/apps/pubg-saas/docker-compose.yml',"
-        "'/var/lib/casaos/apps/pubg-saas/.env','/var/lib/casaos/apps/pubg-saas/secrets',"
-        "'/var/lib/casaos/apps/pubg-saas/secrets/gateway.env']; "
-        "[(lambda p,s: (s.st_uid==0 and not stat.S_ISLNK(s.st_mode) and "
-        "((stat.S_ISDIR(s.st_mode) if p in paths[:5]+[paths[7]] else stat.S_ISREG(s.st_mode)) and "
-        "(p != paths[8] or stat.S_IMODE(s.st_mode)==0o600)) or sys.exit(3)))(pathlib.Path(p),pathlib.Path(p).lstat()) for p in paths]"
+def target_layout_from_labels(project: str, service: str, working_dir: str,
+                              config_files: str) -> dict[str, str]:
+    """Resolve only the active Gate Compose layout reported by Docker labels."""
+    if service != "gateway" or not re.fullmatch(r"pubg-saas(?:-[a-z0-9][a-z0-9-]*)?", project):
+        raise CandidateError("compose_runtime_facts_invalid")
+    if not working_dir.startswith("/") or ".." in working_dir.split("/"):
+        raise CandidateError("compose_runtime_facts_invalid")
+    app_dir = pathlib.PurePosixPath(posixpath.normpath(working_dir))
+    allowed_layout = (app_dir.name == "pubg-saas" and app_dir.parent.name == "infra") or (
+        app_dir.name == "pubg-saas" and app_dir.parent.name == "apps"
     )
-    remote(machine, "python3", "-c", code)
+    files = [value for value in config_files.split(",") if value]
+    if not allowed_layout or len(files) != 1:
+        raise CandidateError("compose_runtime_facts_invalid")
+    compose_file = pathlib.PurePosixPath(posixpath.normpath(files[0]))
+    if (not compose_file.is_absolute() or ".." in files[0].split("/") or
+            compose_file.parent != app_dir or compose_file.name not in COMPOSE_NAMES):
+        raise CandidateError("compose_runtime_facts_invalid")
+    app_path = str(app_dir)
+    return {
+        "project": project,
+        "appDir": app_path,
+        "composeFile": str(compose_file),
+        "envFile": f"{app_path}/.env",
+        "gatewayEnv": f"{app_path}/secrets/gateway.env",
+    }
 
 
-def compose_base(machine: str) -> list[str]:
-    return ["docker", "compose", "--project-name", PROJECT, "--project-directory", APP_DIR,
-            "--env-file", f"{APP_DIR}/.env", "--file", f"{APP_DIR}/docker-compose.yml"]
+def discover_remote_layout(machine: str) -> dict[str, str]:
+    gateways = text(remote(machine, "docker", "ps", "-q", "--filter",
+                           "label=com.docker.compose.service=gateway")).splitlines()
+    if len(gateways) != 1:
+        raise CandidateError("target_gateway_container_missing")
+    label_format = "\n".join(
+        '{{index .Config.Labels "' + name + '"}}'
+        for name in ("com.docker.compose.project", "com.docker.compose.service",
+                     "com.docker.compose.project.working_dir", "com.docker.compose.project.config_files")
+    )
+    labels = text(remote(machine, "docker", "inspect", "--format", label_format, gateways[0])).splitlines()
+    if len(labels) != 4:
+        raise CandidateError("compose_runtime_facts_invalid")
+    return target_layout_from_labels(*labels)
 
 
-def remote_compose(machine: str, *args: str, timeout: int = 180, input_data: bytes | None = None) -> bytes:
-    return remote(machine, *compose_base(machine), *args, timeout=timeout, input_data=input_data)
+def verify_remote_layout(machine: str, layout: dict[str, str]) -> None:
+    code = (
+        "import pathlib,stat,sys; app,compose,env,secrets,gateway=map(pathlib.Path,sys.argv[1:]); "
+        "items=[(app,True,False),(compose,False,False),(env,False,True),"
+        "(secrets,True,False),(gateway,False,True)]; "
+        "[(lambda p,is_dir,private,s: (s.st_uid==0 and not stat.S_ISLNK(s.st_mode) and "
+        "(stat.S_ISDIR(s.st_mode) if is_dir else stat.S_ISREG(s.st_mode)) and "
+        "(not private or stat.S_IMODE(s.st_mode)==0o600)) or sys.exit(3))(p,is_dir,private,p.lstat()) "
+        "for p,is_dir,private in items]"
+    )
+    remote(machine, "python3", "-c", code, layout["appDir"], layout["composeFile"],
+           layout["envFile"], f'{layout["appDir"]}/secrets', layout["gatewayEnv"])
+
+
+def compose_base(machine: str, layout: dict[str, str]) -> list[str]:
+    return ["docker", "compose", "--project-name", layout["project"],
+            "--project-directory", layout["appDir"], "--env-file", layout["envFile"],
+            "--file", layout["composeFile"]]
+
+
+def remote_compose(machine: str, layout: dict[str, str], *args: str,
+                   timeout: int = 180, input_data: bytes | None = None) -> bytes:
+    return remote(machine, *compose_base(machine, layout), *args, timeout=timeout, input_data=input_data)
 
 
 def read_remote_value(machine: str, path: str, key: str) -> str:
@@ -278,7 +323,8 @@ def parse_compose_ps(output: bytes) -> list[dict[str, Any]]:
     return rows
 
 
-def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[str]) -> tuple[dict[str, Any], str, str]:
+def runtime_facts(machine: str, policy: dict[str, Any], sha: str,
+                  paths: list[str]) -> tuple[dict[str, Any], str, str, dict[str, str]]:
     if not machine or machine != policy.get("orbstackMachine"):
         raise CandidateError("target_machine_scope_mismatch")
     try:
@@ -288,13 +334,15 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[st
     if machine == lab_machine:
         raise CandidateError("gate_target_overlaps_lab_machine")
     remote(machine, "docker", "info", "--format", "{{.ServerVersion}}")
-    verify_remote_layout(machine)
-    bot_id = read_remote_value(machine, f"{APP_DIR}/secrets/gateway.env", "KOOK_BOT_ACCOUNT_ID")
-    active_image = read_remote_value(machine, f"{APP_DIR}/.env", "PUBG_SAAS_IMAGE")
+    layout = discover_remote_layout(machine)
+    verify_remote_layout(machine, layout)
+    bot_id = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
+    active_project = read_remote_value(machine, layout["envFile"], "PUBG_SAAS_COMPOSE_PROJECT")
+    active_image = read_remote_value(machine, layout["envFile"], "PUBG_SAAS_IMAGE")
     image_match = IMAGE_RE.fullmatch(active_image)
-    if bot_id != policy.get("botAccountId") or not image_match:
+    if bot_id != policy.get("botAccountId") or active_project != layout["project"] or not image_match:
         raise CandidateError("target_bot_or_image_identity_untrusted")
-    rows = parse_compose_ps(remote_compose(machine, "ps", "--all", "--format", "json"))
+    rows = parse_compose_ps(remote_compose(machine, layout, "ps", "--all", "--format", "json"))
     by_service: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
         service = str(row.get("Service", row.get("service", "")))
@@ -311,7 +359,7 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[st
     worker_state = str(required["worker"][0].get("State", required["worker"][0].get("state", ""))).lower()
     if "running" not in gateway_state or "running" not in worker_state:
         raise CandidateError("active_runtime_not_running")
-    active_container_id = text(remote_compose(machine, "ps", "--quiet", "gateway"))
+    active_container_id = text(remote_compose(machine, layout, "ps", "--quiet", "gateway"))
     active_container_ids = active_container_id.splitlines()
     if len(active_container_ids) != 1:
         raise CandidateError("target_gateway_container_missing")
@@ -320,7 +368,7 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[st
     if running_image_id != tagged_image_id:
         raise CandidateError("runtime_drift_or_unknown")
     for service in ("worker", "egress-proxy"):
-        service_ids = text(remote_compose(machine, "ps", "--quiet", service)).splitlines()
+        service_ids = text(remote_compose(machine, layout, "ps", "--quiet", service)).splitlines()
         if len(service_ids) != 1:
             raise CandidateError("target_compose_service_identity_invalid")
         service_image_id = text(remote(machine, "docker", "inspect", "--format", "{{.Image}}", service_ids[0]))
@@ -344,12 +392,12 @@ def runtime_facts(machine: str, policy: dict[str, Any], sha: str, paths: list[st
         "pgvectorAvailable": False,
         "activeSha": image_match.group(1),
     }
-    return facts, active_image, risk
+    return facts, active_image, risk, layout
 
 
-def restore_remote_files(machine: str, old_compose: bytes, old_env: bytes) -> None:
-    write_remote_file(machine, f"{APP_DIR}/docker-compose.yml", old_compose, "0644")
-    write_remote_file(machine, f"{APP_DIR}/.env", old_env, "preserve")
+def restore_remote_files(machine: str, layout: dict[str, str], old_compose: bytes, old_env: bytes) -> None:
+    write_remote_file(machine, layout["composeFile"], old_compose, "0644")
+    write_remote_file(machine, layout["envFile"], old_env, "preserve")
 
 
 def gate_apply(approval_ref: str) -> int:
@@ -393,7 +441,7 @@ def gate_apply(approval_ref: str) -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise CandidateError("release_in_progress") from error
-        facts, active_image, risk = runtime_facts(machine, policy, sha, paths)
+        facts, active_image, risk, layout = runtime_facts(machine, policy, sha, paths)
         from gate_autopilot import preflight_candidate, validate_approval, validate_m2_clearance
         approval_ok, approval_reason = validate_approval(
             policy, repository=ROOT, instance_id=str(policy.get("instanceId", "")),
@@ -454,8 +502,8 @@ def gate_apply(approval_ref: str) -> int:
             return {"digest": digest, "sourceSha": sha, "image": image}
 
         def verify_target() -> None:
-            remote_compose(machine, "config", "--quiet")
-            current_bot = read_remote_value(machine, f"{APP_DIR}/secrets/gateway.env", "KOOK_BOT_ACCOUNT_ID")
+            remote_compose(machine, layout, "config", "--quiet")
+            current_bot = read_remote_value(machine, layout["gatewayEnv"], "KOOK_BOT_ACCOUNT_ID")
             if current_bot != policy.get("botAccountId"):
                 raise CandidateError("target_bot_identity_changed")
             candidate_id = text(remote(machine, "docker", "image", "inspect", "--format", "{{.Id}}", image))
@@ -466,17 +514,16 @@ def gate_apply(approval_ref: str) -> int:
             nonlocal old_compose, old_env
             checkpoint.mkdir(mode=0o700)
             os.chmod(checkpoint, 0o700)
-            old_compose = remote(machine, "cat", f"{APP_DIR}/docker-compose.yml")
-            old_env = remote(machine, "cat", f"{APP_DIR}/.env")
-            for name, value in (("docker-compose.before.yml", old_compose), ("compose.env.before", old_env)):
+            old_compose = remote(machine, "cat", layout["composeFile"])
+            old_env = remote(machine, "cat", layout["envFile"])
+            for name, value in (("compose.before" + pathlib.PurePosixPath(layout["composeFile"]).suffix, old_compose),
+                                ("compose.env.before", old_env)):
                 path = checkpoint / name
                 with path.open("xb") as output:
                     os.fchmod(output.fileno(), 0o600)
                     output.write(value)
             artifact = checkpoint / "pubg-saas.dump.age"
-            dump_cmd = ["docker", "compose", "--project-name", PROJECT, "--project-directory", APP_DIR,
-                        "--env-file", f"{APP_DIR}/.env", "--file", f"{APP_DIR}/docker-compose.yml",
-                        "exec", "--no-TTY", "postgres", "sh", "-c",
+            dump_cmd = [*compose_base(machine, layout), "exec", "--no-TTY", "postgres", "sh", "-c",
                         "export PGPASSWORD=\"$(cat /run/secrets/pubg_backup_password)\"; exec pg_dump -Fc -n public -U pubg_backup pubg_saas"]
             dump = subprocess.Popen(["orb", "-m", machine, "-u", "root", *dump_cmd],
                                     stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
@@ -510,7 +557,7 @@ def gate_apply(approval_ref: str) -> int:
             nonlocal old_compose, old_env
             assert old_compose is not None and old_env is not None
             try:
-                write_remote_file(machine, f"{APP_DIR}/docker-compose.yml",
+                write_remote_file(machine, layout["composeFile"],
                                   (ROOT / "infra/pubg-saas/compose.yaml").read_bytes(), "0644")
                 update_code = (
                     "import os,pathlib,re,stat,sys,tempfile; p=pathlib.Path(sys.argv[1]); rows=p.read_text().splitlines(keepends=True); "
@@ -520,19 +567,19 @@ def gate_apply(approval_ref: str) -> int:
                     "fd,t=tempfile.mkstemp(prefix='.gate-release-',dir=p.parent); os.fchmod(fd,stat.S_IMODE(old.st_mode)); "
                     "f=os.fdopen(fd,'w'); f.writelines(rows); f.flush(); os.fsync(f.fileno()); f.close(); os.replace(t,p)"
                 )
-                remote(machine, "python3", "-c", update_code, f"{APP_DIR}/.env", image)
-                remote_compose(machine, "run", "--rm", "migrate", timeout=1800)
+                remote(machine, "python3", "-c", update_code, layout["envFile"], image)
+                remote_compose(machine, layout, "run", "--rm", "migrate", timeout=1800)
             except Exception:
-                restore_remote_files(machine, old_compose, old_env)
+                restore_remote_files(machine, layout, old_compose, old_env)
                 raise
 
         def switch() -> dict[str, Any]:
-            remote_compose(machine, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
+            remote_compose(machine, layout, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
             return {"image": active_image}
 
         def healthy() -> bool:
             try:
-                current = parse_compose_ps(remote_compose(machine, "ps", "--format", "json"))
+                current = parse_compose_ps(remote_compose(machine, layout, "ps", "--format", "json"))
             except Exception:
                 return False
             states = {str(row.get("Service", row.get("service", ""))): str(row.get("Health", row.get("health", ""))).lower()
@@ -541,9 +588,9 @@ def gate_apply(approval_ref: str) -> int:
 
         def smoke() -> bool:
             try:
-                remote_compose(machine, "exec", "--no-TTY", "gateway", "node", "-e",
+                remote_compose(machine, layout, "exec", "--no-TTY", "gateway", "node", "-e",
                                "fetch('http://127.0.0.1:8082/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))")
-                remote_compose(machine, "exec", "--no-TTY", "worker", "node", "-e",
+                remote_compose(machine, layout, "exec", "--no-TTY", "worker", "node", "-e",
                                "fetch('http://127.0.0.1:8081/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))")
                 return True
             except Exception:
@@ -552,8 +599,8 @@ def gate_apply(approval_ref: str) -> int:
         def rollback() -> None:
             if old_compose is None or old_env is None:
                 raise CandidateError("rollback_checkpoint_missing")
-            restore_remote_files(machine, old_compose, old_env)
-            remote_compose(machine, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
+            restore_remote_files(machine, layout, old_compose, old_env)
+            remote_compose(machine, layout, "up", "-d", "--no-build", "--wait", "egress-proxy", "gateway", "worker", timeout=900)
 
         def notify() -> bool:
             payload = {

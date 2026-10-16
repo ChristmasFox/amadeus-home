@@ -90,8 +90,10 @@ For a Gate-only phase, `pnpm devctl goal finish-phase P<N>` calls the protected
 candidate route only when the local candidate approval and the independent
 M2 clearance both match. The route re-runs Gate release verification and the
 secrets scan, requires a clean committed tree, checks that the target machine
-and Bot ID match, rejects duplicate Gateway/Worker processes and runtime
-drift, builds a SHA-tagged immutable local image, and confirms its image ID
+and Bot ID match, discovers the Compose project, working directory, and file
+from the active Gateway container labels, rejects ambiguous or untrusted
+layouts, duplicate Gateway/Worker processes, and runtime drift, builds a
+SHA-tagged immutable local image, and confirms its image ID
 after transfer. It writes a mode-`0700` external checkpoint containing the
 prior Compose/env files and an encrypted public-schema PostgreSQL dump. The
 dump is verified by decrypting it through `pg_restore --list` before the
