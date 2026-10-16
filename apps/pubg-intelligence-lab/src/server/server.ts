@@ -428,7 +428,10 @@ export async function startServer(): Promise<{ close: () => Promise<void>; url: 
   vite = await createViteServer({
     server: { middlewareMode: true, hmr: { server } },
     appType: 'spa',
-    optimizeDeps: { noDiscovery: true, include: [] },
+    optimizeDeps: {
+      noDiscovery: true,
+      include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
+    },
   });
   await new Promise<void>((resolveStart, reject) => {
     server.once('error', reject);

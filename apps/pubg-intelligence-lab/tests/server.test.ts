@@ -60,6 +60,9 @@ test('local API serves history and research from a read-only source and stores e
     server = await startServer();
     const page = await fetch(server.url).then((response) => response.text());
     assert.match(page, /PUBG Intelligence Lab/u);
+    const mainModule = await fetch(`${server.url}/src/client/main.tsx`).then((response) => response.text());
+    assert.match(mainModule, /\/node_modules\/\.vite\/deps\/react-dom_client\.js/u);
+    assert.match(mainModule, /const createRoot = __vite__cjsImport\d+_reactDom_client\["createRoot"\]/u);
     const bootstrap = await fetch(`${server.url}/api/bootstrap`).then((response) => response.json()) as { matchCount: number; telemetryCachedMatchCount: number; modelEnabled: boolean };
     assert.equal(bootstrap.matchCount, 2);
     assert.equal(bootstrap.telemetryCachedMatchCount, 0);
