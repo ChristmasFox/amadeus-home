@@ -10,7 +10,6 @@ import {
 
 function enabledEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
-    GATE_MEMORY_EMBEDDING_ENABLED: '1',
     GATE_MEMORY_EMBEDDING_BASE_URL: 'https://embeddings.example.test/v1',
     GATE_MEMORY_EMBEDDING_MODEL_ID: 'fixture-embedding-v1',
     GATE_MEMORY_EMBEDDING_API_KEY: 'fixture-key',
@@ -21,7 +20,7 @@ function enabledEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   };
 }
 
-test('Gate embedding remains unconfigured by default and ignores chat provider credentials', () => {
+test('Gate embedding auto-enables only from a complete dedicated config and ignores chat credentials', () => {
   assert.equal(readGateMemoryEmbeddingConfig({
     MODEL_BASE_URL: 'https://chat.example.test/v1', MODEL_ID: 'chat', MODEL_API_KEY: 'chat-key',
     GATE_MEMORY_EMBEDDING_API_KEY: 'must-not-be-used',
