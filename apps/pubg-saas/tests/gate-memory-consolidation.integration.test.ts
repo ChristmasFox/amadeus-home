@@ -191,6 +191,10 @@ test('consent-versioned Light/REM batches read only admitted DM sources and pers
     const otherMessage = await startDirect(other, '另一个用户也喜欢 M416');
     assert.equal(await consent.admitCurrentMessage(otherMessage), 2);
     await finish(otherMessage);
+    await pool.query(
+      'DELETE FROM gate_memory_consolidation_admissions WHERE bot_account_id=$1 AND actor_id=$2',
+      [bot, other],
+    );
     nextCandidates = [{ confidence: 'high', subject: 'self', kind: 'stable_preference', key: 'main_weapon',
       content: '更喜欢用 M416', evidence: '最近我更喜欢用 M416', validity: 'stable' }];
     const remRun = await writer.processNext('rem');
