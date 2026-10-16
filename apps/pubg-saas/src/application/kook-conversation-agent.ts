@@ -1,6 +1,5 @@
 import {
   ToolLoopAgent,
-  isStepCount,
   type LanguageModel,
   type ModelMessage,
   type ToolSet,
@@ -11,7 +10,6 @@ export const PUBLIC_KOOK_AGENT_LIMITS = {
   totalTimeoutMs: 300_000,
   toolLoopTimeoutMs: 270_000,
   finalizationTimeoutMs: 30_000,
-  maxToolLoopSteps: 12,
 } as const;
 
 export const PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS = [
@@ -158,8 +156,9 @@ export async function runPublicKookAgent<TOOLS extends ToolSet>(input: {
     instructions: PUBLIC_KOOK_ASSISTANT_INSTRUCTIONS,
     tools: input.tools,
     toolsContext: {} as never,
-    // Bound cumulative tool-result growth as well as elapsed time.
-    stopWhen: [isStepCount(PUBLIC_KOOK_AGENT_LIMITS.maxToolLoopSteps)],
+    // Preserve the existing tool-loop behavior; the single overall timeout
+    // remains the runaway guard while the context builder reserves tool space.
+    stopWhen: [],
     temperature: 0.65,
     prepareStep: ({ steps }) => {
       const duplicateToolCall = hasRepeatedToolCall(steps);

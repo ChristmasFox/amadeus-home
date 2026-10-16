@@ -246,8 +246,8 @@ source merge.
   `PUBG_SAAS_EGRESS_PROXY` and requires it, so application requests use the
   guarded egress proxy. The public agent has a 300,000 ms total timeout,
   including a 270,000 ms tool-loop and 30,000 ms finalization budget. Token
-  usage is recorded when the provider returns it, and the tool loop is capped
-  at 12 steps. There is no application monetary cost cap or Gate-owned
+  usage is recorded when the provider returns it. The tool loop has no new
+  fixed step cap. There is no application monetary cost cap or Gate-owned
   embedding-provider configuration yet.
 
 ### Exact source and fixture changes in this audit
@@ -293,8 +293,9 @@ semantic memory retrieval, or complete P1–P6 of the active Goal.
   turns, quote, and checkpoint each keep their 4,000/1,000/1,000 initial
   budgets; the current message remains separate and intact. These are
   conservative estimates, not the configured provider tokenizer or a claim
-  about every provider's model context size. The AI SDK tool loop now stops
-  after 12 steps as well as retaining its existing timeouts.
+  about every provider's model context size. The AI SDK keeps its existing
+  uncapped step behavior and timeouts; the builder reserves estimated space
+  for tool results and the final answer without changing domain/tool output.
 - An isolated PostgreSQL test seeds 1,000 synthetic turns, verifies the
   80-row recent cap and scope index plan, resolves a quote outside the recent
   window, observes the scoped checkpoint, checks rebuild idempotency and
