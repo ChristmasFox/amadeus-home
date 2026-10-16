@@ -133,9 +133,9 @@ data-migration entries. Unknown SQL, extension/pgvector changes, and files
 outside the runtime migrator remain blocked. A reviewed egress reconciliation
 may authorize only the exact observed egress image and expected active image;
 after the checkpoint it aligns that service and verifies health before
-migrations. It does not permit general runtime drift. The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
-`GATE_MEMORY_WRITE_ENABLED`, `GATE_MEMORY_AUTO_LEARN_ENABLED`, or embedding
-requests. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
+migrations. It does not permit general runtime drift. `GATE_MEMORY_READ_ENABLED`, `GATE_MEMORY_WRITE_ENABLED`, and `GATE_MEMORY_AUTO_LEARN_ENABLED`
+are default-on capabilities; setting any of them to `0` is an explicit kill switch. Embedding is
+used automatically when its dedicated configuration is complete and otherwise degrades to lexical recall. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
 unreviewed control-plane changes, destructive schema changes, data-changing
 migrations, unrecognized SQL statements, and extension/pgvector operations.
 The migration classifier only auto-authorizes new tables, non-unique indexes,
@@ -215,10 +215,10 @@ node apps/pubg-saas/dist/src/gate-memory-admin.js scan \
 Repeat the scan command until its result says `complete: true`. The scan
 re-evaluates current memory scope and queues only valid current entries; it
 does not truncate the corpus to recent rows. Then process a bounded number of
-jobs. This is the first command in the sequence that can call the configured
-embedding provider. It requires the independent embedding enable flag,
-`--apply`, and `--allow-provider-requests`; the configured timeout, batch
-limits, request/token budgets, and database daily budget still apply:
+jobs. This is the first admin command in the sequence that can call the configured
+embedding provider. It requires `--apply` and `--allow-provider-requests`; the provider is capability-detected
+from complete Gate embedding configuration. The configured timeout, batch limits,
+request/token budgets, and database daily budget still apply:
 
 ```sh
 node apps/pubg-saas/dist/src/gate-memory-admin.js work \
@@ -242,8 +242,7 @@ node apps/pubg-saas/dist/src/gate-memory-admin.js activate \
 it does not bulk-delete orphaned vectors. Do not delete old vector generations
 until a separately reviewed retention/cleanup change has a verified backup.
 The normal read path uses only the active contract and falls back to lexical
-recall if vectors are unavailable. No worker or cron is enabled by this admin
-tool.
+recall if vectors are unavailable. The admin tool itself creates no scheduler. The running Gateway owns the bounded default Light/REM scheduler; index administration remains separate.
 
 ## Limits and recovery
 
