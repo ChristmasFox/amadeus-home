@@ -1,5 +1,8 @@
 import type { Pool } from 'pg';
 import type { KookIngressJob } from './kook-ingress-queue.js';
+import type { GateMemoryEmbeddingClient, GateMemoryEmbeddingContract } from './gate-memory-embedding.js';
+import { estimateGateEmbeddingTokens } from './gate-memory-embedding.js';
+import { reserveGateMemoryEmbeddingBudget, settleGateMemoryEmbeddingBudget } from './gate-memory-embedding-budget.js';
 import { KOOK_CHANNEL_BINDING_JOIN, KOOK_CHANNEL_VERSION_JOIN } from './kook-channel-binding-sql.js';
 
 export type GateMemoryScope =
@@ -21,12 +24,32 @@ export interface GateMemoryDraft {
 }
 export interface GateMemoryStoreOptions {
   lexicalSearchTimeoutMs?: number;
+  onSearchMetric?: (metric: GateMemorySearchMetric) => void;
 }
 
 const MAX_RESULTS = 24;
 const DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS = 500;
 const FILTER = `bot_account_id=$1 AND scope_kind=$2 AND actor_id=$3 AND
   channel_id=$4 AND tenant_id=$5 AND team_id=$6 AND binding_revision=$7`;
+const EMBEDDING_MEMORY_FILTER = `memory.bot_account_id=$1 AND memory.scope_kind=$2 AND memory.actor_id=$3 AND
+  memory.channel_id=$4 AND memory.tenant_id=$5 AND memory.team_id=$6 AND memory.binding_revision=$7`;
+
+export interface GateMemorySearchResult {
+  entries: GateMemoryEntry[];
+  mode: 'semantic' | 'lexical_only';
+  reason: 'semantic_unconfigured' | 'vector_index_unavailable' | 'semantic_unavailable'
+    | 'semantic_timeout' | 'embedding_budget_exhausted' | 'embedding_budget_unavailable' | null;
+}
+export interface GateMemorySearchMetric {
+  durationMs: number;
+  mode: GateMemorySearchResult['mode'];
+  reason: GateMemorySearchResult['reason'];
+}
+
+function vectorLiteral(values: readonly number[]): string {
+  if (!values.length || values.some(value => !Number.isFinite(value))) throw new Error('gate_memory_embedding_vector_invalid');
+  return `[${values.map(String).join(',')}]`;
+}
 
 function boundedText(value: string, max: number, emojiSequence = false): string {
   if (typeof value !== 'string') throw new Error('gate_memory_input_invalid');
@@ -123,15 +146,25 @@ function liveFence(eventIndex: number, tokenIndex: number): string {
 
 export class GateMemoryStore {
   private readonly lexicalSearchTimeoutMs: number;
+  private readonly onSearchMetric: ((metric: GateMemorySearchMetric) => void) | undefined;
   constructor(
     private readonly pool: Pool,
     private readonly authority: GateMemoryScopeResolver,
     options: GateMemoryStoreOptions = {},
   ) {
     this.lexicalSearchTimeoutMs = options.lexicalSearchTimeoutMs ?? DEFAULT_LEXICAL_SEARCH_TIMEOUT_MS;
+    this.onSearchMetric = options.onSearchMetric;
     if (!Number.isSafeInteger(this.lexicalSearchTimeoutMs) || this.lexicalSearchTimeoutMs < 10 || this.lexicalSearchTimeoutMs > 10_000) {
       throw new Error('gate_memory_lexical_timeout_invalid');
     }
+  }
+
+  private observedSearch(startedAt: number, result: GateMemorySearchResult): GateMemorySearchResult {
+    try {
+      this.onSearchMetric?.({ durationMs: Math.max(0, Date.now() - startedAt),
+        mode: result.mode, reason: result.reason });
+    } catch { /* metrics must not change recall behavior */ }
+    return result;
   }
 
   private async trustedScope(job: KookIngressJob): Promise<(string | number)[]> {
@@ -191,6 +224,125 @@ export class GateMemoryStore {
     }
   }
 
+  private async searchVector(
+    job: KookIngressJob,
+    vector: readonly number[],
+    contract: GateMemoryEmbeddingContract,
+    limit: number,
+  ): Promise<GateMemoryEntry[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS
+      || vector.length !== contract.dimensions || !Number.isSafeInteger(contract.indexVersion)
+      || contract.indexVersion < 1 || contract.indexVersion > 1_000_000
+      || contract.normalization !== 'l2_unit') {
+      throw new Error('gate_memory_embedding_contract_invalid');
+    }
+    const scope = await this.trustedScope(job);
+    const sql = `SELECT memory.memory_key,memory.content,memory.revision,memory.updated_at
+      FROM gate_memory_embeddings embedded
+      JOIN gate_memory_entries memory ON memory.memory_id=embedded.memory_id
+      WHERE ` + EMBEDDING_MEMORY_FILTER + ` AND memory.revoked_at IS NULL
+        AND memory.revision=embedded.source_revision
+        AND embedded.bot_account_id=$1 AND embedded.scope_kind=$2 AND embedded.actor_id=$3
+        AND embedded.channel_id=$4 AND embedded.tenant_id=$5 AND embedded.team_id=$6
+        AND embedded.binding_revision=$7::BIGINT AND embedded.provider_id=$10 AND embedded.model_id=$11
+        AND embedded.dimensions=$12 AND embedded.index_version=$13 AND embedded.normalization='l2_unit'`
+      + liveFence(14, 15) + `
+      ORDER BY embedded.embedding <=> $9::vector,memory.updated_at DESC,memory.memory_key LIMIT $8`;
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SELECT set_config('statement_timeout',$1,true)", [`${this.lexicalSearchTimeoutMs}ms`]);
+      const result = await client.query(sql, [
+        ...scope, limit, vectorLiteral(vector), contract.providerId, contract.modelId,
+        contract.dimensions, contract.indexVersion, job.eventId, job.leaseToken,
+      ]);
+      await client.query('COMMIT');
+      return result.rows.map(project);
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      if (error && typeof error === 'object' && 'code' in error && error.code === '57014') {
+        throw new Error('gate_memory_semantic_timeout');
+      }
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Exact scope-filtered cosine search. No provider call occurs unless the
+   * live request has authority and the separately applied vector schema exists. */
+  async searchWithFallback(
+    job: KookIngressJob,
+    query: string,
+    provider: GateMemoryEmbeddingClient | null,
+    limit = 8,
+  ): Promise<GateMemorySearchResult> {
+    const startedAt = Date.now();
+    const search = boundedText(query, 240, true);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RESULTS) throw new Error('gate_memory_limit_invalid');
+    const trustedScope = await this.trustedScope(job);
+    if (!provider) {
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'semantic_unconfigured' });
+    }
+    let available = false;
+    try {
+      const result = await this.pool.query<{ available: boolean }>(
+        `SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='vector')
+           AND to_regclass('gate_memory_embeddings') IS NOT NULL AS available`,
+      );
+      available = result.rows[0]?.available === true;
+    } catch {
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'vector_index_unavailable' });
+    }
+    if (!available) {
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'vector_index_unavailable' });
+    }
+    const estimatedTokens = estimateGateEmbeddingTokens([search]);
+    let budgetDay: string | null;
+    try {
+      budgetDay = await reserveGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), estimatedTokens, provider);
+    } catch {
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'embedding_budget_unavailable' });
+    }
+    if (!budgetDay) {
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason: 'embedding_budget_exhausted' });
+    }
+    let budgetSettled = false;
+    try {
+      const batch = await provider.embedMany([search]);
+      await settleGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), budgetDay, estimatedTokens, batch.inputTokens);
+      budgetSettled = true;
+      const vector = batch.vectors[0];
+      const norm = vector?.reduce((sum, value) => sum + value * value, 0) ?? 0;
+      if (!vector || batch.vectors.length !== 1 || vector.length !== provider.contract.dimensions
+        || vector.some(value => !Number.isFinite(value))
+        || !Number.isFinite(norm) || Math.abs(Math.sqrt(norm) - 1) > 1e-3
+        || batch.contract.providerId !== provider.contract.providerId
+        || batch.contract.modelId !== provider.contract.modelId
+        || batch.contract.dimensions !== provider.contract.dimensions
+        || batch.contract.normalization !== 'l2_unit'
+        || batch.contract.indexVersion !== provider.contract.indexVersion) {
+        throw new Error('gate_memory_embedding_contract_invalid');
+      }
+      return this.observedSearch(startedAt, {
+        entries: await this.searchVector(job, vector, provider.contract, limit),
+        mode: 'semantic', reason: null,
+      });
+    } catch (error) {
+      if (!budgetSettled) {
+        await settleGateMemoryEmbeddingBudget(this.pool, String(trustedScope[0]), budgetDay, estimatedTokens, null).catch(() => undefined);
+      }
+      const reason = error instanceof Error
+        && (error.message === 'gate_memory_embedding_timeout' || error.message === 'gate_memory_semantic_timeout')
+        ? 'semantic_timeout' : 'semantic_unavailable';
+      return this.observedSearch(startedAt, {
+        entries: await this.searchLexical(job, search, limit), mode: 'lexical_only', reason });
+    }
+  }
+
   /** New key only; a conflicting revision/tombstone is never overwritten. */
   async create(job: KookIngressJob, draft: GateMemoryDraft): Promise<'created' | 'already_exists'> {
     const value = validateGateMemoryDraft(draft);
@@ -201,9 +353,13 @@ export class GateMemoryStore {
         (bot_account_id,scope_kind,actor_id,channel_id,tenant_id,team_id,binding_revision,memory_key,content,source_event_id)
         SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10 FROM allowed
         ON CONFLICT DO NOTHING RETURNING memory_id
+      ), queued AS (
+        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
+        SELECT memory_id,1,'upsert' FROM inserted ON CONFLICT DO NOTHING RETURNING job_id
       )
       SELECT EXISTS(SELECT 1 FROM allowed) AS allowed,
-             EXISTS(SELECT 1 FROM inserted) AS inserted`;
+             EXISTS(SELECT 1 FROM inserted) AS inserted,
+             EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), job.leaseToken]);
     if (result.rows[0]?.allowed !== true) throw new Error('gate_memory_scope_unavailable');
@@ -214,11 +370,17 @@ export class GateMemoryStore {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);
     const scope = await this.trustedScope(job);
-    const sql = 'UPDATE gate_memory_entries SET content=$9,source_event_id=$10,revision=revision+1,updated_at=now() WHERE '
-      + FILTER + ' AND memory_key=$8 AND revision=$11 AND revoked_at IS NULL' + liveFence(10, 12);
+    const sql = `WITH updated AS (
+      UPDATE gate_memory_entries SET content=$9,source_event_id=$10,revision=revision+1,updated_at=now() WHERE `
+      + FILTER + ' AND memory_key=$8 AND revision=$11 AND revoked_at IS NULL' + liveFence(10, 12) + `
+      RETURNING memory_id,revision
+    ), queued AS (
+      INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
+      SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
+    ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
-    return !!result.rowCount;
+    return result.rows[0]?.updated === true;
   }
 
 
@@ -227,7 +389,7 @@ export class GateMemoryStore {
     if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('gate_memory_revision_invalid');
     const value = validateGateMemoryDraft(draft);
     const scope = await this.trustedScope(job);
-    const sql = `UPDATE gate_memory_entries
+    const sql = `WITH updated AS (UPDATE gate_memory_entries
       SET content=$9,source_event_id=$10,revoked_at=NULL,revision=revision+1,updated_at=now()
       WHERE ` + FILTER + ` AND memory_key=$8 AND revision=$11
       AND revoked_at IS NOT NULL AND source_event_id<>$10
@@ -236,20 +398,26 @@ export class GateMemoryStore {
         WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$12
           AND ingress.status='processing' AND ingress.lease_until>now()
           AND ingress.expires_at>now()
-      )` + liveFence(10, 12);
+      )` + liveFence(10, 12) + ` RETURNING memory_id,revision), queued AS (
+        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
+        SELECT memory_id,revision,'upsert' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
+      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope, value.key, value.content,
       boundedText(job.eventId, 256), expectedRevision, job.leaseToken]);
-    return !!result.rowCount;
+    return result.rows[0]?.updated === true;
   }
 
   /** Tombstone removes stored text and blocks replayed creates. */
   async forget(job: KookIngressJob, key: string): Promise<boolean> {
     const scope = await this.trustedScope(job);
-    const sql = `UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
+    const sql = `WITH updated AS (UPDATE gate_memory_entries SET content='',revoked_at=now(),source_event_id=$9,
       revision=revision+1,updated_at=now() WHERE ` + FILTER + ' AND memory_key=$8 AND revoked_at IS NULL'
-      + liveFence(9, 10);
+      + liveFence(9, 10) + ` RETURNING memory_id,revision), queued AS (
+        INSERT INTO gate_memory_embedding_jobs(memory_id,source_revision,operation)
+        SELECT memory_id,revision,'delete' FROM updated ON CONFLICT DO NOTHING RETURNING job_id
+      ) SELECT EXISTS(SELECT 1 FROM updated) AS updated,EXISTS(SELECT 1 FROM queued) AS queued`;
     const result = await this.pool.query(sql, [...scope,
       boundedText(key, 96).toLocaleLowerCase('en-US'), boundedText(job.eventId, 256), job.leaseToken]);
-    return !!result.rowCount;
+    return result.rows[0]?.updated === true;
   }
 }

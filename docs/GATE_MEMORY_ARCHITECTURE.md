@@ -322,3 +322,57 @@ Exact P1 source and fixture changes:
 P1 source acceptance is ready for its committed phase gate. P1 does not add
 semantic recall, Gate-owned embeddings, model-generated summaries, or a real
 Gate-Local deployment.
+
+## P2 Gate-owned embedding and optional pgvector source — 2026-10-16
+
+- `GateMemoryEmbeddingProvider` uses AI SDK `embedMany` with the existing
+  `@ai-sdk/openai-compatible` adapter and Gate's `createPublicModelFetch`
+  egress guard. It reads only separate `GATE_MEMORY_EMBEDDING_*` settings,
+  including a separate key and an explicit `GATE_MEMORY_EMBEDDING_ENABLED=1`
+  switch. The default remains unconfigured; chat credentials are ignored.
+  HTTPS is required except for an exact internal host:port allowlist entry.
+  No live model probe or provider request was made in this phase.
+- Embedding batches have per-call timeout, input-byte/token ceiling, batch
+  limit, request/token daily budgets, SHA-256 content hashes and a contract
+  containing provider, model, dimensions, L2 normalization and index version.
+  Responses are checked for exact dimension, finite nonzero unit vectors and
+  contract drift. UTF-8 byte count is used as a conservative byte-level
+  tokenizer ceiling; it is a spend guard estimate, not a provider invoice or
+  exact tokenizer report. Budget failures and unknown provider outcomes do
+  not refund a possibly billed request.
+- Migration `0024_gate_memory_embedding_jobs.sql` adds a transactional
+  upsert/delete outbox and daily usage accounting using built-in PostgreSQL
+  types only. Fact revisions remain authoritative. Create, revise,
+  remember-again and forget enqueue the matching revision atomically; reads
+  filter revoked facts immediately, before the delete worker removes vectors.
+  Worker leases, source revision checks, current binding checks and
+  idempotent upserts prevent stale index jobs from reviving facts.
+- Migration `0025_gate_memory_pgvector.sql` is intentionally excluded from
+  startup migrations. An operator must first install the extension and
+  separately apply this optional schema. It adds versioned `vector` rows and
+  a BTREE scope-first index only; it does not create HNSW or IVFFlat indexes.
+  Exact cosine recall filters bot, DM actor or channel/tenant/team/binding,
+  provider, model, dimension, index version, source revision and revocation
+  before limiting results. Search reports `semantic` or `lexical_only` with a
+  fixed fallback reason, and its optional metrics callback receives only
+  duration and those fixed labels, never query or memory text.
+- The synthetic fixture uses the pinned `pgvector/pgvector:pg18-bookworm`
+  image in a disposable PostgreSQL service. It runs ordinary migrations,
+  proves the optional migration works as a non-superuser after extension
+  installation, verifies transactional rollback and the BTREE query plan,
+  tests synonym-style semantic lookup with a fixture provider, checks
+  cross-actor isolation, daily budget fallback and immediate revocation, then
+  restores a `pg_dump` snapshot and verifies both source facts and vectors.
+  The ordinary PostgreSQL 18 job continues to test startup without vector.
+  No Gate-Local extension, image switch, migration, provider call or runtime
+  deployment occurred; M2 remains `PAUSED / BLOCKED_BY_RELEASE_ENGINEERING`.
+- This phase provides provider and SQL foundations only. It does not verify
+  a real model ID, provider entitlement, billing, semantic quality, production
+  latency, or connect `GateMemoryStore` to Agent prompt assembly. The fixture
+  proves code paths with synthetic vectors; real model and Gate-Local
+  acceptance remain separate authorizations.
+
+P2 source changes are in `apps/pubg-saas/src/application/gate-memory-*`,
+`apps/pubg-saas/src/infrastructure/ai/gate-memory-embedding-*`, migrations
+`0024` and `0025`, the focused provider/foundation/pgvector tests, and
+`.github/workflows/pubg-saas.yml`.

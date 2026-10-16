@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { Pool } from 'pg';
-import { GateMemoryStore, rankGateMemories, memorySearchTokens, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
+import { GateMemoryStore, GateMemoryIndexWorker, rankGateMemories, memorySearchTokens, validateGateMemoryDraft, migratePublicDatabase, KookIngressQueue, TeamAdminService, PublicQueryAuthorizer, parseTrustedKookGroupMessage } from '../src/index.js';
 import type { GateMemoryScope, GateMemoryScopeResolver } from '../src/index.js';
 import type { KookIngressJob } from '../src/application/kook-ingress-queue.js';
 
@@ -85,7 +85,10 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
   };
   const queue = new KookIngressQueue(pool, { botAccountId: bot });
   const auth = new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot });
-  const memory = new GateMemoryStore(pool, auth);
+  const searchMetrics: Array<{ mode: string; reason: string | null; durationMs: number }> = [];
+  const memory = new GateMemoryStore(pool, auth, {
+    onSearchMetric: metric => searchMetrics.push(metric),
+  });
   try {
     await migratePublicDatabase(pool);
     const teams = new TeamAdminService(pool, { isGuildAdmin: async () => true });
@@ -123,6 +126,35 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     assert.equal(await memory.create(group, { key: 'map_preference', content: '喜欢艾伦格地图' }), 'created');
     assert.equal((await memory.searchLexical(group, '艾'))[0]?.key, 'map_preference');
     assert.equal((await memory.searchLexical(group, '图'))[0]?.key, 'map_preference');
+    const disabledSearch = await memory.searchWithFallback(group, '喜欢艾伦格', null);
+    assert.equal(disabledSearch.mode, 'lexical_only');
+    assert.equal(disabledSearch.reason, 'semantic_unconfigured');
+    assert.equal(disabledSearch.entries[0]?.key, 'map_preference');
+    assert.equal(searchMetrics.at(-1)?.mode, 'lexical_only');
+    assert.equal(searchMetrics.at(-1)?.reason, 'semantic_unconfigured');
+    assert.ok((searchMetrics.at(-1)?.durationMs ?? -1) >= 0);
+    let embeddingCalls = 0;
+    const fixtureProvider = {
+      contract: { providerId: 'gate-openai-compatible' as const, modelId: 'fixture', dimensions: 3,
+        normalization: 'l2_unit' as const, indexVersion: 1 },
+      dailyTokenBudget: 10_000, dailyRequestBudget: 100,
+      async embedMany() { embeddingCalls += 1; throw new Error('must-not-call-without-vector-schema'); },
+    };
+    const noVectorSearch = await memory.searchWithFallback(group, '喜欢艾伦格', fixtureProvider);
+    assert.equal(noVectorSearch.mode, 'lexical_only');
+    assert.equal(noVectorSearch.reason, 'vector_index_unavailable');
+    assert.equal(embeddingCalls, 0, 'standard PostgreSQL never sends a paid embedding request without the optional vector index');
+    assert.equal(await new GateMemoryIndexWorker(pool, null).processOne(), 'semantic_unconfigured');
+    const queuedChanges = await pool.query(
+      `SELECT memory.memory_key,job.source_revision,job.operation FROM gate_memory_embedding_jobs job
+       JOIN gate_memory_entries memory ON memory.memory_id=job.memory_id
+       WHERE memory.bot_account_id=$1 AND memory.memory_key IN ('language','map_preference')
+       ORDER BY memory.memory_key,job.source_revision`, [bot],
+    );
+    assert.deepEqual(queuedChanges.rows.map(row => [row.memory_key, String(row.source_revision), row.operation]), [
+      ['language', '1', 'upsert'], ['language', '2', 'upsert'], ['language', '3', 'delete'],
+      ['language', '4', 'upsert'], ['map_preference', '1', 'upsert'],
+    ]);
 
     // Full-scope search: 150 fresher records cannot make the older relevant
     // memory disappear behind an arbitrary "latest 128" prefilter.
@@ -171,6 +203,7 @@ test('real KOOK lease and scoped SQL guard isolate live DM and bound channel mem
     await assert.rejects(stale.create(group, { key: 'stale', content: '不应写入' }), /gate_memory_scope_unavailable/u);
     assert.equal((await pool.query("SELECT COUNT(*)::INTEGER AS count FROM gate_memory_entries WHERE bot_account_id=$1 AND memory_key='stale'", [bot])).rows[0]?.count, 0);
   } finally {
+    await pool.query('DELETE FROM gate_memory_embedding_usage_daily WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM gate_memory_entries WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     await pool.query('DELETE FROM usage_records WHERE bot_account_id=$1', [bot]).catch(() => undefined);
     for (const table of ['session_contexts', 'result_sets', 'kook_ingress_events',
