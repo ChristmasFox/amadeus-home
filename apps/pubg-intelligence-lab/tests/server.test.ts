@@ -106,6 +106,7 @@ test('local API serves history and research from a read-only source and stores e
       status: string;
       parserVersion: string;
       episodes: Array<{ timeline: Array<{ sourceEventId: string }>; evidenceEventIds: string[]; knockChains: Array<{ outcome: string | null }> }>;
+      tactical: { ruleVersion: string; candidates: Array<{ ruleId: string; metric: { denominator: number | null }; supportEvents: Array<{ matchId: string; eventId: string | null }> }> };
       circleTransitions: unknown[];
     };
     assert.equal(reconstructed.status, 'available');
@@ -113,10 +114,44 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(reconstructed.episodes.length, 1);
     assert.equal(reconstructed.episodes[0]?.knockChains[0]?.outcome, 'REVIVE');
     assert.equal(reconstructed.episodes[0]?.timeline.every((event) => reconstructed.episodes[0]?.evidenceEventIds.includes(event.sourceEventId)), true);
+    assert.equal(reconstructed.tactical.ruleVersion, 'tactical-social-rules-v1');
+    assert.ok(reconstructed.tactical.candidates.some((item) => item.ruleId === 'combat.first-knock-share'));
+    assert.ok(reconstructed.tactical.candidates.every((item) => item.supportEvents.every((ref) => ref.matchId === 'app-match-2' && ref.eventId)));
     const responseText = JSON.stringify(reconstructed);
     assert.equal(responseText.includes('private-player-1'), false);
     assert.equal(responseText.includes('opponent-fixture-1'), false);
     assert.equal(responseText.includes('sanitized-fixture.json'), false);
+    const pairAnalysis = await fetch(`${server.url}/api/tactics/recurrent-pairs?squadId=all&from=2026-10-12&to=2026-10-12&limit=100`).then((response) => response.json()) as {
+      status: string;
+      ruleVersion: string;
+      requestedMatches: number;
+      analyzedMatches: number;
+      unavailableMatches: number;
+      candidates: Array<{ pairRefs?: string[]; supportEvents: Array<{ matchId: string; eventId: string | null }> }>;
+      ruleCoverage: Array<{ ruleId: string; matchCount: number; evaluatedMatchCount: number; supportEventCount: number }>;
+      labels: Record<string, string>;
+    };
+    assert.equal(pairAnalysis.status, 'available');
+    assert.equal(pairAnalysis.ruleVersion, 'tactical-social-rules-v1');
+    assert.equal(pairAnalysis.requestedMatches, 1);
+    assert.equal(pairAnalysis.analyzedMatches, 1);
+    assert.equal(pairAnalysis.unavailableMatches, 0);
+    assert.ok(pairAnalysis.candidates.every((item) => item.supportEvents.every((ref) => ref.matchId === 'app-match-2' && ref.eventId)));
+    assert.ok(pairAnalysis.ruleCoverage.some((row) => row.ruleId === 'combat.first-knock-share' && row.matchCount === 1));
+    assert.ok(pairAnalysis.ruleCoverage.every((row) => row.matchCount === pairAnalysis.analyzedMatches));
+    const outsidePairScope = await fetch(`${server.url}/api/tactics/recurrent-pairs?squadId=all&from=2026-10-10&to=2026-10-11`);
+    const outsidePair = await outsidePairScope.json() as Record<string, unknown>;
+    assert.deepEqual(outsidePair, {
+      status: 'insufficient_data',
+      ruleVersion: 'tactical-social-rules-v1',
+      requestedMatches: 0,
+      analyzedMatches: 0,
+      unavailableMatches: 0,
+      candidateCount: 0,
+      candidates: [],
+      ruleCoverage: [],
+      labels: { },
+    });
     const outOfScope = await fetch(`${server.url}/api/matches/app-match-1/episodes?squadId=all&from=2026-10-11&to=2026-10-11`);
     assert.equal(outOfScope.status, 404);
     assert.deepEqual(await outOfScope.json(), { error: 'match_outside_scope' });

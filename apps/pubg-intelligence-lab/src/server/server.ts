@@ -19,13 +19,17 @@ import {
   battleTeamRef,
   buildResearchReport,
   buildResearchSquads,
+  buildFrequentPairCandidates,
   ExperimentRunStore,
+  analyzeTacticalMatch,
   NaturalLanguageResearchPlanner,
   normalizeBattleTelemetry,
   redactSensitiveText,
   reconstructBattleEpisodes,
+  tacticalPlayerRef,
   type BattleTelemetryDocument,
   type ResearchSquad,
+  type TacticalMatchAnalysis,
 } from '@agent/pubg-intelligence';
 import { createResearchModel } from './model.js';
 
@@ -35,6 +39,7 @@ const DEFAULT_PORT = 4179;
 const DEFAULT_HOST = '127.0.0.1';
 const MAX_REQUEST_BYTES = 16 * 1024;
 const MAX_MATCHES_PER_PAGE = 100;
+const MAX_TACTICAL_MATCHES = 30;
 
 interface MatchReviewFeature {
   facts: MatchReviewFacts;
@@ -424,6 +429,74 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
     });
     return;
   }
+  if (request.method === 'GET' && url.pathname === '/api/tactics/recurrent-pairs') {
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    const requestedLimit = Number(url.searchParams.get('limit') ?? MAX_TACTICAL_MATCHES);
+    const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(MAX_TACTICAL_MATCHES, Math.floor(requestedLimit))) : MAX_TACTICAL_MATCHES;
+    const eligible = snapshot.matches.filter((match) => snapshot.telemetryUrls.has(match.matchId)
+      && inSquad(match, squad)
+      && (scopeBounds.fromMs === undefined || match.timestamp >= scopeBounds.fromMs)
+      && (scopeBounds.toMs === undefined || match.timestamp < scopeBounds.toMs))
+      .sort((left, right) => right.timestamp - left.timestamp || right.matchId.localeCompare(left.matchId));
+    const selected = eligible.slice(0, limit);
+    const analyses: TacticalMatchAnalysis[] = [];
+    let unavailableMatches = 0;
+    let nextIndex = 0;
+    const workerCount = Math.min(3, selected.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextIndex < selected.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        const match = selected[index]!;
+        const trackedPlayerIds = match.players.filter((player) => squad.memberIds.includes(player.accountId)).map((player) => player.accountId);
+        try {
+          const telemetry = await loadBattleTelemetry(snapshot, match);
+          const reconstruction = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+          analyses.push(analyzeTacticalMatch({ match, telemetry, reconstruction, trackedPlayerIds }));
+        } catch {
+          unavailableMatches += 1;
+        }
+      }
+    }));
+    const candidates = buildFrequentPairCandidates(analyses);
+    const ruleIds = new Set(analyses.flatMap((analysis) => analysis.candidates.map((candidate) => candidate.ruleId)));
+    const ruleCoverage = [...ruleIds].sort().map((ruleId) => {
+      const rows = analyses.flatMap((analysis) => analysis.candidates.filter((candidate) => candidate.ruleId === ruleId));
+      const evaluatedMatchCount = analyses.filter((analysis) => analysis.candidates.some((candidate) => candidate.ruleId === ruleId && candidate.metric.denominator !== null)).length;
+      const support = new Set(rows.flatMap((candidate) => candidate.supportEvents.filter((ref) => ref.eventId).map((ref) => `${ref.matchId}\u001f${ref.eventId}`)));
+      const counterexamples = new Set(rows.flatMap((candidate) => candidate.counterexamples.filter((ref) => ref.eventId).map((ref) => `${ref.matchId}\u001f${ref.eventId}`)));
+      return {
+        ruleId,
+        matchCount: analyses.length,
+        evaluatedMatchCount,
+        unknownMatchCount: analyses.length - evaluatedMatchCount,
+        sampleSize: rows.reduce((sum, candidate) => sum + candidate.metric.sampleSize, 0),
+        supportEventCount: support.size,
+        counterexampleEventCount: counterexamples.size,
+      };
+    });
+    const labels: Record<string, string> = {};
+    for (const match of selected) {
+      for (const [index, player] of match.players.entries()) {
+        if (!squad.memberIds.includes(player.accountId)) continue;
+        labels[tacticalPlayerRef(player.accountId)] ??= safePlayerName(player.displayName || player.playerName, index);
+      }
+    }
+    send(response, 200, {
+      status: analyses.length ? 'available' : 'insufficient_data',
+      ruleVersion: 'tactical-social-rules-v1',
+      requestedMatches: selected.length,
+      analyzedMatches: analyses.length,
+      unavailableMatches,
+      candidateCount: candidates.length,
+      candidates,
+      ruleCoverage,
+      labels,
+    });
+    return;
+  }
   const matchEpisodes = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/episodes$/u) : null;
   if (matchEpisodes) {
     let matchId: string;
@@ -450,6 +523,7 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
         .filter((player) => squad.memberIds.includes(player.accountId))
         .map((player) => player.accountId);
       const result = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+      const tactical = analyzeTacticalMatch({ match, telemetry, reconstruction: result, trackedPlayerIds });
       const playerRefs = new Set<string>();
       const teamRefs = new Set<string>();
       for (const episode of result.episodes) {
@@ -481,7 +555,13 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
         episodes: result.episodes,
         circleSamples: result.circleSamples,
         circleTransitions: result.circleTransitions,
-        labels: battleLabels(match, squad, telemetry, playerRefs, teamRefs),
+        labels: {
+          ...battleLabels(match, squad, telemetry, playerRefs, teamRefs),
+          tacticalPlayers: Object.fromEntries(match.players.flatMap((player, index) => squad.memberIds.includes(player.accountId)
+            ? [[tacticalPlayerRef(player.accountId), safePlayerName(player.displayName || player.playerName, index)]]
+            : [])),
+        },
+        tactical,
         diagnostics: result.diagnostics,
       });
     } catch {

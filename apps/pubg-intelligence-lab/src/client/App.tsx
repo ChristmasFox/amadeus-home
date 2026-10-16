@@ -113,8 +113,55 @@ interface BattleMatchResponse {
   episodes?: BattleEpisode[];
   circleSamples?: BattleCircleSample[];
   circleTransitions?: BattleCircleTransition[];
-  labels?: { players: Record<string, string>; teams: Record<string, string> };
+  labels?: { players: Record<string, string>; teams: Record<string, string>; tacticalPlayers?: Record<string, string> };
   diagnostics?: Record<string, number>;
+  tactical?: TacticalMatchAnalysis;
+}
+
+interface TacticalEvidenceRef {
+  matchId: string;
+  eventId: string | null;
+  timeSeconds: number | null;
+  kind: string;
+  actorRef?: string | null;
+  victimRef?: string | null;
+}
+
+interface TacticalInsightCandidate {
+  id: string;
+  ruleId: string;
+  ruleVersion: string;
+  category: string;
+  title: string;
+  status: 'observed' | 'not_observed' | 'incomplete' | 'insufficient_data';
+  statement: string;
+  metric: { numerator: number | null; denominator: number | null; sampleSize: number; value: number | null; unit: string };
+  supportEvents: TacticalEvidenceRef[];
+  counterexamples: TacticalEvidenceRef[];
+  quality: { grade: 'high' | 'moderate' | 'low' | 'insufficient'; reasons: string[] };
+  assumptions: string[];
+  pairRefs?: [string, string];
+}
+
+interface TacticalMatchAnalysis {
+  schemaVersion: number;
+  ruleVersion: string;
+  matchId: string;
+  candidates: TacticalInsightCandidate[];
+  pairObservations: Array<{ pairRef: string; pairRefs: [string, string]; matchId: string; eligible: boolean; opportunityCount: number; sharedEngagementCount: number; supportEvents: TacticalEvidenceRef[]; counterexamples: TacticalEvidenceRef[] }>;
+  diagnostics: Record<string, number>;
+}
+
+interface FrequentPairResponse {
+  status: 'available' | 'insufficient_data';
+  ruleVersion: string;
+  requestedMatches: number;
+  analyzedMatches: number;
+  unavailableMatches: number;
+  candidateCount: number;
+  candidates: TacticalInsightCandidate[];
+  ruleCoverage: Array<{ ruleId: string; matchCount: number; evaluatedMatchCount: number; unknownMatchCount: number; sampleSize: number; supportEventCount: number; counterexampleEventCount: number }>;
+  labels: Record<string, string>;
 }
 
 interface ResearchReport {
@@ -180,6 +227,28 @@ function percent(value: number | null): string {
   return value === null ? '—' : `${(value * 100).toFixed(1)}%`;
 }
 
+function TacticalCandidateCard({ candidate, labels }: { candidate: TacticalInsightCandidate; labels: Record<string, string> }) {
+  const pairLabel = candidate.pairRefs?.map((ref) => labels[ref] ?? ref).join(' × ');
+  const metricValue = candidate.metric.value === null ? '未知' : candidate.metric.value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  const statusLabel = ({ observed: '已观察', not_observed: '无机会样本', incomplete: '部分数据', insufficient_data: '证据不足' } as const)[candidate.status];
+  const qualityLabel = ({ high: '较强', moderate: '中等', low: '有限', insufficient: '不足' } as const)[candidate.quality.grade];
+  const playerLabel = (ref: string | null | undefined) => ref ? labels[ref] ?? `成员 ${ref.slice(-5)}` : '未知';
+  const renderEvidence = (ref: TacticalEvidenceRef, index: number, kind: string) => <div className="tactical-ref-item" key={`${kind}-${index}`}>
+    <code>{ref.matchId} / {ref.eventId ?? '比赛级引用'} · {ref.kind}</code>
+    {(ref.actorRef || ref.victimRef) && <small>{playerLabel(ref.actorRef)} → {playerLabel(ref.victimRef)}</small>}
+  </div>;
+  return <article className={`tactical-candidate quality-${candidate.quality.grade}`}>
+    <div className="tactical-candidate-heading"><b>{candidate.title}</b><span>{statusLabel} · {qualityLabel}</span></div>
+    {pairLabel && <div className="tactical-pair-label">{pairLabel}</div>}
+    <p>{candidate.statement}</p>
+    <div className="tactical-metric">分子/分母 {candidate.metric.numerator ?? '未知'} / {candidate.metric.denominator ?? '未知'} · 样本 {candidate.metric.sampleSize} · 值 {metricValue} {candidate.metric.unit}</div>
+    {candidate.quality.reasons.map((reason, index) => <small className="tactical-note" key={`quality-${index}`}>{reason}</small>)}
+    {candidate.assumptions.map((assumption, index) => <small className="tactical-note" key={`assumption-${index}`}>规则：{assumption}</small>)}
+    {candidate.supportEvents.length > 0 && <div className="tactical-refs"><span>支持事件</span>{candidate.supportEvents.map((ref, index) => renderEvidence(ref, index, 'support'))}</div>}
+    {candidate.counterexamples.length > 0 && <div className="tactical-refs counterexample"><span>反例 / 未支持样本</span>{candidate.counterexamples.map((ref, index) => renderEvidence(ref, index, 'counter'))}</div>}
+  </article>;
+}
+
 function safeQuestion(value: string): string {
   return value.slice(0, 1200)
     .replace(/(?<!\d)1[3-9]\d{9}(?!\d)/gu, '[手机号已隐藏]')
@@ -233,6 +302,9 @@ export function App() {
   const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
   const [battleLoading, setBattleLoading] = useState(false);
   const [battleError, setBattleError] = useState('');
+  const [frequentPairs, setFrequentPairs] = useState<FrequentPairResponse | null>(null);
+  const [frequentPairsLoading, setFrequentPairsLoading] = useState(false);
+  const [frequentPairsError, setFrequentPairsError] = useState('');
   const [question, setQuestion] = useState('');
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [activeResearch, setActiveResearch] = useState<ResearchResponse | null>(null);
@@ -283,6 +355,11 @@ export function App() {
 
   const currentSquad = useMemo(() => bootstrap?.squads.find((squad) => squad.id === squadId), [bootstrap, squadId]);
 
+  useEffect(() => {
+    setFrequentPairs(null);
+    setFrequentPairsError('');
+  }, [squadId, from, to]);
+
   const selectedEpisode = battleData?.episodes?.find((episode) => episode.id === selectedEpisodeId) ?? battleData?.episodes?.[0] ?? null;
   const circleSamplesById = useMemo(() => new Map((battleData?.circleSamples ?? []).map((sample) => [sample.id, sample])), [battleData]);
 
@@ -303,6 +380,23 @@ export function App() {
       setBattleError('交战重建读取失败，请稍后重试。');
     } finally {
       setBattleLoading(false);
+    }
+  }
+
+  async function loadFrequentPairs() {
+    if (!squadId || frequentPairsLoading) return;
+    setFrequentPairsLoading(true);
+    setFrequentPairsError('');
+    setFrequentPairs(null);
+    try {
+      const scope = new URLSearchParams({ squadId, limit: '30' });
+      if (from) scope.set('from', from);
+      if (to) scope.set('to', to);
+      setFrequentPairs(await json<FrequentPairResponse>(`/api/tactics/recurrent-pairs?${scope}`));
+    } catch {
+      setFrequentPairsError('跨局共同交战分析失败；快照保持只读。');
+    } finally {
+      setFrequentPairsLoading(false);
     }
   }
 
@@ -405,6 +499,22 @@ export function App() {
             {detail.analysis.good.length > 0 && <div className="analysis-list"><div className="card-label">有效执行 <span className="green">+{detail.analysis.good.length}</span></div>{detail.analysis.good.slice(0, 3).map((item, index) => <p key={index}><i>↗</i>{item}</p>)}</div>}
             {detail.analysis.improvements.length > 0 && <div className="analysis-list"><div className="card-label">可复盘点 <span className="amber">{detail.analysis.improvements.length}</span></div>{detail.analysis.improvements.slice(0, 3).map((item, index) => <p key={index}><i>·</i>{item}</p>)}</div>}
           </>}
+          {detail && <button className="tactical-pairs-button" onClick={() => void loadFrequentPairs()} disabled={frequentPairsLoading}>
+            {frequentPairsLoading ? '正在分析当前范围比赛…' : frequentPairs ? `重跑跨局常搭对分析 · ${frequentPairs.analyzedMatches} 场` : '分析跨局常搭对候选 · 最多 30 场'} <span>↗</span>
+          </button>}
+          {frequentPairsError && <div className="inline-error">{frequentPairsError}</div>}
+          {frequentPairs && <section className="tactical-analysis tactical-pair-analysis">
+            <div className="evidence-heading"><div><span className="eyebrow">SOCIAL · MATCH HOLDOUT</span><b>重复共同交战候选</b></div><span>{frequentPairs.analyzedMatches}/{frequentPairs.requestedMatches}</span></div>
+            <div className="tactical-integrity">规则 {frequentPairs.ruleVersion} · 读取 {frequentPairs.analyzedMatches} 场 · 不可用 {frequentPairs.unavailableMatches} 场 · 共同交战候选 {frequentPairs.candidateCount}</div>
+            <details className="tactical-coverage"><summary>逐规则样本覆盖（{frequentPairs.ruleCoverage.length} 条规则）</summary>{frequentPairs.ruleCoverage.map((row) => <div className="tactical-coverage-row" key={row.ruleId}><b>{row.ruleId}</b><span>可评估 {row.evaluatedMatchCount}/{row.matchCount} · 样本 {row.sampleSize} · 支持事件 {row.supportEventCount} · 反例事件 {row.counterexampleEventCount} · 未知比赛 {row.unknownMatchCount}</span></div>)}</details>
+            {frequentPairs.candidates.map((candidate) => <TacticalCandidateCard key={candidate.id} candidate={candidate} labels={frequentPairs.labels} />)}
+            {!frequentPairs.candidates.length && <p className="tactical-empty">当前范围没有可形成关系候选的同队双人样本。</p>}
+          </section>}
+          {battleData?.tactical && <section className="tactical-analysis">
+            <div className="evidence-heading"><div><span className="eyebrow">TACTICAL / SOCIAL / ROTATION</span><b>单局规则候选</b></div><span>{battleData.tactical.ruleVersion}</span></div>
+            <div className="tactical-integrity">schema {battleData.tactical.schemaVersion} · 交战 {battleData.tactical.diagnostics.episodeCount} · 位置样本 {battleData.tactical.diagnostics.positionEventCount} · 队伍字段不完整 {battleData.tactical.diagnostics.incompleteTeamEventCount} · 未识别来源 {battleData.tactical.diagnostics.unmatchedBattleSourceCount}</div>
+            {battleData.tactical.candidates.map((candidate) => <TacticalCandidateCard key={candidate.id} candidate={candidate} labels={battleData.labels?.tacticalPlayers ?? {}} />)}
+          </section>}
           {activeResearch && <div className="evidence-card"><div className="evidence-heading"><div><span className="eyebrow">EVIDENCE LEDGER</span><b>研究证据</b></div><span>{activeResearch.report.evidenceCount}</span></div><div className="evidence-list">{activeResearch.report.evidence.slice(0, 10).map((item) => <button className="evidence-row" key={item.id} onClick={() => setSelectedMatchId(item.matchId)}><div className="evidence-ref">{item.source === 'telemetry_feature' ? 'T' : 'M'}</div><div><span>{dateLabel(item.occurredAt)} · {item.mapName}</span><b>{item.value}</b><small>{item.description}</small></div><i>↗</i></button>)}</div></div>}
           {!detail && !activeResearch && !detailLoading && <div className="right-empty"><div className="evidence-empty-icon">⌁</div><b>等待研究输入</b><p>选择一场历史比赛查看领域分析，或发起研究问题。证据会在这里展开。</p></div>}
           {detail && <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>}

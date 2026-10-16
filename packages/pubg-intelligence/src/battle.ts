@@ -76,6 +76,9 @@ export interface BattleSourceEvent {
   damage: number;
   hit: boolean;
   weaponId: string | null;
+  /** Optional supplemental telemetry facts used by versioned R2 rules. */
+  blueZone?: boolean | null;
+  damageReason?: string | null;
   location: TelemetryLocation | null;
 }
 
@@ -382,6 +385,8 @@ function sourceEvent(event: NormalizedTelemetryEvent, raw: Record<string, unknow
     damage: event.damage,
     hit: event.hit,
     weaponId: event.weaponId,
+    blueZone: event.blueZone ?? null,
+    damageReason: event.damageReason ?? null,
     location: event.location,
   };
 }
