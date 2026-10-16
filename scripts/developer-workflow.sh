@@ -40,10 +40,10 @@ if ((${#FILES[@]} == 0)); then
     [[ -n "$path" ]] && FILES+=("$path")
   done < <({
     if [[ "$BASE_REF" == HEAD ]]; then
-      git diff --name-only --diff-filter=ACMR HEAD
+      git diff --name-only --diff-filter=ACMDRT HEAD
     else
-      git diff --name-only --diff-filter=ACMR "${BASE_REF}...HEAD"
-      git diff --name-only --diff-filter=ACMR HEAD
+      git diff --name-only --diff-filter=ACMDRT "${BASE_REF}...HEAD"
+      git diff --name-only --diff-filter=ACMDRT HEAD
     fi
     git ls-files --others --exclude-standard
   } | awk 'NF && !seen[$0]++' | LC_ALL=C sort)

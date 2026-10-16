@@ -2,8 +2,10 @@
 import importlib.util
 import json
 import pathlib
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "devctl.py"
 spec = importlib.util.spec_from_file_location("devctl", MODULE_PATH)
@@ -59,6 +61,25 @@ class DevctlContracts(unittest.TestCase):
     def test_unknown_scope_blocks_deploy(self):
         self.assertEqual(devctl.scope_kind(["plugins/pubg/src/index.ts", "misc/unowned.ts"])[2],
                          "mixed-or-unknown-scope")
+
+    def test_scope_includes_deleted_files_after_commit(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            def run(*args):
+                return subprocess.run(["git", "-C", str(root), *args],
+                                      check=True, capture_output=True, text=True).stdout.strip()
+            run("init", "-q")
+            run("config", "user.email", "fixture@example.invalid")
+            run("config", "user.name", "Fixture")
+            target = root / "plugins" / "pubg" / "src" / "removed.ts"
+            target.parent.mkdir(parents=True)
+            target.write_text("old", encoding="utf-8")
+            run("add", ".")
+            run("commit", "-qm", "fixture")
+            baseline = run("rev-parse", "HEAD")
+            target.unlink()
+            with mock.patch.object(devctl, "ROOT", root):
+                self.assertIn("plugins/pubg/src/removed.ts", devctl.scope_paths(baseline))
 
     def test_evidence_is_private_and_atomic(self):
         with tempfile.TemporaryDirectory() as d:

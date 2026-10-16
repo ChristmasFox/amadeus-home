@@ -86,8 +86,8 @@ def scope_paths(base: str) -> list[str]:
     # Compare all committed changes since Goal start and working-tree changes,
     # even after a Codex commit makes a plain 'git diff HEAD' empty.
     commands = (
-        ["git", "-C", str(ROOT), "diff", "--name-only", "-z", "--diff-filter=ACMR", base + "...HEAD"],
-        ["git", "-C", str(ROOT), "diff", "--name-only", "-z", "--diff-filter=ACMR", "HEAD"],
+        ["git", "-C", str(ROOT), "diff", "--name-only", "-z", "--diff-filter=ACMDRT", base + "...HEAD"],
+        ["git", "-C", str(ROOT), "diff", "--name-only", "-z", "--diff-filter=ACMDRT", "HEAD"],
         ["git", "-C", str(ROOT), "ls-files", "--others", "--exclude-standard", "-z"],
     )
     names = set()
