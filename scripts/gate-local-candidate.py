@@ -280,6 +280,21 @@ def full_database_dump_shell() -> str:
     )
 
 
+def database_backup_required(risk: str, force_full_backup: bool) -> bool:
+    """Retain the default code-only checkpoint, but honor an explicit full PG backup."""
+    return force_full_backup or risk != "reversible_app_candidate"
+
+
+def parse_candidate_command(args: list[str]) -> tuple[str, bool] | None:
+    """Parse only the guarded apply command and its optional explicit PG dump."""
+    if len(args) == 4 and args[:3] == ["candidate", "--apply", "--approval-ref"]:
+        return args[3], False
+    if (len(args) == 6 and args[:3] == ["candidate", "--apply", "--approval-ref"]
+            and args[4:] == ["--database-backup", "full"]):
+        return args[3], True
+    return None
+
+
 def clean_tree() -> None:
     if text(["git", "-C", str(ROOT), "status", "--porcelain"]):
         raise CandidateError("apply_requires_clean_committed_source")
@@ -570,7 +585,7 @@ def restore_remote_files(machine: str, layout: dict[str, str], old_compose: byte
     write_remote_file(machine, layout["envFile"], old_env, "preserve")
 
 
-def gate_apply(approval_ref: str) -> int:
+def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -> int:
     """Deploy Gate-Local using the existing one-time target configuration."""
     policy, policy_reason = validate_private_state(POLICY_PATH, ROOT)
     if policy is None:
@@ -630,7 +645,8 @@ def gate_apply(approval_ref: str) -> int:
         old_compose: bytes | None = None
         old_env: bytes | None = None
         state: dict[str, Any] = {"sourceSha": sha, "image": image, "activeImage": active_image,
-                                 "approvalRef": approval_ref, "checkpoint": str(checkpoint), "risk": risk}
+                                 "approvalRef": approval_ref, "checkpoint": str(checkpoint), "risk": risk,
+                                 "databaseBackupMode": "full" if force_full_database_backup else "migration_required"}
 
         def build() -> dict[str, Any]:
             build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -684,7 +700,7 @@ def gate_apply(approval_ref: str) -> int:
                 with path.open("xb") as output:
                     os.fchmod(output.fileno(), 0o600)
                     output.write(value)
-            if risk == "reversible_app_candidate":
+            if not database_backup_required(risk, force_full_database_backup):
                 # Code-only changes do not need another full database dump.
                 # Preserve Compose/env to roll back the application image.
                 metadata = {**state, "createdAt": now.isoformat(),
@@ -837,13 +853,15 @@ def gate_apply(approval_ref: str) -> int:
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] in {"--help", "-h"}:
-        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id>")
+        print("Usage: gate-local-candidate.py candidate --apply --approval-ref <id> [--database-backup full]")
         return 0
-    if len(args) != 4 or args[:3] != ["candidate", "--apply", "--approval-ref"]:
+    parsed = parse_candidate_command(args)
+    if parsed is None:
         print("GATE_DEPLOYMENT=BLOCKED reason=invalid_candidate_command", file=sys.stderr)
         return 2
+    approval_ref, force_full_database_backup = parsed
     try:
-        return gate_apply(args[3])
+        return gate_apply(approval_ref, force_full_database_backup=force_full_database_backup)
     except OperatorAuthorizationRequired as error:
         print("GATE_DEPLOYMENT=" + deployment_status(error) + " reason=" + str(error), file=sys.stderr)
         print("GATE_DEPLOYMENT_NEXT=" + recovery_step(str(error)), file=sys.stderr)

@@ -13,6 +13,8 @@ The Gate adapter takes only the `AuthorizedPublicQuery` created by the existing 
 
 The AI SDK tool is registered only when `GATE_PUBG_INTELLIGENCE_ENABLED=1` and a valid runtime-only `GATE_PUBG_INTELLIGENCE_CANARY_TENANT_IDS` allowlist are both present. The tool rechecks the current trusted KOOK authorization before reading, and a tenant outside the allowlist receives no data. Both flags default off; invalid or duplicate allowlist entries fail closed. The tool returns a deterministic KOOK-ready rendering plus structured coverage, version, integrity, and evidence-alias fields. Aggregate diagnostics record bounded match/cache counts and elapsed milliseconds without tenant IDs. Existing `kook_agent_runs` captures model token usage.
 
+The guarded Gate-Local candidate tool now accepts an explicit `--database-backup full` apply option. It selects the existing encrypted, authenticated PostgreSQL checkpoint path for a reversible code-only release; the default behavior is unchanged. This allows the requested pre-deployment PG backup without manufacturing a schema migration or bypassing the protected candidate pipeline.
+
 No SQL migration or additional service was added: the current Gate sync already persists compact telemetry facts in its own PostgreSQL database. This source format intentionally does not support R1 episode reconstruction or first-knock attribution in Gate. Raw events are discarded by the Domain feature-store compaction step, so R5 does not infer event-stream claims from fight aggregates or add a second raw-telemetry store. This is the data-contract boundary for this adoption.
 
 ## BUILD_VERIFIED
@@ -29,6 +31,7 @@ No SQL migration or additional service was added: the current Gate sync already 
 - `pnpm check:architecture`, `pnpm check:secrets`, and `git diff --check` — passed.
 - `pnpm install --lockfile-only` — passed.
 - Gate OCI image package check: `docker build --platform linux/arm64 ...` passed; importing `@agent/pubg-intelligence/gate` from the built runtime image confirmed API `1.0.0` loads without `node:sqlite`.
+- Gate autopilot safety suite: 36 tests passed, including the explicit full-database-backup selector and preserved default code-only behavior; Python compile, architecture check, secrets scan, and diff checks passed. Final R5 CI must re-run after this deployment-tool change.
 
 Local tests verify default-off and exact-tenant canary selection, no reads for a non-canary tenant, the typed AI SDK tool loop, response rendering through the KOOK adapter, bounded PostgreSQL adapter calls, stale/partial states, compact-facts validation, out-of-roster rejection, and evidence alias stability. The existing PostgreSQL repository integration test now checks that Tenant A cannot read Tenant B's match-scoped feature record; the KOOK integration test exercises the canary tool against a real disposable Gate PostgreSQL fixture when the CI database is available.
 
@@ -40,7 +43,7 @@ No Gate PostgreSQL runtime was queried for this source-stage verification and no
 
 ## RELEASED
 
-Not released. R5 source is not yet merged into `main`; the required Gate-Local operator opt-in file is present with owner-only permissions, but guarded target preflight, an explicit pre-deployment PostgreSQL backup, image health checks, and runtime canary verification remain pending. PR #12 remains open; merging both branches together has conflicts in Gate package/config/handler files, so R5 is held until PR #12 can be preserved and the final merge CI is green. No migration is required by this source change. M2 remains paused.
+Not released. R5 source is not yet merged into `main`; the required Gate-Local operator opt-in file is present with owner-only permissions, but guarded target preflight, an explicit `--database-backup full` PostgreSQL checkpoint, image health checks, and runtime canary verification remain pending. PR #12 remains open; merging both branches together has conflicts in Gate package/config/handler files, so R5 is held until PR #12 can be preserved and the final merge CI is green. No migration is required by this source change. M2 remains paused.
 
 ## Rollback
 

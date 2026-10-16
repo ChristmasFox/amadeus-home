@@ -104,6 +104,20 @@ def operations(**overrides):
 
 
 class GateAutopilotContracts(unittest.TestCase):
+    def test_candidate_explicitly_requests_verified_full_postgres_backup(self):
+        self.assertEqual(candidate.parse_candidate_command([
+            "candidate", "--apply", "--approval-ref", "r5-gate-canary", "--database-backup", "full",
+        ]), ("r5-gate-canary", True))
+        self.assertEqual(candidate.parse_candidate_command([
+            "candidate", "--apply", "--approval-ref", "r5-gate-canary",
+        ]), ("r5-gate-canary", False))
+        self.assertIsNone(candidate.parse_candidate_command([
+            "candidate", "--apply", "--approval-ref", "r5-gate-canary", "--database-backup", "plain",
+        ]))
+        self.assertFalse(candidate.database_backup_required("reversible_app_candidate", False))
+        self.assertTrue(candidate.database_backup_required("reversible_app_candidate", True))
+        self.assertTrue(candidate.database_backup_required("backward_compatible_schema", False))
+
     def test_keg_only_homebrew_libpq_is_added_when_pg_restore_is_not_on_path(self):
         with tempfile.TemporaryDirectory() as temporary:
             bin_dir = pathlib.Path(temporary) / "libpq" / "bin"
