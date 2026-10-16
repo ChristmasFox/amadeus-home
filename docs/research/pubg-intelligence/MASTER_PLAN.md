@@ -156,6 +156,6 @@ R0 → R1 → R2 → R3 → R4 → R5 is the **promotion order**. R3 UI shell ca
 - R2: complete; see `STATUS.md` and `R2_EVALUATION.md`.
 - R3: complete; source, build, scoped mock-model, and real-snapshot evidence at [`STATUS.md`](STATUS.md) and [`R3_EVALUATION.md`](R3_EVALUATION.md). No real-provider request was verified because local AI configuration is absent.
 - R4: complete; see [`R4_EVALUATION.md`](R4_EVALUATION.md). The fixture promotion gate remains closed because no independently labeled historical holdout is available.
-- R5: in progress; Gate boundary and release procedures are being audited before any integration. No Gate deployment has been performed.
+- R5: source implementation is complete on `research/pubg-intelligence`; see [`R5_EVALUATION.md`](R5_EVALUATION.md). Isolated PostgreSQL CI, merge to `main`, host-local authorization, explicit backup, Gate-Local deployment, and canary verification remain pending. No Gate runtime was accessed; M2 remains paused.
 
 Update this ledger only from verified repository and local runtime evidence.

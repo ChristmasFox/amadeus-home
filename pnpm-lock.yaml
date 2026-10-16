@@ -84,6 +84,9 @@ importers:
       '@agent/pubg-domain':
         specifier: workspace:*
         version: link:../../packages/pubg-domain
+      '@agent/pubg-intelligence':
+        specifier: workspace:*
+        version: link:../../packages/pubg-intelligence
       '@ai-sdk/openai-compatible':
         specifier: 3.0.67
         version: 3.0.67(zod@4.5.4)

@@ -28,6 +28,8 @@ import { sanitizeKookMentionMarkup } from '../channels/kook/trusted-group-event.
 import { buildPublicAgentFacts } from './public-agent-facts.js';
 import type { MemoryObservation } from '@agent/memory';
 import type { GateMemoryPlugin } from './gate-memory-plugin.js';
+import { gatePubgIntelligenceEnabledForTenant, type GatePubgIntelligenceCanaryConfig } from './pubg-intelligence-canary.js';
+import { readGatePubgIntelligence, renderGatePubgIntelligenceKook, type GatePubgIntelligenceWindowDays } from './gate-pubg-intelligence.js';
 
 type PublicQueryIntent =
   | { kind: 'team_stats'; period: 'today' | 'yesterday' }
@@ -49,6 +51,7 @@ export interface KookPublicQueryServices {
   executeNaturalWrite?: (job: KookIngressJob, intent: KookNaturalWriteIntent, signal: AbortSignal) => Promise<KookNaturalWriteResult>;
   onAgentDiagnostic?: (event: KookAgentDiagnostic) => void;
   memoryPlugin?: GateMemoryPlugin;
+  pubgIntelligenceCanary?: GatePubgIntelligenceCanaryConfig;
   executor?: QueryPlanExecutor;
   now?: () => Date;
 }
@@ -323,6 +326,7 @@ async function naturalLanguageReply(
   let writeAttempted = false;
   const executedPubgQueries = new Set<string>();
   const completedPubgQueries = new Map<string, unknown>();
+  const completedIntelligenceQueries = new Map<string, unknown>();
   const reportToolFailure = (reason: string) => {
     toolDegraded = true;
     services.onAgentDiagnostic?.({ event: 'kook_agent_error', stage: 'tool', reason, requestKey, ...(channelId ? { channelId } : {}), count: 1 });
@@ -513,6 +517,40 @@ async function naturalLanguageReply(
   const tools = {
     pubg_query: queryTool,
     team_info: teamInfoTool,
+    ...(services.pubgIntelligenceCanary?.enabled ? {
+      pubg_intelligence_summary: tool({
+        description: '可选的 Gate Intelligence canary 只读摘要。仅对服务端当前授权且位于本地 canary allowlist 的小队可用；使用 Gate PostgreSQL 当前版本的压缩遥测特征，绝不读取 Lab SQLite 或调用 PUBG API。仅在用户询问团战结果/队友定向伤害时调用。返回覆盖、完整性、未知状态和证据别名；缺失不等于 0。',
+        inputSchema: z.object({ windowDays: z.enum(['7', '30']).default('7') }).strict(),
+        execute: async ({ windowDays }) => {
+          const key = windowDays;
+          if (completedIntelligenceQueries.has(key)) return completedIntelligenceQueries.get(key);
+          const authorized = await executeAuthorized();
+          if (authorized.kind === 'unbound') return { status: 'no_team', message: '当前频道没有已绑定且授权的小队。' };
+          if (authorized.kind === 'selection_required') return { status: 'selection_required', message: '请在绑定目标小队的频道查询。' };
+          if (authorized.kind === 'denied') return { status: 'access_denied', message: '当前发言者没有本队查询权限。' };
+          if (authorized.kind === 'authorization_unavailable') return { status: 'authorization_unavailable', message: '权限校验暂不可用，未读取战术数据。' };
+          const query = authorized.query;
+          const canary = services.pubgIntelligenceCanary;
+          if (!canary || !gatePubgIntelligenceEnabledForTenant(canary, query.teamContext.tenantId)) {
+            return { status: 'disabled', message: 'Gate Intelligence 当前未对这支已授权小队开启。' };
+          }
+          try {
+            const window = Number(windowDays) as GatePubgIntelligenceWindowDays;
+            const startedAt = performance.now();
+            const summary = await readGatePubgIntelligence({ authorizedQuery: query, windowDays: window, now: services.now?.() ?? new Date() });
+            const result = { status: 'ok', summary, kookRendering: renderGatePubgIntelligenceKook(summary, window) };
+            completedIntelligenceQueries.set(key, result);
+            reportToolTrace(`pubg_intelligence_summary_${summary.coverage.freshness}_${summary.fightOutcomes.status}_matches_${summary.coverage.requestedMatches}_cached_${summary.coverage.currentFeatureMatches}_ms_${Math.round(performance.now() - startedAt)}`);
+            return result;
+          } catch {
+            reportToolFailure('pubg_intelligence_summary_unavailable');
+            const result = { status: 'unavailable', message: '当前无法读取本队的 Gate 遥测特征；不要用其它来源替代。' };
+            completedIntelligenceQueries.set(key, result);
+            return result;
+          }
+        },
+      }),
+    } : {}),
     ...(job.request.kind === 'group' && services.executeNaturalWrite ? {
       declare_pubg_account: tool({
         description: '仅当当前消息明确要求自绑 PUBG 账号，或管理员明确要求为唯一被 @ 成员代绑时调用。游戏名必须逐字出现在当前消息；不要传任何 KOOK ID。',

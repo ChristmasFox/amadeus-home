@@ -4,6 +4,7 @@ import { AccountClaimService } from './application/account-claim-service.js';
 import { createKookManagementHandler } from './application/kook-management-handler.js';
 import { createKookGroupBindingHandler, executeKookNaturalWrite } from './application/kook-group-binding-handler.js';
 import { composeKookRequestHandlers, createKookPublicQueryHandler } from './application/kook-public-query-handler.js';
+import { readGatePubgIntelligenceCanary } from './application/pubg-intelligence-canary.js';
 import { createPublicAgentModel } from './infrastructure/ai/public-model.js';
 import { PublicQueryAuthorizer } from './application/public-query-authorizer.js';
 import { TeamAdminService } from './application/team-admin-service.js';
@@ -117,6 +118,8 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
           process.stdout.write(`${JSON.stringify({ component: 'gate-memory-learning', ...result })}\n`),
         dreamingOptions);
     }
+    const pubgIntelligenceCanary = readGatePubgIntelligenceCanary(env);
+    process.stdout.write(`${JSON.stringify({ component: 'gate-pubg-intelligence', event: 'canary_readiness', status: pubgIntelligenceCanary.status })}\n`);
     process.stdout.write(`${JSON.stringify({ component: 'gate-memory', event: 'feature_readiness',
       read: memoryFlags.read.status, write: memoryFlags.write.status,
       autoLearn: memoryFlags.autoLearn.status, embedding: embeddingStatus })}\n`);
@@ -132,6 +135,7 @@ export async function gatewayMain(args: string[], env: NodeJS.ProcessEnv = proce
       createKookPublicQueryHandler({
         authorizer, claims, agent,
         memoryPlugin,
+        pubgIntelligenceCanary,
         executeNaturalWrite: (job, intent, signal) => executeKookNaturalWrite(job, bindingServices, intent, signal),
         onAgentDiagnostic,
       }),

@@ -15,6 +15,7 @@ import {
   QueryPlanExecutor,
   TeamAdminService,
   createKookPublicQueryHandler,
+  readGatePubgIntelligenceCanary,
   type KookTextPayload,
 } from '../src/index.js';
 
@@ -97,6 +98,10 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
   });
   const toolCall = (input: unknown) => ({
     content: [{ type: 'tool-call' as const, toolCallId: randomUUID(), toolName: 'pubg_query', input: JSON.stringify(input) }],
+    finishReason: { unified: 'tool-calls' as const, raw: 'tool_calls' }, usage, warnings: [],
+  });
+  const intelligenceToolCall = () => ({
+    content: [{ type: 'tool-call' as const, toolCallId: randomUUID(), toolName: 'pubg_intelligence_summary', input: JSON.stringify({ windowDays: '7' }) }],
     finishReason: { unified: 'tool-calls' as const, raw: 'tool_calls' }, usage, warnings: [],
   });
   const finalText = (text: string) => ({
@@ -310,6 +315,28 @@ test('authorized KOOK queries use persisted Domain facts, preserve unknown cover
     const match = (await repository.listMatches())[0];
     assert.ok(match);
     assert.equal((await persistedTelemetry.ensure(match)).status, 'FETCHED');
+
+    const intelligenceModel = new MockLanguageModelV4({ doGenerate: [
+      intelligenceToolCall(),
+      finalText('当前授权小队的 Gate 遥测摘要已按覆盖情况整理。'),
+    ] });
+    const intelligenceHandler = createKookPublicQueryHandler({
+      authorizer: new PublicQueryAuthorizer(pool, permissions, { botAccountId: bot }),
+      claims,
+      agent: { model: intelligenceModel, provider: 'fixture-provider', modelId: 'fixture-model' },
+      pubgIntelligenceCanary: readGatePubgIntelligenceCanary({
+        GATE_PUBG_INTELLIGENCE_ENABLED: '1',
+        GATE_PUBG_INTELLIGENCE_CANARY_TENANT_IDS: team.tenantId,
+      }),
+      now: () => now,
+    });
+    const intelligenceReply = await send(group(bot, guild, channel, admin, '最近 7 天团战结果和队友伤害怎么样？'), intelligenceHandler);
+    assert.match(intelligenceReply.content, /Gate 遥测摘要/u);
+    const intelligenceToolContext = JSON.stringify(intelligenceModel.doGenerateCalls[1]?.prompt);
+    assert.match(intelligenceToolContext, /Gate Intelligence 1\.0\.0/u);
+    assert.match(intelligenceToolContext, /队员 1/u);
+    assert.match(intelligenceToolContext, /featureMatches|currentFeatureMatches/u);
+    assert.doesNotMatch(intelligenceToolContext, new RegExp(`${alice}|${bob}|${matchId}|${team.teamId}`, 'u'));
 
     const reviewModel = new MockLanguageModelV4({ doGenerate: [
       toolCall(plan('match_review', { period: 'today' })),

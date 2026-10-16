@@ -10,7 +10,7 @@ Branch: `research/pubg-intelligence`
 | R2 — Tactical and social algorithms | Complete; schema `1`, rules `tactical-social-rules-v1` | Focused package/app tests, typechecks, builds, secrets scan, and diff check verified | Real read-only snapshot: 30/30 matches analyzed; rule coverage and limits at [`R2_EVALUATION.md`](R2_EVALUATION.md) |
 | R3 — Natural language assistant and presentations | Complete; `research-assistant-v1`, scoped read-only AI SDK tools, typed evidence claims, three templates | 26 intelligence tests, 2 Lab API tests, package/app builds and typechecks verified | Real snapshot returned 200 for trend and both acceptance questions; unsupported circle cause and directed-revive fallback abstained; see [`R3_EVALUATION.md`](R3_EVALUATION.md) |
 | R4 — Experiment/evaluation loop | Complete; versioned replay engine, deterministic fixture corpus, baseline/candidate comparison, counterexamples, local review registry | 29 intelligence tests, 2 Lab API tests, builds/typecheck/secrets scan passed | Live replay and bounded review write returned 201; snapshot unchanged; see [`R4_EVALUATION.md`](R4_EVALUATION.md). Promotion gate remains closed without historical holdout. |
-| R5 — Controlled Gate adoption | In progress; Gate integration pending boundary audit and implementation | — | No Gate deployment or data access |
+| R5 — Controlled Gate adoption | Source implemented; versioned Gate API and default-off, tenant-allowlisted Gate PostgreSQL adapter; see [`R5_EVALUATION.md`](R5_EVALUATION.md) | Local typecheck/build and non-database suites passed; isolated PostgreSQL integration suite still requires CI database | No Gate runtime/data access or deployment; feature flag remains off |
 
 ## R1 acceptance evidence
 
@@ -58,13 +58,13 @@ Branch: `research/pubg-intelligence`
 
 ## R5 — Controlled Gate adoption
 
-**SOURCE_FIXED** — In progress; no Gate integration has been merged or deployed yet.
+**SOURCE_FIXED** — Added versioned package API `@agent/pubg-intelligence` 1.0.0 (`gate-compact-facts-v1`) and a Gate-only, tenant-authorized PostgreSQL adapter with bounded reads, typed AI SDK tool registration, default-off canary allowlist, KOOK rendering, redacted evidence aliases, and fail-closed SQLite/config checks. No migration, new service, Lab database access, or Gate data write was added. Compact persisted facts do not contain raw event streams, so R5 intentionally does not claim R1 episode or first-knock reconstruction. Full contract and limitations are in [`R5_EVALUATION.md`](R5_EVALUATION.md).
 
-**BUILD_VERIFIED** — Pending implementation.
+**BUILD_VERIFIED** — Intelligence: 32 tests passed. Lab typecheck, 2 tests, and build passed. Gate typecheck and build passed; 4 focused adoption tests passed; Gate suite reported 193 total / 152 passed / 41 PostgreSQL/provider-backed tests skipped because no dedicated database URL is configured. `typecheck:pubg`, `test:pubg`, architecture, secrets, and diff checks passed. `bash scripts/release-gate.sh verify` stopped before the database suite with `GATE_TEST_DATABASE=BLOCKED reason=missing`; remote CI must execute the isolated PostgreSQL fixtures before merge.
 
-**LIVE_VERIFIED** — Not run; no Gate data or runtime was accessed for R5 yet.
+**LIVE_VERIFIED** — Not verified against Gate runtime or data. Tests used a mock AI model and fake PostgreSQL repository; no Lab SQLite or Gate-Local database was accessed and no deployment occurred.
 
-**RELEASED** — Not released. Gate-Local deployment remains subject to main merge, green CI, protected backup/migration/image/health/rollback checks, and the required host-local one-time authorization. M2 remains paused.
+**RELEASED** — Not released. Main merge, green CI, host-local one-time authorization, explicit PostgreSQL backup, health checks, and runtime canary verification remain pending. There is no schema migration. M2 remains paused.
 
 ## Runtime note
 

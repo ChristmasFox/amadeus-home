@@ -17,7 +17,8 @@
     "ai": "7.0.137",
     "pg": "^8.23.1",
     "undici": "8.10.2",
-    "zod": "4.5.4"
+    "zod": "4.5.4",
+    "@agent/pubg-intelligence": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.18.6",

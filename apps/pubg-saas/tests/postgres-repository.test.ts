@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { Pool } from 'pg';
-import type { Coverage, ResultSetRecord, SessionContextRecord, SourceInfo, TeamContext } from '@agent/pubg-domain';
+import type { Coverage, ResultSetRecord, SessionContextRecord, SourceInfo, TeamContext, TelemetryFeatureRecord } from '@agent/pubg-domain';
 import { createTeamContext, DeterministicQueryEngine, PubgDomainService, SqlitePubgRepository, SqlitePubgRepositoryAdapter } from '@agent/pubg-domain';
 import { migratePublicDatabase, PostgresPubgRepository } from '../src/index.js';
 
@@ -117,6 +117,19 @@ test('PostgreSQL tenant and conversation scope is enforced at the repository bou
     assert.deepEqual((await repoA.listMatches()).map((match) => match.matchId), [`match-a-${suffix}`]);
     assert.equal((await repoA.getMatch(`match-b-${suffix}`)), null);
     assert.deepEqual((await repoA.getMatch(`match-a-${suffix}`))?.players.map((player) => player.accountId), [accountA]);
+
+    const featureKey = { parserVersion: 'r5-gate-fixture-parser', featureVersion: 'r5-gate-fixture-features' };
+    const featureRecord = (matchId: string): TelemetryFeatureRecord => ({
+      matchId, ...featureKey, createdAt: new Date(matchAt).toISOString(), facts: { match: { matchId } } as never,
+    });
+    const featureA = featureRecord(`match-a-${suffix}`);
+    const featureB = featureRecord(`match-b-${suffix}`);
+    await repoA.set(featureA);
+    await repoB.set(featureB);
+    assert.deepEqual(await repoA.get({ matchId: featureA.matchId, ...featureKey }), featureA);
+    assert.equal(await repoA.get({ matchId: featureB.matchId, ...featureKey }), null);
+    assert.deepEqual(await repoB.get({ matchId: featureB.matchId, ...featureKey }), featureB);
+    assert.equal(await repoB.get({ matchId: featureA.matchId, ...featureKey }), null);
 
     const state = {
       key: 'team-sync',

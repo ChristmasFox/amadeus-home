@@ -6,3 +6,4 @@ export * from './tactics.js';
 export * from './assistant.js';
 export * from './evaluation.js';
 export * from './evaluation-replay.js';
+export * from './gate-api.js';
