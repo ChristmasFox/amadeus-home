@@ -194,7 +194,7 @@ export class GateMemoryStore {
       WHERE ` + FILTER + ` AND memory_key=$8 AND revision=$11
       AND revoked_at IS NOT NULL AND source_event_id<>$10
       AND revoked_at < (
-        SELECT ingress.created_at FROM kook_ingress_events ingress
+        SELECT ingress.received_at FROM kook_ingress_events ingress
         WHERE ingress.bot_account_id=$1 AND ingress.event_id=$10 AND ingress.lease_token=$12
           AND ingress.status='processing' AND ingress.lease_until>now()
           AND ingress.expires_at>now()
