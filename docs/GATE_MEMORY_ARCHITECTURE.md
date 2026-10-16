@@ -63,3 +63,59 @@ Do not copy Lab's SQLite, sessions, Owner allowlists or provider API keys.
 5. Integrate scoped read-only recall into AI SDK after privacy, latency and
    token budget tests. Real KOOK human acceptance plus explicit Gate deploy
    selection are required before claiming LIVE_VERIFIED.
+
+## Audit remediation — 2026-10-16
+
+Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lifecycle`
+(PR #7). The Gate-Local deployment boundary remains unchanged.
+
+- Channel memory admission is **read-only**: the active KOOK ingress is
+  reconstructed and membership is freshly checked, without entering the
+  side-effecting PUBG query `authorize()` transaction. No row-lock/session
+  creation, extension, or advisory lock occurs for a memory lookup.
+- Each memory SQL statement additionally verifies the **currently active
+  ingress lease and channel binding generation**, preventing a stale scope
+  object from reading or mutating another binding after a concurrent rebind.
+  The real KOOK-to-PostgreSQL integration fixture exercises that boundary.
+  KOOK remote membership checks cannot be made atomic with PostgreSQL
+  transactions; an administrative revocation on KOOK after the HTTP check
+  remains subject to ordinary propagation timing.
+- Lexical fallback uses Chinese Han bigrams and ranks **the complete
+  authorized scope** in SQL before limiting final returned rows. Older facts
+  no longer disappear merely because 128 newer entries exist. This may
+  still return weak lexical candidates; it is **not** semantic recall and
+  is intended to be supplemented by scoped Embeddings.
+- Memory input now rejects Unicode control/format/surrogate characters,
+  including bidi overrides and zero-width hiding controls. This does not
+  replace prompt-injection defenses for recalled content.
+- `forget` clears content while leaving a versioned tombstone, preventing
+  replay. `rememberAgain` is a separate explicit CAS operation requiring
+  a **newly admitted event after the revocation**; the prior event cannot
+  revive a forgotten value. It is not exposed to LLM write tools.
+- GitHub SaaS CI uses a real PostgreSQL 18.1 service. Memory tests hard-fail
+  rather than silently skip when `CI=true` without a DB URL; the audited
+  run covered actual trusted DM/group ingress, stale leases, permissions,
+  version changes, correction/forget, and old-but-relevant lexical search.
+
+### Explicitly unfinished
+
+- The current Gate memory store still is **not wired to AI SDK prompt
+  assembly**, cannot autonomously summarize conversations, and has no
+  semantic embedding/vector index. Existing full message archives remain.
+- There is no automatic deletion of inaccessible **old channel generations**.
+  Their isolation is intentional; implement a reviewed retention/erasure
+  policy, safe cleanup preview, and protected Gate backup before scheduling
+  irreversible deletion. Do not make a rebind silently promote old team
+  memory to another channel.
+- KOOK direct-message account suspension/block lists do not currently exist
+  as a separately authoritative Gate policy; the DM admission uses the
+  authenticated, active trusted event lease and remains separate from PUBG
+  team membership. Add an explicit bot-level block policy if the product
+  introduces such a feature.
+- Removing a memory entry does not by itself delete its original raw KOOK
+  transcript or historical backups; holistic privacy erasure needs a separate
+  retention and recovery design.
+
+Next: bounded prompt assembly and hybrid semantic recall with **Gate-owned**
+Embedding credentials, private scoped indexes and consent-aware consolidation.
+No runtime migration or Gate-Local deployment is implied by a source merge.
