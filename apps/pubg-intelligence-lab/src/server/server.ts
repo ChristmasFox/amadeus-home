@@ -8,17 +8,23 @@ import {
   DEFAULT_TIMEZONE,
   extractMatchReviewFacts,
   localDateLabel,
+  PubgApiTelemetryDownloader,
   SqlitePubgRepository,
   type MatchReviewFacts,
   type NormalizedMatch,
   type TeamConfig,
 } from '@agent/pubg-domain';
 import {
+  battlePlayerRef,
+  battleTeamRef,
   buildResearchReport,
   buildResearchSquads,
   ExperimentRunStore,
   NaturalLanguageResearchPlanner,
+  normalizeBattleTelemetry,
   redactSensitiveText,
+  reconstructBattleEpisodes,
+  type BattleTelemetryDocument,
   type ResearchSquad,
 } from '@agent/pubg-intelligence';
 import { createResearchModel } from './model.js';
@@ -40,6 +46,8 @@ interface Snapshot {
   squads: ResearchSquad[];
   defaultSquad: ResearchSquad;
   features: Map<string, MatchReviewFeature>;
+  telemetryUrls: Map<string, string>;
+  battleTelemetry: Map<string, Promise<BattleTelemetryDocument>>;
   experimentStore: ExperimentRunStore;
   planner: NaturalLanguageResearchPlanner;
   modelEnabled: boolean;
@@ -104,9 +112,15 @@ async function openSnapshot(): Promise<Snapshot> {
 
   const repository = new SqlitePubgRepository(sourcePath, { readOnly: true });
   let matches: NormalizedMatch[];
+  const telemetryUrls = new Map<string, string>();
   const features = new Map<string, MatchReviewFeature>();
   try {
-    matches = repository.listMatches({ limit: 10000 }).map(sanitizeMatch);
+    const sourceMatches = repository.listMatches({ limit: 10000 });
+    for (const match of sourceMatches) {
+      const telemetryUrl = match.telemetryUrl;
+      if (telemetryUrl && isAllowedTelemetryUrl(telemetryUrl)) telemetryUrls.set(match.matchId, telemetryUrl);
+    }
+    matches = sourceMatches.map(sanitizeMatch);
     for (const match of matches) {
       const record = await repository.get({ matchId: match.matchId, parserVersion: PARSER_VERSION, featureVersion: FEATURE_VERSION });
       if (record) features.set(match.matchId, { facts: record.facts, createdAt: record.createdAt });
@@ -124,10 +138,86 @@ async function openSnapshot(): Promise<Snapshot> {
     squads,
     defaultSquad: selectedSquad,
     features,
+    telemetryUrls,
+    battleTelemetry: new Map(),
     experimentStore: new ExperimentRunStore(experimentPath),
     planner: new NaturalLanguageResearchPlanner(model),
     modelEnabled: Boolean(model),
   };
+}
+
+function isAllowedTelemetryUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:'
+      && url.hostname === 'telemetry-cdn.pubg.com'
+      && !url.username
+      && !url.password;
+  } catch {
+    return false;
+  }
+}
+
+async function loadBattleTelemetry(snapshot: Snapshot, match: NormalizedMatch): Promise<BattleTelemetryDocument> {
+  const cached = snapshot.battleTelemetry.get(match.matchId);
+  if (cached) return cached;
+  const telemetryUrl = snapshot.telemetryUrls.get(match.matchId);
+  if (!telemetryUrl) throw new Error('telemetry_asset_missing');
+  const request = new PubgApiTelemetryDownloader({
+    apiKey: '',
+    timeoutMs: 30_000,
+    fetchImpl: (input, init) => fetch(input, { ...init, redirect: 'error' }),
+  }).download({ ...match, telemetryUrl }).then((payload) => normalizeBattleTelemetry(payload, match));
+  snapshot.battleTelemetry.set(match.matchId, request);
+  try {
+    return await request;
+  } catch (error) {
+    snapshot.battleTelemetry.delete(match.matchId);
+    throw error;
+  }
+}
+
+function battleLabels(
+  match: NormalizedMatch,
+  squad: ResearchSquad,
+  telemetry: BattleTelemetryDocument,
+  episodePlayerRefs: Set<string>,
+  episodeTeamRefs: Set<string>,
+): { players: Record<string, string>; teams: Record<string, string> } {
+  const trackedIds = new Set(squad.memberIds);
+  const participants = match.players
+    .map((player, index) => ({
+      id: player.accountId,
+      ref: battlePlayerRef(match.matchId, player.accountId),
+      name: safePlayerName(player.displayName || player.playerName, index),
+      tracked: trackedIds.has(player.accountId),
+    }))
+    .filter((player) => episodePlayerRefs.has(player.ref))
+    .sort((left, right) => Number(right.tracked) - Number(left.tracked) || left.ref.localeCompare(right.ref));
+  const players: Record<string, string> = {};
+  let opponentIndex = 0;
+  for (const player of participants) {
+    players[player.ref] = player.tracked ? player.name : `对手成员 ${String(++opponentIndex).padStart(2, '0')}`;
+  }
+  for (const playerRef of episodePlayerRefs) players[playerRef] ??= `未知队员 ${Object.keys(players).length + 1}`;
+
+  const trackedTeamIds = new Set<string>();
+  const allTeamIds = new Set<string>();
+  for (const event of telemetry.events) {
+    if (event.actorTeamId) allTeamIds.add(event.actorTeamId);
+    if (event.victimTeamId) allTeamIds.add(event.victimTeamId);
+    if (event.actorTeamId && event.actorId && trackedIds.has(event.actorId)) trackedTeamIds.add(event.actorTeamId);
+    if (event.victimTeamId && event.victimId && trackedIds.has(event.victimId)) trackedTeamIds.add(event.victimTeamId);
+  }
+  const sortedTeams = [...allTeamIds]
+    .map((id) => ({ id, ref: battleTeamRef(match.matchId, id), tracked: trackedTeamIds.has(id) }))
+    .filter((team) => episodeTeamRefs.has(team.ref))
+    .sort((left, right) => Number(right.tracked) - Number(left.tracked) || left.ref.localeCompare(right.ref));
+  const teams: Record<string, string> = {};
+  let opponentTeamIndex = 0;
+  for (const team of sortedTeams) teams[team.ref] = team.tracked ? '研究小队' : `对手队伍 ${String(++opponentTeamIndex).padStart(2, '0')}`;
+  for (const teamRef of episodeTeamRefs) teams[teamRef] ??= '未知队伍';
+  return { players, teams };
 }
 
 interface IPv4Network {
@@ -332,6 +422,71 @@ async function handleApi(request: IncomingMessage, response: ServerResponse, sna
       limit: MAX_MATCHES_PER_PAGE,
       matches: filtered.slice(offset, offset + MAX_MATCHES_PER_PAGE).map((match) => visibleMatch(match, squad, snapshot)),
     });
+    return;
+  }
+  const matchEpisodes = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)\/episodes$/u) : null;
+  if (matchEpisodes) {
+    let matchId: string;
+    try { matchId = decodeURIComponent(matchEpisodes[1] ?? ''); }
+    catch { send(response, 400, { error: 'invalid_match_id' }); return; }
+    const match = snapshot.byId.get(matchId);
+    if (!match) { send(response, 404, { error: 'match_not_found' }); return; }
+    const scopeBounds = safeDateBounds(url.searchParams.get('from'), url.searchParams.get('to'));
+    if (!scopeBounds) { send(response, 400, { error: 'invalid_date_range' }); return; }
+    const squad = selectSquad(snapshot, url.searchParams.get('squadId'));
+    if (!inSquad(match, squad)
+      || (scopeBounds.fromMs !== undefined && match.timestamp < scopeBounds.fromMs)
+      || (scopeBounds.toMs !== undefined && match.timestamp >= scopeBounds.toMs)) {
+      send(response, 404, { error: 'match_outside_scope' });
+      return;
+    }
+    if (!snapshot.telemetryUrls.has(matchId)) {
+      send(response, 200, { matchId, status: 'unavailable', reason: 'no_telemetry_asset_in_snapshot' });
+      return;
+    }
+    try {
+      const telemetry = await loadBattleTelemetry(snapshot, match);
+      const trackedPlayerIds = match.players
+        .filter((player) => squad.memberIds.includes(player.accountId))
+        .map((player) => player.accountId);
+      const result = reconstructBattleEpisodes({ match, telemetry, trackedPlayerIds });
+      const playerRefs = new Set<string>();
+      const teamRefs = new Set<string>();
+      for (const episode of result.episodes) {
+        for (const ref of episode.participantRefs) playerRefs.add(ref);
+        for (const team of episode.teams) {
+          if (team.teamRef) teamRefs.add(team.teamRef);
+          for (const member of team.memberRefs) playerRefs.add(member);
+        }
+        for (const event of episode.timeline) {
+          if (event.actorRef) playerRefs.add(event.actorRef);
+          if (event.victimRef) playerRefs.add(event.victimRef);
+          if (event.actorTeamRef) teamRefs.add(event.actorTeamRef);
+          if (event.victimTeamRef) teamRefs.add(event.victimTeamRef);
+        }
+        for (const position of episode.positions) {
+          playerRefs.add(position.playerRef);
+          if (position.teamRef) teamRefs.add(position.teamRef);
+        }
+        for (const chain of episode.knockChains) {
+          if (chain.knockedPlayerRef) playerRefs.add(chain.knockedPlayerRef);
+          if (chain.attackerRef) playerRefs.add(chain.attackerRef);
+        }
+      }
+      send(response, 200, {
+        matchId,
+        status: result.status,
+        schemaVersion: result.schemaVersion,
+        parserVersion: result.parserVersion,
+        episodes: result.episodes,
+        circleSamples: result.circleSamples,
+        circleTransitions: result.circleTransitions,
+        labels: battleLabels(match, squad, telemetry, playerRefs, teamRefs),
+        diagnostics: result.diagnostics,
+      });
+    } catch {
+      send(response, 200, { matchId, status: 'unavailable', reason: 'telemetry_fetch_or_parse_failed' });
+    }
     return;
   }
   const matchDetail = request.method === 'GET' ? url.pathname.match(/^\/api\/matches\/([^/]+)$/u) : null;

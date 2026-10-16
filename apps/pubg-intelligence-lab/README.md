@@ -29,6 +29,9 @@ Without model settings, a local deterministic intent parser handles summary, tre
 - Keep the Lab production SQLite file read-only; snapshots are preferred for interactive work.
 - The server binds only to loopback unless explicitly configured with a private LAN IPv4 address; LAN mode restricts API requests to that interface's subnet and exposes no general file or shell tool.
 - It reads Match Store rows and only the current `telemetry-parser-6` / `review-features-6` cache.
-- Missing current features stay explicitly missing. The app never downloads telemetry or writes to the source cache.
+- Missing current features stay explicitly missing. Battle reconstruction runs only after an explicit match drilldown, using a telemetry asset URL already present in the read-only snapshot. The URL must be HTTPS on `telemetry-cdn.pubg.com`; redirects are rejected, the PUBG API is never queried, and fetched bytes/results remain in process memory.
+- Battle reconstruction never writes to the source cache. Its intermediate schema is `1` / `battle-reconstruction-v1`; output player and team references are match-scoped hashes, with ambiguous or unavailable evidence shown explicitly.
+- Position context is sampled at most once per player per 15-second bucket. Engagements are grouped by known team pair (unknown teams fall back to player pair), a 28-second contact gap, and a matching knock-to-kill continuation window of 120 seconds.
+- Explicit post-match phase signals remain unknown and are excluded from engagement and circle context; uncertain states are counted rather than relabeled as in-match.
 - Experiment records go only to the separate local experiment database.
 - Do not commit source snapshots, experiment databases, player phone numbers, or credentials.

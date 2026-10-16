@@ -45,6 +45,78 @@ interface MatchDetail {
   evidence: Array<{ id: string; source: 'match_store' | 'telemetry'; kind: string; description: string }>;
 }
 
+interface BattleTimelineEvent {
+  id: string;
+  sourceEventId: string;
+  type: string;
+  rawType: string;
+  timeSeconds: number;
+  timestampSource: string;
+  actorRef: string | null;
+  victimRef: string | null;
+  actorTeamRef: string | null;
+  victimTeamRef: string | null;
+  damage: number | null;
+  weapon: string | null;
+  location: { x: number | null; y: number | null; z: number | null } | null;
+}
+
+interface BattleEpisode {
+  id: string;
+  startSeconds: number;
+  endSeconds: number;
+  durationSeconds: number;
+  participantRefs: string[];
+  teams: Array<{
+    teamRef: string | null;
+    memberRefs: string[];
+    tracked: boolean;
+    lastObserved: { active: number; knocked: number; dead: number; unknown: number; completeness: string };
+  }>;
+  firstKnock: { sourceEventId: string; attackerRef: string | null; victimRef: string | null; timeSeconds: number } | null;
+  knockChains: Array<{ knockEventId: string; knockedPlayerRef: string | null; attackerRef: string | null; knockAtSeconds: number; outcome: 'KILL' | 'REVIVE' | null; outcomeEventId: string | null; outcomeAtSeconds: number | null; elapsedSeconds: number | null; windowSeconds: number }>;
+  timeline: BattleTimelineEvent[];
+  positions: Array<{ sourceEventId: string; playerRef: string; teamRef: string | null; timeSeconds: number; location: { x: number | null; y: number | null; z: number | null } }>;
+  circleSampleRefs: string[];
+  circleTransitionRefs: string[];
+  evidenceEventIds: string[];
+  diagnostics: { conflictingStateTransitions: number; unknownTeamContacts: number; ambiguousContextEvents: number; positionsSuppressedBySampling: number };
+}
+
+interface BattleCircleSample {
+  id: string;
+  sourceEventId: string;
+  timeSeconds: number | null;
+  timestampSource: string;
+  alivePlayers: number | null;
+  aliveTeams: number | null;
+  safetyZone: { center: { x: number | null; y: number | null; z: number | null } | null; radius: number | null };
+  poisonGasWarningZone: { center: { x: number | null; y: number | null; z: number | null } | null; radius: number | null };
+}
+
+interface BattleCircleTransition {
+  id: string;
+  fromSampleId: string;
+  toSampleId: string;
+  fromSourceEventId: string;
+  toSourceEventId: string;
+  timeSeconds: number;
+  changedZones: string[];
+}
+
+interface BattleMatchResponse {
+  matchId: string;
+  status: 'available' | 'no_contact_events' | 'unavailable';
+  reason?: string;
+  schemaVersion?: number;
+  parserVersion?: string;
+  episodes?: BattleEpisode[];
+  circleSamples?: BattleCircleSample[];
+  circleTransitions?: BattleCircleTransition[];
+  labels?: { players: Record<string, string>; teams: Record<string, string> };
+  diagnostics?: Record<string, number>;
+}
+
 interface ResearchReport {
   status: 'ok' | 'partial' | 'empty';
   action: string;
@@ -86,6 +158,22 @@ function dateLabel(value: string | null | undefined): string {
 
 function number(value: number): string {
   return Math.round(value).toLocaleString('zh-CN');
+}
+
+function battleTime(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return '时间未知';
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+function battleTypeLabel(type: string): string {
+  return ({ ATTACK: '开火', DAMAGE: '命中/伤害', KNOCK: '击倒', KILL: '淘汰', REVIVE: '救援', POSITION: '位置采样' } as Record<string, string>)[type] ?? type;
+}
+
+function vectorLabel(value: { x: number | null; y: number | null; z: number | null } | null): string {
+  if (!value) return '位置未知';
+  const fields = [value.x, value.y, value.z].map((part) => part === null ? '—' : Math.round(part).toLocaleString('zh-CN'));
+  return `X ${fields[0]} · Y ${fields[1]} · Z ${fields[2]}`;
 }
 
 function percent(value: number | null): string {
@@ -141,6 +229,10 @@ export function App() {
   const [offset, setOffset] = useState(0);
   const [selectedMatchId, setSelectedMatchId] = useState('');
   const [detail, setDetail] = useState<MatchDetail | null>(null);
+  const [battleData, setBattleData] = useState<BattleMatchResponse | null>(null);
+  const [selectedEpisodeId, setSelectedEpisodeId] = useState('');
+  const [battleLoading, setBattleLoading] = useState(false);
+  const [battleError, setBattleError] = useState('');
   const [question, setQuestion] = useState('');
   const [chat, setChat] = useState<ChatEntry[]>([]);
   const [activeResearch, setActiveResearch] = useState<ResearchResponse | null>(null);
@@ -178,6 +270,9 @@ export function App() {
   useEffect(() => {
     if (!selectedMatchId || !squadId) { setDetail(null); return; }
     const controller = new AbortController();
+    setBattleData(null);
+    setSelectedEpisodeId('');
+    setBattleError('');
     setDetailLoading(true);
     void json<MatchDetail>(`/api/matches/${encodeURIComponent(selectedMatchId)}?squadId=${encodeURIComponent(squadId)}`, { signal: controller.signal })
       .then(setDetail)
@@ -187,6 +282,29 @@ export function App() {
   }, [selectedMatchId, squadId]);
 
   const currentSquad = useMemo(() => bootstrap?.squads.find((squad) => squad.id === squadId), [bootstrap, squadId]);
+
+  const selectedEpisode = battleData?.episodes?.find((episode) => episode.id === selectedEpisodeId) ?? battleData?.episodes?.[0] ?? null;
+  const circleSamplesById = useMemo(() => new Map((battleData?.circleSamples ?? []).map((sample) => [sample.id, sample])), [battleData]);
+
+  async function loadBattleReconstruction() {
+    if (!selectedMatchId || battleLoading) return;
+    setBattleLoading(true);
+    setBattleError('');
+    setBattleData(null);
+    setSelectedEpisodeId('');
+    try {
+      const scope = new URLSearchParams({ squadId });
+      if (from) scope.set('from', from);
+      if (to) scope.set('to', to);
+      const result = await json<BattleMatchResponse>(`/api/matches/${encodeURIComponent(selectedMatchId)}/episodes?${scope}`);
+      setBattleData(result);
+      setSelectedEpisodeId(result.episodes?.[0]?.id ?? '');
+    } catch {
+      setBattleError('交战重建读取失败，请稍后重试。');
+    } finally {
+      setBattleLoading(false);
+    }
+  }
 
   async function submitQuestion(event?: FormEvent, suggested?: string) {
     event?.preventDefault();
@@ -223,7 +341,7 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand-lockup"><div className="brand-mark">P<span>•</span></div><div><strong>PUBG INTELLIGENCE LAB</strong><small>LOCAL RESEARCH / R0</small></div></div>
+        <div className="brand-lockup"><div className="brand-mark">P<span>•</span></div><div><strong>PUBG INTELLIGENCE LAB</strong><small>LOCAL RESEARCH / R1</small></div></div>
         <div className="topbar-right"><div className="source-pill"><span className="pulse" />只读快照 <b>{number(bootstrap?.matchCount ?? 0)} 场</b></div><div className="model-pill"><i>{bootstrap?.modelEnabled ? '✦' : '⌁'}</i>{bootstrap?.modelEnabled ? 'AI SDK 已配置' : '本地语义解析'}</div><div className="avatar">IL</div></div>
       </header>
 
@@ -278,6 +396,9 @@ export function App() {
           {detail && <>
             <div className="selected-match-card"><div className="selected-match-image"><span>{detail.match.mapName.toUpperCase()}</span><i>#{detail.match.placement ?? '—'}</i><div className="image-lines" /></div><div className="selected-match-meta"><div><b>{dateLabel(detail.match.createdAt)}</b><span>{detail.match.gameMode}</span></div><span className={`cache-tag ${detail.telemetry.status === 'HIT' ? 'cached' : 'missing'}`}>{detail.telemetry.status === 'HIT' ? 'V6 CACHED' : 'BASE FACTS'}</span></div>
               <div className="match-metric-grid"><Metric label="击杀" value={number(detail.match.kills)} /><Metric label="伤害" value={number(detail.match.damage)} /><Metric label="队员" value={String(detail.analysis.players.length)} /></div>
+              <button className="battle-load-button" onClick={() => void loadBattleReconstruction()} disabled={battleLoading}>
+                {battleLoading ? '正在读取遥测并重建…' : battleData?.matchId === selectedMatchId ? '重新读取交战时间线' : '重建交战时间线'} <span>↗</span>
+              </button>
             </div>
             <div className="insight-copy"><span className="eyebrow">DOMAIN REVIEW</span><p>{detail.analysis.summary}</p>{detail.analysis.teamStory && <p className="team-story">{detail.analysis.teamStory}</p>}</div>
             {detail.analysis.players.length > 0 && <div className="player-detail-list"><div className="card-label">队员表现 <span>本局</span></div>{detail.analysis.players.slice(0, 4).map((player) => <div className="player-detail" key={player.name}><div className="player-avatar">{player.name.slice(0, 1)}</div><div className="player-detail-name"><b>{player.name}</b><small>{player.role ?? '比赛贡献'}</small></div><div className="player-detail-value"><b>{number(player.damage)}</b><small>伤害</small></div></div>)}</div>}
@@ -287,7 +408,42 @@ export function App() {
           {activeResearch && <div className="evidence-card"><div className="evidence-heading"><div><span className="eyebrow">EVIDENCE LEDGER</span><b>研究证据</b></div><span>{activeResearch.report.evidenceCount}</span></div><div className="evidence-list">{activeResearch.report.evidence.slice(0, 10).map((item) => <button className="evidence-row" key={item.id} onClick={() => setSelectedMatchId(item.matchId)}><div className="evidence-ref">{item.source === 'telemetry_feature' ? 'T' : 'M'}</div><div><span>{dateLabel(item.occurredAt)} · {item.mapName}</span><b>{item.value}</b><small>{item.description}</small></div><i>↗</i></button>)}</div></div>}
           {!detail && !activeResearch && !detailLoading && <div className="right-empty"><div className="evidence-empty-icon">⌁</div><b>等待研究输入</b><p>选择一场历史比赛查看领域分析，或发起研究问题。证据会在这里展开。</p></div>}
           {detail && <div className="evidence-card detail-evidence"><div className="evidence-heading"><div><span className="eyebrow">SOURCE TRACE</span><b>单局证据链</b></div><span>{detail.evidence.length}</span></div><div className="evidence-list">{detail.evidence.slice(0, 8).map((item) => <div className="evidence-row static" key={item.id}><div className={`evidence-ref ${item.source === 'telemetry' ? 'telemetry-ref' : ''}`}>{item.id}</div><div><span>{item.source === 'telemetry' ? 'Telemetry 特征' : 'Match Store'} · {item.kind}</span><small>{item.description}</small></div></div>)}</div></div>}
-          <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion}</b><small>原始事件流已压缩，不在本地实验中重新下载。</small></div>
+          {battleError && <div className="inline-error">{battleError}</div>}
+          {battleData?.status === 'unavailable' && <div className="battle-empty"><b>原始遥测不可用</b><span>{battleData.reason === 'no_telemetry_asset_in_snapshot' ? '只读快照没有保存该比赛的遥测资产引用。' : '读取或解析遥测失败；快照未被修改。'}</span></div>}
+          {battleData?.status === 'no_contact_events' && <div className="battle-empty"><b>未重建出交战片段</b><span>未发现满足启发式的对敌伤害、击倒或淘汰事件。此结果不代表没有发生交战。</span><small>{battleData.diagnostics?.sameTeamContactEventCount ?? 0} 条同队事件被排除 · {battleData.diagnostics?.untimedContactEventCount ?? 0} 条接触事件缺少时间</small></div>}
+          {battleData?.status === 'available' && <section className="battle-reconstruction">
+            <div className="evidence-heading"><div><span className="eyebrow">BATTLE RECONSTRUCTION</span><b>交战片段</b></div><span>v{battleData.parserVersion} · {battleData.episodes?.length ?? 0}</span></div>
+            <div className="battle-integrity">接触 {battleData.diagnostics?.contactEventCount ?? 0} · 未归属 {battleData.diagnostics?.unassignedContactEventCount ?? 0} · 同队排除 {battleData.diagnostics?.sameTeamContactEventCount ?? 0} · 无效伤害 {battleData.diagnostics?.ineffectiveContactEventCount ?? 0}<br />未知阶段 {battleData.diagnostics?.unknownPhaseContactEventCount ?? 0} · 重复来源 {battleData.diagnostics?.duplicateSourceEventCount ?? 0} · 重复分配 {battleData.diagnostics?.duplicateTimelineAssignmentCount ?? 0} · 队伍未知 {battleData.diagnostics?.unknownTeamContactEventCount ?? 0}<br />状态冲突 {battleData.diagnostics?.conflictingStateTransitionCount ?? 0} · 上下文歧义 {battleData.diagnostics?.ambiguousContextEventCount ?? 0} · 未决 knock 链 {battleData.diagnostics?.unresolvedKnockChainCount ?? 0}<br />圈变化 {battleData.circleTransitions?.length ?? 0} · 未知阶段圈样本 {battleData.diagnostics?.unknownPhaseCircleSampleCount ?? 0} · 共享圈采样 {battleData.diagnostics?.sharedCircleSampleContextCount ?? 0}</div>
+            <div className="battle-episode-list">
+              {battleData.episodes?.map((episode, index) => <button className={`battle-episode-row ${selectedEpisode?.id === episode.id ? 'active' : ''}`} key={episode.id} onClick={() => setSelectedEpisodeId(episode.id)}>
+                <span className="battle-episode-index">{String(index + 1).padStart(2, '0')}</span>
+                <span className="battle-episode-main"><b>{battleTime(episode.startSeconds)}–{battleTime(episode.endSeconds)}</b><small>{episode.teams.map((team) => team.teamRef ? battleData.labels?.teams[team.teamRef] ?? '未知队伍' : '队伍未知').join(' vs ')}</small></span>
+                <span className="battle-episode-count">{episode.timeline.length}<small>事件</small></span>
+              </button>)}
+            </div>
+            {selectedEpisode && <div className="battle-episode-detail">
+              <div className="battle-episode-summary"><span>{battleTime(selectedEpisode.startSeconds)}–{battleTime(selectedEpisode.endSeconds)} · {number(selectedEpisode.durationSeconds)} 秒</span><span>{selectedEpisode.participantRefs.length} 位参与者</span></div>
+              {selectedEpisode.firstKnock && <div className="battle-first-knock"><span>首个 knock</span><b>{battleTime(selectedEpisode.firstKnock.timeSeconds)} · {selectedEpisode.firstKnock.attackerRef ? battleData.labels?.players[selectedEpisode.firstKnock.attackerRef] ?? '未知队员' : '未知攻击者'} → {selectedEpisode.firstKnock.victimRef ? battleData.labels?.players[selectedEpisode.firstKnock.victimRef] ?? '未知队员' : '未知目标'}</b><small>证据 {selectedEpisode.firstKnock.sourceEventId}</small></div>}
+              <div className="battle-team-states"><div className="card-label">队伍存活状态 <span>仅统计已观测队员</span></div>{selectedEpisode.teams.map((team, index) => <div className="battle-team-state" key={`${team.teamRef ?? 'unknown'}-${index}`}><b>{team.teamRef ? battleData.labels?.teams[team.teamRef] ?? '未知队伍' : '队伍未知'}{team.tracked ? ' · 当前小队' : ''}</b><span>存活观测 {team.lastObserved.active} · 击倒 {team.lastObserved.knocked} · 淘汰 {team.lastObserved.dead} · 未知 {team.lastObserved.unknown}</span></div>)}</div>
+              {selectedEpisode.knockChains.length > 0 && <div className="battle-chain-list"><div className="card-label">Knock → kill / revive <span>窗口 120 秒</span></div>{selectedEpisode.knockChains.map((chain) => <div className="battle-chain-row" key={chain.knockEventId}><b>{chain.knockedPlayerRef ? battleData.labels?.players[chain.knockedPlayerRef] ?? '未知队员' : '未知目标'}</b><span>{chain.outcome === 'KILL' ? `淘汰 · ${chain.elapsedSeconds} 秒` : chain.outcome === 'REVIVE' ? `救援 · ${chain.elapsedSeconds} 秒` : '窗口内无唯一结果证据'}</span><small>{chain.knockEventId}{chain.outcomeEventId ? ` → ${chain.outcomeEventId}` : ''}</small></div>)}</div>}
+              {selectedEpisode.circleSampleRefs.length > 0 && <div className="battle-circle-list"><div className="card-label">毒圈与存活采样 <span>{selectedEpisode.circleSampleRefs.length} 条</span></div>{selectedEpisode.circleSampleRefs.map((ref) => {
+                const sample = circleSamplesById.get(ref);
+                if (!sample) return null;
+                return <div className="battle-circle-row" key={ref}><b>{battleTime(sample.timeSeconds)} · {sample.aliveTeams ?? '—'} 队 / {sample.alivePlayers ?? '—'} 人</b><span>安全圈半径 {sample.safetyZone.radius ?? '未知'} · 中心 {vectorLabel(sample.safetyZone.center)}</span><small>毒圈预警半径 {sample.poisonGasWarningZone.radius ?? '未知'} · 来源 {sample.sourceEventId} · {sample.timestampSource}</small></div>;
+              })}</div>}
+              {selectedEpisode.circleTransitionRefs.length > 0 && <div className="battle-circle-list"><div className="card-label">圈状态变化 <span>{selectedEpisode.circleTransitionRefs.length} 次</span></div>{selectedEpisode.circleTransitionRefs.map((ref) => {
+                const transition = battleData.circleTransitions?.find((item) => item.id === ref);
+                if (!transition) return null;
+                return <div className="battle-circle-row" key={ref}><b>{battleTime(transition.timeSeconds)} · {transition.changedZones.join(' / ')}</b><small>{transition.fromSourceEventId} → {transition.toSourceEventId}</small></div>;
+              })}</div>}
+              {selectedEpisode.positions.length > 0 && <div className="battle-position-list"><div className="card-label">采样位置 <span>{selectedEpisode.positions.length} 个保留样本</span></div>{selectedEpisode.positions.map((position) => <div className="battle-position-row" key={position.sourceEventId}><span>{battleTime(position.timeSeconds)}</span><b>{battleData.labels?.players[position.playerRef] ?? '未知队员'}</b><small>{vectorLabel(position.location)} · {position.sourceEventId}</small></div>)}</div>}
+              <div className="battle-timeline"><div className="card-label">底层事件时间线 <span>{selectedEpisode.timeline.length} 条</span></div>{selectedEpisode.timeline.map((item) => <div className="battle-event-row" key={item.sourceEventId}><span className="battle-event-time">{battleTime(item.timeSeconds)}</span><span className={`battle-event-kind ${item.type.toLowerCase()}`}>{battleTypeLabel(item.type)}</span><span className="battle-event-description">{item.actorRef ? battleData.labels?.players[item.actorRef] ?? '未知队员' : '未知来源'}{item.victimRef ? ` → ${battleData.labels?.players[item.victimRef] ?? '未知队员'}` : ''}{item.damage !== null ? ` · ${number(item.damage)} 伤害` : ''}{item.weapon ? ` · ${item.weapon}` : ''}</span><small>{item.sourceEventId} · {item.timestampSource}</small></div>)}</div>
+              <div className="battle-evidence-chain"><span>证据链</span><small>{selectedEpisode.evidenceEventIds.join(' · ')}</small></div>
+              {(selectedEpisode.diagnostics.unknownTeamContacts > 0 || selectedEpisode.diagnostics.ambiguousContextEvents > 0 || selectedEpisode.diagnostics.conflictingStateTransitions > 0 || selectedEpisode.diagnostics.positionsSuppressedBySampling > 0) && <div className="battle-uncertainty">未决计数：未知队伍 {selectedEpisode.diagnostics.unknownTeamContacts} · 歧义上下文 {selectedEpisode.diagnostics.ambiguousContextEvents} · 冲突状态 {selectedEpisode.diagnostics.conflictingStateTransitions} · 位置降采样 {selectedEpisode.diagnostics.positionsSuppressedBySampling}</div>}
+            </div>}
+            <div className="battle-evaluation-note">启发式：对敌有效 DAMAGE / KNOCK / KILL 按队伍对聚合；相邻接触间隔 ≤28 秒合并，或 knock 后 120 秒内对应 kill 延续。位置按队员每 15 秒取首条样本；歧义事件不强行归属。圈采样仅作为时间邻近的上下文证据，可被相邻 episode 共享。</div>
+          </section>}
+          <div className="right-footer"><span>解析器版本</span><b>{bootstrap?.parserVersion} / {bootstrap?.featureVersion} · battle-reconstruction-v1</b><small>交战重建按需从快照内资产引用只读获取；实验结果不写回 Lab 数据库。</small></div>
         </aside>
       </main>
     </div>

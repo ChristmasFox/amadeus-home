@@ -40,14 +40,29 @@ test('local API serves history and research from a read-only source and stores e
     model: process.env.PUBG_INTELLIGENCE_AI_MODEL,
   };
   let server: Awaited<ReturnType<typeof startServer>> | undefined;
+  const originalFetch = globalThis.fetch;
   try {
     const writable = new SqlitePubgRepository(source);
     writable.upsertMatches([
       { ...fixture, matchId: 'app-match-1', createdAt: '2026-10-10T12:00:00.000Z', players: fixture.players },
-      { ...fixture, matchId: 'app-match-2', createdAt: '2026-10-12T12:00:00.000Z', players: fixture.players.map((player) => ({ ...player, rank: 7, kills: 1 })) },
+      { ...fixture, matchId: 'app-match-2', createdAt: '2026-10-12T12:00:00.000Z', telemetryUrl: 'https://telemetry-cdn.pubg.com/sanitized-fixture.json', players: fixture.players.map((player) => ({ ...player, rank: 7, kills: 1 })) },
     ]);
     writable.close();
     const sourceHash = createHash('sha256').update(readFileSync(source)).digest('hex');
+
+    const telemetryFixture = [
+      { _T: 'LogPlayerTakeDamage', _D: '2026-10-12T12:00:10.000Z', common: { isGame: true }, attacker: { accountId: 'private-player-1', teamId: 'fixture-team-a' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' }, damage: 30 },
+      { _T: 'LogPlayerMakeGroggy', _D: '2026-10-12T12:00:12.000Z', common: { isGame: true }, attacker: { accountId: 'private-player-1', teamId: 'fixture-team-a' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' }, dBNOId: 'fixture-dbno' },
+      { _T: 'LogPlayerRevive', _D: '2026-10-12T12:00:22.000Z', common: { isGame: true }, reviver: { accountId: 'opponent-fixture-2', teamId: 'fixture-team-b' }, victim: { accountId: 'opponent-fixture-1', teamId: 'fixture-team-b' } },
+      { _T: 'LogGameStatePeriodic', _D: '2026-10-12T12:00:24.000Z', common: { isGame: true }, gameState: { elapsedTime: 24, numAlivePlayers: 50, numAliveTeams: 13, safetyZonePosition: { x: 1000, y: 2000 }, safetyZoneRadius: 1800 } },
+    ];
+    globalThis.fetch = (async (input, init) => {
+      const target = input instanceof Request ? input.url : String(input);
+      if (new URL(target).hostname === 'telemetry-cdn.pubg.com') {
+        return new Response(JSON.stringify(telemetryFixture), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return originalFetch(input, init);
+    }) as typeof fetch;
 
     process.env.PUBG_INTELLIGENCE_DB = source;
     process.env.PUBG_INTELLIGENCE_EXPERIMENT_DB = experiments;
@@ -84,6 +99,27 @@ test('local API serves history and research from a read-only source and stores e
     const detail = await fetch(`${server.url}/api/matches/app-match-1`).then((response) => response.json()) as { telemetry: { status: string }; analysis: { summary: string } };
     assert.equal(detail.telemetry.status, 'MISSING');
     assert.ok(detail.analysis.summary.length > 0);
+    const episodes = await fetch(`${server.url}/api/matches/app-match-1/episodes`).then((response) => response.json()) as { status: string; reason: string };
+    assert.equal(episodes.status, 'unavailable');
+    assert.equal(episodes.reason, 'no_telemetry_asset_in_snapshot');
+    const reconstructed = await fetch(`${server.url}/api/matches/app-match-2/episodes?squadId=all&from=2026-10-12&to=2026-10-12`).then((response) => response.json()) as {
+      status: string;
+      parserVersion: string;
+      episodes: Array<{ timeline: Array<{ sourceEventId: string }>; evidenceEventIds: string[]; knockChains: Array<{ outcome: string | null }> }>;
+      circleTransitions: unknown[];
+    };
+    assert.equal(reconstructed.status, 'available');
+    assert.equal(reconstructed.parserVersion, 'battle-reconstruction-v1');
+    assert.equal(reconstructed.episodes.length, 1);
+    assert.equal(reconstructed.episodes[0]?.knockChains[0]?.outcome, 'REVIVE');
+    assert.equal(reconstructed.episodes[0]?.timeline.every((event) => reconstructed.episodes[0]?.evidenceEventIds.includes(event.sourceEventId)), true);
+    const responseText = JSON.stringify(reconstructed);
+    assert.equal(responseText.includes('private-player-1'), false);
+    assert.equal(responseText.includes('opponent-fixture-1'), false);
+    assert.equal(responseText.includes('sanitized-fixture.json'), false);
+    const outOfScope = await fetch(`${server.url}/api/matches/app-match-1/episodes?squadId=all&from=2026-10-11&to=2026-10-11`);
+    assert.equal(outOfScope.status, 404);
+    assert.deepEqual(await outOfScope.json(), { error: 'match_outside_scope' });
     const experimentDatabase = new DatabaseSync(experiments);
     const mobile = '13' + '8' + '0'.repeat(8);
     const credential = 'sk-' + 'z'.repeat(24);
@@ -101,6 +137,7 @@ test('local API serves history and research from a read-only source and stores e
     assert.equal(createHash('sha256').update(readFileSync(source)).digest('hex'), sourceHash);
   } finally {
     if (server) await server.close();
+    globalThis.fetch = originalFetch;
     const restore = (key: string, value: string | undefined) => value === undefined ? delete process.env[key] : process.env[key] = value;
     restore('PUBG_INTELLIGENCE_DB', previous.db);
     restore('PUBG_INTELLIGENCE_EXPERIMENT_DB', previous.experiment);

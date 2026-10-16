@@ -8,6 +8,7 @@ export * from './migration/importer.js';
 export * from './engine/query-engine.js';
 export * from './review/types.js';
 export * from './review/telemetry-events.js';
+export * from './review/combat-scope.js';
 export * from './review/telemetry.js';
 export * from './review/review-facts.js';
 export * from './review/review-analyzer.js';

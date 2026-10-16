@@ -1,6 +1,6 @@
 # PUBG Intelligence Lab — Research & Delivery Plan
 
-Status: PLANNED (no implementation complete)  
+Status: R1 complete — see [`STATUS.md`](STATUS.md) and [`R1_EVALUATION.md`](R1_EVALUATION.md).
 Branch: `research/pubg-intelligence`  
 Scope: Lab historical PUBG telemetry research; Gate consumes only validated, versioned insights.  
 Owner of execution: Codex via /goal, with stage-by-stage acceptance.
@@ -150,13 +150,12 @@ R0 → R1 → R2 → R3 → R4 → R5 is the **promotion order**. R3 UI shell ca
 
 ## 7. Status ledger
 
-- Branch created: yes (`research/pubg-intelligence`).
-- This document: planning artifact only.
-- R0: not started.
-- R1: not started.
+- Branch: `research/pubg-intelligence`.
+- R0: complete; data audit at `docs/reports/PUBG_INTELLIGENCE_R0_DATA_AUDIT.md`.
+- R1: complete; source, build, fixture, and real snapshot evidence at `STATUS.md` and `R1_EVALUATION.md`.
 - R2: not started.
-- R3: not started.
+- R3: partial; R0 conversation shell and R1 match-to-episode drilldown exist; R3 acceptance remains.
 - R4: not started.
-- R5: not started.
+- R5: not started; no Gate integration or deployment was performed.
 
-Update status only upon actual verified work and commit.
+Update this ledger only from verified repository and local runtime evidence.
