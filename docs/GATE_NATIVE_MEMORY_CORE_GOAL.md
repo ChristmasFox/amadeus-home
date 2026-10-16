@@ -1,5 +1,21 @@
 # Gate Native Memory Core — 独立 AI SDK 长期记忆系统实施 Goal
 
+## 2026-10-16 Gate-Local deployment simplification (supersedes conflicting gates below)
+
+The intended workflow is **develop → CI/isolated PG tests → automatic Gate-Local
+candidate → health/smoke → notify; if application fails, restore previous
+application image/config**. A single initial local target configuration may
+remain, but there is no repeated approval for each ordinary compatible
+migration or old running-image version difference. Gate-Local self-heals
+legitimate Gateway/Worker/egress drift during deployment, never with hard-coded
+old/new Git SHAs. Skip an entire database backup for code-only changes; require
+the protected encrypted backup for database schema changes. Do not rerun
+`release-gate.sh verify` with a fresh test DB inside the actual deployment
+process after phase/CI validation. Stop only on wrong target/duplicate Bot,
+unsafe destructive or extension changes, failed backup or failed runtime health.
+M2 formal acceptance remains separate and its paused status is unchanged.
+
+
 > 日期：2026-10-16（Asia/Shanghai）
 > 状态：**APPROVED_FOR_SOURCE_IMPLEMENTATION / AUTOMATED_GATE_LOCAL_CANDIDATE_AFTER_OPT_IN**
 > 执行入口：`/goal docs/GATE_NATIVE_MEMORY_CORE_GOAL.md`
