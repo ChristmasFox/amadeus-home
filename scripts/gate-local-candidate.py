@@ -57,7 +57,7 @@ def recovery_step(reason: str) -> str:
     if reason.startswith("m2_") or reason == "m2_pause_active":
         return "M2 clearance is not required for Gate-Local candidates; reserve gate-m2-clear for a future formal release and keep M2 state unchanged"
     return {
-        "canary_test_tenant_not_unique": "add or identify exactly one existing Gate-Local test tenant marked test, fixture, or canary; no tenant ID was emitted and no deployment write occurred",
+        "canary_test_tenant_not_unique": "identify exactly one Gate-Local test tenant; an unmarked tenant is eligible only when it is the sole tenant for the configured Gate Bot; no tenant ID was emitted and no deployment write occurred",
         "canary_test_tenant_unavailable": "verify the existing Gate-Local test tenant marker and bounded tenant identifier; no tenant ID was emitted and no deployment write occurred",
         "gateway_environment_checkpoint_failed": "verify Gate age recipient/identity files and retry; the candidate does not proceed without encrypted Gateway configuration backup",
         "gateway_environment_checkpoint_verify_failed": "verify the Gate age identity and encrypted Gateway checkpoint; the candidate does not proceed without a verified checkpoint",
@@ -330,7 +330,12 @@ def restore_encrypted_database_backup(
 
 
 def select_existing_test_tenant(machine: str, layout: dict[str, str], bot_account_id: str) -> str:
-    """Select one marked test tenant for the canary, returning its ID only in memory."""
+    """Select one Gate-Local test tenant, returning its ID only in memory.
+
+    Prefer an explicit test/fixture/canary marker. If none exists, a sole tenant
+    for the already-verified Gate-Local Bot is unambiguous and instance-scoped.
+    Multiple unmarked tenants remain ineligible.
+    """
     escaped_bot_id = bot_account_id.replace("'", "''")
     predicate = "(t.tenant_id ~* '(test|fixture|canary)' OR t.guild_id ~* '(test|fixture|canary)' " \
                 "OR EXISTS (SELECT 1 FROM teams tm WHERE tm.tenant_id=t.tenant_id " \
@@ -343,6 +348,20 @@ def select_existing_test_tenant(machine: str, layout: dict[str, str], bot_accoun
     count_sql = f"SELECT COUNT(DISTINCT t.tenant_id) FROM tenants t WHERE {where}"
     count_output = remote_compose(machine, layout, "exec", "--no-TTY", "postgres", "sh", "-c", shell,
                                   "gate-canary-tenant-count", count_sql).decode("utf-8", errors="strict")
+    if count_output.strip() == "0":
+        sole_tenant_count_sql = f"SELECT COUNT(DISTINCT t.tenant_id) FROM tenants t WHERE t.bot_account_id='{escaped_bot_id}'"
+        sole_tenant_count = remote_compose(
+            machine, layout, "exec", "--no-TTY", "postgres", "sh", "-c", shell,
+            "gate-canary-sole-tenant-count", sole_tenant_count_sql,
+        ).decode("utf-8", errors="strict")
+        if sole_tenant_count.strip() != "1":
+            raise CandidateError("canary_test_tenant_not_unique")
+        sole_tenant_sql = f"SELECT DISTINCT t.tenant_id FROM tenants t WHERE t.bot_account_id='{escaped_bot_id}' ORDER BY t.tenant_id"
+        sole_tenant_output = remote_compose(
+            machine, layout, "exec", "--no-TTY", "postgres", "sh", "-c", shell,
+            "gate-canary-sole-tenant-select", sole_tenant_sql,
+        ).decode("utf-8", errors="strict")
+        return unique_test_tenant_id(sole_tenant_count, sole_tenant_output)
     if count_output.strip() != "1":
         raise CandidateError("canary_test_tenant_not_unique")
     tenant_sql = f"SELECT DISTINCT t.tenant_id FROM tenants t WHERE {where} ORDER BY t.tenant_id"
@@ -774,7 +793,7 @@ def gate_apply(approval_ref: str, *, force_full_database_backup: bool = False) -
         canary_tenant_id: str | None = None
         state: dict[str, Any] = {"sourceSha": sha, "image": image, "activeImage": active_image,
                                  "approvalRef": approval_ref, "checkpoint": str(checkpoint), "risk": risk,
-                                 "databaseBackupMode": "full", "canary": "single_marked_test_tenant"}
+                                 "databaseBackupMode": "full", "canary": "single_gate_local_test_tenant"}
 
         def build() -> dict[str, Any]:
             build_time = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
