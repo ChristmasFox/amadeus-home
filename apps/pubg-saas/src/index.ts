@@ -24,6 +24,7 @@ export * from './channels/kook/guild-welcome.js';
 export * from './application/public-query-authorizer.js';
 export * from './application/kook-public-query-handler.js';
 export * from './application/kook-conversation-agent.js';
+export * from './application/gate-memory-store.js';
 export * from './application/nl-query-planner.js';
 export * from './contracts/team-preferences.js';
 export * from './contracts/team-aliases.js';
