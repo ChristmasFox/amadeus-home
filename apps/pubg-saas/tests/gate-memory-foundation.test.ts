@@ -22,13 +22,16 @@ test('memory facts are bounded and keys are normalized', () => {
   assert.throws(() => rankGateMemories([], 'test', 25), /gate_memory_limit_invalid/u);
 });
 
-test('lexical fallback never pretends unrelated paraphrases are semantic hits', () => {
+test('Chinese bigrams recover related surface forms without claiming semantics', () => {
   const facts = [
     { key: 'favorite_map', content: '喜欢艾伦格地图', revision: 1, updatedAt: '2026-10-16' },
     { key: 'football', content: '喜欢看足球', revision: 1, updatedAt: '2026-10-16' },
   ];
   assert.deepEqual(rankGateMemories(facts, '喜欢艾伦格').map(e => e.key), ['favorite_map']);
-  assert.deepEqual(rankGateMemories(facts, '在哪个地图玩得最多'), []);
+  assert.deepEqual(rankGateMemories(facts, '在哪个地图玩得最多').map(e => e.key), ['favorite_map']);
+  assert.deepEqual(rankGateMemories(facts, '平时踢什么球').map(e => e.key), []);
+  assert.throws(() => validateGateMemoryDraft({ key: 'hidden', content: 'a\u200bb' }), /gate_memory_input_invalid/u);
+  assert.throws(() => validateGateMemoryDraft({ key: 'rtl\u202e', content: 'ok' }), /gate_memory_input_invalid/u);
 });
 
 test('missing trusted ingress authority blocks every memory read/write before SQL', async () => {
