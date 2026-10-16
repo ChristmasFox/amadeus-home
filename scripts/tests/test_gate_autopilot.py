@@ -1,4 +1,6 @@
 import importlib.util
+import hashlib
+import json
 import pathlib
 import tempfile
 import unittest
@@ -88,6 +90,7 @@ def operations(**overrides):
         "build": lambda: calls.append("build") or {"digest": "sha256:" + "c" * 64, "sourceSha": SHA},
         "verify_target": lambda: calls.append("verify_target"),
         "backup": lambda: calls.append("backup") or {"recoverable": True},
+        "reconcile_egress": lambda: calls.append("reconcile_egress"),
         "migrate": lambda: calls.append("migrate"),
         "switch": lambda: calls.append("switch") or {"image": "previous"},
         "health": lambda: calls.append("health") or True,
@@ -184,6 +187,153 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(
             preflight(paths=mixed_paths, allow_reviewed_control_plane=True)["reason"], "cross_product_change",
         )
+
+    def test_one_time_reviewed_migration_authorization_is_narrow_and_explicit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/0042_reviewed.sql"
+            file_path = root / migration
+            file_path.parent.mkdir(parents=True)
+            file_path.write_text("UPDATE gate_fixture SET value='reviewed';", encoding="utf-8")
+            common = {
+                "repository": root,
+                "paths": [migration],
+                "instance_id": INSTANCE,
+                "bot_account_id": BOT,
+                "candidate_sha": SHA,
+                "facts": facts(schemaCompatible=False),
+                "approval": approval(repository=str(root.resolve())),
+                "now": NOW,
+            }
+            self.assertEqual(gate.preflight_candidate(**common)["status"], "BLOCKED_OPERATOR_AUTHORIZATION")
+            reviewed = gate.preflight_candidate(**common, reviewed_migration_authorized=True)
+            self.assertEqual(reviewed["status"], "READY")
+
+            file_path.write_text("CREATE EXTENSION vector;", encoding="utf-8")
+            still_blocked = gate.preflight_candidate(**common, reviewed_migration_authorized=True)
+            self.assertEqual(still_blocked["reason"], "separate_pgvector_authorization_required")
+
+    def test_candidate_pipeline_aligns_only_after_verified_backup(self):
+        ops, calls = operations()
+        result = gate.run_candidate_pipeline(ops)
+        self.assertEqual(result["status"], "DEPLOYED_AND_NOTIFIED")
+        self.assertLess(calls.index("backup"), calls.index("reconcile_egress"))
+        self.assertLess(calls.index("reconcile_egress"), calls.index("migrate"))
+        self.assertLess(calls.index("migrate"), calls.index("switch"))
+
+        ops, calls = operations()
+        ops["backup"] = lambda: calls.append("backup") or {"recoverable": False}
+        result = gate.run_candidate_pipeline(ops)
+        self.assertEqual(result["reason"], "recoverable_backup_missing")
+        self.assertNotIn("reconcile_egress", calls)
+
+    def test_known_egress_drift_manifest_is_exact_and_target_bound(self):
+        exact = dict(candidate.KNOWN_EGRESS_DRIFT)
+        self.assertEqual(candidate.reviewed_egress_drift({"knownRuntimeDrift": exact}), exact)
+        for changed in (
+            {**exact, "fromSourceSha": "1" * 40},
+            {**exact, "toSourceSha": "2" * 40},
+            {**exact, "service": "gateway"},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(candidate.OperatorAuthorizationRequired):
+                candidate.reviewed_egress_drift({"knownRuntimeDrift": changed})
+
+    def test_migration_inventory_excludes_only_the_optional_pgvector_file(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration_dir = root / "apps/pubg-saas/src/infrastructure/postgres/migrations"
+            migration_dir.mkdir(parents=True)
+            (root / "apps/pubg-saas/src/infrastructure/postgres/migrate.ts").write_text(
+                "const migrationIds = ['0041_add.sql'] as const;", encoding="utf-8",
+            )
+            (migration_dir / "0041_add.sql").write_text("CREATE TABLE gate_fixture(id INTEGER);", encoding="utf-8")
+            (migration_dir / candidate.OPTIONAL_MIGRATION).write_text(
+                "CREATE EXTENSION vector;", encoding="utf-8",
+            )
+            applied, excluded = candidate.migration_inventory([
+                "apps/pubg-saas/src/infrastructure/postgres/migrations/0041_add.sql",
+                "apps/pubg-saas/src/infrastructure/postgres/migrations/0025_gate_memory_pgvector.sql",
+            ], root)
+        self.assertEqual([row["path"] for row in applied], [
+            "apps/pubg-saas/src/infrastructure/postgres/migrations/0041_add.sql",
+        ])
+        self.assertEqual([row["path"] for row in excluded], [
+            "apps/pubg-saas/src/infrastructure/postgres/migrations/0025_gate_memory_pgvector.sql",
+        ])
+        self.assertEqual(excluded[0]["riskCategory"], "pgvector_install")
+
+    def test_protected_database_checkpoint_dumps_the_whole_database(self):
+        command = candidate.full_database_dump_shell()
+        self.assertIn("pg_dump -Fc", command)
+        self.assertIn("-d pubg_saas", command)
+        self.assertNotIn("-n public", command)
+        self.assertNotIn("--schema=public", command)
+
+    def test_reviewed_migration_authorization_is_bound_to_ref_source_target_and_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            migration_dir = root / "apps/pubg-saas/src/infrastructure/postgres/migrations"
+            migration_dir.mkdir(parents=True)
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/0042_reviewed.sql"
+            (root / "apps/pubg-saas/src/infrastructure/postgres/migrate.ts").write_text(
+                "const migrationIds = ['0042_reviewed.sql'] as const;", encoding="utf-8",
+            )
+            sql_path = root / migration
+            sql_path.write_text("DROP INDEX gate_fixture_old;", encoding="utf-8")
+            optional = "apps/pubg-saas/src/infrastructure/postgres/migrations/0025_gate_memory_pgvector.sql"
+            optional_path = root / optional
+            optional_path.write_text("CREATE EXTENSION vector;", encoding="utf-8")
+            applied, excluded = candidate.migration_inventory([migration, optional], root)
+            manifest = {
+                "schema": candidate.REVIEWED_AUTH_SCHEMA,
+                "approvalRef": "arthur-20261016-destructive-migration",
+                "repository": str(root.resolve()),
+                "environment": "gate-local",
+                "candidateSha": SHA,
+                "activeSourceSha": candidate.KNOWN_EGRESS_DRIFT["toSourceSha"],
+                "instanceId": INSTANCE,
+                "botAccountId": BOT,
+                "allowedRiskCategories": ["data_migration", "destructive_schema"],
+                "migrations": applied,
+                "excludedMigrations": excluded,
+                "knownRuntimeDrift": dict(candidate.KNOWN_EGRESS_DRIFT),
+            }
+            manifest_path = root / "reviewed.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            manifest_path.chmod(0o600)
+            validated, authorized = candidate.load_reviewed_authorization(
+                manifest_path,
+                approval_ref="arthur-20261016-destructive-migration",
+                repository=root,
+                candidate_sha=SHA,
+                active_sha=candidate.KNOWN_EGRESS_DRIFT["toSourceSha"],
+                instance_id=INSTANCE,
+                bot_account_id=BOT,
+                migration_paths=[migration, optional],
+            )
+            self.assertTrue(authorized)
+            self.assertEqual(validated["migrations"], applied)
+            checkpoint = root / "gate-local-20261016T000000Z-aabbccddeeff"
+            checkpoint.mkdir(mode=0o700)
+            used_record = checkpoint / "reviewed-candidate-authorization.json"
+            used_record.write_text(json.dumps(manifest), encoding="utf-8")
+            used_record.chmod(0o600)
+            with self.assertRaisesRegex(candidate.OperatorAuthorizationRequired, "approval_ref_already_used"):
+                candidate.require_unused_reviewed_approval(manifest, root)
+            manifest["migrations"][0]["sha256"] = hashlib.sha256(b"other").hexdigest()
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            manifest_path.chmod(0o600)
+            with self.assertRaisesRegex(candidate.OperatorAuthorizationRequired, "reviewed_migration_set_mismatch"):
+                candidate.load_reviewed_authorization(
+                    manifest_path,
+                    approval_ref="arthur-20261016-destructive-migration",
+                    repository=root,
+                    candidate_sha=SHA,
+                    active_sha=candidate.KNOWN_EGRESS_DRIFT["toSourceSha"],
+                    instance_id=INSTANCE,
+                    bot_account_id=BOT,
+                    migration_paths=[migration, optional],
+                )
 
     def test_duplicate_sha_and_runtime_dual_bot_or_drift_stop(self):
         self.assertEqual(preflight(facts=facts(activeSha=SHA))["status"], "ALREADY_CURRENT")

@@ -19,6 +19,7 @@ PROMOTION_CHECKPOINT_REF=""
 LINEAGE_BRIDGE=0
 CREATE_TAG=0
 ALLOW_REVIEWED_CONTROL_PLANE=0
+REVIEWED_MIGRATION_AUTHORIZATION=""
 LIVE=0
 ENVIRONMENT=""
 MANIFEST=""
@@ -69,6 +70,7 @@ Options:
   --manifest <path>               protected external release manifest (status)
   --runtime-snapshot <path>       sanitized Gate runtime snapshot (status)
   --allow-reviewed-control-plane  one-time direct Gate-Local apply of reviewed release-control source
+  --reviewed-migration-authorization <path> one-time Gate-Local high-risk migration approval, bound to source/target/file hashes
 
 Gate-Local candidate apply uses the protected local autopilot and requires
 the external one-time Gate approval. M2 may remain paused; candidate apply
@@ -97,6 +99,7 @@ while (($#)); do
     --lineage-bridge) LINEAGE_BRIDGE=1 ;;
     --create-tag) CREATE_TAG=1 ;;
     --allow-reviewed-control-plane) ALLOW_REVIEWED_CONTROL_PLANE=1 ;;
+    --reviewed-migration-authorization) (($# >= 2)) || fail '--reviewed-migration-authorization requires a path'; REVIEWED_MIGRATION_AUTHORIZATION="$2"; shift ;;
     --live) LIVE=1 ;;
     --environment) (($# >= 2)) || fail '--environment requires a value'; ENVIRONMENT="$2"; shift ;;
     --manifest) (($# >= 2)) || fail '--manifest requires a path'; MANIFEST="$2"; shift ;;
@@ -153,6 +156,10 @@ fi
 if ((ALLOW_REVIEWED_CONTROL_PLANE)); then
   [[ "$PRODUCT" == gate && "$COMMAND" == candidate && "$ENVIRONMENT" == gate-local && $APPLY -eq 1 ]] || \
     fail '--allow-reviewed-control-plane is limited to an applied Gate-Local candidate'
+fi
+if [[ -n "$REVIEWED_MIGRATION_AUTHORIZATION" ]]; then
+  [[ "$PRODUCT" == gate && "$COMMAND" == candidate && "$ENVIRONMENT" == gate-local && $APPLY -eq 1 ]] || \
+    fail '--reviewed-migration-authorization is limited to an applied Gate-Local candidate'
 fi
 if [[ "$PRODUCT" == gate && "$COMMAND" == verify ]]; then
   python3 "$ROOT_DIR/scripts/validate-pubg-saas-test-database.py" || fail 'Gate verify requires a dedicated loopback PostgreSQL test database; see apps/pubg-saas/README.md'
@@ -396,6 +403,7 @@ case "$COMMAND" in
           [[ "$COMMAND" == candidate ]] || fail 'Gate-Local supports only an unreleased candidate; formal Gate release/tag is not available.'
           candidate_args=(candidate --apply --approval-ref "$APPROVAL_REF")
           ((ALLOW_REVIEWED_CONTROL_PLANE == 0)) || candidate_args+=(--allow-reviewed-control-plane)
+          [[ -z "$REVIEWED_MIGRATION_AUTHORIZATION" ]] || candidate_args+=(--reviewed-migration-authorization "$REVIEWED_MIGRATION_AUTHORIZATION")
           python3 "$ROOT_DIR/scripts/gate-local-candidate.py" "${candidate_args[@]}"
           printf 'CANDIDATE_APPLIED=1\nAPPROVAL_REF=%s\n' "$APPROVAL_REF"
           exit 0

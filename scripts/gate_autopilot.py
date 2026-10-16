@@ -21,6 +21,7 @@ CLEARANCE_SCHEMA = "gate-local-m2-clearance/v1"
 GATE_PREFIXES = ("apps/pubg-saas/", "infra/pubg-saas/")
 SHARED_PREFIXES = ("packages/pubg-domain/", "packages/presentation/", "packages/identity/")
 RISK_CATEGORIES = {"reversible_app_candidate", "backward_compatible_schema"}
+REVIEWED_MIGRATION_CATEGORIES = {"destructive_schema", "data_migration"}
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 
 
@@ -296,6 +297,7 @@ def validate_approval(
     instance_id: str,
     bot_account_id: str,
     risk: str,
+    reviewed_migration_authorized: bool = False,
     now: datetime | None = None,
 ) -> tuple[bool, str]:
     if approval is None:
@@ -317,7 +319,9 @@ def validate_approval(
     categories = approval.get("riskCategories")
     if not isinstance(categories, list) or any(category not in RISK_CATEGORIES for category in categories):
         return False, "approval_risk_scope_invalid"
-    if risk not in categories:
+    if risk not in categories and not (
+        reviewed_migration_authorized and risk in REVIEWED_MIGRATION_CATEGORIES
+    ):
         return False, "risk_category_not_authorized"
     return True, "approved"
 
@@ -359,6 +363,7 @@ def preflight_candidate(
     candidate_sha: str,
     facts: dict[str, Any],
     allow_reviewed_control_plane: bool = False,
+    reviewed_migration_authorized: bool = False,
     now: datetime | None = None,
 ) -> dict[str, str]:
     scope, scope_reason = classify_changed_scope(paths)
@@ -370,11 +375,14 @@ def preflight_candidate(
     if scope != "gate_only" and not reviewed_control_plane:
         return {"status": "BLOCKED", "reason": scope_reason or scope}
     risk, risk_reason = migration_risk(paths, repository)
-    if risk_reason:
+    if risk_reason and not (
+        reviewed_migration_authorized and risk in REVIEWED_MIGRATION_CATEGORIES
+    ):
         status = "BLOCKED_OPERATOR_AUTHORIZATION" if risk_reason.startswith("separate_") else "BLOCKED"
         return {"status": status, "reason": risk_reason}
     allowed, reason = validate_approval(approval, repository=repository, instance_id=instance_id,
-                                        bot_account_id=bot_account_id, risk=risk, now=now)
+                                        bot_account_id=bot_account_id, risk=risk,
+                                        reviewed_migration_authorized=reviewed_migration_authorized, now=now)
     if not allowed:
         status = "READY_FOR_AUTO_ENABLE" if reason == "approval_missing" else "BLOCKED_OPERATOR_AUTHORIZATION"
         return {"status": status, "reason": reason}
@@ -390,7 +398,7 @@ def preflight_candidate(
         return {"status": "BLOCKED", "reason": "runtime_drift_or_unknown"}
     if facts.get("backupRecoverable") is not True:
         return {"status": "BLOCKED", "reason": "recoverable_backup_missing"}
-    if facts.get("schemaCompatible") is not True:
+    if facts.get("schemaCompatible") is not True and not reviewed_migration_authorized:
         return {"status": "BLOCKED", "reason": "schema_incompatible_or_unknown"}
     if facts.get("requiresPgvector") is True and facts.get("pgvectorAvailable") is not True:
         return {"status": "BLOCKED_OPERATOR_AUTHORIZATION", "reason": "separate_pgvector_authorization_required"}
@@ -430,6 +438,11 @@ def run_candidate_pipeline(operations: dict[str, Callable[[], Any]]) -> dict[str
         if not checkpoint or not checkpoint.get("recoverable"):
             return audited({"status": "BLOCKED", "reason": "recoverable_backup_missing", "trace": trace})
         trace.append("backup")
+        reconcile_egress = operations.get("reconcile_egress")
+        if callable(reconcile_egress):
+            current_step = "reconcile_egress"
+            reconcile_egress()
+            trace.append("reconcile_egress")
         current_step = "migrate"
         operations["migrate"]()
         trace.append("migrate")

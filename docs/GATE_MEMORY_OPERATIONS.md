@@ -102,9 +102,11 @@ from the active Gateway container labels, rejects ambiguous or untrusted
 layouts, duplicate Gateway/Worker processes, and runtime drift, builds a
 SHA-tagged immutable local image, and confirms its image ID
 after transfer. It writes a mode-`0700` external checkpoint containing the
-prior Compose/env files and an encrypted public-schema PostgreSQL dump. The
-dump is verified by decrypting it through `pg_restore --list` before the
-migrator runs. The image/Compose switch waits for PostgreSQL, egress proxy,
+prior Compose/env files and an encrypted full-database PostgreSQL custom dump
+(all schemas and data, without owner/ACL restoration). The candidate records
+encrypted size, SHA-256, and `pg_restore --list` entry count. It authenticates
+the complete age stream and verifies the archive before the migrator runs;
+no plaintext dump is retained. The image/Compose switch waits for PostgreSQL, egress proxy,
 Gateway KOOK-handshake readiness, and Worker health. Smoke probes are local
 loopback requests and do not send a KOOK message. A failed health/smoke check
 restores the prior application config and attempts an application rollback;
@@ -116,7 +118,19 @@ notified.
 The adapter compares migration changes against the active image's source SHA,
 not only the current Goal phase base. Unknown lineage and destructive,
 incompatible, or data-changing migrations stop before backup, migration, or
-service switch. The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
+service switch by default. A separately reviewed one-time authorization can
+be passed to a direct Gate-Local apply with
+`--reviewed-migration-authorization <path>`. Its external mode-`0600` manifest
+is bound to the approval reference, checkout, active and candidate SHAs, the
+Gate instance and Bot account, and the exact applied migration paths, risk
+classes, and SHA-256 values. It is consumed into that candidate checkpoint
+only after a verified backup; it never widens the persistent auto-approval
+categories. This path accepts only explicitly reviewed destructive-schema or
+data-migration entries. Unknown SQL, extension/pgvector changes, and files
+outside the runtime migrator remain blocked. A reviewed egress reconciliation
+may authorize only the exact observed egress image and expected active image;
+after the checkpoint it aligns that service and verifies health before
+migrations. It does not permit general runtime drift. The adapter does not enable `GATE_MEMORY_READ_ENABLED`,
 `GATE_MEMORY_WRITE_ENABLED`, `GATE_MEMORY_AUTO_LEARN_ENABLED`, or embedding
 requests. It rejects Gate-Staging/Prod, mixed Lab/Gate source changes,
 unreviewed control-plane changes, destructive schema changes, data-changing
@@ -129,6 +143,13 @@ unknown syntax fails closed. A blocked candidate prints a fixed recovery step
 for its reason. No target query, backup, image build, database migration, or
 service switch is performed when approval is missing. Missing M2 clearance
 does not block a Gate-Local candidate and never changes the M2 pause state.
+
+To recover data from the encrypted full-database checkpoint, decrypt it and
+stream it to `pg_restore` targeting a newly named, empty recovery database.
+Verify the restored database there before any operator-approved connection
+change. Do not overwrite the active database or replace its PostgreSQL volume
+as a routine application rollback; retain the current volume and use the
+protected application rollback first.
 
 To revoke a future formal-release M2 clearance without disabling Gate candidate
 authorization:
