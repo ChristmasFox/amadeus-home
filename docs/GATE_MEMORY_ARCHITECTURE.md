@@ -1,10 +1,11 @@
 # Gate Memory Foundation — KOOK / AI SDK
 
-> This is a **source foundation**, not a Gate-Local memory deployment. P0–P3
-> now provide scoped working context and hybrid long-term recall using
-> synthetic embeddings in acceptance fixtures. Automatic learning, real
-> provider validation and Dreaming are not implemented. Lab Memory Core
-> 1.10.5 remains completely independent.
+> This is the Gate memory source contract, not a Gate-Local deployment record.
+> P0–P6 source milestones are implemented. Read, write, auto-learning and
+> embedding provider flags default off independently; user consent is a second
+> gate for auto-learning. The P6 synthetic evaluation is local-only. No live
+> provider probe or Gate-Local memory operation is claimed. Lab Memory Core
+> remains completely independent.
 
 ## Boundaries
 
@@ -61,10 +62,10 @@ Do not copy Lab's SQLite, sessions, Owner allowlists or provider API keys.
 4. P3 integrated scoped hybrid read-only recall with fixed fallbacks and a
    dedicated context budget. The details and synthetic acceptance evidence
    are recorded below.
-5. P4/P5 remain future work: any transcript consolidation or memory writer
-   needs explicit privacy, consent, conflict, prompt-injection, and
-   deduplication rules. No group memory is written merely because an LLM saw
-   a message.
+5. P4/P5 later added an explicit DM writer, revocation, consent-versioned
+   Light/REM admission, manual consolidation, and shadow index generations.
+   These are source paths only; no group memory is written merely because an
+   LLM saw a message, and no periodic worker is enabled by default.
 
 ## Audit remediation — 2026-10-16
 
@@ -99,13 +100,15 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
   run covered actual trusted DM/group ingress, stale leases, permissions,
   version changes, correction/forget, and old-but-relevant lexical search.
 
-### Explicitly unfinished
+### P3 status at that milestone (superseded by later sections below)
 
 - P3 wires `GateMemoryStore` through `MemoryRetriever` into AI SDK prompt
   assembly. The acceptance path uses synthetic embeddings. Real provider
   entitlement, semantic quality, and live Gate acceptance remain unverified.
-  There is still no autonomous conversation summarization or memory
-  consolidation; existing full message archives remain.
+  At the end of P3 there was no consolidation path. P5 later added a
+  consent-versioned, manually invoked worker interface and candidate
+  confirmation; no production scheduler or automatic consolidation worker is
+  enabled.
 - There is no automatic deletion of inaccessible **old channel generations**.
   Their isolation is intentional; implement a reviewed retention/erasure
   policy, safe cleanup preview, and protected Gate backup before scheduling
@@ -120,9 +123,10 @@ Source follow-up: `fix(gate-memory): audit authorization, lexical recall and lif
   transcript or historical backups; holistic privacy erasure needs a separate
   retention and recovery design.
 
-Next: citation-aware historical retrieval, hybrid semantic recall with
-**Gate-owned** Embedding credentials, private scoped indexes and consent-aware
-consolidation. No runtime migration or Gate-Local deployment is implied by a
+At that milestone, next work included citation-aware historical retrieval,
+hybrid semantic recall with **Gate-owned** Embedding credentials, private
+scoped indexes and consent-aware consolidation. Later P2–P6 sections record
+which source paths were added; no Gate-Local deployment is implied by a
 source merge.
 
 ## Follow-up lexical audit — 2026-10-16
@@ -452,5 +456,134 @@ context-builder, foundation, and pgvector tests.
 P4 source changes are in `gate-memory-store.ts`, new
 `gate-memory-writer.ts`, `kook-public-query-handler.ts`, `gateway.ts`,
 migration `0027_gate_memory_write_receipts.sql`, focused writer fixtures, and
-the KOOK privacy notice. Async consolidation, automated learning, and runtime
-deployment remain out of scope.
+the KOOK privacy notice. The later P5/P6 sections below supersede the earlier
+statement about consolidation scope. Operator auto-learning remains off by
+default and does not imply a scheduled worker or runtime deployment.
+
+## P5 consented consolidation and shadow index generations — 2026-10-16
+
+- Migration `0028_gate_memory_consolidation.sql` stores the per-Bot/user
+  Light/REM consent version, metadata-only source admissions, candidate
+  proposals, and bounded checkpoints. Admission stores KOOK event/message
+  identifiers and consent version; it does not copy message text. Only
+  direct-message events for the consenting actor can be admitted.
+- Operator `GATE_MEMORY_AUTO_LEARN_ENABLED=1` and each user's explicit
+  workflow consent are independent gates. With the operator flag off,
+  `/pubg memory light|rem on` reports that no consent was stored; `/status`
+  reports operator and personal states separately. The source has no timer or
+  default scheduled worker. A manual consolidation run creates candidates;
+  the user must confirm each candidate before the ordinary memory writer can
+  promote it. Group memory is not admitted.
+- Migration `0029_gate_memory_index_generations.sql` keeps the active index
+  contract separate from one building generation. Mutations enqueue both
+  contracts during a shadow build. The scanner advances by a stable memory ID
+  cursor, rechecks current scope, and has a statement timeout. Activation
+  requires a complete scan and coverage of every current unrevoked entry.
+  Semantic read uses only the active contract; building vectors cannot leak
+  into normal recall.
+- `GateMemoryIndexGenerationManager` is controlled through the explicit
+  bounded CLI documented in [Gate Memory Operations](GATE_MEMORY_OPERATIONS.md).
+  Mutations require `--apply`; provider work additionally requires a
+  configured provider and `--allow-provider-requests`. The tool starts no
+  daemon or scheduled task.
+
+## P6 API, data, feature-flag and evaluation contract — 2026-10-16
+
+### Runtime flags and stable status
+
+| Gate environment variable | Default | Meaning |
+| --- | --- | --- |
+| `GATE_MEMORY_READ_ENABLED` | missing = disabled | Enables bounded recall only. Missing/`0`/`1`/invalid are reported as `disabled_missing`, `disabled_by_operator`, `enabled_by_operator`, or `misconfigured`. |
+| `GATE_MEMORY_WRITE_ENABLED` | missing = disabled | Enables explicit DM memory writer only. It is independent of read and auto-learning. |
+| `GATE_MEMORY_AUTO_LEARN_ENABLED` | missing = disabled | Enables Light/REM source admission only when the actor also has active per-workflow consent. No periodic scheduling is enabled. |
+| `GATE_MEMORY_EMBEDDING_ENABLED` | missing = disabled | Missing/`0` disables. `1` is usable only with a valid URL/model/key and explicit daily budget; other values or incomplete contracts fail closed. Secret values are never included in readiness logs. |
+
+Embedding configuration also has bounded dimensions, index version, timeout,
+batch size, request token ceiling, and daily token/request budgets. The current
+defaults are 10 seconds, batches of 8, 4,096 estimated input tokens/request,
+100 requests/day, and an explicit positive daily token budget. The model key,
+URL and credential belong to Gate only. A configured provider does not itself
+enable reads, writes, user consent, or a live provider probe.
+
+Gateway startup emits only fixed readiness statuses. Its new `/healthz`
+endpoint listens on container loopback port 8082 and returns ready only after a
+KOOK Gateway HELLO/resume acknowledgement; Compose can use this signal during
+a candidate health gate. The route exposes no Bot ID, token, event, or memory
+content. The health probe creates no message.
+
+### Data and API version contract
+
+- `gate_memory_entries` remains the authoritative, scoped fact store. Entries
+  are revised with compare-and-swap, carry source provenance/reliability and
+  validity metadata, and use tombstones for forget. Current KOOK ingress,
+  actor/channel/team, tenant and binding revision remain authoritative for
+  every read or mutation.
+- `gate_memory_embedding_jobs` is a transactional outbox. Version 1 is the
+  legacy active generation. Migration `0029` adds a monotonic per-Bot
+  generation state and indexes. A shadow generation is invisible to reads
+  until coverage validation atomically activates its provider/model/dimension/
+  normalization/index-version contract.
+- Optional `gate_memory_embeddings` rows come from separately applied
+  migration `0025`; regular startup never installs pgvector. Semantic failure
+  or missing vectors falls back to lexical recall with a fixed reason code.
+- Migration `0028` admissions bind a source event to the consent version that
+  was active at admission. Revocation changes that version, invalidates
+  pending work, and removes unconfirmed candidates. Promotion remains a
+  separate user confirmation event and writer CAS.
+- A user can ask in a private DM to list, remember, correct, or forget their
+  own facts. The writer classifier sees only the current direct message and
+  exposes no scope or SQL arguments. The deterministic management API for
+  consolidation is `/pubg memory light|rem on|off|status` and
+  `/pubg memory candidates` with `confirm|reject <candidateID>`. No LLM tool
+  can select a Bot, actor, tenant, channel, team, binding revision, DB
+  operation, or admin target.
+
+### Synthetic P6 recall evaluation
+
+`apps/pubg-saas/tests/fixtures/gate-memory-recall-eval.json` is deidentified
+synthetic data covering Chinese paraphrase, single Han fallback, mixed
+Chinese/English, an older relevant fact, a single Latin letter, emoji ZWJ,
+old/new fact conflict, and a foreign-actor row. The harness reports actual
+in-memory timings and counts; those are fixture measurements, not production
+latency or provider quality. The `embeddingRequests` field counts synthetic
+semantic-fixture invocations and does not represent network requests or
+billing. The UTF-8 byte figure is a conservative input estimate, not an
+invoice or exact model tokenizer. On the 2026-10-16 local run, 6 of 7
+queries with expected results recalled all expected items in the top five
+(recall@5 0.8571); the harness counted one false-positive candidate, 8
+scope resolutions, one foreign candidate rejected, zero isolation leaks, 8
+synthetic semantic-fixture calls, and 233 estimated input tokens. Across
+three local executions, measured retrieval time ranged from 2.192–5.571 ms
+total and 0.274–0.696 ms mean for these eight cases. The degraded case
+reported `lexical_only:semantic_timeout`; other cases reported `hybrid:none`.
+These in-memory fixture timings are not a production latency estimate.
+
+### Forget, transcript retention and protected backups
+
+`/pubg memory forget` immediately tombstones the fact so lexical and semantic
+recall exclude it; queued vector deletion cannot make it visible again. It does
+not erase the original raw KOOK conversation transcript, an already-created
+protected backup, or the content-free write/admission idempotency records.
+Those stores have distinct retention and recovery controls. A transcript
+retention/erasure request and expiration or destruction of protected backups
+must be handled by their own reviewed process; forgetting a memory does not
+retroactively rewrite those copies. The user-facing privacy notice states
+these distinctions.
+
+### P6 verification boundaries
+
+- `SOURCE_FIXED`: feature flags, Gateway health, bounded admin CLI, release
+  autopilot source, docs and fixtures are committed and focused checks pass.
+- `ISOLATED_DB_VERIFIED`: only claimed after running the ordinary PostgreSQL
+  and pgvector suites against disposable local fixtures. This does not use
+  Gate-Local or a real provider.
+- `PROVIDER_PROBE_VERIFIED`: only after a separately authorized Gate-owned
+  provider probe. Synthetic fixture calls do not qualify.
+- `GATE_LOCAL_LIVE_VERIFIED`: only after separately approved human KOOK
+  acceptance and the protected Gate-Local candidate route. No P6 source check
+  qualifies.
+
+P6 operational procedures are in [Gate Memory Operations](GATE_MEMORY_OPERATIONS.md)
+and the human script is in [Gate Memory Acceptance](GATE_MEMORY_ACCEPTANCE.md).
+Gate M2 remains `PAUSED / BLOCKED_BY_RELEASE_ENGINEERING` until an operator
+finishes its separate acceptance.
