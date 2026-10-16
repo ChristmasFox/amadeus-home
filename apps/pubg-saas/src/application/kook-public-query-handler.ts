@@ -286,6 +286,9 @@ async function naturalLanguageReply(
   const requestKey = createHash('sha256').update(`${job.botAccountId}\0${job.eventId}`).digest('hex').slice(0, 16);
   const channelId = job.request.kind === 'group' ? job.request.event.channelId : undefined;
   if (!configured) {
+    if (job.request.kind === 'direct' && services.memoryConsolidationConsent) {
+      await services.memoryConsolidationConsent.admitCurrentMessage(job).catch(() => 0);
+    }
     await services.authorizer.recordAgentRun(job, {
       modelId: null, outcome: 'model_unconfigured', failureCode: 'agent_model_unconfigured',
       inputTokens: null, outputTokens: null, totalTokens: null,
