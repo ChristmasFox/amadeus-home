@@ -69,6 +69,15 @@ test('Deep consolidates repeated DM evidence, respects use signals, corrections,
       async function finish(job: KookIngressJob): Promise<void> {
         await queue.complete(job, null);
       }
+      async function drainRemAdmissions(): Promise<void> {
+        for (let attempt = 0; attempt < 32; attempt += 1) {
+          nextCandidates = [];
+          const result = await worker.processNext('rem');
+          if (result.status === 'SKIPPED_NO_ELIGIBLE_CORPUS') return;
+          assert.equal(result.status, 'processed');
+        }
+        assert.fail('REM fixture admission drain exceeded its bound');
+      }
       async function remPair(actor: string, content: string, key: string,
         firstAgeDays: number, secondAgeDays: number): Promise<KookIngressJob[]> {
         const first = await beginDirect(actor, content);
@@ -136,6 +145,7 @@ test('Deep consolidates repeated DM evidence, respects use signals, corrections,
         `SELECT 1 FROM gate_memory_entries WHERE bot_account_id=$1 AND actor_id=$2 AND memory_key='favorite_map'`,
         [bot, actors.casual],
       )).rowCount, 0, 'one casual mention remains episodic');
+      await drainRemAdmissions();
 
       await remPair(actors.repeated, '我长期偏好艾伦格。', 'favorite_map', 2, 1);
       const repeatedCandidate = await pool.query<{ source_event_ids: string[]; status: string }>(
@@ -187,6 +197,7 @@ test('Deep consolidates repeated DM evidence, respects use signals, corrections,
         if (index < 2) await memory.recordUsageSignals(job, signals, 'used');
         await finish(job);
       }
+      await drainRemAdmissions();
       const usefulRun = await worker.processDeep();
       assert.equal(usefulRun.status, 'processed');
       const usefulMemory = await pool.query<{ content: string; revision: string }>(
