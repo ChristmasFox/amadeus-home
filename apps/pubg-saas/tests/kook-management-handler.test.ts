@@ -29,7 +29,7 @@ test('privacy help is available in DMs and unbound groups without database or mo
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /按频道隔离.*按用户隔离并持久保留/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Gate 长期记忆只在本人私聊中按明确的保存\/更正请求写入/u);
   assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /立即退出召回.*原始 KOOK 聊天记录、受保护备份.*写入幂等回执.*没有自动过期/u);
-  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Light\/REM 整理默认关闭.*本人可在私聊.*群聊不会进入整理队列.*没有周期调度/u);
+  assert.match(KOOK_PUBLIC_PRIVACY_NOTICE, /Light\/REM 自动整理默认开启.*本人可在私聊.*off.*群聊不会进入个人记忆整理队列.*自动进入长期记忆/u);
   assert.doesNotMatch(KOOK_PUBLIC_PRIVACY_NOTICE, /最多保留 12 小时|每分钟 10 条|每日 200 条/u);
   const handler = createKookManagementHandler({} as unknown as KookOnboardingServices);
   const bot = 'privacy-bot';
