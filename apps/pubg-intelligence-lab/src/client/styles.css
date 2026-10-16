@@ -18,6 +18,9 @@ body{height:100vh;height:100dvh;min-height:0;overflow:hidden}
 .composer{margin-top:0}
 .composer textarea{resize:none}
 .right-rail{overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.right-rail{min-width:0;max-height:100%;overflow-x:hidden;align-items:stretch}
+.right-rail>*{flex:0 0 auto;min-width:0}
+.right-rail>.right-empty{flex:1 0 auto}
 .evidence-list{overscroll-behavior:contain}
 *{scrollbar-width:thin;scrollbar-color:rgba(130,153,144,.4) transparent}
 *::-webkit-scrollbar{width:6px;height:6px}
