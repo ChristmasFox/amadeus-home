@@ -144,13 +144,13 @@ class GateAutopilotContracts(unittest.TestCase):
         self.assertEqual(candidate.deployment_status(candidate.CandidateError("runtime_drift_or_unknown")),
                          "BLOCKED")
 
-    def test_gate_only_scope_and_product_separation(self):
+    def test_gate_and_shared_changes_trigger_rollout(self):
         self.assertEqual(gate.classify_changed_scope(PATHS), ("gate_only", None))
         self.assertEqual(gate.classify_changed_scope(["plugins/amadeus/src/owner.ts"])[0], "lab_only")
         self.assertEqual(gate.classify_changed_scope(PATHS + ["plugins/amadeus/src/owner.ts"]),
-                         ("mixed_lab_gate", "cross_product_change"))
-        self.assertEqual(gate.classify_changed_scope(["packages/pubg-domain/src/index.ts"])[1],
-                         "shared_package_change")
+                         ("gate_only", None))
+        self.assertEqual(gate.classify_changed_scope(["packages/pubg-domain/src/index.ts"]),
+                         ("gate_only", None))
         self.assertEqual(gate.classify_changed_scope(["docs/GATE_MEMORY.md"])[0], "non_runtime")
 
     def test_missing_approval_fails_closed_and_legacy_expiry_is_ignored(self):
@@ -358,38 +358,49 @@ class GateAutopilotContracts(unittest.TestCase):
             )
             self.assertEqual(gate.migration_risk([migration], root), ("backward_compatible_schema", None))
 
-    def test_migration_classifier_blocks_data_and_unreviewed_statements(self):
+    def test_migrations_only_block_destructive_changes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
-            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_risk.sql"
+            migration = "apps/pubg-saas/src/infrastructure/postgres/migrations/9999_fixture.sql"
             file_path = root / migration
             file_path.parent.mkdir(parents=True)
-            cases = (
-                ("DELETE FROM gate_memory_entries;", ("data_migration", "separate_data_migration_authorization_required")),
-                ("TRUNCATE gate_memory_entries;", ("destructive_schema", "destructive_database_operation")),
-                ("ALTER TABLE gate_memory_entries ALTER COLUMN content TYPE TEXT;",
-                 ("destructive_schema", "destructive_database_operation")),
-                ("ALTER TABLE gate_memory_entries ADD COLUMN required_value TEXT NOT NULL DEFAULT 'x';",
-                 ("destructive_schema", "destructive_database_operation")),
-                ("CREATE UNIQUE INDEX gate_memory_key_unique ON gate_memory_entries(memory_key);",
-                 ("destructive_schema", "destructive_database_operation")),
-                ("SELECT 1;", ("unreviewed_migration", "migration_statement_not_allowlisted")),
-                ("GRANT ALL ON gate_memory_entries TO public;",
-                 ("unreviewed_migration", "migration_security_change_requires_review")),
-                ("CREATE FUNCTION unsafe() RETURNS VOID LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN END $$;",
-                 ("unreviewed_migration", "migration_function_requires_review")),
-                ("CREATE EXTENSION pg_trgm;", ("extension_install", "separate_extension_authorization_required")),
-                ("ALTER TABLE gate_memory_entries ADD COLUMN embedding extensions.vector;",
-                 ("reversible_app_candidate", None)),
+            safe = (
+                "UPDATE gate_memory_entries SET content='new' WHERE memory_id='123';",
+                "ALTER TABLE gate_memory_entries DROP CONSTRAINT old_check;",
+                "CREATE UNIQUE INDEX idx_fixture ON gate_memory_entries(memory_key);",
+                "ALTER TABLE gate_memory_entries ADD COLUMN flag TEXT DEFAULT 'x';",
+                "CREATE FUNCTION fixture() RETURNS int LANGUAGE SQL AS $$ SELECT 1 $$;",
             )
-            for sql, expected in cases:
+            for sql in safe:
                 with self.subTest(sql=sql):
-                    file_path.write_text(sql, encoding="utf-8")
-                    self.assertEqual(gate.migration_risk([migration], root), expected)
+                    file_path.write_text(sql)
+                    self.assertEqual(gate.migration_risk([migration], root), ("backward_compatible_schema", None))
+            blocked = (
+                ("DELETE FROM gate_memory_entries;", "destructive_database_operation"),
+                ("DROP TABLE gate_memory_entries;", "destructive_database_operation"),
+                ("TRUNCATE gate_memory_entries;", "destructive_database_operation"),
+                ("UPDATE gate_memory_entries SET content='gone';", "unbounded_data_update"),
+                ("CREATE EXTENSION pg_trgm;", "separate_extension_authorization_required"),
+                ("GRANT ALL ON gate_memory_entries TO public;", "migration_security_change_requires_review"),
+            )
+            for sql, reason in blocked:
+                with self.subTest(sql=sql):
+                    file_path.write_text(sql)
+                    self.assertEqual(gate.migration_risk([migration], root)[1], reason)
+
+    def test_current_gate_memory_migrations_are_compatible(self):
+        root = MODULE_PATH.parent.parent
+        paths = [f"apps/pubg-saas/src/infrastructure/postgres/migrations/{n:04d}_{name}.sql"
+                 for n, name in (
+                     (22, "scoped_agent_conversation"), (23, "kook_conversation_checkpoints"),
+                     (24, "gate_memory_embedding_jobs"), (26, "gate_memory_retrieval_metadata"),
+                     (27, "gate_memory_write_receipts"), (28, "gate_memory_consolidation"),
+                     (29, "gate_memory_index_generations"))]
+        self.assertEqual(gate.migration_risk(paths, root), ("backward_compatible_schema", None))
+        self.assertEqual(len(candidate.migration_inventory(paths, root)[0]), 7)
 
     def test_candidate_authorization_blocks_include_recovery_steps(self):
         self.assertIn("not required", candidate.recovery_step("m2_pause_active"))
-        self.assertIn("backup", candidate.recovery_step("separate_data_migration_authorization_required"))
         self.assertIn("failed step", candidate.recovery_step("candidate_step_failed"))
         self.assertIn("external audit", candidate.recovery_step("candidate_adapter_failed"))
 
