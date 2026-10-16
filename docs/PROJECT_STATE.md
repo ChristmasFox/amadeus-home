@@ -1,4 +1,27 @@
-# Project State — 2026-10-16
+# Project State — 2026-10-17
+
+## Gate-Local autonomous candidate and PUBG Intelligence canary
+
+Gate-Local candidate authorization is shared by linked worktrees through the
+Git common directory and is active without per-worktree opt-in or interactive
+confirmation. PR #14 merged at `9954570199480d004e4db7bd4a9550926829cf5c`, PR
+#15 at `e69d92c570134db66935b777230318818127ddb0`, and PR #16 at
+`e90b36f0281f78514e1aa2df65a8906adfd9c418`; each PR's final checks are green.
+The final Gate-Local candidate runs
+`local/pubg-saas:git-e90b36f0281f78514e1aa2df65a8906adfd9c418`, portable digest
+`sha256:b9063ee922dad157b8d479473bc347fd65225976834b0ddb0e88d9063ee8dbf0`.
+Post-deploy verification found PostgreSQL, egress-proxy, Gateway, and Worker
+healthy and confirmed the one-tenant PUBG Intelligence allowlist without
+printing its ID. No migration delta was present; M2 remains PAUSED.
+
+The verified, mode-0700 full checkpoint is
+`~/.local/share/pubg-saas-backup/gate-local-20261016T181118Z-e90b36f0281f`.
+Its encrypted database dump is `pubg-saas.dump.age` (1,981,947 bytes; SHA-256
+`c4c21d8b13413191d340e9fa74be06b12457b4d7ae6a5b491663df9d55f8f8f3`). On
+migration or post-switch health/smoke failure, the guarded candidate path
+stops Gateway/Worker, restores the full database and prior image/configuration,
+then restarts the previous app. M2 clearance was neither created nor resumed;
+Lab, Lab data, and the separate 9router service were not changed.
 
 ## Gate memory plugin extraction P3–P5 candidate
 

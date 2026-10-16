@@ -1,6 +1,25 @@
 # Current Task — Lab Memory Recovery and Dual Product Release Engineering
 
-Date: 2026-10-16 (Asia/Shanghai).
+Date: 2026-10-17 (Asia/Shanghai).
+
+## 2026-10-17 — Gate-Local autonomous deployment and R5 canary
+
+Gate-Local repo-wide standing authorization and guarded candidate rollout are
+merged in PRs #14–#16. The final CI-green source is
+`e90b36f0281f78514e1aa2df65a8906adfd9c418`; Gate-Local runs
+`local/pubg-saas:git-e90b36f0281f78514e1aa2df65a8906adfd9c418` (portable digest
+`sha256:b9063ee922dad157b8d479473bc347fd65225976834b0ddb0e88d9063ee8dbf0`).
+Post-deploy checks found all four services healthy and the single-tenant
+PUBG Intelligence canary exact-match enabled; the tenant ID is intentionally
+not recorded here. There was no migration delta. M2 remains PAUSED.
+
+The full encrypted PostgreSQL checkpoint is
+`~/.local/share/pubg-saas-backup/gate-local-20261016T181118Z-e90b36f0281f`
+and reports `verified_recoverable`; the dump SHA-256 is
+`c4c21d8b13413191d340e9fa74be06b12457b4d7ae6a5b491663df9d55f8f8f3`.
+Automatic rollback stops Gateway/Worker, restores the full database and prior
+Compose/environment/image, then restarts the prior application if migration or
+health/smoke checks fail. No Lab or M2 runtime state changed.
 
 Active Goal: `docs/GATE_MEMORY_PLUGIN_EXTRACTION_GOAL.md`.
 

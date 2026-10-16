@@ -68,9 +68,9 @@ Options:
   --manifest <path>               protected external release manifest (status)
   --runtime-snapshot <path>       sanitized Gate runtime snapshot (status)
 
-Gate-Local candidate apply uses the protected local autopilot and requires
-the external one-time Gate approval. M2 may remain paused; candidate apply
-does not clear or resume M2. M2 clearance is reserved for future formal
+Gate-Local candidate apply uses the protected local autopilot and the
+repo-wide standing host authorization shared by linked worktrees; no
+per-worktree opt-in or terminal confirmation is required. M2 may remain paused; candidate apply does not clear or resume M2. M2 clearance is reserved for future formal
 release. Gate-Local converges stale application images automatically and
 applies tested compatible migrations after a protected database backup.
 Staging/Prod apply requires a reviewed environment adapter.
@@ -329,7 +329,7 @@ case "$COMMAND" in
         printf 'GATE_ADAPTER=%s\n' "$([[ -x "$ROOT_DIR/infra/pubg-saas/release-adapters/$ENVIRONMENT.sh" ]] && printf configured || printf unconfigured)"
       fi
       printf '%s\n' 'SEQUENCE=verify -> same-digest build -> backup/precheck -> migrator -> gateway/worker -> health/rollback-plan'
-      printf '%s\n' 'NO_RUNTIME_QUERY=planning never queries Gate-Local; candidate apply requires the external Gate approval; M2 clearance is formal-release-only.'
+      printf '%s\n' 'NO_RUNTIME_QUERY=planning never queries Gate-Local; candidate apply uses repo-wide standing host authorization; M2 clearance is formal-release-only.'
     fi
     ;;
   verify)
@@ -400,7 +400,7 @@ case "$COMMAND" in
       fi
     else
       printf 'APPLY=not-requested\nRELEASE_STATUS=%s\n' "$([[ $COMMAND == candidate ]] && printf UNRELEASED_CANDIDATE || printf PLAN_ONLY)"
-      printf 'APPROVAL_REQUIRED=explicit --apply --approval-ref <id>%s\n' "$([[ $COMMAND == release ]] && printf ' --create-tag' || true)"
+      printf 'APPLY_REQUIRED=explicit --apply with a non-secret audit reference; Gate-Local host authorization is repo-wide and standing%s\n' "$([[ $COMMAND == release ]] && printf ' --create-tag' || true)"
       if [[ "$PRODUCT" == lab ]]; then
         if ((PROMOTE_LIVE_CANDIDATE)); then
           [[ -n "$MEMORY_ACCEPTANCE" ]] || fail 'live-candidate promotion plan requires --memory-acceptance evidence.'

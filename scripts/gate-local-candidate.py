@@ -53,7 +53,7 @@ def deployment_status(error: CandidateError) -> str:
 
 def recovery_step(reason: str) -> str:
     if reason.startswith("approval_"):
-        return "review the external Gate-Local approval; create or renew it with pnpm devctl configure gate-auto-enable"
+        return "restore the protected repo-wide Gate-Local authorization/configuration; no per-worktree opt-in or terminal confirmation is required"
     if reason.startswith("m2_") or reason == "m2_pause_active":
         return "M2 clearance is not required for Gate-Local candidates; reserve gate-m2-clear for a future formal release and keep M2 state unchanged"
     return {
